@@ -248,6 +248,19 @@ describe("messageArtifacts.resolveDefaultArtifactViewMode", () => {
       }),
     ).toBe("preview");
   });
+
+  it("canvas:design 应默认进入预览态，避免主应用工作台打开后停在源码视图", () => {
+    const artifact = createArtifact({
+      type: "canvas:design",
+      status: "complete",
+      meta: {
+        filePath: ".lime/layered-designs/demo.layered-design/design.json",
+        filename: "design.json",
+      },
+    });
+
+    expect(resolveDefaultArtifactViewMode(artifact)).toBe("preview");
+  });
 });
 
 describe("messageArtifacts 路径归一", () => {

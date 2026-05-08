@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useRef, useState } from "react";
+import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import styled from "styled-components";
 import {
   applyLayeredDesignImageTaskOutput,
@@ -9,6 +9,7 @@ import {
   createLayeredDesignExportZipFile,
   buildLayeredDesignProviderCapabilitySummary,
   confirmLayeredDesignExtraction,
+  createLayeredDesignFlatImageAnalyzerFromModelSlotHttpJsonExecutor,
   createLayeredDesignImageTaskArtifacts,
   createLayeredDesignWorkerFirstFlatImageAnalyzer,
   createLayeredDesignPreviewSvgDataUrl,
@@ -42,6 +43,7 @@ import type {
   LayeredDesignExtractionCandidateInput,
   LayeredDesignExtractionCleanPlate,
   LayeredDesignExtractionCleanPlateInput,
+  LayeredDesignAnalyzerModelSlotConfigInput,
   LayeredDesignAnalyzerProviderCapability,
   LayeredDesignAnalyzerModelSlotExecutionEvidence,
   LayeredDesignDocument,
@@ -59,9 +61,131 @@ import {
 const defaultAnalyzeLayeredDesignFlatImage =
   createLayeredDesignWorkerFirstFlatImageAnalyzer();
 
+const DESIGN_CANVAS_ANALYZER_ENDPOINT_STORAGE_KEY =
+  "lime.layeredDesign.analyzerEndpoint";
+const DESIGN_CANVAS_AUTO_REFRESH_ATTEMPTS = 3;
+const DESIGN_CANVAS_AUTO_REFRESH_DELAY_MS = 2200;
+
+const DESIGN_CANVAS_HTTP_JSON_ANALYZER_MODEL_SLOT_CONFIGS: readonly LayeredDesignAnalyzerModelSlotConfigInput[] =
+  [
+    {
+      id: "design-canvas-subject-matting-slot",
+      kind: "subject_matting",
+      label: "Design canvas HTTP JSON subject matting",
+      execution: "remote_model",
+      modelId: "design-canvas-subject-matting-v1",
+      runtime: {
+        timeoutMs: 60_000,
+        fallbackStrategy: "return_null",
+      },
+      metadata: {
+        providerId: "layered-design-http-json",
+        productionReady: true,
+        requiresHumanReview: false,
+        tags: ["design-canvas-mainline", "http-json-executor"],
+      },
+    },
+    {
+      id: "design-canvas-clean-plate-slot",
+      kind: "clean_plate",
+      label: "Design canvas HTTP JSON clean plate",
+      execution: "remote_model",
+      modelId: "design-canvas-clean-plate-v1",
+      runtime: {
+        timeoutMs: 60_000,
+        fallbackStrategy: "return_null",
+      },
+      metadata: {
+        providerId: "layered-design-http-json",
+        productionReady: true,
+        requiresHumanReview: false,
+        tags: ["design-canvas-mainline", "http-json-executor"],
+      },
+    },
+    {
+      id: "design-canvas-text-ocr-slot",
+      kind: "text_ocr",
+      label: "Design canvas HTTP JSON text OCR",
+      execution: "remote_model",
+      modelId: "design-canvas-text-ocr-v1",
+      runtime: {
+        timeoutMs: 60_000,
+        fallbackStrategy: "return_null",
+      },
+      metadata: {
+        providerId: "layered-design-http-json",
+        productionReady: true,
+        requiresHumanReview: false,
+        tags: ["design-canvas-mainline", "http-json-executor"],
+      },
+    },
+  ];
+
+interface AnalyzerEndpointPreference {
+  enabled: boolean;
+  endpointUrl: string;
+}
+
+const DEFAULT_ANALYZER_ENDPOINT_PREFERENCE: AnalyzerEndpointPreference = {
+  enabled: false,
+  endpointUrl: "",
+};
+
+function normalizeAnalyzerEndpointPreference(
+  value: unknown,
+): AnalyzerEndpointPreference {
+  if (!isRecord(value)) {
+    return DEFAULT_ANALYZER_ENDPOINT_PREFERENCE;
+  }
+
+  return {
+    enabled: value.enabled === true,
+    endpointUrl: typeof value.endpointUrl === "string" ? value.endpointUrl : "",
+  };
+}
+
+function readAnalyzerEndpointPreference(): AnalyzerEndpointPreference {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) {
+      return DEFAULT_ANALYZER_ENDPOINT_PREFERENCE;
+    }
+
+    const raw = window.localStorage.getItem(
+      DESIGN_CANVAS_ANALYZER_ENDPOINT_STORAGE_KEY,
+    );
+    if (!raw) {
+      return DEFAULT_ANALYZER_ENDPOINT_PREFERENCE;
+    }
+
+    return normalizeAnalyzerEndpointPreference(JSON.parse(raw));
+  } catch {
+    return DEFAULT_ANALYZER_ENDPOINT_PREFERENCE;
+  }
+}
+
+function writeAnalyzerEndpointPreference(
+  preference: AnalyzerEndpointPreference,
+): void {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) {
+      return;
+    }
+
+    window.localStorage.setItem(
+      DESIGN_CANVAS_ANALYZER_ENDPOINT_STORAGE_KEY,
+      JSON.stringify(preference),
+    );
+  } catch {
+    // localStorage 不可写时只影响偏好持久化，不阻断当前画布工作流。
+  }
+}
+
 const Shell = styled.div`
   display: grid;
-  grid-template-columns: minmax(190px, 240px) minmax(0, 1fr) minmax(230px, 280px);
+  grid-template-columns: minmax(190px, 240px) minmax(0, 1fr) minmax(
+      230px,
+      280px
+    );
   height: 100%;
   min-height: 0;
   width: 100%;
@@ -175,7 +299,11 @@ const StageColumn = styled.main`
   min-height: 0;
   flex-direction: column;
   background:
-    radial-gradient(circle at 18% 12%, rgba(14, 165, 233, 0.1), transparent 28%),
+    radial-gradient(
+      circle at 18% 12%,
+      rgba(14, 165, 233, 0.1),
+      transparent 28%
+    ),
     linear-gradient(180deg, hsl(var(--muted)) 0%, hsl(var(--background)) 62%);
 `;
 
@@ -313,10 +441,8 @@ const ResizeHandle = styled.span<{
   background: #ffffff;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18);
   touch-action: none;
-  ${({ $corner }) =>
-    $corner.includes("n") ? "top: 4px;" : "bottom: 4px;"}
-  ${({ $corner }) =>
-    $corner.includes("w") ? "left: 4px;" : "right: 4px;"}
+  ${({ $corner }) => ($corner.includes("n") ? "top: 4px;" : "bottom: 4px;")}
+  ${({ $corner }) => ($corner.includes("w") ? "left: 4px;" : "right: 4px;")}
   cursor: ${({ $corner }) =>
     $corner === "nw" || $corner === "se" ? "nwse-resize" : "nesw-resize"};
 `;
@@ -655,6 +781,47 @@ const ReviewNoticeTitle = styled.div`
   margin-bottom: 4px;
 `;
 
+const EndpointStatusPill = styled.div<{
+  $tone: "info" | "success" | "warning";
+}>`
+  border: 1px solid
+    ${({ $tone }) =>
+      $tone === "success"
+        ? "rgba(16, 185, 129, 0.32)"
+        : $tone === "warning"
+          ? "rgba(245, 158, 11, 0.36)"
+          : "rgba(14, 165, 233, 0.28)"};
+  border-radius: 14px;
+  background: ${({ $tone }) =>
+    $tone === "success"
+      ? "rgba(16, 185, 129, 0.1)"
+      : $tone === "warning"
+        ? "rgba(245, 158, 11, 0.12)"
+        : "rgba(14, 165, 233, 0.08)"};
+  color: hsl(var(--foreground));
+  font-size: 12px;
+  line-height: 1.45;
+  margin-top: 10px;
+  overflow-wrap: anywhere;
+  padding: 9px 10px;
+`;
+
+const InlineToggle = styled.label`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: hsl(var(--foreground));
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+
+  input {
+    width: 14px;
+    height: 14px;
+    accent-color: hsl(var(--foreground));
+  }
+`;
+
 const QualityFindingList = styled.ul`
   display: flex;
   flex-direction: column;
@@ -866,8 +1033,7 @@ function readModelSlotExecutionEvidence(
     fallbackStrategy:
       fallbackStrategy as LayeredDesignAnalyzerModelSlotExecutionEvidence["fallbackStrategy"],
     fallbackUsed,
-    status:
-      status as LayeredDesignAnalyzerModelSlotExecutionEvidence["status"],
+    status: status as LayeredDesignAnalyzerModelSlotExecutionEvidence["status"],
     ...(getStringParam(raw, "providerId")
       ? { providerId: getStringParam(raw, "providerId") ?? undefined }
       : {}),
@@ -1203,10 +1369,7 @@ function renderLayerContent(
   }
 }
 
-function renderImageLayer(
-  layer: ImageLayer,
-  assets: GeneratedDesignAsset[],
-) {
+function renderImageLayer(layer: ImageLayer, assets: GeneratedDesignAsset[]) {
   const asset = findLayerAsset(layer, assets);
   if (!asset?.src) {
     return <EmptyAsset>{layer.name}</EmptyAsset>;
@@ -1399,6 +1562,12 @@ async function readImageDimensions(
   );
 }
 
+function waitForDesignCanvasAutoRefreshDelay(): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, DESIGN_CANVAS_AUTO_REFRESH_DELAY_MS);
+  });
+}
+
 export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
   ({
     state,
@@ -1410,6 +1579,8 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
     contentId,
     imageGenerationProviderId,
     imageGenerationModelId,
+    imageGenerationSelectionReady = true,
+    imageGenerationSelectionWarning,
     createImageTaskArtifact,
     getImageTaskArtifact,
     readProjectExport = readLayeredDesignProjectExport,
@@ -1428,20 +1599,67 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
     const [exportBusy, setExportBusy] = useState(false);
     const [restoreBusy, setRestoreBusy] = useState(false);
     const [analysisBusy, setAnalysisBusy] = useState(false);
+    const [analyzerEndpointPreference, setAnalyzerEndpointPreference] =
+      useState<AnalyzerEndpointPreference>(readAnalyzerEndpointPreference);
     const [reviewPreviewMode, setReviewPreviewMode] =
       useState<ExtractionReviewPreviewMode>("source");
     const flatImageInputRef = useRef<HTMLInputElement | null>(null);
     const stageFrameRef = useRef<HTMLDivElement | null>(null);
+    const autoRefreshRunRef = useRef(0);
     const [layerDragState, setLayerDragState] =
       useState<CanvasLayerDragState | null>(null);
     const [layerResizeState, setLayerResizeState] =
       useState<CanvasLayerResizeState | null>(null);
     const [layerRotationState, setLayerRotationState] =
       useState<CanvasLayerRotationState | null>(null);
+
+    useEffect(() => {
+      return () => {
+        autoRefreshRunRef.current += 1;
+      };
+    }, []);
+
     const visibleLayers = useMemo(
       () => sortDesignLayers(document.layers).filter((layer) => layer.visible),
       [document.layers],
     );
+    const normalizedAnalyzerEndpointUrl =
+      analyzerEndpointPreference.endpointUrl.trim();
+    const analyzerEndpointActive =
+      analyzerEndpointPreference.enabled &&
+      normalizedAnalyzerEndpointUrl.length > 0;
+    const activeAnalyzeFlatImage = useMemo(
+      () =>
+        analyzerEndpointActive
+          ? createLayeredDesignFlatImageAnalyzerFromModelSlotHttpJsonExecutor(
+              DESIGN_CANVAS_HTTP_JSON_ANALYZER_MODEL_SLOT_CONFIGS,
+              {
+                endpointUrl: normalizedAnalyzerEndpointUrl,
+                headers: {
+                  "x-lime-layered-design-analyzer": "design-canvas-main-app",
+                },
+                timeoutMs: 60_000,
+              },
+              {
+                fallbackAnalyzer: analyzeFlatImage,
+              },
+            )
+          : analyzeFlatImage,
+      [analyzerEndpointActive, analyzeFlatImage, normalizedAnalyzerEndpointUrl],
+    );
+    const activeAnalyzerModelSlotConfigs = analyzerEndpointActive
+      ? DESIGN_CANVAS_HTTP_JSON_ANALYZER_MODEL_SLOT_CONFIGS
+      : analyzerModelSlotConfigs;
+    const analyzerEndpointStatusTone = analyzerEndpointActive
+      ? "success"
+      : analyzerEndpointPreference.enabled
+        ? "warning"
+        : "info";
+    const analyzerEndpointStatusMessage = analyzerEndpointActive
+      ? `已启用：${normalizedAnalyzerEndpointUrl}`
+      : analyzerEndpointPreference.enabled
+        ? "已启用，但需要填写 endpoint URL。"
+        : "未启用：上传和重新拆层使用本地 worker-first analyzer。";
     const panelLayers = useMemo(
       () => sortDesignLayers(document.layers).slice().reverse(),
       [document.layers],
@@ -1466,12 +1684,12 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
         })
       : null;
     const extractionFocusedCandidate = extraction
-      ? extraction.candidates.find(
+      ? (extraction.candidates.find(
           (candidate) => candidate.layer.id === state.selectedLayerId,
         ) ??
         extraction.candidates.find((candidate) => candidate.selected) ??
         extraction.candidates[0] ??
-        null
+        null)
       : null;
     const extractionFocusedCandidateAsset = extractionFocusedCandidate
       ? findAssetById(
@@ -1595,13 +1813,18 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
     )}`;
     const backgroundColor = document.canvas.backgroundColor ?? "#ffffff";
     const normalizedProjectRootPath = projectRootPath?.trim();
-    const canSubmitImageTasks =
+    const normalizedImageGenerationSelectionWarning =
+      imageGenerationSelectionWarning?.trim() ||
+      "图片服务尚未准备好，请稍后再生成图层资产。";
+    const canUseImageTaskArtifacts =
       Boolean(normalizedProjectRootPath) &&
       generationBusyTarget === null &&
       !extractionReviewPending &&
       !analysisBusy;
+    const canSubmitImageTasks =
+      canUseImageTaskArtifacts && imageGenerationSelectionReady;
     const canRefreshImageTasks =
-      canSubmitImageTasks && pendingImageTasks.length > 0;
+      canUseImageTaskArtifacts && pendingImageTasks.length > 0;
 
     const emitState = (nextState: DesignCanvasState) => {
       onStateChange(nextState);
@@ -1618,14 +1841,82 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
       });
     };
 
-    const submitImageLayerGeneration = async (
-      target: "all" | "selected",
-    ) => {
+    const autoRefreshImageTasksAfterSubmission = async ({
+      initialDocument,
+      workspaceRoot,
+      runId,
+    }: {
+      initialDocument: DesignCanvasState["document"];
+      workspaceRoot: string;
+      runId: number;
+    }): Promise<{
+      document: DesignCanvasState["document"];
+      refreshedCount: number;
+      appliedCount: number;
+      pendingCount: number;
+      failedCount: number;
+    } | null> => {
+      let nextDocument = initialDocument;
+      let refreshedCount = 0;
+      let appliedCount = 0;
+      let failedCount = 0;
+
+      for (
+        let attempt = 0;
+        attempt < DESIGN_CANVAS_AUTO_REFRESH_ATTEMPTS;
+        attempt += 1
+      ) {
+        if (listPendingLayeredDesignImageTasks(nextDocument).length === 0) {
+          break;
+        }
+
+        if (attempt > 0) {
+          await waitForDesignCanvasAutoRefreshDelay();
+        }
+
+        if (autoRefreshRunRef.current !== runId) {
+          return null;
+        }
+
+        const result = await refreshLayeredDesignImageTaskResults({
+          document: nextDocument,
+          projectRootPath: workspaceRoot,
+          getTaskArtifact: getImageTaskArtifact,
+        });
+
+        nextDocument = result.document;
+        refreshedCount += result.refreshedCount;
+        appliedCount += result.appliedCount;
+        failedCount += result.failedCount;
+
+        if (result.pendingCount === 0 || result.failedCount > 0) {
+          break;
+        }
+      }
+
+      return {
+        document: nextDocument,
+        refreshedCount,
+        appliedCount,
+        pendingCount: listPendingLayeredDesignImageTasks(nextDocument).length,
+        failedCount,
+      };
+    };
+
+    const submitImageLayerGeneration = async (target: "all" | "selected") => {
       const workspaceRoot = normalizedProjectRootPath;
       if (!workspaceRoot) {
         setGenerationStatus({
           tone: "warning",
           message: "绑定工作区后才能提交图层图片任务。",
+        });
+        return;
+      }
+
+      if (!imageGenerationSelectionReady) {
+        setGenerationStatus({
+          tone: "warning",
+          message: normalizedImageGenerationSelectionWarning,
         });
         return;
       }
@@ -1660,6 +1951,8 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
       });
 
       try {
+        const autoRefreshRunId = autoRefreshRunRef.current + 1;
+        autoRefreshRunRef.current = autoRefreshRunId;
         const submissions = await createLayeredDesignImageTaskArtifacts({
           document,
           requests,
@@ -1689,6 +1982,48 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
         }
 
         emitDocument(nextDocument, selectedLayer?.id);
+        const pendingAfterSubmission =
+          listPendingLayeredDesignImageTasks(nextDocument).length;
+
+        if (pendingAfterSubmission > 0) {
+          setGenerationStatus({
+            tone: "info",
+            message: `已提交 ${submissions.length} 个图片任务，正在自动检查生成结果...`,
+          });
+
+          const autoRefreshResult = await autoRefreshImageTasksAfterSubmission({
+            initialDocument: nextDocument,
+            workspaceRoot,
+            runId: autoRefreshRunId,
+          });
+
+          if (!autoRefreshResult) {
+            return;
+          }
+
+          nextDocument = autoRefreshResult.document;
+          appliedCount += autoRefreshResult.appliedCount;
+          emitDocument(nextDocument, selectedLayer?.id);
+
+          setGenerationStatus({
+            tone:
+              autoRefreshResult.failedCount > 0
+                ? "warning"
+                : appliedCount > 0
+                  ? "success"
+                  : "info",
+            message:
+              appliedCount > 0
+                ? autoRefreshResult.pendingCount > 0
+                  ? `已提交 ${submissions.length} 个图片任务，自动刷新写回 ${appliedCount} 个图层结果，${autoRefreshResult.pendingCount} 个仍在生成。`
+                  : `已提交 ${submissions.length} 个图片任务，并自动刷新写回 ${appliedCount} 个图层结果。`
+                : autoRefreshResult.failedCount > 0
+                  ? `已提交 ${submissions.length} 个图片任务，自动刷新发现 ${autoRefreshResult.failedCount} 个失败。`
+                  : `已提交 ${submissions.length} 个图片任务，自动检查后仍有 ${autoRefreshResult.pendingCount} 个在生成，可稍后刷新生成结果。`,
+          });
+          return;
+        }
+
         setGenerationStatus({
           tone: "success",
           message:
@@ -1700,9 +2035,7 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
         setGenerationStatus({
           tone: "error",
           message:
-            error instanceof Error
-              ? error.message
-              : "提交图层图片任务失败。",
+            error instanceof Error ? error.message : "提交图层图片任务失败。",
         });
       } finally {
         setGenerationBusyTarget(null);
@@ -1759,9 +2092,7 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
         setGenerationStatus({
           tone: "error",
           message:
-            error instanceof Error
-              ? error.message
-              : "刷新图层图片任务失败。",
+            error instanceof Error ? error.message : "刷新图层图片任务失败。",
         });
       } finally {
         setGenerationBusyTarget(null);
@@ -1981,8 +2312,7 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
 
       const centerClientX =
         stageRect.left +
-        ((layer.x + layer.width / 2) / document.canvas.width) *
-          stageRect.width;
+        ((layer.x + layer.width / 2) / document.canvas.width) * stageRect.width;
       const centerClientY =
         stageRect.top +
         ((layer.y + layer.height / 2) / document.canvas.height) *
@@ -2010,7 +2340,9 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
 
     const moveLayerRotation = (event: React.PointerEvent<HTMLSpanElement>) => {
       const rotatedLayer = layerRotationState
-        ? document.layers.find((layer) => layer.id === layerRotationState.layerId)
+        ? document.layers.find(
+            (layer) => layer.id === layerRotationState.layerId,
+          )
         : null;
       if (
         !layerRotationState ||
@@ -2084,14 +2416,12 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
       );
     };
 
-    const updateSelectedTextLayer = (
-      patch: {
-        text?: string;
-        fontSize?: number;
-        color?: string;
-        align?: TextLayer["align"];
-      },
-    ) => {
+    const updateSelectedTextLayer = (patch: {
+      text?: string;
+      fontSize?: number;
+      color?: string;
+      align?: TextLayer["align"];
+    }) => {
       if (!selectedTextLayer || selectedTextLayer.locked) return;
       emitDocument(
         updateTextLayerProperties(document, {
@@ -2113,7 +2443,7 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
 
       try {
         const bundle = createLayeredDesignExportBundle(document, {
-          analyzerModelSlotConfigs,
+          analyzerModelSlotConfigs: activeAnalyzerModelSlotConfigs,
         });
         const svgDataUrl = createLayeredDesignPreviewSvgDataUrl(document);
         const pngDataUrl = await renderSvgDataUrlToPngDataUrl(
@@ -2132,10 +2462,17 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
               previewPngDataUrl: pngDataUrl,
             }),
           });
+          const uncachedRemoteAssetCount = Math.max(
+            0,
+            output.uncachedRemoteAssetCount ?? 0,
+          );
 
           setGenerationStatus({
-            tone: "success",
-            message: `已保存图层设计工程：${output.exportDirectoryRelativePath}（${output.fileCount} 个文件，${output.assetCount} 个 assets）。`,
+            tone: uncachedRemoteAssetCount > 0 ? "warning" : "success",
+            message:
+              uncachedRemoteAssetCount > 0
+                ? `已保存图层设计工程：${output.exportDirectoryRelativePath}（${output.fileCount} 个文件，${output.assetCount} 个 assets）。还有 ${uncachedRemoteAssetCount} 个远程图片资产未缓存到 assets/，工程可在线读回；离线迁移前请重新缓存远程资产。`
+                : `已保存图层设计工程：${output.exportDirectoryRelativePath}（${output.fileCount} 个文件，${output.assetCount} 个 assets）。`,
           });
           return;
         }
@@ -2212,6 +2549,19 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
       flatImageInputRef.current?.click();
     };
 
+    const updateAnalyzerEndpointPreference = (
+      patch: Partial<AnalyzerEndpointPreference>,
+    ) => {
+      setAnalyzerEndpointPreference((current) => {
+        const next = {
+          ...current,
+          ...patch,
+        };
+        writeAnalyzerEndpointPreference(next);
+        return next;
+      });
+    };
+
     const runFlatImageAnalyzer = async (
       image: {
         src: string;
@@ -2229,15 +2579,13 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
       message: string;
     }> => {
       try {
-        const analysis = await analyzeFlatImage({
+        const analysis = await activeAnalyzeFlatImage({
           image,
           createdAt,
         });
         const autoSelectedCount = analysis.candidates.filter((candidate) => {
           const confidence =
-            typeof candidate.confidence === "number"
-              ? candidate.confidence
-              : 0;
+            typeof candidate.confidence === "number" ? candidate.confidence : 0;
           return candidate.selected ?? confidence >= 0.6;
         }).length;
 
@@ -2245,7 +2593,7 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
           analysis: analysis.analysis,
           candidates: analysis.candidates,
           cleanPlate: analysis.cleanPlate,
-          message: `已载入扁平图 draft，并通过 ${analysis.analysis.analyzer.label} 生成 ${autoSelectedCount}/${analysis.candidates.length} 个候选层；当前 clean plate 输出：${formatExtractionAnalysisOutput(
+          message: `${analyzerEndpointActive ? "模型拆层端点已启用；" : ""}已载入扁平图 draft，并通过 ${analysis.analysis.analyzer.label} 生成 ${autoSelectedCount}/${analysis.candidates.length} 个候选层；当前 clean plate 输出：${formatExtractionAnalysisOutput(
             analysis.analysis.outputs?.cleanPlate ?? false,
             {
               availableLabel: "已提供",
@@ -2258,7 +2606,9 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
           analysis: undefined,
           candidates: undefined,
           cleanPlate: undefined,
-          message: fallbackMessage,
+          message: analyzerEndpointActive
+            ? "已载入扁平图 draft；模型拆层端点不可用或返回无效结果，先以原图背景进入编辑。"
+            : fallbackMessage,
         };
       }
     };
@@ -2373,7 +2723,7 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
       });
 
       try {
-        const analysis = await analyzeFlatImage({
+        const analysis = await activeAnalyzeFlatImage({
           image: {
             src: extractionSourceAsset.src,
             width: extractionSourceAsset.width || document.canvas.width,
@@ -2400,10 +2750,7 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
       } catch (error) {
         setGenerationStatus({
           tone: "error",
-          message:
-            error instanceof Error
-              ? error.message
-              : "重新拆层失败。",
+          message: error instanceof Error ? error.message : "重新拆层失败。",
         });
       } finally {
         setAnalysisBusy(false);
@@ -2545,9 +2892,11 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
                 }
                 title={
                   normalizedProjectRootPath
-                    ? extractionReviewPending
-                      ? "先确认拆层候选，再生成图片图层"
-                      : "为所有待生成图片层创建图片任务"
+                    ? !imageGenerationSelectionReady
+                      ? normalizedImageGenerationSelectionWarning
+                      : extractionReviewPending
+                        ? "先确认拆层候选，再生成图片图层"
+                        : "为所有待生成图片层创建图片任务"
                     : "绑定工作区后可生成图层资产"
                 }
               >
@@ -2636,38 +2985,36 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
                   {renderLayerContent(layer, document.assets)}
                   {layer.id === selectedLayer?.id &&
                   !layer.locked &&
-                  !extractionReviewPending
-                    ? (
-                        <>
-                          <RotateHandle
-                            aria-label={`旋转图层 ${layer.name}`}
-                            onPointerDown={(event) =>
-                              startLayerRotation(event, layer)
-                            }
-                            onPointerMove={moveLayerRotation}
-                            onPointerUp={stopLayerRotation}
-                            onPointerCancel={stopLayerRotation}
-                            onClick={(event) => event.stopPropagation()}
-                          >
-                            ↻
-                          </RotateHandle>
-                          {canvasLayerResizeCorners.map((corner) => (
-                            <ResizeHandle
-                              key={corner}
-                              $corner={corner}
-                              aria-label={`缩放图层 ${layer.name} ${corner}`}
-                              onPointerDown={(event) =>
-                                startLayerResize(event, layer, corner)
-                              }
-                              onPointerMove={moveLayerResize}
-                              onPointerUp={stopLayerResize}
-                              onPointerCancel={stopLayerResize}
-                              onClick={(event) => event.stopPropagation()}
-                            />
-                          ))}
-                        </>
-                      )
-                    : null}
+                  !extractionReviewPending ? (
+                    <>
+                      <RotateHandle
+                        aria-label={`旋转图层 ${layer.name}`}
+                        onPointerDown={(event) =>
+                          startLayerRotation(event, layer)
+                        }
+                        onPointerMove={moveLayerRotation}
+                        onPointerUp={stopLayerRotation}
+                        onPointerCancel={stopLayerRotation}
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        ↻
+                      </RotateHandle>
+                      {canvasLayerResizeCorners.map((corner) => (
+                        <ResizeHandle
+                          key={corner}
+                          $corner={corner}
+                          aria-label={`缩放图层 ${layer.name} ${corner}`}
+                          onPointerDown={(event) =>
+                            startLayerResize(event, layer, corner)
+                          }
+                          onPointerMove={moveLayerResize}
+                          onPointerUp={stopLayerResize}
+                          onPointerCancel={stopLayerResize}
+                          onClick={(event) => event.stopPropagation()}
+                        />
+                      ))}
+                    </>
+                  ) : null}
                 </CanvasLayer>
               ))}
               {layerRotationState ? (
@@ -2687,17 +3034,81 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
             <Title>
               {extractionReviewPending
                 ? "确认候选图层后进入编辑"
-                : selectedLayer?.name ?? "未选择图层"}
+                : (selectedLayer?.name ?? "未选择图层")}
             </Title>
           </PanelHeader>
           <InspectorBody>
+            <PropertyCard>
+              <PropertyTitle>模型拆层端点</PropertyTitle>
+              <Hint>
+                高级入口：上传扁平图和“重新拆层”会优先走当前 canvas:design 的
+                HTTP JSON model slot endpoint；失败时回退本地
+                worker-first，不新增旧 poster 路线。
+              </Hint>
+              <FieldStack style={{ marginTop: 10 }}>
+                <FieldLabel>
+                  Endpoint URL
+                  <FieldInput
+                    aria-label="拆层模型端点 URL"
+                    type="url"
+                    placeholder="http://127.0.0.1:52081/model-slot"
+                    value={analyzerEndpointPreference.endpointUrl}
+                    onChange={(event) =>
+                      updateAnalyzerEndpointPreference({
+                        endpointUrl: event.currentTarget.value,
+                      })
+                    }
+                  />
+                </FieldLabel>
+                <InlineToggle>
+                  <input
+                    aria-label="启用拆层模型端点"
+                    type="checkbox"
+                    checked={analyzerEndpointPreference.enabled}
+                    onChange={(event) =>
+                      updateAnalyzerEndpointPreference({
+                        enabled: event.currentTarget.checked,
+                      })
+                    }
+                  />
+                  启用 model slot 拆层端点
+                </InlineToggle>
+              </FieldStack>
+              <EndpointStatusPill
+                $tone={analyzerEndpointStatusTone}
+                aria-label="拆层模型端点状态"
+              >
+                {analyzerEndpointStatusMessage}
+              </EndpointStatusPill>
+              <PreviewToggleRow>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    void rerunExtractionAnalysis();
+                  }}
+                  disabled={
+                    !extraction || !analyzerEndpointActive || analysisBusy
+                  }
+                  title={
+                    !extraction
+                      ? "上传扁平图后可复跑拆层"
+                      : analyzerEndpointActive
+                        ? "使用当前端点重新拆层并回到候选确认"
+                        : "启用并填写 endpoint URL 后可使用端点重新拆层"
+                  }
+                >
+                  {analysisBusy ? "端点复跑中..." : "复跑当前端点"}
+                </Button>
+              </PreviewToggleRow>
+            </PropertyCard>
             {extractionReviewPending && extraction ? (
               <>
                 <PropertyCard>
                   <PropertyTitle>拆层确认</PropertyTitle>
                   <ReviewBadge>待确认</ReviewBadge>
                   <Hint>
-                    当前上传图已进入 extraction draft。先确认要保留的候选层，再进入正式图层编辑；进入后才开放移动、层级调整和图层重生成。
+                    当前上传图已进入 extraction
+                    draft。先确认要保留的候选层，再进入正式图层编辑；进入后才开放移动、层级调整和图层重生成。
                   </Hint>
                   <PropertyGrid style={{ marginTop: 10 }}>
                     <PropertyItem>
@@ -2826,8 +3237,8 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
                       <ReviewNoticeTitle>
                         高风险拆层已阻止直接进入编辑
                       </ReviewNoticeTitle>
-                      请先重新拆层，或选择“仅保留原图”进入编辑，避免把缺
-                      mask / 缺 clean plate 的候选层误当作可编辑图层。
+                      请先重新拆层，或选择“仅保留原图”进入编辑，避免把缺 mask /
+                      缺 clean plate 的候选层误当作可编辑图层。
                     </ReviewNotice>
                   ) : null}
                   {extractionAnalysis?.providerCapabilities &&
@@ -2875,8 +3286,9 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
                 <PropertyCard>
                   <PropertyTitle>对照预览</PropertyTitle>
                   <Hint>
-                    这里对照原图、当前候选、候选 mask 和 clean plate；当前仍未做真实 matting /
-                    mask refine，但 UI 已直接消费同一份 extraction 事实源里的预览资产和文字候选。
+                    这里对照原图、当前候选、候选 mask 和 clean
+                    plate；当前仍未做真实 matting / mask refine，但 UI
+                    已直接消费同一份 extraction 事实源里的预览资产和文字候选。
                   </Hint>
                   <PreviewToggleRow>
                     <PreviewToggleButton
@@ -3020,8 +3432,8 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
                     </Button>
                   </ActionGrid>
                   <Hint style={{ marginTop: 10 }}>
-                    这一步只确认 `LayeredDesignDocument.extraction` 的候选选择，不会回流旧 poster /
-                    image viewer 路线。
+                    这一步只确认 `LayeredDesignDocument.extraction`
+                    的候选选择，不会回流旧 poster / image viewer 路线。
                   </Hint>
                 </PropertyCard>
               </>
@@ -3229,8 +3641,8 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
                         </FieldSelect>
                       </FieldLabel>
                       <Hint>
-                        OCR 或规划生成的普通文案会继续作为真实 TextLayer
-                        写回 `LayeredDesignDocument`，不是烘焙图片层。
+                        OCR 或规划生成的普通文案会继续作为真实 TextLayer 写回
+                        `LayeredDesignDocument`，不是烘焙图片层。
                       </Hint>
                     </FieldStack>
                   </PropertyCard>
@@ -3242,18 +3654,22 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
                     <Button
                       type="button"
                       $primary={Boolean(selectedImageLayer)}
-                      onClick={() => void submitImageLayerGeneration("selected")}
+                      onClick={() =>
+                        void submitImageLayerGeneration("selected")
+                      }
                       disabled={
                         !canSubmitImageTasks ||
                         !selectedImageLayer ||
                         selectedLayer.locked
                       }
                       title={
-                        extractionReviewPending
-                          ? "先确认拆层候选，再重生成当前层"
-                          : selectedImageLayer
-                          ? "为当前图片层重新提交生成任务"
-                          : "只有图片或特效图层支持重生成"
+                        !imageGenerationSelectionReady
+                          ? normalizedImageGenerationSelectionWarning
+                          : extractionReviewPending
+                            ? "先确认拆层候选，再重生成当前层"
+                            : selectedImageLayer
+                              ? "为当前图片层重新提交生成任务"
+                              : "只有图片或特效图层支持重生成"
                       }
                     >
                       {generationBusyTarget === "selected"
@@ -3318,8 +3734,8 @@ export const DesignCanvas: React.FC<DesignCanvasProps> = memo(
                       <Hint>
                         当前来源：扁平图拆层 draft；已选
                         {
-                          extraction.candidates.filter((candidate) =>
-                            candidate.selected,
+                          extraction.candidates.filter(
+                            (candidate) => candidate.selected,
                           ).length
                         }
                         /{extraction.candidates.length} 个候选层。clean plate：

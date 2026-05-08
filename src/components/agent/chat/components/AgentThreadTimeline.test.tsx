@@ -246,6 +246,13 @@ function renderTimeline(
     }) => void;
     onOpenSubagentSession?: (sessionId: string) => void;
     onOpenArtifactFromTimeline?: (target: ArtifactTimelineOpenTarget) => void;
+    sourceMessageId?: string;
+    onSaveFileArtifactAsKnowledge?: (source: {
+      messageId: string;
+      content: string;
+      sourceName?: string;
+      description?: string | null;
+    }) => void;
     focusedItemId?: string | null;
     focusRequestKey?: number;
     deferCompletedSingleDetails?: boolean;
@@ -265,6 +272,8 @@ function renderTimeline(
         actionRequests={props?.actionRequests}
         isCurrentTurn={props?.isCurrentTurn}
         onOpenArtifactFromTimeline={props?.onOpenArtifactFromTimeline}
+        sourceMessageId={props?.sourceMessageId}
+        onSaveFileArtifactAsKnowledge={props?.onSaveFileArtifactAsKnowledge}
         onOpenSavedSiteContent={props?.onOpenSavedSiteContent}
         onOpenSubagentSession={props?.onOpenSubagentSession}
         focusedItemId={props?.focusedItemId}
@@ -431,6 +440,48 @@ describe("AgentThreadTimeline", () => {
     ).toHaveLength(2);
     expect(container.textContent).not.toContain("产出了 index.md");
     expect(container.textContent).not.toContain("产出了 Agents.md");
+  });
+
+  it("时间线 Markdown 产物应透传保存到项目资料回调", () => {
+    const onSaveFileArtifactAsKnowledge = vi.fn();
+    const content =
+      "# 谢晶营销文案包 v1.0\n\n## 视频号口播\n这是一份可以保存到项目资料的 Document 产物，后续对话可以继续复用。";
+    const container = renderTimeline(
+      [
+        createFileArtifactItem({
+          path: "outputs/谢晶_营销文案包_KnowledgeV2_E2E.md",
+          source: "tool_result",
+          content,
+          metadata: {
+            artifactTitle: "谢晶营销文案包 v1.0",
+          },
+        }),
+      ],
+      {
+        sourceMessageId: "assistant-message-1",
+        onSaveFileArtifactAsKnowledge,
+      },
+    );
+
+    expect(container.textContent).toContain("Document 产物");
+    expect(container.textContent).toContain("可保存到项目资料");
+
+    const saveButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>("button"),
+    ).find((button) => button.textContent?.includes("保存这份文档"));
+
+    expect(saveButton).not.toBeUndefined();
+
+    act(() => {
+      saveButton?.click();
+    });
+
+    expect(onSaveFileArtifactAsKnowledge).toHaveBeenCalledWith({
+      messageId: "assistant-message-1",
+      content,
+      sourceName: "谢晶_营销文案包_KnowledgeV2_E2E.md",
+      description: "谢晶营销文案包 v1.0",
+    });
   });
 
   it("不应把 .lime/tasks 下的内部任务快照 JSON 渲染到时间线里", () => {

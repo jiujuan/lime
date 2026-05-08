@@ -1,10 +1,11 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   isLegacyDefaultProjectId,
   normalizeProjectId,
 } from "../utils/topicProjectResolution";
 import {
   LAST_PROJECT_ID_KEY,
+  loadPersistedSessionWorkspaceId,
   loadPersistedProjectId,
   savePersistedProjectId,
 } from "./agentProjectStorage";
@@ -38,6 +39,17 @@ export function useWorkspaceProjectSelection(
   )
     ? null
     : normalizeProjectId(externalProjectId);
+  const normalizedInitialSessionId =
+    typeof initialSessionId === "string" && initialSessionId.trim().length > 0
+      ? initialSessionId.trim()
+      : null;
+  const loadInitialSessionProjectId = useCallback(
+    () =>
+      normalizedInitialSessionId
+        ? loadPersistedSessionWorkspaceId(normalizedInitialSessionId)
+        : null,
+    [normalizedInitialSessionId],
+  );
   const loadRememberedProjectId = useCallback(() => {
     const rememberedProjectId = loadPersistedProjectId(storageKey);
     return isLegacyDefaultProjectId(rememberedProjectId)
@@ -45,7 +57,10 @@ export function useWorkspaceProjectSelection(
       : rememberedProjectId;
   }, [storageKey]);
   const [internalProjectId, setInternalProjectId] = useState<string | null>(
-    () => normalizedExternalProjectId ?? loadRememberedProjectId(),
+    () =>
+      normalizedExternalProjectId ??
+      loadInitialSessionProjectId() ??
+      loadRememberedProjectId(),
   );
   const handledNewChatRequestRef = useRef<string | null>(null);
   const pendingTopicSwitchRef = useRef<PendingTopicSwitchState | null>(null);
@@ -85,6 +100,30 @@ export function useWorkspaceProjectSelection(
     },
     [storageKey],
   );
+
+  useEffect(() => {
+    if (normalizedExternalProjectId) {
+      return;
+    }
+
+    const initialSessionProjectId = loadInitialSessionProjectId();
+    if (!initialSessionProjectId) {
+      return;
+    }
+
+    clearProjectSelectionRuntime();
+    rememberProjectId(initialSessionProjectId);
+    setInternalProjectId((currentProjectId) =>
+      currentProjectId === initialSessionProjectId
+        ? currentProjectId
+        : initialSessionProjectId,
+    );
+  }, [
+    clearProjectSelectionRuntime,
+    loadInitialSessionProjectId,
+    normalizedExternalProjectId,
+    rememberProjectId,
+  ]);
 
   const resetProjectSelection = useCallback(() => {
     clearProjectSelectionRuntime();

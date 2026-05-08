@@ -173,10 +173,12 @@ interface MessageListProps {
     messageId: string;
     content: string;
   }) => void;
-  /** 将助手结果沉淀为项目资料 */
+  /** 将助手结果保存到项目资料 */
   onSaveMessageAsKnowledge?: (source: {
     messageId: string;
     content: string;
+    sourceName?: string;
+    description?: string | null;
   }) => void;
   /** 打开子代理会话 */
   onOpenSubagentSession?: (sessionId: string) => void;
@@ -250,6 +252,66 @@ const MESSAGE_LIST_RENDER_WINDOW_SETTINGS = {
     minimumDelayMs: MESSAGE_LIST_RESTORED_PROGRESSIVE_RENDER_MINIMUM_DELAY_MS,
   },
 } as const;
+
+function resolveKnowledgeSourceFromArtifact(artifact: Artifact): {
+  sourceName?: string;
+  description?: string | null;
+  content: string;
+} | null {
+  if (
+    isHiddenConversationArtifactPath(resolveArtifactProtocolFilePath(artifact))
+  ) {
+    return null;
+  }
+
+  const text = (artifact.content || "").trim();
+  if (
+    artifact.status === "error" ||
+    text.length < 24 ||
+    !["document", "code", "canvas:document"].includes(artifact.type)
+  ) {
+    return null;
+  }
+
+  const filename =
+    typeof artifact.meta?.filename === "string" && artifact.meta.filename.trim()
+      ? artifact.meta.filename.trim()
+      : undefined;
+  const title = (artifact.title || "").trim();
+
+  return {
+    sourceName: filename || title || undefined,
+    description: title || filename || null,
+    content: artifact.content,
+  };
+}
+
+function resolveKnowledgeSourceFromArtifacts(
+  artifacts: Artifact[] | undefined,
+): {
+  sourceName?: string;
+  description?: string | null;
+  content: string;
+} | null {
+  const visibleArtifacts =
+    artifacts?.filter(
+      (artifact) =>
+        !isHiddenConversationArtifactPath(
+          resolveArtifactProtocolFilePath(artifact),
+        ),
+    ) ?? [];
+
+  return [...visibleArtifacts].reverse().reduce<{
+    sourceName?: string;
+    description?: string | null;
+    content: string;
+  } | null>((matched, artifact) => {
+    if (matched) {
+      return matched;
+    }
+    return resolveKnowledgeSourceFromArtifact(artifact);
+  }, null);
+}
 
 function buildHistoricalMessagePreview(
   content: string,
@@ -1902,12 +1964,18 @@ const MessageListInner: React.FC<MessageListProps> = ({
       actionContent &&
       actionContent.length >= 24,
     );
+    const knowledgeArtifactSource =
+      msg.role === "assistant"
+        ? resolveKnowledgeSourceFromArtifacts(msg.artifacts)
+        : null;
+    const knowledgeSaveContent =
+      knowledgeArtifactSource?.content.trim() || actionContent;
     const canSaveMessageAsKnowledge = Boolean(
       onSaveMessageAsKnowledge &&
       msg.role === "assistant" &&
       !msg.isThinking &&
-      actionContent &&
-      actionContent.length >= 24,
+      knowledgeSaveContent &&
+      knowledgeSaveContent.length >= 24,
     );
     const showMessageActions =
       (msg.role === "user" && (canQuoteMessage || canCopyMessage)) ||
@@ -2089,6 +2157,8 @@ const MessageListInner: React.FC<MessageListProps> = ({
             placement="leading"
             onFileClick={onFileClick}
             onOpenArtifactFromTimeline={onOpenArtifactFromTimeline}
+            sourceMessageId={msg.id}
+            onSaveFileArtifactAsKnowledge={onSaveMessageAsKnowledge}
             onOpenSavedSiteContent={onOpenSavedSiteContent}
             onOpenSubagentSession={onOpenSubagentSession}
             onPermissionResponse={onPermissionResponse}
@@ -2305,7 +2375,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
               )}
 
               {msg.role === "assistant" &&
-                renderArtifactCards(visibleAssistantArtifacts)}
+                renderArtifactCards(visibleAssistantArtifacts, msg.id)}
 
               {msg.role === "assistant" &&
               trailingTimeline &&
@@ -2326,6 +2396,8 @@ const MessageListInner: React.FC<MessageListProps> = ({
                   placement="trailing"
                   onFileClick={onFileClick}
                   onOpenArtifactFromTimeline={onOpenArtifactFromTimeline}
+                  sourceMessageId={msg.id}
+                  onSaveFileArtifactAsKnowledge={onSaveMessageAsKnowledge}
                   onOpenSavedSiteContent={onOpenSavedSiteContent}
                   onOpenSubagentSession={onOpenSubagentSession}
                   onPermissionResponse={onPermissionResponse}
@@ -2407,14 +2479,17 @@ const MessageListInner: React.FC<MessageListProps> = ({
                       onClick={() =>
                         onSaveMessageAsKnowledge?.({
                           messageId: msg.id,
-                          content: actionContent,
+                          content:
+                            knowledgeArtifactSource?.content || actionContent,
+                          sourceName: knowledgeArtifactSource?.sourceName,
+                          description: knowledgeArtifactSource?.description,
                         })
                       }
-                      aria-label="沉淀为项目资料"
-                      title="沉淀为项目资料"
+                      aria-label="保存到项目资料"
+                      title="保存到项目资料"
                     >
                       <FileText size={12} />
-                      <span>沉淀为项目资料</span>
+                      <span>保存到项目资料</span>
                     </Button>
                   ) : null}
                 </MessageActions>
@@ -2427,7 +2502,10 @@ const MessageListInner: React.FC<MessageListProps> = ({
     );
   };
 
-  const renderArtifactCards = (artifacts: Artifact[] | undefined) => {
+  const renderArtifactCards = (
+    artifacts: Artifact[] | undefined,
+    messageId: string,
+  ) => {
     const visibleArtifacts =
       artifacts?.filter(
         (artifact) =>
@@ -2451,47 +2529,79 @@ const MessageListInner: React.FC<MessageListProps> = ({
           const writePhase = resolveArtifactWritePhase(artifact);
           const statusLabel = formatArtifactWritePhaseLabel(writePhase);
           const previewText = resolveArtifactPreviewText(artifact, 180);
+          const knowledgeSource = resolveKnowledgeSourceFromArtifact(artifact);
+          const canSaveArtifactAsKnowledge = Boolean(
+            onSaveMessageAsKnowledge && knowledgeSource,
+          );
 
           return (
-            <button
+            <div
               key={artifact.id}
-              type="button"
-              onClick={() => onArtifactClick?.(artifact)}
-              className="w-full flex items-center gap-3 rounded-lg border border-border/70 bg-background/70 px-3 py-2 text-left transition-colors hover:border-primary/50 hover:bg-background"
+              className="flex w-full flex-col items-stretch gap-2 rounded-xl border border-sky-200/80 bg-sky-50 p-2 text-left shadow-sm shadow-sky-950/5 sm:flex-row"
             >
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                {artifact.status === "streaming" ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <FileText className="h-4 w-4" />
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium text-foreground">
-                  {displayTitle}
+              <button
+                type="button"
+                onClick={() => onArtifactClick?.(artifact)}
+                className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-1 py-0.5 text-left transition-colors hover:bg-white"
+              >
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-700">
+                  {artifact.status === "streaming" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileText className="h-4 w-4" />
+                  )}
                 </div>
-                <div className="truncate text-xs text-muted-foreground">
-                  {filePath}
-                </div>
-                <div className="mt-1 flex items-center gap-2">
-                  <span className="inline-flex rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-                    {statusLabel}
-                  </span>
-                  {previewText ? (
-                    <span className="line-clamp-1 text-xs text-muted-foreground">
-                      {previewText}
+                <div className="min-w-0 flex-1">
+                  <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                    <span className="inline-flex rounded-full border border-sky-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-sky-700">
+                      Document 产物
                     </span>
-                  ) : artifact.status === "streaming" ? (
-                    <span className="text-xs text-muted-foreground">
-                      正在准备文件内容...
+                    {knowledgeSource ? (
+                      <span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                        可保存到项目资料
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="truncate text-sm font-semibold text-slate-900">
+                    {displayTitle}
+                  </div>
+                  <div className="truncate text-xs text-slate-500">
+                    {filePath}
+                  </div>
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className="inline-flex rounded-full bg-white px-2 py-0.5 text-[11px] text-slate-500">
+                      {statusLabel}
                     </span>
-                  ) : null}
+                    {previewText ? (
+                      <span className="line-clamp-1 text-xs text-slate-600">
+                        {previewText}
+                      </span>
+                    ) : artifact.status === "streaming" ? (
+                      <span className="text-xs text-slate-500">
+                        正在准备文件内容...
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
-              </div>
-            </button>
+                <ExternalLink className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+              </button>
+              {canSaveArtifactAsKnowledge ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onSaveMessageAsKnowledge?.({
+                      messageId,
+                      content: knowledgeSource?.content || artifact.content,
+                      sourceName: knowledgeSource?.sourceName,
+                      description: knowledgeSource?.description,
+                    })
+                  }
+                  className="flex shrink-0 items-center justify-center rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-sky-700 transition-colors hover:border-sky-300 hover:bg-sky-100 sm:py-0"
+                >
+                  保存这份文档
+                </button>
+              ) : null}
+            </div>
           );
         })}
       </div>

@@ -20,6 +20,7 @@ import {
   RefreshCw,
   Sparkles,
   Star,
+  Trash2,
   X,
 } from "lucide-react";
 import { ProviderIcon } from "@/icons/providers";
@@ -45,6 +46,10 @@ import type { ConnectionTestResult } from "./connectionTestTypes";
 export interface ProviderSettingProps {
   /** Provider 数据（包含 API Keys） */
   provider: ProviderWithKeysDisplay | null;
+  /** 当前授权状态 */
+  authStatus?: "ready" | "login_required";
+  /** 触发登录或授权 */
+  onLogin?: () => void | Promise<void>;
   /** 更新 Provider 配置回调 */
   onUpdate?: (id: string, request: UpdateProviderRequest) => Promise<void>;
   /** 添加 API Key 回调 */
@@ -55,6 +60,8 @@ export interface ProviderSettingProps {
   ) => Promise<void>;
   /** 测试连接回调 */
   onTestConnection?: (providerId: string) => Promise<ConnectionTestResult>;
+  /** 删除或停用 Provider 配置回调 */
+  onDeleteProvider?: (providerId: string) => Promise<boolean | void>;
   /** 是否正在加载 */
   loading?: boolean;
   /** 额外的 CSS 类名 */
@@ -139,6 +146,123 @@ function extractApiModelIds(models: Array<{ id?: string | null }>): string[] {
   );
 }
 
+function isResponsesImageModel(modelId: string): boolean {
+  const normalized = modelId.trim().toLowerCase();
+  return normalized.includes("gpt-image") || normalized.includes("gpt-images");
+}
+
+function isFalProviderLike(provider: ProviderWithKeysDisplay): boolean {
+  const providerId = provider.id.trim().toLowerCase();
+  const providerType = provider.type.trim().toLowerCase();
+  const apiHost = provider.api_host.trim().toLowerCase();
+
+  return (
+    providerType === "fal" ||
+    providerId === "fal" ||
+    providerId.startsWith("fal-") ||
+    providerId.includes("fal.ai") ||
+    apiHost.includes("fal.run") ||
+    apiHost.includes("queue.fal.run")
+  );
+}
+
+function isFalModelFetchUnsupported(result: {
+  error?: string | null;
+  diagnostic_hint?: string | null;
+}): boolean {
+  const message = `${result.error ?? ""} ${result.diagnostic_hint ?? ""}`
+    .trim()
+    .toLowerCase();
+  return message.includes("fal") && message.includes("/models");
+}
+
+function isLikelyFalImageModel(modelId: string): boolean {
+  const normalized = modelId.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return (
+    normalized.startsWith("fal-ai/") ||
+    /(nano-banana|banana|flux|seedream|kontext|recraft|ideogram|sdxl|stable-diffusion|image)/.test(
+      normalized,
+    )
+  );
+}
+
+function isProviderApiKeyRequired(
+  provider: ProviderWithKeysDisplay,
+  modelFetchApiKeyRequired: boolean,
+): boolean {
+  return isFalProviderLike(provider) || modelFetchApiKeyRequired;
+}
+
+function isResponsesModelFetchUnsupported(result: {
+  error?: string | null;
+  diagnostic_hint?: string | null;
+}): boolean {
+  const message = `${result.error ?? ""} ${result.diagnostic_hint ?? ""}`
+    .trim()
+    .toLowerCase();
+  return (
+    message.includes("responses") &&
+    (message.includes("/models") || message.includes("models 接口"))
+  );
+}
+
+function buildResponsesModelFetchStatus(
+  result: {
+    error?: string | null;
+    diagnostic_hint?: string | null;
+  },
+  models: string[],
+): InlineStatus | null {
+  if (!isResponsesModelFetchUnsupported(result)) {
+    return null;
+  }
+
+  const imageModel = models.find(isResponsesImageModel);
+  if (imageModel) {
+    return {
+      tone: "success",
+      message: `已确认 Responses 图片模型 ${imageModel}，该入口无需标准 /models 枚举，图片生成会走 Responses image_generation。`,
+    };
+  }
+
+  return {
+    tone: "info",
+    message:
+      "该 Responses 图片入口不提供标准 /models 枚举；请手动添加 gpt-images-2 或 gpt-image-2，图片生成会走 Responses image_generation。",
+  };
+}
+
+function buildFalModelFetchStatus(
+  provider: ProviderWithKeysDisplay,
+  result: {
+    error?: string | null;
+    diagnostic_hint?: string | null;
+  },
+  models: string[],
+): InlineStatus | null {
+  if (!isFalProviderLike(provider) || !isFalModelFetchUnsupported(result)) {
+    return null;
+  }
+
+  const firstModel = models.find(isLikelyFalImageModel);
+  if (firstModel) {
+    return {
+      tone: "success",
+      message: `已确认 Fal 模型 ${firstModel}，Fal 不提供标准 /models 枚举，后续会使用手动声明的模型 ID。`,
+    };
+  }
+
+  return {
+    tone: "info",
+    message:
+      "Fal 不提供标准 /models 枚举；当前模型优先级没有可用 Fal 图片模型，请手动添加 fal-ai/nano-banana-pro、fal-ai/flux-pro 或其他 fal-ai/... 模型 ID。",
+  };
+}
+
 // ============================================================================
 // 组件实现
 // ============================================================================
@@ -171,6 +295,64 @@ export const ProviderSetting: React.FC<ProviderSettingProps> = (props) => {
     );
   }
 
+  if (props.authStatus === "login_required") {
+    return (
+      <div
+        className={cn("flex h-full flex-col bg-slate-50", props.className)}
+        data-testid="provider-login-required"
+        data-provider-id={props.provider.id}
+      >
+        <div className="flex-1 overflow-y-auto px-4 py-5 lg:px-6">
+          <section className="mx-auto w-full max-w-[820px] rounded-[30px] border border-amber-200 bg-amber-50 p-5 shadow-sm shadow-slate-950/5 lg:p-6">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
+                <ProviderIcon
+                  providerType={props.provider.id}
+                  fallbackText={props.provider.name}
+                  size={48}
+                  className="flex-shrink-0"
+                  data-testid="provider-icon"
+                />
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="min-w-0 truncate text-xl font-semibold tracking-tight text-amber-950">
+                      {props.provider.name}
+                    </h3>
+                    <Badge
+                      variant="outline"
+                      className="border-amber-300 bg-white text-amber-800"
+                    >
+                      需要登录
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-amber-800">
+                    登录后会自动同步 Lime Hub 的可用模型和本地托管访问凭证；未登录时不会展示本地兜底模型。
+                  </p>
+                </div>
+              </div>
+
+              {props.onLogin ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 shrink-0 rounded-full border-amber-300 bg-white px-4 text-amber-900 hover:bg-amber-100 hover:text-amber-950"
+                  onClick={() => {
+                    void props.onLogin?.();
+                  }}
+                  disabled={props.loading}
+                  data-testid="provider-login-button"
+                >
+                  <ExternalLink className="mr-1.5 h-4 w-4" />
+                  去登录
+                </Button>
+              ) : null}
+            </div>
+          </section>
+        </div>
+      </div>
+    );
+  }
+
   return <ProviderSettingBody {...props} provider={props.provider} />;
 };
 
@@ -179,6 +361,7 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
   onUpdate,
   onAddApiKey,
   onTestConnection,
+  onDeleteProvider,
   loading = false,
   className,
 }) => {
@@ -187,10 +370,14 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
   );
   const [modelDraft, setModelDraft] = useState("");
   const [apiModelIds, setApiModelIds] = useState<string[]>([]);
+  const [apiModelQuery, setApiModelQuery] = useState("");
   const [fetchingModels, setFetchingModels] = useState(false);
   const [modelFetchStatus, setModelFetchStatus] = useState<InlineStatus | null>(
     null,
   );
+  const [providerActionStatus, setProviderActionStatus] =
+    useState<InlineStatus | null>(null);
+  const [deletingProvider, setDeletingProvider] = useState(false);
   const [apiKeyDraft, setApiKeyDraft] = useState("");
   const [apiKeyDirty, setApiKeyDirty] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
@@ -203,7 +390,9 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     setModelList(provider?.custom_models ?? []);
     setModelDraft("");
     setApiModelIds([]);
+    setApiModelQuery("");
     setModelFetchStatus(null);
+    setProviderActionStatus(null);
     setConnectionStatus(null);
     setApiKeyDraft("");
     setApiKeyDirty(false);
@@ -223,24 +412,39 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     providerType: provider.type,
     apiHost: provider.api_host,
   });
-  const apiKeyRequired = modelAutoFetchCapability.requiresApiKey;
+  const modelFetchApiKeyRequired = modelAutoFetchCapability.requiresApiKey;
+  const providerApiKeyRequired = isProviderApiKeyRequired(
+    provider,
+    modelFetchApiKeyRequired,
+  );
   const canUseDraftApiKey = apiKeyDirty && apiKeyDraft.trim().length > 0;
   const canReadModelsFromApi =
     modelAutoFetchCapability.supported &&
-    (!apiKeyRequired || hasApiKey || canUseDraftApiKey);
+    (!modelFetchApiKeyRequired || hasApiKey || canUseDraftApiKey);
   const apiKeyInputValue = apiKeyDirty ? apiKeyDraft : apiKeyMask;
   const primaryModel = modelList[0] ?? null;
   const normalizedModelSet = useMemo(
     () => new Set(modelList.map((model) => model.toLowerCase())),
     [modelList],
   );
-  const suggestedApiModels = useMemo(
+  const availableApiModels = useMemo(
     () =>
-      apiModelIds
-        .filter((modelId) => !normalizedModelSet.has(modelId.toLowerCase()))
-        .slice(0, 8),
+      apiModelIds.filter(
+        (modelId) => !normalizedModelSet.has(modelId.toLowerCase()),
+      ),
     [apiModelIds, normalizedModelSet],
   );
+  const normalizedApiModelQuery = apiModelQuery.trim().toLowerCase();
+  const suggestedApiModels = useMemo(
+    () =>
+      normalizedApiModelQuery
+        ? availableApiModels.filter((modelId) =>
+            modelId.toLowerCase().includes(normalizedApiModelQuery),
+          )
+        : availableApiModels,
+    [availableApiModels, normalizedApiModelQuery],
+  );
+  const canDeleteProvider = Boolean(onDeleteProvider);
   const showExplicitPromptCacheBadge =
     getProviderPromptCacheMode(
       provider.type,
@@ -251,7 +455,7 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     !loading &&
     !testingConnection &&
     modelList.length > 0 &&
-    (!apiKeyRequired || hasApiKey || canUseDraftApiKey);
+    (!providerApiKeyRequired || hasApiKey || canUseDraftApiKey);
 
   const persistDraftApiKey = useCallback(async () => {
     const nextApiKey = apiKeyDraft.trim();
@@ -354,27 +558,57 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
 
       if (source !== "Api") {
         setApiModelIds([]);
+        const responsesStatus = buildResponsesModelFetchStatus(
+          result,
+          modelList,
+        );
+        const falStatus = buildFalModelFetchStatus(provider, result, modelList);
         setModelFetchStatus({
-          tone: "info",
+          tone:
+            responsesStatus?.tone ??
+            falStatus?.tone ??
+            (source === "Error" ? "error" : "info"),
           message:
-            "接口没有返回模型列表，已忽略本地目录或兜底结果。请手动添加模型 ID。",
+            responsesStatus?.message ??
+            falStatus?.message ??
+            (source === "Error"
+              ? (result.error ?? "接口获取模型失败。请手动添加模型 ID。")
+              : "接口没有返回实时模型列表。请手动添加模型 ID。"),
         });
         return;
       }
 
-      if (fetchedModelIds.length === 0) {
+      const effectiveFetchedModelIds = isFalProviderLike(provider)
+        ? fetchedModelIds.filter(isLikelyFalImageModel)
+        : fetchedModelIds;
+
+      if (effectiveFetchedModelIds.length === 0) {
         setApiModelIds([]);
         setModelFetchStatus({
           tone: "info",
-          message: "接口已响应，但没有返回可添加的模型 ID。请手动添加模型。",
+          message: isFalProviderLike(provider)
+            ? "Fal 不提供标准 /models 枚举；当前没有可用 Fal 图片模型，请手动添加 fal-ai/nano-banana-pro、fal-ai/flux-pro 或其他 fal-ai/... 模型 ID。"
+            : "接口已响应，但没有返回可添加的模型 ID。请手动添加模型。",
         });
         return;
       }
 
-      setApiModelIds(fetchedModelIds);
+      setApiModelIds(effectiveFetchedModelIds);
+      setApiModelQuery("");
+      const existingFetchedModelCount = effectiveFetchedModelIds.filter((modelId) =>
+        normalizedModelSet.has(modelId.toLowerCase()),
+      ).length;
+      if (existingFetchedModelCount === effectiveFetchedModelIds.length) {
+        setModelFetchStatus({
+          tone: "success",
+          message: `已确认 ${effectiveFetchedModelIds.length} 个模型，当前模型优先级已包含全部结果。`,
+        });
+        return;
+      }
+
       setModelFetchStatus({
         tone: "success",
-        message: `接口返回 ${fetchedModelIds.length} 个模型，点击下方模型即可加入优先级。`,
+        message: `接口返回 ${effectiveFetchedModelIds.length} 个模型，点击下方模型即可加入优先级。`,
       });
     } catch (error) {
       setModelFetchStatus({
@@ -386,11 +620,47 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     }
   }, [
     canReadModelsFromApi,
+    modelList,
     modelAutoFetchCapability.supported,
     modelAutoFetchCapability.unsupportedReason,
+    normalizedModelSet,
     persistDraftApiKey,
-    provider.id,
+    provider,
   ]);
+
+  const handleDeleteProvider = useCallback(async () => {
+    if (!onDeleteProvider) {
+      return;
+    }
+
+    const deleteDescription = provider.is_system
+      ? "此操作会移除该服务商的已启用模型和本地 API 密钥，系统服务商入口仍可重新添加。"
+      : "此操作会移除该服务商和关联密钥。";
+    const confirmed = window.confirm(
+      `确认删除「${provider.name}」配置？${deleteDescription}`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingProvider(true);
+    setProviderActionStatus(null);
+
+    try {
+      await onDeleteProvider(provider.id);
+      setProviderActionStatus({
+        tone: "success",
+        message: "配置已删除。",
+      });
+    } catch (error) {
+      setProviderActionStatus({
+        tone: "error",
+        message: error instanceof Error ? error.message : "删除配置失败",
+      });
+    } finally {
+      setDeletingProvider(false);
+    }
+  }, [onDeleteProvider, provider.id, provider.is_system, provider.name]);
 
   const handleTestConnection = useCallback(async () => {
     if (modelList.length === 0) {
@@ -401,7 +671,7 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
       return;
     }
 
-    if (apiKeyRequired && !hasApiKey && !canUseDraftApiKey) {
+    if (providerApiKeyRequired && !hasApiKey && !canUseDraftApiKey) {
       setConnectionStatus({
         tone: "error",
         message: "请先填写 API 密钥，再测试连接。",
@@ -448,13 +718,13 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
       setTestingConnection(false);
     }
   }, [
-    apiKeyRequired,
     canUseDraftApiKey,
     hasApiKey,
     modelList.length,
     onTestConnection,
     persistDraftApiKey,
     primaryModel,
+    providerApiKeyRequired,
     provider.id,
   ]);
 
@@ -508,28 +778,67 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
               </div>
             </div>
 
-            {accessHelp.url ? (
-              <a
-                href={accessHelp.url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
-                data-testid="provider-api-key-link"
-              >
-                去获取 API 密钥
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
+            {accessHelp.url || canDeleteProvider ? (
+              <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+                {accessHelp.url ? (
+                  <a
+                    href={accessHelp.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+                    data-testid="provider-api-key-link"
+                  >
+                    去获取 API 密钥
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                ) : null}
+                {canDeleteProvider ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 rounded-full border-rose-200 bg-white px-3 text-rose-600 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700"
+                    onClick={() => {
+                      void handleDeleteProvider();
+                    }}
+                    disabled={loading || deletingProvider}
+                    data-testid="provider-delete-button"
+                  >
+                    {deletingProvider ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    {deletingProvider ? "删除中..." : "删除配置"}
+                  </Button>
+                ) : null}
+              </div>
             ) : null}
           </header>
 
           <div className="mt-6 space-y-6">
+            {providerActionStatus ? (
+              <div
+                className={cn(
+                  "flex items-start gap-2 rounded-[16px] border px-3 py-2 text-sm",
+                  buildStatusClass(providerActionStatus.tone),
+                )}
+                data-testid="provider-action-status"
+              >
+                {getStatusIcon(providerActionStatus.tone)}
+                <span className="leading-5">
+                  {providerActionStatus.message}
+                </span>
+              </div>
+            ) : null}
+
             <div className="space-y-2" data-testid="api-key-section">
               <div className="flex items-center justify-between gap-3">
                 <Label
                   htmlFor="provider-api-key"
                   className="text-sm text-slate-600"
                 >
-                  API 密钥{apiKeyRequired ? "" : "（可选）"}
+                  API 密钥{providerApiKeyRequired ? "" : "（可选）"}
                 </Label>
                 {hasApiKey ? (
                   <span className="text-xs text-emerald-600">已配置</span>
@@ -551,7 +860,7 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
                     setApiKeyDraft(event.target.value);
                   }}
                   placeholder={
-                    apiKeyRequired ? "输入 API 密钥" : "本地服务可留空"
+                    providerApiKeyRequired ? "输入 API 密钥" : "本地服务可留空"
                   }
                   className="h-12 rounded-[18px] border-slate-200 bg-white px-4 pr-11"
                   autoCapitalize="none"
@@ -625,30 +934,54 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
                 </div>
               ) : null}
 
-              {suggestedApiModels.length > 0 ? (
+              {availableApiModels.length > 0 ? (
                 <div
                   className="rounded-[18px] border border-slate-200/80 bg-slate-50 p-3"
                   data-testid="api-model-suggestions"
                 >
-                  <div className="mb-2 text-xs font-medium text-slate-500">
-                    接口模型（点击添加）
+                  <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="text-xs font-medium text-slate-500">
+                      接口模型（显示 {suggestedApiModels.length} /{" "}
+                      {availableApiModels.length} 个，点击添加）
+                    </div>
+                    <Input
+                      value={apiModelQuery}
+                      onChange={(event) => setApiModelQuery(event.target.value)}
+                      placeholder="筛选接口模型"
+                      className="h-8 rounded-full border-slate-200 bg-white px-3 text-xs normal-case sm:w-[220px]"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      data-testid="api-model-filter-input"
+                    />
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {suggestedApiModels.map((modelId) => (
-                      <button
-                        key={modelId}
-                        type="button"
-                        onClick={() => {
-                          void addModels([modelId]);
-                        }}
-                        className="max-w-full rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition hover:border-slate-300 hover:text-slate-900"
-                        data-testid="api-model-suggestion"
-                      >
-                        <span className="block max-w-[220px] truncate normal-case">
-                          {modelId}
-                        </span>
-                      </button>
-                    ))}
+                  <div
+                    className="max-h-56 overflow-y-auto pr-1"
+                    data-testid="api-model-suggestion-list"
+                  >
+                    {suggestedApiModels.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {suggestedApiModels.map((modelId) => (
+                          <button
+                            key={modelId}
+                            type="button"
+                            onClick={() => {
+                              void addModels([modelId]);
+                            }}
+                            className="max-w-full rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition hover:border-slate-300 hover:text-slate-900"
+                            data-testid="api-model-suggestion"
+                          >
+                            <span className="block max-w-[220px] truncate normal-case">
+                              {modelId}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-[14px] border border-dashed border-slate-200 bg-white px-3 py-4 text-center text-xs text-slate-500">
+                        没有匹配的接口模型。
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : null}
@@ -769,7 +1102,7 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
                 <p className="text-center text-xs text-slate-500">
                   {modelList.length === 0
                     ? "先添加一个模型，再测试连接。"
-                    : apiKeyRequired && !hasApiKey && !canUseDraftApiKey
+                    : providerApiKeyRequired && !hasApiKey && !canUseDraftApiKey
                       ? "先填写 API 密钥，再测试连接。"
                       : "当前暂不可测试。"}
                 </p>

@@ -171,6 +171,12 @@ interface WorkspaceCanvasPreviewFactoryParams {
   imageGenerationModelId: ComponentProps<
     typeof CanvasFactory
   >["imageGenerationModelId"];
+  imageGenerationSelectionReady: ComponentProps<
+    typeof CanvasFactory
+  >["imageGenerationSelectionReady"];
+  imageGenerationSelectionWarning: ComponentProps<
+    typeof CanvasFactory
+  >["imageGenerationSelectionWarning"];
   autoImageTopic?: string;
   autoContinueProviderType: ComponentProps<
     typeof CanvasFactory
@@ -575,6 +581,17 @@ function useWorkspaceCanvasPreviewRuntime({
       blockFocusRequestKey: artifactPreview.blockFocusRequestKey,
       onJumpToTimelineItem: artifactPreview.onJumpToTimelineItem,
       onCloseCanvas: artifactPreview.onCloseCanvas,
+      canvasFactoryProps: {
+        projectRootPath: defaultPreview.workspaceRoot,
+        projectId: canvasFactory.projectId,
+        contentId: canvasFactory.contentId,
+        imageGenerationProviderId: canvasFactory.imageGenerationProviderId,
+        imageGenerationModelId: canvasFactory.imageGenerationModelId,
+        imageGenerationSelectionReady:
+          canvasFactory.imageGenerationSelectionReady,
+        imageGenerationSelectionWarning:
+          canvasFactory.imageGenerationSelectionWarning,
+      },
       renderToolbarActions: artifactPreview.renderToolbarActions,
     }),
     [
@@ -594,6 +611,13 @@ function useWorkspaceCanvasPreviewRuntime({
       artifactPreview.renderToolbarActions,
       artifactPreview.showPreviousVersionBadge,
       artifactPreview.threadItems,
+      canvasFactory.contentId,
+      canvasFactory.imageGenerationModelId,
+      canvasFactory.imageGenerationProviderId,
+      canvasFactory.imageGenerationSelectionReady,
+      canvasFactory.imageGenerationSelectionWarning,
+      canvasFactory.projectId,
+      defaultPreview.workspaceRoot,
     ],
   );
 
@@ -700,6 +724,10 @@ function useWorkspaceCanvasPreviewRuntime({
             projectRootPath: defaultPreview.workspaceRoot,
             imageGenerationProviderId: canvasFactory.imageGenerationProviderId,
             imageGenerationModelId: canvasFactory.imageGenerationModelId,
+            imageGenerationSelectionReady:
+              canvasFactory.imageGenerationSelectionReady,
+            imageGenerationSelectionWarning:
+              canvasFactory.imageGenerationSelectionWarning,
             autoImageTopic: canvasFactory.autoImageTopic,
             autoContinueProviderType: canvasFactory.autoContinueProviderType,
             onAutoContinueProviderTypeChange:
@@ -730,6 +758,8 @@ function useWorkspaceCanvasPreviewRuntime({
       canvasFactory.contentId,
       canvasFactory.imageGenerationModelId,
       canvasFactory.imageGenerationProviderId,
+      canvasFactory.imageGenerationSelectionReady,
+      canvasFactory.imageGenerationSelectionWarning,
       canvasFactory.isStreaming,
       canvasFactory.onAddImage,
       canvasFactory.onAutoContinueModelChange,
@@ -1144,6 +1174,8 @@ interface UseWorkspaceCanvasSceneRuntimeParams {
   handleCanvasSelectionTextChange: CanvasFactoryParams["onSelectionTextChange"];
   projectId: CanvasFactoryParams["projectId"];
   contentId: CanvasFactoryParams["contentId"];
+  imageGenerationSelectionReady: CanvasFactoryParams["imageGenerationSelectionReady"];
+  imageGenerationSelectionWarning: CanvasFactoryParams["imageGenerationSelectionWarning"];
   sourceThreadId?: string | null;
   projectName?: CanvasFactoryParams["autoImageTopic"];
   providerType: CanvasFactoryParams["autoContinueProviderType"];
@@ -1207,6 +1239,8 @@ export function useWorkspaceCanvasSceneRuntime({
   handleCanvasSelectionTextChange,
   projectId,
   contentId,
+  imageGenerationSelectionReady,
+  imageGenerationSelectionWarning,
   sourceThreadId,
   projectName,
   providerType,
@@ -1332,6 +1366,8 @@ export function useWorkspaceCanvasSceneRuntime({
         imageGenerationProviderId:
           imageWorkbenchGenerationRuntime.selectedProviderId,
         imageGenerationModelId: imageWorkbenchGenerationRuntime.selectedModelId,
+        imageGenerationSelectionReady,
+        imageGenerationSelectionWarning,
         autoImageTopic: projectName,
         autoContinueProviderType: providerType,
         onAutoContinueProviderTypeChange: setProviderType,

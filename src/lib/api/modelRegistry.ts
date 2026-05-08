@@ -19,7 +19,7 @@ interface ModelRegistryQueryOptions {
 
 export interface FetchProviderModelsResult {
   models: EnhancedModelMetadata[];
-  source: "Api" | "Catalog" | "CustomModels" | "LocalFallback";
+  source: "Api" | "Error";
   error: string | null;
   request_url?: string | null;
   diagnostic_hint?: string | null;
@@ -32,26 +32,12 @@ export interface FetchProviderModelsResult {
     | "other"
     | null;
   should_prompt_error?: boolean;
+  from_cache?: boolean;
 }
 
 export function normalizeFetchProviderModelsSource(
   result: Pick<FetchProviderModelsResult, "source" | "models" | "error">,
 ): FetchProviderModelsResult["source"] {
-  if (result.source === "CustomModels") {
-    return "CustomModels";
-  }
-
-  const preservesCurrentProviderCustomModels =
-    result.source === "LocalFallback" &&
-    Array.isArray(result.models) &&
-    result.models.length > 0 &&
-    typeof result.error === "string" &&
-    result.error.includes("已保留当前 Provider 的自定义模型");
-
-  if (preservesCurrentProviderCustomModels) {
-    return "CustomModels";
-  }
-
   return result.source;
 }
 
@@ -123,15 +109,15 @@ export async function getModelRegistry(
 }
 
 /**
- * 获取模型注册表中所有 provider_id
+ * 兼容旧模型注册表 provider_id 查询；本地模型目录已下线，后端返回空集合。
  */
 export async function getModelRegistryProviderIds(): Promise<string[]> {
   return safeInvoke("get_model_registry_provider_ids");
 }
 
 /**
- * 刷新模型注册表（强制从内嵌资源重新加载）
- * @returns 加载的模型数量
+ * 刷新模型注册表（清空已下线的本地模型注册缓存）
+ * @returns 当前模型数量
  */
 export async function refreshModelRegistry(): Promise<number> {
   const count = await safeInvoke<number>("refresh_model_registry");

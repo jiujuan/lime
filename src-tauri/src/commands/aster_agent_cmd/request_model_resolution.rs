@@ -679,11 +679,11 @@ fn build_provider_resolution_context(
         configured_api_host =
             normalize_optional_text(Some(provider_with_keys.provider.api_host.clone()));
         has_credentials = !provider_with_keys.api_keys.is_empty();
+        custom_models = provider_with_keys.provider.custom_models;
 
         if is_custom_provider {
             compatibility_provider_key = provider_with_keys.provider.provider_type.to_string();
             registry_provider_ids.push(provider_registry_id_from_key(&compatibility_provider_key));
-            custom_models = provider_with_keys.provider.custom_models;
         }
     }
 
@@ -1274,8 +1274,90 @@ fn choose_best_multi_candidate_model(
     candidates.first().map(|model| model.id.clone())
 }
 
+fn is_provider_custom_model(context: &ProviderResolutionContext, model_id: &str) -> bool {
+    let normalized_model_id = normalize_identifier(model_id);
+    context
+        .custom_models
+        .iter()
+        .any(|custom_model| normalize_identifier(custom_model) == normalized_model_id)
+}
+
+fn choose_configured_custom_model_candidate(
+    context: &ProviderResolutionContext,
+    current_model_id: &str,
+    models: &[EnhancedModelMetadata],
+    thinking_enabled: bool,
+    has_images: bool,
+    runtime_requirements: &[RuntimeModelCapabilityRequirement],
+) -> Option<String> {
+    let normalized_current_id = normalize_identifier(current_model_id);
+
+    context.custom_models.iter().find_map(|model_id| {
+        let normalized_model_id = normalize_identifier(model_id);
+        if normalized_model_id.is_empty() || normalized_model_id == normalized_current_id {
+            return None;
+        }
+
+        let model = find_model_meta(model_id, models);
+        if configured_custom_model_matches_runtime_request(
+            model_id,
+            model,
+            thinking_enabled,
+            has_images,
+            runtime_requirements,
+        ) {
+            Some(
+                model
+                    .map(|item| item.id.clone())
+                    .unwrap_or_else(|| model_id.to_string()),
+            )
+        } else {
+            None
+        }
+    })
+}
+
+fn configured_custom_model_matches_runtime_request(
+    model_id: &str,
+    model: Option<&EnhancedModelMetadata>,
+    thinking_enabled: bool,
+    has_images: bool,
+    runtime_requirements: &[RuntimeModelCapabilityRequirement],
+) -> bool {
+    if let Some(model) = model {
+        return is_runtime_candidate_model(
+            model,
+            thinking_enabled,
+            has_images,
+            runtime_requirements,
+        );
+    }
+
+    if has_images && !supports_vision(None, model_id) {
+        return false;
+    }
+    if thinking_enabled && !model_has_reasoning_capability(None, model_id) {
+        return false;
+    }
+
+    runtime_requirements
+        .iter()
+        .all(|requirement| match requirement {
+            RuntimeModelCapabilityRequirement::TextGeneration
+            | RuntimeModelCapabilityRequirement::CheapSummary => true,
+            RuntimeModelCapabilityRequirement::VisionInput => supports_vision(None, model_id),
+            RuntimeModelCapabilityRequirement::BrowserReasoning => {
+                model_has_reasoning_capability(None, model_id)
+            }
+            RuntimeModelCapabilityRequirement::ImageGeneration
+            | RuntimeModelCapabilityRequirement::AudioTranscription
+            | RuntimeModelCapabilityRequirement::VoiceGeneration
+            | RuntimeModelCapabilityRequirement::StructuredDocumentGeneration => false,
+        })
+}
+
 fn should_auto_reselect_multi_candidate_model(context: &ProviderResolutionContext) -> bool {
-    !context.is_custom_provider
+    !context.is_custom_provider && context.custom_models.is_empty()
 }
 
 fn choose_provider_permission_recovery_model(
@@ -1285,6 +1367,17 @@ fn choose_provider_permission_recovery_model(
     thinking_enabled: bool,
     has_images: bool,
 ) -> Option<String> {
+    if let Some(candidate) = choose_configured_custom_model_candidate(
+        context,
+        current_model_id,
+        models,
+        thinking_enabled,
+        has_images,
+        &[RuntimeModelCapabilityRequirement::TextGeneration],
+    ) {
+        return Some(candidate);
+    }
+
     if !context.is_custom_provider || !is_xiaomi_like_provider_context(context) {
         return None;
     }
@@ -2845,6 +2938,28 @@ async fn build_runtime_request_provider_config_from_preference(
         resolve_base_model_on_thinking_off(&normalized_model_preference, &catalog)
     };
     let mut fallback_chain = Vec::new();
+    if !context.custom_models.is_empty() && !is_provider_custom_model(&context, &resolved_model) {
+        if let Some(configured_model) = choose_configured_custom_model_candidate(
+            &context,
+            &resolved_model,
+            &catalog,
+            thinking_enabled,
+            has_images,
+            &runtime_requirements,
+        ) {
+            tracing::info!(
+                "[AsterAgent] 当前模型不在 Provider 已配置模型内，自动回落到配置模型: session={}, source={:?}, provider={}, stale_model={}, fallback_model={}",
+                request.session_id,
+                model_preference_source,
+                context.provider_selector,
+                resolved_model,
+                configured_model
+            );
+            fallback_chain.push(format!("{}:{}", context.provider_selector, resolved_model));
+            resolved_model = configured_model;
+            fallback_chain.push(format!("{}:{}", context.provider_selector, resolved_model));
+        }
+    }
     let should_reselect_runtime_gap = should_reselect_for_runtime_capability_gap(
         find_model_meta(&resolved_model, &catalog),
         compatible_candidate_count,
@@ -2872,6 +2987,7 @@ async fn build_runtime_request_provider_config_from_preference(
 
     let should_fallback_unknown_model = allow_runtime_fallback
         && !context.is_custom_provider
+        && context.custom_models.is_empty()
         && find_model_meta(&resolved_model, &catalog).is_none();
     if should_fallback_unknown_model {
         let fallback_model = resolve_catalog_fallback_model_id(
@@ -4113,6 +4229,25 @@ mod tests {
     }
 
     #[test]
+    fn configured_model_allowlist_disables_system_provider_auto_reselection() {
+        let context = ProviderResolutionContext {
+            provider_selector: "deepseek".to_string(),
+            aster_provider_name: "openai".to_string(),
+            compatibility_provider_key: "deepseek".to_string(),
+            registry_provider_ids: vec!["deepseek".to_string()],
+            alias_key: "deepseek".to_string(),
+            custom_models: vec!["deepseek-chat".to_string()],
+            is_custom_provider: false,
+            provider_type: Some(ApiProviderType::Openai),
+            provider_group: None,
+            configured_api_host: Some("https://api.deepseek.com".to_string()),
+            has_credentials: true,
+        };
+
+        assert!(!should_auto_reselect_multi_candidate_model(&context));
+    }
+
+    #[test]
     fn xiaomi_permission_recovery_prefers_non_flash_candidate() {
         let context = ProviderResolutionContext {
             provider_selector: "custom-mimo".to_string(),
@@ -4158,6 +4293,90 @@ mod tests {
             )
             .as_deref(),
             Some("mimo-v2.5-pro")
+        );
+    }
+
+    #[test]
+    fn permission_recovery_prefers_configured_model_for_system_provider() {
+        let context = ProviderResolutionContext {
+            provider_selector: "deepseek".to_string(),
+            aster_provider_name: "openai".to_string(),
+            compatibility_provider_key: "deepseek".to_string(),
+            registry_provider_ids: vec!["deepseek".to_string()],
+            alias_key: "deepseek".to_string(),
+            custom_models: vec!["deepseek-chat".to_string(), "deepseek-reasoner".to_string()],
+            is_custom_provider: false,
+            provider_type: Some(ApiProviderType::Openai),
+            provider_group: None,
+            configured_api_host: Some("https://api.deepseek.com".to_string()),
+            has_credentials: true,
+        };
+        let models = vec![
+            build_model(
+                "deepseek-chat",
+                Some("deepseek"),
+                false,
+                false,
+                true,
+                ModelTier::Mini,
+                Some("2026-04-01"),
+            ),
+            build_model(
+                "deepseek-reasoner",
+                Some("deepseek"),
+                true,
+                false,
+                true,
+                ModelTier::Pro,
+                Some("2026-04-02"),
+            ),
+            build_model(
+                "gpt-5.5",
+                Some("gpt"),
+                true,
+                false,
+                true,
+                ModelTier::Max,
+                Some("2026-05-01"),
+            ),
+        ];
+
+        assert_eq!(
+            choose_provider_permission_recovery_model(&context, "gpt-5.5", &models, false, false)
+                .as_deref(),
+            Some("deepseek-chat")
+        );
+    }
+
+    #[test]
+    fn permission_recovery_can_use_uncataloged_configured_model() {
+        let context = ProviderResolutionContext {
+            provider_selector: "siliconflow-cn".to_string(),
+            aster_provider_name: "openai".to_string(),
+            compatibility_provider_key: "openai".to_string(),
+            registry_provider_ids: vec!["siliconflow-cn".to_string()],
+            alias_key: "siliconflow-cn".to_string(),
+            custom_models: vec!["deepseek-ai/DeepSeek-V4-Flash".to_string()],
+            is_custom_provider: false,
+            provider_type: Some(ApiProviderType::Openai),
+            provider_group: None,
+            configured_api_host: Some("https://api.siliconflow.cn/v1".to_string()),
+            has_credentials: true,
+        };
+        let models = vec![build_model(
+            "gpt-5.5",
+            Some("gpt"),
+            true,
+            false,
+            true,
+            ModelTier::Max,
+            Some("2026-05-01"),
+        )];
+
+        assert_eq!(
+            choose_provider_permission_recovery_model(&context, "gpt-5.5", &models, false, false)
+                .as_deref(),
+            Some("deepseek-ai/DeepSeek-V4-Flash")
         );
     }
 

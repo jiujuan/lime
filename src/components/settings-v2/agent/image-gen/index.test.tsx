@@ -17,17 +17,48 @@ vi.mock("@/components/input-kit", () => ({
     providerType,
     model,
     placeholderLabel,
+    getFallbackModels,
   }: {
     providerType: string;
     model: string;
     placeholderLabel?: string;
+    getFallbackModels?: (provider: {
+      key: string;
+      label: string;
+      registryId: string;
+      fallbackRegistryId?: string;
+      type: string;
+      providerId?: string;
+      apiHost?: string;
+      customModels?: string[];
+    }) => Array<{ id: string }>;
   }) => {
     const providerLabel =
-      providerType === "relay-openai" ? "Relay OpenAI" : providerType;
+      providerType === "relay-openai"
+        ? "Relay OpenAI"
+        : providerType === "fal"
+          ? "Fal"
+          : providerType;
+    const fallbackModelIds =
+      providerType === "fal"
+        ? (getFallbackModels?.({
+            key: "fal",
+            label: "Fal",
+            registryId: "fal",
+            fallbackRegistryId: "openai",
+            type: "openai",
+            providerId: "fal",
+            apiHost: "https://fal.run/fal-ai",
+            customModels: ["gpt-5.2-pro"],
+          })?.map((item) => item.id) ?? [])
+        : [];
     return (
       <div data-testid="image-model-selector">
         {providerLabel || placeholderLabel || "自动选择"} /{" "}
         {model || placeholderLabel || "自动选择"}
+        {fallbackModelIds.length > 0 ? (
+          <span> / {fallbackModelIds.join(",")}</span>
+        ) : null}
       </div>
     );
   },
@@ -46,11 +77,12 @@ vi.mock("@/hooks/useApiKeyProvider", () => ({
       },
       {
         id: "fal",
-        type: "fal",
+        type: "openai",
         name: "Fal",
         enabled: true,
         api_key_count: 1,
-        custom_models: ["fal-ai/nano-banana-pro"],
+        api_host: "https://fal.run/fal-ai",
+        custom_models: ["gpt-5.2-pro"],
       },
       {
         id: "tts-only",
@@ -237,5 +269,29 @@ describe("ImageGenSettings", () => {
       savedConfig.workspace_preferences.media_defaults.image,
     ).toBeUndefined();
     expect(container.textContent).toContain("设置已保存");
+  });
+
+  it("Fal 只配置文本自定义模型时，图片模型选择器应回退到内置 Fal 图片模型", async () => {
+    mockGetConfig.mockResolvedValueOnce({
+      workspace_preferences: {
+        media_defaults: {
+          image: {
+            preferredProviderId: "fal",
+            allowFallback: true,
+          },
+        },
+      },
+      image_gen: {
+        default_count: 3,
+        default_quality: "hd",
+      },
+    });
+
+    const container = renderComponent();
+    await flushEffects(3);
+
+    expect(container.textContent).toContain("Fal / 自动选择");
+    expect(container.textContent).toContain("fal-ai/nano-banana-pro");
+    expect(container.textContent).not.toContain("gpt-5.2-pro");
   });
 });

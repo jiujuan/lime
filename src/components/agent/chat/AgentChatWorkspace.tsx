@@ -313,6 +313,7 @@ import {
   resolveEffectiveInitialInputCapability,
 } from "./utils/inputCapabilityBootstrap";
 import { buildMessageInspirationDraft } from "./utils/messageInspirationDraft";
+import { buildKnowledgeSavePageParams } from "./workspace/knowledge/knowledgeSaveNavigation";
 import {
   listCuratedTaskRecommendationSignals,
   recordCuratedTaskRecommendationSignalFromMemory,
@@ -1448,7 +1449,8 @@ export function AgentChatWorkspace({
     null,
   );
   const { workspaceHarnessEnabled } = useDeveloperFeatureFlags();
-  const { mediaDefaults } = useGlobalMediaGenerationDefaults();
+  const { mediaDefaults, loading: mediaDefaultsLoading } =
+    useGlobalMediaGenerationDefaults();
   const { serviceModels } = useServiceModelsConfig();
   const inputCompletionEnabled =
     serviceModels.input_completion?.enabled !== false;
@@ -1525,6 +1527,36 @@ export function AgentChatWorkspace({
     effectiveImageWorkbenchPreference.preferredProviderId,
     imageWorkbenchPreferredProviderUnavailable,
   ]);
+  const imageGenerationSelectionWarning = useMemo(() => {
+    if (mediaDefaultsLoading || imageWorkbenchGenerationRuntime.providersLoading) {
+      return "图片服务设置加载中，请稍后生成图层资产。";
+    }
+
+    if (
+      imageWorkbenchPreferredProviderUnavailable &&
+      !effectiveImageWorkbenchPreference.allowFallback
+    ) {
+      return imageWorkbenchPreferenceWarning;
+    }
+
+    if (
+      !imageWorkbenchGenerationRuntime.selectedProviderId ||
+      !imageWorkbenchGenerationRuntime.selectedModelId
+    ) {
+      return "图片服务尚未选定 Provider/模型，请先到媒体服务图片设置确认默认渠道。";
+    }
+
+    return null;
+  }, [
+    effectiveImageWorkbenchPreference.allowFallback,
+    imageWorkbenchGenerationRuntime.providersLoading,
+    imageWorkbenchGenerationRuntime.selectedModelId,
+    imageWorkbenchGenerationRuntime.selectedProviderId,
+    imageWorkbenchPreferenceWarning,
+    imageWorkbenchPreferredProviderUnavailable,
+    mediaDefaultsLoading,
+  ]);
+  const imageGenerationSelectionReady = !imageGenerationSelectionWarning;
 
   useEffect(() => {
     taskFilesRef.current = taskFiles;
@@ -4486,8 +4518,10 @@ export function AgentChatWorkspace({
     taskCenterWorkspaceId,
   ]);
   const hasMessages = hasDisplayMessages;
+  const hasCanvasWorkbenchContent = layoutMode !== "chat";
   const effectiveShowChatPanel =
     showChatPanel ||
+    hasCanvasWorkbenchContent ||
     (agentEntry === "new-task" &&
       (hasDisplayMessages ||
         isThemeWorkbench ||
@@ -4496,6 +4530,8 @@ export function AgentChatWorkspace({
         isHomePendingPreviewActive ||
         isSending ||
         queuedTurns.length > 0));
+  const allowTopicSidebarToggle =
+    showChatPanel || (agentEntry === "new-task" && effectiveShowChatPanel);
   const shouldRestoreImageTasksFromWorkspace = !(
     agentEntry === "new-task" &&
     !contentId &&
@@ -4531,6 +4567,7 @@ export function AgentChatWorkspace({
     hasPendingA2UIForm,
     layoutMode,
     showChatPanel: effectiveShowChatPanel,
+    allowSidebarToggle: allowTopicSidebarToggle,
     showSidebar,
     defaultTopicSidebarVisible,
     hasMessages,
@@ -7072,6 +7109,7 @@ export function AgentChatWorkspace({
       preferEmptyStateForFreshTaskCenterTab: shouldRenderTaskCenterEmbeddedHome,
       hasDisplayMessages,
       hasPendingA2UIForm,
+      hasCanvasContent: hasCanvasWorkbenchContent,
       isThemeWorkbench,
       hasUnconsumedInitialDispatch,
       isPreparingSend: isPreparingSend || Boolean(taskCenterDraftSendRequest),
@@ -7127,6 +7165,7 @@ export function AgentChatWorkspace({
     contextWorkspace.generalWorkbenchEnabled,
     currentGate.status,
     hasDisplayMessages,
+    hasCanvasWorkbenchContent,
     hasPendingA2UIForm,
     hideTopBar,
     isBootstrapDispatchPending,
@@ -7577,7 +7616,12 @@ export function AgentChatWorkspace({
   });
   const importTextAsKnowledge = inputbarScene.onImportTextAsKnowledge;
   const handleSaveMessageAsKnowledge = useCallback(
-    (source: { messageId: string; content: string }) => {
+    (source: {
+      messageId: string;
+      content: string;
+      sourceName?: string;
+      description?: string | null;
+    }) => {
       const sourceText = source.content.trim();
       if (!sourceText) {
         toast.error("这条结果暂时没有可沉淀的内容");
@@ -7588,14 +7632,38 @@ export function AgentChatWorkspace({
         return;
       }
 
+      const savePageParams = buildKnowledgeSavePageParams({
+        projectRootPath: project?.rootPath,
+        selectedPackName: inputbarScene.knowledgePackSelection?.packName,
+        currentSessionTitle: teamSessionRuntime.currentSessionTitle,
+        source: {
+          ...source,
+          content: sourceText,
+        },
+      });
+      if (_onNavigate && savePageParams) {
+        _onNavigate("knowledge", savePageParams);
+        return;
+      }
+
       importTextAsKnowledge({
-        sourceName: `agent-output-${source.messageId}.md`,
+        sourceName:
+          source.sourceName?.trim() || `agent-output-${source.messageId}.md`,
         sourceText,
-        description: teamSessionRuntime.currentSessionTitle || "对话结果资料",
+        description:
+          source.description?.trim() ||
+          teamSessionRuntime.currentSessionTitle ||
+          "对话结果资料",
         packType: "custom",
       });
     },
-    [importTextAsKnowledge, teamSessionRuntime.currentSessionTitle],
+    [
+      _onNavigate,
+      importTextAsKnowledge,
+      inputbarScene.knowledgePackSelection?.packName,
+      project?.rootPath,
+      teamSessionRuntime.currentSessionTitle,
+    ],
   );
 
   const canvasScene = useWorkspaceCanvasSceneRuntime({
@@ -7636,6 +7704,8 @@ export function AgentChatWorkspace({
     handleCanvasSelectionTextChange,
     projectId: projectId ?? null,
     contentId: contentId ?? null,
+    imageGenerationSelectionReady,
+    imageGenerationSelectionWarning,
     sourceThreadId: sessionId ?? null,
     projectName: project?.name || undefined,
     providerType,
@@ -8150,6 +8220,11 @@ export function AgentChatWorkspace({
         onClose={() => handleSetFileManagerSidebarOpen(false)}
         onAddPathReferences={handleAddPathReferences}
         onImportAsKnowledge={inputbarScene.onImportPathReferenceAsKnowledge}
+        onOpenFileInWorkspace={(entry) => {
+          void openProjectFilePreviewInCanvas({
+            absolutePath: entry.path,
+          });
+        }}
         initialDirectory={project?.rootPath || null}
       />
     ) : null;

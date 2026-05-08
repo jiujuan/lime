@@ -22,7 +22,7 @@ export function KnowledgePackCard({
   companionLabels?: string[];
 }) {
   const isReady = pack.metadata.status === "ready";
-  const primaryLabel = isReady ? "用于生成" : "继续确认";
+  const primaryLabel = isReady ? "用于创作" : "去确认";
 
   return (
     <article className="rounded-[20px] border border-slate-200 bg-slate-50 p-4">
@@ -35,7 +35,7 @@ export function KnowledgePackCard({
             <StatusPill status={pack.metadata.status} />
             {pack.defaultForWorkspace ? (
               <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                默认资料
+                默认使用
               </span>
             ) : null}
           </div>
@@ -45,7 +45,7 @@ export function KnowledgePackCard({
           </p>
           {companionLabels.length > 0 ? (
             <p className="mt-2 text-xs leading-5 text-emerald-700">
-              用于生成时会自动搭配人设资料：{companionLabels.join("、")}
+              用于创作时会搭配写作口吻：{companionLabels.join("、")}
             </p>
           ) : null}
         </div>
@@ -67,17 +67,17 @@ export function KnowledgePackCard({
           className="inline-flex h-9 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
         >
           <BookOpen className="h-4 w-4" />
-          查看详情
+          打开
         </button>
         <button
           type="button"
           onClick={() => onSetDefault(pack.metadata.name)}
           disabled={actionBusy || !isReady}
-          title={isReady ? undefined : "未确认资料不能设为默认"}
+          title={isReady ? undefined : "未确认资料不能默认使用"}
           className="inline-flex h-9 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <ShieldCheck className="h-4 w-4" />
-          设为默认
+          默认使用
         </button>
       </div>
     </article>

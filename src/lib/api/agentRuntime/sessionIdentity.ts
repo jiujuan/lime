@@ -1,6 +1,7 @@
 const NON_USER_FACING_AGENT_SESSION_ID_PREFIXES = [
   "title-gen-",
   "persona-gen-",
+  "knowledge-builder-session-",
   "__lime_theme_context_search__-",
   "persisted-usage-",
 ];

@@ -463,9 +463,22 @@ async function waitForCheck(options, label, check) {
   let lastValue = null;
 
   while (Date.now() - startedAt < options.timeoutMs) {
-    lastValue = await check();
-    if (lastValue?.ok) {
-      return lastValue.value;
+    try {
+      lastValue = await check();
+      if (lastValue?.ok) {
+        return lastValue.value;
+      }
+    } catch (error) {
+      if (!isTransientPageEvaluationError(error)) {
+        throw error;
+      }
+      lastValue = {
+        ok: false,
+        value: {
+          transientError:
+            error instanceof Error ? error.message : String(error),
+        },
+      };
     }
     await sleep(options.intervalMs);
   }
@@ -474,6 +487,15 @@ async function waitForCheck(options, label, check) {
     `[smoke:agent-runtime-tool-surface-page] 等待 ${label} 超时，最后结果: ${JSON.stringify(
       lastValue?.value ?? null,
     )}`,
+  );
+}
+
+function isTransientPageEvaluationError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes("Execution context was destroyed") ||
+    message.includes("most likely because of a navigation") ||
+    message.includes("Cannot find context with specified id")
   );
 }
 

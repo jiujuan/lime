@@ -65,7 +65,7 @@
 
 - `get_model_registry_provider_ids`
 
-它只允许读取 `src-tauri/resources/models/index.json` 的 `providers` 列表。无论是正式 Tauri 命令还是 DevBridge 开发链路，都不应再回退数据库或其它运行态缓存去“猜” provider 集合；资源异常时必须直接暴露错误，避免把索引损坏伪装成“只是没有模型”。
+`src-tauri/resources/models` 本地模型 catalog 已下线；Provider 元信息以 `get_system_provider_catalog` 为事实源，模型列表以 Provider 实时 `/models` 接口和用户显式 `custom_models` 为事实源。Provider 实时 `/models` 的成功结果可以由 `ModelRegistryService` 持久化缓存 10 天，所有读取先查缓存再访问上游，但该缓存只保存真实接口结果，不得退化成本地 catalog 兜底。`get_model_registry_provider_ids` 仅作为兼容命令保留空结果，不应再读取本地资源、数据库或运行态缓存去“猜” provider 集合。
 同理，聊天运行时初始化的 `aster_agent_init` 在浏览器 DevBridge 模式下也不能再被放进 `mockPriorityCommands`。只要桥接在线，它就必须优先读取后端真实 `provider_name / model_name`，让聊天入口拿到当前运行时模型。
 进一步地，围绕运行时模型解析的真相命令：`aster_agent_init`、`get_default_provider`、`get_api_key_providers`、`get_model_registry`、`get_provider_alias_config`、`fetch_provider_models_auto`、`get_model_registry_provider_ids`，在浏览器 DevBridge 模式下如果桥接失败，必须直接抛错，不能再通过 `safeInvoke` 静默退回 mock；否则前端会把“后端未连上 / 命令失败”误显示成假的 Provider / 模型列表。旧 `get_provider_pool_overview` 属于凭证池命令面，已随凭证池退役，不得重新作为运行时模型解析事实源。
 同时要明确，`aster_agent_init` 只负责初始化 Agent，并不保证已经完成 Provider 配置；当它未返回 `provider_name / model_name` 时，前端不得把本地硬编码默认值当作真实模型，而应继续回退到 `get_default_provider` + 已配置 Provider/模型注册表解析链，拿到当前工作区真正可用的 `provider/model`。

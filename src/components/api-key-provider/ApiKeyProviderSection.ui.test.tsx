@@ -33,11 +33,47 @@ vi.mock("@/lib/api/apiKeyProvider", () => ({
 }));
 
 vi.mock("./ProviderSetting", () => ({
-  ProviderSetting: (props: { provider: ProviderWithKeysDisplay | null }) => (
-    <div data-testid="provider-setting-stub">
-      {props.provider?.name ?? "未选择模型"}
-    </div>
-  ),
+  ProviderSetting: (props: {
+    provider: ProviderWithKeysDisplay | null;
+    authStatus?: "ready" | "login_required";
+    onLogin?: () => void | Promise<void>;
+    onDeleteProvider?: (providerId: string) => Promise<boolean | void>;
+  }) => {
+    if (props.provider && props.authStatus === "login_required") {
+      return (
+        <div data-testid="provider-login-required">
+          {props.provider.name} 需要登录
+          <p>登录后会自动同步 Lime Hub 的可用模型</p>
+          <button
+            type="button"
+            data-testid="provider-login-button"
+            onClick={() => {
+              void props.onLogin?.();
+            }}
+          >
+            去登录
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div data-testid="provider-setting-stub">
+        {props.provider?.name ?? "未选择模型"}
+        {props.provider && props.onDeleteProvider ? (
+          <button
+            type="button"
+            data-testid="provider-setting-delete-stub"
+            onClick={() => {
+              void props.onDeleteProvider?.(props.provider!.id);
+            }}
+          >
+            删除配置
+          </button>
+        ) : null}
+      </div>
+    );
+  },
 }));
 
 vi.mock("./ImportExportDialog", () => ({
@@ -269,6 +305,61 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
     expect(container.textContent ?? "").not.toContain("默认 (Lime Hub)");
   });
 
+  it("未登录时可在 AI 服务商列表中展示 Lime Hub 登录提示", async () => {
+    const onOemLogin = vi.fn();
+    const limeHub = createProvider({
+      id: "lime-hub",
+      name: "Lime 云端",
+      group: "cloud",
+      sort_order: 0,
+      custom_models: [],
+      api_keys: [],
+      api_key_count: 0,
+    });
+    const deepseek = createProvider();
+    const hookState = createHookState({
+      providers: [limeHub, deepseek],
+      selectedProviderId: "lime-hub",
+      selectedProvider: limeHub,
+      filteredProviders: [deepseek],
+    });
+
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <ApiKeyProviderSection
+          exposeOemLoginPrompt
+          onOemLogin={onOemLogin}
+        />,
+      );
+    });
+    mountedRoots.push({ container, root });
+    await flushEffects();
+
+    expect(
+      container.querySelector(
+        '[data-testid="enabled-model-item"][data-provider-id="lime-hub"]',
+      ),
+    ).not.toBeNull();
+    expect(container.textContent ?? "").toContain("Lime 云端");
+    expect(container.textContent ?? "").toContain("需要登录");
+    expect(container.textContent ?? "").toContain(
+      "登录后会自动同步 Lime Hub 的可用模型",
+    );
+    expect(hookState.selectProvider).not.toHaveBeenCalledWith("deepseek");
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="provider-login-button"]')
+        ?.click();
+      await Promise.resolve();
+    });
+
+    expect(onOemLogin).toHaveBeenCalledTimes(1);
+  });
+
   it("点击添加模型后，右侧进入可筛选的服务商目录", async () => {
     createHookState();
     const container = renderSection();
@@ -288,6 +379,26 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
     expect(
       container.querySelector('[data-testid="provider-setting-stub"]'),
     ).toBeNull();
+  });
+
+  it("系统 Provider 删除配置应清空模型、删除本地 Key 并停用入口", async () => {
+    const hookState = createHookState();
+    renderSection();
+
+    await act(async () => {
+      findByTestId<HTMLButtonElement>("provider-setting-delete-stub").click();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(hookState.deleteApiKey).toHaveBeenCalledWith("key-1");
+    expect(hookState.updateProvider).toHaveBeenCalledWith("deepseek", {
+      enabled: false,
+      custom_models: [],
+    });
+    expect(hookState.selectProvider).toHaveBeenCalledWith(null);
+    expect(hookState.deleteCustomProvider).not.toHaveBeenCalled();
   });
 
   it("添加流程中点击左侧已有模型，应退出目录并展开该模型配置", async () => {

@@ -15,18 +15,9 @@ const {
   mockGetModelRegistry: vi.fn(),
   mockGetProviderAliasConfig: vi.fn(),
   mockFetchProviderModelsAuto: vi.fn(),
-  mockNormalizeFetchProviderModelsSource: vi.fn((result) => {
-    if (
-      result?.source === "LocalFallback" &&
-      Array.isArray(result?.models) &&
-      result.models.length > 0 &&
-      typeof result?.error === "string" &&
-      result.error.includes("已保留当前 Provider 的自定义模型")
-    ) {
-      return "CustomModels";
-    }
-    return result?.source ?? "LocalFallback";
-  }),
+  mockNormalizeFetchProviderModelsSource: vi.fn(
+    (result) => result?.source ?? "Error",
+  ),
   mockFilterModelsByTheme: vi.fn(),
 }));
 
@@ -128,7 +119,7 @@ describe("resolveClawWorkspaceProviderSelection", () => {
     mockGetProviderAliasConfig.mockResolvedValue(null);
     mockFetchProviderModelsAuto.mockResolvedValue({
       models: [],
-      source: "LocalFallback",
+      source: "Error",
       error: null,
     });
     mockFilterModelsByTheme.mockImplementation(

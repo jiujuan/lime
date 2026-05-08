@@ -224,6 +224,9 @@ describe("tauri-mock/core invoke", () => {
           ".lime/layered-designs/mock-remote-design.layered-design",
         fileCount: 5,
         assetCount: 1,
+        remoteReferenceAssetCount: 1,
+        cachedRemoteAssetCount: 1,
+        uncachedRemoteAssetCount: 0,
       }),
     );
 

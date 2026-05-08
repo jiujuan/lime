@@ -22,6 +22,13 @@ interface AgentThreadTimelineArtifactCardProps {
   timestamp?: string | null;
   onFileClick?: (fileName: string, content: string) => void;
   onOpenArtifactFromTimeline?: (target: ArtifactTimelineOpenTarget) => void;
+  sourceMessageId?: string;
+  onSaveFileArtifactAsKnowledge?: (source: {
+    messageId: string;
+    content: string;
+    sourceName?: string;
+    description?: string | null;
+  }) => void;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -195,6 +202,57 @@ function resolveFallbackPreview(content: string | undefined): string | null {
   return truncateInlineText(normalized);
 }
 
+function hasDocumentFileExtension(path: string): boolean {
+  const normalizedPath = path.replace(/\\/g, "/").split(/[?#]/)[0] || "";
+  return /\.(md|markdown|txt)$/i.test(normalizedPath);
+}
+
+function looksLikeMarkdownDocument(content: string): boolean {
+  return /^#\s+.+/m.test(content) || /\n#{2,6}\s+.+/m.test(content);
+}
+
+function resolveKnowledgeDocumentSource({
+  item,
+  metadata,
+  displayTitle,
+}: {
+  item: Extract<AgentThreadItem, { type: "file_artifact" }>;
+  metadata: Record<string, unknown> | undefined;
+  displayTitle: string;
+}): {
+  content: string;
+  sourceName: string;
+  description: string | null;
+} | null {
+  const content = normalizeText(item.content);
+  if (!content || content.length < 24 || /^[[{]/.test(content)) {
+    return null;
+  }
+
+  if (
+    !hasDocumentFileExtension(item.path) &&
+    !looksLikeMarkdownDocument(content)
+  ) {
+    return null;
+  }
+
+  const sourceName =
+    readMetadataText(metadata, [
+      "fileName",
+      "filename",
+      "sourceName",
+      "source_name",
+      "artifactFileName",
+      "artifact_file_name",
+    ]) || resolveFileName(item.path);
+
+  return {
+    content,
+    sourceName,
+    description: displayTitle || sourceName || null,
+  };
+}
+
 function resolveDocumentPreview(
   document: ArtifactDocumentV1 | null,
   displayTitle: string,
@@ -216,6 +274,8 @@ export function AgentThreadTimelineArtifactCard({
   timestamp,
   onFileClick,
   onOpenArtifactFromTimeline,
+  sourceMessageId,
+  onSaveFileArtifactAsKnowledge,
 }: AgentThreadTimelineArtifactCardProps) {
   const metadata = asRecord(item.metadata);
   const navigation = resolveTimelineArtifactNavigation(item);
@@ -278,25 +338,45 @@ export function AgentThreadTimelineArtifactCard({
   const versionNo = currentVersion?.versionNo || metadataVersionNo;
   const blockCount = document?.blocks.length || 0;
   const sourceCount = document?.sources.length || 0;
+  const knowledgeDocumentSource = resolveKnowledgeDocumentSource({
+    item,
+    metadata,
+    displayTitle,
+  });
+  const canSaveAsKnowledge = Boolean(
+    onSaveFileArtifactAsKnowledge && sourceMessageId && knowledgeDocumentSource,
+  );
 
   return (
     <div className="py-1.5">
-      <button
-        type="button"
+      <div
         data-testid="timeline-file-artifact-card"
-        className="group w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-left shadow-sm shadow-slate-950/5 transition hover:border-sky-200 hover:bg-sky-50/40"
-        onClick={() => {
-          if (onOpenArtifactFromTimeline && navigation) {
-            onOpenArtifactFromTimeline(
-              shouldOpenFocusedBlock ? blockTargets[0] : navigation.rootTarget,
-            );
-            return;
-          }
-
-          onFileClick?.(item.path, item.content || "");
-        }}
+        className={
+          knowledgeDocumentSource
+            ? "flex w-full flex-col items-stretch gap-2 rounded-[18px] border border-sky-200/80 bg-sky-50 p-2 text-left shadow-sm shadow-sky-950/5 sm:flex-row"
+            : "rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-left shadow-sm shadow-slate-950/5 transition hover:border-sky-200 hover:bg-sky-50/40"
+        }
       >
-        <div className="flex items-start gap-3">
+        <button
+          type="button"
+          className={
+            knowledgeDocumentSource
+              ? "group flex min-w-0 flex-1 items-start gap-3 rounded-[14px] px-2 py-2 text-left transition hover:bg-white"
+              : "group flex w-full items-start gap-3 text-left"
+          }
+          onClick={() => {
+            if (onOpenArtifactFromTimeline && navigation) {
+              onOpenArtifactFromTimeline(
+                shouldOpenFocusedBlock
+                  ? blockTargets[0]
+                  : navigation.rootTarget,
+              );
+              return;
+            }
+
+            onFileClick?.(item.path, item.content || "");
+          }}
+        >
           <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-600">
             {document ? (
               <FileStack className="h-[18px] w-[18px]" />
@@ -306,6 +386,22 @@ export function AgentThreadTimelineArtifactCard({
           </div>
 
           <div className="min-w-0 flex-1">
+            {knowledgeDocumentSource ? (
+              <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                <Badge
+                  variant="outline"
+                  className="border-sky-200 bg-white text-sky-700"
+                >
+                  Document 产物
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className="border-emerald-200 bg-emerald-50 text-emerald-700"
+                >
+                  可保存到项目资料
+                </Badge>
+              </div>
+            ) : null}
             <div className="flex flex-wrap items-center gap-2">
               <div className="min-w-0 flex-1 text-sm font-medium leading-6 text-slate-900">
                 <span className="line-clamp-1 break-all">{displayTitle}</span>
@@ -374,8 +470,25 @@ export function AgentThreadTimelineArtifactCard({
               </span>
             </div>
           </div>
-        </div>
-      </button>
+        </button>
+
+        {canSaveAsKnowledge && knowledgeDocumentSource ? (
+          <button
+            type="button"
+            className="flex shrink-0 items-center justify-center rounded-xl border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-sky-700 transition hover:border-sky-300 hover:bg-sky-100 hover:text-sky-800 sm:py-0"
+            onClick={() =>
+              onSaveFileArtifactAsKnowledge?.({
+                messageId: sourceMessageId!,
+                content: knowledgeDocumentSource.content,
+                sourceName: knowledgeDocumentSource.sourceName,
+                description: knowledgeDocumentSource.description,
+              })
+            }
+          >
+            保存这份文档
+          </button>
+        ) : null}
+      </div>
 
       {onOpenArtifactFromTimeline && blockTargets.length > 1 ? (
         <div className="mt-3 flex flex-wrap gap-2">

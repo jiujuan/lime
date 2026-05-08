@@ -295,7 +295,7 @@ CI 里的 `.github/workflows/quality.yml` 结果摘要现在也会透出 `bridge
 - 修改自动化设置命令族，例如 `get_automation_jobs`、`create_automation_job`、`update_automation_job`、`get_automation_health` 或 `get_automation_run_history`，尤其是它们在浏览器模式 DevBridge 与 mock 间的分流
 - 修改浏览器资料 / 环境预设命令族，或调整它们在 `mockPriorityCommands` 里的优先级
 - 修改浏览器连接器命令族，例如安装目录、启用状态、系统连接器、浏览器动作配置、扩展安装状态、打开 Chrome 扩展 / 远程调试页，或主动断开扩展连接
-- 修改 `get_model_registry_provider_ids`、Provider 模型映射或 `src-tauri/resources/models/index.json` 真相源读取语义
+- 修改 `get_model_registry_provider_ids` 兼容空结果、Provider 实时模型读取或用户 `custom_models` 合并语义
 - 修改 `create_image_generation_task_artifact`、`get_media_task_artifact`、`list_media_task_artifacts`、`cancel_media_task_artifact`、`src/lib/api/mediaTasks.ts`、`src/lib/api/skill-execution.ts`、`useWorkspaceSendActions`、`useWorkspaceImageWorkbenchActionRuntime`、`runtime_turn`，或调整 `Claw @配图 -> harness.image_skill_launch -> Agent 首刀 Skill(image_generate) -> task/timeline` 的异步图片任务主链
 - 修改 `@封面` parser、`useWorkspaceSendActions`、`runtime_turn`、`cover_skill_launch`、`lime task create cover`、`cover_generate` skill 或 `lime_create_cover_generation_task`，尤其是调整 `Claw @封面 -> harness.cover_skill_launch -> Agent 首刀 Skill(cover_generate) -> task file` 主链
 - 修改 `@海报` parser、`useWorkspaceSendActions`、`runtime_turn`、`image_skill_launch`、`lime_create_image_generation_task`、`image_generate` skill 或相关图片 timeline 展示，尤其是调整 `Claw @海报 -> harness.image_skill_launch -> Agent 首刀 Skill(image_generate) -> task/timeline` 主链

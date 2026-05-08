@@ -10,10 +10,14 @@ import { ProviderIcon } from "@/icons/providers";
 import { cn } from "@/lib/utils";
 import type { ProviderWithKeysDisplay } from "@/lib/api/apiKeyProvider";
 import { GripVertical, Plus, Settings2 } from "lucide-react";
-import { buildEnabledModelItems } from "./ModelProviderList.utils";
+import {
+  buildEnabledModelItems,
+  type EnabledModelListOptions,
+} from "./ModelProviderList.utils";
 
 export interface ModelProviderListProps {
   providers: ProviderWithKeysDisplay[];
+  options?: EnabledModelListOptions;
   selectedProviderId?: string | null;
   onProviderSelect?: (providerId: string) => void;
   onAddModel?: () => void;
@@ -23,13 +27,14 @@ export interface ModelProviderListProps {
 
 export const ModelProviderList: React.FC<ModelProviderListProps> = ({
   providers,
+  options,
   selectedProviderId,
   onProviderSelect,
   onAddModel,
   onImportExport,
   className,
 }) => {
-  const items = buildEnabledModelItems(providers);
+  const items = buildEnabledModelItems(providers, options);
 
   return (
     <aside
@@ -104,7 +109,9 @@ export const ModelProviderList: React.FC<ModelProviderListProps> = ({
                       ) : null}
                     </span>
                     <span className="mt-0.5 block truncate text-xs text-slate-500">
-                      {item.modelId ?? "模型待指定"}
+                      {item.status === "login_required"
+                        ? "需要登录"
+                        : item.modelId ?? "模型待指定"}
                     </span>
                   </span>
                 </button>

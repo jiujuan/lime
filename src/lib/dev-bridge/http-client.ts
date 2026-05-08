@@ -20,6 +20,7 @@ const DEV_BRIDGE_TRUTH_COMMAND_TIMEOUT_MS = 5000;
 const DEV_BRIDGE_KNOWLEDGE_COMPILE_TIMEOUT_MS = 180000;
 const DEV_BRIDGE_VOICE_MODEL_DOWNLOAD_TIMEOUT_MS = 30 * 60 * 1000;
 const DEV_BRIDGE_AGENT_RUNTIME_TIMEOUT_MS = 60000;
+const DEV_BRIDGE_LAYERED_DESIGN_PROJECT_TIMEOUT_MS = 60000;
 const DEV_BRIDGE_AGENT_SESSION_READ_TIMEOUT_MS = 8000;
 const DEV_BRIDGE_AGENT_SESSION_PATCH_TIMEOUT_MS = 5000;
 const DEV_BRIDGE_AGENT_SESSION_CREATE_TIMEOUT_MS = 15000;
@@ -36,6 +37,11 @@ const DEV_BRIDGE_PROVIDER_PROBE_COMMANDS = new Set([
 
 const DEV_BRIDGE_AGENT_LONG_RUNNING_COMMANDS = new Set([
   "agent_generate_title",
+]);
+
+const DEV_BRIDGE_LAYERED_DESIGN_PROJECT_COMMANDS = new Set([
+  "save_layered_design_project_export",
+  "read_layered_design_project_export",
 ]);
 
 const DEV_BRIDGE_COOLDOWN_BYPASS_COMMANDS = new Set([
@@ -119,6 +125,9 @@ function resolveBridgeRequestTimeoutMs(cmd: string): number {
   }
   if (cmd === "voice_models_download") {
     return DEV_BRIDGE_VOICE_MODEL_DOWNLOAD_TIMEOUT_MS;
+  }
+  if (DEV_BRIDGE_LAYERED_DESIGN_PROJECT_COMMANDS.has(cmd)) {
+    return DEV_BRIDGE_LAYERED_DESIGN_PROJECT_TIMEOUT_MS;
   }
   if (shouldDisallowMockFallbackInBrowser(cmd)) {
     return DEV_BRIDGE_TRUTH_COMMAND_TIMEOUT_MS;

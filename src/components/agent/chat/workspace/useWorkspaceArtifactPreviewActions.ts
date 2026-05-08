@@ -12,6 +12,10 @@ import { readFilePreview } from "@/lib/api/fileBrowser";
 import type { SessionFile } from "@/lib/api/session-files";
 import type { Artifact } from "@/lib/artifact/types";
 import { resolveArtifactProtocolFilePath } from "@/lib/artifact-protocol";
+import {
+  createLayeredDesignArtifact,
+  type LayeredDesignDocumentInput,
+} from "@/lib/layered-design";
 import type { TaskFile } from "../components/TaskFiles";
 import type { HarnessFilePreviewResult } from "../components/HarnessStatusPanel";
 import { useArtifactAutoPreviewSync } from "../hooks/useArtifactAutoPreviewSync";
@@ -28,6 +32,74 @@ import { doesWorkspaceFileCandidateMatch } from "./workspaceFilePathMatch";
 import { extractFileNameFromPath } from "./workspacePath";
 import { buildGeneralCanvasStateFromWorkspaceFile } from "./workspaceFilePreview";
 import type { CanvasState as GeneralCanvasState } from "@/components/general-chat/bridge";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function hasLayeredDesignDocumentShape(
+  value: unknown,
+): value is LayeredDesignDocumentInput {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  const canvas = value.canvas;
+  return (
+    typeof value.id === "string" &&
+    typeof value.title === "string" &&
+    isRecord(canvas) &&
+    typeof canvas.width === "number" &&
+    typeof canvas.height === "number" &&
+    Array.isArray(value.layers)
+  );
+}
+
+function createWorkspaceLayeredDesignArtifactId(fileName: string): string {
+  const normalized = fileName.trim() || "design.json";
+  let hash = 0;
+  for (let index = 0; index < normalized.length; index += 1) {
+    hash = (hash * 31 + normalized.charCodeAt(index)) >>> 0;
+  }
+
+  return `artifact-workspace-layered-design-${hash.toString(36)}`;
+}
+
+function createLayeredDesignArtifactFromWorkspaceFile(
+  fileName: string,
+  content: string,
+): Artifact | null {
+  const trimmed = content.trim();
+  if (!trimmed.startsWith("{")) {
+    return null;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+
+  if (!hasLayeredDesignDocumentShape(parsed)) {
+    return null;
+  }
+
+  const filename = extractFileNameFromPath(fileName) || "design.json";
+  try {
+    return createLayeredDesignArtifact(parsed, {
+      artifactId: createWorkspaceLayeredDesignArtifactId(fileName),
+      artifactTitle: parsed.title.trim() || filename,
+      meta: {
+        filePath: fileName,
+        filename,
+        openedFrom: "general-workbench-file",
+      },
+    });
+  } catch {
+    return null;
+  }
+}
 
 function buildCanvasStateFromContent(params: {
   previous: CanvasStateUnion | null;
@@ -282,6 +354,16 @@ export function useWorkspaceArtifactPreviewActions({
   const handleFileClick = useCallback(
     (fileName: string, content: string) => {
       if (activeTheme === "general") {
+        const layeredDesignArtifact = createLayeredDesignArtifactFromWorkspaceFile(
+          fileName,
+          content,
+        );
+        if (layeredDesignArtifact) {
+          upsertGeneralArtifact(layeredDesignArtifact);
+          void openArtifactInWorkbench(layeredDesignArtifact);
+          return;
+        }
+
         suppressBrowserAssistCanvasAutoOpen();
         setSelectedArtifactId(null);
         setGeneralCanvasState(
@@ -328,12 +410,14 @@ export function useWorkspaceArtifactPreviewActions({
       activeTheme,
       applyContentToCanvas,
       isThemeWorkbench,
+      openArtifactInWorkbench,
       setGeneralCanvasState,
       setLayoutMode,
       setSelectedArtifactId,
       setSelectedFileId,
       setTaskFiles,
       suppressBrowserAssistCanvasAutoOpen,
+      upsertGeneralArtifact,
     ],
   );
 

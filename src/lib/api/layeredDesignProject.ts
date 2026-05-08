@@ -27,6 +27,9 @@ export interface SaveLayeredDesignProjectExportOutput {
   assetCount: number;
   fileCount: number;
   bytesWritten: number;
+  remoteReferenceAssetCount: number;
+  cachedRemoteAssetCount: number;
+  uncachedRemoteAssetCount: number;
 }
 
 export interface ReadLayeredDesignProjectExportRequest {

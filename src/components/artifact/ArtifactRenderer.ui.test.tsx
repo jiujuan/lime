@@ -1,4 +1,4 @@
-import { act } from "react";
+import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ArtifactRenderer } from "./ArtifactRenderer";
@@ -37,13 +37,18 @@ function createArtifact(overrides: Partial<Artifact> = {}): Artifact {
   };
 }
 
-function renderArtifact(artifact: Artifact) {
+function renderArtifact(
+  artifact: Artifact,
+  props: Partial<ComponentProps<typeof ArtifactRenderer>> = {},
+) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
 
   act(() => {
-    root.render(<ArtifactRenderer artifact={artifact} tone="light" />);
+    root.render(
+      <ArtifactRenderer artifact={artifact} tone="light" {...props} />,
+    );
   });
 
   mountedRenderers.push({ container, root });
@@ -115,7 +120,7 @@ describe("ArtifactRenderer 空内容态", () => {
     expect(container.textContent).toContain("workspace/index.ts");
   });
 
-  it("canvas:design 应直接委托到图层设计画布，不依赖轻量渲染器注册", async () => {
+  it("canvas:design 应先展示紧凑预览，不在工作台卡片内嵌完整编辑器", async () => {
     const container = renderArtifact(
       createArtifact({
         type: "canvas:design",
@@ -158,6 +163,193 @@ describe("ArtifactRenderer 空内容态", () => {
     expect(container.textContent).toContain("LayeredDesignDocument");
     expect(container.textContent).toContain("Artifact 图层海报");
     expect(container.textContent).toContain("标题层");
+    expect(container.textContent).not.toContain("生成全部图片层");
+    expect(container.textContent).not.toContain("导出设计工程");
+  });
+
+  it("canvas:design 完整编辑器应继承主应用项目上下文，支持工程目录保存和图层生成", async () => {
+    const container = renderArtifact(
+      createArtifact({
+        type: "canvas:design",
+        title: "design.json",
+        status: "complete",
+        content: JSON.stringify({
+          id: "design-artifact-context",
+          title: "主应用工程上下文",
+          canvas: { width: 1080, height: 1440 },
+          layers: [
+            {
+              id: "hero",
+              name: "主视觉",
+              type: "image",
+              assetId: "asset-hero",
+              x: 0,
+              y: 0,
+              width: 1080,
+              height: 1440,
+              zIndex: 1,
+              alphaMode: "none",
+            },
+          ],
+          assets: [
+            {
+              id: "asset-hero",
+              kind: "subject",
+              src: "",
+              width: 1080,
+              height: 1440,
+              hasAlpha: false,
+              createdAt: "2026-05-08T00:00:00.000Z",
+            },
+          ],
+          editHistory: [],
+          createdAt: "2026-05-08T00:00:00.000Z",
+          updatedAt: "2026-05-08T00:00:00.000Z",
+        }),
+        meta: {
+          filePath: ".lime/layered-designs/demo.layered-design/design.json",
+          filename: "design.json",
+        },
+      }),
+      {
+        canvasFactoryProps: {
+          projectRootPath: "/workspace/project",
+          projectId: "project-1",
+          contentId: "content-1",
+          imageGenerationProviderId: "fal",
+          imageGenerationModelId: "fal-ai/nano-banana-pro",
+          imageGenerationSelectionReady: true,
+          imageGenerationSelectionWarning: null,
+        },
+      },
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).not.toContain("生成全部图片层");
+    expect(container.textContent).not.toContain("打开最近工程");
+
+    const editButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.getAttribute("title") === "在完整编辑器中打开",
+    );
+    expect(editButton).toBeTruthy();
+
+    act(() => {
+      editButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const fullEditor = document.body.querySelector(
+      '[data-testid="canvas-full-editor"]',
+    );
+    expect(fullEditor).not.toBeNull();
+
+    const generateButton = Array.from(
+      fullEditor?.querySelectorAll("button") ?? [],
+    ).find((button) => button.textContent?.includes("生成全部图片层"));
+    const restoreButton = Array.from(
+      fullEditor?.querySelectorAll("button") ?? [],
+    ).find((button) => button.textContent?.includes("打开最近工程"));
+
+    expect(generateButton).toBeTruthy();
+    expect(generateButton?.getAttribute("title")).toBe(
+      "为所有待生成图片层创建图片任务",
+    );
+    expect(generateButton?.hasAttribute("disabled")).toBe(false);
+    expect(restoreButton?.getAttribute("title")).toBe(
+      "从项目工程目录打开最近保存的图层设计",
+    );
+    expect(restoreButton?.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("canvas:design 的编辑按钮应打开不受预览卡片宽度限制的完整编辑器", async () => {
+    const container = renderArtifact(
+      createArtifact({
+        type: "canvas:design",
+        title: "design.json",
+        status: "complete",
+        content: JSON.stringify({
+          id: "design-artifact-full-editor",
+          title: "完整编辑器图层设计",
+          canvas: { width: 1080, height: 1440 },
+          layers: [
+            {
+              id: "headline",
+              name: "标题层",
+              type: "text",
+              text: "完整编辑器",
+              x: 120,
+              y: 120,
+              width: 840,
+              height: 120,
+              zIndex: 4,
+            },
+          ],
+          assets: [],
+          editHistory: [],
+          createdAt: "2026-05-08T00:00:00.000Z",
+          updatedAt: "2026-05-08T00:00:00.000Z",
+        }),
+        meta: {
+          filePath: ".lime/layered-designs/full.layered-design/design.json",
+          filename: "design.json",
+        },
+      }),
+      {
+        canvasFactoryProps: {
+          projectRootPath: "/workspace/project",
+          projectId: "project-1",
+          contentId: "content-1",
+        },
+      },
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const editButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.getAttribute("title") === "在完整编辑器中打开",
+    );
+    expect(editButton).toBeTruthy();
+
+    act(() => {
+      editButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const fullEditor = document.body.querySelector(
+      '[data-testid="canvas-full-editor"]',
+    );
+    expect(fullEditor).not.toBeNull();
+    expect(fullEditor?.parentElement).toBe(document.body);
+    expect(fullEditor?.getAttribute("role")).toBe("dialog");
+    expect(fullEditor?.getAttribute("aria-modal")).toBe("true");
+    expect(document.body.style.overflow).toBe("hidden");
+    expect(fullEditor?.textContent).toContain("完整编辑器");
+    expect(fullEditor?.textContent).toContain("导出设计工程");
+    expect(fullEditor?.textContent).toContain("打开最近工程");
+
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(
+      document.body.querySelector('[data-testid="canvas-full-editor"]'),
+    ).toBeNull();
+    expect(document.body.style.overflow).toBe("");
   });
 
   it("失败且没有内容时应展示错误解释态", () => {

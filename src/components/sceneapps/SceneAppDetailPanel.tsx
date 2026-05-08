@@ -58,7 +58,7 @@ export function SceneAppDetailPanel({
   }
 
   return (
-    <section className="rounded-[24px] border border-slate-200/80 bg-white p-4 shadow-sm shadow-slate-950/5">
+    <section className="min-w-0 rounded-[24px] border border-slate-200/80 bg-white p-4 shadow-sm shadow-slate-950/5">
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
@@ -127,18 +127,18 @@ export function SceneAppDetailPanel({
 
           <div className="border-t border-slate-200 bg-white p-4">
             <div className="mb-4 grid gap-3 md:grid-cols-2">
-              <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-600">
+              <div className="min-w-0 rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-600">
                 <span className="font-medium text-slate-700">来源：</span>
                 {detailView.sourcePackageId}
               </div>
-              <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-600">
+              <div className="min-w-0 rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-600">
                 <span className="font-medium text-slate-700">版本：</span>
                 {detailView.sourcePackageVersion}
               </div>
             </div>
 
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-              <div className="rounded-[24px] border border-slate-200 bg-white p-4">
+              <div className="min-w-0 rounded-[24px] border border-slate-200 bg-white p-4">
                 <div className="text-sm font-medium text-slate-900">
                   这个 Skill 擅长
                 </div>
@@ -154,7 +154,7 @@ export function SceneAppDetailPanel({
                 </div>
               </div>
 
-              <div className="rounded-[24px] border border-slate-200 bg-white p-4">
+              <div className="min-w-0 rounded-[24px] border border-slate-200 bg-white p-4">
                 <div className="text-sm font-medium text-slate-900">
                   启动前先确认
                 </div>
@@ -178,7 +178,7 @@ export function SceneAppDetailPanel({
             </div>
 
             <div className="mt-4 grid gap-4 xl:grid-cols-3">
-              <div className="rounded-[24px] border border-slate-200 bg-white p-4">
+              <div className="min-w-0 rounded-[24px] border border-slate-200 bg-white p-4">
                 <div className="text-sm font-medium text-slate-900">默认会拿到</div>
                 <p className="mt-3 text-sm leading-6 text-slate-600">
                   {detailView.deliveryNarrative}
@@ -228,7 +228,7 @@ export function SceneAppDetailPanel({
                 )}
               </div>
 
-              <div className="rounded-[24px] border border-slate-200 bg-white p-4">
+              <div className="min-w-0 rounded-[24px] border border-slate-200 bg-white p-4">
                 <div className="text-sm font-medium text-slate-900">
                   通常会这样推进
                 </div>
@@ -272,7 +272,7 @@ export function SceneAppDetailPanel({
                 )}
               </div>
 
-              <div className="rounded-[24px] border border-slate-200 bg-white p-4">
+              <div className="min-w-0 rounded-[24px] border border-slate-200 bg-white p-4">
                 <div className="text-sm font-medium text-slate-900">
                   默认怎么判断
                 </div>
@@ -749,8 +749,14 @@ export function SceneAppDetailPanel({
           </div>
         </details>
 
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.06fr)_minmax(320px,0.94fr)]">
-          <div className="rounded-[24px] border border-slate-200 bg-white p-4">
+        <div
+          data-testid="sceneapp-detail-launch-stack"
+          className="grid min-w-0 gap-4"
+        >
+          <div
+            data-testid="sceneapp-detail-launch-card"
+            className="min-w-0 rounded-[24px] border border-slate-200 bg-white p-4"
+          >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="text-sm font-medium text-slate-900">开始生成</div>
@@ -763,8 +769,8 @@ export function SceneAppDetailPanel({
               </span>
             </div>
 
-            <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(220px,0.82fr)_minmax(0,1.18fr)]">
-              <div className="rounded-[18px] border border-slate-200 bg-slate-50 p-3">
+            <div className="mt-4 grid min-w-0 gap-3 2xl:grid-cols-[minmax(220px,0.82fr)_minmax(0,1.18fr)]">
+              <div className="min-w-0 rounded-[18px] border border-slate-200 bg-slate-50 p-3">
                 <div className="text-[11px] font-medium text-slate-500">
                   结果项目
                 </div>
@@ -778,7 +784,7 @@ export function SceneAppDetailPanel({
                   />
                 </div>
               </div>
-              <div className="rounded-[18px] border border-slate-200 bg-slate-50 p-3">
+              <div className="min-w-0 rounded-[18px] border border-slate-200 bg-slate-50 p-3">
                 <div className="text-[11px] font-medium text-slate-500">
                   这次目标
                 </div>
@@ -866,6 +872,7 @@ export function SceneAppDetailPanel({
           </div>
 
           <SceneAppProjectPackRuntimePanel
+            className="min-w-0"
             title="最近结果样本"
             description="对照最近一轮真实结果。"
             emptyMessage="当前还没有可直接消费的结果文件。先跑出一轮正式样本，再回来从准备页直接打开结果。"

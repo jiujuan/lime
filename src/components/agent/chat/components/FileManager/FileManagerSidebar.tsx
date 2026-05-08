@@ -59,6 +59,7 @@ interface FileManagerSidebarProps {
   onClose: () => void;
   onAddPathReferences: (references: MessagePathReference[]) => void;
   onImportAsKnowledge?: (reference: MessagePathReference) => void;
+  onOpenFileInWorkspace?: (entry: FileEntry) => void;
   initialDirectory?: string | null;
 }
 
@@ -262,12 +263,21 @@ async function copyText(value: string, successMessage: string): Promise<void> {
 function buildContextMenuActions(
   entry: FileEntry,
   knowledgeImportEnabled: boolean,
+  workspacePreviewEnabled: boolean,
 ): ContextMenuAction[] {
   const actions: ContextMenuAction[] = [
     { action: "open", label: "打开", icon: ExternalLink },
     { action: "reveal", label: "在系统文件管理器中显示", icon: Folder },
     { action: "add", label: "添加到对话", icon: PlusCircle },
   ];
+
+  if (workspacePreviewEnabled && !entry.isDir) {
+    actions.push({
+      action: "preview-workspace",
+      label: "在工作台预览",
+      icon: AppWindow,
+    });
+  }
 
   if (knowledgeImportEnabled && !entry.isDir) {
     const unsupportedMessage = getKnowledgeUnsupportedSourceMessage(entry);
@@ -294,6 +304,7 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
   onClose,
   onAddPathReferences,
   onImportAsKnowledge,
+  onOpenFileInWorkspace,
   initialDirectory,
 }) => {
   const normalizedInitialDirectory = initialDirectory?.trim() ?? "";
@@ -585,6 +596,19 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
     [onImportAsKnowledge],
   );
 
+  const handleOpenEntryInWorkspace = useCallback(
+    (entry: FileEntry) => {
+      const isApplication = isApplicationEntry(entry, activeLocationKind);
+      if (entry.isDir || isApplication) {
+        handleOpenEntry(entry);
+        return;
+      }
+
+      onOpenFileInWorkspace?.(entry);
+    },
+    [activeLocationKind, handleOpenEntry, onOpenFileInWorkspace],
+  );
+
   const handlePinEntry = useCallback((entry: FileEntry) => {
     if (!entry.isDir) {
       toast.info("只有文件夹可以固定到侧栏");
@@ -630,6 +654,9 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
         case "add":
           handleAddEntry(entry);
           break;
+        case "preview-workspace":
+          handleOpenEntryInWorkspace(entry);
+          break;
         case "import-knowledge":
           handleImportEntryAsKnowledge(entry);
           break;
@@ -645,6 +672,7 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
       handleAddEntry,
       handleImportEntryAsKnowledge,
       handleOpenEntry,
+      handleOpenEntryInWorkspace,
       handlePinEntry,
       loadActiveDirectory,
     ],
@@ -685,6 +713,9 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
       !entry.isDir && onImportAsKnowledge
         ? getKnowledgeUnsupportedSourceMessage(entry)
         : "";
+    const canPreviewInWorkspace = Boolean(
+      onOpenFileInWorkspace && !entry.isDir && !isApplication,
+    );
     const canImportAsKnowledge = Boolean(
       onImportAsKnowledge && !entry.isDir && !knowledgeUnsupportedMessage,
     );
@@ -787,6 +818,18 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
             >
               加入对话
             </button>
+            {canPreviewInWorkspace ? (
+              <button
+                type="button"
+                className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-semibold text-sky-700 transition hover:border-sky-300 hover:bg-sky-100"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleOpenEntryInWorkspace(entry);
+                }}
+              >
+                预览
+              </button>
+            ) : null}
             {canImportAsKnowledge ? (
               <button
                 type="button"
@@ -948,6 +991,7 @@ export const FileManagerSidebar: React.FC<FileManagerSidebarProps> = ({
           {buildContextMenuActions(
             contextMenu.entry,
             Boolean(onImportAsKnowledge),
+            Boolean(onOpenFileInWorkspace),
           ).map(({ action, label, icon: MenuIcon, disabled, title }) => {
             return (
               <button

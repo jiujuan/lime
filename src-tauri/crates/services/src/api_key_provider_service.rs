@@ -12,7 +12,7 @@ use crate::provider_type_mapping::{
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use chrono::Utc;
 use lime_core::api_host_utils::{
-    is_openai_responses_endpoint, normalize_openai_compatible_api_host,
+    is_openai_responses_compatible_host, normalize_openai_compatible_api_host,
 };
 use lime_core::database::dao::api_key_provider::{
     infer_managed_provider_type, ApiKeyEntry, ApiKeyProvider, ApiKeyProviderDao,
@@ -26,6 +26,7 @@ use lime_core::models::runtime_provider_model::{
 };
 use lime_core::provider_prompt_cache_support::is_known_automatic_anthropic_compatible_host;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -34,6 +35,7 @@ use std::sync::RwLock;
 const SENSENOVA_OLD_OPENAI_COMPATIBLE_API_HOST: &str =
     "https://api.sensenova.cn/compatible-mode/v1";
 const SENSENOVA_OPENAI_COMPATIBLE_API_HOST: &str = "https://api.sensenova.cn/compatible-mode/v2";
+const OPENAI_RESPONSES_IMAGE_TEST_OUTER_MODEL: &str = "gpt-5.5";
 
 // ============================================================================
 // 连接测试结果
@@ -386,6 +388,93 @@ data: [DONE]\n";
                 "https://gateway.example.com/proxy/responses"
             ),
             "https://gateway.example.com/proxy/v1/images/generations"
+        );
+    }
+
+    #[test]
+    fn test_prefers_openai_responses_endpoint_detects_codex_base_path() {
+        assert!(ApiKeyProviderService::prefers_openai_responses_endpoint(
+            "https://gateway.example.com/codex"
+        ));
+        assert!(ApiKeyProviderService::prefers_openai_responses_endpoint(
+            "https://gateway.example.com/proxy/responses"
+        ));
+        assert!(!ApiKeyProviderService::prefers_openai_responses_endpoint(
+            "https://api.openai.com/v1"
+        ));
+    }
+
+    #[test]
+    fn test_openai_responses_image_generation_request_uses_image_generation_tool() {
+        let payload = ApiKeyProviderService::build_openai_responses_image_generation_request(
+            "gpt-images-2",
+            "生成测试图片",
+            false,
+        );
+
+        assert_eq!(
+            payload.get("model").and_then(serde_json::Value::as_str),
+            Some("gpt-5.5")
+        );
+        assert_eq!(
+            payload.get("stream").and_then(serde_json::Value::as_bool),
+            Some(true)
+        );
+        assert_eq!(
+            payload
+                .pointer("/tools/0/type")
+                .and_then(serde_json::Value::as_str),
+            Some("image_generation")
+        );
+        assert_eq!(
+            payload
+                .pointer("/tools/0/model")
+                .and_then(serde_json::Value::as_str),
+            Some("gpt-image-2")
+        );
+        assert_eq!(
+            payload.get("input").and_then(serde_json::Value::as_str),
+            Some("生成测试图片")
+        );
+
+        let retry_payload = ApiKeyProviderService::build_openai_responses_image_generation_request(
+            "gpt-image-2",
+            "生成测试图片",
+            true,
+        );
+        assert_eq!(
+            retry_payload
+                .pointer("/input/0/content/0/type")
+                .and_then(serde_json::Value::as_str),
+            Some("input_text")
+        );
+    }
+
+    #[test]
+    fn test_openai_responses_image_body_has_result_reads_output_item_done() {
+        let sse = concat!(
+            "event: response.output_item.done\n",
+            "data: {\"item\":{\"type\":\"image_generation_call\",\"result\":\"dGVzdA==\"}}\n\n",
+            "event: response.completed\n",
+            "data: {\"response\":{\"id\":\"resp_1\"}}\n\n"
+        );
+
+        assert!(ApiKeyProviderService::openai_responses_image_body_has_result(sse));
+    }
+
+    #[test]
+    fn test_openai_responses_image_retry_detection_matches_gateway_error() {
+        assert!(
+            ApiKeyProviderService::should_retry_openai_responses_image_generation_with_input_list(
+                reqwest::StatusCode::BAD_REQUEST,
+                r#"{"error":{"message":"Input must be a list"}}"#,
+            )
+        );
+        assert!(
+            !ApiKeyProviderService::should_retry_openai_responses_image_generation_with_input_list(
+                reqwest::StatusCode::UNAUTHORIZED,
+                r#"{"error":{"message":"Input must be a list"}}"#,
+            )
         );
     }
 
@@ -1246,7 +1335,7 @@ impl ApiKeyProviderService {
 
         let provider_with_keys = self
             .get_provider(db, provider_id)?
-            .ok_or_else(|| format!("Provider not found: {provider_id}"))?;
+            .ok_or_else(|| format!("Provider 不存在: {provider_id}"))?;
 
         let provider = &provider_with_keys.provider;
         let effective_provider_type = provider.effective_provider_type();
@@ -1335,7 +1424,7 @@ impl ApiKeyProviderService {
 
     #[inline]
     fn prefers_openai_responses_endpoint(api_host: &str) -> bool {
-        is_openai_responses_endpoint(api_host)
+        is_openai_responses_compatible_host(api_host)
     }
 
     fn pick_preferred_fallback_model(fallback_models: &[String]) -> Option<String> {
@@ -2137,7 +2226,7 @@ impl ApiKeyProviderService {
         let conn = lime_core::database::lock_db(db)?;
         let mut provider = ApiKeyProviderDao::get_provider_by_id(&conn, id)
             .map_err(|e| e.to_string())?
-            .ok_or_else(|| format!("Provider not found: {id}"))?;
+            .ok_or_else(|| format!("Provider 不存在: {id}"))?;
 
         // 更新字段
         if let Some(n) = name {
@@ -2192,7 +2281,7 @@ impl ApiKeyProviderService {
         // 检查是否为系统 Provider
         let provider = ApiKeyProviderDao::get_provider_by_id(&conn, id)
             .map_err(|e| e.to_string())?
-            .ok_or_else(|| format!("Provider not found: {id}"))?;
+            .ok_or_else(|| format!("Provider 不存在: {id}"))?;
 
         if provider.is_system {
             return Err("不允许删除系统 Provider".to_string());
@@ -2229,7 +2318,7 @@ impl ApiKeyProviderService {
         // 验证 Provider 存在
         let provider = ApiKeyProviderDao::get_provider_by_id(&tx, provider_id)
             .map_err(|e| e.to_string())?
-            .ok_or_else(|| format!("Provider not found: {provider_id}"))?;
+            .ok_or_else(|| format!("Provider 不存在: {provider_id}"))?;
 
         tracing::info!(
             "[ApiKeyProviderService] 找到 Provider: name={}, id={}",
@@ -3114,7 +3203,7 @@ impl ApiKeyProviderService {
             .await
     }
 
-    /// 测试 Provider 连接（带本地模型兜底）
+    /// 测试 Provider 连接（仅使用显式传入模型或 Provider 自定义模型）
     pub async fn test_connection_with_fallback_models(
         &self,
         db: &DbConnection,
@@ -3127,7 +3216,7 @@ impl ApiKeyProviderService {
         // 获取 Provider 信息
         let provider_with_keys = self
             .get_provider(db, provider_id)?
-            .ok_or_else(|| format!("Provider not found: {provider_id}"))?;
+            .ok_or_else(|| format!("Provider 不存在: {provider_id}"))?;
 
         let provider = &provider_with_keys.provider;
         let effective_provider_type = provider.effective_provider_type();
@@ -3177,7 +3266,6 @@ impl ApiKeyProviderService {
                     .await
             }
             ApiProviderType::Codex => {
-                // Codex 协议直接走 /responses 端点
                 let test_model = Self::pick_test_model(
                     model_name.clone(),
                     &provider.custom_models,
@@ -3185,15 +3273,24 @@ impl ApiKeyProviderService {
                 )
                 .ok_or_else(|| "缺少模型名称：请在自定义模型中填写一个模型名".to_string())?;
 
-                self.test_codex_responses_endpoint(
-                    &api_key,
-                    &provider.api_host,
-                    &test_model,
-                    "hi",
-                    effective_provider_type,
-                )
-                .await
-                .map(|_| vec![test_model])
+                if Self::looks_like_openai_image_model(&test_model) {
+                    self.test_openai_responses_image_generation_endpoint(
+                        &api_key,
+                        &provider.api_host,
+                        &test_model,
+                    )
+                    .await
+                } else {
+                    self.test_codex_responses_endpoint(
+                        &api_key,
+                        &provider.api_host,
+                        &test_model,
+                        "hi",
+                        effective_provider_type,
+                    )
+                    .await
+                    .map(|_| vec![test_model])
+                }
             }
             provider_type
                 if Self::uses_openai_responses_protocol(provider_type)
@@ -3206,15 +3303,29 @@ impl ApiKeyProviderService {
                 );
 
                 if let Some(test_model) = test_model {
-                    self.test_openai_responses_once(&api_key, &provider.api_host, &test_model, "hi")
+                    if Self::looks_like_openai_image_model(&test_model) {
+                        self.test_openai_responses_image_generation_endpoint(
+                            &api_key,
+                            &provider.api_host,
+                            &test_model,
+                        )
+                        .await
+                    } else {
+                        self.test_openai_responses_once(
+                            &api_key,
+                            &provider.api_host,
+                            &test_model,
+                            "hi",
+                        )
                         .await
                         .map(|_| vec![test_model])
+                    }
                 } else if Self::uses_openai_responses_protocol(provider_type) {
                     self.test_openai_models_endpoint(&api_key, &provider.api_host)
                         .await
                 } else {
                     Err(
-                        "当前 API Host 指向 /responses 终端点，请先在自定义模型中填写一个模型名。"
+                        "当前 API Host 指向 Responses 兼容入口，请先在自定义模型中填写一个模型名。"
                             .to_string(),
                     )
                 }
@@ -3262,7 +3373,6 @@ impl ApiKeyProviderService {
                     // 如果 /models 端点失败：
                     // 1) 优先用传入的 model_name
                     // 2) 否则使用 Provider 配置的 custom_models
-                    // 3) 再使用本地模型注册表兜底
                     if models_result.is_err() {
                         let test_model = Self::pick_test_model(
                             model_name.clone(),
@@ -3353,6 +3463,168 @@ impl ApiKeyProviderService {
         self.test_openai_chat_once(api_key, api_host, model, "hi", ApiProviderType::Openai)
             .await
             .map(|_| vec![model.to_string()])
+    }
+
+    fn normalize_openai_responses_image_tool_model(model: &str) -> String {
+        let trimmed = model.trim();
+        if let Some(version) = trimmed.strip_prefix("gpt-images-") {
+            return format!("gpt-image-{version}");
+        }
+
+        trimmed.to_string()
+    }
+
+    fn build_openai_responses_image_generation_input(prompt: &str, use_input_list: bool) -> Value {
+        if use_input_list {
+            return serde_json::json!([
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": prompt,
+                        }
+                    ],
+                }
+            ]);
+        }
+
+        serde_json::json!(prompt)
+    }
+
+    fn build_openai_responses_image_generation_request(
+        image_model: &str,
+        prompt: &str,
+        use_input_list: bool,
+    ) -> Value {
+        serde_json::json!({
+            "model": OPENAI_RESPONSES_IMAGE_TEST_OUTER_MODEL,
+            "input": Self::build_openai_responses_image_generation_input(prompt, use_input_list),
+            "tools": [
+                {
+                    "type": "image_generation",
+                    "model": Self::normalize_openai_responses_image_tool_model(image_model),
+                }
+            ],
+            "stream": true,
+        })
+    }
+
+    fn openai_responses_image_item_has_result(item: &Value) -> bool {
+        item.get("type").and_then(Value::as_str) == Some("image_generation_call")
+            && item
+                .get("result")
+                .or_else(|| item.get("partial_image_b64"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .is_some_and(|value| !value.is_empty())
+    }
+
+    fn openai_responses_image_value_has_result(value: &Value) -> bool {
+        if let Some(item) = value.get("item") {
+            if Self::openai_responses_image_item_has_result(item) {
+                return true;
+            }
+        }
+
+        value
+            .get("output")
+            .and_then(Value::as_array)
+            .is_some_and(|items| {
+                items
+                    .iter()
+                    .any(Self::openai_responses_image_item_has_result)
+            })
+    }
+
+    fn openai_responses_image_body_has_result(body: &str) -> bool {
+        if let Ok(value) = serde_json::from_str::<Value>(body) {
+            if Self::openai_responses_image_value_has_result(&value) {
+                return true;
+            }
+        }
+
+        body.lines()
+            .filter_map(|line| line.trim().strip_prefix("data:"))
+            .map(str::trim)
+            .filter(|data| !data.is_empty() && *data != "[DONE]")
+            .filter_map(|data| serde_json::from_str::<Value>(data).ok())
+            .any(|value| Self::openai_responses_image_value_has_result(&value))
+    }
+
+    fn should_retry_openai_responses_image_generation_with_input_list(
+        status: reqwest::StatusCode,
+        body: &str,
+    ) -> bool {
+        status == reqwest::StatusCode::BAD_REQUEST
+            && body.to_ascii_lowercase().contains("input must be a list")
+    }
+
+    async fn send_openai_responses_image_generation_test(
+        &self,
+        api_key: &str,
+        api_host: &str,
+        model: &str,
+        use_input_list: bool,
+    ) -> Result<(reqwest::StatusCode, String), String> {
+        use lime_providers::providers::codex::CodexProvider;
+
+        let url = CodexProvider::build_responses_url(api_host);
+        let request = Self::build_openai_responses_image_generation_request(
+            model,
+            "生成一个简单的蓝色渐变方块测试图",
+            use_input_list,
+        );
+
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(240))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
+        let resp = client
+            .post(&url)
+            .header("Authorization", format!("Bearer {api_key}"))
+            .header("Content-Type", "application/json")
+            .header("Accept", "text/event-stream")
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| format!("Responses 图片生成接口调用失败: {e}"))?;
+
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        Ok((status, body))
+    }
+
+    async fn test_openai_responses_image_generation_endpoint(
+        &self,
+        api_key: &str,
+        api_host: &str,
+        model: &str,
+    ) -> Result<Vec<String>, String> {
+        let (mut status, mut body) = self
+            .send_openai_responses_image_generation_test(api_key, api_host, model, false)
+            .await?;
+
+        if Self::should_retry_openai_responses_image_generation_with_input_list(status, &body) {
+            (status, body) = self
+                .send_openai_responses_image_generation_test(api_key, api_host, model, true)
+                .await?;
+        }
+
+        if !status.is_success() {
+            return Err(format!(
+                "Responses 图片生成接口返回错误: {}",
+                Self::format_http_api_error(status, &body)
+            ));
+        }
+
+        if !Self::openai_responses_image_body_has_result(&body) {
+            return Err(
+                "Responses 图片生成接口调用成功，但未返回 image_generation_call.result".to_string(),
+            );
+        }
+
+        Ok(vec![model.to_string()])
     }
 
     async fn test_openai_image_generation_endpoint(

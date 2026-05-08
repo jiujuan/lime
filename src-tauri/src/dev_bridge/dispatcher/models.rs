@@ -1,6 +1,5 @@
 use super::{args_or_default, get_string_arg};
 use crate::dev_bridge::DevBridgeState;
-use lime_server_utils::load_model_registry_provider_ids_from_resources;
 use lime_services::model_registry_service::ModelRegistryService;
 use serde_json::Value as JsonValue;
 
@@ -65,9 +64,7 @@ pub(super) async fn try_handle(
                 .ok_or_else(|| "模型注册服务未初始化".to_string())?;
             serde_json::json!(service.force_reload().await?)
         }
-        "get_model_registry_provider_ids" => {
-            serde_json::to_value(load_model_registry_provider_ids_from_resources()?)?
-        }
+        "get_model_registry_provider_ids" => serde_json::to_value(Vec::<String>::new())?,
         "fetch_provider_models_auto" => {
             let args = args_or_default(args);
             let provider_id = get_string_arg(&args, "providerId", "provider_id")?;
@@ -86,6 +83,26 @@ pub(super) async fn try_handle(
             }
 
             let provider_type = provider.provider.provider_type;
+            {
+                let guard = state.model_registry.read().await;
+                let service = guard
+                    .as_ref()
+                    .ok_or_else(|| "模型注册服务未初始化".to_string())?;
+                match service.get_cached_provider_models(
+                    &provider_id,
+                    &api_host,
+                    Some(provider_type),
+                ) {
+                    Ok(Some(cached)) => return Ok(Some(serde_json::to_value(cached)?)),
+                    Ok(None) => {}
+                    Err(error) => {
+                        tracing::warn!(
+                            "[ModelRegistry] 读取 Provider 模型缓存失败，继续获取 API Key: {error}"
+                        );
+                    }
+                }
+            }
+
             let requires_api_key = ModelRegistryService::requires_api_key_for_model_fetch(
                 &provider_id,
                 &api_host,

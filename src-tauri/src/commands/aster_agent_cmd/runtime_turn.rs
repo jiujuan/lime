@@ -68,9 +68,16 @@ fn emit_runtime_events(app: &AppHandle, event_name: &str, events: Vec<RuntimeAge
 
 fn is_runtime_model_permission_denied_error(message: &str) -> bool {
     let normalized = message.trim().to_ascii_lowercase();
-    normalized.contains("authentication failed")
+    (normalized.contains("authentication failed")
         && normalized.contains("403")
-        && normalized.contains("illegal access")
+        && normalized.contains("illegal access"))
+        || normalized.contains("当前模型未在租户白名单中开放")
+        || (normalized.contains("tenant")
+            && normalized.contains("whitelist")
+            && normalized.contains("model"))
+        || (normalized.contains("model")
+            && normalized.contains("not in")
+            && normalized.contains("allowlist"))
 }
 
 fn build_submit_accepted_runtime_status() -> AgentRuntimeStatus {
@@ -7073,6 +7080,19 @@ mod tests {
                 .expect("初始化测试 session manager 失败");
         })
         .await;
+    }
+
+    #[test]
+    fn model_permission_detection_should_include_tenant_whitelist_400() {
+        assert!(is_runtime_model_permission_denied_error(
+            "Agent provider execution failed: Request failed: Bad request (400): 当前模型未在租户白名单中开放"
+        ));
+        assert!(is_runtime_model_permission_denied_error(
+            "Authentication failed (403): illegal access"
+        ));
+        assert!(!is_runtime_model_permission_denied_error(
+            "Request failed: Bad request (400): invalid schema"
+        ));
     }
 
     fn build_runtime_turn_test_request(message: &str, metadata: Option<Value>) -> AsterChatRequest {

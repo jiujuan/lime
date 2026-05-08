@@ -237,6 +237,84 @@ describe("useWorkspaceArtifactPreviewActions", () => {
     );
   });
 
+  it("通用模式打开 LayeredDesignDocument 工程文件应进入 canvas:design 主链", async () => {
+    const upsertGeneralArtifact = vi.fn();
+    const setGeneralCanvasState = vi.fn();
+    const setSelectedArtifactId = vi.fn();
+    const setArtifactViewMode = vi.fn();
+    const setLayoutMode = vi.fn();
+    const suppressBrowserAssistCanvasAutoOpen = vi.fn();
+    const designJson = JSON.stringify({
+      id: "main-app-layered-design",
+      title: "主应用图层设计",
+      canvas: { width: 1080, height: 1440 },
+      layers: [
+        {
+          id: "headline",
+          name: "标题层",
+          type: "text",
+          text: "真实主应用入口",
+          x: 96,
+          y: 120,
+          width: 888,
+          height: 120,
+          zIndex: 10,
+        },
+      ],
+      assets: [],
+      editHistory: [],
+      createdAt: "2026-05-08T00:00:00.000Z",
+      updatedAt: "2026-05-08T00:00:00.000Z",
+    });
+    const { render, getValue } = renderHook({
+      upsertGeneralArtifact,
+      setGeneralCanvasState,
+      setSelectedArtifactId,
+      setArtifactViewMode,
+      setLayoutMode,
+      suppressBrowserAssistCanvasAutoOpen,
+    });
+
+    await render();
+
+    act(() => {
+      getValue().handleFileClick(
+        ".lime/layered-designs/main-app.layered-design/design.json",
+        designJson,
+      );
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(upsertGeneralArtifact).toHaveBeenCalledTimes(1);
+    const artifact = upsertGeneralArtifact.mock.calls[0]?.[0] as Artifact;
+    expect(artifact).toEqual(
+      expect.objectContaining({
+        type: "canvas:design",
+        title: "主应用图层设计",
+        content: expect.stringContaining('"id": "main-app-layered-design"'),
+        meta: expect.objectContaining({
+          filePath:
+            ".lime/layered-designs/main-app.layered-design/design.json",
+          filename: "design.json",
+          platform: "layered-design",
+          designId: "main-app-layered-design",
+          openedFrom: "general-workbench-file",
+        }),
+      }),
+    );
+    expect(suppressBrowserAssistCanvasAutoOpen).toHaveBeenCalledTimes(1);
+    expect(setSelectedArtifactId).toHaveBeenCalledWith(artifact.id);
+    expect(setSelectedArtifactId).not.toHaveBeenCalledWith(null);
+    expect(setArtifactViewMode).toHaveBeenCalledWith("preview", {
+      artifactId: artifact.id,
+    });
+    expect(setLayoutMode).toHaveBeenCalledWith("chat-canvas");
+    expect(setGeneralCanvasState).toHaveBeenCalledTimes(1);
+  });
+
   it("读取带目录的真实结果路径时不应回退到同名裸任务文件", async () => {
     const readFilePreviewSpy = vi
       .spyOn(fileBrowserModule, "readFilePreview")

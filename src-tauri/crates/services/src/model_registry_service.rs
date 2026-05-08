@@ -1,7 +1,9 @@
 //! 模型注册服务
 //!
-//! 从内嵌资源加载模型数据，管理本地缓存，提供模型搜索等功能
-//! 模型数据在构建时从 aiclientproxy/models 仓库打包进应用
+//! 管理运行期模型数据和 Provider 实时模型读取。
+//!
+//! 旧的本地模型资源目录已下线；模型列表以 Provider 实时接口和用户
+//! 显式配置的 `custom_models` 为准。
 
 use aster::providers::canonical::{maybe_get_canonical_model, CanonicalModel};
 use lime_core::api_host_utils::{
@@ -11,119 +13,21 @@ use lime_core::database::dao::api_key_provider::{infer_managed_runtime_spec, Api
 use lime_core::database::DbConnection;
 use lime_core::models::model_registry::{
     EnhancedModelMetadata, ModelAliasSource, ModelCapabilities, ModelDeploymentSource, ModelLimits,
-    ModelManagementPlane, ModelModality, ModelPricing, ModelRuntimeFeature, ModelSource,
-    ModelStatus, ModelSyncState, ModelTaskFamily, ModelTier, ProviderAliasConfig,
-    UserModelPreference,
+    ModelManagementPlane, ModelModality, ModelRuntimeFeature, ModelSource, ModelStatus,
+    ModelSyncState, ModelTaskFamily, ModelTier, ProviderAliasConfig, UserModelPreference,
 };
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use url::form_urlencoded;
 
-/// 内嵌的模型资源目录名（相对于 resource_dir）
-/// 对应 tauri.conf.json 中的 "resources/models/**/*"
-const MODELS_RESOURCE_DIR: &str = "resources/models";
-const MODELS_HOST_ALIASES_FILE: &str = "host_aliases.json";
-const MODELS_HOST_ALIASES_USER_FILE: &str = "host_aliases.user.json";
-const DEFAULT_USER_HOST_ALIASES_TEMPLATE: &str = "{\n  \"rules\": []\n}\n";
 const LIME_TENANT_HEADER: &str = "X-Lime-Tenant-ID";
 const LIME_TENANT_PARAM: &str = "lime_tenant_id";
-
-/// 仓库索引文件结构
-#[derive(Debug, Deserialize)]
-struct RepoIndex {
-    providers: Vec<String>,
-    #[allow(dead_code)]
-    total_models: u32,
-}
-
-/// 仓库中的 Provider 数据结构
-#[derive(Debug, Deserialize)]
-struct RepoProviderData {
-    provider: RepoProvider,
-    models: Vec<RepoModel>,
-}
-
-#[derive(Debug, Deserialize)]
-struct RepoProvider {
-    id: String,
-    name: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct RepoModel {
-    id: String,
-    name: String,
-    family: Option<String>,
-    tier: Option<String>,
-    capabilities: Option<RepoCapabilities>,
-    pricing: Option<RepoPricing>,
-    limits: Option<RepoLimits>,
-    status: Option<String>,
-    release_date: Option<String>,
-    is_latest: Option<bool>,
-    description: Option<String>,
-    #[serde(default)]
-    description_zh: Option<String>,
-    #[serde(default)]
-    task_families: Vec<String>,
-    #[serde(default)]
-    input_modalities: Vec<String>,
-    #[serde(default)]
-    output_modalities: Vec<String>,
-    #[serde(default)]
-    runtime_features: Vec<String>,
-    deployment_source: Option<String>,
-    management_plane: Option<String>,
-    canonical_model_id: Option<String>,
-    provider_model_id: Option<String>,
-    alias_source: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Default)]
-struct RepoCapabilities {
-    #[serde(default)]
-    vision: bool,
-    #[serde(default)]
-    tools: bool,
-    #[serde(default)]
-    streaming: bool,
-    #[serde(default)]
-    json_mode: bool,
-    #[serde(default)]
-    function_calling: bool,
-    #[serde(default)]
-    reasoning: bool,
-}
-
-#[derive(Debug, Deserialize)]
-struct RepoPricing {
-    input: Option<f64>,
-    output: Option<f64>,
-    cache_read: Option<f64>,
-    cache_write: Option<f64>,
-    currency: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct RepoLimits {
-    context: Option<u32>,
-    max_output: Option<u32>,
-}
-
-#[derive(Debug, Clone, Deserialize, Default)]
-struct HostAliasConfig {
-    #[serde(default)]
-    rules: Vec<HostAliasRule>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct HostAliasRule {
-    contains: String,
-    providers: Vec<String>,
-}
+const PROVIDER_MODELS_CACHE_KEY_PREFIX: &str = "provider_models_fetch_cache:";
+const PROVIDER_MODELS_CACHE_TTL_SECONDS: i64 = 10 * 24 * 60 * 60;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ModelFetchProtocol {
@@ -140,6 +44,17 @@ struct PreparedModelFetchRequest {
     protocol: ModelFetchProtocol,
     url: String,
     headers: Vec<(String, String)>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ProviderModelsCachePayload {
+    provider_id: String,
+    api_host: String,
+    provider_type: Option<String>,
+    request_url: Option<String>,
+    fetched_at: i64,
+    expires_at: i64,
+    models: Vec<EnhancedModelMetadata>,
 }
 
 fn normalize_identifier(value: &str) -> String {
@@ -168,22 +83,6 @@ fn push_unique<T: PartialEq>(target: &mut Vec<T>, value: T) {
     }
 }
 
-fn parse_task_family(value: &str) -> Option<ModelTaskFamily> {
-    match normalize_identifier(value).as_str() {
-        "chat" => Some(ModelTaskFamily::Chat),
-        "reasoning" => Some(ModelTaskFamily::Reasoning),
-        "vision_understanding" => Some(ModelTaskFamily::VisionUnderstanding),
-        "image_generation" => Some(ModelTaskFamily::ImageGeneration),
-        "image_edit" => Some(ModelTaskFamily::ImageEdit),
-        "speech_to_text" => Some(ModelTaskFamily::SpeechToText),
-        "text_to_speech" => Some(ModelTaskFamily::TextToSpeech),
-        "embedding" => Some(ModelTaskFamily::Embedding),
-        "rerank" => Some(ModelTaskFamily::Rerank),
-        "moderation" => Some(ModelTaskFamily::Moderation),
-        _ => None,
-    }
-}
-
 fn parse_modality(value: &str) -> Option<ModelModality> {
     match normalize_identifier(value).as_str() {
         "text" => Some(ModelModality::Text),
@@ -197,58 +96,6 @@ fn parse_modality(value: &str) -> Option<ModelModality> {
     }
 }
 
-fn parse_runtime_feature(value: &str) -> Option<ModelRuntimeFeature> {
-    match normalize_identifier(value).as_str() {
-        "streaming" => Some(ModelRuntimeFeature::Streaming),
-        "tool_calling" => Some(ModelRuntimeFeature::ToolCalling),
-        "json_schema" => Some(ModelRuntimeFeature::JsonSchema),
-        "reasoning" => Some(ModelRuntimeFeature::Reasoning),
-        "prompt_cache" => Some(ModelRuntimeFeature::PromptCache),
-        "responses_api" => Some(ModelRuntimeFeature::ResponsesApi),
-        "chat_completions_api" => Some(ModelRuntimeFeature::ChatCompletionsApi),
-        "images_api" => Some(ModelRuntimeFeature::ImagesApi),
-        _ => None,
-    }
-}
-
-fn parse_deployment_source(value: &str) -> Option<ModelDeploymentSource> {
-    match normalize_identifier(value).as_str() {
-        "local" => Some(ModelDeploymentSource::Local),
-        "user_cloud" => Some(ModelDeploymentSource::UserCloud),
-        "oem_cloud" => Some(ModelDeploymentSource::OemCloud),
-        _ => None,
-    }
-}
-
-fn parse_management_plane(value: &str) -> Option<ModelManagementPlane> {
-    match normalize_identifier(value).as_str() {
-        "local_settings" => Some(ModelManagementPlane::LocalSettings),
-        "oem_control_plane" => Some(ModelManagementPlane::OemControlPlane),
-        "hybrid" => Some(ModelManagementPlane::Hybrid),
-        _ => None,
-    }
-}
-
-fn parse_alias_source(value: &str) -> Option<ModelAliasSource> {
-    match normalize_identifier(value).as_str() {
-        "official" => Some(ModelAliasSource::Official),
-        "relay" => Some(ModelAliasSource::Relay),
-        "oem" => Some(ModelAliasSource::Oem),
-        "local" => Some(ModelAliasSource::Local),
-        _ => None,
-    }
-}
-
-fn parse_task_families(values: &[String]) -> Vec<ModelTaskFamily> {
-    let mut families = Vec::new();
-    for value in values {
-        if let Some(family) = parse_task_family(value) {
-            push_unique(&mut families, family);
-        }
-    }
-    families
-}
-
 fn parse_modalities(values: &[String]) -> Vec<ModelModality> {
     let mut modalities = Vec::new();
     for value in values {
@@ -257,16 +104,6 @@ fn parse_modalities(values: &[String]) -> Vec<ModelModality> {
         }
     }
     modalities
-}
-
-fn parse_runtime_features(values: &[String]) -> Vec<ModelRuntimeFeature> {
-    let mut features = Vec::new();
-    for value in values {
-        if let Some(feature) = parse_runtime_feature(value) {
-            push_unique(&mut features, feature);
-        }
-    }
-    features
 }
 
 fn infer_reasoning_capability(model_id: &str) -> bool {
@@ -919,8 +756,6 @@ pub struct ModelRegistryService {
     aliases_cache: Arc<RwLock<HashMap<String, ProviderAliasConfig>>>,
     /// 同步状态
     sync_state: Arc<RwLock<ModelSyncState>>,
-    /// 资源目录路径
-    resource_dir: Option<std::path::PathBuf>,
 }
 
 impl ModelRegistryService {
@@ -931,53 +766,20 @@ impl ModelRegistryService {
             models_cache: Arc::new(RwLock::new(Vec::new())),
             aliases_cache: Arc::new(RwLock::new(HashMap::new())),
             sync_state: Arc::new(RwLock::new(ModelSyncState::default())),
-            resource_dir: None,
         }
     }
 
-    /// 设置资源目录路径
-    pub fn set_resource_dir(&mut self, path: std::path::PathBuf) {
-        self.resource_dir = Some(path);
-    }
-
-    /// 获取用户 host_alias 覆盖文件路径
-    pub fn resolve_user_host_alias_path() -> Option<std::path::PathBuf> {
-        dirs::data_dir().map(|dir| {
-            dir.join("lime")
-                .join("models")
-                .join(MODELS_HOST_ALIASES_USER_FILE)
-        })
-    }
-
-    /// 确保用户 host_alias 覆盖文件存在
-    pub fn ensure_user_host_alias_file() -> Result<std::path::PathBuf, String> {
-        let path = Self::resolve_user_host_alias_path()
-            .ok_or_else(|| "无法解析用户数据目录".to_string())?;
-
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| format!("创建用户模型目录失败: {e}"))?;
-        }
-
-        if !path.exists() {
-            std::fs::write(&path, DEFAULT_USER_HOST_ALIASES_TEMPLATE)
-                .map_err(|e| format!("写入用户 host_alias 模板失败: {e}"))?;
-        }
-
-        Ok(path)
-    }
-
-    /// 初始化服务 - 从内嵌资源加载模型数据
+    /// 初始化服务。
+    ///
+    /// 本地模型目录已下线，初始化只准备空缓存；后续模型列表由 Provider
+    /// 实时接口或用户显式配置提供。
     pub async fn initialize(&self) -> Result<(), String> {
         tracing::info!("[ModelRegistry] 初始化模型注册服务");
 
-        // 始终从内嵌资源加载，不再回退到数据库
-        let (models, aliases) = self.load_from_embedded_resources().await?;
+        let models = Vec::new();
+        let aliases = HashMap::new();
 
-        tracing::info!(
-            "[ModelRegistry] 从内嵌资源加载了 {} 个模型, {} 个别名配置",
-            models.len(),
-            aliases.len()
-        );
+        tracing::info!("[ModelRegistry] 本地模型目录已下线，使用空模型注册表启动");
 
         // 更新缓存
         {
@@ -998,432 +800,6 @@ impl ModelRegistryService {
             state.last_error = None;
         }
 
-        // 保存到数据库（仅用于持久化，不影响运行时数据）
-        if let Err(e) = self.save_models_to_db(&models).await {
-            tracing::warn!("[ModelRegistry] 保存模型到数据库失败: {}", e);
-        }
-
-        Ok(())
-    }
-
-    /// 从内嵌资源加载模型数据
-    async fn load_from_embedded_resources(
-        &self,
-    ) -> Result<
-        (
-            Vec<EnhancedModelMetadata>,
-            HashMap<String, ProviderAliasConfig>,
-        ),
-        String,
-    > {
-        let resource_dir = self
-            .resource_dir
-            .as_ref()
-            .ok_or_else(|| "资源目录未设置".to_string())?;
-
-        tracing::info!("[ModelRegistry] resource_dir: {:?}", resource_dir);
-
-        let models_dir = resource_dir.join(MODELS_RESOURCE_DIR);
-        let index_file = models_dir.join("index.json");
-
-        tracing::info!("[ModelRegistry] models_dir: {:?}", models_dir);
-        tracing::info!(
-            "[ModelRegistry] index_file: {:?}, exists: {}",
-            index_file,
-            index_file.exists()
-        );
-
-        if !index_file.exists() {
-            return Err(format!("索引文件不存在: {index_file:?}"));
-        }
-
-        // 1. 读取索引文件
-        let index_content =
-            std::fs::read_to_string(&index_file).map_err(|e| format!("读取索引文件失败: {e}"))?;
-        let index: RepoIndex =
-            serde_json::from_str(&index_content).map_err(|e| format!("解析索引文件失败: {e}"))?;
-
-        tracing::info!(
-            "[ModelRegistry] 索引包含 {} 个 providers",
-            index.providers.len()
-        );
-
-        // 2. 加载所有 provider 数据
-        let mut models = Vec::new();
-        let now = chrono::Utc::now().timestamp();
-        let providers_dir = models_dir.join("providers");
-
-        tracing::info!("[ModelRegistry] providers_dir: {:?}", providers_dir);
-
-        for provider_id in &index.providers {
-            let provider_file = providers_dir.join(format!("{provider_id}.json"));
-
-            if !provider_file.exists() {
-                tracing::warn!("[ModelRegistry] Provider 文件不存在: {:?}", provider_file);
-                continue;
-            }
-
-            match std::fs::read_to_string(&provider_file) {
-                Ok(content) => match serde_json::from_str::<RepoProviderData>(&content) {
-                    Ok(provider_data) => {
-                        tracing::info!(
-                            "[ModelRegistry] 加载 Provider: {} ({} 个模型)",
-                            provider_id,
-                            provider_data.models.len()
-                        );
-                        for model in provider_data.models {
-                            let enhanced = self.convert_repo_model(
-                                model,
-                                &provider_data.provider.id,
-                                &provider_data.provider.name,
-                                now,
-                            );
-                            models.push(enhanced);
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!("[ModelRegistry] 解析 {} 失败: {}", provider_id, e);
-                    }
-                },
-                Err(e) => {
-                    tracing::warn!("[ModelRegistry] 读取 {} 失败: {}", provider_id, e);
-                }
-            }
-        }
-
-        // 去重：优先保留 provider_id 为 "anthropic" 的模型
-        // 对于相同 ID 的模型，anthropic 官方的优先级最高
-        let mut seen_ids: std::collections::HashMap<String, usize> =
-            std::collections::HashMap::new();
-        let original_count = models.len();
-
-        let mut to_keep = vec![true; models.len()];
-        for (idx, model) in models.iter().enumerate() {
-            if let Some(&existing_idx) = seen_ids.get(&model.id) {
-                // 已经有相同 ID 的模型
-                let existing_model = &models[existing_idx];
-
-                // 如果当前模型是 anthropic 官方的，替换之前的
-                if model.provider_id == "anthropic" && existing_model.provider_id != "anthropic" {
-                    to_keep[existing_idx] = false;
-                    seen_ids.insert(model.id.clone(), idx);
-                } else {
-                    // 否则保留第一个
-                    to_keep[idx] = false;
-                }
-            } else {
-                seen_ids.insert(model.id.clone(), idx);
-            }
-        }
-
-        models = models
-            .into_iter()
-            .enumerate()
-            .filter_map(|(idx, model)| if to_keep[idx] { Some(model) } else { None })
-            .collect();
-
-        if models.len() < original_count {
-            tracing::warn!(
-                "[ModelRegistry] 发现 {} 个重复 ID，已去重",
-                original_count - models.len()
-            );
-        }
-
-        // 按 provider_id 和 display_name 排序
-        models.sort_by(|a, b| {
-            a.provider_id
-                .cmp(&b.provider_id)
-                .then(a.display_name.cmp(&b.display_name))
-        });
-
-        // 3. 凭证池 Provider 别名已退役，保留空集合避免旧模型目录回流
-        let mut aliases = HashMap::new();
-        let aliases_dir = models_dir.join("aliases");
-        let alias_files: [&str; 0] = [];
-
-        for alias_name in alias_files {
-            let alias_file = aliases_dir.join(format!("{alias_name}.json"));
-            if !alias_file.exists() {
-                continue;
-            }
-
-            match std::fs::read_to_string(&alias_file) {
-                Ok(content) => match serde_json::from_str::<ProviderAliasConfig>(&content) {
-                    Ok(config) => {
-                        tracing::info!(
-                            "[ModelRegistry] 加载别名配置: {} ({} 个模型)",
-                            config.provider,
-                            config.models.len()
-                        );
-                        aliases.insert(config.provider.clone(), config);
-                    }
-                    Err(e) => {
-                        tracing::warn!("[ModelRegistry] 解析别名配置 {} 失败: {}", alias_name, e);
-                    }
-                },
-                Err(e) => {
-                    tracing::warn!("[ModelRegistry] 读取别名配置 {} 失败: {}", alias_name, e);
-                }
-            }
-        }
-
-        tracing::info!("[ModelRegistry] 从内嵌资源加载了 {} 个模型", models.len());
-
-        Ok((models, aliases))
-    }
-
-    /// 转换仓库模型格式为内部格式
-    fn convert_repo_model(
-        &self,
-        model: RepoModel,
-        provider_id: &str,
-        provider_name: &str,
-        now: i64,
-    ) -> EnhancedModelMetadata {
-        let caps = model.capabilities.unwrap_or_default();
-        let capabilities = ModelCapabilities {
-            vision: caps.vision,
-            tools: caps.tools,
-            streaming: caps.streaming,
-            json_mode: caps.json_mode,
-            function_calling: caps.function_calling,
-            reasoning: caps.reasoning,
-        };
-        let canonical_model = maybe_get_canonical_model(provider_id, &model.id);
-        let explicit_task_families = parse_task_families(&model.task_families);
-        let explicit_input_modalities = parse_modalities(&model.input_modalities);
-        let explicit_output_modalities = parse_modalities(&model.output_modalities);
-        let explicit_runtime_features = parse_runtime_features(&model.runtime_features);
-        let explicit_deployment_source = model
-            .deployment_source
-            .as_deref()
-            .and_then(parse_deployment_source);
-        let explicit_management_plane = model
-            .management_plane
-            .as_deref()
-            .and_then(parse_management_plane);
-        let explicit_alias_source = model.alias_source.as_deref().and_then(parse_alias_source);
-        let taxonomy = infer_model_taxonomy(ModelTaxonomyInput {
-            model_id: &model.id,
-            provider_id: Some(provider_id),
-            family: model.family.as_deref(),
-            description: model
-                .description_zh
-                .as_deref()
-                .or(model.description.as_deref()),
-            capabilities: Some(&capabilities),
-            explicit_task_families: &explicit_task_families,
-            explicit_input_modalities: &explicit_input_modalities,
-            explicit_output_modalities: &explicit_output_modalities,
-            explicit_runtime_features: &explicit_runtime_features,
-            explicit_deployment_source,
-            explicit_management_plane,
-            provider_model_id: model
-                .provider_model_id
-                .as_deref()
-                .or(Some(model.id.as_str())),
-            canonical_model_id: model.canonical_model_id.as_deref(),
-            explicit_alias_source,
-            canonical_model: canonical_model.as_ref(),
-        });
-
-        EnhancedModelMetadata {
-            id: model.id,
-            display_name: model.name,
-            provider_id: provider_id.to_string(),
-            provider_name: provider_name.to_string(),
-            family: model.family,
-            tier: model
-                .tier
-                .and_then(|t| t.parse().ok())
-                .unwrap_or(ModelTier::Pro),
-            capabilities,
-            task_families: taxonomy.task_families,
-            input_modalities: taxonomy.input_modalities,
-            output_modalities: taxonomy.output_modalities,
-            runtime_features: taxonomy.runtime_features,
-            deployment_source: taxonomy.deployment_source,
-            management_plane: taxonomy.management_plane,
-            canonical_model_id: taxonomy.canonical_model_id,
-            provider_model_id: taxonomy.provider_model_id,
-            alias_source: taxonomy.alias_source,
-            pricing: model.pricing.map(|p| ModelPricing {
-                input_per_million: p.input,
-                output_per_million: p.output,
-                cache_read_per_million: p.cache_read,
-                cache_write_per_million: p.cache_write,
-                currency: p.currency.unwrap_or_else(|| "USD".to_string()),
-            }),
-            limits: ModelLimits {
-                context_length: model.limits.as_ref().and_then(|l| l.context),
-                max_output_tokens: model.limits.as_ref().and_then(|l| l.max_output),
-                requests_per_minute: None,
-                tokens_per_minute: None,
-            },
-            status: model
-                .status
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(ModelStatus::Active),
-            release_date: model.release_date,
-            is_latest: model.is_latest.unwrap_or(false),
-            description: model.description_zh.or(model.description),
-            source: ModelSource::Embedded,
-            created_at: now,
-            updated_at: now,
-        }
-    }
-
-    /// 从数据库加载模型（预留，将来实现从数据库加载自定义模型）
-    #[allow(dead_code)]
-    async fn load_from_db(&self) -> Result<Vec<EnhancedModelMetadata>, String> {
-        let (models, sync_rows) = {
-            let conn = self.db.lock().map_err(|e| e.to_string())?;
-
-            let mut stmt = conn
-                .prepare(
-                    "SELECT id, display_name, provider_id, provider_name, family, tier,
-                            capabilities, pricing, limits, status, release_date, is_latest,
-                            description, source, created_at, updated_at
-                     FROM model_registry",
-                )
-                .map_err(|e| e.to_string())?;
-
-            let models = stmt
-                .query_map([], |row| {
-                    let capabilities_json: String = row.get(6)?;
-                    let pricing_json: Option<String> = row.get(7)?;
-                    let limits_json: String = row.get(8)?;
-                    let status_str: String = row.get(9)?;
-                    let tier_str: String = row.get(5)?;
-                    let source_str: String = row.get(13)?;
-
-                    Ok(EnhancedModelMetadata {
-                        id: row.get(0)?,
-                        display_name: row.get(1)?,
-                        provider_id: row.get(2)?,
-                        provider_name: row.get(3)?,
-                        family: row.get(4)?,
-                        tier: tier_str.parse().unwrap_or(ModelTier::Pro),
-                        capabilities: serde_json::from_str(&capabilities_json).unwrap_or_default(),
-                        task_families: vec![],
-                        input_modalities: vec![],
-                        output_modalities: vec![],
-                        runtime_features: vec![],
-                        deployment_source: ModelDeploymentSource::UserCloud,
-                        management_plane: ModelManagementPlane::LocalSettings,
-                        canonical_model_id: None,
-                        provider_model_id: None,
-                        alias_source: None,
-                        pricing: pricing_json.and_then(|s| serde_json::from_str(&s).ok()),
-                        limits: serde_json::from_str(&limits_json).unwrap_or_default(),
-                        status: status_str.parse().unwrap_or(ModelStatus::Active),
-                        release_date: row.get(10)?,
-                        is_latest: row.get::<_, i32>(11)? != 0,
-                        description: row.get(12)?,
-                        source: source_str.parse().unwrap_or(ModelSource::Local),
-                        created_at: row.get(14)?,
-                        updated_at: row.get(15)?,
-                    })
-                })
-                .map_err(|e| e.to_string())?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| e.to_string())?;
-
-            // 加载同步状态数据
-            let mut sync_stmt = conn
-                .prepare("SELECT key, value FROM model_sync_state")
-                .map_err(|e| e.to_string())?;
-
-            let sync_rows: Vec<(String, String)> = sync_stmt
-                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
-                .map_err(|e| e.to_string())?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| e.to_string())?;
-
-            (models, sync_rows)
-        }; // conn 锁在这里释放
-
-        // 更新同步状态（在锁释放后）
-        {
-            let mut state = self.sync_state.write().await;
-            for (key, value) in sync_rows {
-                match key.as_str() {
-                    "last_sync_at" => {
-                        state.last_sync_at = value.parse().ok();
-                    }
-                    "model_count" => {
-                        state.model_count = value.parse().unwrap_or(0);
-                    }
-                    "last_error" => {
-                        state.last_error = if value.is_empty() { None } else { Some(value) };
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        Ok(models)
-    }
-
-    /// 保存模型到数据库
-    async fn save_models_to_db(&self, models: &[EnhancedModelMetadata]) -> Result<(), String> {
-        let mut conn = self.db.lock().map_err(|e| e.to_string())?;
-
-        // 使用 rusqlite 的事务 API
-        let tx = conn.transaction().map_err(|e| e.to_string())?;
-
-        // 清空现有数据
-        tx.execute("DELETE FROM model_registry", [])
-            .map_err(|e| e.to_string())?;
-
-        // 插入新数据（使用 INSERT OR REPLACE 处理可能的重复 ID）
-        {
-            let mut stmt = tx
-                .prepare(
-                    "INSERT OR REPLACE INTO model_registry (
-                        id, display_name, provider_id, provider_name, family, tier,
-                        capabilities, pricing, limits, status, release_date, is_latest,
-                        description, source, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                )
-                .map_err(|e| e.to_string())?;
-
-            for model in models {
-                let capabilities_json =
-                    serde_json::to_string(&model.capabilities).unwrap_or_default();
-                let pricing_json = model
-                    .pricing
-                    .as_ref()
-                    .map(|p| serde_json::to_string(p).unwrap_or_default());
-                let limits_json = serde_json::to_string(&model.limits).unwrap_or_default();
-
-                stmt.execute(params![
-                    model.id,
-                    model.display_name,
-                    model.provider_id,
-                    model.provider_name,
-                    model.family,
-                    model.tier.to_string(),
-                    capabilities_json,
-                    pricing_json,
-                    limits_json,
-                    model.status.to_string(),
-                    model.release_date,
-                    model.is_latest as i32,
-                    model.description,
-                    model.source.to_string(),
-                    model.created_at,
-                    model.updated_at,
-                ])
-                .map_err(|e| e.to_string())?;
-            }
-        }
-
-        // 提交事务
-        tx.commit().map_err(|e| e.to_string())?;
-
-        tracing::info!("[ModelRegistry] 保存了 {} 个模型到数据库", models.len());
-
         Ok(())
     }
 
@@ -1437,45 +813,39 @@ impl ModelRegistryService {
         self.sync_state.read().await.clone()
     }
 
-    /// 强制从内嵌资源重新加载模型数据
+    /// 刷新模型注册表。
     ///
-    /// 清除数据库缓存并重新从资源文件加载最新的模型数据
+    /// 本地模型目录已下线，刷新会清空内存缓存和 Provider 实时模型缓存。
     pub async fn force_reload(&self) -> Result<u32, String> {
-        tracing::info!("[ModelRegistry] 强制重新加载模型数据");
-
-        // 从内嵌资源加载
-        let (models, aliases) = self.load_from_embedded_resources().await?;
-
-        let model_count = models.len() as u32;
-        tracing::info!(
-            "[ModelRegistry] 从内嵌资源加载了 {} 个模型, {} 个别名配置",
-            models.len(),
-            aliases.len()
-        );
+        tracing::info!("[ModelRegistry] 清空模型注册表缓存");
 
         // 更新缓存
         {
             let mut cache = self.models_cache.write().await;
-            *cache = models.clone();
+            cache.clear();
         }
         {
             let mut cache = self.aliases_cache.write().await;
-            *cache = aliases;
+            cache.clear();
+        }
+        let cleared_provider_cache = self.clear_provider_models_cache()?;
+        if cleared_provider_cache > 0 {
+            tracing::info!(
+                "[ModelRegistry] 已清空 {} 条 Provider 实时模型缓存",
+                cleared_provider_cache
+            );
         }
 
         // 更新同步状态
         {
             let mut state = self.sync_state.write().await;
-            state.model_count = model_count;
+            state.model_count = 0;
             state.last_sync_at = Some(chrono::Utc::now().timestamp());
             state.is_syncing = false;
             state.last_error = None;
         }
 
-        // 保存到数据库
-        self.save_models_to_db(&models).await?;
-
-        Ok(model_count)
+        Ok(0)
     }
 
     /// 按 Provider 获取模型
@@ -1727,6 +1097,10 @@ impl ModelRegistryService {
         api_host: &str,
         provider_type: ApiProviderType,
     ) -> bool {
+        if Self::uses_declared_models_for_model_fetch(provider_id, api_host, Some(provider_type)) {
+            return false;
+        }
+
         match provider_type {
             ApiProviderType::Ollama => false,
             ApiProviderType::Openai
@@ -1744,10 +1118,187 @@ impl ModelRegistryService {
         }
     }
 
+    fn is_fal_like_model_fetch(
+        provider_id: &str,
+        api_host: &str,
+        provider_type: Option<ApiProviderType>,
+    ) -> bool {
+        if matches!(provider_type, Some(ApiProviderType::Fal)) {
+            return true;
+        }
+
+        let provider = provider_id.trim().to_ascii_lowercase();
+        let host = api_host.trim().to_ascii_lowercase();
+
+        provider == "fal"
+            || provider.starts_with("fal-")
+            || provider.contains("fal.ai")
+            || host.contains("fal.run")
+            || host.contains("queue.fal.run")
+    }
+
+    fn uses_declared_models_for_model_fetch(
+        provider_id: &str,
+        api_host: &str,
+        provider_type: Option<ApiProviderType>,
+    ) -> bool {
+        Self::is_fal_like_model_fetch(provider_id, api_host, provider_type)
+    }
+
+    fn provider_models_cache_key(
+        provider_id: &str,
+        api_host: &str,
+        provider_type: Option<ApiProviderType>,
+    ) -> String {
+        let protocol = Self::resolve_model_fetch_protocol(provider_id, api_host, provider_type);
+        let scope = format!(
+            "{}\n{}\n{protocol:?}",
+            provider_id.trim().to_ascii_lowercase(),
+            api_host.trim().trim_end_matches('/')
+        );
+        let digest = Sha256::digest(scope.as_bytes());
+        let mut hash = String::with_capacity(digest.len() * 2);
+        for byte in digest {
+            use std::fmt::Write as _;
+            let _ = write!(&mut hash, "{byte:02x}");
+        }
+        format!("{PROVIDER_MODELS_CACHE_KEY_PREFIX}{hash}")
+    }
+
+    /// 读取 10 天内有效的 Provider 实时模型缓存。
+    ///
+    /// 缓存不包含 API Key，自动获取模型前可以先读缓存，避免无 Key 或临时
+    /// 网络失败时把已确认的模型列表清空。
+    pub fn get_cached_provider_models(
+        &self,
+        provider_id: &str,
+        api_host: &str,
+        provider_type: Option<ApiProviderType>,
+    ) -> Result<Option<FetchModelsResult>, String> {
+        let cache_key = Self::provider_models_cache_key(provider_id, api_host, provider_type);
+        let now = chrono::Utc::now().timestamp();
+        let conn = self.db.lock().map_err(|e| e.to_string())?;
+
+        let cached_value: Option<String> = conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = ?1",
+                params![cache_key],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| format!("读取 Provider 模型缓存失败: {e}"))?;
+
+        let Some(cached_value) = cached_value else {
+            return Ok(None);
+        };
+
+        let payload: ProviderModelsCachePayload = match serde_json::from_str(&cached_value) {
+            Ok(payload) => payload,
+            Err(error) => {
+                tracing::warn!("[ModelRegistry] Provider 模型缓存解析失败，已忽略: {error}");
+                let _ = conn.execute("DELETE FROM settings WHERE key = ?1", params![cache_key]);
+                return Ok(None);
+            }
+        };
+
+        if payload.expires_at <= now {
+            tracing::info!(
+                "[ModelRegistry] Provider 模型缓存已过期: provider={}, host={}",
+                provider_id,
+                api_host
+            );
+            let _ = conn.execute("DELETE FROM settings WHERE key = ?1", params![cache_key]);
+            return Ok(None);
+        }
+
+        let mut models = payload.models;
+
+        if Self::uses_declared_models_for_model_fetch(provider_id, api_host, provider_type) {
+            let original_count = models.len();
+            models.retain(|model| Self::is_likely_fal_declared_model(&model.id));
+            if models.len() != original_count {
+                tracing::info!(
+                    "[ModelRegistry] Fal Provider 模型缓存包含非 Fal 模型，已清理: provider={}, host={}",
+                    provider_id,
+                    api_host
+                );
+                let _ = conn.execute("DELETE FROM settings WHERE key = ?1", params![cache_key]);
+            }
+        }
+
+        if models.is_empty() {
+            let _ = conn.execute("DELETE FROM settings WHERE key = ?1", params![cache_key]);
+            return Ok(None);
+        }
+
+        tracing::info!(
+            "[ModelRegistry] 命中 Provider 模型缓存: provider={}, host={}, models={}",
+            provider_id,
+            api_host,
+            models.len()
+        );
+
+        Ok(Some(FetchModelsResult {
+            models,
+            source: ModelFetchSource::Api,
+            error: None,
+            request_url: payload.request_url,
+            diagnostic_hint: Some("已使用 10 天内缓存的模型列表。".to_string()),
+            error_kind: None,
+            should_prompt_error: false,
+            from_cache: true,
+        }))
+    }
+
+    fn save_provider_models_cache(
+        &self,
+        provider_id: &str,
+        api_host: &str,
+        provider_type: Option<ApiProviderType>,
+        models: &[EnhancedModelMetadata],
+        request_url: Option<String>,
+        fetched_at: i64,
+    ) -> Result<(), String> {
+        if models.is_empty() {
+            return Ok(());
+        }
+
+        let cache_key = Self::provider_models_cache_key(provider_id, api_host, provider_type);
+        let payload = ProviderModelsCachePayload {
+            provider_id: provider_id.trim().to_string(),
+            api_host: api_host.trim().to_string(),
+            provider_type: provider_type.map(|provider_type| provider_type.to_string()),
+            request_url,
+            fetched_at,
+            expires_at: fetched_at + PROVIDER_MODELS_CACHE_TTL_SECONDS,
+            models: models.to_vec(),
+        };
+        let payload = serde_json::to_string(&payload)
+            .map_err(|e| format!("序列化 Provider 模型缓存失败: {e}"))?;
+
+        let conn = self.db.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
+            params![cache_key, payload],
+        )
+        .map_err(|e| format!("写入 Provider 模型缓存失败: {e}"))?;
+
+        Ok(())
+    }
+
+    fn clear_provider_models_cache(&self) -> Result<usize, String> {
+        let conn = self.db.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "DELETE FROM settings WHERE key GLOB ?1",
+            params![format!("{PROVIDER_MODELS_CACHE_KEY_PREFIX}*")],
+        )
+        .map_err(|e| format!("清空 Provider 模型缓存失败: {e}"))
+    }
+
     /// 从 Provider API 获取模型列表
     ///
-    /// 调用 Provider 的 /v1/models 端点获取模型列表，
-    /// 如果失败则回退到本地 JSON 文件
+    /// 优先读取 10 天内 Provider 实时模型缓存；未命中时调用 Provider
+    /// 的 `/models` 端点获取模型列表。
     ///
     /// # 参数
     /// - `provider_id`: Provider ID（如 "siliconflow", "openai"）
@@ -1766,14 +1317,10 @@ impl ModelRegistryService {
             .await
     }
 
-    /// 从 Provider API 获取模型列表（带兜底提示）
+    /// 从 Provider API 获取模型列表。
     ///
-    /// 优先使用 API 实时结果；当 API 不可用时，按以下顺序进行本地兜底：
-    /// 1. 精确匹配 custom_models
-    /// 2. 按 provider_id / provider_type / api_host 推断候选 provider
-    /// 3. 使用本地资源中的候选 provider 模型列表
-    ///
-    /// 对 Anthropic 兼容 Provider，不执行本地模型兜底，避免误显示其它厂商模型。
+    /// 本地模型目录已下线：有效缓存未命中且 API 不可用时直接返回错误来源，
+    /// 不再展示 `custom_models` 或内置厂商目录作为“接口获取”的结果。
     pub async fn fetch_models_from_api_with_hints(
         &self,
         provider_id: &str,
@@ -1788,36 +1335,108 @@ impl ModelRegistryService {
             api_host
         );
 
+        match self.get_cached_provider_models(provider_id, api_host, provider_type) {
+            Ok(Some(cached)) => return Ok(cached),
+            Ok(None) => {}
+            Err(error) => {
+                tracing::warn!("[ModelRegistry] 读取 Provider 模型缓存失败，继续访问 API: {error}");
+            }
+        }
+
+        if Self::uses_declared_models_for_model_fetch(provider_id, api_host, provider_type) {
+            let now = chrono::Utc::now().timestamp();
+            let models = self.build_fal_declared_models(provider_id, custom_models, now);
+
+            if !models.is_empty() {
+                if let Err(error) = self.save_provider_models_cache(
+                    provider_id,
+                    api_host,
+                    provider_type,
+                    &models,
+                    None,
+                    now,
+                ) {
+                    tracing::warn!("[ModelRegistry] 写入声明模型缓存失败: {error}");
+                }
+
+                return Ok(FetchModelsResult {
+                    models,
+                    source: ModelFetchSource::Api,
+                    error: None,
+                    request_url: None,
+                    diagnostic_hint: Some(
+                        "Fal 不提供标准 /models 枚举；已确认 Provider 中声明的 Fal 图片模型，并写入 10 天缓存。"
+                            .to_string(),
+                    ),
+                    error_kind: None,
+                    should_prompt_error: false,
+                    from_cache: false,
+                });
+            }
+
+            return Ok(FetchModelsResult {
+                models: Vec::new(),
+                source: ModelFetchSource::Error,
+                error: Some("Fal 不提供标准 /models 枚举。".to_string()),
+                request_url: None,
+                diagnostic_hint: Some(
+                    "当前模型优先级没有可用 Fal 图片模型；请手动添加 fal-ai/nano-banana-pro、fal-ai/flux-pro 或其他 fal-ai/... 模型 ID。"
+                        .to_string(),
+                ),
+                error_kind: Some(ModelFetchErrorKind::Other),
+                should_prompt_error: false,
+                from_cache: false,
+            });
+        }
+
         let fetch_protocol =
             Self::resolve_model_fetch_protocol(provider_id, api_host, provider_type);
         if fetch_protocol == ModelFetchProtocol::ResponsesCompatible {
-            let (scoped_local_models, scoped_local_source) = self
-                .resolve_scoped_local_models(provider_id, api_host, custom_models)
-                .await;
-            let keeps_custom_models = !scoped_local_models.is_empty()
-                && scoped_local_source == ModelFetchSource::CustomModels;
-            let keeps_catalog_models =
-                !scoped_local_models.is_empty() && scoped_local_source == ModelFetchSource::Catalog;
-            let error = if keeps_custom_models {
-                "当前 Responses 兼容入口未提供标准 /models 接口，已保留当前 Provider 的自定义模型。"
-                    .to_string()
-            } else if keeps_catalog_models {
-                "当前 Responses 兼容入口未提供标准 /models 接口，已回退到内置厂商目录。".to_string()
-            } else {
-                "当前 Responses 兼容入口未提供标准 /models 接口。".to_string()
-            };
+            let now = chrono::Utc::now().timestamp();
+            let models =
+                self.build_responses_compatible_declared_models(provider_id, custom_models, now);
+
+            if !models.is_empty() {
+                if let Err(error) = self.save_provider_models_cache(
+                    provider_id,
+                    api_host,
+                    provider_type,
+                    &models,
+                    None,
+                    now,
+                ) {
+                    tracing::warn!(
+                        "[ModelRegistry] 写入 Responses Provider 声明模型缓存失败: {error}"
+                    );
+                }
+
+                return Ok(FetchModelsResult {
+                    models,
+                    source: ModelFetchSource::Api,
+                    error: None,
+                    request_url: None,
+                    diagnostic_hint: Some(
+                        "当前 Responses 图片入口不提供标准 /models 枚举；已使用 Provider 中声明的图片模型作为可用模型，并写入 10 天缓存。"
+                            .to_string(),
+                    ),
+                    error_kind: None,
+                    should_prompt_error: false,
+                    from_cache: false,
+                });
+            }
 
             return Ok(FetchModelsResult {
-                models: scoped_local_models,
-                source: scoped_local_source,
-                error: Some(error),
+                models: Vec::new(),
+                source: ModelFetchSource::Error,
+                error: Some("当前 Responses 兼容入口未提供标准 /models 接口。".to_string()),
                 request_url: None,
                 diagnostic_hint: Some(
-                    "当前 Base URL 走 `/responses` 主链，Lime 不再探测 `/v1/models`；如需在设置页展示模型，请直接在 Provider 中填写自定义模型。"
+                    "当前 Base URL 走 `/responses` 主链，Lime 不再探测 `/v1/models`；请先在 Provider 中填写 gpt-images-2 或其他图片模型。"
                         .to_string(),
                 ),
                 error_kind: Some(ModelFetchErrorKind::NotFound),
                 should_prompt_error: false,
+                from_cache: false,
             });
         }
 
@@ -1844,6 +1463,17 @@ impl ModelRegistryService {
                     .map(|m| self.convert_api_model(m, provider_id, now))
                     .collect();
 
+                if let Err(error) = self.save_provider_models_cache(
+                    provider_id,
+                    api_host,
+                    provider_type,
+                    &models,
+                    Some(request_url.clone()),
+                    now,
+                ) {
+                    tracing::warn!("[ModelRegistry] 写入 Provider 模型缓存失败: {error}");
+                }
+
                 Ok(FetchModelsResult {
                     models,
                     source: ModelFetchSource::Api,
@@ -1852,634 +1482,29 @@ impl ModelRegistryService {
                     diagnostic_hint: None,
                     error_kind: None,
                     should_prompt_error: false,
+                    from_cache: false,
                 })
             }
             Err(api_error) => {
                 tracing::warn!(
-                    "[ModelRegistry] API 获取失败: {}, 回退到本地文件",
+                    "[ModelRegistry] API 获取失败，本地模型兜底已下线: {}",
                     api_error.message
                 );
 
-                if Self::should_disable_registry_fallback(api_host, provider_type) {
-                    let (scoped_local_models, scoped_local_source) = self
-                        .resolve_scoped_local_models(provider_id, api_host, custom_models)
-                        .await;
-                    let keeps_custom_models = !scoped_local_models.is_empty()
-                        && scoped_local_source == ModelFetchSource::CustomModels;
-                    let keeps_catalog_models = !scoped_local_models.is_empty()
-                        && scoped_local_source == ModelFetchSource::Catalog;
-                    let is_anthropic_models_not_found =
-                        api_error.kind == ModelFetchErrorKind::NotFound;
-                    let adjusted_hint = if is_anthropic_models_not_found {
-                        None
-                    } else {
-                        diagnostic_hint
-                    };
-                    let error = if is_anthropic_models_not_found {
-                        if keeps_custom_models {
-                            "当前 Anthropic 兼容入口未提供标准 /models 接口，已保留当前 Provider 的自定义模型。"
-                                .to_string()
-                        } else if keeps_catalog_models {
-                            "当前 Anthropic 兼容入口未提供标准 /models 接口，已回退到内置厂商目录。"
-                                .to_string()
-                        } else {
-                            "当前 Anthropic 兼容入口未提供标准 /models 接口。".to_string()
-                        }
-                    } else if keeps_custom_models {
-                        format!(
-                            "API 获取失败: {}，已保留当前 Provider 的自定义模型；同时不再回退通用本地目录，避免误显示其它厂商模型。",
-                            api_error.message
-                        )
-                    } else if keeps_catalog_models {
-                        format!(
-                            "API 获取失败: {}，已回退到内置厂商目录；同时不再回退通用本地目录，避免误显示其它厂商模型。",
-                            api_error.message
-                        )
-                    } else {
-                        format!(
-                            "API 获取失败: {}，当前 Provider 不再回退通用本地目录，避免误显示其它厂商模型。",
-                            api_error.message
-                        )
-                    };
-
-                    return Ok(FetchModelsResult {
-                        models: scoped_local_models,
-                        source: scoped_local_source,
-                        error: Some(error),
-                        request_url: api_url,
-                        diagnostic_hint: adjusted_hint,
-                        error_kind: Some(api_error.kind.clone()),
-                        should_prompt_error: false,
-                    });
-                }
-
-                // 回退到本地资源模型（多级匹配）
-                let local_models = self
-                    .resolve_local_fallback_models(
-                        provider_id,
-                        api_host,
-                        provider_type,
-                        custom_models,
-                    )
-                    .await;
-
-                if local_models.is_empty() {
-                    Ok(FetchModelsResult {
-                        models: vec![],
-                        source: ModelFetchSource::LocalFallback,
-                        error: Some(format!("API 获取失败: {}, 本地也无数据", api_error.message)),
-                        request_url: api_url.clone(),
-                        diagnostic_hint,
-                        error_kind: Some(api_error.kind.clone()),
-                        should_prompt_error: Self::should_prompt_model_fetch_error(&api_error.kind),
-                    })
-                } else {
-                    Ok(FetchModelsResult {
-                        models: local_models,
-                        source: ModelFetchSource::LocalFallback,
-                        error: Some(format!(
-                            "API 获取失败: {}, 已使用本地数据",
-                            api_error.message
-                        )),
-                        request_url: api_url,
-                        diagnostic_hint,
-                        error_kind: Some(api_error.kind.clone()),
-                        should_prompt_error: Self::should_prompt_model_fetch_error(&api_error.kind),
-                    })
-                }
+                Ok(FetchModelsResult {
+                    models: Vec::new(),
+                    source: ModelFetchSource::Error,
+                    error: Some(format!(
+                        "API 获取失败: {}。本地模型兜底已下线，请检查 API Host / 密钥，或手动添加模型 ID。",
+                        api_error.message
+                    )),
+                    request_url: api_url,
+                    diagnostic_hint,
+                    error_kind: Some(api_error.kind.clone()),
+                    should_prompt_error: Self::should_prompt_model_fetch_error(&api_error.kind),
+                    from_cache: false,
+                })
             }
-        }
-    }
-
-    pub async fn get_local_fallback_model_ids_with_hints(
-        &self,
-        provider_id: &str,
-        api_host: &str,
-        provider_type: Option<ApiProviderType>,
-        custom_models: &[String],
-    ) -> Vec<String> {
-        self.resolve_local_fallback_models(provider_id, api_host, provider_type, custom_models)
-            .await
-            .into_iter()
-            .map(|model| model.id)
-            .collect()
-    }
-
-    async fn resolve_local_fallback_models(
-        &self,
-        provider_id: &str,
-        api_host: &str,
-        provider_type: Option<ApiProviderType>,
-        custom_models: &[String],
-    ) -> Vec<EnhancedModelMetadata> {
-        let (scoped_local_models, scoped_local_source) = self
-            .resolve_scoped_local_models(provider_id, api_host, custom_models)
-            .await;
-        if !scoped_local_models.is_empty() {
-            tracing::info!(
-                "[ModelRegistry] 本地兜底命中 scoped {}: provider={}, matched={}",
-                match scoped_local_source {
-                    ModelFetchSource::CustomModels => "custom_models",
-                    ModelFetchSource::Catalog => "catalog_models",
-                    _ => "local_models",
-                },
-                provider_id,
-                scoped_local_models.len()
-            );
-            return scoped_local_models;
-        }
-
-        if Self::should_disable_registry_fallback(api_host, provider_type) {
-            tracing::info!(
-                "[ModelRegistry] 当前协议禁用通用本地模型兜底: provider={}, host={}",
-                provider_id,
-                api_host
-            );
-            return Vec::new();
-        }
-
-        let candidate_provider_ids = self
-            .collect_fallback_provider_ids(provider_id, api_host, provider_type, custom_models)
-            .await;
-
-        tracing::info!(
-            "[ModelRegistry] 本地兜底候选 provider: provider={}, candidates={:?}",
-            provider_id,
-            candidate_provider_ids
-        );
-
-        self.collect_local_models_for_candidates(&candidate_provider_ids)
-            .await
-    }
-
-    async fn resolve_scoped_local_models(
-        &self,
-        provider_id: &str,
-        api_host: &str,
-        custom_models: &[String],
-    ) -> (Vec<EnhancedModelMetadata>, ModelFetchSource) {
-        let scoped_provider_candidates = self
-            .collect_explicit_model_provider_ids(provider_id, api_host)
-            .await;
-        let matched_custom_models = self
-            .match_local_models_by_ids(custom_models, Some(scoped_provider_candidates.as_slice()))
-            .await;
-        let scoped_catalog_models = self
-            .collect_local_models_for_candidates(&scoped_provider_candidates)
-            .await;
-
-        if Self::should_prefer_scoped_catalog_for_host(api_host, &scoped_provider_candidates)
-            && !scoped_catalog_models.is_empty()
-        {
-            return (scoped_catalog_models, ModelFetchSource::Catalog);
-        }
-
-        if !matched_custom_models.is_empty() {
-            return (matched_custom_models, ModelFetchSource::CustomModels);
-        }
-
-        // 对未知 relay / 自定义网关场景，显式 custom_models 仍应按“精确模型 ID”保留，
-        // 不能因为 provider_id / host 无法映射，就退化成整包通用目录。
-        let globally_matched_custom_models =
-            self.match_local_models_by_ids(custom_models, None).await;
-        if !globally_matched_custom_models.is_empty() {
-            return (
-                globally_matched_custom_models,
-                ModelFetchSource::CustomModels,
-            );
-        }
-
-        if !scoped_catalog_models.is_empty() {
-            return (scoped_catalog_models, ModelFetchSource::Catalog);
-        }
-
-        (Vec::new(), ModelFetchSource::LocalFallback)
-    }
-
-    fn should_prefer_scoped_catalog_for_host(
-        api_host: &str,
-        scoped_provider_candidates: &[String],
-    ) -> bool {
-        if !api_host.to_lowercase().contains("xiaomimimo.com") {
-            return false;
-        }
-
-        scoped_provider_candidates
-            .iter()
-            .any(|candidate| candidate == "xiaomi")
-    }
-
-    async fn collect_local_models_for_candidates(
-        &self,
-        candidate_provider_ids: &[String],
-    ) -> Vec<EnhancedModelMetadata> {
-        let cache = self.models_cache.read().await;
-        let mut models = Vec::new();
-        let mut seen_ids = HashSet::new();
-
-        for candidate in candidate_provider_ids {
-            for model in cache.iter().filter(|m| m.provider_id == *candidate) {
-                if seen_ids.insert(model.id.clone()) {
-                    models.push(model.clone());
-                }
-            }
-        }
-
-        models
-    }
-
-    async fn match_local_models_by_ids(
-        &self,
-        model_ids: &[String],
-        provider_candidates: Option<&[String]>,
-    ) -> Vec<EnhancedModelMetadata> {
-        if model_ids.is_empty() {
-            return Vec::new();
-        }
-
-        let target_ids: HashSet<String> = model_ids
-            .iter()
-            .map(|id| id.trim().to_lowercase())
-            .filter(|id| !id.is_empty())
-            .collect();
-
-        if target_ids.is_empty() {
-            return Vec::new();
-        }
-
-        let provider_candidates = provider_candidates.map(|candidates| {
-            candidates
-                .iter()
-                .map(|candidate| candidate.trim().to_lowercase())
-                .filter(|candidate| !candidate.is_empty())
-                .collect::<HashSet<_>>()
-        });
-
-        let cache = self.models_cache.read().await;
-        cache
-            .iter()
-            .filter(|model| {
-                target_ids.contains(&model.id.to_lowercase())
-                    && provider_candidates.as_ref().is_none_or(|candidates| {
-                        candidates.contains(&model.provider_id.to_lowercase())
-                    })
-            })
-            .cloned()
-            .collect()
-    }
-
-    async fn collect_fallback_provider_ids(
-        &self,
-        provider_id: &str,
-        api_host: &str,
-        provider_type: Option<ApiProviderType>,
-        custom_models: &[String],
-    ) -> Vec<String> {
-        let mut candidates = Vec::new();
-
-        Self::push_unique_candidate(&mut candidates, provider_id);
-
-        if let Some(stripped) = provider_id.strip_suffix("_api_key") {
-            Self::push_unique_candidate(&mut candidates, stripped);
-        }
-
-        // 根据 custom_models 反推 provider（可覆盖 custom-* 场景）
-        if !custom_models.is_empty() {
-            let target_ids: HashSet<String> = custom_models
-                .iter()
-                .map(|id| id.trim().to_lowercase())
-                .filter(|id| !id.is_empty())
-                .collect();
-
-            if !target_ids.is_empty() {
-                let cache = self.models_cache.read().await;
-                for model in cache.iter() {
-                    if target_ids.contains(&model.id.to_lowercase()) {
-                        Self::push_unique_candidate(&mut candidates, &model.provider_id);
-                    }
-                }
-            }
-        }
-
-        let host_alias_candidates = self.infer_provider_ids_from_host_aliases(api_host);
-        let inferred_host_candidates = if host_alias_candidates.is_empty() {
-            Self::infer_provider_ids_from_api_host(api_host)
-        } else {
-            &[]
-        };
-
-        if host_alias_candidates.is_empty() {
-            for inferred_id in inferred_host_candidates {
-                Self::push_unique_candidate(&mut candidates, inferred_id);
-            }
-        } else {
-            for inferred_id in &host_alias_candidates {
-                Self::push_unique_candidate(&mut candidates, inferred_id);
-            }
-        }
-
-        if let Some(provider_type) = provider_type {
-            let has_scoped_host_candidates =
-                !host_alias_candidates.is_empty() || !inferred_host_candidates.is_empty();
-            if Self::should_skip_provider_type_catalog_fallback(
-                api_host,
-                provider_type,
-                has_scoped_host_candidates,
-            ) {
-                tracing::info!(
-                    "[ModelRegistry] 跳过通用 provider_type 目录兜底: provider={}, host={}, type={:?}",
-                    provider_id,
-                    api_host,
-                    provider_type
-                );
-            } else {
-                for mapped_id in Self::map_provider_type_to_registry_ids(provider_type) {
-                    Self::push_unique_candidate(&mut candidates, mapped_id);
-                }
-            }
-        }
-
-        candidates
-    }
-
-    async fn collect_explicit_model_provider_ids(
-        &self,
-        provider_id: &str,
-        api_host: &str,
-    ) -> Vec<String> {
-        let mut candidates = Vec::new();
-
-        Self::push_unique_candidate(&mut candidates, provider_id);
-
-        if let Some(stripped) = provider_id.strip_suffix("_api_key") {
-            Self::push_unique_candidate(&mut candidates, stripped);
-        }
-
-        let host_alias_candidates = self.infer_provider_ids_from_host_aliases(api_host);
-        if host_alias_candidates.is_empty() {
-            for inferred_id in Self::infer_provider_ids_from_api_host(api_host) {
-                Self::push_unique_candidate(&mut candidates, inferred_id);
-            }
-        } else {
-            for inferred_id in host_alias_candidates {
-                Self::push_unique_candidate(&mut candidates, &inferred_id);
-            }
-        }
-
-        candidates
-    }
-
-    fn push_unique_candidate(candidates: &mut Vec<String>, candidate: &str) {
-        if candidate.trim().is_empty() {
-            return;
-        }
-
-        let normalized = candidate.trim().to_lowercase();
-        if !candidates.iter().any(|existing| existing == &normalized) {
-            candidates.push(normalized);
-        }
-    }
-
-    fn infer_provider_ids_from_host_aliases(&self, api_host: &str) -> Vec<String> {
-        let host = api_host.trim().to_lowercase();
-        if host.is_empty() {
-            return Vec::new();
-        }
-
-        let user_path = Self::resolve_user_host_alias_path();
-        let user_rules = user_path.as_ref().and_then(|path| {
-            if !path.exists() {
-                return None;
-            }
-            Self::load_host_alias_config_from_path(path, "user").map(|config| config.rules)
-        });
-
-        let system_path = self.resolve_system_host_alias_path();
-        let system_rules = system_path.as_ref().and_then(|path| {
-            Self::load_host_alias_config_from_path(path, "system").map(|config| config.rules)
-        });
-
-        if let Some((source, matched)) = Self::select_host_alias_candidates(
-            &host,
-            user_rules.as_deref(),
-            system_rules.as_deref(),
-        ) {
-            match source {
-                "user" => tracing::info!(
-                    "[ModelRegistry] host_alias 用户规则命中: host={}, providers={:?}, path={:?}",
-                    host,
-                    matched,
-                    user_path
-                ),
-                "system" => tracing::info!(
-                    "[ModelRegistry] host_alias 系统规则命中: host={}, providers={:?}, path={:?}",
-                    host,
-                    matched,
-                    system_path
-                ),
-                _ => {}
-            }
-            return matched;
-        }
-
-        tracing::debug!("[ModelRegistry] host_alias 未命中: host={}", host);
-        Vec::new()
-    }
-
-    fn select_host_alias_candidates(
-        host: &str,
-        user_rules: Option<&[HostAliasRule]>,
-        system_rules: Option<&[HostAliasRule]>,
-    ) -> Option<(&'static str, Vec<String>)> {
-        if let Some(rules) = user_rules {
-            let matched = Self::match_host_alias_rules(host, rules);
-            if !matched.is_empty() {
-                return Some(("user", matched));
-            }
-        }
-
-        if let Some(rules) = system_rules {
-            let matched = Self::match_host_alias_rules(host, rules);
-            if !matched.is_empty() {
-                return Some(("system", matched));
-            }
-        }
-
-        None
-    }
-
-    fn match_host_alias_rules(host: &str, rules: &[HostAliasRule]) -> Vec<String> {
-        let mut matched = Vec::new();
-
-        for rule in rules {
-            let pattern = rule.contains.trim().to_lowercase();
-            if pattern.is_empty() || !host.contains(&pattern) {
-                continue;
-            }
-
-            for provider_id in &rule.providers {
-                Self::push_unique_candidate(&mut matched, provider_id);
-            }
-        }
-
-        matched
-    }
-
-    fn resolve_system_host_alias_path(&self) -> Option<std::path::PathBuf> {
-        let resource_dir = self.resource_dir.as_ref()?;
-        Some(
-            resource_dir
-                .join(MODELS_RESOURCE_DIR)
-                .join(MODELS_HOST_ALIASES_FILE),
-        )
-    }
-
-    fn load_host_alias_config_from_path(
-        path: &std::path::Path,
-        source: &str,
-    ) -> Option<HostAliasConfig> {
-        let content = match std::fs::read_to_string(path) {
-            Ok(content) => content,
-            Err(e) => {
-                tracing::debug!(
-                    "[ModelRegistry] 读取 host_aliases 配置失败: source={}, path={:?}, error={}",
-                    source,
-                    path,
-                    e
-                );
-                return None;
-            }
-        };
-
-        match serde_json::from_str::<HostAliasConfig>(&content) {
-            Ok(config) => Some(config),
-            Err(e) => {
-                tracing::warn!(
-                    "[ModelRegistry] 解析 host_aliases 配置失败: source={}, path={:?}, error={}",
-                    source,
-                    path,
-                    e
-                );
-                None
-            }
-        }
-    }
-
-    fn infer_provider_ids_from_api_host(api_host: &str) -> &'static [&'static str] {
-        let host = api_host.to_lowercase();
-
-        if host.contains("bigmodel.cn") {
-            return &["zhipuai"];
-        }
-
-        if host.contains("z.ai") || host.contains("zai") {
-            return &["zai"];
-        }
-
-        if host.contains("moonshot.cn") {
-            return &["moonshotai-cn", "moonshotai", "kimi-for-coding"];
-        }
-
-        if host.contains("moonshot.ai") {
-            return &["moonshotai", "kimi-for-coding"];
-        }
-
-        if host.contains("api.kimi.com") {
-            return &["kimi-for-coding"];
-        }
-
-        if host.contains("minimaxi.com") {
-            return &["minimax-cn", "minimax"];
-        }
-
-        if host.contains("minimax.io") {
-            return &["minimax"];
-        }
-
-        if host.contains("coding-intl.dashscope.aliyuncs.com") {
-            return &["alibaba", "alibaba-cn"];
-        }
-
-        if host.contains("dashscope-intl.aliyuncs.com") {
-            return &["alibaba", "alibaba-cn"];
-        }
-
-        if host.contains("dashscope.aliyuncs.com") {
-            return &["alibaba-cn", "alibaba"];
-        }
-
-        if host.contains("anthropic.com") {
-            return &["anthropic"];
-        }
-
-        if host.contains("openai.com") {
-            return &["openai"];
-        }
-
-        if host.contains("googleapis.com") {
-            return &["google"];
-        }
-
-        if host.contains("bedrock") {
-            return &["amazon-bedrock"];
-        }
-
-        if host.contains("ollama") {
-            return &["ollama-cloud"];
-        }
-
-        if host.contains("fal.run") {
-            return &["fal"];
-        }
-
-        &[]
-    }
-
-    fn should_skip_provider_type_catalog_fallback(
-        api_host: &str,
-        provider_type: ApiProviderType,
-        has_scoped_host_candidates: bool,
-    ) -> bool {
-        if has_scoped_host_candidates {
-            return false;
-        }
-
-        if !matches!(
-            provider_type,
-            ApiProviderType::Openai
-                | ApiProviderType::OpenaiResponse
-                | ApiProviderType::Codex
-                | ApiProviderType::NewApi
-                | ApiProviderType::Gateway
-        ) {
-            return false;
-        }
-
-        let original_host = api_host.trim().trim_end_matches('/');
-        if original_host.is_empty() {
-            return false;
-        }
-
-        let normalized_host = normalize_openai_model_discovery_host(api_host);
-        normalized_host.trim_end_matches('/') != original_host
-    }
-
-    fn map_provider_type_to_registry_ids(
-        provider_type: ApiProviderType,
-    ) -> &'static [&'static str] {
-        match provider_type {
-            ApiProviderType::Openai
-            | ApiProviderType::OpenaiResponse
-            | ApiProviderType::NewApi
-            | ApiProviderType::Gateway
-            | ApiProviderType::AzureOpenai => &["openai"],
-            ApiProviderType::Anthropic | ApiProviderType::AnthropicCompatible => &["anthropic"],
-            ApiProviderType::Gemini => &["google"],
-            ApiProviderType::Vertexai => &["google-vertex", "google"],
-            ApiProviderType::AwsBedrock => &["amazon-bedrock"],
-            ApiProviderType::Ollama => &["ollama-cloud"],
-            ApiProviderType::Fal => &["fal", "openai"],
-            ApiProviderType::Codex => &["codex"],
         }
     }
 
@@ -2509,8 +1534,10 @@ impl ModelRegistryService {
     ) -> ModelFetchProtocol {
         if let Some(provider_type) = provider_type {
             return match provider_type {
+                ApiProviderType::OpenaiResponse | ApiProviderType::Codex => {
+                    ModelFetchProtocol::ResponsesCompatible
+                }
                 ApiProviderType::Openai
-                | ApiProviderType::OpenaiResponse
                 | ApiProviderType::NewApi
                 | ApiProviderType::Gateway
                 | ApiProviderType::Fal => {
@@ -2520,7 +1547,6 @@ impl ModelRegistryService {
                         ModelFetchProtocol::OpenAiCompatible
                     }
                 }
-                ApiProviderType::Codex => ModelFetchProtocol::ResponsesCompatible,
                 ApiProviderType::Anthropic | ApiProviderType::AnthropicCompatible => {
                     ModelFetchProtocol::Anthropic
                 }
@@ -2559,18 +1585,6 @@ impl ModelRegistryService {
         }
 
         ModelFetchProtocol::OpenAiCompatible
-    }
-
-    fn should_disable_registry_fallback(
-        api_host: &str,
-        provider_type: Option<ApiProviderType>,
-    ) -> bool {
-        if matches!(provider_type, Some(ApiProviderType::AnthropicCompatible)) {
-            return true;
-        }
-
-        let host = api_host.trim().to_lowercase();
-        host.contains("/anthropic")
     }
 
     /// 构建模型枚举 API URL
@@ -3348,6 +2362,95 @@ impl ModelRegistryService {
         }
     }
 
+    fn build_provider_declared_model(
+        &self,
+        model_id: &str,
+        provider_id: &str,
+        now: i64,
+    ) -> EnhancedModelMetadata {
+        self.convert_api_model(
+            ApiModelResponse {
+                id: model_id.to_string(),
+                display_name: None,
+                provider_name: Some(provider_id.to_string()),
+                family: None,
+                context_length: None,
+            },
+            provider_id,
+            now,
+        )
+        .with_source(ModelSource::Custom)
+    }
+
+    fn build_declared_models(
+        &self,
+        provider_id: &str,
+        custom_models: &[String],
+        now: i64,
+    ) -> Vec<EnhancedModelMetadata> {
+        let mut seen = std::collections::HashSet::new();
+        custom_models
+            .iter()
+            .map(|model| model.trim())
+            .filter(|model| !model.is_empty())
+            .filter(|model| seen.insert(model.to_ascii_lowercase()))
+            .map(|model| self.build_provider_declared_model(model, provider_id, now))
+            .collect()
+    }
+
+    fn is_likely_fal_declared_model(model_id: &str) -> bool {
+        let normalized = model_id.trim().to_ascii_lowercase();
+        if normalized.is_empty() {
+            return false;
+        }
+
+        normalized.starts_with("fal-ai/")
+            || text_contains_any(
+                &normalized,
+                &[
+                    "nano-banana",
+                    "banana",
+                    "flux",
+                    "seedream",
+                    "kontext",
+                    "recraft",
+                    "ideogram",
+                    "sdxl",
+                    "stable-diffusion",
+                    "image",
+                ],
+            )
+    }
+
+    fn build_fal_declared_models(
+        &self,
+        provider_id: &str,
+        custom_models: &[String],
+        now: i64,
+    ) -> Vec<EnhancedModelMetadata> {
+        self.build_declared_models(provider_id, custom_models, now)
+            .into_iter()
+            .filter(|model| Self::is_likely_fal_declared_model(&model.id))
+            .collect()
+    }
+
+    fn build_responses_compatible_declared_models(
+        &self,
+        provider_id: &str,
+        custom_models: &[String],
+        now: i64,
+    ) -> Vec<EnhancedModelMetadata> {
+        self.build_declared_models(provider_id, custom_models, now)
+            .into_iter()
+            .filter(|model| {
+                model
+                    .task_families
+                    .contains(&ModelTaskFamily::ImageGeneration)
+                    || model.output_modalities.contains(&ModelModality::Image)
+            })
+            .collect()
+    }
+
     fn should_bypass_proxy_for_models_api_url(url: &str) -> bool {
         let Ok(parsed) = reqwest::Url::parse(url) else {
             return false;
@@ -3483,12 +2586,8 @@ struct OllamaModelDetails {
 pub enum ModelFetchSource {
     /// 从 API 获取
     Api,
-    /// 从厂商目录获取
-    Catalog,
-    /// 使用当前 Provider 显式配置的自定义模型
-    CustomModels,
-    /// 从本地文件回退
-    LocalFallback,
+    /// API 获取失败且没有本地兜底
+    Error,
 }
 
 /// 模型获取错误类型
@@ -3520,16 +2619,43 @@ pub struct FetchModelsResult {
     pub error_kind: Option<ModelFetchErrorKind>,
     /// 是否应将该错误作为配置问题强提示
     pub should_prompt_error: bool,
+    /// 是否来自 10 天内的 Provider 实时模型缓存
+    #[serde(default)]
+    pub from_cache: bool,
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{HostAliasRule, ModelFetchProtocol, ModelRegistryService, LIME_TENANT_HEADER};
+    use super::{
+        ModelFetchErrorKind, ModelFetchProtocol, ModelFetchSource, ModelRegistryService,
+        LIME_TENANT_HEADER, PROVIDER_MODELS_CACHE_TTL_SECONDS,
+    };
     use lime_core::database::dao::api_key_provider::ApiProviderType;
     use lime_core::database::DbConnection;
-    use rusqlite::Connection;
+    use lime_core::models::model_registry::{EnhancedModelMetadata, ModelSource};
+    use rusqlite::{params, Connection};
     use std::sync::{Arc, Mutex};
-    use tempfile::tempdir;
+
+    fn setup_cache_service() -> (ModelRegistryService, DbConnection) {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute(
+            "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+            [],
+        )
+        .unwrap();
+        let db = Arc::new(Mutex::new(conn));
+        (ModelRegistryService::new(Arc::clone(&db)), db)
+    }
+
+    fn create_cached_model(id: &str) -> EnhancedModelMetadata {
+        EnhancedModelMetadata::new(
+            id.to_string(),
+            id.to_string(),
+            "openai".to_string(),
+            "OpenAI".to_string(),
+        )
+        .with_source(ModelSource::Api)
+    }
 
     #[test]
     fn test_build_models_api_url() {
@@ -3595,6 +2721,319 @@ mod tests {
         );
 
         assert_eq!(hint, None);
+    }
+
+    #[test]
+    fn test_provider_models_cache_hits_within_ten_days() {
+        let (service, _db) = setup_cache_service();
+        let now = chrono::Utc::now().timestamp();
+        let request_url = "https://api.openai.com/v1/models".to_string();
+
+        service
+            .save_provider_models_cache(
+                "openai",
+                "https://api.openai.com/v1",
+                Some(ApiProviderType::Openai),
+                &[create_cached_model("gpt-5.1")],
+                Some(request_url.clone()),
+                now,
+            )
+            .expect("cache should be saved");
+
+        let cached = service
+            .get_cached_provider_models(
+                "openai",
+                "https://api.openai.com/v1",
+                Some(ApiProviderType::Openai),
+            )
+            .expect("cache read should not fail")
+            .expect("cache should hit");
+
+        assert_eq!(cached.source, ModelFetchSource::Api);
+        assert!(cached.from_cache);
+        assert_eq!(cached.request_url.as_deref(), Some(request_url.as_str()));
+        assert_eq!(cached.models.len(), 1);
+        assert_eq!(cached.models[0].id, "gpt-5.1");
+    }
+
+    #[test]
+    fn test_provider_models_cache_expires_after_ten_days() {
+        let (service, db) = setup_cache_service();
+        let expired_at = chrono::Utc::now().timestamp() - PROVIDER_MODELS_CACHE_TTL_SECONDS - 1;
+
+        service
+            .save_provider_models_cache(
+                "openai",
+                "https://api.openai.com/v1",
+                Some(ApiProviderType::Openai),
+                &[create_cached_model("gpt-5.1")],
+                Some("https://api.openai.com/v1/models".to_string()),
+                expired_at,
+            )
+            .expect("cache should be saved");
+
+        let cached = service
+            .get_cached_provider_models(
+                "openai",
+                "https://api.openai.com/v1",
+                Some(ApiProviderType::Openai),
+            )
+            .expect("cache read should not fail");
+
+        assert!(cached.is_none());
+
+        let remaining: i64 = db
+            .lock()
+            .unwrap()
+            .query_row(
+                "SELECT COUNT(*) FROM settings WHERE key GLOB ?1",
+                params![format!("{}*", super::PROVIDER_MODELS_CACHE_KEY_PREFIX)],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(remaining, 0);
+    }
+
+    #[tokio::test]
+    async fn test_responses_compatible_fetch_uses_declared_image_models() {
+        let (service, _db) = setup_cache_service();
+
+        let result = service
+            .fetch_models_from_api_with_hints(
+                "airgate-openai-images",
+                "https://code.ylsagi.com/codex",
+                "sk-test",
+                Some(ApiProviderType::Openai),
+                &["gpt-images-2".to_string()],
+            )
+            .await
+            .expect("responses declared image models should resolve");
+
+        assert_eq!(result.source, ModelFetchSource::Api);
+        assert_eq!(result.models.len(), 1);
+        assert_eq!(result.models[0].id, "gpt-images-2");
+        assert_eq!(result.models[0].source, ModelSource::Custom);
+        assert!(result.models[0]
+            .task_families
+            .contains(&lime_core::models::model_registry::ModelTaskFamily::ImageGeneration));
+        assert!(result.models[0]
+            .runtime_features
+            .contains(&lime_core::models::model_registry::ModelRuntimeFeature::ImagesApi));
+        assert!(result
+            .diagnostic_hint
+            .as_deref()
+            .unwrap_or_default()
+            .contains("已使用 Provider 中声明的图片模型"));
+
+        let cached = service
+            .get_cached_provider_models(
+                "airgate-openai-images",
+                "https://code.ylsagi.com/codex",
+                Some(ApiProviderType::Openai),
+            )
+            .expect("cache read should not fail")
+            .expect("declared image models should be cached");
+
+        assert!(cached.from_cache);
+        assert_eq!(cached.models[0].id, "gpt-images-2");
+    }
+
+    #[tokio::test]
+    async fn test_openai_response_fetch_uses_declared_image_models_on_plain_base_url() {
+        let (service, _db) = setup_cache_service();
+
+        let result = service
+            .fetch_models_from_api_with_hints(
+                "openai-gpt-images-2",
+                "https://api.openai.com/v1",
+                "sk-test",
+                Some(ApiProviderType::OpenaiResponse),
+                &["gpt-images-2".to_string()],
+            )
+            .await
+            .expect("openai-response declared image models should resolve");
+
+        assert_eq!(result.source, ModelFetchSource::Api);
+        assert_eq!(result.models.len(), 1);
+        assert_eq!(result.models[0].id, "gpt-images-2");
+        assert!(result
+            .diagnostic_hint
+            .as_deref()
+            .unwrap_or_default()
+            .contains("已使用 Provider 中声明的图片模型"));
+    }
+
+    #[tokio::test]
+    async fn test_fal_like_fetch_uses_declared_models_without_models_api() {
+        let (service, _db) = setup_cache_service();
+
+        let result = service
+            .fetch_models_from_api_with_hints(
+                "fal",
+                "https://fal.run/fal-ai",
+                "",
+                Some(ApiProviderType::Openai),
+                &["fal-ai/nano-banana-pro".to_string()],
+            )
+            .await
+            .expect("fal declared models should resolve");
+
+        assert_eq!(result.source, ModelFetchSource::Api);
+        assert_eq!(result.request_url, None);
+        assert_eq!(result.models.len(), 1);
+        assert_eq!(result.models[0].id, "fal-ai/nano-banana-pro");
+        assert_eq!(result.models[0].source, ModelSource::Custom);
+        assert!(result
+            .diagnostic_hint
+            .as_deref()
+            .unwrap_or_default()
+            .contains("Fal 不提供标准 /models 枚举"));
+
+        let cached = service
+            .get_cached_provider_models(
+                "fal",
+                "https://fal.run/fal-ai",
+                Some(ApiProviderType::Openai),
+            )
+            .expect("cache read should not fail")
+            .expect("declared fal models should be cached");
+
+        assert!(cached.from_cache);
+        assert_eq!(cached.models[0].id, "fal-ai/nano-banana-pro");
+    }
+
+    #[tokio::test]
+    async fn test_fal_like_fetch_errors_without_declared_models() {
+        let (service, _db) = setup_cache_service();
+
+        let result = service
+            .fetch_models_from_api_with_hints(
+                "fal",
+                "https://fal.run/fal-ai",
+                "",
+                Some(ApiProviderType::Openai),
+                &[],
+            )
+            .await
+            .expect("fal without declared models should return structured result");
+
+        assert_eq!(result.source, ModelFetchSource::Error);
+        assert_eq!(result.request_url, None);
+        assert!(result.models.is_empty());
+        assert_eq!(result.error_kind, Some(ModelFetchErrorKind::Other));
+        assert!(result
+            .diagnostic_hint
+            .as_deref()
+            .unwrap_or_default()
+            .contains("fal-ai/..."));
+    }
+
+    #[tokio::test]
+    async fn test_fal_like_fetch_ignores_non_fal_declared_models() {
+        let (service, _db) = setup_cache_service();
+
+        let result = service
+            .fetch_models_from_api_with_hints(
+                "fal",
+                "https://fal.run/fal-ai",
+                "",
+                Some(ApiProviderType::Openai),
+                &["gpt-5.2-pro".to_string()],
+            )
+            .await
+            .expect("fal non-image declared models should return structured result");
+
+        assert_eq!(result.source, ModelFetchSource::Error);
+        assert!(result.models.is_empty());
+        assert!(result
+            .diagnostic_hint
+            .as_deref()
+            .unwrap_or_default()
+            .contains("当前模型优先级没有可用 Fal 图片模型"));
+    }
+
+    #[tokio::test]
+    async fn test_responses_compatible_fetch_still_errors_without_declared_image_models() {
+        let (service, _db) = setup_cache_service();
+
+        let result = service
+            .fetch_models_from_api_with_hints(
+                "airgate-openai-images",
+                "https://code.ylsagi.com/codex",
+                "sk-test",
+                Some(ApiProviderType::Openai),
+                &[],
+            )
+            .await
+            .expect("responses without declared models should return structured result");
+
+        assert_eq!(result.source, ModelFetchSource::Error);
+        assert!(result.models.is_empty());
+        assert_eq!(result.error_kind, Some(ModelFetchErrorKind::NotFound));
+        assert!(result
+            .diagnostic_hint
+            .as_deref()
+            .unwrap_or_default()
+            .contains("请先在 Provider 中填写 gpt-images-2"));
+    }
+
+    #[test]
+    fn test_provider_models_cache_key_keeps_tenant_scope() {
+        let tenant_a_key = ModelRegistryService::provider_models_cache_key(
+            "lime-hub",
+            "https://llm.limeai.run#lime_tenant_id=tenant-a",
+            Some(ApiProviderType::Openai),
+        );
+        let tenant_b_key = ModelRegistryService::provider_models_cache_key(
+            "lime-hub",
+            "https://llm.limeai.run#lime_tenant_id=tenant-b",
+            Some(ApiProviderType::Openai),
+        );
+
+        assert_ne!(tenant_a_key, tenant_b_key);
+    }
+
+    #[test]
+    fn test_provider_models_cache_key_shares_inferred_openai_reads() {
+        let inferred_key = ModelRegistryService::provider_models_cache_key(
+            "openai",
+            "https://api.openai.com/v1",
+            None,
+        );
+        let typed_key = ModelRegistryService::provider_models_cache_key(
+            "openai",
+            "https://api.openai.com/v1",
+            Some(ApiProviderType::Openai),
+        );
+
+        assert_eq!(inferred_key, typed_key);
+    }
+
+    #[test]
+    fn test_fal_cache_ignores_non_fal_models() {
+        let (service, _db) = setup_cache_service();
+        let now = chrono::Utc::now().timestamp();
+
+        service
+            .save_provider_models_cache(
+                "fal",
+                "https://fal.run/fal-ai",
+                Some(ApiProviderType::Openai),
+                &[create_cached_model("gpt-5.2-pro")],
+                None,
+                now,
+            )
+            .expect("cache should be saved");
+
+        let cached = service
+            .get_cached_provider_models(
+                "fal",
+                "https://fal.run/fal-ai",
+                Some(ApiProviderType::Openai),
+            )
+            .expect("cache read should not fail");
+
+        assert!(cached.is_none());
     }
 
     #[test]
@@ -3765,279 +3204,6 @@ mod tests {
             .any(|(name, _)| name == "Authorization"));
     }
 
-    fn create_service_with_resource_dir(resource_dir: std::path::PathBuf) -> ModelRegistryService {
-        let conn = Connection::open_in_memory().expect("in-memory db");
-        let db: DbConnection = Arc::new(Mutex::new(conn));
-        let mut service = ModelRegistryService::new(db);
-        service.set_resource_dir(resource_dir);
-        service
-    }
-
-    fn create_service_with_repo_resource_dir() -> ModelRegistryService {
-        create_service_with_resource_dir(
-            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
-        )
-    }
-
-    #[test]
-    fn test_infer_provider_ids_from_host_aliases_resources() {
-        let temp = tempdir().expect("tempdir");
-        let models_dir = temp.path().join("resources/models");
-        std::fs::create_dir_all(&models_dir).expect("create models dir");
-        std::fs::write(
-            models_dir.join("host_aliases.json"),
-            r#"{"rules":[{"contains":"bigmodel.cn","providers":["zhipuai-custom"]}]}"#,
-        )
-        .expect("write host aliases");
-
-        let service = create_service_with_resource_dir(temp.path().to_path_buf());
-        let provider_ids =
-            service.infer_provider_ids_from_host_aliases("https://open.bigmodel.cn/api/anthropic");
-
-        assert_eq!(provider_ids, vec!["zhipuai-custom".to_string()]);
-    }
-
-    #[test]
-    fn test_select_host_alias_candidates_user_priority() {
-        let user_rules = vec![HostAliasRule {
-            contains: "bigmodel.cn".to_string(),
-            providers: vec!["zhipuai-user".to_string()],
-        }];
-        let system_rules = vec![HostAliasRule {
-            contains: "bigmodel.cn".to_string(),
-            providers: vec!["zhipuai-system".to_string()],
-        }];
-
-        let result = ModelRegistryService::select_host_alias_candidates(
-            "https://open.bigmodel.cn/api/anthropic",
-            Some(&user_rules),
-            Some(&system_rules),
-        );
-
-        assert!(result.is_some());
-        let (source, providers) = result.expect("should match");
-        assert_eq!(source, "user");
-        assert_eq!(providers, vec!["zhipuai-user".to_string()]);
-    }
-
-    #[test]
-    fn test_select_host_alias_candidates_system_fallback() {
-        let user_rules = vec![HostAliasRule {
-            contains: "not-hit-domain".to_string(),
-            providers: vec!["nohit".to_string()],
-        }];
-        let system_rules = vec![HostAliasRule {
-            contains: "bigmodel.cn".to_string(),
-            providers: vec!["zhipuai-system".to_string()],
-        }];
-
-        let result = ModelRegistryService::select_host_alias_candidates(
-            "https://open.bigmodel.cn/api/anthropic",
-            Some(&user_rules),
-            Some(&system_rules),
-        );
-
-        assert!(result.is_some());
-        let (source, providers) = result.expect("should fallback to system");
-        assert_eq!(source, "system");
-        assert_eq!(providers, vec!["zhipuai-system".to_string()]);
-    }
-
-    #[test]
-    fn test_infer_provider_ids_from_api_host() {
-        assert_eq!(
-            ModelRegistryService::infer_provider_ids_from_api_host(
-                "https://open.bigmodel.cn/api/anthropic"
-            ),
-            ["zhipuai"]
-        );
-        assert_eq!(
-            ModelRegistryService::infer_provider_ids_from_api_host(
-                "https://coding-intl.dashscope.aliyuncs.com/apps/anthropic"
-            ),
-            ["alibaba", "alibaba-cn"]
-        );
-        assert_eq!(
-            ModelRegistryService::infer_provider_ids_from_api_host(
-                "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/"
-            ),
-            ["alibaba", "alibaba-cn"]
-        );
-        assert_eq!(
-            ModelRegistryService::infer_provider_ids_from_api_host("https://api.kimi.com/coding/"),
-            ["kimi-for-coding"]
-        );
-        assert_eq!(
-            ModelRegistryService::infer_provider_ids_from_api_host("https://api.openai.com/v1"),
-            ["openai"]
-        );
-    }
-
-    #[test]
-    fn test_build_diagnostic_models_api_url_keeps_anthropic_compatible_provider_request() {
-        assert_eq!(
-            ModelRegistryService::build_diagnostic_models_api_url(
-                "compatible-test",
-                "https://api.minimaxi.com/anthropic",
-                Some(ApiProviderType::AnthropicCompatible),
-            ),
-            Some("https://api.minimaxi.com/anthropic/v1/models".to_string())
-        );
-    }
-
-    #[test]
-    fn test_build_diagnostic_models_api_url_skips_responses_compatible_host() {
-        assert_eq!(
-            ModelRegistryService::build_diagnostic_models_api_url(
-                "custom-yls-images",
-                "https://gateway.example.com/codex",
-                Some(ApiProviderType::Openai),
-            ),
-            None
-        );
-    }
-
-    #[test]
-    fn test_should_disable_registry_fallback_for_anthropic_compatible() {
-        assert!(ModelRegistryService::should_disable_registry_fallback(
-            "https://example.com/api/anthropic",
-            Some(ApiProviderType::AnthropicCompatible),
-        ));
-        assert!(ModelRegistryService::should_disable_registry_fallback(
-            "https://open.bigmodel.cn/api/anthropic",
-            None,
-        ));
-        assert!(!ModelRegistryService::should_disable_registry_fallback(
-            "https://api.openai.com/v1",
-            Some(ApiProviderType::Openai),
-        ));
-    }
-
-    #[tokio::test]
-    async fn test_anthropic_compatible_local_fallback_returns_catalog_for_known_mimo_host() {
-        let service = create_service_with_repo_resource_dir();
-        service
-            .initialize()
-            .await
-            .expect("initialize model registry");
-
-        let fallback_models = service
-            .get_local_fallback_model_ids_with_hints(
-                "custom-mimo",
-                "https://token-plan-cn.xiaomimimo.com/anthropic",
-                Some(ApiProviderType::AnthropicCompatible),
-                &[],
-            )
-            .await;
-
-        assert_eq!(fallback_models.len(), 5);
-        assert!(fallback_models.contains(&"mimo-v2.5-pro".to_string()));
-        assert!(fallback_models.contains(&"mimo-v2.5".to_string()));
-        assert!(fallback_models.contains(&"mimo-v2-pro".to_string()));
-        assert!(fallback_models.contains(&"mimo-v2-omni".to_string()));
-        assert!(fallback_models.contains(&"mimo-v2-flash".to_string()));
-    }
-
-    #[tokio::test]
-    async fn test_anthropic_compatible_local_fallback_prefers_catalog_for_known_mimo_host_even_with_custom_models(
-    ) {
-        let service = create_service_with_repo_resource_dir();
-        service
-            .initialize()
-            .await
-            .expect("initialize model registry");
-
-        let fallback_models = service
-            .get_local_fallback_model_ids_with_hints(
-                "custom-mimo",
-                "https://token-plan-cn.xiaomimimo.com/anthropic",
-                Some(ApiProviderType::AnthropicCompatible),
-                &["mimo-v2.5-pro".to_string(), "mimo-v2-flash".to_string()],
-            )
-            .await;
-
-        assert_eq!(fallback_models.len(), 5);
-        assert!(fallback_models.contains(&"mimo-v2.5-pro".to_string()));
-        assert!(fallback_models.contains(&"mimo-v2.5".to_string()));
-        assert!(fallback_models.contains(&"mimo-v2-pro".to_string()));
-        assert!(fallback_models.contains(&"mimo-v2-omni".to_string()));
-        assert!(fallback_models.contains(&"mimo-v2-flash".to_string()));
-    }
-
-    #[tokio::test]
-    async fn test_anthropic_compatible_local_fallback_keeps_explicit_custom_models() {
-        let service = create_service_with_repo_resource_dir();
-        service
-            .initialize()
-            .await
-            .expect("initialize model registry");
-
-        let fallback_models = service
-            .get_local_fallback_model_ids_with_hints(
-                "custom-minimax",
-                "https://api.minimaxi.com/anthropic",
-                Some(ApiProviderType::AnthropicCompatible),
-                &["MiniMax-M2.7".to_string()],
-            )
-            .await;
-
-        assert_eq!(fallback_models, vec!["MiniMax-M2.7".to_string()]);
-    }
-
-    #[tokio::test]
-    async fn test_openai_endpoint_local_fallback_keeps_explicit_custom_models() {
-        let service = create_service_with_repo_resource_dir();
-        service
-            .initialize()
-            .await
-            .expect("initialize model registry");
-
-        let fallback_models = service
-            .get_local_fallback_model_ids_with_hints(
-                "custom-openai-endpoint",
-                "https://gateway.example.com/proxy/responses",
-                Some(ApiProviderType::Openai),
-                &["gpt-images-2".to_string()],
-            )
-            .await;
-
-        assert_eq!(fallback_models, vec!["gpt-images-2".to_string()]);
-    }
-
-    #[tokio::test]
-    async fn test_openai_endpoint_local_fallback_does_not_expand_generic_openai_catalog() {
-        let service = create_service_with_repo_resource_dir();
-        service
-            .initialize()
-            .await
-            .expect("initialize model registry");
-
-        let fallback_models = service
-            .get_local_fallback_model_ids_with_hints(
-                "custom-openai-endpoint",
-                "https://gateway.example.com/proxy/responses",
-                Some(ApiProviderType::Openai),
-                &[],
-            )
-            .await;
-
-        assert!(fallback_models.is_empty());
-    }
-
-    #[test]
-    fn test_map_provider_type_to_registry_ids() {
-        assert_eq!(
-            ModelRegistryService::map_provider_type_to_registry_ids(
-                ApiProviderType::AnthropicCompatible
-            ),
-            ["anthropic"]
-        );
-        assert_eq!(
-            ModelRegistryService::map_provider_type_to_registry_ids(ApiProviderType::Gemini),
-            ["google"]
-        );
-    }
-
     #[test]
     fn test_requires_api_key_for_model_fetch() {
         assert!(ModelRegistryService::requires_api_key_for_model_fetch(
@@ -4099,6 +3265,15 @@ mod tests {
             ),
             ModelFetchProtocol::ResponsesCompatible
         );
+    }
+
+    #[test]
+    fn test_fal_like_provider_does_not_require_key_before_cache_or_declared_models() {
+        assert!(!ModelRegistryService::requires_api_key_for_model_fetch(
+            "fal",
+            "https://fal.run/fal-ai",
+            ApiProviderType::Openai
+        ));
     }
 
     #[test]

@@ -464,6 +464,7 @@ fn build_openai_responses_image_request_payload(
     orchestration_model: &str,
     image_model: &str,
     request_size: &str,
+    use_input_list: bool,
 ) -> Value {
     let tool_model = normalize_openai_responses_image_tool_model(image_model);
     // 一些 Codex/OpenAI relay 对 n 字段兼容性较差，默认依赖上游单图默认值。
@@ -479,33 +480,52 @@ fn build_openai_responses_image_request_payload(
 
     json!({
         "model": orchestration_model,
-        "input": build_openai_responses_image_input(request),
+        "input": build_openai_responses_image_input(request, use_input_list),
         "tools": [tool],
         "stream": true,
     })
 }
 
-fn build_openai_responses_image_input(request: &ImageGenerationRequest) -> String {
+fn build_openai_responses_image_input(
+    request: &ImageGenerationRequest,
+    use_input_list: bool,
+) -> Value {
     let prompt = request.prompt.trim();
     let count = request.n.max(1);
-    if count <= 1 {
-        return prompt.to_string();
+    let input_text = if count <= 1 {
+        prompt.to_string()
+    } else {
+        format!(
+            concat!(
+                "你是一名图片生成编排器。请调用 image_generation 工具恰好 {count} 次，",
+                "每次只生成 1 张独立图片。\n",
+                "- 不要只调用一次工具。\n",
+                "- 不要把多张图片拼成一张拼贴、九宫格、海报或联系单。\n",
+                "- 所有图片要保持同一主题与风格，但每张图都必须能单独使用，并且构图、主体或镜头要有变化。\n",
+                "- 如果原始要求里包含多个角色、物体或场景，请把它们合理分配到不同图片里，不要全部塞进同一张。\n",
+                "- 最终只返回工具结果，不要额外输出解释文本。\n\n",
+                "原始创作要求：{prompt}"
+            ),
+            count = count,
+            prompt = prompt,
+        )
+    };
+
+    if use_input_list {
+        return json!([
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": input_text,
+                    }
+                ],
+            }
+        ]);
     }
 
-    format!(
-        concat!(
-            "你是一名图片生成编排器。请调用 image_generation 工具恰好 {count} 次，",
-            "每次只生成 1 张独立图片。\n",
-            "- 不要只调用一次工具。\n",
-            "- 不要把多张图片拼成一张拼贴、九宫格、海报或联系单。\n",
-            "- 所有图片要保持同一主题与风格，但每张图都必须能单独使用，并且构图、主体或镜头要有变化。\n",
-            "- 如果原始要求里包含多个角色、物体或场景，请把它们合理分配到不同图片里，不要全部塞进同一张。\n",
-            "- 最终只返回工具结果，不要额外输出解释文本。\n\n",
-            "原始创作要求：{prompt}"
-        ),
-        count = count,
-        prompt = prompt,
-    )
+    json!(input_text)
 }
 
 fn normalize_openai_responses_image_tool_model(model: &str) -> String {
@@ -552,6 +572,10 @@ fn is_not_found_status(status: StatusCode, body: &str) -> bool {
     normalized.contains("not found")
         || normalized.contains("page not found")
         || body.contains("请求的接口不存在")
+}
+
+fn should_retry_openai_responses_image_with_input_list(status: StatusCode, body: &str) -> bool {
+    status == StatusCode::BAD_REQUEST && body.to_ascii_lowercase().contains("input must be a list")
 }
 
 fn build_openai_responses_data_url(output_format: Option<&str>, b64: &str) -> String {
@@ -859,109 +883,122 @@ async fn request_openai_responses_images(
     let endpoint = CodexProvider::build_responses_url(api_host);
     let orchestration_model =
         resolve_openai_responses_image_orchestration_model(provider, image_model);
-    let payload = build_openai_responses_image_request_payload(
-        request,
-        &orchestration_model,
-        image_model,
-        request_size,
-    );
-    let response = client
-        .post(&endpoint)
-        .header("Authorization", format!("Bearer {api_key}"))
-        .header(CONTENT_TYPE, "application/json")
-        .header("Accept", "text/event-stream")
-        .header("Accept-Encoding", "identity")
-        .json(&payload)
-        .send()
-        .await
-        .map_err(|error| OpenAiImageEndpointError {
-            message: format!("OpenAI Responses 图片接口请求失败: {error}"),
-            is_endpoint_not_found: false,
-        })?;
-
-    let status = response.status();
-    let mut stream = response.bytes_stream();
-    let mut buffer = String::new();
     let expected_count = request.n.max(1) as usize;
+    let mut use_input_list = false;
 
-    while let Some(chunk) = stream.next().await {
-        match chunk {
-            Ok(bytes) => {
-                buffer.push_str(&String::from_utf8_lossy(&bytes));
+    loop {
+        let payload = build_openai_responses_image_request_payload(
+            request,
+            &orchestration_model,
+            image_model,
+            request_size,
+            use_input_list,
+        );
+        let response = client
+            .post(&endpoint)
+            .header("Authorization", format!("Bearer {api_key}"))
+            .header(CONTENT_TYPE, "application/json")
+            .header("Accept", "text/event-stream")
+            .header("Accept-Encoding", "identity")
+            .json(&payload)
+            .send()
+            .await
+            .map_err(|error| OpenAiImageEndpointError {
+                message: format!("OpenAI Responses 图片接口请求失败: {error}"),
+                is_endpoint_not_found: false,
+            })?;
 
-                if !status.is_success() {
-                    continue;
+        let status = response.status();
+        let mut stream = response.bytes_stream();
+        let mut buffer = String::new();
+
+        while let Some(chunk) = stream.next().await {
+            match chunk {
+                Ok(bytes) => {
+                    buffer.push_str(&String::from_utf8_lossy(&bytes));
+
+                    if !status.is_success() {
+                        continue;
+                    }
+
+                    if let Ok(Some(parsed)) = try_finalize_openai_responses_image_stream(
+                        &buffer,
+                        &request.response_format,
+                        expected_count,
+                    ) {
+                        return Ok(parsed);
+                    }
                 }
+                Err(error) => {
+                    if let Ok(Some(parsed)) = try_finalize_openai_responses_image_stream(
+                        &buffer,
+                        &request.response_format,
+                        expected_count,
+                    ) {
+                        return Ok(parsed);
+                    }
 
-                if let Ok(Some(parsed)) = try_finalize_openai_responses_image_stream(
-                    &buffer,
-                    &request.response_format,
-                    expected_count,
-                ) {
-                    return Ok(parsed);
-                }
-            }
-            Err(error) => {
-                if let Ok(Some(parsed)) = try_finalize_openai_responses_image_stream(
-                    &buffer,
-                    &request.response_format,
-                    expected_count,
-                ) {
-                    return Ok(parsed);
-                }
+                    if let Ok(Some(parsed)) = try_extract_partial_openai_responses_images(
+                        &buffer,
+                        &request.response_format,
+                    ) {
+                        return Ok(parsed);
+                    }
 
-                if let Ok(Some(parsed)) =
-                    try_extract_partial_openai_responses_images(&buffer, &request.response_format)
-                {
-                    return Ok(parsed);
+                    return Err(OpenAiImageEndpointError {
+                        message: format!("OpenAI Responses 图片接口流读取失败: {error}"),
+                        is_endpoint_not_found: false,
+                    });
                 }
-
-                return Err(OpenAiImageEndpointError {
-                    message: format!("OpenAI Responses 图片接口流读取失败: {error}"),
-                    is_endpoint_not_found: false,
-                });
             }
         }
-    }
 
-    if !status.is_success() {
+        if !status.is_success() {
+            if !use_input_list
+                && should_retry_openai_responses_image_with_input_list(status, &buffer)
+            {
+                use_input_list = true;
+                continue;
+            }
+
+            return Err(OpenAiImageEndpointError {
+                is_endpoint_not_found: is_not_found_status(status, &buffer),
+                message: format!(
+                    "OpenAI Responses 图片接口 HTTP {}: {}",
+                    status.as_u16(),
+                    summarize_fal_error_body(&buffer)
+                ),
+            });
+        }
+
+        if let Some(parsed) = try_finalize_openai_responses_image_stream(
+            &buffer,
+            &request.response_format,
+            expected_count,
+        )
+        .map_err(|error| OpenAiImageEndpointError {
+            message: format!("OpenAI Responses 图片接口解析失败: {error}"),
+            is_endpoint_not_found: false,
+        })? {
+            return Ok(parsed);
+        }
+
+        if let Some(parsed) =
+            try_extract_partial_openai_responses_images(&buffer, &request.response_format).map_err(
+                |error| OpenAiImageEndpointError {
+                    message: format!("OpenAI Responses 图片接口解析失败: {error}"),
+                    is_endpoint_not_found: false,
+                },
+            )?
+        {
+            return Ok(parsed);
+        }
+
         return Err(OpenAiImageEndpointError {
-            is_endpoint_not_found: is_not_found_status(status, &buffer),
-            message: format!(
-                "OpenAI Responses 图片接口 HTTP {}: {}",
-                status.as_u16(),
-                summarize_fal_error_body(&buffer)
-            ),
+            message: "OpenAI Responses 图片接口解析失败: 未收齐所需图片事件".to_string(),
+            is_endpoint_not_found: false,
         });
     }
-
-    if let Some(parsed) = try_finalize_openai_responses_image_stream(
-        &buffer,
-        &request.response_format,
-        expected_count,
-    )
-    .map_err(|error| OpenAiImageEndpointError {
-        message: format!("OpenAI Responses 图片接口解析失败: {error}"),
-        is_endpoint_not_found: false,
-    })? {
-        return Ok(parsed);
-    }
-
-    if let Some(parsed) =
-        try_extract_partial_openai_responses_images(&buffer, &request.response_format).map_err(
-            |error| OpenAiImageEndpointError {
-                message: format!("OpenAI Responses 图片接口解析失败: {error}"),
-                is_endpoint_not_found: false,
-            },
-        )?
-    {
-        return Ok(parsed);
-    }
-
-    Err(OpenAiImageEndpointError {
-        message: "OpenAI Responses 图片接口解析失败: 未收齐所需图片事件".to_string(),
-        is_endpoint_not_found: false,
-    })
 }
 
 fn resolve_fal_model(request_model: &str, preferred_model_id: Option<&str>) -> String {
@@ -2033,6 +2070,7 @@ data: {"response":{"created_at":1777000001,"output":[]}}
             "gpt-5.4",
             "gpt-images-2",
             "1024x1024",
+            false,
         );
         let tool = payload["tools"][0].as_object().expect("tool object");
 
@@ -2079,9 +2117,41 @@ data: {"response":{"created_at":1777000001,"output":[]}}
             "gpt-5.4",
             "gpt-images-2",
             "1024x1024",
+            false,
         );
 
         assert_eq!(payload["input"].as_str(), Some("生成一个苹果"));
+    }
+
+    #[test]
+    fn build_openai_responses_image_request_payload_can_use_input_list() {
+        let request = ImageGenerationRequest {
+            model: "gpt-images-2".to_string(),
+            prompt: "生成一个苹果".to_string(),
+            n: 1,
+            size: Some("1024x1024".to_string()),
+            response_format: "b64_json".to_string(),
+            quality: None,
+            style: None,
+            user: None,
+        };
+
+        let payload = build_openai_responses_image_request_payload(
+            &request,
+            "gpt-5.4",
+            "gpt-images-2",
+            "1024x1024",
+            true,
+        );
+
+        assert_eq!(
+            payload["input"][0]["content"][0]["type"].as_str(),
+            Some("input_text")
+        );
+        assert_eq!(
+            payload["input"][0]["content"][0]["text"].as_str(),
+            Some("生成一个苹果")
+        );
     }
 
     #[test]

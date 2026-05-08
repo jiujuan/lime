@@ -61,6 +61,13 @@ interface AgentThreadTimelineProps {
   placement?: "leading" | "trailing" | "default";
   onFileClick?: (fileName: string, content: string) => void;
   onOpenArtifactFromTimeline?: (target: ArtifactTimelineOpenTarget) => void;
+  sourceMessageId?: string;
+  onSaveFileArtifactAsKnowledge?: (source: {
+    messageId: string;
+    content: string;
+    sourceName?: string;
+    description?: string | null;
+  }) => void;
   onOpenSavedSiteContent?: (target: SiteSavedContentTarget) => void;
   onOpenSubagentSession?: (sessionId: string) => void;
   onPermissionResponse?: (response: ConfirmResponse) => void;
@@ -768,6 +775,13 @@ function renderGroupItemDetails(
   options?: {
     groupedToolCall?: boolean;
     groupMarker?: string;
+    sourceMessageId?: string;
+    onSaveFileArtifactAsKnowledge?: (source: {
+      messageId: string;
+      content: string;
+      sourceName?: string;
+      description?: string | null;
+    }) => void;
   },
 ) {
   const toolCall = toToolCallState(item);
@@ -837,6 +851,8 @@ function renderGroupItemDetails(
         timestamp={timestamp}
         onFileClick={onFileClick}
         onOpenArtifactFromTimeline={onOpenArtifactFromTimeline}
+        sourceMessageId={options?.sourceMessageId}
+        onSaveFileArtifactAsKnowledge={options?.onSaveFileArtifactAsKnowledge}
       />
     );
   }
@@ -935,6 +951,13 @@ function renderTimelineItemDetails(
   options?: {
     groupedToolCall?: boolean;
     groupMarker?: string;
+    sourceMessageId?: string;
+    onSaveFileArtifactAsKnowledge?: (source: {
+      messageId: string;
+      content: string;
+      sourceName?: string;
+      description?: string | null;
+    }) => void;
   },
 ) {
   if (isThinkingTimelineItem(item)) {
@@ -1417,6 +1440,8 @@ function TimelineBlockCard({
   isExpanded,
   onFileClick,
   onOpenArtifactFromTimeline,
+  sourceMessageId,
+  onSaveFileArtifactAsKnowledge,
   onOpenSavedSiteContent,
   onOpenSubagentSession,
   onPermissionResponse,
@@ -1433,6 +1458,13 @@ function TimelineBlockCard({
   deferCompletedSingleDetails: boolean;
   onFileClick?: (fileName: string, content: string) => void;
   onOpenArtifactFromTimeline?: (target: ArtifactTimelineOpenTarget) => void;
+  sourceMessageId?: string;
+  onSaveFileArtifactAsKnowledge?: (source: {
+    messageId: string;
+    content: string;
+    sourceName?: string;
+    description?: string | null;
+  }) => void;
   onOpenSavedSiteContent?: (target: SiteSavedContentTarget) => void;
   onOpenSubagentSession?: (sessionId: string) => void;
   onPermissionResponse?: (response: ConfirmResponse) => void;
@@ -1500,6 +1532,8 @@ function TimelineBlockCard({
         {
           groupedToolCall: shouldRenderGroupedToolRows,
           groupMarker: block.items[0]?.id === item.id ? "└" : "·",
+          sourceMessageId,
+          onSaveFileArtifactAsKnowledge,
         },
       );
 
@@ -1509,6 +1543,8 @@ function TimelineBlockCard({
     block.items,
     onFileClick,
     onOpenArtifactFromTimeline,
+    sourceMessageId,
+    onSaveFileArtifactAsKnowledge,
     onOpenSavedSiteContent,
     onOpenSubagentSession,
     onPermissionResponse,
@@ -1548,6 +1584,10 @@ function TimelineBlockCard({
         onOpenSavedSiteContent,
         onOpenSubagentSession,
         onPermissionResponse,
+        {
+          sourceMessageId,
+          onSaveFileArtifactAsKnowledge,
+        },
       )
     : null;
 
@@ -1709,6 +1749,8 @@ export const AgentThreadTimeline: React.FC<AgentThreadTimelineProps> = ({
   placement = "default",
   onFileClick,
   onOpenArtifactFromTimeline,
+  sourceMessageId,
+  onSaveFileArtifactAsKnowledge,
   onOpenSavedSiteContent,
   onOpenSubagentSession,
   onPermissionResponse,
@@ -1804,6 +1846,8 @@ export const AgentThreadTimeline: React.FC<AgentThreadTimelineProps> = ({
             deferCompletedSingleDetails={deferCompletedSingleDetails}
             onFileClick={onFileClick}
             onOpenArtifactFromTimeline={onOpenArtifactFromTimeline}
+            sourceMessageId={sourceMessageId}
+            onSaveFileArtifactAsKnowledge={onSaveFileArtifactAsKnowledge}
             onOpenSavedSiteContent={onOpenSavedSiteContent}
             onOpenSubagentSession={onOpenSubagentSession}
             onPermissionResponse={onPermissionResponse}

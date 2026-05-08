@@ -91,6 +91,9 @@ pub struct SaveLayeredDesignProjectExportOutput {
     pub asset_count: usize,
     pub file_count: usize,
     pub bytes_written: u64,
+    pub remote_reference_asset_count: usize,
+    pub cached_remote_asset_count: usize,
+    pub uncached_remote_asset_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -1148,6 +1151,7 @@ pub(crate) async fn save_layered_design_project_export_inner(
         .ok_or_else(|| format!("图层设计工程 {document_id} 缺少 export-manifest.json 导出文件"))?;
     let psd_like_index = find_prepared_file_index(&prepared_files, "psd-like-manifest.json");
 
+    let mut remote_reference_asset_count = 0_usize;
     let mut cached_remote_assets = Vec::new();
     let manifest_content =
         decode_utf8_file_content(&prepared_files[manifest_index], "export-manifest.json");
@@ -1159,6 +1163,7 @@ pub(crate) async fn save_layered_design_project_export_inner(
         if let Some(mut manifest_value) =
             parse_json_value(&manifest_content, "export-manifest.json")
         {
+            remote_reference_asset_count = collect_remote_manifest_assets(&manifest_value).len();
             let mut psd_like_value = psd_like_content
                 .as_deref()
                 .and_then(|content| parse_json_value(content, "psd-like-manifest.json"));
@@ -1221,6 +1226,9 @@ pub(crate) async fn save_layered_design_project_export_inner(
     let manifest_path = manifest_path.unwrap_or_else(|| export_dir.join("export-manifest.json"));
     let file_count = count_files_recursive(&export_dir)?;
     let asset_count = count_files_recursive(&assets_dir)?;
+    let cached_remote_asset_count = cached_remote_assets.len();
+    let uncached_remote_asset_count =
+        remote_reference_asset_count.saturating_sub(cached_remote_asset_count);
 
     Ok(SaveLayeredDesignProjectExportOutput {
         project_root_path,
@@ -1232,6 +1240,9 @@ pub(crate) async fn save_layered_design_project_export_inner(
         asset_count,
         file_count,
         bytes_written,
+        remote_reference_asset_count,
+        cached_remote_asset_count,
+        uncached_remote_asset_count,
     })
 }
 
@@ -1976,6 +1987,28 @@ mod tests {
         format!("http://{address}/hero.png")
     }
 
+    async fn spawn_missing_remote_asset_server() -> String {
+        let app = Router::new().route(
+            "/missing.png",
+            get(|| async {
+                Response::builder()
+                    .status(StatusCode::NOT_FOUND)
+                    .body(Body::empty())
+                    .expect("创建远程资源 404 响应失败")
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("绑定测试端口失败");
+        let address = listener.local_addr().expect("读取测试端口失败");
+        tokio::spawn(async move {
+            axum::serve(listener, app)
+                .await
+                .expect("远程资源 404 测试服务失败");
+        });
+        format!("http://{address}/missing.png")
+    }
+
     #[tokio::test]
     async fn save_layered_design_project_export_should_write_project_directory() {
         let temp_dir = tempfile::tempdir().expect("创建临时目录失败");
@@ -1991,6 +2024,9 @@ mod tests {
         );
         assert_eq!(output.file_count, 5);
         assert_eq!(output.asset_count, 1);
+        assert_eq!(output.remote_reference_asset_count, 0);
+        assert_eq!(output.cached_remote_asset_count, 0);
+        assert_eq!(output.uncached_remote_asset_count, 0);
         assert_eq!(
             std::fs::read_to_string(
                 temp_dir
@@ -2047,6 +2083,9 @@ mod tests {
 
         assert_eq!(output.file_count, 6);
         assert_eq!(output.asset_count, 1);
+        assert_eq!(output.remote_reference_asset_count, 1);
+        assert_eq!(output.cached_remote_asset_count, 1);
+        assert_eq!(output.uncached_remote_asset_count, 0);
         let export_root = temp_dir
             .path()
             .join(".lime/layered-designs/remote-design.layered-design");
@@ -2073,6 +2112,31 @@ mod tests {
                 .contains(&remote_asset_url),
             true
         );
+    }
+
+    #[tokio::test]
+    async fn save_layered_design_project_export_should_report_uncached_remote_assets() {
+        let temp_dir = tempfile::tempdir().expect("创建临时目录失败");
+        let remote_asset_url = spawn_missing_remote_asset_server().await;
+        let request = remote_asset_request(path_to_string(temp_dir.path()), &remote_asset_url);
+
+        let output = save_layered_design_project_export_inner(request)
+            .await
+            .expect("远程资产缓存失败时仍应保存图层设计工程");
+
+        assert_eq!(output.file_count, 5);
+        assert_eq!(output.asset_count, 0);
+        assert_eq!(output.remote_reference_asset_count, 1);
+        assert_eq!(output.cached_remote_asset_count, 0);
+        assert_eq!(output.uncached_remote_asset_count, 1);
+
+        let export_root = temp_dir
+            .path()
+            .join(".lime/layered-designs/remote-design.layered-design");
+        let manifest_json = std::fs::read_to_string(export_root.join("export-manifest.json"))
+            .expect("读取 export-manifest.json 失败");
+        assert!(manifest_json.contains("\"source\":\"reference\""));
+        assert!(!manifest_json.contains("\"filename\""));
     }
 
     #[tokio::test]

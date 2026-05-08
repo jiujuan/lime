@@ -1,0 +1,97 @@
+{
+  "schemaVersion": "2026-05-09.p5x59",
+  "capturedAt": "2026-05-08T17:30:17Z",
+  "scenario": "P5X59 GUI refresh existing successful Fal image task into canvas:design and project export",
+  "workspaceRoot": "/var/folders/87/s6cpr7hd1_v43cs833x4s_900000gn/T/lime-knowledge-manual-e2e-iQwvyY",
+  "inputDesignFile": "p5x59-layered-design-gui-refresh-existing-task.design.json",
+  "task": {
+    "taskId": "0b8d2b96-47db-4f09-a28e-f9707f51eba2",
+    "taskPath": ".lime/tasks/image_generate/20260508-161856-7ef513fe96dd40339c64f0d985b14651.json",
+    "status": "succeeded",
+    "provider": "fal",
+    "model": "fal-ai/nano-banana-pro",
+    "resultUrl": "https://v3b.fal.media/files/b/0a9967b1/z1Z5x35IF_LP0shI_RCf8_5iMarkYD.png",
+    "reusedExistingTask": true,
+    "newImageGenerationQuotaConsumed": false
+  },
+  "playwright": {
+    "url": "http://127.0.0.1:1420/",
+    "steps": [
+      "Open File Manager from the home input bar.",
+      "Preview p5x59-layered-design-gui-refresh-existing-task.design.json.",
+      "Verify preview uses design-canvas-inline-preview and does not mount full design-canvas.",
+      "Open the full canvas:design editor.",
+      "Click refresh generation results.",
+      "Verify the existing Fal task output is written back into the hero image layer.",
+      "Export the design project into .lime/layered-designs.",
+      "Open the latest saved project from the full editor."
+    ],
+    "screenshot": "playwright-design-canvas-refresh-existing-fal-task.png",
+    "consoleErrors": [
+      {
+        "message": "Failed to load resource: net::ERR_INCOMPLETE_CHUNKED_ENCODING",
+        "source": "http://127.0.0.1:3030/events",
+        "classification": "DevBridge event stream noise; non-blocking for canvas refresh/export/readback"
+      }
+    ]
+  },
+  "assertions": {
+    "inlinePreview": {
+      "designCanvasInlinePreviewCount": 1,
+      "designCanvasCountBeforeEdit": 0,
+      "oldPosterRoutePresent": false
+    },
+    "fullEditor": {
+      "mountedInDocumentBody": true,
+      "role": "dialog",
+      "ariaModal": true,
+      "refreshButtonEnabledBeforeRefresh": true
+    },
+    "refresh": {
+      "successMessage": "已刷新 1 个图片任务，并写回 1 个图层结果。",
+      "heroImageSrc": "https://v3b.fal.media/files/b/0a9967b1/z1Z5x35IF_LP0shI_RCf8_5iMarkYD.png",
+      "generatedAssetId": "asset-hero-generated-0b8d2b96-47db-4f09-a28e-f9707f51eba2"
+    },
+    "export": {
+      "successMessage": "已保存图层设计工程：.lime/layered-designs/p5x59-gui-refresh-existing-task-20260509.layered-design（7 个文件，1 个 assets）。",
+      "exportDirectoryRelativePath": ".lime/layered-designs/p5x59-gui-refresh-existing-task-20260509.layered-design",
+      "files": [
+        "assets/asset-logo.png",
+        "design.json",
+        "export-manifest.json",
+        "preview.png",
+        "preview.svg",
+        "psd-like-manifest.json",
+        "trial.psd"
+      ],
+      "assetCount": 1,
+      "fileCount": 7
+    },
+    "readback": {
+      "successMessage": "已打开图层设计工程：.lime/layered-designs/p5x59-gui-refresh-existing-task-20260509.layered-design（7 个文件，1 个 assets）。",
+      "documentStatus": "exported",
+      "heroLayerAssetId": "asset-hero-generated-0b8d2b96-47db-4f09-a28e-f9707f51eba2",
+      "heroAssetParams": {
+        "source": "image_generation_task",
+        "taskId": "0b8d2b96-47db-4f09-a28e-f9707f51eba2",
+        "taskPath": ".lime/tasks/image_generate/20260508-161856-7ef513fe96dd40339c64f0d985b14651.json",
+        "documentId": "p5x59-gui-refresh-existing-task-20260509",
+        "layerId": "hero",
+        "originalAssetId": "asset-hero",
+        "executorMode": "images_api"
+      },
+      "oldPosterRoutePresent": false
+    }
+  },
+  "knownGap": {
+    "id": "p5x59-remote-fal-asset-cache-not-complete-in-current-network",
+    "summary": "The project export kept the generated hero image as a remote reference because the Fal CDN URL did not finish downloading within the native best-effort cache window in this environment.",
+    "evidence": {
+      "curlProbe": "90s probe downloaded 396227 of 1223993 bytes before timeout.",
+      "manifestSource": "reference",
+      "cachedAssetFiles": ["assets/asset-logo.png"]
+    },
+    "impact": "The saved project remains editable and can be read back while online, but it is not yet a fully offline-portable engineering directory for the generated Fal hero layer.",
+    "nextAction": "Add observable remote-asset cache status and a non-blocking retry/cache action for current canvas:design project export rather than hiding the gap behind a success message."
+  }
+}

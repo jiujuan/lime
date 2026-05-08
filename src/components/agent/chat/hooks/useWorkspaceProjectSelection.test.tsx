@@ -1,7 +1,10 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { LAST_PROJECT_ID_KEY } from "./agentProjectStorage";
+import {
+  LAST_PROJECT_ID_KEY,
+  savePersistedSessionWorkspaceId,
+} from "./agentProjectStorage";
 import { useWorkspaceProjectSelection } from "./useWorkspaceProjectSelection";
 
 interface HookHarness {
@@ -130,6 +133,47 @@ describe("useWorkspaceProjectSelection", () => {
     try {
       expect(harness.getValue().projectId).toBe("project-local");
       expect(harness.getValue().shouldDisableSessionRestore).toBe(true);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("显式初始会话应优先恢复该会话绑定的工作区", () => {
+    localStorage.setItem(LAST_PROJECT_ID_KEY, JSON.stringify("project-local"));
+    savePersistedSessionWorkspaceId("session-42", "project-session");
+    const harness = mountHook({
+      initialSessionId: "session-42",
+    });
+
+    try {
+      expect(harness.getValue().projectId).toBe("project-session");
+      expect(harness.getValue().getRememberedProjectId()).toBe(
+        "project-session",
+      );
+      expect(harness.getValue().shouldDisableSessionRestore).toBe(true);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("切换显式初始会话时应同步切到该会话绑定的工作区", () => {
+    savePersistedSessionWorkspaceId("session-42", "project-session");
+    const harness = mountHook();
+
+    try {
+      act(() => {
+        harness.getValue().applyProjectSelection("project-local");
+      });
+      expect(harness.getValue().projectId).toBe("project-local");
+
+      harness.rerender({
+        initialSessionId: "session-42",
+      });
+
+      expect(harness.getValue().projectId).toBe("project-session");
+      expect(harness.getValue().getRememberedProjectId()).toBe(
+        "project-session",
+      );
     } finally {
       harness.unmount();
     }

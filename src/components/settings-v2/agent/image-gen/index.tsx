@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { getConfig, saveConfig, type Config } from "@/lib/api/appConfig";
 import {
   findConfiguredProviderBySelection,
+  type ConfiguredProvider,
   useConfiguredProviders,
 } from "@/hooks/useConfiguredProviders";
 import { cn } from "@/lib/utils";
@@ -15,6 +16,7 @@ import {
   getImageModelIdsForProvider,
   isImageProvider,
 } from "@/lib/imageGeneration";
+import { buildProviderModelsFromBackendModelIds } from "@/lib/model/providerModelsCatalog";
 import { MediaPreferenceSection } from "../shared/MediaPreferenceSection";
 
 const DEFAULT_MEDIA_PREFERENCE: MediaGenerationPreference = {
@@ -48,12 +50,14 @@ export function ImageGenSettings() {
 
   const imageProviders = useMemo(
     () =>
-      providers.filter((provider) =>
-        isImageProvider(
-          provider.providerId ?? provider.key,
-          provider.type,
-          provider.customModels,
-        ),
+      providers.filter(
+        (provider) =>
+          provider.authStatus === "login_required" ||
+          isImageProvider(
+            provider.providerId ?? provider.key,
+            provider.type,
+            provider.customModels,
+          ),
       ),
     [providers],
   );
@@ -170,6 +174,21 @@ export function ImageGenSettings() {
     void savePreference(DEFAULT_MEDIA_PREFERENCE);
   };
 
+  const getImageFallbackModels = useCallback(
+    (provider: ConfiguredProvider) =>
+      buildProviderModelsFromBackendModelIds(
+        provider,
+        [],
+        getImageModelIdsForProvider(
+          provider.providerId ?? provider.key,
+          provider.type,
+          provider.customModels,
+          provider.apiHost,
+        ),
+      ),
+    [],
+  );
+
   const providerHint = providersLoading
     ? "只展示已声明图片生成能力的 Provider。"
     : imageProviders.length === 0
@@ -189,6 +208,7 @@ export function ImageGenSettings() {
         model={globalImagePreference.preferredModelId ?? ""}
         setModel={handleModelChange}
         providerFilter={(provider) =>
+          provider.authStatus === "login_required" ||
           isImageProvider(
             provider.providerId ?? provider.key,
             provider.type,
@@ -203,6 +223,7 @@ export function ImageGenSettings() {
             provider.apiHost,
           ).includes(model.id)
         }
+        getFallbackModels={getImageFallbackModels}
         allowFallback={globalImagePreference.allowFallback ?? true}
         onAllowFallbackChange={handleFallbackChange}
         fallbackTitle="Provider 不可用时自动回退"

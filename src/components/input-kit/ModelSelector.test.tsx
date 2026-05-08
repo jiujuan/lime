@@ -59,6 +59,39 @@ interface MountedRoot {
 
 const mountedRoots: MountedRoot[] = [];
 
+function createModelMetadata(id: string) {
+  return {
+    id,
+    display_name: id,
+    provider_id: "fal",
+    provider_name: "Fal",
+    family: null,
+    tier: "pro" as const,
+    capabilities: {
+      vision: false,
+      tools: false,
+      streaming: false,
+      json_mode: false,
+      function_calling: false,
+      reasoning: false,
+    },
+    pricing: null,
+    limits: {
+      context_length: null,
+      max_output_tokens: null,
+      requests_per_minute: null,
+      tokens_per_minute: null,
+    },
+    status: "active" as const,
+    release_date: null,
+    is_latest: false,
+    description: null,
+    source: "custom" as const,
+    created_at: 0,
+    updated_at: 0,
+  };
+}
+
 function renderModelSelector(
   props: Partial<React.ComponentProps<typeof ModelSelector>> = {},
 ) {
@@ -291,6 +324,120 @@ describe("ModelSelector", () => {
     expect(setModel).toHaveBeenCalledWith("gpt-5.2-codex");
   });
 
+  it("切换供应商时应同步切换到该供应商的首个已配置模型，避免沿用旧模型", () => {
+    const setProviderType = vi.fn();
+    const setModel = vi.fn();
+    mockUseConfiguredProviders.mockReturnValue({
+      providers: [
+        {
+          key: "lime-hub",
+          label: "Lime 云端",
+          registryId: "lime-hub",
+          type: "openai",
+          providerId: "lime-hub",
+          apiHost: "https://llm.limeai.run",
+          customModels: ["gpt-5.5"],
+        },
+        {
+          key: "deepseek",
+          label: "DeepSeek",
+          registryId: "deepseek",
+          type: "openai",
+          providerId: "deepseek",
+          apiHost: "https://api.deepseek.com",
+          customModels: ["deepseek-chat", "deepseek-reasoner"],
+        },
+      ],
+      loading: false,
+    });
+    mockUseProviderModels.mockReturnValue({
+      modelIds: ["gpt-5.5"],
+      models: [createModelMetadata("gpt-5.5")],
+      loading: false,
+      error: null,
+    });
+
+    const { container } = renderModelSelector({
+      providerType: "lime-hub",
+      setProviderType,
+      model: "gpt-5.5",
+      setModel,
+    });
+
+    const trigger = container.querySelector(
+      'button[role="combobox"]',
+    ) as HTMLButtonElement | null;
+    if (!trigger) {
+      throw new Error("未找到模型选择触发器");
+    }
+
+    act(() => {
+      trigger.click();
+    });
+
+    const deepseekButton = Array.from(
+      document.body.querySelectorAll<HTMLButtonElement>("button"),
+    ).find((button) => button.textContent?.includes("DeepSeek"));
+    if (!deepseekButton) {
+      throw new Error("未找到 DeepSeek 供应商按钮");
+    }
+
+    act(() => {
+      deepseekButton.click();
+    });
+
+    expect(setProviderType).toHaveBeenCalledWith("deepseek");
+    expect(setModel).toHaveBeenCalledWith("deepseek-chat");
+    expect(setModel).not.toHaveBeenCalledWith("gpt-5.5");
+  });
+
+  it("模型过滤清空本地模型时应展示调用方提供的图片模型回退", () => {
+    mockUseConfiguredProviders.mockReturnValue({
+      providers: [
+        {
+          key: "fal",
+          label: "Fal",
+          registryId: "fal",
+          fallbackRegistryId: "openai",
+          type: "openai",
+          providerId: "fal",
+          apiHost: "https://fal.run/fal-ai",
+          customModels: ["gpt-5.2-pro"],
+        },
+      ],
+      loading: false,
+    });
+    mockUseProviderModels.mockReturnValue({
+      modelIds: ["gpt-5.2-pro"],
+      models: [createModelMetadata("gpt-5.2-pro")],
+      loading: false,
+      error: null,
+    });
+
+    const { container } = renderModelSelector({
+      providerType: "fal",
+      model: "",
+      modelFilter: (item) => item.id.startsWith("fal-ai/"),
+      getFallbackModels: () => [createModelMetadata("fal-ai/nano-banana-pro")],
+    });
+
+    const trigger = container.querySelector(
+      'button[role="combobox"]',
+    ) as HTMLButtonElement | null;
+    if (!trigger) {
+      throw new Error("未找到模型选择触发器");
+    }
+
+    act(() => {
+      trigger.click();
+    });
+
+    const pageText = document.body.textContent || "";
+    expect(pageText).toContain("fal-ai/nano-banana-pro");
+    expect(pageText).not.toContain("gpt-5.2-pro");
+    expect(pageText).not.toContain("暂无可用模型");
+  });
+
   it("展开后应显示模型的思考与多模态能力标签", () => {
     const { container } = renderModelSelector();
 
@@ -388,6 +535,85 @@ describe("ModelSelector", () => {
     expect(pageText).toContain("gpt-5.5");
     expect(pageText).toContain("deepseek-v4-flash");
     expect(pageText).not.toContain("暂无可用模型");
+  });
+
+  it("Lime Hub 未登录时应在下拉框提示登录且不展示本地兜底模型", () => {
+    const onManageProviders = vi.fn();
+    mockUseConfiguredProviders.mockReturnValue({
+      providers: [
+        {
+          key: "lime-hub",
+          label: "Lime 云端",
+          registryId: "lime-hub",
+          type: "openai",
+          providerId: "lime-hub",
+          apiHost: "https://llm.limeai.run",
+          customModels: [],
+          authStatus: "login_required",
+        },
+      ],
+      loading: false,
+    });
+    mockUseProviderModels.mockReturnValue({
+      modelIds: ["gpt-5.5", "gpt-5.4"],
+      models: [createModelMetadata("gpt-5.5"), createModelMetadata("gpt-5.4")],
+      loading: false,
+      error: null,
+    });
+
+    const { container } = renderModelSelector({
+      providerType: "lime-hub",
+      model: "gpt-5.5",
+      onManageProviders,
+    });
+
+    expect(container.textContent).toContain("Lime 云端");
+    expect(container.textContent).toContain("需要登录");
+
+    const trigger = container.querySelector(
+      'button[role="combobox"]',
+    ) as HTMLButtonElement | null;
+    if (!trigger) {
+      throw new Error("未找到模型选择触发器");
+    }
+
+    act(() => {
+      trigger.click();
+    });
+
+    expect(mockUseProviderModels).toHaveBeenCalledWith(
+      expect.objectContaining({
+        key: "lime-hub",
+        providerId: "lime-hub",
+        authStatus: "login_required",
+      }),
+      expect.objectContaining({
+        returnFullMetadata: true,
+        autoLoad: false,
+      }),
+    );
+
+    const pageText = document.body.textContent || "";
+    expect(pageText).toContain("云端模型");
+    expect(pageText).toContain("Lime 云端");
+    expect(pageText).toContain("需要登录");
+    expect(pageText).toContain("登录后会自动同步 Lime Hub 的可用模型");
+    expect(pageText).toContain("去登录");
+    expect(pageText).not.toContain("gpt-5.5");
+    expect(pageText).not.toContain("gpt-5.4");
+
+    const loginButton = Array.from(
+      document.body.querySelectorAll<HTMLButtonElement>("button"),
+    ).find((button) => button.textContent?.includes("去登录"));
+    if (!loginButton) {
+      throw new Error("未找到去登录按钮");
+    }
+
+    act(() => {
+      loginButton.click();
+    });
+
+    expect(onManageProviders).toHaveBeenCalledTimes(1);
   });
 
   it("未知 anthropic-compatible Provider 应在选择器中展示显式缓存提示", () => {

@@ -14,6 +14,7 @@ interface SettingModelSelectorFieldProps extends Pick<
   | "disabled"
   | "emptyStateDescription"
   | "emptyStateTitle"
+  | "getFallbackModels"
   | "model"
   | "modelFilter"
   | "onManageProviders"

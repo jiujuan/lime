@@ -5,8 +5,16 @@
  * @requirements 12.1, 12.2, 12.3, 12.4, 12.5
  */
 
-import React, { memo, useCallback, useMemo, useState, useEffect } from "react";
-import { ExternalLink, Loader2 } from "lucide-react";
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ComponentProps,
+} from "react";
+import { createPortal } from "react-dom";
+import { Loader2, Maximize2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Artifact } from "@/lib/artifact/types";
 
@@ -14,6 +22,7 @@ import type { Artifact } from "@/lib/artifact/types";
 import {
   CanvasFactory,
   type CanvasStateUnion,
+  type DesignCanvasState,
 } from "@/lib/workspace/workbenchCanvas";
 
 // 工具函数导入
@@ -32,6 +41,19 @@ import {
 /**
  * Canvas 适配器 Props
  */
+export type CanvasAdapterCanvasFactoryProps = Pick<
+  ComponentProps<typeof CanvasFactory>,
+  | "projectRootPath"
+  | "projectId"
+  | "contentId"
+  | "imageGenerationProviderId"
+  | "imageGenerationModelId"
+  | "imageGenerationSelectionReady"
+  | "imageGenerationSelectionWarning"
+  | "designAnalyzeFlatImage"
+  | "designAnalyzerModelSlotConfigs"
+>;
+
 interface CanvasAdapterProps {
   /** 要渲染的 Artifact 对象 */
   artifact: Artifact;
@@ -39,6 +61,8 @@ interface CanvasAdapterProps {
   isStreaming?: boolean;
   /** 内容变更回调 */
   onContentChange?: (content: string) => void;
+  /** 由工作台注入的 Canvas 运行上下文，用于 project 保存和图层生成 */
+  canvasFactoryProps?: CanvasAdapterCanvasFactoryProps;
   /** 自定义类名 */
   className?: string;
 }
@@ -82,6 +106,29 @@ const CanvasUnsupportedMessage: React.FC<{ canvasType: string }> = memo(
 );
 CanvasUnsupportedMessage.displayName = "CanvasUnsupportedMessage";
 
+function isDesignCanvasState(
+  state: CanvasStateUnion,
+): state is DesignCanvasState {
+  return state.type === "design";
+}
+
+function getLayerTypeLabel(type: string): string {
+  switch (type) {
+    case "image":
+      return "图片";
+    case "text":
+      return "文字";
+    case "shape":
+      return "形状";
+    case "effect":
+      return "效果";
+    case "group":
+      return "组";
+    default:
+      return "图层";
+  }
+}
+
 // ============================================================================
 // 主组件
 // ============================================================================
@@ -104,7 +151,13 @@ CanvasUnsupportedMessage.displayName = "CanvasUnsupportedMessage";
  * @requirements 12.1, 12.2, 12.3, 12.4, 12.5
  */
 export const CanvasAdapter: React.FC<CanvasAdapterProps> = memo(
-  ({ artifact, isStreaming = false, onContentChange, className }) => {
+  ({
+    artifact,
+    isStreaming = false,
+    onContentChange,
+    canvasFactoryProps,
+    className,
+  }) => {
     // 获取 Canvas 类型
     const canvasType = useMemo(
       () => getCanvasTypeFromArtifact(artifact.type),
@@ -157,6 +210,28 @@ export const CanvasAdapter: React.FC<CanvasAdapterProps> = memo(
       setIsFullEditorMode(false);
     }, []);
 
+    useEffect(() => {
+      if (!isFullEditorMode || typeof document === "undefined") {
+        return;
+      }
+
+      const previousBodyOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key === "Escape") {
+          setIsFullEditorMode(false);
+        }
+      };
+
+      document.addEventListener("keydown", handleKeyDown);
+
+      return () => {
+        document.body.style.overflow = previousBodyOverflow;
+        document.removeEventListener("keydown", handleKeyDown);
+      };
+    }, [isFullEditorMode]);
+
     /**
      * 打开完整编辑器模式
      * @requirements 12.4
@@ -190,6 +265,173 @@ export const CanvasAdapter: React.FC<CanvasAdapterProps> = memo(
     const icon =
       CANVAS_TYPE_ICONS[canvasType as keyof typeof CANVAS_TYPE_ICONS];
 
+    const renderCanvasFactory = () => (
+      <CanvasFactory
+        theme="general"
+        state={canvasState}
+        onStateChange={handleStateChange}
+        onBackHome={handleClose}
+        onClose={handleClose}
+        isStreaming={isStreaming}
+        projectRootPath={canvasFactoryProps?.projectRootPath}
+        projectId={canvasFactoryProps?.projectId}
+        contentId={canvasFactoryProps?.contentId}
+        imageGenerationProviderId={
+          canvasFactoryProps?.imageGenerationProviderId
+        }
+        imageGenerationModelId={canvasFactoryProps?.imageGenerationModelId}
+        imageGenerationSelectionReady={
+          canvasFactoryProps?.imageGenerationSelectionReady
+        }
+        imageGenerationSelectionWarning={
+          canvasFactoryProps?.imageGenerationSelectionWarning
+        }
+        designAnalyzeFlatImage={canvasFactoryProps?.designAnalyzeFlatImage}
+        designAnalyzerModelSlotConfigs={
+          canvasFactoryProps?.designAnalyzerModelSlotConfigs
+        }
+      />
+    );
+    const renderDesignPreview = (state: DesignCanvasState) => {
+      const document = state.document;
+      const imageLayerCount = document.layers.filter(
+        (layer) => layer.type === "image" || layer.type === "effect",
+      ).length;
+      const generatedAssetCount = document.assets.filter(
+        (asset) =>
+          asset.params?.source === "image_generation_task" ||
+          Boolean(asset.provider || asset.modelId),
+      ).length;
+      const visibleLayers = document.layers.filter((layer) => layer.visible);
+      const layerSummary = [...document.layers]
+        .sort((a, b) => b.zIndex - a.zIndex)
+        .slice(0, 4);
+
+      return (
+        <div
+          className="flex min-h-[280px] flex-1 flex-col bg-slate-50"
+          data-testid="design-canvas-inline-preview"
+        >
+          <div className="flex flex-1 flex-col gap-3 p-4">
+            <div className="rounded-lg border border-slate-200 bg-white p-4">
+              <p className="text-xs font-semibold text-slate-500">
+                LayeredDesignDocument
+              </p>
+              <h3 className="mt-1 truncate text-base font-semibold text-slate-950">
+                {document.title}
+              </h3>
+              <p className="mt-1 text-xs text-slate-500">
+                {document.canvas.width} x {document.canvas.height} /{" "}
+                {document.layers.length} 个图层 / {imageLayerCount} 个图片层 /{" "}
+                {document.status}
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-4">
+              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                <p className="text-xs font-semibold text-slate-500">显示图层</p>
+                <p className="mt-1 text-lg font-semibold text-slate-950">
+                  {visibleLayers.length}
+                </p>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                <p className="text-xs font-semibold text-slate-500">资产</p>
+                <p className="mt-1 text-lg font-semibold text-slate-950">
+                  {document.assets.length}
+                </p>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                <p className="text-xs font-semibold text-slate-500">已生成</p>
+                <p className="mt-1 text-lg font-semibold text-slate-950">
+                  {generatedAssetCount}
+                </p>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-3">
+                <p className="text-xs font-semibold text-slate-500">当前层</p>
+                <p className="mt-1 truncate text-sm font-semibold text-slate-950">
+                  {document.layers.find(
+                    (layer) => layer.id === state.selectedLayerId,
+                  )?.name ||
+                    document.layers[0]?.name ||
+                    "未选择"}
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <div className="flex items-center justify-between gap-3">
+                <h4 className="text-sm font-semibold text-slate-950">
+                  图层摘要
+                </h4>
+                <span className="text-xs font-medium text-slate-500">
+                  top {layerSummary.length}
+                </span>
+              </div>
+              <div className="mt-2 divide-y divide-slate-100">
+                {layerSummary.map((layer) => (
+                  <div
+                    key={layer.id}
+                    className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-800">
+                        {layer.name}
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {getLayerTypeLabel(layer.type)} / z {layer.zIndex}
+                      </p>
+                    </div>
+                    <span className="text-xs text-slate-500">
+                      {layer.visible ? "显示" : "隐藏"}
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      {layer.locked ? "锁定" : "可编辑"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+    const fullEditorRoot =
+      typeof document === "undefined" ? null : document.body;
+    const fullEditor =
+      isFullEditorMode && fullEditorRoot
+        ? createPortal(
+            <div
+              aria-label="图层设计完整编辑器"
+              aria-modal="true"
+              className="fixed inset-0 z-[99990] flex flex-col bg-[#1e2227]"
+              data-testid="canvas-full-editor"
+              role="dialog"
+            >
+              <div className="flex items-center justify-between border-b border-gray-700 px-4 py-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="text-lg">{icon}</span>
+                  <span className="truncate text-sm font-medium text-white">
+                    {label} Canvas · 完整编辑器
+                  </span>
+                </div>
+                <button
+                  aria-label="关闭完整编辑器"
+                  onClick={handleClose}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-200 transition-colors hover:bg-gray-700"
+                  title="关闭完整编辑器"
+                  type="button"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-hidden">
+                {renderCanvasFactory()}
+              </div>
+            </div>,
+            fullEditorRoot,
+          )
+        : null;
+
     return (
       <div className={cn("h-full flex flex-col bg-[#1e2227]", className)}>
         {/* Canvas 信息头部 */}
@@ -206,26 +448,24 @@ export const CanvasAdapter: React.FC<CanvasAdapterProps> = memo(
             )}
           </div>
           <button
+            aria-label="在完整编辑器中打开"
             onClick={handleOpenFullEditor}
             className="flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
             title="在完整编辑器中打开"
+            type="button"
           >
-            <ExternalLink className="w-4 h-4" />
+            <Maximize2 className="w-4 h-4" />
             <span>编辑</span>
           </button>
         </div>
 
         {/* Canvas 渲染区域 */}
         <div className="flex-1 overflow-hidden">
-          <CanvasFactory
-            theme="general"
-            state={canvasState}
-            onStateChange={handleStateChange}
-            onBackHome={handleClose}
-            onClose={handleClose}
-            isStreaming={isStreaming}
-          />
+          {isDesignCanvasState(canvasState)
+            ? renderDesignPreview(canvasState)
+            : renderCanvasFactory()}
         </div>
+        {fullEditor}
       </div>
     );
   },

@@ -18,6 +18,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
 
+use crate::app::{AppState, LogState};
 use crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState;
 use crate::commands::aster_agent_cmd::tool_runtime::media_cli_bridge;
 use crate::commands::modality_runtime_contracts::{
@@ -53,6 +54,7 @@ use crate::commands::modality_runtime_contracts::{
     VOICE_GENERATION_ROUTING_SLOT, WEB_RESEARCH_CONTRACT_KEY, WEB_RESEARCH_LIMECORE_POLICY_REFS,
 };
 use crate::commands::model_registry_cmd::ModelRegistryState;
+use crate::commands::telemetry_cmd::TelemetryState;
 use crate::config::GlobalConfigManagerState;
 use crate::database::DbConnection;
 use lime_core::models::runtime_provider_model::{RuntimeCredentialData, RuntimeProviderCredential};
@@ -997,6 +999,50 @@ fn finish_image_task_execution(task_id: &str) {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     active.remove(task_id);
+}
+
+async fn ensure_image_generation_local_gateway_running(app: &AppHandle) -> Result<(), String> {
+    let server_state = app
+        .try_state::<AppState>()
+        .ok_or_else(|| "AppState 未初始化，无法启动本地图片网关".to_string())?
+        .inner()
+        .clone();
+
+    if server_state.read().await.status().running {
+        return Ok(());
+    }
+
+    let logs = app
+        .try_state::<LogState>()
+        .ok_or_else(|| "LogState 未初始化，无法启动本地图片网关".to_string())?
+        .inner()
+        .clone();
+    let db = app
+        .try_state::<DbConnection>()
+        .map(|state| state.inner().clone());
+    let telemetry = app.try_state::<TelemetryState>().map(|state| {
+        let telemetry = state.inner();
+        (
+            telemetry.stats.clone(),
+            telemetry.tokens.clone(),
+            telemetry.logger.clone(),
+        )
+    });
+
+    let mut server = server_state.write().await;
+    if server.status().running {
+        return Ok(());
+    }
+
+    match telemetry {
+        Some((stats, tokens, logger)) => {
+            server
+                .start_with_telemetry(logs, db, Some(stats), Some(tokens), Some(logger))
+                .await
+        }
+        None => server.start(logs, db).await,
+    }
+    .map_err(|error| format!("启动本地图片网关失败: {error}"))
 }
 
 fn should_start_audio_generation_worker(output: &MediaTaskOutput) -> bool {
@@ -4526,6 +4572,21 @@ pub(crate) fn start_image_generation_task_worker_if_needed(
     match runner_config {
         Ok(runner_config) => {
             tauri::async_runtime::spawn(async move {
+                if let Err(error_message) =
+                    ensure_image_generation_local_gateway_running(&app).await
+                {
+                    let task_error = build_task_error(
+                        "image_gateway_unavailable",
+                        error_message,
+                        true,
+                        "bootstrap",
+                    );
+                    let _ =
+                        mark_image_task_failed(Some(&app), &workspace_root, &task_id, task_error);
+                    finish_image_task_execution(&task_id);
+                    return;
+                }
+
                 let _ = execute_image_generation_task(
                     Some(app.clone()),
                     workspace_root,

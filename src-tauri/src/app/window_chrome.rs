@@ -15,6 +15,14 @@ const WINDOW_REVEAL_ACTIONS: [WindowRevealAction; 4] = [
     WindowRevealAction::Focus,
 ];
 
+const WINDOW_STARTUP_PREPARE_ACTIONS: [WindowRevealAction; 2] =
+    [WindowRevealAction::Unminimize, WindowRevealAction::Maximize];
+const WINDOW_STARTUP_REVEAL_ACTIONS: [WindowRevealAction; 3] = [
+    WindowRevealAction::Unminimize,
+    WindowRevealAction::Show,
+    WindowRevealAction::Focus,
+];
+
 #[cfg(any(target_os = "macos", test))]
 const LIME_MACOS_APP_ICON_BYTES: &[u8] = include_bytes!("../../../public/logo.png");
 #[cfg(any(target_os = "macos", test))]
@@ -31,25 +39,53 @@ impl WindowRevealAction {
     }
 }
 
+fn apply_window_reveal_action<R: tauri::Runtime>(
+    window: &tauri::WebviewWindow<R>,
+    source: &str,
+    action: WindowRevealAction,
+) {
+    let result = match action {
+        WindowRevealAction::Unminimize => window.unminimize(),
+        WindowRevealAction::Maximize => window.maximize(),
+        WindowRevealAction::Show => window.show(),
+        WindowRevealAction::Focus => window.set_focus(),
+    };
+
+    if let Err(error) = result {
+        tracing::warn!("[{}] 主窗口{}失败: {}", source, action.label(), error);
+    }
+}
+
 /// 应用主窗口的 macOS 标题栏样式，避免启动配置被 headless/dev 链路绕过。
 pub fn apply_main_window_chrome(window: &tauri::WebviewWindow) {
     apply_macos_titlebar_overlay(window);
     apply_macos_application_icon();
 }
 
+/// 启动期先在隐藏状态最大化窗口，不在展示链路里触发尺寸变化。
+pub fn prepare_main_window_for_startup<R: tauri::Runtime>(
+    window: &tauri::WebviewWindow<R>,
+    source: &str,
+) {
+    for action in WINDOW_STARTUP_PREPARE_ACTIONS {
+        apply_window_reveal_action(window, source, action);
+    }
+}
+
+/// 展示启动期已准备好的主窗口；这里不最大化，避免兜底路径重新引入首帧尺寸变化。
+pub fn reveal_prepared_main_window<R: tauri::Runtime>(
+    window: &tauri::WebviewWindow<R>,
+    source: &str,
+) {
+    for action in WINDOW_STARTUP_REVEAL_ACTIONS {
+        apply_window_reveal_action(window, source, action);
+    }
+}
+
 /// 最大化、显示并聚焦主窗口，保持启动和托盘打开时的铺满体验。
 pub fn reveal_main_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>, source: &str) {
     for action in WINDOW_REVEAL_ACTIONS {
-        let result = match action {
-            WindowRevealAction::Unminimize => window.unminimize(),
-            WindowRevealAction::Maximize => window.maximize(),
-            WindowRevealAction::Show => window.show(),
-            WindowRevealAction::Focus => window.set_focus(),
-        };
-
-        if let Err(error) = result {
-            tracing::warn!("[{}] 主窗口{}失败: {}", source, action.label(), error);
-        }
+        apply_window_reveal_action(window, source, action);
     }
 }
 
@@ -231,11 +267,11 @@ unsafe fn show_standard_window_buttons(ns_window: cocoa::base::id) {
 mod tests {
     use super::{
         WindowRevealAction, LIME_MACOS_ABOUT_COPYRIGHT, LIME_MACOS_APP_ICON_BYTES,
-        WINDOW_REVEAL_ACTIONS,
+        WINDOW_REVEAL_ACTIONS, WINDOW_STARTUP_PREPARE_ACTIONS, WINDOW_STARTUP_REVEAL_ACTIONS,
     };
 
     #[test]
-    fn reveal_actions_should_keep_maximized_startup_order() {
+    fn reveal_actions_should_keep_maximized_order_for_later_window_reopen() {
         assert_eq!(
             WINDOW_REVEAL_ACTIONS,
             [
@@ -245,6 +281,23 @@ mod tests {
                 WindowRevealAction::Focus,
             ],
         );
+    }
+
+    #[test]
+    fn startup_actions_should_maximize_before_show_while_hidden() {
+        assert_eq!(
+            WINDOW_STARTUP_PREPARE_ACTIONS,
+            [WindowRevealAction::Unminimize, WindowRevealAction::Maximize],
+        );
+        assert_eq!(
+            WINDOW_STARTUP_REVEAL_ACTIONS,
+            [
+                WindowRevealAction::Unminimize,
+                WindowRevealAction::Show,
+                WindowRevealAction::Focus,
+            ],
+        );
+        assert!(!WINDOW_STARTUP_REVEAL_ACTIONS.contains(&WindowRevealAction::Maximize));
     }
 
     #[test]

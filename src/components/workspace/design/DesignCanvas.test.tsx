@@ -172,6 +172,7 @@ function createImageTaskOutput(
 function createProjectExportOutput(
   fileCount: number,
   assetCount: number,
+  overrides: Partial<SaveLayeredDesignProjectExportOutput> = {},
 ): SaveLayeredDesignProjectExportOutput {
   return {
     projectRootPath: "/workspace",
@@ -188,6 +189,10 @@ function createProjectExportOutput(
     fileCount,
     assetCount,
     bytesWritten: 128,
+    remoteReferenceAssetCount: 0,
+    cachedRemoteAssetCount: 0,
+    uncachedRemoteAssetCount: 0,
+    ...overrides,
   };
 }
 
@@ -205,11 +210,11 @@ function createProjectExportReadOutput(
     designJson,
     manifestPath:
       "/workspace/.lime/layered-designs/restored-design.layered-design/export-manifest.json",
-    manifestJson: "{\"assets\":[]}",
+    manifestJson: '{"assets":[]}',
     psdLikeManifestPath:
       "/workspace/.lime/layered-designs/restored-design.layered-design/psd-like-manifest.json",
     psdLikeManifestJson:
-      "{\"projectionKind\":\"psd-like-layer-stack\",\"layers\":[]}",
+      '{"projectionKind":"psd-like-layer-stack","layers":[]}',
     previewPngPath:
       "/workspace/.lime/layered-designs/restored-design.layered-design/preview.png",
     fileCount: 5,
@@ -226,8 +231,11 @@ function StatefulCanvas({
   canvasProps?: DesignCanvasTestProps;
 }) {
   const [state, setState] = useState(initialState);
-  (globalThis as typeof globalThis & { __designCanvasState?: DesignCanvasState })
-    .__designCanvasState = state;
+  (
+    globalThis as typeof globalThis & {
+      __designCanvasState?: DesignCanvasState;
+    }
+  ).__designCanvasState = state;
 
   return (
     <DesignCanvas state={state} onStateChange={setState} {...canvasProps} />
@@ -265,17 +273,19 @@ function renderDesignCanvas(
     container,
     root,
     readState: () =>
-      (globalThis as typeof globalThis & {
-        __designCanvasState: DesignCanvasState;
-      }).__designCanvasState,
+      (
+        globalThis as typeof globalThis & {
+          __designCanvasState: DesignCanvasState;
+        }
+      ).__designCanvasState,
   };
   mountedCanvases.push(mounted);
   return mounted;
 }
 
 function clickButton(label: string) {
-  const button = Array.from(document.querySelectorAll("button")).find(
-    (item) => item.textContent?.includes(label),
+  const button = Array.from(document.querySelectorAll("button")).find((item) =>
+    item.textContent?.includes(label),
   );
   expect(button).toBeDefined();
   act(() => {
@@ -300,6 +310,25 @@ function changeInputValue(ariaLabel: string, value: string) {
     )?.set;
     valueSetter?.call(input, value);
     input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+function setCheckboxValue(ariaLabel: string, checked: boolean) {
+  const input = document.querySelector(
+    `input[aria-label="${ariaLabel}"]`,
+  ) as HTMLInputElement | null;
+
+  expect(input).not.toBeNull();
+  if (!input) {
+    throw new Error(`未找到复选框：${ariaLabel}`);
+  }
+
+  if (input.checked === checked) {
+    return;
+  }
+
+  act(() => {
+    input.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
 }
 
@@ -329,8 +358,8 @@ function dispatchPointerEvent(
 }
 
 async function clickButtonAsync(label: string) {
-  const button = Array.from(document.querySelectorAll("button")).find(
-    (item) => item.textContent?.includes(label),
+  const button = Array.from(document.querySelectorAll("button")).find((item) =>
+    item.textContent?.includes(label),
   );
   expect(button).toBeDefined();
   await act(async () => {
@@ -904,9 +933,8 @@ function createFlatImageDraftDocumentWithProductionModelSlotReady(): LayeredDesi
 }
 
 class MockFlatImageFileReader {
-  public onload:
-    | ((event: { target: { result: string } }) => void)
-    | null = null;
+  public onload: ((event: { target: { result: string } }) => void) | null =
+    null;
   public onerror: (() => void) | null = null;
   public error: Error | null = null;
 
@@ -928,6 +956,7 @@ beforeEach(() => {
       __designCanvasState?: DesignCanvasState;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  window.localStorage.removeItem("lime.layeredDesign.analyzerEndpoint");
 });
 
 afterEach(() => {
@@ -941,6 +970,7 @@ afterEach(() => {
   }
   delete (globalThis as { __designCanvasState?: DesignCanvasState })
     .__designCanvasState;
+  window.localStorage.removeItem("lime.layeredDesign.analyzerEndpoint");
   globalThis.FileReader = originalFileReader;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -964,6 +994,31 @@ describe("DesignCanvas", () => {
     expect(document.body.textContent).not.toContain("PNG 导出待接入");
   });
 
+  it("应在 DesignCanvas 主路径暴露可复跑的模型拆层端点配置入口", () => {
+    renderDesignCanvas();
+
+    expect(document.body.textContent).toContain("模型拆层端点");
+    expect(document.body.textContent).toContain(
+      "上传扁平图和“重新拆层”会优先走当前 canvas:design",
+    );
+    expect(
+      document.querySelector('input[aria-label="拆层模型端点 URL"]'),
+    ).not.toBeNull();
+    expect(
+      document.querySelector('input[aria-label="启用拆层模型端点"]'),
+    ).not.toBeNull();
+
+    changeInputValue("拆层模型端点 URL", "http://127.0.0.1:52081/model-slot");
+    setCheckboxValue("启用拆层模型端点", true);
+
+    expect(document.body.textContent).toContain(
+      "已启用：http://127.0.0.1:52081/model-slot",
+    );
+    expect(
+      window.localStorage.getItem("lime.layeredDesign.analyzerEndpoint"),
+    ).toContain("http://127.0.0.1:52081/model-slot");
+  });
+
   it("导出设计工程应下载单个 ZIP，而不是散落下载多个文件", async () => {
     const downloads: string[] = [];
     const originalCreateElement = document.createElement.bind(document);
@@ -985,33 +1040,33 @@ describe("DesignCanvas", () => {
       configurable: true,
       value: vi.fn(),
     });
-    vi.spyOn(document, "createElement").mockImplementation(
-      ((tagName: string) => {
-        const element = originalCreateElement(tagName);
+    vi.spyOn(document, "createElement").mockImplementation(((
+      tagName: string,
+    ) => {
+      const element = originalCreateElement(tagName);
 
-        if (tagName.toLowerCase() === "canvas") {
-          Object.defineProperty(element, "getContext", {
-            configurable: true,
-            value: () => ({ drawImage: vi.fn() }),
-          });
-          Object.defineProperty(element, "toDataURL", {
-            configurable: true,
-            value: () => "data:image/png;base64,cHJldmlldy1wbmc=",
-          });
-        }
+      if (tagName.toLowerCase() === "canvas") {
+        Object.defineProperty(element, "getContext", {
+          configurable: true,
+          value: () => ({ drawImage: vi.fn() }),
+        });
+        Object.defineProperty(element, "toDataURL", {
+          configurable: true,
+          value: () => "data:image/png;base64,cHJldmlldy1wbmc=",
+        });
+      }
 
-        if (tagName.toLowerCase() === "a") {
-          Object.defineProperty(element, "click", {
-            configurable: true,
-            value: () => {
-              downloads.push((element as HTMLAnchorElement).download);
-            },
-          });
-        }
+      if (tagName.toLowerCase() === "a") {
+        Object.defineProperty(element, "click", {
+          configurable: true,
+          value: () => {
+            downloads.push((element as HTMLAnchorElement).download);
+          },
+        });
+      }
 
-        return element;
-      }) as typeof document.createElement,
-    );
+      return element;
+    }) as typeof document.createElement);
     try {
       vi.stubGlobal(
         "Image",
@@ -1033,7 +1088,11 @@ describe("DesignCanvas", () => {
       expect(document.body.textContent).toContain("已下载 ZIP 工程包");
     } finally {
       if (createObjectUrlDescriptor) {
-        Object.defineProperty(URL, "createObjectURL", createObjectUrlDescriptor);
+        Object.defineProperty(
+          URL,
+          "createObjectURL",
+          createObjectUrlDescriptor,
+        );
       } else {
         const mutableUrl = URL as Omit<typeof URL, "createObjectURL"> & {
           createObjectURL?: unknown;
@@ -1042,7 +1101,11 @@ describe("DesignCanvas", () => {
       }
 
       if (revokeObjectUrlDescriptor) {
-        Object.defineProperty(URL, "revokeObjectURL", revokeObjectUrlDescriptor);
+        Object.defineProperty(
+          URL,
+          "revokeObjectURL",
+          revokeObjectUrlDescriptor,
+        );
       } else {
         const mutableUrl = URL as Omit<typeof URL, "revokeObjectURL"> & {
           revokeObjectURL?: unknown;
@@ -1070,24 +1133,24 @@ describe("DesignCanvas", () => {
       },
     );
     const originalCreateElement = document.createElement.bind(document);
-    vi.spyOn(document, "createElement").mockImplementation(
-      ((tagName: string) => {
-        const element = originalCreateElement(tagName);
+    vi.spyOn(document, "createElement").mockImplementation(((
+      tagName: string,
+    ) => {
+      const element = originalCreateElement(tagName);
 
-        if (tagName.toLowerCase() === "canvas") {
-          Object.defineProperty(element, "getContext", {
-            configurable: true,
-            value: () => ({ drawImage: vi.fn() }),
-          });
-          Object.defineProperty(element, "toDataURL", {
-            configurable: true,
-            value: () => "data:image/png;base64,ZGVzaWduLWNhbnZhcy1oZXVyaXN0aWM=",
-          });
-        }
+      if (tagName.toLowerCase() === "canvas") {
+        Object.defineProperty(element, "getContext", {
+          configurable: true,
+          value: () => ({ drawImage: vi.fn() }),
+        });
+        Object.defineProperty(element, "toDataURL", {
+          configurable: true,
+          value: () => "data:image/png;base64,ZGVzaWduLWNhbnZhcy1oZXVyaXN0aWM=",
+        });
+      }
 
-        return element;
-      }) as typeof document.createElement,
-    );
+      return element;
+    }) as typeof document.createElement);
     const analyzeFlatImage: AnalyzeLayeredDesignFlatImage = vi
       .fn()
       .mockResolvedValue({
@@ -1260,9 +1323,13 @@ describe("DesignCanvas", () => {
       createdAt: expect.any(String),
     });
     expect(mounted.readState().document.title).toBe("teaser-poster");
-    expect(mounted.readState().document.layers.map((layer) => layer.id)).toEqual(
-      ["extraction-background-image", "subject-layer", "headline-layer"],
-    );
+    expect(
+      mounted.readState().document.layers.map((layer) => layer.id),
+    ).toEqual([
+      "extraction-background-image",
+      "subject-layer",
+      "headline-layer",
+    ]);
     expect(mounted.readState().selectedLayerId).toBe("headline-layer");
     expect(mounted.readState().document.extraction).toMatchObject({
       sourceAssetId: "teaser-poster-source-image",
@@ -1317,6 +1384,125 @@ describe("DesignCanvas", () => {
     );
   });
 
+  it("上传扁平图启用模型拆层端点失败时应回退 current analyzer", async () => {
+    globalThis.FileReader = MockFlatImageFileReader as never;
+    vi.stubGlobal(
+      "Image",
+      class {
+        onload: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        naturalWidth = 90;
+        naturalHeight = 140;
+        width = 90;
+        height = 140;
+
+        set src(_value: string) {
+          queueMicrotask(() => this.onload?.());
+        }
+      },
+    );
+    vi.stubGlobal("createImageBitmap", undefined);
+    const fallbackAnalyzeFlatImage: AnalyzeLayeredDesignFlatImage = vi
+      .fn()
+      .mockResolvedValue({
+        analysis: {
+          analyzer: {
+            kind: "local_heuristic",
+            label: "测试 fallback analyzer",
+          },
+          outputs: {
+            candidateRaster: true,
+            candidateMask: false,
+            cleanPlate: false,
+            ocrText: false,
+          },
+          generatedAt: CREATED_AT,
+        },
+        cleanPlate: {
+          status: "not_requested",
+          message: "测试 fallback clean plate。",
+        },
+        candidates: [
+          {
+            id: "fallback-subject",
+            role: "subject",
+            confidence: 0.8,
+            layer: {
+              id: "fallback-subject-layer",
+              name: "fallback 主体",
+              type: "image",
+              assetId: "fallback-subject-asset",
+              x: 10,
+              y: 10,
+              width: 60,
+              height: 90,
+              zIndex: 20,
+              alphaMode: "embedded",
+            },
+            assets: [
+              {
+                id: "fallback-subject-asset",
+                kind: "subject",
+                src: "data:image/png;base64,ZmFsbGJhY2s=",
+                width: 60,
+                height: 90,
+                hasAlpha: false,
+                createdAt: CREATED_AT,
+              },
+            ],
+          },
+        ],
+      });
+
+    window.localStorage.setItem(
+      "lime.layeredDesign.analyzerEndpoint",
+      JSON.stringify({
+        enabled: true,
+        endpointUrl: "http://127.0.0.1:52081/model-slot",
+      }),
+    );
+
+    const mounted = renderDesignCanvas(undefined, {
+      analyzeFlatImage: fallbackAnalyzeFlatImage,
+    });
+    expect(document.body.textContent).toContain(
+      "已启用：http://127.0.0.1:52081/model-slot",
+    );
+
+    const input = mounted.container.querySelector(
+      '[data-testid="design-canvas-flat-image-input"]',
+    ) as HTMLInputElement | null;
+    expect(input).toBeTruthy();
+
+    const file = new File(["flat"], "model-slot-poster.png", {
+      type: "image/png",
+    });
+
+    await act(async () => {
+      Object.defineProperty(input, "files", {
+        configurable: true,
+        value: [file],
+      });
+      input?.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await waitForCanvasState(
+      () => mounted.readState().document.title === "model-slot-poster",
+      "上传扁平图后未通过 model slot analyzer 创建 extraction draft。",
+      120,
+    );
+
+    expect(fallbackAnalyzeFlatImage).toHaveBeenCalled();
+    expect(document.body.textContent).toContain("模型拆层端点已启用");
+    expect(
+      mounted.readState().document.extraction?.analysis?.analyzer,
+    ).toMatchObject({
+      label: "测试 fallback analyzer",
+    });
+    expect(JSON.stringify(mounted.readState().document)).not.toMatch(
+      /poster_generate|canvas:poster|ImageTaskViewer/,
+    );
+  });
+
   it("拆层候选切换应只把选中候选 materialize 到正式图层", () => {
     const mounted = renderDesignCanvas(
       {
@@ -1331,22 +1517,24 @@ describe("DesignCanvas", () => {
     expect(document.body.textContent).toContain("候选图层");
     expect(document.body.textContent).toContain("边角碎片");
     expect(
-      mounted.readState().document.layers.some(
-        (layer) => layer.id === "fragment-layer",
-      ),
+      mounted
+        .readState()
+        .document.layers.some((layer) => layer.id === "fragment-layer"),
     ).toBe(false);
 
     clickButton("边角碎片");
 
     expect(
-      mounted.readState().document.layers.some(
-        (layer) => layer.id === "fragment-layer",
-      ),
+      mounted
+        .readState()
+        .document.layers.some((layer) => layer.id === "fragment-layer"),
     ).toBe(true);
     expect(
-      mounted.readState().document.extraction?.candidates.find(
-        (candidate) => candidate.id === "fragment-candidate",
-      ),
+      mounted
+        .readState()
+        .document.extraction?.candidates.find(
+          (candidate) => candidate.id === "fragment-candidate",
+        ),
     ).toMatchObject({
       selected: true,
       issues: ["low_confidence"],
@@ -1400,7 +1588,9 @@ describe("DesignCanvas", () => {
     expect(document.body.textContent).toContain("生产 model slot analyzer");
     expect(document.body.textContent).toContain("拆层质量：可进入编辑");
     expect(document.body.textContent).toContain("100 分");
-    expect(document.body.textContent).not.toContain("model slot 缺少质量元数据");
+    expect(document.body.textContent).not.toContain(
+      "model slot 缺少质量元数据",
+    );
     expect(document.body.textContent).not.toContain(
       "高风险拆层已阻止直接进入编辑",
     );
@@ -1432,14 +1622,12 @@ describe("DesignCanvas", () => {
     ) as HTMLButtonElement | undefined;
     const sourceOnlyButton = Array.from(
       document.querySelectorAll("button"),
-    ).find((button) =>
-      button.textContent?.includes("仅保留原图"),
-    ) as HTMLButtonElement | undefined;
+    ).find((button) => button.textContent?.includes("仅保留原图")) as
+      | HTMLButtonElement
+      | undefined;
 
     expect(document.body.textContent).toContain("拆层质量：高风险");
-    expect(document.body.textContent).toContain(
-      "高风险拆层已阻止直接进入编辑",
-    );
+    expect(document.body.textContent).toContain("高风险拆层已阻止直接进入编辑");
     expect(enterButton?.disabled).toBe(true);
     expect(enterButton?.title).toContain("当前拆层质量为高风险");
     expect(sourceOnlyButton?.disabled).toBe(false);
@@ -1476,9 +1664,7 @@ describe("DesignCanvas", () => {
     expect(document.body.textContent).toContain("clean plate 修补覆盖不足");
     expect(document.body.textContent).toContain("0/9200 个目标像素");
     expect(document.body.textContent).toContain("clean plate 未使用主体 mask");
-    expect(document.body.textContent).toContain(
-      "高风险拆层已阻止直接进入编辑",
-    );
+    expect(document.body.textContent).toContain("高风险拆层已阻止直接进入编辑");
     expect(enterButton?.disabled).toBe(true);
 
     clickButton("进入图层编辑");
@@ -1528,7 +1714,9 @@ describe("DesignCanvas", () => {
     const sourcePreview = document.querySelector(
       'img[alt="拆层确认预览：原图"]',
     ) as HTMLImageElement | null;
-    expect(sourcePreview?.src).toContain("data:image/png;base64,ZmxhdC1jbGVhbg==");
+    expect(sourcePreview?.src).toContain(
+      "data:image/png;base64,ZmxhdC1jbGVhbg==",
+    );
 
     clickButton("查看当前候选");
 
@@ -1615,13 +1803,17 @@ describe("DesignCanvas", () => {
       '[aria-label="拆层确认预览：标题文案"]',
     );
     expect(textPreview?.textContent).toContain("霓虹开幕");
-    expect(document.body.textContent).toContain("图片候选显示裁片，文字候选直接渲染 TextLayer");
+    expect(document.body.textContent).toContain(
+      "图片候选显示裁片，文字候选直接渲染 TextLayer",
+    );
     expect(document.body.textContent).toContain("模型执行");
     expect(document.body.textContent).toContain("1 条 / 1 条 fallback");
     expect(document.body.textContent).toContain(
       "OCR TextLayer：runtime-ocr-v1 / attempt 1/1 / fallback_succeeded",
     );
-    expect(document.body.textContent).toContain("来源：标题文案 / 已走 fallback");
+    expect(document.body.textContent).toContain(
+      "来源：标题文案 / 已走 fallback",
+    );
   });
 
   it("仅保留原图进入图层编辑时应清空候选层并保留背景层", () => {
@@ -1641,13 +1833,15 @@ describe("DesignCanvas", () => {
       "confirmed",
     );
     expect(
-      mounted.readState().document.extraction?.candidates.every(
-        (candidate) => !candidate.selected,
-      ),
+      mounted
+        .readState()
+        .document.extraction?.candidates.every(
+          (candidate) => !candidate.selected,
+        ),
     ).toBe(true);
-    expect(mounted.readState().document.layers.map((layer) => layer.id)).toEqual(
-      ["extraction-background-image"],
-    );
+    expect(
+      mounted.readState().document.layers.map((layer) => layer.id),
+    ).toEqual(["extraction-background-image"]);
     expect(mounted.readState().selectedLayerId).toBe(
       "extraction-background-image",
     );
@@ -1745,9 +1939,9 @@ describe("DesignCanvas", () => {
       },
     });
     expect(mounted.readState().document.extraction?.candidates).toHaveLength(1);
-    expect(mounted.readState().document.layers.map((layer) => layer.id)).toEqual(
-      ["extraction-background-image", "logo-layer"],
-    );
+    expect(
+      mounted.readState().document.layers.map((layer) => layer.id),
+    ).toEqual(["extraction-background-image", "logo-layer"]);
     expect(mounted.readState().document.editHistory.at(-1)?.type).toBe(
       "extraction_reanalyzed",
     );
@@ -1770,33 +1964,33 @@ describe("DesignCanvas", () => {
       configurable: true,
       value: createObjectUrlMock,
     });
-    vi.spyOn(document, "createElement").mockImplementation(
-      ((tagName: string) => {
-        const element = originalCreateElement(tagName);
+    vi.spyOn(document, "createElement").mockImplementation(((
+      tagName: string,
+    ) => {
+      const element = originalCreateElement(tagName);
 
-        if (tagName.toLowerCase() === "canvas") {
-          Object.defineProperty(element, "getContext", {
-            configurable: true,
-            value: () => ({ drawImage: vi.fn() }),
-          });
-          Object.defineProperty(element, "toDataURL", {
-            configurable: true,
-            value: () => "data:image/png;base64,cHJldmlldy1wbmc=",
-          });
-        }
+      if (tagName.toLowerCase() === "canvas") {
+        Object.defineProperty(element, "getContext", {
+          configurable: true,
+          value: () => ({ drawImage: vi.fn() }),
+        });
+        Object.defineProperty(element, "toDataURL", {
+          configurable: true,
+          value: () => "data:image/png;base64,cHJldmlldy1wbmc=",
+        });
+      }
 
-        if (tagName.toLowerCase() === "a") {
-          Object.defineProperty(element, "click", {
-            configurable: true,
-            value: () => {
-              downloads.push((element as HTMLAnchorElement).download);
-            },
-          });
-        }
+      if (tagName.toLowerCase() === "a") {
+        Object.defineProperty(element, "click", {
+          configurable: true,
+          value: () => {
+            downloads.push((element as HTMLAnchorElement).download);
+          },
+        });
+      }
 
-        return element;
-      }) as typeof document.createElement,
-    );
+      return element;
+    }) as typeof document.createElement);
 
     try {
       vi.stubGlobal(
@@ -1905,7 +2099,11 @@ describe("DesignCanvas", () => {
       expect(document.body.textContent).toContain("已保存图层设计工程");
     } finally {
       if (createObjectUrlDescriptor) {
-        Object.defineProperty(URL, "createObjectURL", createObjectUrlDescriptor);
+        Object.defineProperty(
+          URL,
+          "createObjectURL",
+          createObjectUrlDescriptor,
+        );
       } else {
         const mutableUrl = URL as Omit<typeof URL, "createObjectURL"> & {
           createObjectURL?: unknown;
@@ -1913,6 +2111,62 @@ describe("DesignCanvas", () => {
         delete mutableUrl.createObjectURL;
       }
     }
+  });
+
+  it("绑定工作区保存后应提示未缓存的远程图片资产", async () => {
+    const saveProjectExport = vi.fn().mockResolvedValue(
+      createProjectExportOutput(7, 1, {
+        remoteReferenceAssetCount: 1,
+        cachedRemoteAssetCount: 0,
+        uncachedRemoteAssetCount: 1,
+      }),
+    );
+    const originalCreateElement = document.createElement.bind(document);
+
+    vi.spyOn(document, "createElement").mockImplementation(((
+      tagName: string,
+    ) => {
+      const element = originalCreateElement(tagName);
+
+      if (tagName.toLowerCase() === "canvas") {
+        Object.defineProperty(element, "getContext", {
+          configurable: true,
+          value: () => ({ drawImage: vi.fn() }),
+        });
+        Object.defineProperty(element, "toDataURL", {
+          configurable: true,
+          value: () => "data:image/png;base64,cHJldmlldy1wbmc=",
+        });
+      }
+
+      return element;
+    }) as typeof document.createElement);
+
+    vi.stubGlobal(
+      "Image",
+      class {
+        onload: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+
+        set src(_value: string) {
+          queueMicrotask(() => this.onload?.());
+        }
+      },
+    );
+
+    renderDesignCanvas(undefined, {
+      projectRootPath: "/workspace",
+      saveProjectExport,
+    });
+
+    await clickButtonAsync("导出设计工程");
+
+    expect(saveProjectExport).toHaveBeenCalled();
+    expect(document.body.textContent).toContain("远程图片资产未缓存到 assets/");
+    expect(document.body.textContent).toContain("离线迁移前请重新缓存远程资产");
+    expect(JSON.stringify(saveProjectExport.mock.calls[0][0])).not.toMatch(
+      /poster_generate|canvas:poster|ImageTaskViewer/,
+    );
   });
 
   it("打开最近工程应从项目目录恢复 LayeredDesignDocument 并继续编辑", async () => {
@@ -2247,9 +2501,16 @@ describe("DesignCanvas", () => {
   });
 
   it("生成全部图片层应提交现有 image task，并把请求记录回文档", async () => {
-    const createImageTaskArtifact = vi
-      .fn()
-      .mockResolvedValue(createImageTaskOutput("task-subject"));
+    const createImageTaskArtifact = vi.fn().mockResolvedValue(
+      createImageTaskOutput("task-subject", {
+        images: [
+          {
+            url: "data:image/png;base64,c3VibWl0LWltbWVkaWF0ZQ==",
+            revised_prompt: "提交后立即完成的角色层",
+          },
+        ],
+      }),
+    );
     const mounted = renderDesignCanvas(undefined, {
       projectRootPath: "/workspace",
       projectId: "project-1",
@@ -2277,15 +2538,83 @@ describe("DesignCanvas", () => {
         contentId: "content-1",
       }),
     );
-    expect(JSON.stringify(createImageTaskArtifact.mock.calls[0][0])).not.toMatch(
-      /poster_generate|canvas:poster/,
-    );
+    expect(
+      JSON.stringify(createImageTaskArtifact.mock.calls[0][0]),
+    ).not.toMatch(/poster_generate|canvas:poster/);
     expect(mounted.readState().document.editHistory.at(-1)).toMatchObject({
-      type: "asset_generation_requested",
+      type: "asset_replaced",
       layerId: "subject",
-      nextAssetId: "asset-subject",
     });
     expect(document.body.textContent).toContain("已提交 1 个图片任务");
+  });
+
+  it("生成全部图片层应自动刷新 pending 任务并写回完成结果", async () => {
+    const createImageTaskArtifact = vi
+      .fn()
+      .mockResolvedValue(createImageTaskOutput("task-subject"));
+    const getImageTaskArtifact = vi.fn().mockResolvedValue(
+      createImageTaskOutput("task-subject", {
+        images: [
+          {
+            url: "data:image/png;base64,YXV0by1yZWZyZXNo",
+            revised_prompt: "自动刷新完成的角色层",
+          },
+        ],
+      }),
+    );
+    const mounted = renderDesignCanvas(undefined, {
+      projectRootPath: "/workspace",
+      createImageTaskArtifact,
+      getImageTaskArtifact,
+    });
+
+    await clickButtonAsync("生成全部图片层");
+
+    expect(getImageTaskArtifact).toHaveBeenCalledWith({
+      projectRootPath: "/workspace",
+      taskRef: ".lime/tasks/image_generate/task-subject.json",
+    });
+    expect(
+      mounted
+        .readState()
+        .document.layers.find((layer) => layer.id === "subject"),
+    ).toMatchObject({
+      type: "image",
+      assetId: "asset-subject-generated-task-subject",
+      source: "generated",
+    });
+    expect(mounted.readState().document.assets.at(-1)).toMatchObject({
+      id: "asset-subject-generated-task-subject",
+      src: "data:image/png;base64,YXV0by1yZWZyZXNo",
+    });
+    expect(document.body.textContent).toContain("自动刷新写回 1 个图层结果");
+    expect(JSON.stringify(mounted.readState().document)).not.toMatch(
+      /poster_generate|canvas:poster|ImageTaskViewer/,
+    );
+  });
+
+  it("图片服务选择未就绪时不应提交图层图片任务", () => {
+    const createImageTaskArtifact = vi
+      .fn()
+      .mockResolvedValue(createImageTaskOutput("task-subject"));
+    renderDesignCanvas(undefined, {
+      projectRootPath: "/workspace",
+      imageGenerationSelectionReady: false,
+      imageGenerationSelectionWarning:
+        "图片服务设置加载中，请稍后生成图层资产。",
+      createImageTaskArtifact,
+    });
+
+    const generateButton = Array.from(document.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("生成全部图片层"),
+    ) as HTMLButtonElement | undefined;
+
+    expect(generateButton).toBeDefined();
+    expect(generateButton?.disabled).toBe(true);
+    expect(generateButton?.getAttribute("title")).toBe(
+      "图片服务设置加载中，请稍后生成图层资产。",
+    );
+    expect(createImageTaskArtifact).not.toHaveBeenCalled();
   });
 
   it("重生成当前图片层应写回生成资产，并保持文字层可编辑", async () => {

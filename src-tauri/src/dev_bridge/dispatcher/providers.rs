@@ -317,36 +317,10 @@ pub(super) async fn try_handle(
                 .db
                 .as_ref()
                 .ok_or_else(|| "Database not initialized".to_string())?;
-            let provider = state
-                .api_key_provider_service
-                .get_provider(db, &provider_id)?
-                .ok_or_else(|| format!("Provider 不存在: {provider_id}"))?;
-
-            let fallback_models = {
-                let guard = state.model_registry.read().await;
-                if let Some(model_registry) = guard.as_ref() {
-                    model_registry
-                        .get_local_fallback_model_ids_with_hints(
-                            &provider_id,
-                            &provider.provider.api_host,
-                            Some(provider.provider.effective_provider_type()),
-                            &provider.provider.custom_models,
-                        )
-                        .await
-                } else {
-                    Vec::new()
-                }
-            };
-
             serde_json::to_value(
                 state
                     .api_key_provider_service
-                    .test_connection_with_fallback_models(
-                        db,
-                        &provider_id,
-                        model_name,
-                        fallback_models,
-                    )
+                    .test_connection_with_fallback_models(db, &provider_id, model_name, Vec::new())
                     .await?,
             )?
         }
@@ -363,27 +337,6 @@ pub(super) async fn try_handle(
                 .db
                 .as_ref()
                 .ok_or_else(|| "Database not initialized".to_string())?;
-            let provider = state
-                .api_key_provider_service
-                .get_provider(db, &provider_id)?
-                .ok_or_else(|| format!("Provider 不存在: {provider_id}"))?;
-
-            let fallback_models = {
-                let guard = state.model_registry.read().await;
-                if let Some(model_registry) = guard.as_ref() {
-                    model_registry
-                        .get_local_fallback_model_ids_with_hints(
-                            &provider_id,
-                            &provider.provider.api_host,
-                            Some(provider.provider.effective_provider_type()),
-                            &provider.provider.custom_models,
-                        )
-                        .await
-                } else {
-                    Vec::new()
-                }
-            };
-
             serde_json::to_value(
                 state
                     .api_key_provider_service
@@ -392,7 +345,7 @@ pub(super) async fn try_handle(
                         &provider_id,
                         model_name,
                         prompt,
-                        fallback_models,
+                        Vec::new(),
                     )
                     .await?,
             )?

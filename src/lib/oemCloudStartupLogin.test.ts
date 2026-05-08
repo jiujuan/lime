@@ -69,29 +69,24 @@ describe("oemCloudStartupLogin", () => {
     vi.restoreAllMocks();
   });
 
-  it("启动时发现品牌云端配置了 Google 登录且本地无会话，应发起登录", async () => {
+  it("启动时发现品牌云端配置了 Google 登录且本地无会话，只提示需要手动登录", async () => {
     configureRuntime();
 
     const result = await startOemCloudStartupLoginIfRequired();
 
-    expect(result.status).toBe("started");
+    expect(result.status).toBe("manual_required");
     expect(mockGetPublicAuthCatalog).toHaveBeenCalledWith("tenant-0001");
-    expect(mockStartOemCloudLogin).toHaveBeenCalledWith(
-      expect.objectContaining({
-        baseUrl: "https://user.limeai.run",
-        tenantId: "tenant-0001",
-      }),
-    );
+    expect(mockStartOemCloudLogin).not.toHaveBeenCalled();
   });
 
-  it("同一窗口已尝试启动登录后不应重复打开浏览器", async () => {
+  it("同一窗口重复检查也不应打开浏览器", async () => {
     configureRuntime();
 
     await startOemCloudStartupLoginIfRequired();
     const result = await startOemCloudStartupLoginIfRequired();
 
-    expect(result.status).toBe("already_attempted");
-    expect(mockStartOemCloudLogin).toHaveBeenCalledTimes(1);
+    expect(result.status).toBe("manual_required");
+    expect(mockStartOemCloudLogin).not.toHaveBeenCalled();
   });
 
   it("已有当前租户会话时不应启动登录", async () => {

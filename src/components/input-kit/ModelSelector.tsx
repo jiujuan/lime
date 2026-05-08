@@ -54,6 +54,16 @@ const THEME_LABEL_MAP: Record<string, string> = {
   general: "通用对话",
 };
 
+function resolveProviderSelectionValue(provider: ConfiguredProvider): string {
+  return provider.providerId ?? provider.key;
+}
+
+function resolveInitialProviderModel(provider: ConfiguredProvider): string {
+  return (
+    provider.customModels?.find((modelId) => modelId.trim().length > 0) ?? ""
+  );
+}
+
 export interface ModelSelectorProps {
   providerType: string;
   setProviderType: (type: string) => void;
@@ -77,6 +87,7 @@ export interface ModelSelectorProps {
     model: EnhancedModelMetadata,
     provider: ConfiguredProvider,
   ) => boolean;
+  getFallbackModels?: (provider: ConfiguredProvider) => EnhancedModelMetadata[];
   emptyStateTitle?: string;
   emptyStateDescription?: string;
 }
@@ -101,6 +112,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   suppressAutoSelection = false,
   providerFilter,
   modelFilter,
+  getFallbackModels,
   emptyStateTitle = "工具模型未配置",
   emptyStateDescription = "配置工具模型以获得更好的对话标题和记忆管理。",
 }) => {
@@ -199,6 +211,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   const selectedProvider = useMemo(() => {
     return findConfiguredProviderBySelection(configuredProviders, providerType);
   }, [configuredProviders, providerType]);
+  const selectedProviderLoginRequired =
+    selectedProvider?.authStatus === "login_required";
   const selectedProviderVisible = useMemo(
     () =>
       selectedProvider
@@ -226,7 +240,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     selectedProvider,
     {
       returnFullMetadata: true,
-      autoLoad: shouldLoadModels,
+      autoLoad: shouldLoadModels && !selectedProviderLoginRequired,
       ...providerModelLoadOptions,
     },
   );
@@ -235,13 +249,35 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     return filterModelsByTheme(activeTheme, providerModels);
   }, [activeTheme, providerModels]);
   const visibleModels = useMemo(() => {
-    if (!selectedProvider || !modelFilter) {
-      return filteredResult.models;
+    const baseModels =
+      selectedProvider && modelFilter
+        ? filteredResult.models.filter((item) =>
+            modelFilter(item, selectedProvider),
+          )
+        : filteredResult.models;
+
+    if (
+      baseModels.length > 0 ||
+      !selectedProvider ||
+      selectedProviderLoginRequired ||
+      !getFallbackModels
+    ) {
+      return baseModels;
     }
-    return filteredResult.models.filter((item) =>
-      modelFilter(item, selectedProvider),
-    );
-  }, [filteredResult.models, modelFilter, selectedProvider]);
+
+    const fallbackModels = getFallbackModels(selectedProvider);
+    if (!selectedProvider || !modelFilter) {
+      return fallbackModels;
+    }
+
+    return fallbackModels.filter((item) => modelFilter(item, selectedProvider));
+  }, [
+    filteredResult.models,
+    getFallbackModels,
+    modelFilter,
+    selectedProvider,
+    selectedProviderLoginRequired,
+  ]);
 
   const modelOptions = useMemo(
     () =>
@@ -287,7 +323,6 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     () => modelOptions.filter((item) => item.compatibilityIssue).length,
     [modelOptions],
   );
-
   useEffect(() => {
     if (hasInitialized.current) return;
     if (!shouldLoadProviders) return;
@@ -315,6 +350,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   useEffect(() => {
     if (!shouldLoadModels) return;
     if (!selectedProvider) return;
+    if (selectedProvider.authStatus === "login_required") return;
     if (modelsLoading) return;
     if (allowAutoModel || suppressAutoSelection) return;
 
@@ -388,9 +424,12 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       (allowAutoProvider && !providerType.trim()
         ? autoProviderLabel
         : fallbackProviderLabel);
-  const selectedModelLabel = showPlaceholderSelection
-    ? placeholderLabel
-    : model || (allowAutoModel ? autoModelLabel : "选择模型");
+  const selectedModelLabel =
+    !showPlaceholderSelection && selectedProviderLoginRequired
+      ? "需要登录"
+      : showPlaceholderSelection
+        ? placeholderLabel
+        : model || (allowAutoModel ? autoModelLabel : "选择模型");
   const compactModelLabel = selectedModelLabel;
   const normalizedTheme = (activeTheme || "").toLowerCase();
   const activeThemeLabel =
@@ -639,11 +678,16 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                           return (
                             <button
                               key={provider.key}
-                              onClick={() =>
+                              onClick={() => {
                                 setProviderType(
-                                  provider.providerId ?? provider.key,
-                                )
-                              }
+                                  resolveProviderSelectionValue(provider),
+                                );
+                                setModel(
+                                  provider.authStatus === "login_required"
+                                    ? ""
+                                    : resolveInitialProviderModel(provider),
+                                );
+                              }}
                               className={cn(
                                 itemClassName,
                                 isSelected
@@ -661,7 +705,12 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                                   <span className="truncate">
                                     {provider.label}
                                   </span>
-                                  {providerPromptCacheMode ===
+                                  {provider.authStatus ===
+                                  "login_required" ? (
+                                    <span className="text-[10px] leading-4 text-amber-700">
+                                      需要登录
+                                    </span>
+                                  ) : providerPromptCacheMode ===
                                   "explicit_only" ? (
                                     <span className="text-[10px] leading-4 text-amber-700">
                                       显式缓存
@@ -714,6 +763,34 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                   (allowAutoProvider || suppressAutoSelection) ? (
                     <div className="rounded-2xl border border-dashed border-slate-200 px-3 py-6 text-center text-xs text-slate-500">
                       先选择供应商，再查看模型列表
+                    </div>
+                  ) : selectedProviderLoginRequired ? (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-4 text-xs leading-5 text-amber-800">
+                      <div className="flex items-start gap-2 text-left">
+                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                        <div className="min-w-0">
+                          <div className="font-medium text-amber-900">
+                            需要登录 {selectedProvider?.label ?? "Lime Hub"}
+                          </div>
+                          <div className="mt-1 text-amber-700">
+                            登录后会自动同步 Lime Hub 的可用模型，下拉框不会再显示本地兜底模型。
+                          </div>
+                          {onManageProviders ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="mt-3 h-8 border-amber-300 bg-white text-amber-800 hover:bg-amber-100 hover:text-amber-900"
+                              onClick={() => {
+                                setOpen(false);
+                                onManageProviders();
+                              }}
+                            >
+                              去登录
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
                     </div>
                   ) : modelOptions.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-slate-200 px-3 py-6 text-center text-xs text-slate-500">

@@ -1,8 +1,9 @@
 ## Lime v1.31.0
 
 发布日期：`2026-05-08`
+递交补充：`2026-05-09`
 
-> 发布说明：GitHub 上一版为 `Lime v1.30.0` Release（tag `v1.30.0` 指向 `28b2a751104a3aa982fdca50f5058aed7db9fee1`）。本版按完整 worktree 递交范围整理 `v1.31.0` release notes，并与 `v1.31.0` tag / GitHub Release 口径保持一致。
+> 发布说明：GitHub 上一版为 `Lime v1.30.0` Release（tag `v1.30.0` 指向 `28b2a751104a3aa982fdca50f5058aed7db9fee1`）。本版按完整 worktree 递交范围整理 `v1.31.0` release notes。当前本地已存在 `v1.31.0` tag；若本轮 dirty worktree 也要纳入同一个版本发布，最终 Git 操作时仍需确认 tag / GitHub Release 指向最终提交。
 
 ### 发布概览
 
@@ -10,8 +11,22 @@
 - 应用版本从 `1.30.0` 升级到 `1.31.0`，同步 `package.json`、`package-lock.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`、`src-tauri/tauri.conf.json`、`src-tauri/tauri.conf.headless.json`、`packages/lime-cli-npm/package.json` 与 `@limecloud/lime-cli` 发布示例。
 - `CREAOAI` 相关 research、roadmap 与 exec plan 已收口为 `Skill Forge` 命名，并同步导航、路线图、执行计划和治理文档，减少旧命名与 current 主线并存。
 - 本版继续坚持 current-first：capability draft、registered skill、runtime binding、Query Loop metadata、runtime enable、Evidence Pack、Knowledge 与 Layered Design 都回到仓库内单一事实源，不新增 legacy / compat 平行执行入口。
+- 2026-05-09 递交补充覆盖 Provider 模型真相源收敛、Lime Hub 未登录态、项目资料 v3 创作者体验、启动窗口稳定展示、Design Canvas HTTP JSON 拆层端点、聊天产物沉淀到项目资料，以及图层化设计外部证据瘦身。
 
 ### 用户可见更新
+
+#### 0. 2026-05-09 递交补充
+
+- Provider 模型列表不再依赖打包内置 `resources/models` 或本地 Lime Hub dev fallback；实时 `/models` 成功结果允许缓存 10 天，读取时优先用缓存，失败时只保留用户显式 `custom_models`。
+- Lime Hub / OEM 托管 Provider 未登录时在设置页和模型选择器中显示“需要登录”，不会自动弹出 OAuth 浏览器，也不会用本地兜底模型伪装为可用；用户可从 Provider UI 显式进入登录。
+- Provider 设置页增加 API 模型筛选、服务商配置删除入口、Responses 图片模型 `/models` 不可枚举时的专用提示，并对 `gpt-image*` / `gpt-images*` 图片模型给出成功或手动添加指引。
+- Knowledge 默认产品层改为“项目资料”：普通用户路径使用“写作口吻 / 参考资料 / 完整资料文档 / 确认可用 / 保存到项目资料”等词表；`Builder Skill`、`Knowledge Pack`、`Resolver` 等工程术语退到高级语境。
+- 新增 `docs/roadmap/knowledge/prd-v3.md` 与 7 张项目资料创作者版原型图，作为 Knowledge v3 UI、词表、状态和故事板的产品事实源。
+- 聊天消息、文件 artifact 与 canvas artifact 可把文档类内容保存回项目资料；保存后进入待确认流程，确认前不会自动用于创作。
+- 启动窗口展示改为等待 Logo 解码、viewport 连续稳定和下一帧渲染后再 `show / setFocus`，避免启动最大化过程中的横向漂移；启动期云端登录改为手动提示，不再自动打开登录浏览器。
+- Design Canvas 增加可持久化的 HTTP JSON 模型拆层端点配置；上传扁平图时优先走当前 canvas 端点，失败后回退 current analyzer，同时在工作台 artifact 中提供图层文档内联预览和完整编辑器。
+- 图层化设计 live evidence 脚本支持本地 Lime image gateway、自动选择启用图片 Provider、dry-run 健康检查、PNG 尺寸校验和外部证据 schema；大型真实样张与 PSD-like 导出证据从 Git 跟踪中移出，保留可复跑脚本与 Playwright 证据。
+- 发布包下线内置 models 资源检查与 `scripts/download-models.sh`，`tauri.conf.headless.json` 不再打包 `resources/models/**/*`，避免旧模型目录继续作为事实源。
 
 #### 1. Skill Forge 与能力沉淀闭环
 

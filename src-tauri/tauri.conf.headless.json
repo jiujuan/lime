@@ -45,8 +45,7 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "icons/tray/*",
-      "resources/models/**/*"
+      "icons/tray/*"
     ],
     "macOS": {
       "entitlements": null,

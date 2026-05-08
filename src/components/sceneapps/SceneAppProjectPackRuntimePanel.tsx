@@ -45,13 +45,13 @@ export function SceneAppProjectPackRuntimePanel({
   return (
     <section
       className={cn(
-        "rounded-[20px] border border-slate-200 bg-white p-3.5",
+        "min-w-0 rounded-[20px] border border-slate-200 bg-white p-3.5",
         className,
       )}
       data-testid={`${testIdPrefix}-runtime-pack`}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <div className="text-sm font-medium text-slate-900">{title}</div>
           <p className="mt-1 text-xs leading-5 text-slate-500">{description}</p>
         </div>
@@ -123,18 +123,18 @@ export function SceneAppProjectPackRuntimePanel({
           ) : null}
 
           {runDetailView.deliveryArtifactEntries.length ? (
-            <div className="mt-3 grid gap-2 md:grid-cols-2">
+            <div className="mt-3 grid min-w-0 gap-2">
               {runDetailView.deliveryArtifactEntries.map((entry) => (
                 <button
                   key={entry.key}
                   type="button"
                   data-testid={`${testIdPrefix}-artifact-entry-${entry.key}`}
-                  className="rounded-[16px] border border-slate-200 bg-slate-50 p-2.5 text-left transition-colors hover:border-slate-300 hover:bg-white"
+                  className="min-w-0 rounded-[16px] border border-slate-200 bg-slate-50 p-2.5 text-left transition-colors hover:border-slate-300 hover:bg-white"
                   disabled={!onDeliveryArtifactAction}
                   onClick={() => onDeliveryArtifactAction?.(entry)}
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <span className="min-w-0 text-sm font-medium text-slate-900">
+                    <span className="min-w-0 truncate text-sm font-medium text-slate-900">
                       {entry.label}
                     </span>
                     {entry.isPrimary ? (
@@ -143,7 +143,7 @@ export function SceneAppProjectPackRuntimePanel({
                       </span>
                     ) : null}
                   </div>
-                  <div className="mt-1 line-clamp-1 text-xs text-slate-500">
+                  <div className="mt-1 line-clamp-1 break-all text-xs text-slate-500">
                     {entry.pathLabel}
                   </div>
                   <div className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">

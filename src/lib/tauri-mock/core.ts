@@ -6021,6 +6021,9 @@ type MockLayeredDesignProjectExport = {
   previewPngPath: string;
   assetCount: number;
   fileCount: number;
+  remoteReferenceAssetCount: number;
+  cachedRemoteAssetCount: number;
+  uncachedRemoteAssetCount: number;
   updatedAtMs: number;
 };
 
@@ -6072,10 +6075,14 @@ function buildDefaultMockLayeredDesignProjectExport(
     manifestPath: `${exportDirectoryPath}/export-manifest.json`,
     manifestJson: '{"assets":[]}',
     psdLikeManifestPath: `${exportDirectoryPath}/psd-like-manifest.json`,
-    psdLikeManifestJson: '{"projectionKind":"psd-like-layer-stack","layers":[]}',
+    psdLikeManifestJson:
+      '{"projectionKind":"psd-like-layer-stack","layers":[]}',
     previewPngPath: `${exportDirectoryPath}/preview.png`,
     assetCount: 0,
     fileCount: 4,
+    remoteReferenceAssetCount: 0,
+    cachedRemoteAssetCount: 0,
+    uncachedRemoteAssetCount: 0,
     updatedAtMs: 0,
   };
 }
@@ -9312,7 +9319,7 @@ const defaultMocks: Record<string, any> = {
     const embeddedAssetCount = files.filter((file: any) =>
       String(file?.relativePath ?? "").startsWith("assets/"),
     ).length;
-    const cachedRemoteAssetCount = (() => {
+    const remoteReferenceAssetCount = (() => {
       const manifestFile = files.find(
         (file: any) =>
           String(file?.relativePath ?? "") === "export-manifest.json",
@@ -9343,6 +9350,11 @@ const defaultMocks: Record<string, any> = {
         return 0;
       }
     })();
+    const cachedRemoteAssetCount = remoteReferenceAssetCount;
+    const uncachedRemoteAssetCount = Math.max(
+      0,
+      remoteReferenceAssetCount - cachedRemoteAssetCount,
+    );
     const designFile = findMockProjectExportFile(files, "design.json");
     const manifestFile = findMockProjectExportFile(
       files,
@@ -9378,6 +9390,9 @@ const defaultMocks: Record<string, any> = {
       previewPngPath: `${exportDirectoryPath}/preview.png`,
       assetCount: embeddedAssetCount + cachedRemoteAssetCount,
       fileCount: files.length + cachedRemoteAssetCount,
+      remoteReferenceAssetCount,
+      cachedRemoteAssetCount,
+      uncachedRemoteAssetCount,
       updatedAtMs,
     };
 
@@ -9404,6 +9419,9 @@ const defaultMocks: Record<string, any> = {
           0,
         ) +
         cachedRemoteAssetCount * 1024,
+      remoteReferenceAssetCount,
+      cachedRemoteAssetCount,
+      uncachedRemoteAssetCount,
     };
   },
   read_layered_design_project_export: (args: any) => {
@@ -9451,16 +9469,7 @@ const defaultMocks: Record<string, any> = {
 
   // 模型相关
   get_model_registry: () => [],
-  get_model_registry_provider_ids: () => [
-    "openai",
-    "anthropic",
-    "google",
-    "codex",
-    "azure",
-    "google-vertex",
-    "amazon-bedrock",
-    "ollama-cloud",
-  ],
+  get_model_registry_provider_ids: () => [],
   refresh_model_registry: () => ({ success: true }),
   search_models: () => [],
   get_all_provider_models: () => ({}),

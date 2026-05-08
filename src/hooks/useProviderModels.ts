@@ -16,13 +16,11 @@ import {
   getAliasConfigKey,
   isAliasProvider,
 } from "@/lib/constants/providerMappings";
-import { buildProviderModelsFromRegistry } from "@/lib/model/providerModelsCatalog";
-import { getProviderModelAutoFetchCapability } from "@/lib/model/providerModelFetchSupport";
 import {
-  buildLimeHubLocalDevModels,
-  isLimeHubProviderId,
-  shouldUseLimeHubLocalDevModels,
-} from "@/lib/model/limeHubLocalDevModels";
+  buildProviderModelsFromBackendModelIds,
+  buildProviderModelsFromRegistry,
+} from "@/lib/model/providerModelsCatalog";
+import { getProviderModelAutoFetchCapability } from "@/lib/model/providerModelFetchSupport";
 import type { ConfiguredProvider } from "./useConfiguredProviders";
 import type { EnhancedModelMetadata } from "@/lib/types/modelRegistry";
 
@@ -66,8 +64,26 @@ function getProviderAutoFetchCapability(selectedProvider: ConfiguredProvider) {
   });
 }
 
-function isLimeHubProvider(selectedProvider: ConfiguredProvider): boolean {
-  return isLimeHubProviderId(selectedProvider.key, selectedProvider.providerId);
+function mergeConfiguredAndFetchedModels(
+  selectedProvider: ConfiguredProvider,
+  registryModels: EnhancedModelMetadata[],
+  fetchedModels: EnhancedModelMetadata[],
+): EnhancedModelMetadata[] {
+  const configuredModels = buildProviderModelsFromBackendModelIds(
+    selectedProvider,
+    registryModels,
+    selectedProvider.customModels ?? [],
+  );
+  const seenModelIds = new Set<string>();
+
+  return [...configuredModels, ...fetchedModels].filter((model) => {
+    const normalizedModelId = model.id.trim().toLowerCase();
+    if (!normalizedModelId || seenModelIds.has(normalizedModelId)) {
+      return false;
+    }
+    seenModelIds.add(normalizedModelId);
+    return true;
+  });
 }
 
 async function fetchProviderModelsFromApi(
@@ -86,9 +102,7 @@ async function fetchProviderModelsFromApi(
 
     if (
       result &&
-      (normalizedSource === "Api" ||
-        normalizedSource === "Catalog" ||
-        normalizedSource === "CustomModels") &&
+      normalizedSource === "Api" &&
       result.models &&
       result.models.length > 0
     ) {
@@ -96,14 +110,6 @@ async function fetchProviderModelsFromApi(
     }
   } catch {
     // ignore and fall back below
-  }
-
-  const limeHubDevModels =
-    shouldUseLimeHubLocalDevModels() && isLimeHubProvider(selectedProvider)
-      ? buildLimeHubLocalDevModels(selectedProvider)
-      : [];
-  if (limeHubDevModels.length > 0) {
-    return limeHubDevModels;
   }
 
   return [];
@@ -114,6 +120,10 @@ export async function loadProviderModels(
   options: LoadProviderModelsOptions = {},
 ): Promise<EnhancedModelMetadata[]> {
   if (!selectedProvider) {
+    return [];
+  }
+
+  if (selectedProvider.authStatus === "login_required") {
     return [];
   }
 
@@ -135,21 +145,17 @@ export async function loadProviderModels(
   const useLiveFetchTruthOnly =
     options.liveFetchOnly && autoFetchCapability.supported;
 
-  if (
-    useLiveFetchTruthOnly &&
-    autoFetchCapability.requiresApiKey &&
-    !options.hasApiKey
-  ) {
-    return [];
-  }
-
   const localResult = buildProviderModelsFromRegistry(
     selectedProvider,
     registryModels,
     aliasConfig,
   );
   if (useLiveFetchTruthOnly) {
-    return fetchProviderModelsFromApi(selectedProvider);
+    return mergeConfiguredAndFetchedModels(
+      selectedProvider,
+      registryModels,
+      await fetchProviderModelsFromApi(selectedProvider),
+    );
   }
 
   if (localResult.hasLocalModels || localResult.models.length > 0) {
@@ -219,20 +225,22 @@ export function useProviderModels(
     returnFullMetadata = false,
     autoLoad = true,
     liveFetchOnly = false,
-    hasApiKey = false,
   } = options;
+  const selectedProviderLoginRequired =
+    selectedProvider?.authStatus === "login_required";
+  const effectiveAutoLoad = autoLoad && !selectedProviderLoginRequired;
 
   // 获取模型注册表数据
   const {
     models: registryModels,
     loading: registryLoading,
     error: registryError,
-  } = useModelRegistry({ autoLoad });
+  } = useModelRegistry({ autoLoad: effectiveAutoLoad });
 
   // 获取别名配置
   const { aliasConfig, loading: aliasLoading } = useAliasConfig(
     selectedProvider,
-    { autoLoad },
+    { autoLoad: effectiveAutoLoad },
   );
 
   // API 获取的模型缓存
@@ -260,9 +268,6 @@ export function useProviderModels(
   const useLiveFetchTruthOnly = Boolean(
     liveFetchOnly && autoFetchCapability?.supported,
   );
-  const canReadLiveModels = Boolean(
-    !useLiveFetchTruthOnly || !autoFetchCapability?.requiresApiKey || hasApiKey,
-  );
   // 当本地没有模型时，从 API 获取
   useEffect(() => {
     if (!selectedProvider) {
@@ -272,7 +277,14 @@ export function useProviderModels(
       return;
     }
 
-    if (!autoLoad) {
+    if (selectedProvider.authStatus === "login_required") {
+      setApiModels([]);
+      setApiLoading(false);
+      setApiError(null);
+      return;
+    }
+
+    if (!effectiveAutoLoad) {
       setApiModels([]);
       setApiLoading(false);
       setApiError(null);
@@ -288,13 +300,6 @@ export function useProviderModels(
     }
 
     if (!autoFetchCapability?.supported) {
-      setApiModels([]);
-      setApiLoading(false);
-      setApiError(null);
-      return;
-    }
-
-    if (!canReadLiveModels) {
       setApiModels([]);
       setApiLoading(false);
       setApiError(null);
@@ -330,9 +335,8 @@ export function useProviderModels(
     fetchFromApi();
   }, [
     selectedProvider,
-    autoLoad,
+    effectiveAutoLoad,
     autoFetchCapability,
-    canReadLiveModels,
     useLiveFetchTruthOnly,
     localResult.hasLocalModels,
     registryLoading,
@@ -341,10 +345,24 @@ export function useProviderModels(
 
   // 合并本地模型和 API 模型
   const finalResult = useMemo(() => {
-    if (useLiveFetchTruthOnly) {
+    if (selectedProviderLoginRequired) {
       return {
-        modelIds: apiModels.map((model) => model.id),
-        models: returnFullMetadata ? apiModels : [],
+        modelIds: [],
+        models: [],
+      };
+    }
+
+    if (useLiveFetchTruthOnly) {
+      const models = selectedProvider
+        ? mergeConfiguredAndFetchedModels(
+            selectedProvider,
+            registryModels,
+            apiModels,
+          )
+        : apiModels;
+      return {
+        modelIds: models.map((model) => model.id),
+        models: returnFullMetadata ? models : [],
       };
     }
 
@@ -384,7 +402,15 @@ export function useProviderModels(
       modelIds: localResult.modelIds,
       models: returnFullMetadata ? localResult.models : [],
     };
-  }, [apiModels, localResult, returnFullMetadata, useLiveFetchTruthOnly]);
+  }, [
+    apiModels,
+    localResult,
+    registryModels,
+    returnFullMetadata,
+    selectedProvider,
+    selectedProviderLoginRequired,
+    useLiveFetchTruthOnly,
+  ]);
 
   // 计算加载状态
   const loading = registryLoading || aliasLoading || apiLoading;

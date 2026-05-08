@@ -16,7 +16,10 @@ import type {
 import { VideoCanvas } from "@/components/workspace/video/VideoCanvas";
 import type { VideoCanvasState } from "@/components/workspace/video/types";
 import { DesignCanvas } from "@/components/workspace/design/DesignCanvas";
-import type { DesignCanvasState } from "@/components/workspace/design/types";
+import type {
+  DesignCanvasProps,
+  DesignCanvasState,
+} from "@/components/workspace/design/types";
 import type {
   AnalyzeLayeredDesignFlatImage,
   LayeredDesignAnalyzerModelSlotConfigInput,
@@ -51,10 +54,18 @@ interface CanvasFactoryProps {
   imageGenerationProviderId?: string | null;
   /** 图层设计图片任务优先使用的模型 */
   imageGenerationModelId?: string | null;
+  /** 图层设计图片任务模型选择是否已就绪 */
+  imageGenerationSelectionReady?: boolean;
+  /** 图层设计图片任务模型选择未就绪提示 */
+  imageGenerationSelectionWarning?: string | null;
   /** 图层设计扁平图 analyzer 注入（DEV smoke / 测试使用） */
   designAnalyzeFlatImage?: AnalyzeLayeredDesignFlatImage;
   /** 图层设计 analyzer model slot config（DEV smoke / 测试导出审计使用） */
   designAnalyzerModelSlotConfigs?: readonly LayeredDesignAnalyzerModelSlotConfigInput[];
+  /** 图层设计图片任务创建函数注入（DEV smoke / 测试使用） */
+  designCreateImageTaskArtifact?: DesignCanvasProps["createImageTaskArtifact"];
+  /** 图层设计图片任务查询函数注入（DEV smoke / 测试使用） */
+  designGetImageTaskArtifact?: DesignCanvasProps["getImageTaskArtifact"];
   /** 自动配图主题关键词 */
   autoImageTopic?: string;
   /** 自动续写同步的 Provider */
@@ -107,8 +118,12 @@ export const CanvasFactory: React.FC<CanvasFactoryProps> = memo(
     projectRootPath,
     imageGenerationProviderId,
     imageGenerationModelId,
+    imageGenerationSelectionReady,
+    imageGenerationSelectionWarning,
     designAnalyzeFlatImage,
     designAnalyzerModelSlotConfigs,
+    designCreateImageTaskArtifact,
+    designGetImageTaskArtifact,
     autoImageTopic,
     autoContinueProviderType,
     onAutoContinueProviderTypeChange,
@@ -192,8 +207,12 @@ export const CanvasFactory: React.FC<CanvasFactoryProps> = memo(
           contentId={contentId}
           imageGenerationProviderId={imageGenerationProviderId}
           imageGenerationModelId={imageGenerationModelId}
+          imageGenerationSelectionReady={imageGenerationSelectionReady}
+          imageGenerationSelectionWarning={imageGenerationSelectionWarning}
           analyzeFlatImage={designAnalyzeFlatImage}
           analyzerModelSlotConfigs={designAnalyzerModelSlotConfigs}
+          createImageTaskArtifact={designCreateImageTaskArtifact}
+          getImageTaskArtifact={designGetImageTaskArtifact}
         />
       );
     }

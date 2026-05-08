@@ -39,6 +39,8 @@ export interface DesignCanvasProps {
   contentId?: string | null;
   imageGenerationProviderId?: string | null;
   imageGenerationModelId?: string | null;
+  imageGenerationSelectionReady?: boolean;
+  imageGenerationSelectionWarning?: string | null;
   createImageTaskArtifact?: (
     request: CreateImageGenerationTaskArtifactRequest,
   ) => Promise<MediaTaskArtifactOutput>;

@@ -9,7 +9,7 @@ pub mod dispatcher;
 
 #[cfg(debug_assertions)]
 use axum::{
-    extract::{Query, State},
+    extract::{DefaultBodyLimit, Query, State},
     http::{request::Parts as RequestParts, HeaderValue, Method},
     response::{
         sse::{Event as SseEvent, KeepAlive, Sse},
@@ -40,6 +40,9 @@ use lime_services::{
 };
 #[cfg(debug_assertions)]
 use tauri::{AppHandle, EventId, Listener};
+
+#[cfg(debug_assertions)]
+const DEV_BRIDGE_MAX_INVOKE_BODY_BYTES: usize = 64 * 1024 * 1024;
 
 #[cfg(debug_assertions)]
 #[derive(Debug, Deserialize)]
@@ -154,6 +157,9 @@ impl DevBridgeServer {
             .route("/invoke", post(invoke_command))
             .route("/events", get(stream_events))
             .route("/health", get(health_check).post(health_check))
+            // 图层设计工程导出会通过 DevBridge 传递 preview.png 与 assets 的 base64。
+            // 保持受控上限，避免真实工程保存被 axum 默认 2MiB body limit 截断成假失败。
+            .layer(DefaultBodyLimit::max(DEV_BRIDGE_MAX_INVOKE_BODY_BYTES))
             .layer(
                 // CORS 配置 - 允许本地开发前端访问
                 CorsLayer::new()

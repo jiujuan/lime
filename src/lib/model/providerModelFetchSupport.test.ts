@@ -87,6 +87,20 @@ describe("providerModelFetchSupport", () => {
     });
   });
 
+  it("Fal-like Host 应通过声明模型确认，不要求 API Key 或 /models 真相源", () => {
+    expect(
+      getProviderModelAutoFetchCapability({
+        providerId: "fal",
+        providerType: "openai",
+        apiHost: "https://fal.run/fal-ai",
+      }),
+    ).toEqual({
+      supported: true,
+      requiresApiKey: false,
+      requiresLiveModelTruth: false,
+    });
+  });
+
   it("Azure OpenAI 当前不应展示自动获取入口", () => {
     const capability = getProviderModelAutoFetchCapability({
       providerId: "azure-openai",

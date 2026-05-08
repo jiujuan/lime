@@ -12,20 +12,10 @@ vi.mock("@/lib/api/modelRegistry", () => ({
   fetchProviderModelsAuto: (...args: unknown[]) =>
     mockFetchProviderModelsAuto(...args),
   normalizeFetchProviderModelsSource: (result: {
-    source: "Api" | "Catalog" | "CustomModels" | "LocalFallback";
+    source: "Api" | "Error";
     models: unknown[];
     error: string | null;
-  }) => {
-    if (
-      result.source === "LocalFallback" &&
-      typeof result.error === "string" &&
-      result.error.includes("已保留当前 Provider 的自定义模型")
-    ) {
-      return "CustomModels";
-    }
-
-    return result.source;
-  },
+  }) => result.source,
 }));
 
 import { ProviderSetting } from "./ProviderSetting";
@@ -103,6 +93,14 @@ function changeInput(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
+function getApiModelSuggestionLabels(container: HTMLElement): string[] {
+  return Array.from(
+    container.querySelectorAll<HTMLButtonElement>(
+      '[data-testid="api-model-suggestion"]',
+    ),
+  ).map((button) => button.textContent?.trim() ?? "");
+}
+
 beforeEach(() => {
   (
     globalThis as typeof globalThis & {
@@ -167,6 +165,44 @@ describe("ProviderSetting", () => {
     ).not.toBeNull();
   });
 
+  it("Lime Hub 未登录时应展示登录提示，不展示模型配置表单", async () => {
+    const onLogin = vi.fn();
+    const container = renderSetting(
+      createProvider({
+        id: "lime-hub",
+        name: "Lime 云端",
+        custom_models: [],
+        api_keys: [],
+        api_key_count: 0,
+      }),
+      {
+        authStatus: "login_required",
+        onLogin,
+      },
+    );
+    await flushEffects();
+
+    expect(
+      container.querySelector('[data-testid="provider-login-required"]'),
+    ).not.toBeNull();
+    expect(container.textContent ?? "").toContain("Lime 云端");
+    expect(container.textContent ?? "").toContain("需要登录");
+    expect(container.textContent ?? "").toContain(
+      "登录后会自动同步 Lime Hub 的可用模型",
+    );
+    expect(container.textContent ?? "").not.toContain("模型优先级");
+    expect(container.textContent ?? "").not.toContain("从接口获取");
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="provider-login-button"]')
+        ?.click();
+      await Promise.resolve();
+    });
+
+    expect(onLogin).toHaveBeenCalledTimes(1);
+  });
+
   it("手动添加模型应直接更新 custom_models", async () => {
     const onUpdate = vi.fn().mockResolvedValue(undefined);
     const container = renderSetting(createProvider({ custom_models: [] }), {
@@ -200,11 +236,11 @@ describe("ProviderSetting", () => {
     expect(container.textContent ?? "").toContain("deepseek-reasoner");
   });
 
-  it("接口获取只接受 Api 来源，不展示本地兜底模型", async () => {
+  it("接口获取失败时不展示错误来源夹带的非实时模型", async () => {
     mockFetchProviderModelsAuto.mockResolvedValueOnce({
-      source: "LocalFallback",
+      source: "Error",
       models: [{ id: "wrong-fallback-model" }],
-      error: "API 获取失败，已使用本地数据",
+      error: "API 获取失败，本地模型兜底已下线。",
     });
     const container = renderSetting(createProvider({ custom_models: [] }));
     await flushEffects();
@@ -220,11 +256,284 @@ describe("ProviderSetting", () => {
     });
 
     expect(mockFetchProviderModelsAuto).toHaveBeenCalledWith("deepseek");
-    expect(container.textContent ?? "").toContain("已忽略本地目录或兜底结果");
+    expect(container.textContent ?? "").toContain("API 获取失败");
     expect(container.textContent ?? "").not.toContain("wrong-fallback-model");
     expect(
       container.querySelector('[data-testid="api-model-suggestions"]'),
     ).toBeNull();
+  });
+
+  it("Responses 图片入口不支持 /models 时应保留手动图片模型并显示确认态", async () => {
+    mockFetchProviderModelsAuto.mockResolvedValueOnce({
+      source: "Error",
+      models: [],
+      error: "当前 Responses 兼容入口未提供标准 /models 接口。",
+      diagnostic_hint: null,
+    });
+    const container = renderSetting(
+      createProvider({
+        id: "airgate-openai-images",
+        name: "OpenAI-gpt-images-2",
+        type: "openai",
+        api_host: "https://code.ylsagi.com/codex",
+        custom_models: ["gpt-images-2"],
+      }),
+    );
+    await flushEffects();
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="fetch-models-button"]')
+        ?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const status = container.querySelector<HTMLElement>(
+      '[data-testid="model-fetch-status"]',
+    );
+    expect(status?.textContent ?? "").toContain("已确认 Responses 图片模型");
+    expect(status?.textContent ?? "").toContain("gpt-images-2");
+    expect(status?.className ?? "").toContain("border-emerald-200");
+    expect(container.textContent ?? "").toContain("gpt-images-2");
+    expect(
+      container.querySelector('[data-testid="api-model-suggestions"]'),
+    ).toBeNull();
+  });
+
+  it("Responses 图片入口缺少声明模型时仍提示手动添加", async () => {
+    mockFetchProviderModelsAuto.mockResolvedValueOnce({
+      source: "Error",
+      models: [],
+      error: "当前 Responses 兼容入口未提供标准 /models 接口。",
+      diagnostic_hint: null,
+    });
+    const container = renderSetting(
+      createProvider({
+        id: "airgate-openai-images",
+        name: "OpenAI-gpt-images-2",
+        type: "openai-response",
+        api_host: "https://api.openai.com/v1",
+        custom_models: [],
+      }),
+    );
+    await flushEffects();
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="fetch-models-button"]')
+        ?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const status = container.querySelector<HTMLElement>(
+      '[data-testid="model-fetch-status"]',
+    );
+    expect(status?.textContent ?? "").toContain(
+      "该 Responses 图片入口不提供标准 /models 枚举",
+    );
+    expect(status?.textContent ?? "").toContain("请手动添加 gpt-images-2");
+    expect(status?.className ?? "").toContain("border-sky-200");
+  });
+
+  it("Responses 图片入口返回已声明图片模型时应显示确认态", async () => {
+    mockFetchProviderModelsAuto.mockResolvedValueOnce({
+      source: "Api",
+      models: [{ id: "gpt-images-2" }],
+      error: null,
+      diagnostic_hint:
+        "当前 Responses 图片入口不提供标准 /models 枚举；已使用 Provider 中声明的图片模型作为可用模型，并写入 10 天缓存。",
+    });
+    const container = renderSetting(
+      createProvider({
+        id: "airgate-openai-images",
+        name: "OpenAI-gpt-images-2",
+        type: "openai",
+        api_host: "https://code.ylsagi.com/codex",
+        custom_models: ["gpt-images-2"],
+      }),
+    );
+    await flushEffects();
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="fetch-models-button"]')
+        ?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const status = container.querySelector<HTMLElement>(
+      '[data-testid="model-fetch-status"]',
+    );
+    expect(status?.textContent ?? "").toContain("已确认 1 个模型");
+    expect(status?.textContent ?? "").toContain("已包含全部结果");
+    expect(status?.className ?? "").toContain("border-emerald-200");
+    expect(container.textContent ?? "").not.toContain(
+      "该 Responses 图片入口不提供标准 /models 枚举",
+    );
+    expect(
+      container.querySelector('[data-testid="api-model-suggestions"]'),
+    ).toBeNull();
+  });
+
+  it("Fal Provider 不支持 /models 时应保留手动模型并显示确认态", async () => {
+    mockFetchProviderModelsAuto.mockResolvedValueOnce({
+      source: "Error",
+      models: [],
+      error: "Fal 不提供标准 /models 枚举。",
+      diagnostic_hint: "请在 Provider 中手动添加 fal-ai/... 模型 ID。",
+    });
+    const container = renderSetting(
+      createProvider({
+        id: "fal",
+        name: "Fal",
+        type: "openai",
+        api_host: "https://fal.run/fal-ai",
+        custom_models: ["fal-ai/nano-banana-pro"],
+      }),
+    );
+    await flushEffects();
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="fetch-models-button"]')
+        ?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const status = container.querySelector<HTMLElement>(
+      '[data-testid="model-fetch-status"]',
+    );
+    expect(status?.textContent ?? "").toContain("已确认 Fal 模型");
+    expect(status?.textContent ?? "").toContain("fal-ai/nano-banana-pro");
+    expect(status?.className ?? "").toContain("border-emerald-200");
+    expect(container.textContent ?? "").toContain("fal-ai/nano-banana-pro");
+    expect(container.textContent ?? "").not.toContain("API 获取失败");
+    expect(
+      container.querySelector('[data-testid="api-model-suggestions"]'),
+    ).toBeNull();
+  });
+
+  it("Fal Provider 没有 API Key 时仍可确认手动声明模型", async () => {
+    mockFetchProviderModelsAuto.mockResolvedValueOnce({
+      source: "Api",
+      models: [{ id: "fal-ai/nano-banana-pro" }],
+      error: null,
+    });
+    const container = renderSetting(
+      createProvider({
+        id: "fal",
+        name: "Fal",
+        type: "openai",
+        api_host: "https://fal.run/fal-ai",
+        api_key_count: 0,
+        api_keys: [],
+        custom_models: ["fal-ai/nano-banana-pro"],
+      }),
+    );
+    await flushEffects();
+
+    const fetchButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="fetch-models-button"]',
+    );
+    const connectionButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="provider-test-connection-button"]',
+    );
+    expect(fetchButton?.disabled).toBe(false);
+    expect(connectionButton?.disabled).toBe(true);
+    expect(container.textContent ?? "").toContain("先填写 API 密钥，再测试连接");
+    expect(container.textContent ?? "").not.toContain("API 密钥（可选）");
+
+    await act(async () => {
+      fetchButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockFetchProviderModelsAuto).toHaveBeenCalledWith("fal");
+    const status = container.querySelector<HTMLElement>(
+      '[data-testid="model-fetch-status"]',
+    );
+    expect(status?.textContent ?? "").toContain("已确认 1 个模型");
+    expect(status?.textContent ?? "").not.toContain("请先填写并保存 API 密钥");
+  });
+
+  it("Fal Provider 只有非 Fal 模型时应提示添加 fal-ai 模型", async () => {
+    mockFetchProviderModelsAuto.mockResolvedValueOnce({
+      source: "Error",
+      models: [],
+      error: "Fal 不提供标准 /models 枚举。",
+      diagnostic_hint:
+        "当前模型优先级没有可用 Fal 图片模型；请手动添加 fal-ai/nano-banana-pro。",
+    });
+    const container = renderSetting(
+      createProvider({
+        id: "fal",
+        name: "Fal",
+        type: "openai",
+        api_host: "https://fal.run/fal-ai",
+        custom_models: ["gpt-5.2-pro"],
+      }),
+    );
+    await flushEffects();
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="fetch-models-button"]')
+        ?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const status = container.querySelector<HTMLElement>(
+      '[data-testid="model-fetch-status"]',
+    );
+    expect(status?.textContent ?? "").toContain(
+      "当前模型优先级没有可用 Fal 图片模型",
+    );
+    expect(status?.textContent ?? "").toContain("fal-ai/nano-banana-pro");
+    expect(status?.className ?? "").toContain("border-sky-200");
+    expect(container.textContent ?? "").not.toContain("API 获取失败");
+  });
+
+  it("Fal Provider 命中旧缓存里的非 Fal 模型时不应显示确认态", async () => {
+    mockFetchProviderModelsAuto.mockResolvedValueOnce({
+      source: "Api",
+      models: [{ id: "gpt-5.2-pro" }],
+      error: null,
+      from_cache: true,
+    });
+    const container = renderSetting(
+      createProvider({
+        id: "fal",
+        name: "Fal",
+        type: "openai",
+        api_host: "https://fal.run/fal-ai",
+        custom_models: ["gpt-5.2-pro"],
+      }),
+    );
+    await flushEffects();
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="fetch-models-button"]')
+        ?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const status = container.querySelector<HTMLElement>(
+      '[data-testid="model-fetch-status"]',
+    );
+    expect(status?.textContent ?? "").toContain(
+      "当前没有可用 Fal 图片模型",
+    );
+    expect(status?.textContent ?? "").toContain("fal-ai/nano-banana-pro");
+    expect(status?.textContent ?? "").not.toContain("已确认 1 个模型");
+    expect(status?.className ?? "").toContain("border-sky-200");
   });
 
   it("接口获取成功后点击模型建议才加入优先级", async () => {
@@ -267,6 +576,105 @@ describe("ProviderSetting", () => {
     expect(onUpdate).toHaveBeenCalledWith("deepseek", {
       custom_models: ["deepseek-chat"],
     });
+  });
+
+  it("接口获取成功后应展示完整模型列表，并支持筛选长列表", async () => {
+    const apiModels = Array.from({ length: 12 }, (_, index) => ({
+      id: `provider-model-${String(index + 1).padStart(2, "0")}`,
+    }));
+    mockFetchProviderModelsAuto.mockResolvedValueOnce({
+      source: "Api",
+      models: apiModels,
+      error: null,
+    });
+    const container = renderSetting(createProvider({ custom_models: [] }));
+    await flushEffects();
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="fetch-models-button"]')
+        ?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent ?? "").toContain("接口返回 12 个模型");
+    expect(container.textContent ?? "").toContain("显示 12 / 12 个");
+    expect(getApiModelSuggestionLabels(container)).toHaveLength(12);
+    expect(getApiModelSuggestionLabels(container)).toContain(
+      "provider-model-12",
+    );
+
+    const filterInput = container.querySelector<HTMLInputElement>(
+      '[data-testid="api-model-filter-input"]',
+    );
+
+    await act(async () => {
+      changeInput(filterInput!, "model-12");
+      await Promise.resolve();
+    });
+
+    expect(container.textContent ?? "").toContain("显示 1 / 12 个");
+    expect(getApiModelSuggestionLabels(container)).toEqual([
+      "provider-model-12",
+    ]);
+  });
+
+  it("非系统 Provider 应展示删除配置按钮，并在确认后调用删除回调", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const onDeleteProvider = vi.fn().mockResolvedValue(true);
+    const container = renderSetting(createProvider(), {
+      onDeleteProvider,
+    });
+    await flushEffects();
+
+    const button = container.querySelector<HTMLButtonElement>(
+      '[data-testid="provider-delete-button"]',
+    );
+
+    expect(button).not.toBeNull();
+    expect(button?.textContent ?? "").toContain("删除配置");
+
+    await act(async () => {
+      button?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      "确认删除「DeepSeek」配置？此操作会移除该服务商和关联密钥。",
+    );
+    expect(onDeleteProvider).toHaveBeenCalledWith("deepseek");
+
+    confirmSpy.mockRestore();
+  });
+
+  it("系统 Provider 也应展示删除配置按钮，并说明只移除本地配置", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const onDeleteProvider = vi.fn().mockResolvedValue(true);
+    const container = renderSetting(createProvider({ is_system: true }), {
+      onDeleteProvider,
+    });
+    await flushEffects();
+
+    const button = container.querySelector<HTMLButtonElement>(
+      '[data-testid="provider-delete-button"]',
+    );
+
+    expect(button).not.toBeNull();
+
+    await act(async () => {
+      button?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      "确认删除「DeepSeek」配置？此操作会移除该服务商的已启用模型和本地 API 密钥，系统服务商入口仍可重新添加。",
+    );
+    expect(onDeleteProvider).toHaveBeenCalledWith("deepseek");
+
+    confirmSpy.mockRestore();
   });
 
   it("测试连接应先保存新密钥，并只显示简洁状态", async () => {

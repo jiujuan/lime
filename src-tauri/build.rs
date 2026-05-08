@@ -10,9 +10,6 @@ fn main() {
         let manifest_path = std::path::PathBuf::from(&manifest_dir);
         let dist_dir = manifest_path.join("../dist");
         let _ = std::fs::create_dir_all(dist_dir);
-
-        // 检查 models 资源是否存在
-        check_models_resources(&manifest_path);
     }
     tauri_build::build()
 }
@@ -26,23 +23,5 @@ fn configure_windows_stack_size() {
         Ok("msvc") => println!("cargo:rustc-link-arg=/STACK:{WINDOWS_STACK_SIZE_BYTES}"),
         Ok("gnu") => println!("cargo:rustc-link-arg=-Wl,--stack,{WINDOWS_STACK_SIZE_BYTES}"),
         _ => {}
-    }
-}
-
-/// 检查 models 资源目录是否存在
-/// 如果不存在，输出警告提示用户运行下载脚本
-fn check_models_resources(manifest_dir: &std::path::Path) {
-    let models_dir = manifest_dir.join("resources/models");
-    let index_file = models_dir.join("index.json");
-
-    if !index_file.exists() {
-        println!("cargo:warning=======================================================");
-        println!("cargo:warning=Models 资源不存在！请运行以下命令下载：");
-        println!("cargo:warning=  ./scripts/download-models.sh");
-        println!("cargo:warning=======================================================");
-
-        // 创建空目录结构，避免 Tauri 构建失败
-        let _ = std::fs::create_dir_all(models_dir.join("providers"));
-        let _ = std::fs::create_dir_all(models_dir.join("aliases"));
     }
 }

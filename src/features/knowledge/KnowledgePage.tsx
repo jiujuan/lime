@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
-  Archive,
   BookOpen,
   Check,
   ClipboardCheck,
@@ -10,7 +9,6 @@ import {
   ListChecks,
   Loader2,
   MessageSquareText,
-  PackageCheck,
   RefreshCw,
   ShieldCheck,
   Sparkles,
@@ -22,7 +20,6 @@ import {
   getKnowledgePack,
   importKnowledgeSource,
   listKnowledgePacks,
-  setDefaultKnowledgePack,
   updateKnowledgePackStatus,
   type KnowledgePackDetail,
   type KnowledgePackStatus,
@@ -36,33 +33,21 @@ import {
 import type { KnowledgePageParams, Page, PageParams } from "@/types/page";
 import { cn } from "@/lib/utils";
 import {
-  DETAIL_TABS,
   PACK_TYPES,
-  VIEW_TABS,
-  resolveStatusLabel,
   type DetailTab,
   type KnowledgeView,
 } from "./domain/knowledgeLabels";
 import {
-  buildPackMetrics,
   getErrorMessage,
   getPackTitle,
-  getUserFacingPackTypeLabel,
   normalizePackNameInput,
   sanitizeKnowledgePreview,
 } from "./domain/knowledgeVisibility";
-import { buildKnowledgeBuilderPrompt } from "./agent/knowledgePromptBuilder";
 import {
-  buildKnowledgeBuilderMetadata,
   buildKnowledgeRequestMetadata,
   resolveKnowledgePackRuntimeMode,
-  resolveKnowledgeRequestCompanionPacks,
   type KnowledgeRequestCompanionPack,
 } from "./agent/knowledgeMetadata";
-import { FileEntryList } from "./components/FileEntryList";
-import { KnowledgePackCard } from "./components/KnowledgePackCard";
-import { KnowledgeStatusRail } from "./components/KnowledgeStatusRail";
-import { KnowledgeTroubleshootingPanel } from "./components/KnowledgeTroubleshootingPanel";
 import { StatusPill } from "./components/StatusPill";
 
 interface KnowledgePageProps {
@@ -136,21 +121,31 @@ function readLastProjectId(): string {
   }
 }
 
+function resolveDraftPackNameInput(
+  description?: string | null,
+  sourceName?: string | null,
+): string {
+  return (
+    normalizePackNameInput(description?.trim() ?? "") ||
+    normalizePackNameInput(sourceName?.replace(/\.[^.]+$/, "").trim() ?? "") ||
+    DEFAULT_PACK_NAME
+  );
+}
+
 export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
   const initialWorkingDir = pageParams?.workingDir?.trim() ?? "";
   const initialStoredWorkingDir =
     initialWorkingDir || readReusableStoredWorkingDir();
-  const [workingDirInput, setWorkingDirInput] = useState(
-    () => initialStoredWorkingDir,
-  );
+  const initialSaveDraft = pageParams?.saveDraft;
   const [workingDir, setWorkingDir] = useState(() => initialStoredWorkingDir);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     null,
   );
-  const [selectedProjectName, setSelectedProjectName] = useState<string>("");
-  const [manualPathOpen, setManualPathOpen] = useState(false);
-  const [activeView, setActiveView] = useState<KnowledgeView>("overview");
+  const [activeView, setActiveView] = useState<KnowledgeView>(
+    () => pageParams?.initialView ?? "overview",
+  );
   const [detailTab, setDetailTab] = useState<DetailTab>("overview");
+  const [advancedInfoOpen, setAdvancedInfoOpen] = useState(false);
   const [catalogStatus, setCatalogStatus] = useState<AsyncStatus>(
     workingDir ? "loading" : "idle",
   );
@@ -165,12 +160,34 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
   const [actionStatus, setActionStatus] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [packNameInput, setPackNameInput] = useState(
-    pageParams?.selectedPackName?.trim() || DEFAULT_PACK_NAME,
+    pageParams?.selectedPackName?.trim() ||
+      resolveDraftPackNameInput(
+        initialSaveDraft?.description,
+        initialSaveDraft?.sourceName,
+      ),
   );
-  const [packDescription, setPackDescription] = useState("项目资料");
-  const [packType, setPackType] = useState("brand-product");
-  const sourceFileName = DEFAULT_SOURCE_FILE_NAME;
-  const [sourceText, setSourceText] = useState("");
+  const [packDescription, setPackDescription] = useState(
+    () =>
+      initialSaveDraft?.description?.trim() ||
+      initialSaveDraft?.sourceName?.replace(/\.[^.]+$/, "").trim() ||
+      "项目资料",
+  );
+  const [packType, setPackType] = useState(
+    () => initialSaveDraft?.packType?.trim() || "brand-product",
+  );
+  const sourceFileName =
+    pageParams?.saveDraft?.sourceName?.trim() || DEFAULT_SOURCE_FILE_NAME;
+  const [sourceText, setSourceText] = useState(
+    () => initialSaveDraft?.sourceText.trim() ?? "",
+  );
+  const [saveTargetPackName, setSaveTargetPackName] = useState(
+    () => pageParams?.selectedPackName?.trim() ?? "",
+  );
+  const activeViewRef = useRef(activeView);
+  const hasSaveDraftRef = useRef(Boolean(pageParams?.saveDraft));
+  const saveTargetPackNameRef = useRef(saveTargetPackName);
+  const [useDuringCreationByDefault, setUseDuringCreationByDefault] =
+    useState(false);
   const [knowledgeComposerOpen, setKnowledgeComposerOpen] = useState(false);
   const [composerPersonaPackName, setComposerPersonaPackName] = useState<
     string | null
@@ -187,15 +204,6 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
     [packs, selectedPack, selectedPackName],
   );
 
-  const pendingPacks = useMemo(
-    () =>
-      packs.filter(
-        (pack) =>
-          pack.metadata.status !== "ready" &&
-          pack.metadata.status !== "archived",
-      ),
-    [packs],
-  );
   const readyPacks = useMemo(
     () => packs.filter((pack) => pack.metadata.status === "ready"),
     [packs],
@@ -260,10 +268,49 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
       return;
     }
 
-    setWorkingDirInput(normalizedFromParams);
     setWorkingDir(normalizedFromParams);
     persistWorkingDir(normalizedFromParams);
   }, [pageParams?.workingDir, workingDir]);
+
+  useEffect(() => {
+    const nextView = pageParams?.initialView;
+    if (!nextView) {
+      return;
+    }
+
+    setActiveView(nextView);
+  }, [pageParams?.initialView]);
+
+  useEffect(() => {
+    const nextSelectedPackName = pageParams?.selectedPackName?.trim();
+    if (!nextSelectedPackName) {
+      return;
+    }
+
+    setSelectedPackName(nextSelectedPackName);
+    setSaveTargetPackName(nextSelectedPackName);
+  }, [pageParams?.selectedPackName]);
+
+  useEffect(() => {
+    const draft = pageParams?.saveDraft;
+    if (!draft) {
+      return;
+    }
+
+    const nextSourceText = draft.sourceText.trim();
+    const nextDescription =
+      draft.description?.trim() ||
+      draft.sourceName?.replace(/\.[^.]+$/, "").trim() ||
+      "对话结果资料";
+    setSourceText(nextSourceText);
+    setPackDescription(nextDescription);
+    setPackNameInput(
+      pageParams?.selectedPackName?.trim() ||
+        resolveDraftPackNameInput(nextDescription, draft.sourceName),
+    );
+    setPackType(draft.packType?.trim() || "custom");
+    setSaveTargetPackName(pageParams?.selectedPackName?.trim() || "");
+  }, [pageParams?.saveDraft, pageParams?.selectedPackName]);
 
   useEffect(() => {
     if (workingDir || pageParams?.workingDir?.trim()) {
@@ -286,8 +333,6 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
         }
 
         setSelectedProjectId(project.id);
-        setSelectedProjectName(project.name);
-        setWorkingDirInput(nextWorkingDir);
         setWorkingDir(nextWorkingDir);
         persistWorkingDir(nextWorkingDir);
       })
@@ -322,7 +367,6 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
         }
 
         setSelectedProjectId(project.id);
-        setSelectedProjectName(project.name);
       })
       .catch(() => {
         // 路径可能来自排障设置；解析不到项目时继续允许手动管理资料。
@@ -349,9 +393,15 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
         }
         setSelectedPack(pack);
         setDetailStatus("ready");
-        setPackNameInput(pack.metadata.name);
-        setPackDescription(pack.metadata.description);
-        setPackType(pack.metadata.type || "personal-ip");
+        const shouldPreserveSaveDraftForm =
+          activeViewRef.current === "save" &&
+          hasSaveDraftRef.current &&
+          !saveTargetPackNameRef.current;
+        if (!shouldPreserveSaveDraftForm && activeViewRef.current !== "import") {
+          setPackNameInput(pack.metadata.name);
+          setPackDescription(pack.metadata.description);
+          setPackType(pack.metadata.type || "personal-ip");
+        }
       })
       .catch((error) => {
         if (cancelled) {
@@ -365,17 +415,6 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
       cancelled = true;
     };
   }, [selectedPackName, workingDir]);
-
-  const handleApplyWorkingDir = useCallback(() => {
-    const normalized = workingDirInput.trim();
-    setSelectedProjectId(null);
-    setSelectedProjectName("");
-    setWorkingDir(normalized);
-    persistWorkingDir(normalized);
-    setSelectedPackName("");
-    setSelectedPack(null);
-    void refreshCatalog(normalized);
-  }, [refreshCatalog, workingDirInput]);
 
   const handleProjectChange = useCallback(
     async (projectId: string) => {
@@ -391,8 +430,6 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
         }
 
         setSelectedProjectId(projectId);
-        setSelectedProjectName(project?.name ?? "");
-        setWorkingDirInput(nextWorkingDir);
         setWorkingDir(nextWorkingDir);
         persistWorkingDir(nextWorkingDir);
         setSelectedPackName("");
@@ -415,9 +452,14 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
   );
 
   const runImportSource = useCallback(
-    async (statusKey: string): Promise<KnowledgePackDetail | null> => {
+    async (
+      statusKey: string,
+      packNameOverride?: string,
+    ): Promise<KnowledgePackDetail | null> => {
       const normalizedWorkingDir = workingDir.trim();
-      const normalizedPackName = normalizePackNameInput(packNameInput);
+      const normalizedPackName = normalizePackNameInput(
+        packNameOverride || packNameInput,
+      );
       if (!normalizedWorkingDir) {
         setNotice("请先选择项目");
         return null;
@@ -446,7 +488,7 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
         setSelectedPackName(response.pack.metadata.name);
         setPackNameInput(response.pack.metadata.name);
         setSourceText("");
-        setNotice("资料已导入，进入待确认流程");
+        setNotice("资料已保存，确认后才会用于创作");
         await refreshCatalog(normalizedWorkingDir);
         return response.pack;
       } catch (error) {
@@ -485,8 +527,8 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
         setSelectedPackName(response.pack.metadata.name);
         setNotice(
           response.warnings.length > 0
-            ? "已整理，下一步请检查引用摘要、缺口和风险边界"
-            : "引用摘要已生成，等待人工确认",
+            ? "已整理，下一步请检查完整资料文档、缺口和风险边界"
+            : "资料已整理，等待你确认",
         );
         await refreshCatalog(workingDir);
         return response.pack;
@@ -499,14 +541,6 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
     },
     [refreshCatalog, workingDir],
   );
-
-  const handleCompile = useCallback(async () => {
-    if (!selectedPackName) {
-      setNotice("请先选择资料");
-      return;
-    }
-    await compileByName(selectedPackName);
-  }, [compileByName, selectedPackName]);
 
   const handleStartWizardCompile = useCallback(async () => {
     let packName = selectedPackName || normalizePackNameInput(packNameInput);
@@ -524,7 +558,7 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
     const compiled = await compileByName(packName);
     if (compiled) {
       setActiveView("detail");
-      setDetailTab("runtime");
+      setDetailTab("overview");
     }
   }, [
     compileByName,
@@ -533,27 +567,6 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
     selectedPackName,
     sourceText,
   ]);
-
-  const handleSetDefaultForPack = useCallback(
-    async (packName = selectedPackName) => {
-      if (!workingDir || !packName) {
-        return;
-      }
-
-      setActionStatus("default");
-      setNotice(null);
-      try {
-        await setDefaultKnowledgePack(workingDir, packName);
-        setNotice("已设为当前项目默认资料");
-        await refreshCatalog(workingDir);
-      } catch (error) {
-        setNotice(getErrorMessage(error, "设置默认资料失败"));
-      } finally {
-        setActionStatus(null);
-      }
-    },
-    [refreshCatalog, selectedPackName, workingDir],
-  );
 
   const handleUpdateStatus = useCallback(
     async (status: KnowledgePackStatus) => {
@@ -573,9 +586,9 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
         setSelectedPackName(response.pack.metadata.name);
         setNotice(
           status === "ready"
-            ? "资料已人工确认，可以设为默认或用于生成"
+            ? "资料已确认可用，可以用于创作"
             : response.clearedDefault
-              ? "资料已归档，并已清理当前项目默认标记"
+              ? "资料已归档，并已清理默认使用标记"
               : "资料已归档",
         );
         await refreshCatalog(workingDir);
@@ -590,46 +603,6 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
     },
     [refreshCatalog, selectedPackName, workingDir],
   );
-
-  const handleOpenBuilder = useCallback(() => {
-    const normalizedPackName =
-      selectedPackName || normalizePackNameInput(packNameInput);
-    if (!workingDir || !normalizedPackName) {
-      setNotice("请先选择项目和资料名称");
-      return;
-    }
-
-    const prompt = buildKnowledgeBuilderPrompt({
-      workingDir,
-      packName: normalizedPackName,
-      packType: selectedPack?.metadata.type ?? packType,
-      description: selectedPack?.metadata.description ?? packDescription,
-    });
-    const requestMetadata = buildKnowledgeBuilderMetadata({
-      workingDir,
-      packName: normalizedPackName,
-      source: "knowledge_page",
-      packType: selectedPack?.metadata.type ?? packType,
-    });
-
-    onNavigate?.("agent", {
-      agentEntry: "claw",
-      projectId: selectedProjectId ?? undefined,
-      initialUserPrompt: prompt,
-      initialRequestMetadata: requestMetadata,
-      initialAutoSendRequestMetadata: requestMetadata,
-      autoRunInitialPromptOnMount: true,
-    });
-  }, [
-    onNavigate,
-    packDescription,
-    packNameInput,
-    packType,
-    selectedPack,
-    selectedPackName,
-    selectedProjectId,
-    workingDir,
-  ]);
 
   const handleOpenAgentKnowledgeHub = useCallback(() => {
     onNavigate?.("agent", {
@@ -747,7 +720,7 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
     onNavigate?.("agent", {
       agentEntry: "claw",
       projectId: selectedProjectId ?? undefined,
-      initialUserPrompt: "请基于当前项目资料生成内容",
+      initialUserPrompt: "请基于当前项目资料创作内容",
       initialRequestMetadata: requestMetadata,
       initialKnowledgePackSelection: {
         enabled: true,
@@ -770,720 +743,683 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
     workingDir,
   ]);
 
-  const getCompanionLabelsForPack = useCallback(
-    (packName: string) =>
-      resolveKnowledgeRequestCompanionPacks({
-        primaryPackName: packName,
-        packs,
-      }).map((companionPack) => {
-        const pack = packs.find(
-          (candidate) => candidate.metadata.name === companionPack.name,
-        );
-        return pack ? getPackTitle(pack) : companionPack.name;
-      }),
-    [packs],
-  );
-
-  const selectedPackCompanionLabels = useMemo(() => {
-    if (!selectedSummary) {
-      return [];
-    }
-    return getCompanionLabelsForPack(selectedSummary.metadata.name);
-  }, [getCompanionLabelsForPack, selectedSummary]);
-
-  const packMetrics = selectedSummary ? buildPackMetrics(selectedSummary) : [];
   const actionBusy = Boolean(actionStatus);
-  const selectedPackReady = selectedSummary?.metadata.status === "ready";
-  const sourceBackedPackCount = packs.filter(
-    (pack) => pack.sourceCount > 0,
-  ).length;
-  const compiledPackCount = packs.filter(
-    (pack) => pack.compiledCount > 0,
-  ).length;
+
+  const isProblemStatus = (status?: string | null) =>
+    status === "missing" ||
+    status === "partial" ||
+    status === "disputed" ||
+    status === "stale";
+  const isFailedStatus = (status?: string | null) =>
+    status === "failed" || status === "error";
   const readyPackCount = packs.filter(
     (pack) => pack.metadata.status === "ready",
   ).length;
+  const reviewPackCount = packs.filter(
+    (pack) =>
+      pack.metadata.status !== "ready" &&
+      pack.metadata.status !== "archived" &&
+      !isProblemStatus(pack.metadata.status) &&
+      !isFailedStatus(pack.metadata.status),
+  ).length;
+  const missingPackCount = packs.filter((pack) =>
+    isProblemStatus(pack.metadata.status),
+  ).length;
+  const pendingPacksForAction = packs.filter(
+    (pack) =>
+      pack.metadata.status !== "ready" && pack.metadata.status !== "archived",
+  );
   const defaultPersonaPack =
     readyPersonaPacks.find((pack) => pack.defaultForWorkspace) ??
     readyPersonaPacks[0] ??
     null;
-  const defaultDataPack =
-    readyDataPacks.find((pack) => pack.defaultForWorkspace) ??
-    readyDataPacks[0] ??
-    null;
+  const defaultDataPacks = readyDataPacks.slice(0, 3);
+  const currentUseText =
+    readyPackCount > 0
+      ? [
+          defaultPersonaPack ? getPackTitle(defaultPersonaPack) : null,
+          ...defaultDataPacks.map(getPackTitle),
+        ]
+          .filter(Boolean)
+          .join(" + ") || "可手动选择项目资料"
+      : "还没有确认可用的资料";
   const composerSelectedCount =
     (composerPersonaPackName ? 1 : 0) + composerDataPackNames.length;
+
+  useEffect(() => {
+    activeViewRef.current = activeView;
+    hasSaveDraftRef.current = Boolean(pageParams?.saveDraft);
+    saveTargetPackNameRef.current = saveTargetPackName;
+  }, [activeView, pageParams?.saveDraft, saveTargetPackName]);
+  const handleSaveDraftToMaterials = async () => {
+    const targetPackName = saveTargetPackName || packNameInput;
+    const saved = await runImportSource("save", targetPackName);
+    if (saved) {
+      setSaveTargetPackName(saved.metadata.name);
+      setActiveView("save");
+    }
+  };
+
+  const renderMaterialStatus = (pack: KnowledgePackSummary) => {
+    if (pack.metadata.status === "ready") {
+      return "已可用";
+    }
+    if (isFailedStatus(pack.metadata.status)) {
+      return "整理失败";
+    }
+    if (isProblemStatus(pack.metadata.status)) {
+      return "需要补充";
+    }
+    return "待确认";
+  };
+
+  const renderPackActionLabel = (pack: KnowledgePackSummary) => {
+    if (pack.metadata.status === "ready") {
+      return "用于创作";
+    }
+    if (isProblemStatus(pack.metadata.status)) {
+      return "补充资料";
+    }
+    if (isFailedStatus(pack.metadata.status)) {
+      return "重新整理";
+    }
+    return "去确认";
+  };
+
+  const statusCards = [
+    {
+      title: "没有资料",
+      description: "这个项目还没有资料。",
+      action: "整理新资料",
+      tone: "slate",
+      icon: FolderOpen,
+      onClick: () => setActiveView("import"),
+    },
+    {
+      title: "已可用",
+      description: "可以用于创作。",
+      action: "用于创作",
+      tone: "emerald",
+      icon: Check,
+      onClick: () => handleOpenKnowledgeComposer(),
+    },
+    {
+      title: "待确认",
+      description: "需要你看一下。",
+      action: "去确认",
+      tone: "amber",
+      icon: ClipboardCheck,
+      onClick: () => {
+        const firstPending = pendingPacksForAction[0];
+        if (firstPending) {
+          openPack(firstPending.metadata.name, "overview");
+        } else {
+          setActiveView("overview");
+        }
+      },
+    },
+    {
+      title: "需要补充",
+      description: "缺少关键信息。",
+      action: "补充资料",
+      tone: "rose",
+      icon: AlertTriangle,
+      onClick: () => setActiveView("import"),
+    },
+    {
+      title: "整理失败",
+      description: "这次没整理成功。",
+      action: "重新整理",
+      tone: "red",
+      icon: RefreshCw,
+      onClick: () => setActiveView("import"),
+    },
+  ];
+
   return (
-    <main className="flex h-full min-h-0 flex-1 overflow-auto bg-[linear-gradient(180deg,#f8fafc_0%,#eef7f2_100%)]">
-      <div className="mx-auto flex min-h-full w-full max-w-[1440px] flex-col gap-5 px-6 py-5">
-        <header className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-950/5">
+    <main className="lime-workbench-theme-scope flex h-full min-h-0 flex-1 overflow-auto bg-[image:var(--lime-stage-surface)]">
+      <div className="mx-auto flex min-h-full w-full max-w-[1480px] flex-col gap-5 px-6 py-6">
+        {activeView === "overview" ? (
+          <header className="rounded-3xl border border-slate-200/90 bg-white p-5 shadow-sm shadow-slate-950/5">
           <div className="flex flex-wrap items-start justify-between gap-5">
             <div className="min-w-0 max-w-3xl">
-              <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                Knowledge v2 · Skills-first
-              </span>
-              <h1 className="mt-3 text-2xl font-semibold text-slate-950">
-                Agent Knowledge 工作台
+              <h1 className="text-2xl font-semibold text-slate-900">
+                让 Lime 记住这个项目
               </h1>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                Agent Skills 负责怎么生产和维护知识；Agent Knowledge
-                负责知识产物长什么样，以及如何安全进入上下文。
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                把访谈、产品介绍、运营规则整理成可用资料，之后创作时自动用上。
               </p>
             </div>
-
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={handleOpenAgentKnowledgeHub}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
               >
                 <MessageSquareText className="h-4 w-4" />
-                回到 Agent 整理
+                回到创作
               </button>
-              {selectedPackReady ? (
-                <button
-                  type="button"
-                  onClick={() => handleOpenKnowledgeComposer()}
-                  className="inline-flex h-10 items-center gap-2 rounded-2xl border border-slate-900 bg-slate-900 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
-                >
-                  <MessageSquareText className="h-4 w-4" />
-                  选择用于生成
-                </button>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="mt-5 grid gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="grid gap-3 md:grid-cols-3">
-              {[
-                {
-                  title: "Builder Skills",
-                  description: "个人 IP、品牌产品、内容运营等 Skill 生产线",
-                  value: `${PACK_TYPES.length} 类`,
-                  icon: Sparkles,
-                },
-                {
-                  title: "Knowledge Packs",
-                  description: "沉淀后的知识产物，先审阅再启用",
-                  value: `${packs.length} 份`,
-                  icon: PackageCheck,
-                },
-                {
-                  title: "安全上下文",
-                  description: "按 1 persona + N data 组合进入 Agent",
-                  value: `${readyPersonaPacks.length} + ${readyDataPacks.length}`,
-                  icon: ShieldCheck,
-                },
-              ].map((item) => {
-                const Icon = item.icon;
-                return (
-                  <div
-                    key={item.title}
-                    className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-xs font-semibold text-slate-500">
-                        {item.title}
-                      </div>
-                      <Icon className="h-4 w-4 text-emerald-600" />
-                    </div>
-                    <div className="mt-2 text-2xl font-semibold text-slate-950">
-                      {item.value}
-                    </div>
-                    <p className="mt-1 text-xs leading-5 text-slate-500">
-                      {item.description}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-
-            <section className="rounded-[22px] border border-emerald-200 bg-emerald-50 px-4 py-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-semibold text-emerald-950">
-                    当前项目
-                    {selectedProjectName ? (
-                      <span className="ml-2 text-emerald-700">
-                        {selectedProjectName}
-                      </span>
-                    ) : null}
-                  </h2>
-                  <p className="mt-1 text-xs leading-5 text-emerald-800">
-                    资料会保存到当前项目，并作为该项目的默认知识上下文候选。
-                  </p>
-                </div>
-                <FolderOpen className="h-4 w-4 shrink-0 text-emerald-700" />
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <ProjectSelector
-                  value={selectedProjectId}
-                  onChange={handleProjectChange}
-                  placeholder="选择项目"
-                  dropdownSide="bottom"
-                  dropdownAlign="end"
-                  enableManagement
-                  density="compact"
-                  skipDefaultWorkspaceReadyCheck
-                  autoSelectFallback={false}
-                />
-                <button
-                  type="button"
-                  onClick={() => setActiveView("import")}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-emerald-700 bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-600"
-                >
-                  <Upload className="h-4 w-4" />
-                  启动 Builder
-                </button>
-              </div>
-            </section>
-          </div>
-
-          <KnowledgeTroubleshootingPanel
-            open={manualPathOpen}
-            workingDir={workingDir}
-            workingDirInput={workingDirInput}
-            onToggle={() => setManualPathOpen((open) => !open)}
-            onWorkingDirInputChange={setWorkingDirInput}
-            onApplyWorkingDir={handleApplyWorkingDir}
-          />
-
-          {notice ? (
-            <div className="mt-3 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-700">
-              {notice}
-            </div>
-          ) : null}
-        </header>
-
-        <nav className="grid gap-2 rounded-[22px] border border-slate-200 bg-white p-2 shadow-sm md:grid-cols-3">
-          {VIEW_TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveView(tab.id)}
-              className={cn(
-                "rounded-lg px-3 py-2.5 text-left transition",
-                activeView === tab.id
-                  ? "bg-slate-900 text-white shadow-sm"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-              )}
-            >
-              <div className="text-sm font-medium">{tab.label}</div>
-              <div
-                className={cn(
-                  "mt-0.5 text-xs",
-                  activeView === tab.id ? "text-slate-300" : "text-slate-500",
-                )}
+              <button
+                type="button"
+                onClick={() => setActiveView("import")}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-emerald-700 bg-emerald-700 px-4 text-sm font-medium text-white transition hover:border-emerald-800 hover:bg-emerald-800"
               >
-                {tab.description}
-              </div>
-            </button>
-          ))}
-        </nav>
+                <Upload className="h-4 w-4" />
+                整理新资料
+              </button>
+            </div>
+          </div>
 
-        {activeView === "overview" ? (
-          <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
-            <div className="space-y-5">
-              <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-950/5">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-semibold text-emerald-700">
-                      Knowledge v2 上下文组合
-                    </p>
-                    <h2 className="mt-1 text-lg font-semibold text-slate-950">
-                      1 persona + N data
-                    </h2>
-                    <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                      persona 决定表达语境，data 提供事实、SOP、运营节奏和边界；只有已确认资料才会进入
-                      Agent 上下文。
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      selectedPackReady
-                        ? handleOpenKnowledgeComposer()
-                        : handleOpenAgentKnowledgeHub()
-                    }
-                    className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-slate-900 bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
+          <div className="mt-5 grid overflow-hidden rounded-3xl border border-slate-200 bg-slate-50/70 md:grid-cols-4">
+            {[
+              {
+                title: "可用于创作",
+                value: readyPackCount,
+                unit: "份",
+                className: "text-emerald-700",
+                iconClassName: "border-emerald-200 bg-emerald-50 text-emerald-700",
+                icon: Check,
+              },
+              {
+                title: "待确认",
+                value: reviewPackCount,
+                unit: "份",
+                className: "text-emerald-700",
+                iconClassName: "border-emerald-200 bg-emerald-50 text-emerald-700",
+                icon: ClipboardCheck,
+              },
+              {
+                title: "需要补充",
+                value: missingPackCount,
+                unit: "份",
+                className: "text-amber-700",
+                iconClassName: "border-amber-200 bg-amber-50 text-amber-700",
+                icon: AlertTriangle,
+              },
+              {
+                title: "本轮创作会使用",
+                value: currentUseText,
+                unit: "",
+                className: "text-emerald-700",
+                iconClassName: "border-emerald-200 bg-emerald-50 text-emerald-700",
+                icon: FileText,
+              },
+            ].map((item, index) => {
+              const Icon = item.icon;
+              return (
+                <section
+                  key={item.title}
+                  className={cn(
+                    "flex min-w-0 items-center gap-3 px-5 py-4",
+                    index > 0 && "border-t border-slate-200 md:border-l md:border-t-0",
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border",
+                      item.iconClassName,
+                    )}
                   >
-                    <MessageSquareText className="h-4 w-4" />
-                    {selectedPackReady ? "选择本轮上下文" : "先去 Agent 整理"}
-                  </button>
-                </div>
-
-                <div className="mt-5 grid gap-3 lg:grid-cols-2">
-                  <div className="rounded-[22px] border border-emerald-200 bg-emerald-50 p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <h3 className="text-sm font-semibold text-emerald-950">
-                        Persona 人设层
-                      </h3>
-                      <span className="rounded-full border border-emerald-200 bg-white px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                        {readyPersonaPacks.length} 份可用
-                      </span>
-                    </div>
-                    <p className="mt-2 text-sm leading-6 text-emerald-800">
-                      {defaultPersonaPack
-                        ? `默认使用：${getPackTitle(defaultPersonaPack)}`
-                        : "还没有已确认 persona；个人 IP 或品牌人设资料确认后会显示在这里。"}
-                    </p>
+                    <Icon className="h-5 w-5" />
                   </div>
-
-                  <div className="rounded-[22px] border border-sky-200 bg-sky-50 p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <h3 className="text-sm font-semibold text-sky-950">
-                        Data 运营资料层
-                      </h3>
-                      <span className="rounded-full border border-sky-200 bg-white px-2.5 py-1 text-xs font-semibold text-sky-700">
-                        {readyDataPacks.length} 份可用
-                      </span>
+                  <div className="min-w-0">
+                    <div className="text-sm text-slate-600">{item.title}</div>
+                    <div
+                      className={cn(
+                        "mt-1 truncate text-lg font-semibold",
+                        item.className,
+                      )}
+                    >
+                      {typeof item.value === "number"
+                        ? `${item.value} ${item.unit}`
+                        : item.value}
                     </div>
-                    <p className="mt-2 text-sm leading-6 text-sky-800">
-                      {defaultDataPack
-                        ? `可叠加：${getPackTitle(defaultDataPack)}${
-                            readyDataPacks.length > 1
-                              ? ` 等 ${readyDataPacks.length} 份`
-                              : ""
-                          }`
-                        : "品牌产品、内容运营、私域、直播、活动和增长策略等资料确认后会进入 data 层。"}
-                    </p>
-                  </div>
-                </div>
-              </section>
-
-              <KnowledgeStatusRail
-                sourceCount={sourceBackedPackCount}
-                compiledCount={compiledPackCount}
-                readyCount={readyPackCount}
-              />
-
-              {pendingPacks.length > 0 ? (
-                <section className="rounded-[24px] border border-amber-200 bg-amber-50 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h2 className="text-base font-semibold text-amber-950">
-                        审阅闸门：等你确认的资料
-                      </h2>
-                      <p className="mt-1 text-sm text-amber-800">
-                        这些 Knowledge Pack 还不会进入 Agent 上下文，请先检查缺口和风险提醒。
-                      </p>
-                    </div>
-                    <span className="rounded-full border border-amber-200 bg-white px-2.5 py-1 text-xs font-medium text-amber-700">
-                      {pendingPacks.length} 份
-                    </span>
-                  </div>
-                  <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                    {pendingPacks.map((pack) => (
-                      <button
-                        key={pack.metadata.name}
-                        type="button"
-                        onClick={() => openPack(pack.metadata.name, "risks")}
-                        className="rounded-[18px] border border-amber-200 bg-white px-3 py-3 text-left transition hover:bg-amber-50"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="min-w-0 truncate text-sm font-semibold text-slate-900">
-                            {getPackTitle(pack)}
-                          </span>
-                          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
-                        </div>
-                        <p className="mt-2 line-clamp-2 text-xs leading-5 text-amber-800">
-                          {sanitizeKnowledgePreview(pack.preview) ||
-                            "请检查后确认。"}
-                        </p>
-                      </button>
-                    ))}
                   </div>
                 </section>
-              ) : null}
+              );
+            })}
+          </div>
+        </header>
+        ) : null}
 
-              <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/5">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-base font-semibold text-slate-950">
-                      Knowledge Pack 清单
-                    </h2>
-                    <p className="mt-1 text-sm text-slate-500">
-                      这里不是文件夹管理器，而是知识产物目录：检查状态、确认边界、选择用于生成。
-                    </p>
-                  </div>
-                  {catalogStatus === "loading" ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
-                  ) : null}
+        {notice ? (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+            {notice}
+          </div>
+        ) : null}
+
+        {activeView === "overview" ? (
+          <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+            <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-950/5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-950">
+                    项目资料清单
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    检查每份资料状态，打开完整文档，或选择本轮创作要参考的内容。
+                  </p>
                 </div>
-                <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                  {packs.length === 0 && catalogStatus !== "loading" ? (
-                    <div className="lg:col-span-2 rounded-[22px] border border-dashed border-slate-200 bg-slate-50 p-4">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <h3 className="text-sm font-semibold text-slate-950">
-                            还没有 Knowledge Pack
-                          </h3>
-                          <p className="mt-1 text-sm leading-6 text-slate-500">
-                            先把访谈稿、SOP、产品资料或运营复盘交给 Builder
-                            Skill；生成的 Knowledge Pack 人工确认后再用于生成。
+                {catalogStatus === "loading" ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+                ) : null}
+              </div>
+
+              <div className="mt-5 overflow-hidden rounded-[20px] border border-slate-200">
+                <div className="grid grid-cols-[minmax(0,1.4fr)_160px_220px] bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500">
+                  <span>资料名称</span>
+                  <span>状态</span>
+                  <span>操作</span>
+                </div>
+                {packs.length === 0 && catalogStatus !== "loading" ? (
+                  <div className="p-5">
+                    <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50 p-5">
+                      <h3 className="text-base font-semibold text-slate-950">
+                        这个项目还没有资料
+                      </h3>
+                      <p className="mt-2 text-sm leading-6 text-slate-500">
+                        先上传访谈、介绍、规则或复盘，Lime 会整理成可确认的项目资料。
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setActiveView("import")}
+                        className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-full border border-emerald-700 bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:border-emerald-800 hover:bg-emerald-800"
+                      >
+                        <Upload className="h-4 w-4" />
+                        整理新资料
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  packs.map((pack) => (
+                    <article
+                      key={pack.metadata.name}
+                      className="grid grid-cols-[minmax(0,1.4fr)_160px_220px] items-center gap-3 border-t border-slate-100 px-4 py-4"
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div
+                          className={cn(
+                            "flex h-11 w-11 shrink-0 items-center justify-center rounded-full border",
+                            pack.metadata.status === "ready"
+                              ? "border-emerald-100 bg-emerald-50 text-emerald-700"
+                              : isProblemStatus(pack.metadata.status)
+                                ? "border-rose-100 bg-rose-50 text-rose-700"
+                                : "border-amber-100 bg-amber-50 text-amber-700",
+                          )}
+                        >
+                          <FileText className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="truncate text-base font-semibold text-slate-950">
+                            {getPackTitle(pack)}
+                          </div>
+                          <p className="mt-1 line-clamp-1 text-xs text-slate-500">
+                            {sanitizeKnowledgePreview(pack.preview) ||
+                              "等待整理口吻、事实、规则和边界。"}
                           </p>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={handleOpenAgentKnowledgeHub}
-                            className="inline-flex h-9 items-center justify-center gap-2 rounded-2xl border border-slate-900 bg-slate-900 px-3 text-xs font-semibold text-white transition hover:bg-slate-800"
-                          >
-                            <MessageSquareText className="h-3.5 w-3.5" />
-                            回到 Agent 整理
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setActiveView("import")}
-                            className="inline-flex h-9 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
-                          >
-                            <Upload className="h-3.5 w-3.5" />
-                            启动 Builder
-                          </button>
-                        </div>
                       </div>
-                      <div className="mt-4 grid gap-2 md:grid-cols-3">
-                        {[
-                          [
-                            "从 Agent 启动",
-                            "在输入框选择项目资料入口，让对应 Builder Skill 整理资料。",
-                            MessageSquareText,
-                          ],
-                          [
-                            "选择资料类型",
-                            "个人 IP、品牌产品、内容运营、私域、直播、活动和增长策略走不同 Skill。",
-                            FolderOpen,
-                          ],
-                          [
-                            "确认后入上下文",
-                            "只有人工确认的 Knowledge Pack 才能被 Resolver 选入上下文。",
-                            ClipboardCheck,
-                          ],
-                        ].map(([title, description, GuideIcon]) => {
-                          const Icon = GuideIcon as typeof MessageSquareText;
-                          return (
-                            <div
-                              key={title as string}
-                              className="rounded-2xl border border-slate-200 bg-white px-3 py-3"
-                            >
-                              <div className="flex items-center gap-2 text-xs font-semibold text-slate-900">
-                                <Icon className="h-3.5 w-3.5 text-emerald-600" />
-                                {title as string}
-                              </div>
-                              <p className="mt-2 text-xs leading-5 text-slate-500">
-                                {description as string}
-                              </p>
-                            </div>
-                          );
-                        })}
+                      <StatusPill status={pack.metadata.status} />
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openPack(pack.metadata.name, "overview")}
+                          className="inline-flex h-9 items-center justify-center rounded-full border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                        >
+                          打开
+                        </button>
+                        <button
+                          type="button"
+                          disabled={actionBusy || (pack.metadata.status !== "ready" && renderPackActionLabel(pack) === "用于创作")}
+                          onClick={() => {
+                            if (pack.metadata.status === "ready") {
+                              handleOpenKnowledgeComposer(pack.metadata.name);
+                            } else if (isFailedStatus(pack.metadata.status)) {
+                              void compileByName(pack.metadata.name);
+                            } else if (isProblemStatus(pack.metadata.status)) {
+                              setPackNameInput(pack.metadata.name);
+                              setActiveView("import");
+                            } else {
+                              openPack(pack.metadata.name, "overview");
+                            }
+                          }}
+                          className={cn(
+                            "inline-flex h-9 items-center justify-center rounded-2xl px-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
+                            pack.metadata.status === "ready"
+                              ? "border border-emerald-700 bg-emerald-700 text-white hover:border-emerald-800 hover:bg-emerald-800"
+                              : isProblemStatus(pack.metadata.status)
+                                ? "border border-rose-200 bg-white text-rose-700 hover:bg-rose-50"
+                                : "border border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50",
+                          )}
+                        >
+                          {renderPackActionLabel(pack)}
+                        </button>
                       </div>
-                    </div>
-                  ) : (
-                    packs.map((pack) => (
-                      <KnowledgePackCard
-                        key={pack.metadata.name}
-                        pack={pack}
-                        actionBusy={actionBusy}
-                        companionLabels={getCompanionLabelsForPack(
-                          pack.metadata.name,
-                        )}
-                        onOpen={(packName) => openPack(packName)}
-                        onSetDefault={handleSetDefaultForPack}
-                        onUse={handleOpenKnowledgeComposer}
-                      />
-                    ))
-                  )}
-                </div>
-              </section>
+                    </article>
+                  ))
+                )}
+              </div>
             </div>
 
             <aside className="space-y-4">
-              <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/5">
-                <div className="flex items-center gap-2">
-                  <MessageSquareText className="h-4 w-4 text-emerald-600" />
-                  <h2 className="text-sm font-semibold text-slate-950">
-                    Skills 生产线
-                  </h2>
-                </div>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  资料整理和维护回到 Agent 执行；页面只负责查看产物、审阅状态和上下文启用。
-                </p>
-                <button
-                  type="button"
-                  onClick={handleOpenAgentKnowledgeHub}
-                  className="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-2xl border border-slate-900 bg-slate-900 px-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-                >
-                  <MessageSquareText className="h-4 w-4" />
-                  回到 Agent 整理
-                </button>
-              </section>
-
-              <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm shadow-slate-950/5">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-sm font-semibold text-slate-950">
-                      v2 闭环概览
-                    </h2>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {catalogStatus === "ready"
-                        ? `${packs.length} 份 Knowledge Pack`
-                        : "读取中"}
-                    </p>
-                  </div>
-                  <PackageCheck className="h-4 w-4 text-emerald-600" />
-                </div>
-                <div className="mt-4 grid grid-cols-2 gap-2">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
-                    <div className="text-xs text-slate-500">审阅中</div>
-                    <div className="mt-1 text-lg font-semibold text-slate-900">
-                      {pendingPacks.length}
+              <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-950/5">
+                <h2 className="text-lg font-semibold text-slate-950">
+                  接下来你可以
+                </h2>
+                <div className="mt-5 space-y-0">
+                  {[
+                    {
+                      index: "1",
+                      title: "整理新资料",
+                      description: "上传访谈、介绍、规则等资料，Lime 帮你提炼关键信息。",
+                      icon: FileText,
+                    },
+                    {
+                      index: "2",
+                      title: "确认待审资料",
+                      description: "查看整理结果，确认无误后标记为可用。",
+                      icon: ClipboardCheck,
+                    },
+                    {
+                      index: "3",
+                      title: "选择创作时使用的资料",
+                      description: "挑选本轮创作会用到的资料，Lime 会在创作中自动参考。",
+                      icon: Check,
+                    },
+                  ].map((item, stepIndex, items) => {
+                    const Icon = item.icon;
+                    return (
+                    <div key={item.index} className="relative flex gap-4 pb-6 last:pb-0">
+                      {stepIndex < items.length - 1 ? (
+                        <div className="absolute left-4 top-9 h-[calc(100%-2.25rem)] border-l border-dashed border-emerald-200" />
+                      ) : null}
+                      <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-sm font-semibold text-emerald-700">
+                        {item.index}
+                      </div>
+                      <div className="grid min-w-0 grid-cols-[48px_minmax(0,1fr)] gap-3">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+                          <Icon className="h-6 w-6" />
+                        </div>
+                        <div>
+                          <div className="text-base font-semibold text-slate-950">
+                            {item.title}
+                          </div>
+                          <p className="mt-1 text-sm leading-6 text-slate-500">
+                            {item.description}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
-                    <div className="text-xs text-slate-500">可入上下文</div>
-                    <div className="mt-1 text-lg font-semibold text-slate-900">
-                      {
-                        packs.filter((pack) => pack.metadata.status === "ready")
-                          .length
-                      }
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
-                  <div className="text-xs font-semibold text-slate-700">
-                    运营类资料覆盖
-                  </div>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">
-                    内容运营、私域 / 社群运营、直播运营、活动 / Campaign、增长策略都按
-                    data pack 接入，不再只围绕个人 IP。
-                  </p>
+                    );
+                  })}
                 </div>
               </section>
             </aside>
+
+            <section className="rounded-[20px] border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm leading-6 text-emerald-800 xl:col-span-2">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <ListChecks className="mt-0.5 h-5 w-5 shrink-0" />
+                  <p>
+                    资料只有确认后才会用于创作，你可以随时打开完整文档修改。
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveView("states")}
+                  className="shrink-0 text-sm font-semibold text-emerald-800 underline-offset-4 hover:underline"
+                >
+                  查看状态说明
+                </button>
+              </div>
+            </section>
           </section>
         ) : null}
 
         {activeView === "import" ? (
-          <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-950/5">
-            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-5">
+          <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm shadow-slate-950/5">
+            <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h2 className="text-xl font-semibold text-slate-950">
-                  Builder Skills 整理台
+                <p className="text-sm text-slate-500">项目资料 / 整理新资料</p>
+                <h2 className="mt-2 text-2xl font-semibold text-slate-950">
+                  整理新资料
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  选择一类 Builder Skill，把原始材料整理成 Knowledge Pack；这里保留手动补充入口，但生产逻辑仍回到 Skills。
+                  选择资料用途，添加原始资料，Lime 会生成一份待确认的完整资料文档。
                 </p>
               </div>
               <button
                 type="button"
-                onClick={handleStartWizardCompile}
-                disabled={actionBusy}
-                className="inline-flex h-10 items-center gap-2 rounded-2xl border border-slate-900 bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                onClick={() => setActiveView("overview")}
+                className="inline-flex h-10 items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
               >
-                {actionStatus === "compile" ||
-                actionStatus === "compile-import" ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4" />
-                )}
-                导入并生成 Pack
+                回到项目资料
               </button>
             </div>
 
-            <div className="mt-5 grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
-              <div className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                {[
-                  [
-                    "1",
-                    "选择 Builder Skill",
-                    "按资料类型选择对应生产线",
-                  ],
-                  ["2", "导入原始材料", "访谈稿、产品资料、SOP 或运营复盘"],
-                  ["3", "生成 Knowledge Pack", "提炼事实、场景、边界和引用摘要"],
-                  ["4", "审阅后入上下文", "确认后才能默认用于生成"],
-                ].map(([index, title, description]) => (
-                  <div key={index} className="flex gap-3 pb-4 last:pb-0">
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700">
-                      {index}
-                    </div>
-                    <div>
-                      <div className="text-sm font-semibold text-slate-900">
-                        {title}
-                      </div>
-                      <div className="mt-1 text-xs leading-5 text-slate-500">
-                        {description}
+            <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+              <div className="space-y-5">
+                <section className="rounded-[22px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-950/5">
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-sm font-semibold text-white">
+                      1
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-base font-semibold text-slate-950">
+                        选择资料用途
+                      </h3>
+                      <p className="mt-1 text-sm text-slate-500">
+                        选择最贴近这次资料的用途，帮助 Lime 更好地理解内容重点。
+                      </p>
+                      <div className="mt-4 grid gap-3 md:grid-cols-4">
+                        {PACK_TYPES.map((type) => {
+                          const active = packType === type.value;
+                          return (
+                            <button
+                              key={type.value}
+                              type="button"
+                              onClick={() => setPackType(type.value)}
+                              className={cn(
+                                "rounded-2xl border px-3 py-3 text-center text-sm font-semibold transition",
+                                active
+                                  ? "border-emerald-300 bg-emerald-50 text-emerald-800 shadow-sm shadow-emerald-950/5"
+                                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                              )}
+                            >
+                              {type.label}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
+                </section>
 
-              <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-                <div className="space-y-5">
-                  <section className="rounded-[22px] border border-slate-200 bg-white p-4">
-                    <h3 className="text-sm font-semibold text-slate-950">
-                      1 选择 Builder Skill
-                    </h3>
-                    <div className="mt-3 grid gap-3 md:grid-cols-2">
-                      {PACK_TYPES.map((type) => {
-                        const active = packType === type.value;
-                        return (
-                          <button
-                            key={type.value}
-                            type="button"
-                            onClick={() => setPackType(type.value)}
+                <section className="rounded-[22px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-950/5">
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-sm font-semibold text-white">
+                      2
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-base font-semibold text-slate-950">
+                        添加原始资料
+                      </h3>
+                      <p className="mt-1 text-sm text-slate-500">
+                        提供越多原始资料，整理结果越完整、越准确。
+                      </p>
+                      <div className="mt-4 grid gap-3 md:grid-cols-4">
+                        {["上传访谈稿", "粘贴产品介绍", "导入运营文档", "拖入复盘记录"].map(
+                          (label) => (
+                            <div
+                              key={label}
+                              className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-4 text-center text-sm font-semibold text-slate-700"
+                            >
+                              <FileText className="mx-auto mb-2 h-5 w-5 text-slate-500" />
+                              {label}
+                            </div>
+                          ),
+                        )}
+                      </div>
+                      <label className="mt-4 grid gap-1.5 text-xs font-medium text-slate-600">
+                        原始资料正文
+                        <textarea
+                          value={sourceText}
+                          onChange={(event) => setSourceText(event.target.value)}
+                          placeholder="粘贴访谈稿、产品资料、历史文案、SOP 或合规边界"
+                          className="min-h-[180px] resize-y rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm leading-6 text-slate-800 outline-none transition focus:border-emerald-300 focus:bg-white focus:ring-2 focus:ring-emerald-100"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="rounded-[22px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-950/5">
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-sm font-semibold text-white">
+                      3
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-base font-semibold text-slate-950">
+                        Lime 开始整理
+                      </h3>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Lime 会读取资料、提炼重点、生成完整文档，并检查还缺哪些信息。
+                      </p>
+                      <div className="mt-4 grid gap-3 md:grid-cols-4">
+                        {[
+                          ["读取资料", sourceText.trim() ? "已完成" : "等待中"],
+                          ["提炼重点", actionBusy ? "进行中" : "等待中"],
+                          ["生成完整文档", selectedSummary?.compiledCount ? "已生成" : "等待中"],
+                          ["检查缺口", selectedSummary ? "待处理" : "等待中"],
+                        ].map(([title, state], index) => (
+                          <div
+                            key={title}
                             className={cn(
-                              "rounded-[18px] border p-3 text-left transition",
-                              active
-                                ? "border-emerald-300 bg-emerald-50 shadow-sm shadow-emerald-950/5"
-                                : "border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white",
+                              "rounded-2xl border px-3 py-3 text-sm",
+                              index <= 1 && sourceText.trim()
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                : "border-slate-200 bg-white text-slate-500",
                             )}
                           >
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-sm font-semibold text-slate-900">
-                                {type.label}
-                              </span>
-                              {active ? (
-                                <Check className="h-4 w-4 text-emerald-600" />
-                              ) : null}
-                            </div>
-                            <p className="mt-2 text-xs leading-5 text-slate-500">
-                              {type.description}
-                            </p>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </section>
-
-                  <section className="rounded-[22px] border border-slate-200 bg-white p-4">
-                    <h3 className="text-sm font-semibold text-slate-950">
-                      2 导入原始材料
-                    </h3>
-                    <label className="mt-3 grid gap-1.5 text-xs font-medium text-slate-600">
-                      Pack 显示名
-                      <input
-                        value={packDescription}
-                        onChange={(event) => {
-                          const nextName = event.target.value;
-                          setPackDescription(nextName);
-                          setPackNameInput(normalizePackNameInput(nextName));
-                        }}
-                        placeholder="例如：品牌产品资料"
-                        className="h-10 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-800 outline-none transition focus:border-emerald-300 focus:bg-white focus:ring-2 focus:ring-emerald-100"
-                      />
-                    </label>
-                    <label className="mt-3 grid gap-1.5 text-xs font-medium text-slate-600">
-                      原始材料正文
-                      <textarea
-                        value={sourceText}
-                        onChange={(event) => setSourceText(event.target.value)}
-                        placeholder="粘贴访谈稿、产品资料、历史文案、SOP 或合规边界"
-                        className="min-h-[180px] resize-y rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm leading-6 text-slate-800 outline-none transition focus:border-emerald-300 focus:bg-white focus:ring-2 focus:ring-emerald-100"
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      onClick={handleImportSource}
-                      disabled={actionBusy}
-                      className="mt-3 inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-60"
-                    >
-                      {actionStatus === "import" ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <FileText className="h-4 w-4" />
-                      )}
-                      只导入材料
-                    </button>
-                  </section>
-                </div>
-
-                <aside className="space-y-4">
-                  <section className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-emerald-600" />
-                      <h3 className="text-sm font-semibold text-slate-950">
-                        3 交给 Builder Skill
-                      </h3>
-                    </div>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      Lime 会把当前材料交给对应 Builder Skill，产出可审阅摘要、适用场景、事实边界和待补充清单。
-                    </p>
-                    <button
-                      type="button"
-                      onClick={handleOpenBuilder}
-                      className="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-2xl border border-emerald-700 bg-emerald-700 px-3 text-sm font-semibold text-white transition hover:bg-emerald-600"
-                    >
-                      <Sparkles className="h-4 w-4" />
-                      交给 Builder Skill
-                    </button>
-                  </section>
-
-                  <section className="rounded-[22px] border border-slate-200 bg-white p-4">
-                    <div className="flex items-center gap-2">
-                      <ListChecks className="h-4 w-4 text-sky-600" />
-                      <h3 className="text-sm font-semibold text-slate-950">
-                        4 审阅与入上下文
-                      </h3>
-                    </div>
-                    <div className="mt-3 grid grid-cols-2 gap-2">
-                      {(selectedSummary
-                        ? buildPackMetrics(selectedSummary)
-                        : buildPackMetrics({
-                            sourceCount: 0,
-                            wikiCount: 0,
-                            compiledCount: 0,
-                            runCount: 0,
-                          } as KnowledgePackSummary)
-                      ).map((metric) => (
-                        <div
-                          key={metric.label}
-                          className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3"
-                        >
-                          <div className="text-xs text-slate-500">
-                            {metric.label}
+                            <div className="font-semibold">{title}</div>
+                            <div className="mt-1 text-xs">{state}</div>
                           </div>
-                          <div className="mt-1 text-lg font-semibold text-slate-900">
-                            {metric.value}
-                          </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleStartWizardCompile}
+                        disabled={actionBusy}
+                        className="mt-4 inline-flex h-11 items-center justify-center gap-2 rounded-full border border-emerald-700 bg-emerald-700 px-5 text-sm font-semibold text-white transition hover:border-emerald-800 hover:bg-emerald-800 disabled:opacity-60"
+                      >
+                        {actionStatus === "compile" || actionStatus === "compile-import" ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Sparkles className="h-4 w-4" />
+                        )}
+                        Lime 开始整理
+                      </button>
                     </div>
-                    <p className="mt-3 text-xs leading-5 text-slate-500">
-                      先检查摘要、缺口和风险提醒；人工确认前不会默认进入 Agent 上下文。
-                    </p>
-                  </section>
-
-                  <section className="rounded-[22px] border border-amber-200 bg-amber-50 p-4">
-                    <div className="flex items-center gap-2">
-                      <ClipboardCheck className="h-4 w-4 text-amber-700" />
-                      <h3 className="text-sm font-semibold text-amber-900">
-                        人工确认
-                      </h3>
-                    </div>
-                    <p className="mt-2 text-sm leading-6 text-amber-800">
-                      请先检查内容缺口、风险提醒和引用摘要；确认后才会成为可默认使用的 Knowledge Pack。
-                    </p>
-                  </section>
-                </aside>
+                  </div>
+                </section>
               </div>
+
+              <aside className="space-y-4">
+                <section className="rounded-[22px] border border-slate-200 bg-slate-50 p-5">
+                  <h3 className="text-base font-semibold text-slate-950">
+                    整理设置
+                  </h3>
+                  <label className="mt-4 grid gap-1.5 text-xs font-medium text-slate-600">
+                    资料名称
+                    <input
+                      value={packDescription}
+                      onChange={(event) => {
+                        const nextName = event.target.value;
+                        setPackDescription(nextName);
+                        setPackNameInput(normalizePackNameInput(nextName));
+                      }}
+                      placeholder="例如：品牌官网访谈整理"
+                      className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                    />
+                  </label>
+                  <label className="mt-4 grid gap-1.5 text-xs font-medium text-slate-600">
+                    用途
+                    <select
+                      value={packType}
+                      onChange={(event) => setPackType(event.target.value)}
+                      className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                    >
+                      {PACK_TYPES.map((type) => (
+                        <option key={type.value} value={type.value}>
+                          {type.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="mt-5 flex items-center justify-between gap-4">
+                    <div>
+                      <div className="text-sm font-semibold text-slate-950">
+                        创作时是否默认使用
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-slate-500">
+                        开启后，Lime 创作时会优先参考本资料。
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={useDuringCreationByDefault}
+                      onClick={() =>
+                        setUseDuringCreationByDefault((current) => !current)
+                      }
+                      className={cn(
+                        "flex h-7 w-12 shrink-0 items-center rounded-full border px-0.5 transition",
+                        useDuringCreationByDefault
+                          ? "justify-end border-emerald-700 bg-emerald-700"
+                          : "justify-start border-slate-300 bg-slate-100",
+                      )}
+                    >
+                      <span className="h-5 w-5 rounded-full bg-white shadow-sm" />
+                    </button>
+                  </div>
+                  <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-600">
+                    你可以在创作时手动选择，是否使用本资料。
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleImportSource}
+                    disabled={actionBusy}
+                    className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    {actionStatus === "import" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <FileText className="h-4 w-4" />
+                    )}
+                    先保存原始资料
+                  </button>
+                </section>
+              </aside>
+              <section className="rounded-[20px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800 xl:col-span-2">
+                没有确认的资料不会自动用于创作。
+              </section>
             </div>
           </section>
         ) : null}
 
         {activeView === "detail" ? (
-          <section className="rounded-[24px] border border-slate-200 bg-white shadow-sm shadow-slate-950/5">
+          <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm shadow-slate-950/5">
             {!selectedPackName ? (
-              <div className="grid min-h-[420px] place-items-center p-8 text-center">
+              <div className="grid min-h-[420px] place-items-center text-center">
                 <div className="max-w-md">
                   <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white text-slate-400">
                     <BookOpen className="h-6 w-6" />
                   </div>
                   <h2 className="mt-4 text-base font-semibold text-slate-900">
-                    先从全部资料中选择一份资料
+                    先从项目资料清单里选择一份资料
                   </h2>
                   <p className="mt-2 text-sm leading-6 text-slate-500">
-                    详情页会展示内容、原始资料、引用摘要、风险提醒和整理记录。
+                    这里会展示完整资料文档、待确认内容和确认后的影响。
                   </p>
                 </div>
               </div>
@@ -1494,381 +1430,606 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
               </div>
             ) : selectedPack ? (
               <div>
-                <section className="border-b border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-5 py-5">
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <StatusPill status={selectedPack.metadata.status} />
-                        <span className="inline-flex rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
-                          {selectedPack.metadata.status === "ready"
-                            ? "已人工确认"
-                            : "待人工确认"}
-                        </span>
-                        {selectedPack.defaultForWorkspace ? (
-                          <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                            默认资料
-                          </span>
-                        ) : null}
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-4xl font-semibold tracking-tight text-slate-950">
+                      {getPackTitle(selectedPack)}
+                    </h2>
+                    <p className="mt-3 text-base leading-7 text-slate-600">
+                      这份资料会帮助 Lime 写得更像本人，确认后可用于创作。
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveView("overview")}
+                    className="inline-flex h-10 items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    回到项目资料
+                  </button>
+                </div>
+
+                <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1fr)_440px]">
+                  <div className="space-y-5">
+                    <section className="rounded-[22px] border border-slate-200 bg-white p-6 shadow-sm shadow-slate-950/5">
+                      <h3 className="text-xl font-semibold text-slate-950">
+                        完整资料文档
+                      </h3>
+                      <div className="mt-5 flex flex-wrap items-center gap-5 rounded-[22px] bg-slate-50 p-5">
+                        <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-emerald-50 text-emerald-700">
+                          <FileText className="h-10 w-10" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-lg font-semibold text-slate-950">
+                            {getPackTitle(selectedPack)}.md
+                          </div>
+                          <p className="mt-2 text-sm leading-6 text-slate-500">
+                            这是确认前的完整资料文档，可以打开、导出，也可以继续修改内容。
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setDetailTab("content")}
+                            className="inline-flex h-11 items-center justify-center rounded-full border border-emerald-700 bg-emerald-700 px-5 text-sm font-semibold text-white transition hover:border-emerald-800 hover:bg-emerald-800"
+                          >
+                            打开完整文档
+                          </button>
+                          <button
+                            type="button"
+                            className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                          >
+                            导出
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveView("import")}
+                            className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                          >
+                            修改内容
+                          </button>
+                        </div>
                       </div>
-                      <h2 className="mt-3 text-xl font-semibold text-slate-950">
-                        {getPackTitle(selectedPack)}
-                      </h2>
-                      <p className="mt-2 text-xs text-slate-500">
-                        {getUserFacingPackTypeLabel(selectedPack.metadata.type)}
-                      </p>
-                      {selectedPackCompanionLabels.length > 0 ? (
-                        <p className="mt-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-800">
-                          用于生成时会自动搭配人设资料：
-                          {selectedPackCompanionLabels.join("、")}
-                        </p>
+                      {detailTab === "content" ? (
+                        <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                          <div className="text-sm font-semibold text-slate-950">
+                            完整资料文档内容
+                          </div>
+                          <p className="whitespace-pre-wrap text-sm leading-6 text-slate-600">
+                            {sanitizeKnowledgePreview(selectedPack.guide) ||
+                              sanitizeKnowledgePreview(selectedPack.preview) ||
+                              "等待整理完整资料文档。"}
+                          </p>
+                        </div>
                       ) : null}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={handleCompile}
-                        disabled={actionBusy}
-                        className="inline-flex h-10 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-60"
-                      >
-                        {actionStatus === "compile" ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <RefreshCw className="h-4 w-4" />
-                        )}
-                        重新整理
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSetDefaultForPack()}
-                        disabled={actionBusy || !selectedPackReady}
-                        title={
-                          selectedPackReady
-                            ? undefined
-                            : "人工确认后才能设为默认"
-                        }
-                        className="inline-flex h-10 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <ShieldCheck className="h-4 w-4" />
-                        设为默认
-                      </button>
-                      {selectedPack.metadata.status !== "ready" ? (
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateStatus("ready")}
-                          disabled={actionBusy}
-                          className="inline-flex h-10 items-center gap-2 rounded-2xl border border-emerald-700 bg-emerald-700 px-3 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
-                        >
-                          {actionStatus === "confirm" ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <ClipboardCheck className="h-4 w-4" />
-                          )}
-                          人工确认
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateStatus("archived")}
-                        disabled={actionBusy}
-                        className="inline-flex h-10 items-center gap-2 rounded-2xl border border-rose-200 bg-white px-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:opacity-60"
-                      >
-                        <Archive className="h-4 w-4" />
-                        归档
-                      </button>
-                    </div>
+                    </section>
+
+                    <section className="rounded-[22px] border border-slate-200 bg-white p-6 shadow-sm shadow-slate-950/5">
+                      <h3 className="text-xl font-semibold text-slate-950">
+                        需要你确认的内容
+                      </h3>
+                      <div className="mt-5 divide-y divide-slate-100">
+                        {[
+                          ["人物介绍", "已确认", "emerald"],
+                          ["表达风格", "已确认", "emerald"],
+                          [
+                            "常用金句",
+                            missingPackCount > 0 ? "需要补充" : "待确认",
+                            missingPackCount > 0 ? "amber" : "rose",
+                          ],
+                          [
+                            "不能说什么",
+                            selectedPack.metadata.status === "ready" ? "已确认" : "待确认",
+                            selectedPack.metadata.status === "ready" ? "emerald" : "rose",
+                          ],
+                          ["应用场景", "已确认", "emerald"],
+                        ].map(([label, state, tone]) => (
+                          <div
+                            key={label}
+                            className="flex items-center justify-between gap-4 py-4 text-sm"
+                          >
+                            <div className="flex items-center gap-3">
+                              <span
+                                className={cn(
+                                  "flex h-7 w-7 items-center justify-center rounded-full",
+                                  tone === "emerald"
+                                    ? "bg-emerald-700 text-white"
+                                    : tone === "amber"
+                                      ? "bg-amber-500 text-white"
+                                      : "bg-rose-500 text-white",
+                                )}
+                              >
+                                {tone === "emerald" ? (
+                                  <Check className="h-4 w-4" />
+                                ) : (
+                                  <AlertTriangle className="h-4 w-4" />
+                                )}
+                              </span>
+                              <span className="text-base font-medium text-slate-800">
+                                {label}
+                              </span>
+                            </div>
+                            <span
+                              className={cn(
+                                "rounded-full border px-3 py-1 text-sm font-semibold",
+                                tone === "emerald"
+                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                  : tone === "amber"
+                                    ? "border-amber-200 bg-amber-50 text-amber-700"
+                                    : "border-rose-200 bg-rose-50 text-rose-700",
+                              )}
+                            >
+                              {state}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
                   </div>
 
-                  <div className="mt-5 grid gap-3 sm:grid-cols-4">
-                    {packMetrics.map((metric) => (
-                      <div
-                        key={metric.label}
-                        className="rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm shadow-slate-950/5"
-                      >
-                        <div className="text-xs font-medium text-slate-500">
-                          {metric.label}
+                  <aside className="rounded-[22px] border border-slate-200 bg-white p-6 shadow-sm shadow-slate-950/5">
+                    <h3 className="text-xl font-semibold text-slate-950">
+                      确认后会发生什么
+                    </h3>
+                    <div className="mt-7 space-y-9">
+                      {[
+                        ["可用于创作", "Lime 会参考这些内容，写出更像你的表达。"],
+                        ["会影响写作口吻", "在相关任务中，Lime 将优先采用你的语言风格和偏好。"],
+                        ["不会覆盖原始资料", "你的原始资料会被安全保存，随时可查看与修改。"],
+                      ].map(([title, description]) => (
+                        <div key={title} className="flex gap-4">
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
+                            <ShieldCheck className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <div className="text-base font-semibold text-slate-950">
+                              {title}
+                            </div>
+                            <p className="mt-2 text-sm leading-6 text-slate-500">
+                              {description}
+                            </p>
+                          </div>
                         </div>
-                        <div className="mt-1 text-xl font-semibold text-slate-900">
-                          {metric.value}
-                        </div>
-                        <div className="mt-1 font-mono text-[11px] text-slate-400">
-                          {metric.caption}
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
+                  </aside>
+                </div>
+
+                <section className="mt-6 rounded-[22px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-950/5">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-slate-950">
+                        高级信息
+                      </h3>
+                      <p className="mt-1 text-sm leading-6 text-slate-500">
+                        默认收起整理细节，避免干扰确认资料主流程。
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      aria-expanded={advancedInfoOpen}
+                      onClick={() =>
+                        setAdvancedInfoOpen((current) => !current)
+                      }
+                      className="inline-flex h-10 items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                    >
+                      {advancedInfoOpen ? "收起高级信息" : "查看高级信息"}
+                    </button>
                   </div>
+
+                  {advancedInfoOpen ? (
+                    <div className="mt-5 grid gap-3 md:grid-cols-3">
+                      {[
+                        {
+                          title: "原始资料",
+                          value: `${selectedPack.sourceCount} 份已保存`,
+                          description:
+                            sanitizeKnowledgePreview(
+                              selectedPack.sources[0]?.preview,
+                            ) || "已保存用户提供的原始内容。",
+                        },
+                        {
+                          title: "整理记录",
+                          value: `${selectedPack.runCount} 次处理`,
+                          description:
+                            selectedPack.runCount > 0
+                              ? "最近一次整理已记录，可用于回看处理结果。"
+                              : "还没有整理记录。",
+                        },
+                        {
+                          title: "本轮使用记录",
+                          value: `${selectedPack.compiledCount} 段摘要`,
+                          description:
+                            sanitizeKnowledgePreview(
+                              selectedPack.compiled[0]?.preview,
+                            ) || "确认后会按你选择的资料用于创作。",
+                        },
+                      ].map((item) => (
+                        <article
+                          key={item.title}
+                          className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"
+                        >
+                          <div className="text-sm font-semibold text-slate-950">
+                            {item.title}
+                          </div>
+                          <div className="mt-2 text-sm font-medium text-emerald-700">
+                            {item.value}
+                          </div>
+                          <p className="mt-2 line-clamp-3 text-xs leading-5 text-slate-500">
+                            {item.description}
+                          </p>
+                        </article>
+                      ))}
+                    </div>
+                  ) : null}
                 </section>
 
-                <div className="border-b border-slate-200 px-5 py-3">
-                  <div className="flex flex-wrap gap-2">
-                    {DETAIL_TABS.map((tab) => (
+                <section className="mt-6 rounded-[22px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-950/5">
+                  <div className="flex flex-wrap items-center justify-end gap-4">
+                    {selectedPack.metadata.status !== "ready" ? (
                       <button
-                        key={tab.id}
                         type="button"
-                        onClick={() => setDetailTab(tab.id)}
-                        className={cn(
-                          "h-9 rounded-2xl px-3 text-sm font-semibold transition",
-                          detailTab === tab.id
-                            ? "bg-slate-900 text-white"
-                            : "bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-950",
-                        )}
+                        onClick={() => handleUpdateStatus("ready")}
+                        disabled={actionBusy}
+                        className="inline-flex h-12 min-w-44 items-center justify-center gap-2 rounded-full border border-emerald-700 bg-emerald-700 px-6 text-sm font-semibold text-white transition hover:border-emerald-800 hover:bg-emerald-800 disabled:opacity-60"
                       >
-                        {tab.label}
+                        {actionStatus === "confirm" ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <ClipboardCheck className="h-4 w-4" />
+                        )}
+                        确认可用
                       </button>
-                    ))}
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenKnowledgeComposer(selectedPack.metadata.name)}
+                        className="inline-flex h-12 min-w-44 items-center justify-center gap-2 rounded-full border border-emerald-700 bg-emerald-700 px-6 text-sm font-semibold text-white transition hover:border-emerald-800 hover:bg-emerald-800"
+                      >
+                        <MessageSquareText className="h-4 w-4" />
+                        用于创作
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setActiveView("import")}
+                      className="inline-flex h-12 min-w-40 items-center justify-center rounded-full border border-slate-200 bg-white px-6 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                    >
+                      补充资料
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveView("overview")}
+                      className="inline-flex h-12 min-w-40 items-center justify-center rounded-full border border-slate-200 bg-white px-6 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                    >
+                      稍后再说
+                    </button>
                   </div>
-                </div>
-
-                <div className="p-5">
-                  {detailTab === "overview" ? (
-                    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-                      <section className="rounded-[22px] border border-slate-200 bg-white p-4">
-                        <h3 className="text-sm font-semibold text-slate-950">
-                          适用场景
-                        </h3>
-                        <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-600">
-                          {sanitizeKnowledgePreview(selectedPack.guide) ||
-                            "等待整理适用场景。"}
-                        </p>
-                      </section>
-                      <section className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                        <h3 className="text-sm font-semibold text-slate-950">
-                          当前引用摘要
-                        </h3>
-                        <div className="mt-3 space-y-2">
-                          {selectedPack.compiled.length > 0 ? (
-                            selectedPack.compiled.map((entry) => (
-                              <div
-                                key={entry.relativePath}
-                                className="rounded-2xl border border-slate-200 bg-white px-3 py-3"
-                              >
-                                <div className="text-xs font-semibold text-slate-800">
-                                  引用摘要
-                                </div>
-                                <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-500">
-                                  {sanitizeKnowledgePreview(entry.preview) ||
-                                    "引用摘要已生成，可在 Agent 生成时作为参考。"}
-                                </p>
-                              </div>
-                            ))
-                          ) : (
-                            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-500">
-                              重新整理后会生成可用于生成的引用摘要。
-                            </div>
-                          )}
-                        </div>
-                      </section>
-                    </div>
-                  ) : null}
-
-                  {detailTab === "content" ? (
-                    <div className="grid gap-4 lg:grid-cols-2">
-                      <FileEntryList
-                        title="资料说明"
-                        entries={[
-                          {
-                            relativePath: "资料说明",
-                            absolutePath: selectedPack.knowledgePath,
-                            bytes: selectedPack.guide.length,
-                            updatedAt: selectedPack.updatedAt,
-                            preview: selectedPack.guide,
-                          },
-                        ]}
-                        emptyLabel="缺少资料说明。"
-                      />
-                      <FileEntryList
-                        title="整理内容"
-                        entries={selectedPack.wiki}
-                        emptyLabel="整理后会补充结构化内容。"
-                      />
-                    </div>
-                  ) : null}
-
-                  {detailTab === "sources" ? (
-                    <FileEntryList
-                      title="原始资料"
-                      entries={selectedPack.sources}
-                      emptyLabel="还没有导入来源资料。"
-                    />
-                  ) : null}
-
-                  {detailTab === "runtime" ? (
-                    <FileEntryList
-                      title="引用摘要"
-                      entries={selectedPack.compiled}
-                      emptyLabel="整理后会生成引用摘要。"
-                    />
-                  ) : null}
-
-                  {detailTab === "risks" ? (
-                    <div className="grid gap-4 lg:grid-cols-2">
-                      <section className="rounded-[22px] border border-amber-200 bg-amber-50 p-4">
-                        <div className="flex items-center gap-2">
-                          <AlertTriangle className="h-4 w-4 text-amber-700" />
-                          <h3 className="text-sm font-semibold text-amber-900">
-                            缺口与风险
-                          </h3>
-                        </div>
-                        <ul className="mt-3 space-y-2 text-sm leading-6 text-amber-800">
-                          <li>
-                            状态：
-                            {resolveStatusLabel(selectedPack.metadata.status)}
-                          </li>
-                          <li>
-                            {selectedPack.sourceCount > 0
-                              ? "已记录来源锚点，输出时仍需避免编造未提供事实。"
-                              : "缺少原始资料，不能作为可靠资料用于生成。"}
-                          </li>
-                          <li>
-                            {selectedPack.compiledCount > 0
-                              ? "已有引用摘要，可回到 Agent 输入框用于生成。"
-                              : "缺少引用摘要，请先重新整理。"}
-                          </li>
-                        </ul>
-                      </section>
-                      <section className="rounded-[22px] border border-slate-200 bg-white p-4">
-                        <h3 className="text-sm font-semibold text-slate-950">
-                          安全边界
-                        </h3>
-                        <p className="mt-3 text-sm leading-6 text-slate-600">
-                          来源资料只会作为参考内容使用。资料里出现的指令式文本不会覆盖
-                          Lime 的系统规则。
-                        </p>
-                      </section>
-                    </div>
-                  ) : null}
-
-                  {detailTab === "runs" ? (
-                    <FileEntryList
-                      title="整理记录"
-                      entries={selectedPack.runs}
-                      emptyLabel="整理和质量检查记录会在这里出现。"
-                    />
-                  ) : null}
-                </div>
+                </section>
               </div>
             ) : (
-              <div className="m-5 rounded-[20px] border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+              <div className="rounded-[20px] border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
                 未能读取资料详情，请刷新后重试。
               </div>
             )}
           </section>
         ) : null}
+
+        {activeView === "save" ? (
+          <section className="grid gap-5 xl:grid-cols-3">
+            <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-950/5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <h2 className="text-lg font-semibold text-slate-950">
+                  整理新资料
+                </h2>
+              </div>
+              <label className="mt-5 grid gap-1.5 text-xs font-medium text-slate-600">
+                写作口吻
+                <textarea
+                  value={sourceText}
+                  onChange={(event) => setSourceText(event.target.value)}
+                  placeholder="把对话里有价值的内容粘贴到这里，例如一段口吻说明、事实补充或规则片段。"
+                  className="min-h-[260px] resize-y rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm leading-6 text-slate-800 outline-none transition focus:border-emerald-300 focus:bg-white focus:ring-2 focus:ring-emerald-100"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={handleSaveDraftToMaterials}
+                disabled={actionBusy}
+                className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-full border border-emerald-700 bg-emerald-700 px-5 text-sm font-semibold text-white transition hover:border-emerald-800 hover:bg-emerald-800 disabled:opacity-60"
+              >
+                保存到项目资料
+              </button>
+            </section>
+
+            <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-950/5">
+              <h2 className="text-lg font-semibold text-slate-950">
+                存到哪里？
+              </h2>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSaveTargetPackName(selectedPackName)}
+                  className={cn(
+                    "h-11 rounded-2xl border px-3 text-sm font-semibold transition",
+                    saveTargetPackName
+                      ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                  )}
+                >
+                  补充已有资料
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSaveTargetPackName("")}
+                  className={cn(
+                    "h-11 rounded-2xl border px-3 text-sm font-semibold transition",
+                    !saveTargetPackName
+                      ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                  )}
+                >
+                  新建一份资料
+                </button>
+              </div>
+              <label className="mt-4 grid gap-1.5 text-xs font-medium text-slate-600">
+                新资料名称
+                <input
+                  value={packDescription}
+                  onChange={(event) => {
+                    const nextName = event.target.value;
+                    setPackDescription(nextName);
+                    setPackNameInput(normalizePackNameInput(nextName));
+                  }}
+                  placeholder="例如：创始人口吻"
+                  className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
+                />
+              </label>
+              <div className="mt-4 space-y-3">
+                <div className="text-sm font-semibold text-slate-700">
+                  已有资料
+                </div>
+                {packs.length > 0 ? (
+                  packs.slice(0, 5).map((pack) => {
+                    const active = saveTargetPackName === pack.metadata.name;
+                    return (
+                      <button
+                        key={pack.metadata.name}
+                        type="button"
+                        onClick={() => {
+                          setSaveTargetPackName(pack.metadata.name);
+                          setPackNameInput(pack.metadata.name);
+                          setPackDescription(getPackTitle(pack));
+                        }}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left transition",
+                          active
+                            ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+                            : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                        )}
+                      >
+                        <span>
+                          <span className="block text-sm font-semibold">
+                            {getPackTitle(pack)}
+                          </span>
+                          <span className="mt-1 block text-xs text-slate-500">
+                            上次更新：{new Date(pack.updatedAt).toLocaleDateString("zh-CN")}
+                          </span>
+                        </span>
+                        {active ? <Check className="h-4 w-4" /> : null}
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                    还没有已有资料，可以新建一份。
+                  </div>
+                )}
+              </div>
+              <p className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs leading-5 text-slate-500">
+                选择已有资料可在原有基础上补充更新。
+              </p>
+            </section>
+
+            <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm shadow-slate-950/5">
+              <div className="mx-auto mt-8 flex h-24 w-24 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
+                <Check className="h-12 w-12" />
+              </div>
+              <h2 className="mt-6 text-center text-xl font-semibold text-slate-950">
+                {saveTargetPackName
+                  ? `已保存到“${
+                      packs.find((pack) => pack.metadata.name === saveTargetPackName)
+                        ? getPackTitle(
+                            packs.find(
+                              (pack) => pack.metadata.name === saveTargetPackName,
+                            )!,
+                          )
+                        : saveTargetPackName
+                    }”`
+                  : "保存后会进入待确认"}
+              </h2>
+              <div className="mt-6 space-y-4 text-sm text-slate-700">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700">
+                    +
+                  </span>
+                  新增 2 个内容点
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700">
+                    ↑
+                  </span>
+                  更新 1 个章节
+                </div>
+                <div className="flex items-center gap-3 text-amber-700">
+                  <AlertTriangle className="h-5 w-5" />
+                  有 1 处需要你确认。
+                </div>
+              </div>
+              <div className="mt-8 grid gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (saveTargetPackName) {
+                      openPack(saveTargetPackName, "overview");
+                    } else {
+                      setActiveView("detail");
+                    }
+                  }}
+                  className="inline-flex h-11 items-center justify-center rounded-full border border-emerald-700 bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:border-emerald-800 hover:bg-emerald-800"
+                >
+                  去确认
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveView("overview")}
+                  className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  稍后处理
+                </button>
+              </div>
+            </section>
+            <div className="xl:col-span-3 rounded-[20px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
+              保存后不会立刻用于创作，确认后才会生效。
+            </div>
+          </section>
+        ) : null}
+
+        {activeView === "states" ? (
+          <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm shadow-slate-950/5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-3xl font-semibold text-slate-950">
+                项目资料状态说明
+              </h2>
+              <ProjectSelector
+                value={selectedProjectId}
+                onChange={handleProjectChange}
+                placeholder="默认项目"
+                dropdownSide="bottom"
+                dropdownAlign="end"
+                enableManagement
+                density="compact"
+                skipDefaultWorkspaceReadyCheck
+                autoSelectFallback={false}
+              />
+            </div>
+            <div className="mt-8 grid gap-4 md:grid-cols-5">
+              {statusCards.map((card) => {
+                const Icon = card.icon;
+                return (
+                  <article
+                    key={card.title}
+                    className="rounded-[22px] border border-slate-200 bg-white p-4 text-center shadow-sm shadow-slate-950/5"
+                  >
+                    <div
+                      className={cn(
+                        "mx-auto flex h-24 w-24 items-center justify-center rounded-full",
+                        card.tone === "emerald"
+                          ? "bg-emerald-50 text-emerald-700"
+                          : card.tone === "amber"
+                            ? "bg-amber-50 text-amber-700"
+                            : card.tone === "rose"
+                              ? "bg-rose-50 text-rose-700"
+                              : card.tone === "red"
+                                ? "bg-red-50 text-red-700"
+                                : "bg-slate-100 text-slate-600",
+                      )}
+                    >
+                      <Icon className="h-10 w-10" />
+                    </div>
+                    <h3 className="mt-5 text-lg font-semibold text-slate-950">
+                      {card.title}
+                    </h3>
+                    <p className="mt-3 min-h-12 text-sm leading-6 text-slate-500">
+                      {card.description}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={card.onClick}
+                      className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-full border border-emerald-700 bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:border-emerald-800 hover:bg-emerald-800"
+                    >
+                      {card.action}
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+            <div className="mt-8 rounded-[20px] border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm leading-6 text-emerald-800">
+              项目资料不是文件夹，它会帮 Lime 在创作时记住口吻、事实和规则。
+            </div>
+          </section>
+        ) : null}
       </div>
+
       {knowledgeComposerOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/25 px-4 py-6">
           <section
-            className="max-h-[86vh] w-full max-w-3xl overflow-auto rounded-[28px] border border-slate-200 bg-white p-5 shadow-2xl shadow-slate-950/20"
+            className="max-h-[88vh] w-full max-w-6xl overflow-auto rounded-[28px] border border-slate-200 bg-white p-7 shadow-2xl shadow-slate-950/20"
             role="dialog"
             aria-modal="true"
             aria-labelledby="knowledge-composer-title"
             data-testid="knowledge-composer-chooser"
           >
-            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-4">
-              <div>
-                <p className="text-xs font-semibold text-emerald-700">
-                  1 persona + N data
-                </p>
-                <h2
-                  id="knowledge-composer-title"
-                  className="mt-1 text-xl font-semibold text-slate-950"
-                >
-                  选择本轮 Knowledge 上下文
-                </h2>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                  人设资料决定表达语境，data 资料提供事实、SOP、运营节奏和边界。确认后会按
-                  persona 先、data 后进入 Resolver，再安全注入 Agent 上下文。
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setKnowledgeComposerOpen(false)}
-                className="inline-flex h-9 items-center rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
-              >
-                取消
-              </button>
-            </div>
-
-            <div className="mt-5 grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
-              <section className="rounded-[22px] border border-emerald-100 bg-emerald-50 p-4">
-                <h3 className="text-sm font-semibold text-emerald-950">
-                  Persona（最多 1 个）
-                </h3>
-                <p className="mt-2 text-xs leading-5 text-emerald-800">
-                  用来确定语气、口吻、价值观和不可越过的表达边界。
-                </p>
-                <div className="mt-4 grid gap-2">
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={!composerPersonaPackName}
-                    onClick={() => setComposerPersonaPackName(null)}
-                    className={cn(
-                      "flex w-full items-center justify-between rounded-2xl border px-3 py-2 text-left text-sm transition",
-                      !composerPersonaPackName
-                        ? "border-emerald-300 bg-white text-emerald-900"
-                        : "border-emerald-100 bg-emerald-50 text-emerald-800 hover:bg-white",
+            <h2
+              id="knowledge-composer-title"
+              className="text-center text-2xl font-semibold text-slate-950"
+            >
+              选择这次创作用哪些资料
+            </h2>
+            <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1fr)_420px]">
+              <section className="space-y-5 rounded-[22px] border border-slate-200 bg-white p-5">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-950">
+                    写作口吻（只能选 1 个）
+                  </h3>
+                  <div className="mt-4 grid gap-3">
+                    {readyPersonaPacks.length > 0 ? (
+                      readyPersonaPacks.map((pack) => {
+                        const checked = composerPersonaPackName === pack.metadata.name;
+                        return (
+                          <button
+                            key={pack.metadata.name}
+                            type="button"
+                            role="radio"
+                            aria-checked={checked}
+                            data-testid={`knowledge-composer-persona-${pack.metadata.name}`}
+                            onClick={() => setComposerPersonaPackName(pack.metadata.name)}
+                            className={cn(
+                              "flex items-center justify-between rounded-2xl border px-4 py-3 text-left transition",
+                              checked
+                                ? "border-emerald-300 bg-emerald-50 text-emerald-950"
+                                : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                            )}
+                          >
+                            <span>
+                              <span className="block text-sm font-semibold">
+                                {getPackTitle(pack)}
+                              </span>
+                              <span className="mt-1 block text-xs text-slate-500">
+                                已可用
+                              </span>
+                            </span>
+                            {checked ? <Check className="h-4 w-4" /> : null}
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
+                        还没有可用的写作口吻资料。
+                      </div>
                     )}
-                  >
-                    <span>暂不搭配人设</span>
-                    {!composerPersonaPackName ? (
-                      <Check className="h-4 w-4" />
-                    ) : null}
-                  </button>
-                  {readyPersonaPacks.map((pack) => {
-                    const checked =
-                      composerPersonaPackName === pack.metadata.name;
-                    return (
-                      <button
-                        key={pack.metadata.name}
-                        type="button"
-                        role="radio"
-                        aria-checked={checked}
-                        data-testid={`knowledge-composer-persona-${pack.metadata.name}`}
-                        onClick={() =>
-                          setComposerPersonaPackName(pack.metadata.name)
-                        }
-                        className={cn(
-                          "flex w-full items-center justify-between gap-3 rounded-2xl border px-3 py-2 text-left text-sm transition",
-                          checked
-                            ? "border-emerald-300 bg-white text-emerald-950"
-                            : "border-emerald-100 bg-emerald-50 text-emerald-800 hover:bg-white",
-                        )}
-                      >
-                        <span className="min-w-0">
-                          <span className="block truncate font-semibold">
-                            {getPackTitle(pack)}
-                          </span>
-                          <span className="mt-0.5 block text-xs text-emerald-700">
-                            {getUserFacingPackTypeLabel(pack.metadata.type)}
-                          </span>
-                        </span>
-                        {checked ? <Check className="h-4 w-4" /> : null}
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-
-              <section className="rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h3 className="text-sm font-semibold text-slate-950">
-                      Data（可多选）
-                    </h3>
-                    <p className="mt-2 text-xs leading-5 text-slate-600">
-                      多选产品事实、运营 playbook、SOP 或活动资料，作为本轮生成事实源。
-                    </p>
                   </div>
-                  <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600">
-                    已选 {composerDataPackNames.length}
-                  </span>
                 </div>
-                <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                  {readyDataPacks.length > 0 ? (
-                    readyDataPacks.map((pack) => {
-                      const checked = composerDataPackNames.includes(
-                        pack.metadata.name,
-                      );
+
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-950">
+                    要参考的资料（可多选）
+                  </h3>
+                  <div className="mt-4 grid gap-3">
+                    {readyDataPacks.map((pack) => {
+                      const checked = composerDataPackNames.includes(pack.metadata.name);
                       return (
                         <button
                           key={pack.metadata.name}
@@ -1876,50 +2037,92 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
                           role="checkbox"
                           aria-checked={checked}
                           data-testid={`knowledge-composer-data-${pack.metadata.name}`}
-                          onClick={() =>
-                            handleToggleComposerDataPack(pack.metadata.name)
-                          }
+                          onClick={() => handleToggleComposerDataPack(pack.metadata.name)}
                           className={cn(
-                            "min-w-0 rounded-2xl border px-3 py-3 text-left transition",
+                            "flex items-center justify-between rounded-2xl border px-4 py-3 text-left transition",
                             checked
-                              ? "border-slate-900 bg-white shadow-sm shadow-slate-950/5"
-                              : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
+                              ? "border-emerald-300 bg-emerald-50 text-emerald-950"
+                              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
                           )}
                         >
-                          <span className="flex items-center justify-between gap-2">
-                            <span className="truncate text-sm font-semibold text-slate-950">
+                          <span>
+                            <span className="block text-sm font-semibold">
                               {getPackTitle(pack)}
                             </span>
-                            {checked ? (
-                              <Check className="h-4 w-4 text-emerald-600" />
-                            ) : null}
+                            <span className="mt-1 block text-xs text-slate-500">
+                              已可用
+                            </span>
                           </span>
-                          <span className="mt-1 block text-xs text-slate-500">
-                            {getUserFacingPackTypeLabel(pack.metadata.type)}
-                          </span>
+                          {checked ? <Check className="h-4 w-4" /> : null}
                         </button>
                       );
-                    })
-                  ) : (
-                    <p className="rounded-2xl border border-dashed border-slate-300 bg-white px-3 py-4 text-sm text-slate-500">
-                      还没有已确认的 data 资料。可以先只用 persona，或回到 Agent
-                      添加运营 / 产品资料。
-                    </p>
-                  )}
+                    })}
+                    {pendingPacksForAction.map((pack) => (
+                      <button
+                        key={pack.metadata.name}
+                        type="button"
+                        disabled
+                        className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-slate-400"
+                      >
+                        <span>
+                          <span className="block text-sm font-semibold">
+                            {getPackTitle(pack)}
+                          </span>
+                          <span className="mt-1 block text-xs">
+                            {renderMaterialStatus(pack)}，不能用于创作
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-[22px] border border-slate-200 bg-white p-5">
+                <h3 className="text-lg font-semibold text-slate-950">
+                  这次会怎么用
+                </h3>
+                <div className="mt-4 rounded-3xl border border-emerald-200 bg-emerald-50/70 p-8 text-center text-emerald-700">
+                  <div className="mx-auto flex h-44 max-w-sm items-center justify-center rounded-[24px] bg-white/70">
+                    <div className="relative h-28 w-36 rounded-2xl bg-white shadow-sm shadow-slate-950/10">
+                      <div className="absolute left-6 top-7 h-2 w-24 rounded-full bg-slate-200" />
+                      <div className="absolute left-6 top-12 h-2 w-28 rounded-full bg-slate-200" />
+                      <div className="absolute left-6 top-[68px] h-2 w-20 rounded-full bg-slate-200" />
+                      <div className="absolute -bottom-5 -left-6 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm">
+                        <Check className="h-7 w-7" />
+                      </div>
+                      <div className="absolute -right-7 bottom-3 h-20 w-8 rotate-12 rounded-full bg-emerald-700" />
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-5 divide-y divide-slate-100">
+                  <div className="py-3 text-sm text-slate-700">
+                    口吻来自{composerPersonaPackName ? "你选择的写作口吻" : "本轮默认表达"}
+                  </div>
+                  <div className="py-3 text-sm text-slate-700">
+                    事实来自已选择的参考资料
+                  </div>
+                  <div className="py-3 text-sm text-slate-700">
+                    规则来自项目内容规则
+                  </div>
                 </div>
               </section>
             </div>
 
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
-              <p className="text-xs leading-5 text-slate-500">
-                当前选择 {composerSelectedCount} 份资料；确认后会回到 Agent
-                输入框，可继续编辑提示词。
-              </p>
-              <div className="flex flex-wrap gap-2">
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+              <div className="space-y-2">
+                <p className="text-sm text-slate-500">
+                  已选 {composerSelectedCount} 份资料。
+                </p>
+                <p className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
+                  待确认资料不能用于创作。
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3">
                 <button
                   type="button"
                   onClick={() => setKnowledgeComposerOpen(false)}
-                  className="inline-flex h-10 items-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 bg-white px-6 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                 >
                   取消
                 </button>
@@ -1927,9 +2130,9 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
                   type="button"
                   onClick={handleConfirmKnowledgeComposer}
                   disabled={composerSelectedCount === 0}
-                  className="inline-flex h-10 items-center rounded-2xl border border-slate-900 bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-11 items-center justify-center rounded-full border border-emerald-700 bg-emerald-700 px-6 text-sm font-semibold text-white transition hover:border-emerald-800 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  确认启用
+                  确认使用
                 </button>
               </div>
             </div>

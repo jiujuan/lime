@@ -29,6 +29,7 @@ interface UseWorkspaceCanvasLayoutRuntimeParams {
   hasPendingA2UIForm: boolean;
   layoutMode: LayoutMode;
   showChatPanel: boolean;
+  allowSidebarToggle?: boolean;
   showSidebar: boolean;
   defaultTopicSidebarVisible: boolean;
   hasMessages: boolean;
@@ -65,6 +66,7 @@ export function useWorkspaceCanvasLayoutRuntime({
   hasPendingA2UIForm,
   layoutMode,
   showChatPanel,
+  allowSidebarToggle = showChatPanel,
   showSidebar,
   defaultTopicSidebarVisible,
   hasMessages,
@@ -334,11 +336,11 @@ export function useWorkspaceCanvasLayoutRuntime({
   }, [hasMessages, onHasMessagesChange]);
 
   const handleToggleSidebar = useCallback(() => {
-    if (!showChatPanel) {
+    if (!allowSidebarToggle) {
       return;
     }
     setShowSidebar((previous) => !previous);
-  }, [setShowSidebar, showChatPanel]);
+  }, [allowSidebarToggle, setShowSidebar]);
 
   const handleToggleCanvas = useCallback(() => {
     if (activeTheme === "general" && !isThemeWorkbench) {

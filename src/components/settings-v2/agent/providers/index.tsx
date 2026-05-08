@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   Bot,
@@ -978,7 +978,6 @@ export function CloudProviderSettings(props: CloudProviderSettingsProps) {
   }, [initialView, workspaceViews]);
   const [activeView, setActiveView] =
     useState<ProviderWorkspaceView>(defaultView);
-  const cloudUserCenterAutoOpenKeyRef = useRef<string | null>(null);
   const [cloudOpenError, setCloudOpenError] = useState<string | null>(null);
   const [cloudOpenInfo, setCloudOpenInfo] = useState<string | null>(null);
 
@@ -1061,35 +1060,14 @@ export function CloudProviderSettings(props: CloudProviderSettingsProps) {
     }
   }, [defaultView, initialView, workspaceViews]);
 
-  useEffect(() => {
-    if (
-      initialView !== "cloud" ||
-      !runtime ||
-      initializing ||
-      openingGoogleLogin
-    ) {
-      return;
-    }
-
-    const sessionKey = session?.session.id ?? "anonymous";
-    const autoOpenKey = `${runtime.baseUrl}::${runtime.tenantId}::${sessionKey}`;
-    if (cloudUserCenterAutoOpenKeyRef.current === autoOpenKey) {
-      return;
-    }
-
-    cloudUserCenterAutoOpenKeyRef.current = autoOpenKey;
-    void handleOpenCloudUserCenter("/welcome");
-  }, [
-    handleOpenCloudUserCenter,
-    initialView,
-    initializing,
-    openingGoogleLogin,
-    runtime,
-    session,
-  ]);
-
   const localProviderContent = (
-    <ApiKeyProviderSection className="min-h-[640px]" />
+    <ApiKeyProviderSection
+      className="min-h-[640px]"
+      exposeOemLoginPrompt={isOemRuntime && !session}
+      onOemLogin={() => {
+        void handleOpenCloudUserCenter("/welcome");
+      }}
+    />
   );
   const companionContent = (
     <div className="space-y-5">

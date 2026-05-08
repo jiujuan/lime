@@ -75,7 +75,7 @@ describe("modelRegistry API", () => {
           provider_name: "OpenAI",
         },
       ])
-      .mockResolvedValueOnce(285)
+      .mockResolvedValueOnce(0)
       .mockResolvedValueOnce([
         {
           id: "gpt-5",
@@ -86,7 +86,7 @@ describe("modelRegistry API", () => {
       ]);
 
     await getModelRegistry();
-    await expect(refreshModelRegistry()).resolves.toBe(285);
+    await expect(refreshModelRegistry()).resolves.toBe(0);
     await expect(getModelRegistry()).resolves.toEqual([
       expect.objectContaining({ id: "gpt-5" }),
     ]);
@@ -94,13 +94,10 @@ describe("modelRegistry API", () => {
     expect(vi.mocked(safeInvoke)).toHaveBeenCalledTimes(3);
   });
 
-  it("getModelRegistryProviderIds 应直接透传命令结果", async () => {
-    vi.mocked(safeInvoke).mockResolvedValueOnce(["openai", "codex"]);
+  it("getModelRegistryProviderIds 仅保留兼容命令并透传空集合", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce([]);
 
-    await expect(getModelRegistryProviderIds()).resolves.toEqual([
-      "openai",
-      "codex",
-    ]);
+    await expect(getModelRegistryProviderIds()).resolves.toEqual([]);
     expect(vi.mocked(safeInvoke)).toHaveBeenCalledWith(
       "get_model_registry_provider_ids",
     );

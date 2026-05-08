@@ -28,6 +28,7 @@ import { resolveProviderTestModel } from "./ApiKeyProviderSection.helpers";
 import { ModelAddPanel } from "./ModelAddPanel";
 import { ModelProviderList } from "./ModelProviderList";
 import { buildEnabledModelItems } from "./ModelProviderList.utils";
+import { isOemManagedHubProvider } from "@/lib/oemLimeHubProvider";
 
 // ============================================================================
 // 类型定义
@@ -36,6 +37,10 @@ import { buildEnabledModelItems } from "./ModelProviderList.utils";
 export interface ApiKeyProviderSectionProps {
   /** 额外的 CSS 类名 */
   className?: string;
+  /** 是否展示 OEM Lime Hub 未登录提示入口 */
+  exposeOemLoginPrompt?: boolean;
+  /** 触发 OEM Lime Hub 登录 */
+  onOemLogin?: () => void | Promise<void>;
 }
 
 export interface ApiKeyProviderSectionRef {
@@ -64,7 +69,7 @@ export interface ApiKeyProviderSectionRef {
 export const ApiKeyProviderSection = forwardRef<
   ApiKeyProviderSectionRef,
   ApiKeyProviderSectionProps
->(({ className }, ref) => {
+>(({ className, exposeOemLoginPrompt = false, onOemLogin }, ref) => {
   // 使用 Hook 管理状态
   const {
     providers,
@@ -75,6 +80,8 @@ export const ApiKeyProviderSection = forwardRef<
     addCustomProvider,
     updateProvider,
     addApiKey,
+    deleteApiKey,
+    deleteCustomProvider,
     exportConfig,
     importConfig,
     refresh,
@@ -93,8 +100,19 @@ export const ApiKeyProviderSection = forwardRef<
   const [showImportExportDialog, setShowImportExportDialog] = useState(false);
   const [showAddModelFlow, setShowAddModelFlow] = useState(false);
   const enabledModelItems = useMemo(
-    () => buildEnabledModelItems(providers),
-    [providers],
+    () => buildEnabledModelItems(providers, { exposeOemLoginPrompt }),
+    [exposeOemLoginPrompt, providers],
+  );
+  const selectedProviderLoginRequired = Boolean(
+    selectedProvider &&
+      exposeOemLoginPrompt &&
+      isOemManagedHubProvider(selectedProvider) &&
+      selectedProvider.api_key_count === 0 &&
+      (selectedProvider.api_keys ?? []).filter((apiKey) => apiKey.enabled)
+        .length === 0 &&
+      !(selectedProvider.custom_models ?? []).some(
+        (modelId) => modelId.trim().length > 0,
+      ),
   );
 
   useEffect(() => {
@@ -145,6 +163,42 @@ export const ApiKeyProviderSection = forwardRef<
       await addApiKey(providerId, apiKey, alias);
     },
     [addApiKey],
+  );
+
+  const handleDeleteProviderConfig = useCallback(
+    async (providerId: string): Promise<boolean> => {
+      const targetProvider = providers.find(
+        (provider) => provider.id === providerId,
+      );
+      if (!targetProvider) {
+        return false;
+      }
+
+      if (!targetProvider.is_system) {
+        return deleteCustomProvider(providerId);
+      }
+
+      for (const apiKey of targetProvider.api_keys ?? []) {
+        await deleteApiKey(apiKey.id);
+      }
+      await updateProvider(providerId, {
+        enabled: false,
+        custom_models: [],
+      });
+      if (selectedProviderId === providerId) {
+        selectProvider(null);
+      }
+
+      return true;
+    },
+    [
+      deleteApiKey,
+      deleteCustomProvider,
+      providers,
+      selectProvider,
+      selectedProviderId,
+      updateProvider,
+    ],
   );
 
   // ===== 连接测试 =====
@@ -202,6 +256,7 @@ export const ApiKeyProviderSection = forwardRef<
       {/* 左侧：已启用模型列表 */}
       <ModelProviderList
         providers={providers}
+        options={{ exposeOemLoginPrompt }}
         selectedProviderId={selectedProviderId}
         onProviderSelect={handleSelectEnabledModel}
         onAddModel={() => setShowAddModelFlow(true)}
@@ -227,6 +282,11 @@ export const ApiKeyProviderSection = forwardRef<
             onUpdate={handleUpdateProvider}
             onAddApiKey={handleAddApiKey}
             onTestConnection={handleTestConnection}
+            onDeleteProvider={handleDeleteProviderConfig}
+            authStatus={
+              selectedProviderLoginRequired ? "login_required" : "ready"
+            }
+            onLogin={onOemLogin}
             loading={loading}
             className="h-full"
           />

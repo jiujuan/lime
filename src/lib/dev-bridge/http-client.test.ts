@@ -475,6 +475,40 @@ describe("http-client", () => {
     });
   });
 
+  it("图层设计工程落盘命令应使用长请求窗口", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockImplementationOnce(createAbortablePendingFetch());
+    vi.stubGlobal("fetch", fetchMock);
+
+    let settled = false;
+    const invokePromise = invokeViaHttp("save_layered_design_project_export", {
+      request: {
+        projectRootPath: "/tmp/lime-layered-design",
+        documentId: "design-1",
+        files: [],
+      },
+    }).then(
+      () => ({ ok: true as const }),
+      (error) => ({ ok: false as const, error }),
+    );
+    invokePromise.finally(() => {
+      settled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(55000);
+    await expect(invokePromise).resolves.toMatchObject({
+      ok: false,
+      error: expect.objectContaining({
+        message: expect.stringContaining("timeout after 60000ms"),
+      }),
+    });
+  });
+
   it("Knowledge Pack 整理命令应保留 Builder Skill 长请求窗口", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()

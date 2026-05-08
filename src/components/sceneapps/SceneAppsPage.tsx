@@ -156,7 +156,7 @@ export function SceneAppsPage({
   }, [runtime.selectedSceneAppId, runtime.viewMode]);
 
   return (
-    <div className="lime-workbench-theme-scope flex-1 overflow-auto px-6 py-6">
+    <div className="lime-workbench-theme-scope flex-1 overflow-y-auto overflow-x-hidden px-6 py-6">
       <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-6">
         <section className="rounded-[28px] border border-slate-200/80 bg-white p-4 shadow-sm shadow-slate-950/5">
           <div className="flex flex-col gap-4">
@@ -293,7 +293,10 @@ export function SceneAppsPage({
               }
             />
           ) : (
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1.02fr)_minmax(420px,0.98fr)]">
+            <div
+              data-testid="sceneapps-detail-layout"
+              className="grid min-w-0 gap-6 2xl:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]"
+            >
               <SceneAppDetailPanel
                 detailView={runtime.selectedDetailView}
                 packRuntimeView={runtime.latestPackResultDetailView}
@@ -322,7 +325,7 @@ export function SceneAppsPage({
                 onLaunch={runtime.handleLaunchSelected}
               />
 
-              <div className="self-start xl:sticky xl:top-6">
+              <div className="min-w-0 self-start 2xl:sticky 2xl:top-6">
                 <SceneAppScorecardPanel
                   scorecardView={runtime.scorecardView}
                   packRuntimeView={runtime.latestPackResultDetailView}

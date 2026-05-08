@@ -114,6 +114,9 @@ async function renderFileManagerSidebar(props?: {
   onImportAsKnowledge?: React.ComponentProps<
     typeof FileManagerSidebar
   >["onImportAsKnowledge"];
+  onOpenFileInWorkspace?: React.ComponentProps<
+    typeof FileManagerSidebar
+  >["onOpenFileInWorkspace"];
   initialDirectory?: React.ComponentProps<
     typeof FileManagerSidebar
   >["initialDirectory"];
@@ -124,6 +127,7 @@ async function renderFileManagerSidebar(props?: {
   const onClose = props?.onClose ?? vi.fn();
   const onAddPathReferences = props?.onAddPathReferences ?? vi.fn();
   const onImportAsKnowledge = props?.onImportAsKnowledge;
+  const onOpenFileInWorkspace = props?.onOpenFileInWorkspace;
 
   await act(async () => {
     root.render(
@@ -131,6 +135,7 @@ async function renderFileManagerSidebar(props?: {
         onClose={onClose}
         onAddPathReferences={onAddPathReferences}
         onImportAsKnowledge={onImportAsKnowledge}
+        onOpenFileInWorkspace={onOpenFileInWorkspace}
         initialDirectory={props?.initialDirectory}
       />,
     );
@@ -405,6 +410,37 @@ describe("FileManagerSidebar", () => {
         source: "file_manager",
       }),
     ]);
+    expect(openPathWithDefaultApp).not.toHaveBeenCalled();
+  });
+
+  it("文件预览按钮应打开工作台预览，不替代普通加入对话动作", async () => {
+    const onAddPathReferences = vi.fn();
+    const onOpenFileInWorkspace = vi.fn();
+    const { container } = await renderFileManagerSidebar({
+      onAddPathReferences,
+      onOpenFileInWorkspace,
+    });
+
+    const fileEntry = Array.from(
+      container.querySelectorAll('[data-testid="file-manager-entry"]'),
+    ).find((entry) => entry.textContent?.includes("brief.txt"));
+    const previewButton = Array.from(
+      fileEntry?.querySelectorAll("button") ?? [],
+    ).find((button) => button.textContent?.includes("预览"));
+
+    await act(async () => {
+      previewButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(onOpenFileInWorkspace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: "/Users/demo/brief.txt",
+        name: "brief.txt",
+        isDir: false,
+      }),
+    );
+    expect(onAddPathReferences).not.toHaveBeenCalled();
     expect(openPathWithDefaultApp).not.toHaveBeenCalled();
   });
 

@@ -70,7 +70,7 @@ const PERSONA_PACK = {
     "",
     "- 语气：清晰、克制、只说已确认事实。",
     "- 边界：不得把 smoke 数据当作真实用户资料。",
-    "- 适用：验证 KnowledgePage chooser 的 persona + data 协同。",
+    "- 适用：验证项目资料选择弹层的写作口吻和参考资料协同。",
   ].join("\n"),
 };
 
@@ -80,9 +80,9 @@ const AGENT_RESULT_MESSAGE = {
   content: [
     "# 对话结果资料",
     "",
-    "- 事实：该结果来自当前 Agent 对话，用于验证生成结果可以沉淀成项目资料。",
+    "- 事实：该结果来自当前 Agent 对话，用于验证生成结果可以保存到项目资料。",
     "- 适用场景：用户拿到一段可复用结论后，可以一键保存，随后在项目资料管理页检查确认。",
-    "- 风险提示：沉淀后仍需人工确认，避免把临时分析当成长期事实。",
+    "- 风险提示：保存后仍需确认，避免把临时分析当成长期事实。",
   ].join("\n"),
 };
 
@@ -100,6 +100,20 @@ const USER_FACING_FORBIDDEN_TEXT = [
   "runtimeMode",
   "primaryDocument",
   "runtimeBinding",
+  "Builder Skill",
+  "Knowledge Pack",
+  "Resolver",
+  "Context Run",
+  "runtime",
+  "profile",
+  "documents",
+  "sources",
+  "runs",
+  "persona",
+  "data",
+  "wrapper",
+  "selected sections",
+  "compile",
   "Request failed",
   "Bad request",
 ];
@@ -298,6 +312,8 @@ async function waitForPageText(page, label, needles, timeoutMs) {
       { timeout: timeoutMs },
     );
   } catch (error) {
+    const pageUrl = page.url();
+    const pageTitle = await page.title().catch(() => "");
     const text = await page
       .locator("body")
       .innerText()
@@ -323,7 +339,7 @@ async function waitForPageText(page, label, needles, timeoutMs) {
     throw new Error(
       `[smoke:knowledge-gui] ${label} 等待失败，缺少 ${JSON.stringify(
         missing,
-      )}，页面文本预览: ${searchableText.slice(0, 2_000)}`,
+      )}，url=${pageUrl}，title=${pageTitle}，页面文本预览: ${searchableText.slice(0, 2_000)}`,
       { cause: error },
     );
   }
@@ -437,7 +453,15 @@ async function openPackDetail(page, title) {
   await page
     .locator("article")
     .filter({ hasText: title })
-    .getByRole("button", { name: "查看详情" })
+    .getByRole("button", { name: "打开" })
+    .click({ timeout: DEFAULT_ACTION_TIMEOUT_MS });
+}
+
+async function openPackForCreation(page, title) {
+  await page
+    .locator("article")
+    .filter({ hasText: title })
+    .getByRole("button", { name: "用于创作" })
     .click({ timeout: DEFAULT_ACTION_TIMEOUT_MS });
 }
 
@@ -482,8 +506,8 @@ async function confirmKnowledgeComposer(
 ) {
   await waitForPageText(
     page,
-    "Knowledge chooser 打开",
-    ["选择本轮 Knowledge 上下文", "Persona（最多 1 个）", "Data（可多选）"],
+    "项目资料选择弹层打开",
+    ["选择这次创作用哪些资料", "写作口吻（只能选 1 个）", "要参考的资料（可多选）"],
     options.timeoutMs,
   );
 
@@ -499,86 +523,64 @@ async function confirmKnowledgeComposer(
       .click({ timeout: DEFAULT_ACTION_TIMEOUT_MS });
     await waitForPageText(
       page,
-      "Knowledge chooser 多 data 选择",
-      ["已选 2"],
+      "项目资料选择弹层多选",
+      [selectPersona ? "已选 3 份资料" : "已选 2 份资料"],
       options.timeoutMs,
     );
   }
 
-  if (selectPersona && selectSecondaryData) {
-    await waitForPageText(
-      page,
-      "Knowledge chooser persona + 多 data 选择",
-      ["当前选择 3 份资料"],
-      options.timeoutMs,
-    );
-  }
-
-  await clickPageControl(page, { text: "确认启用" });
+  await clickPageControl(page, { text: "确认使用" });
 }
 
-async function verifyDetailTabs(page, options, packTitle) {
+async function verifyReviewPage(page, options, packTitle) {
   await openPackDetail(page, packTitle);
   await waitForPageText(
     page,
-    "资料详情头部加载",
+    "确认资料页加载",
     [
       packTitle,
-      "概览",
-      "内容",
-      "原始资料",
-      "引用摘要",
-      "缺口与风险",
-      "整理记录",
+      "完整资料文档",
+      "打开完整文档",
+      "导出",
+      "修改内容",
+      "需要你确认的内容",
+      "确认后会发生什么",
+      "不会覆盖原始资料",
     ],
     options.timeoutMs,
   );
-  await assertNoUserFacingInternalText(page, "资料详情头部");
+  await assertNoUserFacingInternalText(page, "确认资料页");
 
-  const tabExpectations = [
-    { tab: "概览", needles: ["适用场景", "当前引用摘要"] },
-    { tab: "内容", needles: ["资料说明", "整理内容"] },
-    { tab: "原始资料", needles: ["原始资料"] },
-    { tab: "引用摘要", needles: ["引用摘要"] },
-    { tab: "缺口与风险", needles: ["缺口与风险", "安全边界"] },
-    { tab: "整理记录", needles: ["整理记录"] },
-  ];
-
-  for (const item of tabExpectations) {
-    await clickPageControl(page, { text: item.tab });
-    await waitForPageText(
-      page,
-      `资料详情 Tab ${item.tab}`,
-      item.needles,
-      options.timeoutMs,
-    );
-    await assertNoUserFacingInternalText(page, `资料详情 Tab ${item.tab}`);
-  }
+  await clickPageControl(page, { text: "打开完整文档" });
+  await waitForPageText(
+    page,
+    "完整资料文档展开",
+    ["完整资料文档内容"],
+    options.timeoutMs,
+  );
+  await assertNoUserFacingInternalText(page, "完整资料文档展开");
 }
 
 async function verifyBuilderImportAndReview(page, options) {
-  await clickPageControl(page, { text: "Builder 整理" });
+  await clickPageControl(page, { text: "整理新资料" });
   await waitForPageText(
     page,
-    "Builder 整理台加载",
+    "整理新资料页面加载",
     [
-      "Builder Skills 整理台",
-      "1 选择 Builder Skill",
-      "2 导入原始材料",
-      "3 交给 Builder Skill",
-      "4 审阅与入上下文",
+      "选择资料用途",
+      "添加原始资料",
+      "Lime 开始整理",
+      "没有确认的资料不会自动用于创作",
     ],
     options.timeoutMs,
   );
 
   await page
-    .getByRole("button", {
-      name: "内容运营 选题日历、栏目节奏、素材复用和发布复盘。",
-    })
+    .getByRole("button", { name: "内容运营", exact: true })
     .click({ timeout: DEFAULT_ACTION_TIMEOUT_MS });
-  await page.getByLabel("Pack 显示名").fill(BUILDER_ACCEPTANCE_PACK.title);
+  await page.getByLabel("资料名称").fill(BUILDER_ACCEPTANCE_PACK.title);
   await page
-    .getByLabel("原始材料正文")
+    .getByLabel("原始资料正文")
     .fill(BUILDER_ACCEPTANCE_PACK.sourceText);
   await waitForPageText(
     page,
@@ -591,42 +593,30 @@ async function verifyBuilderImportAndReview(page, options) {
     options.timeoutMs,
   );
   await page
-    .getByRole("button", { name: "导入并生成 Pack", exact: true })
+    .getByRole("button", { name: "Lime 开始整理", exact: true })
     .click({ timeout: DEFAULT_ACTION_TIMEOUT_MS });
 
-  await waitForExactButton(page, "Builder 产物详情加载", "人工确认", options.timeoutMs);
+  await waitForExactButton(page, "整理结果详情加载", "确认可用", options.timeoutMs);
   await waitForPageText(
     page,
-    "Builder 产物详情加载",
+    "整理结果详情加载",
     [
       BUILDER_ACCEPTANCE_PACK.title,
-      "重新整理",
-      "待人工确认",
-      "引用摘要",
-      "人工确认",
+      "完整资料文档",
+      "需要你确认的内容",
+      "确认可用",
     ],
     options.timeoutMs,
   );
-  await assertNoUserFacingInternalText(page, "Builder 产物详情");
+  await assertNoUserFacingInternalText(page, "整理结果详情");
 
   await page
-    .getByRole("button", { name: "人工确认", exact: true })
+    .getByRole("button", { name: "确认可用", exact: true })
     .click({ timeout: DEFAULT_ACTION_TIMEOUT_MS });
   await waitForPageText(
     page,
-    "Builder 产物人工确认",
-    ["资料已人工确认", BUILDER_ACCEPTANCE_PACK.title],
-    options.timeoutMs,
-  );
-
-  await waitForExactButton(page, "Builder 产物设为默认入口", "设为默认", options.timeoutMs);
-  await page
-    .getByRole("button", { name: "设为默认", exact: true })
-    .click({ timeout: DEFAULT_ACTION_TIMEOUT_MS });
-  await waitForPageText(
-    page,
-    "Builder 产物设为默认",
-    ["已设为当前项目默认资料", "默认资料"],
+    "整理结果确认可用",
+    ["资料已确认可用", BUILDER_ACCEPTANCE_PACK.title],
     options.timeoutMs,
   );
 }
@@ -863,39 +853,60 @@ async function runPlaywrightGuiFlow(options) {
       page,
       "知识库总览加载",
       [
-        "Agent Knowledge 工作台",
-        "Knowledge v2 · Skills-first",
-        "Skills 生产线",
-        "回到 Agent 整理",
-        "上下文总览",
-        "Knowledge Pack 清单",
-        "资料进入 Pack",
-        "Builder 已整理",
-        "可入上下文",
+        "让 Lime 记住这个项目",
+        "回到创作",
+        "整理新资料",
+        "项目资料清单",
+        "可用于创作",
+        "本轮创作会使用",
         PERSONA_PACK.title,
         DEFAULT_PACK.title,
         SECONDARY_PACK.title,
         FILE_MANAGER_SOURCE_TITLE,
-        options.projectName,
       ],
       options.timeoutMs,
     );
-    await assertVisibleText(page, "Knowledge v2 总览细节", [
-      "Knowledge v2 上下文组合",
-      "Persona 人设层",
-      "Data 运营资料层",
-      "审阅闸门：等你确认的资料",
-      "v2 闭环概览",
-      "运营类资料覆盖",
+    await assertVisibleText(page, "项目资料首页细节", [
+      "接下来你可以",
+      "确认待审资料",
+      "选择创作时使用的资料",
+      "资料只有确认后才会用于创作",
     ]);
-    await assertNoUserFacingInternalText(page, "Knowledge v2 总览");
+    await assertNoUserFacingInternalText(page, "项目资料首页");
 
-    logStage("verify-detail-tabs");
-    await verifyDetailTabs(page, options, DEFAULT_PACK.title);
-    await clickPageControl(page, { text: "上下文总览" });
+    logStage("verify-states-page");
+    await clickPageControl(page, { text: "查看状态说明" });
+    await waitForPageText(
+      page,
+      "项目资料状态说明页加载",
+      ["项目资料状态说明", "没有资料", "已可用", "待确认", "需要补充", "整理失败"],
+      options.timeoutMs,
+    );
+    await assertNoUserFacingInternalText(page, "项目资料状态说明页");
+    await clickScopedButton(page, {
+      scope: '[data-testid="app-sidebar-main-nav"]',
+      ariaLabel: "灵感",
+    });
+    await waitForPageText(
+      page,
+      "灵感页加载",
+      ["收藏过的想法"],
+      options.timeoutMs,
+    );
+    await openKnowledgePageFromMainNav(page);
+    await waitForPageText(
+      page,
+      "状态说明后返回项目资料首页",
+      ["让 Lime 记住这个项目", "项目资料清单", DEFAULT_PACK.title],
+      options.timeoutMs,
+    );
+
+    logStage("verify-review-page");
+    await verifyReviewPage(page, options, DEFAULT_PACK.title);
+    await clickPageControl(page, { text: "回到项目资料" });
 
     logStage("open-agent-with-knowledge");
-    await clickPageControl(page, { text: "选择用于生成" });
+    await openPackForCreation(page, DEFAULT_PACK.title);
     await confirmKnowledgeComposer(page, options, {
       selectSecondaryData: true,
       selectPersona: true,
@@ -906,7 +917,7 @@ async function runPlaywrightGuiFlow(options) {
       await waitForPageText(
         page,
         "Agent 页面加载",
-        [`资料：${DEFAULT_PACK.title}`, "+2", "请基于当前项目资料生成内容"],
+        [`资料：${DEFAULT_PACK.title}`, "+2", "请基于当前项目资料创作内容"],
         options.timeoutMs,
       );
     } catch (error) {
@@ -925,7 +936,7 @@ async function runPlaywrightGuiFlow(options) {
 
     logStage("prepare-agent-result");
     await seedAgentResultForKnowledgeCapture(page, options);
-    await clickPageControl(page, { text: "选择用于生成" });
+    await openPackForCreation(page, DEFAULT_PACK.title);
     await confirmKnowledgeComposer(page, options);
 
     logStage("wait-agent-result");
@@ -934,35 +945,57 @@ async function runPlaywrightGuiFlow(options) {
       "Agent 结果样本加载",
       [
         `资料：${DEFAULT_PACK.title}`,
-        "沉淀为项目资料",
+        "保存到项目资料",
         "事实：该结果来自当前 Agent 对话",
       ],
       options.timeoutMs,
     );
 
     logStage("capture-agent-result");
-    await clickPageControl(page, { ariaLabel: "沉淀为项目资料" });
+    await clickPageControl(page, { ariaLabel: "保存到项目资料" });
 
-    logStage("wait-agent-result-captured");
+    logStage("wait-agent-result-save-page");
     await waitForPageText(
       page,
-      "Agent 结果沉淀完成",
-      ["项目资料已整理", AGENT_RESULT_MESSAGE.title],
+      "Agent 结果进入保存页",
+      [
+        "存到哪里？",
+        "补充已有资料",
+        "新建一份资料",
+        "保存到项目资料",
+        "保存后不会立刻用于创作，确认后才会生效",
+        "事实：该结果来自当前 Agent 对话",
+      ],
+      options.timeoutMs,
+    );
+    await assertNoUserFacingInternalText(page, "Agent 结果保存页");
+
+    await clickPageControl(page, { text: "保存到项目资料" });
+    await waitForPageText(
+      page,
+      "Agent 结果保存完成",
+      ["资料已保存，确认后才会用于创作", "新增 2 个内容点", "更新 1 个章节"],
       options.timeoutMs,
     );
 
-    logStage("return-knowledge-page");
+    logStage("return-knowledge-overview");
+    await clickScopedButton(page, {
+      scope: '[data-testid="app-sidebar-main-nav"]',
+      ariaLabel: "灵感",
+    });
+    await waitForPageText(page, "灵感页加载", ["灵感"], options.timeoutMs);
     await openKnowledgePageFromMainNav(page);
 
     logStage("wait-captured-agent-result");
     await waitForPageText(
       page,
-      "沉淀资料进入管理页",
+      "保存资料进入管理页",
       [
-        "Agent Knowledge 工作台",
-        "Knowledge Pack 清单",
-        AGENT_RESULT_MESSAGE.title,
-        "继续确认",
+        "让 Lime 记住这个项目",
+        "项目资料清单",
+        DEFAULT_PACK.title,
+        "待确认",
+        "去确认",
       ],
       options.timeoutMs,
     );

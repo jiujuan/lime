@@ -5,21 +5,13 @@
 use crate::models::model_registry::{
     EnhancedModelMetadata, ModelSyncState, ModelTier, ProviderAliasConfig, UserModelPreference,
 };
-use lime_server_utils::load_model_registry_provider_ids_from_resources;
 use lime_services::model_registry_service::{FetchModelsResult, ModelRegistryService};
-use serde::Serialize;
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::RwLock;
 
 /// 模型注册服务状态
 pub type ModelRegistryState = Arc<RwLock<Option<ModelRegistryService>>>;
-
-#[derive(Debug, Clone, Serialize)]
-pub struct HostAliasUserFileInfo {
-    pub path: String,
-    pub exists: bool,
-}
 
 /// 获取所有模型
 #[tauri::command]
@@ -34,14 +26,15 @@ pub async fn get_model_registry(
     Ok(service.get_all_models().await)
 }
 
-/// 获取模型注册表中所有 provider_id（去重且有序）
+/// 获取模型注册表中所有 provider_id（去重且有序）。
 ///
-/// provider_id 以 `src-tauri/resources/models/index.json` 的 providers 列表为唯一真相源。
+/// 本地模型目录已下线，Provider 元信息改由 `get_system_provider_catalog`
+/// 和用户配置提供；这里保留命令兼容并返回空集合。
 #[tauri::command]
 pub async fn get_model_registry_provider_ids(
     _state: State<'_, ModelRegistryState>,
 ) -> Result<Vec<String>, String> {
-    load_model_registry_provider_ids_from_resources()
+    Ok(Vec::new())
 }
 
 /// 搜索模型
@@ -188,7 +181,7 @@ pub async fn get_all_alias_configs(
     Ok(service.get_all_alias_configs().await)
 }
 
-/// 刷新模型注册表（强制从内嵌资源重新加载）
+/// 刷新模型注册表（本地模型目录已下线，等价于清空缓存）
 #[tauri::command]
 pub async fn refresh_model_registry(state: State<'_, ModelRegistryState>) -> Result<u32, String> {
     let guard = state.read().await;
@@ -199,27 +192,10 @@ pub async fn refresh_model_registry(state: State<'_, ModelRegistryState>) -> Res
     service.force_reload().await
 }
 
-#[tauri::command]
-pub fn get_model_host_alias_user_file_info() -> Result<HostAliasUserFileInfo, String> {
-    let path = ModelRegistryService::resolve_user_host_alias_path()
-        .ok_or_else(|| "无法解析用户数据目录".to_string())?;
-
-    Ok(HostAliasUserFileInfo {
-        path: path.to_string_lossy().to_string(),
-        exists: path.exists(),
-    })
-}
-
-#[tauri::command]
-pub fn ensure_model_host_alias_user_file() -> Result<String, String> {
-    let path = ModelRegistryService::ensure_user_host_alias_file()?;
-    Ok(path.to_string_lossy().to_string())
-}
-
 /// 从 Provider API 获取模型列表
 ///
-/// 调用 Provider 的 /v1/models 端点获取模型列表，
-/// 如果失败则回退到本地 JSON 文件
+/// 调用 Provider 的 /v1/models 端点获取模型列表；失败时返回错误来源，
+/// 不再回退本地模型目录。
 ///
 /// # 参数
 /// - `provider_id`: Provider ID（如 "siliconflow", "openai"）
@@ -271,6 +247,23 @@ pub async fn fetch_provider_models_auto(
     }
 
     let provider_type = provider.provider.effective_provider_type();
+
+    {
+        let guard = state.read().await;
+        let service = guard
+            .as_ref()
+            .ok_or_else(|| "模型注册服务未初始化".to_string())?;
+        match service.get_cached_provider_models(&provider_id, &api_host, Some(provider_type)) {
+            Ok(Some(cached)) => return Ok(cached),
+            Ok(None) => {}
+            Err(error) => {
+                tracing::warn!(
+                    "[ModelRegistry] 读取 Provider 模型缓存失败，继续获取 API Key: {error}"
+                );
+            }
+        }
+    }
+
     let requires_api_key = ModelRegistryService::requires_api_key_for_model_fetch(
         &provider_id,
         &api_host,
@@ -290,7 +283,6 @@ pub async fn fetch_provider_models_auto(
             .unwrap_or_default()
     };
 
-    // 调用模型注册服务
     let guard = state.read().await;
     let service = guard
         .as_ref()

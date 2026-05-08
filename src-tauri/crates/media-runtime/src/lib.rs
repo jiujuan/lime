@@ -1514,10 +1514,20 @@ fn collect_generated_images(response_body: &Value) -> Vec<Value> {
         .unwrap_or_default()
 }
 
+fn normalize_responses_image_generation_tool_model(model: &str) -> String {
+    let trimmed = model.trim();
+    if let Some(version) = trimmed.strip_prefix("gpt-images-") {
+        return format!("gpt-image-{version}");
+    }
+
+    trimmed.to_string()
+}
+
 fn build_responses_image_generation_tool(model: &str) -> Value {
     let mut tool = Map::new();
     tool.insert("type".to_string(), json!("image_generation"));
-    let trimmed_model = model.trim();
+    let normalized_model = normalize_responses_image_generation_tool_model(model);
+    let trimmed_model = normalized_model.trim();
     if !trimmed_model.is_empty() {
         tool.insert("model".to_string(), json!(trimmed_model));
     }
@@ -1589,6 +1599,18 @@ fn build_responses_image_generation_endpoint(endpoint: &str) -> String {
 
 fn should_retry_responses_image_generation_with_input_list(status: u16, body: &str) -> bool {
     status == 400 && body.to_ascii_lowercase().contains("input must be a list")
+}
+
+fn is_responses_image_generation_endpoint_not_found(status: u16, body: &str) -> bool {
+    if status == 404 {
+        return true;
+    }
+
+    let normalized = body.to_ascii_lowercase();
+    normalized.contains("not found")
+        || normalized.contains("page not found")
+        || normalized.contains("cannot post")
+        || body.contains("请求的接口不存在")
 }
 
 fn parse_sse_event(raw_event: &str) -> Option<(String, String)> {
@@ -1907,20 +1929,30 @@ async fn request_single_responses_image_generation(
     }
 
     if !(200..300).contains(&status) {
+        let endpoint_not_found =
+            is_responses_image_generation_endpoint_not_found(status, &response_body_raw);
         let error_body: Value = serde_json::from_str(&response_body_raw).unwrap_or_else(|_| {
             json!({
                 "error": {
-                    "code": "responses_image_generation_failed",
+                    "code": if endpoint_not_found {
+                        "responses_image_generation_endpoint_not_found"
+                    } else {
+                        "responses_image_generation_failed"
+                    },
                     "message": summarize_response_body(&response_body_raw),
                 }
             })
         });
-        let error_code = error_body
-            .get("error")
-            .and_then(|value| value.get("code"))
-            .and_then(Value::as_str)
-            .filter(|value| !value.trim().is_empty())
-            .unwrap_or("responses_image_generation_failed");
+        let error_code = if endpoint_not_found {
+            "responses_image_generation_endpoint_not_found"
+        } else {
+            error_body
+                .get("error")
+                .and_then(|value| value.get("code"))
+                .and_then(Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or("responses_image_generation_failed")
+        };
         let error_message = error_body
             .get("error")
             .and_then(|value| value.get("message"))
@@ -1946,13 +1978,46 @@ async fn request_single_image_generation_for_executor(
     task_id: &str,
 ) -> Result<(Value, Value), TaskErrorRecord> {
     if is_responses_image_generation_executor(&prepared_input.executor_mode) {
-        return request_single_responses_image_generation(
+        return match request_single_responses_image_generation(
             client,
             runner_config,
             prepared_input,
             request_prompt,
         )
-        .await;
+        .await
+        {
+            Ok(result) => Ok(result),
+            Err(error) if error.code == "responses_image_generation_endpoint_not_found" => {
+                let (mut image, response) = request_single_image_generation(
+                    client,
+                    runner_config,
+                    prepared_input,
+                    request_prompt,
+                    task_id,
+                )
+                .await?;
+                if let Some(image_object) = image.as_object_mut() {
+                    image_object.insert(
+                        "source".to_string(),
+                        json!(IMAGE_EXECUTOR_MODE_RESPONSES_IMAGE_GENERATION),
+                    );
+                    image_object.insert(
+                        "fallback_source".to_string(),
+                        json!(IMAGE_EXECUTOR_MODE_IMAGES_API),
+                    );
+                }
+                Ok((
+                    image,
+                    json!({
+                        "executor_mode": IMAGE_EXECUTOR_MODE_RESPONSES_IMAGE_GENERATION,
+                        "fallback_executor_mode": IMAGE_EXECUTOR_MODE_IMAGES_API,
+                        "fallback_reason": error.message,
+                        "response": response,
+                    }),
+                ))
+            }
+            Err(error) => Err(error),
+        };
     }
 
     request_single_image_generation(
@@ -4511,6 +4576,120 @@ mod tests {
         server.abort();
     }
 
+    #[tokio::test]
+    async fn execute_image_generation_task_should_fallback_to_images_api_when_responses_route_missing(
+    ) {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let captured_body = Arc::new(Mutex::new(None::<Value>));
+        let created = write_task_artifact(
+            temp_dir.path(),
+            TaskType::ImageGenerate,
+            Some("图层主视觉".to_string()),
+            json!({
+                "prompt": "透明背景上的青柠产品主体",
+                "size": "1024x1024",
+                "count": 1,
+                "provider_id": "airgate-openai-images",
+                "model": "gpt-images-2",
+                "executor_mode": "responses_image_generation",
+                "outer_model": "gpt-5.5"
+            }),
+            TaskWriteOptions::default(),
+        )
+        .expect("create task");
+
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind image api");
+        let address = listener.local_addr().expect("resolve address");
+        let captured_body_for_server = Arc::clone(&captured_body);
+        let server = tokio::spawn(async move {
+            let app = Router::new().route(
+                "/v1/images/generations",
+                post(move |Json(body): Json<Value>| {
+                    let captured_body = Arc::clone(&captured_body_for_server);
+                    async move {
+                        *captured_body.lock().expect("lock captured body") = Some(body);
+                        (
+                            StatusCode::OK,
+                            Json(json!({
+                                "created": 1_717_200_000i64,
+                                "data": [
+                                    {
+                                        "b64_json": "ZmFrZS1sb2NhbC1pbWFnZS1nYXRld2F5",
+                                        "revised_prompt": "青柠产品主体"
+                                    }
+                                ]
+                            })),
+                        )
+                    }
+                }),
+            );
+            axum::serve(listener, app).await.expect("serve image api");
+        });
+
+        let result = execute_image_generation_task(
+            temp_dir.path(),
+            &created.task_id,
+            &ImageGenerationRunnerConfig {
+                endpoint: format!("http://{address}/v1/images/generations"),
+                api_key: "test-key".to_string(),
+            },
+        )
+        .await
+        .expect("execute responses image task through local image gateway");
+
+        assert_eq!(result.normalized_status, "succeeded");
+        let result_value = result.record.result.as_ref().expect("result value");
+        assert_eq!(
+            result_value.get("executor_mode").and_then(Value::as_str),
+            Some(IMAGE_EXECUTOR_MODE_RESPONSES_IMAGE_GENERATION)
+        );
+        assert_eq!(
+            result_value
+                .get("responses")
+                .and_then(Value::as_array)
+                .and_then(|responses| responses.first())
+                .and_then(|response| response.get("fallback_executor_mode"))
+                .and_then(Value::as_str),
+            Some(IMAGE_EXECUTOR_MODE_IMAGES_API)
+        );
+        assert_eq!(
+            result_value
+                .get("images")
+                .and_then(Value::as_array)
+                .and_then(|images| images.first())
+                .and_then(|value| value.get("url"))
+                .and_then(Value::as_str),
+            Some("data:image/png;base64,ZmFrZS1sb2NhbC1pbWFnZS1nYXRld2F5")
+        );
+        assert_eq!(
+            result_value
+                .get("images")
+                .and_then(Value::as_array)
+                .and_then(|images| images.first())
+                .and_then(|value| value.get("source"))
+                .and_then(Value::as_str),
+            Some(IMAGE_EXECUTOR_MODE_RESPONSES_IMAGE_GENERATION)
+        );
+
+        let body = captured_body
+            .lock()
+            .expect("lock captured body")
+            .clone()
+            .expect("captured body");
+        assert_eq!(
+            body.get("model").and_then(Value::as_str),
+            Some("gpt-images-2")
+        );
+        assert_eq!(
+            body.get("response_format").and_then(Value::as_str),
+            Some("b64_json")
+        );
+
+        server.abort();
+    }
+
     #[test]
     fn responses_image_generation_endpoint_should_reuse_images_api_base() {
         assert_eq!(
@@ -4528,6 +4707,20 @@ mod tests {
         assert_eq!(
             build_responses_image_generation_endpoint("https://gateway.example.com/v1/responses"),
             "https://gateway.example.com/v1/responses"
+        );
+    }
+
+    #[test]
+    fn responses_image_generation_tool_should_normalize_gpt_images_2_alias() {
+        let tool = build_responses_image_generation_tool("gpt-images-2");
+
+        assert_eq!(
+            tool.get("type").and_then(Value::as_str),
+            Some("image_generation")
+        );
+        assert_eq!(
+            tool.get("model").and_then(Value::as_str),
+            Some("gpt-image-2")
         );
     }
 

@@ -7,18 +7,14 @@ import {
   type OemCloudRuntimeContext,
 } from "@/lib/api/oemCloudRuntime";
 import { getStoredOemCloudSessionState } from "@/lib/oemCloudSession";
-import { startOemCloudLogin } from "@/lib/oemCloudLoginLauncher";
-
-const STARTUP_LOGIN_ATTEMPT_PREFIX = "lime:oem-cloud-startup-login:v1";
 
 export type OemCloudStartupLoginStatus =
   | "not_configured"
   | "has_session"
-  | "already_attempted"
+  | "manual_required"
   | "not_required"
   | "no_google_provider"
   | "unsupported_policy"
-  | "started"
   | "failed";
 
 export interface OemCloudStartupLoginResult {
@@ -40,9 +36,9 @@ function hasGoogleAuthProvider(
   );
 }
 
-function shouldStartGoogleOauth(
+function resolveStartupLoginPolicy(
   catalog: Awaited<ReturnType<typeof getPublicAuthCatalog>>,
-): OemCloudStartupLoginResult | null {
+): OemCloudStartupLoginResult {
   if (!catalog.authPolicy.required) {
     return { status: "not_required" };
   }
@@ -58,7 +54,7 @@ function shouldStartGoogleOauth(
     return { status: "no_google_provider" };
   }
 
-  return null;
+  return { status: "manual_required" };
 }
 
 function hasCurrentTenantSession(runtime: OemCloudRuntimeContext): boolean {
@@ -73,28 +69,6 @@ function hasCurrentTenantSession(runtime: OemCloudRuntimeContext): boolean {
   );
 }
 
-function getStartupLoginAttemptKey(runtime: OemCloudRuntimeContext): string {
-  return `${STARTUP_LOGIN_ATTEMPT_PREFIX}:${runtime.tenantId}:${runtime.baseUrl}`;
-}
-
-function readStartupAttempt(runtime: OemCloudRuntimeContext): boolean {
-  if (typeof window === "undefined" || !window.sessionStorage) {
-    return false;
-  }
-
-  return (
-    window.sessionStorage.getItem(getStartupLoginAttemptKey(runtime)) === "1"
-  );
-}
-
-function markStartupAttempt(runtime: OemCloudRuntimeContext): void {
-  if (typeof window === "undefined" || !window.sessionStorage) {
-    return;
-  }
-
-  window.sessionStorage.setItem(getStartupLoginAttemptKey(runtime), "1");
-}
-
 export async function startOemCloudStartupLoginIfRequired(
   runtime = resolveOemCloudRuntimeContext(),
 ): Promise<OemCloudStartupLoginResult> {
@@ -106,13 +80,8 @@ export async function startOemCloudStartupLoginIfRequired(
     return { status: "has_session" };
   }
 
-  if (readStartupAttempt(runtime)) {
-    return { status: "already_attempted" };
-  }
-
-  let startupDecision: OemCloudStartupLoginResult | null;
   try {
-    startupDecision = shouldStartGoogleOauth(
+    return resolveStartupLoginPolicy(
       await getPublicAuthCatalog(runtime.tenantId),
     );
   } catch (error) {
@@ -121,23 +90,6 @@ export async function startOemCloudStartupLoginIfRequired(
         ? error.message.trim()
         : "读取云端登录配置失败";
     console.warn("读取启动期云端登录配置失败:", error);
-    return { status: "failed", reason };
-  }
-
-  if (startupDecision) {
-    return startupDecision;
-  }
-
-  markStartupAttempt(runtime);
-  try {
-    await startOemCloudLogin(runtime);
-    return { status: "started" };
-  } catch (error) {
-    const reason =
-      error instanceof Error && error.message.trim()
-        ? error.message.trim()
-        : "启动云端登录失败";
-    console.warn("启动期云端登录失败:", error);
     return { status: "failed", reason };
   }
 }

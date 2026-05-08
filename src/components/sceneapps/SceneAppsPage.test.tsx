@@ -1435,6 +1435,22 @@ describe("SceneAppsPage", () => {
       container.querySelector('[data-testid="sceneapp-detail-advanced-sections"]'),
     ).not.toBeNull();
     expect(
+      container.querySelector('[data-testid="sceneapps-detail-layout"]')
+        ?.className,
+    ).toContain("2xl:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]");
+    expect(
+      container.querySelector('[data-testid="sceneapp-detail-launch-stack"]')
+        ?.className,
+    ).not.toContain("xl:grid-cols");
+    expect(
+      container.querySelector('[data-testid="sceneapp-detail-launch-card"]')
+        ?.className,
+    ).toContain("min-w-0");
+    expect(
+      container.querySelector('[data-testid="sceneapp-detail-pack-runtime-pack"]')
+        ?.className,
+    ).toContain("min-w-0");
+    expect(
       container.querySelector(
         '[data-testid="sceneapp-scorecard-advanced-sections"]',
       ),

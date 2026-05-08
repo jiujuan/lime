@@ -24,6 +24,25 @@ function isLikelyLocalHost(apiHost?: string | null): boolean {
   );
 }
 
+function isLikelyFalProvider(input: {
+  providerId?: string | null;
+  providerType?: string | null;
+  apiHost?: string | null;
+}): boolean {
+  const providerId = normalize(input.providerId);
+  const providerType = normalize(input.providerType);
+  const apiHost = normalize(input.apiHost);
+
+  return (
+    providerType === "fal" ||
+    providerId === "fal" ||
+    providerId.startsWith("fal-") ||
+    providerId.includes("fal.ai") ||
+    apiHost.includes("fal.run") ||
+    apiHost.includes("queue.fal.run")
+  );
+}
+
 interface ProviderModelAutoFetchCapability {
   supported: boolean;
   requiresApiKey: boolean;
@@ -40,13 +59,20 @@ export function getProviderModelAutoFetchCapability(input: {
   const providerType = normalize(input.providerType) as ProviderType | "";
   const localHost = isLikelyLocalHost(input.apiHost);
 
+  if (isLikelyFalProvider(input)) {
+    return {
+      supported: true,
+      requiresApiKey: false,
+      requiresLiveModelTruth: false,
+    };
+  }
+
   switch (providerType) {
     case "openai":
     case "openai-response":
     case "codex":
     case "new-api":
     case "gateway":
-    case "fal":
       return {
         supported: true,
         requiresApiKey:

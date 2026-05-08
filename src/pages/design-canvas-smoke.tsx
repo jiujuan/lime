@@ -5,7 +5,12 @@ import {
   CanvasFactory,
   createInitialDesignCanvasState,
   type CanvasStateUnion,
+  type DesignCanvasProps,
 } from "@/lib/workspace/workbenchCanvas";
+import type {
+  CreateImageGenerationTaskArtifactRequest,
+  MediaTaskArtifactOutput,
+} from "@/lib/api/mediaTasks";
 import {
   LAYERED_DESIGN_DEFAULT_MODEL_SLOT_TEXT_OCR_PRIORITY_LABEL,
   createLayeredDesignDefaultAnalyzerModelSlotJsonExecutor,
@@ -49,8 +54,7 @@ const WORKER_OCR_PRIORITY_FIRST_LABEL = "Smoke failing OCR provider";
 const WORKER_OCR_PRIORITY_EMPTY_LABEL = "Smoke empty OCR provider";
 const WORKER_OCR_PRIORITY_WORKER_LABEL =
   "Smoke OCR priority browser Worker provider";
-const WORKER_OCR_PRIORITY_FIXTURE_LABEL =
-  "Text OCR priority provider fixture";
+const WORKER_OCR_PRIORITY_FIXTURE_LABEL = "Text OCR priority provider fixture";
 const WORKER_OCR_PRIORITY_LABEL = `OCR priority: ${WORKER_OCR_PRIORITY_FIRST_LABEL} -> ${WORKER_OCR_PRIORITY_EMPTY_LABEL} -> ${WORKER_OCR_PRIORITY_WORKER_LABEL}`;
 const WORKER_CLEAN_PLATE_FIXTURE_LABEL =
   "Clean plate browser Worker provider fixture";
@@ -158,6 +162,8 @@ type SmokeAnalyzerMode =
   | "worker-model-slots-http-json"
   | "worker-model-slots-native-ocr";
 
+type SmokeImageTaskMode = "none" | "auto-refresh-fixture";
+
 const analyzerBadgeLabels: Record<SmokeAnalyzerMode, string> = {
   default: "默认 analyzer",
   native: "Native analyzer 已启用",
@@ -170,8 +176,12 @@ const analyzerBadgeLabels: Record<SmokeAnalyzerMode, string> = {
   "worker-model-slots": "Worker model slots analyzer 已启用",
   "worker-model-slots-http-json":
     "Worker model slots HTTP JSON analyzer 已启用",
-  "worker-model-slots-native-ocr": "Worker model slots native OCR analyzer 已启用",
+  "worker-model-slots-native-ocr":
+    "Worker model slots native OCR analyzer 已启用",
 };
+
+const smokeGeneratedLayerDataUrl =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAIElEQVR42mP8z8DwnwEJMDIwMDAwYGRk+M8ABYwMDAwAw8AD9tHX3zYAAAAASUVORK5CYII=";
 
 const smokeArtifact = createLayeredDesignArtifactFromPrompt(
   "@海报 为 Lime AI 图层化设计生成一张咖啡快闪活动海报，保留背景、主体、氛围特效、标题和 CTA 独立图层",
@@ -195,7 +205,10 @@ function readSearchParam(name: string): string | null {
 }
 
 function createSmokeCanvasState(): CanvasStateUnion {
-  return createCanvasStateFromArtifact(smokeArtifact) ?? createInitialDesignCanvasState();
+  return (
+    createCanvasStateFromArtifact(smokeArtifact) ??
+    createInitialDesignCanvasState()
+  );
 }
 
 function resolveAnalyzerMode(value: string | null): SmokeAnalyzerMode {
@@ -215,6 +228,96 @@ function resolveAnalyzerMode(value: string | null): SmokeAnalyzerMode {
   }
 
   return "default";
+}
+
+function resolveImageTaskMode(value: string | null): SmokeImageTaskMode {
+  return value === "auto-refresh-fixture" ? value : "none";
+}
+
+function createSmokeImageTaskOutput(
+  request: CreateImageGenerationTaskArtifactRequest,
+  result?: Record<string, unknown>,
+): MediaTaskArtifactOutput {
+  const taskId = `smoke-image-task-${request.slotId ?? "layer"}`;
+  const taskPath = `.lime/tasks/image_generate/${taskId}.json`;
+  const status = result ? "succeeded" : "pending_submit";
+  const normalizedStatus = result ? "succeeded" : "pending";
+  const timestamp = "2026-05-05T01:00:00.000Z";
+
+  return {
+    success: true,
+    task_id: taskId,
+    task_type: "image_generate",
+    task_family: "image",
+    status,
+    normalized_status: normalizedStatus,
+    path: taskPath,
+    absolute_path: `${request.projectRootPath}/${taskPath}`,
+    artifact_path: taskPath,
+    absolute_artifact_path: `${request.projectRootPath}/${taskPath}`,
+    reused_existing: false,
+    record: {
+      task_id: taskId,
+      task_type: "image_generate",
+      task_family: "image",
+      title: request.title,
+      payload: {
+        prompt: request.prompt,
+        provider_id: request.providerId ?? "smoke-fixture",
+        model: request.model ?? "smoke-layered-design-image-v1",
+        executor_mode: request.executorMode ?? "responses_image_generation",
+        runtime_contract: request.runtimeContract,
+        slot_id: request.slotId,
+        target_output_id: request.targetOutputId,
+        entry_source: request.entrySource,
+      },
+      status,
+      normalized_status: normalizedStatus,
+      created_at: timestamp,
+      updated_at: timestamp,
+      result,
+    },
+  };
+}
+
+function createSmokeImageTaskFixture(): Pick<
+  DesignCanvasProps,
+  "createImageTaskArtifact" | "getImageTaskArtifact"
+> {
+  const requestsByTaskRef = new Map<
+    string,
+    CreateImageGenerationTaskArtifactRequest
+  >();
+
+  return {
+    createImageTaskArtifact: async (request) => {
+      const output = createSmokeImageTaskOutput(request);
+      requestsByTaskRef.set(output.path, request);
+      return output;
+    },
+    getImageTaskArtifact: async ({ taskRef }) => {
+      const request = requestsByTaskRef.get(taskRef);
+      if (!request) {
+        throw new Error(`Smoke 图片任务不存在：${taskRef}`);
+      }
+
+      return createSmokeImageTaskOutput(request, {
+        executor_mode: request.executorMode ?? "responses_image_generation",
+        images: [
+          {
+            url: smokeGeneratedLayerDataUrl,
+            revised_prompt: `Smoke 自动刷新生成：${request.anchorSectionTitle ?? request.slotId ?? "图层"}`,
+            source: "smoke_auto_refresh_fixture",
+            postprocess: {
+              status: "succeeded",
+              transparent: true,
+              input_source: "fixture_data_url",
+            },
+          },
+        ],
+      });
+    },
+  };
 }
 
 class SmokeStructuredAnalyzerWorker {
@@ -293,8 +396,7 @@ function assertSameStringList(
 function recordSmokeModelSlotQualityContract(
   request: LayeredDesignAnalyzerModelSlotTransportJsonRequest,
 ) {
-  const expected =
-    SMOKE_MODEL_SLOT_QUALITY_CONTRACT_EXPECTATIONS[request.kind];
+  const expected = SMOKE_MODEL_SLOT_QUALITY_CONTRACT_EXPECTATIONS[request.kind];
   const contract = request.context.qualityContract;
 
   if (!contract || contract.factSource !== expected.factSource) {
@@ -488,7 +590,11 @@ const Page = styled.main`
   min-height: 100vh;
   flex-direction: column;
   background:
-    radial-gradient(circle at 12% 10%, rgba(14, 165, 233, 0.16), transparent 28%),
+    radial-gradient(
+      circle at 12% 10%,
+      rgba(14, 165, 233, 0.16),
+      transparent 28%
+    ),
     linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
   color: #0f172a;
 `;
@@ -565,6 +671,17 @@ export function DesignCanvasSmokePage() {
     () => resolveAnalyzerMode(readSearchParam("analyzer")),
     [],
   );
+  const imageTaskMode = useMemo(
+    () => resolveImageTaskMode(readSearchParam("imageTask")),
+    [],
+  );
+  const imageTaskFixture = useMemo(
+    () =>
+      imageTaskMode === "auto-refresh-fixture"
+        ? createSmokeImageTaskFixture()
+        : {},
+    [imageTaskMode],
+  );
   const analyzeFlatImage = useMemo(() => {
     if (analyzerMode === "native") {
       return createLayeredDesignFlatImageAnalyzerFromStructuredProvider(
@@ -636,6 +753,11 @@ export function DesignCanvasSmokePage() {
           <Badge data-testid="design-canvas-smoke-analyzer">
             {analyzerBadgeLabels[analyzerMode]}
           </Badge>
+          {imageTaskMode === "auto-refresh-fixture" ? (
+            <Badge data-testid="design-canvas-smoke-image-task">
+              图片任务自动刷新 fixture
+            </Badge>
+          ) : null}
           {analyzerMode === "worker-refined" ? (
             <Badge>{WORKER_REFINED_FIXTURE_LABEL}</Badge>
           ) : null}
@@ -652,8 +774,8 @@ export function DesignCanvasSmokePage() {
           ) : null}
           {analyzerMode === "worker-ocr-priority" ? (
             <Badge>
-              {WORKER_OCR_PRIORITY_FIXTURE_LABEL} / {WORKER_OCR_PRIORITY_LABEL} /{" "}
-              {WORKER_OCR_TEXT}
+              {WORKER_OCR_PRIORITY_FIXTURE_LABEL} / {WORKER_OCR_PRIORITY_LABEL}{" "}
+              / {WORKER_OCR_TEXT}
             </Badge>
           ) : null}
           {analyzerMode === "worker-clean-plate" ? (
@@ -691,6 +813,16 @@ export function DesignCanvasSmokePage() {
             projectRootPath={projectRootPath}
             projectId={projectId}
             contentId="design-canvas-smoke"
+            imageGenerationProviderId={
+              imageTaskMode === "auto-refresh-fixture"
+                ? "smoke-fixture"
+                : undefined
+            }
+            imageGenerationModelId={
+              imageTaskMode === "auto-refresh-fixture"
+                ? "smoke-layered-design-image-v1"
+                : undefined
+            }
             designAnalyzeFlatImage={analyzeFlatImage}
             designAnalyzerModelSlotConfigs={
               analyzerMode === "worker-model-slots" ||
@@ -699,6 +831,10 @@ export function DesignCanvasSmokePage() {
                 ? WORKER_MODEL_SLOT_CONFIGS
                 : undefined
             }
+            designCreateImageTaskArtifact={
+              imageTaskFixture.createImageTaskArtifact
+            }
+            designGetImageTaskArtifact={imageTaskFixture.getImageTaskArtifact}
           />
         </CanvasCard>
       </CanvasHost>

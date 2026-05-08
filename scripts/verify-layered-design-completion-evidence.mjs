@@ -17,6 +17,7 @@ const REQUIRED_KINDS = ["subject_matting", "clean_plate", "text_ocr"];
 const DEFAULT_MINIMUM_SAMPLES = 5;
 const DEFAULT_MINIMUM_SAMPLE_SCORE = 8;
 const DEFAULT_MINIMUM_PASSED_TOOLS = 1;
+const PNG_SIGNATURE_HEX = "89504e470d0a1a0a";
 const PSD_VERIFIER_PATH = fileURLToPath(
   new URL("./verify-layered-design-psd-export.mjs", import.meta.url),
 );
@@ -104,6 +105,97 @@ function hasAllItems(values, required) {
   return required.every((item) => values.includes(item));
 }
 
+function assertNonEmptyFile(filePath, label) {
+  assert(fs.existsSync(filePath), `${label} 不存在: ${filePath}`);
+  const byteLength = fs.statSync(filePath).size;
+  assert(byteLength > 0, `${label} 是空文件: ${filePath}`);
+  return byteLength;
+}
+
+function readPngDimensions(imagePath, label = "PNG 图片") {
+  const header = fs.readFileSync(imagePath).subarray(0, 24);
+  assert(
+    header.length >= 24 &&
+      header.subarray(0, 8).toString("hex") === PNG_SIGNATURE_HEX &&
+      header.subarray(12, 16).toString("ascii") === "IHDR",
+    `${label} 不是有效 PNG: ${imagePath}`,
+  );
+  return {
+    width: header.readUInt32BE(16),
+    height: header.readUInt32BE(20),
+  };
+}
+
+function validatePngFile(imagePath, label, expected = {}) {
+  const byteLength = assertNonEmptyFile(imagePath, label);
+  const dimensions = readPngDimensions(imagePath, label);
+  if (Number.isInteger(expected.byteLength)) {
+    assert(
+      byteLength === expected.byteLength,
+      `${label} 文件大小不匹配: ${byteLength} != ${expected.byteLength}`,
+    );
+  }
+  if (Number.isInteger(expected.width)) {
+    assert(
+      dimensions.width === expected.width,
+      `${label} 宽度不匹配: ${dimensions.width} != ${expected.width}`,
+    );
+  }
+  if (Number.isInteger(expected.height)) {
+    assert(
+      dimensions.height === expected.height,
+      `${label} 高度不匹配: ${dimensions.height} != ${expected.height}`,
+    );
+  }
+
+  return {
+    path: imagePath,
+    byteLength,
+    width: dimensions.width,
+    height: dimensions.height,
+  };
+}
+
+function resolveExistingPngPath(baseDir, value, label, expected = {}) {
+  const imagePath = resolveExistingPath(baseDir, value, label);
+  return validatePngFile(imagePath, label, expected);
+}
+
+function validateSampleManifest(sampleManifestPath, checkedSamples) {
+  const manifest = readJson(sampleManifestPath);
+  const samples = Array.isArray(manifest.samples) ? manifest.samples : [];
+  const byId = new Map(samples.map((sample) => [sample.id, sample]));
+  const baseDir = path.dirname(sampleManifestPath);
+  const sampleImages = [];
+
+  for (const sampleId of checkedSamples) {
+    const sample = byId.get(sampleId);
+    assert(sample, `sample manifest 缺少 benchmark 样本: ${sampleId}`);
+    const image = isRecord(sample.image) ? sample.image : undefined;
+    assert(image, `sample manifest 样本缺少 image: ${sampleId}`);
+    assert(
+      image.mimeType === "image/png",
+      `sample image ${sampleId} mimeType 必须是 image/png: ${image.mimeType}`,
+    );
+    const sampleImage = resolveExistingPngPath(
+      baseDir,
+      image.path,
+      `sample image ${sampleId}`,
+      {
+        width: image.width,
+        height: image.height,
+      },
+    );
+    sampleImages.push(sampleImage);
+  }
+
+  return {
+    sampleManifestPath,
+    sampleImages,
+    sampleCount: samples.length,
+  };
+}
+
 function validateBenchmarkReport(benchmarkPath, requirements) {
   const report = readJson(benchmarkPath);
   const benchmark = isRecord(report.benchmark) ? report.benchmark : undefined;
@@ -137,9 +229,16 @@ function validateBenchmarkReport(benchmarkPath, requirements) {
       benchmark.checkedRequestCount >= checkedSamples.length * requiredKinds.length,
     `benchmark checkedRequestCount 不足: ${benchmark.checkedRequestCount}`,
   );
+  const sampleManifestPath = resolveExistingPath(
+    path.dirname(benchmarkPath),
+    benchmark.sampleManifestPath,
+    "benchmark.sampleManifestPath",
+  );
+  const sampleManifest = validateSampleManifest(sampleManifestPath, checkedSamples);
 
   return {
     report,
+    sampleManifest,
     checkedSamples,
     checkedKinds,
     checkedRequestCount: benchmark.checkedRequestCount,
@@ -180,10 +279,16 @@ function validateHumanReview(reviewPath, benchmark, requirements) {
   const byId = new Map(samples.map((sample) => [sample.id, sample]));
   const acceptedSamples = [];
   const failures = [];
+  const baseDir = path.dirname(reviewPath);
+  const evidenceFiles = readStringArray(review.evidenceFiles);
 
   assert(
     review.schemaVersion === HUMAN_REVIEW_SCHEMA_VERSION,
     `人工复核 schemaVersion 不匹配: ${review.schemaVersion}`,
+  );
+  assert(evidenceFiles.length > 0, "人工复核缺少 evidenceFiles，不能作为最终验收证据");
+  const evidenceImages = evidenceFiles.map((file, index) =>
+    resolveExistingPngPath(baseDir, file, `人工复核 evidenceFiles[${index}]`),
   );
 
   for (const sampleId of benchmark.checkedSamples) {
@@ -216,6 +321,7 @@ function validateHumanReview(reviewPath, benchmark, requirements) {
   return {
     reviewedAt: review.reviewedAt,
     acceptedSamples,
+    evidenceImages,
     sampleCount: samples.length,
   };
 }
@@ -236,11 +342,39 @@ function validateExportEvidence(exportDirectoryPath, benchmark) {
   const psdLikeManifestPath = path.join(exportDirectoryPath, "psd-like-manifest.json");
   const trialPsdPath = path.join(exportDirectoryPath, "trial.psd");
   const exportManifest = readJson(exportManifestPath);
+  const psdLikeManifest = readJson(psdLikeManifestPath);
   const benchmarkSummary = exportManifest.evidence?.modelSlotBenchmark;
 
   assert(fs.existsSync(exportManifestPath), `缺少 export-manifest.json: ${exportManifestPath}`);
   assert(fs.existsSync(psdLikeManifestPath), `缺少 psd-like-manifest.json: ${psdLikeManifestPath}`);
   assert(fs.existsSync(trialPsdPath), `缺少 trial.psd: ${trialPsdPath}`);
+  const designFile = resolveExistingPath(
+    exportDirectoryPath,
+    exportManifest.designFile ?? "design.json",
+    "导出工程 design.json",
+  );
+  assertNonEmptyFile(designFile, "导出工程 design.json");
+  const previewSvgFile = resolveExistingPath(
+    exportDirectoryPath,
+    exportManifest.previewSvgFile ?? psdLikeManifest.preview?.svgFile ?? "preview.svg",
+    "导出工程 preview.svg",
+  );
+  assertNonEmptyFile(previewSvgFile, "导出工程 preview.svg");
+  const previewPng = resolveExistingPngPath(
+    exportDirectoryPath,
+    exportManifest.previewPngFile ?? psdLikeManifest.preview?.pngFile ?? "preview.png",
+    "导出工程 preview.png",
+  );
+  const assetPngs = (Array.isArray(exportManifest.assets) ? exportManifest.assets : []).map(
+    (asset, index) => {
+      assert(isRecord(asset), `导出工程 assets[${index}] 不是对象`);
+      return resolveExistingPngPath(
+        exportDirectoryPath,
+        asset.filename,
+        `导出工程 assets[${index}]`,
+      );
+    },
+  );
   assert(benchmarkSummary, "export-manifest.json 缺少 evidence.modelSlotBenchmark");
   assert(
     benchmarkSummary.completionGate?.status === "sample_manifest_completed",
@@ -279,6 +413,10 @@ function validateExportEvidence(exportDirectoryPath, benchmark) {
     exportManifestPath,
     psdLikeManifestPath,
     trialPsdPath,
+    designFile,
+    previewSvgFile,
+    previewPng,
+    assetPngs,
     modelSlotBenchmark: normalizeModelSlotBenchmarkSummary(benchmark),
     psdLayerCount: verifierSummary.psd.layerCount,
     psdLayerNames: verifierSummary.psd.layerNames,
@@ -316,13 +454,16 @@ function validateDesignToolEvidence(evidencePath, exportEvidence, requirements) 
     const checks = isRecord(item.checks) ? item.checks : undefined;
     const files = readStringArray(item.evidenceFiles);
     const allChecksPassed = checks && requiredChecks.every((key) => checks[key] === true);
-    const allFilesExist = files.length > 0 && files.every((file) => fs.existsSync(path.resolve(baseDir, file)));
-    if (item.status === "passed" && allChecksPassed && allFilesExist) {
+    const evidenceImages = files.map((file, index) =>
+      resolveExistingPngPath(baseDir, file, `${item.tool ?? "design tool"} evidenceFiles[${index}]`),
+    );
+    if (item.status === "passed" && allChecksPassed && evidenceImages.length > 0) {
       passedTools.push({
         tool: item.tool,
         toolVersion: item.toolVersion,
         openedAt: item.openedAt,
         evidenceFiles: files.map((file) => path.resolve(baseDir, file)),
+        evidenceImages,
       });
     }
   }
@@ -346,6 +487,8 @@ function validateGptImageLiveEvidence(evidencePath) {
   const models = isRecord(evidence.models) ? evidence.models : undefined;
   const result = isRecord(evidence.result) ? evidence.result : undefined;
   const document = isRecord(evidence.document) ? evidence.document : undefined;
+  const gateway = isRecord(evidence.gateway) ? evidence.gateway : undefined;
+  const transport = result?.transport ?? gateway?.transport ?? "responses";
 
   assert(
     evidence.schema === GPT_IMAGE_LIVE_SCHEMA_VERSION,
@@ -385,14 +528,25 @@ function validateGptImageLiveEvidence(evidencePath) {
     Number.isInteger(result?.imageBytes) && result.imageBytes > 0,
     `GPT Image live evidence imageBytes 无效: ${result?.imageBytes}`,
   );
-  assert(
-    Number.isInteger(result?.eventCount) && result.eventCount > 0,
-    `GPT Image live evidence eventCount 无效: ${result?.eventCount}`,
-  );
-  assert(
-    Number.isInteger(result?.outputItemCount) && result.outputItemCount > 0,
-    `GPT Image live evidence outputItemCount 无效: ${result?.outputItemCount}`,
-  );
+  if (transport === "responses") {
+    assert(
+      Number.isInteger(result?.eventCount) && result.eventCount > 0,
+      `GPT Image live evidence eventCount 无效: ${result?.eventCount}`,
+    );
+    assert(
+      Number.isInteger(result?.outputItemCount) && result.outputItemCount > 0,
+      `GPT Image live evidence outputItemCount 无效: ${result?.outputItemCount}`,
+    );
+  } else {
+    assert(
+      transport === "lime_images_gateway",
+      `GPT Image live evidence transport 不支持: ${transport}`,
+    );
+    assert(
+      gateway?.imagesPath === "/v1/images/generations",
+      `GPT Image live evidence 本地配图网关路径不匹配: ${gateway?.imagesPath}`,
+    );
+  }
   assert(
     typeof result?.imageOutputPath === "string" &&
       result.imageOutputPath.trim().length > 0,
@@ -400,7 +554,9 @@ function validateGptImageLiveEvidence(evidencePath) {
   );
 
   const imageOutputPath = path.resolve(baseDir, result.imageOutputPath);
-  assert(fs.existsSync(imageOutputPath), `GPT Image live PNG evidence 不存在: ${imageOutputPath}`);
+  const imageOutput = validatePngFile(imageOutputPath, "GPT Image live PNG evidence", {
+    byteLength: result.imageBytes,
+  });
 
   assert(
     typeof document?.generatedAssetId === "string" &&
@@ -419,8 +575,10 @@ function validateGptImageLiveEvidence(evidencePath) {
     imageModel: models?.imageModel,
     outerModel: models?.outerModel,
     executorMode: models?.executorMode,
+    transport,
     imageBytes: result.imageBytes,
     imageOutputPath,
+    imageOutput,
     targetLayerId: document?.targetLayerId,
     generatedAssetId: document?.generatedAssetId,
   };
@@ -448,10 +606,21 @@ function validateCompletionEvidenceFile(evidencePath) {
   const baseDir = path.dirname(resolvedEvidencePath);
   const evidence = readJson(resolvedEvidencePath);
   const requirements = normalizeRequirements(evidence.requirements);
+  const completionGate = isRecord(evidence.completionGate)
+    ? evidence.completionGate
+    : undefined;
 
   assert(
     evidence.schemaVersion === SCHEMA_VERSION,
     `completion evidence schemaVersion 不匹配: ${evidence.schemaVersion}`,
+  );
+  assert(
+    completionGate?.status === "external_evidence_completed",
+    `completion evidence gate 不是 external_evidence_completed: ${completionGate?.status}`,
+  );
+  assert(
+    readStringArray(completionGate.missing).length === 0,
+    `completion evidence gate 仍有缺口: ${readStringArray(completionGate.missing).join(", ")}`,
   );
 
   const benchmarkPath = resolveExistingPath(
@@ -500,6 +669,9 @@ function validateCompletionEvidenceFile(evidencePath) {
     evidencePath: resolvedEvidencePath,
     benchmark: {
       reportPath: benchmarkPath,
+      sampleManifestPath: benchmark.sampleManifest.sampleManifestPath,
+      sampleImages: benchmark.sampleManifest.sampleImages,
+      sampleImagePaths: benchmark.sampleManifest.sampleImages.map((image) => image.path),
       checkedSamples: benchmark.checkedSamples,
       checkedKinds: benchmark.checkedKinds,
       checkedRequestCount: benchmark.checkedRequestCount,
@@ -616,6 +788,28 @@ function createSelfTestFiles(rootDir) {
     "real-poster-dark-neon-004",
     "real-poster-dense-product-card-005",
   ];
+  const tinyPng = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABQABDQottAAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  const sampleDir = path.join(rootDir, "samples");
+  fs.mkdirSync(sampleDir, { recursive: true });
+  const sampleManifest = {
+    schemaVersion: "layered-design-model-slot-benchmark-samples@1",
+    samples: sampleIds.map((id) => {
+      fs.writeFileSync(path.join(sampleDir, `${id}.png`), tinyPng);
+      return {
+        id,
+        label: id,
+        image: {
+          path: `samples/${id}.png`,
+          width: 1,
+          height: 1,
+          mimeType: "image/png",
+        },
+      };
+    }),
+  };
   const benchmarkReport = {
     schemaVersion: BENCHMARK_SCHEMA_VERSION,
     createdAt: "2026-05-08T00:00:00.000Z",
@@ -646,6 +840,7 @@ function createSelfTestFiles(rootDir) {
     schemaVersion: HUMAN_REVIEW_SCHEMA_VERSION,
     reviewedAt: "2026-05-08T00:05:00.000Z",
     benchmarkReport: "model-slot-benchmark.real.json",
+    evidenceFiles: ["model-slot-review-contact-sheet.png"],
     samples: sampleIds.map((id) => ({
       id,
       scores: {
@@ -660,21 +855,46 @@ function createSelfTestFiles(rootDir) {
     })),
   };
   const exportDir = path.join(rootDir, "real-sample.layered-design");
+  const assetDir = path.join(exportDir, "assets");
   fs.mkdirSync(exportDir, { recursive: true });
+  fs.mkdirSync(assetDir, { recursive: true });
   fs.writeFileSync(
     path.join(rootDir, "model-slot-benchmark.real.json"),
     JSON.stringify(benchmarkReport, null, 2),
   );
   fs.writeFileSync(
+    path.join(rootDir, "real-samples.json"),
+    JSON.stringify(sampleManifest, null, 2),
+  );
+  fs.writeFileSync(
     path.join(rootDir, "real-samples.human-review.json"),
     JSON.stringify(review, null, 2),
   );
+  fs.writeFileSync(path.join(rootDir, "model-slot-review-contact-sheet.png"), tinyPng);
+  fs.writeFileSync(path.join(exportDir, "design.json"), "{}\n");
+  fs.writeFileSync(path.join(exportDir, "preview.svg"), "<svg xmlns=\"http://www.w3.org/2000/svg\" />\n");
+  fs.writeFileSync(path.join(exportDir, "preview.png"), tinyPng);
+  fs.writeFileSync(path.join(assetDir, "subject.png"), tinyPng);
   fs.writeFileSync(
     path.join(exportDir, "export-manifest.json"),
     JSON.stringify(
       {
         schemaVersion: "layered-design-export@1",
+        designFile: "design.json",
+        previewSvgFile: "preview.svg",
+        previewPngFile: "preview.png",
         evidence: { modelSlotBenchmark: benchmarkSummary },
+        assets: [
+          {
+            id: "subject",
+            kind: "subject_cutout",
+            source: "file",
+            filename: "assets/subject.png",
+            width: 1,
+            height: 1,
+            hasAlpha: true,
+          },
+        ],
       },
       null,
       2,
@@ -685,6 +905,10 @@ function createSelfTestFiles(rootDir) {
     JSON.stringify(
       {
         compatibility: { truePsd: false },
+        preview: {
+          svgFile: "preview.svg",
+          pngFile: "preview.png",
+        },
         layers: [{ name: "主体候选", type: "image" }],
       },
       null,
@@ -695,7 +919,7 @@ function createSelfTestFiles(rootDir) {
     path.join(exportDir, "trial.psd"),
     createMinimalPsdWithLayer("主体候选"),
   );
-  fs.writeFileSync(path.join(rootDir, "photopea-layer-panel.png"), "self-test");
+  fs.writeFileSync(path.join(rootDir, "photopea-layer-panel.png"), tinyPng);
   fs.writeFileSync(
     path.join(rootDir, "design-tool-interoperability.json"),
     JSON.stringify(
@@ -726,7 +950,7 @@ function createSelfTestFiles(rootDir) {
       2,
     ),
   );
-  fs.writeFileSync(path.join(rootDir, "gpt-image-live.png"), "self-test-png");
+  fs.writeFileSync(path.join(rootDir, "gpt-image-live.png"), tinyPng);
   const gptImageLiveEvidence = {
     schema: GPT_IMAGE_LIVE_SCHEMA_VERSION,
     mode: "live",
@@ -756,7 +980,7 @@ function createSelfTestFiles(rootDir) {
       imageItemId: "ig_self_test",
       eventCount: 2,
       outputItemCount: 1,
-      imageBytes: 13,
+      imageBytes: tinyPng.length,
       imageOutputPath: "gpt-image-live.png",
     },
     document: {
@@ -796,6 +1020,10 @@ function createSelfTestFiles(rootDir) {
           minimumPassedTools: DEFAULT_MINIMUM_PASSED_TOOLS,
           requiredKinds: REQUIRED_KINDS,
         },
+        completionGate: {
+          status: "external_evidence_completed",
+          missing: [],
+        },
       },
       null,
       2,
@@ -829,6 +1057,29 @@ function runSelfTest() {
   assert(
     summary.gptImageLive.executorMode === "responses_image_generation",
     "self-test GPT Image live executor 异常",
+  );
+
+  const localGatewayGptImageLiveEvidence = structuredClone(gptImageLiveEvidence);
+  localGatewayGptImageLiveEvidence.gateway = {
+    baseUrlHash: "selftest-local",
+    transport: "lime_images_gateway",
+    imagesPath: "/v1/images/generations",
+  };
+  localGatewayGptImageLiveEvidence.result.transport = "lime_images_gateway";
+  localGatewayGptImageLiveEvidence.result.eventCount = 0;
+  localGatewayGptImageLiveEvidence.result.outputItemCount = 0;
+  fs.writeFileSync(
+    gptImageLivePath,
+    JSON.stringify(localGatewayGptImageLiveEvidence, null, 2),
+  );
+  const localGatewaySummary = validateCompletionEvidenceFile(evidencePath);
+  assert(
+    localGatewaySummary.gptImageLive.transport === "lime_images_gateway",
+    "self-test 本地配图网关 GPT Image live transport 异常",
+  );
+  fs.writeFileSync(
+    gptImageLivePath,
+    JSON.stringify(gptImageLiveEvidence, null, 2),
   );
 
   const invalidGptImageLiveEvidence = structuredClone(gptImageLiveEvidence);

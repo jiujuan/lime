@@ -20,6 +20,7 @@ use super::types::{AppState, TrayManagerState};
 const MAIN_WINDOW_LABEL: &str = "main";
 const SKIP_STARTUP_WINDOW_REVEAL_ENV: &str = "LIME_SKIP_STARTUP_WINDOW_REVEAL";
 const DISABLE_SINGLE_INSTANCE_ENV: &str = "LIME_DISABLE_SINGLE_INSTANCE";
+const STARTUP_WINDOW_REVEAL_FALLBACK_DELAY_MS: u64 = 2_500;
 
 fn env_flag_enabled(key: &str) -> bool {
     matches!(
@@ -304,12 +305,45 @@ pub fn run() {
                 tracing::info!("[启动] 未注入 updater 公钥，跳过注册 updater 插件");
             }
 
-            // 启动时先最大化再显示，避免用户看到“先小窗后展开”的过程。
+            // 启动时沿用固定初始窗口尺寸，避免隐藏窗口最大化在展示后才生效造成首帧跳动。
             if let Some(main_window) = app.get_webview_window("main") {
                 super::window_chrome::apply_main_window_chrome(&main_window);
 
                 if should_reveal_main_window_on_startup() {
-                    super::window_chrome::reveal_main_window(&main_window, "启动");
+                    super::window_chrome::prepare_main_window_for_startup(&main_window, "启动");
+
+                    let app_handle = app.handle().clone();
+                    tauri::async_runtime::spawn(async move {
+                        tokio::time::sleep(tokio::time::Duration::from_millis(
+                            STARTUP_WINDOW_REVEAL_FALLBACK_DELAY_MS,
+                        ))
+                        .await;
+
+                        if let Some(window) = app_handle.get_webview_window(MAIN_WINDOW_LABEL) {
+                            match window.is_visible() {
+                                Ok(true) => {}
+                                Ok(false) => {
+                                    tracing::warn!(
+                                        "[启动] 前端首帧未主动展示主窗口，执行兜底展示"
+                                    );
+                                    super::window_chrome::reveal_prepared_main_window(
+                                        &window,
+                                        "启动兜底",
+                                    );
+                                }
+                                Err(error) => {
+                                    tracing::warn!(
+                                        "[启动] 读取主窗口可见状态失败，执行兜底展示: {}",
+                                        error
+                                    );
+                                    super::window_chrome::reveal_prepared_main_window(
+                                        &window,
+                                        "启动兜底",
+                                    );
+                                }
+                            }
+                        }
+                    });
                 } else {
                     tracing::info!("[启动] 已跳过主窗口展示流程（headless smoke 模式）");
                 }
@@ -578,42 +612,10 @@ pub fn run() {
             {
                 let app_handle = app.handle().clone();
                 let db_clone = db_clone.clone();
-                // 获取资源目录路径
-                let mut resource_dir = app.path().resource_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-
-                // 检查 resources/models/index.json 是否存在
-                let models_index = resource_dir.join("resources/models/index.json");
-
-                if !models_index.exists() {
-                    // 开发模式：尝试多个可能的路径
-                    let possible_paths = [
-                        // 从 target/debug 回退到 src-tauri
-                        std::env::current_exe()
-                            .ok()
-                            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-                            .map(|p| p.join("resources")),
-                        // 直接使用 target/debug/resources
-                        std::env::current_exe()
-                            .ok()
-                            .and_then(|p| p.parent().map(|p| p.to_path_buf())),
-                        // 使用当前工作目录
-                        std::env::current_dir().ok().map(|p| p.join("src-tauri")),
-                    ];
-
-                    for path in possible_paths.into_iter().flatten() {
-                        let test_index = path.join("resources/models/index.json");
-                        if test_index.exists() {
-                            resource_dir = path;
-                            break;
-                        }
-                    }
-                }
 
                 tauri::async_runtime::spawn(async move {
                     // 创建 ModelRegistryService
-                    let mut service = lime_services::model_registry_service::ModelRegistryService::new(db_clone);
-                    // 设置资源目录路径
-                    service.set_resource_dir(resource_dir);
+                    let service = lime_services::model_registry_service::ModelRegistryService::new(db_clone);
 
                     // 初始化服务
                     match service.initialize().await {
@@ -1347,8 +1349,6 @@ pub fn run() {
             commands::model_registry_cmd::get_model_registry,
             commands::model_registry_cmd::get_model_registry_provider_ids,
             commands::model_registry_cmd::refresh_model_registry,
-            commands::model_registry_cmd::get_model_host_alias_user_file_info,
-            commands::model_registry_cmd::ensure_model_host_alias_user_file,
             commands::model_registry_cmd::search_models,
             commands::model_registry_cmd::get_model_preferences,
             commands::model_registry_cmd::toggle_model_favorite,

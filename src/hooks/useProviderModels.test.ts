@@ -11,18 +11,9 @@ const {
   mockGetModelRegistry: vi.fn(),
   mockGetProviderAliasConfig: vi.fn(),
   mockFetchProviderModelsAuto: vi.fn(),
-  mockNormalizeFetchProviderModelsSource: vi.fn((result) => {
-    if (
-      result?.source === "LocalFallback" &&
-      Array.isArray(result?.models) &&
-      result.models.length > 0 &&
-      typeof result?.error === "string" &&
-      result.error.includes("已保留当前 Provider 的自定义模型")
-    ) {
-      return "CustomModels";
-    }
-    return result?.source ?? "LocalFallback";
-  }),
+  mockNormalizeFetchProviderModelsSource: vi.fn(
+    (result) => result?.source ?? "Error",
+  ),
 }));
 
 vi.mock("@/lib/api/modelRegistry", () => ({
@@ -49,7 +40,9 @@ function createProvider(
   };
 }
 
-function createLimeHubProvider(): ConfiguredProvider {
+function createLimeHubProvider(
+  overrides: Partial<ConfiguredProvider> = {},
+): ConfiguredProvider {
   return createProvider({
     key: "lime-hub",
     label: "Lime Hub",
@@ -58,7 +51,41 @@ function createLimeHubProvider(): ConfiguredProvider {
     type: "openai",
     providerId: "lime-hub",
     apiHost: "https://llm.limeai.run#lime_tenant_id=tenant-0001",
+    ...overrides,
   });
+}
+
+function createModelMetadata(id: string) {
+  return {
+    id,
+    display_name: id,
+    provider_id: "openai",
+    provider_name: "OpenAI",
+    family: null,
+    tier: "pro" as const,
+    capabilities: {
+      vision: false,
+      tools: true,
+      streaming: true,
+      json_mode: true,
+      function_calling: true,
+      reasoning: false,
+    },
+    pricing: null,
+    limits: {
+      context_length: null,
+      max_output_tokens: null,
+      requests_per_minute: null,
+      tokens_per_minute: null,
+    },
+    status: "active" as const,
+    release_date: null,
+    is_latest: false,
+    description: null,
+    source: "custom" as const,
+    created_at: 0,
+    updated_at: 0,
+  };
 }
 
 describe("loadProviderModels", () => {
@@ -120,42 +147,39 @@ describe("loadProviderModels", () => {
     expect(mockFetchProviderModelsAuto).toHaveBeenCalledWith("openai");
   });
 
-  it("实时目录读取失败并回退到 LocalFallback 时，不应继续把旧模型当成最新模型展示", async () => {
+  it("实时模型目录应合并当前 Provider 已启用模型，避免设置页模型在选择器里消失", async () => {
     mockFetchProviderModelsAuto.mockResolvedValueOnce({
-      models: [
-        {
-          id: "gpt-4.1",
-          display_name: "GPT-4.1",
-          provider_id: "openai",
-          provider_name: "OpenAI",
-          family: null,
-          tier: "pro",
-          capabilities: {
-            vision: true,
-            tools: true,
-            streaming: true,
-            json_mode: true,
-            function_calling: true,
-            reasoning: true,
-          },
-          pricing: null,
-          limits: {
-            context_length: null,
-            max_output_tokens: null,
-            requests_per_minute: null,
-            tokens_per_minute: null,
-          },
-          status: "active",
-          release_date: null,
-          is_latest: true,
-          description: null,
-          source: "local",
-          created_at: 0,
-          updated_at: 0,
-        },
-      ],
-      source: "LocalFallback",
-      error: "401 Unauthorized",
+      models: [createModelMetadata("Pro/moonshotai/Kimi-K2.6")],
+      source: "Api",
+      error: null,
+    });
+
+    const models = await loadProviderModels(
+      createProvider({
+        key: "siliconflow-cn",
+        label: "Silicon Flow (国内)",
+        registryId: "siliconflow-cn",
+        providerId: "siliconflow-cn",
+        apiHost: "https://api.siliconflow.cn/v1",
+        customModels: ["deepseek-ai/DeepSeek-V4-Flash"],
+      }),
+      {
+        liveFetchOnly: true,
+        hasApiKey: true,
+      },
+    );
+
+    expect(models.map((model) => model.id)).toEqual([
+      "deepseek-ai/DeepSeek-V4-Flash",
+      "Pro/moonshotai/Kimi-K2.6",
+    ]);
+  });
+
+  it("实时目录读取失败且无本地兜底时，不应继续把旧模型当成最新模型展示", async () => {
+    mockFetchProviderModelsAuto.mockResolvedValueOnce({
+      models: [],
+      source: "Error",
+      error: "API 获取失败: 401 Unauthorized。本地模型兜底已下线。",
     });
 
     const models = await loadProviderModels(createProvider(), {
@@ -166,7 +190,7 @@ describe("loadProviderModels", () => {
     expect(models).toEqual([]);
   });
 
-  it("厂商目录来源应视为有效的实时模型真相", async () => {
+  it("错误来源即使夹带模型，也不应视为有效实时模型真相", async () => {
     mockFetchProviderModelsAuto.mockResolvedValueOnce({
       models: [
         {
@@ -200,8 +224,8 @@ describe("loadProviderModels", () => {
           updated_at: 0,
         },
       ],
-      source: "Catalog",
-      error: null,
+      source: "Error",
+      error: "API 获取失败，本地模型兜底已下线。",
     });
 
     const models = await loadProviderModels(
@@ -217,46 +241,14 @@ describe("loadProviderModels", () => {
       },
     );
 
-    expect(models.map((model) => model.id)).toEqual(["MiniMax-M2.7"]);
+    expect(models).toEqual([]);
   });
 
-  it("当前 Provider 的自定义模型来源也应视为有效的实时模型真相", async () => {
+  it("接口读取失败时仍保留当前 Provider 已显式配置的模型", async () => {
     mockFetchProviderModelsAuto.mockResolvedValueOnce({
-      models: [
-        {
-          id: "MiniMax-M2.7",
-          display_name: "MiniMax-M2.7",
-          provider_id: "minimax",
-          provider_name: "MiniMax",
-          family: null,
-          tier: "pro",
-          capabilities: {
-            vision: false,
-            tools: true,
-            streaming: true,
-            json_mode: true,
-            function_calling: true,
-            reasoning: true,
-          },
-          pricing: null,
-          limits: {
-            context_length: null,
-            max_output_tokens: null,
-            requests_per_minute: null,
-            tokens_per_minute: null,
-          },
-          status: "active",
-          release_date: null,
-          is_latest: true,
-          description: null,
-          source: "custom",
-          created_at: 0,
-          updated_at: 0,
-        },
-      ],
-      source: "LocalFallback",
-      error:
-        "当前 Anthropic 兼容入口未提供标准 /models 接口，已保留当前 Provider 的自定义模型。",
+      models: [],
+      source: "Error",
+      error: "当前 Anthropic 兼容入口未提供标准 /models 接口。",
     });
 
     const models = await loadProviderModels(
@@ -265,6 +257,7 @@ describe("loadProviderModels", () => {
         providerId: "custom-minimax",
         type: "anthropic-compatible" as ConfiguredProvider["type"],
         apiHost: "https://api.minimaxi.com/anthropic",
+        customModels: ["MiniMax-M2.7"],
       }),
       {
         liveFetchOnly: true,
@@ -275,7 +268,32 @@ describe("loadProviderModels", () => {
     expect(models.map((model) => model.id)).toEqual(["MiniMax-M2.7"]);
   });
 
-  it("本地开发环境下 Lime Hub 实时目录为空时，应使用本地 mock 兜底", async () => {
+  it("实时目录无 API Key 时仍先走后端读取缓存", async () => {
+    mockFetchProviderModelsAuto.mockResolvedValueOnce({
+      models: [createModelMetadata("gpt-cached")],
+      source: "Api",
+      error: null,
+      from_cache: true,
+    });
+
+    const models = await loadProviderModels(
+      createProvider({
+        customModels: ["manual-model"],
+      }),
+      {
+        liveFetchOnly: true,
+        hasApiKey: false,
+      },
+    );
+
+    expect(models.map((model) => model.id)).toEqual([
+      "manual-model",
+      "gpt-cached",
+    ]);
+    expect(mockFetchProviderModelsAuto).toHaveBeenCalledWith("openai");
+  });
+
+  it("Lime Hub 实时目录为空时不应注入本地 mock 模型", async () => {
     mockFetchProviderModelsAuto.mockResolvedValueOnce({
       models: [],
       source: "Api",
@@ -287,14 +305,11 @@ describe("loadProviderModels", () => {
       hasApiKey: true,
     });
 
-    expect(models.map((model) => model.id)).toEqual(["gpt-5.5", "gpt-5.4"]);
-    expect(models.every((model) => model.provider_id === "lime-hub")).toBe(
-      true,
-    );
+    expect(models).toEqual([]);
     expect(mockFetchProviderModelsAuto).toHaveBeenCalledWith("lime-hub");
   });
 
-  it("本地开发 mock 兜底只应用于 Lime Hub", async () => {
+  it("普通 Provider 实时目录为空时也不应注入本地模型兜底", async () => {
     mockFetchProviderModelsAuto.mockResolvedValueOnce({
       models: [],
       source: "Api",
@@ -307,5 +322,22 @@ describe("loadProviderModels", () => {
     });
 
     expect(models).toEqual([]);
+  });
+
+  it("Lime Hub 未登录时不读取模型注册表和实时接口", async () => {
+    const models = await loadProviderModels(
+      createLimeHubProvider({
+        authStatus: "login_required",
+      }),
+      {
+        liveFetchOnly: true,
+        hasApiKey: true,
+      },
+    );
+
+    expect(models).toEqual([]);
+    expect(mockGetModelRegistry).not.toHaveBeenCalled();
+    expect(mockGetProviderAliasConfig).not.toHaveBeenCalled();
+    expect(mockFetchProviderModelsAuto).not.toHaveBeenCalled();
   });
 });

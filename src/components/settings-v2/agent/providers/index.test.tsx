@@ -456,6 +456,32 @@ describe("CloudProviderSettings", () => {
     expect(cloudTab?.getAttribute("data-state")).toBe("inactive");
   });
 
+  it("未登录时 initialView=cloud 不应自动打开登录页", async () => {
+    const handleGoogleLogin = vi.fn().mockResolvedValue(undefined);
+    const openUserCenter = vi.fn();
+    mockUseOemCloudAccess.mockReturnValue(
+      createAccessState({ handleGoogleLogin, openUserCenter }),
+    );
+
+    const { container } = await renderPage({ initialView: "cloud" });
+
+    const settingsTab = container.querySelector(
+      '[data-testid="provider-workspace-tab-settings"]',
+    );
+    const cloudTab = container.querySelector(
+      '[data-testid="provider-workspace-tab-cloud"]',
+    );
+    const text = container.textContent ?? "";
+
+    expect(text).toContain("API Key Provider 设置占位");
+    expect(text).not.toContain("已打开 Lime Hub 登录页");
+    expect(text).not.toContain("已在浏览器打开 Lime Hub 用户中心");
+    expect(settingsTab?.getAttribute("data-state")).toBe("active");
+    expect(cloudTab?.getAttribute("data-state")).toBe("inactive");
+    expect(handleGoogleLogin).not.toHaveBeenCalled();
+    expect(openUserCenter).not.toHaveBeenCalled();
+  });
+
   it("未登录时应直接打开品牌云端登录入口", async () => {
     const handleGoogleLogin = vi.fn().mockResolvedValue(undefined);
     mockUseOemCloudAccess.mockReturnValue(

@@ -337,6 +337,9 @@ export function resolveDefaultArtifactViewMode(
   if (artifact.type === "document") {
     return "preview";
   }
+  if (artifact.type.startsWith("canvas:")) {
+    return "preview";
+  }
   if (
     artifact.type === "html" ||
     artifact.type === "svg" ||

@@ -9,10 +9,6 @@ vi.mock("@/lib/dev-bridge", () => ({
   safeInvoke: vi.fn(),
 }));
 
-vi.mock("@/lib/tauri-runtime", () => ({
-  hasTauriRuntimeMarkers: vi.fn(() => false),
-}));
-
 describe("apiKeyProvider API", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -100,22 +96,34 @@ describe("apiKeyProvider API", () => {
     expect(vi.mocked(safeInvoke)).toHaveBeenCalledTimes(2);
   });
 
-  it("本地开发浏览器模式下 Provider 读取失败时应提供 Lime Hub mock", async () => {
+  it("Provider 读取失败时不应注入本地 Lime Hub mock 或写入缓存", async () => {
     vi.mocked(safeInvoke).mockRejectedValueOnce(
       new Error("DevBridge unavailable"),
     );
 
     await expect(
       apiKeyProviderApi.getProviders({ forceRefresh: true }),
-    ).resolves.toEqual([
-      expect.objectContaining({
-        id: "lime-hub",
-        name: "Lime Hub",
+    ).rejects.toThrow("DevBridge unavailable");
+
+    vi.mocked(safeInvoke).mockResolvedValueOnce([
+      {
+        id: "custom-openai-images",
+        name: "OpenAI-gpt-images-2",
         type: "openai",
+        enabled: true,
         api_key_count: 1,
-        custom_models: ["gpt-5.5", "gpt-5.4"],
+        custom_models: ["gpt-images-2"],
+        api_keys: [],
+      },
+    ]);
+
+    await expect(apiKeyProviderApi.getProviders()).resolves.toEqual([
+      expect.objectContaining({
+        id: "custom-openai-images",
+        custom_models: ["gpt-images-2"],
       }),
     ]);
+    expect(vi.mocked(safeInvoke)).toHaveBeenCalledTimes(2);
   });
 
   it("写操作成功后应失效缓存", async () => {

@@ -28,6 +28,7 @@ const DEFAULTS = {
   timeoutMs: 180_000,
   intervalMs: 1_000,
   analyzer: "default",
+  imageTask: "none",
   projectRoundtrip: true,
 };
 
@@ -43,8 +44,7 @@ const WORKER_OCR_PRIORITY_TEXT =
 const WORKER_CLEAN_PLATE_SOURCE =
   "背景修补来源：Simple browser clean plate provider / simple_neighbor_inpaint_v1";
 const WORKER_POSTPROCESS_ALPHA_HOLE_TEXT = "主体 alpha 孔洞已修复";
-const WORKER_POSTPROCESS_CLEAN_PLATE_HALO_TEXT =
-  "clean plate 边缘残影已修补";
+const WORKER_POSTPROCESS_CLEAN_PLATE_HALO_TEXT = "clean plate 边缘残影已修补";
 const NATIVE_SUBJECT_META = "subject / 置信度 74%";
 const NATIVE_HIGH_RISK_LEVEL_TEXT = "拆层质量：高风险";
 const NATIVE_ELLIPSE_FALLBACK_TEXT = "主体 mask 使用兜底椭圆";
@@ -65,6 +65,25 @@ const WORKER_MODEL_SLOT_EXPORT_RELATIVE_PATH =
   ".lime/layered-designs/design-canvas-smoke.layered-design";
 const EXTRACTION_QUALITY_EXPORT_RELATIVE_PATH =
   ".lime/layered-designs/smoke-flat-image.layered-design";
+const GENERATED_IMAGE_TASK_EXPECTED_LAYERS = [
+  {
+    layerId: "background-image",
+    assetId:
+      "design-canvas-smoke-asset-background-generated-smoke-image-task-background-image",
+  },
+  {
+    layerId: "subject-image",
+    assetId:
+      "design-canvas-smoke-asset-subject-generated-smoke-image-task-subject-image",
+  },
+  {
+    layerId: "atmosphere-effect",
+    assetId:
+      "design-canvas-smoke-asset-effect-generated-smoke-image-task-atmosphere-effect",
+  },
+];
+const GENERATED_IMAGE_TASK_EXPORT_RELATIVE_PATH =
+  ".lime/layered-designs/design-canvas-smoke.layered-design";
 const WORKER_MODEL_SLOT_QUALITY_CONTRACT_EXPECTATIONS = {
   subject_matting: {
     slotId: "smoke-subject-matting-slot",
@@ -110,6 +129,7 @@ const ANALYZER_MODES = new Set([
   "worker-model-slots-native-ocr",
   "native",
 ]);
+const IMAGE_TASK_MODES = new Set(["none", "auto-refresh-fixture"]);
 
 const ANALYZER_BADGE_TEXT = {
   default: "默认 analyzer",
@@ -265,6 +285,7 @@ Lime Design Canvas Smoke
   --timeout-ms <ms>        总超时，默认 180000
   --interval-ms <ms>       轮询间隔，默认 1000
   --analyzer <mode>        analyzer 注入模式：default / worker / worker-refined / worker-matting / worker-ocr / worker-ocr-priority / worker-clean-plate / worker-model-slots / worker-model-slots-http-json / worker-model-slots-native-ocr / native，默认 default（产品默认 worker-first）
+  --image-task <mode>      图片任务注入模式：none / auto-refresh-fixture，默认 none
   --project-roundtrip      上传拆层前验证 prompt seed 工程保存与重新打开（默认开启）
   --skip-project-roundtrip 跳过工程保存/重新打开，仅用于定位非持久化链路问题
   -h, --help               显示帮助
@@ -313,6 +334,12 @@ function parseArgs(argv) {
       continue;
     }
 
+    if (arg === "--image-task" && argv[index + 1]) {
+      options.imageTask = String(argv[index + 1]).trim();
+      index += 1;
+      continue;
+    }
+
     if (arg === "--help" || arg === "-h") {
       printHelp();
       process.exit(0);
@@ -342,6 +369,9 @@ function parseArgs(argv) {
     throw new Error(
       "--analyzer 必须是 worker、worker-refined、worker-matting、worker-ocr、worker-ocr-priority、worker-clean-plate、worker-model-slots、worker-model-slots-http-json、worker-model-slots-native-ocr、native 或 default",
     );
+  }
+  if (!IMAGE_TASK_MODES.has(options.imageTask)) {
+    throw new Error("--image-task 必须是 none 或 auto-refresh-fixture");
   }
 
   return options;
@@ -553,8 +583,7 @@ function createSmokeFlatImagePngBuffer(width = 360, height = 560) {
         y > height * 0.24 &&
         y < height * 0.82;
       const inSubjectInteriorHole =
-        Math.abs(x - width * 0.5) <= 2 &&
-        Math.abs(y - height * 0.5) <= 2;
+        Math.abs(x - width * 0.5) <= 2 && Math.abs(y - height * 0.5) <= 2;
       const inSubjectConnectedHalo =
         x > width * 0.18 &&
         x < width * 0.18 + 5 &&
@@ -723,7 +752,10 @@ async function resolveDefaultWorkspace(options) {
 }
 
 async function assertWorkerModelSlotsManifest(page, workspace) {
-  assert(workspace.rootPath, "worker-model-slots manifest 断言缺少 workspace rootPath");
+  assert(
+    workspace.rootPath,
+    "worker-model-slots manifest 断言缺少 workspace rootPath",
+  );
 
   const manifest = await readProjectExportManifest(
     page,
@@ -804,7 +836,8 @@ function assertWorkerModelSlotHttpJsonSidecarRequests(requests) {
     WORKER_MODEL_SLOT_QUALITY_CONTRACT_EXPECTATIONS,
   )) {
     const request = requests.find(
-      (item) => item?.kind === kind && item?.context?.slotId === expected.slotId,
+      (item) =>
+        item?.kind === kind && item?.context?.slotId === expected.slotId,
     );
     assert(
       request,
@@ -843,9 +876,8 @@ async function readProjectExportOutput(
 
   return await page.evaluate(
     async ({ projectRootPath, exportDirectoryRelativePath }) => {
-      const { readLayeredDesignProjectExport } = await import(
-        "/src/lib/api/layeredDesignProject.ts"
-      );
+      const { readLayeredDesignProjectExport } =
+        await import("/src/lib/api/layeredDesignProject.ts");
       return readLayeredDesignProjectExport({
         projectRootPath,
         exportDirectoryRelativePath,
@@ -945,7 +977,10 @@ async function assertExtractionQualityManifest(page, workspace) {
   );
 }
 
-async function assertWorkerModelSlotsExtractionQualityManifest(page, workspace) {
+async function assertWorkerModelSlotsExtractionQualityManifest(
+  page,
+  workspace,
+) {
   const output = await readProjectExportOutput(
     page,
     workspace,
@@ -1171,6 +1206,7 @@ function buildSmokeUrl(options, workspace, sidecar) {
   url.searchParams.set("projectRootPath", workspace.rootPath);
   url.searchParams.set("projectId", workspace.projectId);
   url.searchParams.set("analyzer", options.analyzer);
+  url.searchParams.set("imageTask", options.imageTask);
   if (sidecar?.url) {
     url.searchParams.set("modelSlotEndpointUrl", sidecar.url);
   }
@@ -1184,13 +1220,102 @@ async function waitForText(page, label, text) {
       timeout: ACTION_TIMEOUT_MS,
     });
   } catch (error) {
-    const bodyText = await page.locator("body").innerText().catch(() => "");
+    const bodyText = await page
+      .locator("body")
+      .innerText()
+      .catch(() => "");
     throw new Error(
       `[smoke:design-canvas] ${label} 等待失败，缺少文本 ${JSON.stringify(
         text,
       )}；页面文本片段: ${JSON.stringify(bodyText.slice(0, 1200))}`,
     );
   }
+}
+
+async function assertPromptSeedImageTaskManifest(page, workspace) {
+  const output = await readProjectExportOutput(
+    page,
+    workspace,
+    GENERATED_IMAGE_TASK_EXPORT_RELATIVE_PATH,
+  );
+  const designJson = pickStringField(output, "designJson", "design_json");
+  assert(
+    designJson,
+    `图片任务工程导出缺少 designJson: ${GENERATED_IMAGE_TASK_EXPORT_RELATIVE_PATH}`,
+  );
+  const design = JSON.parse(designJson);
+  const layers = Array.isArray(design?.layers) ? design.layers : [];
+  const assets = Array.isArray(design?.assets) ? design.assets : [];
+  const editHistoryJson = JSON.stringify(design?.editHistory ?? []);
+
+  for (const expected of GENERATED_IMAGE_TASK_EXPECTED_LAYERS) {
+    const layer = layers.find((item) => item?.id === expected.layerId);
+    const generatedAsset = assets.find(
+      (asset) => asset?.id === expected.assetId,
+    );
+
+    assert(
+      layer?.assetId === expected.assetId && layer?.source === "generated",
+      `图片任务导出未把 ${expected.layerId} 图层写回生成资产: ${JSON.stringify(
+        layer,
+      )}`,
+    );
+    assert(
+      typeof generatedAsset?.src === "string" &&
+        generatedAsset.src.startsWith("data:image/png;base64,") &&
+        generatedAsset?.params?.source === "image_generation_task" &&
+        generatedAsset?.params?.generatedImageSource ===
+          "smoke_auto_refresh_fixture" &&
+        generatedAsset?.params?.postprocess?.status === "succeeded",
+      `图片任务导出缺少 ${expected.assetId} 生成资产和后处理元数据: ${JSON.stringify(
+        generatedAsset,
+      )}`,
+    );
+  }
+  assert(
+    editHistoryJson.includes("asset_generation_requested") &&
+      editHistoryJson.includes("asset_replaced"),
+    `图片任务导出缺少提交与写回历史: ${editHistoryJson}`,
+  );
+
+  const manifestJson = pickStringField(output, "manifestJson", "manifest_json");
+  assert(
+    manifestJson,
+    `图片任务工程导出缺少 manifestJson: ${GENERATED_IMAGE_TASK_EXPORT_RELATIVE_PATH}`,
+  );
+  const manifest = JSON.parse(manifestJson);
+  const manifestAssets = Array.isArray(manifest?.assets) ? manifest.assets : [];
+  for (const expected of GENERATED_IMAGE_TASK_EXPECTED_LAYERS) {
+    const manifestAsset = manifestAssets.find(
+      (asset) => asset?.id === expected.assetId,
+    );
+    assert(
+      manifestAsset?.source === "file" &&
+        typeof manifestAsset?.filename === "string" &&
+        manifestAsset.filename.startsWith("assets/"),
+      `图片任务导出 manifest 未缓存 ${expected.assetId} data URL 生成资产: ${JSON.stringify(
+        manifestAsset,
+      )}`,
+    );
+  }
+
+  const psdLikeManifestJson = pickStringField(
+    output,
+    "psdLikeManifestJson",
+    "psd_like_manifest_json",
+  );
+  assert(
+    psdLikeManifestJson,
+    `图片任务工程导出缺少 psdLikeManifestJson: ${GENERATED_IMAGE_TASK_EXPORT_RELATIVE_PATH}`,
+  );
+  assert(
+    !designJson.match(/poster_generate|canvas:poster|ImageTaskViewer/) &&
+      !manifestJson.match(/poster_generate|canvas:poster|ImageTaskViewer/) &&
+      !psdLikeManifestJson.match(
+        /poster_generate|canvas:poster|ImageTaskViewer/,
+      ),
+    "图片任务工程导出不应回流旧 poster / ImageTaskViewer 链路",
+  );
 }
 
 async function runPageFlow(options, smokeUrl) {
@@ -1214,7 +1339,10 @@ async function runPageFlow(options, smokeUrl) {
         chromeError instanceof Error ? chromeError.message : String(chromeError)
       }`,
     );
-    context = await chromium.launchPersistentContext(userDataDir, launchOptions);
+    context = await chromium.launchPersistentContext(
+      userDataDir,
+      launchOptions,
+    );
   }
 
   const page = context.pages()[0] ?? (await context.newPage());
@@ -1261,6 +1389,77 @@ async function runPageFlow(options, smokeUrl) {
     await waitForText(page, "导出入口", "导出设计工程");
     await waitForText(page, "工程恢复入口", "打开最近工程");
 
+    if (options.imageTask === "auto-refresh-fixture") {
+      logStage("image-task-auto-refresh-fixture");
+      await waitForText(
+        page,
+        "图片任务 fixture 标记",
+        "图片任务自动刷新 fixture",
+      );
+      await page
+        .getByRole("button", { name: "生成全部图片层", exact: true })
+        .click({
+          timeout: ACTION_TIMEOUT_MS,
+        });
+      await waitForText(
+        page,
+        "图片任务自动刷新写回",
+        "自动刷新写回 3 个图层结果",
+      );
+      await page
+        .getByRole("button", { name: "选择图层 氛围特效", exact: true })
+        .click({ timeout: ACTION_TIMEOUT_MS });
+      await waitForText(
+        page,
+        "图片任务生成来源",
+        "smoke-layered-design-image-v1",
+      );
+
+      if (options.projectRoundtrip) {
+        logStage("image-task-export-roundtrip");
+        await page
+          .getByRole("button", { name: "导出设计工程", exact: true })
+          .click({
+            timeout: ACTION_TIMEOUT_MS,
+          });
+        await waitForText(
+          page,
+          "图片任务工程目录保存结果",
+          "已保存图层设计工程",
+        );
+        await waitForText(
+          page,
+          "图片任务工程目录保存路径",
+          "design-canvas-smoke.layered-design",
+        );
+
+        const smokeUrlObject = new URL(smokeUrl);
+        const workspace = {
+          rootPath: smokeUrlObject.searchParams.get("projectRootPath") ?? "",
+        };
+        await assertPromptSeedImageTaskManifest(page, workspace);
+
+        await page
+          .getByRole("button", { name: "打开最近工程", exact: true })
+          .click({
+            timeout: ACTION_TIMEOUT_MS,
+          });
+        await waitForText(
+          page,
+          "图片任务工程目录恢复结果",
+          "已打开图层设计工程",
+        );
+        await page
+          .getByRole("button", { name: "选择图层 氛围特效", exact: true })
+          .click({ timeout: ACTION_TIMEOUT_MS });
+        await waitForText(
+          page,
+          "恢复后图片任务生成来源",
+          "smoke-layered-design-image-v1",
+        );
+      }
+    }
+
     logStage("interact-layer");
     await page.getByRole("button", { name: "选择图层 主标题" }).click({
       timeout: ACTION_TIMEOUT_MS,
@@ -1278,11 +1477,17 @@ async function runPageFlow(options, smokeUrl) {
 
     if (options.projectRoundtrip) {
       logStage("project-roundtrip-save-open");
-      await page.getByRole("button", { name: "导出设计工程", exact: true }).click({
-        timeout: ACTION_TIMEOUT_MS,
-      });
+      await page
+        .getByRole("button", { name: "导出设计工程", exact: true })
+        .click({
+          timeout: ACTION_TIMEOUT_MS,
+        });
       await waitForText(page, "工程目录保存结果", "已保存图层设计工程");
-      await waitForText(page, "工程目录保存路径", "design-canvas-smoke.layered-design");
+      await waitForText(
+        page,
+        "工程目录保存路径",
+        "design-canvas-smoke.layered-design",
+      );
       if (
         options.analyzer === "worker-model-slots" ||
         options.analyzer === "worker-model-slots-http-json" ||
@@ -1294,9 +1499,11 @@ async function runPageFlow(options, smokeUrl) {
         });
       }
 
-      await page.getByRole("button", { name: "打开最近工程", exact: true }).click({
-        timeout: ACTION_TIMEOUT_MS,
-      });
+      await page
+        .getByRole("button", { name: "打开最近工程", exact: true })
+        .click({
+          timeout: ACTION_TIMEOUT_MS,
+        });
       await waitForText(page, "工程目录恢复结果", "已打开图层设计工程");
       await waitForText(page, "恢复后画布标题", "Smoke 图层设计海报");
       await waitForText(page, "恢复后图层栏", "主标题");
@@ -1313,11 +1520,7 @@ async function runPageFlow(options, smokeUrl) {
     await waitForText(page, "上传扁平图结果", "已载入扁平图 draft");
     const expectedAnalyzerResult = ANALYZER_RESULT_TEXT[options.analyzer];
     if (expectedAnalyzerResult) {
-      await waitForText(
-        page,
-        "analyzer 执行结果",
-        expectedAnalyzerResult,
-      );
+      await waitForText(page, "analyzer 执行结果", expectedAnalyzerResult);
     }
     const extraCheck = ANALYZER_EXTRA_CHECK[options.analyzer];
     if (extraCheck) {
@@ -1393,9 +1596,11 @@ async function runPageFlow(options, smokeUrl) {
     await waitForText(page, "候选图层", "候选图层");
 
     if (extraCheck?.qualityTexts || extraCheck?.highRiskManifestFindingIds) {
-      await page.getByRole("button", { name: "恢复默认候选", exact: true }).click({
-        timeout: ACTION_TIMEOUT_MS,
-      });
+      await page
+        .getByRole("button", { name: "恢复默认候选", exact: true })
+        .click({
+          timeout: ACTION_TIMEOUT_MS,
+        });
       await page
         .getByRole("button", { name: /☑\s*主体候选/ })
         .waitFor({ state: "visible", timeout: ACTION_TIMEOUT_MS });
@@ -1413,10 +1618,16 @@ async function runPageFlow(options, smokeUrl) {
 
       if (options.projectRoundtrip) {
         logStage("high-risk-extraction-quality-export-manifest");
-        await page.getByRole("button", { name: "导出设计工程", exact: true }).click({
-          timeout: ACTION_TIMEOUT_MS,
-        });
-        await waitForText(page, "高风险拆层工程目录保存结果", "已保存图层设计工程");
+        await page
+          .getByRole("button", { name: "导出设计工程", exact: true })
+          .click({
+            timeout: ACTION_TIMEOUT_MS,
+          });
+        await waitForText(
+          page,
+          "高风险拆层工程目录保存结果",
+          "已保存图层设计工程",
+        );
         await waitForText(
           page,
           "高风险拆层工程目录保存路径",
@@ -1433,13 +1644,17 @@ async function runPageFlow(options, smokeUrl) {
         );
       }
 
-      await page.getByRole("button", { name: "仅保留原图", exact: true }).click({
-        timeout: ACTION_TIMEOUT_MS,
-      });
+      await page
+        .getByRole("button", { name: "仅保留原图", exact: true })
+        .click({
+          timeout: ACTION_TIMEOUT_MS,
+        });
     } else {
-      await page.getByRole("button", { name: "进入图层编辑", exact: true }).click({
-        timeout: ACTION_TIMEOUT_MS,
-      });
+      await page
+        .getByRole("button", { name: "进入图层编辑", exact: true })
+        .click({
+          timeout: ACTION_TIMEOUT_MS,
+        });
     }
     await page
       .getByRole("button", { name: "进入图层编辑", exact: true })
@@ -1451,9 +1666,11 @@ async function runPageFlow(options, smokeUrl) {
       (extraCheck?.qualityTexts || extraCheck?.modelSlotQualityManifest)
     ) {
       logStage("extraction-quality-export-manifest");
-      await page.getByRole("button", { name: "导出设计工程", exact: true }).click({
-        timeout: ACTION_TIMEOUT_MS,
-      });
+      await page
+        .getByRole("button", { name: "导出设计工程", exact: true })
+        .click({
+          timeout: ACTION_TIMEOUT_MS,
+        });
       await waitForText(page, "拆层工程目录保存结果", "已保存图层设计工程");
       await waitForText(
         page,
@@ -1513,9 +1730,8 @@ async function main() {
 
     await runPageFlow(options, smokeUrl);
     if (sidecar) {
-      const requests = await readModelSlotHttpJsonExecutorSidecarRequests(
-        sidecar,
-      );
+      const requests =
+        await readModelSlotHttpJsonExecutorSidecarRequests(sidecar);
       assertWorkerModelSlotHttpJsonSidecarRequests(requests);
     }
   } finally {

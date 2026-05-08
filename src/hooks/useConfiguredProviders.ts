@@ -4,13 +4,26 @@
  * @module hooks/useConfiguredProviders
  */
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiKeyProviderApi } from "@/lib/api/apiKeyProvider";
 import type { ProviderWithKeysDisplay } from "@/lib/api/apiKeyProvider";
 import { useApiKeyProvider } from "./useApiKeyProvider";
 import { getRegistryIdFromType } from "@/lib/constants/providerMappings";
 import { resolvePromptCacheSupportNotice } from "@/lib/model/providerPromptCacheSupport";
 import type { ProviderDeclaredPromptCacheMode } from "@/lib/types/provider";
+import {
+  buildOemLimeHubApiHost,
+  OEM_LIME_HUB_PROVIDER_ID,
+  resolveOemLimeHubProviderName,
+} from "@/lib/oemLimeHubProvider";
+import {
+  resolveOemCloudRuntimeContext,
+  type OemCloudRuntimeContext,
+} from "@/lib/api/oemCloudRuntime";
+import {
+  subscribeOemCloudBootstrapChanged,
+  subscribeOemCloudSessionChanged,
+} from "@/lib/oemCloudSession";
 
 // ============================================================================
 // 类型定义
@@ -40,6 +53,8 @@ export interface ConfiguredProvider {
   promptCacheMode?: ProviderDeclaredPromptCacheMode | null;
   /** 自定义模型列表（用于 API Key Provider） */
   customModels?: string[];
+  /** 需要登录或授权时，供模型选择器展示明确状态 */
+  authStatus?: "ready" | "login_required";
 }
 
 export interface UseConfiguredProvidersResult {
@@ -55,6 +70,10 @@ export interface UseConfiguredProvidersOptions {
 
 interface LoadConfiguredProvidersOptions {
   forceRefresh?: boolean;
+}
+
+interface BuildConfiguredProvidersOptions {
+  oemRuntime?: OemCloudRuntimeContext | null;
 }
 
 function normalizeProviderType(value?: string | null): string {
@@ -90,36 +109,99 @@ function isConfiguredApiKeyProvider(
   );
 }
 
+function isLimeHubProvider(provider: ProviderWithKeysDisplay): boolean {
+  return provider.id.trim().toLowerCase() === OEM_LIME_HUB_PROVIDER_ID;
+}
+
+function hasOemCloudLogin(runtime?: OemCloudRuntimeContext | null): boolean {
+  return Boolean(runtime?.sessionToken?.trim());
+}
+
+function shouldExposeLimeHubLoginPrompt(
+  provider: ProviderWithKeysDisplay,
+  runtime?: OemCloudRuntimeContext | null,
+): boolean {
+  return Boolean(
+    runtime &&
+      provider.enabled &&
+      isLimeHubProvider(provider) &&
+      !hasOemCloudLogin(runtime),
+  );
+}
+
+function buildConfiguredProviderFromApiKeyProvider(
+  provider: ProviderWithKeysDisplay,
+  authStatus: ConfiguredProvider["authStatus"] = "ready",
+): ConfiguredProvider {
+  return {
+    key: provider.id,
+    label: provider.name,
+    registryId: provider.id,
+    fallbackRegistryId: getRegistryIdFromType(provider.type, provider.api_host),
+    type: provider.type,
+    credentialType: `${provider.type}_key`,
+    providerId: provider.id,
+    apiHost: provider.api_host,
+    promptCacheMode: provider.prompt_cache_mode,
+    customModels: provider.custom_models,
+    authStatus,
+  };
+}
+
+function buildSyntheticLimeHubLoginProvider(
+  runtime: OemCloudRuntimeContext,
+): ConfiguredProvider {
+  return {
+    key: OEM_LIME_HUB_PROVIDER_ID,
+    label: resolveOemLimeHubProviderName(runtime),
+    registryId: OEM_LIME_HUB_PROVIDER_ID,
+    fallbackRegistryId: getRegistryIdFromType("openai", runtime.gatewayBaseUrl),
+    type: "openai",
+    credentialType: "openai_key",
+    providerId: OEM_LIME_HUB_PROVIDER_ID,
+    apiHost: buildOemLimeHubApiHost(runtime) ?? runtime.gatewayBaseUrl,
+    promptCacheMode: null,
+    customModels: [],
+    authStatus: "login_required",
+  };
+}
+
 export function buildConfiguredProviders(
   apiKeyProviders: ProviderWithKeysDisplay[],
+  options: BuildConfiguredProvidersOptions = {},
 ): ConfiguredProvider[] {
   const safeApiKeyProviders = Array.isArray(apiKeyProviders)
     ? apiKeyProviders
     : [];
+  const oemRuntime = options.oemRuntime;
   const providerMap = new Map<string, ConfiguredProvider>();
 
-  safeApiKeyProviders.filter(isConfiguredApiKeyProvider).forEach((provider) => {
-    const key = provider.id;
-    const label = provider.name;
-
-    if (!providerMap.has(key)) {
-      providerMap.set(key, {
-        key,
-        label,
-        registryId: provider.id,
-        fallbackRegistryId: getRegistryIdFromType(
-          provider.type,
-          provider.api_host,
+  safeApiKeyProviders.forEach((provider) => {
+    const loginRequired = shouldExposeLimeHubLoginPrompt(provider, oemRuntime);
+    if (
+      !providerMap.has(provider.id) &&
+      (isConfiguredApiKeyProvider(provider) || loginRequired)
+    ) {
+      providerMap.set(
+        provider.id,
+        buildConfiguredProviderFromApiKeyProvider(
+          provider,
+          loginRequired ? "login_required" : "ready",
         ),
-        type: provider.type,
-        credentialType: `${provider.type}_key`,
-        providerId: provider.id,
-        apiHost: provider.api_host,
-        promptCacheMode: provider.prompt_cache_mode,
-        customModels: provider.custom_models,
-      });
+      );
     }
   });
+
+  if (
+    oemRuntime &&
+    !hasOemCloudLogin(oemRuntime) &&
+    !providerMap.has(OEM_LIME_HUB_PROVIDER_ID)
+  ) {
+    providerMap.set(
+      OEM_LIME_HUB_PROVIDER_ID,
+      buildSyntheticLimeHubLoginProvider(oemRuntime),
+    );
+  }
 
   return Array.from(providerMap.values());
 }
@@ -179,7 +261,9 @@ export async function loadConfiguredProviders(
     : undefined;
   const apiKeyProviders = await apiKeyProviderApi.getProviders(sourceOptions);
 
-  return buildConfiguredProviders(apiKeyProviders);
+  return buildConfiguredProviders(apiKeyProviders, {
+    oemRuntime: resolveOemCloudRuntimeContext(),
+  });
 }
 
 // ============================================================================
@@ -212,14 +296,35 @@ export function useConfiguredProviders(
   options: UseConfiguredProvidersOptions = {},
 ): UseConfiguredProvidersResult {
   const { autoLoad = true } = options;
+  const [oemCloudRevision, setOemCloudRevision] = useState(0);
   const { providers: apiKeyProviders, loading: apiKeyLoading } =
     useApiKeyProvider({ autoLoad, hydrateUiState: false });
 
+  useEffect(() => {
+    if (!autoLoad) {
+      return;
+    }
+
+    const bumpRevision = () => setOemCloudRevision((revision) => revision + 1);
+    const unsubscribeSession = subscribeOemCloudSessionChanged(bumpRevision);
+    const unsubscribeBootstrap = subscribeOemCloudBootstrapChanged(bumpRevision);
+
+    return () => {
+      unsubscribeSession();
+      unsubscribeBootstrap();
+    };
+  }, [autoLoad]);
+
   // 计算已配置的 Provider 列表
-  const providers = useMemo(
-    () => buildConfiguredProviders(apiKeyProviders),
-    [apiKeyProviders],
-  );
+  const providers = useMemo(() => {
+    if (!autoLoad) {
+      return buildConfiguredProviders(apiKeyProviders);
+    }
+    void oemCloudRevision;
+    return buildConfiguredProviders(apiKeyProviders, {
+      oemRuntime: resolveOemCloudRuntimeContext(),
+    });
+  }, [apiKeyProviders, autoLoad, oemCloudRevision]);
 
   return {
     providers,

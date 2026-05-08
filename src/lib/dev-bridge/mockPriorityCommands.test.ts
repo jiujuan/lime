@@ -32,12 +32,18 @@ describe("mockPriorityCommands", () => {
     expect(shouldPreferMockInBrowser("close_webview_panel")).toBe(true);
   });
 
-  it("图层设计工程目录命令在浏览器模式优先走 mock", () => {
+  it("图层设计工程目录命令在浏览器模式必须走真实桥接", () => {
     expect(
       shouldPreferMockInBrowser("save_layered_design_project_export"),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldPreferMockInBrowser("read_layered_design_project_export"),
+    ).toBe(false);
+    expect(
+      shouldDisallowMockFallbackInBrowser("save_layered_design_project_export"),
+    ).toBe(true);
+    expect(
+      shouldDisallowMockFallbackInBrowser("read_layered_design_project_export"),
     ).toBe(true);
   });
 

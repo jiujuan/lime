@@ -60,6 +60,9 @@ interface ArtifactWorkbenchPreviewProps {
   onArtifactDocumentControllerChange?: (
     controller: ArtifactWorkbenchDocumentController | null,
   ) => void;
+  canvasFactoryProps?: ComponentProps<
+    typeof ArtifactRenderer
+  >["canvasFactoryProps"];
   renderToolbarActions?: (params: {
     artifact: Artifact;
     document: ArtifactDocumentV1 | null;
@@ -85,6 +88,7 @@ export function ArtifactWorkbenchPreview({
   onCloseCanvas,
   stackedWorkbenchTrigger,
   onArtifactDocumentControllerChange,
+  canvasFactoryProps,
   renderToolbarActions,
 }: ArtifactWorkbenchPreviewProps) {
   const isLiveSelectedArtifact =
@@ -157,6 +161,7 @@ export function ArtifactWorkbenchPreview({
           viewMode={artifactViewMode}
           previewSize={artifactPreviewSize}
           tone="light"
+          canvasFactoryProps={canvasFactoryProps}
         />
         {isLiveSelectedArtifact && artifactOverlay ? (
           <ArtifactCanvasOverlay overlay={artifactOverlay} />
@@ -217,6 +222,7 @@ export function ArtifactWorkbenchPreview({
             viewMode={artifactViewMode}
             previewSize={artifactPreviewSize}
             tone="light"
+            canvasFactoryProps={canvasFactoryProps}
           />
           {isLiveSelectedArtifact && artifactOverlay ? (
             <ArtifactCanvasOverlay overlay={artifactOverlay} />

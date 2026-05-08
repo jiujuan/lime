@@ -331,16 +331,19 @@ pub fn update_translate(
 mod tests {
     use super::*;
 
-    fn reset_runtime_state() {
+    fn reset_main_shortcut_state() {
         IS_REGISTERED.store(false, Ordering::SeqCst);
-        IS_TRANSLATE_REGISTERED.store(false, Ordering::SeqCst);
         *get_current_shortcut().write() = None;
+    }
+
+    fn reset_translate_shortcut_state() {
+        IS_TRANSLATE_REGISTERED.store(false, Ordering::SeqCst);
         *get_translate_shortcut().write() = None;
     }
 
     #[test]
     fn test_main_shortcut_runtime_accessors_reflect_state() {
-        reset_runtime_state();
+        reset_main_shortcut_state();
 
         assert!(!is_registered());
         assert_eq!(get_current(), None);
@@ -351,12 +354,12 @@ mod tests {
         assert!(is_registered());
         assert_eq!(get_current().as_deref(), Some("CommandOrControl+Shift+V"));
 
-        reset_runtime_state();
+        reset_main_shortcut_state();
     }
 
     #[test]
     fn test_translate_shortcut_runtime_accessors_reflect_state() {
-        reset_runtime_state();
+        reset_translate_shortcut_state();
 
         assert!(!is_translate_registered());
         assert_eq!(get_current_translate(), None);
@@ -370,6 +373,6 @@ mod tests {
             Some("CommandOrControl+Shift+T")
         );
 
-        reset_runtime_state();
+        reset_translate_shortcut_state();
     }
 }

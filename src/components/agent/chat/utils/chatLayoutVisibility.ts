@@ -3,6 +3,7 @@ interface ResolveChatLayoutVisibilityParams {
   preferEmptyStateForFreshTaskCenterTab?: boolean;
   hasDisplayMessages: boolean;
   hasPendingA2UIForm: boolean;
+  hasCanvasContent?: boolean;
   isThemeWorkbench: boolean;
   hasUnconsumedInitialDispatch: boolean;
   isPreparingSend: boolean;
@@ -16,6 +17,7 @@ export function shouldShowChatLayout({
   preferEmptyStateForFreshTaskCenterTab = false,
   hasDisplayMessages,
   hasPendingA2UIForm,
+  hasCanvasContent = false,
   isThemeWorkbench,
   hasUnconsumedInitialDispatch,
   isPreparingSend,
@@ -27,6 +29,7 @@ export function shouldShowChatLayout({
     (agentEntry === "claw" && !preferEmptyStateForFreshTaskCenterTab) ||
     hasDisplayMessages ||
     hasPendingA2UIForm ||
+    hasCanvasContent ||
     isThemeWorkbench ||
     hasUnconsumedInitialDispatch ||
     isPreparingSend ||

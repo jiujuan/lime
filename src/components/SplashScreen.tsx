@@ -4,9 +4,10 @@
  * 应用启动时显示专用 Logo、Slogan 与进度动画，然后淡出进入主界面。
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState, type CSSProperties } from "react";
 import styled, { keyframes } from "styled-components";
 import { LIME_BRAND_LOGO_SRC, LIME_BRAND_NAME } from "@/lib/branding";
+import { revealStartupWindowWhenReady } from "@/lib/startupWindowReveal";
 
 const sceneEnter = keyframes`
   from { opacity: 0; transform: scale(0.985); }
@@ -38,6 +39,43 @@ const glowPulse = keyframes`
   0%, 100% { opacity: 0.58; transform: scale(0.96); }
   50% { opacity: 1; transform: scale(1.04); }
 `;
+
+const splashContainerCriticalStyle: CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  overflow: "hidden",
+  zIndex: 9999,
+};
+
+const splashStageCriticalStyle: CSSProperties = {
+  position: "relative",
+  zIndex: 1,
+  width: "min(860px, calc(100vw - 40px))",
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  textAlign: "center",
+};
+
+const splashLogoStackCriticalStyle: CSSProperties = {
+  position: "relative",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "min(360px, 78vw)",
+  height: "min(360px, 78vw)",
+};
+
+const splashLogoCriticalStyle: CSSProperties = {
+  position: "relative",
+  width: "clamp(240px, 34vw, 320px)",
+  height: "clamp(240px, 34vw, 320px)",
+  objectFit: "contain",
+};
 
 const Container = styled.div<{ $isExiting: boolean }>`
   position: fixed;
@@ -279,6 +317,10 @@ export function SplashScreen({
 }: SplashScreenProps) {
   const [isExiting, setIsExiting] = useState(false);
 
+  useLayoutEffect(() => {
+    revealStartupWindowWhenReady();
+  }, []);
+
   useEffect(() => {
     const exitTimer = setTimeout(() => {
       setIsExiting(true);
@@ -295,7 +337,11 @@ export function SplashScreen({
   }, [duration, exitDuration, onComplete]);
 
   return (
-    <Container $isExiting={isExiting}>
+    <Container
+      $isExiting={isExiting}
+      data-testid="splash-screen"
+      style={splashContainerCriticalStyle}
+    >
       <AmbientOrb
         $size={280}
         $top="-72px"
@@ -317,10 +363,15 @@ export function SplashScreen({
         $delay="-4s"
       />
 
-      <Stage>
-        <LogoStack>
+      <Stage style={splashStageCriticalStyle}>
+        <LogoStack style={splashLogoStackCriticalStyle}>
           <LogoGlow />
-          <Logo src={LIME_BRAND_LOGO_SRC} alt={LIME_BRAND_NAME} />
+          <Logo
+            src={LIME_BRAND_LOGO_SRC}
+            alt={LIME_BRAND_NAME}
+            data-lime-startup-logo
+            style={splashLogoCriticalStyle}
+          />
         </LogoStack>
         <CopyBlock>
           <CopyGlow />

@@ -19,7 +19,6 @@ use uuid::Uuid;
 
 use crate::app::AppState;
 use crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState;
-use crate::commands::model_registry_cmd::ModelRegistryState;
 use crate::database::dao::api_key_provider::{ApiProviderType, ProviderWithKeys};
 use crate::database::DbConnection;
 
@@ -1162,7 +1161,6 @@ async fn run_companion_chat_completion(
     let api_key_service = app_handle
         .try_state::<ApiKeyProviderServiceState>()
         .ok_or_else(|| "ApiKeyProviderServiceState 未初始化".to_string())?;
-    let fallback_models = load_local_fallback_models(app_handle, &target.provider.provider).await;
     let result = api_key_service
         .0
         .test_chat_with_fallback_models(
@@ -1170,7 +1168,7 @@ async fn run_companion_chat_completion(
             &target.provider.provider.id,
             target.model_name.clone(),
             prompt,
-            fallback_models,
+            Vec::new(),
         )
         .await?;
 
@@ -1185,29 +1183,6 @@ async fn run_companion_chat_completion(
             .filter(|value| !value.trim().is_empty())
             .unwrap_or("青柠这次暂时没有连上可用模型"),
     ))
-}
-
-async fn load_local_fallback_models(
-    app_handle: &AppHandle,
-    provider: &crate::database::dao::api_key_provider::ApiKeyProvider,
-) -> Vec<String> {
-    let Some(model_registry_state) = app_handle.try_state::<ModelRegistryState>() else {
-        return Vec::new();
-    };
-
-    let guard = model_registry_state.inner().read().await;
-    let Some(model_registry) = guard.as_ref() else {
-        return Vec::new();
-    };
-
-    model_registry
-        .get_local_fallback_model_ids_with_hints(
-            &provider.id,
-            &provider.api_host,
-            Some(provider.provider_type),
-            &provider.custom_models,
-        )
-        .await
 }
 
 fn can_use_companion_chat_provider(provider: &ProviderWithKeys) -> bool {

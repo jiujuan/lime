@@ -48,6 +48,22 @@ describe("chatLayoutVisibility", () => {
     ).toBe(false);
   });
 
+  it("空白首页打开画布预览时应进入会话布局", () => {
+    expect(
+      shouldShowChatLayout({
+        agentEntry: "new-task",
+        hasDisplayMessages: false,
+        hasPendingA2UIForm: false,
+        hasCanvasContent: true,
+        isThemeWorkbench: false,
+        hasUnconsumedInitialDispatch: false,
+        isPreparingSend: false,
+        isSending: false,
+        queuedTurnCount: 0,
+      }),
+    ).toBe(true);
+  });
+
   it("任务中心新建空标签可内嵌首页空态", () => {
     expect(
       shouldShowChatLayout({

@@ -480,11 +480,11 @@ export function useWorkspaceKnowledgeRuntime({
           );
         })
         .catch((error) => {
-          console.error("沉淀项目资料失败:", error);
+          console.error("保存项目资料失败:", error);
           toast.error(
             error instanceof Error && error.message.trim()
               ? error.message
-              : "沉淀项目资料失败，请稍后重试。",
+              : "保存项目资料失败，请稍后重试。",
           );
         });
     },

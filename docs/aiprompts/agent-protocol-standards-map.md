@@ -27,6 +27,10 @@
 | Agent UI | Agent interaction surfaces；composer、message parts、status、tool UI、task capsule、artifact workspace、timeline/evidence | Workspace projection、Agent chat、artifact workspace、human-in-the-loop、timeline evidence | [site](https://limecloud.github.io/agentui/) / [llms-full](https://limecloud.github.io/agentui/llms-full.txt) / [repo](https://github.com/limecloud/agentui) | `../roadmap/agentui/README.md`、`workspace.md`、`design-language.md` |
 | Agent Runtime | Agent execution runtime；events、control plane、tasks、tools、permissions、sandbox、remote channels、replay refs | Query loop、task lifecycle、tool execution、subagents、remote runtime、model routing、snapshots | [site](https://limecloud.github.io/agentruntime/) / [llms-full](https://limecloud.github.io/agentruntime/llms-full.txt) / [repo](https://github.com/limecloud/agentruntime) | `query-loop.md`、`task-agent-taxonomy.md`、`remote-runtime.md`、`state-history-telemetry.md` |
 | Agent Evidence | Evidence, provenance, verification, review, replay, redaction, telemetry correlation, export manifests | Harness evidence pack、requestTelemetry、review/replay/export、source grounding、artifact review | [site](https://limecloud.github.io/agentevidence/) / [llms-full](https://limecloud.github.io/agentevidence/llms-full.txt) / [repo](https://github.com/limecloud/agentevidence) | `harness-engine-governance.md`、`state-history-telemetry.md`、`persistence-map.md` |
+| Agent Policy | Policy decisions, approvals, permission grants, risk scopes, redaction, retention, waivers, policy traces | human approval、sandbox、retention、risk、waiver、permission bridge 横跨 runtime/evidence/UI | [site](https://limecloud.github.io/agentpolicy/) / [llms-full](https://limecloud.github.io/agentpolicy/llms-full.txt) / [repo](https://github.com/limecloud/agentpolicy) | `quality-workflow.md`、`remote-runtime.md`、`harness-engine-governance.md` |
+| Agent Artifact | Durable deliverables；artifact identity、parts、versions、diffs、render/export manifests、source links、handoff packages | FileArtifact、sidecar、version、checkpoint、snapshot refs、artifact workspace、evidence refs | [site](https://limecloud.github.io/agentartifact/) / [llms-full](https://limecloud.github.io/agentartifact/llms-full.txt) / [repo](https://github.com/limecloud/agentartifact) | `persistence-map.md`、`../roadmap/artifacts/roadmap.md`、`../roadmap/agentui/README.md` |
+| Agent Tool | Tool declarations；tool surfaces、input/output contracts、execution/permission profiles、invocation lifecycle、progress、result refs、errors | tools、MCP、site adapter、native skill、browser assist、capability matrix、permission profile、tool timeline | [site](https://limecloud.github.io/agenttool/) / [llms-full](https://limecloud.github.io/agenttool/llms-full.txt) / [repo](https://github.com/limecloud/agenttool) | `skill-standard.md`、`site-adapter-standard.md`、`mcp.md`、`command-runtime.md`、`../roadmap/warp/capability-matrix.md` |
+| Agent Context | Context surfaces；context items、source refs、selection/ranking、budget/window、assembly/injection、compaction/summary、missing context | Memory / Compaction、Prompt Foundation、Query Loop 输入快照、Knowledge selection、tool-visible context | [site](https://limecloud.github.io/agentcontext/) / [llms-full](https://limecloud.github.io/agentcontext/llms-full.txt) / [repo](https://github.com/limecloud/agentcontext) | `memory-compaction.md`、`prompt-foundation.md`、`query-loop.md`、`state-history-telemetry.md` |
 
 ## 友链与外部对齐
 
@@ -66,10 +70,6 @@
 
 | 候选标准 | 建议名称 | 为什么值得拆 | 当前 Lime 事实源 | 拆分状态 |
 | --- | --- | --- | --- | --- |
-| Artifact / Deliverable | Agent Artifact | 生成物需要版本、diff、preview、export、handoff、workspace 编辑与 evidence refs | `../roadmap/artifacts/roadmap.md`、`persistence-map.md`、Agent UI Artifact Workspace | 高优先级候选 |
-| Tool / Capability Invocation | Agent Tool | tools、MCP、site adapter、native skill、browser assist 都需要统一 capability ref、permission、progress、large output | `skill-standard.md`、`site-adapter-standard.md`、`mcp.md`、`command-runtime.md` | 候选，先避免重复 MCP |
-| Policy / Permission | Agent Policy | human approval、sandbox、retention、risk、waiver、permission bridge 横跨 runtime/evidence/UI | `quality-workflow.md`、`remote-runtime.md`、`harness-engine-governance.md` | 候选，需先验证边界 |
-| Memory / Context | Agent Context | working memory、durable memory、knowledge selection、compaction、missing context 需要统一上下文事实 | `memory-compaction.md`、`prompt-foundation.md`、Knowledge v2 PRD | 候选，需区分 Knowledge |
 | Evaluation / Benchmark | Agent Evaluation | acceptance scenarios、provider E2E、quality review、harness evals、rubric 与 evidence 可复用 | `../test/harness-evals.md`、`../roadmap/knowledge/completion-audit-20260508.md` | 候选，适合从 Evidence 扩展 |
 | Workflow / Scene | Agent Workflow | ServiceSkill scene、功能方案包、multi-step content workflow、browser-grounded scene 需要 portable workflow facts | `command-runtime.md`、`../roadmap/limenextv2/README.md` | 中期候选 |
 | Model Routing / Economy | Agent Model Routing | provider registry、model profile、cost、quota、fallback、task profile 有通用标准价值 | `providers.md`、`credential-pool.md`、`../roadmap/task/model-routing.md` | 中期候选 |
@@ -105,7 +105,8 @@ Agent Knowledge -> 给 Agent 什么可信资料
 Agent Runtime   -> Agent 工作如何执行和恢复
 Agent UI        -> Agent 工作如何被看见和控制
 Agent Evidence  -> Agent 结果为什么可信、如何审计和回放
-Agent Artifact  -> Agent 生成物如何版本化、编辑、导出和交接（候选）
-Agent Tool      -> Agent 能力如何被声明、授权、调用和审计（候选）
-Agent Policy    -> Agent 权限、风险、保留、豁免如何统一表达（候选）
+Agent Policy    -> Agent 权限、风险、保留、豁免如何统一表达
+Agent Artifact  -> Agent 生成物如何版本化、编辑、导出和交接
+Agent Tool      -> Agent 能力如何被声明、授权、调用和审计
+Agent Context   -> Agent 当前可用、选择、组装、压缩、缺失并注入了什么上下文
 ```

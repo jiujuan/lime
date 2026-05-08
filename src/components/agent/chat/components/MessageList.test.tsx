@@ -1811,7 +1811,8 @@ describe("MessageList", () => {
         timestamp: new Date(now.getTime() + 1000),
         actionRequests: [
           {
-            requestId: "runtime_permission_confirmation:turn-runtime-permission",
+            requestId:
+              "runtime_permission_confirmation:turn-runtime-permission",
             actionType: "elicitation",
             prompt:
               "当前执行需要确认运行时权限：web_search。确认后才允许继续模型执行；拒绝会保持阻断。",
@@ -4511,7 +4512,7 @@ describe("MessageList", () => {
     });
   });
 
-  it("助手结果应支持沉淀为项目资料", () => {
+  it("助手结果应支持保存到项目资料", () => {
     const onSaveMessageAsKnowledge = vi.fn();
     const now = new Date();
     const messages: Message[] = [
@@ -4519,14 +4520,14 @@ describe("MessageList", () => {
         id: "msg-assistant-save-knowledge",
         role: "assistant",
         content:
-          "这是一段足够长的项目事实说明，用来验证助手消息上会出现沉淀为项目资料的入口。",
+          "这是一段足够长的项目事实说明，用来验证助手消息上会出现保存到项目资料的入口。",
         timestamp: now,
       },
     ];
 
     const container = render(messages, { onSaveMessageAsKnowledge });
     const saveButton = container.querySelector(
-      'button[aria-label="沉淀为项目资料"]',
+      'button[aria-label="保存到项目资料"]',
     );
 
     expect(saveButton).not.toBeNull();
@@ -4538,7 +4539,58 @@ describe("MessageList", () => {
     expect(onSaveMessageAsKnowledge).toHaveBeenCalledWith({
       messageId: "msg-assistant-save-knowledge",
       content:
-        "这是一段足够长的项目事实说明，用来验证助手消息上会出现沉淀为项目资料的入口。",
+        "这是一段足够长的项目事实说明，用来验证助手消息上会出现保存到项目资料的入口。",
+    });
+  });
+
+  it("助手结果带产物时应优先把产物正文保存到项目资料", () => {
+    const onSaveMessageAsKnowledge = vi.fn();
+    const now = new Date();
+    const artifactContent =
+      "# 谢晶营销文案包 v1.0\n\n这是一份已经写入项目目录的 Markdown 产物，应该作为项目资料来源。";
+    const messages: Message[] = [
+      {
+        id: "msg-assistant-save-artifact-knowledge",
+        role: "assistant",
+        content:
+          "文件已生成，下面是摘要。这里不应该覆盖真正的 Markdown 产物正文。",
+        timestamp: now,
+        artifacts: [
+          {
+            id: "artifact-knowledge-output",
+            type: "document",
+            title: "谢晶_营销文案包_KnowledgeV2_E2E.md",
+            content: artifactContent,
+            status: "complete",
+            meta: {
+              filename: "谢晶_营销文案包_KnowledgeV2_E2E.md",
+            },
+            position: { start: 0, end: artifactContent.length },
+            createdAt: now.getTime(),
+            updatedAt: now.getTime(),
+          },
+        ],
+      },
+    ];
+
+    const container = render(messages, { onSaveMessageAsKnowledge });
+    expect(container.textContent).toContain("Document 产物");
+    expect(container.textContent).toContain("可保存到项目资料");
+    const saveButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("保存这份文档"),
+    );
+
+    expect(saveButton).not.toBeNull();
+
+    act(() => {
+      saveButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(onSaveMessageAsKnowledge).toHaveBeenCalledWith({
+      messageId: "msg-assistant-save-artifact-knowledge",
+      content: artifactContent,
+      sourceName: "谢晶_营销文案包_KnowledgeV2_E2E.md",
+      description: "谢晶_营销文案包_KnowledgeV2_E2E.md",
     });
   });
 
@@ -4685,6 +4737,7 @@ describe("MessageList", () => {
     const artifactCard = container.querySelector("button");
     expect(artifactCard?.textContent).toContain("demo.md");
     expect(artifactCard?.textContent).toContain("docs/demo.md");
+    expect(container.textContent).toContain("Document 产物");
 
     act(() => {
       artifactCard?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -4734,8 +4787,8 @@ describe("MessageList", () => {
     expect(container.textContent).toContain(
       "content-posts/20260408-preview.md",
     );
-    const titleNode = container.querySelector(
-      "div.truncate.text-sm.font-medium.text-foreground",
+    const titleNode = Array.from(container.querySelectorAll("div")).find(
+      (node) => node.textContent === "渠道预览稿",
     );
     expect(titleNode?.textContent).toBe("渠道预览稿");
   });

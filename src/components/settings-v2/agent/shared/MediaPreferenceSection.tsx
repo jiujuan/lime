@@ -13,6 +13,7 @@ interface MediaPreferenceSectionProps extends Pick<
   | "disabled"
   | "emptyStateDescription"
   | "emptyStateTitle"
+  | "getFallbackModels"
   | "model"
   | "modelFilter"
   | "providerFilter"
@@ -54,6 +55,7 @@ export function MediaPreferenceSection({
   setModel,
   providerFilter,
   modelFilter,
+  getFallbackModels,
   resetLabel,
   onReset,
   resetDisabled = false,
@@ -100,6 +102,7 @@ export function MediaPreferenceSection({
           setModel={setModel}
           providerFilter={providerFilter}
           modelFilter={modelFilter}
+          getFallbackModels={getFallbackModels}
           placeholderLabel="自动选择"
           layoutLabelWidthClassName="md:grid-cols-[180px_minmax(0,1fr)]"
         />

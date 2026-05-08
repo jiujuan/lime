@@ -35,7 +35,10 @@ import {
   resolveArtifactWritePhase,
 } from "@/components/agent/chat/utils/messageArtifacts";
 import { ErrorFallbackRenderer } from "./ErrorFallbackRenderer";
-import { CanvasAdapter } from "./CanvasAdapter";
+import {
+  CanvasAdapter,
+  type CanvasAdapterCanvasFactoryProps,
+} from "./CanvasAdapter";
 import type { Artifact, ArtifactRendererProps } from "@/lib/artifact/types";
 
 // ============================================================================
@@ -539,6 +542,8 @@ interface ArtifactRendererComponentProps extends ArtifactRendererProps {
   className?: string;
   /** 防抖延迟（毫秒），默认 100ms */
   debounceDelay?: number;
+  /** Canvas Artifact 运行上下文，用于 current 工作台 project 保存与图层生成 */
+  canvasFactoryProps?: CanvasAdapterCanvasFactoryProps;
   /** 是否隐藏内部工具栏 */
   hideToolbar?: boolean;
   /** 视图模式（用于代码预览） */
@@ -578,6 +583,7 @@ export const ArtifactRenderer: React.FC<ArtifactRendererComponentProps> = memo(
     viewMode,
     previewSize = "desktop",
     tone = "dark",
+    canvasFactoryProps,
   }) => {
     // 错误状态管理
     const [renderError, setRenderError] = useState<Error | null>(null);
@@ -709,6 +715,7 @@ export const ArtifactRenderer: React.FC<ArtifactRendererComponentProps> = memo(
             artifact={debouncedArtifact}
             isStreaming={isStreaming}
             onContentChange={onContentChange}
+            canvasFactoryProps={canvasFactoryProps}
           />
           {(isStreaming || isCompleting) && (
             <StreamingIndicator isCompleting={isCompleting} />

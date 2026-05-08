@@ -1,6 +1,10 @@
 import type { ProviderWithKeysDisplay } from "@/lib/api/apiKeyProvider";
 import { isOemManagedHubProvider } from "@/lib/oemLimeHubProvider";
 
+export interface EnabledModelListOptions {
+  exposeOemLoginPrompt?: boolean;
+}
+
 export interface EnabledModelItem {
   id: string;
   provider: ProviderWithKeysDisplay;
@@ -8,6 +12,7 @@ export interface EnabledModelItem {
   modelId: string | null;
   isDefault: boolean;
   enabledApiKeyCount: number;
+  status: "ready" | "login_required";
 }
 
 function getEnabledApiKeyCount(provider: ProviderWithKeysDisplay): number {
@@ -33,13 +38,18 @@ function isKeylessLocalProvider(provider: ProviderWithKeysDisplay): boolean {
 
 export function isProviderVisibleInEnabledModelList(
   provider: ProviderWithKeysDisplay,
+  options: EnabledModelListOptions = {},
 ): boolean {
-  if (isOemManagedHubProvider(provider)) {
+  if (!provider.enabled) {
     return false;
   }
 
-  if (!provider.enabled) {
-    return false;
+  if (isOemManagedHubProvider(provider)) {
+    return Boolean(
+      options.exposeOemLoginPrompt &&
+        getEnabledApiKeyCount(provider) === 0 &&
+        !getProviderDefaultModel(provider),
+    );
   }
 
   return (
@@ -51,16 +61,37 @@ export function isProviderVisibleInEnabledModelList(
 
 export function buildEnabledModelItems(
   providers: ProviderWithKeysDisplay[],
+  options: EnabledModelListOptions = {},
 ): EnabledModelItem[] {
-  return providers
-    .filter(isProviderVisibleInEnabledModelList)
+  const items = providers
+    .filter((provider) => isProviderVisibleInEnabledModelList(provider, options))
     .sort((a, b) => a.sort_order - b.sort_order)
-    .map((provider, index) => ({
-      id: provider.id,
-      provider,
-      providerName: provider.name,
-      modelId: getProviderDefaultModel(provider),
-      isDefault: index === 0,
-      enabledApiKeyCount: getEnabledApiKeyCount(provider),
-    }));
+    .map((provider): EnabledModelItem => {
+      const modelId = getProviderDefaultModel(provider);
+      const enabledApiKeyCount = getEnabledApiKeyCount(provider);
+      const loginRequired =
+        isOemManagedHubProvider(provider) &&
+        enabledApiKeyCount === 0 &&
+        !modelId;
+
+      return {
+        id: provider.id,
+        provider,
+        providerName: provider.name,
+        modelId,
+        isDefault: false,
+        enabledApiKeyCount,
+        status: loginRequired ? "login_required" : "ready",
+      };
+    });
+
+  const defaultReadyIndex = items.findIndex((item) => item.status === "ready");
+  if (defaultReadyIndex >= 0) {
+    items[defaultReadyIndex] = {
+      ...items[defaultReadyIndex],
+      isDefault: true,
+    };
+  }
+
+  return items;
 }
