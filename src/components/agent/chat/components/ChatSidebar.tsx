@@ -854,6 +854,9 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   const olderSectionMoreLabel = isTaskCenter
     ? "查看更多归档对话"
     : "查看更多历史任务";
+  const handleCreateConversation = isTaskCenter
+    ? (onOpenTaskCenterHome ?? onNewChat)
+    : onNewChat;
   const taskCountLabel = searchKeyword.trim()
     ? `${filteredTaskItems.length} 个结果`
     : `${topics.length} 个${isTaskCenter ? "对话" : "任务"}`;
@@ -1182,7 +1185,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                     type="button"
                     aria-label={newChatLabel}
                     title={newChatLabel}
-                    onClick={onNewChat}
+                    onClick={handleCreateConversation}
                     className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-600 transition hover:border-slate-300 hover:bg-white hover:text-slate-900 dark:border-white/10 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/15"
                   >
                     <Plus className="h-4 w-4" />
@@ -1230,7 +1233,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
             <>
               <button
                 type="button"
-                onClick={onNewChat}
+                onClick={handleCreateConversation}
                 className={CHAT_SIDEBAR_PRIMARY_ACTION_BUTTON_CLASSNAME}
               >
                 <Plus className="h-4 w-4" />

@@ -4,13 +4,11 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RootRouter } from "./RootRouter";
 
-const {
-  mockFinalizeModuleImportAutoReload,
-  mockGetRuntimeAppVersion,
-} = vi.hoisted(() => ({
-  mockFinalizeModuleImportAutoReload: vi.fn(),
-  mockGetRuntimeAppVersion: vi.fn(() => "0.0.0-test"),
-}));
+const { mockFinalizeModuleImportAutoReload, mockGetRuntimeAppVersion } =
+  vi.hoisted(() => ({
+    mockFinalizeModuleImportAutoReload: vi.fn(),
+    mockGetRuntimeAppVersion: vi.fn(() => "0.0.0-test"),
+  }));
 
 vi.mock("./App", () => ({
   default: () => <div data-testid="main-app">主应用</div>,
@@ -104,6 +102,16 @@ describe("RootRouter", () => {
 
     expect(
       container.querySelector('[data-testid="smart-input-page"]'),
+    ).not.toBeNull();
+  });
+
+  it("Windows 独立窗口从 index.html 入口启动时应映射到连接器引导页", async () => {
+    const { container } = await renderRootRouter(
+      "/index.html?lime_window=browser-connector-guide&mode=cdp",
+    );
+
+    expect(
+      container.querySelector('[data-testid="browser-connector-guide-page"]'),
     ).not.toBeNull();
   });
 });

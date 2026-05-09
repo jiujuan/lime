@@ -199,6 +199,7 @@ fn format_messages(messages: &[Message], image_format: &ImageFormat) -> Vec<Data
                 }
                 MessageContent::SystemNotification(_)
                 | MessageContent::ToolConfirmationRequest(_)
+                | MessageContent::ToolInputDelta(_)
                 | MessageContent::ActionRequired(_) => {}
             }
         }

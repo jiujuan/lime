@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentThreadTimelineArtifactCard } from "./AgentThreadTimelineArtifactCard";
 import type { AgentThreadItem } from "../types";
+import { conversationProjectionStore } from "../projection/conversationProjectionStore";
 
 interface MountedHarness {
   container: HTMLDivElement;
@@ -34,6 +35,7 @@ afterEach(() => {
   }
 
   vi.clearAllMocks();
+  conversationProjectionStore.clearAgentUiProjectionEvents();
 });
 
 function createFileArtifactItem(
@@ -201,6 +203,38 @@ describe("AgentThreadTimelineArtifactCard", () => {
       "本轮重点是补齐来源线索与交付节奏。",
     );
     expect(container.textContent).not.toContain("schemaVersion");
+  });
+
+  it("应从 AgentUI projection store 显示 artifact 标准投影状态", () => {
+    conversationProjectionStore.recordAgentUiProjectionEvents([
+      {
+        type: "artifact.preview.ready",
+        sourceType: "artifact_snapshot",
+        sequence: 1,
+        timestamp: "2026-03-28T01:00:02Z",
+        sessionId: "session-artifact-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        artifactId: "artifact-document:demo",
+        owner: "artifact",
+        scope: "artifact",
+        phase: "completed",
+        surface: "artifact_workspace",
+        persistence: "artifact_store",
+        payload: { status: "ready" },
+      },
+    ]);
+
+    const container = renderCard(createFileArtifactItem());
+
+    const badge = container.querySelector(
+      '[data-testid="timeline-file-artifact-agentui"]',
+    ) as HTMLElement | null;
+    expect(badge).not.toBeNull();
+    expect(badge?.textContent).toContain("AgentUI Artifact 预览");
+    expect(badge?.getAttribute("title")).toContain(
+      "conversationProjectionStore.agentUi",
+    );
   });
 
   it("Markdown 文件产物应明确标识为可沉淀的 Document 产物", () => {

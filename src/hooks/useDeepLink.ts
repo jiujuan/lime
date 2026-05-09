@@ -36,7 +36,7 @@ import { useConnectCallback } from "./useConnectCallback";
 /**
  * Deep Link 解析后的 payload
  */
-export interface ConnectPayload {
+interface ConnectPayload {
   /** 中转商 ID（必填） */
   relay: string;
   /** API Key（必填） */
@@ -142,7 +142,7 @@ export interface RelayInfo {
 /**
  * Deep Link 处理结果（从后端接收的事件 payload）
  */
-export interface DeepLinkResult {
+interface DeepLinkResult {
   /** 解析后的 payload */
   payload: ConnectPayload;
   /** 中转商信息（如果在注册表中找到） */
@@ -154,7 +154,7 @@ export interface DeepLinkResult {
 /**
  * 保存 API Key 的返回结果
  */
-export interface SaveApiKeyResult {
+interface SaveApiKeyResult {
   /** Provider ID */
   provider_id: string;
   /** API Key ID */
@@ -176,7 +176,7 @@ export interface ConnectError {
 /**
  * useDeepLink Hook 返回值
  */
-export interface UseDeepLinkReturn {
+interface UseDeepLinkReturn {
   /** 解析后的 Deep Link payload */
   connectPayload: ConnectPayload | null;
   /** 中转商信息（如果在注册表中找到） */
@@ -197,7 +197,7 @@ export interface UseDeepLinkReturn {
   clearError: () => void;
 }
 
-export interface UseDeepLinkOptions {
+interface UseDeepLinkOptions {
   onOpenBrowserConnectorSettings?: (params: { enable: boolean }) => void;
   onOpenWebsiteDeepLink?: (payload: OpenDeepLinkPayload) => void;
 }
@@ -209,7 +209,7 @@ export interface OpenDeepLinkPayload {
   version?: string | null;
 }
 
-export interface OpenDeepLinkResult {
+interface OpenDeepLinkResult {
   payload: OpenDeepLinkPayload;
 }
 
@@ -725,5 +725,3 @@ export function useDeepLink(options?: UseDeepLinkOptions): UseDeepLinkReturn {
     clearError,
   };
 }
-
-export default useDeepLink;

@@ -1304,5 +1304,3 @@ function SearchToolCallGroup({
 
 // 导出别名，用于交错显示模式
 export const ToolCallItem = ToolCallDisplay;
-
-export default ToolCallDisplay;

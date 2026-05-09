@@ -73,6 +73,7 @@ function printGithubFormat(result) {
     `docs=${tasks.docs}`,
     `docs_only=${tasks.docsOnly}`,
     `fallback=${tasks.fallback}`,
+    `recommended_commands=${Array.isArray(tasks.recommendedCommands) ? tasks.recommendedCommands.join(" | ") : ""}`,
     `workflow=${tasks.workflow}`,
   ];
 

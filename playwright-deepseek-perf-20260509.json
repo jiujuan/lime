@@ -1,0 +1,477 @@
+{
+  "summary": {
+    "entries": [
+      {
+        "id": 1,
+        "phase": "homeInput.submit",
+        "at": 1031750.8999999985,
+        "wallTime": 1778306573822,
+        "sessionId": "draft-send-moxxti4e-f13111a9",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "hasDraftTab": false,
+          "inputLength": 8,
+          "requestId": "draft-send-moxxti4e-f13111a9",
+          "source": "empty-state",
+          "usedJSHeapSize": 404318882,
+          "totalJSHeapSize": 409574158
+        }
+      },
+      {
+        "id": 2,
+        "phase": "homeInput.pendingShellApplied",
+        "at": 1031751.1000000015,
+        "wallTime": 1778306573822,
+        "sessionId": "draft-send-moxxti4e-f13111a9",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "durationMs": 0,
+          "requestId": "draft-send-moxxti4e-f13111a9",
+          "source": "empty-state",
+          "usedJSHeapSize": 404318882,
+          "totalJSHeapSize": 409574158
+        }
+      },
+      {
+        "id": 3,
+        "phase": "homeInput.pendingPreviewPaint",
+        "at": 1031803.1000000015,
+        "wallTime": 1778306573874,
+        "sessionId": "draft-send-moxxti4e-f13111a9",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "durationMs": 52,
+          "requestId": "draft-send-moxxti4e-f13111a9",
+          "source": "empty-state",
+          "usedJSHeapSize": 405980766,
+          "totalJSHeapSize": 413862358
+        }
+      },
+      {
+        "id": 4,
+        "phase": "homeInput.sendDispatch.start",
+        "at": 1031803.200000003,
+        "wallTime": 1778306573874,
+        "sessionId": "draft-send-moxxti4e-f13111a9",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "elapsedMs": 52,
+          "requestId": "draft-send-moxxti4e-f13111a9",
+          "source": "empty-state",
+          "usedJSHeapSize": 405980766,
+          "totalJSHeapSize": 413862358
+        }
+      },
+      {
+        "id": 5,
+        "phase": "workspaceSend.plan.ready",
+        "at": 1031812.200000003,
+        "wallTime": 1778306573883,
+        "sessionId": "draft-send-moxxti4e-f13111a9",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "durationMs": 9,
+          "hasPendingSessionBinding": false,
+          "primedSessionId": null,
+          "requestId": "draft-send-moxxti4e-f13111a9",
+          "source": "empty-state",
+          "usedJSHeapSize": 405980766,
+          "totalJSHeapSize": 413862358
+        }
+      },
+      {
+        "id": 6,
+        "phase": "agentStream.assistantDraft",
+        "at": 1031817.799999997,
+        "wallTime": 1778306573888,
+        "sessionId": "draft-send-moxxti4e-f13111a9",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "assistantContentLength": 0,
+          "expectingQueue": false,
+          "hasAssistantDraftContent": false,
+          "phase": "routing",
+          "statusTitle": "快速响应已启用",
+          "source": "empty-state",
+          "requestId": "draft-send-moxxti4e-f13111a9",
+          "homeSubmittedDeltaMs": 66,
+          "usedJSHeapSize": 405980766,
+          "totalJSHeapSize": 413862358
+        }
+      },
+      {
+        "id": 7,
+        "phase": "agentStream.ensureSession.start",
+        "at": 1031818.8999999985,
+        "wallTime": 1778306573890,
+        "sessionId": "draft-send-moxxti4e-f13111a9",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "hadActiveSessionBeforeEnsure": false,
+          "skipSessionRestore": true,
+          "skipSessionStartHooks": true,
+          "source": "empty-state",
+          "requestId": "draft-send-moxxti4e-f13111a9",
+          "homeSubmittedDeltaMs": 68,
+          "usedJSHeapSize": 405980766,
+          "totalJSHeapSize": 413862358
+        }
+      },
+      {
+        "id": 8,
+        "phase": "agentUi.longTask",
+        "at": 1031839.700000003,
+        "wallTime": 1778306573910,
+        "sessionId": "draft-send-moxxti4e-f13111a9",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": null,
+        "metrics": {
+          "durationMs": 50,
+          "name": "self",
+          "startTimeMs": 1031749.5,
+          "usedJSHeapSize": 405980766,
+          "totalJSHeapSize": 413862358
+        }
+      },
+      {
+        "id": 9,
+        "phase": "agentStream.assistantDraftPaint",
+        "at": 1031849.3999999985,
+        "wallTime": 1778306573920,
+        "sessionId": "draft-send-moxxti4e-f13111a9",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "assistantContentLength": 0,
+          "expectingQueue": false,
+          "hasAssistantDraftContent": false,
+          "phase": "routing",
+          "statusTitle": "快速响应已启用",
+          "source": "empty-state",
+          "requestId": "draft-send-moxxti4e-f13111a9",
+          "homeSubmittedDeltaMs": 98,
+          "usedJSHeapSize": 405980766,
+          "totalJSHeapSize": 413862358
+        }
+      },
+      {
+        "id": 10,
+        "phase": "agentStream.ensureSession.done",
+        "at": 1031857.700000003,
+        "wallTime": 1778306573928,
+        "sessionId": "draft-send-moxxti4e-f13111a9",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "activeSessionId": "8f375476-bce0-41b9-b6f7-04862ccddd17",
+          "durationMs": 38,
+          "hadActiveSessionBeforeEnsure": false,
+          "skipSessionRestore": true,
+          "skipSessionStartHooks": true,
+          "source": "empty-state",
+          "requestId": "draft-send-moxxti4e-f13111a9",
+          "actualSessionId": "8f375476-bce0-41b9-b6f7-04862ccddd17",
+          "homeSubmittedDeltaMs": 106,
+          "usedJSHeapSize": 406885565,
+          "totalJSHeapSize": 414776105
+        }
+      },
+      {
+        "id": 11,
+        "phase": "agentStream.request.start",
+        "at": 1031858.3999999985,
+        "wallTime": 1778306573929,
+        "sessionId": "draft-send-moxxti4e-f13111a9",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "contentLength": 8,
+          "eventName": "aster_stream_219aa323-50ee-4d32-8fc1-3c1978360328",
+          "expectingQueue": false,
+          "model": "deepseek-chat",
+          "provider": "deepseek",
+          "skipUserMessage": false,
+          "systemPromptLength": 163,
+          "systemPromptPreview": "你是 Lime 的快速响应助手。当前日期：2026年5月9日。\n本回合是轻量首轮普通对话，请直接",
+          "source": "empty-state",
+          "requestId": "draft-send-moxxti4e-f13111a9",
+          "actualSessionId": "8f375476-bce0-41b9-b6f7-04862ccddd17",
+          "homeSubmittedDeltaMs": 107,
+          "usedJSHeapSize": 406885565,
+          "totalJSHeapSize": 414776105
+        }
+      },
+      {
+        "id": 12,
+        "phase": "agentStream.listenerBound",
+        "at": 1031886.5,
+        "wallTime": 1778306573957,
+        "sessionId": "draft-send-moxxti4e-f13111a9",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "elapsedMs": 28,
+          "eventName": "aster_stream_219aa323-50ee-4d32-8fc1-3c1978360328",
+          "expectingQueue": false,
+          "source": "empty-state",
+          "requestId": "draft-send-moxxti4e-f13111a9",
+          "actualSessionId": "8f375476-bce0-41b9-b6f7-04862ccddd17",
+          "homeSubmittedDeltaMs": 135,
+          "usedJSHeapSize": 406885565,
+          "totalJSHeapSize": 414776105
+        }
+      },
+      {
+        "id": 13,
+        "phase": "agentStream.submitDispatched",
+        "at": 1031886.799999997,
+        "wallTime": 1778306573957,
+        "sessionId": "draft-send-moxxti4e-f13111a9",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "elapsedMs": 28,
+          "eventName": "aster_stream_219aa323-50ee-4d32-8fc1-3c1978360328",
+          "expectingQueue": false,
+          "listenerBoundDeltaMs": 0,
+          "model": "deepseek-chat",
+          "provider": "deepseek",
+          "source": "empty-state",
+          "requestId": "draft-send-moxxti4e-f13111a9",
+          "actualSessionId": "8f375476-bce0-41b9-b6f7-04862ccddd17",
+          "homeSubmittedDeltaMs": 135,
+          "usedJSHeapSize": 406885565,
+          "totalJSHeapSize": 414776105
+        }
+      },
+      {
+        "id": 14,
+        "phase": "agentStream.submitAccepted",
+        "at": 1031961,
+        "wallTime": 1778306574032,
+        "sessionId": "draft-send-moxxti4e-f13111a9",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "elapsedMs": 102,
+          "eventName": "aster_stream_219aa323-50ee-4d32-8fc1-3c1978360328",
+          "submitInvokeMs": 74,
+          "source": "empty-state",
+          "requestId": "draft-send-moxxti4e-f13111a9",
+          "actualSessionId": "8f375476-bce0-41b9-b6f7-04862ccddd17",
+          "homeSubmittedDeltaMs": 210,
+          "usedJSHeapSize": 409902058,
+          "totalJSHeapSize": 416864258
+        }
+      },
+      {
+        "id": 15,
+        "phase": "homeInput.sendDispatch.done",
+        "at": 1031961.299999997,
+        "wallTime": 1778306574032,
+        "sessionId": "draft-send-moxxti4e-f13111a9",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "durationMs": 210,
+          "requestId": "draft-send-moxxti4e-f13111a9",
+          "result": true,
+          "source": "empty-state",
+          "usedJSHeapSize": 409902058,
+          "totalJSHeapSize": 416864258
+        }
+      },
+      {
+        "id": 16,
+        "phase": "agentStream.firstEvent",
+        "at": 1031980.5,
+        "wallTime": 1778306574051,
+        "sessionId": "draft-send-moxxti4e-f13111a9",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "elapsedMs": 122,
+          "eventName": "aster_stream_219aa323-50ee-4d32-8fc1-3c1978360328",
+          "eventType": "runtime_status",
+          "recognized": true,
+          "submissionDispatchedDeltaMs": 94,
+          "source": "empty-state",
+          "requestId": "draft-send-moxxti4e-f13111a9",
+          "actualSessionId": "8f375476-bce0-41b9-b6f7-04862ccddd17",
+          "homeSubmittedDeltaMs": 229,
+          "usedJSHeapSize": 409902058,
+          "totalJSHeapSize": 416864258
+        }
+      },
+      {
+        "id": 17,
+        "phase": "agentStream.firstRuntimeStatus",
+        "at": 1031981,
+        "wallTime": 1778306574052,
+        "sessionId": "draft-send-moxxti4e-f13111a9",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "elapsedMs": 123,
+          "eventName": "aster_stream_219aa323-50ee-4d32-8fc1-3c1978360328",
+          "firstEventDeltaMs": 1,
+          "phase": "preparing",
+          "title": "已接收请求，正在准备执行",
+          "source": "empty-state",
+          "requestId": "draft-send-moxxti4e-f13111a9",
+          "actualSessionId": "8f375476-bce0-41b9-b6f7-04862ccddd17",
+          "homeSubmittedDeltaMs": 230,
+          "usedJSHeapSize": 409902058,
+          "totalJSHeapSize": 416864258
+        }
+      },
+      {
+        "id": 18,
+        "phase": "agentStream.firstTextDelta",
+        "at": 1034232.1000000015,
+        "wallTime": 1778306576303,
+        "sessionId": "draft-send-moxxti4e-f13111a9",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "deltaChars": 1,
+          "elapsedMs": 2374,
+          "eventName": "aster_stream_219aa323-50ee-4d32-8fc1-3c1978360328",
+          "firstEventDeltaMs": 2252,
+          "firstRuntimeStatusDeltaMs": 2251,
+          "source": "empty-state",
+          "requestId": "draft-send-moxxti4e-f13111a9",
+          "actualSessionId": "8f375476-bce0-41b9-b6f7-04862ccddd17",
+          "homeSubmittedDeltaMs": 2481,
+          "usedJSHeapSize": 410747015,
+          "totalJSHeapSize": 420551075
+        }
+      },
+      {
+        "id": 19,
+        "phase": "agentRuntime.getSession.start",
+        "at": 1034933.200000003,
+        "wallTime": 1778306577004,
+        "sessionId": "8f375476-bce0-41b9-b6f7-04862ccddd17",
+        "workspaceId": null,
+        "source": null,
+        "metrics": {
+          "historyLimit": 40,
+          "historyOffset": null,
+          "historyBeforeMessageId": null,
+          "resumeSessionStartHooks": false,
+          "usedJSHeapSize": 410207946,
+          "totalJSHeapSize": 420553286
+        }
+      },
+      {
+        "id": 20,
+        "phase": "agentRuntime.getSession.success",
+        "at": 1034964.799999997,
+        "wallTime": 1778306577035,
+        "sessionId": "8f375476-bce0-41b9-b6f7-04862ccddd17",
+        "workspaceId": null,
+        "source": null,
+        "metrics": {
+          "historyLimit": 40,
+          "historyOffset": null,
+          "historyBeforeMessageId": null,
+          "resumeSessionStartHooks": false,
+          "childSubagentSessionsCount": 0,
+          "durationMs": 31,
+          "itemsCount": 4,
+          "messagesCount": 2,
+          "queuedTurnsCount": 0,
+          "turnsCount": 1,
+          "usedJSHeapSize": 410207946,
+          "totalJSHeapSize": 420553286
+        }
+      }
+    ],
+    "sessions": [
+      {
+        "sessionId": "8f375476-bce0-41b9-b6f7-04862ccddd17",
+        "workspaceId": null,
+        "runtimeGetSessionDurationMs": 31,
+        "switchStartCount": 0,
+        "fetchDetailStartCount": 0,
+        "fetchDetailErrorCount": 0,
+        "runtimeGetSessionStartCount": 1,
+        "runtimeGetSessionErrorCount": 0,
+        "messageListPaintCount": 0,
+        "longTaskCount": 0,
+        "threadItemsScanDeferredCount": 0,
+        "maxUsedJSHeapSize": 410207946,
+        "phases": [
+          "agentRuntime.getSession.start",
+          "agentRuntime.getSession.success"
+        ]
+      },
+      {
+        "sessionId": "draft-send-moxxti4e-f13111a9",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "homeInputToPendingShellMs": 0,
+        "homeInputToPendingPreviewPaintMs": 52,
+        "homeInputToSendDispatchMs": 52,
+        "homeInputToSendPlanReadyMs": 61,
+        "homeInputToAssistantDraftMs": 67,
+        "homeInputToAssistantDraftPaintMs": 99,
+        "homeInputToStreamRequestStartMs": 108,
+        "homeInputToSubmitAcceptedMs": 210,
+        "homeInputToFirstEventMs": 230,
+        "homeInputToFirstRuntimeStatusMs": 230,
+        "homeInputToFirstTextDeltaMs": 2481,
+        "sendDispatchToSubmitAcceptedMs": 158,
+        "streamSubmitDispatchedToAcceptedMs": 74,
+        "submitAcceptedToFirstEventMs": 20,
+        "firstEventToFirstTextDeltaMs": 2252,
+        "streamEnsureSessionDurationMs": 38,
+        "streamSubmitInvokeDurationMs": 74,
+        "switchStartCount": 0,
+        "fetchDetailStartCount": 0,
+        "fetchDetailErrorCount": 0,
+        "runtimeGetSessionStartCount": 0,
+        "runtimeGetSessionErrorCount": 0,
+        "messageListPaintCount": 0,
+        "longTaskCount": 1,
+        "longTaskMaxMs": 50,
+        "threadItemsScanDeferredCount": 0,
+        "maxUsedJSHeapSize": 410747015,
+        "phases": [
+          "homeInput.submit",
+          "homeInput.pendingShellApplied",
+          "homeInput.pendingPreviewPaint",
+          "homeInput.sendDispatch.start",
+          "workspaceSend.plan.ready",
+          "agentStream.assistantDraft",
+          "agentStream.ensureSession.start",
+          "agentUi.longTask",
+          "agentStream.assistantDraftPaint",
+          "agentStream.ensureSession.done",
+          "agentStream.request.start",
+          "agentStream.listenerBound",
+          "agentStream.submitDispatched",
+          "agentStream.submitAccepted",
+          "homeInput.sendDispatch.done",
+          "agentStream.firstEvent",
+          "agentStream.firstRuntimeStatus",
+          "agentStream.firstTextDelta"
+        ]
+      }
+    ]
+  },
+  "current": {
+    "hasRanInto": false,
+    "hasPleaseRetry": false,
+    "hasPermissionFallback": false,
+    "hasGood": true,
+    "bodyTail": "Lime\n邀请好友\n搜索任务\n新建任务\nSkills\n灵感\n项目资料\n最近对话\nRan into this erro...\n17分\n好\n20分\n新对话\n52分\n好\n54分\nRan into this erro...\n1时\n新对话\n1时\n新对话\n1时\n新对话\n1时\n新对话\n2时\n新对话\n2时\n查看更多对话\n归档\n开\n开源使用\n本地可用\nKnowledge Manual E2E 38362\nHarness\n新对话\n\n只回答一个字：好\n\n已完成思考\n我们被要求只回答一个字：好。直接回复即可。\n\n好\n\n已完成\n·\n00:02\n添加资料\n模型\ndeepseek-v4-pro\n高级设置"
+  }
+}

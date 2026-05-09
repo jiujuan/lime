@@ -32,7 +32,7 @@ import {
   type ChromeBridgeStatusSnapshot,
 } from "@/lib/webview-api";
 import {
-  buildBrowserConnectorGuideUrl,
+  buildBrowserConnectorGuideNavigationUrl,
   type BrowserConnectorGuideMode,
 } from "./guide-window-launcher";
 
@@ -547,7 +547,7 @@ function BrowserConnectorGuideContent() {
                   type="button"
                   onClick={() => {
                     window.location.href =
-                      buildBrowserConnectorGuideUrl("extension");
+                      buildBrowserConnectorGuideNavigationUrl("extension");
                   }}
                   className={SECONDARY_BUTTON_CLASS_NAME}
                 >

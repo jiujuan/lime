@@ -735,5 +735,3 @@ export function InstructionEditor({
     </div>
   );
 }
-
-export default InstructionEditor;

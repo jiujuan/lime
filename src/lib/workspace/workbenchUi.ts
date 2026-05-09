@@ -6,13 +6,7 @@
 
 export {
   CanvasBreadcrumbHeader,
-  type CanvasBreadcrumbHeaderProps,
 } from "@/components/workspace/canvas/shared/CanvasBreadcrumbHeader";
-
-export {
-  ImageGallery,
-  type ImageGalleryProps,
-} from "@/components/workspace/media/ImageGallery";
 
 export { LayoutTransition } from "@/components/workspace/layout/LayoutTransition";
 

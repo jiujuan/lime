@@ -45,6 +45,103 @@ impl ProviderError {
             ProviderError::NotImplemented(_) => "not_implemented",
         }
     }
+
+    pub fn is_retryable(&self) -> bool {
+        match self {
+            ProviderError::RateLimitExceeded { .. } | ProviderError::ServerError(_) => true,
+            ProviderError::RequestFailed(message) => is_retryable_request_failed_message(message),
+            ProviderError::Authentication(_)
+            | ProviderError::ContextLengthExceeded(_)
+            | ProviderError::ExecutionError(_)
+            | ProviderError::UsageError(_)
+            | ProviderError::NotImplemented(_) => false,
+        }
+    }
+
+    pub fn is_non_retryable_provider_rejection(&self) -> bool {
+        match self {
+            ProviderError::Authentication(_) => true,
+            ProviderError::RequestFailed(message) => {
+                Self::message_is_non_retryable_provider_rejection(message)
+            }
+            ProviderError::ContextLengthExceeded(_)
+            | ProviderError::RateLimitExceeded { .. }
+            | ProviderError::ServerError(_)
+            | ProviderError::ExecutionError(_)
+            | ProviderError::UsageError(_)
+            | ProviderError::NotImplemented(_) => false,
+        }
+    }
+
+    pub fn message_is_non_retryable_provider_rejection(message: &str) -> bool {
+        let normalized = message.to_ascii_lowercase();
+        normalized.contains("authentication error")
+            || normalized.contains("unauthorized")
+            || normalized.contains("forbidden")
+            || !is_retryable_request_failed_message(message)
+    }
+}
+
+fn is_retryable_request_failed_message(message: &str) -> bool {
+    let normalized = message.to_ascii_lowercase();
+    let non_retryable_markers = [
+        "bad request (400)",
+        "resource not found (404)",
+        "invalid_request_error",
+        "status: 400",
+        "status: 401",
+        "status: 403",
+        "status: 404",
+        "status 400",
+        "status 401",
+        "status 403",
+        "status 404",
+    ];
+
+    !non_retryable_markers
+        .iter()
+        .any(|marker| normalized.contains(marker))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ProviderError;
+
+    #[test]
+    fn bad_request_provider_errors_are_not_retryable() {
+        let error = ProviderError::RequestFailed(
+            "Bad request (400): 当前模型未在租户白名单中开放".to_string(),
+        );
+
+        assert!(!error.is_retryable());
+    }
+
+    #[test]
+    fn transient_request_failures_remain_retryable() {
+        let error = ProviderError::RequestFailed("connection failed".to_string());
+
+        assert!(error.is_retryable());
+    }
+
+    #[test]
+    fn client_side_provider_rejections_are_classified() {
+        let bad_request = ProviderError::RequestFailed(
+            "Bad request (400): 当前模型未在租户白名单中开放".to_string(),
+        );
+        let auth = ProviderError::Authentication("invalid key".to_string());
+        let server = ProviderError::ServerError("server unavailable".to_string());
+
+        assert!(bad_request.is_non_retryable_provider_rejection());
+        assert!(auth.is_non_retryable_provider_rejection());
+        assert!(!server.is_non_retryable_provider_rejection());
+    }
+
+    #[test]
+    fn wrapped_bad_request_messages_are_classified() {
+        assert!(ProviderError::message_is_non_retryable_provider_rejection(
+            "Request failed: Bad request (400): 当前模型未在租户白名单中开放"
+        ));
+    }
 }
 
 impl From<anyhow::Error> for ProviderError {

@@ -153,6 +153,33 @@ struct InboundMessage {
     mentioned_bot: bool,
 }
 
+fn build_gateway_source_metadata(
+    account: &ResolvedDiscordAccount,
+    inbound: &InboundMessage,
+) -> serde_json::Value {
+    let remote_task_id = format!(
+        "gateway:discord:{}:{}",
+        account.account_id, inbound.message_id
+    );
+    json!({
+        "remote_task": {
+            "source": "gateway_channel",
+            "channel": "discord",
+            "accountId": account.account_id.as_str(),
+            "remoteTaskId": remote_task_id,
+            "inboundMessageId": inbound.message_id.as_str(),
+            "channelId": inbound.channel_id.as_str(),
+            "guildId": inbound.guild_id.as_deref(),
+            "senderId": inbound.sender_id.as_str(),
+            "agentCard": {
+                "id": format!("discord:{}", account.account_id),
+                "name": "Discord Remote",
+                "provider": "discord"
+            }
+        }
+    })
+}
+
 #[derive(Debug, Clone)]
 struct PendingConfirmation {
     token: String,
@@ -1431,6 +1458,7 @@ async fn handle_plain_text(
                 "model": account.default_model.clone(),
                 "web_search": true,
                 "search_mode": "allowed",
+                "source_metadata": build_gateway_source_metadata(account, inbound),
             })),
         })
         .await;

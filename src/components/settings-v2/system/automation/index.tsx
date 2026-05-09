@@ -66,6 +66,12 @@ import {
   type AutomationServiceSkillContext,
 } from "./serviceSkillContext";
 import {
+  recordAutomationJobMutationAgentUiProjection,
+  recordAutomationJobsRefreshAgentUiProjection,
+  recordAutomationRunHistoryAgentUiProjection,
+  recordAutomationStatusRefreshAgentUiProjection,
+} from "./automationAgentUiProjection";
+import {
   LEGACY_BROWSER_AUTOMATION_NOTICE,
   LEGACY_BROWSER_AUTOMATION_STATUS,
   describeSchedule,
@@ -723,12 +729,20 @@ export function AutomationSettings({
 
         if (jobsResult.status === "fulfilled") {
           setJobs(jobsResult.value);
+          recordAutomationJobsRefreshAgentUiProjection(jobsResult.value);
         } else {
           coreErrors.push(
             resolveAutomationLoadErrorMessage(
               jobsResult.reason,
               "持续流程列表加载失败",
             ),
+          );
+        }
+
+        if (statusResult.status === "fulfilled") {
+          recordAutomationStatusRefreshAgentUiProjection(
+            statusResult.value,
+            nextJobs,
           );
         }
 
@@ -852,6 +866,10 @@ export function AutomationSettings({
         return;
       }
       setJobRuns(runs);
+      const job = jobsRef.current.find((item) => item.id === jobId);
+      if (job) {
+        recordAutomationRunHistoryAgentUiProjection(job, runs);
+      }
     } catch (error) {
       if (!isCurrentRequest()) {
         return;
@@ -965,6 +983,10 @@ export function AutomationSettings({
         payload.mode === "create"
           ? await createAutomationJob(payload.request)
           : await updateAutomationJob(payload.id, payload.request);
+      recordAutomationJobMutationAgentUiProjection(
+        result,
+        payload.mode === "create" ? "created" : "updated",
+      );
 
       toast.success(
         payload.mode === "create" ? "持续流程已创建" : "持续流程已更新",
@@ -992,6 +1014,7 @@ export function AutomationSettings({
 
     try {
       await deleteAutomationJob(job.id);
+      recordAutomationJobMutationAgentUiProjection(job, "deleted");
       toast.success("持续流程已删除");
       await refreshAll(true);
     } catch (error) {

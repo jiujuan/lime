@@ -26,7 +26,7 @@ import {
 } from "@/types/gallery-material";
 import { cn } from "@/lib/utils";
 
-export interface ImageGalleryProps {
+interface ImageGalleryProps {
   /** 项目 ID */
   projectId: string;
   /** 选中的素材 ID 列表 */
@@ -470,5 +470,3 @@ export function ImageGallery({
     </div>
   );
 }
-
-export default ImageGallery;

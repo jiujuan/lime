@@ -162,7 +162,7 @@ type SmokeAnalyzerMode =
   | "worker-model-slots-http-json"
   | "worker-model-slots-native-ocr";
 
-type SmokeImageTaskMode = "none" | "auto-refresh-fixture";
+type SmokeImageTaskMode = "none" | "auto-refresh-fixture" | "live-single-layer";
 
 const analyzerBadgeLabels: Record<SmokeAnalyzerMode, string> = {
   default: "默认 analyzer",
@@ -231,7 +231,11 @@ function resolveAnalyzerMode(value: string | null): SmokeAnalyzerMode {
 }
 
 function resolveImageTaskMode(value: string | null): SmokeImageTaskMode {
-  return value === "auto-refresh-fixture" ? value : "none";
+  if (value === "auto-refresh-fixture" || value === "live-single-layer") {
+    return value;
+  }
+
+  return "none";
 }
 
 function createSmokeImageTaskOutput(
@@ -675,6 +679,11 @@ export function DesignCanvasSmokePage() {
     () => resolveImageTaskMode(readSearchParam("imageTask")),
     [],
   );
+  const liveImageProviderId = useMemo(
+    () => readSearchParam("imageProvider"),
+    [],
+  );
+  const liveImageModelId = useMemo(() => readSearchParam("imageModel"), []);
   const imageTaskFixture = useMemo(
     () =>
       imageTaskMode === "auto-refresh-fixture"
@@ -758,6 +767,12 @@ export function DesignCanvasSmokePage() {
               图片任务自动刷新 fixture
             </Badge>
           ) : null}
+          {imageTaskMode === "live-single-layer" ? (
+            <Badge data-testid="design-canvas-smoke-image-task">
+              真实图片任务单层验收 / {liveImageProviderId ?? "默认 Provider"} /{" "}
+              {liveImageModelId ?? "默认模型"}
+            </Badge>
+          ) : null}
           {analyzerMode === "worker-refined" ? (
             <Badge>{WORKER_REFINED_FIXTURE_LABEL}</Badge>
           ) : null}
@@ -816,12 +831,16 @@ export function DesignCanvasSmokePage() {
             imageGenerationProviderId={
               imageTaskMode === "auto-refresh-fixture"
                 ? "smoke-fixture"
-                : undefined
+                : imageTaskMode === "live-single-layer"
+                  ? liveImageProviderId
+                  : undefined
             }
             imageGenerationModelId={
               imageTaskMode === "auto-refresh-fixture"
                 ? "smoke-layered-design-image-v1"
-                : undefined
+                : imageTaskMode === "live-single-layer"
+                  ? liveImageModelId
+                  : undefined
             }
             designAnalyzeFlatImage={analyzeFlatImage}
             designAnalyzerModelSlotConfigs={

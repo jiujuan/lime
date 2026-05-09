@@ -373,5 +373,3 @@ export function EmptyStateQuickActions({
     </QuickActionsPanel>
   );
 }
-
-export default EmptyStateQuickActions;

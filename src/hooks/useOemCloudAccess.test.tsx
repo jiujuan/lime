@@ -28,6 +28,9 @@ const controlPlaneMocks = vi.hoisted(() => ({
 }));
 
 const shellOpenMock = vi.hoisted(() => vi.fn());
+const systemBrowserMocks = vi.hoisted(() => ({
+  openExternalUrlWithSystemBrowser: vi.fn(),
+}));
 const tauriRuntimeMocks = vi.hoisted(() => ({
   hasTauriInvokeCapability: vi.fn(),
   hasTauriRuntimeMarkers: vi.fn(),
@@ -79,6 +82,11 @@ vi.mock("@/lib/api/oemCloudControlPlane", () => {
 
 vi.mock("@tauri-apps/plugin-shell", () => ({
   open: shellOpenMock,
+}));
+
+vi.mock("@/lib/api/externalUrl", () => ({
+  openExternalUrlWithSystemBrowser:
+    systemBrowserMocks.openExternalUrlWithSystemBrowser,
 }));
 
 vi.mock("@/lib/tauri-runtime", () => ({
@@ -243,6 +251,10 @@ describe("useOemCloudAccess", () => {
     controlPlaneMocks.verifyClientAuthEmailCode.mockResolvedValue(null);
     desktopAuthMocks.completeOemCloudDesktopOAuthLogin.mockResolvedValue({});
     shellOpenMock.mockResolvedValue(undefined);
+    systemBrowserMocks.openExternalUrlWithSystemBrowser.mockReset();
+    systemBrowserMocks.openExternalUrlWithSystemBrowser.mockResolvedValue(
+      undefined,
+    );
     tauriRuntimeMocks.hasTauriInvokeCapability.mockReturnValue(true);
     tauriRuntimeMocks.hasTauriRuntimeMarkers.mockReturnValue(true);
   });
@@ -598,9 +610,12 @@ describe("useOemCloudAccess", () => {
       provider: "google",
       desktopRedirectUri: "lime://oauth/callback",
     });
-    expect(shellOpenMock).toHaveBeenCalledWith(
+    expect(
+      systemBrowserMocks.openExternalUrlWithSystemBrowser,
+    ).toHaveBeenCalledWith(
       "https://user.limeai.run/oauth/desktop/device-code-001/signin",
     );
+    expect(shellOpenMock).not.toHaveBeenCalled();
     expect(controlPlaneMocks.pollClientDesktopAuthSession).toHaveBeenCalledWith(
       "device-code-001",
     );
@@ -630,6 +645,9 @@ describe("useOemCloudAccess", () => {
       authorizeUrl:
         "https://user.limeai.run/oauth/desktop/device-code-001/signin",
     });
+    systemBrowserMocks.openExternalUrlWithSystemBrowser.mockRejectedValue(
+      new Error("permission denied"),
+    );
     shellOpenMock.mockRejectedValue(new Error("permission denied"));
 
     const container = document.createElement("div");
@@ -646,7 +664,9 @@ describe("useOemCloudAccess", () => {
       await latestState?.handleGoogleLogin();
     });
 
-    expect(shellOpenMock).toHaveBeenCalledWith(
+    expect(
+      systemBrowserMocks.openExternalUrlWithSystemBrowser,
+    ).toHaveBeenCalledWith(
       "https://user.limeai.run/oauth/desktop/device-code-001/signin",
     );
     expect(latestState?.errorMessage).toContain("系统浏览器打开失败");
@@ -676,8 +696,11 @@ describe("useOemCloudAccess", () => {
       await latestState?.handleGoogleLogin();
     });
 
-    expect(shellOpenMock).toHaveBeenCalledTimes(1);
-    const openedUrl = shellOpenMock.mock.calls[0]?.[0] as string;
+    expect(
+      systemBrowserMocks.openExternalUrlWithSystemBrowser,
+    ).toHaveBeenCalledTimes(1);
+    const openedUrl = systemBrowserMocks.openExternalUrlWithSystemBrowser.mock
+      .calls[0]?.[0] as string;
     const parsedUrl = new URL(openedUrl);
 
     expect(parsedUrl.origin).toBe("https://user.limeai.run");

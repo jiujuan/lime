@@ -83,6 +83,23 @@ import {
   revealPathInFinder,
 } from "@/lib/api/fileSystem";
 import { extractArtifactProtocolPathsFromValue } from "@/lib/artifact-protocol";
+import {
+  buildAgentUiEvidenceChangedEvent,
+  buildAgentUiHandoffProjectionEvents,
+  buildAgentUiReviewProjectionEvents,
+} from "../projection/agentUiEventProjection";
+import {
+  formatAgentUiProjectionEventDetail,
+  formatAgentUiProjectionEventType,
+  formatAgentUiProjectionPhase,
+  summarizeAgentUiProjectionEvents,
+} from "../projection/agentUiProjectionSummary";
+import {
+  recordAgentUiProjectionEvents,
+  type AgentUiProjectionScopeFilter,
+} from "../projection/conversationProjectionStore";
+import { recordTeamControlAgentUiProjection } from "../projection/teamControlAgentUiProjection";
+import { useAgentUiProjectionEvents } from "../projection/useConversationProjectionStore";
 import { SearchResultPreviewList } from "./SearchResultPreviewList";
 import type {
   ActionRequired,
@@ -214,6 +231,7 @@ type ToolInventoryFilterValue = "all" | "runtime" | "persisted" | "default";
 type HarnessSectionKey =
   | "team_config"
   | "runtime"
+  | "agentui"
   | "handoff"
   | "reliability"
   | "runtime-facts"
@@ -308,6 +326,65 @@ function formatIsoDateTime(value?: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function resolveReviewDecisionRegressionFacts(
+  verificationSummary?:
+    | AgentRuntimeReviewDecisionTemplate["verification_summary"]
+    | null,
+): {
+  regressionOutcome?: "blocking_failure" | "recovered";
+  regressionFailureOutcomes?: string[];
+  regressionRecoveredOutcomes?: string[];
+  requestedFixExecutionResults?: Array<{
+    requestedFix?: string;
+    requestedFixIndex?: number;
+    executionStatus?:
+      | "pending"
+      | "assigned"
+      | "running"
+      | "completed"
+      | "failed"
+      | "blocked"
+      | "cancelled";
+    regressionOutcome?: string;
+    summaryPreview?: string;
+    resultRef?: string;
+    artifactIds?: string[];
+    artifactPaths?: string[];
+  }>;
+} {
+  const regressionFailureOutcomes =
+    verificationSummary?.focus_verification_failure_outcomes;
+  const regressionRecoveredOutcomes =
+    verificationSummary?.focus_verification_recovered_outcomes;
+  const artifactOutcome = verificationSummary?.artifact_validator?.outcome;
+  const regressionOutcome = regressionFailureOutcomes?.length
+    ? "blocking_failure"
+    : regressionRecoveredOutcomes?.length
+      ? "recovered"
+      : artifactOutcome === "blocking_failure" ||
+          artifactOutcome === "recovered"
+        ? artifactOutcome
+        : undefined;
+
+  return {
+    regressionOutcome,
+    regressionFailureOutcomes,
+    regressionRecoveredOutcomes,
+    requestedFixExecutionResults: (
+      verificationSummary?.requested_fix_execution_results ?? []
+    ).map((result) => ({
+      requestedFix: result.requested_fix,
+      requestedFixIndex: result.requested_fix_index,
+      executionStatus: result.execution_status,
+      regressionOutcome: result.regression_outcome,
+      summaryPreview: result.summary_preview,
+      resultRef: result.result_ref,
+      artifactIds: result.artifact_ids,
+      artifactPaths: result.artifact_paths,
+    })),
+  };
 }
 
 function resolveSubagentRuntimeStatusLabel(
@@ -2289,6 +2366,21 @@ export function HarnessStatusPanel({
     Partial<Record<HarnessSectionKey, HTMLElement | null>>
   >({});
   const currentSessionId = diagnosticRuntimeContext?.sessionId?.trim() || null;
+  const agentUiProjectionFilter = useMemo<AgentUiProjectionScopeFilter | null>(
+    () => (currentSessionId ? { sessionId: currentSessionId } : null),
+    [currentSessionId],
+  );
+  const agentUiProjectionEvents = useAgentUiProjectionEvents(
+    agentUiProjectionFilter,
+  );
+  const agentUiProjectionSummary = useMemo(
+    () =>
+      currentSessionId
+        ? summarizeAgentUiProjectionEvents(agentUiProjectionEvents)
+        : summarizeAgentUiProjectionEvents([]),
+    [agentUiProjectionEvents, currentSessionId],
+  );
+  const hasAgentUiProjectionSection = agentUiProjectionSummary.total > 0;
 
   useEffect(() => {
     setHandoffBundle(null);
@@ -2336,11 +2428,59 @@ export function HarnessStatusPanel({
     try {
       const bundle = await exportAgentRuntimeHandoffBundle(currentSessionId);
       setHandoffBundle(bundle);
+      recordAgentUiProjectionEvents(
+        buildAgentUiHandoffProjectionEvents(
+          {
+            evidenceId: bundle.bundle_relative_root,
+            handoffId: bundle.bundle_relative_root,
+            sessionId: bundle.session_id,
+            threadId: bundle.thread_id,
+            kind: "runtime_handoff_bundle",
+            status: "handoff_requested",
+            verdict: "complete",
+            from: "lime_runtime",
+            to: "specialist_runtime",
+            reason: "handoff_bundle_exported",
+            resumeTarget: bundle.bundle_relative_root,
+            contextBoundary: bundle.workspace_root,
+            summaryPreview: `已导出 ${bundle.artifacts.length} 个交接制品`,
+            artifactPaths: bundle.artifacts.map(
+              (artifact) => artifact.relative_path,
+            ),
+            itemCount: bundle.artifacts.length,
+          },
+          {
+            timestamp: bundle.exported_at,
+            sessionId: bundle.session_id,
+            threadId: bundle.thread_id,
+          },
+        ),
+      );
       toast.success(`已导出 ${bundle.artifacts.length} 个交接制品`);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "导出交接制品失败";
       setHandoffExportError(message);
+      recordAgentUiProjectionEvents(
+        buildAgentUiHandoffProjectionEvents(
+          {
+            evidenceId: `handoff-bundle:${currentSessionId}`,
+            handoffId: `handoff-bundle:${currentSessionId}`,
+            sessionId: currentSessionId,
+            kind: "runtime_handoff_bundle",
+            status: "failed",
+            verdict: "export_failed",
+            from: "lime_runtime",
+            to: "specialist_runtime",
+            reason: "handoff_bundle_export_failed",
+            summaryPreview: message,
+          },
+          {
+            timestamp: new Date().toISOString(),
+            sessionId: currentSessionId,
+          },
+        ),
+      );
       toast.error(message);
     } finally {
       setHandoffExporting(false);
@@ -2358,11 +2498,49 @@ export function HarnessStatusPanel({
     try {
       const pack = await exportAgentRuntimeEvidencePack(currentSessionId);
       setEvidencePack(pack);
+      recordAgentUiProjectionEvents([
+        buildAgentUiEvidenceChangedEvent(
+          {
+            evidenceId: pack.pack_relative_root,
+            sessionId: pack.session_id,
+            threadId: pack.thread_id,
+            kind: "evidence_pack",
+            status: "ready",
+            verdict: pack.known_gaps.length > 0 ? "gaps_present" : "complete",
+            summaryPreview: `已导出 ${pack.artifacts.length} 个问题证据文件`,
+            artifactPaths: pack.artifacts.map(
+              (artifact) => artifact.relative_path,
+            ),
+            itemCount: pack.item_count,
+          },
+          {
+            timestamp: pack.exported_at,
+            sessionId: pack.session_id,
+            threadId: pack.thread_id,
+          },
+        ),
+      ]);
       toast.success(`已导出 ${pack.artifacts.length} 个问题证据文件`);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "导出问题证据包失败";
       setEvidenceExportError(message);
+      recordAgentUiProjectionEvents([
+        buildAgentUiEvidenceChangedEvent(
+          {
+            evidenceId: `evidence-pack:${currentSessionId}`,
+            sessionId: currentSessionId,
+            kind: "evidence_pack",
+            status: "failed",
+            verdict: "export_failed",
+            summaryPreview: message,
+          },
+          {
+            timestamp: new Date().toISOString(),
+            sessionId: currentSessionId,
+          },
+        ),
+      ]);
       toast.error(message);
     } finally {
       setEvidenceExporting(false);
@@ -2380,12 +2558,50 @@ export function HarnessStatusPanel({
     try {
       const replay = await exportAgentRuntimeReplayCase(currentSessionId);
       setReplayCase(replay);
+      recordAgentUiProjectionEvents([
+        buildAgentUiEvidenceChangedEvent(
+          {
+            evidenceId: replay.replay_relative_root,
+            sessionId: replay.session_id,
+            threadId: replay.thread_id,
+            kind: "replay_case",
+            status: "ready",
+            verdict: "complete",
+            summaryPreview: `已导出 ${replay.artifacts.length} 个 Replay 样本文件`,
+            artifactPaths: replay.artifacts.map(
+              (artifact) => artifact.relative_path,
+            ),
+            itemCount: replay.artifacts.length,
+          },
+          {
+            timestamp: replay.exported_at,
+            sessionId: replay.session_id,
+            threadId: replay.thread_id,
+          },
+        ),
+      ]);
       toast.success(`已导出 ${replay.artifacts.length} 个 Replay 样本文件`);
       return replay;
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "导出 Replay 样本失败";
       setReplayExportError(message);
+      recordAgentUiProjectionEvents([
+        buildAgentUiEvidenceChangedEvent(
+          {
+            evidenceId: `replay-case:${currentSessionId}`,
+            sessionId: currentSessionId,
+            kind: "replay_case",
+            status: "failed",
+            verdict: "export_failed",
+            summaryPreview: message,
+          },
+          {
+            timestamp: new Date().toISOString(),
+            sessionId: currentSessionId,
+          },
+        ),
+      ]);
       toast.error(message);
       return null;
     } finally {
@@ -2405,12 +2621,60 @@ export function HarnessStatusPanel({
       const analysis =
         await exportAgentRuntimeAnalysisHandoff(currentSessionId);
       setAnalysisHandoff(analysis);
+      recordAgentUiProjectionEvents(
+        buildAgentUiHandoffProjectionEvents(
+          {
+            evidenceId: analysis.analysis_relative_root,
+            handoffId: analysis.handoff_bundle_relative_root,
+            sessionId: analysis.session_id,
+            threadId: analysis.thread_id,
+            kind: "analysis_handoff",
+            status: "handoff_requested",
+            verdict: "complete",
+            from: "lime_harness",
+            to: "external_reviewer",
+            reason: "analysis_handoff_exported",
+            resumeTarget: analysis.analysis_relative_root,
+            contextBoundary: analysis.sanitized_workspace_root,
+            summaryPreview: `已导出 ${analysis.artifacts.length} 个外部分析文件`,
+            artifactPaths: analysis.artifacts.map(
+              (artifact) => artifact.relative_path,
+            ),
+            itemCount: analysis.artifacts.length,
+          },
+          {
+            timestamp: analysis.exported_at,
+            sessionId: analysis.session_id,
+            threadId: analysis.thread_id,
+          },
+        ),
+      );
       toast.success(`已导出 ${analysis.artifacts.length} 个外部分析文件`);
       return analysis;
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "导出外部分析交接失败";
       setAnalysisExportError(message);
+      recordAgentUiProjectionEvents(
+        buildAgentUiHandoffProjectionEvents(
+          {
+            evidenceId: `analysis-handoff:${currentSessionId}`,
+            handoffId: `analysis-handoff:${currentSessionId}`,
+            sessionId: currentSessionId,
+            kind: "analysis_handoff",
+            status: "failed",
+            verdict: "export_failed",
+            from: "lime_harness",
+            to: "external_reviewer",
+            reason: "analysis_handoff_export_failed",
+            summaryPreview: message,
+          },
+          {
+            timestamp: new Date().toISOString(),
+            sessionId: currentSessionId,
+          },
+        ),
+      );
       toast.error(message);
       return null;
     } finally {
@@ -2488,13 +2752,83 @@ export function HarnessStatusPanel({
     try {
       const template =
         await exportAgentRuntimeReviewDecisionTemplate(currentSessionId);
+      const regressionFacts = resolveReviewDecisionRegressionFacts(
+        template.verification_summary,
+      );
       setReviewDecisionTemplate(template);
+      recordAgentUiProjectionEvents(
+        buildAgentUiReviewProjectionEvents(
+          {
+            reviewEvent: "requested",
+            evidenceId: template.review_relative_root,
+            reviewId: template.review_relative_root,
+            sessionId: template.session_id,
+            threadId: template.thread_id,
+            kind: "review_decision",
+            status: "ready",
+            verdict: template.default_decision_status,
+            decisionStatus: template.default_decision_status,
+            riskLevel: template.decision.risk_level,
+            checklistCount: template.review_checklist.length,
+            ...regressionFacts,
+            requestedFixes: template.decision.followup_actions,
+            followupActions: template.decision.followup_actions,
+            regressionRequirements: template.decision.regression_requirements,
+            summaryPreview: `已导出 ${template.artifacts.length} 个人工审核文件`,
+            artifactPaths: template.artifacts.map(
+              (artifact) => artifact.relative_path,
+            ),
+            itemCount: template.artifacts.length,
+          },
+          {
+            timestamp: template.exported_at,
+            sessionId: template.session_id,
+            threadId: template.thread_id,
+          },
+        ),
+      );
+      recordTeamControlAgentUiProjection(
+        {
+          action: "request_review",
+          requestedSessionIds: [],
+          affectedSessionIds: [],
+          reviewId: template.review_relative_root,
+          workItemId: template.review_relative_root,
+          runtimeEntity: "work_item",
+          messagePreview: `已导出 ${template.artifacts.length} 个人工审核文件`,
+          timestamp: template.exported_at,
+        },
+        {
+          timestamp: template.exported_at,
+          sessionId: template.session_id,
+          threadId: template.thread_id,
+        },
+      );
       toast.success(`已导出 ${template.artifacts.length} 个人工审核文件`);
       return template;
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "导出人工审核记录失败";
       setReviewDecisionExportError(message);
+      recordAgentUiProjectionEvents(
+        buildAgentUiReviewProjectionEvents(
+          {
+            reviewEvent: "completed",
+            evidenceId: `review-decision:${currentSessionId}`,
+            reviewId: `review-decision:${currentSessionId}`,
+            sessionId: currentSessionId,
+            kind: "review_decision",
+            status: "failed",
+            verdict: "export_failed",
+            decisionStatus: "export_failed",
+            summaryPreview: message,
+          },
+          {
+            timestamp: new Date().toISOString(),
+            sessionId: currentSessionId,
+          },
+        ),
+      );
       toast.error(message);
       return null;
     } finally {
@@ -2519,13 +2853,70 @@ export function HarnessStatusPanel({
       setReviewDecisionExportError(null);
       try {
         const template = await saveAgentRuntimeReviewDecision(request);
+        const regressionFacts = resolveReviewDecisionRegressionFacts(
+          template.verification_summary,
+        );
         setReviewDecisionTemplate(template);
         setReviewDecisionEditorOpen(false);
+        recordAgentUiProjectionEvents(
+          buildAgentUiReviewProjectionEvents(
+            {
+              reviewEvent: "completed",
+              evidenceId: template.review_relative_root,
+              reviewId: template.review_relative_root,
+              sessionId: template.session_id,
+              threadId: template.thread_id,
+              kind: "review_decision",
+              status: "completed",
+              verdict: template.decision.decision_status,
+              decisionStatus: template.decision.decision_status,
+              reviewer: template.decision.human_reviewer,
+              riskLevel: template.decision.risk_level,
+              followupActionCount: template.decision.followup_actions.length,
+              regressionRequirementCount:
+                template.decision.regression_requirements.length,
+              checklistCount: template.review_checklist.length,
+              ...regressionFacts,
+              requestedFixes: template.decision.followup_actions,
+              followupActions: template.decision.followup_actions,
+              regressionRequirements: template.decision.regression_requirements,
+              summaryPreview: template.decision.decision_summary,
+              artifactPaths: template.artifacts.map(
+                (artifact) => artifact.relative_path,
+              ),
+              itemCount: template.artifacts.length,
+            },
+            {
+              timestamp: template.exported_at,
+              sessionId: template.session_id,
+              threadId: template.thread_id,
+            },
+          ),
+        );
         toast.success("已保存人工审核结果");
       } catch (error) {
         const message =
           error instanceof Error ? error.message : "保存人工审核结果失败";
         setReviewDecisionExportError(message);
+        recordAgentUiProjectionEvents(
+          buildAgentUiReviewProjectionEvents(
+            {
+              reviewEvent: "completed",
+              evidenceId: `review-decision:${request.session_id}`,
+              reviewId: `review-decision:${request.session_id}`,
+              sessionId: request.session_id,
+              kind: "review_decision",
+              status: "failed",
+              verdict: "save_failed",
+              decisionStatus: "save_failed",
+              summaryPreview: message,
+            },
+            {
+              timestamp: new Date().toISOString(),
+              sessionId: request.session_id,
+            },
+          ),
+        );
         toast.error(message);
       } finally {
         setReviewDecisionSaving(false);
@@ -2833,6 +3224,9 @@ export function HarnessStatusPanel({
     if (runtimeTaskPresentation) {
       sections.push({ key: "runtime", label: "任务进行时" });
     }
+    if (hasAgentUiProjectionSection) {
+      sections.push({ key: "agentui", label: "AgentUI 投影" });
+    }
     if (hasHandoffSection) {
       sections.push({ key: "handoff", label: "交接制品" });
     }
@@ -2874,6 +3268,7 @@ export function HarnessStatusPanel({
     return sections;
   }, [
     environment.skillsCount,
+    hasAgentUiProjectionSection,
     hasToolInventorySection,
     harnessState.delegatedTasks.length,
     harnessState.activeFileWrites.length,
@@ -2900,6 +3295,21 @@ export function HarnessStatusPanel({
         value: runtimeTaskPresentation.title,
         hint: `${runtimeTaskPresentation.statusLabel} · ${runtimeTaskPresentation.progressLabel}`,
         icon: Loader2,
+      });
+    }
+
+    if (hasAgentUiProjectionSection) {
+      const latestEvent = agentUiProjectionSummary.latestEvent;
+      cards.push({
+        sectionKey: "agentui",
+        title: "AgentUI 投影",
+        value: `${agentUiProjectionSummary.total} 条`,
+        hint: latestEvent
+          ? `${formatAgentUiProjectionEventType(latestEvent.type)} · ${formatAgentUiProjectionPhase(
+              latestEvent.phase,
+            )}`
+          : "读取 conversationProjectionStore.agentUi",
+        icon: Bot,
       });
     }
 
@@ -3038,7 +3448,9 @@ export function HarnessStatusPanel({
     environment.activeContextCount,
     environment.contextEnabled,
     environment.contextItemsCount,
+    agentUiProjectionSummary,
     handoffBundle,
+    hasAgentUiProjectionSection,
     hasHandoffSection,
     hasToolInventorySection,
     hasSelectedTeamConfig,
@@ -3985,8 +4397,8 @@ export function HarnessStatusPanel({
                                   </div>
                                   <div className="mt-1 text-xs leading-5 text-muted-foreground">
                                     基于 automation owner、Workspace Skill
-                                    ToolCall 与 artifact / timeline
-                                    evidence 的完成判定，不读取模型自报。
+                                    ToolCall 与 artifact / timeline evidence
+                                    的完成判定，不读取模型自报。
                                   </div>
                                 </div>
                                 <Badge variant="outline">
@@ -4034,8 +4446,9 @@ export function HarnessStatusPanel({
                                   <span className="ml-1 text-foreground">
                                     {evidencePack.completion_audit_summary
                                       .blocking_reasons.length > 0
-                                      ? evidencePack.completion_audit_summary
-                                          .blocking_reasons.join("、")
+                                      ? evidencePack.completion_audit_summary.blocking_reasons.join(
+                                          "、",
+                                        )
                                       : "无"}
                                   </span>
                                 </div>
@@ -5355,6 +5768,105 @@ export function HarnessStatusPanel({
                     teamMemorySnapshot={teamMemorySnapshot}
                     diagnosticRuntimeContext={diagnosticRuntimeContext}
                   />
+                </Section>
+              ) : null}
+
+              {hasAgentUiProjectionSection ? (
+                <Section
+                  sectionKey="agentui"
+                  title="AgentUI 标准投影"
+                  badge={`${agentUiProjectionSummary.total} 条`}
+                  registerRef={registerSectionRef}
+                >
+                  <div className="space-y-3 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge
+                        variant="outline"
+                        className="border-sky-300 bg-background text-sky-800"
+                      >
+                        current projection
+                      </Badge>
+                      <span className="text-xs text-sky-900">
+                        只读取 conversationProjectionStore.agentUi；不从
+                        assistant 文本反推工具、证据或审批状态。
+                      </span>
+                    </div>
+
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                      <InventoryStatCard
+                        title="Action / HITL"
+                        value={`${agentUiProjectionSummary.actionCount}`}
+                        hint="action.required / permission.changed"
+                      />
+                      <InventoryStatCard
+                        title="Task / Agent"
+                        value={`${agentUiProjectionSummary.taskCount}`}
+                        hint="queue.changed / task.changed / agent.changed"
+                      />
+                      <InventoryStatCard
+                        title="Artifact"
+                        value={`${agentUiProjectionSummary.artifactCount}`}
+                        hint="artifact.* typed events"
+                      />
+                      <InventoryStatCard
+                        title="Evidence"
+                        value={`${agentUiProjectionSummary.evidenceCount}`}
+                        hint="evidence.changed"
+                      />
+                      <InventoryStatCard
+                        title="Diagnostics"
+                        value={`${agentUiProjectionSummary.diagnosticsCount}`}
+                        hint="context / metric / diagnostic"
+                      />
+                    </div>
+
+                    {agentUiProjectionSummary.latestNotableEvents.length > 0 ? (
+                      <div className="space-y-2">
+                        <div className="text-xs font-medium text-sky-950">
+                          最近标准事件
+                        </div>
+                        {agentUiProjectionSummary.latestNotableEvents.map(
+                          (event, index) => (
+                            <div
+                              key={[
+                                event.sequence,
+                                event.type,
+                                event.sourceType,
+                                index,
+                              ].join(":")}
+                              className="rounded-xl border border-sky-200 bg-background p-3"
+                            >
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant="secondary">
+                                  {formatAgentUiProjectionEventType(event.type)}
+                                </Badge>
+                                <Badge variant="outline">
+                                  {formatAgentUiProjectionPhase(event.phase)}
+                                </Badge>
+                                {event.control ? (
+                                  <Badge variant="outline">
+                                    control · {event.control}
+                                  </Badge>
+                                ) : null}
+                                {event.timestamp ? (
+                                  <span className="text-xs text-muted-foreground">
+                                    {formatIsoDateTime(event.timestamp)}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <div className="mt-2 text-xs text-muted-foreground">
+                                <span className="font-mono text-foreground">
+                                  {event.sourceType}
+                                </span>
+                                <span className="mx-1">·</span>
+                                {formatAgentUiProjectionEventDetail(event)}
+                              </div>
+                            </div>
+                          ),
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
                 </Section>
               ) : null}
 
@@ -7308,5 +7820,3 @@ export function HarnessStatusPanel({
     </>
   );
 }
-
-export default HarnessStatusPanel;

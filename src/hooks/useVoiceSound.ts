@@ -6,7 +6,7 @@
 
 import { useCallback, useRef, useEffect } from "react";
 
-export interface UseVoiceSoundReturn {
+interface UseVoiceSoundReturn {
   playStartSound: () => void;
   playStopSound: () => void;
 }

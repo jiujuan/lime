@@ -135,6 +135,15 @@ function printSummary(changedFiles, tasks) {
   if (tasks.fallback) {
     console.log("[local-ci] - 未检测到改动，执行全量兜底校验");
   }
+  if (
+    Array.isArray(tasks.recommendedCommands) &&
+    tasks.recommendedCommands.length > 0
+  ) {
+    console.log("[local-ci] 推荐额外重验:");
+    for (const command of tasks.recommendedCommands) {
+      console.log(`[local-ci] - ${command}`);
+    }
+  }
 }
 
 function runSelectedTasks(tasks) {

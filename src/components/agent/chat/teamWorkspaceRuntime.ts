@@ -27,6 +27,8 @@ export interface TeamWorkspaceActivityEntry {
   detail: string;
   statusLabel: string;
   badgeClassName: string;
+  sourceType?: string;
+  sourceLabel?: string;
 }
 
 export interface TeamWorkspaceLiveRuntimeState {
@@ -310,6 +312,11 @@ function resolveItemActivityDescriptor(item: AgentThreadItem): {
   detail: string | null;
 } | null {
   switch (item.type) {
+    case "user_message":
+      return {
+        title: "用户输入",
+        detail: normalizeActivityText(item.content),
+      };
     case "agent_message":
       return {
         title: "回复",
@@ -355,6 +362,30 @@ function resolveItemActivityDescriptor(item: AgentThreadItem): {
           normalizeActivityText(item.output) ||
           normalizeActivityText(item.query),
       };
+    case "approval_request":
+      return {
+        title: "等待批准",
+        detail: normalizeActivityText(
+          item.prompt || item.tool_name || item.action_type,
+        ),
+      };
+    case "request_user_input":
+      return {
+        title: "等待输入",
+        detail: normalizeActivityText(
+          item.prompt ||
+            item.questions
+              ?.map((question) => question.header || question.question)
+              .filter(Boolean)
+              .join(" / ") ||
+            item.action_type,
+        ),
+      };
+    case "file_artifact":
+      return {
+        title: "产物",
+        detail: normalizeActivityText(item.path),
+      };
     case "warning":
       return {
         title: "警告",
@@ -371,6 +402,11 @@ function resolveItemActivityDescriptor(item: AgentThreadItem): {
         detail: normalizeActivityText(
           item.summary || item.title || item.status_label,
         ),
+      };
+    case "context_compaction":
+      return {
+        title: "上下文压缩",
+        detail: normalizeActivityText(item.detail || item.trigger || item.stage),
       };
     default:
       return null;
@@ -572,6 +608,8 @@ export function buildStatusEventActivityEntry(
     detail: `收到任务状态事件，已切换为${statusMeta.label}。`,
     statusLabel: statusMeta.label,
     badgeClassName: statusMeta.badgeClassName,
+    sourceType: "runtime_status",
+    sourceLabel: "运行时状态",
   };
 }
 
@@ -590,6 +628,8 @@ export function buildTeamWorkspaceActivityEntryFromThreadItem(
     detail: descriptor.detail,
     statusLabel: statusMeta.label,
     badgeClassName: statusMeta.badgeClassName,
+    sourceType: item.type,
+    sourceLabel: "thread item",
   };
 }
 

@@ -424,12 +424,21 @@ pub trait Provider: Send + Sync {
             Ok(result) => Ok(result),
             Err(e) => {
                 if fast_config.model_name != model_config.model_name {
-                    tracing::warn!(
-                        "Fast model {} failed with error: {}. Falling back to regular model {}",
-                        fast_config.model_name,
-                        e,
-                        model_config.model_name
-                    );
+                    if e.is_non_retryable_provider_rejection() {
+                        tracing::info!(
+                            "Fast model {} was rejected: {}. Falling back to regular model {}",
+                            fast_config.model_name,
+                            e,
+                            model_config.model_name
+                        );
+                    } else {
+                        tracing::warn!(
+                            "Fast model {} failed with error: {}. Falling back to regular model {}",
+                            fast_config.model_name,
+                            e,
+                            model_config.model_name
+                        );
+                    }
                     self.complete_with_model(&model_config, system, messages, tools)
                         .await
                 } else {

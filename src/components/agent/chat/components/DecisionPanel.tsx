@@ -967,5 +967,3 @@ export function DecisionPanelList({
     </div>
   );
 }
-
-export default DecisionPanel;

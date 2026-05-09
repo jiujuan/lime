@@ -1,0 +1,635 @@
+{
+  "consoleErrors": null,
+  "placeholderText": null,
+  "hasCompletedThinking": true,
+  "hasInternalSelfTalk": false,
+  "bodyTail": "Lime\n邀请好友\n搜索任务\n新建任务\nSkills\n灵感\n项目资料\n最近对话\n新对话\n1分\n新对话\n3分\n新对话\n25分\n新对话\n29分\n尽快显示“思考中”状态是为了消解用户...\n31分\n新对话\n34分\n已完成回答。如有其他问题，随时告诉我...\n39分\n首字前尽快显示思考状态能第一时间确认...\n40分\n已为你整理为三句回答，内容直接说明“...\n42分\n**三步思考：**\n1时\n查看更多对话\n归档\n开\n开源使用\n本地可用\nKnowledge Manual E2E 38362\nHarness\n新对话\n\n请用三句话说明：为什么流式输出要按换行或小批次显示？\n\n已完成思考\n\n流式输出按换行或小批次显示主要是为了避免高频更新DOM导致页面卡顿和视觉闪烁。换行符通常对应语义边界，在此处分批能保证每次显示的文本相对完整，提升阅读体验。适当小批次延迟还能模拟自然对话节奏，给用户留出理解时间，让交互更流畅自然。\n\n已完成\n·\n00:12\n保存到项目资料\n添加资料\n模型\ndeepseek-v4-pro\n高级设置",
+  "summary": {
+    "entries": [
+      {
+        "id": 1,
+        "phase": "agentUi.longTask",
+        "at": 739.1000000089407,
+        "wallTime": 1778320226396,
+        "sessionId": null,
+        "workspaceId": null,
+        "source": null,
+        "metrics": {
+          "durationMs": 294,
+          "name": "self",
+          "startTimeMs": 442.70000000298023,
+          "usedJSHeapSize": 842309980,
+          "totalJSHeapSize": 864292744
+        }
+      },
+      {
+        "id": 2,
+        "phase": "agentRuntime.listSessions.start",
+        "at": 1408.2000000029802,
+        "wallTime": 1778320227065,
+        "sessionId": null,
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": null,
+        "metrics": {
+          "archivedOnly": false,
+          "includeArchived": false,
+          "limit": 11,
+          "usedJSHeapSize": 872513737,
+          "totalJSHeapSize": 890716065
+        }
+      },
+      {
+        "id": 3,
+        "phase": "agentRuntime.listSessions.success",
+        "at": 1754.1000000089407,
+        "wallTime": 1778320227411,
+        "sessionId": null,
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": null,
+        "metrics": {
+          "archivedOnly": false,
+          "includeArchived": false,
+          "limit": 11,
+          "durationMs": 346,
+          "sessionsCount": 11,
+          "usedJSHeapSize": 880190927,
+          "totalJSHeapSize": 899842987
+        }
+      },
+      {
+        "id": 4,
+        "phase": "appSidebar.recentConversations.loadBreakdown",
+        "at": 1754.5,
+        "wallTime": 1778320227411,
+        "sessionId": null,
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": null,
+        "metrics": {
+          "hasMore": true,
+          "limit": 11,
+          "listDurationMs": 346,
+          "sessionsCount": 11,
+          "sortDurationMs": 0,
+          "totalDurationMs": 346,
+          "visibleCount": 10,
+          "usedJSHeapSize": 880190927,
+          "totalJSHeapSize": 899842987
+        }
+      },
+      {
+        "id": 5,
+        "phase": "agentRuntime.listSessions.start",
+        "at": 1777.1000000089407,
+        "wallTime": 1778320227434,
+        "sessionId": null,
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": null,
+        "metrics": {
+          "archivedOnly": false,
+          "includeArchived": false,
+          "limit": 21,
+          "usedJSHeapSize": 880190927,
+          "totalJSHeapSize": 899842987
+        }
+      },
+      {
+        "id": 6,
+        "phase": "agentRuntime.listSessions.success",
+        "at": 1886.2000000029802,
+        "wallTime": 1778320227543,
+        "sessionId": null,
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": null,
+        "metrics": {
+          "archivedOnly": false,
+          "includeArchived": false,
+          "limit": 21,
+          "durationMs": 109,
+          "sessionsCount": 21,
+          "usedJSHeapSize": 886964131,
+          "totalJSHeapSize": 902913803
+        }
+      },
+      {
+        "id": 7,
+        "phase": "sidebar.recentConversations.loadBreakdown",
+        "at": 1886.6000000089407,
+        "wallTime": 1778320227543,
+        "sessionId": null,
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": null,
+        "metrics": {
+          "auxiliaryFilterDurationMs": 0,
+          "hiddenAuxiliarySessionsCount": 0,
+          "limit": 21,
+          "listDurationMs": 109,
+          "sessionsCount": 21,
+          "topicMapDurationMs": 0,
+          "topicsCount": 21,
+          "totalDurationMs": 109,
+          "workspaceFilterDurationMs": 0,
+          "workspaceSessionsCount": 21,
+          "usedJSHeapSize": 886964131,
+          "totalJSHeapSize": 902913803
+        }
+      },
+      {
+        "id": 8,
+        "phase": "homeInput.submit",
+        "at": 49389.40000000596,
+        "wallTime": 1778320275047,
+        "sessionId": "draft-send-moy5z61z-b632176f",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "hasDraftTab": false,
+          "inputLength": 26,
+          "requestId": "draft-send-moy5z61z-b632176f",
+          "source": "empty-state",
+          "usedJSHeapSize": 849131145,
+          "totalJSHeapSize": 857579141
+        }
+      },
+      {
+        "id": 9,
+        "phase": "homeInput.pendingShellApplied",
+        "at": 49389.60000000894,
+        "wallTime": 1778320275047,
+        "sessionId": "draft-send-moy5z61z-b632176f",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "durationMs": 0,
+          "requestId": "draft-send-moy5z61z-b632176f",
+          "source": "empty-state",
+          "usedJSHeapSize": 849131145,
+          "totalJSHeapSize": 857579141
+        }
+      },
+      {
+        "id": 10,
+        "phase": "homeInput.pendingPreviewPaint",
+        "at": 49434.5,
+        "wallTime": 1778320275092,
+        "sessionId": "draft-send-moy5z61z-b632176f",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "durationMs": 45,
+          "requestId": "draft-send-moy5z61z-b632176f",
+          "source": "empty-state",
+          "usedJSHeapSize": 849131145,
+          "totalJSHeapSize": 857579141
+        }
+      },
+      {
+        "id": 11,
+        "phase": "homeInput.sendDispatch.start",
+        "at": 49434.60000000894,
+        "wallTime": 1778320275092,
+        "sessionId": "draft-send-moy5z61z-b632176f",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "elapsedMs": 45,
+          "requestId": "draft-send-moy5z61z-b632176f",
+          "source": "empty-state",
+          "usedJSHeapSize": 849131145,
+          "totalJSHeapSize": 857579141
+        }
+      },
+      {
+        "id": 12,
+        "phase": "workspaceSend.plan.ready",
+        "at": 49441.79999999702,
+        "wallTime": 1778320275100,
+        "sessionId": "draft-send-moy5z61z-b632176f",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "durationMs": 7,
+          "hasPendingSessionBinding": false,
+          "primedSessionId": null,
+          "requestId": "draft-send-moy5z61z-b632176f",
+          "source": "empty-state",
+          "usedJSHeapSize": 851690732,
+          "totalJSHeapSize": 859507912
+        }
+      },
+      {
+        "id": 13,
+        "phase": "agentStream.assistantDraft",
+        "at": 49443.90000000596,
+        "wallTime": 1778320275102,
+        "sessionId": "draft-send-moy5z61z-b632176f",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "assistantContentLength": 0,
+          "expectingQueue": false,
+          "hasAssistantDraftContent": false,
+          "phase": "routing",
+          "statusTitle": "快速响应已启用",
+          "source": "empty-state",
+          "requestId": "draft-send-moy5z61z-b632176f",
+          "homeSubmittedDeltaMs": 55,
+          "usedJSHeapSize": 851690732,
+          "totalJSHeapSize": 859507912
+        }
+      },
+      {
+        "id": 14,
+        "phase": "agentStream.ensureSession.start",
+        "at": 49445.10000000894,
+        "wallTime": 1778320275103,
+        "sessionId": "draft-send-moy5z61z-b632176f",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "hadActiveSessionBeforeEnsure": false,
+          "skipSessionRestore": true,
+          "skipSessionStartHooks": true,
+          "source": "empty-state",
+          "requestId": "draft-send-moy5z61z-b632176f",
+          "homeSubmittedDeltaMs": 56,
+          "usedJSHeapSize": 851690732,
+          "totalJSHeapSize": 859507912
+        }
+      },
+      {
+        "id": 15,
+        "phase": "agentStream.assistantDraftPaint",
+        "at": 49463.90000000596,
+        "wallTime": 1778320275122,
+        "sessionId": "draft-send-moy5z61z-b632176f",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "assistantContentLength": 0,
+          "expectingQueue": false,
+          "hasAssistantDraftContent": false,
+          "phase": "routing",
+          "statusTitle": "快速响应已启用",
+          "source": "empty-state",
+          "requestId": "draft-send-moy5z61z-b632176f",
+          "homeSubmittedDeltaMs": 75,
+          "usedJSHeapSize": 851690732,
+          "totalJSHeapSize": 859507912
+        }
+      },
+      {
+        "id": 16,
+        "phase": "agentStream.ensureSession.done",
+        "at": 49515.20000000298,
+        "wallTime": 1778320275173,
+        "sessionId": "draft-send-moy5z61z-b632176f",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "activeSessionId": "bbf39174-08df-408c-8262-7a309c3b09a6",
+          "durationMs": 70,
+          "hadActiveSessionBeforeEnsure": false,
+          "skipSessionRestore": true,
+          "skipSessionStartHooks": true,
+          "source": "empty-state",
+          "requestId": "draft-send-moy5z61z-b632176f",
+          "actualSessionId": "bbf39174-08df-408c-8262-7a309c3b09a6",
+          "homeSubmittedDeltaMs": 126,
+          "usedJSHeapSize": 849772078,
+          "totalJSHeapSize": 863355806
+        }
+      },
+      {
+        "id": 17,
+        "phase": "agentStream.request.start",
+        "at": 49516.20000000298,
+        "wallTime": 1778320275174,
+        "sessionId": "draft-send-moy5z61z-b632176f",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "contentLength": 26,
+          "eventName": "aster_stream_28f9ad24-c6be-4f84-926e-9622d86761bb",
+          "expectingQueue": false,
+          "model": "deepseek-chat",
+          "provider": "deepseek",
+          "skipUserMessage": false,
+          "systemPromptLength": 163,
+          "systemPromptPreview": "你是 Lime 的快速响应助手。当前日期：2026年5月9日。\n本回合是轻量首轮普通对话，请直接",
+          "source": "empty-state",
+          "requestId": "draft-send-moy5z61z-b632176f",
+          "actualSessionId": "bbf39174-08df-408c-8262-7a309c3b09a6",
+          "homeSubmittedDeltaMs": 127,
+          "usedJSHeapSize": 849772078,
+          "totalJSHeapSize": 863355806
+        }
+      },
+      {
+        "id": 18,
+        "phase": "agentStream.listenerBound",
+        "at": 49542.79999999702,
+        "wallTime": 1778320275201,
+        "sessionId": "draft-send-moy5z61z-b632176f",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "elapsedMs": 27,
+          "eventName": "aster_stream_28f9ad24-c6be-4f84-926e-9622d86761bb",
+          "expectingQueue": false,
+          "source": "empty-state",
+          "requestId": "draft-send-moy5z61z-b632176f",
+          "actualSessionId": "bbf39174-08df-408c-8262-7a309c3b09a6",
+          "homeSubmittedDeltaMs": 154,
+          "usedJSHeapSize": 849772078,
+          "totalJSHeapSize": 863355806
+        }
+      },
+      {
+        "id": 19,
+        "phase": "agentStream.submitDispatched",
+        "at": 49543.70000000298,
+        "wallTime": 1778320275202,
+        "sessionId": "draft-send-moy5z61z-b632176f",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "elapsedMs": 28,
+          "eventName": "aster_stream_28f9ad24-c6be-4f84-926e-9622d86761bb",
+          "expectingQueue": false,
+          "listenerBoundDeltaMs": 1,
+          "model": "deepseek-chat",
+          "provider": "deepseek",
+          "source": "empty-state",
+          "requestId": "draft-send-moy5z61z-b632176f",
+          "actualSessionId": "bbf39174-08df-408c-8262-7a309c3b09a6",
+          "homeSubmittedDeltaMs": 155,
+          "usedJSHeapSize": 849772078,
+          "totalJSHeapSize": 863355806
+        }
+      },
+      {
+        "id": 20,
+        "phase": "agentStream.submitAccepted",
+        "at": 50006.70000000298,
+        "wallTime": 1778320275665,
+        "sessionId": "draft-send-moy5z61z-b632176f",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "elapsedMs": 490,
+          "eventName": "aster_stream_28f9ad24-c6be-4f84-926e-9622d86761bb",
+          "submitInvokeMs": 462,
+          "source": "empty-state",
+          "requestId": "draft-send-moy5z61z-b632176f",
+          "actualSessionId": "bbf39174-08df-408c-8262-7a309c3b09a6",
+          "homeSubmittedDeltaMs": 618,
+          "usedJSHeapSize": 852504645,
+          "totalJSHeapSize": 863797681
+        }
+      },
+      {
+        "id": 21,
+        "phase": "homeInput.sendDispatch.done",
+        "at": 50007.70000000298,
+        "wallTime": 1778320275665,
+        "sessionId": "draft-send-moy5z61z-b632176f",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "durationMs": 618,
+          "requestId": "draft-send-moy5z61z-b632176f",
+          "result": true,
+          "source": "empty-state",
+          "usedJSHeapSize": 852504645,
+          "totalJSHeapSize": 863797681
+        }
+      },
+      {
+        "id": 22,
+        "phase": "agentStream.firstEvent",
+        "at": 50314.5,
+        "wallTime": 1778320275972,
+        "sessionId": "draft-send-moy5z61z-b632176f",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "elapsedMs": 798,
+          "eventName": "aster_stream_28f9ad24-c6be-4f84-926e-9622d86761bb",
+          "eventType": "runtime_status",
+          "recognized": true,
+          "submissionDispatchedDeltaMs": 770,
+          "source": "empty-state",
+          "requestId": "draft-send-moy5z61z-b632176f",
+          "actualSessionId": "bbf39174-08df-408c-8262-7a309c3b09a6",
+          "homeSubmittedDeltaMs": 925,
+          "usedJSHeapSize": 851619235,
+          "totalJSHeapSize": 864354991
+        }
+      },
+      {
+        "id": 23,
+        "phase": "agentStream.firstRuntimeStatus",
+        "at": 50316.10000000894,
+        "wallTime": 1778320275974,
+        "sessionId": "draft-send-moy5z61z-b632176f",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "elapsedMs": 800,
+          "eventName": "aster_stream_28f9ad24-c6be-4f84-926e-9622d86761bb",
+          "firstEventDeltaMs": 2,
+          "phase": "preparing",
+          "title": "已接收请求，正在准备执行",
+          "source": "empty-state",
+          "requestId": "draft-send-moy5z61z-b632176f",
+          "actualSessionId": "bbf39174-08df-408c-8262-7a309c3b09a6",
+          "homeSubmittedDeltaMs": 927,
+          "usedJSHeapSize": 851619235,
+          "totalJSHeapSize": 864354991
+        }
+      },
+      {
+        "id": 24,
+        "phase": "agentStream.firstThinkingDelta",
+        "at": 53084.79999999702,
+        "wallTime": 1778320278743,
+        "sessionId": "draft-send-moy5z61z-b632176f",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "deltaChars": 4,
+          "elapsedMs": 3569,
+          "eventName": "aster_stream_28f9ad24-c6be-4f84-926e-9622d86761bb",
+          "firstEventDeltaMs": 2771,
+          "firstRuntimeStatusDeltaMs": 2769,
+          "surfaced": false,
+          "source": "empty-state",
+          "requestId": "draft-send-moy5z61z-b632176f",
+          "actualSessionId": "bbf39174-08df-408c-8262-7a309c3b09a6",
+          "homeSubmittedDeltaMs": 3696,
+          "usedJSHeapSize": 856004274,
+          "totalJSHeapSize": 870653242
+        }
+      },
+      {
+        "id": 25,
+        "phase": "agentStream.firstTextDelta",
+        "at": 62674.60000000894,
+        "wallTime": 1778320288333,
+        "sessionId": "draft-send-moy5z61z-b632176f",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "deltaChars": 1,
+          "elapsedMs": 13159,
+          "eventName": "aster_stream_28f9ad24-c6be-4f84-926e-9622d86761bb",
+          "firstEventDeltaMs": 12361,
+          "firstRuntimeStatusDeltaMs": 12359,
+          "source": "empty-state",
+          "requestId": "draft-send-moy5z61z-b632176f",
+          "actualSessionId": "bbf39174-08df-408c-8262-7a309c3b09a6",
+          "homeSubmittedDeltaMs": 13286,
+          "usedJSHeapSize": 856005497,
+          "totalJSHeapSize": 872366473
+        }
+      },
+      {
+        "id": 26,
+        "phase": "agentStream.firstTextPaint",
+        "at": 62846.5,
+        "wallTime": 1778320288505,
+        "sessionId": "draft-send-moy5z61z-b632176f",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "source": "empty-state",
+        "metrics": {
+          "elapsedMs": 13331,
+          "eventName": "aster_stream_28f9ad24-c6be-4f84-926e-9622d86761bb",
+          "firstTextDeltaDeltaMs": 172,
+          "renderFlushDeltaMs": 23,
+          "source": "empty-state",
+          "requestId": "draft-send-moy5z61z-b632176f",
+          "actualSessionId": "bbf39174-08df-408c-8262-7a309c3b09a6",
+          "homeSubmittedDeltaMs": 13458,
+          "usedJSHeapSize": 856879995,
+          "totalJSHeapSize": 872895319
+        }
+      },
+      {
+        "id": 27,
+        "phase": "agentRuntime.getSession.start",
+        "at": 64991.10000000894,
+        "wallTime": 1778320290649,
+        "sessionId": "bbf39174-08df-408c-8262-7a309c3b09a6",
+        "workspaceId": null,
+        "source": null,
+        "metrics": {
+          "historyLimit": 40,
+          "historyOffset": null,
+          "historyBeforeMessageId": null,
+          "resumeSessionStartHooks": false,
+          "usedJSHeapSize": 862910768,
+          "totalJSHeapSize": 885006348
+        }
+      },
+      {
+        "id": 28,
+        "phase": "agentRuntime.getSession.success",
+        "at": 65203.29999999702,
+        "wallTime": 1778320290862,
+        "sessionId": "bbf39174-08df-408c-8262-7a309c3b09a6",
+        "workspaceId": null,
+        "source": null,
+        "metrics": {
+          "historyLimit": 40,
+          "historyOffset": null,
+          "historyBeforeMessageId": null,
+          "resumeSessionStartHooks": false,
+          "childSubagentSessionsCount": 0,
+          "durationMs": 213,
+          "itemsCount": 4,
+          "messagesCount": 2,
+          "queuedTurnsCount": 0,
+          "turnsCount": 1,
+          "usedJSHeapSize": 864840299,
+          "totalJSHeapSize": 885057687
+        }
+      }
+    ],
+    "sessions": [
+      {
+        "sessionId": "bbf39174-08df-408c-8262-7a309c3b09a6",
+        "workspaceId": null,
+        "runtimeGetSessionDurationMs": 213,
+        "switchStartCount": 0,
+        "fetchDetailStartCount": 0,
+        "fetchDetailErrorCount": 0,
+        "runtimeGetSessionStartCount": 1,
+        "runtimeGetSessionErrorCount": 0,
+        "messageListPaintCount": 0,
+        "longTaskCount": 0,
+        "threadItemsScanDeferredCount": 0,
+        "maxUsedJSHeapSize": 864840299,
+        "phases": [
+          "agentRuntime.getSession.start",
+          "agentRuntime.getSession.success"
+        ]
+      },
+      {
+        "sessionId": "draft-send-moy5z61z-b632176f",
+        "workspaceId": "481ffafe-2f65-46a0-8392-b508677b7cdd",
+        "homeInputToPendingShellMs": 0,
+        "homeInputToPendingPreviewPaintMs": 45,
+        "homeInputToSendDispatchMs": 45,
+        "homeInputToSendPlanReadyMs": 52,
+        "homeInputToAssistantDraftMs": 55,
+        "homeInputToAssistantDraftPaintMs": 75,
+        "homeInputToStreamRequestStartMs": 127,
+        "homeInputToSubmitAcceptedMs": 617,
+        "homeInputToFirstEventMs": 925,
+        "homeInputToFirstRuntimeStatusMs": 927,
+        "homeInputToFirstThinkingDeltaMs": 3695,
+        "homeInputToFirstTextDeltaMs": 13285,
+        "homeInputToFirstTextPaintMs": 13457,
+        "sendDispatchToSubmitAcceptedMs": 572,
+        "streamSubmitDispatchedToAcceptedMs": 463,
+        "submitAcceptedToFirstEventMs": 308,
+        "firstEventToFirstThinkingDeltaMs": 2770,
+        "firstEventToFirstTextDeltaMs": 12360,
+        "firstThinkingDeltaToFirstTextDeltaMs": 9590,
+        "firstTextDeltaToFirstTextPaintMs": 172,
+        "streamEnsureSessionDurationMs": 70,
+        "streamSubmitInvokeDurationMs": 462,
+        "switchStartCount": 0,
+        "fetchDetailStartCount": 0,
+        "fetchDetailErrorCount": 0,
+        "runtimeGetSessionStartCount": 0,
+        "runtimeGetSessionErrorCount": 0,
+        "messageListPaintCount": 0,
+        "longTaskCount": 0,
+        "threadItemsScanDeferredCount": 0,
+        "maxUsedJSHeapSize": 856879995,
+        "phases": [
+          "homeInput.submit",
+          "homeInput.pendingShellApplied",
+          "homeInput.pendingPreviewPaint",
+          "homeInput.sendDispatch.start",
+          "workspaceSend.plan.ready",
+          "agentStream.assistantDraft",
+          "agentStream.ensureSession.start",
+          "agentStream.assistantDraftPaint",
+          "agentStream.ensureSession.done",
+          "agentStream.request.start",
+          "agentStream.listenerBound",
+          "agentStream.submitDispatched",
+          "agentStream.submitAccepted",
+          "homeInput.sendDispatch.done",
+          "agentStream.firstEvent",
+          "agentStream.firstRuntimeStatus",
+          "agentStream.firstThinkingDelta",
+          "agentStream.firstTextDelta",
+          "agentStream.firstTextPaint"
+        ]
+      }
+    ]
+  }
+}

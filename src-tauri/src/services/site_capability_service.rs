@@ -4428,7 +4428,7 @@ mod tests {
             &db,
             SiteAdapterLaunchReadinessRequest {
                 adapter_name: "github/search".to_string(),
-                profile_key: None,
+                profile_key: Some("unattached-github-profile".to_string()),
                 target_id: None,
             },
         )

@@ -22,7 +22,7 @@ import type {
 } from "@/types/material";
 
 /** Hook 返回类型 */
-export interface UseMaterialsReturn {
+interface UseMaterialsReturn {
   /** 素材列表 */
   materials: Material[];
   /** 筛选后的素材列表 */
@@ -172,5 +172,3 @@ export function useMaterials(projectId: string | null): UseMaterialsReturn {
     getContent,
   };
 }
-
-export default useMaterials;

@@ -164,5 +164,3 @@ export const ArtifactPlaceholder: React.FC<ArtifactPlaceholderProps> = memo(
 );
 
 ArtifactPlaceholder.displayName = "ArtifactPlaceholder";
-
-export default ArtifactPlaceholder;

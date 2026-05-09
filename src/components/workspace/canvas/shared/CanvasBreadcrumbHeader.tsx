@@ -2,7 +2,7 @@ import React, { memo } from "react";
 import styled from "styled-components";
 import { ChevronRight, Home } from "lucide-react";
 
-export interface CanvasBreadcrumbHeaderProps {
+interface CanvasBreadcrumbHeaderProps {
   label: string;
   onBackHome?: () => void;
   backTitle?: string;

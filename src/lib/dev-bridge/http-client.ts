@@ -17,6 +17,7 @@ const BRIDGE_EVENTS_URL = "http://127.0.0.1:3030/events";
 const DEV_BRIDGE_EVENT_CONNECT_TIMEOUT_MS = 10000;
 const DEV_BRIDGE_REQUEST_TIMEOUT_MS = 1800;
 const DEV_BRIDGE_TRUTH_COMMAND_TIMEOUT_MS = 5000;
+const DEV_BRIDGE_STARTUP_TRUTH_COMMAND_TIMEOUT_MS = 30000;
 const DEV_BRIDGE_KNOWLEDGE_COMPILE_TIMEOUT_MS = 180000;
 const DEV_BRIDGE_VOICE_MODEL_DOWNLOAD_TIMEOUT_MS = 30 * 60 * 1000;
 const DEV_BRIDGE_AGENT_RUNTIME_TIMEOUT_MS = 60000;
@@ -55,11 +56,19 @@ const DEV_BRIDGE_COOLDOWN_BYPASS_COMMANDS = new Set([
   "workspace_get_default",
   "workspace_list",
   "workspace_ensure_ready",
+  "workspace_ensure_default_ready",
 ]);
 
 const DEV_BRIDGE_READ_RETRY_COMMANDS = new Set([
   "agent_runtime_get_session",
   "agent_runtime_list_sessions",
+]);
+
+const DEV_BRIDGE_STARTUP_TRUTH_COMMANDS = new Set([
+  "aster_agent_init",
+  "workspace_ensure_ready",
+  "workspace_ensure_default_ready",
+  "sceneapp_list_catalog",
 ]);
 
 export interface InvokeRequest {
@@ -98,7 +107,11 @@ let bridgeLastHealthyAt = 0;
 let bridgeConnectionBackoffUntil = 0;
 let bridgeHealthProbePromise: Promise<boolean> | null = null;
 
-function resolveBridgeRequestTimeoutMs(cmd: string): number {
+export function resolveBridgeRequestTimeoutMs(cmd: string): number {
+  if (DEV_BRIDGE_STARTUP_TRUTH_COMMANDS.has(cmd)) {
+    return DEV_BRIDGE_STARTUP_TRUTH_COMMAND_TIMEOUT_MS;
+  }
+
   if (
     cmd === "agent_runtime_get_session" ||
     cmd === "agent_runtime_list_sessions"

@@ -175,6 +175,8 @@ function extractMessageActivityEntries(
             detail: detailText,
             statusLabel: statusMeta.label,
             badgeClassName: statusMeta.badgeClassName,
+            sourceType: "message_fallback",
+            sourceLabel: "message history",
           },
         ];
       }

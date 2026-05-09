@@ -1186,6 +1186,19 @@ fn format_markdown_verification_summary(summary: Option<&Value>) -> String {
         ));
     }
 
+    if let Some(requested_fix_results) = summary_array_field(
+        summary,
+        "requestedFixExecutionResults",
+        "requested_fix_execution_results",
+    ) {
+        if !requested_fix_results.is_empty() {
+            lines.push(format!(
+                "- Requested Fix 执行：{}",
+                describe_requested_fix_execution_results(requested_fix_results)
+            ));
+        }
+    }
+
     if lines.is_empty() {
         "- 当前没有结构化验证摘要。".to_string()
     } else {
@@ -1202,6 +1215,17 @@ fn summary_object_field<'a>(
         .get(camel_case)
         .or_else(|| summary.get(snake_case))
         .filter(|value| value.is_object())
+}
+
+fn summary_array_field<'a>(
+    summary: &'a Value,
+    camel_case: &str,
+    snake_case: &str,
+) -> Option<&'a Vec<Value>> {
+    summary
+        .get(camel_case)
+        .or_else(|| summary.get(snake_case))
+        .and_then(Value::as_array)
 }
 
 fn summary_string_field<'a>(
@@ -1278,6 +1302,63 @@ fn describe_gui_smoke_summary(summary: &Value) -> String {
         exit_code,
         if passed { "已通过" } else { "未通过" }
     )
+}
+
+fn describe_requested_fix_execution_results(results: &[Value]) -> String {
+    let completed_count = results
+        .iter()
+        .filter(|result| {
+            summary_string_field(result, "executionStatus", "execution_status") == Some("completed")
+        })
+        .count();
+    let recovered_count = results
+        .iter()
+        .filter(|result| {
+            summary_string_field(result, "regressionOutcome", "regression_outcome")
+                == Some("recovered")
+        })
+        .count();
+    let blocked_count = results
+        .iter()
+        .filter(|result| {
+            matches!(
+                summary_string_field(result, "executionStatus", "execution_status"),
+                Some("failed" | "blocked" | "cancelled")
+            ) || summary_string_field(result, "regressionOutcome", "regression_outcome")
+                == Some("blocking_failure")
+        })
+        .count();
+    let first_detail = results
+        .iter()
+        .find(|result| result.is_object())
+        .map(describe_requested_fix_execution_result)
+        .unwrap_or_else(|| "首项无结构化详情".to_string());
+
+    format!(
+        "记录 {} · completed {} · recovered {} · blocked {} · {}",
+        results.len(),
+        completed_count,
+        recovered_count,
+        blocked_count,
+        first_detail
+    )
+}
+
+fn describe_requested_fix_execution_result(result: &Value) -> String {
+    let requested_fix =
+        summary_string_field(result, "requestedFix", "requested_fix").unwrap_or("未命名修复");
+    let status =
+        summary_string_field(result, "executionStatus", "execution_status").unwrap_or("pending");
+    let outcome =
+        summary_string_field(result, "regressionOutcome", "regression_outcome").unwrap_or("未判定");
+    let index = summary_u64_field(result, "requestedFixIndex", "requested_fix_index")
+        .map(|value| format!("#{value} "))
+        .unwrap_or_default();
+    let result_ref = summary_string_field(result, "resultRef", "result_ref")
+        .map(|value| format!(" · result_ref {value}"))
+        .unwrap_or_default();
+
+    format!("{index}{status}/{outcome} · {requested_fix}{result_ref}")
 }
 
 fn format_markdown_text_block(value: &str, placeholder: &str) -> String {
@@ -1612,6 +1693,40 @@ mod tests {
                 aggregated_output: Some("GUI smoke finished successfully".to_string()),
                 exit_code: Some(0),
                 error: None,
+            },
+        });
+    }
+
+    fn seed_requested_fix_execution_result(detail: &mut SessionDetail) {
+        detail.items.push(AgentThreadItem {
+            id: "requested-fix-execution-1".to_string(),
+            thread_id: "thread-1".to_string(),
+            turn_id: "turn-1".to_string(),
+            sequence: 6,
+            status: AgentThreadItemStatus::Completed,
+            started_at: "2026-03-27T10:01:10Z".to_string(),
+            completed_at: Some("2026-03-27T10:01:20Z".to_string()),
+            updated_at: "2026-03-27T10:01:20Z".to_string(),
+            payload: AgentThreadItemPayload::FileArtifact {
+                path: ".lime/harness/sessions/session-1/evidence/requested-fix-result.json"
+                    .to_string(),
+                source: "review_requested_fix_execution".to_string(),
+                content: None,
+                metadata: Some(json!({
+                    "requestedFixExecutionResults": [
+                        {
+                            "requestedFix": "复查 Artifact 校验相关产物",
+                            "requestedFixIndex": 2,
+                            "executionStatus": "completed",
+                            "regressionOutcome": "recovered",
+                            "summaryPreview": "已复查并重新导出 evidence pack。",
+                            "resultRef": "agent-runtime://session/session-1/thread/thread-1/turn/turn-1/item/requested-fix-execution-1",
+                            "artifactPaths": [
+                                ".lime/harness/sessions/session-1/evidence/requested-fix-result.json"
+                            ]
+                        }
+                    ]
+                })),
             },
         });
     }
@@ -2104,6 +2219,60 @@ mod tests {
             "\"verificationRecoveredOutcomes\": [\n      \"Artifact 校验已恢复 1 个产物，fallback 0 次。\"\n    ]"
         ));
         assert!(json.contains("\"outcome\": \"recovered\""));
+    }
+
+    #[test]
+    fn should_carry_requested_fix_execution_results_into_review_decision() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let mut detail = build_detail();
+        let thread_read = build_thread_read();
+        seed_requested_fix_execution_result(&mut detail);
+
+        let result =
+            export_runtime_review_decision_template(&detail, &thread_read, temp_dir.path())
+                .expect("export");
+
+        let verification_summary = result
+            .verification_summary
+            .as_ref()
+            .expect("verification summary");
+        assert_eq!(
+            verification_summary
+                .pointer("/requestedFixExecutionResults/0/executionStatus")
+                .and_then(Value::as_str),
+            Some("completed")
+        );
+        assert_eq!(
+            verification_summary
+                .pointer("/requestedFixExecutionResults/0/regressionOutcome")
+                .and_then(Value::as_str),
+            Some("recovered")
+        );
+        assert_eq!(
+            verification_summary
+                .pointer("/requestedFixExecutionResults/0/resultRef")
+                .and_then(Value::as_str),
+            Some(
+                "agent-runtime://session/session-1/thread/thread-1/turn/turn-1/item/requested-fix-execution-1"
+            )
+        );
+
+        let markdown_path = temp_dir
+            .path()
+            .join(".lime/harness/sessions/session-1/review/review-decision.md");
+        let json_path = temp_dir
+            .path()
+            .join(".lime/harness/sessions/session-1/review/review-decision.json");
+
+        let markdown = fs::read_to_string(markdown_path).expect("markdown");
+        assert!(markdown.contains("Requested Fix 执行"));
+        assert!(markdown.contains("completed 1"));
+        assert!(markdown.contains("复查 Artifact 校验相关产物"));
+        assert!(markdown.contains("requested-fix-execution-1"));
+
+        let json = fs::read_to_string(json_path).expect("json");
+        assert!(json.contains("\"requestedFixExecutionResults\""));
+        assert!(json.contains("\"resultRef\""));
     }
 
     #[test]

@@ -1125,6 +1125,12 @@ impl Tool for TaskUpdateTool {
         }
 
         let task = next_state.items[task_index].clone();
+        let owner_change = (previous_task.owner != task.owner).then(|| {
+            json!({
+                "from": previous_task.owner.clone(),
+                "to": task.owner.clone(),
+            })
+        });
         persist_task_board(&self.storage, &binding, next_state.clone()).await;
         if let Some(owner_name) = assigned_owner.as_deref() {
             enqueue_task_assignment_message(context, &previous_task, owner_name).await;
@@ -1165,6 +1171,9 @@ impl Tool for TaskUpdateTool {
         if let Some(status_change) = status_change.clone() {
             output["statusChange"] = status_change;
         }
+        if let Some(owner_change) = owner_change.clone() {
+            output["ownerChange"] = owner_change;
+        }
         if verification_nudge_needed {
             output["verificationNudgeNeeded"] = json!(true);
         }
@@ -1187,6 +1196,9 @@ impl Tool for TaskUpdateTool {
 
         if let Some(status_change) = status_change {
             result = result.with_metadata("status_change", status_change);
+        }
+        if let Some(owner_change) = owner_change {
+            result = result.with_metadata("owner_change", owner_change);
         }
         if verification_nudge_needed {
             result = result.with_metadata("verification_nudge_needed", json!(true));
@@ -1843,7 +1855,7 @@ mod tests {
             .await
             .expect("create should succeed");
 
-        update_tool
+        let assignment_result = update_tool
             .execute(
                 json!({
                     "taskId": "1",
@@ -1853,6 +1865,19 @@ mod tests {
             )
             .await
             .expect("assignment should succeed");
+        let assignment_output: Value =
+            serde_json::from_str(&assignment_result.output.unwrap_or_default())
+                .expect("valid json");
+        assert_eq!(assignment_output["ownerChange"]["from"], Value::Null);
+        assert_eq!(assignment_output["ownerChange"]["to"], json!("researcher"));
+        assert_eq!(
+            assignment_result.metadata["owner_change"]["from"],
+            Value::Null
+        );
+        assert_eq!(
+            assignment_result.metadata["owner_change"]["to"],
+            json!("researcher")
+        );
 
         let scope = ActionRequiredScope {
             session_id: Some(child.id.clone()),
@@ -1874,16 +1899,36 @@ mod tests {
         assert_eq!(payload["description"], json!("把任务交给 researcher"));
         assert_eq!(payload["assignedBy"], json!("team-lead"));
 
-        update_tool
+        let reassignment_result = update_tool
             .execute(
                 json!({
                     "taskId": "1",
-                    "owner": "researcher"
+                    "owner": "implementer"
+                }),
+                &lead_context,
+            )
+            .await
+            .expect("reassignment should succeed");
+        assert_eq!(
+            reassignment_result.metadata["owner_change"]["from"],
+            json!("researcher")
+        );
+        assert_eq!(
+            reassignment_result.metadata["owner_change"]["to"],
+            json!("implementer")
+        );
+
+        let same_owner_result = update_tool
+            .execute(
+                json!({
+                    "taskId": "1",
+                    "owner": "implementer"
                 }),
                 &lead_context,
             )
             .await
             .expect("same owner update should still succeed");
+        assert!(!same_owner_result.metadata.contains_key("owner_change"));
 
         let drained_again = UserMessageManager::global()
             .drain_messages_for_scope(&scope)

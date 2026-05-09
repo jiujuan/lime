@@ -397,7 +397,7 @@ describe("KnowledgePage", () => {
     expect(container.textContent).toContain("可用于创作");
     expect(container.textContent).toContain("待确认");
     expect(container.textContent).toContain("需要补充");
-    expect(container.textContent).toContain("本轮创作会使用");
+    expect(container.textContent).toContain("建议本轮使用");
     expect(container.textContent).toContain("项目资料清单");
     expect(container.textContent).toContain("接下来你可以");
     expect(container.textContent).toContain("整理新资料");
@@ -499,10 +499,16 @@ describe("KnowledgePage", () => {
     expect(container.textContent).toContain("选择资料用途");
     expect(container.textContent).toContain("添加原始资料");
     expect(container.textContent).toContain("Lime 开始整理");
+    expect(container.textContent).toContain("当前先支持粘贴正文");
+    expect(container.textContent).toContain(
+      "这里不再设置“默认使用”",
+    );
     expect(container.textContent).toContain("没有确认的资料不会自动用于创作");
     expect(container.textContent).toContain("个人 IP");
     expect(container.textContent).toContain("品牌产品");
     expect(container.textContent).toContain("内容运营");
+    expect(container.textContent).not.toContain("创作时是否默认使用");
+    expect(container.textContent).not.toContain("先保存原始资料");
     expect(container.textContent).not.toContain("Builder Skill");
     expect(container.textContent).not.toContain("compile");
 
@@ -548,6 +554,9 @@ describe("KnowledgePage", () => {
     expect(container.textContent).not.toContain("本轮使用记录");
     expect(container.textContent).toContain("确认可用");
     expect(container.textContent).toContain("不会覆盖原始资料");
+    expect(container.textContent).toContain("参考资料");
+    expect(container.textContent).not.toContain("导出");
+    expect(container.textContent).not.toContain("常用金句");
     expect(container.textContent).not.toContain("KNOWLEDGE.md");
     expect(container.textContent).not.toContain("frontmatter");
     expect(container.textContent).not.toContain("user-confirmed");
@@ -672,7 +681,10 @@ describe("KnowledgePage", () => {
     expect(container.textContent).toContain("存到哪里？");
     expect(container.textContent).toContain("补充已有资料");
     expect(container.textContent).toContain("新建一份资料");
+    expect(container.textContent).toContain("保存后需要确认");
+    expect(container.textContent).toContain("保存不会自动改变本轮创作资料");
     expect(container.textContent).toContain("保存后不会立刻用于创作，确认后才会生效");
+    expect(container.textContent).not.toContain("新增 2 个内容点");
 
     const sourceTextarea = container.querySelector(
       "textarea",
@@ -691,9 +703,8 @@ describe("KnowledgePage", () => {
         sourceText: "对话中总结出的创始人口吻和两个新内容点。",
       }),
     );
-    expect(container.textContent).toContain("新增 2 个内容点");
-    expect(container.textContent).toContain("更新 1 个章节");
-    expect(container.textContent).toContain("有 1 处需要你确认");
+    expect(container.textContent).toContain("内容已进入项目资料");
+    expect(container.textContent).toContain("下一步需要确认后才会用于创作");
   });
 
   it("从对话保存进入项目资料时应预填待保存内容", async () => {

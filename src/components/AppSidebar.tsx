@@ -4017,12 +4017,11 @@ export function AppSidebar({
     setAccountLoginError(null);
     const browserTarget = createExternalBrowserOpenTarget();
     try {
-      const result = await startOemCloudLogin(undefined, { browserTarget });
-      toast.success(
-        result.mode === "desktop_auth"
-          ? `${cloudBrandLabel} 登录已同步`
-          : `已打开 ${cloudBrandLabel} 登录页，请在浏览器完成授权`,
-      );
+      await startOemCloudLogin(undefined, {
+        browserTarget,
+        waitForCompletion: false,
+      });
+      toast.success(`已打开 ${cloudBrandLabel} 登录页，请在浏览器完成授权`);
       setAccountMenuOpen(false);
       setLanguageMenuOpen(false);
     } catch (error) {

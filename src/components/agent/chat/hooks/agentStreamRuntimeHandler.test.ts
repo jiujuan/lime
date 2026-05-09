@@ -1,7 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentEvent } from "@/lib/api/agentProtocol";
 import type { Message } from "../types";
+import {
+  clearAgentUiProjectionEvents,
+  conversationProjectionStore,
+  selectAgentUiProjectionEvents,
+} from "../projection/conversationProjectionStore";
 import { handleTurnStreamEvent } from "./agentStreamRuntimeHandler";
+import { AGENT_STREAM_TEXT_DELTA_RENDER_FLUSH_MS } from "./agentStreamTimerController";
+import {
+  clearAllAgentStreamTextOverlays,
+  getAgentStreamTextOverlay,
+} from "./agentStreamTextOverlayStore";
 
 const { mockToast } = vi.hoisted(() => ({
   mockToast: {
@@ -23,6 +33,274 @@ describe("agentStreamRuntimeHandler", () => {
     mockToast.error.mockReset();
     mockToast.info.mockReset();
     mockToast.warning.mockReset();
+    clearAgentUiProjectionEvents();
+    clearAllAgentStreamTextOverlays();
+  });
+
+  it("应在 reducer 边界记录标准 Agent UI projection envelope", () => {
+    clearAgentUiProjectionEvents();
+    const requestState = {
+      accumulatedContent: "",
+      queuedTurnId: null,
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    };
+
+    handleTurnStreamEvent({
+      data: {
+        type: "runtime_status",
+        status: {
+          phase: "routing",
+          title: "选择模型",
+          detail: "正在选择可用模型",
+        },
+      } as AgentEvent,
+      requestState,
+      callbacks: {
+        activateStream: () => {},
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: () => {},
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (parts) => parts,
+      },
+      eventName: "agent-runtime-test",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-1",
+      activeSessionId: "session-1",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react",
+      content: "",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages: vi.fn() as never,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: vi.fn() as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    });
+
+    const projectionEvents = selectAgentUiProjectionEvents(
+      conversationProjectionStore.getSnapshot(),
+    );
+    expect(projectionEvents).toEqual([
+      expect.objectContaining({
+        type: "run.status",
+        sourceType: "runtime_status",
+        sequence: 1,
+        sessionId: "session-1",
+        runId: "agent-runtime-test",
+        messageId: "assistant-1",
+        owner: "runtime",
+        scope: "run",
+        phase: "routing",
+        surface: "runtime_status",
+      }),
+      expect.objectContaining({
+        type: "metric.changed",
+        sourceType: "performance_metric",
+        sessionId: "session-1",
+        owner: "diagnostics",
+        scope: "session",
+        surface: "diagnostics",
+        payload: expect.objectContaining({
+          metricPhase: "agentStream.firstRuntimeStatus",
+          source: "agent-stream",
+          metrics: expect.objectContaining({
+            eventName: "agent-runtime-test",
+            phase: "routing",
+            title: "选择模型",
+          }),
+        }),
+      }),
+    ]);
+    expect(
+      (requestState as { agentUiEventSequence?: number }).agentUiEventSequence,
+    ).toBe(1);
+  });
+
+  it("应把工具进度和输出增量写入 projection 与运行中工具卡", () => {
+    clearAgentUiProjectionEvents();
+    let messages: Message[] = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-05-09T10:00:00.000Z"),
+        toolCalls: [
+          {
+            id: "tool-1",
+            name: "mcp__runner__execute",
+            arguments: "{}",
+            status: "running",
+            startTime: new Date("2026-05-09T10:00:00.000Z"),
+          },
+        ],
+        contentParts: [
+          {
+            type: "tool_use",
+            toolCall: {
+              id: "tool-1",
+              name: "mcp__runner__execute",
+              arguments: "{}",
+              status: "running",
+              startTime: new Date("2026-05-09T10:00:00.000Z"),
+            },
+          },
+        ],
+      },
+    ];
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const requestState = {
+      accumulatedContent: "",
+      queuedTurnId: null,
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    };
+    const baseOptions = {
+      requestState,
+      callbacks: {
+        activateStream: () => {},
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: () => {},
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
+          parts,
+      },
+      eventName: "agent-runtime-test",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-1",
+      activeSessionId: "session-1",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react" as const,
+      content: "",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages: setMessages as never,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: vi.fn() as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    };
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "tool_input_delta",
+        tool_id: "tool-1",
+        tool_name: "mcp__runner__execute",
+        delta: '{"command"',
+        accumulated_arguments: '{"command"',
+        provider: "openai_compatible",
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "tool_progress",
+        tool_id: "tool-1",
+        progress: {
+          message: "正在处理第 2 项",
+          progress: 2,
+          total: 4,
+        },
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "tool_output_delta",
+        tool_id: "tool-1",
+        delta: "partial output",
+        output_kind: "log",
+      } as AgentEvent,
+    });
+
+    expect(messages[0]?.toolCalls?.[0]).toMatchObject({
+      arguments: '{"command"',
+      progress: {
+        message: "正在处理第 2 项",
+        progress: 2,
+        total: 4,
+      },
+      result: {
+        success: true,
+        output: "partial output",
+        metadata: {
+          streaming: true,
+          output_kind: "log",
+        },
+      },
+      logs: [
+        "正在生成工具输入：{\"command\"",
+        "正在处理第 2 项",
+        "partial output",
+      ],
+    });
+    expect(messages[0]?.contentParts?.[0]).toMatchObject({
+      type: "tool_use",
+      toolCall: {
+        result: {
+          output: "partial output",
+        },
+      },
+    });
+
+    expect(
+      selectAgentUiProjectionEvents(conversationProjectionStore.getSnapshot()),
+    ).toEqual([
+      expect.objectContaining({
+        type: "tool.args.delta",
+        sourceType: "tool_input_delta",
+        sequence: 1,
+        toolCallId: "tool-1",
+      }),
+      expect.objectContaining({
+        type: "tool.progress",
+        sourceType: "tool_progress",
+        sequence: 2,
+        toolCallId: "tool-1",
+      }),
+      expect.objectContaining({
+        type: "tool.output.delta",
+        sourceType: "tool_output_delta",
+        sequence: 3,
+        toolCallId: "tool-1",
+      }),
+    ]);
   });
 
   it("收到 final_done 时应把 usage 写回 assistant 消息", () => {
@@ -298,12 +576,15 @@ describe("agentStreamRuntimeHandler", () => {
       data: { type: "text_delta", text: "继续输出。" } as AgentEvent,
     });
 
-    vi.advanceTimersByTime(32);
+    vi.advanceTimersByTime(AGENT_STREAM_TEXT_DELTA_RENDER_FLUSH_MS);
 
-    expect(messages[0]?.content).toBe("先显示快照。继续输出。");
+    expect(messages[0]?.content).toBe("先显示快照。");
     expect(messages[0]?.contentParts).toEqual([
-      { type: "text", text: "先显示快照。继续输出。" },
+      { type: "text", text: "先显示快照。" },
     ]);
+    expect(getAgentStreamTextOverlay("assistant-1")?.content).toBe(
+      "先显示快照。继续输出。",
+    );
     expect(onTextDelta).toHaveBeenCalledTimes(1);
     expect(onTextDelta).toHaveBeenCalledWith(
       "继续输出。",
@@ -397,9 +678,10 @@ describe("agentStreamRuntimeHandler", () => {
       } as AgentEvent,
     });
 
-    expect(messages[0]?.content).toBe("好");
+    expect(messages[0]?.content).toBe("");
     expect(messages[0]?.thinkingContent).toBeUndefined();
-    expect(messages[0]?.contentParts).toEqual([{ type: "text", text: "好" }]);
+    expect(messages[0]?.contentParts).toEqual([]);
+    expect(getAgentStreamTextOverlay("assistant-1")?.content).toBe("好");
   });
 
   it("连续 text_delta 应合并到低频渲染，避免每个字符都刷新消息树", () => {
@@ -479,14 +761,109 @@ describe("agentStreamRuntimeHandler", () => {
       data: { type: "text_delta", text: "3" } as AgentEvent,
     });
 
-    expect(setMessages).toHaveBeenCalledTimes(1);
-    expect(messages[0]?.content).toBe("1");
+    expect(setMessages).not.toHaveBeenCalled();
+    expect(messages[0]?.content).toBe("");
+    expect(getAgentStreamTextOverlay("assistant-1")?.content).toBe("1");
 
-    vi.advanceTimersByTime(32);
+    vi.advanceTimersByTime(AGENT_STREAM_TEXT_DELTA_RENDER_FLUSH_MS);
 
-    expect(setMessages).toHaveBeenCalledTimes(2);
-    expect(messages[0]?.content).toBe("123");
-    expect(messages[0]?.contentParts).toEqual([{ type: "text", text: "123" }]);
+    expect(setMessages).not.toHaveBeenCalled();
+    expect(messages[0]?.content).toBe("");
+    expect(messages[0]?.contentParts).toEqual([]);
+    expect(getAgentStreamTextOverlay("assistant-1")?.content).toBe("123");
+  });
+
+  it("text_delta_batch 应先写入 overlay，并在 final_done 时一次性 reconcile 回消息", () => {
+    vi.useFakeTimers();
+    let messages: Message[] = [
+      {
+        id: "assistant-batch",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-04-30T10:00:00.000Z"),
+        isThinking: true,
+        contentParts: [],
+      },
+    ];
+    const requestState = {
+      accumulatedContent: "",
+      queuedTurnId: null,
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    };
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const baseOptions = {
+      requestState,
+      callbacks: {
+        activateStream: vi.fn(),
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: () => {},
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
+          parts,
+      },
+      eventName: "agent-runtime-text-batch-protocol-test",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-batch",
+      activeSessionId: "session-1",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react" as const,
+      content: "批量输出",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages: setMessages as never,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: vi.fn() as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    };
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "text_delta_batch",
+        text: "批量输出\n",
+        chunks: ["批量", "输出", "\n"],
+        boundary: "newline",
+      } as AgentEvent,
+    });
+
+    expect(setMessages).not.toHaveBeenCalled();
+    expect(messages[0]?.content).toBe("");
+    expect(getAgentStreamTextOverlay("assistant-batch")?.content).toBe(
+      "批量输出\n",
+    );
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: { type: "final_done" } as AgentEvent,
+    });
+
+    expect(messages[0]).toMatchObject({
+      content: "批量输出",
+      contentParts: [{ type: "text", text: "批量输出" }],
+      isThinking: false,
+    });
+    expect(getAgentStreamTextOverlay("assistant-batch")).toBeNull();
   });
 
   it("text flush 后仍应保留并继续累积 thinkingContent", () => {
@@ -571,10 +948,11 @@ describe("agentStreamRuntimeHandler", () => {
 
     expect(messages[0]?.thinkingContent).toBe("先想第一段。");
 
-    vi.advanceTimersByTime(32);
+    vi.advanceTimersByTime(AGENT_STREAM_TEXT_DELTA_RENDER_FLUSH_MS);
 
-    expect(messages[0]?.content).toBe("正文一");
+    expect(messages[0]?.content).toBe("");
     expect(messages[0]?.thinkingContent).toBe("先想第一段。");
+    expect(getAgentStreamTextOverlay("assistant-1")?.content).toBe("正文一");
 
     handleTurnStreamEvent({
       ...baseOptions,

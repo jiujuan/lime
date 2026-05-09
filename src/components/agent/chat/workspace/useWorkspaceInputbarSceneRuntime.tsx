@@ -30,7 +30,10 @@ import {
 import { resolveCanvasTaskFileTarget } from "../utils/taskFileCanvasSync";
 import { isRenderableTaskFile } from "./generalWorkbenchHelpers";
 import { GeneralWorkbenchDialogSection } from "./WorkspaceHarnessDialogs";
-import type { TeamWorkbenchSurfaceProps } from "./chatSurfaceProps";
+import type {
+  AgentUiTeamWorkbenchPromptMetadata,
+  TeamWorkbenchSurfaceProps,
+} from "./chatSurfaceProps";
 import type { GeneralWorkbenchEntryPromptState } from "./workspaceSendHelpers";
 import type { CuratedTaskReferenceEntry } from "../utils/curatedTaskReferenceSelection";
 import { useWorkspaceKnowledgeRuntime } from "./knowledge/useWorkspaceKnowledgeRuntime";
@@ -243,6 +246,11 @@ interface WorkspaceInputbarScenePresentationRuntimeResult {
   inputbarNode: ReactNode;
   generalWorkbenchDialog: ReactNode;
   runtimeToolAvailability: RuntimeToolAvailability | null | undefined;
+  seedAgentUiWorkbenchPrompt: (prompt: string) => void;
+  submitAgentUiWorkbenchPrompt: (
+    prompt: string,
+    metadata: AgentUiTeamWorkbenchPromptMetadata,
+  ) => Promise<boolean>;
 }
 type InputbarScenePresentationParams =
   UseWorkspaceInputbarScenePresentationRuntimeParams;
@@ -423,6 +431,49 @@ function useWorkspaceInputbarScenePresentationRuntime({
       {...inputbarPresentation.generalWorkbenchDialog}
     />
   );
+  const seedAgentUiWorkbenchPrompt = useCallback(
+    (prompt: string) => {
+      const normalizedPrompt = prompt.trim();
+      if (normalizedPrompt) {
+        inputbarPresentation.inputbar.setInput(normalizedPrompt);
+      }
+    },
+    [inputbarPresentation.inputbar],
+  );
+  const submitAgentUiWorkbenchPrompt = useCallback(
+    async (
+      prompt: string,
+      metadata: AgentUiTeamWorkbenchPromptMetadata,
+    ) => {
+      const normalizedPrompt = prompt.trim();
+      if (!normalizedPrompt) {
+        return false;
+      }
+
+      const result = await inputbarPresentation.inputbar.onSend(
+        undefined,
+        undefined,
+        undefined,
+        normalizedPrompt,
+        inputbarPresentation.inputbar.executionStrategy ?? "react",
+        undefined,
+        {
+          skipSceneCommandRouting: true,
+          displayContent: normalizedPrompt,
+          requestMetadata: {
+            harness: {
+              agent_ui_workbench: {
+                action: "execute_requested_fix",
+                ...metadata,
+              },
+            },
+          },
+        },
+      );
+      return result !== false;
+    },
+    [inputbarPresentation.inputbar],
+  );
 
   return {
     visibleTaskFiles,
@@ -433,6 +484,8 @@ function useWorkspaceInputbarScenePresentationRuntime({
     generalWorkbenchDialog,
     runtimeToolAvailability:
       inputbarPresentation.generalWorkbenchDialog.runtimeToolAvailability,
+    seedAgentUiWorkbenchPrompt,
+    submitAgentUiWorkbenchPrompt,
   };
 }
 

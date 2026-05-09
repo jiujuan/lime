@@ -118,6 +118,31 @@ struct InboundMessage {
     context_token: Option<String>,
 }
 
+fn build_gateway_source_metadata(
+    account: &ResolvedWechatAccount,
+    inbound: &InboundMessage,
+    session_id: &str,
+) -> serde_json::Value {
+    let remote_task_id = format!("gateway:wechat:{}:{}", account.account_id, Uuid::new_v4());
+    json!({
+        "remote_task": {
+            "source": "gateway_channel",
+            "channel": "wechat",
+            "accountId": account.account_id.as_str(),
+            "remoteTaskId": remote_task_id,
+            "sessionId": session_id,
+            "fromUserId": inbound.from_user_id.as_str(),
+            "groupId": inbound.group_id.as_deref(),
+            "contextTokenPresent": inbound.context_token.is_some(),
+            "agentCard": {
+                "id": format!("wechat:{}", account.account_id),
+                "name": "Wechat Remote",
+                "provider": "wechat"
+            }
+        }
+    })
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PendingWechatActionType {
     ToolConfirmation,
@@ -848,6 +873,7 @@ async fn run_agent_for_message(
                 rpc_model,
                 preview_inbound_text(&inbound.text),
                 usize::from(media.is_some()),
+                build_gateway_source_metadata(account, inbound, session_id),
             )
             .await;
             let _ = send_typing(
@@ -878,6 +904,7 @@ async fn run_agent_for_message(
         rpc_model,
         preview_inbound_text(&inbound.text),
         usize::from(media.is_some()),
+        build_gateway_source_metadata(account, inbound, session_id),
     )
     .await
 }
@@ -895,6 +922,7 @@ async fn run_agent_wait_loop(
     rpc_model: Option<&str>,
     text_preview: String,
     media_count: usize,
+    source_metadata: serde_json::Value,
 ) -> Result<WechatAgentOutcome, String> {
     let request = GatewayRpcRequest {
         jsonrpc: "2.0".to_string(),
@@ -907,6 +935,7 @@ async fn run_agent_wait_loop(
             "stream": false,
             "web_search": true,
             "model": rpc_model,
+            "source_metadata": source_metadata,
         })),
     };
     let response = rpc_handler.handle_request(request).await;

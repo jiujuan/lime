@@ -1,36 +1,24 @@
 # 语音组件
 
-语音输入功能相关的 React 组件。
+语音输入功能相关的 React 组件。当前语音输入设置主链位于 `src/components/settings-v2/agent/voice/index.tsx`，这里只保留被现役页面直接复用的基础组件。
 
 ## 文件索引
 
 | 文件 | 说明 |
-|------|------|
-| `types.ts` | 类型定义和常量 |
-| `AsrCredentialCard.tsx` | ASR 凭证卡片组件 |
-| `AddAsrCredentialModal.tsx` | 添加 ASR 凭证模态框 |
-| `AsrProviderSection.tsx` | ASR Provider 管理区域 |
+| --- | --- |
+| `types.ts` | 指令编辑器使用的类型与 API 边界 |
 | `InstructionEditor.tsx` | 自定义指令编辑器组件 |
-| `index.ts` | 模块导出 |
+| `MicrophoneTest.tsx` | 麦克风设备选择与测试组件 |
+| `VolumeWaveform.tsx` | 录音音量波形组件 |
 
 ## 使用方式
 
+现役代码应直接引用具体组件路径，避免恢复目录级 barrel：
+
 ```tsx
-import { AsrProviderSection, InstructionEditor } from "@/components/voice";
-
-// 在语音服务设置中使用 ASR 管理
-<AsrProviderSection />
-
-// 在设置页面中使用指令编辑器
-<InstructionEditor
-  defaultInstructionId="default"
-  onDefaultChange={(id) => console.log("默认指令:", id)}
-/>
+import { InstructionEditor } from "@/components/voice/InstructionEditor";
+import { MicrophoneTest } from "@/components/voice/MicrophoneTest";
+import { VolumeWaveform } from "@/components/voice/VolumeWaveform";
 ```
 
-## 支持的 ASR Provider
-
-- **本地 Whisper** - 离线语音识别
-- **讯飞语音** - 讯飞开放平台
-- **百度语音** - 百度 AI 开放平台
-- **OpenAI Whisper** - OpenAI Whisper API
+旧的 ASR 凭证管理 UI 已下线；语音模型与转写任务能力继续收敛到设置页、媒体任务和 `audio_transcription` 合同主链。

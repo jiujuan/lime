@@ -86,5 +86,3 @@ export const CodePreview: React.FC<CodePreviewProps> = ({
     </div>
   );
 };
-
-export default CodePreview;

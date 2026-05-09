@@ -1,6 +1,8 @@
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { parseAgentEvent } from "@/lib/api/agentProtocol";
 import type { AgentRuntimeEventSource } from "@/lib/api/agentRuntimeEvents";
+import { buildAgentUiProjectionEvents } from "../projection/agentUiEventProjection";
+import { recordAgentUiProjectionEvents } from "../projection/conversationProjectionStore";
 import type {
   TeamWorkspaceActivityEntry,
   TeamWorkspaceLiveRuntimeState,
@@ -74,6 +76,30 @@ type SessionEventListener = (
   handler: SessionEventHandler,
 ) => Promise<UnlistenFn>;
 
+const projectionSequenceBySessionId = new Map<string, number>();
+
+function recordTeamRuntimeAgentUiProjection(
+  sessionId: string,
+  data: NonNullable<ReturnType<typeof parseAgentEvent>>,
+) {
+  const sequence = projectionSequenceBySessionId.get(sessionId) ?? 0;
+  const projectionEvents = buildAgentUiProjectionEvents(data, {
+    sequence: sequence + 1,
+    timestamp: new Date().toISOString(),
+    sessionId,
+    runId: `agent_subagent_stream:${sessionId}`,
+  });
+  if (projectionEvents.length === 0) {
+    return;
+  }
+
+  projectionSequenceBySessionId.set(
+    sessionId,
+    sequence + projectionEvents.length,
+  );
+  recordAgentUiProjectionEvents(projectionEvents);
+}
+
 async function subscribeToSessionEvents(params: {
   sessionIds: string[];
   listen: SessionEventListener;
@@ -123,6 +149,7 @@ export async function subscribeTeamWorkspaceStatusEvents(
       if (!matchingSession) {
         return;
       }
+      recordTeamRuntimeAgentUiProjection(data.session_id, data);
 
       const baseFingerprint = deps.getBaseFingerprint(
         data.session_id,
@@ -193,6 +220,7 @@ export async function subscribeTeamWorkspaceStreamEvents(
       if (!matchingSession) {
         return;
       }
+      recordTeamRuntimeAgentUiProjection(sessionId, data);
 
       const projection = projectRuntimeStreamEvent({
         sessionId,

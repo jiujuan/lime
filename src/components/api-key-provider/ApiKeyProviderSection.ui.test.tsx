@@ -9,11 +9,13 @@ const {
   mockUseModelRegistry,
   mockGetSystemProviderCatalog,
   mockTestConnection,
+  mockFetchProviderModelsAuto,
 } = vi.hoisted(() => ({
   mockUseApiKeyProvider: vi.fn(),
   mockUseModelRegistry: vi.fn(),
   mockGetSystemProviderCatalog: vi.fn(),
   mockTestConnection: vi.fn(),
+  mockFetchProviderModelsAuto: vi.fn(),
 }));
 
 vi.mock("@/hooks/useApiKeyProvider", () => ({
@@ -30,6 +32,16 @@ vi.mock("@/lib/api/apiKeyProvider", () => ({
     testConnection: mockTestConnection,
     testChat: vi.fn(),
   },
+}));
+
+vi.mock("@/lib/api/modelRegistry", () => ({
+  fetchProviderModelsAuto: (...args: unknown[]) =>
+    mockFetchProviderModelsAuto(...args),
+  normalizeFetchProviderModelsSource: (result: {
+    source: "Api" | "Error";
+    models: unknown[];
+    error: string | null;
+  }) => result.source,
 }));
 
 vi.mock("./ProviderSetting", () => ({
@@ -241,6 +253,11 @@ beforeEach(() => {
     ]),
   });
   mockTestConnection.mockResolvedValue({ success: true, latency_ms: 12 });
+  mockFetchProviderModelsAuto.mockResolvedValue({
+    source: "Api",
+    models: [{ id: "deepseek-chat" }],
+    error: null,
+  });
 });
 
 afterEach(() => {
@@ -329,10 +346,7 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
     const root = createRoot(container);
     act(() => {
       root.render(
-        <ApiKeyProviderSection
-          exposeOemLoginPrompt
-          onOemLogin={onOemLogin}
-        />,
+        <ApiKeyProviderSection exposeOemLoginPrompt onOemLogin={onOemLogin} />,
       );
     });
     mountedRoots.push({ container, root });
@@ -352,7 +366,9 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
 
     await act(async () => {
       container
-        .querySelector<HTMLButtonElement>('[data-testid="provider-login-button"]')
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="provider-login-button"]',
+        )
         ?.click();
       await Promise.resolve();
     });
@@ -379,6 +395,79 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
     expect(
       container.querySelector('[data-testid="provider-setting-stub"]'),
     ).toBeNull();
+  });
+
+  it("添加流程应提供与详情页一致的接口获取模型入口，并自动填入小模型列表", async () => {
+    mockFetchProviderModelsAuto.mockResolvedValueOnce({
+      source: "Api",
+      models: [{ id: "deepseek-v4-pro" }, { id: "deepseek-v4-flash" }],
+      error: null,
+    });
+    const deepseek = createProvider({
+      enabled: false,
+      custom_models: [],
+      api_keys: [],
+      api_key_count: 0,
+    });
+    const hookState = createHookState({
+      providers: [deepseek],
+      selectedProviderId: null,
+      selectedProvider: null,
+      filteredProviders: [deepseek],
+    });
+    const container = renderSection();
+
+    await act(async () => {
+      findByTestId<HTMLButtonElement>("add-model-button").click();
+      await flushEffects(4);
+    });
+
+    await act(async () => {
+      findByTestId<HTMLButtonElement>("model-catalog-category-cn").click();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-template-id="catalog-deepseek"]',
+        )
+        ?.click();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      setInputValue(
+        findByTestId<HTMLInputElement>("model-api-key-input"),
+        "sk-test",
+      );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      findByTestId<HTMLButtonElement>("fetch-models-button").click();
+      await flushEffects(6);
+    });
+
+    expect(hookState.updateProvider).toHaveBeenCalledWith(
+      "deepseek",
+      expect.objectContaining({
+        type: "openai",
+        api_host: "https://api.deepseek.com",
+        enabled: true,
+        custom_models: [],
+      }),
+    );
+    expect(hookState.addApiKey).toHaveBeenCalledWith(
+      "deepseek",
+      "sk-test",
+      undefined,
+    );
+    expect(mockFetchProviderModelsAuto).toHaveBeenCalledWith("deepseek");
+    expect(container.textContent ?? "").toContain("从接口获取");
+    expect(container.textContent ?? "").toContain("已自动加入模型优先级");
+    expect(container.textContent ?? "").toContain("deepseek-v4-pro");
+    expect(container.textContent ?? "").toContain("deepseek-v4-flash");
   });
 
   it("系统 Provider 删除配置应清空模型、删除本地 Key 并停用入口", async () => {

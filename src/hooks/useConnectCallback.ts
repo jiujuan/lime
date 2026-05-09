@@ -12,12 +12,12 @@ import { safeInvoke } from "@/lib/dev-bridge";
 /**
  * 回调状态类型
  */
-export type CallbackStatus = "success" | "cancelled" | "error";
+type CallbackStatus = "success" | "cancelled" | "error";
 
 /**
  * 发送回调的参数
  */
-export interface SendCallbackParams {
+interface SendCallbackParams {
   /** 中转商 ID */
   relayId: string;
   /** API Key */
@@ -35,7 +35,7 @@ export interface SendCallbackParams {
 /**
  * useConnectCallback Hook 返回值
  */
-export interface UseConnectCallbackReturn {
+interface UseConnectCallbackReturn {
   /** 发送成功回调 */
   sendSuccessCallback: (
     relayId: string,
@@ -188,5 +188,3 @@ export function useConnectCallback(): UseConnectCallbackReturn {
     sendCallback,
   };
 }
-
-export default useConnectCallback;

@@ -107,6 +107,7 @@ import {
   type ContextWorkspaceSummary,
   type EnsureBrowserAssistCanvasOptions,
 } from "./workspaceSendHelpers";
+import { recordTeamFormationAgentUiProjection } from "../projection/teamFormationAgentUiProjection";
 import type { Character } from "@/lib/api/memory";
 import type { TeamMemorySnapshot } from "@/lib/teamMemorySync";
 import type { ThemeType } from "@/lib/workspace/workbenchContract";
@@ -262,7 +263,6 @@ const PROMPT_REWRITE_PURPOSES = new Set<RewritePurpose>([
 function waitForNextPaint(): Promise<void> {
   if (
     typeof window === "undefined" ||
-    import.meta.env?.MODE === "test" ||
     typeof window.requestAnimationFrame !== "function"
   ) {
     return Promise.resolve();
@@ -3466,10 +3466,11 @@ export function useWorkspaceSendActions({
       if (messagesCount === 0) {
         const previewStartedAt = Date.now();
         ensureSubmissionPreview();
-        await waitForNextPaint();
-        logAgentDebug("WorkspaceSend", "initialPreview.paintDone", {
-          durationMs: Date.now() - previewStartedAt,
-          messagesCount,
+        void waitForNextPaint().then(() => {
+          logAgentDebug("WorkspaceSend", "initialPreview.paintDone", {
+            durationMs: Date.now() - previewStartedAt,
+            messagesCount,
+          });
         });
       }
 
@@ -5418,6 +5419,9 @@ export function useWorkspaceSendActions({
           hasPreparedRuntimeTeamState: Boolean(preparedRuntimeTeamState),
         });
         if (preparedRuntimeTeamState) {
+          recordTeamFormationAgentUiProjection(preparedRuntimeTeamState, {
+            sessionId,
+          });
           setRuntimeTeamDispatchPreview(
             buildRuntimeTeamDispatchPreview(
               preparedRuntimeTeamState,
@@ -5611,6 +5615,7 @@ export function useWorkspaceSendActions({
       selectedTeamLabel,
       selectedTeamSummary,
       serviceModels,
+      sessionId,
       teamMemoryShadowSnapshot,
       sendMessage,
       setInput,

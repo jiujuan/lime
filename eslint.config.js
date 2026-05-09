@@ -47,7 +47,7 @@ const sceneAppDeadRestrictedPatterns = [
       "**/types-runtime-context.*",
     ],
     message:
-      "types-runtime-context.ts 已折叠为历史路径转发文件；请统一改用 @/lib/sceneapp/types 或当前 sceneapp barrel，避免 dead 类型副本重新扩散。",
+      "types-runtime-context.ts 历史转发文件已删除；请统一改用 @/lib/sceneapp/types 或当前 sceneapp barrel，避免 dead 类型副本重新扩散。",
   },
 ];
 

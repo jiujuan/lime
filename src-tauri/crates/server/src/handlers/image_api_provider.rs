@@ -1075,6 +1075,7 @@ fn resolve_fal_queue_host(api_host: &str) -> String {
             format!("{}://queue.fal.run", url.scheme())
         }
         Ok(url) if url.host_str() == Some("fal.run") => format!("{}://queue.fal.run", url.scheme()),
+        Ok(url) => url.to_string().trim_end_matches('/').to_string(),
         _ => FAL_QUEUE_DEFAULT_HOST.to_string(),
     }
 }
@@ -1409,6 +1410,29 @@ async fn request_fal_queue_images(
     payload: &Value,
     count: u32,
 ) -> Result<Vec<String>, String> {
+    request_fal_queue_images_with_options(
+        client,
+        api_host,
+        api_key,
+        endpoint_model,
+        payload,
+        count,
+        Duration::from_secs(FAL_QUEUE_TIMEOUT_SECS),
+        Duration::from_millis(FAL_QUEUE_POLL_INTERVAL_MS),
+    )
+    .await
+}
+
+async fn request_fal_queue_images_with_options(
+    client: &Client,
+    api_host: &str,
+    api_key: &str,
+    endpoint_model: &str,
+    payload: &Value,
+    count: u32,
+    queue_timeout: Duration,
+    poll_interval: Duration,
+) -> Result<Vec<String>, String> {
     let queue_endpoint = format!(
         "{}/{}",
         resolve_fal_queue_host(api_host).trim_end_matches('/'),
@@ -1450,7 +1474,9 @@ async fn request_fal_queue_images(
         return Err("Fal 队列提交成功，但缺少 status_url".to_string());
     };
 
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(FAL_QUEUE_TIMEOUT_SECS);
+    let deadline = tokio::time::Instant::now() + queue_timeout;
+    let mut last_status_payload: Option<Value> = None;
+    let mut completed = false;
     while tokio::time::Instant::now() < deadline {
         let status_payload = get_fal_json(client, &status_url, api_key).await?;
         if let Some(next_response_url) = status_payload
@@ -1468,6 +1494,7 @@ async fn request_fal_queue_images(
             .to_ascii_uppercase();
 
         if status == "COMPLETED" {
+            completed = true;
             break;
         }
 
@@ -1478,7 +1505,19 @@ async fn request_fal_queue_images(
             ));
         }
 
-        tokio::time::sleep(Duration::from_millis(FAL_QUEUE_POLL_INTERVAL_MS)).await;
+        last_status_payload = Some(status_payload);
+        tokio::time::sleep(poll_interval).await;
+    }
+
+    if !completed {
+        let status_summary = last_status_payload
+            .map(|value| preview_text(&value.to_string(), 240))
+            .unwrap_or_else(|| "未收到 Fal 队列状态响应".to_string());
+        return Err(format!(
+            "Fal 队列任务超过 {} 秒仍未完成: {}",
+            queue_timeout.as_secs(),
+            status_summary
+        ));
     }
 
     let Some(response_url) = response_url else {
@@ -1734,7 +1773,8 @@ mod tests {
         load_image_provider_routing, looks_like_image_generation_model, normalize_fal_api_host,
         normalize_openai_compatible_image_response, normalize_openai_responses_image_payload,
         normalize_openai_responses_image_sse, normalize_openai_responses_image_tool_model,
-        request_openai_responses_images, resolve_compatible_image_model, resolve_fal_model,
+        request_fal_queue_images_with_options, request_openai_responses_images,
+        resolve_compatible_image_model, resolve_fal_model,
         resolve_openai_responses_image_orchestration_model,
         should_prefer_openai_responses_image_api, size_to_aspect_ratio,
         try_extract_partial_openai_responses_images,
@@ -1827,6 +1867,54 @@ mod tests {
             collect_image_urls(&payload),
             vec!["https://cdn.example.com/final-image.png".to_string()]
         );
+    }
+
+    #[tokio::test]
+    async fn request_fal_queue_images_should_fail_when_queue_times_out() {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind fal queue test app");
+        let address = listener.local_addr().expect("resolve address");
+        let server = tokio::spawn(async move {
+            let app = Router::new()
+                .route(
+                    "/fal-ai/nano-banana-pro",
+                    post(|| async move {
+                        axum::Json(json!({
+                            "request_id": "req-timeout",
+                        }))
+                    }),
+                )
+                .route(
+                    "/fal-ai/nano-banana-pro/requests/req-timeout/status",
+                    axum::routing::get(|| async move { axum::Json(json!({"status": "IN_QUEUE"})) }),
+                );
+            axum::serve(listener, app)
+                .await
+                .expect("serve fal queue test app");
+        });
+
+        let client = Client::builder()
+            .timeout(Duration::from_millis(250))
+            .build()
+            .expect("build client");
+        let result = request_fal_queue_images_with_options(
+            &client,
+            &format!("http://{address}"),
+            "test-key",
+            "fal-ai/nano-banana-pro",
+            &json!({"prompt": "青柠"}),
+            1,
+            Duration::from_millis(25),
+            Duration::from_millis(1),
+        )
+        .await;
+
+        let error = result.expect_err("queue timeout should fail");
+        assert!(error.contains("Fal 队列任务超过"));
+        assert!(error.contains("IN_QUEUE"));
+
+        server.abort();
     }
 
     #[test]

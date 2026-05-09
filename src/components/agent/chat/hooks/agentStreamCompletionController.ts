@@ -149,7 +149,9 @@ export function reconcileAgentStreamFinalContentParts(params: {
   surfaceThinkingDeltas: boolean;
 }): Message["contentParts"] {
   if (!params.parts?.length) {
-    return params.parts;
+    return params.finalContent
+      ? [{ type: "text", text: params.finalContent }]
+      : params.parts;
   }
 
   const visibleParts = params.surfaceThinkingDeltas
@@ -163,6 +165,9 @@ export function reconcileAgentStreamFinalContentParts(params: {
     .filter((part) => part.type === "text")
     .map((part) => part.text)
     .join("");
+  if (!textContent && params.finalContent) {
+    return [...visibleParts, { type: "text", text: params.finalContent }];
+  }
   const finalTextChanged =
     params.finalContent !== params.rawContent ||
     (textContent.length > 0 && textContent !== params.finalContent);

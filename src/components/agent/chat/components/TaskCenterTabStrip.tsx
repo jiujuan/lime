@@ -7,13 +7,19 @@ import {
   Plus,
   X,
 } from "lucide-react";
-import type { CSSProperties } from "react";
+import { useMemo, type CSSProperties } from "react";
 import type { TaskStatus } from "../hooks/agentChatShared";
 import { cn } from "@/lib/utils";
 import {
   TASK_CENTER_CHROME_STAGE_BLEND,
   TASK_CENTER_CHROME_STAGE_SEAM,
 } from "../workspace/taskCenterChromeTokens";
+import { useAgentUiProjectionEvents } from "../projection/useConversationProjectionStore";
+import {
+  summarizeAgentUiProjectionEvents,
+  type AgentUiProjectionSummary,
+} from "../projection/agentUiProjectionSummary";
+import type { AgentUiProjectionEvent } from "../projection/agentUiEventProjection";
 
 const TASK_CENTER_TAB_STATUS_META: Record<
   TaskStatus,
@@ -73,6 +79,52 @@ function formatTaskTabTitle(item: TaskCenterTabItem): string {
   )}`;
 }
 
+function buildTaskCenterAgentUiSummaryByTaskId(
+  items: TaskCenterTabItem[],
+  events: AgentUiProjectionEvent[],
+): Map<string, AgentUiProjectionSummary> {
+  const itemIds = new Set(items.map((item) => item.id));
+  const eventsByTaskId = new Map<string, AgentUiProjectionEvent[]>();
+
+  for (const event of events) {
+    const candidateIds = Array.from(
+      new Set(
+        [event.sessionId, event.threadId, event.taskId, event.runId].filter(
+          (value): value is string => Boolean(value),
+        ),
+      ),
+    );
+
+    for (const candidateId of candidateIds) {
+      if (!itemIds.has(candidateId)) {
+        continue;
+      }
+
+      const scopedEvents = eventsByTaskId.get(candidateId) ?? [];
+      scopedEvents.push(event);
+      eventsByTaskId.set(candidateId, scopedEvents);
+    }
+  }
+
+  const summaryByTaskId = new Map<string, AgentUiProjectionSummary>();
+  for (const [taskId, scopedEvents] of eventsByTaskId) {
+    summaryByTaskId.set(taskId, summarizeAgentUiProjectionEvents(scopedEvents));
+  }
+  return summaryByTaskId;
+}
+
+function formatTaskCenterAgentUiSummaryTitle(
+  summary: AgentUiProjectionSummary,
+): string {
+  return [
+    `AgentUI 投影 ${summary.total} 条`,
+    `Task ${summary.taskCount}`,
+    `Action ${summary.actionCount}`,
+    `Artifact ${summary.artifactCount}`,
+    `Diagnostics ${summary.diagnosticsCount}`,
+  ].join(" · ");
+}
+
 const conversationTabShellClassName =
   "group flex h-[28px] items-center gap-0 rounded-[14px] border border-transparent px-1 transition-[background-color,border-color,box-shadow,color] duration-150 ease-out";
 
@@ -112,6 +164,12 @@ export function TaskCenterTabStrip({
   onWorkbenchToggle,
 }: TaskCenterTabStripProps) {
   const showToolbarActions = showHistoryToggle || showWorkbenchToggle;
+  const agentUiProjectionEvents = useAgentUiProjectionEvents();
+  const agentUiSummaryByTaskId = useMemo(
+    () =>
+      buildTaskCenterAgentUiSummaryByTaskId(items, agentUiProjectionEvents),
+    [agentUiProjectionEvents, items],
+  );
 
   return (
     <section
@@ -126,6 +184,7 @@ export function TaskCenterTabStrip({
               const statusMeta =
                 TASK_CENTER_TAB_STATUS_META[item.status] ??
                 TASK_CENTER_TAB_STATUS_META.done;
+              const agentUiSummary = agentUiSummaryByTaskId.get(item.id);
 
               return (
                 <div
@@ -164,6 +223,17 @@ export function TaskCenterTabStrip({
                         data-testid={`task-center-tab-unread-${item.id}`}
                         aria-hidden="true"
                       />
+                    ) : null}
+                    {agentUiSummary && agentUiSummary.total > 0 ? (
+                      <span
+                        className="inline-flex h-[18px] shrink-0 items-center rounded-full border border-sky-200 bg-sky-50 px-1.5 text-[10px] font-semibold leading-none text-sky-700"
+                        data-testid={`task-center-tab-agentui-${item.id}`}
+                        title={formatTaskCenterAgentUiSummaryTitle(
+                          agentUiSummary,
+                        )}
+                      >
+                        AgentUI {agentUiSummary.total}
+                      </span>
                     ) : null}
                     {item.isPinned ? (
                       <Pin

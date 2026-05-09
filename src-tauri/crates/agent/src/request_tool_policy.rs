@@ -3,7 +3,9 @@
 //! 该模块沉淀“请求级工具策略（例如联网搜索）”与统一流式执行逻辑，
 //! 供 aster_agent_cmd、scheduler、gateway 等入口复用同一条执行主链。
 
-use crate::protocol::{AgentEvent as RuntimeAgentEvent, AgentRuntimeStatus, AgentToolResult};
+use crate::protocol::{
+    AgentEvent as RuntimeAgentEvent, AgentRuntimeStatus, AgentToolResult, TextDeltaBatchBoundary,
+};
 use crate::protocol_projection::project_runtime_event;
 use crate::write_artifact_events::WriteArtifactEventEmitter;
 use aster::agents::{Agent, AgentEvent as AsterAgentEvent};
@@ -49,6 +51,7 @@ const WEB_SEARCH_PREFLIGHT_ENABLED_ENV_KEYS: &[&str] = &[
 const STREAM_EVENT_DIAG_WARN_TEXT_DELTA_CHARS: usize = 2_000;
 const STREAM_EVENT_DIAG_WARN_TOOL_OUTPUT_CHARS: usize = 8_000;
 const STREAM_EVENT_DIAG_WARN_CONTEXT_STEPS: usize = 24;
+const TEXT_DELTA_BATCH_BACKLOG_CHARS: usize = 120;
 const NEWS_PREFLIGHT_QUERY_LIMIT: usize = 4;
 const NEWS_PREFLIGHT_QUERY_PARALLELISM: usize = 4;
 const NEWS_PREFLIGHT_QUERY_OUTPUT_CHAR_LIMIT: usize = 1_600;
@@ -388,6 +391,66 @@ fn update_stream_event_diagnostics(
             diagnostics.error_count += 1;
         }
         _ => {}
+    }
+}
+
+#[derive(Debug, Default)]
+struct TextDeltaBatcher {
+    chunks: Vec<String>,
+    text: String,
+}
+
+impl TextDeltaBatcher {
+    fn is_empty(&self) -> bool {
+        self.text.is_empty()
+    }
+
+    fn push(&mut self, text: String) -> Option<RuntimeAgentEvent> {
+        if text.is_empty() {
+            return None;
+        }
+
+        let boundary = if text.contains('\n') {
+            Some(TextDeltaBatchBoundary::Newline)
+        } else {
+            None
+        };
+        self.text.push_str(&text);
+        self.chunks.push(text);
+
+        let boundary = boundary.or_else(|| {
+            (self.text.chars().count() >= TEXT_DELTA_BATCH_BACKLOG_CHARS)
+                .then_some(TextDeltaBatchBoundary::Backlog)
+        });
+        boundary.and_then(|boundary| self.flush(boundary))
+    }
+
+    fn flush(&mut self, boundary: TextDeltaBatchBoundary) -> Option<RuntimeAgentEvent> {
+        if self.is_empty() {
+            return None;
+        }
+
+        let text = std::mem::take(&mut self.text);
+        let chunks = std::mem::take(&mut self.chunks);
+        Some(RuntimeAgentEvent::TextDeltaBatch {
+            text,
+            chunks,
+            boundary,
+        })
+    }
+}
+
+fn emit_text_delta_batch<F>(
+    batcher: &mut TextDeltaBatcher,
+    boundary: TextDeltaBatchBoundary,
+    emitted_any: &mut bool,
+    on_event: &mut F,
+) where
+    F: FnMut(&RuntimeAgentEvent),
+{
+    if let Some(event) = batcher.flush(boundary) {
+        *emitted_any = true;
+        on_event(&event);
     }
 }
 
@@ -1513,9 +1576,11 @@ where
     let started_at = Instant::now();
     let mut auto_compaction_projection = AutoCompactionProjectionState;
     let mut inline_provider_error = None;
+    let mut text_delta_batcher = TextDeltaBatcher::default();
+    let session_id = session_config.id.clone();
     tracing::info!(
         "[AsterAgent][TTFT] agent.reply start: session_id={}, message_chars={}",
-        session_config.id,
+        session_id,
         user_message.as_concat_text().chars().count()
     );
     let mut stream = agent
@@ -1533,22 +1598,37 @@ where
     while let Some(event_result) = stream.next().await {
         match event_result {
             Ok(agent_event) => {
-                *emitted_any = true;
-                if inline_provider_error.is_none() {
-                    inline_provider_error = match &agent_event {
-                        AsterAgentEvent::Message(message) => {
-                            extract_inline_agent_provider_error(message)
-                        }
-                        _ => None,
-                    };
+                let provider_error_for_event = match &agent_event {
+                    AsterAgentEvent::Message(message) => {
+                        extract_inline_agent_provider_error(message)
+                    }
+                    _ => None,
+                };
+                if let Some(provider_error) = provider_error_for_event {
+                    if inline_provider_error.is_none() {
+                        inline_provider_error = Some(provider_error);
+                    }
+                    tracing::warn!(
+                        "[AsterAgent][ReplyPolicy] suppressed inline provider error text from runtime stream: session_id={}",
+                        session_id
+                    );
+                    continue;
                 }
+
                 let runtime_events = auto_compaction_projection
                     .project_event(&agent_event)
                     .unwrap_or_else(|| project_runtime_event(agent_event));
                 for mut runtime_event in runtime_events {
                     let extra_events = write_artifact_emitter.process_event(&mut runtime_event);
                     for extra_event in &extra_events {
+                        emit_text_delta_batch(
+                            &mut text_delta_batcher,
+                            TextDeltaBatchBoundary::Provider,
+                            emitted_any,
+                            on_event,
+                        );
                         update_stream_event_diagnostics(diagnostics, extra_event);
+                        *emitted_any = true;
                         on_event(extra_event);
                     }
 
@@ -1588,10 +1668,33 @@ where
                         _ => {}
                     }
                     update_stream_event_diagnostics(diagnostics, &runtime_event);
-                    on_event(&runtime_event);
+                    match runtime_event {
+                        RuntimeAgentEvent::TextDelta { text } => {
+                            if let Some(batch_event) = text_delta_batcher.push(text) {
+                                *emitted_any = true;
+                                on_event(&batch_event);
+                            }
+                        }
+                        other_event => {
+                            emit_text_delta_batch(
+                                &mut text_delta_batcher,
+                                TextDeltaBatchBoundary::Provider,
+                                emitted_any,
+                                on_event,
+                            );
+                            *emitted_any = true;
+                            on_event(&other_event);
+                        }
+                    }
                 }
             }
             Err(e) => {
+                emit_text_delta_batch(
+                    &mut text_delta_batcher,
+                    TextDeltaBatchBoundary::Provider,
+                    emitted_any,
+                    on_event,
+                );
                 return Err(ReplyAttemptError {
                     message: inline_provider_error.unwrap_or_else(|| format!("Stream error: {e}")),
                     emitted_any: *emitted_any,
@@ -1599,6 +1702,13 @@ where
             }
         }
     }
+
+    emit_text_delta_batch(
+        &mut text_delta_batcher,
+        TextDeltaBatchBoundary::Final,
+        emitted_any,
+        on_event,
+    );
 
     if let Some(message) = inline_provider_error {
         return Err(ReplyAttemptError {
@@ -2842,6 +2952,50 @@ mod tests {
     }
 
     #[test]
+    fn text_delta_batcher_should_flush_on_newline_backlog_and_final() {
+        let mut newline_batcher = TextDeltaBatcher::default();
+        assert!(newline_batcher.push("第一段".to_string()).is_none());
+        let newline_event = newline_batcher
+            .push("\n".to_string())
+            .expect("newline should flush batch");
+        assert!(matches!(
+            newline_event,
+            RuntimeAgentEvent::TextDeltaBatch {
+                ref text,
+                ref chunks,
+                boundary: TextDeltaBatchBoundary::Newline,
+            } if text == "第一段\n" && chunks.len() == 2
+        ));
+
+        let mut backlog_batcher = TextDeltaBatcher::default();
+        let backlog_event = backlog_batcher
+            .push("a".repeat(TEXT_DELTA_BATCH_BACKLOG_CHARS))
+            .expect("backlog should flush batch");
+        assert!(matches!(
+            backlog_event,
+            RuntimeAgentEvent::TextDeltaBatch {
+                ref text,
+                boundary: TextDeltaBatchBoundary::Backlog,
+                ..
+            } if text.chars().count() == TEXT_DELTA_BATCH_BACKLOG_CHARS
+        ));
+
+        let mut final_batcher = TextDeltaBatcher::default();
+        assert!(final_batcher.push("尾巴".to_string()).is_none());
+        let final_event = final_batcher
+            .flush(TextDeltaBatchBoundary::Final)
+            .expect("final should flush pending text");
+        assert!(matches!(
+            final_event,
+            RuntimeAgentEvent::TextDeltaBatch {
+                ref text,
+                boundary: TextDeltaBatchBoundary::Final,
+                ..
+            } if text == "尾巴"
+        ));
+    }
+
+    #[test]
     fn detects_news_expansion_for_daily_news_summary_requests() {
         assert!(message_suggests_news_expansion("帮我汇总3月13日国际新闻"));
         assert!(message_suggests_news_expansion(
@@ -3156,13 +3310,13 @@ mod tests {
         assert!(error.message.contains("Agent provider execution failed"));
         assert!(error.message.contains("Authentication failed"));
         assert!(
-            runtime_events.iter().any(|event| matches!(
+            !runtime_events.iter().any(|event| matches!(
                 event,
                 RuntimeAgentEvent::TextDelta { text }
                     if text.contains("Ran into this error:")
                         && text.contains("Authentication failed")
             )),
-            "应保留底层 provider 错误文本事件"
+            "不应把底层 provider inline 错误文本透传给前端"
         );
 
         let snapshot = agent

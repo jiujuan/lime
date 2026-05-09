@@ -134,6 +134,8 @@ function buildActivityEntry(params: {
   detail?: string | null;
   statusLabel: string;
   badgeClassName: string;
+  sourceType?: string;
+  sourceLabel?: string;
 }): TeamWorkspaceActivityEntry | null {
   const detail = normalizeLiveActivityText(params.detail);
   if (!detail) {
@@ -146,6 +148,8 @@ function buildActivityEntry(params: {
     detail,
     statusLabel: params.statusLabel,
     badgeClassName: params.badgeClassName,
+    sourceType: params.sourceType,
+    sourceLabel: params.sourceLabel,
   };
 }
 
@@ -156,6 +160,8 @@ function buildTextDraftEntry(sessionId: string, draft?: string) {
     detail: draft,
     statusLabel: "处理中",
     badgeClassName: IN_PROGRESS_BADGE_CLASS_NAME,
+    sourceType: "agent_message",
+    sourceLabel: "stream text",
   });
 }
 
@@ -166,6 +172,8 @@ function buildThinkingDraftEntry(sessionId: string, draft?: string) {
     detail: normalizeProcessDisplayText(draft),
     statusLabel: "处理中",
     badgeClassName: IN_PROGRESS_BADGE_CLASS_NAME,
+    sourceType: "reasoning",
+    sourceLabel: "stream thinking",
   });
 }
 
@@ -192,6 +200,8 @@ function buildRuntimeStatusEntry(
     badgeClassName: waiting
       ? QUEUED_BADGE_CLASS_NAME
       : IN_PROGRESS_BADGE_CLASS_NAME,
+    sourceType: "runtime_status",
+    sourceLabel: "runtime status",
   });
 }
 
@@ -261,6 +271,8 @@ function buildToolActivityEntry(params: {
         ? COMPLETED_BADGE_CLASS_NAME
         : FAILED_BADGE_CLASS_NAME
       : IN_PROGRESS_BADGE_CLASS_NAME,
+    sourceType: "tool_call",
+    sourceLabel: result ? "tool_end" : "tool_start",
   });
 }
 
@@ -278,6 +290,8 @@ function buildLifecycleActivityEntry(params: {
     detail: params.detail,
     statusLabel: params.statusLabel,
     badgeClassName: params.badgeClassName,
+    sourceType: "lifecycle",
+    sourceLabel: "runtime lifecycle",
   });
 }
 
@@ -292,6 +306,8 @@ function buildWarningActivityEntry(
     detail: message,
     statusLabel: "警告",
     badgeClassName: QUEUED_BADGE_CLASS_NAME,
+    sourceType: "warning",
+    sourceLabel: "runtime warning",
   });
 }
 
@@ -302,6 +318,8 @@ function buildErrorActivityEntry(sessionId: string, message: string) {
     detail: message,
     statusLabel: "需重试",
     badgeClassName: FAILED_BADGE_CLASS_NAME,
+    sourceType: "error",
+    sourceLabel: "runtime error",
   });
 }
 
@@ -314,7 +332,9 @@ export function areActivityEntriesEqual(
     left.title === right.title &&
     left.detail === right.detail &&
     left.statusLabel === right.statusLabel &&
-    left.badgeClassName === right.badgeClassName
+    left.badgeClassName === right.badgeClassName &&
+    left.sourceType === right.sourceType &&
+    left.sourceLabel === right.sourceLabel
   );
 }
 
@@ -554,7 +574,8 @@ export function projectRuntimeStreamEvent(params: {
         refreshPreview: event.type === "item_completed",
       };
     }
-    case "text_delta": {
+    case "text_delta":
+    case "text_delta_batch": {
       const nextTextDraft = appendLiveActivityDraft(
         streamState?.textDraft,
         event.text,

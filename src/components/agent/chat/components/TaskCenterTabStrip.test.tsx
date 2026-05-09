@@ -6,6 +6,7 @@ import {
   TaskCenterTabStrip,
   type TaskCenterTabItem,
 } from "./TaskCenterTabStrip";
+import { conversationProjectionStore } from "../projection/conversationProjectionStore";
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
@@ -26,6 +27,7 @@ afterEach(() => {
     });
     mounted.container.remove();
   }
+  conversationProjectionStore.clearAgentUiProjectionEvents();
   vi.clearAllMocks();
 });
 
@@ -238,5 +240,55 @@ describe("TaskCenterTabStrip", () => {
     expect(
       container.querySelector('[data-testid="task-center-tab-toolbar"]'),
     ).toBeTruthy();
+  });
+
+  it("应从 conversationProjectionStore.agentUi 展示任务级标准投影提示", () => {
+    conversationProjectionStore.recordAgentUiProjectionEvents([
+      {
+        type: "task.changed",
+        sourceType: "queue_added",
+        sequence: 1,
+        timestamp: "2026-04-24T10:01:00.000Z",
+        sessionId: "topic-a",
+        threadId: "topic-a",
+        taskId: "topic-a",
+        owner: "task",
+        scope: "task",
+        phase: "submitted",
+        surface: "session_tabs",
+        persistence: "ui_local",
+        control: "steer",
+        payload: { taskEvent: "queue_added" },
+      },
+      {
+        type: "action.required",
+        sourceType: "action_required",
+        sequence: 2,
+        timestamp: "2026-04-24T10:02:00.000Z",
+        sessionId: "other-topic",
+        threadId: "other-topic",
+        actionId: "action-other",
+        owner: "action",
+        scope: "action_request",
+        phase: "waiting",
+        surface: "hitl",
+        persistence: "snapshot",
+        control: "approve",
+      },
+    ]);
+
+    const { container } = renderTabStrip();
+
+    const projectionBadge = container.querySelector(
+      '[data-testid="task-center-tab-agentui-topic-a"]',
+    ) as HTMLElement | null;
+    expect(projectionBadge).not.toBeNull();
+    expect(projectionBadge?.textContent).toContain("AgentUI 1");
+    expect(projectionBadge?.getAttribute("title")).toContain(
+      "AgentUI 投影 1 条",
+    );
+    expect(
+      container.querySelector('[data-testid="task-center-tab-agentui-topic-b"]'),
+    ).toBeNull();
   });
 });

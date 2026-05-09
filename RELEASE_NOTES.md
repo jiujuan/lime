@@ -1,3 +1,74 @@
+## Lime v1.32.0
+
+发布日期：`2026-05-10`
+递交范围：完整 dirty worktree，包含 tracked、deleted 与新增文件；不把本版误标为单一功能发布。
+
+> 发布说明：上一版本地 release tag 为 `v1.31.0`。本版按用户确认的“所有代码都要递交”口径整理 `v1.32.0` release notes；最终 `git commit` / tag / push / GitHub Release 仍属于高风险操作，需要提交前再次确认。
+
+### 发布概览
+
+- 应用版本从 `1.31.0` 升级到 `1.32.0`，同步 `package.json`、`package-lock.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`、`src-tauri/tauri.conf.json`、`src-tauri/tauri.conf.headless.json` 与 `packages/lime-cli-npm/package.json`。
+- README 与仓库元信息改为面向中文创作者的开源 AI 内容工作台定位，补齐 GitHub release、平台、license badge、关键词和 GitHub About 推荐配置。
+- AgentUI 对齐推进到 v0.6.0 Team Workbench 主链：conversation projection、team surfaces、review lane、teammate transcript、worker notification 与 runtime entity 都回到结构化事件事实源。
+- 聊天流式渲染、DeepSeek / OpenAI-compatible reasoning 与 tool input/output 处理、历史消息 hydration、失败态 overlay 和性能指标做了集中稳定性修复。
+- Provider 与模型配置、Lime Hub 未登录态、Chrome Relay 引导、项目资料保存 / Knowledge 产品 E2E、Design Canvas smoke 与 GUI 质量脚本同步更新。
+- 本版继续减少 legacy surface：移除旧启动布局 / Chrome bridge / NewAPI image 测试脚本、旧 scene apps rail、旧语音 ASR 凭证 UI、旧 Knowledge 页面碎片组件与若干临时 patch 脚本。
+
+### 用户可见更新
+
+#### 1. Agent 对话与 Team Workbench
+
+- Team Workbench 可消费 `team_roster`、`work_board`、`delegation_graph`、`handoff_lane`、`worker_notifications`、`review_lane`、`teammate_transcript`、`background_teammate`、`remote_teammate`、`team_policy` 十类标准 surface，并提供分组 lane、surface detail 与操作视图。
+- `teammate_transcript/open_detail` 增加 Transcript Zoom：可定位父会话、子会话、最近回合、live activity 与历史 activity snapshot，但不会把队友内部输出混进主 final answer。
+- Review lane 展示 reviewer、risk、checklist、followup、regression requirements、requested fixes 与回归结果；requested fix 会投影成 work item，但仍保持 pending，不伪造成已执行。
+- Worker notification 展示 transcript ref、token usage、duration、tool count 与 result ref；Rust source 只透传真值，不从 assistant prose 或 teammate transcript 反推。
+- Streaming 渲染保留低频 text overlay，`final_done` 后再回填 message content / contentParts；失败态保留工具和过程信息，并追加失败正文。
+
+#### 2. Provider、项目资料与桌面体验
+
+- Provider 模型添加面板补齐模型抓取 helper、API 模型筛选、图片模型提示与未登录态展示；Lime Hub / OEM 登录改为用户显式触发，不再静默弹浏览器。
+- Knowledge 页面和项目资料保存路径继续使用普通用户词表，聊天消息、文件 artifact 与 canvas artifact 可进入待确认的项目资料流程。
+- 新增 `knowledge:product-e2e`，覆盖项目资料创作者版首页、状态、确认、选择、保存和整理闭环；GUI smoke 可选择串联该产品 E2E。
+- Chrome Relay 引导窗口支持更稳定的显式打开路径，相关测试覆盖 guide window launcher 与外部 URL 边界。
+- README 截图更新为 2026-05-09 的新建任务、生成过程和 AI 服务商配置三张产品图。
+
+#### 3. Design Canvas 与质量脚本
+
+- Design Canvas smoke 增强到可验证图层文档、artifact 预览、canvas endpoint、真实工程导出和截图证据，减少只测静态页面的假通过。
+- `verify:gui-smoke`、`knowledge-gui-smoke`、`local-ci` 与 quality planner 对 Knowledge 产品 E2E、GUI 主路径和发布完整性有更清晰的任务选择。
+- `.github/workflows/quality.yml` 与 ESLint 配置更新，减少旧脚本 / 旧页面残留造成的 CI 噪声。
+
+### 开发者与治理更新
+
+- `agentUiEventProjection`、`conversationProjectionStore`、`agentUiProjectionSummary`、`agentUiTeamWorkbenchViewModel` 与 `AgentUiTeamWorkbenchSurfaceView` 构成 AgentUI v0.6 projection -> selector -> UI 的 current 主链。
+- Rust runtime 事件扩展 `SubagentStatusChangedEvent`、request tool policy、runtime turn、event converter 与 provider format，支持 structured action、reasoning、tool delta、usage / duration / tool count 和 DeepSeek reasoning 输出稳定化。
+- `external_tools_cmd` 与 DevBridge dispatcher 拆出外部 URL 打开边界，避免前端直接把外部链接处理逻辑散落到 UI。
+- `legacySurfaceCatalog` 与相关测试扩展 legacy / deprecated surface 识别，明确旧 ASR UI、旧 Knowledge 组件、旧 scene apps rail 和临时 patch 脚本的清退状态。
+- `docs/roadmap/agentui/lime-agentui-standard-alignment.md` 记录 AgentUI v0.6.0 标准、当前对齐状态、验证结果和下一刀，不把 Team Workbench 做成第二套 runtime taxonomy。
+
+### 已知边界
+
+- Team Workbench action 当前以标准 target 定位为主；非本地 target runtime dispatch、reassignment、requested fixes 真实执行 / 完成状态仍是后续项。
+- Remote teammate 只有 adapter baseline；必须等 current remote ingress 提供真实 task id、Agent Card、artifact update 后才能接入，不用 heartbeat 猜完成。
+- Worker `result_ref` 仍需要 durable worker result artifact / source；本版只展示已有结构化 source 的字段。
+- Knowledge 产品 E2E 已进入脚本与 smoke 入口，但真实用户历史 workspace 的长期 fallback 清零仍需单独治理。
+
+### 校验状态
+
+- `npm run verify:app-version`：通过，版本一致性为 `1.32.0`。
+- `cargo fmt --manifest-path "src-tauri/Cargo.toml" --all`：通过。
+- `cargo test --manifest-path "src-tauri/Cargo.toml"`：通过，`1293` 个 lib 测试通过，`deepseek_reasoner_output_schema_runtime` 2 个集成测试通过，2 个真实联网测试保持 `ignored`。
+- `npm run lint:rust`：通过；保留既有 `lime-media-runtime` 的 `clippy::result_large_err` warning，命令退出码为 0。
+- `npm run lint`：通过。
+- `npm test`：通过，52 批 Vitest / 组件测试完成；首轮发现并修复空白新建任务发送后轻量预览过早清理的问题。
+- `npm run test:contracts`：通过。
+- `npm run verify:gui-smoke`：通过，覆盖 workspace-ready、browser-runtime、site-adapters、agent-service-skill-entry、agent-runtime-tool-surface、agent-runtime-tool-surface-page、knowledge-gui 与 design-canvas。
+- `git diff --check`：通过，已清理本轮 diff 中的文件末尾多余空行。
+
+---
+
+**完整变更**: `v1.31.0` -> `v1.32.0`
+
 ## Lime v1.31.0
 
 发布日期：`2026-05-08`

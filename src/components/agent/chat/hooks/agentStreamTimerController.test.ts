@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   AGENT_STREAM_QUEUED_DRAFT_CLEANUP_GRACE_MS,
+  AGENT_STREAM_TEXT_DELTA_BACKLOG_FLUSH_CHARS,
   AGENT_STREAM_TEXT_DELTA_RENDER_FLUSH_MS,
   buildAgentStreamQueuedDraftCleanupTimerFirePlan,
   buildAgentStreamQueuedDraftCleanupTimerSchedulePlan,
@@ -20,7 +21,7 @@ describe("agentStreamTimerController", () => {
     });
   });
 
-  it("首个可见文本应立即 flush，不等待 32ms timer", () => {
+  it("首个可见文本应立即 flush，不等待低频 timer", () => {
     expect(
       buildAgentStreamTextRenderTimerSchedulePlan({
         accumulatedContent: "你好",
@@ -56,6 +57,45 @@ describe("agentStreamTimerController", () => {
     ).toEqual({
       action: "schedule_timer",
       delayMs: AGENT_STREAM_TEXT_DELTA_RENDER_FLUSH_MS,
+    });
+  });
+
+  it("后续文本到达换行边界或积压阈值时应立即 flush", () => {
+    expect(
+      buildAgentStreamTextRenderTimerSchedulePlan({
+        accumulatedContent: "你好\n",
+        renderedContent: "你好",
+        hasPendingTimer: true,
+      }),
+    ).toEqual({
+      action: "flush_now",
+      delayMs: null,
+    });
+
+    expect(
+      buildAgentStreamTextRenderTimerSchedulePlan({
+        accumulatedContent: `你好${"啊".repeat(
+          AGENT_STREAM_TEXT_DELTA_BACKLOG_FLUSH_CHARS,
+        )}`,
+        renderedContent: "你好",
+        hasPendingTimer: false,
+      }),
+    ).toEqual({
+      action: "flush_now",
+      delayMs: null,
+    });
+  });
+
+  it("内容没有新增时不应调度 text render timer", () => {
+    expect(
+      buildAgentStreamTextRenderTimerSchedulePlan({
+        accumulatedContent: "你好",
+        renderedContent: "你好",
+        hasPendingTimer: false,
+      }),
+    ).toEqual({
+      action: "skip",
+      delayMs: null,
     });
   });
 

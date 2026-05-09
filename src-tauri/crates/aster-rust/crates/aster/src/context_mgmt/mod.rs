@@ -426,6 +426,7 @@ fn format_message_for_compacting(msg: &Message) -> String {
                     "frontend_tool_request: [error]".to_string()
                 }
             }
+            MessageContent::ToolInputDelta(_) => String::new(),
             MessageContent::Thinking(thinking) => format!("thinking: {}", thinking.thinking),
             MessageContent::RedactedThinking(_) => "redacted_thinking".to_string(),
             MessageContent::SystemNotification(notification) => {

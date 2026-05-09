@@ -20,5 +20,3 @@ i18n.use(initReactI18next).init({
     useSuspense: false, // Disable suspense as we handle loading differently
   },
 });
-
-export default i18n;

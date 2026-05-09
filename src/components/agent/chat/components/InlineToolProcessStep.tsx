@@ -291,9 +291,19 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     metadata?.execution_origin === "preload" || metadata?.preload === true;
   const hasOpenableFile = Boolean(filePath && onFileClick);
   const processSummary = useMemo(() => {
+    const streamingOutputSummary =
+      toolCall.status === "running" && structuredResultPreview
+        ? `实时输出：${structuredResultPreview}`
+        : null;
+    const progressSummary =
+      toolCall.status === "running" && toolCall.progress?.message
+        ? `进度：${toolCall.progress.message}`
+        : null;
     const preferredSummary =
       toolCall.status === "running"
-        ? processNarrative.preSummary
+        ? streamingOutputSummary ||
+          progressSummary ||
+          processNarrative.preSummary
         : processNarrative.postSource === "generic" && structuredResultPreview
           ? structuredResultPreview
           : processNarrative.postSummary ||
@@ -307,6 +317,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     processNarrative.postSummary,
     processNarrative.preSummary,
     structuredResultPreview,
+    toolCall.progress?.message,
     toolCall.status,
   ]);
   const hasDetails =
@@ -536,5 +547,3 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     </div>
   );
 };
-
-export default InlineToolProcessStep;

@@ -189,5 +189,3 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
     </div>
   );
 };
-
-export default CanvasPanel;

@@ -984,7 +984,10 @@ fn resolve_image_generation_runner_config(
 
 fn should_start_image_generation_worker(output: &MediaTaskOutput) -> bool {
     output.task_type == MediaTaskType::ImageGenerate.as_str()
-        && matches!(output.normalized_status.as_str(), "pending" | "queued")
+        && matches!(
+            output.normalized_status.as_str(),
+            "pending" | "queued" | "running"
+        )
 }
 
 fn mark_image_task_execution_started(task_id: &str) -> bool {
@@ -4587,13 +4590,50 @@ pub(crate) fn start_image_generation_task_worker_if_needed(
                     return;
                 }
 
-                let _ = execute_image_generation_task(
-                    Some(app.clone()),
-                    workspace_root,
-                    task_id.clone(),
-                    runner_config,
+                let execution = tokio::time::timeout(
+                    Duration::from_secs(lime_media_runtime::IMAGE_TASK_RUNNER_TIMEOUT_SECS + 30),
+                    execute_image_generation_task(
+                        Some(app.clone()),
+                        workspace_root.clone(),
+                        task_id.clone(),
+                        runner_config,
+                    ),
                 )
                 .await;
+                match execution {
+                    Ok(Ok(_)) => {}
+                    Ok(Err(error_message)) => {
+                        let task_error = build_task_error(
+                            "image_worker_execution_failed",
+                            format!("图片任务执行异常: {error_message}"),
+                            true,
+                            "worker",
+                        );
+                        let _ = mark_image_task_failed(
+                            Some(&app),
+                            &workspace_root,
+                            &task_id,
+                            task_error,
+                        );
+                    }
+                    Err(_) => {
+                        let task_error = build_task_error(
+                            "image_worker_timeout",
+                            format!(
+                                "图片任务执行超过 {} 秒仍未完成，已停止本次生成。",
+                                lime_media_runtime::IMAGE_TASK_RUNNER_TIMEOUT_SECS + 30
+                            ),
+                            true,
+                            "worker",
+                        );
+                        let _ = mark_image_task_failed(
+                            Some(&app),
+                            &workspace_root,
+                            &task_id,
+                            task_error,
+                        );
+                    }
+                }
                 finish_image_task_execution(&task_id);
             });
         }

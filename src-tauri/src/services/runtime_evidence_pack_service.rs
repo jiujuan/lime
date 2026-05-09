@@ -147,6 +147,7 @@ struct RuntimeEvidenceVerificationSummary {
     artifact_validator: RuntimeArtifactValidatorSummary,
     browser_evidence: Vec<Value>,
     gui_smoke: Option<Value>,
+    requested_fix_execution_results: Vec<Value>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -2855,7 +2856,133 @@ fn collect_runtime_verification(
         artifact_validator: collect_artifact_validator_summary(workspace_root, recent_artifacts),
         browser_evidence: collect_browser_evidence(detail),
         gui_smoke: collect_gui_smoke_result(detail),
+        requested_fix_execution_results: collect_requested_fix_execution_results(recent_artifacts),
     }
+}
+
+fn normalize_requested_fix_execution_status(value: Option<String>) -> &'static str {
+    match value.as_deref() {
+        Some("assigned") => "assigned",
+        Some("running") => "running",
+        Some("completed") => "completed",
+        Some("failed") => "failed",
+        Some("blocked") => "blocked",
+        Some("cancelled") => "cancelled",
+        _ => "pending",
+    }
+}
+
+fn normalize_requested_fix_regression_outcome(value: Option<String>) -> Option<&'static str> {
+    match value.as_deref() {
+        Some("success") => Some("success"),
+        Some("blocking_failure") => Some("blocking_failure"),
+        Some("advisory_failure") => Some("advisory_failure"),
+        Some("recovered") => Some("recovered"),
+        _ => None,
+    }
+}
+
+fn normalize_requested_fix_execution_result(
+    value: &Value,
+    source_artifact_path: &str,
+) -> Option<Value> {
+    if !value.is_object() {
+        return None;
+    }
+
+    let requested_fix = read_json_string(value, &[&["requestedFix"][..], &["requested_fix"][..]]);
+    let requested_fix_index = read_json_usize(
+        value,
+        &[&["requestedFixIndex"][..], &["requested_fix_index"][..]],
+    );
+    let execution_status = normalize_requested_fix_execution_status(read_json_string(
+        value,
+        &[&["executionStatus"][..], &["execution_status"][..]],
+    ));
+    let regression_outcome = normalize_requested_fix_regression_outcome(read_json_string(
+        value,
+        &[&["regressionOutcome"][..], &["regression_outcome"][..]],
+    ));
+    let summary_preview =
+        read_json_string(value, &[&["summaryPreview"][..], &["summary_preview"][..]]);
+    let result_ref = read_json_string(value, &[&["resultRef"][..], &["result_ref"][..]]);
+    let artifact_ids =
+        read_json_string_array(value, &[&["artifactIds"][..], &["artifact_ids"][..]]);
+    let mut artifact_paths =
+        read_json_string_array(value, &[&["artifactPaths"][..], &["artifact_paths"][..]]);
+
+    if requested_fix.is_none()
+        && requested_fix_index.is_none()
+        && result_ref.is_none()
+        && summary_preview.is_none()
+        && artifact_paths.is_empty()
+    {
+        return None;
+    }
+
+    if artifact_paths.is_empty() {
+        artifact_paths.push(source_artifact_path.to_string());
+    }
+
+    Some(json!({
+        "requestedFix": requested_fix,
+        "requestedFixIndex": requested_fix_index,
+        "executionStatus": execution_status,
+        "regressionOutcome": regression_outcome,
+        "summaryPreview": summary_preview,
+        "resultRef": result_ref,
+        "artifactIds": artifact_ids,
+        "artifactPaths": artifact_paths,
+        "sourceArtifactPath": source_artifact_path
+    }))
+}
+
+fn collect_requested_fix_execution_results_from_metadata(
+    artifact: &RuntimeRecentArtifact,
+) -> Vec<Value> {
+    let Some(metadata) = artifact.metadata.as_ref() else {
+        return Vec::new();
+    };
+
+    let mut results = Vec::new();
+    for path in [
+        &["requestedFixExecutionResults"][..],
+        &["requested_fix_execution_results"][..],
+        &["review", "requestedFixExecutionResults"][..],
+        &["review", "requested_fix_execution_results"][..],
+    ] {
+        if let Some(Value::Array(items)) = find_json_value(metadata, path) {
+            results.extend(items.iter().filter_map(|item| {
+                normalize_requested_fix_execution_result(item, artifact.path.as_str())
+            }));
+        }
+    }
+
+    for path in [
+        &["requestedFixExecutionResult"][..],
+        &["requested_fix_execution_result"][..],
+        &["review", "requestedFixExecutionResult"][..],
+        &["review", "requested_fix_execution_result"][..],
+    ] {
+        if let Some(item) = find_json_value(metadata, path) {
+            if let Some(result) =
+                normalize_requested_fix_execution_result(item, artifact.path.as_str())
+            {
+                results.push(result);
+            }
+        }
+    }
+
+    results
+}
+
+fn collect_requested_fix_execution_results(
+    recent_artifacts: &[RuntimeRecentArtifact],
+) -> Vec<Value> {
+    recent_artifacts
+        .iter()
+        .flat_map(collect_requested_fix_execution_results_from_metadata)
+        .collect()
 }
 
 fn collect_auxiliary_runtime_snapshots(
@@ -3517,6 +3644,13 @@ fn build_observability_verification_summary_json(
                 "hasOutputPreview": gui_smoke.get("outputPreview").is_some(),
                 "outcome": outcome.as_str()
             }),
+        );
+    }
+
+    if !verification.requested_fix_execution_results.is_empty() {
+        payload.insert(
+            "requestedFixExecutionResults".to_string(),
+            Value::Array(verification.requested_fix_execution_results.clone()),
         );
     }
 
@@ -6102,6 +6236,54 @@ mod tests {
         assert_eq!(
             snapshot["policy_inputs"][0]["value_source"],
             json!("local_model_catalog")
+        );
+    }
+
+    #[test]
+    fn requested_fix_execution_results_should_come_from_artifact_metadata() {
+        let recent_artifacts = vec![RuntimeRecentArtifact {
+            path: ".lime/harness/sessions/session-1/evidence/runtime.json".to_string(),
+            metadata: Some(json!({
+                "requestedFixExecutionResults": [
+                    {
+                        "requestedFix": "补齐 evidence pack",
+                        "requestedFixIndex": 1,
+                        "executionStatus": "completed",
+                        "regressionOutcome": "recovered",
+                        "summaryPreview": "已重新导出 evidence pack。",
+                        "resultRef": "agent-runtime://session/session-1/thread/thread-1/turn/turn-1/item/item-fix-1",
+                        "artifactPaths": [
+                            ".lime/harness/sessions/session-1/evidence/runtime.json"
+                        ]
+                    }
+                ]
+            })),
+        }];
+        let results = collect_requested_fix_execution_results(&recent_artifacts);
+        let verification = RuntimeEvidenceVerificationSummary {
+            requested_fix_execution_results: results,
+            ..RuntimeEvidenceVerificationSummary::default()
+        };
+        let summary = build_observability_verification_summary_json(&verification)
+            .expect("verification summary");
+
+        assert_eq!(
+            summary
+                .pointer("/requestedFixExecutionResults/0/executionStatus")
+                .and_then(Value::as_str),
+            Some("completed")
+        );
+        assert_eq!(
+            summary
+                .pointer("/requestedFixExecutionResults/0/regressionOutcome")
+                .and_then(Value::as_str),
+            Some("recovered")
+        );
+        assert_eq!(
+            summary
+                .pointer("/requestedFixExecutionResults/0/resultRef")
+                .and_then(Value::as_str),
+            Some("agent-runtime://session/session-1/thread/thread-1/turn/turn-1/item/item-fix-1")
         );
     }
 

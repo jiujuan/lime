@@ -1,4 +1,4 @@
-use crate::conversation::message::{Message, MessageContent};
+use crate::conversation::message::{Message, MessageContent, MessageMetadata};
 use crate::model::ModelConfig;
 use crate::providers::base::Usage;
 use crate::providers::errors::ProviderError;
@@ -95,6 +95,9 @@ pub fn format_messages(messages: &[Message]) -> Vec<Value> {
                 }
                 MessageContent::ActionRequired(_action_required) => {
                     // Skip action required messages - they're for UI only
+                }
+                MessageContent::ToolInputDelta(_) => {
+                    // Skip streaming-only tool input deltas.
                 }
                 MessageContent::SystemNotification(_) => {
                     // Skip
@@ -503,6 +506,23 @@ where
         message
     }
 
+    fn build_tool_input_delta_message(
+        tool_id: String,
+        tool_name: Option<String>,
+        delta: String,
+        accumulated_arguments: String,
+    ) -> Message {
+        Message::assistant()
+            .with_tool_input_delta(
+                tool_id,
+                tool_name,
+                delta,
+                Some(accumulated_arguments),
+                Some("anthropic"),
+            )
+            .with_metadata(MessageMetadata::invisible())
+    }
+
     #[derive(Serialize, Deserialize, Debug)]
     struct StreamingEvent {
         #[serde(rename = "type")]
@@ -627,8 +647,19 @@ where
                             // Tool input delta
                             if let Some(tool_id) = &current_tool_id {
                                 if let Some(partial_json) = delta.get("partial_json").and_then(|v| v.as_str()) {
-                                    if let Some((_name, args)) = accumulated_tool_calls.get_mut(tool_id) {
+                                    if let Some((name, args)) = accumulated_tool_calls.get_mut(tool_id) {
                                         args.push_str(partial_json);
+                                        if !partial_json.is_empty() {
+                                            yield (
+                                                Some(build_tool_input_delta_message(
+                                                    tool_id.clone(),
+                                                    Some(name.clone()),
+                                                    partial_json.to_string(),
+                                                    args.clone(),
+                                                )),
+                                                None,
+                                            );
+                                        }
                                     }
                                 }
                             }
@@ -1165,5 +1196,64 @@ mod tests {
             &thinking_messages[1].content[0],
             MessageContent::Thinking(content) if content.thinking == "，再组织回答。"
         ));
+    }
+
+    #[tokio::test]
+    async fn test_streaming_tool_call_emits_input_delta_signal() {
+        let stream = futures::stream::iter([
+            Ok(String::from(
+                "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_tool\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-sonnet-4-20250514\",\"content\":[],\"usage\":{\"input_tokens\":0,\"output_tokens\":0}}}",
+            )),
+            Ok(String::from(
+                "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"tool_1\",\"name\":\"read_file\",\"input\":{}}}",
+            )),
+            Ok(String::from(
+                "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"path\\\"\"}}",
+            )),
+            Ok(String::from(
+                "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\":\\\"README.md\\\"}\"}}",
+            )),
+            Ok(String::from("data: {\"type\":\"content_block_stop\",\"index\":0}")),
+            Ok(String::from("data: {\"type\":\"message_stop\"}")),
+            Ok(String::from("data: [DONE]")),
+        ]);
+
+        let outputs = response_to_streaming_message(stream)
+            .collect::<Vec<_>>()
+            .await;
+
+        let messages = outputs
+            .into_iter()
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .expect("stream should parse");
+        let mut deltas = Vec::new();
+        let mut final_tool_arguments = None;
+
+        for (message, _usage) in messages {
+            let Some(message) = message else {
+                continue;
+            };
+            for content in message.content {
+                match content {
+                    MessageContent::ToolInputDelta(delta) => {
+                        assert_eq!(delta.id, "tool_1");
+                        assert_eq!(delta.tool_name.as_deref(), Some("read_file"));
+                        assert_eq!(delta.provider.as_deref(), Some("anthropic"));
+                        deltas.push(delta.accumulated_arguments.unwrap_or_default());
+                    }
+                    MessageContent::ToolRequest(request) => {
+                        let call = request.tool_call.expect("tool call should parse");
+                        final_tool_arguments = call.arguments;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        assert_eq!(deltas, vec!["{\"path\"", "{\"path\":\"README.md\"}"]);
+        assert_eq!(
+            final_tool_arguments.and_then(|args| args.get("path").cloned()),
+            Some(json!("README.md"))
+        );
     }
 }

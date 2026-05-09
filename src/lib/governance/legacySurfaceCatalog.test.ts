@@ -30,6 +30,211 @@ describe("legacySurfaceCatalog", () => {
     expect("legacyHelperSurfaceMonitors" in agentCommandCatalog).toBe(false);
   });
 
+  it("应记录已删除的根目录一次性 Task Center 补丁脚本", () => {
+    const monitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "root-task-center-patch-scripts",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead-candidate");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.targets).toEqual([
+      "patch_dark.js",
+      "patch_flare.js",
+      "patch_navbar.js",
+    ]);
+  });
+
+  it("应记录已删除的旧桥接与 New API 手动调试脚本", () => {
+    const monitor = legacySurfaceCatalogJson.imports.find(
+      (entry) =>
+        entry.id === "scripts-hardcoded-bridge-debug-and-newapi-image-smoke",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead-candidate");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.targets).toEqual([
+      "scripts/check-chrome-bridge.mjs",
+      "scripts/test-chrome-bridge.mjs",
+      "scripts/test-ws-connection.mjs",
+      "scripts/test-newapi-image.ts",
+    ]);
+  });
+
+  it("应记录已删除的旧启动排版诊断脚本", () => {
+    const monitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "scripts-startup-layout-diagnostics-legacy",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead-candidate");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.targets).toEqual([
+      "scripts/startup-layout-e2e.mjs",
+      "scripts/startup-layout-guide.mjs",
+    ]);
+  });
+
+  it("应记录已删除的 SceneApp runtime context 历史转发壳", () => {
+    const monitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "sceneapp-runtime-context-compat-barrel",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead-candidate");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.targets).toEqual([
+      "src/lib/sceneapp/types-runtime-context.ts",
+    ]);
+  });
+
+  it("应记录已删除的 SceneApps 独立工作流 rail", () => {
+    const monitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "sceneapps-workflow-rail-entry",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead-candidate");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.targets).toEqual([
+      "src/components/sceneapps/SceneAppsWorkflowRail.tsx",
+    ]);
+  });
+
+  it("应记录已删除的旧 ASR 凭证管理 UI", () => {
+    const monitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "voice-asr-provider-management-ui",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead-candidate");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.targets).toEqual([
+      "src/components/voice/AddAsrCredentialModal.tsx",
+      "src/components/voice/AsrCredentialCard.tsx",
+      "src/components/voice/AsrProviderSection.tsx",
+      "src/components/voice/index.ts",
+    ]);
+  });
+
+  it("应记录已删除的 KnowledgePage 旧拆分组件", () => {
+    const monitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "knowledge-page-legacy-component-split",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead-candidate");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.targets).toEqual([
+      "src/features/knowledge/components/FileEntryList.tsx",
+      "src/features/knowledge/components/KnowledgePackCard.tsx",
+      "src/features/knowledge/components/KnowledgeStatusRail.tsx",
+      "src/features/knowledge/components/KnowledgeTroubleshootingPanel.tsx",
+    ]);
+  });
+
+  it("应记录已删除的首页空态 SceneApp 旧面板", () => {
+    const importMonitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "empty-state-legacy-sceneapps-panel-entry",
+    );
+    const textMonitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) => entry.id === "empty-state-legacy-sceneapps-panel-surface",
+    );
+
+    expect(importMonitor).toBeTruthy();
+    expect(importMonitor?.classification).toBe("dead-candidate");
+    expect(importMonitor?.allowedPaths).toEqual([]);
+    expect(importMonitor?.targets).toEqual([
+      "src/components/agent/chat/components/EmptyStateSceneAppsPanel.tsx",
+    ]);
+
+    expect(textMonitor).toBeTruthy();
+    expect(textMonitor?.classification).toBe("dead-candidate");
+    expect(textMonitor?.allowedPaths).toEqual([]);
+    expect(textMonitor?.patterns).toEqual([
+      "EmptyStateSceneAppsPanel",
+      "sceneapps-home-directory",
+    ]);
+    expect(textMonitor?.includePathPrefixes).toEqual([
+      "src/components/agent/chat",
+    ]);
+  });
+
+  it("应记录已删除的旧首页 entry 推荐方案工具", () => {
+    const importMonitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "entry-recommended-solutions-legacy-helper",
+    );
+    const textMonitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) => entry.id === "entry-recommended-solutions-legacy-runtime",
+    );
+
+    expect(importMonitor).toBeTruthy();
+    expect(importMonitor?.classification).toBe("dead-candidate");
+    expect(importMonitor?.allowedPaths).toEqual([]);
+    expect(importMonitor?.targets).toEqual([
+      "src/components/agent/chat/utils/entryRecommendedSolutions.ts",
+    ]);
+
+    expect(textMonitor).toBeTruthy();
+    expect(textMonitor?.classification).toBe("dead-candidate");
+    expect(textMonitor?.allowedPaths).toEqual([]);
+    expect(textMonitor?.patterns).toEqual([
+      "lime:entry-recommended-solution-usage:v1",
+      "ENTRY_RECOMMENDED_SOLUTIONS",
+      "listEntryRecommendedSolutions(",
+      "recordEntryRecommendedSolutionUsage(",
+    ]);
+    expect(textMonitor?.includePathPrefixes).toEqual([
+      "src/components/agent/chat",
+    ]);
+  });
+
+  it("应记录已删除的 Agent Chat 侧微信模型同步 Hook", () => {
+    const importMonitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "agent-chat-wechat-runtime-model-sync-hook",
+    );
+    const textMonitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) =>
+        entry.id === "agent-chat-wechat-runtime-model-sync-hook-usage",
+    );
+
+    expect(importMonitor).toBeTruthy();
+    expect(importMonitor?.classification).toBe("dead-candidate");
+    expect(importMonitor?.allowedPaths).toEqual([]);
+    expect(importMonitor?.targets).toEqual([
+      "src/components/agent/chat/hooks/useWechatRuntimeModelSync.ts",
+    ]);
+
+    expect(textMonitor).toBeTruthy();
+    expect(textMonitor?.classification).toBe("dead-candidate");
+    expect(textMonitor?.allowedPaths).toEqual([]);
+    expect(textMonitor?.patterns).toEqual(["useWechatRuntimeModelSync"]);
+    expect(textMonitor?.includePathPrefixes).toEqual([
+      "src/components/agent/chat",
+    ]);
+  });
+
+  it("应禁止 tauri-mock/index 恢复旧 mock 聚合导出", () => {
+    const monitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) => entry.id === "tauri-mock-index-legacy-barrel-exports",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead-candidate");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.patterns).toEqual([
+      'export * from "./core"',
+      'export * from "./event"',
+      "openFileDialog",
+      "openShell",
+    ]);
+    expect(monitor?.includePathPrefixes).toEqual([
+      "src/lib/tauri-mock/index.ts",
+    ]);
+  });
+
+
   it("应将旧海报素材命令与 helper 收敛到图库主链", () => {
     expect(agentCommandCatalog.deprecatedCommandReplacements).toMatchObject({
       create_poster_metadata: "create_gallery_material_metadata",

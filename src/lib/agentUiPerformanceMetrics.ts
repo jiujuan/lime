@@ -22,13 +22,16 @@ export interface AgentUiPerformanceSessionSummary {
   homeInputToSubmitAcceptedMs?: number;
   homeInputToFirstEventMs?: number;
   homeInputToFirstRuntimeStatusMs?: number;
+  homeInputToFirstThinkingDeltaMs?: number;
   homeInputToFirstTextDeltaMs?: number;
   homeInputToFirstTextRenderFlushMs?: number;
   homeInputToFirstTextPaintMs?: number;
   sendDispatchToSubmitAcceptedMs?: number;
   streamSubmitDispatchedToAcceptedMs?: number;
   submitAcceptedToFirstEventMs?: number;
+  firstEventToFirstThinkingDeltaMs?: number;
   firstEventToFirstTextDeltaMs?: number;
+  firstThinkingDeltaToFirstTextDeltaMs?: number;
   firstTextDeltaToFirstTextPaintMs?: number;
   streamEnsureSessionDurationMs?: number;
   streamSubmitInvokeDurationMs?: number;
@@ -402,6 +405,10 @@ export function summarizeAgentUiPerformanceMetrics(): AgentUiPerformanceSnapshot
       sessionEntries,
       "agentStream.firstRuntimeStatus",
     );
+    const streamFirstThinkingDelta = firstEntry(
+      sessionEntries,
+      "agentStream.firstThinkingDelta",
+    );
     const streamFirstTextDelta = firstEntry(
       sessionEntries,
       "agentStream.firstTextDelta",
@@ -467,6 +474,10 @@ export function summarizeAgentUiPerformanceMetrics(): AgentUiPerformanceSnapshot
         homeInputSubmit,
         streamFirstRuntimeStatus,
       ),
+      homeInputToFirstThinkingDeltaMs: deltaMs(
+        homeInputSubmit,
+        streamFirstThinkingDelta,
+      ),
       homeInputToFirstTextDeltaMs: deltaMs(
         homeInputSubmit,
         streamFirstTextDelta,
@@ -491,8 +502,16 @@ export function summarizeAgentUiPerformanceMetrics(): AgentUiPerformanceSnapshot
         streamSubmitAccepted,
         streamFirstEvent,
       ),
+      firstEventToFirstThinkingDeltaMs: deltaMs(
+        streamFirstEvent,
+        streamFirstThinkingDelta,
+      ),
       firstEventToFirstTextDeltaMs: deltaMs(
         streamFirstEvent,
+        streamFirstTextDelta,
+      ),
+      firstThinkingDeltaToFirstTextDeltaMs: deltaMs(
+        streamFirstThinkingDelta,
         streamFirstTextDelta,
       ),
       firstTextDeltaToFirstTextPaintMs: deltaMs(

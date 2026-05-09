@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  Bot,
   Clock3,
   Copy,
   FileText,
@@ -49,6 +50,13 @@ import {
   type ThreadReliabilityTone,
 } from "../utils/threadReliabilityView";
 import { isRuntimePermissionConfirmationWaitMessage } from "../utils/runtimeActionConfirmation";
+import {
+  formatAgentUiProjectionEventDetail,
+  formatAgentUiProjectionEventType,
+  formatAgentUiProjectionPhase,
+  type AgentUiProjectionSummary,
+} from "../projection/agentUiProjectionSummary";
+import { useAgentUiProjectionSummary } from "../projection/useConversationProjectionStore";
 import { AgentIncidentPanel } from "./AgentIncidentPanel";
 import { AgentThreadFileCheckpointDialog } from "./AgentThreadFileCheckpointDialog";
 import { AgentThreadMemoryPrefetchPreview } from "./AgentThreadMemoryPrefetchPreview";
@@ -548,6 +556,7 @@ function buildReliabilityDiagnosticText(params: {
   memoryPrefetchState?: RuntimeMemoryPrefetchState;
   memoryPrefetchComparison?: RuntimeMemoryPrefetchComparisonState;
   diagnosticRuntimeContext?: AgentThreadReliabilityDiagnosticContext | null;
+  agentUiProjectionSummary?: AgentUiProjectionSummary;
 }): string {
   const {
     threadRead,
@@ -560,6 +569,7 @@ function buildReliabilityDiagnosticText(params: {
     memoryPrefetchState,
     memoryPrefetchComparison,
     diagnosticRuntimeContext,
+    agentUiProjectionSummary,
   } = params;
   const threadItemSignals = summarizeThreadItemSignals(threadItems);
   const recentMessages = summarizeRecentMessages(messages);
@@ -688,6 +698,29 @@ function buildReliabilityDiagnosticText(params: {
     }
   } else {
     sections.push("- 暂无额外建议");
+  }
+
+  sections.push("", "### AgentUI 标准投影");
+  if (agentUiProjectionSummary?.total) {
+    sections.push(`- 标准事件总数：${agentUiProjectionSummary.total}`);
+    sections.push(`- Action / HITL：${agentUiProjectionSummary.actionCount}`);
+    sections.push(`- Task / Agent：${agentUiProjectionSummary.taskCount}`);
+    sections.push(`- Artifact：${agentUiProjectionSummary.artifactCount}`);
+    sections.push(`- Evidence：${agentUiProjectionSummary.evidenceCount}`);
+    sections.push(
+      `- Diagnostics：${agentUiProjectionSummary.diagnosticsCount}`,
+    );
+    sections.push(
+      `- 最近事件：${agentUiProjectionSummary.latestNotableEvents
+        .slice(0, 5)
+        .map(
+          (event) =>
+            `${formatAgentUiProjectionEventType(event.type)}｜${formatAgentUiProjectionPhase(event.phase)}｜${formatAgentUiProjectionEventDetail(event)}`,
+        )
+        .join(" || ")}`,
+    );
+  } else {
+    sections.push("- 无");
   }
 
   sections.push("", "### 最近 warning");
@@ -910,6 +943,7 @@ function buildReliabilityRawPayload(params: {
   memoryPrefetchState?: RuntimeMemoryPrefetchState;
   memoryPrefetchComparison?: RuntimeMemoryPrefetchComparisonState;
   diagnosticRuntimeContext?: AgentThreadReliabilityDiagnosticContext | null;
+  agentUiProjectionSummary?: AgentUiProjectionSummary;
 }): Record<string, unknown> {
   return {
     exported_at: new Date().toISOString(),
@@ -937,6 +971,7 @@ function buildReliabilityRawPayload(params: {
     recent_messages: summarizeRecentMessages(params.messages),
     thread_item_signals: summarizeThreadItemSignals(params.threadItems),
     reliability_view: params.view,
+    agent_ui_projection_summary: params.agentUiProjectionSummary || null,
   };
 }
 
@@ -1066,6 +1101,10 @@ export const AgentThreadReliabilityPanel: React.FC<
   const diagnosticSessionId = diagnosticRuntimeContext?.sessionId?.trim() || "";
   const diagnosticWorkingDir =
     diagnosticRuntimeContext?.workingDir?.trim() || "";
+  const agentUiProjectionSummary = useAgentUiProjectionSummary(
+    diagnosticSessionId ? { sessionId: diagnosticSessionId } : null,
+    { enabled: Boolean(diagnosticSessionId) },
+  );
 
   useEffect(() => {
     if (!diagnosticSessionId) {
@@ -1242,6 +1281,7 @@ export const AgentThreadReliabilityPanel: React.FC<
           memoryPrefetchState,
           memoryPrefetchComparison,
           diagnosticRuntimeContext,
+          agentUiProjectionSummary,
         }),
       );
       toast.success("AI 诊断内容已复制");
@@ -1275,6 +1315,7 @@ export const AgentThreadReliabilityPanel: React.FC<
             memoryPrefetchState,
             memoryPrefetchComparison,
             diagnosticRuntimeContext,
+            agentUiProjectionSummary,
           }),
         ),
       );
@@ -1419,6 +1460,77 @@ export const AgentThreadReliabilityPanel: React.FC<
           </div>
         </div>
       </div>
+
+      {agentUiProjectionSummary.total > 0 ? (
+        <div
+          className="mt-4 rounded-2xl border border-sky-200 bg-sky-50/70 px-4 py-3"
+          data-testid="agent-thread-reliability-agentui-projection"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 text-sm font-medium text-sky-900">
+              <Bot className="h-4 w-4" />
+              <span>AgentUI 标准投影</span>
+            </div>
+            <Badge
+              variant="outline"
+              className="border-sky-300 bg-white text-sky-700"
+            >
+              {agentUiProjectionSummary.total} 条
+            </Badge>
+            <span className="text-xs text-sky-800">
+              来源：conversationProjectionStore.agentUi
+            </span>
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="rounded-xl border border-sky-100 bg-white px-3 py-2">
+              <div className="text-[11px] text-sky-700">Action / HITL</div>
+              <div className="mt-1 text-lg font-semibold text-sky-950">
+                {agentUiProjectionSummary.actionCount}
+              </div>
+            </div>
+            <div className="rounded-xl border border-sky-100 bg-white px-3 py-2">
+              <div className="text-[11px] text-sky-700">Task / Agent</div>
+              <div className="mt-1 text-lg font-semibold text-sky-950">
+                {agentUiProjectionSummary.taskCount}
+              </div>
+            </div>
+            <div className="rounded-xl border border-sky-100 bg-white px-3 py-2">
+              <div className="text-[11px] text-sky-700">Artifact</div>
+              <div className="mt-1 text-lg font-semibold text-sky-950">
+                {agentUiProjectionSummary.artifactCount}
+              </div>
+            </div>
+            <div className="rounded-xl border border-sky-100 bg-white px-3 py-2">
+              <div className="text-[11px] text-sky-700">Evidence</div>
+              <div className="mt-1 text-lg font-semibold text-sky-950">
+                {agentUiProjectionSummary.evidenceCount}
+              </div>
+            </div>
+            <div className="rounded-xl border border-sky-100 bg-white px-3 py-2">
+              <div className="text-[11px] text-sky-700">Diagnostics</div>
+              <div className="mt-1 text-lg font-semibold text-sky-950">
+                {agentUiProjectionSummary.diagnosticsCount}
+              </div>
+            </div>
+          </div>
+          {agentUiProjectionSummary.latestEvent ? (
+            <div className="mt-3 text-xs leading-5 text-sky-900">
+              最近事件：
+              {formatAgentUiProjectionEventType(
+                agentUiProjectionSummary.latestEvent.type,
+              )}
+              {" · "}
+              {formatAgentUiProjectionPhase(
+                agentUiProjectionSummary.latestEvent.phase,
+              )}
+              {" · "}
+              {formatAgentUiProjectionEventDetail(
+                agentUiProjectionSummary.latestEvent,
+              )}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {runtimeDecisionReason || fallbackChain.length > 0 || oemPolicy ? (
         <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50/80 px-4 py-3">

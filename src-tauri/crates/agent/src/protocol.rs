@@ -33,6 +33,18 @@ pub struct AgentToolResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentToolProgressPayload {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub progress: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<HashMap<String, Value>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentArtifactSignal {
     pub artifact_id: String,
@@ -43,7 +55,7 @@ pub struct AgentArtifactSignal {
     pub metadata: Option<HashMap<String, Value>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AgentTokenUsage {
     pub input_tokens: u32,
     pub output_tokens: u32,
@@ -57,6 +69,78 @@ pub struct AgentTokenUsage {
 pub struct AgentContextTraceStep {
     pub stage: String,
     pub detail: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AgentContextBudget {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub used_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remaining_tokens: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentMissingContextFact {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    pub kind: String,
+    pub label: String,
+    pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentRetrievalRef {
+    pub source_id: String,
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub score: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentTeamMemoryRef {
+    pub key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repo_scope: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub priority: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AgentTurnContextSummary {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory_budget: Option<AgentContextBudget>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub missing_context: Vec<AgentMissingContextFact>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub retrieval_refs: Vec<AgentRetrievalRef>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub team_memory_refs: Vec<AgentTeamMemoryRef>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -133,6 +217,15 @@ pub enum AgentMessageContent {
     Image { mime_type: String, data: String },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TextDeltaBatchBoundary {
+    Newline,
+    Backlog,
+    Final,
+    Provider,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum AgentEvent {
@@ -160,6 +253,13 @@ pub enum AgentEvent {
     #[serde(rename = "text_delta")]
     TextDelta { text: String },
 
+    #[serde(rename = "text_delta_batch")]
+    TextDeltaBatch {
+        text: String,
+        chunks: Vec<String>,
+        boundary: TextDeltaBatchBoundary,
+    },
+
     #[serde(rename = "thinking_delta")]
     ThinkingDelta { text: String },
 
@@ -177,11 +277,48 @@ pub enum AgentEvent {
         result: AgentToolResult,
     },
 
+    #[serde(rename = "tool_progress")]
+    ToolProgress {
+        tool_id: String,
+        progress: AgentToolProgressPayload,
+    },
+
+    #[serde(rename = "tool_output_delta")]
+    ToolOutputDelta {
+        tool_id: String,
+        delta: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        output_kind: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        metadata: Option<HashMap<String, Value>>,
+    },
+
+    #[serde(rename = "tool_input_delta")]
+    ToolInputDelta {
+        tool_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        tool_name: Option<String>,
+        delta: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        accumulated_arguments: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        provider: Option<String>,
+    },
+
     #[serde(rename = "artifact_snapshot")]
     ArtifactSnapshot { artifact: AgentArtifactSignal },
 
     #[serde(rename = "action_required")]
     ActionRequired {
+        request_id: String,
+        action_type: String,
+        data: Value,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        scope: Option<AgentActionRequiredScope>,
+    },
+
+    #[serde(rename = "action_resolved")]
+    ActionResolved {
         request_id: String,
         action_type: String,
         data: Value,
@@ -196,6 +333,12 @@ pub enum AgentEvent {
         turn_id: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         output_schema_runtime: Option<TurnOutputSchemaRuntime>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        context_summary: Option<AgentTurnContextSummary>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        approval_policy: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        sandbox_policy: Option<String>,
     },
 
     #[serde(rename = "model_change")]
@@ -509,5 +652,20 @@ mod tests {
 
         assert_eq!(value["type"], "runtime_status");
         assert_eq!(value["status"]["phase"], "routing");
+    }
+
+    #[test]
+    fn agent_event_text_delta_batch_serializes_with_protocol_tag() {
+        let value = serde_json::to_value(AgentEvent::TextDeltaBatch {
+            text: "第一段\n".to_string(),
+            chunks: vec!["第一段".to_string(), "\n".to_string()],
+            boundary: TextDeltaBatchBoundary::Newline,
+        })
+        .expect("serialize text delta batch");
+
+        assert_eq!(value["type"], "text_delta_batch");
+        assert_eq!(value["text"], "第一段\n");
+        assert_eq!(value["chunks"][0], "第一段");
+        assert_eq!(value["boundary"], "newline");
     }
 }

@@ -16,6 +16,11 @@ import {
   resolveTimelineArtifactNavigation,
   type ArtifactTimelineOpenTarget,
 } from "../utils/artifactTimelineNavigation";
+import { useLatestAgentUiProjectionEventForArtifact } from "../projection/useConversationProjectionStore";
+import {
+  formatAgentUiProjectionEventType,
+  formatAgentUiProjectionPhase,
+} from "../projection/agentUiProjectionSummary";
 
 interface AgentThreadTimelineArtifactCardProps {
   item: Extract<AgentThreadItem, { type: "file_artifact" }>;
@@ -295,6 +300,17 @@ export function AgentThreadTimelineArtifactCard({
     "artifact_title",
     "title",
   ]);
+  const artifactProjectionId =
+    normalizeText(document?.artifactId) ||
+    readMetadataText(metadata, [
+      "artifactId",
+      "artifact_id",
+      "artifactDocumentId",
+      "artifact_document_id",
+    ]);
+  const latestArtifactProjection = useLatestAgentUiProjectionEventForArtifact(
+    artifactProjectionId,
+  );
   const metadataKind = readMetadataText(metadata, [
     "artifactKind",
     "artifact_kind",
@@ -428,6 +444,25 @@ export function AgentThreadTimelineArtifactCard({
                   className="border-slate-200 bg-slate-50 text-slate-600"
                 >
                   {sourceLabel}
+                </Badge>
+              ) : null}
+              {latestArtifactProjection ? (
+                <Badge
+                  variant="outline"
+                  className="border-sky-200 bg-white text-sky-700"
+                  data-testid="timeline-file-artifact-agentui"
+                  title={[
+                    "conversationProjectionStore.agentUi",
+                    latestArtifactProjection.sourceType,
+                    formatAgentUiProjectionPhase(
+                      latestArtifactProjection.phase,
+                    ),
+                  ].join(" · ")}
+                >
+                  AgentUI{" "}
+                  {formatAgentUiProjectionEventType(
+                    latestArtifactProjection.type,
+                  )}
                 </Badge>
               ) : null}
               {timestamp ? (

@@ -1,6 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  clearAgentUiProjectionEvents,
   createConversationProjectionStore,
+  selectAgentUiProjectionEvents,
+  selectAgentUiProjectionEventsBySurface,
+  selectAgentUiProjectionEventsBySurfaceForScope,
+  selectAgentUiProjectionEventsByType,
+  selectAgentUiProjectionEventsByTypeForScope,
+  selectAgentUiProjectionEventsForScope,
+  selectLatestAgentUiProjectionEventByType,
+  selectLatestAgentUiProjectionEventForAction,
+  selectLatestAgentUiProjectionEventForArtifact,
+  selectLatestAgentUiProjectionEventForEvidence,
+  selectLatestAgentUiProjectionEventForRun,
+  selectLatestAgentUiProjectionEventForScope,
+  selectLatestAgentUiProjectionEventForToolCall,
   selectConversationStreamDiagnostics,
   selectLatestConversationStreamDiagnostic,
 } from "./conversationProjectionStore";
@@ -71,6 +85,7 @@ describe("conversationProjectionStore", () => {
     expect(after.stream).toBe(before.stream);
     expect(after.queue).toBe(before.queue);
     expect(after.render).toBe(before.render);
+    expect(after.agentUi).toBe(before.agentUi);
   });
 
   it("无 sessionId 时应按 requestId 记录最新 stream diagnostic", () => {
@@ -94,5 +109,191 @@ describe("conversationProjectionStore", () => {
         "request-c",
       ),
     ).toEqual(entry);
+  });
+
+  it("应记录 Agent UI projection events，并按 run/tool/action/artifact 建索引", () => {
+    const store = createConversationProjectionStore();
+    const listener = vi.fn();
+    store.subscribe(listener);
+
+    const [toolEvent, actionEvent, artifactEvent, evidenceEvent] =
+      store.recordAgentUiProjectionEvents([
+        {
+          type: "tool.result",
+          sourceType: "tool_end",
+          sequence: 1,
+          sessionId: "session-a",
+          runId: "run-a",
+          toolCallId: "tool-a",
+          owner: "tool",
+          scope: "tool_call",
+          phase: "completed",
+          surface: "tool_ui",
+        },
+        {
+          type: "action.required",
+          sourceType: "action_required",
+          sequence: 2,
+          sessionId: "session-a",
+          runId: "run-a",
+          actionId: "action-a",
+          owner: "action",
+          scope: "action_request",
+          phase: "waiting",
+          surface: "hitl",
+        },
+        {
+          type: "artifact.preview.ready",
+          sourceType: "artifact_snapshot",
+          sequence: 3,
+          sessionId: "session-a",
+          runId: "run-a",
+          artifactId: "artifact-a",
+          owner: "artifact",
+          scope: "artifact",
+          phase: "completed",
+          surface: "artifact_workspace",
+        },
+        {
+          type: "evidence.changed",
+          sourceType: "evidence_projection",
+          sequence: 4,
+          sessionId: "session-a",
+          runId: "run-a",
+          evidenceId: "evidence-a",
+          owner: "evidence",
+          scope: "evidence",
+          phase: "completed",
+          surface: "timeline_evidence",
+        },
+      ]);
+
+    const snapshot = store.getSnapshot();
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(selectAgentUiProjectionEvents(snapshot)).toEqual([
+      toolEvent,
+      actionEvent,
+      artifactEvent,
+      evidenceEvent,
+    ]);
+    expect(selectAgentUiProjectionEventsByType(snapshot, "tool.result")).toEqual(
+      [toolEvent],
+    );
+    expect(
+      selectLatestAgentUiProjectionEventByType(snapshot, "evidence.changed"),
+    ).toBe(evidenceEvent);
+    expect(selectLatestAgentUiProjectionEventForRun(snapshot, "run-a")).toBe(
+      evidenceEvent,
+    );
+    expect(
+      selectLatestAgentUiProjectionEventForToolCall(snapshot, "tool-a"),
+    ).toBe(toolEvent);
+    expect(
+      selectLatestAgentUiProjectionEventForAction(snapshot, "action-a"),
+    ).toBe(actionEvent);
+    expect(
+      selectLatestAgentUiProjectionEventForArtifact(snapshot, "artifact-a"),
+    ).toBe(artifactEvent);
+    expect(
+      selectLatestAgentUiProjectionEventForEvidence(snapshot, "evidence-a"),
+    ).toBe(evidenceEvent);
+  });
+
+  it("应支持清空全局 Agent UI projection events", () => {
+    const store = createConversationProjectionStore();
+    store.recordAgentUiProjectionEvents([
+      {
+        type: "text.delta",
+        sourceType: "text_delta",
+        sessionId: "session-a",
+        owner: "model",
+        scope: "part",
+        phase: "producing",
+      },
+    ]);
+    expect(selectAgentUiProjectionEvents(store.getSnapshot())).toHaveLength(1);
+    store.clearAgentUiProjectionEvents();
+    expect(selectAgentUiProjectionEvents(store.getSnapshot())).toEqual([]);
+
+    clearAgentUiProjectionEvents();
+  });
+
+  it("应支持按 session/thread/run 等 scope 读取 Agent UI projection events", () => {
+    const store = createConversationProjectionStore();
+    const [first, second, third] = store.recordAgentUiProjectionEvents([
+      {
+        type: "task.changed",
+        sourceType: "queue_added",
+        sequence: 1,
+        sessionId: "session-a",
+        threadId: "thread-a",
+        runId: "run-a",
+        taskId: "task-a",
+        owner: "task",
+        scope: "task",
+        phase: "submitted",
+        surface: "task_capsule",
+      },
+      {
+        type: "evidence.changed",
+        sourceType: "evidence_projection",
+        sequence: 2,
+        sessionId: "session-a",
+        threadId: "thread-a",
+        runId: "run-a",
+        evidenceId: "evidence-a",
+        owner: "evidence",
+        scope: "evidence",
+        phase: "completed",
+        surface: "timeline_evidence",
+      },
+      {
+        type: "diagnostic.changed",
+        sourceType: "runtime_status",
+        sequence: 3,
+        sessionId: "session-b",
+        threadId: "thread-b",
+        runId: "run-b",
+        owner: "diagnostics",
+        scope: "run",
+        phase: "routing",
+        surface: "diagnostics",
+      },
+    ]);
+
+    const snapshot = store.getSnapshot();
+    expect(
+      selectAgentUiProjectionEventsForScope(snapshot, {
+        sessionId: "session-a",
+      }),
+    ).toEqual([first, second]);
+    expect(
+      selectAgentUiProjectionEventsByTypeForScope(
+        snapshot,
+        "evidence.changed",
+        { sessionId: "session-a" },
+      ),
+    ).toEqual([second]);
+    expect(
+      selectAgentUiProjectionEventsBySurface(snapshot, "task_capsule"),
+    ).toEqual([first]);
+    expect(
+      selectAgentUiProjectionEventsBySurfaceForScope(
+        snapshot,
+        "timeline_evidence",
+        { sessionId: "session-a" },
+      ),
+    ).toEqual([second]);
+    expect(
+      selectLatestAgentUiProjectionEventForScope(snapshot, {
+        threadId: "thread-a",
+        runId: "run-a",
+      }),
+    ).toBe(second);
+    expect(
+      selectLatestAgentUiProjectionEventForScope(snapshot, {
+        sessionId: "session-b",
+      }),
+    ).toBe(third);
   });
 });

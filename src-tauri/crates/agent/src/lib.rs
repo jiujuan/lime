@@ -75,7 +75,8 @@ pub use prompt::{
 pub use protocol::{
     AgentActionRequiredScope, AgentArtifactSignal, AgentEvent, AgentImageAttachment, AgentMessage,
     AgentMessageContent, AgentOp, AgentRuntimeStatus, AgentTokenUsage, AgentToolImage,
-    AgentToolResult, AgentUserInputOp, AgentUserPreferences,
+    AgentToolProgressPayload, AgentToolResult, AgentUserInputOp, AgentUserPreferences,
+    TextDeltaBatchBoundary,
 };
 pub use protocol_projection::{project_item_runtime, project_runtime_event, project_turn_runtime};
 pub use provider_continuation_state::{

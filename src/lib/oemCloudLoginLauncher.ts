@@ -6,6 +6,7 @@ import {
   createClientDesktopAuthSession,
   pollClientDesktopAuthSession,
 } from "@/lib/api/oemCloudControlPlane";
+import { openExternalUrlWithSystemBrowser } from "@/lib/api/externalUrl";
 import {
   resolveOemCloudRuntimeContext,
   type OemCloudRuntimeContext,
@@ -41,6 +42,7 @@ export interface OpenExternalUrlOptions {
 
 export interface OemCloudLoginLaunchOptions {
   browserTarget?: ExternalBrowserOpenTarget | null;
+  waitForCompletion?: boolean;
 }
 
 function buildOpenExternalUrlError(error: unknown) {
@@ -127,20 +129,29 @@ export async function openExternalUrl(
 ): Promise<void> {
   const shouldUseTauriShell =
     hasTauriInvokeCapability() || hasTauriRuntimeMarkers();
-  try {
-    const { open } = await import("@tauri-apps/plugin-shell");
-    await open(url);
-    options.browserTarget?.close();
-    return;
-  } catch (error) {
-    if (shouldUseTauriShell) {
+  if (shouldUseTauriShell) {
+    let nativeOpenError: unknown = null;
+    try {
+      await openExternalUrlWithSystemBrowser(url);
       options.browserTarget?.close();
-      throw buildOpenExternalUrlError(error);
+      return;
+    } catch (error) {
+      nativeOpenError = error;
     }
 
-    if (typeof window === "undefined") {
-      throw new Error("当前环境不支持打开外部浏览器");
+    try {
+      const { open } = await import("@tauri-apps/plugin-shell");
+      await open(url);
+      options.browserTarget?.close();
+      return;
+    } catch (error) {
+      options.browserTarget?.close();
+      throw buildOpenExternalUrlError(nativeOpenError ?? error);
     }
+  }
+
+  if (typeof window === "undefined") {
+    throw new Error("当前环境不支持打开外部浏览器");
   }
 
   if (options.browserTarget) {
@@ -433,9 +444,36 @@ function isGoogleOauthCompletionForRuntime(
   const sessionTenantSlug = storedSession?.session.tenant.slug?.trim();
   return Boolean(
     sessionTenantId === callbackTenantId &&
-    (sessionTenantId === runtimeTenantId ||
-      sessionTenantSlug === runtimeTenantId),
+      (sessionTenantId === runtimeTenantId ||
+        sessionTenantSlug === runtimeTenantId),
   );
+}
+
+function monitorGoogleDesktopAuthCompletion(
+  runtime: OemCloudRuntimeContext,
+  authSession: OemCloudDesktopAuthSessionStartResponse,
+  oauthCompletedPromise: Promise<void>,
+  isCompleted: () => boolean,
+  disposeOauthCompletedListener: () => void,
+) {
+  const pollPromise = pollGoogleDesktopAuthSession(
+    runtime,
+    authSession,
+    isCompleted,
+  );
+
+  return Promise.race([
+    oauthCompletedPromise.then(() => "event" as const),
+    pollPromise.then(() => "poll" as const),
+  ])
+    .then((winner) => {
+      if (winner === "event") {
+        void pollPromise.catch(() => undefined);
+      }
+    })
+    .finally(() => {
+      disposeOauthCompletedListener();
+    });
 }
 
 export async function openConfiguredOemCloudLoginUrl(
@@ -492,24 +530,20 @@ export async function startOemCloudLogin(
     browserTarget: options.browserTarget,
   });
 
-  const pollPromise = pollGoogleDesktopAuthSession(
+  const completionPromise = monitorGoogleDesktopAuthCompletion(
     runtime,
     authSession,
+    oauthCompletedPromise,
     () => oauthCompleted,
+    disposeOauthCompletedListener,
   );
 
-  let winner: "event" | "poll";
-  try {
-    winner = await Promise.race([
-      oauthCompletedPromise.then(() => "event" as const),
-      pollPromise.then(() => "poll" as const),
-    ]);
-  } finally {
-    disposeOauthCompletedListener();
-  }
-
-  if (winner === "event") {
-    void pollPromise.catch(() => undefined);
+  if (options.waitForCompletion ?? true) {
+    await completionPromise;
+  } else {
+    void completionPromise.catch((error) => {
+      console.warn("Google 桌面登录后台同步失败:", error);
+    });
   }
 
   return {

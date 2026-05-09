@@ -103,6 +103,7 @@ import {
   resolveLastAssistantMessage,
 } from "../projection/messageTimelineRenderProjection";
 import {
+  buildHistoricalHydrationProjectionEvents,
   buildHistoricalMarkdownHydrationIndexByMessageId,
   buildHistoricalMarkdownHydrationTargets,
   countDeferredHistoricalContentParts,
@@ -110,6 +111,11 @@ import {
   hasStructuredHistoricalContentHint,
   shouldDeferHistoricalAssistantMessageDetails as shouldDeferHistoricalAssistantMessageDetailsProjection,
 } from "../projection/historicalMessageHydrationProjection";
+import { recordAgentUiProjectionEvents } from "../projection/conversationProjectionStore";
+import {
+  type AgentStreamTextOverlaySnapshot,
+  useAgentStreamTextOverlay,
+} from "../hooks/agentStreamTextOverlayStore";
 
 interface MessageListProps {
   sessionId?: string | null;
@@ -234,6 +240,7 @@ const MESSAGE_LIST_COMPACT_HISTORICAL_ASSISTANT_THRESHOLD = 900;
 const MESSAGE_LIST_COMPACT_HISTORICAL_ASSISTANT_PREVIEW_CHARS = 900;
 const MESSAGE_LIST_LONG_HISTORICAL_MESSAGE_THRESHOLD = 24_000;
 const MESSAGE_LIST_LONG_HISTORICAL_MESSAGE_PREVIEW_CHARS = 2_000;
+const MESSAGE_LIST_PLAIN_ANSWER_REASONING_SUPPRESS_MAX_CHARS = 80;
 const MESSAGE_LIST_RESTORED_MARKDOWN_HYDRATION_INITIAL_COUNT = 2;
 const MESSAGE_LIST_RESTORED_MARKDOWN_HYDRATION_BATCH_SIZE = 2;
 const MESSAGE_LIST_RESTORED_MARKDOWN_HYDRATION_DELAY_MS = 140;
@@ -555,23 +562,32 @@ function measureMessageListComputation<T>(
 }
 
 const AssistantFirstTokenPlaceholder: React.FC<{
-  status: AgentRuntimeStatus;
+  status?: AgentRuntimeStatus | null;
 }> = ({ status }) => {
-  const title = truncateRuntimeStatusText(status.title || "正在准备处理", 48);
+  const rawTitle = truncateRuntimeStatusText(
+    status?.title || "已提交请求",
+    48,
+  );
+  const title =
+    status?.phase === "failed" || status?.phase === "cancelled"
+      ? rawTitle
+      : "思考中";
   const detail =
-    truncateRuntimeStatusText(status.detail, 120) ||
-    "已提交请求，等待首个响应。";
+    [rawTitle !== title ? rawTitle : null, status?.detail]
+      .map((part) => (part ? truncateRuntimeStatusText(part, 120) : null))
+      .filter(Boolean)
+      .join(" · ") || "已提交请求，等待首个响应。";
 
   return (
     <div
       data-testid="assistant-first-token-placeholder"
-      className="inline-flex max-w-full items-start gap-2 rounded-2xl border border-emerald-200/70 bg-emerald-50/70 px-3 py-2 text-sm text-emerald-900"
+      className="inline-flex max-w-full items-start gap-2 rounded-2xl border border-sky-200/80 bg-sky-50 px-3 py-2 text-sm text-sky-900 shadow-sm shadow-sky-950/5"
       aria-live="polite"
     >
-      <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-emerald-700" />
+      <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-sky-700" />
       <span className="min-w-0">
         <span className="block font-medium leading-5">{title}</span>
-        <span className="mt-0.5 block text-xs leading-5 text-emerald-700/80">
+        <span className="mt-0.5 block text-xs leading-5 text-sky-700/80">
           {detail}
         </span>
       </span>
@@ -646,6 +662,10 @@ function shouldRenderConversationTimelineItem(
     hasInlineRuntimeStatus?: boolean;
   },
 ): boolean {
+  if (item.type === "user_message" || item.type === "agent_message") {
+    return false;
+  }
+
   if (item.type !== "turn_summary") {
     return true;
   }
@@ -689,6 +709,78 @@ function hasInlineThinkingContent(message: Message): boolean {
         (part) => part.type === "thinking" && part.text.trim().length > 0,
       ),
     )
+  );
+}
+
+function hasInternalRoutingSummary(items: AgentThreadItem[]): boolean {
+  return items.some(
+    (item) =>
+      item.type === "turn_summary" &&
+      isInternalRoutingTurnSummaryText(item.text),
+  );
+}
+
+function hasSubstantiveProcessTimelineItem(
+  items: AgentThreadItem[],
+): boolean {
+  return items.some((item) => {
+    switch (item.type) {
+      case "user_message":
+      case "agent_message":
+      case "turn_summary":
+      case "reasoning":
+        return false;
+      default:
+        return true;
+    }
+  });
+}
+
+function hasNonTextInlineProcessPart(message: Message): boolean {
+  return Boolean(
+    message.contentParts?.some(
+      (part) => part.type !== "text" && part.type !== "thinking",
+    ),
+  );
+}
+
+function shouldSuppressAmbientPlainAnswerReasoning(params: {
+  item: AgentThreadItem;
+  timelineItems: AgentThreadItem[];
+  turn: AgentThreadTurn;
+  message: Message;
+  displayContent: string;
+}): boolean {
+  if (
+    params.item.type !== "reasoning" ||
+    params.item.status !== "completed" ||
+    params.turn.status !== "completed"
+  ) {
+    return false;
+  }
+
+  if (
+    params.message.isThinking ||
+    hasInlineThinkingContent(params.message) ||
+    hasNonTextInlineProcessPart(params.message) ||
+    (params.message.toolCalls || []).length > 0 ||
+    (params.message.actionRequests || []).length > 0 ||
+    !params.displayContent.trim()
+  ) {
+    return false;
+  }
+
+  const displayTextLength = Array.from(params.displayContent.trim()).length;
+  if (
+    displayTextLength >
+    MESSAGE_LIST_PLAIN_ANSWER_REASONING_SUPPRESS_MAX_CHARS
+  ) {
+    return false;
+  }
+
+  return (
+    hasInternalRoutingSummary(params.timelineItems) &&
+    !hasSubstantiveProcessTimelineItem(params.timelineItems)
   );
 }
 
@@ -840,6 +932,71 @@ function filterConversationDisplayContentParts(
   });
   return filtered.length > 0 ? filtered : undefined;
 }
+
+function mergeStreamingOverlayContentParts(
+  parts: Message["contentParts"] | undefined,
+  overlayContent: string | null,
+): Message["contentParts"] | undefined {
+  if (!overlayContent) {
+    return parts;
+  }
+
+  const textPart: NonNullable<Message["contentParts"]>[number] = {
+    type: "text",
+    text: overlayContent,
+  };
+  if (!parts?.length) {
+    return [textPart];
+  }
+
+  const firstTextIndex = parts.findIndex((part) => part.type === "text");
+  if (firstTextIndex < 0) {
+    return [...parts, textPart];
+  }
+
+  return parts.flatMap<NonNullable<Message["contentParts"]>[number]>(
+    (part, index) => {
+      if (part.type !== "text") {
+        return [part];
+      }
+      return index === firstTextIndex ? [textPart] : [];
+    },
+  );
+}
+
+interface MessageListItemWithStreamingOverlayProps {
+  msg: Message;
+  group: ReturnType<typeof buildMessageRenderGroupsProjection>[number];
+  onOverlayUpdate?: () => void;
+  render: (
+    msg: Message,
+    group: ReturnType<typeof buildMessageRenderGroupsProjection>[number],
+    overlay: AgentStreamTextOverlaySnapshot | null,
+  ) => React.ReactNode;
+}
+
+const MessageListItemWithStreamingOverlay = React.memo(
+  ({
+    msg,
+    group,
+    onOverlayUpdate,
+    render,
+  }: MessageListItemWithStreamingOverlayProps) => {
+    const overlay = useAgentStreamTextOverlay(
+      msg.role === "assistant" ? msg.id : null,
+    );
+    useEffect(() => {
+      if (!overlay?.content) {
+        return;
+      }
+      onOverlayUpdate?.();
+    }, [onOverlayUpdate, overlay?.content, overlay?.updatedAt]);
+
+    return <>{render(msg, group, overlay)}</>;
+  },
+);
+MessageListItemWithStreamingOverlay.displayName =
+  "MessageListItemWithStreamingOverlay";
 
 const MessageListInner: React.FC<MessageListProps> = ({
   sessionId = null,
@@ -1526,6 +1683,39 @@ const MessageListInner: React.FC<MessageListProps> = ({
     };
 
     recordAgentUiPerformanceMetric("messageList.commit", metricContext);
+    recordAgentUiProjectionEvents(
+      buildHistoricalHydrationProjectionEvents(
+        {
+          sessionId,
+          threadId: threadRead?.thread_id ?? null,
+          recordReason: metricContext.recordReason,
+          isRestoringSession,
+          isRestoredHistoryWindow,
+          isHistoricalTimelineReady,
+          canBuildHistoricalTimeline,
+          shouldDeferHistoricalTimeline,
+          shouldDeferThreadItemsScan,
+          shouldDeferTailRuntimeStatusLine,
+          hiddenHistoryCount,
+          persistedHiddenHistoryCount,
+          targetCount: historicalMarkdownHydrationTargets.length,
+          hydratedHistoricalMarkdownCount,
+          historicalMarkdownDeferredCount,
+          historicalContentPartsDeferredCount,
+          messagesCount: messages.length,
+          visibleMessagesCount: visibleMessages.length,
+          renderedMessagesCount: renderedMessages.length,
+          renderedTurnsCount: renderedTurns.length,
+          threadItemsCount: renderedThreadItems.length,
+          messageListComputeMs: messageListMeasuredComputeMs,
+        },
+        {
+          timestamp: new Date().toISOString(),
+          sessionId,
+          threadId: threadRead?.thread_id ?? null,
+        },
+      ),
+    );
 
     if (typeof window === "undefined" || !window.requestAnimationFrame) {
       recordAgentUiPerformanceMetric("messageList.paint", metricContext);
@@ -1550,6 +1740,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
     hiddenHistoryCount,
     historicalContentPartsDeferredCount,
     historicalContentPartsDeferredMeasurement.durationMs,
+    historicalMarkdownHydrationTargets.length,
     historicalMarkdownHydrationTargetsMeasurement.durationMs,
     hydratedHistoricalMarkdownCount,
     historicalMarkdownDeferredCount,
@@ -1570,6 +1761,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
     shouldDeferHistoricalTimeline,
     shouldDeferTailRuntimeStatusLine,
     shouldDeferThreadItemsScan,
+    threadRead?.thread_id,
     timelineByMessageIdMeasurement.durationMs,
     turns.length,
     visibleMessages.length,
@@ -1733,19 +1925,44 @@ const MessageListInner: React.FC<MessageListProps> = ({
     }
   };
 
+  const handleStreamingOverlayUpdate = useCallback(() => {
+    if (!shouldAutoScroll || isUserScrolling || !scrollRef.current) {
+      return;
+    }
+
+    const scrollToTail = () => {
+      scrollRef.current?.scrollIntoView({
+        behavior: "auto",
+        block: "end",
+      });
+    };
+
+    if (typeof window !== "undefined" && window.requestAnimationFrame) {
+      window.requestAnimationFrame(scrollToTail);
+      return;
+    }
+
+    scrollToTail();
+  }, [isUserScrolling, shouldAutoScroll]);
+
   const renderMessageItem = (
     msg: Message,
     group: (typeof renderGroups)[number],
+    streamingTextOverlay: AgentStreamTextOverlaySnapshot | null = null,
   ) => {
     const hasImages = Array.isArray(msg.images) && msg.images.length > 0;
     const shouldSuppressImageProcessFlow = Boolean(msg.imageWorkbenchPreview);
-    const displayContent = sanitizeMessageTextForDisplay(msg.content || "", {
+    const rawDisplayContent =
+      msg.role === "assistant" && streamingTextOverlay?.content
+        ? streamingTextOverlay.content
+        : msg.content || "";
+    const displayContent = sanitizeMessageTextForDisplay(rawDisplayContent, {
       role: msg.role,
       hasImages,
     });
     const shouldDeferMessageDetails =
       shouldDeferHistoricalAssistantMessageDetails(msg);
-    const rawRuntimePeerContent = (msg.content || "").trim();
+    const rawRuntimePeerContent = rawDisplayContent.trim();
     const shouldRenderRuntimePeerCards =
       rawRuntimePeerContent.length > 0 &&
       isPureRuntimePeerMessageText(rawRuntimePeerContent);
@@ -1775,10 +1992,13 @@ const MessageListInner: React.FC<MessageListProps> = ({
       );
     const conversationContentParts =
       msg.role === "assistant"
-        ? filterConversationDisplayContentParts(displayContentParts, {
-            includeProcessFlow: includeInlineProcessFlow,
-            preserveToolUseParts: !hasProcessTimelineItems,
-          })
+        ? mergeStreamingOverlayContentParts(
+            filterConversationDisplayContentParts(displayContentParts, {
+              includeProcessFlow: includeInlineProcessFlow,
+              preserveToolUseParts: !hasProcessTimelineItems,
+            }),
+            streamingTextOverlay?.content || null,
+          )
         : displayContentParts;
     const conversationThinkingContent =
       msg.role === "assistant" && includeInlineProcessFlow
@@ -1794,6 +2014,11 @@ const MessageListInner: React.FC<MessageListProps> = ({
       toolCalls: conversationToolCalls,
       actionRequests: msg.actionRequests,
     });
+    const shouldLetInlineProcessOwnActiveTurn =
+      timeline !== null &&
+      timeline.turn.status !== "completed" &&
+      includeInlineProcessFlow &&
+      inlineProcessCoverage.hasInlineProcessEntries;
     const timelineConversationItems = timeline
       ? timeline.items.filter((item) =>
           shouldRenderConversationTimelineItem(item, timeline.items, {
@@ -1810,11 +2035,27 @@ const MessageListInner: React.FC<MessageListProps> = ({
     );
     const primaryTimelineItems = timeline
       ? timeline.items.filter((item) => {
+          if (shouldLetInlineProcessOwnActiveTurn) {
+            return false;
+          }
+
           if (!timelineConversationItemIds?.has(item.id)) {
             return false;
           }
 
           if (isDeferredTimelineItem(item)) {
+            return false;
+          }
+
+          if (
+            shouldSuppressAmbientPlainAnswerReasoning({
+              item,
+              timelineItems: timeline.items,
+              turn: timeline.turn,
+              message: msg,
+              displayContent,
+            })
+          ) {
             return false;
           }
 
@@ -1928,7 +2169,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
       shouldCollapseLongHistoricalMessage ||
       shouldFlattenHistoricalAssistantContent
         ? rendererContent
-        : msg.content || "";
+        : rawDisplayContent;
     const rendererContentParts =
       shouldCollapseLongHistoricalMessage ||
       shouldFlattenHistoricalAssistantContent
@@ -2023,7 +2264,6 @@ const MessageListInner: React.FC<MessageListProps> = ({
     const shouldRenderFirstTokenPlaceholder =
       msg.role === "assistant" &&
       msg.isThinking &&
-      Boolean(msg.runtimeStatus) &&
       !shouldRenderRuntimeStatusPill(msg.runtimeStatus) &&
       !hasVisibleAssistantText &&
       !conversationContentParts?.length &&
@@ -2199,7 +2439,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
                     ? null
                     : primaryTimelineNode}
 
-                  {shouldRenderFirstTokenPlaceholder && msg.runtimeStatus ? (
+                  {shouldRenderFirstTokenPlaceholder ? (
                     <AssistantFirstTokenPlaceholder
                       status={msg.runtimeStatus}
                     />
@@ -2766,7 +3006,15 @@ const MessageListInner: React.FC<MessageListProps> = ({
               className="py-2"
             >
               <div className="space-y-1">
-                {group.messages.map((msg) => renderMessageItem(msg, group))}
+                {group.messages.map((msg, messageIndex) => (
+                  <MessageListItemWithStreamingOverlay
+                    key={msg.id ?? `${group.id}:${messageIndex}`}
+                    msg={msg}
+                    group={group}
+                    onOverlayUpdate={handleStreamingOverlayUpdate}
+                    render={renderMessageItem}
+                  />
+                ))}
               </div>
             </section>
           );

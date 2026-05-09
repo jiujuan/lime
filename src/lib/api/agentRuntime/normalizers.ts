@@ -30,6 +30,8 @@ import type {
   AgentRuntimeReviewDecisionRiskLevel,
   AgentRuntimeReviewDecisionStatus,
   AgentRuntimeReviewDecisionTemplate,
+  AgentRuntimeRequestedFixExecutionResult,
+  AgentRuntimeRequestedFixExecutionStatus,
   AgentRuntimeThreadReadModel,
   AsterSubagentParentContext,
   AsterSubagentSessionInfo,
@@ -486,11 +488,7 @@ function normalizeTaskIndex(
       "limitEventKinds",
       "limit_event_kinds",
     ),
-    quota_low_count: readNumberField(
-      value,
-      "quotaLowCount",
-      "quota_low_count",
-    ),
+    quota_low_count: readNumberField(value, "quotaLowCount", "quota_low_count"),
     items: rawItems
       .map((entry: unknown) => normalizeTaskIndexItem(entry))
       .filter(Boolean) as AgentRuntimeEvidenceTaskIndexItem[],
@@ -929,6 +927,76 @@ function normalizeEvidenceObservabilityVerificationOutcomes(value: unknown) {
   };
 }
 
+function normalizeRequestedFixExecutionStatus(
+  value: string | undefined,
+): AgentRuntimeRequestedFixExecutionStatus {
+  switch (value) {
+    case "assigned":
+    case "running":
+    case "completed":
+    case "failed":
+    case "blocked":
+    case "cancelled":
+      return value;
+    default:
+      return "pending";
+  }
+}
+
+function normalizeRequestedFixExecutionResult(
+  value: unknown,
+): AgentRuntimeRequestedFixExecutionResult | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    requested_fix: readOptionalStringField(
+      value,
+      "requestedFix",
+      "requested_fix",
+    ),
+    requested_fix_index: readOptionalNumberField(
+      value,
+      "requestedFixIndex",
+      "requested_fix_index",
+    ),
+    execution_status: normalizeRequestedFixExecutionStatus(
+      readOptionalStringField(value, "executionStatus", "execution_status"),
+    ),
+    regression_outcome: normalizeEvidenceVerificationOutcome(
+      readOptionalStringField(value, "regressionOutcome", "regression_outcome"),
+    ),
+    summary_preview: readOptionalStringField(
+      value,
+      "summaryPreview",
+      "summary_preview",
+    ),
+    result_ref: readOptionalStringField(value, "resultRef", "result_ref"),
+    artifact_ids: readStringListField(value, "artifactIds", "artifact_ids"),
+    artifact_paths: readStringListField(
+      value,
+      "artifactPaths",
+      "artifact_paths",
+    ),
+  };
+}
+
+function normalizeRequestedFixExecutionResults(
+  value: unknown,
+): AgentRuntimeRequestedFixExecutionResult[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry) => normalizeRequestedFixExecutionResult(entry))
+    .filter(
+      (entry): entry is AgentRuntimeRequestedFixExecutionResult =>
+        entry !== null,
+    );
+}
+
 function normalizeEvidenceVerificationSummary(value: unknown) {
   if (!isRecord(value)) {
     return undefined;
@@ -961,6 +1029,10 @@ function normalizeEvidenceVerificationSummary(value: unknown) {
       value,
       "focusVerificationRecoveredOutcomes",
       "focus_verification_recovered_outcomes",
+    ),
+    requested_fix_execution_results: normalizeRequestedFixExecutionResults(
+      value.requestedFixExecutionResults ??
+        value.requested_fix_execution_results,
     ),
   };
 }

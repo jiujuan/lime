@@ -14,6 +14,11 @@ import { useWorkspaceSendActions } from "./useWorkspaceSendActions";
 import type { TeamWorkspaceRuntimeFormationState } from "../teamWorkspaceRuntime";
 import { listSlashEntryUsage } from "../skill-selection/slashEntryUsage";
 import { saveSkillCatalog } from "@/lib/api/skillCatalog";
+import {
+  clearAgentUiProjectionEvents,
+  conversationProjectionStore,
+  selectAgentUiProjectionEventsBySurface,
+} from "../projection/conversationProjectionStore";
 
 const mockPreheatBrowserAssistInBackground = vi.hoisted(() => vi.fn());
 const mockGetSkillCatalog = vi.hoisted(() => vi.fn());
@@ -523,6 +528,7 @@ describe("useWorkspaceSendActions", () => {
 
     vi.clearAllMocks();
     window.localStorage.clear();
+    clearAgentUiProjectionEvents();
     mockResolveImageWorkbenchSkillRequest.mockReturnValue(null);
     mockEnsureSessionForCommandMetadata.mockResolvedValue(null);
     mockGetSkillCatalog.mockResolvedValue({ entries: [] });
@@ -578,6 +584,51 @@ describe("useWorkspaceSendActions", () => {
         },
       });
     } finally {
+      harness.unmount();
+    }
+  });
+
+  it("首轮初始预览绘制不应阻塞消息提交", async () => {
+    const originalRequestAnimationFrameDescriptor = Object.getOwnPropertyDescriptor(
+      window,
+      "requestAnimationFrame",
+    );
+    const requestAnimationFrameSpy = vi.fn(
+      (_callback: Parameters<typeof window.requestAnimationFrame>[0]) => 1,
+    );
+    Object.defineProperty(window, "requestAnimationFrame", {
+      configurable: true,
+      writable: true,
+      value: requestAnimationFrameSpy,
+    });
+    const harness = mountHook();
+
+    try {
+      let result: boolean | "timeout" = "timeout";
+      await act(async () => {
+        result = await Promise.race([
+          harness
+            .getValue()
+            .handleSend([], false, false, "只回答一个字：好", "react"),
+          new Promise<"timeout">((resolve) =>
+            setTimeout(() => resolve("timeout"), 50),
+          ),
+        ]);
+      });
+
+      expect(result).toBe(true);
+      expect(requestAnimationFrameSpy).toHaveBeenCalledTimes(1);
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+    } finally {
+      if (originalRequestAnimationFrameDescriptor) {
+        Object.defineProperty(
+          window,
+          "requestAnimationFrame",
+          originalRequestAnimationFrameDescriptor,
+        );
+      } else {
+        Reflect.deleteProperty(window, "requestAnimationFrame");
+      }
       harness.unmount();
     }
   });
@@ -1003,6 +1054,21 @@ describe("useWorkspaceSendActions", () => {
           title: "任务分工已准备好",
         }),
       });
+      expect(
+        selectAgentUiProjectionEventsBySurface(
+          conversationProjectionStore.getSnapshot(),
+          "work_board",
+        ),
+      ).toEqual([
+        expect.objectContaining({
+          sourceType: "team_formation_projection",
+          sessionId: "session-1",
+          taskId: "runtime-team-preview-1:researcher",
+          workItemId: "runtime-team-preview-1:researcher",
+          control: "assign",
+          runtimeEntity: "work_item",
+        }),
+      ]);
     } finally {
       harness.unmount();
     }

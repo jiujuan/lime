@@ -331,5 +331,3 @@ export function useConfiguredProviders(
     loading: apiKeyLoading,
   };
 }
-
-export default useConfiguredProviders;

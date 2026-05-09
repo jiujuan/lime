@@ -481,6 +481,8 @@ const CODE_LANGUAGE_ALIASES: Record<string, string> = {
   yml: "yaml",
   zsh: "bash",
 };
+const COMPACT_PIPE_TABLE_SEPARATOR_PATTERN = /\|\|[ \t:|-]{3,}\|\|/;
+const MARKDOWN_FENCE_LINE_PATTERN = /^\s*(`{3,}|~{3,})/;
 
 interface MarkdownRendererProps {
   content: string;
@@ -557,6 +559,101 @@ function resolveCodePresentationMode(
   }
 
   return "syntax";
+}
+
+function parsePipeTableCells(row: string): string[] {
+  const trimmed = row.trim();
+  if (!trimmed.includes("|")) {
+    return [];
+  }
+
+  const withoutLeadingPipe = trimmed.startsWith("|")
+    ? trimmed.slice(1)
+    : trimmed;
+  const withoutEdgePipes = withoutLeadingPipe.endsWith("|")
+    ? withoutLeadingPipe.slice(0, -1)
+    : withoutLeadingPipe;
+
+  return withoutEdgePipes.split("|").map((cell) => cell.trim());
+}
+
+function formatPipeTableRow(cells: string[]): string {
+  return `| ${cells.join(" | ")} |`;
+}
+
+function normalizeCellsForTableWidth(cells: string[], width: number): string[] {
+  if (cells.length === width) {
+    return cells;
+  }
+
+  if (cells.length > width) {
+    return [...cells.slice(0, width - 1), cells.slice(width - 1).join(" | ")];
+  }
+
+  return [...cells, ...Array.from({ length: width - cells.length }, () => "")];
+}
+
+function normalizeCompactPipeTableLine(line: string): string {
+  const separatorMatch = COMPACT_PIPE_TABLE_SEPARATOR_PATTERN.exec(line);
+  if (!separatorMatch || typeof separatorMatch.index !== "number") {
+    return line;
+  }
+
+  const leadingWhitespace = line.match(/^\s*/)?.[0] ?? "";
+  const headerSource = line.slice(0, separatorMatch.index).trim();
+  const headerCells = parsePipeTableCells(headerSource);
+  const nonEmptyHeaderCells = headerCells.filter(Boolean);
+  if (headerCells.length < 2 || nonEmptyHeaderCells.length < 2) {
+    return line;
+  }
+
+  const rowSource = line
+    .slice(separatorMatch.index + separatorMatch[0].length)
+    .trim();
+  const bodyRows = rowSource
+    .split(/\s*\|\|\s*/)
+    .map(parsePipeTableCells)
+    .filter((cells) => cells.filter(Boolean).length >= 2)
+    .map((cells) => normalizeCellsForTableWidth(cells, headerCells.length));
+
+  if (bodyRows.length === 0) {
+    return line;
+  }
+
+  const tableLines = [
+    formatPipeTableRow(headerCells),
+    formatPipeTableRow(headerCells.map(() => "---")),
+    ...bodyRows.map(formatPipeTableRow),
+  ];
+
+  return tableLines
+    .map((tableLine) => `${leadingWhitespace}${tableLine}`)
+    .join("\n");
+}
+
+function normalizeCompactPipeTables(markdown: string): string {
+  if (!COMPACT_PIPE_TABLE_SEPARATOR_PATTERN.test(markdown)) {
+    return markdown;
+  }
+
+  let activeFenceMarker: "`" | "~" | null = null;
+  return markdown
+    .split("\n")
+    .map((line) => {
+      const fenceMatch = MARKDOWN_FENCE_LINE_PATTERN.exec(line);
+      if (fenceMatch) {
+        const marker = fenceMatch[1]?.startsWith("~") ? "~" : "`";
+        activeFenceMarker = activeFenceMarker === marker ? null : marker;
+        return line;
+      }
+
+      if (activeFenceMarker) {
+        return line;
+      }
+
+      return normalizeCompactPipeTableLine(line);
+    })
+    .join("\n");
 }
 
 export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
@@ -791,7 +888,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
         index++;
       }
 
-      return { text: result, images };
+      return { text: normalizeCompactPipeTables(result), images };
     }, [renderContent]);
 
     // 渲染 base64 图片

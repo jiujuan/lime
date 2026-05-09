@@ -1473,6 +1473,21 @@ describe("Agent API 治理护栏", () => {
         focusVerificationRecoveredOutcomes: [
           "Artifact 校验已恢复 1 个产物，fallback 0 次。",
         ],
+        requestedFixExecutionResults: [
+          {
+            requestedFix:
+              "复查 Artifact 校验相关产物，确认 issues / repaired / fallback 状态与最终结论一致。",
+            requestedFixIndex: 2,
+            executionStatus: "completed",
+            regressionOutcome: "recovered",
+            summaryPreview: "已复查并重新导出 evidence pack。",
+            resultRef:
+              "agent-runtime://session/session-runtime-4b/thread/thread-runtime-4b/turn/turn-review/item/item-fix-2",
+            artifactPaths: [
+              ".lime/harness/sessions/session-runtime-4b/evidence/runtime.json",
+            ],
+          },
+        ],
       },
       decision: {
         decisionStatus: "pending_review",
@@ -1550,6 +1565,19 @@ describe("Agent API 治理护栏", () => {
         ],
         focus_verification_recovered_outcomes: [
           "Artifact 校验已恢复 1 个产物，fallback 0 次。",
+        ],
+        requested_fix_execution_results: [
+          expect.objectContaining({
+            requested_fix_index: 2,
+            execution_status: "completed",
+            regression_outcome: "recovered",
+            summary_preview: "已复查并重新导出 evidence pack。",
+            result_ref:
+              "agent-runtime://session/session-runtime-4b/thread/thread-runtime-4b/turn/turn-review/item/item-fix-2",
+            artifact_paths: [
+              ".lime/harness/sessions/session-runtime-4b/evidence/runtime.json",
+            ],
+          }),
         ],
       }),
       decision: expect.objectContaining({

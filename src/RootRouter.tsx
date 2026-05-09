@@ -21,6 +21,25 @@ const DesignCanvasSmokePage = lazy(() =>
   })),
 );
 
+const INDEX_ENTRY_PATH = "/index.html";
+const WINDOW_ROUTE_QUERY_PARAM = "lime_window";
+const BROWSER_CONNECTOR_GUIDE_ROUTE_ID = "browser-connector-guide";
+const BROWSER_CONNECTOR_GUIDE_PATH = "/browser-connector-guide";
+
+function getEffectivePathname(location: Location): string {
+  if (location.pathname !== INDEX_ENTRY_PATH) {
+    return location.pathname;
+  }
+
+  const params = new URLSearchParams(location.search);
+  const windowRoute = params.get(WINDOW_ROUTE_QUERY_PARAM);
+  if (windowRoute === BROWSER_CONNECTOR_GUIDE_ROUTE_ID) {
+    return BROWSER_CONNECTOR_GUIDE_PATH;
+  }
+
+  return location.pathname;
+}
+
 /**
  * 根据 URL 路径渲染对应的组件
  *
@@ -32,7 +51,7 @@ const DesignCanvasSmokePage = lazy(() =>
  * - 其他: 主应用
  */
 export function RootRouter() {
-  const pathname = window.location.pathname;
+  const pathname = getEffectivePathname(window.location);
 
   useEffect(() => {
     if (typeof window === "undefined") {

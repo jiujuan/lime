@@ -30,7 +30,7 @@ import { isOemManagedHubProvider } from "@/lib/oemLimeHubProvider";
 // Hook 返回类型
 // ============================================================================
 
-export interface UseApiKeyProviderReturn {
+interface UseApiKeyProviderReturn {
   /** 所有 Provider（包含 API Keys） */
   providers: ProviderWithKeysDisplay[];
   /** 当前选中的 Provider ID */

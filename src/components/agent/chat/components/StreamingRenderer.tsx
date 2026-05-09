@@ -7,7 +7,7 @@
 
 import React, { memo, useMemo, useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ExternalLink, FileText } from "lucide-react";
+import { ChevronDown, ExternalLink, FileText, Loader2 } from "lucide-react";
 import { useDebouncedValue } from "@/lib/artifact/hooks/useDebouncedValue";
 import { MarkdownRenderer, type MarkdownRenderMode } from "./MarkdownRenderer";
 import { A2UITaskCard, A2UITaskLoadingCard } from "./A2UITaskCard";
@@ -129,11 +129,12 @@ function resolveThinkingDisplayParts(
 
   const parsed = parseAIResponse(trimmed, false);
   if (!parsed.hasA2UI && !parsed.hasPending) {
-    const preview =
-      trimmed
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .find(Boolean) || "";
+    const preview = isStreaming
+      ? ""
+      : trimmed
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .find(Boolean) || "";
     return {
       statusLabel,
       body: trimmed,
@@ -161,6 +162,7 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
   isStreaming = false,
 }) => {
   const [expanded, setExpanded] = React.useState(defaultExpanded);
+  const previousDefaultExpandedRef = React.useRef(defaultExpanded);
   const thinkingDisplay = useMemo(
     () => resolveThinkingDisplayParts(content, isStreaming),
     [content, isStreaming],
@@ -168,8 +170,9 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
   const hasBody = thinkingDisplay.body.length > 0;
 
   React.useEffect(() => {
-    if (defaultExpanded) {
-      setExpanded(true);
+    if (previousDefaultExpandedRef.current !== defaultExpanded) {
+      previousDefaultExpandedRef.current = defaultExpanded;
+      setExpanded(defaultExpanded);
     }
   }, [defaultExpanded]);
 
@@ -177,7 +180,7 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
 
   return (
     <div
-      className={cn(grouped ? "flex items-start gap-2 py-1.5" : "py-1")}
+      className={cn(grouped ? "flex items-start gap-2 py-1.5" : "py-0.5")}
       data-testid="thinking-block"
       data-visual-style={grouped ? "grouped-inline" : "card"}
     >
@@ -191,7 +194,7 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
           "min-w-0 flex-1",
           grouped
             ? "rounded-none border-0 bg-transparent px-0 py-0"
-            : "rounded-[18px] border border-slate-200/90 bg-slate-50/80 px-4 py-3",
+            : "rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm shadow-slate-950/5",
         )}
         open={expanded}
         onToggle={(e) => setExpanded((e.target as HTMLDetailsElement).open)}
@@ -200,7 +203,7 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
           className={cn(
             "list-none select-none rounded-xl transition-colors",
             hasBody ? "cursor-pointer" : "cursor-default",
-            grouped && hasBody && "hover:bg-slate-50/80",
+            grouped && hasBody && "hover:bg-slate-50",
           )}
           onClick={(event) => {
             if (!hasBody) {
@@ -216,7 +219,7 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
                 "shrink-0 rounded-full",
                 grouped ? "mt-2 h-2 w-2" : "mt-1.5 h-2.5 w-2.5",
                 isStreaming
-                  ? "bg-amber-500 shadow-[0_0_0_4px_rgba(245,158,11,0.14)]"
+                  ? "animate-pulse bg-sky-500 shadow-[0_0_0_4px_rgba(14,165,233,0.14)]"
                   : "bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.14)]",
               )}
             />
@@ -779,6 +782,9 @@ function buildStreamingProcessSummary(entries: StreamingProcessEntry[]): {
     (entry): entry is Extract<StreamingProcessEntry, { kind: "tool" }> =>
       entry.kind === "tool",
   );
+  const thinkingCount = entries.filter(
+    (entry) => entry.kind === "thinking",
+  ).length;
   const batchDescriptor =
     toolEntries.length === entries.length
       ? summarizeStreamingToolBatch(toolEntries.map((entry) => entry.toolCall))
@@ -791,12 +797,25 @@ function buildStreamingProcessSummary(entries: StreamingProcessEntry[]): {
     };
   }
 
-  const toolCount = entries.filter((entry) => entry.kind === "tool").length;
+  const toolCount = toolEntries.length;
   const messageCount = entries.length - toolCount;
   const primarySummary = (() => {
+    if (thinkingCount > 0 && toolCount > 0) {
+      for (const entry of toolEntries) {
+        const narrative = resolveToolProcessNarrative(entry.toolCall);
+        if (narrative.preSummary || narrative.summary) {
+          return narrative.preSummary || narrative.summary;
+        }
+      }
+      return "正在处理过程步骤";
+    }
+
     for (const entry of entries) {
       if (entry.kind === "thinking") {
-        const preview = resolveThinkingDisplayParts(entry.text, false).preview;
+        const preview = resolveThinkingDisplayParts(
+          entry.text,
+          entry.defaultExpanded === true,
+        ).preview;
         if (preview) {
           return preview;
         }
@@ -823,8 +842,14 @@ function buildStreamingProcessSummary(entries: StreamingProcessEntry[]): {
   })();
 
   if (!primarySummary) {
-    const summaryParts = [`${toolCount} 个工具调用`];
-    if (messageCount > 0) {
+    const summaryParts: string[] = [];
+    if (thinkingCount > 0) {
+      summaryParts.push("思考中");
+    }
+    if (toolCount > 0) {
+      summaryParts.push(`${toolCount} 个工具调用`);
+    }
+    if (messageCount > thinkingCount) {
       summaryParts.push(`${messageCount} 条过程消息`);
     }
     return {
@@ -838,14 +863,22 @@ function buildStreamingProcessSummary(entries: StreamingProcessEntry[]): {
     return {
       summaryText: primarySummary,
       descriptor: null,
-      metaText: null,
+      metaText: thinkingCount > 1 ? `${thinkingCount} 条思路` : null,
     };
   }
 
   return {
     summaryText: primarySummary,
     descriptor: null,
-    metaText: entries.length > 1 ? `${toolCount} 个工具调用` : null,
+    metaText:
+      entries.length > 1
+        ? [
+            thinkingCount > 0 ? `${thinkingCount} 条思路` : null,
+            `${toolCount} 个工具调用`,
+          ]
+            .filter(Boolean)
+            .join("，")
+        : null,
   };
 }
 
@@ -869,16 +902,18 @@ const StreamingProcessGroup: React.FC<{
     grouped: boolean,
     groupMarker: string,
   ) => React.ReactNode;
-}> = ({ entries, defaultExpanded = true, renderEntry }) => {
+}> = ({ entries, defaultExpanded = false, renderEntry }) => {
   const [expanded, setExpanded] = React.useState(defaultExpanded);
+  const previousDefaultExpandedRef = React.useRef(defaultExpanded);
   const { summaryText, descriptor, metaText } = useMemo(
     () => buildStreamingProcessSummary(entries),
     [entries],
   );
 
   React.useEffect(() => {
-    if (defaultExpanded) {
-      setExpanded(true);
+    if (previousDefaultExpandedRef.current !== defaultExpanded) {
+      previousDefaultExpandedRef.current = defaultExpanded;
+      setExpanded(defaultExpanded);
     }
   }, [defaultExpanded]);
 
@@ -1232,29 +1267,75 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
       (part: WriteFileMessagePart, key: string) => {
         const fileContent =
           typeof part.content === "string" ? part.content : "";
+        const filePath = part.filePath || "文档.md";
+        const normalizedPath = filePath.replace(/\\/g, "/").trim();
+        const fileName =
+          normalizedPath.split("/").filter(Boolean).pop() || normalizedPath;
+        const previewText =
+          fileContent.trim().replace(/\s+/g, " ").slice(0, 160) ||
+          "正在准备文件内容，稍后会同步完整预览。";
+        const displayPreview =
+          previewText.length >= 160
+            ? `${previewText.slice(0, 159)}…`
+            : previewText;
+        const isPending = part.type === "pending_write_file" || isStreaming;
+
         return (
           <div
             key={key}
-            className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/70"
+            data-testid="streaming-write-file-card"
+            className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-left shadow-sm shadow-slate-950/5 transition hover:border-sky-200 hover:bg-sky-50/40"
             onClick={() =>
               part.filePath && onFileClick?.(part.filePath, fileContent)
             }
           >
-            <FileText className="h-4 w-4" />
-            <span>写入</span>
-            <span className="font-medium text-foreground">
-              {part.filePath || "文档.md"}
-            </span>
-            {part.filePath ? (
-              <ExternalLink className="ml-auto h-3.5 w-3.5 text-muted-foreground" />
-            ) : null}
-            {part.type === "pending_write_file" ? (
-              <span className="animate-pulse">...</span>
-            ) : null}
+            <div className="group flex w-full items-start gap-3 text-left">
+              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-600">
+                {isPending ? (
+                  <Loader2 className="h-[18px] w-[18px] animate-spin text-sky-600" />
+                ) : (
+                  <FileText className="h-[18px] w-[18px]" />
+                )}
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="min-w-0 flex-1 text-sm font-medium leading-6 text-slate-900">
+                    <span className="line-clamp-1 break-all">
+                      {isPending ? `正在生成 ${fileName}` : fileName}
+                    </span>
+                  </div>
+                  <span className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] leading-5 text-sky-700">
+                    {isPending ? "生成中" : "已写入"}
+                  </span>
+                </div>
+
+                <div className="mt-2 text-sm leading-6 text-slate-600">
+                  {displayPreview}
+                </div>
+
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span
+                    title={filePath}
+                    className="inline-flex max-w-full rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-mono text-[11px] text-slate-500"
+                  >
+                    <span className="truncate">
+                      {normalizedPath || fileName}
+                    </span>
+                  </span>
+                  {part.filePath ? (
+                    <span className="inline-flex items-center gap-1 text-xs text-slate-400 transition group-hover:text-sky-700">
+                      <span>在画布中打开</span>
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            </div>
           </div>
         );
       },
-      [onFileClick],
+      [isStreaming, onFileClick],
     );
 
     const renderActionRequestNode = React.useCallback(
@@ -1346,22 +1427,11 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
           (entry) => entry.kind === "tool",
         ).length;
         if (toolCount > 0 && entries.length > 1) {
-          const batchDescriptor = entries.every(
-            (entry) => entry.kind === "tool",
-          )
-            ? summarizeStreamingToolBatch(
-                entries.map(
-                  (entry) =>
-                    (entry as Extract<StreamingProcessEntry, { kind: "tool" }>)
-                      .toolCall,
-                ),
-              )
-            : null;
           return (
             <StreamingProcessGroup
               key={key}
               entries={entries}
-              defaultExpanded={!batchDescriptor}
+              defaultExpanded={isStreaming}
               renderEntry={renderProcessEntry}
             />
           );
@@ -1373,7 +1443,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
           </React.Fragment>
         ));
       },
-      [renderProcessEntry],
+      [isStreaming, renderProcessEntry],
     );
 
     const renderParsedResultParts = React.useCallback(
@@ -1603,8 +1673,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
             kind: "thinking",
             id: `thinking-${index}`,
             text: part.text,
-            defaultExpanded:
-              isStreaming && index === interleavedContentParts.length - 1,
+            defaultExpanded: isStreaming,
           });
           return;
         }
@@ -1709,5 +1778,3 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
 );
 
 StreamingRenderer.displayName = "StreamingRenderer";
-
-export default StreamingRenderer;

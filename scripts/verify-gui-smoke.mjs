@@ -46,6 +46,7 @@ const tauriCommand =
     : path.join(rootDir, "node_modules", ".bin", "tauri");
 
 const state = {
+  activeCommandPid: null,
   child: null,
   cleanedUp: false,
   tempConfigPath: null,
@@ -112,7 +113,9 @@ function listSqliteBuildOutputDirs(targetDir) {
         entry.isDirectory() && entry.name.startsWith("libsqlite3-sys-"),
     )
     .map((entry) => path.join(buildDir, entry.name, "out"))
-    .filter((outDir) => fs.existsSync(outDir) && fs.statSync(outDir).isDirectory())
+    .filter(
+      (outDir) => fs.existsSync(outDir) && fs.statSync(outDir).isDirectory(),
+    )
     .sort();
 }
 
@@ -169,6 +172,7 @@ const DEFAULTS = {
   cargoTargetDir: resolvePreferredCargoTargetDir(),
   intervalMs: 1_000,
   reuseRunning: false,
+  includeKnowledgeProductE2e: false,
   sampleProjectName: "Lime Smoke Workspace",
 };
 DEFAULTS.timeoutMs = resolveDefaultTimeoutMs(DEFAULTS.cargoTargetDir);
@@ -195,6 +199,7 @@ Lime GUI 冒烟入口
 用法:
   npm run verify:gui-smoke
   npm run verify:gui-smoke -- --reuse-running
+  npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
   npm run verify:gui-smoke -- --timeout-ms 600000
 
 选项:
@@ -206,6 +211,8 @@ Lime GUI 冒烟入口
   --sample-project-name <s>   workspace 路径校验使用的示例项目名
   --cargo-target-dir <dir>    指定 Cargo target 目录；默认优先复用 src-tauri/target，无锁时共享，否则回退独立 GUI smoke target
   --reuse-running             复用已启动的 headless Tauri，不主动拉起
+  --include-knowledge-product-e2e
+                             额外执行项目资料产品 E2E 闭环验收
   -h, --help                  显示帮助
 `);
 }
@@ -266,6 +273,11 @@ function parseArgs(argv) {
       continue;
     }
 
+    if (arg === "--include-knowledge-product-e2e") {
+      options.includeKnowledgeProductE2e = true;
+      continue;
+    }
+
     if (arg === "--help" || arg === "-h") {
       printHelp();
       process.exit(0);
@@ -318,7 +330,10 @@ function isTransientInvokeError(error) {
 }
 
 async function invokeBridgeCommand(options, cmd, args) {
-  const invokeTimeoutMs = Math.min(options.timeoutMs, INVOKE_TIMEOUT_CEILING_MS);
+  const invokeTimeoutMs = Math.min(
+    options.timeoutMs,
+    INVOKE_TIMEOUT_CEILING_MS,
+  );
   const requestInit = {
     method: "POST",
     headers: {
@@ -383,31 +398,87 @@ function buildNoopBeforeDevCommand() {
   return `"${process.execPath}" -e "process.exit(0)"`;
 }
 
-function runCommand(command, args, label, timeoutMs) {
-  console.log(`\n[verify:gui-smoke] > ${formatCommand(command, args)}`);
-  const result = spawnSync(command, args, {
-    cwd: rootDir,
-    stdio: "inherit",
-    env: process.env,
-    timeout: timeoutMs,
-  });
+function hasProcessTreeMembers(pid) {
+  if (!Number.isInteger(pid) || pid < 1) {
+    return false;
+  }
 
-  if (result.error) {
-    if (result.error.code === "ETIMEDOUT") {
+  if (process.platform === "win32") {
+    return isProcessAlive(pid);
+  }
+
+  return (
+    listProcessStats().some(
+      (item) => item.pgid === pid && !isZombieProcess(item),
+    ) || isProcessAlive(pid)
+  );
+}
+
+async function runCommand(command, args, label, timeoutMs) {
+  console.log(`\n[verify:gui-smoke] > ${formatCommand(command, args)}`);
+
+  await new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: rootDir,
+      detached: process.platform !== "win32",
+      stdio: "inherit",
+      env: process.env,
+    });
+    let settled = false;
+    let timedOut = false;
+    state.activeCommandPid = child.pid ?? null;
+
+    const settle = (callback) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeout);
+      if (state.activeCommandPid === child.pid) {
+        state.activeCommandPid = null;
+      }
+      callback();
+    };
+
+    const timeout = setTimeout(() => {
+      timedOut = true;
       const error = new Error(
         `[verify:gui-smoke] ${label} 超时（>${timeoutMs}ms）`,
       );
       error.exitCode = 124;
-      throw error;
-    }
-    throw result.error;
-  }
+      void stopProcessTree(child.pid, `${label} 子命令`).finally(() => {
+        settle(() => reject(error));
+      });
+    }, timeoutMs);
 
-  if (typeof result.status === "number" && result.status !== 0) {
-    const error = new Error(`[verify:gui-smoke] ${label} 失败`);
-    error.exitCode = result.status;
-    throw error;
-  }
+    child.once("error", (error) => {
+      settle(() => reject(error));
+    });
+
+    child.once("exit", (status, signal) => {
+      if (timedOut) {
+        return;
+      }
+
+      if (typeof status === "number" && status !== 0) {
+        const error = new Error(`[verify:gui-smoke] ${label} 失败`);
+        error.exitCode = status;
+        settle(() => reject(error));
+        return;
+      }
+
+      if (signal) {
+        const error = new Error(
+          `[verify:gui-smoke] ${label} 被信号 ${signal} 终止`,
+        );
+        error.exitCode = signal === "SIGTERM" ? 143 : 1;
+        settle(() => reject(error));
+        return;
+      }
+
+      settle(resolve);
+    });
+  });
 }
 
 function createHeadlessTauriConfig(options, startupMode) {
@@ -706,7 +777,7 @@ async function stopProcessTree(pid, label) {
   signalProcessTree(pid, "SIGTERM");
 
   for (let attempt = 0; attempt < 25; attempt += 1) {
-    if (!isProcessAlive(pid)) {
+    if (!hasProcessTreeMembers(pid)) {
       return;
     }
     await sleep(200);
@@ -821,15 +892,15 @@ function isLikelyLimeFrontendListener(command) {
   );
 }
 
-function startHeadlessTauri(options, startupMode) {
+async function startHeadlessTauri(options, startupMode) {
   console.log("[verify:gui-smoke] 启动 headless Tauri 环境...");
-  runCommand(
+  await runCommand(
     npmCommand,
     ["run", "generate:agent-runtime-clients"],
     "generate:agent-runtime-clients",
     options.timeoutMs,
   );
-  runCommand(
+  await runCommand(
     npmCommand,
     ["run", "generate:extension-site-adapters"],
     "generate:extension-site-adapters",
@@ -1006,9 +1077,8 @@ async function waitForBridgeHealth(options, startedByScript) {
       }
 
       const exitDetail = describeChildExit(state.child);
-      const activeProcessCount = listActiveGuiSmokeGroupProcesses(
-        startedByScript,
-      ).length;
+      const activeProcessCount =
+        listActiveGuiSmokeGroupProcesses(startedByScript).length;
       const heartbeat = describeGuiSmokeHeartbeat(startedByScript);
 
       if (activeProcessCount > 0) {
@@ -1018,9 +1088,7 @@ async function waitForBridgeHealth(options, startedByScript) {
             `[bridge:health] headless Tauri 父进程已退出（${exitDetail}），但进程组仍有 ${activeProcessCount} 个活跃进程，继续等待 DevBridge${heartbeat ? `；进程组: ${heartbeat}` : ""}`,
           );
         }
-      } else if (
-        now - childExitObservedAt >= GUI_SMOKE_CHILD_EXIT_GRACE_MS
-      ) {
+      } else if (now - childExitObservedAt >= GUI_SMOKE_CHILD_EXIT_GRACE_MS) {
         const lastDetail =
           lastError instanceof Error
             ? `；最近一次健康检查错误: ${lastError.message}`
@@ -1061,7 +1129,10 @@ async function waitForBridgeHealth(options, startedByScript) {
         startedByScript,
       ).filter((item) => item.command.includes("/bin/rustc"));
       if (startedByScript && smokeRustcProcesses.length > 0) {
-        if (elapsed - lastHealthDuringCompileAt >= GUI_SMOKE_BRIDGE_HEARTBEAT_MS) {
+        if (
+          elapsed - lastHealthDuringCompileAt >=
+          GUI_SMOKE_BRIDGE_HEARTBEAT_MS
+        ) {
           lastHealthDuringCompileAt = elapsed;
           const heartbeat = describeGuiSmokeHeartbeat(startedByScript);
           console.log(
@@ -1290,6 +1361,9 @@ async function main() {
 
   const handleSignal = async (signal) => {
     try {
+      if (state.activeCommandPid) {
+        await stopProcessTree(state.activeCommandPid, "当前 GUI smoke 子命令");
+      }
       await stopHeadlessTauri();
     } finally {
       process.kill(process.pid, signal);
@@ -1305,7 +1379,7 @@ async function main() {
 
   try {
     if (startedByScript) {
-      startHeadlessTauri(options, startupMode);
+      await startHeadlessTauri(options, startupMode);
       await sleep(1_500);
     } else if (startupMode.reusedExisting) {
       console.log("[verify:gui-smoke] 复用已运行的 headless Tauri 环境。");
@@ -1320,7 +1394,7 @@ async function main() {
       required: true,
     });
 
-    runCommand(
+    await runCommand(
       npmCommand,
       [
         "run",
@@ -1337,7 +1411,7 @@ async function main() {
       options.timeoutMs + 5_000,
     );
 
-    runCommand(
+    await runCommand(
       npmCommand,
       [
         "run",
@@ -1353,7 +1427,7 @@ async function main() {
       options.timeoutMs + 5_000,
     );
 
-    runCommand(
+    await runCommand(
       npmCommand,
       [
         "run",
@@ -1368,21 +1442,21 @@ async function main() {
       options.timeoutMs + 5_000,
     );
 
-    runCommand(
+    await runCommand(
       npmCommand,
       ["run", "smoke:agent-service-skill-entry"],
       "smoke:agent-service-skill-entry",
       options.timeoutMs + 30_000,
     );
 
-    runCommand(
+    await runCommand(
       npmCommand,
       ["run", "smoke:agent-runtime-tool-surface"],
       "smoke:agent-runtime-tool-surface",
       options.timeoutMs + 30_000,
     );
 
-    runCommand(
+    await runCommand(
       npmCommand,
       [
         "run",
@@ -1403,7 +1477,7 @@ async function main() {
       options.timeoutMs + 30_000,
     );
 
-    runCommand(
+    await runCommand(
       npmCommand,
       [
         "run",
@@ -1424,7 +1498,28 @@ async function main() {
       options.timeoutMs + 30_000,
     );
 
-    runCommand(
+    if (options.includeKnowledgeProductE2e) {
+      await runCommand(
+        npmCommand,
+        [
+          "run",
+          "knowledge:product-e2e",
+          "--",
+          "--app-url",
+          options.appUrl,
+          "--health-url",
+          options.healthUrl,
+          "--invoke-url",
+          options.invokeUrl,
+          "--timeout-ms",
+          String(options.timeoutMs),
+        ],
+        "knowledge:product-e2e",
+        options.timeoutMs + 30_000,
+      );
+    }
+
+    await runCommand(
       npmCommand,
       [
         "run",

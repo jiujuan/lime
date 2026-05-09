@@ -36,6 +36,9 @@ describe("agentStreamErrorController", () => {
     ).toMatchObject({
       isThinking: false,
       content: "已输出一半\n\n执行失败：provider failed",
+      contentParts: [
+        { type: "text", text: "已输出一半\n\n执行失败：provider failed" },
+      ],
       runtimeStatus: {
         phase: "failed",
         title: "当前处理失败",
@@ -57,6 +60,41 @@ describe("agentStreamErrorController", () => {
       content: "旧内容\n\n执行失败：boom",
       usage,
     });
+  });
+
+  it("失败 patch 应保留既有过程 part，并用失败正文替换 text part", () => {
+    const patch = buildAgentStreamFailedAssistantMessagePatch({
+      accumulatedContent: "",
+      errorMessage: "模型未输出最终答复，请重试",
+      previousContent: "",
+      previousContentParts: [
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-1",
+            name: "site_run_adapter",
+            arguments: "{}",
+            status: "completed",
+            startTime: new Date("2026-05-09T10:00:00.000Z"),
+          },
+        },
+        {
+          type: "text",
+          text: "旧正文",
+        },
+      ],
+    });
+
+    expect(patch.contentParts).toEqual([
+      expect.objectContaining({
+        type: "tool_use",
+        toolCall: expect.objectContaining({ id: "tool-1" }),
+      }),
+      {
+        type: "text",
+        text: "执行失败：模型未输出最终答复，请重试",
+      },
+    ]);
   });
 
   it("应构造错误失败副作用计划", () => {

@@ -134,5 +134,3 @@ export function ServiceSkillExecutionCard({
     </section>
   );
 }
-
-export default ServiceSkillExecutionCard;

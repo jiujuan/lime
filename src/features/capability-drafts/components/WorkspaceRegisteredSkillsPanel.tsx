@@ -19,6 +19,10 @@ import {
   updateAutomationJob,
   type AutomationJobRecord,
 } from "@/lib/api/automation";
+import {
+  recordAutomationJobAgentUiProjection,
+  recordAutomationJobsAgentUiProjection,
+} from "@/components/agent/chat/projection/automationJobAgentUiProjection";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { buildAgentEnvelopeDraftPresentation } from "../agentEnvelopeDraftPresentation";
@@ -833,6 +837,7 @@ export function WorkspaceRegisteredSkillsPanel({
       setSkills(nextState.skills);
       setBindings(nextState.bindings);
       setAutomationJobs(nextState.automationJobs);
+      recordAutomationJobsAgentUiProjection(nextState.automationJobs, "loaded");
     } catch (loadError) {
       setSkills([]);
       setBindings([]);
@@ -865,6 +870,10 @@ export function WorkspaceRegisteredSkillsPanel({
           setSkills(nextState.skills);
           setBindings(nextState.bindings);
           setAutomationJobs(nextState.automationJobs);
+          recordAutomationJobsAgentUiProjection(
+            nextState.automationJobs,
+            "loaded",
+          );
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -928,6 +937,7 @@ export function WorkspaceRegisteredSkillsPanel({
             item.id === updatedJob.id ? updatedJob : item,
           ),
         );
+        recordAutomationJobAgentUiProjection(updatedJob, "updated");
       } catch (toggleError) {
         setError(String(toggleError));
       } finally {

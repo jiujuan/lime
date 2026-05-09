@@ -2,7 +2,11 @@ import {
   recordAgentUiPerformanceMetric,
   type AgentUiPerformanceEntry,
 } from "@/lib/agentUiPerformanceMetrics";
-import { recordConversationStreamDiagnostic } from "../projection/conversationProjectionStore";
+import {
+  recordAgentUiProjectionEvents,
+  recordConversationStreamDiagnostic,
+} from "../projection/conversationProjectionStore";
+import { buildAgentUiMetricChangedEvent } from "../projection/agentUiEventProjection";
 
 export const AGENT_UI_PERFORMANCE_TRACE_METADATA_KEY =
   "agentUiPerformanceTrace";
@@ -134,5 +138,24 @@ export function recordAgentStreamPerformanceMetric(
         : null,
     metrics: entry.metrics,
   });
+  recordAgentUiProjectionEvents([
+    buildAgentUiMetricChangedEvent({
+      phase: entry.phase,
+      at: entry.at,
+      wallTime: entry.wallTime,
+      sessionId: entry.sessionId,
+      workspaceId: entry.workspaceId,
+      source: entry.source,
+      requestId:
+        typeof entry.metrics.requestId === "string"
+          ? entry.metrics.requestId
+          : null,
+      actualSessionId:
+        typeof entry.metrics.actualSessionId === "string"
+          ? entry.metrics.actualSessionId
+          : null,
+      metrics: entry.metrics,
+    }),
+  ]);
   return entry;
 }

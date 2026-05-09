@@ -29,6 +29,8 @@ const DEFAULTS = {
   intervalMs: 1_000,
   analyzer: "default",
   imageTask: "none",
+  imageProvider: "",
+  imageModel: "",
   projectRoundtrip: true,
 };
 
@@ -82,6 +84,11 @@ const GENERATED_IMAGE_TASK_EXPECTED_LAYERS = [
       "design-canvas-smoke-asset-effect-generated-smoke-image-task-atmosphere-effect",
   },
 ];
+const LIVE_IMAGE_TASK_EXPECTED_LAYER = {
+  layerId: "subject-image",
+  layerName: "主体",
+  originalAssetId: "design-canvas-smoke-asset-subject",
+};
 const GENERATED_IMAGE_TASK_EXPORT_RELATIVE_PATH =
   ".lime/layered-designs/design-canvas-smoke.layered-design";
 const WORKER_MODEL_SLOT_QUALITY_CONTRACT_EXPECTATIONS = {
@@ -129,7 +136,11 @@ const ANALYZER_MODES = new Set([
   "worker-model-slots-native-ocr",
   "native",
 ]);
-const IMAGE_TASK_MODES = new Set(["none", "auto-refresh-fixture"]);
+const IMAGE_TASK_MODES = new Set([
+  "none",
+  "auto-refresh-fixture",
+  "live-single-layer",
+]);
 
 const ANALYZER_BADGE_TEXT = {
   default: "默认 analyzer",
@@ -285,7 +296,9 @@ Lime Design Canvas Smoke
   --timeout-ms <ms>        总超时，默认 180000
   --interval-ms <ms>       轮询间隔，默认 1000
   --analyzer <mode>        analyzer 注入模式：default / worker / worker-refined / worker-matting / worker-ocr / worker-ocr-priority / worker-clean-plate / worker-model-slots / worker-model-slots-http-json / worker-model-slots-native-ocr / native，默认 default（产品默认 worker-first）
-  --image-task <mode>      图片任务注入模式：none / auto-refresh-fixture，默认 none
+  --image-task <mode>      图片任务模式：none / auto-refresh-fixture / live-single-layer，默认 none
+  --image-provider <id>    live-single-layer 使用的真实图片 Provider ID
+  --image-model <id>       live-single-layer 使用的真实图片模型 ID
   --project-roundtrip      上传拆层前验证 prompt seed 工程保存与重新打开（默认开启）
   --skip-project-roundtrip 跳过工程保存/重新打开，仅用于定位非持久化链路问题
   -h, --help               显示帮助
@@ -340,6 +353,18 @@ function parseArgs(argv) {
       continue;
     }
 
+    if (arg === "--image-provider" && argv[index + 1]) {
+      options.imageProvider = String(argv[index + 1]).trim();
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--image-model" && argv[index + 1]) {
+      options.imageModel = String(argv[index + 1]).trim();
+      index += 1;
+      continue;
+    }
+
     if (arg === "--help" || arg === "-h") {
       printHelp();
       process.exit(0);
@@ -371,7 +396,12 @@ function parseArgs(argv) {
     );
   }
   if (!IMAGE_TASK_MODES.has(options.imageTask)) {
-    throw new Error("--image-task 必须是 none 或 auto-refresh-fixture");
+    throw new Error(
+      "--image-task 必须是 none、auto-refresh-fixture 或 live-single-layer",
+    );
+  }
+  if (options.imageTask === "live-single-layer" && !options.imageModel) {
+    throw new Error("--image-task live-single-layer 必须提供 --image-model");
   }
 
   return options;
@@ -1207,6 +1237,12 @@ function buildSmokeUrl(options, workspace, sidecar) {
   url.searchParams.set("projectId", workspace.projectId);
   url.searchParams.set("analyzer", options.analyzer);
   url.searchParams.set("imageTask", options.imageTask);
+  if (options.imageProvider) {
+    url.searchParams.set("imageProvider", options.imageProvider);
+  }
+  if (options.imageModel) {
+    url.searchParams.set("imageModel", options.imageModel);
+  }
   if (sidecar?.url) {
     url.searchParams.set("modelSlotEndpointUrl", sidecar.url);
   }
@@ -1230,6 +1266,120 @@ async function waitForText(page, label, text) {
       )}；页面文本片段: ${JSON.stringify(bodyText.slice(0, 1200))}`,
     );
   }
+}
+
+function assertNoLegacyImageTaskRoute(serialized, label) {
+  assert(
+    !serialized.match(/poster_generate|canvas:poster|ImageTaskViewer/),
+    `${label} 不应回流旧 poster / ImageTaskViewer 链路`,
+  );
+}
+
+async function readPageBodyText(page) {
+  return await page
+    .locator("body")
+    .innerText({ timeout: ACTION_TIMEOUT_MS })
+    .catch(() => "");
+}
+
+function findGeneratedLayerAsset(design, expectedLayerId) {
+  const layers = Array.isArray(design?.layers) ? design.layers : [];
+  const assets = Array.isArray(design?.assets) ? design.assets : [];
+  const layer = layers.find((item) => item?.id === expectedLayerId);
+  const asset = assets.find((item) => item?.id === layer?.assetId);
+
+  return { layer, asset };
+}
+
+async function waitForLiveSingleLayerWriteback(page, options) {
+  const deadline = Date.now() + options.timeoutMs;
+  let lastBodyText = "";
+
+  while (Date.now() < deadline) {
+    lastBodyText = await readPageBodyText(page);
+    if (
+      lastBodyText.includes("写回 1 个图层结果") ||
+      lastBodyText.includes("写回 1 个已完成结果") ||
+      lastBodyText.includes("自动刷新写回 1 个图层结果")
+    ) {
+      return lastBodyText;
+    }
+    if (
+      lastBodyText.includes("自动刷新发现 1 个失败") ||
+      lastBodyText.includes("刷新图层图片任务失败") ||
+      lastBodyText.includes("提交图层图片任务失败")
+    ) {
+      throw new Error(
+        `[smoke:design-canvas] live 图片任务失败：${JSON.stringify(
+          lastBodyText.slice(0, 1800),
+        )}`,
+      );
+    }
+
+    const refreshButton = page.getByRole("button", {
+      name: "刷新生成结果",
+      exact: true,
+    });
+    const canRefresh = await refreshButton
+      .evaluate((button) => !button.disabled)
+      .catch(() => false);
+    if (canRefresh) {
+      await refreshButton.click({ timeout: ACTION_TIMEOUT_MS });
+    }
+
+    await sleep(options.intervalMs);
+  }
+
+  throw new Error(
+    `[smoke:design-canvas] live 图片任务在 ${options.timeoutMs}ms 内未写回图层；页面文本片段: ${JSON.stringify(
+      lastBodyText.slice(0, 1800),
+    )}`,
+  );
+}
+
+async function waitForLiveSingleLayerSubmission(page) {
+  const deadline = Date.now() + ACTION_TIMEOUT_MS;
+  let lastBodyText = "";
+
+  while (Date.now() < deadline) {
+    lastBodyText = await readPageBodyText(page);
+    if (
+      lastBodyText.includes("正在提交 1 个图层图片任务") ||
+      lastBodyText.includes("已提交 1 个图片任务") ||
+      lastBodyText.includes("写回 1 个图层结果") ||
+      lastBodyText.includes("写回 1 个已完成结果")
+    ) {
+      return;
+    }
+    if (
+      lastBodyText.includes("提交图层图片任务失败") ||
+      lastBodyText.includes("绑定工作区后才能提交图层图片任务") ||
+      lastBodyText.includes("图片服务尚未准备好") ||
+      lastBodyText.includes("请选择图片或特效图层后再重生成")
+    ) {
+      throw new Error(
+        `[smoke:design-canvas] live 图片任务提交失败：${JSON.stringify(
+          lastBodyText.slice(0, 1800),
+        )}`,
+      );
+    }
+    await sleep(500);
+  }
+
+  throw new Error(
+    `[smoke:design-canvas] live 图片任务点击后未进入提交态；页面文本片段: ${JSON.stringify(
+      lastBodyText.slice(0, 1800),
+    )}`,
+  );
+}
+
+async function selectLayerFromLayerRail(page, layerName) {
+  await page
+    .getByLabel("图层列表")
+    .getByRole("button")
+    .filter({ hasText: layerName })
+    .first()
+    .click({ timeout: ACTION_TIMEOUT_MS });
 }
 
 async function assertPromptSeedImageTaskManifest(page, workspace) {
@@ -1309,40 +1459,187 @@ async function assertPromptSeedImageTaskManifest(page, workspace) {
     `图片任务工程导出缺少 psdLikeManifestJson: ${GENERATED_IMAGE_TASK_EXPORT_RELATIVE_PATH}`,
   );
   assert(
-    !designJson.match(/poster_generate|canvas:poster|ImageTaskViewer/) &&
-      !manifestJson.match(/poster_generate|canvas:poster|ImageTaskViewer/) &&
-      !psdLikeManifestJson.match(
-        /poster_generate|canvas:poster|ImageTaskViewer/,
-      ),
-    "图片任务工程导出不应回流旧 poster / ImageTaskViewer 链路",
+    designJson && manifestJson && psdLikeManifestJson,
+    "图片任务工程导出缺少完整导出文件",
+  );
+  assertNoLegacyImageTaskRoute(designJson, "图片任务 design.json");
+  assertNoLegacyImageTaskRoute(manifestJson, "图片任务 export-manifest.json");
+  assertNoLegacyImageTaskRoute(
+    psdLikeManifestJson,
+    "图片任务 psd-like-manifest.json",
+  );
+}
+
+async function assertLiveSingleLayerImageTaskProjectExport(
+  page,
+  workspace,
+  options,
+  restored = false,
+) {
+  const output = await readProjectExportOutput(
+    page,
+    workspace,
+    GENERATED_IMAGE_TASK_EXPORT_RELATIVE_PATH,
+  );
+  const designJson = pickStringField(output, "designJson", "design_json");
+  assert(
+    designJson,
+    `live 图片任务工程导出缺少 designJson: ${GENERATED_IMAGE_TASK_EXPORT_RELATIVE_PATH}`,
+  );
+  const design = JSON.parse(designJson);
+  const { layer, asset } = findGeneratedLayerAsset(
+    design,
+    LIVE_IMAGE_TASK_EXPECTED_LAYER.layerId,
+  );
+
+  assert(
+    layer?.source === "generated" &&
+      typeof layer?.assetId === "string" &&
+      layer.assetId.includes("-generated-"),
+    `live 图片任务未把 ${LIVE_IMAGE_TASK_EXPECTED_LAYER.layerId} 图层写回生成资产: ${JSON.stringify(
+      layer,
+    )}`,
+  );
+  assert(
+    typeof asset?.src === "string" &&
+      asset.src.trim().length > 0 &&
+      asset?.params?.source === "image_generation_task" &&
+      typeof asset?.params?.taskId === "string" &&
+      typeof asset?.params?.taskPath === "string" &&
+      asset?.params?.documentId === "design-canvas-smoke" &&
+      asset?.params?.layerId === LIVE_IMAGE_TASK_EXPECTED_LAYER.layerId &&
+      asset?.params?.originalAssetId ===
+        LIVE_IMAGE_TASK_EXPECTED_LAYER.originalAssetId,
+    `live 图片任务导出缺少真实生成资产元数据: ${JSON.stringify(asset)}`,
+  );
+  assert(
+    asset.modelId === options.imageModel,
+    `live 图片任务生成模型不一致: expected ${options.imageModel}, got ${asset.modelId}`,
+  );
+  if (options.imageProvider) {
+    assert(
+      asset.provider === options.imageProvider,
+      `live 图片任务 Provider 不一致: expected ${options.imageProvider}, got ${asset.provider}`,
+    );
+  }
+
+  const executorMode = asset.params.executorMode;
+  assert(
+    executorMode === "images_api" ||
+      executorMode === "responses_image_generation",
+    `live 图片任务 executorMode 缺失或非法: ${JSON.stringify(asset.params)}`,
+  );
+
+  const manifestJson = pickStringField(output, "manifestJson", "manifest_json");
+  assert(
+    manifestJson,
+    `live 图片任务工程导出缺少 manifestJson: ${GENERATED_IMAGE_TASK_EXPORT_RELATIVE_PATH}`,
+  );
+  const manifest = JSON.parse(manifestJson);
+  const manifestAssets = Array.isArray(manifest?.assets) ? manifest.assets : [];
+  const manifestAsset = manifestAssets.find((item) => item?.id === asset.id);
+  assert(
+    manifestAsset &&
+      (manifestAsset.source === "file" || manifestAsset.source === "reference"),
+    `live 图片任务 manifest 缺少生成资产投影: ${JSON.stringify(manifestAsset)}`,
+  );
+  assert(
+    manifestAsset.modelId === options.imageModel,
+    `live 图片任务 manifest 模型不一致: ${JSON.stringify(manifestAsset)}`,
+  );
+  if (manifestAsset.source === "reference") {
+    assert(
+      typeof manifestAsset.originalSrc === "string" &&
+        /^https?:\/\//.test(manifestAsset.originalSrc),
+      `live 图片任务远程引用资产缺少 originalSrc: ${JSON.stringify(
+        manifestAsset,
+      )}`,
+    );
+  }
+
+  const psdLikeManifestJson = pickStringField(
+    output,
+    "psdLikeManifestJson",
+    "psd_like_manifest_json",
+  );
+  assert(
+    psdLikeManifestJson,
+    `live 图片任务工程导出缺少 psdLikeManifestJson: ${GENERATED_IMAGE_TASK_EXPORT_RELATIVE_PATH}`,
+  );
+  assertNoLegacyImageTaskRoute(designJson, "live 图片任务 design.json");
+  assertNoLegacyImageTaskRoute(
+    manifestJson,
+    "live 图片任务 export-manifest.json",
+  );
+  assertNoLegacyImageTaskRoute(
+    psdLikeManifestJson,
+    "live 图片任务 psd-like-manifest.json",
+  );
+
+  console.log(
+    `[smoke:design-canvas] live-image-task ${restored ? "restored-" : ""}asset=${asset.id} model=${asset.modelId} provider=${
+      asset.provider ?? ""
+    } executor=${executorMode} manifestSource=${manifestAsset.source}`,
   );
 }
 
 async function runPageFlow(options, smokeUrl) {
-  const userDataDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), `lime-design-canvas-smoke-${process.pid}-`),
-  );
   const launchOptions = {
     headless: true,
+  };
+  const contextOptions = {
     viewport: { width: 1440, height: 980 },
   };
+  let browser = null;
   let context = null;
+  let userDataDir = null;
 
   try {
-    context = await chromium.launchPersistentContext(userDataDir, {
-      ...launchOptions,
-      channel: "chrome",
-    });
-  } catch (chromeError) {
+    try {
+      browser = await chromium.launch({
+        ...launchOptions,
+        channel: "chrome",
+      });
+      context = await browser.newContext(contextOptions);
+    } catch (chromeError) {
+      console.warn(
+        `[smoke:design-canvas] Chrome channel 启动失败，尝试 Playwright 自带 Chromium: ${
+          chromeError instanceof Error
+            ? chromeError.message
+            : String(chromeError)
+        }`,
+      );
+      browser = await chromium.launch(launchOptions);
+      context = await browser.newContext(contextOptions);
+    }
+  } catch (launchError) {
+    userDataDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), `lime-design-canvas-smoke-${process.pid}-`),
+    );
     console.warn(
-      `[smoke:design-canvas] Chrome channel 启动失败，尝试 Playwright 自带 Chromium: ${
-        chromeError instanceof Error ? chromeError.message : String(chromeError)
+      `[smoke:design-canvas] 普通 browser context 启动失败，尝试 persistent context: ${
+        launchError instanceof Error ? launchError.message : String(launchError)
       }`,
     );
-    context = await chromium.launchPersistentContext(
-      userDataDir,
-      launchOptions,
-    );
+    try {
+      context = await chromium.launchPersistentContext(userDataDir, {
+        ...launchOptions,
+        ...contextOptions,
+        channel: "chrome",
+      });
+    } catch (persistentChromeError) {
+      console.warn(
+        `[smoke:design-canvas] Chrome persistent context 启动失败，尝试 Playwright 自带 Chromium: ${
+          persistentChromeError instanceof Error
+            ? persistentChromeError.message
+            : String(persistentChromeError)
+        }`,
+      );
+      context = await chromium.launchPersistentContext(userDataDir, {
+        ...launchOptions,
+        ...contextOptions,
+      });
+    }
   }
 
   const page = context.pages()[0] ?? (await context.newPage());
@@ -1406,9 +1703,7 @@ async function runPageFlow(options, smokeUrl) {
         "图片任务自动刷新写回",
         "自动刷新写回 3 个图层结果",
       );
-      await page
-        .getByRole("button", { name: "选择图层 氛围特效", exact: true })
-        .click({ timeout: ACTION_TIMEOUT_MS });
+      await selectLayerFromLayerRail(page, "氛围特效");
       await waitForText(
         page,
         "图片任务生成来源",
@@ -1449,9 +1744,7 @@ async function runPageFlow(options, smokeUrl) {
           "图片任务工程目录恢复结果",
           "已打开图层设计工程",
         );
-        await page
-          .getByRole("button", { name: "选择图层 氛围特效", exact: true })
-          .click({ timeout: ACTION_TIMEOUT_MS });
+        await selectLayerFromLayerRail(page, "氛围特效");
         await waitForText(
           page,
           "恢复后图片任务生成来源",
@@ -1460,10 +1753,83 @@ async function runPageFlow(options, smokeUrl) {
       }
     }
 
+    if (options.imageTask === "live-single-layer") {
+      logStage("image-task-live-single-layer");
+      await waitForText(page, "真实图片任务标记", "真实图片任务单层验收");
+      await waitForText(page, "真实图片任务模型", options.imageModel);
+      if (options.imageProvider) {
+        await waitForText(page, "真实图片任务 Provider", options.imageProvider);
+      }
+
+      await selectLayerFromLayerRail(
+        page,
+        LIVE_IMAGE_TASK_EXPECTED_LAYER.layerName,
+      );
+      await page
+        .getByRole("button", { name: "重生成当前层", exact: true })
+        .click({ timeout: ACTION_TIMEOUT_MS });
+      await waitForLiveSingleLayerSubmission(page);
+      await waitForLiveSingleLayerWriteback(page, options);
+      await waitForText(page, "live 图片任务生成模型", options.imageModel);
+
+      if (options.projectRoundtrip) {
+        logStage("image-task-live-export-roundtrip");
+        await page
+          .getByRole("button", { name: "导出设计工程", exact: true })
+          .click({
+            timeout: ACTION_TIMEOUT_MS,
+          });
+        await waitForText(
+          page,
+          "live 图片任务工程目录保存结果",
+          "已保存图层设计工程",
+        );
+        await waitForText(
+          page,
+          "live 图片任务工程目录保存路径",
+          "design-canvas-smoke.layered-design",
+        );
+
+        const smokeUrlObject = new URL(smokeUrl);
+        const workspace = {
+          rootPath: smokeUrlObject.searchParams.get("projectRootPath") ?? "",
+        };
+        await assertLiveSingleLayerImageTaskProjectExport(
+          page,
+          workspace,
+          options,
+        );
+
+        await page
+          .getByRole("button", { name: "打开最近工程", exact: true })
+          .click({
+            timeout: ACTION_TIMEOUT_MS,
+          });
+        await waitForText(
+          page,
+          "live 图片任务工程目录恢复结果",
+          "已打开图层设计工程",
+        );
+        await selectLayerFromLayerRail(
+          page,
+          LIVE_IMAGE_TASK_EXPECTED_LAYER.layerName,
+        );
+        await waitForText(
+          page,
+          "live 恢复后图片任务生成模型",
+          options.imageModel,
+        );
+        await assertLiveSingleLayerImageTaskProjectExport(
+          page,
+          workspace,
+          options,
+          true,
+        );
+      }
+    }
+
     logStage("interact-layer");
-    await page.getByRole("button", { name: "选择图层 主标题" }).click({
-      timeout: ACTION_TIMEOUT_MS,
-    });
+    await selectLayerFromLayerRail(page, "主标题");
     await waitForText(page, "主标题选中", "主标题");
     await page.getByRole("button", { name: "右移", exact: true }).click({
       timeout: ACTION_TIMEOUT_MS,
@@ -1698,8 +2064,11 @@ async function runPageFlow(options, smokeUrl) {
       );
     }
   } finally {
-    await context.close().catch(() => undefined);
-    fs.rmSync(userDataDir, { recursive: true, force: true });
+    await context?.close().catch(() => undefined);
+    await browser?.close().catch(() => undefined);
+    if (userDataDir) {
+      fs.rmSync(userDataDir, { recursive: true, force: true });
+    }
   }
 }
 

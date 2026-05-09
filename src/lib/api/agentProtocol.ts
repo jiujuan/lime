@@ -289,6 +289,7 @@ export interface AgentToolCallState {
   arguments?: string;
   status: "running" | "completed" | "failed";
   result?: AgentToolExecutionResult;
+  progress?: AgentToolProgressPayload & { updatedAt?: Date };
   startTime: Date;
   endTime?: Date;
   logs?: string[];
@@ -320,6 +321,20 @@ export interface AgentActionRequiredQuestion {
 export interface AgentEventTextDelta {
   type: "text_delta";
   text: string;
+}
+
+export type AgentEventTextDeltaBatchBoundary =
+  | "newline"
+  | "backlog"
+  | "final"
+  | "provider"
+  | (string & {});
+
+export interface AgentEventTextDeltaBatch {
+  type: "text_delta_batch";
+  text: string;
+  chunks: string[];
+  boundary: AgentEventTextDeltaBatchBoundary;
 }
 
 export interface AgentEventThreadStarted {
@@ -375,6 +390,36 @@ export interface AgentEventToolEnd {
   result: AgentToolExecutionResult;
 }
 
+export interface AgentToolProgressPayload {
+  message?: string;
+  progress?: number;
+  total?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AgentEventToolProgress {
+  type: "tool_progress";
+  tool_id: string;
+  progress: AgentToolProgressPayload;
+}
+
+export interface AgentEventToolOutputDelta {
+  type: "tool_output_delta";
+  tool_id: string;
+  delta: string;
+  output_kind?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AgentEventToolInputDelta {
+  type: "tool_input_delta";
+  tool_id: string;
+  tool_name?: string;
+  delta: string;
+  accumulated_arguments?: string;
+  provider?: string;
+}
+
 export interface AgentEventArtifactSnapshot {
   type: "artifact_snapshot";
   artifact: AgentArtifactSignal;
@@ -392,9 +437,64 @@ export interface AgentEventActionRequired {
   requested_schema?: Record<string, unknown>;
 }
 
+export interface AgentEventActionResolved {
+  type: "action_resolved";
+  request_id: string;
+  action_type: AgentActionRequiredType | "plan_approval" | string;
+  scope?: AgentActionRequiredScope;
+  approved?: boolean;
+  feedback?: string;
+  permission_mode?: string;
+  data?: Record<string, unknown>;
+}
+
 export interface AgentEventContextTrace {
   type: "context_trace";
   steps: AgentContextTraceStep[];
+}
+
+export interface AgentContextBudget {
+  used_tokens?: number;
+  max_tokens?: number;
+  remaining_tokens?: number;
+  status?: string;
+  source?: string;
+}
+
+export interface AgentMissingContextFact {
+  id?: string;
+  kind: string;
+  label: string;
+  status: string;
+  reason?: string;
+  source?: string;
+}
+
+export interface AgentRetrievalRef {
+  source_id: string;
+  kind: string;
+  title?: string;
+  path?: string;
+  url?: string;
+  score?: number;
+  scope?: string;
+  status?: string;
+  source?: string;
+}
+
+export interface AgentTeamMemoryRef {
+  key: string;
+  repo_scope?: string;
+  updated_at?: number;
+  priority?: number;
+  source?: string;
+}
+
+export interface AgentTurnContextSummary {
+  memory_budget?: AgentContextBudget | null;
+  missing_context?: AgentMissingContextFact[];
+  retrieval_refs?: AgentRetrievalRef[];
+  team_memory_refs?: AgentTeamMemoryRef[];
 }
 
 export interface AgentEventTurnContext {
@@ -403,6 +503,9 @@ export interface AgentEventTurnContext {
   thread_id: string;
   turn_id: string;
   output_schema_runtime?: AsterTurnOutputSchemaRuntime | null;
+  context_summary?: AgentTurnContextSummary | null;
+  approval_policy?: string | null;
+  sandbox_policy?: string | null;
 }
 
 export interface AgentEventModelChange {
@@ -438,6 +541,9 @@ export interface AgentRuntimeStatusMetadata {
   turn_gating?: boolean;
   limit_status?: string;
   capability_gap?: string;
+  keepalive_kind?: string;
+  keepalive_sequence?: number;
+  keepalive_elapsed_ms?: number;
 }
 
 export interface AgentRuntimeStatusPayload {
@@ -558,6 +664,22 @@ export interface AgentEventSubagentStatusChanged {
   root_session_id: string;
   parent_session_id?: string;
   status: AgentSubagentRuntimeStatus;
+  latest_turn_id?: string;
+  latest_turn_status?: AgentSubagentRuntimeStatus;
+  queued_turn_count?: number;
+  team_phase?: string;
+  team_parallel_budget?: number;
+  team_active_count?: number;
+  team_queued_count?: number;
+  provider_concurrency_group?: string;
+  provider_parallel_budget?: number;
+  queue_reason?: string;
+  retryable_overload?: boolean;
+  closed?: boolean;
+  usage?: AgentTokenUsage;
+  duration_ms?: number;
+  tool_count?: number;
+  result_ref?: string;
 }
 
 export interface AgentEventDone {
@@ -595,11 +717,16 @@ export type AgentEvent =
   | AgentEventTurnCompleted
   | AgentEventTurnFailed
   | AgentEventTextDelta
+  | AgentEventTextDeltaBatch
   | AgentEventThinkingDelta
   | AgentEventToolStart
   | AgentEventToolEnd
+  | AgentEventToolProgress
+  | AgentEventToolOutputDelta
+  | AgentEventToolInputDelta
   | AgentEventArtifactSnapshot
   | AgentEventActionRequired
+  | AgentEventActionResolved
   | AgentEventTurnContext
   | AgentEventModelChange
   | AgentEventContextTrace
@@ -720,6 +847,18 @@ function normalizeActionRequiredScope(
     : undefined;
 }
 
+function normalizeRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function normalizeOptionalNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
 export function parseAgentEvent(data: unknown): AgentEvent | null {
   if (!data || typeof data !== "object") {
     return null;
@@ -769,6 +908,23 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
         type: "text_delta",
         text: (event.text as string) || "",
       };
+    case "text_delta_batch": {
+      const text = (event.text as string) || "";
+      const chunks = Array.isArray(event.chunks)
+        ? event.chunks.filter(
+            (chunk): chunk is string => typeof chunk === "string",
+          )
+        : text
+          ? [text]
+          : [];
+      return {
+        type: "text_delta_batch",
+        text,
+        chunks,
+        boundary:
+          typeof event.boundary === "string" ? event.boundary : "provider",
+      };
+    }
     case "reasoning_delta":
     case "thinking_delta":
       return {
@@ -787,6 +943,42 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
         type: "tool_end",
         tool_id: (event.tool_id as string) || "",
         result: event.result as AgentToolExecutionResult,
+      };
+    case "tool_progress": {
+      const progress = normalizeRecord(event.progress) || {};
+      return {
+        type: "tool_progress",
+        tool_id: (event.tool_id as string) || "",
+        progress: {
+          message:
+            typeof progress.message === "string" ? progress.message : undefined,
+          progress: normalizeOptionalNumber(progress.progress),
+          total: normalizeOptionalNumber(progress.total),
+          metadata: normalizeRecord(progress.metadata),
+        },
+      };
+    }
+    case "tool_output_delta":
+      return {
+        type: "tool_output_delta",
+        tool_id: (event.tool_id as string) || "",
+        delta: (event.delta as string) || "",
+        output_kind:
+          typeof event.output_kind === "string" ? event.output_kind : undefined,
+        metadata: normalizeRecord(event.metadata),
+      };
+    case "tool_input_delta":
+      return {
+        type: "tool_input_delta",
+        tool_id: (event.tool_id as string) || "",
+        tool_name:
+          typeof event.tool_name === "string" ? event.tool_name : undefined,
+        delta: (event.delta as string) || "",
+        accumulated_arguments:
+          typeof event.accumulated_arguments === "string"
+            ? event.accumulated_arguments
+            : undefined,
+        provider: typeof event.provider === "string" ? event.provider : undefined,
       };
     case "artifact_snapshot":
     case "ArtifactSnapshot": {
@@ -856,6 +1048,52 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
           (actionData.requested_schema as Record<string, unknown> | undefined),
       };
     }
+    case "action_resolved": {
+      const actionData =
+        (event.data as Record<string, unknown> | undefined) || {};
+      const requestId =
+        (event.request_id as string | undefined) ||
+        (actionData.request_id as string | undefined) ||
+        (actionData.requestId as string | undefined) ||
+        (actionData.id as string | undefined) ||
+        "";
+      const actionType =
+        (event.action_type as string | undefined) ||
+        (actionData.action_type as string | undefined) ||
+        (actionData.actionType as string | undefined) ||
+        (actionData.type as string | undefined) ||
+        "tool_confirmation";
+
+      return {
+        type: "action_resolved",
+        request_id: requestId,
+        action_type: actionType,
+        scope: normalizeActionRequiredScope(event.scope ?? actionData.scope),
+        approved:
+          typeof event.approved === "boolean"
+            ? event.approved
+            : typeof actionData.approved === "boolean"
+              ? actionData.approved
+              : typeof actionData.approve === "boolean"
+                ? actionData.approve
+                : undefined,
+        feedback:
+          typeof event.feedback === "string"
+            ? event.feedback
+            : typeof actionData.feedback === "string"
+              ? actionData.feedback
+              : undefined,
+        permission_mode:
+          typeof event.permission_mode === "string"
+            ? event.permission_mode
+            : typeof actionData.permission_mode === "string"
+              ? actionData.permission_mode
+              : typeof actionData.permissionMode === "string"
+                ? actionData.permissionMode
+                : undefined,
+        data: actionData,
+      };
+    }
     case "turn_context":
       return {
         type: "turn_context",
@@ -867,6 +1105,15 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
             | AsterTurnOutputSchemaRuntime
             | null
             | undefined) || null,
+        context_summary:
+          (event.context_summary as AgentTurnContextSummary | null | undefined) ||
+          null,
+        approval_policy:
+          typeof event.approval_policy === "string"
+            ? event.approval_policy
+            : null,
+        sandbox_policy:
+          typeof event.sandbox_policy === "string" ? event.sandbox_policy : null,
       };
     case "model_change":
       return {
@@ -1022,6 +1269,18 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
                   typeof metadata.capability_gap === "string"
                     ? metadata.capability_gap
                     : undefined,
+                keepalive_kind:
+                  typeof metadata.keepalive_kind === "string"
+                    ? metadata.keepalive_kind
+                    : undefined,
+                keepalive_sequence:
+                  typeof metadata.keepalive_sequence === "number"
+                    ? metadata.keepalive_sequence
+                    : undefined,
+                keepalive_elapsed_ms:
+                  typeof metadata.keepalive_elapsed_ms === "number"
+                    ? metadata.keepalive_elapsed_ms
+                    : undefined,
               }
             : undefined,
         },
@@ -1157,6 +1416,58 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
         parent_session_id: event.parent_session_id as string | undefined,
         status:
           (event.status as AgentSubagentRuntimeStatus | undefined) || "idle",
+        latest_turn_id:
+          typeof event.latest_turn_id === "string"
+            ? event.latest_turn_id
+            : undefined,
+        latest_turn_status:
+          event.latest_turn_status as AgentSubagentRuntimeStatus | undefined,
+        queued_turn_count:
+          typeof event.queued_turn_count === "number"
+            ? event.queued_turn_count
+            : undefined,
+        team_phase:
+          typeof event.team_phase === "string" ? event.team_phase : undefined,
+        team_parallel_budget:
+          typeof event.team_parallel_budget === "number"
+            ? event.team_parallel_budget
+            : undefined,
+        team_active_count:
+          typeof event.team_active_count === "number"
+            ? event.team_active_count
+            : undefined,
+        team_queued_count:
+          typeof event.team_queued_count === "number"
+            ? event.team_queued_count
+            : undefined,
+        provider_concurrency_group:
+          typeof event.provider_concurrency_group === "string"
+            ? event.provider_concurrency_group
+            : undefined,
+        provider_parallel_budget:
+          typeof event.provider_parallel_budget === "number"
+            ? event.provider_parallel_budget
+            : undefined,
+        queue_reason:
+          typeof event.queue_reason === "string"
+            ? event.queue_reason
+            : undefined,
+        retryable_overload:
+          typeof event.retryable_overload === "boolean"
+            ? event.retryable_overload
+            : undefined,
+        closed: typeof event.closed === "boolean" ? event.closed : undefined,
+        usage: event.usage as AgentTokenUsage | undefined,
+        duration_ms: normalizeOptionalNumber(
+          event.duration_ms ?? event.durationMs,
+        ),
+        tool_count: normalizeOptionalNumber(event.tool_count ?? event.toolCount),
+        result_ref:
+          typeof event.result_ref === "string"
+            ? event.result_ref
+            : typeof event.resultRef === "string"
+              ? event.resultRef
+              : undefined,
       };
     case "final_done":
       return {

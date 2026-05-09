@@ -423,6 +423,11 @@ async function waitForExactButton(page, label, name, timeoutMs) {
       .getByRole("button", { name, exact: true })
       .waitFor({ state: "visible", timeout: timeoutMs });
   } catch (error) {
+    const pageUrl = page.url();
+    const pageTitle = await page.title().catch(() => "");
+    const readyState = await page
+      .evaluate(() => document.readyState)
+      .catch(() => "unknown");
     const pageText = await page
       .locator("body")
       .innerText()
@@ -442,6 +447,9 @@ async function waitForExactButton(page, label, name, timeoutMs) {
     throw new Error(
       `[smoke:knowledge-gui] ${label} 等待按钮失败 ${JSON.stringify({
         name,
+        url: pageUrl,
+        title: pageTitle,
+        readyState,
         buttons,
       })}，页面文本预览: ${pageText.slice(0, 2_000)}`,
       { cause: error },
@@ -499,6 +507,50 @@ async function clickScopedButton(page, { scope, text, ariaLabel, index = 0 }) {
   }
 }
 
+async function syncSmokeProjectStorage(page, options) {
+  await page.evaluate(
+    ({ workingDir, onboardingVersion, projectId }) => {
+      localStorage.setItem("lime_onboarding_complete", "true");
+      localStorage.setItem("lime_onboarding_version", onboardingVersion);
+      localStorage.setItem("lime_user_profile", "developer");
+      localStorage.setItem("lime.knowledge.working-dir", workingDir);
+      localStorage.setItem("agent_last_project_id", JSON.stringify(projectId));
+      window.dispatchEvent(
+        new CustomEvent("agent-persisted-project-id-changed", {
+          detail: {
+            key: "agent_last_project_id",
+            projectId,
+          },
+        }),
+      );
+    },
+    {
+      workingDir: options.workingDir,
+      onboardingVersion: ONBOARDING_VERSION,
+      projectId: options.projectId,
+    },
+  );
+}
+
+async function restoreKnowledgeOverview(page, options, label) {
+  await page.goto(options.appUrl, { waitUntil: "domcontentloaded" });
+  await syncSmokeProjectStorage(page, options);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await waitForPageText(
+    page,
+    `${label} 首页恢复`,
+    ["青柠一下，灵感即来"],
+    options.timeoutMs,
+  );
+  await openKnowledgePageFromMainNav(page, options);
+  await waitForPageText(
+    page,
+    `${label} 项目资料首页恢复`,
+    ["让 Lime 记住这个项目", "项目资料清单"],
+    options.timeoutMs,
+  );
+}
+
 async function confirmKnowledgeComposer(
   page,
   options,
@@ -540,9 +592,7 @@ async function verifyReviewPage(page, options, packTitle) {
     [
       packTitle,
       "完整资料文档",
-      "打开完整文档",
-      "导出",
-      "修改内容",
+      "查看文档内容",
       "需要你确认的内容",
       "确认后会发生什么",
       "不会覆盖原始资料",
@@ -551,7 +601,7 @@ async function verifyReviewPage(page, options, packTitle) {
   );
   await assertNoUserFacingInternalText(page, "确认资料页");
 
-  await clickPageControl(page, { text: "打开完整文档" });
+  await clickPageControl(page, { text: "查看文档内容" });
   await waitForPageText(
     page,
     "完整资料文档展开",
@@ -596,7 +646,35 @@ async function verifyBuilderImportAndReview(page, options) {
     .getByRole("button", { name: "Lime 开始整理", exact: true })
     .click({ timeout: DEFAULT_ACTION_TIMEOUT_MS });
 
-  await waitForExactButton(page, "整理结果详情加载", "确认可用", options.timeoutMs);
+  try {
+    await waitForExactButton(
+      page,
+      "整理结果详情加载",
+      "确认可用",
+      Math.min(options.timeoutMs, 60_000),
+    );
+  } catch (error) {
+    console.warn(
+      `[smoke:knowledge-gui] 整理结果详情首轮等待失败，尝试从项目资料首页恢复打开: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    await waitForKnowledgePack(
+      options,
+      "整理结果写入完成",
+      (pack) =>
+        pack.description === BUILDER_ACCEPTANCE_PACK.title ||
+        pack.name === BUILDER_ACCEPTANCE_PACK.title,
+    );
+    await restoreKnowledgeOverview(page, options, "整理结果详情恢复");
+    await openPackDetail(page, BUILDER_ACCEPTANCE_PACK.title);
+    await waitForExactButton(
+      page,
+      "整理结果详情恢复加载",
+      "确认可用",
+      options.timeoutMs,
+    );
+  }
   await waitForPageText(
     page,
     "整理结果详情加载",
@@ -621,11 +699,34 @@ async function verifyBuilderImportAndReview(page, options) {
   );
 }
 
-async function openKnowledgePageFromMainNav(page) {
-  await clickScopedButton(page, {
-    scope: '[data-testid="app-sidebar-main-nav"]',
-    ariaLabel: "项目资料",
-  });
+async function openKnowledgePageFromMainNav(page, options) {
+  await syncSmokeProjectStorage(page, options);
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      await clickScopedButton(page, {
+        scope: '[data-testid="app-sidebar-main-nav"]',
+        ariaLabel: "项目资料",
+      });
+      await waitForPageText(
+        page,
+        `项目资料导航第 ${attempt} 次`,
+        ["让 Lime 记住这个项目"],
+        Math.min(options.timeoutMs, 15_000),
+      );
+      return;
+    } catch (error) {
+      lastError = error;
+      await sleep(500);
+    }
+  }
+
+  throw new Error(
+    `[smoke:knowledge-gui] 项目资料导航失败: ${
+      lastError instanceof Error ? lastError.message : String(lastError)
+    }`,
+  );
 }
 
 async function waitForKnowledgePack(options, label, matcher) {
@@ -778,23 +879,7 @@ async function runPlaywrightGuiFlow(options) {
   try {
     logStage("open-playwright-page");
     await page.goto(options.appUrl, { waitUntil: "domcontentloaded" });
-    await page.evaluate(
-      ({ workingDir, onboardingVersion, projectId }) => {
-        localStorage.setItem("lime_onboarding_complete", "true");
-        localStorage.setItem("lime_onboarding_version", onboardingVersion);
-        localStorage.setItem("lime_user_profile", "developer");
-        localStorage.setItem("lime.knowledge.working-dir", workingDir);
-        localStorage.setItem(
-          "agent_last_project_id",
-          JSON.stringify(projectId),
-        );
-      },
-      {
-        workingDir: options.workingDir,
-        onboardingVersion: ONBOARDING_VERSION,
-        projectId: options.projectId,
-      },
-    );
+    await syncSmokeProjectStorage(page, options);
     await page.reload({ waitUntil: "domcontentloaded" });
 
     logStage("wait-home");
@@ -846,7 +931,7 @@ async function runPlaywrightGuiFlow(options) {
     await clickPageControl(page, { ariaLabel: "关闭文件管理器" });
 
     logStage("open-knowledge-page");
-    await openKnowledgePageFromMainNav(page);
+    await openKnowledgePageFromMainNav(page, options);
 
     logStage("wait-knowledge-overview");
     await waitForPageText(
@@ -858,7 +943,7 @@ async function runPlaywrightGuiFlow(options) {
         "整理新资料",
         "项目资料清单",
         "可用于创作",
-        "本轮创作会使用",
+        "建议本轮使用",
         PERSONA_PACK.title,
         DEFAULT_PACK.title,
         SECONDARY_PACK.title,
@@ -893,7 +978,7 @@ async function runPlaywrightGuiFlow(options) {
       ["收藏过的想法"],
       options.timeoutMs,
     );
-    await openKnowledgePageFromMainNav(page);
+    await openKnowledgePageFromMainNav(page, options);
     await waitForPageText(
       page,
       "状态说明后返回项目资料首页",
@@ -932,7 +1017,7 @@ async function runPlaywrightGuiFlow(options) {
     }
 
     logStage("return-knowledge-before-agent-result");
-    await openKnowledgePageFromMainNav(page);
+    await openKnowledgePageFromMainNav(page, options);
 
     logStage("prepare-agent-result");
     await seedAgentResultForKnowledgeCapture(page, options);
@@ -974,7 +1059,7 @@ async function runPlaywrightGuiFlow(options) {
     await waitForPageText(
       page,
       "Agent 结果保存完成",
-      ["资料已保存，确认后才会用于创作", "新增 2 个内容点", "更新 1 个章节"],
+      ["资料已保存，确认后才会用于创作", "内容已进入项目资料"],
       options.timeoutMs,
     );
 
@@ -984,7 +1069,7 @@ async function runPlaywrightGuiFlow(options) {
       ariaLabel: "灵感",
     });
     await waitForPageText(page, "灵感页加载", ["灵感"], options.timeoutMs);
-    await openKnowledgePageFromMainNav(page);
+    await openKnowledgePageFromMainNav(page, options);
 
     logStage("wait-captured-agent-result");
     await waitForPageText(

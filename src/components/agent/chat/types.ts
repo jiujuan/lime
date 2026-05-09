@@ -5,6 +5,7 @@ import type {
 } from "@/lib/api/agentProtocol";
 import type { Artifact, ArtifactStatus } from "@/lib/artifact/types";
 import { safeInvoke } from "@/lib/dev-bridge";
+import type { AgentUiProjectionEvent } from "./projection/agentUiEventProjection";
 
 export type {
   AgentThreadItem,
@@ -201,11 +202,21 @@ export type MessagePreviewTarget =
  * - tool_use: 工具调用（包含状态和结果）
  * - action_required: 权限确认请求
  */
+interface AgentUiProjectionContentPartMeta {
+  agentUiEvent?: AgentUiProjectionEvent;
+}
+
 export type ContentPart =
-  | { type: "text"; text: string }
-  | { type: "thinking"; text: string }
-  | { type: "tool_use"; toolCall: ToolCallState }
-  | { type: "action_required"; actionRequired: ActionRequired };
+  | ({ type: "text"; text: string } & AgentUiProjectionContentPartMeta)
+  | ({ type: "thinking"; text: string } & AgentUiProjectionContentPartMeta)
+  | ({
+      type: "tool_use";
+      toolCall: ToolCallState;
+    } & AgentUiProjectionContentPartMeta)
+  | ({
+      type: "action_required";
+      actionRequired: ActionRequired;
+    } & AgentUiProjectionContentPartMeta);
 
 export type BrowserTaskRequirement =
   | "optional"

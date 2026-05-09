@@ -72,12 +72,7 @@ impl RetryConfig {
 }
 
 pub fn should_retry(error: &ProviderError) -> bool {
-    matches!(
-        error,
-        ProviderError::RateLimitExceeded { .. }
-            | ProviderError::ServerError(_)
-            | ProviderError::RequestFailed(_)
-    )
+    error.is_retryable()
 }
 
 pub async fn retry_operation<F, Fut, T>(

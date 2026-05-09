@@ -146,6 +146,7 @@ fn temporary_icon_png_path() -> PathBuf {
     ))
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn normalize_bundle_icon_file_name(value: &str) -> Option<String> {
     let trimmed = value.trim().trim_matches('"').trim();
     if trimmed.is_empty() {

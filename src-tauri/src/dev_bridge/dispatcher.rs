@@ -10,6 +10,7 @@ mod capability_drafts;
 mod channels;
 mod companion;
 mod content;
+mod external_tools;
 mod files;
 mod knowledge;
 mod logs;
@@ -115,6 +116,10 @@ pub async fn handle_command(
     }
 
     if let Some(result) = files::try_handle(state, cmd, args.as_ref()).await? {
+        return Ok(result);
+    }
+
+    if let Some(result) = external_tools::try_handle(cmd, args.as_ref()).await? {
         return Ok(result);
     }
 

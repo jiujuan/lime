@@ -1,4 +1,4 @@
-use crate::conversation::message::{Message, MessageContent};
+use crate::conversation::message::{Message, MessageContent, MessageMetadata};
 use crate::model::ModelConfig;
 use crate::providers::base::{ProviderUsage, Usage};
 use crate::providers::formats::tool_description_with_examples;
@@ -11,6 +11,7 @@ use rmcp::model::{object, CallToolRequestParam, ErrorCode, ErrorData, RawContent
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::ops::Deref;
 
 fn convert_image_to_input_image(mime_type: &str, data: &str) -> Value {
@@ -263,6 +264,30 @@ pub enum ContentPart {
         name: String,
         arguments: String,
     },
+}
+
+#[derive(Debug, Clone, Default)]
+struct ResponsesStreamingToolCall {
+    tool_id: String,
+    tool_name: Option<String>,
+    accumulated_arguments: String,
+}
+
+fn responses_tool_input_delta_message(
+    id: String,
+    name: Option<String>,
+    delta: String,
+    accumulated_arguments: String,
+) -> Message {
+    Message::assistant()
+        .with_tool_input_delta(
+            id,
+            name,
+            delta,
+            Some(accumulated_arguments),
+            Some("openai_responses"),
+        )
+        .with_metadata(MessageMetadata::invisible())
 }
 
 fn add_conversation_history(input_items: &mut Vec<Value>, messages: &[Message]) {
@@ -699,6 +724,7 @@ where
         let mut final_usage: Option<ProviderUsage> = None;
         let mut output_items: Vec<ResponseOutputItemInfo> = Vec::new();
         let mut is_text_response = false;
+        let mut streaming_tool_calls: HashMap<String, ResponsesStreamingToolCall> = HashMap::new();
 
         'outer: while let Some(response) = stream.next().await {
             let response_str = response?;
@@ -753,6 +779,26 @@ where
                     yield (Some(msg), None);
                 }
 
+                ResponsesStreamEvent::OutputItemAdded { item, .. } => {
+                    if let ResponseOutputItemInfo::FunctionCall {
+                        id,
+                        call_id,
+                        name,
+                        arguments,
+                        ..
+                    } = item
+                    {
+                        streaming_tool_calls.insert(
+                            id,
+                            ResponsesStreamingToolCall {
+                                tool_id: call_id,
+                                tool_name: Some(name),
+                                accumulated_arguments: arguments,
+                            },
+                        );
+                    }
+                }
+
                 ResponsesStreamEvent::OutputItemDone { item, .. } => {
                     output_items.push(item);
                 }
@@ -791,13 +837,43 @@ where
                     break 'outer;
                 }
 
-                ResponsesStreamEvent::FunctionCallArgumentsDelta { .. } => {
-                    // Function call arguments are being streamed, but we'll get the complete
-                    // arguments in the OutputItemDone event, so we can ignore deltas for now
+                ResponsesStreamEvent::FunctionCallArgumentsDelta {
+                    item_id, delta, ..
+                } => {
+                    if !delta.is_empty() {
+                        let entry = streaming_tool_calls.entry(item_id.clone()).or_insert_with(|| {
+                            ResponsesStreamingToolCall {
+                                tool_id: item_id,
+                                tool_name: None,
+                                accumulated_arguments: String::new(),
+                            }
+                        });
+                        entry.accumulated_arguments.push_str(&delta);
+                        yield (
+                            Some(responses_tool_input_delta_message(
+                                entry.tool_id.clone(),
+                                entry.tool_name.clone(),
+                                delta,
+                                entry.accumulated_arguments.clone(),
+                            )),
+                            None,
+                        );
+                    }
                 }
 
-                ResponsesStreamEvent::FunctionCallArgumentsDone { .. } => {
-                    // Arguments are complete, will be in the OutputItemDone event
+                ResponsesStreamEvent::FunctionCallArgumentsDone {
+                    item_id,
+                    arguments,
+                    ..
+                } => {
+                    let entry = streaming_tool_calls.entry(item_id.clone()).or_insert_with(|| {
+                        ResponsesStreamingToolCall {
+                            tool_id: item_id,
+                            tool_name: None,
+                            accumulated_arguments: String::new(),
+                        }
+                    });
+                    entry.accumulated_arguments = arguments;
                 }
 
                 ResponsesStreamEvent::ResponseFailed { error, .. } => {
@@ -832,6 +908,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::StreamExt;
     use rmcp::object;
 
     #[test]
@@ -967,5 +1044,58 @@ mod tests {
             payload["text"]["format"]["schema"]["properties"]["answer"]["type"],
             "string"
         );
+    }
+
+    #[tokio::test]
+    async fn test_responses_streaming_tool_arguments_emit_input_delta_signal() -> anyhow::Result<()>
+    {
+        let lines = [
+            r#"data: {"type":"response.created","sequence_number":0,"response":{"id":"resp-1","object":"response","created_at":1778300000,"status":"in_progress","model":"gpt-5-codex","output":[]}}"#,
+            r#"data: {"type":"response.output_item.added","sequence_number":1,"output_index":0,"item":{"type":"function_call","id":"fc-1","status":"in_progress","call_id":"call-1","name":"read_file","arguments":""}}"#,
+            r#"data: {"type":"response.function_call_arguments.delta","sequence_number":2,"item_id":"fc-1","output_index":0,"delta":"{\"path\"" }"#,
+            r#"data: {"type":"response.function_call_arguments.delta","sequence_number":3,"item_id":"fc-1","output_index":0,"delta":":\"README.md\"}" }"#,
+            r#"data: {"type":"response.function_call_arguments.done","sequence_number":4,"item_id":"fc-1","output_index":0,"arguments":"{\"path\":\"README.md\"}" }"#,
+            r#"data: {"type":"response.output_item.done","sequence_number":5,"output_index":0,"item":{"type":"function_call","id":"fc-1","status":"completed","call_id":"call-1","name":"read_file","arguments":"{\"path\":\"README.md\"}"}}"#,
+            r#"data: {"type":"response.completed","sequence_number":6,"response":{"id":"resp-1","object":"response","created_at":1778300001,"status":"completed","model":"gpt-5-codex","output":[],"usage":{"input_tokens":10,"output_tokens":4,"total_tokens":14}}}"#,
+            "data: [DONE]",
+        ];
+
+        let stream = tokio_stream::iter(lines.into_iter().map(|line| Ok(line.to_string())));
+        let messages = responses_api_to_streaming_message(stream);
+        futures::pin_mut!(messages);
+
+        let mut deltas = Vec::new();
+        let mut final_tool_arguments = None;
+
+        while let Some(Ok((message, _usage))) = messages.next().await {
+            let Some(message) = message else {
+                continue;
+            };
+            for content in message.content {
+                match content {
+                    MessageContent::ToolInputDelta(delta) => {
+                        assert_eq!(delta.id, "call-1");
+                        assert_eq!(delta.tool_name.as_deref(), Some("read_file"));
+                        assert_eq!(delta.provider.as_deref(), Some("openai_responses"));
+                        deltas.push(delta.accumulated_arguments.unwrap_or_default());
+                    }
+                    MessageContent::ToolRequest(request) => {
+                        let call = request.tool_call.expect("tool call should parse");
+                        final_tool_arguments = Some(call.arguments);
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        assert_eq!(deltas, vec!["{\"path\"", "{\"path\":\"README.md\"}"]);
+        assert_eq!(
+            final_tool_arguments
+                .flatten()
+                .and_then(|args| args.get("path").cloned()),
+            Some(json!("README.md"))
+        );
+
+        Ok(())
     }
 }

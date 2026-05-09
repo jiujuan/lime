@@ -13,7 +13,7 @@ import {
   type A2UITaskCardSurface,
 } from "@/lib/workspace/a2ui";
 
-export interface A2UITaskCardProps {
+interface A2UITaskCardProps {
   response: A2UIResponse;
   onSubmit?: (formData: A2UIFormData) => void;
   onFormStateChange?: (formData: A2UIFormData) => void;
@@ -158,5 +158,3 @@ export function A2UITaskLoadingCard({
     </A2UITaskCardShell>
   );
 }
-
-export default A2UITaskCard;

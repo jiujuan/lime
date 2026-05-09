@@ -19,11 +19,16 @@ import {
   type SystemProviderCatalogItem,
   type UpdateProviderRequest,
 } from "@/lib/api/apiKeyProvider";
+import {
+  fetchProviderModelsAuto,
+  normalizeFetchProviderModelsSource,
+} from "@/lib/api/modelRegistry";
 import type {
   ProviderDeclaredPromptCacheMode,
   ProviderType,
 } from "@/lib/types/provider";
 import { useModelRegistry } from "@/hooks/useModelRegistry";
+import { getProviderModelAutoFetchCapability } from "@/lib/model/providerModelFetchSupport";
 import {
   dedupeModelIds,
   getProviderTypeLabel,
@@ -33,16 +38,30 @@ import {
   SENSENOVA_OPENAI_COMPATIBLE_API_HOST,
 } from "./providerConfigUtils";
 import {
+  AlertCircle,
   ArrowLeft,
   Check,
   ExternalLink,
   Eye,
   Globe2,
+  Loader2,
   Plus,
+  RefreshCw,
   ServerCog,
   SlidersHorizontal,
+  Sparkles,
   Zap,
 } from "lucide-react";
+import {
+  buildFalModelFetchStatus,
+  buildResponsesModelFetchStatus,
+  extractApiModelIds,
+  isFalProviderLike,
+  isLikelyFalImageModel,
+  isProviderApiKeyRequired,
+  type ProviderModelFetchProfile,
+  type ProviderModelFetchStatus,
+} from "./providerModelFetchHelpers";
 
 export type ModelAddView = "catalog" | "configure";
 export type ModelCatalogCategory =
@@ -558,6 +577,24 @@ function validateForm(state: FormState): string | null {
   return null;
 }
 
+function validateModelFetchForm(state: FormState): string | null {
+  if (!state.name.trim()) {
+    return "请先填写供应商名称。";
+  }
+  if (!state.apiHost.trim()) {
+    return "请先填写 API Base URL。";
+  }
+  if (state.apiHost.trim() !== normalizeKnownProviderApiHost(state.apiHost)) {
+    return "检测到你填写的是文档页或旧接口地址，已自动修正 API Base URL，请确认后再获取模型。";
+  }
+  try {
+    new URL(state.apiHost.trim());
+  } catch {
+    return "请输入有效的 API Base URL。";
+  }
+  return null;
+}
+
 function renderTemplateIcon(template: ProviderTemplate) {
   if (template.isCustom) {
     return <SlidersHorizontal className="h-5 w-5 text-slate-500" />;
@@ -623,6 +660,38 @@ function renderTemplateBadges(template: ProviderTemplate) {
   );
 }
 
+function buildStatusClass(tone: ProviderModelFetchStatus["tone"]): string {
+  switch (tone) {
+    case "success":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "error":
+      return "border-rose-200 bg-rose-50 text-rose-700";
+    case "info":
+    default:
+      return "border-sky-200 bg-sky-50 text-sky-700";
+  }
+}
+
+function getStatusIcon(tone: ProviderModelFetchStatus["tone"]) {
+  if (tone === "success") {
+    return <Check className="h-4 w-4" />;
+  }
+  if (tone === "error") {
+    return <AlertCircle className="h-4 w-4" />;
+  }
+  return <Sparkles className="h-4 w-4" />;
+}
+
+function hasConfiguredApiKey(provider?: ProviderWithKeysDisplay | null) {
+  if (!provider) {
+    return false;
+  }
+  if (provider.api_keys?.length) {
+    return provider.api_keys.some((apiKey) => apiKey.enabled);
+  }
+  return provider.api_key_count > 0;
+}
+
 export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
   providers,
   onAddProvider,
@@ -645,6 +714,16 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
+  const [fetchingModels, setFetchingModels] = useState(false);
+  const [modelFetchStatus, setModelFetchStatus] =
+    useState<ProviderModelFetchStatus | null>(null);
+  const [apiModelIds, setApiModelIds] = useState<string[]>([]);
+  const [apiModelQuery, setApiModelQuery] = useState("");
+  const [draftProviderId, setDraftProviderId] = useState<string | null>(null);
+  const [persistedApiKey, setPersistedApiKey] = useState<{
+    providerId: string;
+    value: string;
+  } | null>(null);
   const { groupedByProvider } = useModelRegistry({ autoLoad: true });
 
   useEffect(() => {
@@ -704,6 +783,11 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
     setFormState(createInitialFormState(template));
     setModelDraft("");
     setSubmitError(null);
+    setModelFetchStatus(null);
+    setApiModelIds([]);
+    setApiModelQuery("");
+    setDraftProviderId(null);
+    setPersistedApiKey(null);
     setView("configure");
   }, []);
 
@@ -747,6 +831,295 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
     }));
   }, []);
 
+  const template = selectedTemplate ?? CUSTOM_TEMPLATE;
+  const configuredProvider = useMemo(() => {
+    if (draftProviderId) {
+      return existingProviderById.get(draftProviderId) ?? null;
+    }
+
+    return template.systemProviderId
+      ? (existingProviderById.get(template.systemProviderId) ?? null)
+      : null;
+  }, [draftProviderId, existingProviderById, template.systemProviderId]);
+
+  const modelFetchProfile = useMemo<ProviderModelFetchProfile>(
+    () => ({
+      id:
+        draftProviderId ??
+        template.systemProviderId ??
+        template.providerResourceId ??
+        template.iconProviderId ??
+        template.id,
+      type: formState.type,
+      api_host: normalizeKnownProviderApiHost(formState.apiHost),
+    }),
+    [
+      draftProviderId,
+      formState.apiHost,
+      formState.type,
+      template.iconProviderId,
+      template.id,
+      template.providerResourceId,
+      template.systemProviderId,
+    ],
+  );
+
+  const modelAutoFetchCapability = useMemo(
+    () =>
+      getProviderModelAutoFetchCapability({
+        providerId: modelFetchProfile.id,
+        providerType: formState.type,
+        apiHost: modelFetchProfile.api_host,
+      }),
+    [formState.type, modelFetchProfile.api_host, modelFetchProfile.id],
+  );
+
+  const modelFetchApiKeyRequired = modelAutoFetchCapability.requiresApiKey;
+  const providerApiKeyRequired = isProviderApiKeyRequired(
+    modelFetchProfile,
+    modelFetchApiKeyRequired,
+  );
+  const canReadModelsFromApi =
+    Boolean(formState.apiHost.trim()) &&
+    modelAutoFetchCapability.supported &&
+    (!modelFetchApiKeyRequired ||
+      hasConfiguredApiKey(configuredProvider) ||
+      formState.apiKey.trim().length > 0);
+  const normalizedModelSet = useMemo(
+    () => new Set(formState.models.map((model) => model.toLowerCase())),
+    [formState.models],
+  );
+  const availableApiModels = useMemo(
+    () =>
+      apiModelIds.filter(
+        (modelId) => !normalizedModelSet.has(modelId.toLowerCase()),
+      ),
+    [apiModelIds, normalizedModelSet],
+  );
+  const normalizedApiModelQuery = apiModelQuery.trim().toLowerCase();
+  const suggestedApiModels = useMemo(
+    () =>
+      normalizedApiModelQuery
+        ? availableApiModels.filter((modelId) =>
+            modelId.toLowerCase().includes(normalizedApiModelQuery),
+          )
+        : availableApiModels,
+    [availableApiModels, normalizedApiModelQuery],
+  );
+
+  const addFetchedModels = useCallback((models: string[]) => {
+    if (models.length === 0) {
+      return;
+    }
+
+    setFormState((previous) => ({
+      ...previous,
+      models: dedupeModelIds([...previous.models, ...models]),
+    }));
+  }, []);
+
+  const persistProviderForModelFetch = useCallback(
+    async (state: FormState): Promise<string> => {
+      const request: AddCustomProviderRequest = {
+        name: state.name.trim(),
+        type: state.type,
+        api_host: state.apiHost,
+        prompt_cache_mode: resolvePromptCacheModeRequestValue(
+          state.type,
+          state.promptCacheMode,
+          state.apiHost,
+        ),
+      };
+
+      const existingProvider = draftProviderId
+        ? (existingProviderById.get(draftProviderId) ?? null)
+        : template.systemProviderId
+          ? (existingProviderById.get(template.systemProviderId) ?? null)
+          : null;
+      let providerId = existingProvider?.id ?? draftProviderId;
+
+      if (providerId) {
+        await onUpdateProvider(providerId, {
+          type: request.type,
+          api_host: request.api_host,
+          enabled: true,
+          prompt_cache_mode: request.prompt_cache_mode,
+          custom_models: state.models,
+        });
+      } else {
+        const created = await onAddProvider(request);
+        providerId = created.id;
+        await onUpdateProvider(providerId, {
+          enabled: true,
+          custom_models: state.models,
+        });
+      }
+
+      setDraftProviderId(providerId);
+
+      const nextApiKey = state.apiKey.trim();
+      if (
+        nextApiKey &&
+        !(
+          persistedApiKey?.providerId === providerId &&
+          persistedApiKey.value === nextApiKey
+        )
+      ) {
+        await onAddApiKey(providerId, nextApiKey);
+        setPersistedApiKey({ providerId, value: nextApiKey });
+      }
+
+      return providerId;
+    },
+    [
+      draftProviderId,
+      existingProviderById,
+      onAddApiKey,
+      onAddProvider,
+      onUpdateProvider,
+      persistedApiKey,
+      template.systemProviderId,
+    ],
+  );
+
+  const handleFetchModelsFromApi = useCallback(async () => {
+    const normalizedFormState = {
+      ...formState,
+      apiHost: normalizeKnownProviderApiHost(formState.apiHost),
+    };
+    if (normalizedFormState.apiHost !== formState.apiHost) {
+      setFormState((previous) => ({
+        ...previous,
+        apiHost: normalizedFormState.apiHost,
+      }));
+    }
+
+    const validationError = validateModelFetchForm(normalizedFormState);
+    if (validationError) {
+      setModelFetchStatus({ tone: "error", message: validationError });
+      return;
+    }
+
+    if (!modelAutoFetchCapability.supported) {
+      setModelFetchStatus({
+        tone: "info",
+        message:
+          modelAutoFetchCapability.unsupportedReason ??
+          "当前协议不支持接口获取模型，请手动添加模型 ID。",
+      });
+      return;
+    }
+
+    if (!canReadModelsFromApi) {
+      setModelFetchStatus({
+        tone: "error",
+        message: modelFetchApiKeyRequired
+          ? "请先填写 API 密钥，再从接口获取模型。"
+          : "请先补全 API Base URL，再从接口获取模型。",
+      });
+      return;
+    }
+
+    setFetchingModels(true);
+    setModelFetchStatus(null);
+
+    try {
+      const providerId =
+        await persistProviderForModelFetch(normalizedFormState);
+      const result = await fetchProviderModelsAuto(providerId);
+      const source = normalizeFetchProviderModelsSource(result);
+      const fetchedModelIds = extractApiModelIds(result.models ?? []);
+
+      if (source !== "Api") {
+        setApiModelIds([]);
+        const responsesStatus = buildResponsesModelFetchStatus(
+          result,
+          normalizedFormState.models,
+        );
+        const falStatus = buildFalModelFetchStatus(
+          modelFetchProfile,
+          result,
+          normalizedFormState.models,
+        );
+        setModelFetchStatus({
+          tone:
+            responsesStatus?.tone ??
+            falStatus?.tone ??
+            (source === "Error" ? "error" : "info"),
+          message:
+            responsesStatus?.message ??
+            falStatus?.message ??
+            (source === "Error"
+              ? (result.error ?? "接口获取模型失败。请手动添加模型 ID。")
+              : "接口没有返回实时模型列表。请手动添加模型 ID。"),
+        });
+        return;
+      }
+
+      const effectiveFetchedModelIds = isFalProviderLike(modelFetchProfile)
+        ? fetchedModelIds.filter(isLikelyFalImageModel)
+        : fetchedModelIds;
+
+      if (effectiveFetchedModelIds.length === 0) {
+        setApiModelIds([]);
+        setModelFetchStatus({
+          tone: "info",
+          message: isFalProviderLike(modelFetchProfile)
+            ? "Fal 不提供标准 /models 枚举；当前没有可用 Fal 图片模型，请手动添加 fal-ai/nano-banana-pro、fal-ai/flux-pro 或其他 fal-ai/... 模型 ID。"
+            : "接口已响应，但没有返回可添加的模型 ID。请手动添加模型。",
+        });
+        return;
+      }
+
+      setApiModelIds(effectiveFetchedModelIds);
+      setApiModelQuery("");
+
+      const existingFetchedModelCount = effectiveFetchedModelIds.filter(
+        (modelId) => normalizedModelSet.has(modelId.toLowerCase()),
+      ).length;
+      const shouldAutoFillModels =
+        formState.models.length === 0 && effectiveFetchedModelIds.length <= 6;
+      if (shouldAutoFillModels) {
+        addFetchedModels(effectiveFetchedModelIds);
+        setModelFetchStatus({
+          tone: "success",
+          message: `接口返回 ${effectiveFetchedModelIds.length} 个模型，已自动加入模型优先级。`,
+        });
+        return;
+      }
+
+      if (existingFetchedModelCount === effectiveFetchedModelIds.length) {
+        setModelFetchStatus({
+          tone: "success",
+          message: `已确认 ${effectiveFetchedModelIds.length} 个模型，当前模型优先级已包含全部结果。`,
+        });
+        return;
+      }
+
+      setModelFetchStatus({
+        tone: "success",
+        message: `接口返回 ${effectiveFetchedModelIds.length} 个模型，点击下方模型即可加入优先级。`,
+      });
+    } catch (error) {
+      setModelFetchStatus({
+        tone: "error",
+        message: error instanceof Error ? error.message : "接口获取模型失败",
+      });
+    } finally {
+      setFetchingModels(false);
+    }
+  }, [
+    addFetchedModels,
+    canReadModelsFromApi,
+    formState,
+    modelAutoFetchCapability.supported,
+    modelAutoFetchCapability.unsupportedReason,
+    modelFetchApiKeyRequired,
+    modelFetchProfile,
+    normalizedModelSet,
+    persistProviderForModelFetch,
+  ]);
+
   const activateProvider = useCallback(async () => {
     const normalizedFormState = {
       ...formState,
@@ -765,7 +1138,6 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
       return;
     }
 
-    const template = selectedTemplate ?? CUSTOM_TEMPLATE;
     setSubmitting(true);
     setSubmitError(null);
 
@@ -781,10 +1153,12 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
         ),
       };
 
-      const existingProvider = template.systemProviderId
-        ? existingProviderById.get(template.systemProviderId)
-        : null;
-      let providerId = existingProvider?.id ?? null;
+      const existingProvider = draftProviderId
+        ? (existingProviderById.get(draftProviderId) ?? null)
+        : template.systemProviderId
+          ? (existingProviderById.get(template.systemProviderId) ?? null)
+          : null;
+      let providerId = existingProvider?.id ?? draftProviderId;
 
       if (providerId) {
         await onUpdateProvider(providerId, {
@@ -797,14 +1171,23 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
       } else {
         const created = await onAddProvider(request);
         providerId = created.id;
+        setDraftProviderId(providerId);
         await onUpdateProvider(providerId, {
           enabled: true,
           custom_models: normalizedFormState.models,
         });
       }
 
-      if (normalizedFormState.apiKey.trim()) {
-        await onAddApiKey(providerId, normalizedFormState.apiKey.trim());
+      const nextApiKey = normalizedFormState.apiKey.trim();
+      if (
+        nextApiKey &&
+        !(
+          persistedApiKey?.providerId === providerId &&
+          persistedApiKey.value === nextApiKey
+        )
+      ) {
+        await onAddApiKey(providerId, nextApiKey);
+        setPersistedApiKey({ providerId, value: nextApiKey });
       }
 
       const testResult = await apiKeyProviderApi.testConnection(
@@ -826,13 +1209,15 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
       setSubmitting(false);
     }
   }, [
+    draftProviderId,
     existingProviderById,
     formState,
     onActivated,
     onAddApiKey,
     onAddProvider,
     onUpdateProvider,
-    selectedTemplate,
+    persistedApiKey,
+    template.systemProviderId,
   ]);
 
   if (view === "catalog") {
@@ -926,8 +1311,8 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
     );
   }
 
-  const template = selectedTemplate ?? CUSTOM_TEMPLATE;
-  const apiKeyRequired = isApiKeyRequired(formState.type);
+  const apiKeyRequired =
+    providerApiKeyRequired || isApiKeyRequired(formState.type);
 
   return (
     <div
@@ -1162,14 +1547,119 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label className="text-sm text-slate-600">
-              模型优先级（至少添加一个）
-            </Label>
-            <p className="text-xs leading-5 text-slate-500">
-              这里不再预填本地兜底模型；请输入你确认可用的模型
-              ID，或保存后到配置页从接口获取。
-            </p>
+          <div className="space-y-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <Label className="text-sm text-slate-600">
+                  模型优先级（至少添加一个）
+                </Label>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  只使用接口返回或你手动添加的模型，不再显示本地兜底模型。
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 rounded-full border-slate-200 bg-white"
+                onClick={() => {
+                  void handleFetchModelsFromApi();
+                }}
+                disabled={submitting || fetchingModels || !canReadModelsFromApi}
+                data-testid="fetch-models-button"
+              >
+                {fetchingModels ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                从接口获取
+              </Button>
+            </div>
+
+            {!modelAutoFetchCapability.supported &&
+            modelAutoFetchCapability.unsupportedReason ? (
+              <p className="rounded-[16px] border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
+                {modelAutoFetchCapability.unsupportedReason}
+              </p>
+            ) : null}
+
+            {modelFetchStatus ? (
+              <div
+                className={cn(
+                  "flex items-start gap-2 rounded-[16px] border px-3 py-2 text-sm",
+                  buildStatusClass(modelFetchStatus.tone),
+                )}
+                data-testid="model-fetch-status"
+              >
+                {getStatusIcon(modelFetchStatus.tone)}
+                <span className="leading-5">{modelFetchStatus.message}</span>
+              </div>
+            ) : null}
+
+            {availableApiModels.length > 0 ? (
+              <div
+                className="rounded-[18px] border border-slate-200/80 bg-slate-50 p-3"
+                data-testid="api-model-suggestions"
+              >
+                <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-xs font-medium text-slate-500">
+                    接口模型（显示 {suggestedApiModels.length} /{" "}
+                    {availableApiModels.length} 个，点击添加）
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <Input
+                      value={apiModelQuery}
+                      onChange={(event) => setApiModelQuery(event.target.value)}
+                      placeholder="筛选接口模型"
+                      className="h-8 rounded-full border-slate-200 bg-white px-3 text-xs normal-case sm:w-[220px]"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      data-testid="api-model-filter-input"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 rounded-full border-slate-200 bg-white px-3 text-xs"
+                      onClick={() => addFetchedModels(suggestedApiModels)}
+                      disabled={suggestedApiModels.length === 0}
+                      data-testid="api-model-add-all-button"
+                    >
+                      添加全部
+                    </Button>
+                  </div>
+                </div>
+                <div
+                  className="max-h-56 overflow-y-auto pr-1"
+                  data-testid="api-model-suggestion-list"
+                >
+                  {suggestedApiModels.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {suggestedApiModels.map((modelId) => (
+                        <button
+                          key={modelId}
+                          type="button"
+                          onClick={() => addFetchedModels([modelId])}
+                          className="max-w-full rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition hover:border-slate-300 hover:text-slate-900"
+                          data-testid="api-model-suggestion"
+                        >
+                          <span className="block max-w-[220px] truncate normal-case">
+                            {modelId}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-[14px] border border-dashed border-slate-200 bg-white px-3 py-4 text-center text-xs text-slate-500">
+                      没有匹配的接口模型。
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : null}
+
             <div
               className="rounded-[22px] bg-slate-100 p-3"
               data-testid="model-priority-list"
@@ -1283,5 +1773,3 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
     </div>
   );
 };
-
-export default ModelAddPanel;

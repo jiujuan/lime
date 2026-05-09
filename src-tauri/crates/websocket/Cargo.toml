@@ -30,7 +30,7 @@ chrono.workspace = true
 # 工具库
 dashmap.workspace = true
 parking_lot.workspace = true
+rusqlite.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
-rusqlite.workspace = true

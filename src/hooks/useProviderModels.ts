@@ -28,7 +28,7 @@ import type { EnhancedModelMetadata } from "@/lib/types/modelRegistry";
 // 类型定义
 // ============================================================================
 
-export interface UseProviderModelsOptions {
+interface UseProviderModelsOptions {
   /** 是否返回完整的模型元数据（默认只返回模型 ID） */
   returnFullMetadata?: boolean;
   /** 是否自动加载模型注册表 */
@@ -39,7 +39,7 @@ export interface UseProviderModelsOptions {
   hasApiKey?: boolean;
 }
 
-export interface UseProviderModelsResult {
+interface UseProviderModelsResult {
   /** 模型 ID 列表 */
   modelIds: string[];
   /** 完整的模型元数据列表（仅当 returnFullMetadata 为 true 时有值） */
@@ -424,15 +424,3 @@ export function useProviderModels(
     error,
   };
 }
-
-/**
- * 简化版本：只返回模型 ID 列表
- */
-export function useProviderModelIds(
-  selectedProvider: ConfiguredProvider | undefined | null,
-): string[] {
-  const { modelIds } = useProviderModels(selectedProvider);
-  return modelIds;
-}
-
-export default useProviderModels;

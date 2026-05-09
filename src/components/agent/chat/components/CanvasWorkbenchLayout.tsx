@@ -2280,5 +2280,3 @@ export const CanvasWorkbenchLayout = memo(function CanvasWorkbenchLayout({
     </section>
   );
 });
-
-export default CanvasWorkbenchLayout;

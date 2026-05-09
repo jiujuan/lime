@@ -4,6 +4,7 @@ import {
   createAutomationJob,
   type AutomationJobRequest,
 } from "@/lib/api/automation";
+import { recordAutomationJobAgentUiProjection } from "@/components/agent/chat/projection/automationJobAgentUiProjection";
 import {
   planSceneAppLaunch,
   type SceneAppDescriptor,
@@ -195,6 +196,7 @@ export function useSceneAppLaunchRuntime({
           pendingAutomationRequest,
         );
         const createdJob = await createAutomationJob(request);
+        recordAutomationJobAgentUiProjection(createdJob, "created");
         toast.success(`SceneApp 自动化已创建：${createdJob.name}`);
         setAutomationDialogOpen(false);
         setAutomationDialogInitialValues(null);

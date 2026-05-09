@@ -25,7 +25,7 @@ import type {
 } from "@/types/gallery-material";
 
 /** Hook 返回类型 */
-export interface UseGalleryMaterialReturn {
+interface UseGalleryMaterialReturn {
   /** 素材列表 */
   materials: GalleryMaterial[];
   /** 筛选后的素材列表 */
@@ -252,5 +252,3 @@ export function useGalleryMaterial(
     listByMood,
   };
 }
-
-export default useGalleryMaterial;

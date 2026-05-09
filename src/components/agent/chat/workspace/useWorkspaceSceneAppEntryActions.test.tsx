@@ -3,6 +3,11 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
+import {
+  clearAgentUiProjectionEvents,
+  conversationProjectionStore,
+  selectAgentUiProjectionEventsByType,
+} from "../projection/conversationProjectionStore";
 import { useWorkspaceSceneAppEntryActions } from "./useWorkspaceSceneAppEntryActions";
 import type { SceneAppCatalog, SceneAppPlanResult } from "@/lib/sceneapp";
 
@@ -340,9 +345,11 @@ beforeEach(() => {
     id: "job-1",
     name: "每日趋势摘要 自动化",
   });
+  clearAgentUiProjectionEvents();
 });
 
 afterEach(() => {
+  clearAgentUiProjectionEvents();
   while (mountedRoots.length > 0) {
     const mounted = mountedRoots.pop();
     if (!mounted) break;
@@ -593,5 +600,20 @@ describe("useWorkspaceSceneAppEntryActions", () => {
     expect(mockToastSuccess).toHaveBeenCalledWith(
       "SceneApp 自动化已创建：每日趋势摘要 自动化",
     );
+    expect(
+      selectAgentUiProjectionEventsByType(
+        conversationProjectionStore.getSnapshot(),
+        "agent.changed",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        sourceType: "automation_job_projection",
+        taskId: "job-1",
+        agentId: "job-1",
+        agentName: "每日趋势摘要 自动化",
+        surface: "background_teammate",
+        runtimeEntity: "automation_job",
+      }),
+    ]);
   });
 });

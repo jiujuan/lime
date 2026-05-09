@@ -88,5 +88,3 @@ export const ModelCapabilityBadges: React.FC<ModelCapabilityBadgesProps> = ({
     </div>
   );
 };
-
-export default ModelCapabilityBadges;

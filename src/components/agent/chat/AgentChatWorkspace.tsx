@@ -128,6 +128,7 @@ import {
   alignChatToolPreferencesWithExecutionStrategy,
   loadChatToolPreferences,
 } from "./utils/chatToolPreferences";
+import { isWorkspacePathErrorMessage } from "./hooks/agentChatCoreUtils";
 import { mergeArtifacts } from "./utils/messageArtifacts";
 import {
   createChatToolPreferencesFromExecutionRuntime,
@@ -358,6 +359,18 @@ const SESSION_RECENT_METADATA_NAVIGATION_DEFER_MS = 45_000;
 const SESSION_RECENT_METADATA_BACKGROUND_SYNC_IDLE_TIMEOUT_MS = 20_000;
 const BROWSER_WORKSPACE_HOME_HINT_STORAGE_KEY =
   "lime.agent.browser-workspace-home-hint-shown";
+
+function isTransientWorkspaceBridgeError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    message.includes("[DevBridge] 浏览器模式无法连接后端桥接") ||
+    message.includes("Failed to fetch") ||
+    normalized.includes("timeout") ||
+    normalized.includes("aborterror") ||
+    normalized.includes("bridge health check failed") ||
+    normalized.includes("bridge cooldown active")
+  );
+}
 const FILE_MANAGER_SIDEBAR_OPEN_STORAGE_KEY = "lime.file-manager.sidebar-open";
 const FILE_MANAGER_NAV_COLLAPSE_BREAKPOINT_PX = 1180;
 const APP_SIDEBAR_COLLAPSE_EVENT = "lime:app-sidebar-collapse";
@@ -2199,7 +2212,12 @@ export function AgentChatWorkspace({
             },
             { level: "warn" },
           );
-          setWorkspaceHealthError(true);
+          if (
+            isWorkspacePathErrorMessage(message) ||
+            !isTransientWorkspaceBridgeError(message)
+          ) {
+            setWorkspaceHealthError(true);
+          }
         });
     };
 
@@ -2707,6 +2725,7 @@ export function AgentChatWorkspace({
     subagentParentContext,
   });
   const teamSessionControlRuntime = useWorkspaceTeamSessionControlRuntime({
+    sessionId,
     childSubagentSessions,
     liveRuntimeBySessionId: teamSessionRuntime.liveRuntimeBySessionId,
     stopSending,
@@ -3909,6 +3928,9 @@ export function AgentChatWorkspace({
   const taskCenterDraftMaterializePromisesRef = useRef<
     Map<string, Promise<string | null>>
   >(new Map());
+  const taskCenterDraftMaterializedSessionIdsRef = useRef<Map<string, string>>(
+    new Map(),
+  );
   const homePendingPreviewPaintedRequestIdsRef = useRef<Set<string>>(new Set());
   const [taskCenterLocalSessionOverride, setTaskCenterLocalSessionOverride] =
     useState<{
@@ -4013,6 +4035,10 @@ export function AgentChatWorkspace({
     taskCenterRouteTabSyncRef.current = normalizedInitialSessionId;
     if (routeChanged || shouldRespectTaskCenterLocalSession) {
       setActiveTaskCenterDraftTabId(null);
+    }
+    if (shouldRespectTaskCenterLocalSession) {
+      setTaskCenterTransitionTopicId(null);
+      setTaskCenterDetachedTopicId(null);
     }
     setTaskCenterOpenTabMap((currentMap) => {
       if (shouldRespectTaskCenterLocalSession) {
@@ -4763,12 +4789,45 @@ export function AgentChatWorkspace({
     setSelectedText,
     taskCenterWorkspaceId,
   ]);
+
+  const commitMaterializedTaskCenterDraftTab = useCallback(
+    (
+      draftTabId: string,
+      newSessionId: string,
+      options?: { preserveInput?: boolean },
+    ) => {
+      startTransition(() => {
+        setTaskCenterDraftTabs((current) =>
+          current.filter((tab) => tab.id !== draftTabId),
+        );
+        setActiveTaskCenterDraftTabId((current) =>
+          current === draftTabId ? null : current,
+        );
+        finalizeFreshTaskCenterConversation(
+          newSessionId,
+          taskCenterWorkspaceId,
+          options,
+        );
+      });
+    },
+    [finalizeFreshTaskCenterConversation, taskCenterWorkspaceId],
+  );
+
   const materializeTaskCenterDraftTab = useCallback(
     async (
       draftTabId: string,
-      options?: { reason?: "send" | "input_warmup" },
+      options?: {
+        reason?: "send" | "input_warmup";
+        commit?: boolean;
+      },
     ): Promise<string | null> => {
       const reason = options?.reason ?? "send";
+      const materializedSessionId =
+        taskCenterDraftMaterializedSessionIdsRef.current.get(draftTabId);
+      if (materializedSessionId) {
+        return materializedSessionId;
+      }
+
       const existingPromise =
         taskCenterDraftMaterializePromisesRef.current.get(draftTabId);
       if (existingPromise) {
@@ -4805,7 +4864,7 @@ export function AgentChatWorkspace({
 
       const materializePromise = (async () => {
         const newSessionId = await createFreshSession("新对话", {
-          preserveCurrentSnapshot: true,
+          preserveCurrentSnapshot: false,
         });
         if (!newSessionId) {
           setTaskCenterDraftTabs((current) =>
@@ -4823,20 +4882,16 @@ export function AgentChatWorkspace({
           });
           return null;
         }
+        taskCenterDraftMaterializedSessionIdsRef.current.set(
+          draftTabId,
+          newSessionId,
+        );
 
-        startTransition(() => {
-          setTaskCenterDraftTabs((current) =>
-            current.filter((tab) => tab.id !== draftTabId),
-          );
-          setActiveTaskCenterDraftTabId((current) =>
-            current === draftTabId ? null : current,
-          );
-          finalizeFreshTaskCenterConversation(
-            newSessionId,
-            taskCenterWorkspaceId,
-            { preserveInput: true },
-          );
-        });
+        if (options?.commit !== false) {
+          commitMaterializedTaskCenterDraftTab(draftTabId, newSessionId, {
+            preserveInput: true,
+          });
+        }
 
         logAgentDebug("AgentChatPage", "taskCenter.draftTab.materialize.done", {
           draftTabId,
@@ -4870,8 +4925,8 @@ export function AgentChatWorkspace({
       return trackedPromise;
     },
     [
+      commitMaterializedTaskCenterDraftTab,
       createFreshSession,
-      finalizeFreshTaskCenterConversation,
       taskCenterWorkspaceId,
     ],
   );
@@ -7634,6 +7689,8 @@ export function AgentChatWorkspace({
 
       const savePageParams = buildKnowledgeSavePageParams({
         projectRootPath: project?.rootPath,
+        knowledgeSelectionWorkingDir:
+          inputbarScene.knowledgePackSelection?.workingDir,
         selectedPackName: inputbarScene.knowledgePackSelection?.packName,
         currentSessionTitle: teamSessionRuntime.currentSessionTitle,
         source: {
@@ -7660,6 +7717,7 @@ export function AgentChatWorkspace({
     [
       _onNavigate,
       importTextAsKnowledge,
+      inputbarScene.knowledgePackSelection?.workingDir,
       inputbarScene.knowledgePackSelection?.packName,
       project?.rootPath,
       teamSessionRuntime.currentSessionTitle,
@@ -7768,7 +7826,7 @@ export function AgentChatWorkspace({
               : tab,
           ),
         );
-        setTaskCenterDraftSendRequest({
+        const request: TaskCenterDraftSendRequest = {
           id: requestId,
           draftTabId: activeDraftTabId,
           text,
@@ -7780,7 +7838,9 @@ export function AgentChatWorkspace({
           submittedAt,
           materializeDraft: true,
           source: "task-center-empty-state",
-        });
+        };
+        setTaskCenterDraftSendRequest(request);
+        setHomePendingPreviewRequest(request);
         recordAgentUiPerformanceMetric("homeInput.pendingShellApplied", {
           durationMs: Date.now() - submittedAt,
           requestId,
@@ -7788,24 +7848,6 @@ export function AgentChatWorkspace({
           source: "task-center-empty-state",
           workspaceId: taskCenterWorkspaceId,
         });
-        void materializeTaskCenterDraftTab(activeDraftTabId, {
-          reason: "send",
-        })
-          .catch((error) => {
-            recordAgentUiPerformanceMetric("homeInput.draftMaterialize.error", {
-              durationMs: Date.now() - submittedAt,
-              error: error instanceof Error ? error.message : String(error),
-              requestId,
-              sessionId: activeDraftTabId,
-              source: "task-center-empty-state",
-              workspaceId: taskCenterWorkspaceId,
-            });
-          })
-          .finally(() => {
-            setTaskCenterDraftSendRequest((current) =>
-              current?.id === requestId ? null : current,
-            );
-          });
         return;
       }
 
@@ -7875,7 +7917,6 @@ export function AgentChatWorkspace({
       effectiveThreadItems.length,
       handleSend,
       hasDisplayMessages,
-      materializeTaskCenterDraftTab,
       sessionId,
       taskCenterWorkspaceId,
       turns.length,
@@ -7903,83 +7944,149 @@ export function AgentChatWorkspace({
 
     const request = taskCenterDraftSendRequest;
     let cancelled = false;
-    const cancel = scheduleAfterNextPaint(() => {
-      if (cancelled) {
-        return;
+    const clearRequest = (options?: { keepHomePreview?: boolean }) => {
+      setTaskCenterDraftSendRequest((current) =>
+        current?.id === request.id ? null : current,
+      );
+      if (!options?.keepHomePreview) {
+        setHomePendingPreviewRequest((current) =>
+          current?.id === request.id ? null : current,
+        );
       }
+      if (request.materializeDraft) {
+        taskCenterDraftMaterializedSessionIdsRef.current.delete(
+          request.draftTabId,
+        );
+      }
+    };
+    const cancel = scheduleAfterNextPaint(() => {
+      void (async () => {
+        if (cancelled) {
+          return;
+        }
 
-      recordAgentUiPerformanceMetric("homeInput.sendDispatch.start", {
-        elapsedMs: Date.now() - request.submittedAt,
-        requestId: request.id,
-        sessionId: request.draftTabId,
-        source: request.source,
-        workspaceId: taskCenterWorkspaceId,
-      });
-      const tracedSendOptions: HandleSendOptions = {
-        ...(request.sendOptions || {}),
-        // 首页首发代表“创建新对话”，不要先恢复上次会话，否则会把首字链路拖进旧会话 hydration。
-        skipSessionRestore: true,
-        // 同一条快路径也不应同步跑项目启动 hooks 或 submit 前队列恢复扫描。
-        skipSessionStartHooks: true,
-        skipPreSubmitResume: true,
-        requestMetadata: mergeAgentUiPerformanceTraceMetadata(
-          request.sendOptions?.requestMetadata,
-          {
+        const materializedSessionId = request.materializeDraft
+          ? await materializeTaskCenterDraftTab(request.draftTabId, {
+              reason: "send",
+              commit: false,
+            })
+          : null;
+        if (cancelled) {
+          return;
+        }
+        if (request.materializeDraft && !materializedSessionId) {
+          recordAgentUiPerformanceMetric("homeInput.sendDispatch.error", {
+            durationMs: Date.now() - request.submittedAt,
+            error: "draft_materialize_failed",
             requestId: request.id,
             sessionId: request.draftTabId,
             source: request.source,
-            submittedAt: request.submittedAt,
             workspaceId: taskCenterWorkspaceId,
-          },
-        ),
-      };
-      const sendPromise = handleSendRef.current(
-        request.images,
-        request.webSearch,
-        request.thinking,
-        request.text,
-        request.sendExecutionStrategy,
-        undefined,
-        tracedSendOptions,
-      );
-      void sendPromise
-        .then(
-          (result) => {
-            recordAgentUiPerformanceMetric("homeInput.sendDispatch.done", {
-              durationMs: Date.now() - request.submittedAt,
-              requestId: request.id,
-              result,
-              sessionId: request.draftTabId,
-              source: request.source,
-              workspaceId: taskCenterWorkspaceId,
-            });
-          },
-          (error) => {
-            recordAgentUiPerformanceMetric("homeInput.sendDispatch.error", {
-              durationMs: Date.now() - request.submittedAt,
-              error: error instanceof Error ? error.message : String(error),
-              requestId: request.id,
-              sessionId: request.draftTabId,
-              source: request.source,
-              workspaceId: taskCenterWorkspaceId,
-            });
-            setHomePendingPreviewRequest((current) =>
-              current?.id === request.id ? null : current,
-            );
-          },
-        )
-        .finally(() => {
-          if (request.materializeDraft) {
-            return;
-          }
+          });
+          clearRequest();
+          return;
+        }
+
+        const dispatchSessionId = materializedSessionId ?? request.draftTabId;
+        recordAgentUiPerformanceMetric("homeInput.sendDispatch.start", {
+          elapsedMs: Date.now() - request.submittedAt,
+          requestId: request.id,
+          sessionId: dispatchSessionId,
+          source: request.source,
+          workspaceId: taskCenterWorkspaceId,
         });
+        const tracedSendOptions: HandleSendOptions = {
+          ...(request.sendOptions || {}),
+          // 首页首发代表“创建新对话”，不要先恢复上次会话，否则会把首字链路拖进旧会话 hydration。
+          skipSessionRestore: true,
+          // 同一条快路径也不应同步跑项目启动 hooks 或 submit 前队列恢复扫描。
+          skipSessionStartHooks: true,
+          skipPreSubmitResume: true,
+          requestMetadata: mergeAgentUiPerformanceTraceMetadata(
+            request.sendOptions?.requestMetadata,
+            {
+              requestId: request.id,
+              sessionId: dispatchSessionId,
+              source: request.source,
+              submittedAt: request.submittedAt,
+              workspaceId: taskCenterWorkspaceId,
+            },
+          ),
+        };
+        const sendPromise = handleSendRef.current(
+          request.images,
+          request.webSearch,
+          request.thinking,
+          request.text,
+          request.sendExecutionStrategy,
+          undefined,
+          tracedSendOptions,
+        );
+        void sendPromise
+          .then(
+            (result) => {
+              if (request.materializeDraft && materializedSessionId) {
+                commitMaterializedTaskCenterDraftTab(
+                  request.draftTabId,
+                  materializedSessionId,
+                  { preserveInput: result !== true },
+                );
+              }
+              recordAgentUiPerformanceMetric("homeInput.sendDispatch.done", {
+                durationMs: Date.now() - request.submittedAt,
+                requestId: request.id,
+                result,
+                sessionId: dispatchSessionId,
+                source: request.source,
+                workspaceId: taskCenterWorkspaceId,
+              });
+              clearRequest({ keepHomePreview: !request.materializeDraft });
+            },
+            (error) => {
+              if (request.materializeDraft && materializedSessionId) {
+                commitMaterializedTaskCenterDraftTab(
+                  request.draftTabId,
+                  materializedSessionId,
+                  { preserveInput: true },
+                );
+              }
+              recordAgentUiPerformanceMetric("homeInput.sendDispatch.error", {
+                durationMs: Date.now() - request.submittedAt,
+                error: error instanceof Error ? error.message : String(error),
+                requestId: request.id,
+                sessionId: dispatchSessionId,
+                source: request.source,
+                workspaceId: taskCenterWorkspaceId,
+              });
+              clearRequest();
+            },
+          );
+      })().catch((error) => {
+        recordAgentUiPerformanceMetric("homeInput.sendDispatch.error", {
+          durationMs: Date.now() - request.submittedAt,
+          error: error instanceof Error ? error.message : String(error),
+          requestId: request.id,
+          sessionId: request.draftTabId,
+          source: request.source,
+          workspaceId: taskCenterWorkspaceId,
+        });
+        if (!cancelled) {
+          clearRequest();
+        }
+      });
     });
 
     return () => {
       cancelled = true;
       cancel();
     };
-  }, [handleSendRef, taskCenterDraftSendRequest, taskCenterWorkspaceId]);
+  }, [
+    commitMaterializedTaskCenterDraftTab,
+    handleSendRef,
+    materializeTaskCenterDraftTab,
+    taskCenterDraftSendRequest,
+    taskCenterWorkspaceId,
+  ]);
 
   const sceneDisplayMessages =
     taskCenterSessionSwitchPending || shouldSuppressTaskCenterDraftContent

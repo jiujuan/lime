@@ -311,6 +311,7 @@ impl TokenEstimator {
                 }
                 tokens
             }
+            MessageContent::ToolInputDelta(_) => 0,
             MessageContent::SystemNotification(notification) => {
                 Self::estimate_tokens(&notification.msg)
             }

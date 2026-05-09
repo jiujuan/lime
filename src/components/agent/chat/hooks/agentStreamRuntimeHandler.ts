@@ -26,6 +26,9 @@ import {
   handleArtifactSnapshotEvent,
   handleContextTraceEvent,
   handleToolEndEvent,
+  handleToolInputDeltaEvent,
+  handleToolOutputDeltaEvent,
+  handleToolProgressEvent,
   handleToolStartEvent,
 } from "./agentStreamEventProcessor";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
@@ -36,6 +39,7 @@ import {
   buildAgentStreamMissingFinalReplyFailureSideEffectPlan,
   type AgentStreamMissingFinalReplyPlan,
   isAgentStreamEmptyFinalReplyError,
+  reconcileAgentStreamFinalContentParts,
 } from "./agentStreamCompletionController";
 import {
   applyAgentStreamErrorToastPlan,
@@ -62,6 +66,10 @@ import {
   buildAgentStreamRuntimeSummaryItemUpdate,
 } from "./agentStreamRuntimeStatusController";
 import { buildAgentStreamTextDeltaApplyPlan } from "./agentStreamTextDeltaController";
+import {
+  clearAgentStreamTextOverlay,
+  upsertAgentStreamTextOverlay,
+} from "./agentStreamTextOverlayStore";
 import {
   buildAgentStreamFirstTextPaintContext,
   buildAgentStreamTextRenderFlushPlan,
@@ -103,11 +111,15 @@ import {
   buildAgentStreamThinkingDeltaPreApplyPlan,
 } from "./agentStreamThinkingDeltaController";
 import { isRuntimePermissionConfirmationWaitMessage } from "../utils/runtimeActionConfirmation";
+import { buildAgentUiProjectionEvents } from "../projection/agentUiEventProjection";
+import { recordAgentUiProjectionEvents } from "../projection/conversationProjectionStore";
 
 function extractVisibleTextFromAgentMessage(
-  message: AgentEvent extends never ? never : {
-    content?: Array<{ type?: string; text?: string }>;
-  },
+  message: AgentEvent extends never
+    ? never
+    : {
+        content?: Array<{ type?: string; text?: string }>;
+      },
 ): string {
   const parts = Array.isArray(message.content) ? message.content : [];
   return parts
@@ -137,6 +149,7 @@ interface StreamRequestState {
   listenerBoundAt?: number | null;
   firstEventReceivedAt?: number | null;
   firstRuntimeStatusAt?: number | null;
+  firstThinkingDeltaAt?: number | null;
   firstTextDeltaAt?: number | null;
   firstTextPaintAt?: number | null;
   firstTextPaintScheduled?: boolean;
@@ -151,7 +164,9 @@ interface StreamRequestState {
   prefilledMessageSnapshotReplayOffset?: number;
   prefilledMessageSnapshotText?: string | null;
   renderedContent?: string;
+  hiddenThinkingPartsCleared?: boolean;
   performanceTrace?: AgentUiPerformanceTraceMetadata | null;
+  agentUiEventSequence?: number;
 }
 
 function resolveVisibleTextDeltaAfterSnapshotPrefill(params: {
@@ -313,6 +328,19 @@ export function handleTurnStreamEvent({
     appendThinkingToParts,
   } = callbacks;
 
+  const projectionEvents = buildAgentUiProjectionEvents(data, {
+    sequence: (requestState.agentUiEventSequence ?? 0) + 1,
+    timestamp: new Date().toISOString(),
+    sessionId: activeSessionId,
+    runId: eventName,
+    messageId: assistantMsgId,
+  });
+  if (projectionEvents.length > 0) {
+    requestState.agentUiEventSequence =
+      (requestState.agentUiEventSequence ?? 0) + projectionEvents.length;
+    recordAgentUiProjectionEvents(projectionEvents);
+  }
+
   const clearQueuedDraftCleanupTimer = () => {
     const clearPlan = buildAgentStreamTimerClearPlan({
       hasTimer: Boolean(requestState.queuedDraftCleanupTimerId),
@@ -358,16 +386,14 @@ export function handleTurnStreamEvent({
 
     requestState.renderedContent = flushPlan.nextRenderedContent;
     requestState.textDeltaFlushCount = flushPlan.nextTextDeltaFlushCount;
-    requestState.lastTextRenderFlushAt =
-      flushPlan.nextLastTextRenderFlushAt;
+    requestState.lastTextRenderFlushAt = flushPlan.nextLastTextRenderFlushAt;
     requestState.maxTextDeltaBacklogChars =
       flushPlan.nextMaxTextDeltaBacklogChars;
     if (
       flushPlan.firstTextRenderFlushAt &&
       flushPlan.firstTextRenderFlushContext
     ) {
-      requestState.firstTextRenderFlushAt =
-        flushPlan.firstTextRenderFlushAt;
+      requestState.firstTextRenderFlushAt = flushPlan.firstTextRenderFlushAt;
       recordAgentStreamPerformanceMetric(
         "agentStream.firstTextRenderFlush",
         requestState.performanceTrace,
@@ -388,29 +414,13 @@ export function handleTurnStreamEvent({
         },
       );
     }
-    setMessages((prev) =>
-      prev.map((msg) =>
-        msg.id === assistantMsgId
-          ? {
-              ...msg,
-              content: nextContent,
-              thinkingContent: surfaceThinkingDeltas
-                ? msg.thinkingContent
-                : undefined,
-              contentParts: flushPlan.textDelta
-                ? appendTextToParts(
-                    surfaceThinkingDeltas
-                      ? msg.contentParts || []
-                      : (msg.contentParts || []).filter(
-                          (part) => part.type !== "thinking",
-                        ),
-                    flushPlan.textDelta,
-                  )
-                : msg.contentParts,
-            }
-          : msg,
-      ),
-    );
+    upsertAgentStreamTextOverlay({
+      messageId: assistantMsgId,
+      eventName,
+      content: nextContent,
+      boundary: "render_flush",
+      updatedAt: flushStartedAt,
+    });
     if (flushPlan.shouldScheduleFirstTextPaint) {
       const recordFirstTextPaint = () => {
         const paintedAt = Date.now();
@@ -465,6 +475,29 @@ export function handleTurnStreamEvent({
     }, schedulePlan.delayMs);
   };
 
+  const clearStreamingTextOverlay = () => {
+    clearAgentStreamTextOverlay(assistantMsgId);
+  };
+
+  const buildStreamingTextCommitPatch = (
+    msg: Message,
+  ): Partial<Pick<Message, "content" | "contentParts">> => {
+    const finalContent = requestState.accumulatedContent || msg.content;
+    if (!finalContent) {
+      return {};
+    }
+
+    return {
+      content: finalContent,
+      contentParts: reconcileAgentStreamFinalContentParts({
+        parts: msg.contentParts,
+        finalContent,
+        rawContent: requestState.accumulatedContent || finalContent,
+        surfaceThinkingDeltas,
+      }),
+    };
+  };
+
   const scheduleQueuedDraftCleanup = (shouldWatchCurrentRequest: boolean) => {
     const cleanupSchedulePlan =
       buildAgentStreamQueuedDraftCleanupTimerSchedulePlan({
@@ -483,11 +516,10 @@ export function handleTurnStreamEvent({
 
     requestState.queuedDraftCleanupTimerId = setTimeout(() => {
       requestState.queuedDraftCleanupTimerId = null;
-      const cleanupFirePlan =
-        buildAgentStreamQueuedDraftCleanupTimerFirePlan({
-          requestFinished: requestState.requestFinished,
-          streamActivated: isStreamActivated(),
-        });
+      const cleanupFirePlan = buildAgentStreamQueuedDraftCleanupTimerFirePlan({
+        requestFinished: requestState.requestFinished,
+        streamActivated: isStreamActivated(),
+      });
       if (!cleanupFirePlan.shouldCleanup) {
         return;
       }
@@ -559,12 +591,14 @@ export function handleTurnStreamEvent({
                 errorMessage: sideEffectPlan.errorMessage,
                 accumulatedContent: requestState.accumulatedContent,
                 previousContent: msg.content,
+                previousContentParts: msg.contentParts,
                 usage: sideEffectPlan.usage ?? msg.usage,
               }),
             }
           : msg,
       ),
     );
+    clearStreamingTextOverlay();
     if (sideEffectPlan.shouldClearActiveStream) {
       clearActiveStreamIfMatch(eventName);
     }
@@ -696,11 +730,12 @@ export function handleTurnStreamEvent({
       );
       setThreadItems((prev) => {
         const pendingItem = prev.find((item) => item.id === pendingItemKey);
-        const updatedPendingItem =
-          buildAgentStreamTurnStartedPendingItemUpdate({
+        const updatedPendingItem = buildAgentStreamTurnStartedPendingItemUpdate(
+          {
             pendingItem,
             turn: data.turn,
-          });
+          },
+        );
         if (!updatedPendingItem) {
           return prev;
         }
@@ -780,6 +815,23 @@ export function handleTurnStreamEvent({
             firstRuntimeStatusContext,
           );
         }
+        if (data.status.metadata?.keepalive_kind) {
+          logAgentDebug(
+            "AgentStream",
+            "runtimeKeepalive",
+            {
+              eventName,
+              sessionId: activeSessionId,
+              kind: data.status.metadata.keepalive_kind,
+              sequence: data.status.metadata.keepalive_sequence ?? null,
+              elapsedMs: data.status.metadata.keepalive_elapsed_ms ?? null,
+              title: data.status.title,
+            },
+            {
+              dedupeKey: `${eventName}:runtimeKeepalive:${data.status.metadata.keepalive_sequence ?? "unknown"}`,
+            },
+          );
+        }
         const runtimeStatusPlan = buildAgentStreamRuntimeStatusApplyPlan({
           status: data.status,
           updatedAt: new Date().toISOString(),
@@ -831,6 +883,29 @@ export function handleTurnStreamEvent({
 
     case "thinking_delta":
       {
+        if (!requestState.firstThinkingDeltaAt) {
+          const now = Date.now();
+          requestState.firstThinkingDeltaAt = now;
+          const context = {
+            deltaChars: data.text.length,
+            elapsedMs: Math.max(0, now - requestState.requestStartedAt),
+            eventName,
+            firstEventDeltaMs: requestState.firstEventReceivedAt
+              ? Math.max(0, now - requestState.firstEventReceivedAt)
+              : null,
+            firstRuntimeStatusDeltaMs: requestState.firstRuntimeStatusAt
+              ? Math.max(0, now - requestState.firstRuntimeStatusAt)
+              : null,
+            surfaced: surfaceThinkingDeltas,
+            sessionId: activeSessionId,
+          };
+          recordAgentStreamPerformanceMetric(
+            "agentStream.firstThinkingDelta",
+            requestState.performanceTrace,
+            context,
+          );
+          logAgentDebug("AgentStream", "firstThinkingDelta", context);
+        }
         const thinkingPlan = buildAgentStreamThinkingDeltaPreApplyPlan({
           surfaceThinkingDeltas,
         });
@@ -860,7 +935,8 @@ export function handleTurnStreamEvent({
       );
       break;
 
-    case "text_delta": {
+    case "text_delta":
+    case "text_delta_batch": {
       activateStream();
       clearOptimisticItem();
       let visibleTextDelta = data.text;
@@ -891,8 +967,7 @@ export function handleTurnStreamEvent({
           requestState.prefilledMessageSnapshotReplayOffset =
             visibleDelta.nextReplayOffset;
         }
-        requestState.textDeltaBufferedCount =
-          textDeltaPlan.nextBufferedCount;
+        requestState.textDeltaBufferedCount = textDeltaPlan.nextBufferedCount;
         if (
           textDeltaPlan.firstTextDeltaAt &&
           textDeltaPlan.firstTextDeltaContext
@@ -909,10 +984,25 @@ export function handleTurnStreamEvent({
             textDeltaPlan.firstTextDeltaContext,
           );
         }
-        requestState.accumulatedContent =
-          textDeltaPlan.nextAccumulatedContent;
+        requestState.accumulatedContent = textDeltaPlan.nextAccumulatedContent;
       }
       if (visibleTextDelta) {
+        if (!surfaceThinkingDeltas && !requestState.hiddenThinkingPartsCleared) {
+          requestState.hiddenThinkingPartsCleared = true;
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMsgId
+                ? {
+                    ...msg,
+                    thinkingContent: undefined,
+                    contentParts: (msg.contentParts || []).filter(
+                      (part) => part.type !== "thinking",
+                    ),
+                  }
+                : msg,
+            ),
+          );
+        }
         observer?.onTextDelta?.(
           visibleTextDelta,
           requestState.accumulatedContent,
@@ -937,6 +1027,43 @@ export function handleTurnStreamEvent({
         assistantMsgId,
         activeSessionId,
         resolvedWorkspaceId,
+        setMessages,
+      });
+      break;
+
+    case "tool_progress":
+      activateStream();
+      clearOptimisticItem();
+      handleToolProgressEvent({
+        data,
+        toolLogIdByToolId,
+        assistantMsgId,
+        setMessages,
+      });
+      break;
+
+    case "tool_input_delta":
+      activateStream();
+      clearOptimisticItem();
+      handleToolInputDeltaEvent({
+        data,
+        toolLogIdByToolId,
+        toolStartedAtByToolId,
+        toolNameByToolId,
+        assistantMsgId,
+        activeSessionId,
+        resolvedWorkspaceId,
+        setMessages,
+      });
+      break;
+
+    case "tool_output_delta":
+      activateStream();
+      clearOptimisticItem();
+      handleToolOutputDeltaEvent({
+        data,
+        toolLogIdByToolId,
+        assistantMsgId,
         setMessages,
       });
       break;
@@ -1018,8 +1145,7 @@ export function handleTurnStreamEvent({
 
     case "context_trace":
       {
-        const contextTracePlan =
-          buildAgentStreamContextTracePreApplyPlan(data);
+        const contextTracePlan = buildAgentStreamContextTracePreApplyPlan(data);
         if (contextTracePlan.shouldActivateStream) {
           activateStream();
         }
@@ -1077,6 +1203,7 @@ export function handleTurnStreamEvent({
           };
         }),
       );
+      clearStreamingTextOverlay();
       clearActiveStreamIfMatch(eventName);
       disposeListener();
       break;
@@ -1097,11 +1224,13 @@ export function handleTurnStreamEvent({
             msg.id === assistantMsgId
               ? {
                   ...updateMessageArtifactsStatus(msg, "complete"),
+                  ...buildStreamingTextCommitPatch(msg),
                   isThinking: false,
                 }
               : msg,
           ),
         );
+        clearStreamingTextOverlay();
         setIsSending(false);
         clearActiveStreamIfMatch(eventName);
         disposeListener();
@@ -1141,6 +1270,7 @@ export function handleTurnStreamEvent({
               : msg,
           ),
         );
+        clearStreamingTextOverlay();
         clearActiveStreamIfMatch(eventName);
         disposeListener();
         break;
@@ -1164,11 +1294,13 @@ export function handleTurnStreamEvent({
                   errorMessage: errorFailurePlan.errorMessage,
                   accumulatedContent: requestState.accumulatedContent,
                   previousContent: msg.content,
+                  previousContentParts: msg.contentParts,
                 }),
               }
             : msg,
         ),
       );
+      clearStreamingTextOverlay();
       clearActiveStreamIfMatch(eventName);
       disposeListener();
       break;

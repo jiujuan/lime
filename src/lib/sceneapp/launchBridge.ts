@@ -13,6 +13,7 @@ import type { Page, PageParams } from "@/types/page";
 import type { CreationMode } from "@/components/agent/chat/components/types";
 import type { ChatToolPreferences } from "@/components/agent/chat/utils/chatToolPreferences";
 import { resolveWorkspaceEntry } from "@/components/agent/chat/workspaceEntry";
+import { recordAutomationJobAgentUiProjection } from "@/components/agent/chat/projection/automationJobAgentUiProjection";
 
 type ResolvedWorkspaceEntryOk = Extract<
   ReturnType<typeof resolveWorkspaceEntry>,
@@ -191,6 +192,16 @@ export async function executeSceneAppLaunchAction(
     options.createAutomationJob ?? createSceneAppAutomationJob;
   const result = await createAutomationJob(
     resolvedAction.executionDraft.automationIntent,
+  );
+  recordAutomationJobAgentUiProjection(
+    {
+      id: result.jobId,
+      name: result.jobName,
+      enabled: result.enabled,
+      workspace_id: result.workspaceId,
+      next_run_at: result.nextRunAt,
+    },
+    "created",
   );
 
   return {

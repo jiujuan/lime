@@ -17,7 +17,7 @@ import type { ConfiguredProvider } from "./useConfiguredProviders";
 // 类型定义
 // ============================================================================
 
-export interface UseAliasConfigResult {
+interface UseAliasConfigResult {
   /** 别名配置（如果 Provider 使用别名配置） */
   aliasConfig: ProviderAliasConfig | null;
   /** 是否正在加载 */
@@ -118,16 +118,3 @@ export function useAliasConfig(
     error,
   };
 }
-
-/**
- * 简化版本：只返回别名配置
- * 适用于不需要加载状态的场景
- */
-export function useAliasConfigSimple(
-  selectedProvider: ConfiguredProvider | undefined | null,
-): ProviderAliasConfig | null {
-  const { aliasConfig } = useAliasConfig(selectedProvider);
-  return aliasConfig;
-}
-
-export default useAliasConfig;

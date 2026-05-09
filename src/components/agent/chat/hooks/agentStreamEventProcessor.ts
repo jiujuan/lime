@@ -5,7 +5,11 @@ import type {
   AgentEventArtifactSnapshot,
   AgentEventContextTrace,
   AgentEventToolEnd,
+  AgentEventToolInputDelta,
+  AgentEventToolOutputDelta,
+  AgentEventToolProgress,
   AgentEventToolStart,
+  AgentToolCallState,
 } from "@/lib/api/agentProtocol";
 import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
 import type { Artifact } from "@/lib/artifact/types";
@@ -299,6 +303,36 @@ function buildWriteMetadataWithToolSources({
   };
 }
 
+function appendToolLiveLog(
+  logs: string[] | undefined,
+  message: string | undefined,
+): string[] | undefined {
+  const normalized = message?.trim();
+  if (!normalized) {
+    return logs;
+  }
+
+  const previous = logs || [];
+  if (previous[previous.length - 1] === normalized) {
+    return previous;
+  }
+
+  return [...previous, normalized].slice(-40);
+}
+
+function mergeToolStreamMetadata(
+  current: Record<string, unknown> | undefined,
+  incoming: Record<string, unknown> | undefined,
+  extra?: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const merged = {
+    ...(current || {}),
+    ...(incoming || {}),
+    ...(extra || {}),
+  };
+  return Object.keys(merged).length > 0 ? merged : undefined;
+}
+
 function upsertAssistantWriteArtifact({
   assistantMsgId,
   setMessages,
@@ -529,8 +563,35 @@ export function handleToolStartEvent({
         return message;
       }
 
-      if (message.toolCalls?.find((toolCall) => toolCall.id === data.tool_id)) {
-        return message;
+      const updateToolCall = (
+        toolCall: AgentToolCallState,
+      ): AgentToolCallState =>
+        toolCall.id === data.tool_id
+          ? {
+              ...toolCall,
+              name: data.tool_name || toolCall.name,
+              arguments: data.arguments ?? toolCall.arguments,
+              status: "running",
+              startTime: toolCall.startTime || new Date(),
+            }
+          : toolCall;
+      const hasExistingToolCall = Boolean(
+        message.toolCalls?.find((toolCall) => toolCall.id === data.tool_id),
+      );
+
+      if (hasExistingToolCall) {
+        return {
+          ...message,
+          toolCalls: message.toolCalls?.map(updateToolCall),
+          contentParts: message.contentParts?.map((part) =>
+            part.type === "tool_use" && part.toolCall.id === data.tool_id
+              ? {
+                  ...part,
+                  toolCall: updateToolCall(part.toolCall),
+                }
+              : part,
+          ),
+        };
       }
 
       return {
@@ -582,6 +643,274 @@ export function handleToolStartEvent({
     setPendingActions,
     setMessages,
   });
+}
+
+export function handleToolInputDeltaEvent({
+  data,
+  toolLogIdByToolId,
+  toolStartedAtByToolId,
+  toolNameByToolId,
+  setMessages,
+  assistantMsgId,
+  activeSessionId,
+  resolvedWorkspaceId,
+}: Pick<
+  BaseProcessorContext,
+  "assistantMsgId" | "activeSessionId" | "resolvedWorkspaceId" | "setMessages"
+> &
+  ToolTrackingContext & {
+    data: AgentEventToolInputDelta;
+  }) {
+  const accumulatedArguments = data.accumulated_arguments ?? data.delta;
+  const toolName =
+    data.tool_name || toolNameByToolId.get(data.tool_id) || "工具输入准备中";
+  const progressDescription = accumulatedArguments.trim()
+    ? `正在生成工具输入：${truncateForLog(accumulatedArguments, 120)}`
+    : "正在生成工具输入";
+
+  if (!toolLogIdByToolId.has(data.tool_id)) {
+    const toolLogId = activityLogger.log({
+      eventType: "tool_start",
+      status: "pending",
+      title: `准备工具 ${toolName}`,
+      description: progressDescription,
+      workspaceId: resolvedWorkspaceId,
+      sessionId: activeSessionId,
+      source: "aster-chat",
+      correlationId: data.tool_id,
+      metadata: {
+        toolId: data.tool_id,
+        toolName,
+        provider: data.provider,
+        inputStreaming: true,
+      },
+    });
+    toolLogIdByToolId.set(data.tool_id, toolLogId);
+    toolStartedAtByToolId.set(data.tool_id, Date.now());
+  } else {
+    const toolLogId = toolLogIdByToolId.get(data.tool_id);
+    if (toolLogId) {
+      activityLogger.updateLog(toolLogId, {
+        status: "pending",
+        description: progressDescription,
+      });
+    }
+  }
+  toolNameByToolId.set(data.tool_id, toolName);
+
+  setMessages((prev) =>
+    prev.map((message) => {
+      if (message.id !== assistantMsgId) {
+        return message;
+      }
+
+      const updateToolCall = (
+        toolCall: AgentToolCallState,
+      ): AgentToolCallState =>
+        toolCall.id === data.tool_id
+          ? {
+              ...toolCall,
+              name: data.tool_name || toolCall.name,
+              arguments: accumulatedArguments,
+              status: "running",
+              progress: {
+                ...(toolCall.progress || {}),
+                message: progressDescription,
+                metadata: {
+                  ...(toolCall.progress?.metadata || {}),
+                  provider: data.provider,
+                  input_streaming: true,
+                },
+                updatedAt: new Date(),
+              },
+              logs: appendToolLiveLog(toolCall.logs, progressDescription),
+            }
+          : toolCall;
+      const existingToolCall = message.toolCalls?.find(
+        (toolCall) => toolCall.id === data.tool_id,
+      );
+
+      if (existingToolCall) {
+        return {
+          ...message,
+          toolCalls: message.toolCalls?.map(updateToolCall),
+          contentParts: message.contentParts?.map((part) =>
+            part.type === "tool_use" && part.toolCall.id === data.tool_id
+              ? {
+                  ...part,
+                  toolCall: updateToolCall(part.toolCall),
+                }
+              : part,
+          ),
+        };
+      }
+
+      const newToolCall: AgentToolCallState = {
+        id: data.tool_id,
+        name: toolName,
+        arguments: accumulatedArguments,
+        status: "running",
+        progress: {
+          message: progressDescription,
+          metadata: {
+            provider: data.provider,
+            input_streaming: true,
+          },
+          updatedAt: new Date(),
+        },
+        logs: [progressDescription],
+        startTime: new Date(),
+      };
+
+      return {
+        ...message,
+        toolCalls: [...(message.toolCalls || []), newToolCall],
+        contentParts: [
+          ...(message.contentParts || []),
+          { type: "tool_use" as const, toolCall: newToolCall },
+        ],
+      };
+    }),
+  );
+}
+
+export function handleToolProgressEvent({
+  data,
+  toolLogIdByToolId,
+  setMessages,
+  assistantMsgId,
+}: Pick<BaseProcessorContext, "assistantMsgId" | "setMessages"> &
+  Pick<ToolTrackingContext, "toolLogIdByToolId"> & {
+    data: AgentEventToolProgress;
+  }) {
+  const progressMessage = data.progress.message?.trim();
+  const progressDescription =
+    progressMessage ||
+    (typeof data.progress.progress === "number"
+      ? `工具进度 ${data.progress.progress}${
+          typeof data.progress.total === "number"
+            ? `/${data.progress.total}`
+            : ""
+        }`
+      : undefined);
+
+  const toolLogId = toolLogIdByToolId.get(data.tool_id);
+  if (toolLogId && progressDescription) {
+    activityLogger.updateLog(toolLogId, {
+      status: "pending",
+      description: truncateForLog(progressDescription, 120),
+    });
+  }
+
+  setMessages((prev) =>
+    prev.map((message) => {
+      if (message.id !== assistantMsgId) {
+        return message;
+      }
+
+      const updateToolCall = (
+        toolCall: AgentToolCallState,
+      ): AgentToolCallState => {
+        if (toolCall.id !== data.tool_id) {
+          return toolCall;
+        }
+
+        return {
+          ...toolCall,
+          progress: {
+            ...data.progress,
+            updatedAt: new Date(),
+          },
+          logs: appendToolLiveLog(toolCall.logs, progressDescription),
+        };
+      };
+
+      return {
+        ...message,
+        toolCalls: message.toolCalls?.map(updateToolCall),
+        contentParts: message.contentParts?.map((part) =>
+          part.type === "tool_use" && part.toolCall.id === data.tool_id
+            ? {
+                ...part,
+                toolCall: updateToolCall(part.toolCall),
+              }
+            : part,
+        ),
+      };
+    }),
+  );
+}
+
+export function handleToolOutputDeltaEvent({
+  data,
+  toolLogIdByToolId,
+  setMessages,
+  assistantMsgId,
+}: Pick<BaseProcessorContext, "assistantMsgId" | "setMessages"> &
+  Pick<ToolTrackingContext, "toolLogIdByToolId"> & {
+    data: AgentEventToolOutputDelta;
+  }) {
+  if (!data.delta) {
+    return;
+  }
+
+  const toolLogId = toolLogIdByToolId.get(data.tool_id);
+  if (toolLogId) {
+    activityLogger.updateLog(toolLogId, {
+      status: "pending",
+      description: truncateForLog(data.delta, 120),
+    });
+  }
+
+  setMessages((prev) =>
+    prev.map((message) => {
+      if (message.id !== assistantMsgId) {
+        return message;
+      }
+
+      const updateToolCall = (
+        toolCall: AgentToolCallState,
+      ): AgentToolCallState => {
+        if (toolCall.id !== data.tool_id) {
+          return toolCall;
+        }
+
+        const currentResult = toolCall.result;
+        const nextOutput = `${currentResult?.output || ""}${data.delta}`;
+        return {
+          ...toolCall,
+          result: {
+            success: currentResult?.success ?? true,
+            output: nextOutput,
+            error: currentResult?.error,
+            images: currentResult?.images,
+            metadata: mergeToolStreamMetadata(
+              currentResult?.metadata,
+              data.metadata,
+              {
+                streaming: true,
+                ...(data.output_kind ? { output_kind: data.output_kind } : {}),
+              },
+            ),
+          },
+          logs: appendToolLiveLog(toolCall.logs, data.delta),
+        };
+      };
+
+      return {
+        ...message,
+        toolCalls: message.toolCalls?.map(updateToolCall),
+        contentParts: message.contentParts?.map((part) =>
+          part.type === "tool_use" && part.toolCall.id === data.tool_id
+            ? {
+                ...part,
+                toolCall: updateToolCall(part.toolCall),
+              }
+            : part,
+        ),
+      };
+    }),
+  );
 }
 
 export function handleToolEndEvent({

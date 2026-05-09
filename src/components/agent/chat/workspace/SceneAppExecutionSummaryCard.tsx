@@ -1093,5 +1093,3 @@ export function SceneAppExecutionSummaryCard({
     </section>
   );
 }
-
-export default SceneAppExecutionSummaryCard;

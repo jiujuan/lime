@@ -180,7 +180,9 @@ export async function registerAgentStreamTurnEventBinding(
 
   let firstEventReceived = false;
   let lastEventReceivedAt = 0;
+  let lastRuntimeEventType: string | null = null;
   const warnedUnknownEventTypes = new Set<string>();
+  const surfaceThinkingDeltas = thinking === true;
   const markFirstEventReceived = (params: {
     eventReceivedAt: number;
     eventType: string;
@@ -229,6 +231,7 @@ export async function registerAgentStreamTurnEventBinding(
 
     firstEventReceived = true;
     lastEventReceivedAt = Date.now();
+    lastRuntimeEventType = "deferred_submission";
     const deferredContext = buildAgentStreamFirstEventDeferredContext({
       activeSessionId,
       deferredAt: lastEventReceivedAt,
@@ -348,7 +351,7 @@ export async function registerAgentStreamTurnEventBinding(
       activeSessionId,
       resolvedWorkspaceId,
       effectiveExecutionStrategy,
-      surfaceThinkingDeltas: thinking !== false,
+      surfaceThinkingDeltas,
       content,
       runtime,
       webSearch,
@@ -385,6 +388,20 @@ export async function registerAgentStreamTurnEventBinding(
         return;
       }
       const timeoutStartedAt = Date.now();
+      logAgentDebug(
+        "AgentStream",
+        "inactivityWatchdog.timeout",
+        {
+          eventName,
+          sessionId: activeSessionId,
+          elapsedSinceLastEventMs: lastEventReceivedAt
+            ? timeoutStartedAt - lastEventReceivedAt
+            : null,
+          lastRuntimeEventType,
+          requestElapsedMs: timeoutStartedAt - requestState.requestStartedAt,
+        },
+        { level: "warn" },
+      );
       void (async () => {
         const recovered = await tryRecoverSilentTurn();
         const timeoutAction = resolveAgentStreamInactivityTimeoutAction({
@@ -398,14 +415,34 @@ export async function registerAgentStreamTurnEventBinding(
         });
         switch (timeoutAction) {
           case "ignore":
+            logAgentDebug("AgentStream", "inactivityWatchdog.ignored", {
+              eventName,
+              sessionId: activeSessionId,
+              lastRuntimeEventType,
+            });
             return;
           case "recover":
             console.warn(
               buildAgentStreamInactivitySilentRecoveryWarning({ eventName }),
             );
+            logAgentDebug("AgentStream", "inactivityWatchdog.recovered", {
+              eventName,
+              sessionId: activeSessionId,
+              lastRuntimeEventType,
+            });
             finalizeSilentTurnRecovery();
             return;
           case "fail":
+            logAgentDebug(
+              "AgentStream",
+              "inactivityWatchdog.failed",
+              {
+                eventName,
+                sessionId: activeSessionId,
+                lastRuntimeEventType,
+              },
+              { level: "warn" },
+            );
             dispatchSyntheticError(AGENT_STREAM_INACTIVITY_TIMEOUT_MESSAGE);
             return;
         }
@@ -436,6 +473,7 @@ export async function registerAgentStreamTurnEventBinding(
           });
         }
         lastEventReceivedAt = eventReceivedAt;
+        lastRuntimeEventType = unknownEventPlan.eventType;
         callbacks.activateStream(
           activeSessionId,
           effectiveWaitingRuntimeStatus,
@@ -461,6 +499,7 @@ export async function registerAgentStreamTurnEventBinding(
         });
       }
       lastEventReceivedAt = eventReceivedAt;
+      lastRuntimeEventType = data.type;
 
       handleTurnStreamEvent({
         data,
@@ -491,7 +530,7 @@ export async function registerAgentStreamTurnEventBinding(
         activeSessionId,
         resolvedWorkspaceId,
         effectiveExecutionStrategy,
-        surfaceThinkingDeltas: thinking !== false,
+        surfaceThinkingDeltas,
         content,
         runtime,
         webSearch,

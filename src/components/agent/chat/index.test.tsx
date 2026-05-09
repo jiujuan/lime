@@ -1467,6 +1467,84 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     expect(container.querySelector('[data-testid="message-list"]')).toBeNull();
   });
 
+  it("打开旧会话后草稿预热创建新对话时不应继承旧消息快照", async () => {
+    type MockEmptyStateProps = {
+      input?: string;
+      setInput?: (value: string) => void;
+    };
+    mockEmptyState.mockImplementation((props?: MockEmptyStateProps) => (
+      <div data-testid="empty-state" data-input={props?.input || ""}>
+        <button
+          type="button"
+          data-testid="mock-empty-type"
+          onClick={() => props?.setInput?.("新的独立对话")}
+        >
+          输入
+        </button>
+      </div>
+    ));
+
+    const state: Record<string, unknown> = createMockAgentChatUnifiedState({
+      sessionId: "topic-current",
+      messages: [
+        {
+          id: "old-user",
+          role: "user",
+          content: "旧会话问题",
+          timestamp: new Date(FIXED_TOPIC_UPDATED_AT),
+        },
+        {
+          id: "old-assistant",
+          role: "assistant",
+          content: "旧会话回答",
+          timestamp: new Date(FIXED_TOPIC_UPDATED_AT + 1_000),
+        },
+      ],
+      topics: [
+        {
+          id: "topic-current",
+          title: "旧会话",
+          updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
+          workspaceId: "workspace-test",
+        },
+      ],
+    });
+    const createFreshSession = vi.fn(async () => "new-topic");
+    state.createFreshSession = createFreshSession;
+    installMockAgentChatUnifiedState(state);
+
+    const mounted = mountPage({
+      agentEntry: "claw",
+      initialSessionId: "topic-current",
+      projectId: "workspace-test",
+    });
+    await flushEffects();
+
+    expect(
+      await waitForElement(
+        mounted.container,
+        '[data-testid="task-center-tab-create-button"]',
+      ),
+    ).not.toBeNull();
+    clickButton(mounted.container, "task-center-tab-create-button");
+    await flushEffects();
+    mounted.rerender();
+    await flushEffects();
+
+    expect(mounted.container.textContent).not.toContain("旧会话问题");
+    expect(mounted.container.textContent).not.toContain("旧会话回答");
+
+    clickButton(mounted.container, "mock-empty-type");
+    await flushEffects(8);
+
+    expect(createFreshSession).toHaveBeenCalledWith(
+      "新对话",
+      expect.objectContaining({
+        preserveCurrentSnapshot: false,
+      }),
+    );
+  });
+
   it("草稿标签输入后应预热创建会话，发送时复用同一次创建", async () => {
     const onNavigate = vi.fn();
     vi.mocked(buildHomeAgentParams).mockClear();
@@ -1556,8 +1634,8 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     clickButton(mounted.container, "mock-empty-send");
     await flushEffects(2);
     expect(createFreshSession).toHaveBeenCalledTimes(1);
-    expect(sharedSendMessageMock).toHaveBeenCalledTimes(1);
-    expect(getSendMessageCall().content).toBe("你好");
+    expect(sharedSendMessageMock).not.toHaveBeenCalled();
+    expect(mounted.container.textContent).toContain("你好");
     expect(
       mounted.container.querySelector('[data-testid="empty-state"]'),
     ).toBeNull();
@@ -1572,7 +1650,16 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     await flushEffects();
 
     expect(sharedSendMessageMock).toHaveBeenCalledTimes(1);
+    expect(getSendMessageCall().content).toBe("你好");
+    expect(
+      (
+        getSendMessageCall().options?.requestMetadata as
+          | Record<string, Record<string, unknown>>
+          | undefined
+      )?.agentUiPerformanceTrace?.sessionId,
+    ).toBe("new-topic");
     expect(createFreshSession).toHaveBeenCalledTimes(1);
+    expect(mounted.container.textContent).not.toContain("正在恢复生成会话");
     expect(buildHomeAgentParams).not.toHaveBeenCalled();
     expect(onNavigate).not.toHaveBeenCalled();
   });

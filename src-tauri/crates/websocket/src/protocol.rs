@@ -151,6 +151,13 @@ pub struct AgentRunParams {
     /// 是否流式响应
     #[serde(default)]
     pub stream: bool,
+    /// 调用方结构化来源元数据（例如 gateway channel provenance）
+    #[serde(
+        default,
+        alias = "sourceMetadata",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub source_metadata: Option<serde_json::Value>,
 }
 
 /// Agent 输入块

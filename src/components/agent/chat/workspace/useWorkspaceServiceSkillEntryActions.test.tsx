@@ -5,6 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
 import type { TeamDefinition } from "../utils/teamDefinitions";
 import type { ServiceSkillHomeItem } from "../service-skills/types";
+import {
+  clearAgentUiProjectionEvents,
+  conversationProjectionStore,
+  selectAgentUiProjectionEventsByType,
+} from "../projection/conversationProjectionStore";
 import { useWorkspaceServiceSkillEntryActions } from "./useWorkspaceServiceSkillEntryActions";
 
 const mockCreateAutomationJob = vi.fn();
@@ -312,6 +317,7 @@ beforeEach(() => {
   mockGetOrCreateDefaultProject.mockResolvedValue(
     createProject("project-default"),
   );
+  clearAgentUiProjectionEvents();
   mockRecordServiceSkillAutomationLink.mockReset();
   mockToastSuccess.mockReset();
   mockToastError.mockReset();
@@ -321,6 +327,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  clearAgentUiProjectionEvents();
   while (mountedRoots.length > 0) {
     const mounted = mountedRoots.pop();
     if (!mounted) {
@@ -937,6 +944,21 @@ describe("useWorkspaceServiceSkillEntryActions", () => {
       jobId: "automation-job-1",
       jobName: "每日趋势摘要｜定时执行",
     });
+    expect(
+      selectAgentUiProjectionEventsByType(
+        conversationProjectionStore.getSnapshot(),
+        "agent.changed",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        sourceType: "automation_job_projection",
+        taskId: "automation-job-1",
+        agentId: "automation-job-1",
+        agentName: "每日趋势摘要｜定时执行",
+        surface: "background_teammate",
+        runtimeEntity: "automation_job",
+      }),
+    ]);
     expect(recordServiceSkillUsage).toHaveBeenCalledWith({
       skillId: "daily-trend-briefing",
       runnerType: "scheduled",

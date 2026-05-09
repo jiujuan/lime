@@ -3,6 +3,8 @@ import {
   buildAgentStreamFirstTextPaintContext,
   buildAgentStreamTextRenderFlushPlan,
   resolveAgentStreamPendingRenderedTextDelta,
+  shouldFlushAgentStreamTextRenderAtLineBoundary,
+  shouldFlushAgentStreamTextRenderBacklog,
   shouldFlushAgentStreamVisibleFirstText,
   shouldScheduleAgentStreamTextRenderTimer,
 } from "./agentStreamTextRenderFlushController";
@@ -40,6 +42,31 @@ describe("agentStreamTextRenderFlushController", () => {
       .toBe(true);
     expect(shouldScheduleAgentStreamTextRenderTimer({ hasPendingTimer: true }))
       .toBe(false);
+  });
+
+  it("应判断换行边界和积压阈值 flush 条件", () => {
+    expect(
+      shouldFlushAgentStreamTextRenderAtLineBoundary({
+        pendingDelta: "第一行\n",
+      }),
+    ).toBe(true);
+    expect(
+      shouldFlushAgentStreamTextRenderAtLineBoundary({
+        pendingDelta: "第一行",
+      }),
+    ).toBe(false);
+    expect(
+      shouldFlushAgentStreamTextRenderBacklog({
+        backlogChars: 120,
+        backlogFlushChars: 120,
+      }),
+    ).toBe(true);
+    expect(
+      shouldFlushAgentStreamTextRenderBacklog({
+        backlogChars: 119,
+        backlogFlushChars: 120,
+      }),
+    ).toBe(false);
   });
 
   it("应构造首个 render flush 计划和 first paint 调度", () => {

@@ -56,6 +56,7 @@ pub fn format_messages(messages: &[Message]) -> Vec<Value> {
                 }
                 MessageContent::ToolConfirmationRequest(_) => {}
                 MessageContent::ActionRequired(_) => {}
+                MessageContent::ToolInputDelta(_) => {}
                 MessageContent::SystemNotification(_) => {
                     // Skip
                 }

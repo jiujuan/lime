@@ -60,6 +60,7 @@
 - `roadmap/knowledge/completion-audit-20260508.md`：Knowledge v2 完成度审计，按 prompt-to-artifact 映射真实 Provider E2E、legacy fallback、发布状态与剩余缺口
 - `roadmap/knowledge/evidence/provider-e2e-quality-review-20260508.md`：真实 Provider 短资料输出质量评测，对照个人 IP Builder Skill checklist 标记 PASS / PARTIAL
 - `../scripts/knowledge-provider-e2e.mjs`：真实 Provider E2E 可复用脚本，默认必须显式 `--allow-external-provider` 才会外发资料
+- `../scripts/knowledge-product-e2e.mjs`：项目资料 PRD v3 产品 E2E，可通过 `npm run knowledge:product-e2e` 验收首页、状态说明、确认、选择、保存、整理闭环；也可通过 `npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running` 串入 GUI smoke
 - `../scripts/knowledge-release-scope-report.mjs`：Knowledge-only 发布范围只读审计脚本，分类 dirty worktree 中的 Knowledge / non-Knowledge / unknown 路径
 - `roadmap/knowledge/prd-v2-diagrams.md`：Agent Knowledge v2 可视化设计，包含总体架构、核心流程、时序图、UI 原型和用户故事走查
 - `roadmap/managed-objective/README.md`：Managed Objective 路线图，把 thread goal loop 启发收敛为 Lime 的跨 turn 目标推进控制层
@@ -90,15 +91,16 @@
 
 对外文档（`content/`）以及商业/品牌文档（`bussniss/`、`oem/`）默认采用以下口径：
 
-1. 主叙事是“本地优先的内容闭环 Agent 系统”，不再主打“创作类 AI Agent 平台”或“通用 Agent 平台”
-2. 前台主词固定为 `技能 / 灵感库 / 生成`，其中 `生成` 是唯一主执行面
-3. 先讲任务闭环与结果推进，再讲模型连接、协议兼容、渠道入口和工具接入
-4. `项目结果 / 复盘` 是生成链的结果视角，不默认讲成并列一级主舞台
+1. 普通用户入口统一使用“给中文创作者用的 AI 内容工作台”，不再把技术化系统定位放在首屏或标题层
+2. 先讲创作者故事与真实任务：写文章、做脚本、整理资料、改版本、保存结果、复盘下一轮
+3. 再讲产品工作方式：资料、灵感、生成、修改和复盘放在同一个创作空间里持续推进
+4. 模型连接、协议兼容、渠道入口、工具接入和开发者能力只作为进阶说明，不能盖过创作主线
+5. `README.md` 是普通创作者向表达基线；官网、下载页和对外文案应优先复用它的措辞
 
 涉及商务合作、官网定位、品牌与 OEM 时，优先阅读：
 
-1. `roadmap/limenextv2/README.md`
-2. `bussniss/README.md`
+1. `../README.md`
+2. `bussniss/lime-readme-website-positioning-copy.md`
 3. `oem/README.md`
 
 ## 维护原则

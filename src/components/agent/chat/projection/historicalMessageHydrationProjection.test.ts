@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildHistoricalHydrationProjectionEvents,
   buildHistoricalMarkdownHydrationIndexByMessageId,
   buildHistoricalMarkdownHydrationTargets,
   countDeferredHistoricalContentParts,
@@ -141,5 +142,78 @@ describe("historicalMessageHydrationProjection", () => {
         hydratedHistoricalMarkdownCount: 1,
       }),
     ).toBe(1);
+  });
+
+  it("应为旧会话 hydration 输出 stale-safe AgentUI envelope", () => {
+    const events = buildHistoricalHydrationProjectionEvents(
+      {
+        sessionId: "session-history-1",
+        threadId: "thread-history-1",
+        recordReason: "restored-window",
+        isRestoringSession: true,
+        isRestoredHistoryWindow: true,
+        isHistoricalTimelineReady: false,
+        canBuildHistoricalTimeline: false,
+        shouldDeferHistoricalTimeline: true,
+        shouldDeferThreadItemsScan: true,
+        shouldDeferTailRuntimeStatusLine: true,
+        hiddenHistoryCount: 20,
+        persistedHiddenHistoryCount: 40,
+        targetCount: 3,
+        hydratedHistoricalMarkdownCount: 1,
+        historicalMarkdownDeferredCount: 2,
+        historicalContentPartsDeferredCount: 1,
+        messagesCount: 50,
+        visibleMessagesCount: 10,
+        renderedMessagesCount: 5,
+        renderedTurnsCount: 2,
+        threadItemsCount: 120,
+        messageListComputeMs: 9.5,
+      },
+      {
+        sequence: 30,
+        timestamp: "2026-05-09T00:00:00.000Z",
+      },
+    );
+
+    expect(events).toHaveLength(3);
+    expect(events[0]).toMatchObject({
+      type: "session.hydrated",
+      sourceType: "hydration_projection",
+      sequence: 30,
+      sessionId: "session-history-1",
+      threadId: "thread-history-1",
+      owner: "session",
+      scope: "session",
+      phase: "hydrating",
+      surface: "session_tabs",
+      persistence: "snapshot",
+      payload: {
+        recordReason: "restored-window",
+        historicalMarkdownDeferredCount: 2,
+        historicalContentPartsDeferredCount: 1,
+      },
+    });
+    expect(events[1]).toMatchObject({
+      type: "messages.snapshot",
+      sequence: 31,
+      owner: "session",
+      scope: "thread",
+      phase: "hydrating",
+    });
+    expect(events[2]).toMatchObject({
+      type: "diagnostic.changed",
+      sequence: 32,
+      owner: "diagnostics",
+      scope: "session",
+      phase: "hydrating",
+      refs: {
+        diagnosticKeys: ["historical_hydration_stale_window"],
+      },
+      payload: {
+        diagnosticKey: "historical_hydration_stale_window",
+        stale: true,
+      },
+    });
   });
 });

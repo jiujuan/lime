@@ -8,6 +8,10 @@ import {
   clearAgentUiPerformanceMetrics,
   getAgentUiPerformanceMetrics,
 } from "@/lib/agentUiPerformanceMetrics";
+import {
+  clearAllAgentStreamTextOverlays,
+  upsertAgentStreamTextOverlay,
+} from "../hooks/agentStreamTextOverlayStore";
 
 const IMAGE_WORKBENCH_FOCUS_EVENT = "lime:image-workbench-focus";
 const VIDEO_WORKBENCH_TASK_ACTION_EVENT = "lime:video-workbench-task-action";
@@ -209,6 +213,7 @@ beforeEach(() => {
     HTMLElement.prototype.scrollIntoView = () => {};
   }
   clearAgentUiPerformanceMetrics();
+  clearAllAgentStreamTextOverlays();
 });
 
 afterEach(() => {
@@ -223,6 +228,7 @@ afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
   clearAgentUiPerformanceMetrics();
+  clearAllAgentStreamTextOverlays();
   mockUseConfiguredProviders.mockImplementation(() => ({
     providers: [],
     loading: false,
@@ -308,6 +314,49 @@ describe("MessageList", () => {
     expect(messageColumn?.className).toContain("min-h-full");
     expect(messageColumn?.className).toContain("justify-start");
     expect(messageColumn?.className).not.toContain("justify-end");
+  });
+
+  it("流式正文 overlay 应优先渲染并替代首 token 占位", () => {
+    upsertAgentStreamTextOverlay({
+      messageId: "assistant-overlay",
+      eventName: "agent-runtime-overlay-test",
+      content: "overlay 正文已经可见",
+    });
+
+    const container = render([
+      {
+        id: "assistant-overlay",
+        role: "assistant",
+        content: "",
+        isThinking: true,
+        timestamp: new Date("2026-05-09T10:00:00.000Z"),
+        contentParts: [
+          {
+            type: "tool_use",
+            toolCall: {
+              id: "tool-1",
+              name: "read_file",
+              status: "running",
+              startTime: new Date("2026-05-09T10:00:00.000Z"),
+            },
+          },
+        ],
+      } as Message,
+    ]);
+
+    expect(container.textContent).not.toContain("正在准备回复");
+    expect(mockStreamingRenderer).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        content: "overlay 正文已经可见",
+        contentParts: expect.arrayContaining([
+          expect.objectContaining({
+            type: "text",
+            text: "overlay 正文已经可见",
+          }),
+        ]),
+        isStreaming: true,
+      }),
+    );
   });
 
   it("任务中心发送首帧也应吸顶展示", () => {
@@ -3444,6 +3493,200 @@ describe("MessageList", () => {
     );
   });
 
+  it("thinking 关闭的已完成短答不应在聊天区展示持久化 reasoning", () => {
+    const now = new Date("2026-05-09T06:02:56.361Z");
+    const messages: Message[] = [
+      {
+        id: "msg-user-fast-plain-answer",
+        role: "user",
+        content: "只回答一个字：好",
+        timestamp: new Date("2026-05-09T06:02:54.927Z"),
+      },
+      {
+        id: "msg-assistant-fast-plain-answer",
+        role: "assistant",
+        content: "好",
+        timestamp: now,
+      },
+    ];
+
+    const container = render(messages, {
+      currentTurnId: "turn-fast-plain-answer",
+      turns: [
+        {
+          id: "turn-fast-plain-answer",
+          thread_id: "thread-fast-plain-answer",
+          prompt_text: "只回答一个字：好",
+          status: "completed",
+          started_at: "2026-05-09T06:02:54.278Z",
+          completed_at: "2026-05-09T06:02:56.366Z",
+          created_at: "2026-05-09T06:02:54.278Z",
+          updated_at: "2026-05-09T06:02:56.366Z",
+        },
+      ],
+      threadItems: [
+        {
+          id: "turn-summary-fast-plain-answer",
+          thread_id: "thread-fast-plain-answer",
+          turn_id: "turn-fast-plain-answer",
+          sequence: 1,
+          status: "completed",
+          started_at: "2026-05-09T06:02:54.281Z",
+          completed_at: "2026-05-09T06:02:56.365Z",
+          updated_at: "2026-05-09T06:02:56.365Z",
+          type: "turn_summary",
+          text: "直接回答优先\n当前请求无需默认升级为搜索或任务，先直接给出结果，必要时再调用工具。",
+        },
+        {
+          id: "user-fast-plain-answer",
+          thread_id: "thread-fast-plain-answer",
+          turn_id: "turn-fast-plain-answer",
+          sequence: 2,
+          status: "completed",
+          started_at: "2026-05-09T06:02:54.278Z",
+          completed_at: "2026-05-09T06:02:54.927Z",
+          updated_at: "2026-05-09T06:02:54.927Z",
+          type: "user_message",
+          content: "只回答一个字：好",
+        },
+        {
+          id: "reasoning-fast-plain-answer",
+          thread_id: "thread-fast-plain-answer",
+          turn_id: "turn-fast-plain-answer",
+          sequence: 3,
+          status: "completed",
+          started_at: "2026-05-09T06:02:55.716Z",
+          completed_at: "2026-05-09T06:02:56.361Z",
+          updated_at: "2026-05-09T06:02:56.361Z",
+          type: "reasoning",
+          text: "我们被要求只回答一个字：好。直接回复即可。",
+          summary: ["我们被要求只回答一个字：好。直接回复即可。"],
+        },
+        {
+          id: "assistant-fast-plain-answer",
+          thread_id: "thread-fast-plain-answer",
+          turn_id: "turn-fast-plain-answer",
+          sequence: 4,
+          status: "completed",
+          started_at: "2026-05-09T06:02:56.289Z",
+          completed_at: "2026-05-09T06:02:56.361Z",
+          updated_at: "2026-05-09T06:02:56.361Z",
+          type: "agent_message",
+          text: "好",
+        },
+      ],
+    });
+
+    expect(
+      container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
+    ).toBeNull();
+    expect(mockAgentThreadTimeline).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("好");
+    expect(container.textContent).not.toContain("执行轨迹");
+    expect(container.textContent).not.toContain("我们被要求只回答一个字");
+    expect(mockStreamingRenderer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: "好",
+        thinkingContent: undefined,
+        contentParts: undefined,
+      }),
+    );
+  });
+
+  it("较长已完成回答应保留安全思考入口但不泄露 reasoning 正文", () => {
+    const now = new Date("2026-05-09T07:12:00.000Z");
+    const messages: Message[] = [
+      {
+        id: "msg-user-long-answer-thinking-status",
+        role: "user",
+        content: "解释首字等待为什么影响体验",
+        timestamp: new Date("2026-05-09T07:11:55.000Z"),
+      },
+      {
+        id: "msg-assistant-long-answer-thinking-status",
+        role: "assistant",
+        content:
+          "首字等待会影响用户对系统是否接收请求、是否仍在工作以及后续结果是否可靠的判断，因此需要尽快给出状态反馈。这个反馈不需要暴露内部推理，只要稳定告诉用户任务已经进入处理，就能显著降低等待焦虑。",
+        timestamp: now,
+      },
+    ];
+
+    const container = render(messages, {
+      currentTurnId: "turn-long-answer-thinking-status",
+      turns: [
+        {
+          id: "turn-long-answer-thinking-status",
+          thread_id: "thread-long-answer-thinking-status",
+          prompt_text: "解释首字等待为什么影响体验",
+          status: "completed",
+          started_at: "2026-05-09T07:11:55.000Z",
+          completed_at: "2026-05-09T07:12:00.000Z",
+          created_at: "2026-05-09T07:11:55.000Z",
+          updated_at: "2026-05-09T07:12:00.000Z",
+        },
+      ],
+      threadItems: [
+        {
+          id: "turn-summary-long-answer-thinking-status",
+          thread_id: "thread-long-answer-thinking-status",
+          turn_id: "turn-long-answer-thinking-status",
+          sequence: 1,
+          status: "completed",
+          started_at: "2026-05-09T07:11:55.000Z",
+          completed_at: "2026-05-09T07:12:00.000Z",
+          updated_at: "2026-05-09T07:12:00.000Z",
+          type: "turn_summary",
+          text: "直接回答优先\n当前请求无需默认升级为搜索或任务。",
+        },
+        {
+          id: "reasoning-long-answer-thinking-status",
+          thread_id: "thread-long-answer-thinking-status",
+          turn_id: "turn-long-answer-thinking-status",
+          sequence: 2,
+          status: "completed",
+          started_at: "2026-05-09T07:11:56.000Z",
+          completed_at: "2026-05-09T07:11:58.000Z",
+          updated_at: "2026-05-09T07:11:58.000Z",
+          type: "reasoning",
+          text: "我们被要求解释首字等待为什么影响体验，需要先拆解心理反馈与系统状态。",
+          summary: [
+            "我们被要求解释首字等待为什么影响体验，需要先拆解心理反馈与系统状态。",
+          ],
+        },
+        {
+          id: "assistant-long-answer-thinking-status",
+          thread_id: "thread-long-answer-thinking-status",
+          turn_id: "turn-long-answer-thinking-status",
+          sequence: 3,
+          status: "completed",
+          started_at: "2026-05-09T07:11:59.000Z",
+          completed_at: "2026-05-09T07:12:00.000Z",
+          updated_at: "2026-05-09T07:12:00.000Z",
+          type: "agent_message",
+          text: messages[1]?.content || "",
+        },
+      ],
+    });
+
+    const leadingTimelineProps = mockAgentThreadTimeline.mock.calls.find(
+      ([props]) => props?.placement === "leading",
+    )?.[0] as { items?: AgentThreadItem[] } | undefined;
+
+    expect(leadingTimelineProps?.items).toEqual([
+      expect.objectContaining({
+        type: "reasoning",
+        id: "reasoning-long-answer-thinking-status",
+      }),
+    ]);
+    expect(container.textContent).toContain("执行轨迹");
+    expect(container.textContent).not.toContain("我们被要求解释首字等待");
+    expect(mockStreamingRenderer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        thinkingContent: undefined,
+      }),
+    );
+  });
+
   it("流式 assistant 消息仍应向正文传递当前过程状态", () => {
     const now = new Date();
     const messages: Message[] = [
@@ -3685,6 +3928,108 @@ describe("MessageList", () => {
             type: "text",
             text: "正在分析依赖关系。",
           },
+        ],
+      }),
+    );
+  });
+
+  it("当前运行回合已有内联过程时，应让 StreamingRenderer 承担穿插式过程", () => {
+    const now = new Date();
+    const messages: Message[] = [
+      {
+        id: "msg-active-interleaved-process",
+        role: "assistant",
+        content: "",
+        timestamp: now,
+        isThinking: true,
+        thinkingContent: "The search plan is forming.",
+        contentParts: [
+          {
+            type: "thinking",
+            text: "The search plan is forming.",
+          },
+          {
+            type: "tool_use",
+            toolCall: {
+              id: "tool-active-search-1",
+              name: "web_search",
+              arguments: JSON.stringify({
+                query: "international news May 9 2026 headlines",
+              }),
+              status: "running",
+              startTime: now,
+            },
+          },
+        ],
+        toolCalls: [
+          {
+            id: "tool-active-search-1",
+            name: "web_search",
+            arguments: JSON.stringify({
+              query: "international news May 9 2026 headlines",
+            }),
+            status: "running",
+            startTime: now,
+          },
+        ],
+      },
+    ];
+
+    const container = render(messages, {
+      currentTurnId: "turn-active-interleaved-process",
+      turns: [
+        {
+          id: "turn-active-interleaved-process",
+          thread_id: "thread-active-interleaved-process",
+          prompt_text: "总结一下今天的国际新闻",
+          status: "running",
+          started_at: "2026-05-09T09:00:00Z",
+          created_at: "2026-05-09T09:00:00Z",
+          updated_at: "2026-05-09T09:00:02Z",
+        },
+      ],
+      threadItems: [
+        {
+          id: "reasoning-active-interleaved-process",
+          thread_id: "thread-active-interleaved-process",
+          turn_id: "turn-active-interleaved-process",
+          sequence: 1,
+          status: "in_progress",
+          started_at: "2026-05-09T09:00:01Z",
+          updated_at: "2026-05-09T09:00:01Z",
+          type: "reasoning",
+          text: "The",
+        },
+        {
+          id: "search-active-interleaved-process",
+          thread_id: "thread-active-interleaved-process",
+          turn_id: "turn-active-interleaved-process",
+          sequence: 2,
+          status: "in_progress",
+          started_at: "2026-05-09T09:00:02Z",
+          updated_at: "2026-05-09T09:00:02Z",
+          type: "web_search",
+          action: "web_search",
+          query: "international news May 9 2026 headlines",
+        },
+      ],
+    });
+
+    expect(
+      container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
+    ).toBeNull();
+    expect(mockStreamingRenderer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        thinkingContent: "The search plan is forming.",
+        contentParts: [
+          { type: "thinking", text: "The search plan is forming." },
+          expect.objectContaining({ type: "tool_use" }),
+        ],
+        toolCalls: [
+          expect.objectContaining({
+            id: "tool-active-search-1",
+            status: "running",
+          }),
         ],
       }),
     );
@@ -4988,15 +5333,17 @@ describe("MessageList", () => {
       ],
     });
 
-    const timelineProps = mockAgentThreadTimeline.mock.calls.at(-1)?.[0] as
-      | {
+    const timelineProps = mockAgentThreadTimeline.mock.calls.map(
+      ([props]) =>
+        props as {
           actionRequests?: Array<Record<string, unknown>>;
           placement?: string;
-        }
-      | undefined;
+        },
+    );
 
-    expect(timelineProps?.placement).toBe("leading");
-    expect(timelineProps?.actionRequests).toBeUndefined();
+    expect(
+      timelineProps.every((props) => props.actionRequests === undefined),
+    ).toBe(true);
     expect(mockStreamingRenderer).toHaveBeenCalledWith(
       expect.objectContaining({
         renderProposedPlanBlocks: true,

@@ -189,6 +189,7 @@ npm run verify:local:full
 
 ```bash
 npm run verify:gui-smoke
+npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 ```
 
 作用：
@@ -199,6 +200,7 @@ npm run verify:gui-smoke
 - 验证 `browser runtime` 的启动、状态读取与审计主链可用
 - 其中 `browser runtime smoke` 默认以无界面浏览器会话执行，避免额外弹出仅用于校验的空白 Chrome
 - 验证 `site adapter catalog` 的状态、列表与推荐主链可读
+- 可选执行项目资料产品 E2E：`--include-knowledge-product-e2e` 会在 `smoke:knowledge-gui` 后追加 `npm run knowledge:product-e2e`，用于验证项目资料 PRD v3 首页、状态说明、确认、选择、保存和整理闭环
 
 它解决的是 GUI 产品特有风险：
 
@@ -510,11 +512,14 @@ CI 里的 `.github/workflows/quality.yml` 结果摘要现在也会透出 `bridge
 入口：
 
 - `docs/aiprompts/playwright-e2e.md`
+- 项目资料 PRD v3 产品闭环：`npm run knowledge:product-e2e`
+- 需要把项目资料产品闭环和 GUI smoke 串联时：`npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running`
 
 作用：
 
 - 用 Playwright MCP 做真实页面交互验证
 - 检查控制台错误、主导航、关键业务工作流
+- 对项目资料，额外检查普通用户默认页面不暴露工程词、不保留假入口、不在保存前展示假统计
 
 注意：
 

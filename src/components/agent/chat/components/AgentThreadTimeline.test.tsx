@@ -342,6 +342,42 @@ function createStructuredA2UIParseResult() {
 }
 
 describe("AgentThreadTimeline", () => {
+  it("已完成的单条 reasoning 只显示安全思考入口，不暴露内部正文预览", () => {
+    const container = renderTimeline([
+      {
+        ...createBaseItem("reasoning-safe-summary", 1),
+        type: "reasoning",
+        text: "我们被要求先分析用户反馈，再给出修复方案。",
+        summary: ["我们被要求先分析用户反馈，再给出修复方案。"],
+      },
+    ]);
+
+    expect(container.textContent).toContain("已完成思考");
+    expect(container.textContent).not.toContain("我们被要求先分析");
+    expect(
+      container.querySelector(
+        '[data-testid="agent-thread-block:1:process:details"]',
+      ),
+    ).toBeNull();
+  });
+
+  it("已完成 reasoning 不应把模型自述型思考作为摘要露出", () => {
+    const container = renderTimeline([
+      {
+        ...createBaseItem("reasoning-provider-summary", 1),
+        type: "reasoning",
+        text: "好的，用户问的是“首字前为什么要尽快显示思考状态？”。我需要用简洁的三句话来直接解释这个原因，避免展开复杂流程。",
+        summary: [
+          "好的，用户问的是“首字前为什么要尽快显示思考状态？”。我需要用简洁的三句话来直接解释这个原因，避免展开复杂流程。",
+        ],
+      },
+    ]);
+
+    expect(container.textContent).toContain("已完成思考");
+    expect(container.textContent).not.toContain("用户问的是");
+    expect(container.textContent).not.toContain("我需要用");
+  });
+
   it("默认直接渲染内联时间线，不再显示旧摘要壳", () => {
     const items: AgentThreadItem[] = [
       {
@@ -782,12 +818,54 @@ describe("AgentThreadTimeline", () => {
     ];
 
     const container = renderTimeline(items, { isCurrentTurn: true });
-    const processBlock = container.querySelector<HTMLElement>(
+    const processBlock = container.querySelector<HTMLDetailsElement>(
       '[data-testid="agent-thread-block:1:process"]',
     );
 
     expect(processBlock?.dataset.emphasis).toBe("active");
     expect(container.textContent).toContain("Mac mini 最新价格");
+    expect(processBlock?.open).toBe(true);
+  });
+
+  it("当前回合的思考和搜索过程应在运行中展开", () => {
+    const items: AgentThreadItem[] = [
+      {
+        ...createBaseItem("reasoning-1", 1),
+        status: "in_progress",
+        completed_at: undefined,
+        type: "reasoning",
+        text: "用户\n\n搜索结果",
+      },
+      {
+        ...createBaseItem("search-1", 2),
+        status: "in_progress",
+        completed_at: undefined,
+        type: "web_search",
+        action: "web_search",
+        query: "国际新闻 2026年5月9日",
+      },
+    ];
+
+    const container = renderTimeline(items, {
+      isCurrentTurn: true,
+      turn: {
+        status: "running",
+      },
+    });
+
+    const processBlock = container.querySelector<HTMLDetailsElement>(
+      '[data-testid="agent-thread-block:1:process"]',
+    );
+
+    expect(processBlock).not.toBeNull();
+    expect(processBlock?.open).toBe(true);
+    expect(processBlock?.querySelector("summary")?.textContent).toContain(
+      "国际新闻 2026年5月9日",
+    );
+    expect(container.textContent).toContain("搜索结果");
+    expect(
+      container.querySelector('[data-testid="tool-call-item"]'),
+    ).not.toBeNull();
   });
 
   it("存在待处理请求时应显示轻量待处理提示", () => {
@@ -1071,7 +1149,7 @@ describe("AgentThreadTimeline", () => {
     );
   });
 
-  it("已完成的单条思考应默认保留完整正文", () => {
+  it("已完成的单条思考应默认只保留摘要，展开后再显示完整正文", () => {
     const reasoningText =
       "先核对执行链路，再立即恢复当前运行。\n随后补齐自动续提。";
     const items: AgentThreadItem[] = [
@@ -1088,14 +1166,25 @@ describe("AgentThreadTimeline", () => {
       },
     });
 
+    const block = container.querySelector<HTMLDetailsElement>(
+      '[data-testid="agent-thread-block:1:process"]',
+    );
+    const summary = block?.querySelector("summary");
+    expect(block?.open).toBe(false);
+    expect(container.textContent).toContain(
+      "先核对执行链路，再立即恢复当前运行。",
+    );
+    expect(container.textContent).not.toContain("随后补齐自动续提。");
+
+    act(() => {
+      summary?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
     expect(
       container.querySelector(
         '[data-testid="agent-thread-block:1:process:details"]',
       ),
-    ).toBeNull();
-    expect(container.textContent).toContain(
-      "先核对执行链路，再立即恢复当前运行。",
-    );
+    ).not.toBeNull();
     expect(container.textContent).toContain("随后补齐自动续提。");
   });
 
@@ -1181,8 +1270,15 @@ describe("AgentThreadTimeline", () => {
       },
     });
 
+    const summary = container.querySelector("summary");
     expect(container.textContent).toContain("先判断任务类型");
     expect(container.textContent).toContain("再决定是否联网");
+    expect(container.textContent).not.toContain("这里是更完整的正文。");
+
+    act(() => {
+      summary?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
     expect(container.textContent).toContain("这里是更完整的正文。");
   });
 

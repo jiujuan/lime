@@ -6,12 +6,12 @@
  */
 
 // 检查是否在 Tauri 环境中
-export function isTauriAvailable(): boolean {
+function isTauriAvailable(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
 // 初始化 mock 系统
-export function initMockSystem() {
+function initMockSystem() {
   if (isTauriAvailable()) {
     console.log("[Mock] Running in Tauri environment, skipping mock");
     return;
@@ -26,14 +26,3 @@ export function initMockSystem() {
 if (import.meta.env.DEV && !isTauriAvailable()) {
   initMockSystem();
 }
-
-// 导出所有 mock 模块
-export * from "./core";
-export * from "./event";
-export * from "./window";
-
-// 导出插件模块，使用别名避免命名冲突
-export { open as openFileDialog, save as saveDialog } from "./plugin-dialog";
-export { open as openShell } from "./plugin-shell";
-export * from "./plugin-deep-link";
-export * from "./plugin-global-shortcut";

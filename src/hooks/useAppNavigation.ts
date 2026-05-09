@@ -2,7 +2,7 @@ import { useCallback, useLayoutEffect, useState } from "react";
 import { buildHomeAgentParams } from "@/lib/workspace/navigation";
 import type { Page, PageParams } from "@/types/page";
 
-export interface UseAppNavigationResult {
+interface UseAppNavigationResult {
   currentPage: Page;
   pageParams: PageParams;
   requestedPage: Page;

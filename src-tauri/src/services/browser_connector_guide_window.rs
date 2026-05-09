@@ -18,6 +18,9 @@ pub enum BrowserConnectorGuideMode {
 
 const GUIDE_WINDOW_LABEL_PREFIX: &str = "browser-connector-guide";
 const GUIDE_WINDOW_ROUTE: &str = "/browser-connector-guide";
+// 独立窗口统一先加载 index.html，避免 Windows WebView2 在深路径启动时拿不到前端入口。
+const GUIDE_WINDOW_SHELL_ROUTE: &str = "index.html";
+const GUIDE_WINDOW_QUERY_PARAM: &str = "lime_window";
 const WINDOW_WIDTH: f64 = 900.0;
 const WINDOW_HEIGHT: f64 = 700.0;
 const MIN_WINDOW_WIDTH: f64 = 760.0;
@@ -52,7 +55,8 @@ fn build_browser_connector_guide_label(mode: BrowserConnectorGuideMode) -> Strin
 
 fn build_browser_connector_guide_route(mode: BrowserConnectorGuideMode) -> String {
     format!(
-        "{GUIDE_WINDOW_ROUTE}?mode={}",
+        "{GUIDE_WINDOW_SHELL_ROUTE}?{GUIDE_WINDOW_QUERY_PARAM}={}&mode={}",
+        urlencoding::encode(GUIDE_WINDOW_ROUTE.trim_start_matches('/')),
         urlencoding::encode(mode.as_query_value())
     )
 }
@@ -122,7 +126,7 @@ mod tests {
         );
         assert_eq!(
             build_browser_connector_guide_route(mode),
-            "/browser-connector-guide?mode=cdp"
+            "index.html?lime_window=browser-connector-guide&mode=cdp"
         );
     }
 }

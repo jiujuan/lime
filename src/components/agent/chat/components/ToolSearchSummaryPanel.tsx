@@ -94,5 +94,3 @@ export function ToolSearchSummaryPanel({
     </div>
   );
 }
-
-export default ToolSearchSummaryPanel;

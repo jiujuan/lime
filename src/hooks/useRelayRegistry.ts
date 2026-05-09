@@ -21,7 +21,7 @@ interface UseRelayRegistryOptions {
 /**
  * Registry 错误
  */
-export interface RegistryError {
+interface RegistryError {
   code: string;
   message: string;
 }
@@ -29,7 +29,7 @@ export interface RegistryError {
 /**
  * useRelayRegistry Hook 返回值
  */
-export interface UseRelayRegistryReturn {
+interface UseRelayRegistryReturn {
   /** 所有中转商列表 */
   providers: RelayInfo[];
   /** 是否正在加载 */
@@ -166,5 +166,3 @@ export function useRelayRegistry(
     getProvider,
   };
 }
-
-export default useRelayRegistry;

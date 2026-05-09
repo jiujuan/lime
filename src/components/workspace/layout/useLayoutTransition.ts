@@ -8,7 +8,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { LayoutMode } from "@/lib/workspace/workflowTypes";
 
 /** 过渡状态 */
-export type TransitionState =
+type TransitionState =
   | "idle"
   | "entering"
   | "entered"
@@ -27,7 +27,7 @@ export interface TransitionConfig {
   exitDelay?: number;
 }
 
-export interface LayoutTransitionOptions {
+interface LayoutTransitionOptions {
   /** chat-canvas 模式下聊天面板宽度 */
   chatCanvasPanelWidth?: string;
 }

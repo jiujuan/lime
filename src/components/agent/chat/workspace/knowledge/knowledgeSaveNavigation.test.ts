@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildKnowledgeSavePageParams } from "./knowledgeSaveNavigation";
+import {
+  buildKnowledgeSavePageParams,
+  resolveKnowledgeSaveProjectRoot,
+} from "./knowledgeSaveNavigation";
 
 describe("buildKnowledgeSavePageParams", () => {
   it("应把助手结果转换为项目资料保存页参数", () => {
@@ -50,6 +53,39 @@ describe("buildKnowledgeSavePageParams", () => {
         description: "复盘会话",
         packType: "custom",
         requestKey: 2026050902,
+      },
+    });
+  });
+
+  it("保存入口应优先使用当前资料选择的目录", () => {
+    expect(
+      resolveKnowledgeSaveProjectRoot({
+        projectRootPath: "",
+        knowledgeSelectionWorkingDir: " /tmp/selected-knowledge ",
+      }),
+    ).toBe("/tmp/selected-knowledge");
+
+    expect(
+      buildKnowledgeSavePageParams({
+        projectRootPath: "",
+        knowledgeSelectionWorkingDir: " /tmp/selected-knowledge ",
+        selectedPackName: "manual-e2e-ready",
+        requestKey: 2026050903,
+        source: {
+          messageId: "message-3",
+          content: "从当前已选项目资料进入保存页。",
+        },
+      }),
+    ).toEqual({
+      workingDir: "/tmp/selected-knowledge",
+      initialView: "save",
+      selectedPackName: "manual-e2e-ready",
+      saveDraft: {
+        sourceName: "agent-output-message-3.md",
+        sourceText: "从当前已选项目资料进入保存页。",
+        description: "对话结果资料",
+        packType: "custom",
+        requestKey: 2026050903,
       },
     });
   });

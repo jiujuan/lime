@@ -38,6 +38,14 @@ import { getProviderPromptCacheMode } from "@/lib/model/providerPromptCacheSuppo
 import { getProviderAccessHelp } from "@/lib/provider/providerAccessHelp";
 import { dedupeModelIds, getProviderTypeLabel } from "./providerConfigUtils";
 import type { ConnectionTestResult } from "./connectionTestTypes";
+import {
+  buildFalModelFetchStatus,
+  buildResponsesModelFetchStatus,
+  extractApiModelIds,
+  isFalProviderLike,
+  isLikelyFalImageModel,
+  isProviderApiKeyRequired,
+} from "./providerModelFetchHelpers";
 
 // ============================================================================
 // 类型定义
@@ -138,131 +146,6 @@ function getStatusIcon(tone: InlineStatusTone) {
   return <Sparkles className="h-4 w-4" />;
 }
 
-function extractApiModelIds(models: Array<{ id?: string | null }>): string[] {
-  return dedupeModelIds(
-    models
-      .map((model) => model.id?.trim() ?? "")
-      .filter((modelId) => modelId.length > 0),
-  );
-}
-
-function isResponsesImageModel(modelId: string): boolean {
-  const normalized = modelId.trim().toLowerCase();
-  return normalized.includes("gpt-image") || normalized.includes("gpt-images");
-}
-
-function isFalProviderLike(provider: ProviderWithKeysDisplay): boolean {
-  const providerId = provider.id.trim().toLowerCase();
-  const providerType = provider.type.trim().toLowerCase();
-  const apiHost = provider.api_host.trim().toLowerCase();
-
-  return (
-    providerType === "fal" ||
-    providerId === "fal" ||
-    providerId.startsWith("fal-") ||
-    providerId.includes("fal.ai") ||
-    apiHost.includes("fal.run") ||
-    apiHost.includes("queue.fal.run")
-  );
-}
-
-function isFalModelFetchUnsupported(result: {
-  error?: string | null;
-  diagnostic_hint?: string | null;
-}): boolean {
-  const message = `${result.error ?? ""} ${result.diagnostic_hint ?? ""}`
-    .trim()
-    .toLowerCase();
-  return message.includes("fal") && message.includes("/models");
-}
-
-function isLikelyFalImageModel(modelId: string): boolean {
-  const normalized = modelId.trim().toLowerCase();
-  if (!normalized) {
-    return false;
-  }
-
-  return (
-    normalized.startsWith("fal-ai/") ||
-    /(nano-banana|banana|flux|seedream|kontext|recraft|ideogram|sdxl|stable-diffusion|image)/.test(
-      normalized,
-    )
-  );
-}
-
-function isProviderApiKeyRequired(
-  provider: ProviderWithKeysDisplay,
-  modelFetchApiKeyRequired: boolean,
-): boolean {
-  return isFalProviderLike(provider) || modelFetchApiKeyRequired;
-}
-
-function isResponsesModelFetchUnsupported(result: {
-  error?: string | null;
-  diagnostic_hint?: string | null;
-}): boolean {
-  const message = `${result.error ?? ""} ${result.diagnostic_hint ?? ""}`
-    .trim()
-    .toLowerCase();
-  return (
-    message.includes("responses") &&
-    (message.includes("/models") || message.includes("models 接口"))
-  );
-}
-
-function buildResponsesModelFetchStatus(
-  result: {
-    error?: string | null;
-    diagnostic_hint?: string | null;
-  },
-  models: string[],
-): InlineStatus | null {
-  if (!isResponsesModelFetchUnsupported(result)) {
-    return null;
-  }
-
-  const imageModel = models.find(isResponsesImageModel);
-  if (imageModel) {
-    return {
-      tone: "success",
-      message: `已确认 Responses 图片模型 ${imageModel}，该入口无需标准 /models 枚举，图片生成会走 Responses image_generation。`,
-    };
-  }
-
-  return {
-    tone: "info",
-    message:
-      "该 Responses 图片入口不提供标准 /models 枚举；请手动添加 gpt-images-2 或 gpt-image-2，图片生成会走 Responses image_generation。",
-  };
-}
-
-function buildFalModelFetchStatus(
-  provider: ProviderWithKeysDisplay,
-  result: {
-    error?: string | null;
-    diagnostic_hint?: string | null;
-  },
-  models: string[],
-): InlineStatus | null {
-  if (!isFalProviderLike(provider) || !isFalModelFetchUnsupported(result)) {
-    return null;
-  }
-
-  const firstModel = models.find(isLikelyFalImageModel);
-  if (firstModel) {
-    return {
-      tone: "success",
-      message: `已确认 Fal 模型 ${firstModel}，Fal 不提供标准 /models 枚举，后续会使用手动声明的模型 ID。`,
-    };
-  }
-
-  return {
-    tone: "info",
-    message:
-      "Fal 不提供标准 /models 枚举；当前模型优先级没有可用 Fal 图片模型，请手动添加 fal-ai/nano-banana-pro、fal-ai/flux-pro 或其他 fal-ai/... 模型 ID。",
-  };
-}
-
 // ============================================================================
 // 组件实现
 // ============================================================================
@@ -326,7 +209,8 @@ export const ProviderSetting: React.FC<ProviderSettingProps> = (props) => {
                     </Badge>
                   </div>
                   <p className="mt-2 text-sm leading-6 text-amber-800">
-                    登录后会自动同步 Lime Hub 的可用模型和本地托管访问凭证；未登录时不会展示本地兜底模型。
+                    登录后会自动同步 Lime Hub
+                    的可用模型和本地托管访问凭证；未登录时不会展示本地兜底模型。
                   </p>
                 </div>
               </div>
@@ -595,8 +479,8 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
 
       setApiModelIds(effectiveFetchedModelIds);
       setApiModelQuery("");
-      const existingFetchedModelCount = effectiveFetchedModelIds.filter((modelId) =>
-        normalizedModelSet.has(modelId.toLowerCase()),
+      const existingFetchedModelCount = effectiveFetchedModelIds.filter(
+        (modelId) => normalizedModelSet.has(modelId.toLowerCase()),
       ).length;
       if (existingFetchedModelCount === effectiveFetchedModelIds.length) {
         setModelFetchStatus({
@@ -1168,5 +1052,3 @@ export function extractProviderSettingInfo(
     hasConnectionTest: true,
   };
 }
-
-export default ProviderSetting;

@@ -158,5 +158,3 @@ export const ModelProviderList: React.FC<ModelProviderListProps> = ({
     </aside>
   );
 };
-
-export default ModelProviderList;

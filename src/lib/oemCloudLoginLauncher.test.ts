@@ -12,6 +12,9 @@ const controlPlaneMocks = vi.hoisted(() => ({
   createClientDesktopAuthSession: vi.fn(),
   pollClientDesktopAuthSession: vi.fn(),
 }));
+const systemBrowserMocks = vi.hoisted(() => ({
+  openExternalUrlWithSystemBrowser: vi.fn(),
+}));
 const tauriRuntimeMocks = vi.hoisted(() => ({
   hasTauriInvokeCapability: vi.fn(),
   hasTauriRuntimeMarkers: vi.fn(),
@@ -32,6 +35,11 @@ vi.mock("@/lib/api/oemCloudControlPlane", async (importOriginal) => {
 
 vi.mock("@tauri-apps/plugin-shell", () => ({
   open: shellOpenMock,
+}));
+
+vi.mock("@/lib/api/externalUrl", () => ({
+  openExternalUrlWithSystemBrowser:
+    systemBrowserMocks.openExternalUrlWithSystemBrowser,
 }));
 
 vi.mock("@/lib/tauri-runtime", () => ({
@@ -61,6 +69,10 @@ describe("oemCloudLoginLauncher", () => {
     localStorage.clear();
     shellOpenMock.mockReset();
     shellOpenMock.mockResolvedValue(undefined);
+    systemBrowserMocks.openExternalUrlWithSystemBrowser.mockReset();
+    systemBrowserMocks.openExternalUrlWithSystemBrowser.mockResolvedValue(
+      undefined,
+    );
     controlPlaneMocks.createClientDesktopAuthSession.mockReset();
     controlPlaneMocks.pollClientDesktopAuthSession.mockReset();
     tauriRuntimeMocks.hasTauriInvokeCapability.mockReset();
@@ -74,7 +86,7 @@ describe("oemCloudLoginLauncher", () => {
     vi.restoreAllMocks();
   });
 
-  it("Tauri 可用时应通过 shell open 打开系统浏览器", async () => {
+  it("Tauri 可用时应优先通过 native 命令打开系统浏览器", async () => {
     tauriRuntimeMocks.hasTauriInvokeCapability.mockReturnValue(true);
     tauriRuntimeMocks.hasTauriRuntimeMarkers.mockReturnValue(true);
     const browserTarget = {
@@ -84,26 +96,43 @@ describe("oemCloudLoginLauncher", () => {
 
     await openExternalUrl("https://user.limeai.run/login", { browserTarget });
 
-    expect(shellOpenMock).toHaveBeenCalledWith("https://user.limeai.run/login");
+    expect(
+      systemBrowserMocks.openExternalUrlWithSystemBrowser,
+    ).toHaveBeenCalledWith("https://user.limeai.run/login");
+    expect(shellOpenMock).not.toHaveBeenCalled();
     expect(browserTarget.close).toHaveBeenCalledTimes(1);
     expect(browserTarget.navigate).not.toHaveBeenCalled();
+  });
+
+  it("native 打开命令不可用时应回退到 Tauri shell open", async () => {
+    tauriRuntimeMocks.hasTauriInvokeCapability.mockReturnValue(true);
+    tauriRuntimeMocks.hasTauriRuntimeMarkers.mockReturnValue(true);
+    systemBrowserMocks.openExternalUrlWithSystemBrowser.mockRejectedValue(
+      new Error("unknown command"),
+    );
+
+    await openExternalUrl("https://user.limeai.run/login");
+
+    expect(shellOpenMock).toHaveBeenCalledWith("https://user.limeai.run/login");
   });
 
   it("Tauri shell open 失败时应抛错且不回退成假成功", async () => {
     tauriRuntimeMocks.hasTauriInvokeCapability.mockReturnValue(true);
     tauriRuntimeMocks.hasTauriRuntimeMarkers.mockReturnValue(true);
+    systemBrowserMocks.openExternalUrlWithSystemBrowser.mockRejectedValue(
+      new Error("native denied"),
+    );
     shellOpenMock.mockRejectedValue(new Error("permission denied"));
     const windowOpenSpy = vi.spyOn(window, "open").mockReturnValue(null);
 
     await expect(
       openExternalUrl("https://user.limeai.run/login"),
-    ).rejects.toThrow("系统浏览器打开失败：permission denied");
+    ).rejects.toThrow("系统浏览器打开失败：native denied");
 
     expect(windowOpenSpy).not.toHaveBeenCalled();
   });
 
   it("浏览器场景应先预打开空白页，再导航到登录 URL", async () => {
-    shellOpenMock.mockRejectedValue(new Error("not in tauri"));
     const openedWindow = createOpenedWindow();
     const windowOpenSpy = vi
       .spyOn(window, "open")
@@ -119,11 +148,14 @@ describe("oemCloudLoginLauncher", () => {
     expect(openedWindow.location.assign).toHaveBeenCalledWith(
       "https://user.limeai.run/login",
     );
+    expect(
+      systemBrowserMocks.openExternalUrlWithSystemBrowser,
+    ).not.toHaveBeenCalled();
+    expect(shellOpenMock).not.toHaveBeenCalled();
     expect(windowOpenSpy).toHaveBeenCalledTimes(1);
   });
 
   it("浏览器弹窗被拦截时应抛出可感知错误", async () => {
-    shellOpenMock.mockRejectedValue(new Error("not in tauri"));
     vi.spyOn(window, "open").mockReturnValue(null);
 
     await expect(
@@ -188,7 +220,9 @@ describe("oemCloudLoginLauncher", () => {
     });
 
     await vi.waitFor(() => {
-      expect(shellOpenMock).toHaveBeenCalledWith(
+      expect(
+        systemBrowserMocks.openExternalUrlWithSystemBrowser,
+      ).toHaveBeenCalledWith(
         "https://user.limeai.run/oauth/desktop/device-001/signin",
       );
     });
@@ -213,5 +247,69 @@ describe("oemCloudLoginLauncher", () => {
       mode: "desktop_auth",
       openedUrl: "https://user.limeai.run/oauth/desktop/device-001/signin",
     });
+  });
+
+  it("桌面 OAuth 可只等待浏览器打开并在后台继续同步登录", async () => {
+    tauriRuntimeMocks.hasTauriInvokeCapability.mockReturnValue(true);
+    tauriRuntimeMocks.hasTauriRuntimeMarkers.mockReturnValue(true);
+    controlPlaneMocks.createClientDesktopAuthSession.mockResolvedValue({
+      authSessionId: "auth-session-001",
+      deviceCode: "device-001",
+      tenantId: "tenant-0001",
+      clientId: "desktop-client",
+      clientName: "Lime Desktop",
+      provider: "google",
+      desktopRedirectUri: "lime://oauth/callback",
+      status: "pending_login",
+      expiresInSeconds: 600,
+      pollIntervalSeconds: 2,
+      authorizeUrl: "https://user.limeai.run/oauth/desktop/device-001/signin",
+    });
+    controlPlaneMocks.pollClientDesktopAuthSession.mockReturnValue(
+      new Promise(() => undefined),
+    );
+
+    await expect(
+      startOemCloudLogin(
+        {
+          baseUrl: "https://user.limeai.run",
+          controlPlaneBaseUrl: "https://user.limeai.run/api",
+          sceneBaseUrl: "https://user.limeai.run/scene-api",
+          gatewayBaseUrl: "https://llm.limeai.run",
+          tenantId: "tenant-0001",
+          sessionToken: null,
+          hubProviderName: null,
+          loginPath: "/login",
+          desktopClientId: "desktop-client",
+          desktopOauthRedirectUrl: "lime://oauth/callback",
+          desktopOauthNextPath: "/welcome",
+        },
+        { waitForCompletion: false },
+      ),
+    ).resolves.toEqual({
+      mode: "desktop_auth",
+      openedUrl: "https://user.limeai.run/oauth/desktop/device-001/signin",
+    });
+
+    expect(
+      systemBrowserMocks.openExternalUrlWithSystemBrowser,
+    ).toHaveBeenCalledWith(
+      "https://user.limeai.run/oauth/desktop/device-001/signin",
+    );
+    expect(shellOpenMock).not.toHaveBeenCalled();
+    expect(controlPlaneMocks.pollClientDesktopAuthSession).toHaveBeenCalledWith(
+      "device-001",
+    );
+
+    window.dispatchEvent(
+      new CustomEvent("lime:oem-cloud-oauth-completed", {
+        detail: {
+          tenantId: "tenant-0001",
+          nextPath: "/welcome",
+          provider: "google",
+        },
+      }),
+    );
+    await Promise.resolve();
   });
 });

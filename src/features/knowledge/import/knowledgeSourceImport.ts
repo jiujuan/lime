@@ -78,7 +78,7 @@ function inferPackType(title: string, sourceText: string): string {
 function buildFallbackPackName(packType: string): string {
   const compactTime = new Date()
     .toISOString()
-    .replace(/[-:.TZ]/g, "")
+    .replace(/-|:|\.|T|Z/g, "")
     .slice(0, 14);
   const prefix = packType === "custom" ? "project-material" : packType;
   return `${prefix}-${compactTime}`;

@@ -630,4 +630,135 @@ describe("agentStreamTurnEventBinding", () => {
     expect(clearActiveStreamIfMatch).toHaveBeenCalledWith("event-inactivity");
     expect(disposeListener).toHaveBeenCalled();
   });
+
+  it("运行时 keepalive 事件应刷新 inactivity 计时，避免长模型调用被前端误中断", async () => {
+    vi.useFakeTimers();
+
+    let messages: Message[] = [
+      {
+        id: "assistant-keepalive",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-04-14T10:00:00.000Z"),
+        isThinking: true,
+      },
+    ];
+    let streamActivated = false;
+    let streamHandler: ((event: { payload: unknown }) => void) | null = null;
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const clearActiveStreamIfMatch = vi.fn(() => true);
+    const disposeListener = vi.fn();
+    const runtime = {
+      listenToTurnEvents: vi.fn(async (_eventName, handler) => {
+        streamHandler = handler;
+        return vi.fn();
+      }),
+    } as unknown as AgentRuntimeAdapter;
+    const requestState: StreamRequestState = {
+      accumulatedContent: "",
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+      queuedTurnId: null,
+    };
+
+    await registerAgentStreamTurnEventBinding({
+      runtime,
+      eventName: "event-keepalive",
+      requestState,
+      skipUserMessage: false,
+      effectiveProviderType: "deepseek",
+      effectiveModel: "deepseek-v4-pro",
+      effectiveExecutionStrategy: "react",
+      content: "帮我整理一下今天的国际新闻",
+      expectingQueue: false,
+      activeSessionId: "session-keepalive",
+      resolvedWorkspaceId: "workspace-keepalive",
+      assistantMsgId: "assistant-keepalive",
+      pendingTurnKey: "pending-turn-keepalive",
+      pendingItemKey: "pending-item-keepalive",
+      effectiveWaitingRuntimeStatus: {
+        phase: "preparing",
+        title: "处理中",
+        detail: "正在准备执行上下文",
+      },
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      callbacks: {
+        activateStream: () => {
+          streamActivated = true;
+        },
+        isStreamActivated: () => streamActivated,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener,
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch,
+        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
+        removeQueuedTurnState: () => {},
+      },
+      sounds: {
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+      },
+      appendThinkingToParts: (parts) => parts,
+      setMessages: setMessages as never,
+      setPendingActions: noopDispatch<ActionRequired[]>(),
+      setThreadItems: noopDispatch<AgentThreadItem[]>(),
+      setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
+      setCurrentTurnId: noopDispatch<string | null>(),
+      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setIsSending: noopDispatch<boolean>(),
+    });
+
+    if (!streamHandler) {
+      throw new Error("expected stream handler to be registered");
+    }
+
+    const activeStreamHandler = streamHandler as (event: {
+      payload: unknown;
+    }) => void;
+
+    activeStreamHandler({
+      payload: {
+        type: "runtime_status",
+        status: {
+          phase: "preparing",
+          title: "已接收请求，正在准备执行",
+          detail: "系统正在初始化本轮执行环境并整理上下文，稍后会继续返回更详细进度。",
+        },
+      },
+    });
+
+    await vi.advanceTimersByTimeAsync(80_000);
+
+    activeStreamHandler({
+      payload: {
+        type: "runtime_status",
+        status: {
+          phase: "routing",
+          title: "仍在执行，等待下一步进度",
+          detail: "运行时已连续处理约 80 秒，本轮可能正在等待模型或工具返回。",
+          metadata: { keepalive_kind: "runtime_turn_active" },
+        },
+      },
+    });
+
+    await vi.advanceTimersByTimeAsync(80_000);
+
+    expect(messages[0]?.content).toBe("");
+    expect(messages[0]?.runtimeStatus).toMatchObject({
+      phase: "routing",
+      title: "仍在执行，等待下一步进度",
+    });
+    expect(clearActiveStreamIfMatch).not.toHaveBeenCalled();
+    expect(disposeListener).not.toHaveBeenCalled();
+  });
 });

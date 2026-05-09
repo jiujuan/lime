@@ -32,7 +32,7 @@ import {
 /**
  * useSkillExecution Hook 选项
  */
-export interface UseSkillExecutionOptions {
+interface UseSkillExecutionOptions {
   /** 步骤开始回调 */
   onStepStart?: (stepId: string, stepName: string, total: number) => void;
   /** 步骤完成回调 */
@@ -46,7 +46,7 @@ export interface UseSkillExecutionOptions {
 /**
  * useSkillExecution Hook 返回值
  */
-export interface UseSkillExecutionReturn {
+interface UseSkillExecutionReturn {
   /** 执行 Skill */
   execute: (
     skillName: string,
@@ -342,5 +342,3 @@ export function useSkillExecution(
     currentStepIndex,
   };
 }
-
-export default useSkillExecution;

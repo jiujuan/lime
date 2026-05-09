@@ -442,6 +442,23 @@ impl TurnInputEnvelopeBuilder {
         self
     }
 
+    pub fn upsert_turn_context_metadata(
+        &mut self,
+        key: impl Into<String>,
+        value: Value,
+    ) -> &mut Self {
+        if value.is_null() {
+            return self;
+        }
+
+        let metadata = self
+            .envelope
+            .turn_context_metadata
+            .get_or_insert_with(Map::new);
+        metadata.insert(key.into(), value);
+        self
+    }
+
     pub fn set_provider_routing(
         &mut self,
         provider_routing: Option<TurnProviderRoutingSnapshot>,

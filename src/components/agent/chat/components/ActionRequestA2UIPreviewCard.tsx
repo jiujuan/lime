@@ -96,5 +96,3 @@ export function ActionRequestA2UIPreviewCard({
     />
   );
 }
-
-export default ActionRequestA2UIPreviewCard;

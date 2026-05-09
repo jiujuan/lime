@@ -2,9 +2,13 @@ name: Quality
 
 on:
   pull_request:
+    paths-ignore:
+      - ".github/workflows/build-windows-test.yml"
   push:
     branches:
       - main
+    paths-ignore:
+      - ".github/workflows/build-windows-test.yml"
   workflow_dispatch:
 
 permissions:

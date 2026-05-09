@@ -142,6 +142,33 @@ struct InboundMessage {
     raw_content: Option<String>,
 }
 
+fn build_gateway_source_metadata(
+    account: &ResolvedFeishuAccount,
+    inbound: &InboundMessage,
+) -> serde_json::Value {
+    let remote_task_id = format!(
+        "gateway:feishu:{}:{}",
+        account.account_id, inbound.message_id
+    );
+    json!({
+        "remote_task": {
+            "source": "gateway_channel",
+            "channel": "feishu",
+            "accountId": account.account_id.as_str(),
+            "remoteTaskId": remote_task_id,
+            "inboundMessageId": inbound.message_id.as_str(),
+            "chatId": inbound.chat_id.as_str(),
+            "chatKind": inbound.chat_kind.as_str(),
+            "senderId": inbound.sender_id.as_deref(),
+            "agentCard": {
+                "id": format!("feishu:{}", account.account_id),
+                "name": "Feishu Remote",
+                "provider": "feishu"
+            }
+        }
+    })
+}
+
 #[derive(Debug, Clone)]
 struct ReceiveTarget {
     receive_id_type: &'static str,
@@ -1375,6 +1402,7 @@ async fn handle_plain_text(
                 "model": account.default_model.clone(),
                 "web_search": true,
                 "search_mode": "allowed",
+                "source_metadata": build_gateway_source_metadata(account, inbound),
             })),
         })
         .await;

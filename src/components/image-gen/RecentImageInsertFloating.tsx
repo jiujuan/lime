@@ -266,5 +266,3 @@ export function RecentImageInsertFloating({
     </FloatingRoot>
   );
 }
-
-export default RecentImageInsertFloating;

@@ -31,6 +31,7 @@ export interface StreamRequestState {
   listenerBoundAt?: number | null;
   firstEventReceivedAt?: number | null;
   firstRuntimeStatusAt?: number | null;
+  firstThinkingDeltaAt?: number | null;
   firstTextDeltaAt?: number | null;
   firstTextPaintAt?: number | null;
   firstTextPaintScheduled?: boolean;
@@ -101,6 +102,7 @@ export function createAgentStreamSubmissionLifecycle(
     listenerBoundAt: null,
     firstEventReceivedAt: null,
     firstRuntimeStatusAt: null,
+    firstThinkingDeltaAt: null,
     firstTextDeltaAt: null,
     firstTextPaintAt: null,
     firstTextPaintScheduled: false,

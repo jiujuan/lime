@@ -1076,6 +1076,16 @@ function resolveExpandedBlockIndexes(params: {
 
   blocks.forEach((block, index) => {
     if (
+      isCurrentTurn &&
+      turn.status === "running" &&
+      block.kind === "process" &&
+      block.status === "in_progress"
+    ) {
+      expanded.add(index);
+      return;
+    }
+
+    if (
       block.defaultExpanded &&
       (!collapseInactiveDetails ||
         (block.kind === "approval" && block.status !== "completed") ||
@@ -1087,17 +1097,16 @@ function resolveExpandedBlockIndexes(params: {
 
   if (focusBlockIndex >= 0) {
     const focusBlock = blocks[focusBlockIndex];
-    const completedThinkingBlock =
-      Boolean(focusBlock) &&
-      focusBlock.status === "completed" &&
-      focusBlock.items.every((item) => isThinkingTimelineItem(item));
     const shouldExpandFocus =
-      focusBlock?.status !== "completed" ||
-      (!completedThinkingBlock && turn.status === "running") ||
+      (focusBlock?.kind === "approval" && focusBlock.status !== "completed") ||
+      focusBlock?.kind === "alert" ||
       turn.status === "failed" ||
       turn.status === "aborted";
 
-    if (shouldExpandFocus && !collapseInactiveDetails) {
+    if (
+      shouldExpandFocus &&
+      !collapseInactiveDetails
+    ) {
       expanded.add(focusBlockIndex);
     }
 
@@ -1257,6 +1266,26 @@ function resolveProcessMixLabel(block: AgentThreadOrderedBlock): string | null {
   }
 
   return parts.length > 0 ? parts.join("，") : null;
+}
+
+function isInternalThinkingPreviewLine(line: string): boolean {
+  const normalized = line.trim();
+  if (!normalized) {
+    return false;
+  }
+
+  if (isInternalRoutingTurnSummaryText(normalized)) {
+    return true;
+  }
+
+  return (
+    /^(我们被要求|我被要求|我需要|我们需要|我们先|我们要|需要理解用户|首先，?用户|We need to|The user asks?|The user wants|The prompt asks|I need to)/i.test(
+      normalized,
+    ) ||
+    /(用户的问题|用户问的是|用户要求|这似乎是一个关于|这个问题其实是在询问|我需要用|避免展开复杂流程|the user'?s question|the user requested)/i.test(
+      normalized,
+    )
+  );
 }
 
 function resolveThreadInlineStatusHint(params: {
@@ -1433,6 +1462,23 @@ function TimelineBlockStatusIndicator({
   return <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />;
 }
 
+function hasStructuredThinkingInlinePreview(item: AgentThreadItem): boolean {
+  if (item.type !== "reasoning" && item.type !== "turn_summary") {
+    return false;
+  }
+
+  const displayText =
+    item.type === "reasoning"
+      ? resolveThinkingDisplayText(item)
+      : resolveTurnSummaryDisplayText(item);
+  if (!displayText.trim()) {
+    return false;
+  }
+
+  const parsed = parseAIResponse(displayText, false);
+  return Boolean(parsed.hasA2UI || parsed.hasPending);
+}
+
 function TimelineBlockCard({
   block,
   index,
@@ -1505,8 +1551,18 @@ function TimelineBlockCard({
     block.kind === "artifact" &&
     hasDetailEntries &&
     block.items.every((item) => item.type === "file_artifact");
+  const singleThinkingItem =
+    block.items.length === 1 && isThinkingTimelineItem(block.items[0]!)
+      ? block.items[0]!
+      : null;
+  const shouldSummarizeSingleThinkingInline =
+    Boolean(singleThinkingItem) &&
+    (singleThinkingItem?.type === "reasoning" ||
+      singleThinkingItem?.type === "turn_summary") &&
+    !hasStructuredThinkingInlinePreview(singleThinkingItem);
   const shouldRenderSingleItemInline =
     block.items.length === 1 &&
+    !shouldSummarizeSingleThinkingInline &&
     (!deferCompletedSingleDetails ||
       preferInlineDetails ||
       block.status !== "completed" ||
@@ -1619,8 +1675,11 @@ function TimelineBlockCard({
   }
 
   const visibleHeadline = headline;
+  const safeThinkingSupportingLines = isThinkingOnlyBlock
+    ? supportingLines.filter((line) => !isInternalThinkingPreviewLine(line))
+    : supportingLines;
   const visibleSupportingLines =
-    isThinkingOnlyBlock && open ? [] : supportingLines;
+    isThinkingOnlyBlock && open ? [] : safeThinkingSupportingLines;
   const summaryCountLabel = block.items.length > 1 ? block.countLabel : null;
   const processMixLabel = resolveProcessMixLabel(block);
   const summaryDetailHint =
@@ -1859,5 +1918,3 @@ export const AgentThreadTimeline: React.FC<AgentThreadTimelineProps> = ({
     </div>
   );
 };
-
-export default AgentThreadTimeline;

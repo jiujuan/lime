@@ -156,6 +156,10 @@ vi.mock("../utils/clawWorkspaceProviderSelection", () => ({
 }));
 
 import { useAsterAgentChat } from "./useAsterAgentChat";
+import {
+  clearAllAgentStreamTextOverlays,
+  getAgentStreamTextOverlay,
+} from "./agentStreamTextOverlayStore";
 
 interface HookHarness {
   getValue: () => ReturnType<typeof useAsterAgentChat>;
@@ -382,9 +386,11 @@ beforeEach(() => {
   mockTryExecuteSlashSkillCommand.mockResolvedValue(false);
   mockGetDefaultProvider.mockResolvedValue("openai");
   mockResolveClawWorkspaceProviderSelection.mockResolvedValue(null);
+  clearAllAgentStreamTextOverlays();
 });
 
 afterEach(() => {
+  clearAllAgentStreamTextOverlays();
   localStorage.clear();
   sessionStorage.clear();
 });
@@ -506,6 +512,46 @@ describe("useAsterAgentChat 首页新会话", () => {
           localStorage.getItem(`agent_pref_model_${workspaceId}`) || "null",
         ),
       ).toBe("gpt-5.4-mini");
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("已有工作区模型偏好时预热不应被运行时默认模型覆盖", async () => {
+    const workspaceId = "ws-init-keep-scoped-model";
+    localStorage.setItem(
+      `agent_pref_provider_${workspaceId}`,
+      JSON.stringify("openai"),
+    );
+    localStorage.setItem(
+      `agent_pref_model_${workspaceId}`,
+      JSON.stringify("gpt-4o"),
+    );
+    mockInitAsterAgent.mockResolvedValue({
+      initialized: true,
+      provider_configured: true,
+      provider_name: "openai",
+      model_name: "gpt-5.2-pro",
+    });
+    mockResolveClawWorkspaceProviderSelection.mockResolvedValue({
+      providerType: "deepseek",
+      model: "deepseek-v4-pro",
+    });
+
+    const harness = mountHook(workspaceId);
+
+    try {
+      await flushEffects();
+      await flushEffects();
+
+      expect(harness.getValue().providerType).toBe("openai");
+      expect(harness.getValue().model).toBe("gpt-4o");
+      expect(
+        JSON.parse(
+          localStorage.getItem(`agent_pref_model_${workspaceId}`) || "null",
+        ),
+      ).toBe("gpt-4o");
+      expect(mockResolveClawWorkspaceProviderSelection).not.toHaveBeenCalled();
     } finally {
       harness.unmount();
     }
@@ -2774,7 +2820,9 @@ describe("useAsterAgentChat runtime routing", () => {
             part.text.includes("先判断任务是直接回答还是需要联网"),
         ),
       ).toBe(true);
-      expect(assistantMessage?.content).toContain("我会先分析你的诉求。");
+      expect(getAgentStreamTextOverlay(assistantMessage?.id)?.content).toContain(
+        "我会先分析你的诉求。",
+      );
 
       act(() => {
         stream.emit({
@@ -2788,6 +2836,8 @@ describe("useAsterAgentChat runtime routing", () => {
 
       expect(assistantMessage?.runtimeStatus).toBeUndefined();
       expect(assistantMessage?.isThinking).toBe(false);
+      expect(assistantMessage?.content).toContain("我会先分析你的诉求。");
+      expect(getAgentStreamTextOverlay(assistantMessage?.id)).toBeNull();
     } finally {
       harness.unmount();
     }

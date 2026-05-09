@@ -83,6 +83,31 @@ describe("InlineToolProcessStep", () => {
     expect(container.textContent).not.toContain("执行完成");
   });
 
+  it("运行中的工具收到输出增量时应优先展示实时输出摘要", () => {
+    const { container } = renderTool({
+      id: "tool-streaming-output-1",
+      name: "mcp__runner__execute",
+      arguments: JSON.stringify({ command: "npm test" }),
+      status: "running",
+      result: {
+        success: true,
+        output: "正在运行 12 个测试用例",
+        metadata: {
+          streaming: true,
+        },
+      },
+      progress: {
+        message: "正在处理第 2 项",
+        progress: 2,
+        total: 4,
+      },
+      startTime: new Date("2026-05-09T10:00:00.000Z"),
+    });
+
+    expect(container.textContent).toContain("实时输出：正在运行 12 个测试用例");
+    expect(container.textContent).not.toContain("进度：正在处理第 2 项");
+  });
+
   it("ToolSearch 在流式阶段应保持结构化预览，不自动展开原始 JSON", () => {
     const { container } = renderTool(
       {

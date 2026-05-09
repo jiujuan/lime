@@ -94,5 +94,3 @@ export const TokenUsageDisplay: React.FC<TokenUsageDisplayProps> = ({
     </UsageContainer>
   );
 };
-
-export default TokenUsageDisplay;

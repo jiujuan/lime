@@ -44,5 +44,3 @@ export function CreationReplaySurfaceBanner({
     </div>
   );
 }
-
-export default CreationReplaySurfaceBanner;

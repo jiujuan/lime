@@ -3,6 +3,11 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useTeamWorkspaceRuntime } from "./useTeamWorkspaceRuntime";
+import {
+  clearAgentUiProjectionEvents,
+  conversationProjectionStore,
+  selectAgentUiProjectionEventsByTypeForScope,
+} from "../projection/conversationProjectionStore";
 
 const { mockSafeListen, mockParseAgentEvent } = vi.hoisted(() => ({
   mockSafeListen: vi.fn(),
@@ -111,6 +116,7 @@ describe("useTeamWorkspaceRuntime", () => {
     }
     vi.useRealTimers();
     vi.clearAllMocks();
+    clearAgentUiProjectionEvents();
   });
 
   it("收到 team 状态事件后，应立即投影 live runtime 与 live activity，并在去抖后递增刷新版本", async () => {
@@ -402,6 +408,61 @@ describe("useTeamWorkspaceRuntime", () => {
     expect(latestValue?.liveRuntimeBySessionId["child-1"]?.runtimeStatus).toBe(
       "completed",
     );
+  });
+
+  it("收到子代理 action_resolved 后，应写入 AgentUI 标准投影事实源", async () => {
+    const listeners = new Map<string, (event: { payload: unknown }) => void>();
+    mockSafeListen.mockImplementation(
+      async (
+        eventName: string,
+        handler: (event: { payload: unknown }) => void,
+      ) => {
+        listeners.set(eventName, handler);
+        return () => {
+          listeners.delete(eventName);
+        };
+      },
+    );
+
+    await renderHookProbe();
+
+    await act(async () => {
+      listeners.get("agent_subagent_stream:child-1")?.({
+        payload: {
+          type: "action_resolved",
+          request_id: "plan-req-1",
+          action_type: "plan_approval",
+          approved: true,
+          data: {
+            decision_kind: "plan_approval_response",
+            approved: true,
+            scope: {
+              session_id: "child-1",
+            },
+          },
+        },
+      });
+      await Promise.resolve();
+    });
+
+    const actionResolvedEvents = selectAgentUiProjectionEventsByTypeForScope(
+      conversationProjectionStore.getSnapshot(),
+      "action.resolved",
+      { sessionId: "child-1" },
+    );
+    expect(actionResolvedEvents).toHaveLength(1);
+    expect(actionResolvedEvents[0]).toMatchObject({
+      type: "action.resolved",
+      sourceType: "action_resolved",
+      actionId: "plan-req-1",
+      sessionId: "child-1",
+      runId: "agent_subagent_stream:child-1",
+      payload: {
+        actionType: "plan_approval",
+        decisionKind: "plan_approval_response",
+        approved: true,
+      },
+    });
   });
 
   it("收到 error 后，应立即把 live runtime 从 running 回落到 failed", async () => {

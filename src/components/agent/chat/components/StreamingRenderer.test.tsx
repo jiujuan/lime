@@ -502,11 +502,21 @@ describe("StreamingRenderer", () => {
       ],
     });
 
-    expect(container.textContent).toContain("先检查滚动触发逻辑");
+    const processGroupButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="streaming-process-group"] button',
+    );
+    expect(processGroupButton?.getAttribute("aria-expanded")).toBe("false");
+    expect(container.textContent).not.toContain("先检查滚动触发逻辑");
     expect(container.textContent).toContain("1 个工具调用");
     expect(
       container.querySelector('[data-testid="streaming-process-group"]'),
     ).toBeTruthy();
+
+    act(() => {
+      processGroupButton?.click();
+    });
+
+    expect(container.textContent).toContain("先检查滚动触发逻辑");
     expect(
       container
         .querySelector('[data-testid="inline-tool-process-step"]')
@@ -549,11 +559,23 @@ describe("StreamingRenderer", () => {
       isStreaming: false,
     });
 
-    expect(container.textContent).toContain("先检查 auto-scroll 触发条件");
+    const processGroupButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="streaming-process-group"] button',
+    );
+    expect(processGroupButton?.getAttribute("aria-expanded")).toBe("false");
+    expect(container.textContent).not.toContain(
+      "先检查 auto-scroll 触发条件",
+    );
     expect(container.textContent).toContain("1 个工具调用");
     expect(
       container.querySelector('[data-testid="streaming-process-group"]'),
     ).toBeTruthy();
+
+    act(() => {
+      processGroupButton?.click();
+    });
+
+    expect(container.textContent).toContain("先检查 auto-scroll 触发条件");
     expect(
       container
         .querySelector('[data-testid="inline-tool-process-step"]')
@@ -687,12 +709,19 @@ describe("StreamingRenderer", () => {
       hasPending: true,
     });
 
-    renderHarness({
+    const { container } = renderHarness({
       content: '<write_file path="notes/live.md"># 草稿\n正在生成中',
       isStreaming: true,
       onWriteFile,
     });
 
+    expect(
+      container.querySelector('[data-testid="streaming-write-file-card"]'),
+    ).toBeTruthy();
+    expect(container.textContent).toContain("正在生成 live.md");
+    expect(container.textContent).toContain("生成中");
+    expect(container.textContent).toContain("notes/live.md");
+    expect(container.textContent).not.toContain("写入notes/live.md");
     expect(onWriteFile).toHaveBeenCalledTimes(1);
     expect(onWriteFile).toHaveBeenCalledWith(
       "# 草稿\n正在生成中",
@@ -838,7 +867,7 @@ describe("StreamingRenderer", () => {
     ).toBeNull();
   });
 
-  it("思考内容进入流式阶段后应自动展开", () => {
+  it("思考内容进入流式阶段后应展开，完成后自动折叠", () => {
     const { container, rerender } = renderHarness({
       content: "",
       thinkingContent: "第一步：分析问题",
@@ -858,10 +887,23 @@ describe("StreamingRenderer", () => {
     const streamingDetails = container.querySelector("details");
     expect(streamingDetails).toBeTruthy();
     expect((streamingDetails as HTMLDetailsElement).open).toBe(true);
+    expect(container.textContent).toContain("思考中");
     expect(container.textContent).toContain("第二步：调用工具");
+
+    rerender({
+      content: "",
+      thinkingContent: "第一步：分析问题\n第二步：调用工具",
+      isStreaming: false,
+    });
+
+    const completedDetails = container.querySelector("details");
+    expect(completedDetails).toBeTruthy();
+    expect((completedDetails as HTMLDetailsElement).open).toBe(false);
+    expect(container.textContent).toContain("已完成思考");
+    expect(container.textContent).not.toContain("第二步：调用工具");
   });
 
-  it("思考块应使用统一状态标签，并保留首行原始文案", () => {
+  it("思考块应使用统一状态标签，并在完成态保留首行摘要", () => {
     const { container, rerender } = renderHarness({
       content: "",
       thinkingContent: "先生成一版草稿\n- 再根据反馈快速迭代",
@@ -878,11 +920,74 @@ describe("StreamingRenderer", () => {
       isStreaming: true,
     });
 
+    expect(container.textContent).toContain("思考中");
     expect(container.textContent).toContain("先生成一版草稿");
   });
 
-  it("思考块应压平被切碎成多行的过程 prose", () => {
-    renderHarness({
+  it("运行中的过程组应展开，完成后自动折叠为摘要", () => {
+    const processParts: ContentPart[] = [
+      {
+        type: "thinking",
+        text: "先确认过程组行高\n再和工具行对齐",
+      },
+      {
+        type: "tool_use",
+        toolCall: {
+          id: "tool-process-group-running",
+          name: "functions.exec_command",
+          arguments: JSON.stringify({ cmd: "rg -n thinking src" }),
+          status: "running",
+          startTime: new Date("2026-03-29T08:40:00.000Z"),
+        },
+      },
+    ];
+    const { container, rerender } = renderHarness({
+      content: "",
+      contentParts: processParts,
+      isStreaming: true,
+    });
+
+    const runningProcessGroup = container.querySelector<HTMLButtonElement>(
+      '[data-testid="streaming-process-group"] button',
+    );
+    expect(runningProcessGroup).not.toBeNull();
+    expect(runningProcessGroup?.getAttribute("aria-expanded")).toBe("true");
+    expect(container.textContent).toContain("先确认过程组行高");
+    expect(
+      container.querySelector('[data-testid="inline-tool-process-step"]'),
+    ).not.toBeNull();
+
+    rerender({
+      content: "",
+      contentParts: [
+        processParts[0]!,
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-process-group-running",
+            name: "functions.exec_command",
+            arguments: JSON.stringify({ cmd: "rg -n thinking src" }),
+            status: "completed",
+            startTime: new Date("2026-03-29T08:40:00.000Z"),
+            result: { success: true, output: "ok" },
+            endTime: new Date("2026-03-29T08:40:01.000Z"),
+          },
+        },
+      ],
+      isStreaming: false,
+    });
+
+    const completedProcessGroup = container.querySelector<HTMLButtonElement>(
+      '[data-testid="streaming-process-group"] button',
+    );
+    expect(completedProcessGroup).not.toBeNull();
+    expect(completedProcessGroup?.getAttribute("aria-expanded")).toBe("false");
+    expect(container.textContent).toContain("1 条思路，1 个工具调用");
+    expect(container.textContent).not.toContain("先确认过程组行高");
+  });
+
+  it("思考块展开后应压平被切碎成多行的过程 prose", () => {
+    const { container } = renderHarness({
       content: "",
       thinkingContent: [
         "目录",
@@ -906,6 +1011,14 @@ describe("StreamingRenderer", () => {
       isStreaming: true,
     });
 
+    const details = container.querySelector("details");
+    act(() => {
+      if (details) {
+        (details as HTMLDetailsElement).open = true;
+      }
+      details?.dispatchEvent(new Event("toggle", { bubbles: true }));
+    });
+
     expect(mockMarkdownRenderer).toHaveBeenCalled();
     const latestCall =
       mockMarkdownRenderer.mock.calls[
@@ -916,7 +1029,7 @@ describe("StreamingRenderer", () => {
     );
   });
 
-  it("过程组中的思考块应切换为轻量行内样式", () => {
+  it("过程组中的思考与工具应默认压缩为摘要", () => {
     const { container } = renderHarness({
       content: "",
       contentParts: [
@@ -937,6 +1050,21 @@ describe("StreamingRenderer", () => {
           },
         },
       ],
+    });
+
+    const processGroup = container.querySelector<HTMLButtonElement>(
+      '[data-testid="streaming-process-group"] button',
+    );
+    expect(processGroup).not.toBeNull();
+    expect(processGroup?.getAttribute("aria-expanded")).toBe("false");
+    expect(container.textContent).toContain("1 条思路，1 个工具调用");
+    expect(container.textContent).not.toContain("先确认过程组行高");
+    expect(
+      container.querySelector('[data-testid="thinking-block"]'),
+    ).toBeNull();
+
+    act(() => {
+      processGroup?.click();
     });
 
     expect(

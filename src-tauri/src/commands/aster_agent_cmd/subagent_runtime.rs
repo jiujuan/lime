@@ -15,6 +15,10 @@ const DEFAULT_WAIT_AGENT_TIMEOUT_MS: i64 = 30_000;
 const MIN_WAIT_AGENT_TIMEOUT_MS: i64 = 1_000;
 const MAX_WAIT_AGENT_TIMEOUT_MS: i64 = 300_000;
 
+fn is_zero(value: &usize) -> bool {
+    *value == 0
+}
+
 fn resolve_spawn_working_dir(
     parent_working_dir: &std::path::Path,
     requested_cwd: Option<String>,
@@ -51,6 +55,38 @@ struct SubagentStatusChangedEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     parent_session_id: Option<String>,
     status: SubagentRuntimeStatusKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    latest_turn_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    latest_turn_status: Option<SubagentRuntimeStatusKind>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    queued_turn_count: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    team_phase: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    team_parallel_budget: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    team_active_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    team_queued_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    provider_concurrency_group: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    provider_parallel_budget: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    queue_reason: Option<String>,
+    #[serde(default)]
+    retryable_overload: bool,
+    #[serde(default)]
+    closed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    usage: Option<lime_agent::AgentTokenUsage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    duration_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    result_ref: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
@@ -801,10 +837,21 @@ fn should_emit_subagent_status_for_runtime_event(event: &RuntimeAgentEvent) -> b
     )
 }
 
+fn is_non_subagent_session_status_lookup(error: &str) -> bool {
+    error.contains("会话不是 subagent session") || error.contains("session_type=user")
+}
+
 pub(crate) async fn emit_subagent_status_changed_events(app: &AppHandle, session_id: &str) {
     let status = match load_subagent_runtime_status(session_id).await {
         Ok(status) => status,
         Err(error) => {
+            if is_non_subagent_session_status_lookup(&error) {
+                tracing::debug!(
+                    "[AsterAgent][Subagent] 跳过非 subagent session 的 team runtime 状态事件: session_id={}",
+                    session_id
+                );
+                return;
+            }
             tracing::warn!(
                 "[AsterAgent][Subagent] 读取 team runtime 状态失败: session_id={}, error={}",
                 session_id,
@@ -824,6 +871,22 @@ pub(crate) async fn emit_subagent_status_changed_events(app: &AppHandle, session
         root_session_id,
         parent_session_id: scope_ids.get(1).cloned(),
         status: status.kind,
+        latest_turn_id: status.latest_turn_id,
+        latest_turn_status: status.latest_turn_status,
+        queued_turn_count: status.queued_turn_count,
+        team_phase: status.team_phase,
+        team_parallel_budget: status.team_parallel_budget,
+        team_active_count: status.team_active_count,
+        team_queued_count: status.team_queued_count,
+        provider_concurrency_group: status.provider_concurrency_group,
+        provider_parallel_budget: status.provider_parallel_budget,
+        queue_reason: status.queue_reason,
+        retryable_overload: status.retryable_overload,
+        closed: status.closed,
+        usage: status.usage,
+        duration_ms: status.duration_ms,
+        tool_count: status.tool_count,
+        result_ref: status.result_ref,
     };
 
     for scope_session_id in scope_ids {
@@ -848,6 +911,54 @@ fn build_target_runtime_event_name(session: &aster::session::Session) -> String 
 
 fn build_runtime_control_submission_id(prefix: &str, session_id: &str, request_id: &str) -> String {
     format!("{prefix}:{session_id}:{request_id}")
+}
+
+fn build_plan_approval_action_resolved_event(
+    session: &aster::session::Session,
+    request_id: &str,
+    approved: bool,
+    feedback: Option<&str>,
+    permission_mode: Option<&str>,
+    timestamp: Option<String>,
+    previous_state: &aster::session::SessionPlanModeState,
+) -> RuntimeAgentEvent {
+    RuntimeAgentEvent::ActionResolved {
+        request_id: request_id.to_string(),
+        action_type: "plan_approval".to_string(),
+        data: json!({
+            "action_type": "plan_approval",
+            "decision_kind": "plan_approval_response",
+            "approved": approved,
+            "feedback": feedback,
+            "permission_mode": permission_mode,
+            "timestamp": timestamp.unwrap_or_else(|| Utc::now().to_rfc3339()),
+            "target_session_id": session.id,
+            "plan_file": previous_state.plan_file,
+            "plan_id": previous_state.plan_id,
+            "awaiting_leader_approval": false,
+        }),
+        scope: Some(lime_agent::AgentActionRequiredScope {
+            session_id: Some(session.id.clone()),
+            thread_id: None,
+            turn_id: None,
+        }),
+    }
+}
+
+fn emit_runtime_control_event(
+    app: &AppHandle,
+    session: &aster::session::Session,
+    event: &RuntimeAgentEvent,
+) {
+    let event_name = build_target_runtime_event_name(session);
+    if let Err(error) = app.emit(&event_name, event) {
+        tracing::warn!(
+            "[AsterAgent][Subagent] 发送 runtime control 事件失败: session_id={}, event_name={}, error={}",
+            session.id,
+            event_name,
+            error
+        );
+    }
 }
 
 fn escape_xml_attribute(value: &str) -> String {
@@ -938,7 +1049,9 @@ async fn maybe_handle_plan_approval_response_for_teammate(
     let Some(RuntimeControlMessage::PlanApprovalResponse {
         request_id,
         approve,
-        ..
+        feedback,
+        permission_mode,
+        timestamp,
     }) = parse_runtime_control_message(message)
     else {
         return Ok(None);
@@ -968,6 +1081,16 @@ async fn maybe_handle_plan_approval_response_for_teammate(
     aster::session::save_session_plan_mode_state(&session.id, next_state)
         .await
         .map_err(|error| format!("更新 teammate plan mode 状态失败: {error}"))?;
+    let resolved_event = build_plan_approval_action_resolved_event(
+        session,
+        &request_id,
+        approve,
+        feedback.as_deref(),
+        permission_mode.as_deref(),
+        timestamp,
+        &state,
+    );
+    emit_runtime_control_event(&runtime.app_handle, session, &resolved_event);
     if matches!(session.session_type, SessionType::SubAgent) {
         emit_subagent_status_changed_events(&runtime.app_handle, &session.id).await;
     }
@@ -2754,6 +2877,77 @@ mod tests {
                 ..
             } if request_id == "req-1"
         ));
+    }
+
+    #[test]
+    fn test_build_plan_approval_action_resolved_event_uses_structured_payload() {
+        let session = aster::session::Session {
+            id: "child-1".to_string(),
+            working_dir: std::path::PathBuf::from("/tmp/lime-child"),
+            name: "researcher".to_string(),
+            user_set_name: false,
+            session_type: SessionType::SubAgent,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            extension_data: Default::default(),
+            total_tokens: None,
+            input_tokens: None,
+            output_tokens: None,
+            cached_input_tokens: None,
+            cache_creation_input_tokens: None,
+            accumulated_total_tokens: None,
+            accumulated_input_tokens: None,
+            accumulated_output_tokens: None,
+            schedule_id: None,
+            recipe: None,
+            user_recipe_values: None,
+            conversation: None,
+            message_count: 0,
+            provider_name: None,
+            model_config: None,
+        };
+        let plan_state = aster::session::SessionPlanModeState {
+            active: true,
+            plan_file: Some("/tmp/lime-child/PLAN.md".to_string()),
+            plan_id: Some("plan-1".to_string()),
+            awaiting_leader_approval: true,
+            pending_request_id: Some("req-1".to_string()),
+        };
+
+        let event = build_plan_approval_action_resolved_event(
+            &session,
+            "req-1",
+            false,
+            Some("请补充验证步骤"),
+            Some("default"),
+            Some("2026-05-09T00:00:00Z".to_string()),
+            &plan_state,
+        );
+
+        match event {
+            RuntimeAgentEvent::ActionResolved {
+                request_id,
+                action_type,
+                data,
+                scope,
+            } => {
+                assert_eq!(request_id, "req-1");
+                assert_eq!(action_type, "plan_approval");
+                assert_eq!(data["decision_kind"], json!("plan_approval_response"));
+                assert_eq!(data["approved"], json!(false));
+                assert_eq!(data["feedback"], json!("请补充验证步骤"));
+                assert_eq!(data["permission_mode"], json!("default"));
+                assert_eq!(data["target_session_id"], json!("child-1"));
+                assert_eq!(data["plan_file"], json!("/tmp/lime-child/PLAN.md"));
+                assert_eq!(data["plan_id"], json!("plan-1"));
+                assert_eq!(data["awaiting_leader_approval"], json!(false));
+                assert_eq!(
+                    scope.and_then(|scope| scope.session_id).as_deref(),
+                    Some("child-1")
+                );
+            }
+            other => panic!("expected ActionResolved event, got {other:?}"),
+        }
     }
 
     #[test]

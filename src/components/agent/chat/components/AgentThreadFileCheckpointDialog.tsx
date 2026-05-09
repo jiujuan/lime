@@ -639,5 +639,3 @@ export function AgentThreadFileCheckpointDialog({
     </Dialog>
   );
 }
-
-export default AgentThreadFileCheckpointDialog;

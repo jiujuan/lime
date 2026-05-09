@@ -1,6 +1,6 @@
 import type { AgentPageParams, Page, PageParams } from "@/types/page";
 
-export interface AppShellLayoutState {
+interface AppShellLayoutState {
   shouldHideSidebarForAgent: boolean;
   shouldShowAppSidebar: boolean;
   shouldAddMainContentGap: boolean;

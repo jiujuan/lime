@@ -585,5 +585,3 @@ export function CanvasSessionOverviewPanel({
     </section>
   );
 }
-
-export default CanvasSessionOverviewPanel;

@@ -119,6 +119,27 @@ pub async fn open_codex_cli_logout() -> Result<String, String> {
     Ok("codex logout".to_string())
 }
 
+fn normalize_external_url(url: &str) -> Result<String, String> {
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return Err("外部链接不能为空".to_string());
+    }
+
+    let parsed = url::Url::parse(trimmed).map_err(|error| format!("外部链接格式无效: {error}"))?;
+    match parsed.scheme() {
+        "http" | "https" => Ok(parsed.to_string()),
+        _ => Err("外部链接只支持 http/https 地址".to_string()),
+    }
+}
+
+/// 使用系统默认浏览器打开外部链接。
+#[tauri::command]
+pub async fn open_external_url(url: String) -> Result<(), String> {
+    let normalized_url = normalize_external_url(&url)?;
+    open::that(&normalized_url).map_err(|error| format!("无法打开系统浏览器: {error}"))?;
+    Ok(())
+}
+
 /// 外部工具列表
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExternalTool {
@@ -166,6 +187,25 @@ pub async fn get_external_tools() -> Result<Vec<ExternalTool>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn normalize_external_url_accepts_http_and_https() {
+        assert_eq!(
+            normalize_external_url(" https://user.limeai.run/login ").unwrap(),
+            "https://user.limeai.run/login"
+        );
+        assert_eq!(
+            normalize_external_url("http://127.0.0.1:1420/").unwrap(),
+            "http://127.0.0.1:1420/"
+        );
+    }
+
+    #[test]
+    fn normalize_external_url_rejects_non_web_schemes() {
+        assert!(normalize_external_url("lime://oauth/callback").is_err());
+        assert!(normalize_external_url("file:///tmp/demo.txt").is_err());
+        assert!(normalize_external_url("").is_err());
+    }
 
     #[tokio::test]
     async fn test_codex_cli_status() {

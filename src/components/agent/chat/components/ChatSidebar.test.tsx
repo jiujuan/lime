@@ -212,6 +212,25 @@ describe("ChatSidebar", () => {
     expect(onOpenMemoryPage).toHaveBeenCalledTimes(1);
   });
 
+  it("任务中心顶部新建对话应打开任务中心空白草稿而不是复用当前会话", () => {
+    const onNewChat = vi.fn();
+    const onOpenTaskCenterHome = vi.fn();
+    const container = renderSidebar({
+      contextVariant: "task-center",
+      onNewChat,
+      onOpenTaskCenterHome,
+    });
+
+    act(() => {
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="新建对话"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(onOpenTaskCenterHome).toHaveBeenCalledTimes(1);
+    expect(onNewChat).not.toHaveBeenCalled();
+  });
+
   it("任务中心侧栏不应再在顶部重复展示继续最近会话卡", () => {
     const now = Date.now();
     const container = renderSidebar({

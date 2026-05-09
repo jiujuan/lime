@@ -12,6 +12,12 @@ import {
 import { HarnessStatusPanel } from "./HarnessStatusPanel";
 import { RuntimeReviewDecisionDialog } from "./RuntimeReviewDecisionDialog";
 import type { HarnessSessionState } from "../utils/harnessState";
+import {
+  clearAgentUiProjectionEvents,
+  conversationProjectionStore,
+  selectAgentUiProjectionEventsByType,
+  selectLatestAgentUiProjectionEventForEvidence,
+} from "../projection/conversationProjectionStore";
 
 const {
   exportAgentRuntimeAnalysisHandoffMock,
@@ -686,6 +692,7 @@ afterEach(() => {
     configurable: true,
     value: originalWindowOpen,
   });
+  clearAgentUiProjectionEvents();
   vi.clearAllMocks();
 });
 
@@ -719,6 +726,130 @@ describe("HarnessStatusPanel", () => {
     expect(scrollArea?.className).toContain("flex-1");
     expect(scrollArea?.className).toContain("min-h-0");
     expect(panel?.querySelector(".sticky.top-0")).toBeNull();
+  });
+
+  it("应从 conversationProjectionStore.agentUi 展示标准投影摘要", () => {
+    act(() => {
+      conversationProjectionStore.recordAgentUiProjectionEvents([
+        {
+          type: "task.changed",
+          sourceType: "queue_added",
+          sequence: 1,
+          sessionId: "session-agentui-1",
+          threadId: "thread-agentui-1",
+          taskId: "task-agentui-1",
+          owner: "task",
+          scope: "task",
+          phase: "submitted",
+          surface: "task_capsule",
+          control: "steer",
+          payload: { taskEvent: "steer_intent" },
+        },
+        {
+          type: "action.required",
+          sourceType: "action_required",
+          sequence: 2,
+          sessionId: "session-agentui-1",
+          threadId: "thread-agentui-1",
+          actionId: "action-agentui-1",
+          owner: "action",
+          scope: "action_request",
+          phase: "waiting",
+          surface: "hitl",
+          control: "approve",
+          payload: { status: "waiting" },
+        },
+        {
+          type: "artifact.preview.ready",
+          sourceType: "artifact_snapshot",
+          sequence: 3,
+          sessionId: "session-agentui-1",
+          threadId: "thread-agentui-1",
+          artifactId: "artifact-agentui-1",
+          owner: "artifact",
+          scope: "artifact",
+          phase: "completed",
+          surface: "artifact_workspace",
+          payload: { status: "preview_ready" },
+        },
+        {
+          type: "evidence.changed",
+          sourceType: "evidence_projection",
+          sequence: 4,
+          sessionId: "session-agentui-1",
+          threadId: "thread-agentui-1",
+          evidenceId: "evidence-agentui-1",
+          owner: "evidence",
+          scope: "evidence",
+          phase: "completed",
+          surface: "timeline_evidence",
+          persistence: "evidence_pack",
+          payload: { verdict: "gaps_present" },
+        },
+        {
+          type: "diagnostic.changed",
+          sourceType: "runtime_status",
+          sequence: 5,
+          sessionId: "session-agentui-1",
+          threadId: "thread-agentui-1",
+          owner: "diagnostics",
+          scope: "run",
+          phase: "routing",
+          surface: "diagnostics",
+          payload: { status: "limit_warning" },
+        },
+        {
+          type: "metric.changed",
+          sourceType: "performance_metric",
+          sequence: 6,
+          sessionId: "session-agentui-1",
+          threadId: "thread-agentui-1",
+          owner: "diagnostics",
+          scope: "run",
+          phase: "completed",
+          surface: "diagnostics",
+          payload: { status: "paint_ready" },
+        },
+        {
+          type: "diagnostic.changed",
+          sourceType: "runtime_status",
+          sequence: 7,
+          sessionId: "session-other",
+          owner: "diagnostics",
+          scope: "run",
+          phase: "routing",
+          surface: "diagnostics",
+          payload: { status: "other session marker" },
+        },
+      ]);
+    });
+
+    renderPanel({
+      layout: "dialog",
+      diagnosticRuntimeContext: {
+        sessionId: "session-agentui-1",
+        workspaceId: "workspace-agentui-1",
+        providerType: "openai",
+        model: "gpt-5.4",
+        executionStrategy: "react",
+        activeTheme: "default",
+        selectedTeamLabel: null,
+      },
+    });
+
+    expect(document.body.textContent).toContain("AgentUI 标准投影");
+    expect(document.body.textContent).toContain("6 条");
+    expect(document.body.textContent).toContain(
+      "只读取 conversationProjectionStore.agentUi",
+    );
+    expect(document.body.textContent).toContain("Action / HITL");
+    expect(document.body.textContent).toContain("Task / Agent");
+    expect(document.body.textContent).toContain("Artifact");
+    expect(document.body.textContent).toContain("Evidence");
+    expect(document.body.textContent).toContain("Diagnostics");
+    expect(document.body.textContent).toContain("steer_intent");
+    expect(document.body.textContent).toContain("gaps_present");
+    expect(document.body.textContent).not.toContain("other session marker");
   });
 
   it("弹窗模式应让前置概览跟随滚动区，而不是固定在顶部", () => {
@@ -917,6 +1048,37 @@ describe("HarnessStatusPanel", () => {
     expect(document.body.textContent).toContain("线程状态");
     expect(document.body.textContent).toContain("处理中");
     expect(document.body.textContent).toContain("排队中");
+    expect(
+      selectAgentUiProjectionEventsByType(
+        conversationProjectionStore.getSnapshot(),
+        "agent.handoff",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        type: "agent.handoff",
+        sourceType: "evidence_projection",
+        sessionId: "session-handoff-1",
+        threadId: "thread-handoff-1",
+        evidenceId: ".lime/harness/sessions/session-handoff-1",
+        handoffId: ".lime/harness/sessions/session-handoff-1",
+        phase: "waiting",
+        surface: "handoff_lane",
+        topology: "specialist_handoff",
+        payload: expect.objectContaining({
+          handoffEvent: "runtime_handoff_bundle",
+          status: "handoff_requested",
+          from: "lime_runtime",
+          to: "specialist_runtime",
+          reason: "handoff_bundle_exported",
+          resumeTarget: ".lime/harness/sessions/session-handoff-1",
+        }),
+        refs: {
+          artifactPaths: [
+            ".lime/harness/sessions/session-handoff-1/handoff.md",
+          ],
+        },
+      }),
+    ]);
     expect(mockToast.success).toHaveBeenCalledWith("已导出 1 个交接制品");
   });
 
@@ -1241,6 +1403,34 @@ describe("HarnessStatusPanel", () => {
       ".lime/harness/sessions/session-evidence-1/evidence/summary.md",
     );
     expect(mockToast.success).toHaveBeenCalledWith("已导出 1 个问题证据文件");
+    expect(
+      selectLatestAgentUiProjectionEventForEvidence(
+        conversationProjectionStore.getSnapshot(),
+        ".lime/harness/sessions/session-evidence-1/evidence",
+      ),
+    ).toMatchObject({
+      type: "evidence.changed",
+      sourceType: "evidence_projection",
+      sessionId: "session-evidence-1",
+      threadId: "thread-evidence-1",
+      evidenceId: ".lime/harness/sessions/session-evidence-1/evidence",
+      owner: "evidence",
+      scope: "evidence",
+      phase: "completed",
+      surface: "timeline_evidence",
+      persistence: "evidence_pack",
+      refs: {
+        artifactPaths: [
+          ".lime/harness/sessions/session-evidence-1/evidence/summary.md",
+        ],
+      },
+      payload: {
+        kind: "evidence_pack",
+        status: "ready",
+        verdict: "gaps_present",
+        itemCount: 5,
+      },
+    });
   });
 
   it("存在 sessionId 时应支持导出外部分析交接并展示分析文件列表", async () => {
@@ -1635,6 +1825,43 @@ describe("HarnessStatusPanel", () => {
       "重新导出 evidence pack，确认 Artifact 校验摘要已更新。",
     );
     expect(document.body.textContent).toContain("aster-rust");
+    expect(
+      selectAgentUiProjectionEventsByType(
+        conversationProjectionStore.getSnapshot(),
+        "task.changed",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        sourceType: "team_control_projection",
+        sessionId: "session-review-1",
+        taskId: ".lime/harness/sessions/session-review-1/review",
+        reviewId: ".lime/harness/sessions/session-review-1/review",
+        workItemId: ".lime/harness/sessions/session-review-1/review",
+        surface: "review_lane",
+        control: "request_review",
+        runtimeEntity: "work_item",
+      }),
+    ]);
+    expect(
+      selectLatestAgentUiProjectionEventForEvidence(
+        conversationProjectionStore.getSnapshot(),
+        ".lime/harness/sessions/session-review-1/review",
+      ),
+    ).toMatchObject({
+      type: "review.requested",
+      payload: {
+        regressionOutcome: "blocking_failure",
+        regressionFailureOutcomes: ["Artifact 校验存在 2 条未恢复 issues。"],
+        requestedFixes: [
+          "先对照 analysis-context.json / evidence/runtime.json 核对当前验证失败焦点，再决定是继续修复还是补证据。",
+          "复查 Artifact 校验相关产物，确认 issues / repaired / fallback 状态与最终结论一致。",
+        ],
+        regressionRequirements: [
+          "按 replay case 复现问题并确认修复后行为与预期一致。",
+          "重新导出 evidence pack，确认 Artifact 校验摘要已更新。",
+        ],
+      },
+    });
     expect(mockToast.success).toHaveBeenCalledWith("已导出 2 个人工审核文件");
   });
 
@@ -1769,6 +1996,20 @@ describe("HarnessStatusPanel", () => {
         focus_verification_failure_outcomes: [],
         focus_verification_recovered_outcomes: [
           "Artifact 校验已恢复 1 个产物，fallback 0 次。",
+        ],
+        requested_fix_execution_results: [
+          {
+            requested_fix: "处理 approval-denied-dialog",
+            requested_fix_index: 1,
+            execution_status: "completed",
+            regression_outcome: "recovered",
+            summary_preview: "已处理权限确认后重新导出 evidence pack。",
+            result_ref:
+              "agent-runtime://session/session-review-2/thread/thread-review-2/turn/turn-review/item/item-fix-1",
+            artifact_paths: [
+              ".lime/harness/sessions/session-review-2/evidence/runtime.json",
+            ],
+          },
         ],
       },
       decision: {
@@ -1967,6 +2208,41 @@ describe("HarnessStatusPanel", () => {
     );
     expect(document.body.textContent).toContain("Lime Maintainer");
     expect(document.body.textContent).toContain("处理 approval-denied-dialog");
+    const requestedFixTask = selectAgentUiProjectionEventsByType(
+      conversationProjectionStore.getSnapshot(),
+      "task.changed",
+    )
+      .slice()
+      .reverse()
+      .find((event) => event.payload?.taskEvent === "review_requested_fix");
+    expect(requestedFixTask).toMatchObject({
+      type: "task.changed",
+      sessionId: "session-review-2",
+      threadId: "thread-review-2",
+      taskId: ".lime/harness/sessions/session-review-2/review:requested-fix:1",
+      workItemId:
+        ".lime/harness/sessions/session-review-2/review:requested-fix:1",
+      reviewId: ".lime/harness/sessions/session-review-2/review",
+      surface: "work_board",
+      control: "open_detail",
+      runtimeEntity: "work_item",
+      runtimeStatus: "completed",
+      payload: {
+        taskEvent: "review_requested_fix",
+        executionStatus: "completed",
+        regressionOutcome: "recovered",
+        regressionRecoveredOutcomes: [
+          "Artifact 校验已恢复 1 个产物，fallback 0 次。",
+        ],
+        regressionRequirements: ["npm run test:contracts", "人工审核回归"],
+        executionSummaryPreview: "已处理权限确认后重新导出 evidence pack。",
+        executionResultRef:
+          "agent-runtime://session/session-review-2/thread/thread-review-2/turn/turn-review/item/item-fix-1",
+        executionArtifactPaths: [
+          ".lime/harness/sessions/session-review-2/evidence/runtime.json",
+        ],
+      },
+    });
     expect(mockToast.success).toHaveBeenCalledWith("已保存人工审核结果");
   });
 

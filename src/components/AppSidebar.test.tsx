@@ -880,9 +880,47 @@ describe("AppSidebar", () => {
     });
 
     expect(mockStartOemCloudLogin).toHaveBeenCalledTimes(1);
+    expect(mockStartOemCloudLogin).toHaveBeenCalledWith(undefined, {
+      browserTarget: null,
+      waitForCompletion: false,
+    });
     expect(mockToastSuccess).toHaveBeenCalledWith(
       "已打开 Lime 云端 登录页，请在浏览器完成授权",
     );
+  });
+
+  it("开源入口启动桌面 OAuth 后只等待登录页打开，不应显示已同步", async () => {
+    mockStartOemCloudLogin.mockResolvedValueOnce({
+      mode: "desktop_auth",
+      openedUrl: "https://user.limeai.run/oauth/desktop/device-001/signin",
+    });
+    const container = mountSidebarContainer({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "new-task",
+      } as AgentPageParams,
+    });
+    await flushEffects(2);
+    await openAccountMenu(container);
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          'button[aria-label="连接 Lime 云端"]',
+        )
+        ?.click();
+      await Promise.resolve();
+    });
+
+    expect(mockStartOemCloudLogin).toHaveBeenCalledWith(undefined, {
+      browserTarget: null,
+      waitForCompletion: false,
+    });
+    expect(mockToastSuccess).toHaveBeenCalledWith(
+      "已打开 Lime 云端 登录页，请在浏览器完成授权",
+    );
+    expect(mockToastSuccess).not.toHaveBeenCalledWith("Lime 云端 登录已同步");
+    expect(container.textContent).not.toContain("正在打开...");
   });
 
   it("开源使用说明应折叠到信息图标中", async () => {

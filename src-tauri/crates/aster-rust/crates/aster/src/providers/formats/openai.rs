@@ -1,4 +1,4 @@
-use crate::conversation::message::{Message, MessageContent};
+use crate::conversation::message::{Message, MessageContent, MessageMetadata};
 use crate::model::ModelConfig;
 use crate::providers::base::{ProviderUsage, Usage};
 use crate::providers::formats::tool_description_with_examples;
@@ -57,6 +57,31 @@ struct StreamingChunk {
     id: Option<String>,
     usage: Option<Value>,
     model: Option<String>,
+}
+
+#[derive(Debug, Default)]
+struct StreamingToolCallAccumulator {
+    id: Option<String>,
+    name: Option<String>,
+    arguments: String,
+}
+
+fn tool_input_delta_message(
+    id: String,
+    name: Option<String>,
+    delta: String,
+    accumulated_arguments: String,
+    provider: &str,
+) -> Message {
+    Message::assistant()
+        .with_tool_input_delta(
+            id,
+            name,
+            delta,
+            Some(accumulated_arguments),
+            Some(provider.to_string()),
+        )
+        .with_metadata(MessageMetadata::invisible())
 }
 
 pub fn format_messages(messages: &[Message], image_format: &ImageFormat) -> Vec<Value> {
@@ -209,6 +234,7 @@ pub fn format_messages(messages: &[Message], image_format: &ImageFormat) -> Vec<
                 }
                 MessageContent::ToolConfirmationRequest(_) => {}
                 MessageContent::ActionRequired(_) => {}
+                MessageContent::ToolInputDelta(_) => {}
                 MessageContent::Image(image) => {
                     content_array.push(convert_image(image, image_format));
                 }
@@ -547,12 +573,34 @@ where
             if chunk.choices.is_empty() {
                 yield (None, usage)
             } else if chunk.choices[0].delta.tool_calls.as_ref().is_some_and(|tc| !tc.is_empty()) {
-                let mut tool_call_data: std::collections::HashMap<i32, (String, String, String)> = std::collections::HashMap::new();
+                let mut tool_call_data: std::collections::HashMap<i32, StreamingToolCallAccumulator> =
+                    std::collections::HashMap::new();
 
                 if let Some(tool_calls) = &chunk.choices[0].delta.tool_calls {
                     for tool_call in tool_calls {
-                        if let (Some(index), Some(id), Some(name)) = (tool_call.index, &tool_call.id, &tool_call.function.name) {
-                            tool_call_data.insert(index, (id.clone(), name.clone(), tool_call.function.arguments.clone()));
+                        if let Some(index) = tool_call.index {
+                            let entry = tool_call_data.entry(index).or_default();
+                            if let Some(id) = &tool_call.id {
+                                entry.id = Some(id.clone());
+                            }
+                            if let Some(name) = &tool_call.function.name {
+                                entry.name = Some(name.clone());
+                            }
+                            if !tool_call.function.arguments.is_empty() {
+                                entry.arguments.push_str(&tool_call.function.arguments);
+                                if let Some(id) = entry.id.clone() {
+                                    yield (
+                                        Some(tool_input_delta_message(
+                                            id,
+                                            entry.name.clone(),
+                                            tool_call.function.arguments.clone(),
+                                            entry.arguments.clone(),
+                                            "openai_compatible",
+                                        )),
+                                        None,
+                                    );
+                                }
+                            }
                         }
                     }
                 }
@@ -576,10 +624,27 @@ where
                                     if let Some(delta_tool_calls) = &tool_chunk.choices[0].delta.tool_calls {
                                         for delta_call in delta_tool_calls {
                                             if let Some(index) = delta_call.index {
-                                                if let Some((_, _, ref mut args)) = tool_call_data.get_mut(&index) {
-                                                    args.push_str(&delta_call.function.arguments);
-                                                } else if let (Some(id), Some(name)) = (&delta_call.id, &delta_call.function.name) {
-                                                    tool_call_data.insert(index, (id.clone(), name.clone(), delta_call.function.arguments.clone()));
+                                                let entry = tool_call_data.entry(index).or_default();
+                                                if let Some(id) = &delta_call.id {
+                                                    entry.id = Some(id.clone());
+                                                }
+                                                if let Some(name) = &delta_call.function.name {
+                                                    entry.name = Some(name.clone());
+                                                }
+                                                if !delta_call.function.arguments.is_empty() {
+                                                    entry.arguments.push_str(&delta_call.function.arguments);
+                                                    if let Some(id) = entry.id.clone() {
+                                                        yield (
+                                                            Some(tool_input_delta_message(
+                                                                id,
+                                                                entry.name.clone(),
+                                                                delta_call.function.arguments.clone(),
+                                                                entry.arguments.clone(),
+                                                                "openai_compatible",
+                                                            )),
+                                                            None,
+                                                        );
+                                                    }
                                                 }
                                             }
                                         }
@@ -602,7 +667,13 @@ where
                 sorted_indices.sort();
 
                 for index in sorted_indices {
-                    if let Some((id, function_name, arguments)) = tool_call_data.get(&index) {
+                    if let Some(tool_call) = tool_call_data.get(&index) {
+                        let (Some(id), Some(function_name)) =
+                            (tool_call.id.as_ref(), tool_call.name.as_ref())
+                        else {
+                            continue;
+                        };
+                        let arguments = &tool_call.arguments;
                         let parsed = if arguments.is_empty() {
                             Ok(json!({}))
                         } else {
@@ -1669,6 +1740,56 @@ data: [DONE]
         }
 
         panic!("Expected tool call message with two calls, but did not see it");
+    }
+
+    #[tokio::test]
+    async fn test_streaming_tool_call_emits_input_delta_signal() -> anyhow::Result<()> {
+        let response_lines = [
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call-1","type":"function","function":{"name":"read_file","arguments":""}}]},"index":0,"finish_reason":null}],"id":"chatcmpl-1"}"#,
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"path\""}}]},"index":0,"finish_reason":null}],"id":"chatcmpl-1"}"#,
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":":\"README.md\"}"}}]},"index":0,"finish_reason":null}],"id":"chatcmpl-1"}"#,
+            r#"data: {"model":"gpt-4o","choices":[{"delta":{"content":""},"index":0,"finish_reason":"tool_calls"}],"id":"chatcmpl-1"}"#,
+            "data: [DONE]",
+        ];
+
+        let response_stream =
+            tokio_stream::iter(response_lines.into_iter().map(|line| Ok(line.to_string())));
+        let messages = response_to_streaming_message(response_stream);
+        pin!(messages);
+
+        let mut deltas = Vec::new();
+        let mut final_tool_arguments = None;
+
+        while let Some(Ok((message, _usage))) = messages.next().await {
+            let Some(message) = message else {
+                continue;
+            };
+            for content in message.content {
+                match content {
+                    MessageContent::ToolInputDelta(delta) => {
+                        assert_eq!(delta.id, "call-1");
+                        assert_eq!(delta.tool_name.as_deref(), Some("read_file"));
+                        assert_eq!(delta.provider.as_deref(), Some("openai_compatible"));
+                        deltas.push(delta.accumulated_arguments.unwrap_or_default());
+                    }
+                    MessageContent::ToolRequest(request) => {
+                        let call = request.tool_call.expect("tool call should parse");
+                        final_tool_arguments = Some(call.arguments);
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        assert_eq!(deltas, vec!["{\"path\"", "{\"path\":\"README.md\"}"]);
+        assert_eq!(
+            final_tool_arguments
+                .flatten()
+                .and_then(|args| args.get("path").cloned()),
+            Some(json!("README.md"))
+        );
+
+        Ok(())
     }
 
     #[tokio::test]

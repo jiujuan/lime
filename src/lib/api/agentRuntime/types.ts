@@ -787,6 +787,26 @@ export interface AgentRuntimeEvidenceObservabilityVerificationOutcomes {
   recovered: string[];
 }
 
+export type AgentRuntimeRequestedFixExecutionStatus =
+  | "pending"
+  | "assigned"
+  | "running"
+  | "completed"
+  | "failed"
+  | "blocked"
+  | "cancelled";
+
+export interface AgentRuntimeRequestedFixExecutionResult {
+  requested_fix?: string;
+  requested_fix_index?: number;
+  execution_status: AgentRuntimeRequestedFixExecutionStatus;
+  regression_outcome?: AgentRuntimeEvidenceVerificationOutcome;
+  summary_preview?: string;
+  result_ref?: string;
+  artifact_ids: string[];
+  artifact_paths: string[];
+}
+
 export interface AgentRuntimeEvidenceVerificationSummary {
   artifact_validator?: AgentRuntimeArtifactValidatorVerificationSummary;
   browser_verification?: AgentRuntimeBrowserVerificationSummary;
@@ -794,6 +814,7 @@ export interface AgentRuntimeEvidenceVerificationSummary {
   observability_verification_outcomes?: AgentRuntimeEvidenceObservabilityVerificationOutcomes;
   focus_verification_failure_outcomes: string[];
   focus_verification_recovered_outcomes: string[];
+  requested_fix_execution_results?: AgentRuntimeRequestedFixExecutionResult[];
 }
 
 export interface AgentRuntimeEvidenceObservabilitySummary {

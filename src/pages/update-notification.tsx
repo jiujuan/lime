@@ -251,5 +251,3 @@ export function UpdateNotificationPage() {
     </div>
   );
 }
-
-export default UpdateNotificationPage;

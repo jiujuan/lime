@@ -25,6 +25,7 @@ import type { ArtifactDisplayState } from "../hooks/useArtifactDisplayState";
 import { ImageTaskViewer } from "../components/ImageTaskViewer";
 import { TeamWorkbenchSummaryPanel } from "../components/TeamWorkbenchSummaryPanel";
 import { TeamWorkspaceBoard } from "../components/TeamWorkspaceBoard";
+import type { AgentUiTeamWorkbenchViewItem } from "../projection/agentUiTeamWorkbenchViewModel";
 import type {
   CanvasWorkbenchHeaderBadge,
   CanvasWorkbenchDefaultPreview,
@@ -42,7 +43,10 @@ import { buildCanvasWorkbenchDefaultPreview } from "./canvasWorkbenchDefaultPrev
 import { resolveAbsoluteWorkspacePath } from "./workspacePath";
 import { buildGeneralCanvasStateFromWorkspaceFile } from "./workspaceFilePreview";
 import type { SessionImageWorkbenchState } from "./imageWorkbenchHelpers";
-import type { TeamWorkbenchSurfaceProps } from "./chatSurfaceProps";
+import type {
+  AgentUiTeamWorkbenchPromptMetadata,
+  TeamWorkbenchSurfaceProps,
+} from "./chatSurfaceProps";
 import { hasRenderableGeneralCanvasPreview } from "./generalCanvasPreviewState";
 import { useWorkspaceInputbarSceneRuntime } from "./useWorkspaceInputbarSceneRuntime";
 import { useWorkspaceImageWorkbenchActionRuntime } from "./useWorkspaceImageWorkbenchActionRuntime";
@@ -65,6 +69,31 @@ type GeneralCanvasPanelProps = Omit<
   ComponentProps<typeof GeneralCanvasPanel>,
   "toolbarActions"
 >;
+export type AgentUiTeamWorkbenchActionRouteResult =
+  | "closed"
+  | "continued"
+  | "handoff_source_located"
+  | "located_only"
+  | "opened"
+  | "remote_task_source_located"
+  | "seeded_reassignment"
+  | "seeded_work_item"
+  | "submitted_work_item"
+  | "work_item_source_located"
+  | "unsupported"
+  | "unsupported_handoff"
+  | "unsupported_remote"
+  | "unsupported_review"
+  | "unsupported_work_item"
+  | "waited";
+interface AgentUiTeamWorkbenchActionRouteOptions {
+  reassignmentAssignee?: string | null;
+  onSeedWorkbenchPrompt?: (prompt: string) => void;
+  onSubmitWorkbenchPrompt?: (
+    prompt: string,
+    metadata: AgentUiTeamWorkbenchPromptMetadata,
+  ) => boolean | Promise<boolean>;
+}
 type RenderArtifactWorkbenchPreviewOptions = {
   stackedWorkbenchTrigger?: ReactNode;
   onArtifactDocumentControllerChange?: ComponentProps<
@@ -210,6 +239,11 @@ interface WorkspaceCanvasPreviewTeamWorkbenchParams {
   enabled: boolean;
   surfaceProps: TeamWorkbenchSurfaceProps;
   autoFocusToken?: string | number | null;
+  onSeedWorkbenchPrompt?: (prompt: string) => void;
+  onSubmitWorkbenchPrompt?: (
+    prompt: string,
+    metadata: AgentUiTeamWorkbenchPromptMetadata,
+  ) => boolean | Promise<boolean>;
   teamDispatchPreviewState?: TeamWorkspaceRuntimeFormationState | null;
   liveActivityBySessionId?: Record<string, TeamWorkspaceActivityEntry[]>;
   teamWaitSummary?: TeamWorkspaceWaitSummary | null;
@@ -288,7 +322,10 @@ type CanvasFactoryParams = CanvasPreviewPresentationParams["canvasFactory"];
 type TeamWorkbenchParams = CanvasPreviewPresentationParams["teamWorkbench"];
 type InputbarScene = Pick<
   ReturnType<typeof useWorkspaceInputbarSceneRuntime>,
-  "activeCanvasTaskFile" | "teamWorkbenchSurfaceProps"
+  | "activeCanvasTaskFile"
+  | "seedAgentUiWorkbenchPrompt"
+  | "submitAgentUiWorkbenchPrompt"
+  | "teamWorkbenchSurfaceProps"
 >;
 type ImageWorkbenchGenerationRuntime = ReturnType<typeof useImageGen>;
 type ImageWorkbenchActionRuntime = ReturnType<
@@ -515,6 +552,353 @@ export function buildCanvasTeamWorkbenchView({
       renderTeamWorkbenchPreview(options?.stackedWorkbenchTrigger),
     renderPanel: renderTeamWorkbenchPanel,
   };
+}
+
+function appendCandidate(values: string[], value?: string | null) {
+  const normalized = value?.trim();
+  if (normalized) {
+    values.push(normalized);
+  }
+}
+
+function appendTranscriptCandidates(values: string[], value?: string | null) {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return;
+  }
+
+  appendCandidate(values, normalized);
+  normalized
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .reverse()
+    .forEach((segment) => appendCandidate(values, segment));
+  normalized
+    .split(":")
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .reverse()
+    .forEach((segment) => appendCandidate(values, segment));
+}
+
+export function resolveAgentUiTeamWorkbenchLocalSessionTarget(
+  item: AgentUiTeamWorkbenchViewItem,
+  surfaceProps: TeamWorkbenchSurfaceProps,
+): string | null {
+  const childSessionIds = new Set(
+    (surfaceProps.childSubagentSessions ?? [])
+      .map((session) => session.id.trim())
+      .filter(Boolean),
+  );
+  if (childSessionIds.size === 0) {
+    return null;
+  }
+
+  const candidates: string[] = [];
+  appendCandidate(candidates, item.target.agentId);
+  appendCandidate(candidates, item.event.agentId);
+  appendCandidate(candidates, item.target.taskId);
+  appendCandidate(candidates, item.event.taskId);
+  appendCandidate(candidates, item.target.workItemId);
+  appendCandidate(candidates, item.event.workItemId);
+  appendCandidate(candidates, item.action?.targetId);
+  appendTranscriptCandidates(candidates, item.target.transcriptRef);
+  appendTranscriptCandidates(candidates, item.event.transcriptRef);
+  appendCandidate(candidates, item.target.sessionId);
+  appendCandidate(candidates, item.event.sessionId);
+
+  return candidates.find((candidate) => childSessionIds.has(candidate)) ?? null;
+}
+
+function hasRouteTargetValue(value?: string | null): boolean {
+  return Boolean(value?.trim());
+}
+
+function hasRouteTargetList(values?: string[] | null): boolean {
+  return Boolean(values?.some((value) => value.trim()));
+}
+
+function readWorkbenchRoutePayloadText(
+  item: AgentUiTeamWorkbenchViewItem,
+  key: string,
+): string | undefined {
+  const value = item.event.payload?.[key];
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    const normalized = `${value}`.trim();
+    return normalized || undefined;
+  }
+  return undefined;
+}
+
+function readWorkbenchRoutePayloadList(
+  item: AgentUiTeamWorkbenchViewItem,
+  key: string,
+): string[] {
+  const value = item.event.payload?.[key];
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((entry) =>
+      typeof entry === "string" ||
+      typeof entry === "number" ||
+      typeof entry === "boolean"
+        ? `${entry}`.trim()
+        : "",
+    )
+    .filter(Boolean);
+}
+
+function buildRequestedFixWorkbenchPrompt(
+  item: AgentUiTeamWorkbenchViewItem,
+): string | null {
+  if (
+    item.event.surface !== "work_board" ||
+    item.action?.control !== "assign" ||
+    readWorkbenchRoutePayloadText(item, "taskEvent") !==
+      "review_requested_fix"
+  ) {
+    return null;
+  }
+
+  const requestedFix =
+    readWorkbenchRoutePayloadText(item, "requestedFix") || item.title.trim();
+  if (!requestedFix) {
+    return null;
+  }
+
+  const reviewId = item.target.reviewId || item.event.reviewId;
+  const workItemId = item.target.workItemId || item.event.workItemId;
+  const regressionRequirements = readWorkbenchRoutePayloadList(
+    item,
+    "regressionRequirements",
+  );
+  const lines = [
+    `请执行 Review requested fix：${requestedFix}`,
+    reviewId ? `Review：${reviewId}` : null,
+    workItemId ? `工作项：${workItemId}` : null,
+    regressionRequirements.length > 0
+      ? `回归要求：${regressionRequirements.join("；")}`
+      : null,
+    "完成后请把执行结果写入 evidence/artifact metadata.requestedFixExecutionResults，至少包含 requestedFix、executionStatus、regressionOutcome、resultRef 与 artifactIds/artifactPaths。",
+    "完成后请输出变更摘要、验证结果，并保留 evidence / artifact 引用。",
+  ];
+  return lines.filter(Boolean).join("\n");
+}
+
+function buildRequestedFixWorkbenchPromptMetadata(
+  item: AgentUiTeamWorkbenchViewItem,
+): AgentUiTeamWorkbenchPromptMetadata | null {
+  if (
+    item.event.surface !== "work_board" ||
+    item.action?.control !== "assign" ||
+    readWorkbenchRoutePayloadText(item, "taskEvent") !==
+      "review_requested_fix"
+  ) {
+    return null;
+  }
+
+  const requestedFix =
+    readWorkbenchRoutePayloadText(item, "requestedFix") || item.title.trim();
+  if (!requestedFix) {
+    return null;
+  }
+
+  const requestedFixIndex = readWorkbenchRoutePayloadText(
+    item,
+    "requestedFixIndex",
+  );
+  const regressionRequirements = readWorkbenchRoutePayloadList(
+    item,
+    "regressionRequirements",
+  );
+  return {
+    kind: "review_requested_fix",
+    source: "agent_ui_team_workbench",
+    reviewId: item.target.reviewId || item.event.reviewId || undefined,
+    workItemId: item.target.workItemId || item.event.workItemId || undefined,
+    requestedFix,
+    requestedFixIndex,
+    regressionRequirements:
+      regressionRequirements.length > 0 ? regressionRequirements : undefined,
+  };
+}
+
+function buildReassignmentWorkbenchPrompt(
+  item: AgentUiTeamWorkbenchViewItem,
+  nextAssignee: string | null | undefined,
+): string | null {
+  if (item.event.surface !== "work_board") {
+    return null;
+  }
+
+  const normalizedAssignee = nextAssignee?.trim();
+  if (!normalizedAssignee) {
+    return null;
+  }
+
+  const workItemId =
+    item.target.workItemId ||
+    item.event.workItemId ||
+    item.target.taskId ||
+    item.event.taskId ||
+    item.action?.targetId;
+  if (!workItemId?.trim()) {
+    return null;
+  }
+
+  const previousAssignee =
+    readWorkbenchRoutePayloadText(item, "nextAssigneeId") ||
+    readWorkbenchRoutePayloadText(item, "currentAssigneeId") ||
+    readWorkbenchRoutePayloadText(item, "assigneeId") ||
+    readWorkbenchRoutePayloadText(item, "owner");
+  const taskListId = readWorkbenchRoutePayloadText(item, "sourceTaskListId");
+  const lines = [
+    `请使用 TaskUpdate 将工作项「${workItemId}」重新指派给「${normalizedAssignee}」。`,
+    taskListId ? `Task list：${taskListId}` : null,
+    previousAssignee ? `当前负责人：${previousAssignee}` : null,
+    `目标负责人：${normalizedAssignee}`,
+    "只更新该工作项的 owner；不要从 teammate 文本、assistant prose 或 peer message 反推指派状态。",
+    "完成后请确认 TaskUpdate 返回 ownerChange / owner_change metadata，让 Agent UI work_board 通过结构化 source 显示 owner 变更。",
+  ];
+  return lines.filter(Boolean).join("\n");
+}
+
+function resolveAgentUiTeamWorkbenchNonLocalRouteResult(
+  item: AgentUiTeamWorkbenchViewItem,
+): AgentUiTeamWorkbenchActionRouteResult {
+  if (
+    item.event.surface === "remote_teammate" ||
+    item.event.runtimeEntity === "external_task" ||
+    hasRouteTargetValue(item.target.remoteTaskId) ||
+    hasRouteTargetValue(item.event.remoteTaskId)
+  ) {
+    return "remote_task_source_located";
+  }
+
+  if (
+    item.event.surface === "review_lane" ||
+    item.action?.control === "request_review" ||
+    hasRouteTargetValue(item.target.reviewId) ||
+    hasRouteTargetValue(item.event.reviewId)
+  ) {
+    return "unsupported_review";
+  }
+
+  if (
+    item.event.surface === "handoff_lane" ||
+    hasRouteTargetValue(item.target.handoffId) ||
+    hasRouteTargetValue(item.event.handoffId)
+  ) {
+    return "handoff_source_located";
+  }
+
+  if (
+    item.event.surface === "work_board" ||
+    item.event.runtimeEntity === "work_item" ||
+    hasRouteTargetValue(item.target.workItemId) ||
+    hasRouteTargetValue(item.event.workItemId)
+  ) {
+    if (readWorkbenchRoutePayloadText(item, "taskEvent") === "team_reassignment") {
+      return "work_item_source_located";
+    }
+    return "unsupported_work_item";
+  }
+
+  if (
+    hasRouteTargetValue(item.action?.targetId) ||
+    hasRouteTargetValue(item.target.agentId) ||
+    hasRouteTargetValue(item.target.taskId) ||
+    hasRouteTargetValue(item.target.workItemId) ||
+    hasRouteTargetValue(item.target.workerNotificationId) ||
+    hasRouteTargetValue(item.target.transcriptRef) ||
+    hasRouteTargetValue(item.target.evidenceId) ||
+    hasRouteTargetValue(item.target.artifactId) ||
+    hasRouteTargetValue(item.target.resultRef) ||
+    hasRouteTargetValue(item.target.rawEventRef) ||
+    hasRouteTargetList(item.target.artifactIds) ||
+    hasRouteTargetList(item.target.artifactPaths)
+  ) {
+    return "located_only";
+  }
+
+  return "unsupported";
+}
+
+export async function routeAgentUiTeamWorkbenchAction(
+  item: AgentUiTeamWorkbenchViewItem,
+  surfaceProps: TeamWorkbenchSurfaceProps,
+  options: AgentUiTeamWorkbenchActionRouteOptions = {},
+): Promise<AgentUiTeamWorkbenchActionRouteResult> {
+  const reassignmentPrompt = buildReassignmentWorkbenchPrompt(
+    item,
+    options.reassignmentAssignee,
+  );
+  if (reassignmentPrompt && options.onSeedWorkbenchPrompt) {
+    options.onSeedWorkbenchPrompt(reassignmentPrompt);
+    return "seeded_reassignment";
+  }
+
+  const targetSessionId = resolveAgentUiTeamWorkbenchLocalSessionTarget(
+    item,
+    surfaceProps,
+  );
+  if (!targetSessionId) {
+    const requestedFixPrompt = buildRequestedFixWorkbenchPrompt(item);
+    const requestedFixMetadata =
+      requestedFixPrompt && options.onSubmitWorkbenchPrompt
+        ? buildRequestedFixWorkbenchPromptMetadata(item)
+        : null;
+    if (requestedFixPrompt && requestedFixMetadata) {
+      const submitted = await options.onSubmitWorkbenchPrompt?.(
+        requestedFixPrompt,
+        requestedFixMetadata,
+      );
+      if (submitted) {
+        return "submitted_work_item";
+      }
+    }
+    if (requestedFixPrompt && options.onSeedWorkbenchPrompt) {
+      options.onSeedWorkbenchPrompt(requestedFixPrompt);
+      return "seeded_work_item";
+    }
+    return resolveAgentUiTeamWorkbenchNonLocalRouteResult(item);
+  }
+
+  switch (item.action?.control) {
+    case "close":
+    case "stop":
+      if (surfaceProps.onCloseSubagentSession) {
+        await surfaceProps.onCloseSubagentSession(targetSessionId);
+        return "closed";
+      }
+      break;
+    case "continue_agent":
+      if (surfaceProps.onResumeSubagentSession) {
+        await surfaceProps.onResumeSubagentSession(targetSessionId);
+        return "continued";
+      }
+      break;
+    case "wait":
+      if (surfaceProps.onWaitSubagentSession) {
+        await surfaceProps.onWaitSubagentSession(targetSessionId);
+        return "waited";
+      }
+      break;
+    default:
+      break;
+  }
+
+  if (surfaceProps.onOpenSubagentSession) {
+    await surfaceProps.onOpenSubagentSession(targetSessionId);
+    return "opened";
+  }
+  return "located_only";
 }
 
 function useWorkspaceCanvasPreviewRuntime({
@@ -935,24 +1319,47 @@ function useWorkspaceCanvasPreviewRuntime({
         teamWorkbench.teamDispatchPreviewState ??
         teamWorkbench.surfaceProps.teamDispatchPreviewState,
       teamMemorySnapshot: teamWorkbench.teamMemorySnapshot,
+      onWorkbenchAction: (item) => {
+        return routeAgentUiTeamWorkbenchAction(
+          item,
+          teamWorkbench.surfaceProps,
+          {
+            onSeedWorkbenchPrompt: teamWorkbench.onSeedWorkbenchPrompt,
+            onSubmitWorkbenchPrompt: teamWorkbench.onSubmitWorkbenchPrompt,
+          },
+        ).catch((error) => {
+          toast.error(
+            error instanceof Error ? error.message : "工作台操作执行失败",
+          );
+          return "unsupported";
+        });
+      },
+      onWorkbenchReassign: (item, nextAssignee) => {
+        return routeAgentUiTeamWorkbenchAction(
+          item,
+          teamWorkbench.surfaceProps,
+          {
+            onSeedWorkbenchPrompt: teamWorkbench.onSeedWorkbenchPrompt,
+            onSubmitWorkbenchPrompt: teamWorkbench.onSubmitWorkbenchPrompt,
+            reassignmentAssignee: nextAssignee,
+          },
+        ).catch((error) => {
+          toast.error(
+            error instanceof Error ? error.message : "工作台重指派回填失败",
+          );
+          return "unsupported";
+        });
+      },
     }),
     [
       teamWorkbench.liveActivityBySessionId,
-      teamWorkbench.surfaceProps.childSubagentSessions,
-      teamWorkbench.surfaceProps.currentSessionId,
-      teamWorkbench.surfaceProps.currentSessionLatestTurnStatus,
-      teamWorkbench.surfaceProps.currentSessionQueuedTurnCount,
-      teamWorkbench.surfaceProps.currentSessionRuntimeStatus,
-      teamWorkbench.surfaceProps.liveRuntimeBySessionId,
-      teamWorkbench.surfaceProps.selectedTeamLabel,
-      teamWorkbench.surfaceProps.selectedTeamRoles,
-      teamWorkbench.surfaceProps.selectedTeamSummary,
-      teamWorkbench.surfaceProps.subagentParentContext,
-      teamWorkbench.surfaceProps.teamDispatchPreviewState,
       teamWorkbench.teamControlSummary,
       teamWorkbench.teamDispatchPreviewState,
       teamWorkbench.teamMemorySnapshot,
       teamWorkbench.teamWaitSummary,
+      teamWorkbench.onSeedWorkbenchPrompt,
+      teamWorkbench.onSubmitWorkbenchPrompt,
+      teamWorkbench.surfaceProps,
     ],
   );
 
@@ -1387,6 +1794,8 @@ export function useWorkspaceCanvasSceneRuntime({
         enabled: teamWorkspaceEnabled,
         surfaceProps: inputbarScene.teamWorkbenchSurfaceProps,
         autoFocusToken: teamWorkbenchAutoFocusToken,
+        onSeedWorkbenchPrompt: inputbarScene.seedAgentUiWorkbenchPrompt,
+        onSubmitWorkbenchPrompt: inputbarScene.submitAgentUiWorkbenchPrompt,
         teamDispatchPreviewState,
         liveActivityBySessionId,
         teamWaitSummary,

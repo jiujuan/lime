@@ -86,5 +86,3 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
 
   return <div className="h-full overflow-auto bg-white">{body}</div>;
 };
-
-export default MarkdownPreview;

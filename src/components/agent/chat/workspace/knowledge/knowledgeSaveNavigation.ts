@@ -9,20 +9,37 @@ interface KnowledgeSaveNavigationSource {
 
 interface BuildKnowledgeSavePageParamsOptions {
   projectRootPath?: string | null;
+  knowledgeSelectionWorkingDir?: string | null;
   selectedPackName?: string | null;
   currentSessionTitle?: string | null;
   source: KnowledgeSaveNavigationSource;
   requestKey?: number;
 }
 
+export function resolveKnowledgeSaveProjectRoot({
+  projectRootPath,
+  knowledgeSelectionWorkingDir,
+}: {
+  projectRootPath?: string | null;
+  knowledgeSelectionWorkingDir?: string | null;
+}): string {
+  return (
+    knowledgeSelectionWorkingDir?.trim() || projectRootPath?.trim() || ""
+  );
+}
+
 export function buildKnowledgeSavePageParams({
   projectRootPath,
+  knowledgeSelectionWorkingDir,
   selectedPackName,
   currentSessionTitle,
   source,
   requestKey = Date.now(),
 }: BuildKnowledgeSavePageParamsOptions): KnowledgePageParams | null {
-  const workingDir = projectRootPath?.trim();
+  const workingDir = resolveKnowledgeSaveProjectRoot({
+    projectRootPath,
+    knowledgeSelectionWorkingDir,
+  });
   const sourceText = source.content.trim();
   if (!workingDir || !sourceText) {
     return null;

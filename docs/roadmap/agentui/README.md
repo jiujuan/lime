@@ -30,6 +30,7 @@ AgentUI 不是再做一个聊天页面，而是把 Lime 已有的 runtime、time
 | [conversation-projection-fact-map.md](conversation-projection-fact-map.md) | 对话状态事实源地图，标明 owner、writer、readers、persistence、runtime fact source 与 projection-only 边界。 |
 | [conversation-projection-implementation-plan.md](conversation-projection-implementation-plan.md) | 对话主链瘦身的分阶段实施计划，顺序为事实源盘点、Projection Store、controller、selector、UI。 |
 | [conversation-projection-acceptance.md](conversation-projection-acceptance.md) | 对话投影改造的固定验收场景、性能指标、Playwright 续测口径和完成判定。 |
+| [lime-agentui-standard-alignment.md](lime-agentui-standard-alignment.md) | AgentUI 标准全流程 taxonomy 与 Lime 当前实现差距，固定 current / compat / deprecated / dead 分类和下一刀。 |
 
 ## 当前结论
 

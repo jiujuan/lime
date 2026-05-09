@@ -15,6 +15,7 @@ import {
   type TeamWorkspaceLiveRuntimeState,
   type TeamWorkspaceWaitSummary,
 } from "../teamWorkspaceRuntime";
+import { recordTeamControlAgentUiProjection } from "../projection/teamControlAgentUiProjection";
 
 function normalizeUniqueSessionIds(ids: string[]): string[] {
   return Array.from(
@@ -42,12 +43,14 @@ function buildTeamControlSummary(params: {
 }
 
 interface UseWorkspaceTeamSessionControlRuntimeParams {
+  sessionId?: string | null;
   childSubagentSessions: AsterSubagentSessionInfo[];
   liveRuntimeBySessionId: Record<string, TeamWorkspaceLiveRuntimeState>;
   stopSending: () => Promise<void>;
 }
 
 export function useWorkspaceTeamSessionControlRuntime({
+  sessionId,
   childSubagentSessions,
   liveRuntimeBySessionId,
   stopSending,
@@ -56,6 +59,11 @@ export function useWorkspaceTeamSessionControlRuntime({
     useState<TeamWorkspaceWaitSummary | null>(null);
   const [teamControlSummary, setTeamControlSummary] =
     useState<TeamWorkspaceControlSummary | null>(null);
+  const recordTeamControlProjection = useCallback(
+    (input: Parameters<typeof recordTeamControlAgentUiProjection>[0]) =>
+      recordTeamControlAgentUiProjection(input, { sessionId }),
+    [sessionId],
+  );
 
   const handleCloseSubagentSession = useCallback(
     async (subagentSessionId: string) => {
@@ -68,6 +76,12 @@ export function useWorkspaceTeamSessionControlRuntime({
           requestedSessionIds: [subagentSessionId],
           cascadeSessionIds: response.cascade_session_ids,
           affectedSessionIds: response.changed_session_ids,
+        });
+        recordTeamControlProjection({
+          action: "close",
+          requestedSessionIds: summary.requestedSessionIds,
+          cascadeSessionIds: summary.cascadeSessionIds,
+          affectedSessionIds: summary.affectedSessionIds,
         });
         if (summary.affectedSessionIds.length > 0) {
           setTeamControlSummary(summary);
@@ -90,7 +104,7 @@ export function useWorkspaceTeamSessionControlRuntime({
         throw error;
       }
     },
-    [],
+    [recordTeamControlProjection],
   );
 
   const handleResumeSubagentSession = useCallback(
@@ -104,6 +118,12 @@ export function useWorkspaceTeamSessionControlRuntime({
           requestedSessionIds: [subagentSessionId],
           cascadeSessionIds: response.cascade_session_ids,
           affectedSessionIds: response.changed_session_ids,
+        });
+        recordTeamControlProjection({
+          action: "resume",
+          requestedSessionIds: summary.requestedSessionIds,
+          cascadeSessionIds: summary.cascadeSessionIds,
+          affectedSessionIds: summary.affectedSessionIds,
         });
         if (summary.affectedSessionIds.length > 0) {
           setTeamControlSummary(summary);
@@ -126,7 +146,7 @@ export function useWorkspaceTeamSessionControlRuntime({
         throw error;
       }
     },
-    [],
+    [recordTeamControlProjection],
   );
 
   const handleWaitSubagentSession = useCallback(
@@ -135,6 +155,14 @@ export function useWorkspaceTeamSessionControlRuntime({
         const response = await waitAgentRuntimeSubagents({
           ids: [subagentSessionId],
           timeout_ms: timeoutMs,
+        });
+        recordTeamControlProjection({
+          action: "wait",
+          requestedSessionIds: [subagentSessionId],
+          affectedSessionIds: [subagentSessionId],
+          resolvedSessionId: subagentSessionId,
+          resolvedStatus: response.status[subagentSessionId]?.kind,
+          timedOut: response.timed_out,
         });
         if (response.timed_out) {
           toast.info("等待超时，这项任务仍未进入最终状态");
@@ -151,7 +179,7 @@ export function useWorkspaceTeamSessionControlRuntime({
         throw error;
       }
     },
-    [],
+    [recordTeamControlProjection],
   );
 
   const handleWaitActiveTeamSessions = useCallback(
@@ -171,6 +199,12 @@ export function useWorkspaceTeamSessionControlRuntime({
           timeout_ms: timeoutMs,
         });
         if (response.timed_out) {
+          recordTeamControlProjection({
+            action: "wait",
+            requestedSessionIds: normalizedSessionIds,
+            affectedSessionIds: normalizedSessionIds,
+            timedOut: true,
+          });
           setTeamWaitSummary({
             awaitedSessionIds: normalizedSessionIds,
             timedOut: true,
@@ -187,6 +221,14 @@ export function useWorkspaceTeamSessionControlRuntime({
         const resolvedStatus = resolvedSessionId
           ? response.status[resolvedSessionId]?.kind
           : undefined;
+        recordTeamControlProjection({
+          action: "wait",
+          requestedSessionIds: normalizedSessionIds,
+          affectedSessionIds: normalizedSessionIds,
+          resolvedSessionId,
+          resolvedStatus,
+          timedOut: false,
+        });
 
         setTeamWaitSummary({
           awaitedSessionIds: normalizedSessionIds,
@@ -205,7 +247,7 @@ export function useWorkspaceTeamSessionControlRuntime({
         throw error;
       }
     },
-    [],
+    [recordTeamControlProjection],
   );
 
   const handleCloseCompletedTeamSessions = useCallback(
@@ -248,14 +290,19 @@ export function useWorkspaceTeamSessionControlRuntime({
       );
 
       if (successfulResponses.length > 0) {
-        setTeamControlSummary(
-          buildTeamControlSummary({
-            action: "close_completed",
-            requestedSessionIds: normalizedSessionIds,
-            cascadeSessionIds,
-            affectedSessionIds,
-          }),
-        );
+        const summary = buildTeamControlSummary({
+          action: "close_completed",
+          requestedSessionIds: normalizedSessionIds,
+          cascadeSessionIds,
+          affectedSessionIds,
+        });
+        recordTeamControlProjection({
+          action: "close_completed",
+          requestedSessionIds: summary.requestedSessionIds,
+          cascadeSessionIds: summary.cascadeSessionIds,
+          affectedSessionIds: summary.affectedSessionIds,
+        });
+        setTeamControlSummary(summary);
       }
 
       if (succeededCount > 0) {
@@ -280,7 +327,7 @@ export function useWorkspaceTeamSessionControlRuntime({
         }
       }
     },
-    [],
+    [recordTeamControlProjection],
   );
 
   const handleSendSubagentInput = useCallback(
@@ -302,6 +349,12 @@ export function useWorkspaceTeamSessionControlRuntime({
           message: normalizedMessage,
           interrupt: options?.interrupt === true,
         });
+        recordTeamControlProjection({
+          action: "send_input",
+          requestedSessionIds: [subagentSessionId],
+          affectedSessionIds: [subagentSessionId],
+          messagePreview: normalizedMessage,
+        });
         toast.success(
           options?.interrupt === true
             ? "已中断当前执行并发送新说明"
@@ -314,7 +367,7 @@ export function useWorkspaceTeamSessionControlRuntime({
         throw error;
       }
     },
-    [],
+    [recordTeamControlProjection],
   );
 
   const handleStopSending = useCallback(async () => {
@@ -373,6 +426,12 @@ export function useWorkspaceTeamSessionControlRuntime({
         cascadeSessionIds,
         affectedSessionIds,
       });
+      recordTeamControlProjection({
+        action: "stop",
+        requestedSessionIds: summary.requestedSessionIds,
+        cascadeSessionIds: summary.cascadeSessionIds,
+        affectedSessionIds: summary.affectedSessionIds,
+      });
       if (summary.affectedSessionIds.length > 0) {
         setTeamControlSummary(summary);
       }
@@ -397,7 +456,12 @@ export function useWorkspaceTeamSessionControlRuntime({
         throw firstFailure instanceof Error ? firstFailure : new Error(message);
       }
     }
-  }, [childSubagentSessions, liveRuntimeBySessionId, stopSending]);
+  }, [
+    childSubagentSessions,
+    liveRuntimeBySessionId,
+    recordTeamControlProjection,
+    stopSending,
+  ]);
 
   return {
     teamWaitSummary,

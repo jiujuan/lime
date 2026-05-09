@@ -80,6 +80,35 @@ use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, instrument, warn};
 
+fn should_log_provider_failure_as_error(error: &ProviderError) -> bool {
+    !error.is_non_retryable_provider_rejection()
+        && (matches!(
+            error,
+            ProviderError::ServerError(_)
+                | ProviderError::ExecutionError(_)
+                | ProviderError::UsageError(_)
+        ) || error.is_retryable())
+}
+
+fn should_log_session_description_failure_as_warning(error: &anyhow::Error) -> bool {
+    if let Some(provider_error) = error.downcast_ref::<ProviderError>() {
+        return should_log_provider_failure_as_error(provider_error);
+    }
+
+    !ProviderError::message_is_non_retryable_provider_rejection(&error.to_string())
+}
+
+fn log_session_description_failure(error: &anyhow::Error) {
+    if should_log_session_description_failure_as_warning(error) {
+        warn!("Failed to generate session description: {}", error);
+    } else {
+        debug!(
+            "Skipped session description because provider rejected the request: {}",
+            error
+        );
+    }
+}
+
 const DEFAULT_MAX_TURNS: u32 = 1000;
 const COMPACTION_THINKING_TEXT: &str = "aster is compacting the conversation...";
 const CONTEXT_COMPACTION_WARNING_TEXT: &str =
@@ -911,6 +940,13 @@ pub enum AgentEvent {
     },
     Message(Message),
     McpNotification((String, ServerNotification)),
+    ToolInputDelta {
+        tool_id: String,
+        tool_name: Option<String>,
+        delta: String,
+        accumulated_arguments: Option<String>,
+        provider: Option<String>,
+    },
     ModelChange {
         model: String,
         mode: String,
@@ -919,6 +955,31 @@ pub enum AgentEvent {
     ContextTrace {
         steps: Vec<ContextTraceStep>,
     },
+}
+
+fn collect_provider_tool_input_delta_events(message: &Message) -> Option<Vec<AgentEvent>> {
+    if message.content.is_empty() {
+        return None;
+    }
+
+    let mut events = Vec::new();
+    for content in &message.content {
+        let MessageContent::ToolInputDelta(delta) = content else {
+            return None;
+        };
+        if delta.id.trim().is_empty() || delta.delta.is_empty() {
+            continue;
+        }
+        events.push(AgentEvent::ToolInputDelta {
+            tool_id: delta.id.clone(),
+            tool_name: delta.tool_name.clone(),
+            delta: delta.delta.clone(),
+            accumulated_arguments: delta.accumulated_arguments.clone(),
+            provider: delta.provider.clone(),
+        });
+    }
+
+    Some(events)
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -3557,7 +3618,7 @@ impl Agent {
                         )
                         .await
                         {
-                            warn!("Failed to generate session description: {}", e);
+                            log_session_description_failure(&e);
                         }
                     });
                     None
@@ -3661,6 +3722,15 @@ impl Agent {
                             }
 
                             if let Some(response) = response {
+                                if let Some(tool_input_events) =
+                                    collect_provider_tool_input_delta_events(&response)
+                                {
+                                    for event in tool_input_events {
+                                        yield event;
+                                    }
+                                    continue;
+                                }
+
                                 let ToolCategorizeResult {
                                     frontend_requests,
                                     remaining_requests,
@@ -3965,7 +4035,11 @@ impl Agent {
                         }
                         Err(ref provider_err) => {
                             crate::posthog::emit_error(provider_err.telemetry_type(), &provider_err.to_string());
-                            error!("Error: {}", provider_err);
+                            if should_log_provider_failure_as_error(provider_err) {
+                                error!("Error: {}", provider_err);
+                            } else {
+                                info!("Provider request rejected: {}", provider_err);
+                            }
                             yield AgentEvent::Message(
                                 Message::assistant().with_text(
                                     format!("Ran into this error: {provider_err}.\n\nPlease retry if you think this is a transient or recoverable error.")
@@ -4049,7 +4123,7 @@ impl Agent {
                     )
                     .await
                     {
-                        warn!("Failed to generate session description: {}", e);
+                        log_session_description_failure(&e);
                     }
                 });
             }

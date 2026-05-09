@@ -375,5 +375,3 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
     </Dialog>
   );
 };
-
-export default ImportExportDialog;

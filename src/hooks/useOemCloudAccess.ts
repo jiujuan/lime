@@ -23,7 +23,6 @@ import {
   type OemCloudPartnerHubModelsSource,
   type OemCloudProviderModelItem,
   type OemCloudProviderOfferDetail,
-  type OemCloudProviderOfferState,
   type OemCloudProviderOfferSummary,
   type OemCloudProviderPreference,
   type OemCloudSubscription,
@@ -81,7 +80,7 @@ import {
 } from "@/lib/siteAdapterCatalogBootstrap";
 import { resolveOemLimeHubProviderName } from "@/lib/oemLimeHubProvider";
 
-export type OemCloudLoginMode = "password" | "email_code";
+type OemCloudLoginMode = "password" | "email_code";
 
 function buildErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) {
@@ -118,7 +117,7 @@ export function formatOemCloudDateTime(value?: string) {
   }).format(parsed);
 }
 
-export function formatOemCloudAccessModeLabel(
+function formatOemCloudAccessModeLabel(
   value?: OemCloudPartnerHubAccessMode,
 ) {
   switch (value) {
@@ -133,7 +132,7 @@ export function formatOemCloudAccessModeLabel(
   }
 }
 
-export function formatOemCloudConfigModeLabel(
+function formatOemCloudConfigModeLabel(
   value?: OemCloudPartnerHubConfigMode,
 ) {
   switch (value) {
@@ -148,7 +147,7 @@ export function formatOemCloudConfigModeLabel(
   }
 }
 
-export function formatOemCloudModelsSourceLabel(
+function formatOemCloudModelsSourceLabel(
   value?: OemCloudPartnerHubModelsSource,
 ) {
   switch (value) {
@@ -161,34 +160,13 @@ export function formatOemCloudModelsSourceLabel(
   }
 }
 
-export function formatOemCloudOfferStateLabel(
-  value?: OemCloudProviderOfferState,
-) {
-  switch (value) {
-    case "available_logged_out":
-      return "待登录";
-    case "available_subscribe_required":
-      return "需开通套餐";
-    case "available_ready":
-      return "可直接使用";
-    case "available_quota_low":
-      return "额度偏低";
-    case "blocked":
-      return "已受限";
-    case "unavailable":
-      return "不可用";
-    default:
-      return "未知";
-  }
-}
-
 const LOCAL_PROVIDER_SUMMARY = "本地开发者 Provider";
 const PAYMENT_STATUS_WATCH_INTERVAL_MS = 2500;
 const PAYMENT_STATUS_WATCH_MAX_ATTEMPTS = 72;
 
 type OemCloudPaymentWatchKind = "plan_order" | "credit_topup_order";
 
-export interface OemCloudPaymentWatcher {
+interface OemCloudPaymentWatcher {
   kind: OemCloudPaymentWatchKind;
   orderId: string;
   title: string;

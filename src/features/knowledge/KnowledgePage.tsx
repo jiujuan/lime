@@ -183,11 +183,10 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
   const [saveTargetPackName, setSaveTargetPackName] = useState(
     () => pageParams?.selectedPackName?.trim() ?? "",
   );
+  const [saveCompletedPackName, setSaveCompletedPackName] = useState("");
   const activeViewRef = useRef(activeView);
   const hasSaveDraftRef = useRef(Boolean(pageParams?.saveDraft));
   const saveTargetPackNameRef = useRef(saveTargetPackName);
-  const [useDuringCreationByDefault, setUseDuringCreationByDefault] =
-    useState(false);
   const [knowledgeComposerOpen, setKnowledgeComposerOpen] = useState(false);
   const [composerPersonaPackName, setComposerPersonaPackName] = useState<
     string | null
@@ -310,6 +309,7 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
     );
     setPackType(draft.packType?.trim() || "custom");
     setSaveTargetPackName(pageParams?.selectedPackName?.trim() || "");
+    setSaveCompletedPackName("");
   }, [pageParams?.saveDraft, pageParams?.selectedPackName]);
 
   useEffect(() => {
@@ -508,10 +508,6 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
       workingDir,
     ],
   );
-
-  const handleImportSource = useCallback(async () => {
-    await runImportSource("import");
-  }, [runImportSource]);
 
   const compileByName = useCallback(
     async (packName: string) => {
@@ -796,6 +792,7 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
     const saved = await runImportSource("save", targetPackName);
     if (saved) {
       setSaveTargetPackName(saved.metadata.name);
+      setSaveCompletedPackName(saved.metadata.name);
       setActiveView("save");
     }
   };
@@ -825,6 +822,54 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
     }
     return "去确认";
   };
+
+  const getPackPurposeLabel = (
+    pack: KnowledgePackSummary | KnowledgePackDetail,
+  ) =>
+    resolveKnowledgePackRuntimeMode(pack) === "persona"
+      ? "写作口吻"
+      : "参考资料";
+
+  const getPackUsageDescription = (
+    pack: KnowledgePackSummary | KnowledgePackDetail,
+  ) =>
+    resolveKnowledgePackRuntimeMode(pack) === "persona"
+      ? "这份资料会帮助 Lime 保持一致的表达方式，确认后可作为写作口吻使用。"
+      : "这份资料会帮助 Lime 引用已确认的事实、规则和边界，确认后可作为参考资料使用。";
+
+  const getPackTypeLabel = (
+    pack: KnowledgePackSummary | KnowledgePackDetail,
+  ) =>
+    PACK_TYPES.find((type) => type.value === pack.metadata.type)?.label ??
+    "自定义资料";
+
+  const getConfirmationChecklist = (pack: KnowledgePackDetail) => [
+    {
+      label: "原始资料",
+      state: pack.sourceCount > 0 ? "已保存" : "需要补充",
+      tone: pack.sourceCount > 0 ? "emerald" : "amber",
+    },
+    {
+      label: "完整资料文档",
+      state: pack.guide.trim() || pack.preview ? "已生成" : "待补充",
+      tone: pack.guide.trim() || pack.preview ? "emerald" : "amber",
+    },
+    {
+      label: getPackPurposeLabel(pack),
+      state: getPackTypeLabel(pack),
+      tone: "slate",
+    },
+    {
+      label: "使用前确认",
+      state: renderMaterialStatus(pack),
+      tone:
+        pack.metadata.status === "ready"
+          ? "emerald"
+          : isProblemStatus(pack.metadata.status)
+            ? "amber"
+            : "rose",
+    },
+  ];
 
   const statusCards = [
     {
@@ -887,7 +932,7 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
                 让 Lime 记住这个项目
               </h1>
               <p className="mt-1 text-sm leading-6 text-slate-600">
-                把访谈、产品介绍、运营规则整理成可用资料，之后创作时自动用上。
+                把访谈、产品介绍、运营规则整理成可确认资料，创作前再选择要使用的口吻和参考。
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -937,7 +982,7 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
                 icon: AlertTriangle,
               },
               {
-                title: "本轮创作会使用",
+                title: "建议本轮使用",
                 value: currentUseText,
                 unit: "",
                 className: "text-emerald-700",
@@ -997,7 +1042,7 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
                     项目资料清单
                   </h2>
                   <p className="mt-1 text-sm text-slate-500">
-                    检查每份资料状态，打开完整文档，或选择本轮创作要参考的内容。
+                    检查每份资料状态，查看整理结果，或选择本轮创作要参考的内容。
                   </p>
                 </div>
                 {catalogStatus === "loading" ? (
@@ -1123,7 +1168,7 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
                     {
                       index: "3",
                       title: "选择创作时使用的资料",
-                      description: "挑选本轮创作会用到的资料，Lime 会在创作中自动参考。",
+                      description: "挑选本轮创作会用到的资料，Lime 只参考你这次明确选择的内容。",
                       icon: Check,
                     },
                   ].map((item, stepIndex, items) => {
@@ -1161,7 +1206,7 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
                 <div className="flex items-start gap-3">
                   <ListChecks className="mt-0.5 h-5 w-5 shrink-0" />
                   <p>
-                    资料只有确认后才会用于创作，你可以随时打开完整文档修改。
+                    资料只有确认后才会用于创作；没有确认的资料只留在项目资料里等待处理。
                   </p>
                 </div>
                 <button
@@ -1245,14 +1290,14 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
                         添加原始资料
                       </h3>
                       <p className="mt-1 text-sm text-slate-500">
-                        提供越多原始资料，整理结果越完整、越准确。
+                        当前先支持粘贴正文；下面这些只是可整理的资料类型，不是单独入口。
                       </p>
                       <div className="mt-4 grid gap-3 md:grid-cols-4">
                         {["上传访谈稿", "粘贴产品介绍", "导入运营文档", "拖入复盘记录"].map(
                           (label) => (
                             <div
                               key={label}
-                              className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-4 text-center text-sm font-semibold text-slate-700"
+                              className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-4 text-center text-sm font-semibold text-slate-500"
                             >
                               <FileText className="mx-auto mb-2 h-5 w-5 text-slate-500" />
                               {label}
@@ -1283,7 +1328,7 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
                         Lime 开始整理
                       </h3>
                       <p className="mt-1 text-sm text-slate-500">
-                        Lime 会读取资料、提炼重点、生成完整文档，并检查还缺哪些信息。
+                        点击后会保存原始资料，并生成一份待确认的完整资料文档。
                       </p>
                       <div className="mt-4 grid gap-3 md:grid-cols-4">
                         {[
@@ -1356,48 +1401,9 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
                       ))}
                     </select>
                   </label>
-                  <div className="mt-5 flex items-center justify-between gap-4">
-                    <div>
-                      <div className="text-sm font-semibold text-slate-950">
-                        创作时是否默认使用
-                      </div>
-                      <p className="mt-1 text-xs leading-5 text-slate-500">
-                        开启后，Lime 创作时会优先参考本资料。
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={useDuringCreationByDefault}
-                      onClick={() =>
-                        setUseDuringCreationByDefault((current) => !current)
-                      }
-                      className={cn(
-                        "flex h-7 w-12 shrink-0 items-center rounded-full border px-0.5 transition",
-                        useDuringCreationByDefault
-                          ? "justify-end border-emerald-700 bg-emerald-700"
-                          : "justify-start border-slate-300 bg-slate-100",
-                      )}
-                    >
-                      <span className="h-5 w-5 rounded-full bg-white shadow-sm" />
-                    </button>
-                  </div>
                   <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-600">
-                    你可以在创作时手动选择，是否使用本资料。
+                    这里不再设置“默认使用”。资料确认后，创作前会在选择弹层里明确勾选。
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleImportSource}
-                    disabled={actionBusy}
-                    className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
-                  >
-                    {actionStatus === "import" ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <FileText className="h-4 w-4" />
-                    )}
-                    先保存原始资料
-                  </button>
                 </section>
               </aside>
               <section className="rounded-[20px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800 xl:col-span-2">
@@ -1436,7 +1442,7 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
                       {getPackTitle(selectedPack)}
                     </h2>
                     <p className="mt-3 text-base leading-7 text-slate-600">
-                      这份资料会帮助 Lime 写得更像本人，确认后可用于创作。
+                      {getPackUsageDescription(selectedPack)}
                     </p>
                   </div>
                   <button
@@ -1463,7 +1469,7 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
                             {getPackTitle(selectedPack)}.md
                           </div>
                           <p className="mt-2 text-sm leading-6 text-slate-500">
-                            这是确认前的完整资料文档，可以打开、导出，也可以继续修改内容。
+                            这是根据原始资料整理出的可读文档。先查看内容，确认无误后再用于创作。
                           </p>
                         </div>
                         <div className="flex flex-wrap gap-3">
@@ -1472,20 +1478,7 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
                             onClick={() => setDetailTab("content")}
                             className="inline-flex h-11 items-center justify-center rounded-full border border-emerald-700 bg-emerald-700 px-5 text-sm font-semibold text-white transition hover:border-emerald-800 hover:bg-emerald-800"
                           >
-                            打开完整文档
-                          </button>
-                          <button
-                            type="button"
-                            className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                          >
-                            导出
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setActiveView("import")}
-                            className="inline-flex h-11 items-center justify-center rounded-full border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                          >
-                            修改内容
+                            查看文档内容
                           </button>
                         </div>
                       </div>
@@ -1508,21 +1501,7 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
                         需要你确认的内容
                       </h3>
                       <div className="mt-5 divide-y divide-slate-100">
-                        {[
-                          ["人物介绍", "已确认", "emerald"],
-                          ["表达风格", "已确认", "emerald"],
-                          [
-                            "常用金句",
-                            missingPackCount > 0 ? "需要补充" : "待确认",
-                            missingPackCount > 0 ? "amber" : "rose",
-                          ],
-                          [
-                            "不能说什么",
-                            selectedPack.metadata.status === "ready" ? "已确认" : "待确认",
-                            selectedPack.metadata.status === "ready" ? "emerald" : "rose",
-                          ],
-                          ["应用场景", "已确认", "emerald"],
-                        ].map(([label, state, tone]) => (
+                        {getConfirmationChecklist(selectedPack).map(({ label, state, tone }) => (
                           <div
                             key={label}
                             className="flex items-center justify-between gap-4 py-4 text-sm"
@@ -1533,6 +1512,8 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
                                   "flex h-7 w-7 items-center justify-center rounded-full",
                                   tone === "emerald"
                                     ? "bg-emerald-700 text-white"
+                                    : tone === "slate"
+                                      ? "bg-slate-200 text-slate-700"
                                     : tone === "amber"
                                       ? "bg-amber-500 text-white"
                                       : "bg-rose-500 text-white",
@@ -1553,6 +1534,8 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
                                 "rounded-full border px-3 py-1 text-sm font-semibold",
                                 tone === "emerald"
                                   ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                  : tone === "slate"
+                                    ? "border-slate-200 bg-slate-50 text-slate-700"
                                   : tone === "amber"
                                     ? "border-amber-200 bg-amber-50 text-amber-700"
                                     : "border-rose-200 bg-rose-50 text-rose-700",
@@ -1572,9 +1555,9 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
                     </h3>
                     <div className="mt-7 space-y-9">
                       {[
-                        ["可用于创作", "Lime 会参考这些内容，写出更像你的表达。"],
-                        ["会影响写作口吻", "在相关任务中，Lime 将优先采用你的语言风格和偏好。"],
-                        ["不会覆盖原始资料", "你的原始资料会被安全保存，随时可查看与修改。"],
+                        ["可用于创作", "这份资料会出现在创作资料选择里。"],
+                        ["需要明确选择", "确认可用不等于每次自动使用，创作前仍要勾选。"],
+                        ["不会覆盖原始资料", "原始资料会保留，后续补充会生成新的待确认版本。"],
                       ].map(([title, description]) => (
                         <div key={title} className="flex gap-4">
                           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
@@ -1722,14 +1705,17 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
                   <Sparkles className="h-5 w-5" />
                 </div>
                 <h2 className="text-lg font-semibold text-slate-950">
-                  整理新资料
+                  保存这段内容
                 </h2>
               </div>
               <label className="mt-5 grid gap-1.5 text-xs font-medium text-slate-600">
-                写作口吻
+                要保存的内容
                 <textarea
                   value={sourceText}
-                  onChange={(event) => setSourceText(event.target.value)}
+                  onChange={(event) => {
+                    setSourceText(event.target.value);
+                    setSaveCompletedPackName("");
+                  }}
                   placeholder="把对话里有价值的内容粘贴到这里，例如一段口吻说明、事实补充或规则片段。"
                   className="min-h-[260px] resize-y rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm leading-6 text-slate-800 outline-none transition focus:border-emerald-300 focus:bg-white focus:ring-2 focus:ring-emerald-100"
                 />
@@ -1737,7 +1723,7 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
               <button
                 type="button"
                 onClick={handleSaveDraftToMaterials}
-                disabled={actionBusy}
+                disabled={actionBusy || !sourceText.trim()}
                 className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-full border border-emerald-700 bg-emerald-700 px-5 text-sm font-semibold text-white transition hover:border-emerald-800 hover:bg-emerald-800 disabled:opacity-60"
               >
                 保存到项目资料
@@ -1748,10 +1734,18 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
               <h2 className="text-lg font-semibold text-slate-950">
                 存到哪里？
               </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                选已有资料就是补充到那份资料；不选已有资料则新建一份待确认资料。
+              </p>
               <div className="mt-4 grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() => setSaveTargetPackName(selectedPackName)}
+                  onClick={() => {
+                    const fallbackPackName =
+                      selectedPackName || packs[0]?.metadata.name || "";
+                    setSaveTargetPackName(fallbackPackName);
+                    setSaveCompletedPackName("");
+                  }}
                   className={cn(
                     "h-11 rounded-2xl border px-3 text-sm font-semibold transition",
                     saveTargetPackName
@@ -1763,7 +1757,10 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setSaveTargetPackName("")}
+                  onClick={() => {
+                    setSaveTargetPackName("");
+                    setSaveCompletedPackName("");
+                  }}
                   className={cn(
                     "h-11 rounded-2xl border px-3 text-sm font-semibold transition",
                     !saveTargetPackName
@@ -1800,6 +1797,7 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
                         type="button"
                         onClick={() => {
                           setSaveTargetPackName(pack.metadata.name);
+                          setSaveCompletedPackName("");
                           setPackNameInput(pack.metadata.name);
                           setPackDescription(getPackTitle(pack));
                         }}
@@ -1838,47 +1836,65 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
                 <Check className="h-12 w-12" />
               </div>
               <h2 className="mt-6 text-center text-xl font-semibold text-slate-950">
-                {saveTargetPackName
+                {saveCompletedPackName
                   ? `已保存到“${
-                      packs.find((pack) => pack.metadata.name === saveTargetPackName)
+                      packs.find((pack) => pack.metadata.name === saveCompletedPackName)
                         ? getPackTitle(
                             packs.find(
-                              (pack) => pack.metadata.name === saveTargetPackName,
+                              (pack) => pack.metadata.name === saveCompletedPackName,
                             )!,
                           )
-                        : saveTargetPackName
+                        : saveCompletedPackName
                     }”`
-                  : "保存后会进入待确认"}
+                  : "保存后需要确认"}
               </h2>
               <div className="mt-6 space-y-4 text-sm text-slate-700">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700">
-                    +
-                  </span>
-                  新增 2 个内容点
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700">
-                    ↑
-                  </span>
-                  更新 1 个章节
-                </div>
-                <div className="flex items-center gap-3 text-amber-700">
-                  <AlertTriangle className="h-5 w-5" />
-                  有 1 处需要你确认。
-                </div>
+                {saveCompletedPackName ? (
+                  <>
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700">
+                        ✓
+                      </span>
+                      内容已进入项目资料
+                    </div>
+                    <div className="flex items-center gap-3 text-amber-700">
+                      <AlertTriangle className="h-5 w-5" />
+                      下一步需要确认后才会用于创作。
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700">
+                        1
+                      </span>
+                      保存内容到项目资料
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700">
+                        2
+                      </span>
+                      回到项目资料页确认
+                    </div>
+                    <div className="flex items-center gap-3 text-amber-700">
+                      <AlertTriangle className="h-5 w-5" />
+                      保存不会自动改变本轮创作资料。
+                    </div>
+                  </>
+                )}
               </div>
               <div className="mt-8 grid gap-3">
                 <button
                   type="button"
                   onClick={() => {
-                    if (saveTargetPackName) {
-                      openPack(saveTargetPackName, "overview");
+                    if (saveCompletedPackName) {
+                      openPack(saveCompletedPackName, "overview");
                     } else {
-                      setActiveView("detail");
+                      setActiveView("overview");
                     }
                   }}
-                  className="inline-flex h-11 items-center justify-center rounded-full border border-emerald-700 bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:border-emerald-800 hover:bg-emerald-800"
+                  disabled={!saveCompletedPackName}
+                  className="inline-flex h-11 items-center justify-center rounded-full border border-emerald-700 bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:border-emerald-800 hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   去确认
                 </button>
@@ -1945,13 +1961,9 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
                     <p className="mt-3 min-h-12 text-sm leading-6 text-slate-500">
                       {card.description}
                     </p>
-                    <button
-                      type="button"
-                      onClick={card.onClick}
-                      className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-full border border-emerald-700 bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:border-emerald-800 hover:bg-emerald-800"
-                    >
-                      {card.action}
-                    </button>
+                    <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+                      下一步：{card.action}
+                    </div>
                   </article>
                 );
               })}

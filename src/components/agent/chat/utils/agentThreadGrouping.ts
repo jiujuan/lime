@@ -861,8 +861,27 @@ function buildPreviewLines(
   items: AgentThreadItem[],
 ): string[] {
   const lines: string[] = [];
+  const shouldPreferToolPreview =
+    kind === "process" &&
+    items.some(
+      (item) =>
+        item.type === "tool_call" ||
+        item.type === "command_execution" ||
+        item.type === "web_search",
+    ) &&
+    items.some(
+      (item) =>
+        item.type === "reasoning" || item.type === "context_compaction",
+    );
 
   for (const item of items) {
+    if (
+      shouldPreferToolPreview &&
+      (item.type === "reasoning" || item.type === "context_compaction")
+    ) {
+      continue;
+    }
+
     const summary = summarizeBlockPreviewLine(kind, item);
     if (!summary || lines.includes(summary)) {
       continue;

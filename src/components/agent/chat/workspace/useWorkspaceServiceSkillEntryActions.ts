@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { siteGetAdapterLaunchReadiness } from "@/lib/webview-api";
 import { createAutomationJob } from "@/lib/api/automation";
+import { recordAutomationJobAgentUiProjection } from "../projection/automationJobAgentUiProjection";
 import {
   createContent,
   getOrCreateDefaultProject,
@@ -948,6 +949,7 @@ export function useWorkspaceServiceSkillEntryActions({
         }
 
         const createdJob = await createAutomationJob(request);
+        recordAutomationJobAgentUiProjection(createdJob, "created");
         toast.success(`本地自动化任务已创建：${createdJob.name}`);
 
         setAutomationDialogOpen(false);

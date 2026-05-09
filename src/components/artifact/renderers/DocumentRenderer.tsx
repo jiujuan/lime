@@ -189,5 +189,3 @@ export const DocumentRenderer: React.FC<ArtifactRendererProps> = memo(
 );
 
 DocumentRenderer.displayName = "DocumentRenderer";
-
-export default DocumentRenderer;

@@ -12,6 +12,16 @@ export type TeamWorkbenchSurfaceProps = Omit<
   "className" | "embedded" | "defaultShellExpanded"
 >;
 
+export interface AgentUiTeamWorkbenchPromptMetadata {
+  kind: "review_requested_fix";
+  source: "agent_ui_team_workbench";
+  reviewId?: string;
+  workItemId?: string;
+  requestedFix: string;
+  requestedFixIndex?: string;
+  regressionRequirements?: string[];
+}
+
 type ChatToolPreferences = {
   webSearch: boolean;
   thinking: boolean;

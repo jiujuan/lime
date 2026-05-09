@@ -238,5 +238,3 @@ export const InputbarRuntimeStatusLine: React.FC<
     </div>
   );
 };
-
-export default InputbarRuntimeStatusLine;

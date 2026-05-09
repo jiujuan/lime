@@ -61,15 +61,24 @@ export function buildAgentStreamFailedAssistantMessagePatch(params: {
   accumulatedContent: string;
   errorMessage: string;
   previousContent: string;
+  previousContentParts?: Message["contentParts"];
   usage?: Message["usage"];
-}): Pick<Message, "content" | "isThinking" | "runtimeStatus"> &
+}): Pick<Message, "content" | "contentParts" | "isThinking" | "runtimeStatus"> &
   Partial<Pick<Message, "usage">> {
+  const content = buildFailedAgentMessageContent(
+    params.errorMessage,
+    params.accumulatedContent || params.previousContent,
+  );
+  const processParts = (params.previousContentParts || []).filter(
+    (part) => part.type !== "text",
+  );
+
   return {
     isThinking: false,
-    content: buildFailedAgentMessageContent(
-      params.errorMessage,
-      params.accumulatedContent || params.previousContent,
-    ),
+    content,
+    contentParts: content
+      ? [...processParts, { type: "text", text: content }]
+      : processParts,
     runtimeStatus: buildFailedAgentRuntimeStatus(params.errorMessage),
     ...(params.usage !== undefined ? { usage: params.usage } : {}),
   };

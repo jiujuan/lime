@@ -19,6 +19,7 @@ import type {
 import type { TeamMemorySnapshot } from "@/lib/teamMemorySync";
 import type { HarnessSessionState } from "../utils/harnessState";
 import { recordRuntimeMemoryPrefetchHistory } from "@/lib/runtimeMemoryPrefetchHistory";
+import { conversationProjectionStore } from "../projection/conversationProjectionStore";
 
 const {
   diffAgentRuntimeFileCheckpointMock,
@@ -281,6 +282,7 @@ afterEach(() => {
     value: originalClipboard,
   });
   vi.clearAllMocks();
+  conversationProjectionStore.clearAgentUiProjectionEvents();
 });
 
 function renderPanel(props?: {
@@ -491,6 +493,137 @@ describe("AgentThreadReliabilityPanel", () => {
     expect(container.textContent).toContain("品牌云端托管锁定");
     expect(container.textContent).toContain("品牌云端额度偏低");
     expect(container.textContent).toContain("claude-sonnet-4");
+  });
+
+  it("应从 AgentUI projection store 展示并导出标准投影诊断", async () => {
+    conversationProjectionStore.recordAgentUiProjectionEvents([
+      {
+        type: "task.changed",
+        sourceType: "queue_added",
+        sequence: 1,
+        timestamp: "2026-03-23T10:00:01Z",
+        sessionId: "session-agentui-1",
+        threadId: "thread-agentui-1",
+        taskId: "task-agentui-1",
+        owner: "task",
+        scope: "task",
+        phase: "submitted",
+        surface: "session_tabs",
+        persistence: "ui_local",
+        control: "steer",
+        payload: { taskEvent: "queue_added" },
+      },
+      {
+        type: "artifact.updated",
+        sourceType: "artifact_snapshot",
+        sequence: 2,
+        timestamp: "2026-03-23T10:00:02Z",
+        sessionId: "session-agentui-1",
+        threadId: "thread-agentui-1",
+        artifactId: "artifact-agentui-1",
+        owner: "artifact",
+        scope: "artifact",
+        phase: "completed",
+        surface: "artifact_workspace",
+        persistence: "artifact_store",
+        payload: { status: "ready" },
+      },
+      {
+        type: "diagnostic.changed",
+        sourceType: "runtime_status",
+        sequence: 3,
+        timestamp: "2026-03-23T10:00:03Z",
+        sessionId: "session-agentui-1",
+        threadId: "thread-agentui-1",
+        owner: "diagnostics",
+        scope: "session",
+        phase: "completed",
+        surface: "diagnostics",
+        persistence: "diagnostics_log",
+        payload: { reason: "runtime_summary_updated" },
+      },
+      {
+        type: "task.changed",
+        sourceType: "queue_added",
+        sequence: 4,
+        timestamp: "2026-03-23T10:00:04Z",
+        sessionId: "other-session",
+        threadId: "other-thread",
+        taskId: "other-task",
+        owner: "task",
+        scope: "task",
+        phase: "submitted",
+      },
+    ]);
+
+    const container = renderPanel({
+      threadRead: {
+        thread_id: "thread-agentui-1",
+        status: "running",
+        active_turn_id: "turn-agentui-1",
+        pending_requests: [],
+        incidents: [],
+      },
+      turns: [
+        {
+          id: "turn-agentui-1",
+          thread_id: "thread-agentui-1",
+          prompt_text: "继续对齐 AgentUI 标准投影",
+          status: "running",
+          started_at: "2026-03-23T10:00:00Z",
+          created_at: "2026-03-23T10:00:00Z",
+          updated_at: "2026-03-23T10:00:03Z",
+        },
+      ],
+      currentTurnId: "turn-agentui-1",
+      diagnosticRuntimeContext: {
+        sessionId: "session-agentui-1",
+        workspaceId: "workspace-agentui-1",
+        workingDir: "/workspace/agentui",
+      },
+    });
+
+    expect(
+      container.querySelector(
+        '[data-testid="agent-thread-reliability-agentui-projection"]',
+      ),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("AgentUI 标准投影");
+    expect(container.textContent).toContain("3 条");
+    expect(container.textContent).toContain(
+      "来源：conversationProjectionStore.agentUi",
+    );
+    expect(container.textContent).toContain("Task / Agent");
+    expect(container.textContent).toContain("Artifact");
+    expect(container.textContent).toContain("Diagnostics");
+
+    const copyButton = container.querySelector(
+      '[data-testid="agent-thread-reliability-copy"]',
+    );
+    await act(async () => {
+      copyButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      expect.stringContaining("### AgentUI 标准投影"),
+    );
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      expect.stringContaining("标准事件总数：3"),
+    );
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      expect.stringContaining("Task / Agent：1"),
+    );
+
+    const jsonButton = container.querySelector(
+      '[data-testid="agent-thread-reliability-copy-json"]',
+    );
+    await act(async () => {
+      jsonButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      expect.stringContaining('"agent_ui_projection_summary"'),
+    );
   });
 
   it("应展示最近文件快照摘要", () => {

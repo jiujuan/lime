@@ -331,5 +331,3 @@ export function ShortcutSettings({
     </div>
   );
 }
-
-export default ShortcutSettings;

@@ -311,5 +311,3 @@ ApiKeyProviderSection.displayName = "ApiKeyProviderSection";
 // ============================================================================
 // 辅助函数（用于测试）
 // ============================================================================
-
-export default ApiKeyProviderSection;

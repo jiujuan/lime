@@ -113,6 +113,9 @@
     "memory_runtime_get_extraction_status",
     "memory_runtime_prefetch_for_turn"
   ],
+  "systemUtilityCommands": [
+    "open_external_url"
+  ],
   "fileBrowserCommands": [
     "list_dir",
     "read_file_preview_cmd",

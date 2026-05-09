@@ -2169,6 +2169,8 @@ mod tests {
                                     "blockingProfileKeys": [],
                                     "decisionSource": "execution_profile_registry",
                                     "decisionScope": "declared_permission_profiles_only",
+                                    "confirmationStatus": "not_requested",
+                                    "confirmationSource": "declared_profile_only",
                                     "notes": ["只记录声明，不执行真实授权。"]
                                 }
                             }),
@@ -2282,7 +2284,7 @@ mod tests {
                                     "status": "estimated",
                                     "estimatedCostClass": "low",
                                     "inputPerMillion": 1.0,
-                                    "outputPerMillion": 2.0,
+                                    "outputPerMillion": 5.0,
                                     "cacheReadPerMillion": 0.5,
                                     "cacheWritePerMillion": 1.5,
                                     "currency": "USD"
@@ -2356,6 +2358,16 @@ mod tests {
                                     "eventKind": "quota_low",
                                     "message": "OEM 云端额度偏低",
                                     "retryable": true
+                                },
+                                "oem_policy": {
+                                    "tenantId": "tenant-1",
+                                    "providerSource": "oem_cloud",
+                                    "quotaStatus": "low"
+                                },
+                                "runtime_summary": {
+                                    "limitEventKind": "quota_low",
+                                    "limitEventMessage": "OEM 云端额度偏低",
+                                    "quotaLow": true
                                 }
                             }),
                         )]

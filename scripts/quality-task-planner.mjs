@@ -17,6 +17,10 @@ const IGNORED_PREFIXES = [
 
 const IGNORED_FILES = new Set([".DS_Store"]);
 
+const LOW_RISK_WORKFLOW_FILES = new Set([
+  ".github/workflows/build-windows-test.yml",
+]);
+
 const FRONTEND_ROOT_FILES = new Set([
   "package.json",
   "package-lock.json",
@@ -99,6 +103,22 @@ const GUI_SMOKE_PREFIXES = [
   "src/stores/",
   "src-tauri/src/app/",
   "src-tauri/src/dev_bridge/",
+];
+
+const KNOWLEDGE_PRODUCT_E2E_FILES = new Set([
+  "scripts/knowledge-gui-smoke.mjs",
+  "scripts/knowledge-product-e2e.mjs",
+  "src/components/agent/chat/AgentChatWorkspace.tsx",
+]);
+
+const KNOWLEDGE_PRODUCT_E2E_PREFIXES = [
+  "src/features/knowledge/",
+  "src/components/agent/chat/workspace/knowledge/",
+];
+
+const KNOWLEDGE_PRODUCT_E2E_RECOMMENDED_COMMANDS = [
+  "npm run knowledge:product-e2e",
+  "npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running",
 ];
 
 function gitOutput({ cwd, gitCommand, args }) {
@@ -234,7 +254,9 @@ function isMarkdownLike(file) {
 }
 
 function isWorkflowChange(file) {
-  return file.startsWith(".github/workflows/");
+  return (
+    file.startsWith(".github/workflows/") && !LOW_RISK_WORKFLOW_FILES.has(file)
+  );
 }
 
 function isDocsChange(file) {
@@ -269,7 +291,10 @@ function isHarnessCleanupContractChange(file) {
   return HARNESS_CLEANUP_CONTRACT_FILES.has(file);
 }
 
-function collectBridgeReasons(changedFiles, { full = false, fallback = false, workflow = false } = {}) {
+function collectBridgeReasons(
+  changedFiles,
+  { full = false, fallback = false, workflow = false } = {},
+) {
   if (full) {
     return ["full_suite"];
   }
@@ -290,8 +315,7 @@ function collectBridgeReasons(changedFiles, { full = false, fallback = false, wo
 
   if (
     changedFiles.some(
-      (file) =>
-        isBridgeChange(file) && !isHarnessCleanupContractChange(file),
+      (file) => isBridgeChange(file) && !isHarnessCleanupContractChange(file),
     )
   ) {
     reasons.push("bridge_runtime");
@@ -311,6 +335,25 @@ function isGuiSmokeChange(file) {
   );
 }
 
+function isKnowledgeProductE2eChange(file) {
+  return (
+    KNOWLEDGE_PRODUCT_E2E_FILES.has(file) ||
+    KNOWLEDGE_PRODUCT_E2E_PREFIXES.some((prefix) => file.startsWith(prefix))
+  );
+}
+
+function collectRecommendedCommands(changedFiles, { docsOnly = false } = {}) {
+  if (docsOnly) {
+    return [];
+  }
+
+  if (changedFiles.some(isKnowledgeProductE2eChange)) {
+    return [...KNOWLEDGE_PRODUCT_E2E_RECOMMENDED_COMMANDS];
+  }
+
+  return [];
+}
+
 function isIntegrityChange(file) {
   return (
     INTEGRITY_FILES.has(file) ||
@@ -321,6 +364,10 @@ function isIntegrityChange(file) {
 }
 
 function detectTasks(changedFiles, { full = false } = {}) {
+  const recommendedCommands = collectRecommendedCommands(changedFiles, {
+    docsOnly: false,
+  });
+
   if (full) {
     return {
       integrity: true,
@@ -332,6 +379,7 @@ function detectTasks(changedFiles, { full = false } = {}) {
       docs: true,
       docsOnly: false,
       fallback: false,
+      recommendedCommands,
       workflow: false,
     };
   }
@@ -347,6 +395,7 @@ function detectTasks(changedFiles, { full = false } = {}) {
       docs: true,
       docsOnly: false,
       fallback: true,
+      recommendedCommands,
       workflow: false,
     };
   }
@@ -363,6 +412,7 @@ function detectTasks(changedFiles, { full = false } = {}) {
       docs: true,
       docsOnly: false,
       fallback: false,
+      recommendedCommands,
       workflow: true,
     };
   }
@@ -378,11 +428,13 @@ function detectTasks(changedFiles, { full = false } = {}) {
       docs: true,
       docsOnly: true,
       fallback: false,
+      recommendedCommands: [],
       workflow: false,
     };
   }
 
   const bridge = changedFiles.some(isBridgeChange);
+  const docsOnly = false;
 
   return {
     integrity: changedFiles.some(isIntegrityChange),
@@ -392,8 +444,9 @@ function detectTasks(changedFiles, { full = false } = {}) {
     bridgeReasons: bridge ? collectBridgeReasons(changedFiles) : [],
     guiSmoke: changedFiles.some(isGuiSmokeChange),
     docs: changedFiles.some(isDocsChange),
-    docsOnly: false,
+    docsOnly,
     fallback: false,
+    recommendedCommands,
     workflow: false,
   };
 }
@@ -424,6 +477,7 @@ function planQualityTasks({
 export {
   collectBridgeReasons,
   collectChangedFiles,
+  collectRecommendedCommands,
   detectTasks,
   planQualityTasks,
   resolveDiffBase,

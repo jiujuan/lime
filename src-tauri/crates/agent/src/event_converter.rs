@@ -7,7 +7,9 @@ use aster::agents::AgentEvent;
 use aster::conversation::message::{
     ActionRequiredData, ActionRequiredScope, Message, MessageContent,
 };
-use aster::session::{ItemRuntime, ItemRuntimePayload, ItemStatus, TurnRuntime, TurnStatus};
+use aster::session::{
+    ItemRuntime, ItemRuntimePayload, ItemStatus, TurnContextOverride, TurnRuntime, TurnStatus,
+};
 use lime_core::database::dao::agent_timeline::{
     AgentRequestOption, AgentRequestQuestion, AgentThreadItem, AgentThreadItemPayload,
     AgentThreadTurn,
@@ -16,16 +18,21 @@ use regex::Regex;
 
 pub use crate::protocol::{
     AgentActionRequiredScope as TauriActionRequiredScope,
-    AgentArtifactSignal as TauriArtifactSnapshot, AgentContextTraceStep as TauriContextTraceStep,
-    AgentEvent as TauriAgentEvent, AgentMessage as TauriMessage,
-    AgentMessageContent as TauriMessageContent, AgentRuntimeStatus as TauriRuntimeStatus,
+    AgentArtifactSignal as TauriArtifactSnapshot, AgentContextBudget as TauriContextBudget,
+    AgentContextTraceStep as TauriContextTraceStep, AgentEvent as TauriAgentEvent,
+    AgentMessage as TauriMessage, AgentMessageContent as TauriMessageContent,
+    AgentMissingContextFact as TauriMissingContextFact, AgentRetrievalRef as TauriRetrievalRef,
+    AgentRuntimeStatus as TauriRuntimeStatus, AgentTeamMemoryRef as TauriTeamMemoryRef,
     AgentTokenUsage as TauriTokenUsage, AgentToolImage as TauriToolImage,
-    AgentToolResult as TauriToolResult,
+    AgentToolProgressPayload as TauriToolProgressPayload, AgentToolResult as TauriToolResult,
+    AgentTurnContextSummary as TauriTurnContextSummary,
 };
 use crate::text_normalization::{
     normalize_legacy_runtime_status_title, normalize_legacy_turn_summary_text,
 };
 use crate::tool_io_offload::{maybe_offload_tool_arguments, maybe_offload_tool_result_payload};
+use rmcp::model::ServerNotification;
+use std::collections::HashMap;
 
 const JSON_RECURSION_LIMIT: usize = 50;
 const JSON_TRAVERSAL_NODE_LIMIT: usize = 4_096;
@@ -33,6 +40,7 @@ const TOOL_RESULT_MAX_TEXT_PARTS: usize = 256;
 const TOOL_RESULT_MAX_OUTPUT_CHARS: usize = 4_000;
 const TOOL_RESULT_MAX_IMAGES: usize = 12;
 const TOOL_RESULT_TRUNCATED_NOTICE: &str = "\n\n[event_converter] 工具输出已截断";
+const TOOL_NOTIFICATION_MAX_DELTA_CHARS: usize = 1_200;
 const TOOL_RESULT_DIAG_WARN_JSON_BYTES: usize = 64 * 1024;
 const TOOL_RESULT_DIAG_WARN_OUTPUT_CHARS: usize = 4_000;
 const TOOL_RESULT_DIAG_WARN_IMAGE_COUNT: usize = 4;
@@ -83,6 +91,201 @@ fn truncate_chars(text: &str, max_chars: usize) -> (String, bool) {
     }
 
     (text.to_string(), false)
+}
+
+fn truncate_notification_text(text: impl Into<String>) -> String {
+    let text = text.into();
+    let (mut limited, truncated) = truncate_chars(&text, TOOL_NOTIFICATION_MAX_DELTA_CHARS);
+    if truncated {
+        limited.push_str("\n\n[event_converter] 工具流式通知已截断");
+    }
+    limited
+}
+
+fn metadata_with_kind(kind: &str) -> HashMap<String, serde_json::Value> {
+    let mut metadata = HashMap::new();
+    metadata.insert(
+        "notification_kind".to_string(),
+        serde_json::Value::String(kind.to_string()),
+    );
+    metadata
+}
+
+fn value_to_notification_text(value: &serde_json::Value) -> String {
+    if let Some(text) = value.as_str() {
+        return truncate_notification_text(text);
+    }
+
+    truncate_notification_text(serde_json::to_string(value).unwrap_or_else(|_| value.to_string()))
+}
+
+fn maybe_text_from_custom_notification_params(
+    params: Option<&serde_json::Value>,
+) -> Option<String> {
+    let params = params?;
+    if let Some(text) = params.as_str() {
+        return Some(truncate_notification_text(text));
+    }
+
+    let object = params.as_object()?;
+    for key in ["delta", "text", "message", "output"] {
+        if let Some(value) = object.get(key).and_then(serde_json::Value::as_str) {
+            let text = value.trim();
+            if !text.is_empty() {
+                return Some(truncate_notification_text(text));
+            }
+        }
+    }
+
+    None
+}
+
+fn convert_mcp_notification(
+    tool_id: String,
+    notification: ServerNotification,
+) -> Vec<TauriAgentEvent> {
+    match notification {
+        ServerNotification::ProgressNotification(notification) => {
+            let mut metadata = metadata_with_kind("mcp_progress");
+            metadata.insert(
+                "progress_token".to_string(),
+                serde_json::to_value(&notification.params.progress_token)
+                    .unwrap_or(serde_json::Value::Null),
+            );
+
+            vec![TauriAgentEvent::ToolProgress {
+                tool_id,
+                progress: TauriToolProgressPayload {
+                    message: notification.params.message.map(truncate_notification_text),
+                    progress: Some(notification.params.progress),
+                    total: notification.params.total,
+                    metadata: Some(metadata),
+                },
+            }]
+        }
+        ServerNotification::LoggingMessageNotification(notification) => {
+            let mut metadata = metadata_with_kind("mcp_log");
+            metadata.insert(
+                "level".to_string(),
+                serde_json::to_value(notification.params.level).unwrap_or_else(|_| {
+                    serde_json::Value::String(format!("{:?}", notification.params.level))
+                }),
+            );
+            if let Some(logger) = notification.params.logger {
+                metadata.insert("logger".to_string(), serde_json::Value::String(logger));
+            }
+
+            vec![TauriAgentEvent::ToolOutputDelta {
+                tool_id,
+                delta: value_to_notification_text(&notification.params.data),
+                output_kind: Some("log".to_string()),
+                metadata: Some(metadata),
+            }]
+        }
+        ServerNotification::CancelledNotification(notification) => {
+            let mut metadata = metadata_with_kind("mcp_cancelled");
+            metadata.insert(
+                "request_id".to_string(),
+                serde_json::to_value(&notification.params.request_id)
+                    .unwrap_or(serde_json::Value::Null),
+            );
+            vec![TauriAgentEvent::ToolProgress {
+                tool_id,
+                progress: TauriToolProgressPayload {
+                    message: notification
+                        .params
+                        .reason
+                        .map(truncate_notification_text)
+                        .or_else(|| Some("工具请求已取消".to_string())),
+                    progress: None,
+                    total: None,
+                    metadata: Some(metadata),
+                },
+            }]
+        }
+        ServerNotification::ResourceUpdatedNotification(notification) => {
+            let mut metadata = metadata_with_kind("mcp_resource_updated");
+            metadata.insert(
+                "uri".to_string(),
+                serde_json::Value::String(notification.params.uri.clone()),
+            );
+            vec![TauriAgentEvent::ToolProgress {
+                tool_id,
+                progress: TauriToolProgressPayload {
+                    message: Some(truncate_notification_text(format!(
+                        "资源已更新：{}",
+                        notification.params.uri
+                    ))),
+                    progress: None,
+                    total: None,
+                    metadata: Some(metadata),
+                },
+            }]
+        }
+        ServerNotification::ResourceListChangedNotification(_) => {
+            vec![TauriAgentEvent::ToolProgress {
+                tool_id,
+                progress: TauriToolProgressPayload {
+                    message: Some("工具服务资源列表已更新".to_string()),
+                    progress: None,
+                    total: None,
+                    metadata: Some(metadata_with_kind("mcp_resources_changed")),
+                },
+            }]
+        }
+        ServerNotification::ToolListChangedNotification(_) => {
+            vec![TauriAgentEvent::ToolProgress {
+                tool_id,
+                progress: TauriToolProgressPayload {
+                    message: Some("工具服务能力列表已更新".to_string()),
+                    progress: None,
+                    total: None,
+                    metadata: Some(metadata_with_kind("mcp_tools_changed")),
+                },
+            }]
+        }
+        ServerNotification::PromptListChangedNotification(_) => {
+            vec![TauriAgentEvent::ToolProgress {
+                tool_id,
+                progress: TauriToolProgressPayload {
+                    message: Some("工具服务提示词列表已更新".to_string()),
+                    progress: None,
+                    total: None,
+                    metadata: Some(metadata_with_kind("mcp_prompts_changed")),
+                },
+            }]
+        }
+        ServerNotification::CustomNotification(notification) => {
+            let mut metadata = metadata_with_kind("mcp_custom");
+            metadata.insert(
+                "method".to_string(),
+                serde_json::Value::String(notification.method.clone()),
+            );
+            if let Some(delta) =
+                maybe_text_from_custom_notification_params(notification.params.as_ref())
+            {
+                return vec![TauriAgentEvent::ToolOutputDelta {
+                    tool_id,
+                    delta,
+                    output_kind: Some("custom".to_string()),
+                    metadata: Some(metadata),
+                }];
+            }
+
+            vec![TauriAgentEvent::ToolProgress {
+                tool_id,
+                progress: TauriToolProgressPayload {
+                    message: Some(truncate_notification_text(format!(
+                        "收到工具通知：{}",
+                        notification.method
+                    ))),
+                    progress: None,
+                    total: None,
+                    metadata: Some(metadata),
+                },
+            }]
+        }
+    }
 }
 
 fn push_non_empty_limited(
@@ -535,23 +738,300 @@ fn extract_tool_result_metadata<T: serde::Serialize>(
         .and_then(|value| find_metadata(&value, 0))
 }
 
+fn read_object_string(
+    object: &serde_json::Map<String, serde_json::Value>,
+    keys: &[&str],
+) -> Option<String> {
+    keys.iter()
+        .filter_map(|key| object.get(*key))
+        .find_map(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn read_object_u32(
+    object: &serde_json::Map<String, serde_json::Value>,
+    keys: &[&str],
+) -> Option<u32> {
+    keys.iter()
+        .filter_map(|key| object.get(*key))
+        .find_map(serde_json::Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok())
+}
+
+fn read_object_i64(
+    object: &serde_json::Map<String, serde_json::Value>,
+    keys: &[&str],
+) -> Option<i64> {
+    keys.iter()
+        .filter_map(|key| object.get(*key))
+        .find_map(|value| {
+            value
+                .as_i64()
+                .or_else(|| value.as_u64().and_then(|value| i64::try_from(value).ok()))
+        })
+}
+
+fn read_object_f64(
+    object: &serde_json::Map<String, serde_json::Value>,
+    keys: &[&str],
+) -> Option<f64> {
+    keys.iter()
+        .filter_map(|key| object.get(*key))
+        .find_map(serde_json::Value::as_f64)
+}
+
+fn metadata_object<'a>(
+    metadata: &'a HashMap<String, serde_json::Value>,
+    keys: &[&str],
+) -> Option<&'a serde_json::Map<String, serde_json::Value>> {
+    keys.iter()
+        .filter_map(|key| metadata.get(*key))
+        .find_map(serde_json::Value::as_object)
+}
+
+fn nested_object<'a>(
+    object: &'a serde_json::Map<String, serde_json::Value>,
+    keys: &[&str],
+) -> Option<&'a serde_json::Map<String, serde_json::Value>> {
+    keys.iter()
+        .filter_map(|key| object.get(*key))
+        .find_map(serde_json::Value::as_object)
+}
+
+fn nested_array<'a>(
+    object: &'a serde_json::Map<String, serde_json::Value>,
+    keys: &[&str],
+) -> Option<&'a Vec<serde_json::Value>> {
+    keys.iter()
+        .filter_map(|key| object.get(*key))
+        .find_map(serde_json::Value::as_array)
+}
+
+fn build_context_budget_from_object(
+    object: &serde_json::Map<String, serde_json::Value>,
+) -> Option<TauriContextBudget> {
+    let budget = TauriContextBudget {
+        used_tokens: read_object_u32(object, &["used_tokens", "usedTokens"]),
+        max_tokens: read_object_u32(
+            object,
+            &["max_tokens", "maxTokens", "token_limit", "tokenLimit"],
+        ),
+        remaining_tokens: read_object_i64(object, &["remaining_tokens", "remainingTokens"]),
+        status: read_object_string(object, &["status"]),
+        source: read_object_string(object, &["source"]),
+    };
+
+    if budget.used_tokens.is_none()
+        && budget.max_tokens.is_none()
+        && budget.remaining_tokens.is_none()
+        && budget.status.is_none()
+        && budget.source.is_none()
+    {
+        None
+    } else {
+        Some(budget)
+    }
+}
+
+fn build_missing_context_from_object(
+    object: &serde_json::Map<String, serde_json::Value>,
+    index: usize,
+) -> Option<TauriMissingContextFact> {
+    let label = read_object_string(object, &["label", "title", "path", "id"])
+        .unwrap_or_else(|| format!("missing_context:{index}"));
+    Some(TauriMissingContextFact {
+        id: read_object_string(object, &["id"]),
+        kind: read_object_string(object, &["kind"]).unwrap_or_else(|| "context".to_string()),
+        label,
+        status: read_object_string(object, &["status"]).unwrap_or_else(|| "unknown".to_string()),
+        reason: read_object_string(object, &["reason", "message", "detail"]),
+        source: read_object_string(object, &["source"]),
+    })
+}
+
+fn build_retrieval_ref_from_object(
+    object: &serde_json::Map<String, serde_json::Value>,
+    index: usize,
+) -> Option<TauriRetrievalRef> {
+    let source_id = read_object_string(object, &["source_id", "sourceId", "id"])
+        .or_else(|| read_object_string(object, &["path", "url"]))
+        .unwrap_or_else(|| format!("retrieval_ref:{index}"));
+    Some(TauriRetrievalRef {
+        source_id,
+        kind: read_object_string(object, &["kind"]).unwrap_or_else(|| "context".to_string()),
+        title: read_object_string(object, &["title", "label", "name"]),
+        path: read_object_string(
+            object,
+            &[
+                "path",
+                "file_path",
+                "filePath",
+                "relative_path",
+                "relativePath",
+            ],
+        ),
+        url: read_object_string(object, &["url"]),
+        score: read_object_f64(object, &["score"]),
+        scope: read_object_string(object, &["scope"]),
+        status: read_object_string(object, &["status"]),
+        source: read_object_string(object, &["source"]),
+    })
+}
+
+fn build_team_memory_ref_from_object(
+    object: &serde_json::Map<String, serde_json::Value>,
+    repo_scope: Option<String>,
+    index: usize,
+) -> Option<TauriTeamMemoryRef> {
+    let key = read_object_string(object, &["key", "id", "label"])?;
+    Some(TauriTeamMemoryRef {
+        key,
+        repo_scope: read_object_string(object, &["repo_scope", "repoScope"]).or(repo_scope),
+        updated_at: read_object_i64(object, &["updated_at", "updatedAt"]),
+        priority: read_object_u32(object, &["priority"]).or_else(|| u32::try_from(index).ok()),
+        source: read_object_string(object, &["source"])
+            .or_else(|| Some("team_memory_shadow".to_string())),
+    })
+}
+
+fn extract_agentui_context_object(
+    metadata: &HashMap<String, serde_json::Value>,
+) -> Option<&serde_json::Map<String, serde_json::Value>> {
+    metadata_object(metadata, &["agentui_context", "agentUiContext"]).or_else(|| {
+        metadata_object(metadata, &["harness"])
+            .and_then(|harness| nested_object(harness, &["agentui_context", "agentUiContext"]))
+    })
+}
+
+fn extract_team_memory_shadow_object(
+    metadata: &HashMap<String, serde_json::Value>,
+) -> Option<&serde_json::Map<String, serde_json::Value>> {
+    metadata_object(metadata, &["team_memory_shadow", "teamMemoryShadow"]).or_else(|| {
+        metadata_object(metadata, &["harness"])
+            .and_then(|harness| nested_object(harness, &["team_memory_shadow", "teamMemoryShadow"]))
+    })
+}
+
+fn build_turn_context_summary(
+    turn_context: Option<&TurnContextOverride>,
+) -> Option<TauriTurnContextSummary> {
+    let metadata = &turn_context?.metadata;
+    let agentui_context = extract_agentui_context_object(metadata);
+    let mut summary = TauriTurnContextSummary::default();
+
+    if let Some(context) = agentui_context {
+        summary.memory_budget = nested_object(
+            context,
+            &[
+                "memory_budget",
+                "memoryBudget",
+                "context_budget",
+                "contextBudget",
+            ],
+        )
+        .and_then(build_context_budget_from_object);
+
+        if let Some(items) = nested_array(context, &["missing_context", "missingContext"]) {
+            summary
+                .missing_context
+                .extend(items.iter().enumerate().filter_map(|(index, value)| {
+                    value
+                        .as_object()
+                        .and_then(|object| build_missing_context_from_object(object, index))
+                }));
+        }
+
+        if let Some(items) = nested_array(context, &["retrieval_refs", "retrievalRefs"]) {
+            summary
+                .retrieval_refs
+                .extend(items.iter().enumerate().filter_map(|(index, value)| {
+                    value
+                        .as_object()
+                        .and_then(|object| build_retrieval_ref_from_object(object, index))
+                }));
+        }
+
+        if let Some(items) = nested_array(context, &["team_memory_refs", "teamMemoryRefs"]) {
+            summary
+                .team_memory_refs
+                .extend(items.iter().enumerate().filter_map(|(index, value)| {
+                    value
+                        .as_object()
+                        .and_then(|object| build_team_memory_ref_from_object(object, None, index))
+                }));
+        }
+    }
+
+    if let Some(shadow) = extract_team_memory_shadow_object(metadata) {
+        let repo_scope = read_object_string(shadow, &["repo_scope", "repoScope"]);
+        if let Some(entries) = nested_array(shadow, &["entries"]) {
+            summary
+                .team_memory_refs
+                .extend(entries.iter().enumerate().filter_map(|(index, value)| {
+                    value.as_object().and_then(|object| {
+                        build_team_memory_ref_from_object(object, repo_scope.clone(), index)
+                    })
+                }));
+        }
+    }
+
+    let mut seen_retrieval_refs = std::collections::HashSet::new();
+    summary
+        .retrieval_refs
+        .retain(|item| seen_retrieval_refs.insert(item.source_id.clone()));
+    let mut seen_team_memory_refs = std::collections::HashSet::new();
+    summary.team_memory_refs.retain(|item| {
+        seen_team_memory_refs.insert(format!(
+            "{}:{}",
+            item.repo_scope.as_deref().unwrap_or_default(),
+            item.key
+        ))
+    });
+
+    if summary.memory_budget.is_none()
+        && summary.missing_context.is_empty()
+        && summary.retrieval_refs.is_empty()
+        && summary.team_memory_refs.is_empty()
+    {
+        None
+    } else {
+        Some(summary)
+    }
+}
+
 /// 将 Aster AgentEvent 转换为 TauriAgentEvent 列表
 ///
 /// 一个 AgentEvent 可能产生多个 TauriAgentEvent
 pub fn convert_agent_event(event: AgentEvent) -> Vec<TauriAgentEvent> {
     match event {
         AgentEvent::TurnStarted { turn } => {
-            let turn_context_event =
-                if turn.context_override.is_some() || turn.output_schema_runtime.is_some() {
-                    Some(TauriAgentEvent::TurnContext {
-                        session_id: turn.session_id.clone(),
-                        thread_id: turn.thread_id.clone(),
-                        turn_id: turn.id.clone(),
-                        output_schema_runtime: turn.output_schema_runtime.clone(),
-                    })
-                } else {
-                    None
-                };
+            let context_summary = build_turn_context_summary(turn.context_override.as_ref());
+            let approval_policy = turn
+                .context_override
+                .as_ref()
+                .and_then(|context| context.approval_policy.clone());
+            let sandbox_policy = turn
+                .context_override
+                .as_ref()
+                .and_then(|context| context.sandbox_policy.clone());
+            let turn_context_event = if turn.context_override.is_some()
+                || turn.output_schema_runtime.is_some()
+                || context_summary.is_some()
+            {
+                Some(TauriAgentEvent::TurnContext {
+                    session_id: turn.session_id.clone(),
+                    thread_id: turn.thread_id.clone(),
+                    turn_id: turn.id.clone(),
+                    output_schema_runtime: turn.output_schema_runtime.clone(),
+                    context_summary,
+                    approval_policy,
+                    sandbox_policy,
+                })
+            } else {
+                None
+            };
             let thread_id = turn.thread_id.clone();
             let mut events = vec![
                 TauriAgentEvent::ThreadStarted { thread_id },
@@ -574,11 +1054,22 @@ pub fn convert_agent_event(event: AgentEvent) -> Vec<TauriAgentEvent> {
             item: convert_item_runtime(item),
         }],
         AgentEvent::Message(message) => convert_message(message),
-        AgentEvent::McpNotification((server_name, notification)) => {
-            // MCP 通知暂时忽略或转换为日志
-            tracing::debug!("MCP notification from {}: {:?}", server_name, notification);
-            vec![]
+        AgentEvent::McpNotification((tool_id, notification)) => {
+            convert_mcp_notification(tool_id, notification)
         }
+        AgentEvent::ToolInputDelta {
+            tool_id,
+            tool_name,
+            delta,
+            accumulated_arguments,
+            provider,
+        } => vec![TauriAgentEvent::ToolInputDelta {
+            tool_id,
+            tool_name,
+            delta,
+            accumulated_arguments,
+            provider,
+        }],
         AgentEvent::ModelChange { model, mode } => {
             vec![TauriAgentEvent::ModelChange { model, mode }]
         }
@@ -1052,6 +1543,15 @@ fn convert_message(message: Message) -> Vec<TauriAgentEvent> {
                     });
                 }
             },
+            MessageContent::ToolInputDelta(delta) => {
+                events.push(TauriAgentEvent::ToolInputDelta {
+                    tool_id: delta.id.clone(),
+                    tool_name: delta.tool_name.clone(),
+                    delta: delta.delta.clone(),
+                    accumulated_arguments: delta.accumulated_arguments.clone(),
+                    provider: delta.provider.clone(),
+                });
+            }
             MessageContent::RedactedThinking(_) => {
                 // 隐藏的思考内容，忽略
             }
@@ -1308,6 +1808,115 @@ mod tests {
     }
 
     #[test]
+    fn test_convert_mcp_notifications_to_tool_stream_events() {
+        use rmcp::model::{
+            LoggingLevel, LoggingMessageNotification, LoggingMessageNotificationMethod,
+            LoggingMessageNotificationParam, NumberOrString, ProgressNotification,
+            ProgressNotificationMethod, ProgressNotificationParam, ProgressToken,
+            ServerNotification,
+        };
+
+        let progress_events = convert_agent_event(AgentEvent::McpNotification((
+            "tool-1".to_string(),
+            ServerNotification::ProgressNotification(ProgressNotification {
+                method: ProgressNotificationMethod,
+                params: ProgressNotificationParam {
+                    progress_token: ProgressToken(NumberOrString::Number(7)),
+                    progress: 2.0,
+                    total: Some(4.0),
+                    message: Some("正在处理第 2 项".to_string()),
+                },
+                extensions: Default::default(),
+            }),
+        )));
+
+        assert_eq!(progress_events.len(), 1);
+        match &progress_events[0] {
+            TauriAgentEvent::ToolProgress { tool_id, progress } => {
+                assert_eq!(tool_id, "tool-1");
+                assert_eq!(progress.message.as_deref(), Some("正在处理第 2 项"));
+                assert_eq!(progress.progress, Some(2.0));
+                assert_eq!(progress.total, Some(4.0));
+                assert_eq!(
+                    progress
+                        .metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.get("notification_kind"))
+                        .and_then(serde_json::Value::as_str),
+                    Some("mcp_progress")
+                );
+            }
+            other => panic!("Expected ToolProgress event, got {other:?}"),
+        }
+
+        let output_events = convert_agent_event(AgentEvent::McpNotification((
+            "tool-1".to_string(),
+            ServerNotification::LoggingMessageNotification(LoggingMessageNotification {
+                method: LoggingMessageNotificationMethod,
+                params: LoggingMessageNotificationParam {
+                    level: LoggingLevel::Info,
+                    logger: Some("runner".to_string()),
+                    data: serde_json::json!({
+                        "message": "已生成一段工具输出"
+                    }),
+                },
+                extensions: Default::default(),
+            }),
+        )));
+
+        assert_eq!(output_events.len(), 1);
+        match &output_events[0] {
+            TauriAgentEvent::ToolOutputDelta {
+                tool_id,
+                delta,
+                output_kind,
+                metadata,
+            } => {
+                assert_eq!(tool_id, "tool-1");
+                assert!(delta.contains("已生成一段工具输出"));
+                assert_eq!(output_kind.as_deref(), Some("log"));
+                assert_eq!(
+                    metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.get("notification_kind"))
+                        .and_then(serde_json::Value::as_str),
+                    Some("mcp_log")
+                );
+            }
+            other => panic!("Expected ToolOutputDelta event, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_convert_provider_tool_input_delta_event() {
+        let events = convert_agent_event(AgentEvent::ToolInputDelta {
+            tool_id: "tool-1".to_string(),
+            tool_name: Some("read_file".to_string()),
+            delta: "{\"path\"".to_string(),
+            accumulated_arguments: Some("{\"path\"".to_string()),
+            provider: Some("openai_compatible".to_string()),
+        });
+
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            TauriAgentEvent::ToolInputDelta {
+                tool_id,
+                tool_name,
+                delta,
+                accumulated_arguments,
+                provider,
+            } => {
+                assert_eq!(tool_id, "tool-1");
+                assert_eq!(tool_name.as_deref(), Some("read_file"));
+                assert_eq!(delta, "{\"path\"");
+                assert_eq!(accumulated_arguments.as_deref(), Some("{\"path\""));
+                assert_eq!(provider.as_deref(), Some("openai_compatible"));
+            }
+            other => panic!("Expected ToolInputDelta event, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn test_convert_history_replaced_returns_empty_for_runtime_projection() {
         let event = AgentEvent::HistoryReplaced(aster::conversation::Conversation::empty());
 
@@ -1428,10 +2037,13 @@ mod tests {
                 thread_id,
                 turn_id,
                 output_schema_runtime,
+                context_summary,
+                ..
             } => {
                 assert_eq!(session_id, "session-2");
                 assert_eq!(thread_id, "thread-2");
                 assert_eq!(turn_id, "turn-2");
+                assert!(context_summary.is_none());
                 let runtime = output_schema_runtime
                     .as_ref()
                     .expect("expected output schema runtime");
@@ -1439,6 +2051,105 @@ mod tests {
                 assert_eq!(runtime.model_name.as_deref(), Some("gpt-5.4"));
             }
             other => panic!("Expected TurnContext event, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_convert_turn_started_with_context_summary_facts() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "agentui_context".to_string(),
+            serde_json::json!({
+                "memory_budget": {
+                    "used_tokens": 640,
+                    "max_tokens": 1200,
+                    "status": "ready",
+                    "source": "knowledge_context_resolver"
+                },
+                "retrieval_refs": [
+                    {
+                        "source_id": "knowledge_pack:brand:compiled/splits/brief.md",
+                        "kind": "knowledge_pack",
+                        "title": "brand:brief",
+                        "path": "compiled/splits/brief.md",
+                        "scope": "workspace",
+                        "status": "ready",
+                        "source": "knowledge_context_resolver"
+                    }
+                ],
+                "missing_context": [
+                    {
+                        "id": "knowledge_warning:0",
+                        "kind": "knowledge_warning",
+                        "label": "sources/missing.md",
+                        "status": "unknown",
+                        "reason": "缺少来源",
+                        "source": "knowledge_context_resolver"
+                    }
+                ]
+            }),
+        );
+        metadata.insert(
+            "team_memory_shadow".to_string(),
+            serde_json::json!({
+                "repo_scope": "/repo/lime",
+                "entries": [
+                    {
+                        "key": "team.selection",
+                        "content": "不要把 memory 正文透出到 AgentUI refs",
+                        "updated_at": 1710000000
+                    }
+                ]
+            }),
+        );
+        let turn = TurnRuntime::new(
+            "turn-context",
+            "session-context",
+            "thread-context",
+            Some("使用项目资料".to_string()),
+            Some(aster::session::TurnContextOverride {
+                approval_policy: Some("on-request".to_string()),
+                sandbox_policy: Some("workspace-write".to_string()),
+                metadata,
+                ..aster::session::TurnContextOverride::default()
+            }),
+        );
+
+        let events = convert_agent_event(AgentEvent::TurnStarted { turn });
+
+        assert_eq!(events.len(), 3);
+        match &events[2] {
+            TauriAgentEvent::TurnContext {
+                session_id,
+                thread_id,
+                turn_id,
+                context_summary: Some(summary),
+                approval_policy,
+                sandbox_policy,
+                ..
+            } => {
+                assert_eq!(session_id, "session-context");
+                assert_eq!(thread_id, "thread-context");
+                assert_eq!(turn_id, "turn-context");
+                assert_eq!(approval_policy.as_deref(), Some("on-request"));
+                assert_eq!(sandbox_policy.as_deref(), Some("workspace-write"));
+                let budget = summary.memory_budget.as_ref().expect("context budget");
+                assert_eq!(budget.used_tokens, Some(640));
+                assert_eq!(budget.max_tokens, Some(1200));
+                assert_eq!(summary.retrieval_refs.len(), 1);
+                assert_eq!(
+                    summary.retrieval_refs[0].source_id,
+                    "knowledge_pack:brand:compiled/splits/brief.md"
+                );
+                assert_eq!(summary.missing_context[0].status, "unknown");
+                assert_eq!(summary.team_memory_refs.len(), 1);
+                assert_eq!(summary.team_memory_refs[0].key, "team.selection");
+                assert_eq!(
+                    summary.team_memory_refs[0].repo_scope.as_deref(),
+                    Some("/repo/lime")
+                );
+            }
+            other => panic!("Expected TurnContext with context_summary, got {other:?}"),
         }
     }
 

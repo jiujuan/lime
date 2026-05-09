@@ -748,5 +748,3 @@ export function EmptyStateComposerPanel({
     </>
   );
 }
-
-export default EmptyStateComposerPanel;

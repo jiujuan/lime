@@ -160,12 +160,21 @@ pub fn map_http_error_to_provider_error(
     };
 
     if !status.is_success() {
-        tracing::warn!(
-            "Provider request failed with status: {}. Payload: {:?}. Returning error: {:?}",
-            status,
-            payload,
-            error
-        );
+        if status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error() {
+            tracing::warn!(
+                "Provider request failed with status: {}. Payload: {:?}. Returning error: {:?}",
+                status,
+                payload,
+                error
+            );
+        } else {
+            tracing::info!(
+                "Provider request rejected with status: {}. Payload: {:?}. Returning error: {:?}",
+                status,
+                payload,
+                error
+            );
+        }
     }
 
     error

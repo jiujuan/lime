@@ -2609,6 +2609,10 @@ mod tests {
                 ),
                 retryable_overload: true,
                 closed: false,
+                usage: None,
+                duration_ms: None,
+                tool_count: None,
+                result_ref: None,
             },
         );
 

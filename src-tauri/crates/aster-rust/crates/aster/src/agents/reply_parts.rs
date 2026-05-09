@@ -489,13 +489,25 @@ impl Agent {
                     model_config.model_name,
                     elapsed_ms
                 ),
-                Err(error) => tracing::warn!(
-                    "[AsterAgent][TTFT] provider stream request failed before body: provider={}, model={}, elapsed_ms={}, error={}",
-                    provider.get_name(),
-                    model_config.model_name,
-                    elapsed_ms,
-                    error
-                ),
+                Err(error) => {
+                    if error.is_non_retryable_provider_rejection() {
+                        tracing::info!(
+                            "[AsterAgent][TTFT] provider stream request rejected before body: provider={}, model={}, elapsed_ms={}, error={}",
+                            provider.get_name(),
+                            model_config.model_name,
+                            elapsed_ms,
+                            error
+                        );
+                    } else {
+                        tracing::warn!(
+                            "[AsterAgent][TTFT] provider stream request failed before body: provider={}, model={}, elapsed_ms={}, error={}",
+                            provider.get_name(),
+                            model_config.model_name,
+                            elapsed_ms,
+                            error
+                        );
+                    }
+                }
             }
             debug!("WAITING_LLM_STREAM_END");
             result

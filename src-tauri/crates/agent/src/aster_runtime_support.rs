@@ -71,12 +71,25 @@ pub fn initialize_aster_runtime(db: DbConnection) -> Result<(), String> {
 
 fn block_on_aster_runtime_init<F>(future: F) -> Result<(), String>
 where
-    F: Future<Output = Result<(), String>>,
+    F: Future<Output = Result<(), String>> + Send + 'static,
 {
-    if let Ok(handle) = tokio::runtime::Handle::try_current() {
-        return handle.block_on(future);
+    if tokio::runtime::Handle::try_current().is_ok() {
+        let join_handle = std::thread::Builder::new()
+            .name("lime-runtime-init".to_string())
+            .spawn(move || run_aster_runtime_future(future))
+            .map_err(|error| format!("创建 Aster runtime 初始化线程失败: {error}"))?;
+        return join_handle
+            .join()
+            .map_err(|_| "Aster runtime 初始化线程异常退出".to_string())?;
     }
 
+    run_aster_runtime_future(future)
+}
+
+fn run_aster_runtime_future<F>(future: F) -> Result<(), String>
+where
+    F: Future<Output = Result<(), String>>,
+{
     #[cfg(target_os = "windows")]
     tracing::info!("[AsterRuntime] Windows 平台 - 创建 Tokio Runtime (IOCP)");
 

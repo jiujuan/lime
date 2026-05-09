@@ -189,7 +189,7 @@ impl RpcHandler {
         )
         .map_err(|e| RpcError::internal_error(e.message.clone()))?;
 
-        let start_metadata = json!({
+        let mut start_metadata = json!({
             "trigger": "websocket_rpc",
             "message": message,
             "inputs": params.inputs.clone(),
@@ -197,6 +197,12 @@ impl RpcHandler {
             "model": params.model.clone(),
             "web_search": params.web_search,
         });
+        if let Some(source_metadata) = params.source_metadata.clone() {
+            if let Some(metadata_object) = start_metadata.as_object_mut() {
+                metadata_object.insert("source_metadata".to_string(), source_metadata.clone());
+                metadata_object.insert("sourceMetadata".to_string(), source_metadata);
+            }
+        }
         self.create_run_record(
             &db,
             &run_id,
@@ -1038,6 +1044,7 @@ fn finalize_run(
     let duration_ms = finished_at.timestamp_millis().saturating_sub(started_ms);
     let finished_at_str = finished_at.to_rfc3339();
     if let Ok(conn) = lime_core::database::lock_db(db) {
+        let merged_metadata = merge_agent_run_terminal_metadata(&conn, run_id, metadata);
         let _ = AgentRunDao::finish_run(
             &conn,
             run_id,
@@ -1046,7 +1053,7 @@ fn finalize_run(
             Some(duration_ms),
             error_code,
             error_message,
-            metadata.map(|value| value.to_string()).as_deref(),
+            merged_metadata.as_deref(),
         );
     }
 }
@@ -1061,6 +1068,7 @@ fn finish_run_with_status(
 ) {
     if let Ok(conn) = lime_core::database::lock_db(db) {
         let now = Utc::now().to_rfc3339();
+        let merged_metadata = merge_agent_run_terminal_metadata(&conn, run_id, metadata);
         let _ = AgentRunDao::finish_run(
             &conn,
             run_id,
@@ -1069,8 +1077,37 @@ fn finish_run_with_status(
             None,
             error_code,
             error_message,
-            metadata.map(|value| value.to_string()).as_deref(),
+            merged_metadata.as_deref(),
         );
+    }
+}
+
+fn merge_agent_run_terminal_metadata(
+    conn: &rusqlite::Connection,
+    run_id: &str,
+    terminal_metadata: Option<serde_json::Value>,
+) -> Option<String> {
+    let terminal_metadata = terminal_metadata?;
+    let Some(existing_metadata) = AgentRunDao::get_run(conn, run_id)
+        .ok()
+        .flatten()
+        .and_then(|run| run.metadata)
+    else {
+        return Some(terminal_metadata.to_string());
+    };
+    let Ok(mut existing_value) = serde_json::from_str::<serde_json::Value>(&existing_metadata)
+    else {
+        return Some(terminal_metadata.to_string());
+    };
+
+    match (existing_value.as_object_mut(), &terminal_metadata) {
+        (Some(existing_object), serde_json::Value::Object(terminal_object)) => {
+            for (key, value) in terminal_object {
+                existing_object.insert(key.clone(), value.clone());
+            }
+            Some(existing_value.to_string())
+        }
+        _ => Some(terminal_metadata.to_string()),
     }
 }
 
@@ -1300,6 +1337,119 @@ mod tests {
             .sessions
             .iter()
             .any(|session| session.session_id == run_result.session_id));
+    }
+
+    #[tokio::test]
+    async fn test_agent_run_should_persist_source_metadata() {
+        let handler = create_test_handler();
+        let request = GatewayRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: "run-source-metadata".to_string(),
+            method: RpcMethod::AgentRun,
+            params: Some(json!({
+                "message": "来自 Telegram 的远程请求",
+                "stream": false,
+                "source_metadata": {
+                    "remote_task": {
+                        "source": "gateway_channel",
+                        "channel": "telegram",
+                        "accountId": "default",
+                        "remoteTaskId": "gateway:telegram:default:message-1"
+                    }
+                }
+            })),
+        };
+        let run_response = handler.handle_request(request).await;
+        assert!(run_response.error.is_none());
+        let run_result: AgentRunResult =
+            serde_json::from_value(run_response.result.expect("缺少 run result"))
+                .expect("解析 agent.run 失败");
+        let db = handler.state.db.read().await.clone().expect("db 未初始化");
+        let conn = database::lock_db(&db).expect("DB lock 失败");
+        let run = AgentRunDao::get_run(&conn, &run_result.run_id)
+            .expect("读取 run 失败")
+            .expect("run 应存在");
+        let metadata: serde_json::Value =
+            serde_json::from_str(run.metadata.as_deref().expect("metadata 应存在"))
+                .expect("metadata JSON 应合法");
+
+        assert_eq!(
+            metadata
+                .pointer("/source_metadata/remote_task/remoteTaskId")
+                .and_then(serde_json::Value::as_str),
+            Some("gateway:telegram:default:message-1")
+        );
+        assert_eq!(
+            metadata
+                .pointer("/sourceMetadata/remote_task/channel")
+                .and_then(serde_json::Value::as_str),
+            Some("telegram")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_agent_run_terminal_metadata_should_preserve_source_metadata() {
+        let handler = create_test_handler();
+        let db = handler.state.db.read().await.clone().expect("db 未初始化");
+        handler
+            .create_run_record(
+                &db,
+                "run-source-terminal",
+                "chat",
+                Some("agent.run".to_string()),
+                Some("session-source-terminal".to_string()),
+                Some(json!({
+                    "trigger": "websocket_rpc",
+                    "source_metadata": {
+                        "remote_task": {
+                            "source": "gateway_channel",
+                            "channel": "telegram",
+                            "remoteTaskId": "gateway:telegram:default:message-1"
+                        }
+                    },
+                    "sourceMetadata": {
+                        "remote_task": {
+                            "channel": "telegram"
+                        }
+                    }
+                })),
+            )
+            .expect("创建 run 失败");
+
+        finalize_run(
+            &db,
+            "run-source-terminal",
+            Utc::now().timestamp_millis(),
+            AgentRunStatus::Success,
+            None,
+            None,
+            Some(json!({
+                "content": "远程任务已完成",
+                "result": {
+                    "response": "远程任务已完成"
+                }
+            })),
+        );
+
+        let conn = database::lock_db(&db).expect("DB lock 失败");
+        let run = AgentRunDao::get_run(&conn, "run-source-terminal")
+            .expect("读取 run 失败")
+            .expect("run 应存在");
+        let metadata: serde_json::Value =
+            serde_json::from_str(run.metadata.as_deref().expect("metadata 应存在"))
+                .expect("metadata JSON 应合法");
+
+        assert_eq!(run.status, AgentRunStatus::Success);
+        assert_eq!(
+            metadata
+                .pointer("/source_metadata/remote_task/remoteTaskId")
+                .and_then(serde_json::Value::as_str),
+            Some("gateway:telegram:default:message-1")
+        );
+        assert_eq!(
+            metadata.get("content").and_then(serde_json::Value::as_str),
+            Some("远程任务已完成")
+        );
     }
 
     #[tokio::test]

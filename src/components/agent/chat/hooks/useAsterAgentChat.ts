@@ -476,7 +476,14 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
         return;
       }
 
+      const currentProviderType = context.providerTypeRef.current.trim();
+      const currentModel = context.modelRef.current.trim();
+      const isUsingFrontendDefaultModel =
+        currentProviderType === DEFAULT_AGENT_PROVIDER &&
+        currentModel === DEFAULT_AGENT_MODEL;
+
       if (
+        isUsingFrontendDefaultModel &&
         status?.provider_configured &&
         (status.provider_selector?.trim() || status.provider_name?.trim()) &&
         status.model_name?.trim()
@@ -489,12 +496,11 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
         return;
       }
 
+      if (status?.provider_configured && !isUsingFrontendDefaultModel) {
+        return;
+      }
+
       try {
-        const currentProviderType = context.providerTypeRef.current.trim();
-        const currentModel = context.modelRef.current.trim();
-        const isUsingFrontendDefaultModel =
-          currentProviderType === DEFAULT_AGENT_PROVIDER &&
-          currentModel === DEFAULT_AGENT_MODEL;
         const defaultProvider = isUsingFrontendDefaultModel
           ? (await getDefaultProvider()).trim()
           : "";

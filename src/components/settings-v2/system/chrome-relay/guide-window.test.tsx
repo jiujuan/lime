@@ -59,7 +59,11 @@ vi.mock("@/lib/webview-api", async () => {
   };
 });
 
-import { openBrowserConnectorGuideWindow } from "./guide-window-launcher";
+import {
+  buildBrowserConnectorGuideNavigationUrl,
+  buildBrowserConnectorGuideShellUrl,
+  openBrowserConnectorGuideWindow,
+} from "./guide-window-launcher";
 import { BrowserConnectorGuideWindow } from "./guide-window";
 
 interface Mounted {
@@ -264,6 +268,16 @@ describe("BrowserConnectorGuideWindow", () => {
     expect(mockOpenBrowserRemoteDebuggingPage).toHaveBeenCalledTimes(1);
   });
 
+  it("index.html 壳入口应继续从查询参数识别 cdp 模式", async () => {
+    const container = renderGuide(
+      "/index.html?lime_window=browser-connector-guide&mode=cdp",
+    );
+    await flushEffects();
+
+    expect(container.textContent).toContain("启用浏览器直连");
+    expect(container.textContent).not.toContain("安装 Lime Browser Bridge");
+  });
+
   it("未知 mode 应回退到扩展连接引导", async () => {
     const container = renderGuide("/browser-connector-guide?mode=unknown");
     await flushEffects();
@@ -286,6 +300,21 @@ describe("BrowserConnectorGuideWindow", () => {
     );
     expect(mockOpenBrowserConnectorGuideWindowCommand).not.toHaveBeenCalled();
     mockWindowOpen.mockRestore();
+  });
+
+  it("Tauri 独立窗口内部切换模式时应保持 index.html 壳入口", () => {
+    window.history.pushState(
+      {},
+      "",
+      "/index.html?lime_window=browser-connector-guide&mode=cdp",
+    );
+
+    expect(buildBrowserConnectorGuideShellUrl("extension")).toBe(
+      "index.html?lime_window=browser-connector-guide&mode=extension",
+    );
+    expect(buildBrowserConnectorGuideNavigationUrl("extension")).toBe(
+      "index.html?lime_window=browser-connector-guide&mode=extension",
+    );
   });
 
   it("Tauri 环境打开引导时应走 Rust 开窗命令", async () => {

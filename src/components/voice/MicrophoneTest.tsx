@@ -251,5 +251,3 @@ export function MicrophoneTest({
     </div>
   );
 }
-
-export default MicrophoneTest;

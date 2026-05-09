@@ -115,6 +115,7 @@ fn canonical_provider_selector(provider_selector: &str) -> String {
 }
 
 const XIAOMI_HOST_KEYWORDS: [&str; 1] = ["xiaomimimo.com"];
+const PROVIDER_PERMISSION_RECOVERY_MODELS: [(&str, &str); 1] = [("openai", "gpt-4o-mini")];
 
 fn provider_alias_config_key(provider_key: &str) -> String {
     match normalize_identifier(provider_key).as_str() {
@@ -1360,6 +1361,53 @@ fn should_auto_reselect_multi_candidate_model(context: &ProviderResolutionContex
     !context.is_custom_provider && context.custom_models.is_empty()
 }
 
+fn provider_matches_permission_recovery_selector(
+    context: &ProviderResolutionContext,
+    provider_selector: &str,
+) -> bool {
+    let target = canonical_provider_selector(provider_selector);
+    let provider_selector = canonical_provider_selector(&context.provider_selector);
+    !context.is_custom_provider && provider_selector == target
+}
+
+fn choose_known_provider_permission_recovery_model(
+    context: &ProviderResolutionContext,
+    current_model_id: &str,
+    models: &[EnhancedModelMetadata],
+    thinking_enabled: bool,
+    has_images: bool,
+) -> Option<String> {
+    let normalized_current_id = normalize_identifier(current_model_id);
+    let candidate_id =
+        PROVIDER_PERMISSION_RECOVERY_MODELS
+            .iter()
+            .find_map(|(provider_selector, model_id)| {
+                provider_matches_permission_recovery_selector(context, provider_selector)
+                    .then_some(*model_id)
+            })?;
+
+    if normalize_identifier(candidate_id) == normalized_current_id {
+        return None;
+    }
+
+    let model = find_model_meta(candidate_id, models);
+    if !configured_custom_model_matches_runtime_request(
+        candidate_id,
+        model,
+        thinking_enabled,
+        has_images,
+        &[RuntimeModelCapabilityRequirement::TextGeneration],
+    ) {
+        return None;
+    }
+
+    Some(
+        model
+            .map(|item| item.id.clone())
+            .unwrap_or_else(|| candidate_id.to_string()),
+    )
+}
+
 fn choose_provider_permission_recovery_model(
     context: &ProviderResolutionContext,
     current_model_id: &str,
@@ -1374,6 +1422,16 @@ fn choose_provider_permission_recovery_model(
         thinking_enabled,
         has_images,
         &[RuntimeModelCapabilityRequirement::TextGeneration],
+    ) {
+        return Some(candidate);
+    }
+
+    if let Some(candidate) = choose_known_provider_permission_recovery_model(
+        context,
+        current_model_id,
+        models,
+        thinking_enabled,
+        has_images,
     ) {
         return Some(candidate);
     }
@@ -2558,26 +2616,53 @@ fn normalize_runtime_permission_profile_keys(values: &[String]) -> Vec<String> {
     normalized
 }
 
+fn resolve_runtime_request_access_mode(
+    request: &AsterChatRequest,
+) -> Option<lime_agent::SessionExecutionRuntimeAccessMode> {
+    lime_agent::SessionExecutionRuntimeAccessMode::from_runtime_policies(
+        request.approval_policy.as_deref(),
+        request.sandbox_policy.as_deref(),
+    )
+    .or_else(|| {
+        let access_mode =
+            extract_harness_string(request.metadata.as_ref(), &["access_mode", "accessMode"]);
+        lime_agent::SessionExecutionRuntimeAccessMode::from_access_mode_text(access_mode.as_deref())
+    })
+}
+
 fn build_permission_state(
     task_profile: &lime_agent::SessionExecutionRuntimeTaskProfile,
+    access_mode: Option<lime_agent::SessionExecutionRuntimeAccessMode>,
 ) -> lime_agent::SessionExecutionRuntimePermissionState {
     let required_profile_keys =
         normalize_runtime_permission_profile_keys(&task_profile.permission_profile_keys);
-    let ask_profile_keys = required_profile_keys
+    let mut ask_profile_keys = required_profile_keys
         .iter()
         .filter(|profile_key| runtime_permission_profile_requires_confirmation(profile_key))
         .cloned()
         .collect::<Vec<_>>();
+    let preauthorized_by_full_access = matches!(
+        access_mode,
+        Some(lime_agent::SessionExecutionRuntimeAccessMode::FullAccess)
+    ) && !ask_profile_keys.is_empty();
     let status = if required_profile_keys.is_empty() {
         "not_required"
-    } else if ask_profile_keys.is_empty() {
+    } else if ask_profile_keys.is_empty() || preauthorized_by_full_access {
         "declared_only"
     } else {
         "requires_confirmation"
     };
+    if preauthorized_by_full_access {
+        ask_profile_keys.clear();
+    }
     let mut notes = Vec::new();
     if required_profile_keys.is_empty() {
         notes.push("当前 task profile 未声明 permissionProfileKeys。".to_string());
+    } else if preauthorized_by_full_access {
+        notes.push(
+            "当前请求访问模式为 full-access（never + danger-full-access），风险权限声明已由本轮显式授权覆盖，不再创建二次确认。"
+                .to_string(),
+        );
     } else {
         notes.push(
             "permissionProfileKeys 已进入运行时判定摘要；需确认权限会在模型执行前阻断，直到真实确认 resolved。"
@@ -2597,10 +2682,28 @@ fn build_permission_state(
         ask_profile_keys,
         blocking_profile_keys: Vec::new(),
         decision_source: "execution_profile_registry".to_string(),
-        decision_scope: "declared_permission_profiles_only".to_string(),
-        confirmation_status: Some("not_requested".to_string()),
+        decision_scope: if preauthorized_by_full_access {
+            "declared_permission_profiles_resolved_by_full_access".to_string()
+        } else {
+            "declared_permission_profiles_only".to_string()
+        },
+        confirmation_status: Some(
+            if preauthorized_by_full_access {
+                "resolved"
+            } else {
+                "not_requested"
+            }
+            .to_string(),
+        ),
         confirmation_request_id: None,
-        confirmation_source: Some("declared_profile_only".to_string()),
+        confirmation_source: Some(
+            if preauthorized_by_full_access {
+                "access_mode_full_access"
+            } else {
+                "declared_profile_only"
+            }
+            .to_string(),
+        ),
         notes,
     }
 }
@@ -2682,6 +2785,7 @@ fn compose_routing_decision_reason(
 
 fn build_no_candidate_resolution(
     task_profile: lime_agent::SessionExecutionRuntimeTaskProfile,
+    access_mode: Option<lime_agent::SessionExecutionRuntimeAccessMode>,
     decision_source: &str,
     decision_reason: String,
     oem_locked: bool,
@@ -2712,7 +2816,7 @@ fn build_no_candidate_resolution(
         None,
     );
     let cost_state = build_cost_state(None, None, "unavailable");
-    let permission_state = build_permission_state(&task_profile);
+    let permission_state = build_permission_state(&task_profile, access_mode);
     let runtime_summary = build_runtime_summary(
         &routing_decision,
         &limit_state,
@@ -3179,7 +3283,8 @@ pub(super) async fn resolve_runtime_request_provider_resolution(
     request: &AsterChatRequest,
 ) -> Result<RuntimeRequestProviderResolution, String> {
     let task_profile = build_runtime_task_profile(request);
-    let permission_state = build_permission_state(&task_profile);
+    let access_mode = resolve_runtime_request_access_mode(request);
+    let permission_state = build_permission_state(&task_profile, access_mode);
     let request_oem_routing = resolve_request_oem_routing_context(request.metadata.as_ref());
     let oem_locked = request_oem_routing_is_locked(request_oem_routing.as_ref());
     let oem_limit_event = build_request_oem_limit_event(request_oem_routing.as_ref());
@@ -3282,6 +3387,7 @@ pub(super) async fn resolve_runtime_request_provider_resolution(
         else {
             return Ok(build_no_candidate_resolution(
                 task_profile,
+                access_mode,
                 "request_override",
                 "当前回合传入了 provider/model 偏好，但没有找到可恢复的 provider 默认值。"
                     .to_string(),
@@ -3558,6 +3664,7 @@ pub(super) async fn resolve_runtime_request_provider_resolution(
     else {
         return Ok(build_no_candidate_resolution(
             task_profile,
+            access_mode,
             "auto_default",
             fallback_note.unwrap_or_else(|| {
                 "当前会话没有 provider/model 默认值，自动路由没有候选可选。".to_string()
@@ -4349,6 +4456,49 @@ mod tests {
     }
 
     #[test]
+    fn permission_recovery_falls_back_to_known_openai_fast_model() {
+        let context = ProviderResolutionContext {
+            provider_selector: "openai".to_string(),
+            aster_provider_name: "openai".to_string(),
+            compatibility_provider_key: "openai".to_string(),
+            registry_provider_ids: vec!["openai".to_string()],
+            alias_key: "openai".to_string(),
+            custom_models: vec![],
+            is_custom_provider: false,
+            provider_type: Some(ApiProviderType::Openai),
+            provider_group: None,
+            configured_api_host: None,
+            has_credentials: true,
+        };
+        let models = vec![
+            build_model(
+                "gpt-4o",
+                Some("gpt-4o"),
+                false,
+                true,
+                true,
+                ModelTier::Pro,
+                Some("2024-05-13"),
+            ),
+            build_model(
+                "gpt-4o-mini",
+                Some("gpt-4o"),
+                false,
+                true,
+                true,
+                ModelTier::Mini,
+                Some("2024-07-18"),
+            ),
+        ];
+
+        assert_eq!(
+            choose_provider_permission_recovery_model(&context, "gpt-4o", &models, false, false)
+                .as_deref(),
+            Some("gpt-4o-mini")
+        );
+    }
+
+    #[test]
     fn permission_recovery_can_use_uncataloged_configured_model() {
         let context = ProviderResolutionContext {
             provider_selector: "siliconflow-cn".to_string(),
@@ -4859,7 +5009,7 @@ mod tests {
             entry_source: None,
         };
 
-        let permission_state = build_permission_state(&task_profile);
+        let permission_state = build_permission_state(&task_profile, None);
 
         assert_eq!(permission_state.status, "requires_confirmation");
         assert_eq!(
@@ -4888,6 +5038,64 @@ mod tests {
             permission_state.confirmation_source.as_deref(),
             Some("declared_profile_only")
         );
+    }
+
+    #[test]
+    fn runtime_permission_state_full_access_resolves_declared_profiles_without_extra_confirmation()
+    {
+        let task_profile = lime_agent::SessionExecutionRuntimeTaskProfile {
+            kind: "image_generation".to_string(),
+            source: "image_skill_launch".to_string(),
+            traits: vec!["modality_runtime_contract".to_string()],
+            modality_contract_key: Some("image_generation".to_string()),
+            routing_slot: Some("image_generation_model".to_string()),
+            execution_profile_key: Some("image_generation_profile".to_string()),
+            executor_adapter_key: Some("skill:image_generate".to_string()),
+            executor_kind: Some("skill".to_string()),
+            executor_binding_key: Some("image_generate".to_string()),
+            permission_profile_keys: vec![
+                "write_artifacts".to_string(),
+                "media_upload".to_string(),
+                "ask_user_question".to_string(),
+            ],
+            user_lock_policy: None,
+            service_model_slot: None,
+            scene_kind: None,
+            scene_skill_id: None,
+            entry_source: None,
+        };
+
+        let permission_state = build_permission_state(
+            &task_profile,
+            Some(lime_agent::SessionExecutionRuntimeAccessMode::FullAccess),
+        );
+
+        assert_eq!(permission_state.status, "declared_only");
+        assert_eq!(
+            permission_state.required_profile_keys,
+            vec![
+                "write_artifacts".to_string(),
+                "media_upload".to_string(),
+                "ask_user_question".to_string(),
+            ]
+        );
+        assert!(permission_state.ask_profile_keys.is_empty());
+        assert_eq!(
+            permission_state.decision_scope,
+            "declared_permission_profiles_resolved_by_full_access"
+        );
+        assert_eq!(
+            permission_state.confirmation_status.as_deref(),
+            Some("resolved")
+        );
+        assert_eq!(
+            permission_state.confirmation_source.as_deref(),
+            Some("access_mode_full_access")
+        );
+        assert!(permission_state
+            .notes
+            .iter()
+            .any(|note| note.contains("full-access")));
     }
 
     #[test]

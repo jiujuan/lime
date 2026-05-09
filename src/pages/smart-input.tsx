@@ -871,5 +871,3 @@ export function SmartInputPage() {
     </div>
   );
 }
-
-export default SmartInputPage;

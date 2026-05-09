@@ -1,16 +1,38 @@
 {
   "name": "lime",
   "private": true,
-  "version": "1.31.0",
+  "version": "1.32.0",
+  "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
+  "keywords": [
+    "ai",
+    "llm",
+    "desktop-app",
+    "tauri",
+    "react",
+    "typescript",
+    "content-creation",
+    "writing-tool",
+    "prompt-management",
+    "knowledge-base",
+    "research-tool",
+    "multi-model",
+    "workflow",
+    "chinese-creators",
+    "open-source"
+  ],
+  "license": "GPL-3.0-only",
   "type": "module",
   "engines": {
     "node": ">=22.0.0"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/aiclientproxy/lime.git"
+    "url": "git+https://github.com/limecloud/lime.git"
   },
-  "homepage": "https://github.com/aiclientproxy/lime",
+  "homepage": "https://github.com/limecloud/lime",
+  "bugs": {
+    "url": "https://github.com/limecloud/lime/issues"
+  },
   "scripts": {
     "generate:agent-runtime-clients": "node scripts/generate-agent-runtime-clients.mjs",
     "check:agent-runtime-clients": "node scripts/generate-agent-runtime-clients.mjs --check",
@@ -79,6 +101,7 @@
     "smoke:agent-runtime-tool-surface-page": "node scripts/agent-runtime-tool-surface-page-smoke.mjs",
     "smoke:agent-service-skill-entry": "node scripts/agent-service-skill-entry-smoke.mjs",
     "smoke:knowledge-gui": "node scripts/knowledge-gui-smoke.mjs",
+    "knowledge:product-e2e": "node scripts/knowledge-product-e2e.mjs",
     "knowledge:legacy-fallback-report": "node scripts/knowledge-legacy-fallback-report.mjs",
     "smoke:design-canvas": "node scripts/design-canvas-smoke.mjs",
     "smoke:social-workbench": "node scripts/social-workbench-e2e-smoke.mjs",

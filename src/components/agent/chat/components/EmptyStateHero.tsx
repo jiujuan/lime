@@ -521,5 +521,3 @@ export function EmptyStateHero({
     </HeroSection>
   );
 }
-
-export default EmptyStateHero;

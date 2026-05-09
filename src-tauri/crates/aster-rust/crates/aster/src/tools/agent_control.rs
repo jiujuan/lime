@@ -786,8 +786,41 @@ impl Tool for SendInputTool {
         if let Some(summary) = summary {
             metadata.insert("summary".to_string(), Value::String(summary));
         }
+        let plan_approval_response_metadata =
+            if let Some(StructuredMessage::PlanApprovalResponse {
+                request_id,
+                approve,
+                feedback,
+            }) = structured_message.as_ref()
+            {
+                let first_delivery = deliveries.first().and_then(Value::as_object);
+                Some(json!({
+                    "type": "plan_approval_response",
+                    "request_id": request_id,
+                    "approved": approve,
+                    "feedback": feedback,
+                    "timestamp": chrono::Utc::now().to_rfc3339(),
+                    "delivery_target": first_delivery
+                        .and_then(|delivery| delivery.get("target"))
+                        .and_then(Value::as_str),
+                    "target_session_id": first_delivery
+                        .and_then(|delivery| delivery.get("agentId"))
+                        .and_then(Value::as_str),
+                    "delivery_submission_id": first_delivery
+                        .and_then(|delivery| delivery.get("submissionId"))
+                        .and_then(Value::as_str),
+                }))
+            } else {
+                None
+            };
         metadata.insert("deliveries".to_string(), Value::Array(deliveries));
         metadata.insert("target".to_string(), Value::String(target));
+        if let Some(plan_approval_response_metadata) = plan_approval_response_metadata {
+            metadata.insert(
+                "plan_approval_response".to_string(),
+                plan_approval_response_metadata,
+            );
+        }
 
         Ok(ToolResult::success(pretty_json(&structured_output)?)
             .with_metadata("send_message", Value::Object(metadata)))
@@ -2074,5 +2107,25 @@ mod tests {
             json!("Plan approved for researcher. Request ID: req-approve")
         );
         assert_eq!(result.metadata["send_message"]["target"], "researcher");
+        assert_eq!(
+            result.metadata["send_message"]["plan_approval_response"]["type"],
+            json!("plan_approval_response")
+        );
+        assert_eq!(
+            result.metadata["send_message"]["plan_approval_response"]["request_id"],
+            json!("req-approve")
+        );
+        assert_eq!(
+            result.metadata["send_message"]["plan_approval_response"]["approved"],
+            json!(true)
+        );
+        assert_eq!(
+            result.metadata["send_message"]["plan_approval_response"]["delivery_submission_id"],
+            json!("submission-plan-approve")
+        );
+        assert_eq!(
+            result.metadata["send_message"]["plan_approval_response"]["target_session_id"],
+            json!(teammate.id)
+        );
     }
 }

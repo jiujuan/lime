@@ -54,5 +54,3 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({
     </div>
   );
 };
-
-export default MarkdownPreview;

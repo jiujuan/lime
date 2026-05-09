@@ -126,6 +126,33 @@ struct InboundMessage {
     message_thread_id: Option<i64>,
 }
 
+fn build_gateway_source_metadata(
+    account: &ResolvedTelegramAccount,
+    inbound: &InboundMessage,
+) -> serde_json::Value {
+    let remote_task_id = format!(
+        "gateway:telegram:{}:{}",
+        account.account_id, inbound.message_id
+    );
+    json!({
+        "remote_task": {
+            "source": "gateway_channel",
+            "channel": "telegram",
+            "accountId": account.account_id.as_str(),
+            "remoteTaskId": remote_task_id,
+            "inboundMessageId": inbound.message_id.to_string(),
+            "chatId": inbound.chat_id.to_string(),
+            "chatKind": inbound.chat_kind.as_str(),
+            "senderId": inbound.sender_id.map(|value| value.to_string()),
+            "agentCard": {
+                "id": format!("telegram:{}", account.account_id),
+                "name": "Telegram Remote",
+                "provider": "telegram"
+            }
+        }
+    })
+}
+
 #[derive(Debug, Clone)]
 struct PendingConfirmation {
     token: String,
@@ -1167,6 +1194,7 @@ async fn handle_plain_text_with_mode(
                 "model": account.default_model.clone(),
                 "web_search": true,
                 "search_mode": "allowed",
+                "source_metadata": build_gateway_source_metadata(account, inbound),
             })),
         })
         .await;

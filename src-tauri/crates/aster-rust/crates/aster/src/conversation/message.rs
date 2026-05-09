@@ -174,6 +174,19 @@ pub struct FrontendToolRequest {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct ToolInputDeltaContent {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_name: Option<String>,
+    pub delta: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accumulated_arguments: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub enum SystemNotificationType {
     ThinkingMessage,
     InlineMessage,
@@ -197,6 +210,7 @@ pub enum MessageContent {
     ToolConfirmationRequest(ToolConfirmationRequest),
     ActionRequired(ActionRequired),
     FrontendToolRequest(FrontendToolRequest),
+    ToolInputDelta(ToolInputDeltaContent),
     Thinking(ThinkingContent),
     RedactedThinking(RedactedThinkingContent),
     SystemNotification(SystemNotificationContent),
@@ -236,6 +250,12 @@ impl fmt::Display for MessageContent {
                 Ok(tool_call) => write!(f, "[FrontendToolRequest: {}]", tool_call.name),
                 Err(e) => write!(f, "[FrontendToolRequest: Error: {}]", e),
             },
+            MessageContent::ToolInputDelta(delta) => write!(
+                f,
+                "[ToolInputDelta: {} {} chars]",
+                delta.tool_name.as_deref().unwrap_or("unknown"),
+                delta.delta.len()
+            ),
             MessageContent::Thinking(t) => write!(f, "[Thinking: {}]", t.thinking),
             MessageContent::RedactedThinking(_r) => write!(f, "[RedactedThinking]"),
             MessageContent::SystemNotification(r) => {
@@ -375,6 +395,29 @@ impl MessageContent {
         MessageContent::FrontendToolRequest(FrontendToolRequest {
             id: id.into(),
             tool_call,
+        })
+    }
+
+    pub fn tool_input_delta<S1, S2, S3, S4, S5>(
+        id: S1,
+        tool_name: Option<S2>,
+        delta: S3,
+        accumulated_arguments: Option<S4>,
+        provider: Option<S5>,
+    ) -> Self
+    where
+        S1: Into<String>,
+        S2: Into<String>,
+        S3: Into<String>,
+        S4: Into<String>,
+        S5: Into<String>,
+    {
+        MessageContent::ToolInputDelta(ToolInputDeltaContent {
+            id: id.into(),
+            tool_name: tool_name.map(Into::into),
+            delta: delta.into(),
+            accumulated_arguments: accumulated_arguments.map(Into::into),
+            provider: provider.map(Into::into),
         })
     }
 
@@ -737,6 +780,30 @@ impl Message {
         tool_call: ToolResult<CallToolRequestParam>,
     ) -> Self {
         self.with_content(MessageContent::frontend_tool_request(id, tool_call))
+    }
+
+    pub fn with_tool_input_delta<S1, S2, S3, S4, S5>(
+        self,
+        id: S1,
+        tool_name: Option<S2>,
+        delta: S3,
+        accumulated_arguments: Option<S4>,
+        provider: Option<S5>,
+    ) -> Self
+    where
+        S1: Into<String>,
+        S2: Into<String>,
+        S3: Into<String>,
+        S4: Into<String>,
+        S5: Into<String>,
+    {
+        self.with_content(MessageContent::tool_input_delta(
+            id,
+            tool_name,
+            delta,
+            accumulated_arguments,
+            provider,
+        ))
     }
 
     /// Add thinking content to the message

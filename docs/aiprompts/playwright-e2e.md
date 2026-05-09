@@ -36,6 +36,7 @@
 - 初装引导里的旧插件选择 / 插件安装 / 配置切换链路已经下线，不再对 `config-switch` 推荐安装、Provider Switch 页面或相关命令做 GUI 续测；当前 onboarding 只围绕现役语音体验流程验证
 - 项目排版模板与品牌人设扩展旧链路已下线，不再对相关弹窗、模板列表、默认模板、人设扩展表单做 GUI 续测；项目与工作台回归只围绕当前 `Claw` / `workspace` / 现役 `persona` 主链
 - 如果只是模块级代码修改、并不需要真实页面交互，优先跑最小单测或 `verify:local`
+- 项目资料 PRD v3 的产品闭环已有仓库级 Playwright 入口：`npm run knowledge:product-e2e`；需要和 GUI smoke 一起验收时使用 `npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running`
 
 ## 进入前的最低准备
 
@@ -75,6 +76,20 @@ npm run test:contracts
 - 修改了 `src/lib/tauri-mock/`
 - 修改了浏览器模式 bridge/mock 优先级
 - 修改了 Tauri 命令边界
+
+### 项目资料产品 E2E
+
+```bash
+npm run knowledge:product-e2e
+npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
+```
+
+用途：
+
+- 验收项目资料 PRD v3 的完整产品闭环：首页、状态说明、确认资料、选择创作资料、Agent 结果保存到项目资料、整理新资料
+- 检查普通用户默认页面不暴露工程词
+- 检查不再出现假入口、假统计或“资料自动进入本轮创作”的误导文案
+- 记录 `console error` 与浏览器 fallback mock，区分项目资料主路径阻塞和记忆 / hint 噪音
 
 ## 标准续测流程
 

@@ -29,7 +29,7 @@ import { recordWorkspaceRepair } from "@/lib/workspaceHealthTelemetry";
 // import type { WorkspaceType } from '@/types/workspace';
 
 /** Hook 返回类型 */
-export interface UseProjectsReturn {
+interface UseProjectsReturn {
   /** 项目列表 */
   projects: Project[];
   /** 通用对话项目列表 */
@@ -299,5 +299,3 @@ export function useProjects(
     getOrCreateDefault,
   };
 }
-
-export default useProjects;

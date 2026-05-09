@@ -67,5 +67,3 @@ export function VolumeWaveform({
     </div>
   );
 }
-
-export default VolumeWaveform;

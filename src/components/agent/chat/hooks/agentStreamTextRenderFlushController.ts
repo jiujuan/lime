@@ -35,6 +35,19 @@ export function shouldFlushAgentStreamVisibleFirstText(params: {
   );
 }
 
+export function shouldFlushAgentStreamTextRenderAtLineBoundary(params: {
+  pendingDelta: string;
+}): boolean {
+  return params.pendingDelta.includes("\n");
+}
+
+export function shouldFlushAgentStreamTextRenderBacklog(params: {
+  backlogChars: number;
+  backlogFlushChars: number;
+}): boolean {
+  return params.backlogChars >= params.backlogFlushChars;
+}
+
 export function shouldScheduleAgentStreamTextRenderTimer(params: {
   hasPendingTimer: boolean;
 }): boolean {

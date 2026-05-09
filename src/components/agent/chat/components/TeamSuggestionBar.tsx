@@ -151,5 +151,3 @@ export function TeamSuggestionBar({
     </div>
   );
 }
-
-export default TeamSuggestionBar;

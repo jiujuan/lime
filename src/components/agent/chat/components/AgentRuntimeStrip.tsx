@@ -305,5 +305,3 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
     </div>
   );
 };
-
-export default AgentRuntimeStrip;

@@ -52,5 +52,3 @@ export function useGlobalMediaGenerationDefaults(): UseGlobalMediaGenerationDefa
 
   return { mediaDefaults, loading };
 }
-
-export default useGlobalMediaGenerationDefaults;

@@ -41,6 +41,7 @@ pub fn to_bedrock_message_content(content: &MessageContent) -> Result<bedrock::C
         MessageContent::ActionRequired(_action_required) => {
             bedrock::ContentBlock::Text("".to_string())
         }
+        MessageContent::ToolInputDelta(_) => bedrock::ContentBlock::Text("".to_string()),
         MessageContent::Image(image) => {
             bedrock::ContentBlock::Image(to_bedrock_image(&image.data, &image.mime_type)?)
         }

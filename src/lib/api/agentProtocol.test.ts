@@ -132,6 +132,196 @@ describe("agentProtocol", () => {
     });
   });
 
+  it("应解析批量正文增量事件并兼容缺失 chunks", () => {
+    expect(
+      parseAgentEvent({
+        type: "text_delta_batch",
+        text: "第一段\n",
+        chunks: ["第一段", "\n"],
+        boundary: "newline",
+      }),
+    ).toEqual({
+      type: "text_delta_batch",
+      text: "第一段\n",
+      chunks: ["第一段", "\n"],
+      boundary: "newline",
+    });
+
+    expect(
+      parseAgentEvent({
+        type: "text_delta_batch",
+        text: "尾段",
+      }),
+    ).toEqual({
+      type: "text_delta_batch",
+      text: "尾段",
+      chunks: ["尾段"],
+      boundary: "provider",
+    });
+  });
+
+  it("应解析工具进度与工具输出增量事件", () => {
+    expect(
+      parseAgentEvent({
+        type: "tool_input_delta",
+        tool_id: "tool-1",
+        tool_name: "read_file",
+        delta: '{"path"',
+        accumulated_arguments: '{"path"',
+        provider: "openai_compatible",
+      }),
+    ).toEqual({
+      type: "tool_input_delta",
+      tool_id: "tool-1",
+      tool_name: "read_file",
+      delta: '{"path"',
+      accumulated_arguments: '{"path"',
+      provider: "openai_compatible",
+    });
+
+    expect(
+      parseAgentEvent({
+        type: "tool_progress",
+        tool_id: "tool-1",
+        progress: {
+          message: "正在处理第 2 项",
+          progress: 2,
+          total: 4,
+          metadata: {
+            notification_kind: "mcp_progress",
+          },
+        },
+      }),
+    ).toEqual({
+      type: "tool_progress",
+      tool_id: "tool-1",
+      progress: {
+        message: "正在处理第 2 项",
+        progress: 2,
+        total: 4,
+        metadata: {
+          notification_kind: "mcp_progress",
+        },
+      },
+    });
+
+    expect(
+      parseAgentEvent({
+        type: "tool_output_delta",
+        tool_id: "tool-1",
+        delta: "partial output",
+        output_kind: "log",
+        metadata: {
+          notification_kind: "mcp_log",
+        },
+      }),
+    ).toEqual({
+      type: "tool_output_delta",
+      tool_id: "tool-1",
+      delta: "partial output",
+      output_kind: "log",
+      metadata: {
+        notification_kind: "mcp_log",
+      },
+    });
+  });
+
+  it("应解析 turn_context 的结构化 context summary", () => {
+    expect(
+      parseAgentEvent({
+        type: "turn_context",
+        session_id: "session-ctx",
+        thread_id: "thread-ctx",
+        turn_id: "turn-ctx",
+        output_schema_runtime: null,
+        approval_policy: "on-request",
+        sandbox_policy: "workspace-write",
+        context_summary: {
+          memory_budget: {
+            used_tokens: 640,
+            max_tokens: 1200,
+            status: "ready",
+            source: "knowledge_context_resolver",
+          },
+          missing_context: [
+            {
+              id: "knowledge_warning:0",
+              kind: "knowledge_warning",
+              label: "sources/missing.md",
+              status: "unknown",
+              reason: "缺少来源",
+              source: "knowledge_context_resolver",
+            },
+          ],
+          retrieval_refs: [
+            {
+              source_id: "knowledge_pack:brand:compiled/splits/brief.md",
+              kind: "knowledge_pack",
+              title: "brand:brief",
+              path: "compiled/splits/brief.md",
+              scope: "workspace",
+              status: "ready",
+              source: "knowledge_context_resolver",
+            },
+          ],
+          team_memory_refs: [
+            {
+              key: "team.selection",
+              repo_scope: "/repo/lime",
+              updated_at: 1710000000,
+              source: "team_memory_shadow",
+            },
+          ],
+        },
+      }),
+    ).toEqual({
+      type: "turn_context",
+      session_id: "session-ctx",
+      thread_id: "thread-ctx",
+      turn_id: "turn-ctx",
+      output_schema_runtime: null,
+      approval_policy: "on-request",
+      sandbox_policy: "workspace-write",
+      context_summary: {
+        memory_budget: {
+          used_tokens: 640,
+          max_tokens: 1200,
+          status: "ready",
+          source: "knowledge_context_resolver",
+        },
+        missing_context: [
+          {
+            id: "knowledge_warning:0",
+            kind: "knowledge_warning",
+            label: "sources/missing.md",
+            status: "unknown",
+            reason: "缺少来源",
+            source: "knowledge_context_resolver",
+          },
+        ],
+        retrieval_refs: [
+          {
+            source_id: "knowledge_pack:brand:compiled/splits/brief.md",
+            kind: "knowledge_pack",
+            title: "brand:brief",
+            path: "compiled/splits/brief.md",
+            scope: "workspace",
+            status: "ready",
+            source: "knowledge_context_resolver",
+          },
+        ],
+        team_memory_refs: [
+          {
+            key: "team.selection",
+            repo_scope: "/repo/lime",
+            updated_at: 1710000000,
+            source: "team_memory_shadow",
+          },
+        ],
+      },
+    });
+  });
+
   it("应解析 action_required 的 scope，并兼容嵌套 data.scope", () => {
     expect(
       parseAgentEvent({
@@ -195,6 +385,46 @@ describe("agentProtocol", () => {
       scope: {
         session_id: "session-2",
         thread_id: "thread-2",
+      },
+    });
+  });
+
+  it("应解析 action_resolved 的结构化 plan approval response", () => {
+    expect(
+      parseAgentEvent({
+        type: "action_resolved",
+        request_id: "plan-req-1",
+        action_type: "plan_approval",
+        data: {
+          decision_kind: "plan_approval_response",
+          approved: false,
+          feedback: "请补充验收项",
+          permissionMode: "default",
+          scope: {
+            sessionId: "child-1",
+          },
+        },
+      }),
+    ).toEqual({
+      type: "action_resolved",
+      request_id: "plan-req-1",
+      action_type: "plan_approval",
+      scope: {
+        session_id: "child-1",
+        thread_id: undefined,
+        turn_id: undefined,
+      },
+      approved: false,
+      feedback: "请补充验收项",
+      permission_mode: "default",
+      data: {
+        decision_kind: "plan_approval_response",
+        approved: false,
+        feedback: "请补充验收项",
+        permissionMode: "default",
+        scope: {
+          sessionId: "child-1",
+        },
       },
     });
   });
@@ -303,6 +533,34 @@ describe("agentProtocol", () => {
           turn_gating: true,
           limit_status: undefined,
           capability_gap: undefined,
+          keepalive_kind: undefined,
+          keepalive_sequence: undefined,
+          keepalive_elapsed_ms: undefined,
+        },
+      },
+    });
+
+    expect(
+      parseAgentEvent({
+        type: "runtime_status",
+        status: {
+          phase: "routing",
+          title: "仍在执行，等待下一步进度",
+          detail: "运行时仍在处理。",
+          metadata: {
+            keepalive_kind: "runtime_turn_active",
+            keepalive_sequence: 3,
+            keepalive_elapsed_ms: 135000,
+          },
+        },
+      }),
+    ).toMatchObject({
+      type: "runtime_status",
+      status: {
+        metadata: {
+          keepalive_kind: "runtime_turn_active",
+          keepalive_sequence: 3,
+          keepalive_elapsed_ms: 135000,
         },
       },
     });
@@ -808,6 +1066,27 @@ describe("agentProtocol", () => {
         root_session_id: "root-1",
         parent_session_id: "parent-1",
         status: "running",
+        latest_turn_id: "turn-1",
+        latest_turn_status: "queued",
+        queued_turn_count: 2,
+        team_phase: "queued",
+        team_parallel_budget: 3,
+        team_active_count: 1,
+        team_queued_count: 2,
+        provider_concurrency_group: "openai:gpt-5.2",
+        provider_parallel_budget: 4,
+        queue_reason: "provider_busy",
+        retryable_overload: true,
+        closed: false,
+        usage: {
+          input_tokens: 120,
+          output_tokens: 32,
+          cached_input_tokens: 5,
+          cache_creation_input_tokens: 7,
+        },
+        duration_ms: 12345,
+        tool_count: 4,
+        result_ref: "artifact://worker-result-1",
       }),
     ).toEqual({
       type: "subagent_status_changed",
@@ -815,6 +1094,27 @@ describe("agentProtocol", () => {
       root_session_id: "root-1",
       parent_session_id: "parent-1",
       status: "running",
+      latest_turn_id: "turn-1",
+      latest_turn_status: "queued",
+      queued_turn_count: 2,
+      team_phase: "queued",
+      team_parallel_budget: 3,
+      team_active_count: 1,
+      team_queued_count: 2,
+      provider_concurrency_group: "openai:gpt-5.2",
+      provider_parallel_budget: 4,
+      queue_reason: "provider_busy",
+      retryable_overload: true,
+      closed: false,
+      usage: {
+        input_tokens: 120,
+        output_tokens: 32,
+        cached_input_tokens: 5,
+        cache_creation_input_tokens: 7,
+      },
+      duration_ms: 12345,
+      tool_count: 4,
+      result_ref: "artifact://worker-result-1",
     });
   });
 });

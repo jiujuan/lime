@@ -5,6 +5,11 @@ import {
 } from "./sceneAppLaunch";
 import type { SceneAppPlanResult } from "@/lib/sceneapp";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
+import {
+  clearAgentUiProjectionEvents,
+  conversationProjectionStore,
+  selectAgentUiProjectionEventsByType,
+} from "../projection/conversationProjectionStore";
 
 type SceneAppPlanResultOverrides = {
   descriptor?: Partial<SceneAppPlanResult["descriptor"]>;
@@ -105,6 +110,7 @@ function createPlanResult(
 describe("sceneAppLaunch", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearAgentUiProjectionEvents();
   });
 
   it("应把 workspace 类型 SceneApp 翻译成 agent 导航动作", () => {
@@ -496,6 +502,21 @@ describe("sceneAppLaunch", () => {
         }),
       }),
     );
+    expect(
+      selectAgentUiProjectionEventsByType(
+        conversationProjectionStore.getSnapshot(),
+        "agent.changed",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        sourceType: "automation_job_projection",
+        taskId: "sceneapp-job-1",
+        agentId: "sceneapp-job-1",
+        agentName: "每日趋势摘要 自动化",
+        surface: "background_teammate",
+        runtimeEntity: "automation_job",
+      }),
+    ]);
   });
 
   it("workspace 类型 SceneApp 缺少导航回调时应返回结构化错误", async () => {

@@ -11,6 +11,11 @@ import {
   getAutomationRunHistory,
   updateAutomationJob,
 } from "@/lib/api/automation";
+import {
+  clearAgentUiProjectionEvents,
+  conversationProjectionStore,
+  selectAgentUiProjectionEventsBySurface,
+} from "@/components/agent/chat/projection/conversationProjectionStore";
 import { WorkspaceRegisteredSkillsPanel } from "./WorkspaceRegisteredSkillsPanel";
 
 vi.mock("@/lib/api/capabilityDrafts", () => ({
@@ -64,6 +69,7 @@ describe("WorkspaceRegisteredSkillsPanel", () => {
     vi.mocked(getAutomationRunHistory).mockReset();
     vi.mocked(updateAutomationJob).mockReset();
     vi.mocked(exportAgentRuntimeEvidencePack).mockReset();
+    clearAgentUiProjectionEvents();
     vi.mocked(listWorkspaceSkillBindings).mockResolvedValue({
       request: {
         workspace_root: "/tmp/work",
@@ -98,6 +104,7 @@ describe("WorkspaceRegisteredSkillsPanel", () => {
       mounted.container.remove();
     }
     vi.clearAllMocks();
+    clearAgentUiProjectionEvents();
   });
 
   it("没有项目根目录时只显示选择项目提示，不读取已注册能力", () => {
@@ -903,6 +910,12 @@ describe("WorkspaceRegisteredSkillsPanel", () => {
     expect(container.textContent).toContain("Schedule：Cron 0 9 * * *");
     expect(container.textContent).toContain("Managed Objective：paused");
     expect(container.textContent).toContain("Completion Audit：paused");
+    expect(
+      selectAgentUiProjectionEventsBySurface(
+        conversationProjectionStore.getSnapshot(),
+        "background_teammate",
+      ),
+    ).toHaveLength(1);
     expect(toggleButton).toBeTruthy();
     expect(toggleButton?.textContent).toContain("恢复 Managed Job");
     expect(auditButton).toBeTruthy();

@@ -551,7 +551,8 @@ export async function tryExecuteSlashSkillCommand(
       if (!streamEvent) return;
 
       switch (streamEvent.type) {
-        case "text_delta": {
+        case "text_delta":
+        case "text_delta_batch": {
           streamCounters.text_delta += 1;
           accumulatedContent = appendTextWithOverlapDetection(
             accumulatedContent,
