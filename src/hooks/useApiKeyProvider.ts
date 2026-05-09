@@ -114,6 +114,7 @@ export interface UseApiKeyProviderReturn {
 interface UseApiKeyProviderOptions {
   autoLoad?: boolean;
   hydrateUiState?: boolean;
+  allowOemManagedSelection?: boolean;
 }
 
 // ============================================================================
@@ -172,7 +173,11 @@ function providerDebugLog(...args: unknown[]): void {
 export function useApiKeyProvider(
   options: UseApiKeyProviderOptions = {},
 ): UseApiKeyProviderReturn {
-  const { autoLoad = true, hydrateUiState = true } = options;
+  const {
+    autoLoad = true,
+    hydrateUiState = true,
+    allowOemManagedSelection = false,
+  } = options;
   // ===== 状态 =====
   const [providers, setProviders] = useState<ProviderWithKeysDisplay[]>([]);
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(
@@ -532,7 +537,9 @@ export function useApiKeyProvider(
       return null;
     }
     const found = providers.find(
-      (p) => p.id === selectedProviderId && !isOemManagedHubProvider(p),
+      (p) =>
+        p.id === selectedProviderId &&
+        (allowOemManagedSelection || !isOemManagedHubProvider(p)),
     );
     if (found) {
       providerDebugLog(
@@ -544,9 +551,13 @@ export function useApiKeyProvider(
       );
     }
     return found ?? null;
-  }, [providers, selectedProviderId]);
+  }, [allowOemManagedSelection, providers, selectedProviderId]);
 
   useEffect(() => {
+    if (allowOemManagedSelection) {
+      return;
+    }
+
     if (!selectedProviderId) {
       return;
     }
@@ -561,7 +572,12 @@ export function useApiKeyProvider(
     const nextProviderId = nextVisibleProvider?.id ?? null;
     setSelectedProviderId(nextProviderId);
     void saveSelectedProvider(nextProviderId);
-  }, [providers, saveSelectedProvider, selectedProviderId]);
+  }, [
+    allowOemManagedSelection,
+    providers,
+    saveSelectedProvider,
+    selectedProviderId,
+  ]);
 
   /** 按搜索过滤后的 Provider 列表 */
   const filteredProviders = useMemo(() => {

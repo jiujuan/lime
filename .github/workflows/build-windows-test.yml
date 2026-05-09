@@ -1,0 +1,187 @@
+name: Build Windows Test Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "要构建的分支 / tag / commit SHA"
+        required: false
+        default: "main"
+      retention_days:
+        description: "Artifact 保留天数"
+        required: false
+        default: "7"
+      build_mode:
+        description: "构建模式：debug 更快，release 更接近正式包"
+        required: false
+        default: "debug"
+        type: choice
+        options:
+          - debug
+          - release
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-windows-test-${{ github.event.inputs.source_ref || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_NET_RETRY: 10
+  RUSTUP_MAX_RETRIES: 10
+  CARGO_TERM_COLOR: always
+  NODE_OPTIONS: --max-old-space-size=8192
+
+jobs:
+  build-windows-test:
+    name: Build Windows x64 NSIS installer
+    runs-on: windows-2022
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.source_ref || github.ref }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: "pnpm-lock.yaml"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: windows-test-x64-${{ github.event.inputs.build_mode || 'debug' }}-no-local-voice
+          cache-on-failure: true
+          cache-all-crates: true
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare unsigned test Tauri config
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs = require("fs");
+          const source = "src-tauri/tauri.windows.conf.json";
+          const target = "src-tauri/tauri.windows.test.conf.json";
+          const config = JSON.parse(fs.readFileSync(source, "utf8"));
+
+          config.bundle = config.bundle || {};
+          config.bundle.targets = ["nsis"];
+          config.bundle.createUpdaterArtifacts = false;
+
+          fs.writeFileSync(target, `${JSON.stringify(config, null, 2)}\n`);
+          console.log(`Wrote ${target}`);
+          NODE
+
+      - name: Build Tauri Windows test package
+        id: build
+        uses: tauri-apps/tauri-action@v0
+        env:
+          CARGO_PROFILE_RELEASE_LTO: "off"
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 32
+          CARGO_INCREMENTAL: 0
+          SCCACHE_GHA_ENABLED: "true"
+          RUSTC_WRAPPER: sccache
+        with:
+          tauriScript: npx tauri
+          projectPath: src-tauri
+          args: ${{ (github.event.inputs.build_mode || 'debug') == 'debug' && '--debug' || '' }} --target x86_64-pc-windows-msvc --config tauri.windows.test.conf.json -- --no-default-features --features custom-protocol
+
+      - name: Stage Windows test package
+        shell: bash
+        env:
+          ARTIFACT_PATHS_JSON: ${{ steps.build.outputs.artifactPaths }}
+          STAGING_DIR: windows-test-package
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs = require("fs");
+          const path = require("path");
+
+          const stagingDir = process.env.STAGING_DIR || "windows-test-package";
+          fs.rmSync(stagingDir, { recursive: true, force: true });
+          fs.mkdirSync(stagingDir, { recursive: true });
+
+          function collectFiles(dir, result = []) {
+            if (!fs.existsSync(dir)) {
+              return result;
+            }
+            for (const name of fs.readdirSync(dir)) {
+              const current = path.join(dir, name);
+              const stat = fs.statSync(current);
+              if (stat.isDirectory()) {
+                collectFiles(current, result);
+              } else if (/\.(exe|msi|zip|sig)$/i.test(name)) {
+                result.push(current);
+              }
+            }
+            return result;
+          }
+
+          const raw = (process.env.ARTIFACT_PATHS_JSON || "").trim();
+          let artifacts = [];
+          if (raw) {
+            artifacts = JSON.parse(raw);
+          }
+
+          if (!Array.isArray(artifacts) || artifacts.length === 0) {
+            const target = "x86_64-pc-windows-msvc";
+            artifacts = [
+              `src-tauri/target/${target}/debug/bundle/nsis`,
+              `src-tauri/target/${target}/release/bundle/nsis`,
+            ].flatMap((dir) => collectFiles(dir));
+          }
+
+          if (!Array.isArray(artifacts) || artifacts.length === 0) {
+            throw new Error(`Windows artifactPaths 为空，且未找到 NSIS 产物: ${raw}`);
+          }
+
+          for (const artifact of artifacts) {
+            if (typeof artifact !== "string") {
+              continue;
+            }
+            if (!fs.existsSync(artifact) || !fs.statSync(artifact).isFile()) {
+              throw new Error(`Windows 构建产物不存在: ${artifact}`);
+            }
+            const stagedPath = path.join(stagingDir, path.basename(artifact));
+            fs.copyFileSync(artifact, stagedPath);
+            console.log(`Staged Windows test package: ${artifact} -> ${stagedPath}`);
+          }
+
+          const staged = fs.readdirSync(stagingDir).filter((name) =>
+            fs.statSync(path.join(stagingDir, name)).isFile(),
+          );
+          if (staged.length === 0) {
+            throw new Error("Windows 构建未生成可上传测试包");
+          }
+          NODE
+
+      - name: Upload Windows test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: lime-windows-test-x64
+          if-no-files-found: error
+          retention-days: ${{ github.event.inputs.retention_days || 7 }}
+          path: windows-test-package/*

@@ -85,7 +85,9 @@ export const ApiKeyProviderSection = forwardRef<
     exportConfig,
     importConfig,
     refresh,
-  } = useApiKeyProvider();
+  } = useApiKeyProvider({
+    allowOemManagedSelection: exposeOemLoginPrompt,
+  });
 
   // 暴露 refresh 方法给父组件
   useImperativeHandle(
