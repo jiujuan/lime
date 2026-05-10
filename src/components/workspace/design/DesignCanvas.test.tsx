@@ -2113,69 +2113,61 @@ describe("DesignCanvas", () => {
     }
   });
 
-  it(
-    "绑定工作区保存后应提示未缓存的远程图片资产",
-    async () => {
-      const saveProjectExport = vi.fn().mockResolvedValue(
-        createProjectExportOutput(7, 1, {
-          remoteReferenceAssetCount: 1,
-          cachedRemoteAssetCount: 0,
-          uncachedRemoteAssetCount: 1,
-        }),
-      );
-      const originalCreateElement = document.createElement.bind(document);
+  it("绑定工作区保存后应提示未缓存的远程图片资产", async () => {
+    const saveProjectExport = vi.fn().mockResolvedValue(
+      createProjectExportOutput(7, 1, {
+        remoteReferenceAssetCount: 1,
+        cachedRemoteAssetCount: 0,
+        uncachedRemoteAssetCount: 1,
+      }),
+    );
+    const originalCreateElement = document.createElement.bind(document);
 
-      vi.spyOn(document, "createElement").mockImplementation(((
-        tagName: string,
-      ) => {
-        const element = originalCreateElement(tagName);
+    vi.spyOn(document, "createElement").mockImplementation(((
+      tagName: string,
+    ) => {
+      const element = originalCreateElement(tagName);
 
-        if (tagName.toLowerCase() === "canvas") {
-          Object.defineProperty(element, "getContext", {
-            configurable: true,
-            value: () => ({ drawImage: vi.fn() }),
-          });
-          Object.defineProperty(element, "toDataURL", {
-            configurable: true,
-            value: () => "data:image/png;base64,cHJldmlldy1wbmc=",
-          });
+      if (tagName.toLowerCase() === "canvas") {
+        Object.defineProperty(element, "getContext", {
+          configurable: true,
+          value: () => ({ drawImage: vi.fn() }),
+        });
+        Object.defineProperty(element, "toDataURL", {
+          configurable: true,
+          value: () => "data:image/png;base64,cHJldmlldy1wbmc=",
+        });
+      }
+
+      return element;
+    }) as typeof document.createElement);
+
+    vi.stubGlobal(
+      "Image",
+      class {
+        onload: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+
+        set src(_value: string) {
+          queueMicrotask(() => this.onload?.());
         }
+      },
+    );
 
-        return element;
-      }) as typeof document.createElement);
+    renderDesignCanvas(undefined, {
+      projectRootPath: "/workspace",
+      saveProjectExport,
+    });
 
-      vi.stubGlobal(
-        "Image",
-        class {
-          onload: (() => void) | null = null;
-          onerror: (() => void) | null = null;
+    await clickButtonAsync("导出设计工程");
 
-          set src(_value: string) {
-            queueMicrotask(() => this.onload?.());
-          }
-        },
-      );
-
-      renderDesignCanvas(undefined, {
-        projectRootPath: "/workspace",
-        saveProjectExport,
-      });
-
-      await clickButtonAsync("导出设计工程");
-
-      expect(saveProjectExport).toHaveBeenCalled();
-      expect(document.body.textContent).toContain(
-        "远程图片资产未缓存到 assets/",
-      );
-      expect(document.body.textContent).toContain(
-        "离线迁移前请重新缓存远程资产",
-      );
-      expect(JSON.stringify(saveProjectExport.mock.calls[0][0])).not.toMatch(
-        /poster_generate|canvas:poster|ImageTaskViewer/,
-      );
-    },
-    10_000,
-  );
+    expect(saveProjectExport).toHaveBeenCalled();
+    expect(document.body.textContent).toContain("远程图片资产未缓存到 assets/");
+    expect(document.body.textContent).toContain("离线迁移前请重新缓存远程资产");
+    expect(JSON.stringify(saveProjectExport.mock.calls[0][0])).not.toMatch(
+      /poster_generate|canvas:poster|ImageTaskViewer/,
+    );
+  }, 10_000);
 
   it("打开最近工程应从项目目录恢复 LayeredDesignDocument 并继续编辑", async () => {
     const restoredDocument = createLayeredDesignDocument({

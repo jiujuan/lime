@@ -51,11 +51,13 @@ describe("messageRenderWindowProjection", () => {
     const visibleMessages = Array.from({ length: 6 }, (_, index) =>
       message(index, index % 2 === 0 ? "user" : "assistant"),
     );
-    const renderedMessageCount = resolveInitialConversationRenderedMessageCount({
-      isSending: false,
-      visibleMessageCount: visibleMessages.length,
-      settings,
-    });
+    const renderedMessageCount = resolveInitialConversationRenderedMessageCount(
+      {
+        isSending: false,
+        visibleMessageCount: visibleMessages.length,
+        settings,
+      },
+    );
 
     const projection = buildConversationMessageRenderWindowProjection({
       visibleMessages,

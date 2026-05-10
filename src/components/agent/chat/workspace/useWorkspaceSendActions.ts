@@ -393,8 +393,11 @@ function withFastResponseMetadata(
 
   const nextMetadata = { ...(requestMetadata || {}) };
   const harness = asRecord(nextMetadata.harness) || {};
-  const { browser_assist: _browserAssist, browserAssist: _browserAssistCamel, ...leanHarness } =
-    harness;
+  const {
+    browser_assist: _browserAssist,
+    browserAssist: _browserAssistCamel,
+    ...leanHarness
+  } = harness;
   nextMetadata.harness = {
     ...leanHarness,
     fast_response_routing: fastResponseMetadata,

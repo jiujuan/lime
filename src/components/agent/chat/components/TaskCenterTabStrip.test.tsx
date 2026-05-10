@@ -285,7 +285,9 @@ describe("TaskCenterTabStrip", () => {
     expect(projectionBadge).toBeNull();
     expect(container.textContent).not.toContain("AgentUI");
     expect(
-      container.querySelector('[data-testid="task-center-tab-agentui-topic-b"]'),
+      container.querySelector(
+        '[data-testid="task-center-tab-agentui-topic-b"]',
+      ),
     ).toBeNull();
   });
 });

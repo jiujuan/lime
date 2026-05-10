@@ -137,11 +137,7 @@ export function createStoredZipArchive(entries: StoredZipEntry[]): Uint8Array {
   for (const entry of entries) {
     const filename = encodeUtf8(entry.path);
     const checksum = crc32(entry.content);
-    const localHeader = createLocalZipHeader(
-      filename,
-      entry.content,
-      checksum,
-    );
+    const localHeader = createLocalZipHeader(filename, entry.content, checksum);
     const centralHeader = createCentralZipHeader(
       filename,
       entry.content,

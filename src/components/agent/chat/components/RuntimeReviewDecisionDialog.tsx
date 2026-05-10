@@ -287,7 +287,8 @@ export function RuntimeReviewDecisionDialog({
                   </p>
                 ) : null}
                 <p className="mt-2 text-xs font-medium">
-                  请切换到满足 routingSlot 的模型或取消显式模型锁定后，再保存“接受”结论。
+                  请切换到满足 routingSlot
+                  的模型或取消显式模型锁定后，再保存“接受”结论。
                 </p>
               </div>
             ) : null}
@@ -324,7 +325,8 @@ export function RuntimeReviewDecisionDialog({
                 ) : null}
                 {permissionConfirmationBlocksAccepted ? (
                   <p className="mt-2 text-xs font-medium">
-                    当前 review decision 不能作为成功交付证据，请先处理真实权限确认。
+                    当前 review decision
+                    不能作为成功交付证据，请先处理真实权限确认。
                   </p>
                 ) : null}
               </div>

@@ -145,9 +145,7 @@ export function resolveDocumentDirection(
   return "ltr";
 }
 
-export function resolveLocaleOptionLabel(
-  preference?: string | null,
-): string {
+export function resolveLocaleOptionLabel(preference?: string | null): string {
   const normalized = normalizeLocalePreference(preference);
   return (
     UI_LOCALE_OPTIONS.find((option) => option.id === normalized)?.label ||

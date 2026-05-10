@@ -160,10 +160,10 @@ export function SettingsHomePage({
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-[24px] font-semibold tracking-tight text-slate-900">
+              <h1 className="text-[24px] font-semibold tracking-tight text-slate-900">
                 {t("settings.home.title", "设置首页")}
-                </h1>
-                <WorkbenchInfoTip
+              </h1>
+              <WorkbenchInfoTip
                 ariaLabel={t("settings.home.hero.tipAria", "设置首页说明")}
                 content={t(
                   "settings.home.hero.tip",
@@ -198,7 +198,7 @@ export function SettingsHomePage({
                 overview.experimentalCount > 0
                   ? "border-amber-200 bg-amber-50 text-amber-700"
                   : "border-emerald-200 bg-emerald-50 text-emerald-700"
-                }`}
+              }`}
             >
               {t("settings.home.summary.experimental", {
                 count: overview.experimentalCount,
@@ -324,10 +324,7 @@ export function SettingsHomePage({
 
                 <div className="mt-3 flex justify-end">
                   <WorkbenchInfoTip
-                    ariaLabel={t(
-                      "settings.home.companion.tipAria",
-                      "桌宠说明",
-                    )}
+                    ariaLabel={t("settings.home.companion.tipAria", "桌宠说明")}
                     content={t(
                       "settings.home.companion.description",
                       "开启桌宠、安装引导与连接诊断。",
@@ -351,10 +348,7 @@ export function SettingsHomePage({
               <Sparkles className="h-4 w-4 text-sky-600" />
               {t("settings.home.current.title", "当前入口")}
               <WorkbenchInfoTip
-                ariaLabel={t(
-                  "settings.home.current.tipAria",
-                  "当前入口说明",
-                )}
+                ariaLabel={t("settings.home.current.tipAria", "当前入口说明")}
                 content={t(
                   "settings.home.current.tip",
                   "前台只保留 current Skills；下面这些就是现在直接进入的主路径和辅助路径。",
@@ -524,10 +518,7 @@ export function SettingsHomePage({
                           </div>
                           <div className="mt-0.5 text-xs text-slate-500">
                             {item.experimental
-                              ? t(
-                                  "settings.home.item.experimental",
-                                  "实验能力",
-                                )
+                              ? t("settings.home.item.experimental", "实验能力")
                               : t("settings.home.item.configure", "进入配置")}
                           </div>
                         </div>

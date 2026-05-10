@@ -8,16 +8,14 @@ import {
   type LayeredDesignSubjectMattingWorkerLike,
 } from "./subjectMattingWorker";
 
-export interface LayeredDesignSubjectMattingWorkerHandle
-  extends LayeredDesignSubjectMattingWorkerLike {
+export interface LayeredDesignSubjectMattingWorkerHandle extends LayeredDesignSubjectMattingWorkerLike {
   terminate?: () => void;
 }
 
 export type LayeredDesignSubjectMattingWorkerFactory =
   () => LayeredDesignSubjectMattingWorkerHandle;
 
-export interface CreateLayeredDesignWorkerSubjectMattingProviderOptions
-  extends CreateLayeredDesignSubjectMattingWorkerProviderOptions {
+export interface CreateLayeredDesignWorkerSubjectMattingProviderOptions extends CreateLayeredDesignSubjectMattingWorkerProviderOptions {
   workerFactory?: LayeredDesignSubjectMattingWorkerFactory;
   fallbackProvider?: LayeredDesignSubjectMattingProvider | null;
 }

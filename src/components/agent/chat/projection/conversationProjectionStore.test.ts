@@ -176,9 +176,9 @@ describe("conversationProjectionStore", () => {
       artifactEvent,
       evidenceEvent,
     ]);
-    expect(selectAgentUiProjectionEventsByType(snapshot, "tool.result")).toEqual(
-      [toolEvent],
-    );
+    expect(
+      selectAgentUiProjectionEventsByType(snapshot, "tool.result"),
+    ).toEqual([toolEvent]);
     expect(
       selectLatestAgentUiProjectionEventByType(snapshot, "evidence.changed"),
     ).toBe(evidenceEvent);

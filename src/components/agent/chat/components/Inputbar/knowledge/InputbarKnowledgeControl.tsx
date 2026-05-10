@@ -191,10 +191,7 @@ export function InputbarKnowledgeControl({
   openKnowledgeHubRequestKey?: number;
   onToggleKnowledgePack?: (enabled: boolean) => void;
   onSelectKnowledgePack?: (packName: string) => void;
-  onToggleKnowledgeCompanionPack?: (
-    packName: string,
-    enabled: boolean,
-  ) => void;
+  onToggleKnowledgeCompanionPack?: (packName: string, enabled: boolean) => void;
   onStartKnowledgeOrganize?: () => void;
   onManageKnowledgePacks?: () => void;
 }) {
@@ -245,7 +242,7 @@ export function InputbarKnowledgeControl({
     "项目资料";
   const effectiveKnowledgeEnabled = Boolean(
     knowledgePackSelection?.enabled &&
-      isReadyKnowledgePackStatus(knowledgePackSelection.status),
+    isReadyKnowledgePackStatus(knowledgePackSelection.status),
   );
   const hubState = resolveKnowledgeHubState({
     knowledgePackSelection,
@@ -256,13 +253,13 @@ export function InputbarKnowledgeControl({
   });
   const shouldShowSecondaryManageAction = Boolean(
     onManageKnowledgePacks &&
-      hubState.primaryAction !== "manage" &&
-      (readyOptions.length > 0 || hiddenPendingCount > 0),
+    hubState.primaryAction !== "manage" &&
+    (readyOptions.length > 0 || hiddenPendingCount > 0),
   );
   const shouldShowSecondaryOrganizeAction = Boolean(
     onStartKnowledgeOrganize &&
-      hubState.primaryAction !== "organize" &&
-      hubState.primaryAction !== "supplement",
+    hubState.primaryAction !== "organize" &&
+    hubState.primaryAction !== "supplement",
   );
   const secondaryOrganizeLabel = inputText.trim()
     ? "整理当前输入"
@@ -445,7 +442,8 @@ export function InputbarKnowledgeControl({
           ) : null}
           {hiddenPendingCount > 0 ? (
             <KnowledgeHubDescription>
-              还有 {hiddenPendingCount} 份资料待确认，确认后才会出现在可用列表里。
+              还有 {hiddenPendingCount}{" "}
+              份资料待确认，确认后才会出现在可用列表里。
             </KnowledgeHubDescription>
           ) : null}
           <KnowledgeHubActions>

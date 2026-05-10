@@ -18,6 +18,29 @@ vi.mock("@/lib/api/modelRegistry", () => ({
   }) => result.source,
 }));
 
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (
+      _key: string,
+      fallbackOrOptions?: string | { defaultValue?: string },
+    ) => {
+      const template =
+        typeof fallbackOrOptions === "string"
+          ? fallbackOrOptions
+          : (fallbackOrOptions?.defaultValue ?? _key);
+
+      if (!fallbackOrOptions || typeof fallbackOrOptions === "string") {
+        return template;
+      }
+
+      return template.replace(/{{\s*(\w+)\s*}}/g, (match, name) => {
+        const value = (fallbackOrOptions as Record<string, unknown>)[name];
+        return value == null ? match : String(value);
+      });
+    },
+  }),
+}));
+
 import { ProviderSetting } from "./ProviderSetting";
 
 interface MountedRoot {
@@ -195,7 +218,9 @@ describe("ProviderSetting", () => {
 
     await act(async () => {
       container
-        .querySelector<HTMLButtonElement>('[data-testid="provider-login-button"]')
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="provider-login-button"]',
+        )
         ?.click();
       await Promise.resolve();
     });
@@ -444,7 +469,9 @@ describe("ProviderSetting", () => {
     );
     expect(fetchButton?.disabled).toBe(false);
     expect(connectionButton?.disabled).toBe(true);
-    expect(container.textContent ?? "").toContain("先填写 API 密钥，再测试连接");
+    expect(container.textContent ?? "").toContain(
+      "先填写 API 密钥，再测试连接",
+    );
     expect(container.textContent ?? "").not.toContain("API 密钥（可选）");
 
     await act(async () => {
@@ -528,9 +555,7 @@ describe("ProviderSetting", () => {
     const status = container.querySelector<HTMLElement>(
       '[data-testid="model-fetch-status"]',
     );
-    expect(status?.textContent ?? "").toContain(
-      "当前没有可用 Fal 图片模型",
-    );
+    expect(status?.textContent ?? "").toContain("当前没有可用 Fal 图片模型");
     expect(status?.textContent ?? "").toContain("fal-ai/nano-banana-pro");
     expect(status?.textContent ?? "").not.toContain("已确认 1 个模型");
     expect(status?.className ?? "").toContain("border-sky-200");

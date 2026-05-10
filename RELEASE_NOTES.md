@@ -8,7 +8,7 @@
 ### 发布概览
 
 - 应用版本从 `1.32.0` 升级到 `1.33.0`，同步 `package.json`、`package-lock.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`、`src-tauri/tauri.conf.json`、`src-tauri/tauri.conf.headless.json`、`packages/lime-cli-npm/package.json` 与 `@limecloud/lime-cli` 发布示例。
-- Agent QC 发布门禁补齐 scenario / GUI flow / Evidence Pack schema、qcloop job / status / preflight / export / release-summary / audit 脚本，以及 GitHub release workflow 的 P0 Evidence Pack 硬门禁。
+- Agent QC 保留 scenario / GUI flow / Evidence Pack schema、qcloop job / status / preflight / export / release-summary / audit 脚本作为本地与人工证据工具；按本版要求从 GitHub Actions 发布/夜间/合同验证链路移除。
 - Agent Runtime 与 Team / Workspace 主链补齐 approval sandbox、Claw chat ready streaming、tool surface、service skill entry、browser runtime、knowledge GUI 与 GUI owner 检查脚本，降低只靠浅层 smoke 误判的风险。
 - i18n 主链从 legacy DOM Patch 迁到 key-based resources：新增 `createI18n`、namespace loader、locale resources、格式化工具与覆盖测试，旧 patch 文件移入 `src/i18n/legacy-patch/` 并从 current 入口退场。
 - 设置 v2、侧边栏、Agent 输入栏、任务中心、Skills 页面与系统诊断页完成一批用户可见回归，覆盖账号、统计、用户中心、Provider、媒体能力、语音、快捷键、环境、渠道日志与工作区修复历史。
@@ -38,17 +38,17 @@
 ### 开发者与治理更新
 
 - Agent QC 文档新增 `docs/test/*.json`、`docs/tests/*`、completion audit、current blockers、evidence contract、qcloop operations、rollout plan 与 stale worker 分析，发布证据口径回到仓库内版本化事实源。
-- `npm run test:contracts` 增加 `agent-qc:check`，同时校验 Agent QC scenario manifest 与 GUI flow manifest。
-- `scripts/quality-task-planner`、`local-ci`、`verify-gui-smoke` 和各 smoke runner 同步 Agent QC / GUI 主路径任务选择。
-- `.github/workflows/release.yml` 和 nightly harness workflow 补齐 Agent QC 发布门禁，不再允许缺 P0 Evidence Pack 的 release note 进入绿色发布。
+- `npm run test:contracts` 回到 command / harness / modality / harness cleanup 合同检查，不再间接执行 `agent-qc:check`。
+- `scripts/quality-task-planner`、`local-ci` 与 completion audit 同步解耦 Agent QC：Agent QC 文档和本地脚本不再触发 GitHub Actions bridge/contracts 验证原因。
+- `.github/workflows/release.yml` 删除 `agent_qc_*` workflow inputs、Evidence Pack 检查和 release-summary 拼接；`.github/workflows/harness-nightly.yml` 删除 `artifacts/agent-qc/*` 生成，nightly 只保留 harness eval 资产。
 - `legacySurfaceCatalog`、`agentCommandCatalog`、DevBridge dispatcher、mockPriorityCommands 与 tauri mock 同步 runtime / tool / QC 新边界。
 - Rust 发布门禁收口三处稳定性问题：MCP tool search 精确 inner tool name 优先于后缀命中，Fal queue 超时测试禁用本机代理并加宽 client timeout，Agent 流式策略测试改用注入式内存 `SessionStore`，避免全量并发测试写全局 SQLite 时出现 I/O 抖动。
 
 ### 已知边界
 
-- 官方 Agent QC Evidence Pack 仍必须由真实 qcloop 8/8 P0 pass 后导出；历史 sidecar、source-tree smoke 或 `.lime/qc` 本地运行态文件不能替代发布证据。
+- 官方 Agent QC Evidence Pack 仍应由真实 qcloop 8/8 P0 pass 后导出，作为本地 / 人工发布证据；它不再作为 GitHub Actions 发布硬门禁。
 - `output/dialogue-feature-e2e-20260510/` 是本轮对话功能 E2E 证据，不等同于 installer artifact 验证。
-- release workflow 已具备硬门禁；GitHub Release artifact 仍由 tag 推送后的发布流水线生成。
+- GitHub Release artifact 仍由 tag 推送后的发布流水线生成；release workflow 不再读取 `.lime/qc/agent-qc-evidence.json`。
 
 ### 校验状态
 
@@ -58,7 +58,8 @@
 - `npm run lint:rust`：通过；已修复 `lime-media-runtime` 大 Err variant clippy warning，并在后续 MCP / server / agent 测试稳定性修复后复跑通过。
 - `npm run lint`：通过。
 - `npm test`：通过，`54/54` 批退出码为 `0`。
-- `npm run test:contracts`：通过，覆盖 command / harness / modality / harness cleanup / agent-qc scenario 与 GUI flow manifest contract。
+- `npm run test:contracts`：通过，覆盖 command / harness / modality / harness cleanup contract；Agent QC 已从该 GitHub Actions 可触发入口拆出。
+- `rg -n "agent-qc|Agent QC|qcloop|agent_qc" ".github/workflows"`：无结果，确认 GitHub Actions workflow 不再直接触发 Agent QC。
 - `git diff --check`：通过。
 
 ---

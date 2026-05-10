@@ -19,17 +19,18 @@ import {
 } from "./analyzerModelSlotTransport";
 
 const CREATED_AT = "2026-05-07T00:00:00.000Z";
-const SUBJECT_QUALITY_CONTRACT: LayeredDesignAnalyzerModelSlotQualityContract = {
-  factSource: "LayeredDesignDocument.assets",
-  requiredResultFields: ["imageSrc", "maskSrc", "hasAlpha"],
-  requiredParamKeys: [
-    "foregroundPixelCount",
-    "detectedForegroundPixelCount",
-    "ellipseFallbackApplied",
-    "totalPixelCount",
-  ],
-  reviewFindingIds: ["subject_model_slot_quality_metadata_missing"],
-};
+const SUBJECT_QUALITY_CONTRACT: LayeredDesignAnalyzerModelSlotQualityContract =
+  {
+    factSource: "LayeredDesignDocument.assets",
+    requiredResultFields: ["imageSrc", "maskSrc", "hasAlpha"],
+    requiredParamKeys: [
+      "foregroundPixelCount",
+      "detectedForegroundPixelCount",
+      "ellipseFallbackApplied",
+      "totalPixelCount",
+    ],
+    reviewFindingIds: ["subject_model_slot_quality_metadata_missing"],
+  };
 const CLEAN_PLATE_QUALITY_CONTRACT: LayeredDesignAnalyzerModelSlotQualityContract =
   {
     factSource: "LayeredDesignDocument.assets",
@@ -335,7 +336,9 @@ describe("layered-design analyzer model slot transport", () => {
       transport,
     );
 
-    await expect(subjectSlot.execute(createSubjectInput())).resolves.toMatchObject({
+    await expect(
+      subjectSlot.execute(createSubjectInput()),
+    ).resolves.toMatchObject({
       imageSrc: "data:image/png;base64,subject-handler-alpha",
       maskSrc: "data:image/png;base64,subject-handler-mask",
       params: {
@@ -345,7 +348,9 @@ describe("layered-design analyzer model slot transport", () => {
         },
       },
     });
-    await expect(cleanSlot.execute(createCleanPlateInput())).resolves.toMatchObject({
+    await expect(
+      cleanSlot.execute(createCleanPlateInput()),
+    ).resolves.toMatchObject({
       src: "data:image/png;base64,clean-handler-clean",
       params: {
         modelId: "handler-inpaint-v1",
@@ -483,59 +488,59 @@ describe("layered-design analyzer model slot transport", () => {
       transport,
     );
 
-    await expect(subjectSlot.execute(createSubjectInput())).resolves.toMatchObject(
-      {
-        imageSrc: "data:image/png;base64,subject-json-alpha",
-        maskSrc: "data:image/png;base64,subject-json-mask",
-        params: {
-          qualityContractValidation: {
-            status: "missing_required_params",
-            missingResultFields: [],
-            missingParamKeys: [
-              "foregroundPixelCount",
-              "detectedForegroundPixelCount",
-              "ellipseFallbackApplied",
-              "totalPixelCount",
-            ],
-          },
-          modelSlotExecution: {
-            slotId: "subject-json",
-            slotKind: "subject_matting",
-            providerId: "json-provider",
-            modelVersion: "2026-05",
-            modelId: "json-matting-v1",
-            attempt: 1,
-            timeoutMs: 12_000,
-            status: "succeeded",
-          },
+    await expect(
+      subjectSlot.execute(createSubjectInput()),
+    ).resolves.toMatchObject({
+      imageSrc: "data:image/png;base64,subject-json-alpha",
+      maskSrc: "data:image/png;base64,subject-json-mask",
+      params: {
+        qualityContractValidation: {
+          status: "missing_required_params",
+          missingResultFields: [],
+          missingParamKeys: [
+            "foregroundPixelCount",
+            "detectedForegroundPixelCount",
+            "ellipseFallbackApplied",
+            "totalPixelCount",
+          ],
+        },
+        modelSlotExecution: {
+          slotId: "subject-json",
+          slotKind: "subject_matting",
+          providerId: "json-provider",
+          modelVersion: "2026-05",
+          modelId: "json-matting-v1",
+          attempt: 1,
+          timeoutMs: 12_000,
+          status: "succeeded",
         },
       },
-    );
-    await expect(cleanSlot.execute(createCleanPlateInput())).resolves.toMatchObject(
-      {
-        src: "data:image/png;base64,json-inpaint-v1-clean",
-        params: {
+    });
+    await expect(
+      cleanSlot.execute(createCleanPlateInput()),
+    ).resolves.toMatchObject({
+      src: "data:image/png;base64,json-inpaint-v1-clean",
+      params: {
+        modelId: "json-inpaint-v1",
+        qualityContractValidation: {
+          status: "missing_required_params",
+          missingResultFields: [],
+          missingParamKeys: [
+            "filledPixelCount",
+            "totalSubjectPixelCount",
+            "maskApplied",
+          ],
+        },
+        modelSlotExecution: {
+          slotId: "clean-json",
+          slotKind: "clean_plate",
+          providerId: "json-provider",
           modelId: "json-inpaint-v1",
-          qualityContractValidation: {
-            status: "missing_required_params",
-            missingResultFields: [],
-            missingParamKeys: [
-              "filledPixelCount",
-              "totalSubjectPixelCount",
-              "maskApplied",
-            ],
-          },
-          modelSlotExecution: {
-            slotId: "clean-json",
-            slotKind: "clean_plate",
-            providerId: "json-provider",
-            modelId: "json-inpaint-v1",
-            attempt: 1,
-            status: "succeeded",
-          },
+          attempt: 1,
+          status: "succeeded",
         },
       },
-    );
+    });
     await expect(ocrSlot.execute(createOcrInput())).resolves.toMatchObject([
       {
         text: "JSON OCR json-ocr-v1",

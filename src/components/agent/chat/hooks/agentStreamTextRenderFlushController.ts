@@ -30,9 +30,7 @@ export function shouldFlushAgentStreamVisibleFirstText(params: {
   accumulatedContent: string;
   renderedContent: string;
 }): boolean {
-  return (
-    !params.renderedContent && params.accumulatedContent.trim().length > 0
-  );
+  return !params.renderedContent && params.accumulatedContent.trim().length > 0;
 }
 
 export function shouldFlushAgentStreamTextRenderAtLineBoundary(params: {

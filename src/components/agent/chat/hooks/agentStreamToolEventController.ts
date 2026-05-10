@@ -17,12 +17,13 @@ export function buildAgentStreamToolEndPreApplyPlan(params: {
   const toolName = params.toolNameByToolId.get(params.toolId) || "";
 
   return {
-    hasMeaningfulCompletionSignal:
-      hasMeaningfulAgentStreamToolCompletionSignal({
+    hasMeaningfulCompletionSignal: hasMeaningfulAgentStreamToolCompletionSignal(
+      {
         toolId: params.toolId,
         toolName,
         normalizedResult,
-      }),
+      },
+    ),
     normalizedResult,
     toolName,
   };

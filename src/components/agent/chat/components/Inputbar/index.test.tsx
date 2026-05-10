@@ -2794,9 +2794,7 @@ describe("Inputbar", () => {
     expect(campaignOption).toBeTruthy();
 
     act(() => {
-      campaignOption?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
+      campaignOption?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
     expect(onToggleKnowledgeCompanionPack).toHaveBeenCalledWith(

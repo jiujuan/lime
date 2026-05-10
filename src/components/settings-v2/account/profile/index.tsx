@@ -546,9 +546,9 @@ export function ProfileSettings() {
                       ? "学生"
                       : "研究者",
     }),
-  ).filter(
-    (tag) => !tags.includes(tag),
-  ).slice(0, 6);
+  )
+    .filter((tag) => !tags.includes(tag))
+    .slice(0, 6);
   const quickTags = tags.slice(0, 3);
   const extraTagCount = Math.max(tags.length - quickTags.length, 0);
   const isInitialLoading = loading && !config;

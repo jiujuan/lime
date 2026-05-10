@@ -476,8 +476,7 @@ export function createHotkeyCatalogCopy(
   };
 }
 
-const DEFAULT_HOTKEY_CATALOG_COPY =
-  createHotkeyCatalogCopy(fallbackTranslate);
+const DEFAULT_HOTKEY_CATALOG_COPY = createHotkeyCatalogCopy(fallbackTranslate);
 
 function applyDefinitionCopy(
   definition: AuditedHotkeyDefinition,
@@ -725,11 +724,7 @@ export function buildAuditedHotkeyCatalog({
       scene: "workspace",
       ...copy.scenes.workspace,
       hotkeys: [
-        createStaticHotkeyItem(
-          WORKBENCH_SIDEBAR_TOGGLE_HOTKEY,
-          platform,
-          copy,
-        ),
+        createStaticHotkeyItem(WORKBENCH_SIDEBAR_TOGGLE_HOTKEY, platform, copy),
       ],
     },
     {

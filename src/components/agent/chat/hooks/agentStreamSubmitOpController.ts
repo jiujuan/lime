@@ -7,8 +7,7 @@ type AgentStreamSubmitOpBaseOptions = Omit<
   "queueIfBusy" | "sessionId" | "turnId" | "workspaceId"
 >;
 
-export interface BuildAgentStreamSubmitOpOptions
-  extends AgentStreamSubmitOpBaseOptions {
+export interface BuildAgentStreamSubmitOpOptions extends AgentStreamSubmitOpBaseOptions {
   activeSessionId: string;
   requestTurnId: string;
   submitWorkspaceId?: string;

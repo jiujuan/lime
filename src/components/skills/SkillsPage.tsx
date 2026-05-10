@@ -373,9 +373,7 @@ export const SkillsPage = forwardRef<SkillsPageRef, SkillsPageProps>(
                     }
                   />
                 </div>
-                <p className="text-sm text-slate-600">
-                  管理和使用 AI 技能扩展
-                </p>
+                <p className="text-sm text-slate-600">管理和使用 AI 技能扩展</p>
               </div>
             )}
 
@@ -497,9 +495,7 @@ export const SkillsPage = forwardRef<SkillsPageRef, SkillsPageProps>(
                   open={section.key !== "builtin"}
                   className="group overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
                 >
-                  <summary
-                    className="list-none cursor-pointer px-4 py-3 hover:bg-slate-50 transition [&::-webkit-details-marker]:hidden"
-                  >
+                  <summary className="list-none cursor-pointer px-4 py-3 hover:bg-slate-50 transition [&::-webkit-details-marker]:hidden">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div

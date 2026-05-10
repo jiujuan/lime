@@ -18,9 +18,10 @@ class StartupPerformanceTracker {
 
   constructor() {
     this.startTime = performance.now();
-    this.enabled = typeof window !== "undefined" &&
+    this.enabled =
+      typeof window !== "undefined" &&
       (window.localStorage.getItem("lime.debug.startup") === "true" ||
-       new URLSearchParams(window.location.search).has("debug-startup"));
+        new URLSearchParams(window.location.search).has("debug-startup"));
   }
 
   mark(name: string): void {
@@ -35,9 +36,7 @@ class StartupPerformanceTracker {
       relativeTime,
     });
 
-    console.log(
-      `[Startup] ${name} @ ${relativeTime.toFixed(2)}ms`,
-    );
+    console.log(`[Startup] ${name} @ ${relativeTime.toFixed(2)}ms`);
   }
 
   getMilestones(): StartupMilestone[] {
@@ -52,9 +51,13 @@ class StartupPerformanceTracker {
       this.milestones.map((m) => ({
         Milestone: m.name,
         "Time (ms)": m.relativeTime.toFixed(2),
-        "Delta (ms)": this.milestones.indexOf(m) > 0
-          ? (m.relativeTime - this.milestones[this.milestones.indexOf(m) - 1].relativeTime).toFixed(2)
-          : "0.00",
+        "Delta (ms)":
+          this.milestones.indexOf(m) > 0
+            ? (
+                m.relativeTime -
+                this.milestones[this.milestones.indexOf(m) - 1].relativeTime
+              ).toFixed(2)
+            : "0.00",
       })),
     );
     console.groupEnd();

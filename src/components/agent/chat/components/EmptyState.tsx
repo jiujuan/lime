@@ -411,10 +411,7 @@ interface EmptyStateProps extends SkillSelectionSourceProps {
   /** 切换当前项目资料 */
   onSelectKnowledgePack?: (packName: string) => void;
   /** 显式选择 / 取消一份协同资料 */
-  onToggleKnowledgeCompanionPack?: (
-    packName: string,
-    enabled: boolean,
-  ) => void;
+  onToggleKnowledgeCompanionPack?: (packName: string, enabled: boolean) => void;
   /** 从当前输入或会话沉淀项目资料 */
   onStartKnowledgeOrganize?: () => void;
   /** 打开项目资料管理 */

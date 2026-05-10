@@ -871,7 +871,9 @@ export function AppSidebarConversationShelf({
       ) : null}
       <ConversationSection>
         <ConversationSectionHeader>
-          <ConversationSectionTitle>{recentTitleLabel}</ConversationSectionTitle>
+          <ConversationSectionTitle>
+            {recentTitleLabel}
+          </ConversationSectionTitle>
           <ConversationActionButton
             type="button"
             onClick={onCreateConversation}

@@ -56,8 +56,7 @@ export function buildSessionSwitchStartMetricContext(params: {
     cachedLocalMessagesCount: params.cachedSnapshot?.messages.length ?? 0,
     currentSessionId: params.currentSessionId ?? null,
     messagesCount: params.messagesCount,
-    refreshCachedSnapshotImmediately:
-      params.refreshCachedSnapshotImmediately,
+    refreshCachedSnapshotImmediately: params.refreshCachedSnapshotImmediately,
     sessionId: params.topicId,
     topicId: params.topicId,
     workspaceId: params.workspaceId,

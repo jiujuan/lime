@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Check, LoaderCircle, Sparkles } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,9 +20,11 @@ import {
   findCuratedTaskTemplateById,
   hasFilledAllCuratedTaskRequiredInputs,
   resolveCuratedTaskInputValues,
+  type CuratedTaskPresentationCopy,
   type CuratedTaskInputValues,
   type CuratedTaskTemplateItem,
 } from "@/components/agent/chat/utils/curatedTaskTemplates";
+import { formatNumber } from "@/i18n/format";
 import { listUnifiedMemories } from "@/lib/api/unifiedMemory";
 import { cn } from "@/lib/utils";
 import {
@@ -83,6 +86,8 @@ export function CuratedTaskLauncherDialog({
   onApplyReviewSuggestion,
   onConfirm,
 }: CuratedTaskLauncherDialogProps) {
+  const { i18n, t } = useTranslation("agent");
+  const locale = i18n.language;
   const [inputValues, setInputValues] = useState<CuratedTaskInputValues>({});
   const [referenceEntries, setReferenceEntries] = useState<
     CuratedTaskReferenceEntry[]
@@ -203,7 +208,10 @@ export function CuratedTaskLauncherDialog({
           ]);
         });
         setReferenceEntriesError(
-          "暂时没拿到最近参考列表，仍然可以直接进入生成。",
+          t(
+            "curatedTask.launcher.reference.loadError",
+            "暂时没拿到最近参考列表，仍然可以直接进入生成。",
+          ),
         );
       })
       .finally(() => {
@@ -217,7 +225,7 @@ export function CuratedTaskLauncherDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, referenceEntriesVersion, seededReferenceEntries, task]);
+  }, [open, referenceEntriesVersion, seededReferenceEntries, task, t]);
 
   const isLaunchDisabled = useMemo(() => {
     if (!task) {
@@ -260,8 +268,11 @@ export function CuratedTaskLauncherDialog({
   );
   const launcherReadinessLabel =
     remainingRequiredFieldCount === 0
-      ? "关键信息已齐，可以直接开始"
-      : `还差 ${remainingRequiredFieldCount} 项关键信息`;
+      ? t("curatedTask.launcher.readiness.ready", "关键信息已齐，可以直接开始")
+      : t("curatedTask.launcher.readiness.missing", {
+          count: formatNumber(remainingRequiredFieldCount, { locale }),
+          defaultValue: "还差 {{count}} 项关键信息",
+        });
 
   const launcherOutcomeSummary = useMemo(() => {
     if (!task) {
@@ -270,11 +281,40 @@ export function CuratedTaskLauncherDialog({
 
     const followUp = task.followUpActions[0];
     if (followUp) {
-      return `我会先给你 ${task.outputHint}，接着可以继续${followUp}。`;
+      return t("curatedTask.launcher.outcome.withFollowUp", {
+        defaultValue: "我会先给你 {{outputHint}}，接着可以继续{{followUp}}。",
+        followUp,
+        outputHint: task.outputHint,
+      });
     }
 
-    return `我会先给你 ${task.outputHint}。`;
-  }, [task]);
+    return t("curatedTask.launcher.outcome.default", {
+      defaultValue: "我会先给你 {{outputHint}}。",
+      outputHint: task.outputHint,
+    });
+  }, [task, t]);
+  const curatedTaskPresentationCopy = useMemo<CuratedTaskPresentationCopy>(
+    () => ({
+      formatFactItems: (visibleItems, totalCount) => {
+        const items = visibleItems.join(
+          t("curatedTask.launcher.summary.itemSeparator", "、"),
+        );
+        if (visibleItems.length >= totalCount) {
+          return items;
+        }
+
+        return t("curatedTask.launcher.summary.withMore", {
+          defaultValue: "{{items}} 等 {{total}} 项",
+          items,
+          remaining: formatNumber(totalCount - visibleItems.length, {
+            locale,
+          }),
+          total: formatNumber(totalCount, { locale }),
+        });
+      },
+    }),
+    [locale, t],
+  );
   const launcherStarterContract = useMemo(() => {
     if (!task) {
       return null;
@@ -282,12 +322,24 @@ export function CuratedTaskLauncherDialog({
 
     return {
       requiredSummary:
-        summarizeCuratedTaskRequiredInputs(task) || "当前无必填信息",
+        summarizeCuratedTaskRequiredInputs(
+          task,
+          2,
+          curatedTaskPresentationCopy,
+        ) || t("curatedTask.launcher.contract.requiredEmpty", "当前无必填信息"),
       outputSummary:
-        summarizeCuratedTaskOutputContract(task) || task.outputHint,
-      followUpSummary: summarizeCuratedTaskFollowUpActions(task),
+        summarizeCuratedTaskOutputContract(
+          task,
+          2,
+          curatedTaskPresentationCopy,
+        ) || task.outputHint,
+      followUpSummary: summarizeCuratedTaskFollowUpActions(
+        task,
+        2,
+        curatedTaskPresentationCopy,
+      ),
     };
-  }, [task]);
+  }, [curatedTaskPresentationCopy, task, t]);
 
   const latestReviewTaskSignal = useMemo(
     () =>
@@ -362,12 +414,23 @@ export function CuratedTaskLauncherDialog({
       return null;
     }
 
+    const fields = carriedFields.join(
+      t("curatedTask.launcher.carry.fieldSeparator", " / "),
+    );
     if (task.id === "account-project-review") {
-      return `下面的 ${carriedFields.join(" / ")} 已按这轮结果自动带入，你可以直接改成这次真正想判断的版本。`;
+      return t("curatedTask.launcher.carry.review", {
+        defaultValue:
+          "下面的 {{fields}} 已按这轮结果自动带入，你可以直接改成这次真正想判断的版本。",
+        fields,
+      });
     }
 
-    return `下面的 ${carriedFields.join(" / ")} 已按这轮结果自动带入，你可以直接改成这次真正想推进的版本。`;
-  }, [activeReviewBaselineSnapshot, inputValues, task]);
+    return t("curatedTask.launcher.carry.default", {
+      defaultValue:
+        "下面的 {{fields}} 已按这轮结果自动带入，你可以直接改成这次真正想推进的版本。",
+      fields,
+    });
+  }, [activeReviewBaselineSnapshot, inputValues, task, t]);
 
   const handleValueChange = (key: string, value: string) => {
     setInputValues((current) => ({
@@ -439,7 +502,10 @@ export function CuratedTaskLauncherDialog({
                   {task.title}
                 </DialogTitle>
                 <DialogDescription className="max-w-2xl text-sm leading-6 text-slate-600">
-                  开始这一步前，我先确认几件事。{task.summary}
+                  {t("curatedTask.launcher.description", {
+                    defaultValue: "开始这一步前，我先确认几件事。{{summary}}",
+                    summary: task.summary,
+                  })}
                 </DialogDescription>
                 <div className="rounded-[18px] border border-slate-200 bg-white/90 px-3.5 py-3 text-xs leading-5 text-slate-500">
                   {launcherOutcomeSummary}
@@ -448,20 +514,29 @@ export function CuratedTaskLauncherDialog({
                   <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-xs leading-5 text-slate-600">
                     <div>
                       <span className="font-medium text-slate-700">
-                        你先给：
+                        {t(
+                          "curatedTask.launcher.contract.requiredPrefix",
+                          "你先给：",
+                        )}
                       </span>
                       {launcherStarterContract.requiredSummary}
                     </div>
                     <div className="mt-1">
                       <span className="font-medium text-slate-700">
-                        会拿到：
+                        {t(
+                          "curatedTask.launcher.contract.outputPrefix",
+                          "会拿到：",
+                        )}
                       </span>
                       {launcherStarterContract.outputSummary}
                     </div>
                     {launcherStarterContract.followUpSummary ? (
                       <div className="mt-1">
                         <span className="font-medium text-slate-700">
-                          接着可做：
+                          {t(
+                            "curatedTask.launcher.contract.followUpPrefix",
+                            "接着可做：",
+                          )}
                         </span>
                         {launcherStarterContract.followUpSummary}
                       </div>
@@ -487,10 +562,13 @@ export function CuratedTaskLauncherDialog({
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full border border-emerald-200 bg-white px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                      围绕最近判断
+                      {t("curatedTask.launcher.review.badge", "围绕最近判断")}
                     </span>
                     <div className="text-xs font-semibold leading-5 text-slate-900">
-                      最近判断已更新：{reviewFeedbackProjection.signal.title}
+                      {t("curatedTask.launcher.review.title", {
+                        defaultValue: "最近判断已更新：{{title}}",
+                        title: reviewFeedbackProjection.signal.title,
+                      })}
                     </div>
                   </div>
                   <div className="mt-1.5 text-xs leading-5 text-slate-600">
@@ -498,7 +576,11 @@ export function CuratedTaskLauncherDialog({
                   </div>
                   <div className="mt-1 text-xs leading-5 text-slate-600">
                     {primarySuggestedTask
-                      ? `这轮判断更建议优先回到「${primarySuggestedTask.title}」，切过去后我会继续带着当前参考对象。`
+                      ? t("curatedTask.launcher.review.switchSuggestion", {
+                          defaultValue:
+                            "这轮判断更建议优先回到「{{title}}」，切过去后我会继续带着当前参考对象。",
+                          title: primarySuggestedTask.title,
+                        })
                       : reviewFeedbackProjection.suggestionText}
                   </div>
                   {primarySuggestedTask && onApplyReviewSuggestion ? (
@@ -509,10 +591,16 @@ export function CuratedTaskLauncherDialog({
                         data-testid="curated-task-launcher-review-feedback-banner-action"
                         onClick={handleApplyReviewSuggestion}
                       >
-                        改用「{primarySuggestedTask.title}」
+                        {t("curatedTask.launcher.review.switchAction", {
+                          defaultValue: "改用「{{title}}」",
+                          title: primarySuggestedTask.title,
+                        })}
                       </button>
                       <span className="text-[10px] leading-5 text-slate-500">
-                        这一步已经填过的同名字段会尽量保留。
+                        {t(
+                          "curatedTask.launcher.review.keepFieldsHint",
+                          "这一步已经填过的同名字段会尽量保留。",
+                        )}
                       </span>
                     </div>
                   ) : null}
@@ -525,10 +613,13 @@ export function CuratedTaskLauncherDialog({
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded-full border border-emerald-200 bg-white px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                      当前结果基线
+                      {t("curatedTask.launcher.baseline.badge", "当前结果基线")}
                     </span>
                     <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600">
-                      项目结果
+                      {t(
+                        "curatedTask.launcher.baseline.projectResult",
+                        "项目结果",
+                      )}
                     </span>
                   </div>
                   <div className="mt-2 text-sm font-semibold text-slate-900">
@@ -551,10 +642,13 @@ export function CuratedTaskLauncherDialog({
               <section className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="text-sm font-semibold text-slate-900">
-                    先给我这些信息
+                    {t("curatedTask.launcher.inputs.title", "先给我这些信息")}
                   </div>
                   <div className="text-[11px] text-slate-500">
-                    缺的越少，起第一版越快
+                    {t(
+                      "curatedTask.launcher.inputs.hint",
+                      "缺的越少，起第一版越快",
+                    )}
                   </div>
                 </div>
               </section>
@@ -577,7 +671,10 @@ export function CuratedTaskLauncherDialog({
                             {field.label}
                           </Label>
                           <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-500">
-                            必填
+                            {t(
+                              "curatedTask.launcher.inputs.requiredBadge",
+                              "必填",
+                            )}
                           </span>
                         </div>
                         {field.helperText ? (
@@ -617,14 +714,25 @@ export function CuratedTaskLauncherDialog({
                   <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600">
-                        最多 {MAX_REFERENCE_SELECTION_COUNT} 条
+                        {t("curatedTask.launcher.reference.limitBadge", {
+                          count: formatNumber(MAX_REFERENCE_SELECTION_COUNT, {
+                            locale,
+                          }),
+                          defaultValue: "最多 {{count}} 条",
+                        })}
                       </span>
                     </div>
                     <div className="text-sm font-semibold text-slate-900">
-                      想的话，再带几条参考对象
+                      {t(
+                        "curatedTask.launcher.reference.title",
+                        "想的话，再带几条参考对象",
+                      )}
                     </div>
                     <div className="text-xs leading-5 text-slate-500">
-                      风格、偏好、项目结果和当前上下文都可以。不是必填，但会让这一轮更贴近你的目标。
+                      {t(
+                        "curatedTask.launcher.reference.description",
+                        "风格、偏好、项目结果和当前上下文都可以。不是必填，但会让这一轮更贴近你的目标。",
+                      )}
                     </div>
                   </div>
                   {selectedReferenceEntryIds.length > 0 ? (
@@ -634,7 +742,7 @@ export function CuratedTaskLauncherDialog({
                       className="rounded-2xl border-slate-200"
                       onClick={() => setSelectedReferenceEntryIds([])}
                     >
-                      清空已选
+                      {t("curatedTask.launcher.reference.clear", "清空已选")}
                     </Button>
                   ) : null}
                 </div>
@@ -642,7 +750,10 @@ export function CuratedTaskLauncherDialog({
                 {isReferenceEntriesLoading ? (
                   <div className="mt-4 flex items-center gap-2 rounded-[18px] border border-dashed border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
                     <LoaderCircle className="h-4 w-4 animate-spin text-slate-500" />
-                    正在读取最近参考对象…
+                    {t(
+                      "curatedTask.launcher.reference.loading",
+                      "正在读取最近参考对象…",
+                    )}
                   </div>
                 ) : null}
 
@@ -704,15 +815,31 @@ export function CuratedTaskLauncherDialog({
                               </div>
                               {entry.tags.length > 0 ? (
                                 <div className="text-[11px] leading-5 text-slate-500">
-                                  相关线索：{entry.tags.slice(0, 2).join("、")}
+                                  {t("curatedTask.launcher.reference.tags", {
+                                    defaultValue: "相关线索：{{tags}}",
+                                    tags: entry.tags
+                                      .slice(0, 2)
+                                      .join(
+                                        t(
+                                          "curatedTask.launcher.reference.tagSeparator",
+                                          "、",
+                                        ),
+                                      ),
+                                  })}
                                 </div>
                               ) : null}
                               {entryReviewHighlights.length > 0 ? (
                                 <div className="rounded-[14px] border border-emerald-200 bg-emerald-50/80 px-3 py-2 text-xs leading-5 text-emerald-900">
                                   <div className="font-medium text-emerald-900">
-                                    当前结果基线：
-                                    {entryReviewSnapshot?.sourceTitle ||
-                                      entry.title}
+                                    {t(
+                                      "curatedTask.launcher.baseline.entryTitle",
+                                      {
+                                        defaultValue: "当前结果基线：{{title}}",
+                                        title:
+                                          entryReviewSnapshot?.sourceTitle ||
+                                          entry.title,
+                                      },
+                                    )}
                                   </div>
                                   <div className="mt-1 space-y-1">
                                     {entryReviewHighlights.map((item) => (
@@ -749,7 +876,10 @@ export function CuratedTaskLauncherDialog({
                 referenceEntries.length === 0 &&
                 !referenceEntriesError ? (
                   <div className="mt-4 rounded-[18px] border border-dashed border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
-                    当前还没有可选参考对象，后面补进来也可以。
+                    {t(
+                      "curatedTask.launcher.reference.empty",
+                      "当前还没有可选参考对象，后面补进来也可以。",
+                    )}
                   </div>
                 ) : null}
 
@@ -761,10 +891,21 @@ export function CuratedTaskLauncherDialog({
 
                 {selectedReferenceEntryIds.length > 0 ? (
                   <div className="mt-4 rounded-[18px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-                    已选择 {selectedReferenceEntryIds.length}{" "}
-                    条参考对象，本轮会一起带入生成。
+                    {t("curatedTask.launcher.reference.selected", {
+                      count: formatNumber(selectedReferenceEntryIds.length, {
+                        locale,
+                      }),
+                      defaultValue:
+                        "已选择 {{count}} 条参考对象，本轮会一起带入生成。",
+                    })}
                     {missingSelectedReferenceCount > 0
-                      ? ` 其中 ${missingSelectedReferenceCount} 条未出现在最近列表里，但发送时仍会保留。`
+                      ? t("curatedTask.launcher.reference.missingSelected", {
+                          count: formatNumber(missingSelectedReferenceCount, {
+                            locale,
+                          }),
+                          defaultValue:
+                            " 其中 {{count}} 条未出现在最近列表里，但发送时仍会保留。",
+                        })
                       : ""}
                   </div>
                 ) : null}
@@ -772,7 +913,7 @@ export function CuratedTaskLauncherDialog({
 
               <section className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
                 <div className="text-sm font-semibold text-slate-900">
-                  这一轮会先拿到什么
+                  {t("curatedTask.launcher.output.title", "这一轮会先拿到什么")}
                 </div>
                 <div className="mt-2 text-sm leading-6 text-slate-600">
                   {task.outputContract.join("、")}
@@ -790,7 +931,7 @@ export function CuratedTaskLauncherDialog({
                 className="rounded-2xl border-slate-200"
                 onClick={() => onOpenChange(false)}
               >
-                稍后再说
+                {t("curatedTask.launcher.action.cancel", "稍后再说")}
               </Button>
               <Button
                 type="button"
@@ -799,7 +940,7 @@ export function CuratedTaskLauncherDialog({
                 disabled={isLaunchDisabled}
                 onClick={handleConfirm}
               >
-                开始生成
+                {t("curatedTask.launcher.action.confirm", "开始生成")}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </DialogFooter>

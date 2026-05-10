@@ -563,9 +563,7 @@ describe("StreamingRenderer", () => {
       '[data-testid="streaming-process-group"] button',
     );
     expect(processGroupButton?.getAttribute("aria-expanded")).toBe("false");
-    expect(container.textContent).not.toContain(
-      "先检查 auto-scroll 触发条件",
-    );
+    expect(container.textContent).not.toContain("先检查 auto-scroll 触发条件");
     expect(container.textContent).toContain("1 个工具调用");
     expect(
       container.querySelector('[data-testid="streaming-process-group"]'),

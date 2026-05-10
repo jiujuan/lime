@@ -48,7 +48,8 @@ async function waitForStableViewport(): Promise<void> {
     return;
   }
 
-  const deadline = window.performance.now() + STARTUP_REVEAL_VIEWPORT_TIMEOUT_MS;
+  const deadline =
+    window.performance.now() + STARTUP_REVEAL_VIEWPORT_TIMEOUT_MS;
   let previous = readViewportSize();
   let stableFrames = 0;
 

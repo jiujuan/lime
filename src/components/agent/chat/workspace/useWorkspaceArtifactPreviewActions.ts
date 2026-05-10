@@ -354,10 +354,8 @@ export function useWorkspaceArtifactPreviewActions({
   const handleFileClick = useCallback(
     (fileName: string, content: string) => {
       if (activeTheme === "general") {
-        const layeredDesignArtifact = createLayeredDesignArtifactFromWorkspaceFile(
-          fileName,
-          content,
-        );
+        const layeredDesignArtifact =
+          createLayeredDesignArtifactFromWorkspaceFile(fileName, content);
         if (layeredDesignArtifact) {
           upsertGeneralArtifact(layeredDesignArtifact);
           void openArtifactInWorkbench(layeredDesignArtifact);

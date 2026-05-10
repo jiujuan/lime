@@ -17,7 +17,9 @@ const LazyAgentChatWorkspace = lazy(async () => {
   startupTracker.mark("AgentChatWorkspace: module load start");
   const module = await loadAgentChatWorkspaceModule();
   const duration = performance.now() - t0;
-  startupTracker.mark(`AgentChatWorkspace: module loaded (${duration.toFixed(0)}ms)`);
+  startupTracker.mark(
+    `AgentChatWorkspace: module loaded (${duration.toFixed(0)}ms)`,
+  );
   console.info(
     `[PERF] AgentChatWorkspace module loaded: ${duration.toFixed(0)}ms`,
   );

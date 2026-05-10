@@ -177,10 +177,39 @@ function selectRepresentativeSidecar(sidecars) {
     if (candidateStale > selectedStale) {
       return candidate;
     }
+    if (candidateStale < selectedStale) {
+      return selected;
+    }
+    const selectedMaxStaleSeconds = maxItemStaleSeconds(selectedStatus);
+    const candidateMaxStaleSeconds = maxItemStaleSeconds(candidateStatus);
+    if (candidateMaxStaleSeconds > selectedMaxStaleSeconds) {
+      return candidate;
+    }
+    if (candidateMaxStaleSeconds < selectedMaxStaleSeconds) {
+      return selected;
+    }
     const selectedRunning = Number(selectedStatus?.counts?.running || 0);
     const candidateRunning = Number(candidateStatus?.counts?.running || 0);
-    return candidateRunning > selectedRunning ? candidate : selected;
+    if (candidateRunning > selectedRunning) {
+      return candidate;
+    }
+    if (candidateRunning < selectedRunning) {
+      return selected;
+    }
+    return generatedAtMs(candidateStatus) > generatedAtMs(selectedStatus) ? candidate : selected;
   }, null);
+}
+
+function maxItemStaleSeconds(status) {
+  return Math.max(
+    0,
+    ...asArray(status?.items).map((item) => Number(item?.staleSeconds || 0)),
+  );
+}
+
+function generatedAtMs(status) {
+  const value = Date.parse(String(status?.generatedAt || ""));
+  return Number.isFinite(value) ? value : 0;
 }
 
 function renderAgentQcGuiOwnerSummary(report) {

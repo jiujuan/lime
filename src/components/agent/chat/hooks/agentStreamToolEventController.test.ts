@@ -26,7 +26,7 @@ describe("agentStreamToolEventController", () => {
         output: [
           "正文",
           LIME_TOOL_METADATA_BEGIN,
-          "{\"task_id\":\"task-a\",\"task_type\":\"image_generate\"}",
+          '{"task_id":"task-a","task_type":"image_generate"}',
           LIME_TOOL_METADATA_END,
         ].join("\n"),
       }),

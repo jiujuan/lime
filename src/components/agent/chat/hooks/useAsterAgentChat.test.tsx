@@ -210,8 +210,7 @@ function mountHook(
         currentOptions.getSyncedSessionRecentPreferences,
       initialTopicsLoadMode: currentOptions.initialTopicsLoadMode,
       initialTopicsDeferredDelayMs: currentOptions.initialTopicsDeferredDelayMs,
-      initialRuntimeWarmupLoadMode:
-        currentOptions.initialRuntimeWarmupLoadMode,
+      initialRuntimeWarmupLoadMode: currentOptions.initialRuntimeWarmupLoadMode,
       initialRuntimeWarmupDeferredDelayMs:
         currentOptions.initialRuntimeWarmupDeferredDelayMs,
     });
@@ -2820,9 +2819,9 @@ describe("useAsterAgentChat runtime routing", () => {
             part.text.includes("先判断任务是直接回答还是需要联网"),
         ),
       ).toBe(true);
-      expect(getAgentStreamTextOverlay(assistantMessage?.id)?.content).toContain(
-        "我会先分析你的诉求。",
-      );
+      expect(
+        getAgentStreamTextOverlay(assistantMessage?.id)?.content,
+      ).toContain("我会先分析你的诉求。");
 
       act(() => {
         stream.emit({
@@ -3922,7 +3921,9 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
         scheduledTasks[0]?.();
       });
 
-      expect(sessionStorage.getItem(`aster_messages_${workspaceId}`)).toBe("[]");
+      expect(sessionStorage.getItem(`aster_messages_${workspaceId}`)).toBe(
+        "[]",
+      );
       expect(
         localStorage.getItem(
           `agent_topic_model_pref_${workspaceId}_${createdSessionId}`,

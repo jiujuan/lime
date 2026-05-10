@@ -4,8 +4,7 @@ import {
   stripAssistantProtocolResidue,
 } from "../utils/protocolResidue";
 
-export const AGENT_STREAM_EMPTY_FINAL_REPLY_ERROR_HINT =
-  "模型未输出最终答复";
+export const AGENT_STREAM_EMPTY_FINAL_REPLY_ERROR_HINT = "模型未输出最终答复";
 export const AGENT_STREAM_EMPTY_FINAL_REPLY_ERROR_MESSAGE =
   "模型未输出最终答复，请重试";
 export const AGENT_STREAM_EMPTY_FINAL_REPLY_FALLBACK_CONTENT =

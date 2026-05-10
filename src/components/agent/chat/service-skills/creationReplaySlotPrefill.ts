@@ -11,6 +11,15 @@ export interface CreationReplaySlotPrefillResult {
   hint: string;
 }
 
+export interface CreationReplaySlotPrefillCopy {
+  sourceLabels?: {
+    memoryEntry?: string;
+    skillScaffold?: string;
+  };
+  formatFieldSummary?: (visibleLabels: string[], totalCount: number) => string;
+  formatHint?: (sourceLabel: string, fieldSummary: string) => string;
+}
+
 const PLATFORM_MATCHERS = [
   {
     value: "xiaohongshu",
@@ -207,23 +216,30 @@ function extractReplayUrl(creationReplay: CreationReplayMetadata): string {
 
 function resolveReplaySourceLabel(
   creationReplay: CreationReplayMetadata,
+  copy: CreationReplaySlotPrefillCopy = {},
 ): string {
   return creationReplay.kind === "memory_entry"
-    ? "当前灵感条目"
-    : "当前技能草稿";
+    ? (copy.sourceLabels?.memoryEntry ?? "当前灵感条目")
+    : (copy.sourceLabels?.skillScaffold ?? "当前技能草稿");
 }
 
 function buildPrefillHint(
   creationReplay: CreationReplayMetadata,
   fieldLabels: string[],
+  copy: CreationReplaySlotPrefillCopy = {},
 ): string {
   const visibleLabels = fieldLabels.slice(0, 3);
   const fieldSummary =
-    fieldLabels.length > 3
+    copy.formatFieldSummary?.(visibleLabels, fieldLabels.length) ??
+    (fieldLabels.length > 3
       ? `${visibleLabels.join("、")} 等参数`
-      : visibleLabels.join("、");
+      : visibleLabels.join("、"));
+  const sourceLabel = resolveReplaySourceLabel(creationReplay, copy);
 
-  return `已根据${resolveReplaySourceLabel(creationReplay)}自动预填 ${fieldSummary}，可继续修改后执行。`;
+  return (
+    copy.formatHint?.(sourceLabel, fieldSummary) ??
+    `已根据${sourceLabel}自动预填 ${fieldSummary}，可继续修改后执行。`
+  );
 }
 
 function findFirstKeywordValue(
@@ -678,6 +694,7 @@ function shouldApplyPrefillValue(
 export function buildCreationReplaySlotPrefill(
   skill: ServiceSkillHomeItem,
   creationReplay?: CreationReplayMetadata,
+  copy: CreationReplaySlotPrefillCopy = {},
 ): CreationReplaySlotPrefillResult | null {
   if (!creationReplay) {
     return null;
@@ -703,6 +720,6 @@ export function buildCreationReplaySlotPrefill(
   return {
     slotValues,
     fieldLabels,
-    hint: buildPrefillHint(creationReplay, fieldLabels),
+    hint: buildPrefillHint(creationReplay, fieldLabels, copy),
   };
 }

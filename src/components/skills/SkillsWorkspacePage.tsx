@@ -71,6 +71,7 @@ import {
   summarizeCuratedTaskOutputContract,
   summarizeCuratedTaskRequiredInputs,
   type CuratedTaskInputValues,
+  type CuratedTaskPresentationCopy,
   type CuratedTaskTemplateItem,
 } from "@/components/agent/chat/utils/curatedTaskTemplates";
 import {
@@ -456,6 +457,47 @@ export function SkillsWorkspacePage({
         "；",
       );
       return {
+        creationReplay: {
+          sourceLabels: {
+            memoryEntry: t(
+              "skills.workspace.serviceSkill.prefill.creationReplay.source.memoryEntry",
+              "当前灵感条目",
+            ),
+            skillScaffold: t(
+              "skills.workspace.serviceSkill.prefill.creationReplay.source.skillScaffold",
+              "当前技能草稿",
+            ),
+          },
+          formatFieldSummary: (visibleLabels, totalCount) => {
+            const locale = i18n.language;
+            const fields = formatList(visibleLabels, {
+              locale,
+              style: "short",
+            });
+            if (visibleLabels.length >= totalCount) {
+              return fields;
+            }
+
+            return t(
+              "skills.workspace.serviceSkill.prefill.creationReplay.fieldSummaryWithMore",
+              {
+                defaultValue: "{{fields}} 等参数",
+                fields,
+                remaining: formatNumber(totalCount - visibleLabels.length, {
+                  locale,
+                }),
+                total: formatNumber(totalCount, { locale }),
+              },
+            );
+          },
+          formatHint: (sourceLabel, fieldSummary) =>
+            t("skills.workspace.serviceSkill.prefill.creationReplay.hint", {
+              defaultValue:
+                "已根据{{source}}自动预填 {{fields}}，可继续修改后执行。",
+              fields: fieldSummary,
+              source: sourceLabel,
+            }),
+        },
         filledPrefix: t(
           "skills.workspace.serviceSkill.prefill.filledPrefix",
           "上次填写：",
@@ -497,6 +539,91 @@ export function SkillsWorkspacePage({
               "已根据你上次成功执行 {{title}} 时的输入自动预填，可继续修改后执行。",
             title: sceneTitle,
           }),
+      };
+    }, [i18n.language, t]);
+  const curatedTaskPresentationCopy =
+    useMemo<CuratedTaskPresentationCopy>(() => {
+      const itemSeparator = t(
+        "skills.workspace.curatedTask.itemSeparator",
+        "；",
+      );
+      const formatItemsWithMore = (
+        key: string,
+        defaultValue: string,
+        visibleItems: string[],
+        totalCount: number,
+      ) => {
+        const items = visibleItems.join(itemSeparator);
+        if (visibleItems.length >= totalCount) {
+          return items;
+        }
+
+        const locale = i18n.language;
+        return t(key, {
+          defaultValue,
+          items,
+          remaining: formatNumber(totalCount - visibleItems.length, {
+            locale,
+          }),
+          total: formatNumber(totalCount, { locale }),
+        });
+      };
+
+      return {
+        followUpPrefix: t(
+          "skills.workspace.curatedTask.followUpPrefix",
+          "下一步：",
+        ),
+        itemSeparator,
+        outputPrefix: t("skills.workspace.curatedTask.outputPrefix", "交付："),
+        recentFilledPrefix: t(
+          "skills.workspace.curatedTask.recentFilledPrefix",
+          "上次填写：",
+        ),
+        recentReferencePrefix: t(
+          "skills.workspace.curatedTask.recentReferencePrefix",
+          "参考：",
+        ),
+        requiredPrefix: t(
+          "skills.workspace.curatedTask.requiredPrefix",
+          "需要：",
+        ),
+        resultDestinationPrefix: t(
+          "skills.workspace.curatedTask.resultDestinationPrefix",
+          "去向：",
+        ),
+        segmentSeparator: t(
+          "skills.workspace.curatedTask.segmentSeparator",
+          " · ",
+        ),
+        formatFactItems: (visibleItems, totalCount) =>
+          formatItemsWithMore(
+            "skills.workspace.curatedTask.factItems.withMore",
+            "{{items}} 等 {{total}} 项",
+            visibleItems,
+            totalCount,
+          ),
+        formatRecentPrefillHint: (taskTitle) =>
+          t("skills.workspace.curatedTask.prefillHint", {
+            defaultValue:
+              "已根据你上次启动 {{title}} 时的参数自动预填，可继续修改后进入生成。",
+            title: taskTitle,
+          }),
+        formatRecentReferenceFallback: (totalCount) =>
+          t(
+            "skills.workspace.curatedTask.recentReferenceFallback",
+            "{{count}} 条参考对象",
+            {
+              count: totalCount,
+            },
+          ),
+        formatRecentReferenceItems: (visibleTitles, totalCount) =>
+          formatItemsWithMore(
+            "skills.workspace.curatedTask.referenceItems.withMore",
+            "{{items}} 等 {{total}} 条",
+            visibleTitles,
+            totalCount,
+          ),
       };
     }, [i18n.language, t]);
   const {
@@ -1682,7 +1809,10 @@ export function SkillsWorkspacePage({
                         const template = featured.template;
                         const isPrimaryRecommendation = index === 0;
                         const launchPrefill =
-                          resolveCuratedTaskTemplateLaunchPrefill(template);
+                          resolveCuratedTaskTemplateLaunchPrefill(
+                            template,
+                            curatedTaskPresentationCopy,
+                          );
                         const reviewPrefillSnapshot =
                           buildSceneAppExecutionReviewPrefillSnapshot({
                             referenceEntries: launchPrefill?.referenceEntries,
@@ -1694,6 +1824,7 @@ export function SkillsWorkspacePage({
                           );
                         const recentUsageDescription =
                           buildCuratedTaskRecentUsageDescription({
+                            copy: curatedTaskPresentationCopy,
                             task: template,
                             prefill: launchPrefill,
                           });
@@ -1705,11 +1836,23 @@ export function SkillsWorkspacePage({
                             highlights: reviewPrefillHighlights,
                           });
                         const requiredSummary =
-                          summarizeCuratedTaskRequiredInputs(template);
+                          summarizeCuratedTaskRequiredInputs(
+                            template,
+                            2,
+                            curatedTaskPresentationCopy,
+                          );
                         const outputSummary =
-                          summarizeCuratedTaskOutputContract(template);
+                          summarizeCuratedTaskOutputContract(
+                            template,
+                            2,
+                            curatedTaskPresentationCopy,
+                          );
                         const followUpSummary =
-                          summarizeCuratedTaskFollowUpActions(template);
+                          summarizeCuratedTaskFollowUpActions(
+                            template,
+                            2,
+                            curatedTaskPresentationCopy,
+                          );
                         const resultDestination =
                           getCuratedTaskOutputDestination(template);
 

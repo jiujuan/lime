@@ -14,7 +14,9 @@ export type SessionExecutionStrategySource =
   | "shadow_cache"
   | "default";
 
-export type SessionModelPreferenceSource = "execution_runtime" | "session_storage";
+export type SessionModelPreferenceSource =
+  | "execution_runtime"
+  | "session_storage";
 
 export interface SessionMetadataSyncPlan {
   accessMode: AgentAccessMode;
@@ -116,9 +118,9 @@ export function buildSessionMetadataSyncPlan(params: {
     fallbackProviderPreference,
     hasPatch: Boolean(
       patch.accessMode ||
-        patch.providerType ||
-        patch.model ||
-        patch.executionStrategy,
+      patch.providerType ||
+      patch.model ||
+      patch.executionStrategy,
     ),
     modelPreferenceSource: params.runtimePreference
       ? "execution_runtime"

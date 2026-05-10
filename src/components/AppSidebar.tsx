@@ -4157,10 +4157,7 @@ export function AppSidebar({
     "navigation.sidebar.sections.pluginExtensions",
     "插件扩展",
   );
-  const languageMenuLabel = t(
-    "navigation.sidebar.account.language",
-    "语言",
-  );
+  const languageMenuLabel = t("navigation.sidebar.account.language", "语言");
   const interfaceLanguageLabel = t(
     "navigation.sidebar.account.interfaceLanguage",
     "界面语言",
@@ -4173,10 +4170,7 @@ export function AppSidebar({
     "navigation.sidebar.account.openMenu",
     "打开用户菜单",
   );
-  const accountMenuLabel = t(
-    "navigation.sidebar.account.menu",
-    "用户菜单",
-  );
+  const accountMenuLabel = t("navigation.sidebar.account.menu", "用户菜单");
   const accountCloudStateLabel = t(
     "navigation.sidebar.account.state.cloud",
     "云端",
@@ -4189,24 +4183,18 @@ export function AppSidebar({
     "navigation.sidebar.account.localTooltip",
     "开源使用 · 本地可用",
   );
-  const connectCloudLabel = t(
-    "navigation.sidebar.account.connectCloud",
-    {
-      brand: cloudBrandLabel,
-      defaultValue: "连接 {{brand}}",
-    },
-  );
+  const connectCloudLabel = t("navigation.sidebar.account.connectCloud", {
+    brand: cloudBrandLabel,
+    defaultValue: "连接 {{brand}}",
+  });
   const accountLoginPendingLabel = t(
     "navigation.sidebar.account.login.opening",
     "正在打开...",
   );
-  const accountLoginOpenedLabel = t(
-    "navigation.sidebar.account.login.opened",
-    {
-      brand: cloudBrandLabel,
-      defaultValue: "已打开 {{brand}} 登录页，请在浏览器完成授权",
-    },
-  );
+  const accountLoginOpenedLabel = t("navigation.sidebar.account.login.opened", {
+    brand: cloudBrandLabel,
+    defaultValue: "已打开 {{brand}} 登录页，请在浏览器完成授权",
+  });
   const accountLoginFailedFallbackLabel = t(
     "navigation.sidebar.account.login.failed",
     {
@@ -4237,10 +4225,7 @@ export function AppSidebar({
     "模型设置",
   );
   const accountAboutLabel = t("navigation.sidebar.account.about", "关于");
-  const accountLogoutLabel = t(
-    "navigation.sidebar.account.logout",
-    "退出登录",
-  );
+  const accountLogoutLabel = t("navigation.sidebar.account.logout", "退出登录");
   const accountLogoutPendingLabel = t(
     "navigation.sidebar.account.logoutPending",
     "退出中...",
@@ -4839,7 +4824,9 @@ export function AppSidebar({
                           </TooltipContent>
                         </Tooltip>
                       </AccountPlanTitle>
-                      <AccountPlanBadge>{accountFreePlanLabel}</AccountPlanBadge>
+                      <AccountPlanBadge>
+                        {accountFreePlanLabel}
+                      </AccountPlanBadge>
                     </AccountPlanHeader>
                     <AccountPlanDetail>
                       <span>{accountNoLoginAvailableLabel}</span>

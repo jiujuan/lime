@@ -81,8 +81,7 @@ export function buildAgentStreamTextRenderTimerSchedulePlan(params: {
     shouldFlushAgentStreamTextRenderBacklog({
       backlogChars: pendingDelta.length,
       backlogFlushChars:
-        params.backlogFlushChars ??
-        AGENT_STREAM_TEXT_DELTA_BACKLOG_FLUSH_CHARS,
+        params.backlogFlushChars ?? AGENT_STREAM_TEXT_DELTA_BACKLOG_FLUSH_CHARS,
     })
   ) {
     return {

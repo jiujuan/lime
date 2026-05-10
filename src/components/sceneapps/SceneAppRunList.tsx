@@ -46,14 +46,18 @@ export function SceneAppRunList({
       return;
     }
 
-    const selectedRunIndex = runs.findIndex((run) => run.runId === selectedRunId);
+    const selectedRunIndex = runs.findIndex(
+      (run) => run.runId === selectedRunId,
+    );
     if (selectedRunIndex === -1) {
       setPage((currentPage) => Math.min(currentPage, totalPages));
       return;
     }
 
     const nextPage = Math.floor(selectedRunIndex / RUNS_PAGE_SIZE) + 1;
-    setPage((currentPage) => (currentPage === nextPage ? currentPage : nextPage));
+    setPage((currentPage) =>
+      currentPage === nextPage ? currentPage : nextPage,
+    );
   }, [runs, selectedRunId, totalPages]);
 
   return (

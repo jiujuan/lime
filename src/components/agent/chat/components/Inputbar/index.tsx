@@ -105,10 +105,7 @@ interface InputbarProps extends SkillSelectionSourceProps {
   knowledgePackOptions?: InputbarKnowledgePackOption[];
   onToggleKnowledgePack?: (enabled: boolean) => void;
   onSelectKnowledgePack?: (packName: string) => void;
-  onToggleKnowledgeCompanionPack?: (
-    packName: string,
-    enabled: boolean,
-  ) => void;
+  onToggleKnowledgeCompanionPack?: (packName: string, enabled: boolean) => void;
   onStartKnowledgeOrganize?: () => void;
   onManageKnowledgePacks?: () => void;
   queuedTurns?: QueuedTurnSnapshot[];

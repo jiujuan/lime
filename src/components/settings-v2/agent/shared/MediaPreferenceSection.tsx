@@ -94,7 +94,8 @@ export function MediaPreferenceSection({
             disabled={disabled || resetDisabled}
             className="rounded-full border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
           >
-            {resetLabel ?? t("settings.mediaGeneration.action.reset", "恢复默认")}
+            {resetLabel ??
+              t("settings.mediaGeneration.action.reset", "恢复默认")}
           </Button>
         ) : null}
       </div>

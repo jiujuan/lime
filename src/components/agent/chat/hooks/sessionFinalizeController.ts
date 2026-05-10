@@ -31,8 +31,8 @@ export function isCrossWorkspaceSessionDetail(params: {
 }): boolean {
   return Boolean(
     params.resolvedWorkspaceId &&
-      params.knownWorkspaceId &&
-      params.knownWorkspaceId !== params.resolvedWorkspaceId,
+    params.knownWorkspaceId &&
+    params.knownWorkspaceId !== params.resolvedWorkspaceId,
   );
 }
 

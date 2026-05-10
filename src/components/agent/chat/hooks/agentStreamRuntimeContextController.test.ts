@@ -45,15 +45,16 @@ describe("agentStreamRuntimeContextController", () => {
       shouldActivateStream: true,
       source: "turn_context",
     });
-    expect(applyAgentStreamTurnContextExecutionRuntime(null, event))
-      .toMatchObject({
-        session_id: "session-a",
-        provider_name: "deepseek",
-        model_name: "deepseek-chat",
-        latest_turn_id: "turn-a",
-        latest_turn_status: "running",
-        source: "turn_context",
-      });
+    expect(
+      applyAgentStreamTurnContextExecutionRuntime(null, event),
+    ).toMatchObject({
+      session_id: "session-a",
+      provider_name: "deepseek",
+      model_name: "deepseek-chat",
+      latest_turn_id: "turn-a",
+      latest_turn_status: "running",
+      source: "turn_context",
+    });
   });
 
   it("应构造 model change 前置计划并保留当前 turn 状态", () => {
@@ -88,13 +89,14 @@ describe("agentStreamRuntimeContextController", () => {
       shouldActivateStream: true,
       source: "model_change",
     });
-    expect(applyAgentStreamModelChangeExecutionRuntime(current, event))
-      .toMatchObject({
-        session_id: "session-a",
-        model_name: "deepseek-reasoner",
-        mode: "chat",
-        latest_turn_status: "completed",
-        source: "model_change",
-      });
+    expect(
+      applyAgentStreamModelChangeExecutionRuntime(current, event),
+    ).toMatchObject({
+      session_id: "session-a",
+      model_name: "deepseek-reasoner",
+      mode: "chat",
+      latest_turn_status: "completed",
+      source: "model_change",
+    });
   });
 });

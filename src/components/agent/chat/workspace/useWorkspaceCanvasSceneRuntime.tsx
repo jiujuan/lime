@@ -660,8 +660,7 @@ function buildRequestedFixWorkbenchPrompt(
   if (
     item.event.surface !== "work_board" ||
     item.action?.control !== "assign" ||
-    readWorkbenchRoutePayloadText(item, "taskEvent") !==
-      "review_requested_fix"
+    readWorkbenchRoutePayloadText(item, "taskEvent") !== "review_requested_fix"
   ) {
     return null;
   }
@@ -697,8 +696,7 @@ function buildRequestedFixWorkbenchPromptMetadata(
   if (
     item.event.surface !== "work_board" ||
     item.action?.control !== "assign" ||
-    readWorkbenchRoutePayloadText(item, "taskEvent") !==
-      "review_requested_fix"
+    readWorkbenchRoutePayloadText(item, "taskEvent") !== "review_requested_fix"
   ) {
     return null;
   }
@@ -804,7 +802,9 @@ function resolveAgentUiTeamWorkbenchNonLocalRouteResult(
     hasRouteTargetValue(item.target.workItemId) ||
     hasRouteTargetValue(item.event.workItemId)
   ) {
-    if (readWorkbenchRoutePayloadText(item, "taskEvent") === "team_reassignment") {
+    if (
+      readWorkbenchRoutePayloadText(item, "taskEvent") === "team_reassignment"
+    ) {
       return "work_item_source_located";
     }
     return "unsupported_work_item";

@@ -55,10 +55,7 @@ export function hasStructuredHistoricalContentHint(content: string): boolean {
 
 export function isHistoricalAssistantMessageHydrationCandidate<
   TMessage extends HistoricalConversationMessageLike,
->(
-  message: TMessage,
-  state: HistoricalMessageHydrationState,
-): boolean {
+>(message: TMessage, state: HistoricalMessageHydrationState): boolean {
   return (
     state.isRestoredHistoryWindow &&
     !state.focusedTimelineItemId &&
@@ -111,9 +108,7 @@ export function isHistoricalMarkdownHydrated(params: {
   hydrationIndexByMessageId: ReadonlyMap<string, number>;
   hydratedHistoricalMarkdownCount: number;
 }): boolean {
-  const hydrationIndex = params.hydrationIndexByMessageId.get(
-    params.messageId,
-  );
+  const hydrationIndex = params.hydrationIndexByMessageId.get(params.messageId);
   return (
     hydrationIndex === undefined ||
     hydrationIndex < params.hydratedHistoricalMarkdownCount
@@ -138,8 +133,7 @@ export function shouldDeferHistoricalAssistantMessageDetails<
       !isHistoricalMarkdownHydrated({
         messageId: params.message.id,
         hydrationIndexByMessageId: params.hydrationIndexByMessageId,
-        hydratedHistoricalMarkdownCount:
-          params.hydratedHistoricalMarkdownCount,
+        hydratedHistoricalMarkdownCount: params.hydratedHistoricalMarkdownCount,
       }))
   );
 }
@@ -166,8 +160,7 @@ export function countDeferredHistoricalContentParts<
         state: params.state,
         isHistoricalTimelineReady: params.isHistoricalTimelineReady,
         hydrationIndexByMessageId: params.hydrationIndexByMessageId,
-        hydratedHistoricalMarkdownCount:
-          params.hydratedHistoricalMarkdownCount,
+        hydratedHistoricalMarkdownCount: params.hydratedHistoricalMarkdownCount,
       })
     ) {
       count += 1;

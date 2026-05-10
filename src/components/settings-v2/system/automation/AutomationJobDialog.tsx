@@ -99,10 +99,7 @@ function translateWithValues(
   values: Record<string, string | number | boolean>,
 ): string {
   const translated = String(
-    t(
-      key as never,
-      { ...values, defaultValue } as never,
-    ),
+    t(key as never, { ...values, defaultValue } as never),
   );
   return Object.entries(values).reduce((text, [name, value]) => {
     const replacement = String(value);
@@ -415,10 +412,7 @@ function buildLegacyBrowserPayloadSummary(
       value: payload.profile_key ?? payload.profile_id,
     },
     {
-      label: t(
-        "settings.automation.jobDialog.legacy.summary.url",
-        "启动地址",
-      ),
+      label: t("settings.automation.jobDialog.legacy.summary.url", "启动地址"),
       value:
         payload.url?.trim() ||
         t(
@@ -468,10 +462,7 @@ function scheduleKindLabel(
 ): string {
   switch (scheduleKind) {
     case "every":
-      return t(
-        "settings.automation.jobDialog.schedule.kind.every",
-        "固定间隔",
-      );
+      return t("settings.automation.jobDialog.schedule.kind.every", "固定间隔");
     case "cron":
       return t("settings.automation.jobDialog.schedule.kind.cron", "Cron");
     case "at":
@@ -486,15 +477,9 @@ function accessModeLabel(
 ): string {
   switch (accessMode) {
     case "read-only":
-      return t(
-        "settings.automation.jobDialog.accessMode.readOnly",
-        "只读",
-      );
+      return t("settings.automation.jobDialog.accessMode.readOnly", "只读");
     case "current":
-      return t(
-        "settings.automation.jobDialog.accessMode.current",
-        "按需确认",
-      );
+      return t("settings.automation.jobDialog.accessMode.current", "按需确认");
     case "full-access":
     default:
       return t(
@@ -1279,7 +1264,9 @@ export function AutomationJobDialog({
                       "浏览器自动化已下线",
                     )}
                   </div>
-                  <div className="mt-2">{legacyBrowserAutomationMessage(t)}</div>
+                  <div className="mt-2">
+                    {legacyBrowserAutomationMessage(t)}
+                  </div>
                 </div>
                 <div className="rounded-[24px] border border-slate-200/80 bg-slate-50 px-4 py-4">
                   <div className="text-sm font-medium text-slate-900">

@@ -441,10 +441,7 @@ function useWorkspaceInputbarScenePresentationRuntime({
     [inputbarPresentation.inputbar],
   );
   const submitAgentUiWorkbenchPrompt = useCallback(
-    async (
-      prompt: string,
-      metadata: AgentUiTeamWorkbenchPromptMetadata,
-    ) => {
+    async (prompt: string, metadata: AgentUiTeamWorkbenchPromptMetadata) => {
       const normalizedPrompt = prompt.trim();
       if (!normalizedPrompt) {
         return false;

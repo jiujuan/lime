@@ -207,10 +207,7 @@ async function runAttemptWithTimeout<TInput, TOutput>(
 async function executeModelSlotRuntime<TInput, TOutput>(
   config: LayeredDesignAnalyzerModelSlotConfig,
   input: TInput,
-  options: CreateLayeredDesignAnalyzerModelSlotRuntimeOptions<
-    TInput,
-    TOutput
-  >,
+  options: CreateLayeredDesignAnalyzerModelSlotRuntimeOptions<TInput, TOutput>,
   emptyResult: () => TOutput,
 ): Promise<TOutput> {
   let lastError: unknown;
@@ -243,10 +240,7 @@ async function executeModelSlotRuntime<TInput, TOutput>(
     throw lastError instanceof Error ? lastError : new Error(String(lastError));
   }
 
-  if (
-    config.runtime.fallbackStrategy === "use_heuristic" &&
-    options.fallback
-  ) {
+  if (config.runtime.fallbackStrategy === "use_heuristic" && options.fallback) {
     const output = await options.fallback(input, fallbackContext, lastError);
     return decorateModelSlotOutputWithEvidence(
       output,

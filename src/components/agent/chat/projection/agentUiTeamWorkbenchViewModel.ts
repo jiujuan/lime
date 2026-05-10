@@ -335,7 +335,9 @@ function formatRemoteArtifactContentLocation(
     return `内容：${contentRef}`;
   }
   const contentUrl = readPayloadText(event, "primaryArtifactContentUrl");
-  return contentUrl ? `内容链接：${formatRemoteContentUrlLabel(contentUrl)}` : null;
+  return contentUrl
+    ? `内容链接：${formatRemoteContentUrlLabel(contentUrl)}`
+    : null;
 }
 
 function resolveTargetId(event: AgentUiProjectionEvent): string {
@@ -533,7 +535,9 @@ function resolveItemSubtitle(event: AgentUiProjectionEvent): string {
       readPayloadText(event, "primaryArtifactId"),
     );
     const detail = uniqueValues([
-      resolveRemoteTaskId(event) ? `远端任务：${resolveRemoteTaskId(event)}` : null,
+      resolveRemoteTaskId(event)
+        ? `远端任务：${resolveRemoteTaskId(event)}`
+        : null,
       readPayloadText(event, "agentCardProvider")
         ? `来源：${readPayloadText(event, "agentCardProvider")}`
         : null,
@@ -651,7 +655,8 @@ function buildItemChips(event: AgentUiProjectionEvent): string[] {
     readPayloadText(event, "decisionStatus"),
     readPayloadText(event, "riskLevel"),
     readPayloadText(event, "agentCardProvider"),
-    event.surface === "remote_teammate" && readPayloadText(event, "artifactCount")
+    event.surface === "remote_teammate" &&
+    readPayloadText(event, "artifactCount")
       ? `Artifact ${readPayloadText(event, "artifactCount")}`
       : null,
     event.surface === "remote_teammate" &&

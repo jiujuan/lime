@@ -129,10 +129,7 @@ export function WorkspaceRepairHistoryCard({
 
   const displayTitle =
     title ??
-    t(
-      "settings.system.workspaceRepair.title",
-      "Workspace 自动修复记录",
-    );
+    t("settings.system.workspaceRepair.title", "Workspace 自动修复记录");
   const displayDescription =
     description ??
     t(
@@ -208,10 +205,7 @@ export function WorkspaceRepairHistoryCard({
             onClick={() => void copyLatestRecord()}
             className={actionButtonClass}
           >
-            {t(
-              "settings.system.workspaceRepair.action.copyLatest",
-              "复制最新",
-            )}
+            {t("settings.system.workspaceRepair.action.copyLatest", "复制最新")}
           </button>
           <button
             type="button"
@@ -231,10 +225,7 @@ export function WorkspaceRepairHistoryCard({
 
       {records.length === 0 ? (
         <div className="rounded-lg border border-dashed bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
-          {t(
-            "settings.system.workspaceRepair.empty",
-            "暂无自动修复记录",
-          )}
+          {t("settings.system.workspaceRepair.empty", "暂无自动修复记录")}
         </div>
       ) : (
         <div className="max-h-80 space-y-2 overflow-y-auto pr-1">

@@ -2,28 +2,30 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockGetConfig, mockSaveConfig, mockUseTranslation } = vi.hoisted(() => ({
-  mockGetConfig: vi.fn(),
-  mockSaveConfig: vi.fn(),
-  mockUseTranslation: vi.fn((_namespace?: string) => ({
-    t: (key: string, options?: unknown) => {
-      if (typeof options === "string") {
-        return options;
-      }
+const { mockGetConfig, mockSaveConfig, mockUseTranslation } = vi.hoisted(
+  () => ({
+    mockGetConfig: vi.fn(),
+    mockSaveConfig: vi.fn(),
+    mockUseTranslation: vi.fn((_namespace?: string) => ({
+      t: (key: string, options?: unknown) => {
+        if (typeof options === "string") {
+          return options;
+        }
 
-      if (options && typeof options === "object") {
-        const values = options as Record<string, unknown>;
-        const template =
-          typeof values.defaultValue === "string" ? values.defaultValue : key;
-        return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-          String(values[name] ?? ""),
-        );
-      }
+        if (options && typeof options === "object") {
+          const values = options as Record<string, unknown>;
+          const template =
+            typeof values.defaultValue === "string" ? values.defaultValue : key;
+          return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+            String(values[name] ?? ""),
+          );
+        }
 
-      return key;
-    },
-  })),
-}));
+        return key;
+      },
+    })),
+  }),
+);
 
 vi.mock("@/lib/api/appConfig", () => ({
   getConfig: mockGetConfig,

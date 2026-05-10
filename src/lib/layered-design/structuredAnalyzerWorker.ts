@@ -126,8 +126,7 @@ function isWorkerRequest(
 function createWorkerError(
   response: LayeredDesignStructuredAnalyzerWorkerError,
 ): Error {
-  const message =
-    response.error?.message ?? "图层拆分 worker 返回了未知错误";
+  const message = response.error?.message ?? "图层拆分 worker 返回了未知错误";
   const error = new Error(message);
   if (response.error?.code) {
     error.name = response.error.code;
@@ -187,9 +186,7 @@ export function createLayeredDesignStructuredAnalyzerWorkerProvider(
             timeoutHandle = setTimeout(() => {
               cleanup();
               reject(
-                new Error(
-                  `图层拆分 worker 在 ${timeoutMs}ms 内没有返回结果`,
-                ),
+                new Error(`图层拆分 worker 在 ${timeoutMs}ms 内没有返回结果`),
               );
             }, timeoutMs);
           }

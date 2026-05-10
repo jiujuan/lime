@@ -107,7 +107,10 @@ function scheduleAgentChatPagePreload(): void {
 
   const preload = () => {
     void loadAgentChatPage().catch((error) => {
-      console.debug("[AppPageContent] Agent 页面预加载失败，等待按需重试", error);
+      console.debug(
+        "[AppPageContent] Agent 页面预加载失败，等待按需重试",
+        error,
+      );
     });
   };
 

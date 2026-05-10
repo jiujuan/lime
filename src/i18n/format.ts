@@ -5,8 +5,10 @@ export type LocaleScopedOptions = {
   locale?: string | null;
 };
 
-export type DateFormatOptions = Intl.DateTimeFormatOptions & LocaleScopedOptions;
-export type NumberFormatOptions = Intl.NumberFormatOptions & LocaleScopedOptions;
+export type DateFormatOptions = Intl.DateTimeFormatOptions &
+  LocaleScopedOptions;
+export type NumberFormatOptions = Intl.NumberFormatOptions &
+  LocaleScopedOptions;
 export type RelativeTimeFormatOptions = Intl.RelativeTimeFormatOptions &
   LocaleScopedOptions;
 export type LocaleCompareOptions = Intl.CollatorOptions & LocaleScopedOptions;

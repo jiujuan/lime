@@ -529,17 +529,11 @@ function GatewayTunnelPanel({
         "一键安装 cloudflared",
       ),
       probe: t("settings.channels.gatewayTunnel.action.probe", "探测"),
-      create: t(
-        "settings.channels.gatewayTunnel.action.create",
-        "创建隧道",
-      ),
+      create: t("settings.channels.gatewayTunnel.action.create", "创建隧道"),
       start: t("settings.channels.gatewayTunnel.action.start", "启动"),
       stop: t("settings.channels.gatewayTunnel.action.stop", "停止"),
       restart: t("settings.channels.gatewayTunnel.action.restart", "重启"),
-      status: t(
-        "settings.channels.gatewayTunnel.action.status",
-        "查询状态",
-      ),
+      status: t("settings.channels.gatewayTunnel.action.status", "查询状态"),
       sync: t(
         "settings.channels.gatewayTunnel.action.syncFeishu",
         "同步飞书回调 URL",
@@ -2060,10 +2054,7 @@ function WechatGatewayDebugPanel({
     <div className={PANEL_CLASS_NAME}>
       <div>
         <h3 className="text-sm font-medium">
-          {t(
-            "settings.channels.wechatRuntime.title",
-            "微信 Gateway 运行控制",
-          )}
+          {t("settings.channels.wechatRuntime.title", "微信 Gateway 运行控制")}
         </h3>
         <p className="text-xs text-muted-foreground">
           {t(
@@ -2294,10 +2285,7 @@ function WechatGatewayDebugPanel({
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <label className="space-y-1">
               <span className="text-xs text-muted-foreground">
-                {t(
-                  "settings.channels.wechatRuntime.field.botType",
-                  "Bot Type",
-                )}
+                {t("settings.channels.wechatRuntime.field.botType", "Bot Type")}
               </span>
               <input
                 value={botType}
@@ -2575,22 +2563,28 @@ function WechatGatewayDebugPanel({
                           })}
                         </p>
                         <p>
-                          {t("settings.channels.wechatRuntime.accounts.baseUrl", {
-                            value:
-                              item.baseUrl ||
-                              config.base_url ||
-                              DEFAULT_WECHAT_BASE_URL,
-                            defaultValue: "Base URL：{{value}}",
-                          })}
+                          {t(
+                            "settings.channels.wechatRuntime.accounts.baseUrl",
+                            {
+                              value:
+                                item.baseUrl ||
+                                config.base_url ||
+                                DEFAULT_WECHAT_BASE_URL,
+                              defaultValue: "Base URL：{{value}}",
+                            },
+                          )}
                         </p>
                         <p>
-                          {t("settings.channels.wechatRuntime.accounts.cdnUrl", {
-                            value:
-                              item.cdnBaseUrl ||
-                              config.cdn_base_url ||
-                              DEFAULT_WECHAT_CDN_BASE_URL,
-                            defaultValue: "CDN URL：{{value}}",
-                          })}
+                          {t(
+                            "settings.channels.wechatRuntime.accounts.cdnUrl",
+                            {
+                              value:
+                                item.cdnBaseUrl ||
+                                config.cdn_base_url ||
+                                DEFAULT_WECHAT_CDN_BASE_URL,
+                              defaultValue: "CDN URL：{{value}}",
+                            },
+                          )}
                         </p>
                         <p>
                           {t(

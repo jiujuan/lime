@@ -226,10 +226,7 @@ export function ImageGenSettings() {
           "settings.mediaGeneration.image.description",
           "这里只配置图片生成任务的默认 Provider、模型与回退策略；默认图片数量等全局参数统一收口到同页下方的 AI 图片设置。",
         )}
-        selectorLabel={t(
-          "settings.mediaGeneration.selector.label",
-          "默认模型",
-        )}
+        selectorLabel={t("settings.mediaGeneration.selector.label", "默认模型")}
         selectorDescription={t(
           "settings.mediaGeneration.selector.description",
           "统一使用聊天页同款模型选择器；未指定时沿用自动匹配策略。",

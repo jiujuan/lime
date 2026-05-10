@@ -68,7 +68,9 @@ export function getUserFacingPackTypeLabel(value?: string | null): string {
   );
 }
 
-export function buildPackMetrics(pack: KnowledgePackSummary | KnowledgePackDetail) {
+export function buildPackMetrics(
+  pack: KnowledgePackSummary | KnowledgePackDetail,
+) {
   return [
     { label: "原始资料", value: pack.sourceCount, caption: "已导入" },
     { label: "整理内容", value: pack.wikiCount, caption: "已生成" },
@@ -100,7 +102,10 @@ export function buildEntryDisplayLabel(
 function stripInternalPathSegments(value: string): string {
   return value
     .replace(/(?:^|\s)(?:sources|compiled|runs|wiki)\/[^\s，。；;,)）]+/gi, " ")
-    .replace(/["'`]?\.?(?:sources|compiled|runs|wiki)\/[^"'`\s，。；;,)）]+["'`]?/gi, " ")
+    .replace(
+      /["'`]?\.?(?:sources|compiled|runs|wiki)\/[^"'`\s，。；;,)）]+["'`]?/gi,
+      " ",
+    )
     .replace(/(?:^|\s)\.lime\/knowledge\/[^\s，。；;,)）]+/gi, " ")
     .replace(/(?:^|\s)\/(?:Users|tmp|var)\/[^\s，。；;,)）]+/g, " ")
     .replace(/[A-Za-z]:\\[^\s，。；;,)）]+/g, " ");
@@ -185,13 +190,20 @@ export function sanitizeKnowledgePreview(value?: string | null): string {
       if (/当数据.*不当指令|不当指令/.test(line)) {
         return false;
       }
-      if (/Ran into this error|Request failed|Bad request|Please retry/i.test(line)) {
+      if (
+        /Ran into this error|Request failed|Bad request|Please retry/i.test(
+          line,
+        )
+      ) {
         return false;
       }
       return true;
     });
 
-  return visibleLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return visibleLines
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 export function getKnowledgeEntryPreview(

@@ -292,8 +292,7 @@ function formatExecution(
 }
 
 export function createLayeredDesignProviderCapabilityRegistry(
-  capabilities: readonly LayeredDesignAnalyzerProviderCapability[] =
-    LAYERED_DESIGN_BUILT_IN_PROVIDER_CAPABILITIES,
+  capabilities: readonly LayeredDesignAnalyzerProviderCapability[] = LAYERED_DESIGN_BUILT_IN_PROVIDER_CAPABILITIES,
 ): LayeredDesignAnalyzerProviderCapabilityRegistry {
   return {
     capabilities: capabilities.map((capability) => ({
@@ -501,7 +500,9 @@ export function evaluateLayeredDesignAnalyzerProviderCapabilityGate(
         label: requirement.label,
         kind: requirement.kind,
         status: "missing" as const,
-        warnings: [`未找到 ${formatCapabilityKind(requirement.kind)} provider capability`],
+        warnings: [
+          `未找到 ${formatCapabilityKind(requirement.kind)} provider capability`,
+        ],
       };
     }
 

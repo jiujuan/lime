@@ -732,7 +732,8 @@ describe("agentStreamTurnEventBinding", () => {
         status: {
           phase: "preparing",
           title: "已接收请求，正在准备执行",
-          detail: "系统正在初始化本轮执行环境并整理上下文，稍后会继续返回更详细进度。",
+          detail:
+            "系统正在初始化本轮执行环境并整理上下文，稍后会继续返回更详细进度。",
         },
       },
     });

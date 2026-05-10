@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { detectTasks } from "./quality-task-planner.mjs";
 
 describe("quality-task-planner", () => {
-  it("应把 Agent QC manifest/schema 归到 bridge/contracts 风险", () => {
+  it("Agent QC 文档不应进入 GitHub Actions bridge/contracts 验证", () => {
     const tasks = detectTasks([
       "docs/tests/agent-ops-qc.md",
       "docs/tests/agent-qc-p0-scenarios.md",
@@ -11,6 +11,15 @@ describe("quality-task-planner", () => {
       "docs/test/agent-qc-scenarios.manifest.json",
       "docs/test/agent-qc-evidence.schema.json",
       "docs/test/agent-qc-gui-flows.manifest.json",
+    ]);
+
+    expect(tasks.bridge).toBe(false);
+    expect(tasks.bridgeReasons).not.toContain("agent_qc_contract");
+    expect(tasks.docsOnly).toBe(true);
+  });
+
+  it("Agent QC 本地脚本不应触发 bridge/contracts 原因", () => {
+    const tasks = detectTasks([
       "scripts/lib/agent-qc-completion-audit-core.mjs",
       "scripts/lib/agent-qc-evidence-core.mjs",
       "scripts/lib/agent-qc-gui-flow-core.mjs",
@@ -18,8 +27,8 @@ describe("quality-task-planner", () => {
       "scripts/lib/agent-qc-release-summary-core.mjs",
     ]);
 
-    expect(tasks.bridge).toBe(true);
-    expect(tasks.bridgeReasons).toContain("agent_qc_contract");
+    expect(tasks.bridge).toBe(false);
+    expect(tasks.bridgeReasons).not.toContain("agent_qc_contract");
     expect(tasks.docsOnly).toBe(false);
   });
 

@@ -672,10 +672,7 @@ export const mergeAdjacentAssistantMessages = (
     }
 
     const previous = merged[merged.length - 1];
-    if (
-      !previous ||
-      !shouldMergeAdjacentAssistantMessages(previous, current)
-    ) {
+    if (!previous || !shouldMergeAdjacentAssistantMessages(previous, current)) {
       merged.push(current);
       continue;
     }
@@ -814,10 +811,14 @@ function hasSharedValue(left: Set<string>, right: Set<string>): boolean {
   return false;
 }
 
-function hasSharedProcessIdentity(previous: Message, current: Message): boolean {
+function hasSharedProcessIdentity(
+  previous: Message,
+  current: Message,
+): boolean {
   if (
     previous.imageWorkbenchPreview?.taskId &&
-    previous.imageWorkbenchPreview.taskId === current.imageWorkbenchPreview?.taskId
+    previous.imageWorkbenchPreview.taskId ===
+      current.imageWorkbenchPreview?.taskId
   ) {
     return true;
   }

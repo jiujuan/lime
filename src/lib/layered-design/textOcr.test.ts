@@ -233,7 +233,9 @@ describe("LayeredDesign text OCR adapter", () => {
       fallbackProvider,
     ]);
 
-    expect(provider.label).toBe("OCR priority: 失败 OCR -> 空 OCR -> 可用 OCR -> 备用 OCR");
+    expect(provider.label).toBe(
+      "OCR priority: 失败 OCR -> 空 OCR -> 可用 OCR -> 备用 OCR",
+    );
     await expect(provider.detectText(ocrProviderInput)).resolves.toEqual([
       {
         text: "优先级标题",

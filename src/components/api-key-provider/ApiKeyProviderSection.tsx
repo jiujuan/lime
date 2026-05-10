@@ -107,14 +107,14 @@ export const ApiKeyProviderSection = forwardRef<
   );
   const selectedProviderLoginRequired = Boolean(
     selectedProvider &&
-      exposeOemLoginPrompt &&
-      isOemManagedHubProvider(selectedProvider) &&
-      selectedProvider.api_key_count === 0 &&
-      (selectedProvider.api_keys ?? []).filter((apiKey) => apiKey.enabled)
-        .length === 0 &&
-      !(selectedProvider.custom_models ?? []).some(
-        (modelId) => modelId.trim().length > 0,
-      ),
+    exposeOemLoginPrompt &&
+    isOemManagedHubProvider(selectedProvider) &&
+    selectedProvider.api_key_count === 0 &&
+    (selectedProvider.api_keys ?? []).filter((apiKey) => apiKey.enabled)
+      .length === 0 &&
+    !(selectedProvider.custom_models ?? []).some(
+      (modelId) => modelId.trim().length > 0,
+    ),
   );
 
   useEffect(() => {

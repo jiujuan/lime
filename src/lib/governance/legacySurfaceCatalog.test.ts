@@ -195,8 +195,7 @@ describe("legacySurfaceCatalog", () => {
       (entry) => entry.id === "agent-chat-wechat-runtime-model-sync-hook",
     );
     const textMonitor = legacySurfaceCatalogJson.frontendText.find(
-      (entry) =>
-        entry.id === "agent-chat-wechat-runtime-model-sync-hook-usage",
+      (entry) => entry.id === "agent-chat-wechat-runtime-model-sync-hook-usage",
     );
 
     expect(importMonitor).toBeTruthy();
@@ -233,7 +232,6 @@ describe("legacySurfaceCatalog", () => {
       "src/lib/tauri-mock/index.ts",
     ]);
   });
-
 
   it("应将旧海报素材命令与 helper 收敛到图库主链", () => {
     expect(agentCommandCatalog.deprecatedCommandReplacements).toMatchObject({

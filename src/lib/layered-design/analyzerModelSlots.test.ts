@@ -99,7 +99,8 @@ describe("layered-design analyzer model slots", () => {
         hasAlpha: true,
       })),
     };
-    const provider = createLayeredDesignSubjectMattingProviderFromModelSlot(slot);
+    const provider =
+      createLayeredDesignSubjectMattingProviderFromModelSlot(slot);
 
     await expect(
       provider.matteSubject({
@@ -308,11 +309,12 @@ describe("layered-design analyzer model slots", () => {
         },
       ]),
     };
-    const workerSlotOptions = createLayeredDesignWorkerHeuristicModelSlotOptions({
-      subjectMattingSlot: subjectSlot,
-      cleanPlateSlot,
-      textOcrSlot: textSlot,
-    });
+    const workerSlotOptions =
+      createLayeredDesignWorkerHeuristicModelSlotOptions({
+        subjectMattingSlot: subjectSlot,
+        cleanPlateSlot,
+        textOcrSlot: textSlot,
+      });
     const provider =
       createLayeredDesignWorkerHeuristicStructuredAnalyzerProvider({
         ...workerSlotOptions,
@@ -361,7 +363,9 @@ describe("layered-design analyzer model slots", () => {
       ],
     });
     expect(
-      result.candidates.find((candidate) => candidate.id === "subject-candidate"),
+      result.candidates.find(
+        (candidate) => candidate.id === "subject-candidate",
+      ),
     ).toMatchObject({
       confidence: 0.98,
       assets: [

@@ -980,7 +980,8 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
           typeof event.accumulated_arguments === "string"
             ? event.accumulated_arguments
             : undefined,
-        provider: typeof event.provider === "string" ? event.provider : undefined,
+        provider:
+          typeof event.provider === "string" ? event.provider : undefined,
       };
     case "artifact_snapshot":
     case "ArtifactSnapshot": {
@@ -1108,14 +1109,18 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
             | null
             | undefined) || null,
         context_summary:
-          (event.context_summary as AgentTurnContextSummary | null | undefined) ||
-          null,
+          (event.context_summary as
+            | AgentTurnContextSummary
+            | null
+            | undefined) || null,
         approval_policy:
           typeof event.approval_policy === "string"
             ? event.approval_policy
             : null,
         sandbox_policy:
-          typeof event.sandbox_policy === "string" ? event.sandbox_policy : null,
+          typeof event.sandbox_policy === "string"
+            ? event.sandbox_policy
+            : null,
       };
     case "model_change":
       return {
@@ -1422,8 +1427,9 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
           typeof event.latest_turn_id === "string"
             ? event.latest_turn_id
             : undefined,
-        latest_turn_status:
-          event.latest_turn_status as AgentSubagentRuntimeStatus | undefined,
+        latest_turn_status: event.latest_turn_status as
+          | AgentSubagentRuntimeStatus
+          | undefined,
         queued_turn_count:
           typeof event.queued_turn_count === "number"
             ? event.queued_turn_count
@@ -1463,7 +1469,9 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
         duration_ms: normalizeOptionalNumber(
           event.duration_ms ?? event.durationMs,
         ),
-        tool_count: normalizeOptionalNumber(event.tool_count ?? event.toolCount),
+        tool_count: normalizeOptionalNumber(
+          event.tool_count ?? event.toolCount,
+        ),
         result_ref:
           typeof event.result_ref === "string"
             ? event.result_ref

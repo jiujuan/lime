@@ -5,8 +5,7 @@ export interface AgentStreamRequestLogFinishPayload {
   error?: string;
 }
 
-export interface AgentStreamRequestLogFinishUpdatePayload
-  extends AgentStreamRequestLogFinishPayload {
+export interface AgentStreamRequestLogFinishUpdatePayload extends AgentStreamRequestLogFinishPayload {
   duration: number;
 }
 

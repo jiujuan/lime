@@ -193,10 +193,7 @@ export function VideoGenSettings() {
           "settings.mediaGeneration.video.description",
           "这里配置视频任务的默认 Provider、模型与回退策略，保持和图片、语音一致的简洁设置结构。",
         )}
-        selectorLabel={t(
-          "settings.mediaGeneration.selector.label",
-          "默认模型",
-        )}
+        selectorLabel={t("settings.mediaGeneration.selector.label", "默认模型")}
         selectorDescription={t(
           "settings.mediaGeneration.selector.description",
           "统一使用聊天页同款模型选择器；未指定时沿用自动匹配策略。",

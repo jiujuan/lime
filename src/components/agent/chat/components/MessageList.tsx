@@ -564,10 +564,7 @@ function measureMessageListComputation<T>(
 const AssistantFirstTokenPlaceholder: React.FC<{
   status?: AgentRuntimeStatus | null;
 }> = ({ status }) => {
-  const rawTitle = truncateRuntimeStatusText(
-    status?.title || "已提交请求",
-    48,
-  );
+  const rawTitle = truncateRuntimeStatusText(status?.title || "已提交请求", 48);
   const title =
     status?.phase === "failed" || status?.phase === "cancelled"
       ? rawTitle
@@ -720,9 +717,7 @@ function hasInternalRoutingSummary(items: AgentThreadItem[]): boolean {
   );
 }
 
-function hasSubstantiveProcessTimelineItem(
-  items: AgentThreadItem[],
-): boolean {
+function hasSubstantiveProcessTimelineItem(items: AgentThreadItem[]): boolean {
   return items.some((item) => {
     switch (item.type) {
       case "user_message":
@@ -772,8 +767,7 @@ function shouldSuppressAmbientPlainAnswerReasoning(params: {
 
   const displayTextLength = Array.from(params.displayContent.trim()).length;
   if (
-    displayTextLength >
-    MESSAGE_LIST_PLAIN_ANSWER_REASONING_SUPPRESS_MAX_CHARS
+    displayTextLength > MESSAGE_LIST_PLAIN_ANSWER_REASONING_SUPPRESS_MAX_CHARS
   ) {
     return false;
   }

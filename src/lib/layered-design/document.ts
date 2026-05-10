@@ -209,8 +209,7 @@ function normalizeDesignLayer(
 
 function normalizeConfidence(value: unknown, fallback: number): number {
   const numeric = normalizeNumber(value, fallback);
-  const normalized =
-    numeric > 1 && numeric <= 100 ? numeric / 100 : numeric;
+  const normalized = numeric > 1 && numeric <= 100 ? numeric / 100 : numeric;
   return Math.min(1, Math.max(0, normalized));
 }
 
@@ -411,7 +410,9 @@ function collectExtractionGeneratedAssets(
 
   return [
     ...(extraction.cleanPlate?.asset ? [extraction.cleanPlate.asset] : []),
-    ...(extraction.candidates ?? []).flatMap((candidate) => candidate.assets ?? []),
+    ...(extraction.candidates ?? []).flatMap(
+      (candidate) => candidate.assets ?? [],
+    ),
   ].map(copyGeneratedAsset);
 }
 
@@ -501,7 +502,8 @@ function copyLayeredDesignExtractionAnalysis(
       cleanPlate: analysis.outputs.cleanPlate,
       ocrText: analysis.outputs.ocrText,
     },
-    ...(analysis.providerCapabilities && analysis.providerCapabilities.length > 0
+    ...(analysis.providerCapabilities &&
+    analysis.providerCapabilities.length > 0
       ? {
           providerCapabilities: analysis.providerCapabilities.map(
             (capability) => ({
@@ -587,7 +589,10 @@ function updateExtractionTextCandidateLayer(
   return {
     ...copiedExtraction,
     candidates: copiedExtraction.candidates.map((candidate) => {
-      if (candidate.layer.id !== textLayer.id || candidate.layer.type !== "text") {
+      if (
+        candidate.layer.id !== textLayer.id ||
+        candidate.layer.type !== "text"
+      ) {
         return candidate;
       }
 
@@ -631,7 +636,10 @@ export function normalizeLayeredDesignDocument(
       normalizeDesignLayer(layer, index),
     ),
   );
-  const assets = [...(document.assets ?? []), ...collectExtractionGeneratedAssets(document.extraction)].reduce<GeneratedDesignAsset[]>(
+  const assets = [
+    ...(document.assets ?? []),
+    ...collectExtractionGeneratedAssets(document.extraction),
+  ].reduce<GeneratedDesignAsset[]>(
     (allAssets, asset) => upsertGeneratedAsset(allAssets, asset),
     [],
   );
@@ -645,7 +653,9 @@ export function normalizeLayeredDesignDocument(
     canvas: { ...document.canvas },
     layers,
     assets,
-    ...(extraction ? { extraction: copyLayeredDesignExtraction(extraction) } : {}),
+    ...(extraction
+      ? { extraction: copyLayeredDesignExtraction(extraction) }
+      : {}),
     ...(document.preview
       ? { preview: normalizePreviewProjection(document.preview) }
       : {}),
@@ -756,7 +766,9 @@ export function attachLayeredDesignModelSlotBenchmarkEvidence(
     throw new Error("无效 model slot benchmark evidence");
   }
   if (!document.extraction?.analysis) {
-    throw new Error("当前文档缺少 extraction analysis，无法附着 benchmark evidence");
+    throw new Error(
+      "当前文档缺少 extraction analysis，无法附着 benchmark evidence",
+    );
   }
 
   const appliedAt = params.appliedAt ?? nowIso();

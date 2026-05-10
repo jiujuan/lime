@@ -101,7 +101,10 @@ function normalizeLayerOpacity(layer: DesignLayer): number {
   );
 }
 
-function parseHexColor(value: string | undefined, fallback: RgbColor): RgbColor {
+function parseHexColor(
+  value: string | undefined,
+  fallback: RgbColor,
+): RgbColor {
   const normalized = value?.trim().replace(/^#/, "");
   if (!normalized) {
     return fallback;
@@ -176,7 +179,9 @@ function createPsdLayerRecord(layer: DesignLayer): PsdLayerRecord {
     bounds: createLayerBounds(layer),
     color: resolveLayerColor(layer),
     alpha:
-      layer.type === "group" ? 0 : clampByte(normalizeLayerOpacity(layer) * 255),
+      layer.type === "group"
+        ? 0
+        : clampByte(normalizeLayerOpacity(layer) * 255),
   };
 }
 
@@ -237,8 +242,14 @@ function encodeUtf8(value: string): Uint8Array {
   return new TextEncoder().encode(value);
 }
 
-function createAdditionalLayerInfoBlock(key: string, data: Uint8Array): Uint8Array {
-  const normalizedKey = key.replace(/[^\x20-\x7e]/g, "?").padEnd(4, " ").slice(0, 4);
+function createAdditionalLayerInfoBlock(
+  key: string,
+  data: Uint8Array,
+): Uint8Array {
+  const normalizedKey = key
+    .replace(/[^\x20-\x7e]/g, "?")
+    .padEnd(4, " ")
+    .slice(0, 4);
   const block = new BinaryWriter();
   block.writeAscii("8BIM");
   block.writeAscii(normalizedKey);
@@ -403,7 +414,9 @@ export function createLayeredDesignTrialPsdFile(
     green: 255,
     blue: 255,
   });
-  const layerRecords = sortDesignLayers(document.layers).map(createPsdLayerRecord);
+  const layerRecords = sortDesignLayers(document.layers).map(
+    createPsdLayerRecord,
+  );
   const writer = new BinaryWriter();
   const layerAndMaskInfo = createLayerAndMaskInfoSection(layerRecords);
 

@@ -8,6 +8,7 @@
  */
 
 import React, { useState, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
@@ -68,6 +69,7 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
   onExport,
   onImport,
 }) => {
+  const { t } = useTranslation("settings");
   // ===== 状态 =====
   const [activeTab, setActiveTab] = useState<TabValue>("export");
   const [includeKeys, setIncludeKeys] = useState(false);
@@ -88,11 +90,18 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
       const config = await onExport(includeKeys);
       setExportedConfig(config);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "导出失败");
+      setError(
+        e instanceof Error
+          ? e.message
+          : t(
+              "settings.providers.importExport.message.exportFailed",
+              "导出失败",
+            ),
+      );
     } finally {
       setExporting(false);
     }
-  }, [onExport, includeKeys]);
+  }, [onExport, includeKeys, t]);
 
   // ===== 复制到剪贴板 =====
   const handleCopy = useCallback(async () => {
@@ -101,9 +110,11 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      setError("复制失败");
+      setError(
+        t("settings.providers.importExport.message.copyFailed", "复制失败"),
+      );
     }
-  }, [exportedConfig]);
+  }, [exportedConfig, t]);
 
   // ===== 下载文件 =====
   const handleDownload = useCallback(() => {
@@ -121,7 +132,12 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
   // ===== 导入处理 =====
   const handleImport = useCallback(async () => {
     if (!importConfig.trim()) {
-      setError("请输入或选择配置文件");
+      setError(
+        t(
+          "settings.providers.importExport.message.emptyImport",
+          "请输入或选择配置文件",
+        ),
+      );
       return;
     }
 
@@ -140,14 +156,26 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
       }
     } catch (e) {
       if (e instanceof SyntaxError) {
-        setError("无效的 JSON 格式");
+        setError(
+          t(
+            "settings.providers.importExport.message.invalidJson",
+            "无效的 JSON 格式",
+          ),
+        );
       } else {
-        setError(e instanceof Error ? e.message : "导入失败");
+        setError(
+          e instanceof Error
+            ? e.message
+            : t(
+                "settings.providers.importExport.message.importFailed",
+                "导入失败",
+              ),
+        );
       }
     } finally {
       setImporting(false);
     }
-  }, [importConfig, onImport]);
+  }, [importConfig, onImport, t]);
 
   // ===== 文件选择处理 =====
   const handleFileSelect = useCallback(
@@ -163,14 +191,19 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
         setImportResult(null);
       };
       reader.onerror = () => {
-        setError("读取文件失败");
+        setError(
+          t(
+            "settings.providers.importExport.message.readFileFailed",
+            "读取文件失败",
+          ),
+        );
       };
       reader.readAsText(file);
 
       // 重置 input 以允许选择相同文件
       e.target.value = "";
     },
-    [],
+    [t],
   );
 
   // ===== 关闭时重置状态 =====
@@ -190,9 +223,17 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
         data-testid="import-export-dialog"
       >
         <DialogHeader className="mb-4">
-          <DialogTitle>导入/导出 Provider 配置</DialogTitle>
+          <DialogTitle>
+            {t(
+              "settings.providers.importExport.title",
+              "导入/导出 Provider 配置",
+            )}
+          </DialogTitle>
           <DialogDescription>
-            导出当前 Provider 配置或从文件导入配置
+            {t(
+              "settings.providers.importExport.description",
+              "导出当前 Provider 配置或从文件导入配置",
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -204,11 +245,11 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="export" data-testid="export-tab">
               <Download className="h-4 w-4 mr-2" />
-              导出
+              {t("settings.providers.importExport.tab.export", "导出")}
             </TabsTrigger>
             <TabsTrigger value="import" data-testid="import-tab">
               <Upload className="h-4 w-4 mr-2" />
-              导入
+              {t("settings.providers.importExport.tab.import", "导入")}
             </TabsTrigger>
           </TabsList>
 
@@ -222,7 +263,10 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                 data-testid="include-keys-checkbox"
               />
               <Label htmlFor="include-keys" className="text-sm">
-                包含 API Key 元数据（别名、启用状态，不包含实际 Key 值）
+                {t(
+                  "settings.providers.importExport.export.includeKeyMetadata",
+                  "包含 API Key 元数据（别名、启用状态，不包含实际 Key 值）",
+                )}
               </Label>
             </div>
 
@@ -233,7 +277,15 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                 className="w-full"
                 data-testid="export-button"
               >
-                {exporting ? "导出中..." : "生成导出配置"}
+                {exporting
+                  ? t(
+                      "settings.providers.importExport.export.action.generating",
+                      "导出中...",
+                    )
+                  : t(
+                      "settings.providers.importExport.export.action.generate",
+                      "生成导出配置",
+                    )}
               </Button>
             ) : (
               <div className="space-y-3">
@@ -253,12 +305,18 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                     {copied ? (
                       <>
                         <Check className="h-4 w-4 mr-2" />
-                        已复制
+                        {t(
+                          "settings.providers.importExport.export.action.copied",
+                          "已复制",
+                        )}
                       </>
                     ) : (
                       <>
                         <Copy className="h-4 w-4 mr-2" />
-                        复制
+                        {t(
+                          "settings.providers.importExport.export.action.copy",
+                          "复制",
+                        )}
                       </>
                     )}
                   </Button>
@@ -268,7 +326,10 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                     data-testid="download-button"
                   >
                     <Download className="h-4 w-4 mr-2" />
-                    下载文件
+                    {t(
+                      "settings.providers.importExport.export.action.download",
+                      "下载文件",
+                    )}
                   </Button>
                 </div>
               </div>
@@ -286,7 +347,10 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                   data-testid="select-file-button"
                 >
                   <Upload className="h-4 w-4 mr-2" />
-                  选择文件
+                  {t(
+                    "settings.providers.importExport.import.action.selectFile",
+                    "选择文件",
+                  )}
                 </Button>
                 <input
                   ref={fileInputRef}
@@ -299,7 +363,10 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
               </div>
 
               <div className="text-center text-sm text-muted-foreground">
-                或粘贴配置 JSON
+                {t(
+                  "settings.providers.importExport.import.pasteJson",
+                  "或粘贴配置 JSON",
+                )}
               </div>
 
               <Textarea
@@ -320,7 +387,15 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                 className="w-full"
                 data-testid="import-button"
               >
-                {importing ? "导入中..." : "导入配置"}
+                {importing
+                  ? t(
+                      "settings.providers.importExport.import.action.importing",
+                      "导入中...",
+                    )
+                  : t(
+                      "settings.providers.importExport.import.action.submit",
+                      "导入配置",
+                    )}
               </Button>
             </div>
 
@@ -335,14 +410,44 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
                 data-testid="import-result"
               >
                 <div className="font-medium mb-1">
-                  {importResult.success ? "导入完成" : "导入部分完成"}
+                  {importResult.success
+                    ? t(
+                        "settings.providers.importExport.import.result.success",
+                        "导入完成",
+                      )
+                    : t(
+                        "settings.providers.importExport.import.result.partial",
+                        "导入部分完成",
+                      )}
                 </div>
                 <ul className="list-disc list-inside space-y-1">
-                  <li>导入 Provider: {importResult.imported_providers} 个</li>
-                  <li>跳过（已存在）: {importResult.skipped_providers} 个</li>
+                  <li>
+                    {t(
+                      "settings.providers.importExport.import.result.importedProviders",
+                      {
+                        count: importResult.imported_providers,
+                        defaultValue: "导入 Provider: {{count}} 个",
+                      },
+                    )}
+                  </li>
+                  <li>
+                    {t(
+                      "settings.providers.importExport.import.result.skippedProviders",
+                      {
+                        count: importResult.skipped_providers,
+                        defaultValue: "跳过（已存在）: {{count}} 个",
+                      },
+                    )}
+                  </li>
                   {importResult.errors.length > 0 && (
                     <li className="text-red-600">
-                      错误: {importResult.errors.join(", ")}
+                      {t(
+                        "settings.providers.importExport.import.result.errors",
+                        {
+                          errors: importResult.errors.join(", "),
+                          defaultValue: "错误: {{errors}}",
+                        },
+                      )}
                     </li>
                   )}
                 </ul>
@@ -368,7 +473,7 @@ export const ImportExportDialog: React.FC<ImportExportDialogProps> = ({
             onClick={handleClose}
             data-testid="close-button"
           >
-            关闭
+            {t("settings.providers.importExport.action.close", "关闭")}
           </Button>
         </DialogFooter>
       </DialogContent>

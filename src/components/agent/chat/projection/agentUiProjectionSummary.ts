@@ -37,8 +37,7 @@ export interface AgentUiTeamWorkbenchSurfaceLaneDefinition {
   surfaces: AgentUiSurface[];
 }
 
-export interface AgentUiTeamWorkbenchSurfaceLaneSummary
-  extends AgentUiTeamWorkbenchSurfaceLaneDefinition {
+export interface AgentUiTeamWorkbenchSurfaceLaneSummary extends AgentUiTeamWorkbenchSurfaceLaneDefinition {
   total: number;
   latestEvents: AgentUiProjectionEvent[];
 }
@@ -49,8 +48,7 @@ export interface AgentUiTeamWorkbenchSurfaceDefinition {
   description: string;
 }
 
-export interface AgentUiTeamWorkbenchSurfaceSummary
-  extends AgentUiTeamWorkbenchSurfaceDefinition {
+export interface AgentUiTeamWorkbenchSurfaceSummary extends AgentUiTeamWorkbenchSurfaceDefinition {
   total: number;
   latestEvents: AgentUiProjectionEvent[];
 }
@@ -82,40 +80,39 @@ export const EMPTY_AGENT_UI_TEAM_WORKBENCH_PROJECTION_SUMMARY: AgentUiTeamWorkbe
     latestEvents: [],
   };
 
-export const AGENT_UI_EVENT_LABELS: Partial<
-  Record<AgentUiEventClass, string>
-> = {
-  "action.required": "Action 等待",
-  "action.resolved": "Action 已处理",
-  "agent.changed": "Agent 状态",
-  "agent.completed": "Agent 完成",
-  "agent.handoff": "Agent 交接",
-  "agent.spawned": "Agent 已创建",
-  "artifact.preview.ready": "Artifact 预览",
-  "artifact.updated": "Artifact 更新",
-  "context.changed": "Context 更新",
-  "context.compaction.completed": "Context 压缩完成",
-  "context.compaction.started": "Context 压缩开始",
-  "diagnostic.changed": "Diagnostics",
-  "evidence.changed": "Evidence",
-  "metric.changed": "Metric",
-  "permission.changed": "Permission",
-  "queue.changed": "Queue",
-  "run.failed": "Run 失败",
-  "run.finished": "Run 完成",
-  "run.started": "Run 开始",
-  "run.status": "Run 状态",
-  "task.changed": "Task",
-  "team.changed": "Team 状态",
-  "tool.failed": "Tool 失败",
-  "tool.output.delta": "Tool 输出",
-  "tool.progress": "Tool 进度",
-  "tool.result": "Tool 结果",
-  "tool.started": "Tool 开始",
-  "worker.notification": "Worker 通知",
-  "review.requested": "Review 请求",
-  "review.completed": "Review 完成",
-};
+export const AGENT_UI_EVENT_LABELS: Partial<Record<AgentUiEventClass, string>> =
+  {
+    "action.required": "Action 等待",
+    "action.resolved": "Action 已处理",
+    "agent.changed": "Agent 状态",
+    "agent.completed": "Agent 完成",
+    "agent.handoff": "Agent 交接",
+    "agent.spawned": "Agent 已创建",
+    "artifact.preview.ready": "Artifact 预览",
+    "artifact.updated": "Artifact 更新",
+    "context.changed": "Context 更新",
+    "context.compaction.completed": "Context 压缩完成",
+    "context.compaction.started": "Context 压缩开始",
+    "diagnostic.changed": "Diagnostics",
+    "evidence.changed": "Evidence",
+    "metric.changed": "Metric",
+    "permission.changed": "Permission",
+    "queue.changed": "Queue",
+    "run.failed": "Run 失败",
+    "run.finished": "Run 完成",
+    "run.started": "Run 开始",
+    "run.status": "Run 状态",
+    "task.changed": "Task",
+    "team.changed": "Team 状态",
+    "tool.failed": "Tool 失败",
+    "tool.output.delta": "Tool 输出",
+    "tool.progress": "Tool 进度",
+    "tool.result": "Tool 结果",
+    "tool.started": "Tool 开始",
+    "worker.notification": "Worker 通知",
+    "review.requested": "Review 请求",
+    "review.completed": "Review 完成",
+  };
 
 export const AGENT_UI_ACTION_EVENT_TYPES = new Set<AgentUiEventClass>([
   "action.required",
@@ -390,10 +387,7 @@ function formatHandoffLaneAuxiliaryDetail(
   const status = readAgentUiProjectionPayloadValue(event, "status");
   const from = readAgentUiProjectionPayloadValue(event, "from");
   const to = readAgentUiProjectionPayloadValue(event, "to");
-  const resumeTarget = readAgentUiProjectionPayloadValue(
-    event,
-    "resumeTarget",
-  );
+  const resumeTarget = readAgentUiProjectionPayloadValue(event, "resumeTarget");
   const contextBoundary = readAgentUiProjectionPayloadValue(
     event,
     "contextBoundary",
@@ -412,7 +406,9 @@ function formatHandoffLaneAuxiliaryDetail(
 function formatPlanApprovalAuxiliaryDetail(
   event: AgentUiProjectionEvent,
 ): string | null {
-  if (readAgentUiProjectionPayloadValue(event, "actionType") !== "plan_approval") {
+  if (
+    readAgentUiProjectionPayloadValue(event, "actionType") !== "plan_approval"
+  ) {
     return null;
   }
 
@@ -651,8 +647,7 @@ export function summarizeAgentUiTeamWorkbenchProjectionEvents(
     (event) =>
       AGENT_UI_TEAM_WORKBENCH_EVENT_TYPES.has(event.type) ||
       Boolean(
-        event.surface &&
-          AGENT_UI_TEAM_WORKBENCH_SURFACES.has(event.surface),
+        event.surface && AGENT_UI_TEAM_WORKBENCH_SURFACES.has(event.surface),
       ),
   );
 
@@ -682,8 +677,9 @@ export function summarizeAgentUiTeamWorkbenchProjectionEvents(
     backgroundCount: teamEvents.filter(
       (event) => event.surface === "background_teammate",
     ).length,
-    remoteCount: teamEvents.filter((event) => event.surface === "remote_teammate")
-      .length,
+    remoteCount: teamEvents.filter(
+      (event) => event.surface === "remote_teammate",
+    ).length,
     policyCount: teamEvents.filter((event) => event.surface === "team_policy")
       .length,
     latestEvents: teamEvents.slice().reverse().slice(0, 5),

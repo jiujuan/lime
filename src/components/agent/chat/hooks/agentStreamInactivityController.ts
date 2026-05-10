@@ -10,10 +10,7 @@ export type AgentStreamFirstEventTimeoutAction =
   | "ignore"
   | "recover";
 
-export type AgentStreamInactivityTimeoutAction =
-  | "fail"
-  | "ignore"
-  | "recover";
+export type AgentStreamInactivityTimeoutAction = "fail" | "ignore" | "recover";
 
 export function buildAgentStreamFirstEventSilentRecoveryWarning(params: {
   eventName: string;

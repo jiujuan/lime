@@ -42,9 +42,7 @@ const subjectMattingInput = {
   },
 };
 
-class FakeSubjectMattingWorker
-  implements LayeredDesignSubjectMattingWorkerHandle
-{
+class FakeSubjectMattingWorker implements LayeredDesignSubjectMattingWorkerHandle {
   readonly sentMessages: LayeredDesignSubjectMattingWorkerRequest[] = [];
   readonly terminate = vi.fn();
   private readonly listeners =

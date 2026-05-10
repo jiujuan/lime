@@ -187,10 +187,7 @@ export function ChannelLogTailPanel() {
     try {
       await navigator.clipboard.writeText(content);
       setCopyTip(
-        t(
-          "settings.channels.logTail.message.copiedView",
-          "已复制当前视图",
-        ),
+        t("settings.channels.logTail.message.copiedView", "已复制当前视图"),
       );
       window.setTimeout(() => setCopyTip(null), 1500);
     } catch {
@@ -218,9 +215,7 @@ export function ChannelLogTailPanel() {
       await clearLogs();
       setLogs([]);
       setError(null);
-      setCopyTip(
-        t("settings.channels.logTail.message.cleared", "日志已清空"),
-      );
+      setCopyTip(t("settings.channels.logTail.message.cleared", "日志已清空"));
       window.setTimeout(() => setCopyTip(null), 1500);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -330,7 +325,10 @@ export function ChannelLogTailPanel() {
               className="h-4 w-4 rounded border"
             />
             <span className="text-xs text-muted-foreground">
-              {t("settings.channels.logTail.filter.autoScroll", "自动滚动到底部")}
+              {t(
+                "settings.channels.logTail.filter.autoScroll",
+                "自动滚动到底部",
+              )}
             </span>
           </label>
         )}

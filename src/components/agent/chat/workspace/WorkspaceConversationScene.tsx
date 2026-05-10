@@ -384,7 +384,9 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   knowledgePackSelection?: ComponentProps<
     typeof EmptyState
   >["knowledgePackSelection"];
-  knowledgePackOptions?: ComponentProps<typeof EmptyState>["knowledgePackOptions"];
+  knowledgePackOptions?: ComponentProps<
+    typeof EmptyState
+  >["knowledgePackOptions"];
   onToggleKnowledgePack?: ComponentProps<
     typeof EmptyState
   >["onToggleKnowledgePack"];

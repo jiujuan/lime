@@ -57,9 +57,7 @@ import {
 import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
 import { isAuxiliaryAgentSessionId } from "@/lib/api/agentRuntime/sessionIdentity";
-import {
-  filterConversationThreadItems,
-} from "../utils/threadTimelineView";
+import { filterConversationThreadItems } from "../utils/threadTimelineView";
 import { shouldResumeTaskSession } from "../utils/taskCenterTabs";
 import {
   createSessionAccessModeFromExecutionRuntime,
@@ -1786,7 +1784,8 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         applyResolvedDetail();
       }
       setSessionHistoryWindow(resolveSessionHistoryWindow(detail));
-      const workspaceDefaultAccessMode = resolvePersistedAccessMode(workspaceId);
+      const workspaceDefaultAccessMode =
+        resolvePersistedAccessMode(workspaceId);
       const metadataSyncPlan = buildSessionMetadataSyncPlan({
         runtimeAccessMode,
         runtimePreference,
@@ -1822,22 +1821,24 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         persistSessionAccessMode(topicId, metadataSyncPlan.accessMode);
       }
 
-      const switchSuccessMetricContext = buildSessionSwitchSuccessMetricContext({
-        accessModeSource: metadataSyncPlan.accessModeSource,
-        durationMs: Date.now() - startedAt,
-        executionStrategySource: resolveSessionExecutionStrategySource({
-          runtimeExecutionStrategy,
-          topicExecutionStrategy,
-          shadowExecutionStrategyFallback,
-        }),
-        itemsCount: detail.items?.length ?? 0,
-        messagesCount: detail.messages.length,
-        modelPreferenceSource: metadataSyncPlan.modelPreferenceSource,
-        queuedTurnsCount: detail.queued_turns?.length ?? 0,
-        topicId,
-        turnsCount: detail.turns?.length ?? 0,
-        workspaceId,
-      });
+      const switchSuccessMetricContext = buildSessionSwitchSuccessMetricContext(
+        {
+          accessModeSource: metadataSyncPlan.accessModeSource,
+          durationMs: Date.now() - startedAt,
+          executionStrategySource: resolveSessionExecutionStrategySource({
+            runtimeExecutionStrategy,
+            topicExecutionStrategy,
+            shadowExecutionStrategyFallback,
+          }),
+          itemsCount: detail.items?.length ?? 0,
+          messagesCount: detail.messages.length,
+          modelPreferenceSource: metadataSyncPlan.modelPreferenceSource,
+          queuedTurnsCount: detail.queued_turns?.length ?? 0,
+          topicId,
+          turnsCount: detail.turns?.length ?? 0,
+          workspaceId,
+        },
+      );
       recordAgentUiPerformanceMetric(
         "session.switch.success",
         switchSuccessMetricContext,
@@ -2175,16 +2176,15 @@ export function useAgentSession(options: UseAgentSessionOptions) {
                 ) {
                   return;
                 }
-                const retryAction =
-                  resolveDeferredSessionHydrationErrorAction({
-                    error,
-                    retryCount: deferredHydrationRetryCount,
-                    maxRetry: SESSION_DETAIL_DEFERRED_HYDRATION_MAX_RETRY,
-                    retryDelayMs:
-                      SESSION_DETAIL_DEFERRED_HYDRATION_RETRY_DELAY_MS,
-                    topicId,
-                    workspaceId,
-                  });
+                const retryAction = resolveDeferredSessionHydrationErrorAction({
+                  error,
+                  retryCount: deferredHydrationRetryCount,
+                  maxRetry: SESSION_DETAIL_DEFERRED_HYDRATION_MAX_RETRY,
+                  retryDelayMs:
+                    SESSION_DETAIL_DEFERRED_HYDRATION_RETRY_DELAY_MS,
+                  topicId,
+                  workspaceId,
+                });
                 if (retryAction.kind === "retry") {
                   deferredHydrationRetryCount = retryAction.nextRetryCount;
                   recordAgentUiPerformanceMetric(

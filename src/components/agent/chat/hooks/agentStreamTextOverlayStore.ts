@@ -67,7 +67,7 @@ export function clearAgentStreamTextOverlay(messageId: string) {
 export function getAgentStreamTextOverlay(
   messageId: string | null | undefined,
 ): AgentStreamTextOverlaySnapshot | null {
-  return messageId ? overlays.get(messageId) ?? null : null;
+  return messageId ? (overlays.get(messageId) ?? null) : null;
 }
 
 export function clearAllAgentStreamTextOverlays() {

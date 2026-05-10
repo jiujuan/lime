@@ -313,7 +313,8 @@ export function updateLayeredDesignExtractionSelection(
     (candidate) => candidate.selected,
   ).length;
   const editRecord: LayerEditRecord = {
-    id: params.editId ?? `candidate-selection-${document.editHistory.length + 1}`,
+    id:
+      params.editId ?? `candidate-selection-${document.editHistory.length + 1}`,
     type: "candidate_selection_updated",
     actor: params.actor ?? "user",
     summary:
@@ -365,7 +366,9 @@ export function confirmLayeredDesignExtraction(
     },
   });
   const editRecord: LayerEditRecord = {
-    id: params.editId ?? `candidate-selection-confirmed-${document.editHistory.length + 1}`,
+    id:
+      params.editId ??
+      `candidate-selection-confirmed-${document.editHistory.length + 1}`,
     type: "candidate_selection_confirmed",
     actor: params.actor ?? "user",
     summary:
@@ -406,7 +409,8 @@ export function reanalyzeLayeredDesignExtraction(
     analysis: params.analysis,
     candidates: params.candidates,
     cleanPlate: params.cleanPlate,
-    candidateSelectionThreshold: document.extraction.candidateSelectionThreshold,
+    candidateSelectionThreshold:
+      document.extraction.candidateSelectionThreshold,
     backgroundLayerId: document.extraction.backgroundLayerId,
     createdAt: document.createdAt,
     updatedAt: editedAt,
@@ -418,7 +422,9 @@ export function reanalyzeLayeredDesignExtraction(
   const cleanPlateStatus =
     refreshed.extraction?.cleanPlate.status ?? "not_requested";
   const editRecord: LayerEditRecord = {
-    id: params.editId ?? `extraction-reanalyzed-${document.editHistory.length + 1}`,
+    id:
+      params.editId ??
+      `extraction-reanalyzed-${document.editHistory.length + 1}`,
     type: "extraction_reanalyzed",
     actor: params.actor ?? "user",
     summary:

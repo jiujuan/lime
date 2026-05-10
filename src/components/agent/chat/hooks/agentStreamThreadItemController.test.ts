@@ -1,16 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type {
-  AgentThreadItem,
-  AgentThreadTurn,
-} from "@/lib/api/agentProtocol";
+import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
 import {
   buildAgentStreamTurnStartedPendingItemUpdate,
   shouldDeferAgentStreamThreadItemUpdate,
 } from "./agentStreamThreadItemController";
 
-function threadItem(
-  overrides: Partial<AgentThreadItem> = {},
-): AgentThreadItem {
+function threadItem(overrides: Partial<AgentThreadItem> = {}): AgentThreadItem {
   return {
     id: "item-a",
     thread_id: "thread-old",

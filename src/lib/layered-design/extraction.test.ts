@@ -183,9 +183,9 @@ describe("LayeredDesign extraction draft", () => {
   it("应把扁平图拆层结果归一为 LayeredDesignDocument，并让背景优先落 clean plate", () => {
     const document = createExtractionDocument();
 
-    expect(document.assets.find((asset) => asset.id === "flat-source")?.kind).toBe(
-      "source_image",
-    );
+    expect(
+      document.assets.find((asset) => asset.id === "flat-source")?.kind,
+    ).toBe("source_image");
     expect(document.extraction?.cleanPlate).toMatchObject({
       status: "succeeded",
       assetId: "clean-plate",
@@ -275,9 +275,12 @@ describe("LayeredDesign extraction draft", () => {
   });
 
   it("重新拆层后应重置为 pending review，并写回新的候选层结果", () => {
-    const confirmed = confirmLayeredDesignExtraction(createExtractionDocument(), {
-      editedAt: UPDATED_AT,
-    });
+    const confirmed = confirmLayeredDesignExtraction(
+      createExtractionDocument(),
+      {
+        editedAt: UPDATED_AT,
+      },
+    );
     const reanalyzed = reanalyzeLayeredDesignExtraction(confirmed, {
       editedAt: "2026-05-06T02:00:00.000Z",
       analysis: {

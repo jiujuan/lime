@@ -13,8 +13,7 @@ import {
 import type { LayeredDesignAnalyzerProviderCapability } from "./providerCapabilities";
 import type { LayeredDesignExtractionCandidateInput } from "./types";
 
-export interface LayeredDesignStructuredAnalyzerWorkerHandle
-  extends LayeredDesignStructuredAnalyzerWorkerLike {
+export interface LayeredDesignStructuredAnalyzerWorkerHandle extends LayeredDesignStructuredAnalyzerWorkerLike {
   terminate?: () => void;
 }
 
@@ -22,13 +21,13 @@ export type LayeredDesignStructuredAnalyzerWorkerFactory =
   () => LayeredDesignStructuredAnalyzerWorkerHandle;
 
 export interface CreateLayeredDesignWorkerHeuristicAnalyzerOptions
-  extends CreateLayeredDesignFlatImageAnalyzerFromStructuredProviderOptions,
+  extends
+    CreateLayeredDesignFlatImageAnalyzerFromStructuredProviderOptions,
     CreateLayeredDesignStructuredAnalyzerWorkerProviderOptions {
   workerFactory?: LayeredDesignStructuredAnalyzerWorkerFactory;
 }
 
-export interface CreateLayeredDesignWorkerFirstFlatImageAnalyzerOptions
-  extends CreateLayeredDesignWorkerHeuristicAnalyzerOptions {
+export interface CreateLayeredDesignWorkerFirstFlatImageAnalyzerOptions extends CreateLayeredDesignWorkerHeuristicAnalyzerOptions {
   mergeTextOcrFromFallback?: boolean;
 }
 
@@ -58,9 +57,8 @@ function mergeWorkerAnalysisWithTextOcrResult(params: {
   workerResult: LayeredDesignFlatImageAnalysisResult;
   textOcrResult: LayeredDesignFlatImageAnalysisResult;
 }): LayeredDesignFlatImageAnalysisResult {
-  const textCandidates = params.textOcrResult.candidates.filter(
-    isTextLayerCandidate,
-  );
+  const textCandidates =
+    params.textOcrResult.candidates.filter(isTextLayerCandidate);
   if (textCandidates.length === 0) {
     return params.workerResult;
   }
@@ -101,10 +99,13 @@ export function createDefaultLayeredDesignStructuredAnalyzerWorker(): Worker {
     throw new Error("当前环境不支持图层拆分 Worker");
   }
 
-  return new Worker(new URL("./structuredAnalyzer.worker.ts", import.meta.url), {
-    name: "lime-layered-design-structured-analyzer",
-    type: "module",
-  });
+  return new Worker(
+    new URL("./structuredAnalyzer.worker.ts", import.meta.url),
+    {
+      name: "lime-layered-design-structured-analyzer",
+      type: "module",
+    },
+  );
 }
 
 export function createLayeredDesignWorkerHeuristicAnalyzer(

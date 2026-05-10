@@ -12,7 +12,9 @@ describe("i18n namespace loader", () => {
   it("应为每个支持 locale 内联核心 namespace", () => {
     const resources = loadBundledI18nResources();
 
-    expect(Object.keys(resources).sort()).toEqual([...SUPPORTED_LOCALES].sort());
+    expect(Object.keys(resources).sort()).toEqual(
+      [...SUPPORTED_LOCALES].sort(),
+    );
     for (const locale of SUPPORTED_LOCALES) {
       expect(Object.keys(resources[locale]).sort()).toEqual(
         [...CORE_NAMESPACES].sort(),

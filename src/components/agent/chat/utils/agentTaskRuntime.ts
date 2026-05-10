@@ -132,7 +132,9 @@ function hasSubmittedRuntimeActionConfirmation(params: {
 }): boolean {
   return (
     params.pendingActions.some(isSubmittedRuntimeActionConfirmation) ||
-    params.submittedActionsInFlight.some(isSubmittedRuntimeActionConfirmation) ||
+    params.submittedActionsInFlight.some(
+      isSubmittedRuntimeActionConfirmation,
+    ) ||
     params.latestTurnItems.some(isSubmittedRuntimeActionConfirmationThreadItem)
   );
 }
@@ -591,7 +593,7 @@ export function buildAgentTaskRuntimeCardModel({
   const hasSubtasks = Boolean(subtaskStats?.total);
   const hasLiveRuntimeDetail = Boolean(
     latestAssistant?.runtimeStatus?.title ||
-      latestAssistant?.runtimeStatus?.detail,
+    latestAssistant?.runtimeStatus?.detail,
   );
   const hasBlockingOrQueue =
     visiblePendingActions.length > 0 ||

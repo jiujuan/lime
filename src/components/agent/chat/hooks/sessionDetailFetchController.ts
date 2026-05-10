@@ -54,7 +54,9 @@ export function createSessionDetailPrefetchRegistry<
   };
 }
 
-function buildSessionDetailFetchMetricContext<TDetail extends SessionDetailFetchDetailLike>(params: {
+function buildSessionDetailFetchMetricContext<
+  TDetail extends SessionDetailFetchDetailLike,
+>(params: {
   detail: TDetail;
   mode: SessionDetailFetchMode;
   requestDurationMs: number;

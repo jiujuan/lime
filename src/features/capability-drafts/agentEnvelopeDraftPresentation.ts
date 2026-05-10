@@ -120,10 +120,10 @@ function isCompletionAuditReady(
 ): boolean {
   return Boolean(
     summary?.decision === "completed" &&
-      summary.required_evidence.automation_owner &&
-      summary.required_evidence.workspace_skill_tool_call &&
-      summary.required_evidence.artifact_or_timeline &&
-      isControlledGetEvidenceRequirementSatisfied(summary),
+    summary.required_evidence.automation_owner &&
+    summary.required_evidence.workspace_skill_tool_call &&
+    summary.required_evidence.artifact_or_timeline &&
+    isControlledGetEvidenceRequirementSatisfied(summary),
   );
 }
 
@@ -170,10 +170,9 @@ function buildCompletionAuditEvidenceLabel(
       : "";
   const missingControlledGetRequirement =
     !isControlledGetEvidenceRequirementSatisfied(summary);
-  const suffix =
-    missingControlledGetRequirement
-      ? "；缺受控 GET evidence，不能固化为 Agent"
-      : summary.decision === "completed"
+  const suffix = missingControlledGetRequirement
+    ? "；缺受控 GET evidence，不能固化为 Agent"
+    : summary.decision === "completed"
       ? ""
       : "；未 completed，不能固化为 Agent";
 
@@ -246,7 +245,10 @@ export function buildAgentEnvelopeDraftPresentation({
     completionAuditEvidenceLabel ??
     `Evidence：已关联 evidence pack${evidencePackId ? ` ${evidencePackId}` : ""}。`;
 
-  const evidenceLabelByStatus: Record<AgentEnvelopeDraftEvidenceStatus, string> = {
+  const evidenceLabelByStatus: Record<
+    AgentEnvelopeDraftEvidenceStatus,
+    string
+  > = {
     missing: "Evidence：还没有成功运行证据；先通过本回合启用拿到一次结果。",
     source_metadata_only:
       completionAuditEvidenceLabel ??

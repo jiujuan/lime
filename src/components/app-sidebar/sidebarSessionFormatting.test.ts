@@ -29,12 +29,12 @@ describe("sidebarSessionFormatting", () => {
   it("按 UI locale 格式化会话更新时间", () => {
     vi.spyOn(Date, "now").mockReturnValue(NOW_MS);
 
-    expect(
-      formatSidebarSessionMeta(buildSession(), { locale: "zh-CN" }),
-    ).toBe("2分钟前");
-    expect(
-      formatSidebarSessionMeta(buildSession(), { locale: "en-US" }),
-    ).toBe("2m ago");
+    expect(formatSidebarSessionMeta(buildSession(), { locale: "zh-CN" })).toBe(
+      "2分钟前",
+    );
+    expect(formatSidebarSessionMeta(buildSession(), { locale: "en-US" })).toBe(
+      "2m ago",
+    );
   });
 
   it("归档状态允许组件用 namespace 文案组合 meta", () => {

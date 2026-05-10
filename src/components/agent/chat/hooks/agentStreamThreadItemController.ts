@@ -1,7 +1,4 @@
-import type {
-  AgentThreadItem,
-  AgentThreadTurn,
-} from "@/lib/api/agentProtocol";
+import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
 
 export function shouldDeferAgentStreamThreadItemUpdate(
   item: AgentThreadItem,

@@ -686,10 +686,7 @@ export function AppearanceSettings() {
                   <div>
                     <div className="flex items-center gap-2">
                       <h3 className="text-sm font-semibold text-slate-900">
-                        {t(
-                          "settings.appearance.language.title",
-                          "界面语言",
-                        )}
+                        {t("settings.appearance.language.title", "界面语言")}
                       </h3>
                       <WorkbenchInfoTip
                         ariaLabel={`${t(

@@ -67,7 +67,9 @@ export function MemoryCuratedTaskSuggestionPanel(
         <div
           className={
             props.gridClassName ??
-            (compact ? "grid gap-3 xl:grid-cols-3" : "grid gap-4 xl:grid-cols-3")
+            (compact
+              ? "grid gap-3 xl:grid-cols-3"
+              : "grid gap-4 xl:grid-cols-3")
           }
         >
           {props.tasks.map((featured) => {

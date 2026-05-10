@@ -945,10 +945,13 @@ export function ChromeRelaySettings() {
       } catch (error) {
         pushMessage({
           type: "error",
-          text: t("settings.chromeRelay.main.message.updateSystemConnectorFailed", {
-            defaultValue: "更新系统连接器失败: {{message}}",
-            message: getRelayErrorMessage(error),
-          }),
+          text: t(
+            "settings.chromeRelay.main.message.updateSystemConnectorFailed",
+            {
+              defaultValue: "更新系统连接器失败: {{message}}",
+              message: getRelayErrorMessage(error),
+            },
+          ),
         });
       } finally {
         setUpdatingSystemConnectorId(null);
@@ -1170,10 +1173,13 @@ export function ChromeRelaySettings() {
     (backend: BrowserBackendType) => {
       switch (backend) {
         case "aster_compat":
-          return t("settings.chromeRelay.main.backend.asterCompat.description", {
-            defaultValue:
-              "优先复用现有 Aster 兼容链路，适合需要兼容旧协议接入的场景。",
-          });
+          return t(
+            "settings.chromeRelay.main.backend.asterCompat.description",
+            {
+              defaultValue:
+                "优先复用现有 Aster 兼容链路，适合需要兼容旧协议接入的场景。",
+            },
+          );
         case "lime_extension_bridge":
           return t(
             "settings.chromeRelay.main.backend.extensionBridge.description",
@@ -1242,9 +1248,12 @@ export function ChromeRelaySettings() {
             label: getBackendLabel(backend),
             reason:
               backendStatus.reason ||
-              t("settings.chromeRelay.main.message.backendUnavailableFallback", {
-                defaultValue: "缺少可用连接",
-              }),
+              t(
+                "settings.chromeRelay.main.message.backendUnavailableFallback",
+                {
+                  defaultValue: "缺少可用连接",
+                },
+              ),
           }),
         });
         return;
@@ -1354,10 +1363,7 @@ export function ChromeRelaySettings() {
   const renderProfilePanel = (keyPrefix = "") => (
     <SurfacePanel
       icon={Globe}
-      title={t(
-        "settings.chromeRelay.main.profile.title",
-        "Profile 会话",
-      )}
+      title={t("settings.chromeRelay.main.profile.title", "Profile 会话")}
       description={t(
         "settings.chromeRelay.main.profile.description",
         "为搜索和桥接准备独立浏览器 Profile。每个会话都可以单独打开、关闭，并观察当前调试端口。",
@@ -1777,10 +1783,7 @@ export function ChromeRelaySettings() {
   const renderBridgePanel = () => (
     <SurfacePanel
       icon={Sparkles}
-      title={t(
-        "settings.chromeRelay.main.bridge.title",
-        "Chrome 扩展桥接",
-      )}
+      title={t("settings.chromeRelay.main.bridge.title", "Chrome 扩展桥接")}
       description={t(
         "settings.chromeRelay.main.bridge.description",
         "该桥接负责让浏览器扩展回传页面信息并接收控制命令，适合在独立 Profile 中补充观察与辅助执行。",
@@ -2429,7 +2432,10 @@ export function ChromeRelaySettings() {
           },
         );
       }
-      if (connector.enabled && connector.authorization_status === "authorized") {
+      if (
+        connector.enabled &&
+        connector.authorization_status === "authorized"
+      ) {
         return t("settings.chromeRelay.main.systemConnector.status.enabled", {
           defaultValue: "已启用",
         });
@@ -2598,10 +2604,7 @@ export function ChromeRelaySettings() {
                             : "",
                         )}
                       />
-                      {t(
-                        "settings.chromeRelay.main.action.rescan",
-                        "重新扫描",
-                      )}
+                      {t("settings.chromeRelay.main.action.rescan", "重新扫描")}
                     </button>
                   </div>
 
@@ -3328,7 +3331,10 @@ export function ChromeRelaySettings() {
                     >
                       <Bug className="h-4 w-4" />
                       {openingDebugger
-                        ? t("settings.chromeRelay.main.action.opening", "打开中...")
+                        ? t(
+                            "settings.chromeRelay.main.action.opening",
+                            "打开中...",
+                          )
                         : t(
                             "settings.chromeRelay.main.action.openStandaloneDebugger",
                             "打开独立调试窗口",
@@ -3381,10 +3387,7 @@ export function ChromeRelaySettings() {
                       >
                         {renderSectionTabLabel(
                           "overview",
-                          t(
-                            "settings.chromeRelay.main.tab.overview",
-                            "总览",
-                          ),
+                          t("settings.chromeRelay.main.tab.overview", "总览"),
                           Sparkles,
                           runtimeSummary.pendingCommands,
                         )}

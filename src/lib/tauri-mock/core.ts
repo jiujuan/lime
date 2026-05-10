@@ -6314,7 +6314,10 @@ const defaultMocks: Record<string, any> = {
     const name =
       typeof request.name === "string" ? request.name : "founder-personal-ip";
     const pack = findMockKnowledgePack(workingDir, name);
-    const now = new Date().toISOString().replace(/-|:|\./g, "").slice(0, 15);
+    const now = new Date()
+      .toISOString()
+      .replace(/-|:|\./g, "")
+      .slice(0, 15);
     const runId = `context-${now}Z`;
     const selectedFiles = [
       pack.compiled[0]?.relativePath ??
@@ -9599,10 +9602,7 @@ const defaultMocks: Record<string, any> = {
   open_with_default_app: () => ({}),
   open_external_url: (args: any) => {
     const url = typeof args?.url === "string" ? args.url : "";
-    if (
-      typeof window !== "undefined" &&
-      /^https?:\/\//i.test(url.trim())
-    ) {
+    if (typeof window !== "undefined" && /^https?:\/\//i.test(url.trim())) {
       window.open(url.trim(), "_blank", "noopener,noreferrer");
     }
     return {};

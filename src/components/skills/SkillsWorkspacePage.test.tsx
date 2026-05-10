@@ -465,13 +465,13 @@ describe("SkillsWorkspacePage", () => {
       "这一组里可以先从「品牌文案改写」开始。",
     );
     expect(container.textContent).toContain("进去看看");
-    expect(container.textContent).toContain("主题或赛道、希望关注的平台/地域");
+    expect(container.textContent).toContain("主题或赛道；希望关注的平台/地域");
     expect(container.textContent).toContain("趋势摘要 + 选题方向");
     expect(container.textContent).toContain(
       "趋势摘要会先写回当前内容，方便继续展开选题和主稿。",
     );
     expect(container.textContent).toContain(
-      "继续展开其中一个选题、生成首条内容主稿",
+      "继续展开其中一个选题；生成首条内容主稿",
     );
     expect(container.textContent).not.toContain(
       "这里放跑通过的做法；不确定时先回首页拿结果。",
@@ -1474,7 +1474,7 @@ describe("SkillsWorkspacePage", () => {
     expect(onNavigate).toHaveBeenCalledWith(
       "agent",
       expect.objectContaining({
-        initialPendingServiceSkillLaunch: {
+        initialPendingServiceSkillLaunch: expect.objectContaining({
           skillId: "service-skill-1",
           requestKey: expect.any(Number),
           initialSlotValues: {
@@ -1483,8 +1483,8 @@ describe("SkillsWorkspacePage", () => {
             target_duration: "90 秒",
           },
           prefillHint:
-            "已根据当前技能草稿自动预填 文章链接/正文、目标时长，可继续修改后执行。",
-        },
+            "已根据当前技能草稿自动预填 文章链接/正文和目标时长，可继续修改后执行。",
+        }),
       }),
     );
     expect(mockRecordUsage).not.toHaveBeenCalled();

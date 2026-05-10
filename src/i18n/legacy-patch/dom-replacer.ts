@@ -200,7 +200,9 @@ export function getI18nPatchMetricsReport(): I18nPatchMetricsReport {
     0,
   );
   const averagePatchTimeMs =
-    metrics.patchTimes.length > 0 ? totalPatchTime / metrics.patchTimes.length : 0;
+    metrics.patchTimes.length > 0
+      ? totalPatchTime / metrics.patchTimes.length
+      : 0;
   const slowestPatchTimeMs =
     metrics.patchTimes.length > 0 ? Math.max(...metrics.patchTimes) : 0;
 
@@ -227,17 +229,14 @@ function replaceTextNode(
 
   compiled.matcher.lastIndex = 0;
   let matchedSegments = 0;
-  const nextText = originalText.replace(
-    compiled.matcher,
-    (matched) => {
-      const replacement = compiled.replacements.get(matched);
-      if (replacement === undefined) {
-        return matched;
-      }
-      matchedSegments += 1;
-      return replacement;
-    },
-  );
+  const nextText = originalText.replace(compiled.matcher, (matched) => {
+    const replacement = compiled.replacements.get(matched);
+    if (replacement === undefined) {
+      return matched;
+    }
+    matchedSegments += 1;
+    return replacement;
+  });
 
   if (nextText === originalText) {
     return { matchedSegments: 0, replaced: false };

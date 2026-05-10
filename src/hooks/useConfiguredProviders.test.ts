@@ -125,8 +125,7 @@ describe("buildConfiguredProviders", () => {
         providerId: "lime-hub",
         label: "Lime 云端",
         authStatus: "login_required",
-        apiHost:
-          "https://llm.limeai.run#lime_tenant_id=tenant-0001",
+        apiHost: "https://llm.limeai.run#lime_tenant_id=tenant-0001",
       }),
     ]);
   });

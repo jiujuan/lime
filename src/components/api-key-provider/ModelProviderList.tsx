@@ -5,6 +5,7 @@
  */
 
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { ProviderIcon } from "@/icons/providers";
 import { cn } from "@/lib/utils";
@@ -34,6 +35,7 @@ export const ModelProviderList: React.FC<ModelProviderListProps> = ({
   onImportExport,
   className,
 }) => {
+  const { t } = useTranslation("settings");
   const items = buildEnabledModelItems(providers, options);
 
   return (
@@ -47,9 +49,14 @@ export const ModelProviderList: React.FC<ModelProviderListProps> = ({
       <div className="px-5 pb-3 pt-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold text-slate-900">启用的模型</p>
+            <p className="text-sm font-semibold text-slate-900">
+              {t("settings.providers.modelList.title", "启用的模型")}
+            </p>
             <p className="mt-1 text-xs leading-5 text-slate-500">
-              拖拽排序，首位为默认
+              {t(
+                "settings.providers.modelList.description",
+                "拖拽排序，首位为默认",
+              )}
             </p>
           </div>
           {onAddModel ? (
@@ -57,7 +64,10 @@ export const ModelProviderList: React.FC<ModelProviderListProps> = ({
               type="button"
               onClick={onAddModel}
               className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
-              aria-label="添加模型"
+              aria-label={t(
+                "settings.providers.modelList.action.add",
+                "添加模型",
+              )}
               data-testid="enabled-model-add-icon-button"
             >
               <Plus className="h-4 w-4" />
@@ -72,7 +82,10 @@ export const ModelProviderList: React.FC<ModelProviderListProps> = ({
             {items.map((item) => {
               const selected = selectedProviderId === item.id;
               const title = item.isDefault
-                ? `默认 (${item.providerName})`
+                ? t("settings.providers.modelList.item.defaultTitle", {
+                    provider: item.providerName,
+                    defaultValue: "默认 ({{provider}})",
+                  })
                 : item.providerName;
 
               return (
@@ -104,14 +117,24 @@ export const ModelProviderList: React.FC<ModelProviderListProps> = ({
                       </span>
                       {item.isDefault ? (
                         <Badge className="border border-emerald-200 bg-emerald-50 px-1.5 py-0 text-[11px] text-emerald-700 hover:bg-emerald-50">
-                          默认
+                          {t(
+                            "settings.providers.modelList.badge.default",
+                            "默认",
+                          )}
                         </Badge>
                       ) : null}
                     </span>
                     <span className="mt-0.5 block truncate text-xs text-slate-500">
                       {item.status === "login_required"
-                        ? "需要登录"
-                        : item.modelId ?? "模型待指定"}
+                        ? t(
+                            "settings.providers.modelList.status.loginRequired",
+                            "需要登录",
+                          )
+                        : (item.modelId ??
+                          t(
+                            "settings.providers.modelList.status.modelPending",
+                            "模型待指定",
+                          ))}
                     </span>
                   </span>
                 </button>
@@ -123,9 +146,14 @@ export const ModelProviderList: React.FC<ModelProviderListProps> = ({
             className="mt-2 rounded-[20px] border border-dashed border-slate-200 bg-white px-4 py-8 text-center"
             data-testid="enabled-model-empty"
           >
-            <p className="text-sm font-medium text-slate-900">还没有启用模型</p>
+            <p className="text-sm font-medium text-slate-900">
+              {t("settings.providers.modelList.empty.title", "还没有启用模型")}
+            </p>
             <p className="mt-2 text-xs leading-5 text-slate-500">
-              点击添加模型后，再从推荐服务或自定义供应商里筛选。
+              {t(
+                "settings.providers.modelList.empty.description",
+                "点击添加模型后，再从推荐服务或自定义供应商里筛选。",
+              )}
             </p>
           </div>
         )}
@@ -140,7 +168,7 @@ export const ModelProviderList: React.FC<ModelProviderListProps> = ({
             data-testid="add-model-button"
           >
             <Plus className="h-4 w-4 text-slate-500" />
-            添加模型
+            {t("settings.providers.modelList.action.add", "添加模型")}
           </button>
         ) : null}
         {onImportExport ? (
@@ -151,7 +179,10 @@ export const ModelProviderList: React.FC<ModelProviderListProps> = ({
             data-testid="import-export-button"
           >
             <Settings2 className="h-4 w-4" />
-            导入 / 导出配置
+            {t(
+              "settings.providers.modelList.action.importExport",
+              "导入 / 导出配置",
+            )}
           </button>
         ) : null}
       </div>

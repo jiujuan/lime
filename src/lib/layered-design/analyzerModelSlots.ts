@@ -15,12 +15,8 @@ import {
   type LayeredDesignAnalyzerProviderCapability,
   type LayeredDesignAnalyzerProviderCapabilityGateReport,
 } from "./providerCapabilities";
-import type {
-  CreateLayeredDesignWorkerHeuristicStructuredAnalyzerProviderOptions,
-} from "./structuredAnalyzerWorkerHeuristic";
-import {
-  createLayeredDesignWorkerTextCandidateExtractorFromOcrProvider,
-} from "./textOcr";
+import type { CreateLayeredDesignWorkerHeuristicStructuredAnalyzerProviderOptions } from "./structuredAnalyzerWorkerHeuristic";
+import { createLayeredDesignWorkerTextCandidateExtractorFromOcrProvider } from "./textOcr";
 import {
   createLayeredDesignSubjectMaskRefinerFromMattingProvider,
   type LayeredDesignSubjectMattingInput,

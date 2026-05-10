@@ -194,8 +194,7 @@ export function createLayeredDesignSubjectMattingWorkerProvider(
 
               cleanup();
               if (
-                event.data.type ===
-                LAYERED_DESIGN_SUBJECT_MATTING_WORKER_ERROR
+                event.data.type === LAYERED_DESIGN_SUBJECT_MATTING_WORKER_ERROR
               ) {
                 reject(createWorkerError(event.data));
                 return;

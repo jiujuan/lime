@@ -27,21 +27,25 @@ export interface CreateLayeredDesignArtifactOptions {
   source?: LayeredDesignArtifactSource;
 }
 
-export interface CreateLayeredDesignArtifactFromPromptOptions
-  extends Omit<CreateLayeredDesignArtifactOptions, "source"> {
+export interface CreateLayeredDesignArtifactFromPromptOptions extends Omit<
+  CreateLayeredDesignArtifactOptions,
+  "source"
+> {
   id?: string;
   title?: string;
   documentCreatedAt?: string;
 }
 
 export interface CreateLayeredDesignArtifactFromExtractionOptions
-  extends Omit<CreateLayeredDesignArtifactOptions, "source">,
+  extends
+    Omit<CreateLayeredDesignArtifactOptions, "source">,
     CreateLayeredDesignExtractionDocumentParams {
   documentCreatedAt?: string;
 }
 
 export interface CreateLayeredDesignArtifactFromFlatImageOptions
-  extends Omit<CreateLayeredDesignArtifactOptions, "source">,
+  extends
+    Omit<CreateLayeredDesignArtifactOptions, "source">,
     CreateLayeredDesignFlatImageDraftDocumentParams {
   documentCreatedAt?: string;
 }

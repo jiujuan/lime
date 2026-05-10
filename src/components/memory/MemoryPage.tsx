@@ -6,12 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  ArrowRight,
-  BrainCircuit,
-  Database,
-  FolderKanban,
-} from "lucide-react";
+import { ArrowRight, BrainCircuit, Database, FolderKanban } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
@@ -37,6 +32,11 @@ import {
   type UnifiedMemory,
   type UnifiedMemoryStatsResponse,
 } from "@/lib/api/unifiedMemory";
+import {
+  normalizeUserFacingMemorySummary,
+  normalizeUserFacingMemoryTags,
+  normalizeUserFacingMemoryTitle,
+} from "@/lib/memory/userFacingMemoryText";
 import {
   getStoredResourceProjectId,
   onResourceProjectChange,
@@ -589,7 +589,12 @@ function resolveSectionState(section?: MemoryPageSection): {
 }
 
 function buildCreationPrompt(
-  entry: UnifiedMemory,
+  entry: {
+    title: string;
+    summary: string;
+    contentPreview: string;
+    tags: string[];
+  },
   categoryLabel: string,
 ): string {
   const lines = [
@@ -597,7 +602,7 @@ function buildCreationPrompt(
     `灵感分类：${categoryLabel}`,
     `灵感标题：${entry.title}`,
     `摘要：${entry.summary}`,
-    `内容：${entry.content}`,
+    `内容：${entry.contentPreview}`,
   ];
   if (entry.tags.length > 0) {
     lines.push(`标签：${entry.tags.join("、")}`);
@@ -1069,7 +1074,9 @@ export function MemoryPage({ onNavigate, pageParams }: MemoryPageProps) {
   useEffect(() => {
     if (
       focusedDurableMemory?.id &&
-      pagedFilteredMemories.some((memory) => memory.id === focusedDurableMemory.id)
+      pagedFilteredMemories.some(
+        (memory) => memory.id === focusedDurableMemory.id,
+      )
     ) {
       setSelectedDurableMemoryId(focusedDurableMemory.id);
       return;
@@ -1104,15 +1111,29 @@ export function MemoryPage({ onNavigate, pageParams }: MemoryPageProps) {
   const selectedDurableProjection = useMemo(
     () =>
       selectedDurableMemory
-        ? inspirationEntryMap.get(selectedDurableMemory.id) ?? null
+        ? (inspirationEntryMap.get(selectedDurableMemory.id) ?? null)
         : null,
     [inspirationEntryMap, selectedDurableMemory],
   );
-  const selectedDurablePreviewLines = useMemo(
-    () =>
-      selectedDurableMemory ? buildMemoryPreviewLines(selectedDurableMemory) : [],
-    [selectedDurableMemory],
-  );
+  const selectedDurablePreviewLines = useMemo(() => {
+    if (!selectedDurableMemory) {
+      return [];
+    }
+
+    const previewLines = buildMemoryPreviewLines(selectedDurableMemory).map(
+      (line) => normalizeUserFacingMemorySummary(line),
+    );
+    const fallbackPreview = selectedDurableProjection?.contentPreview;
+    const lines = previewLines.length > 0 ? previewLines : [fallbackPreview];
+
+    return Array.from(
+      new Set(
+        lines.filter(
+          (line): line is string => Boolean(line) && line !== "等待补充摘要",
+        ),
+      ),
+    ).slice(0, 4);
+  }, [selectedDurableMemory, selectedDurableProjection?.contentPreview]);
 
   const inspirationProjectionCounts = useMemo(() => {
     return inspirationEntries.reduce(
@@ -1466,16 +1487,33 @@ export function MemoryPage({ onNavigate, pageParams }: MemoryPageProps) {
 
   function handleBringToCreation(entry: UnifiedMemory) {
     const categoryLabel = CATEGORY_LABELS[entry.category];
+    const projectedEntry = inspirationEntryMap.get(entry.id);
+    const userFacingEntry = {
+      title:
+        projectedEntry?.title ??
+        normalizeUserFacingMemoryTitle({
+          value: entry.title,
+          category: entry.category,
+        }),
+      summary:
+        projectedEntry?.summary ??
+        normalizeUserFacingMemorySummary(entry.summary || entry.content),
+      contentPreview:
+        projectedEntry?.contentPreview ??
+        normalizeUserFacingMemorySummary(entry.content || entry.summary),
+      tags:
+        projectedEntry?.tags ?? normalizeUserFacingMemoryTags(entry.tags, 6),
+    };
     const entryBannerMessage = `已从灵感库带入“${categoryLabel}”条目，可继续改写后发送。`;
     const initialRequestMetadata =
       buildMemoryEntryCreationReplayRequestMetadata({
         id: entry.id,
         projectId: projectId || undefined,
         category: entry.category,
-        title: entry.title,
-        summary: entry.summary,
-        content: entry.content,
-        tags: entry.tags,
+        title: userFacingEntry.title,
+        summary: userFacingEntry.summary,
+        content: userFacingEntry.contentPreview,
+        tags: userFacingEntry.tags,
       });
 
     onNavigate(
@@ -1483,7 +1521,7 @@ export function MemoryPage({ onNavigate, pageParams }: MemoryPageProps) {
       buildHomeAgentParams({
         projectId: projectId || undefined,
         entryBannerMessage,
-        initialUserPrompt: buildCreationPrompt(entry, categoryLabel),
+        initialUserPrompt: buildCreationPrompt(userFacingEntry, categoryLabel),
         initialRequestMetadata,
       }),
     );
@@ -1872,707 +1910,700 @@ export function MemoryPage({ onNavigate, pageParams }: MemoryPageProps) {
         </header>
 
         <main className="space-y-5">
-            {loading ? (
-              <div className={PANEL_CLASS_NAME}>
-                <p className="text-sm text-slate-500">正在加载灵感库...</p>
-              </div>
-            ) : error ? (
-              <div
-                className={cn(
-                  PANEL_CLASS_NAME,
-                  "border-rose-200 bg-rose-50/80",
-                )}
-              >
-                <p className="text-sm text-rose-700">{error}</p>
-              </div>
-            ) : null}
+          {loading ? (
+            <div className={PANEL_CLASS_NAME}>
+              <p className="text-sm text-slate-500">正在加载灵感库...</p>
+            </div>
+          ) : error ? (
+            <div
+              className={cn(PANEL_CLASS_NAME, "border-rose-200 bg-rose-50/80")}
+            >
+              <p className="text-sm text-rose-700">{error}</p>
+            </div>
+          ) : null}
 
-            {!loading &&
-            !error &&
-            hasRuntimeContext &&
-            activeSection !== "home" ? (
-              <MemorySurfacePanel
-                title="当前运行时对照模式"
-                description="你正在带着当前会话的运行时上下文查看记忆库存；切换分区不会丢失这轮对照。"
-                actions={
-                  <button
-                    type="button"
-                    className={cn(BUTTON_CLASS_NAME, EMERALD_BUTTON_CLASS_NAME)}
-                    onClick={() => navigateToMemorySection("home")}
-                  >
-                    返回总览预演
-                  </button>
-                }
-              >
-                <div className="flex flex-wrap gap-4 text-sm text-slate-500">
-                  <span>会话：{runtimeSessionId}</span>
-                  <span>工作区：{runtimeWorkingDir}</span>
-                  {runtimeUserMessage ? (
-                    <span>本轮输入：{runtimeUserMessage}</span>
-                  ) : null}
-                </div>
-                {runtimePrefetchState.result ? (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Badge
-                      variant="outline"
-                      className={EMERALD_OUTLINE_BADGE_CLASS_NAME}
-                    >
-                      {formatRuntimeLayerStatusLabel(
-                        "规则",
-                        runtimePrefetchState.result.rules_source_paths.length,
-                      )}
-                    </Badge>
-                    <Badge
-                      variant="outline"
-                      className={EMERALD_OUTLINE_BADGE_CLASS_NAME}
-                    >
-                      {formatRuntimeLayerStatusLabel(
-                        "工作",
-                        null,
-                        Boolean(
-                          runtimePrefetchState.result.working_memory_excerpt,
-                        ),
-                      )}
-                    </Badge>
-                    <Badge
-                      variant="outline"
-                      className={EMERALD_OUTLINE_BADGE_CLASS_NAME}
-                    >
-                      {formatRuntimeLayerStatusLabel(
-                        "持久",
-                        runtimePrefetchState.result.durable_memories.length,
-                      )}
-                    </Badge>
-                    <Badge
-                      variant="outline"
-                      className={EMERALD_OUTLINE_BADGE_CLASS_NAME}
-                    >
-                      {formatRuntimeLayerStatusLabel(
-                        "Team",
-                        runtimePrefetchState.result.team_memory_entries.length,
-                      )}
-                    </Badge>
-                    <Badge
-                      variant="outline"
-                      className={EMERALD_OUTLINE_BADGE_CLASS_NAME}
-                    >
-                      {formatRuntimeLayerStatusLabel(
-                        "压缩",
-                        null,
-                        Boolean(runtimePrefetchState.result.latest_compaction),
-                      )}
-                    </Badge>
-                  </div>
+          {!loading &&
+          !error &&
+          hasRuntimeContext &&
+          activeSection !== "home" ? (
+            <MemorySurfacePanel
+              title="当前运行时对照模式"
+              description="你正在带着当前会话的运行时上下文查看记忆库存；切换分区不会丢失这轮对照。"
+              actions={
+                <button
+                  type="button"
+                  className={cn(BUTTON_CLASS_NAME, EMERALD_BUTTON_CLASS_NAME)}
+                  onClick={() => navigateToMemorySection("home")}
+                >
+                  返回总览预演
+                </button>
+              }
+            >
+              <div className="flex flex-wrap gap-4 text-sm text-slate-500">
+                <span>会话：{runtimeSessionId}</span>
+                <span>工作区：{runtimeWorkingDir}</span>
+                {runtimeUserMessage ? (
+                  <span>本轮输入：{runtimeUserMessage}</span>
                 ) : null}
-              </MemorySurfacePanel>
-            ) : null}
+              </div>
+              {runtimePrefetchState.result ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Badge
+                    variant="outline"
+                    className={EMERALD_OUTLINE_BADGE_CLASS_NAME}
+                  >
+                    {formatRuntimeLayerStatusLabel(
+                      "规则",
+                      runtimePrefetchState.result.rules_source_paths.length,
+                    )}
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    className={EMERALD_OUTLINE_BADGE_CLASS_NAME}
+                  >
+                    {formatRuntimeLayerStatusLabel(
+                      "工作",
+                      null,
+                      Boolean(
+                        runtimePrefetchState.result.working_memory_excerpt,
+                      ),
+                    )}
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    className={EMERALD_OUTLINE_BADGE_CLASS_NAME}
+                  >
+                    {formatRuntimeLayerStatusLabel(
+                      "持久",
+                      runtimePrefetchState.result.durable_memories.length,
+                    )}
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    className={EMERALD_OUTLINE_BADGE_CLASS_NAME}
+                  >
+                    {formatRuntimeLayerStatusLabel(
+                      "Team",
+                      runtimePrefetchState.result.team_memory_entries.length,
+                    )}
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    className={EMERALD_OUTLINE_BADGE_CLASS_NAME}
+                  >
+                    {formatRuntimeLayerStatusLabel(
+                      "压缩",
+                      null,
+                      Boolean(runtimePrefetchState.result.latest_compaction),
+                    )}
+                  </Badge>
+                </div>
+              ) : null}
+            </MemorySurfacePanel>
+          ) : null}
 
-            {!loading && !error && activeSection === "home" ? (
-              <>
-                <div className="grid gap-5 xl:grid-cols-[minmax(0,1.18fr)_minmax(300px,0.82fr)]">
-                  <div className="space-y-5">
-                    <MemorySurfacePanel title="先拿结果">
-                      <div className="space-y-3">
-                        {homeContinuationReferenceEntry ||
-                        activeRecommendationReferenceEntries.length > 0 ? (
-                          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3.5">
-                            <div className="flex flex-wrap items-center gap-2">
-                              {homeContinuationReferenceEntry ? (
-                                <Badge
-                                  variant="outline"
-                                  className={EMERALD_OUTLINE_BADGE_CLASS_NAME}
-                                >
-                                  当前续接成果
-                                </Badge>
-                              ) : null}
-                              {activeRecommendationReferenceEntries.length > 0 ? (
-                                <Badge
-                                  variant="outline"
-                                  className={EMERALD_OUTLINE_BADGE_CLASS_NAME}
-                                >
-                                  {activeRecommendationReferenceEntries.length} 条参考对象
-                                </Badge>
-                              ) : null}
-                            </div>
+          {!loading && !error && activeSection === "home" ? (
+            <>
+              <div className="grid gap-5 xl:grid-cols-[minmax(0,1.18fr)_minmax(300px,0.82fr)]">
+                <div className="space-y-5">
+                  <MemorySurfacePanel title="先拿结果">
+                    <div className="space-y-3">
+                      {homeContinuationReferenceEntry ||
+                      activeRecommendationReferenceEntries.length > 0 ? (
+                        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3.5">
+                          <div className="flex flex-wrap items-center gap-2">
                             {homeContinuationReferenceEntry ? (
-                              <p className="mt-2 text-sm font-medium text-slate-900">
-                                {homeContinuationReferenceEntry.title}
-                              </p>
+                              <Badge
+                                variant="outline"
+                                className={EMERALD_OUTLINE_BADGE_CLASS_NAME}
+                              >
+                                当前续接成果
+                              </Badge>
                             ) : null}
-                            {featuredMemoryReferenceSummary ? (
-                              <p className="mt-1 text-xs leading-5 text-slate-600">
-                                {featuredMemoryReferenceSummary}
-                              </p>
+                            {activeRecommendationReferenceEntries.length > 0 ? (
+                              <Badge
+                                variant="outline"
+                                className={EMERALD_OUTLINE_BADGE_CLASS_NAME}
+                              >
+                                {activeRecommendationReferenceEntries.length}{" "}
+                                条参考对象
+                              </Badge>
                             ) : null}
                           </div>
-                        ) : null}
-
-                        {featuredMemoryCuratedTasks.length > 0 ? (
-                          <div
-                            className="grid gap-3 xl:grid-cols-2"
-                            data-testid="memory-home-suggestion-panel"
-                          >
-                            {featuredMemoryCuratedTasks.map((featured) => {
-                              const task = featured.template;
-                              const description =
-                                featured.reasonSummary || task.summary;
-
-                              return (
-                                <article
-                                  key={task.id}
-                                  data-testid={`memory-home-suggestion-panel-task-${task.id}`}
-                                  className="flex h-full flex-col rounded-2xl border border-slate-200 bg-slate-50 p-4"
-                                >
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <Badge
-                                      variant="outline"
-                                      className="border-sky-200 bg-sky-50 text-sky-700"
-                                    >
-                                      {featured.badgeLabel}
-                                    </Badge>
-                                  </div>
-
-                                  <div className="mt-3 min-w-0 flex-1">
-                                    <h3 className="text-sm font-semibold text-slate-900">
-                                      {task.title}
-                                    </h3>
-                                    <p className="mt-1 line-clamp-2 text-sm leading-6 text-slate-600">
-                                      {description}
-                                    </p>
-                                  </div>
-
-                                  <div className="mt-4 flex flex-col items-start gap-3 md:flex-row md:items-end md:justify-between">
-                                    <p className="min-w-0 flex-1 text-xs leading-5 text-slate-500">
-                                      {task.summary}
-                                    </p>
-                                    <button
-                                      type="button"
-                                      className={cn(
-                                        BUTTON_CLASS_NAME,
-                                        EMERALD_BUTTON_CLASS_NAME,
-                                        "shrink-0 whitespace-nowrap self-start",
-                                      )}
-                                      onClick={() => setMemoryLauncherTask(task)}
-                                    >
-                                      开始这一步
-                                      <ArrowRight className="h-4 w-4" />
-                                    </button>
-                                  </div>
-                                </article>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50/70 p-4">
-                            <p className="text-sm leading-6 text-slate-500">
-                              当前还没有足够灵感可直接推下一步。先收藏一条风格、参考或成果，再回来这里继续起手。
+                          {homeContinuationReferenceEntry ? (
+                            <p className="mt-2 text-sm font-medium text-slate-900">
+                              {homeContinuationReferenceEntry.title}
                             </p>
-                          </div>
-                        )}
-                      </div>
-                    </MemorySurfacePanel>
+                          ) : null}
+                          {featuredMemoryReferenceSummary ? (
+                            <p className="mt-1 text-xs leading-5 text-slate-600">
+                              {featuredMemoryReferenceSummary}
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : null}
 
-                    <MemorySurfacePanel title="最近灵感">
-                      {featuredInspirationEntries.length > 0 ? (
-                        <div className="space-y-2">
-                          {featuredInspirationEntries.map((entry) => (
-                            <article
-                              key={entry.id}
-                              className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5"
-                            >
-                              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <Badge
-                                      variant="outline"
-                                      className="border-emerald-200 bg-emerald-50 text-emerald-700"
-                                    >
-                                      {entry.projectionLabel}
-                                    </Badge>
-                                    <Badge
-                                      variant="outline"
-                                      className={SLATE_OUTLINE_BADGE_CLASS_NAME}
-                                    >
-                                      {entry.categoryLabel}
-                                    </Badge>
-                                    <span className="text-xs text-slate-400">
-                                      {formatRelativeTime(entry.updatedAt)}
-                                    </span>
-                                  </div>
-                                  <h3 className="mt-2 text-sm font-semibold text-slate-900">
-                                    {entry.title}
+                      {featuredMemoryCuratedTasks.length > 0 ? (
+                        <div
+                          className="grid gap-3 xl:grid-cols-2"
+                          data-testid="memory-home-suggestion-panel"
+                        >
+                          {featuredMemoryCuratedTasks.map((featured) => {
+                            const task = featured.template;
+                            const description =
+                              featured.reasonSummary || task.summary;
+
+                            return (
+                              <article
+                                key={task.id}
+                                data-testid={`memory-home-suggestion-panel-task-${task.id}`}
+                                className="flex h-full flex-col rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                              >
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge
+                                    variant="outline"
+                                    className="border-sky-200 bg-sky-50 text-sky-700"
+                                  >
+                                    {featured.badgeLabel}
+                                  </Badge>
+                                </div>
+
+                                <div className="mt-3 min-w-0 flex-1">
+                                  <h3 className="text-sm font-semibold text-slate-900">
+                                    {task.title}
                                   </h3>
-                                  <p className="mt-1 line-clamp-1 text-sm text-slate-600">
-                                    {entry.summary}
+                                  <p className="mt-1 line-clamp-2 text-sm leading-6 text-slate-600">
+                                    {description}
                                   </p>
                                 </div>
-                                <div className="flex flex-wrap gap-2">
+
+                                <div className="mt-4 flex flex-col items-start gap-3 md:flex-row md:items-end md:justify-between">
+                                  <p className="min-w-0 flex-1 text-xs leading-5 text-slate-500">
+                                    {task.summary}
+                                  </p>
                                   <button
                                     type="button"
                                     className={cn(
                                       BUTTON_CLASS_NAME,
                                       EMERALD_BUTTON_CLASS_NAME,
+                                      "shrink-0 whitespace-nowrap self-start",
                                     )}
-                                    onClick={() => {
-                                      const sourceEntry = unifiedMemories.find(
-                                        (memory) => memory.id === entry.id,
-                                      );
-                                      if (!sourceEntry) {
-                                        return;
-                                      }
-                                      handleBringToCreation(sourceEntry);
-                                    }}
+                                    onClick={() => setMemoryLauncherTask(task)}
                                   >
-                                    带回输入
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={BUTTON_CLASS_NAME}
-                                    onClick={() => {
-                                      const sourceEntry = unifiedMemories.find(
-                                        (memory) => memory.id === entry.id,
-                                      );
-                                      if (!sourceEntry) {
-                                        return;
-                                      }
-                                      handleOpenInScene(sourceEntry);
-                                    }}
-                                  >
-                                    去 Skills
+                                    开始这一步
+                                    <ArrowRight className="h-4 w-4" />
                                   </button>
                                 </div>
-                              </div>
-                            </article>
-                          ))}
+                              </article>
+                            );
+                          })}
                         </div>
                       ) : (
                         <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50/70 p-4">
                           <p className="text-sm leading-6 text-slate-500">
-                            当前还没有正式沉淀下来的灵感对象。先在对话结果里收藏一条参考、风格或成果，再回到这里继续复用。
+                            当前还没有足够灵感可直接推下一步。先收藏一条风格、参考或成果，再回来这里继续起手。
                           </p>
                         </div>
                       )}
-                    </MemorySurfacePanel>
-                  </div>
+                    </div>
+                  </MemorySurfacePanel>
 
-                  <div className="space-y-5">
-                    <MemorySurfacePanel title="灵感概览">
-                      <div
-                        className="space-y-2"
-                        data-testid="memory-home-default-overview"
-                      >
-                        {homeOverviewCards.map((card) => (
-                          <button
-                            key={card.key}
-                            type="button"
-                            className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-slate-300 hover:bg-white"
-                            onClick={card.onClick}
+                  <MemorySurfacePanel title="最近灵感">
+                    {featuredInspirationEntries.length > 0 ? (
+                      <div className="space-y-2">
+                        {featuredInspirationEntries.map((entry) => (
+                          <article
+                            key={entry.id}
+                            className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5"
                           >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <p className="text-sm font-semibold text-slate-900">
-                                  {card.title}
-                                </p>
-                                <p className="mt-1 line-clamp-1 text-sm text-slate-500">
-                                  {card.detail}
+                            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge
+                                    variant="outline"
+                                    className="border-emerald-200 bg-emerald-50 text-emerald-700"
+                                  >
+                                    {entry.projectionLabel}
+                                  </Badge>
+                                  <Badge
+                                    variant="outline"
+                                    className={SLATE_OUTLINE_BADGE_CLASS_NAME}
+                                  >
+                                    {entry.categoryLabel}
+                                  </Badge>
+                                  <span className="text-xs text-slate-400">
+                                    {formatRelativeTime(entry.updatedAt)}
+                                  </span>
+                                </div>
+                                <h3 className="mt-2 text-sm font-semibold text-slate-900">
+                                  {entry.title}
+                                </h3>
+                                <p className="mt-1 line-clamp-1 text-sm text-slate-600">
+                                  {entry.summary}
                                 </p>
                               </div>
-                              <div className="shrink-0 text-right">
-                                <p className="text-lg font-semibold text-slate-950">
-                                  {card.value}
-                                </p>
-                                <span className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
-                                  查看
-                                  <ArrowRight className="h-3.5 w-3.5" />
-                                </span>
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  className={cn(
+                                    BUTTON_CLASS_NAME,
+                                    EMERALD_BUTTON_CLASS_NAME,
+                                  )}
+                                  onClick={() => {
+                                    const sourceEntry = unifiedMemories.find(
+                                      (memory) => memory.id === entry.id,
+                                    );
+                                    if (!sourceEntry) {
+                                      return;
+                                    }
+                                    handleBringToCreation(sourceEntry);
+                                  }}
+                                >
+                                  带回输入
+                                </button>
+                                <button
+                                  type="button"
+                                  className={BUTTON_CLASS_NAME}
+                                  onClick={() => {
+                                    const sourceEntry = unifiedMemories.find(
+                                      (memory) => memory.id === entry.id,
+                                    );
+                                    if (!sourceEntry) {
+                                      return;
+                                    }
+                                    handleOpenInScene(sourceEntry);
+                                  }}
+                                >
+                                  去 Skills
+                                </button>
                               </div>
                             </div>
-                          </button>
+                          </article>
                         ))}
                       </div>
-                    </MemorySurfacePanel>
-
-                    <MemorySurfacePanel title="风格摘要">
-                      <p className="text-sm leading-6 text-slate-600">
-                        {tasteSummary.summary}
-                      </p>
-                      <div className="mt-3 grid gap-3 md:grid-cols-3 xl:grid-cols-1">
-                        <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                          <p className="text-sm font-semibold text-slate-900">
-                            像这样写
-                          </p>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {tasteSummary.styleKeywords.length > 0 ? (
-                              tasteSummary.styleKeywords.map((keyword) => (
-                                <Badge
-                                  key={keyword}
-                                  variant="outline"
-                                  className="border-emerald-200 bg-emerald-50 text-emerald-700"
-                                >
-                                  {keyword}
-                                </Badge>
-                              ))
-                            ) : (
-                              <p className="text-sm leading-6 text-slate-500">
-                                还没有提炼出明确的风格关键词。
-                              </p>
-                            )}
-                          </div>
-                        </article>
-
-                        <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                          <p className="text-sm font-semibold text-slate-900">
-                            常用参考
-                          </p>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {tasteSummary.referenceKeywords.length > 0 ? (
-                              tasteSummary.referenceKeywords.map((keyword) => (
-                                <Badge
-                                  key={keyword}
-                                  variant="outline"
-                                  className={SLATE_OUTLINE_BADGE_CLASS_NAME}
-                                >
-                                  {keyword}
-                                </Badge>
-                              ))
-                            ) : (
-                              <p className="text-sm leading-6 text-slate-500">
-                                还没有整理出短标签。
-                              </p>
-                            )}
-                          </div>
-                        </article>
-
-                        <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                          <p className="text-sm font-semibold text-slate-900">
-                            先避开
-                          </p>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {tasteSummary.avoidKeywords.length > 0 ? (
-                              tasteSummary.avoidKeywords.map((keyword) => (
-                                <Badge
-                                  key={keyword}
-                                  variant="outline"
-                                  className="border-amber-200 bg-amber-50 text-amber-700"
-                                >
-                                  {keyword}
-                                </Badge>
-                              ))
-                            ) : (
-                              <p className="text-sm leading-6 text-slate-500">
-                                当前还没有明显避让词。
-                              </p>
-                            )}
-                          </div>
-                        </article>
+                    ) : (
+                      <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50/70 p-4">
+                        <p className="text-sm leading-6 text-slate-500">
+                          当前还没有正式沉淀下来的灵感对象。先在对话结果里收藏一条参考、风格或成果，再回到这里继续复用。
+                        </p>
                       </div>
-                    </MemorySurfacePanel>
-                  </div>
+                    )}
+                  </MemorySurfacePanel>
                 </div>
 
-                {hasRuntimeContext ? (
-                  <MemorySurfacePanel
-                    title="当前运行时预演"
-                    description="这份预演复用了当前会话的运行时预取结果，便于把库存和本轮真实命中对上。"
-                    actions={runtimeDrilldownActions}
-                  >
-                    <div className="flex flex-wrap gap-4 text-sm text-slate-500">
-                      <span>会话：{runtimeSessionId}</span>
-                      <span>工作区：{runtimeWorkingDir}</span>
-                      <span>
-                        团队记忆：
-                        {runtimeTeamSnapshot
-                          ? runtimeTeamSnapshot.repoScope
-                          : "未命中本地快照"}
-                      </span>
+                <div className="space-y-5">
+                  <MemorySurfacePanel title="灵感概览">
+                    <div
+                      className="space-y-2"
+                      data-testid="memory-home-default-overview"
+                    >
+                      {homeOverviewCards.map((card) => (
+                        <button
+                          key={card.key}
+                          type="button"
+                          className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-slate-300 hover:bg-white"
+                          onClick={card.onClick}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-slate-900">
+                                {card.title}
+                              </p>
+                              <p className="mt-1 line-clamp-1 text-sm text-slate-500">
+                                {card.detail}
+                              </p>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="text-lg font-semibold text-slate-950">
+                                {card.value}
+                              </p>
+                              <span className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
+                                查看
+                                <ArrowRight className="h-3.5 w-3.5" />
+                              </span>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
                     </div>
-                    <AgentThreadMemoryPrefetchPreview
-                      className="mt-4"
-                      status={runtimePrefetchState.status}
-                      result={runtimePrefetchState.result}
-                      error={runtimePrefetchState.error}
-                    />
                   </MemorySurfacePanel>
-                ) : null}
 
-                {hasRuntimeContext &&
-                currentRuntimeHistoryEntry &&
-                runtimeComparisonBaselineEntry &&
-                runtimeComparisonDiff ? (
-                  <MemorySurfacePanel
-                    title="当前预演 vs 历史基线"
-                    description="把当前这次真实预演和历史里的一次命中正面对照，便于判断这轮是补强了还是退化了。"
-                    actions={
-                      <button
-                        type="button"
-                        className={cn(
-                          BUTTON_CLASS_NAME,
-                          "border-slate-300 text-slate-700",
-                        )}
-                        onClick={() =>
-                          setRuntimeComparisonBaselineSignature(null)
-                        }
-                      >
-                        改用最近基线
-                      </button>
-                    }
-                  >
-                    <div className="flex flex-wrap gap-4 text-sm text-slate-500">
-                      <span>
-                        当前会话：{currentRuntimeHistoryEntry.sessionId}
-                      </span>
-                      <span>
-                        基线时间：
-                        {formatRelativeTime(
-                          runtimeComparisonBaselineEntry.capturedAt,
-                        )}
-                      </span>
-                      <span>
-                        基线来源：
-                        {resolveRuntimeHistorySourceLabel(
-                          runtimeComparisonBaselineEntry.source,
-                        )}
-                      </span>
-                    </div>
-                    <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                      <p className="text-sm font-medium text-slate-900">
-                        基线摘要
-                      </p>
-                      <p className="mt-2 text-sm leading-6 text-slate-600">
-                        {resolveRuntimeHistorySummary(
-                          runtimeComparisonBaselineEntry,
-                        )}
-                      </p>
-                      {runtimeComparisonBaselineEntry.userMessage ? (
-                        <p className="mt-2 text-sm leading-6 text-slate-500">
-                          基线输入：{runtimeComparisonBaselineEntry.userMessage}
+                  <MemorySurfacePanel title="风格摘要">
+                    <p className="text-sm leading-6 text-slate-600">
+                      {tasteSummary.summary}
+                    </p>
+                    <div className="mt-3 grid gap-3 md:grid-cols-3 xl:grid-cols-1">
+                      <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <p className="text-sm font-semibold text-slate-900">
+                          像这样写
                         </p>
-                      ) : null}
-                    </div>
-                    <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-4">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="text-xs font-medium text-slate-500">
-                          相对基线判断
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {tasteSummary.styleKeywords.length > 0 ? (
+                            tasteSummary.styleKeywords.map((keyword) => (
+                              <Badge
+                                key={keyword}
+                                variant="outline"
+                                className="border-emerald-200 bg-emerald-50 text-emerald-700"
+                              >
+                                {keyword}
+                              </Badge>
+                            ))
+                          ) : (
+                            <p className="text-sm leading-6 text-slate-500">
+                              还没有提炼出明确的风格关键词。
+                            </p>
+                          )}
                         </div>
-                        {runtimeComparisonAssessment ? (
-                          <Badge
-                            variant="outline"
-                            className={resolveRuntimeComparisonAssessmentBadgeClassName(
-                              runtimeComparisonAssessment,
-                            )}
-                          >
-                            {formatRuntimeMemoryPrefetchHistoryDiffStatusLabel(
-                              runtimeComparisonAssessment.status,
-                            )}
-                          </Badge>
-                        ) : null}
+                      </article>
+
+                      <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <p className="text-sm font-semibold text-slate-900">
+                          常用参考
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {tasteSummary.referenceKeywords.length > 0 ? (
+                            tasteSummary.referenceKeywords.map((keyword) => (
+                              <Badge
+                                key={keyword}
+                                variant="outline"
+                                className={SLATE_OUTLINE_BADGE_CLASS_NAME}
+                              >
+                                {keyword}
+                              </Badge>
+                            ))
+                          ) : (
+                            <p className="text-sm leading-6 text-slate-500">
+                              还没有整理出短标签。
+                            </p>
+                          )}
+                        </div>
+                      </article>
+
+                      <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <p className="text-sm font-semibold text-slate-900">
+                          先避开
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {tasteSummary.avoidKeywords.length > 0 ? (
+                            tasteSummary.avoidKeywords.map((keyword) => (
+                              <Badge
+                                key={keyword}
+                                variant="outline"
+                                className="border-amber-200 bg-amber-50 text-amber-700"
+                              >
+                                {keyword}
+                              </Badge>
+                            ))
+                          ) : (
+                            <p className="text-sm leading-6 text-slate-500">
+                              当前还没有明显避让词。
+                            </p>
+                          )}
+                        </div>
+                      </article>
+                    </div>
+                  </MemorySurfacePanel>
+                </div>
+              </div>
+
+              {hasRuntimeContext ? (
+                <MemorySurfacePanel
+                  title="当前运行时预演"
+                  description="这份预演复用了当前会话的运行时预取结果，便于把库存和本轮真实命中对上。"
+                  actions={runtimeDrilldownActions}
+                >
+                  <div className="flex flex-wrap gap-4 text-sm text-slate-500">
+                    <span>会话：{runtimeSessionId}</span>
+                    <span>工作区：{runtimeWorkingDir}</span>
+                    <span>
+                      团队记忆：
+                      {runtimeTeamSnapshot
+                        ? runtimeTeamSnapshot.repoScope
+                        : "未命中本地快照"}
+                    </span>
+                  </div>
+                  <AgentThreadMemoryPrefetchPreview
+                    className="mt-4"
+                    status={runtimePrefetchState.status}
+                    result={runtimePrefetchState.result}
+                    error={runtimePrefetchState.error}
+                  />
+                </MemorySurfacePanel>
+              ) : null}
+
+              {hasRuntimeContext &&
+              currentRuntimeHistoryEntry &&
+              runtimeComparisonBaselineEntry &&
+              runtimeComparisonDiff ? (
+                <MemorySurfacePanel
+                  title="当前预演 vs 历史基线"
+                  description="把当前这次真实预演和历史里的一次命中正面对照，便于判断这轮是补强了还是退化了。"
+                  actions={
+                    <button
+                      type="button"
+                      className={cn(
+                        BUTTON_CLASS_NAME,
+                        "border-slate-300 text-slate-700",
+                      )}
+                      onClick={() =>
+                        setRuntimeComparisonBaselineSignature(null)
+                      }
+                    >
+                      改用最近基线
+                    </button>
+                  }
+                >
+                  <div className="flex flex-wrap gap-4 text-sm text-slate-500">
+                    <span>
+                      当前会话：{currentRuntimeHistoryEntry.sessionId}
+                    </span>
+                    <span>
+                      基线时间：
+                      {formatRelativeTime(
+                        runtimeComparisonBaselineEntry.capturedAt,
+                      )}
+                    </span>
+                    <span>
+                      基线来源：
+                      {resolveRuntimeHistorySourceLabel(
+                        runtimeComparisonBaselineEntry.source,
+                      )}
+                    </span>
+                  </div>
+                  <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                    <p className="text-sm font-medium text-slate-900">
+                      基线摘要
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      {resolveRuntimeHistorySummary(
+                        runtimeComparisonBaselineEntry,
+                      )}
+                    </p>
+                    {runtimeComparisonBaselineEntry.userMessage ? (
+                      <p className="mt-2 text-sm leading-6 text-slate-500">
+                        基线输入：{runtimeComparisonBaselineEntry.userMessage}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="text-xs font-medium text-slate-500">
+                        相对基线判断
                       </div>
                       {runtimeComparisonAssessment ? (
-                        <p className="mt-2 text-sm leading-6 text-slate-600">
-                          {describeRuntimeMemoryPrefetchHistoryDiffAssessment(
+                        <Badge
+                          variant="outline"
+                          className={resolveRuntimeComparisonAssessmentBadgeClassName(
                             runtimeComparisonAssessment,
                           )}
-                        </p>
+                        >
+                          {formatRuntimeMemoryPrefetchHistoryDiffStatusLabel(
+                            runtimeComparisonAssessment.status,
+                          )}
+                        </Badge>
                       ) : null}
-                      {runtimeComparisonDiff.changed ? (
-                        <>
-                          <div className="mt-3 text-xs font-medium text-slate-500">
-                            具体变化
-                          </div>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {runtimeComparisonDiff.layerChanges.rulesDelta !==
-                            0 ? (
-                              <Badge
-                                variant="outline"
-                                className={EMERALD_BADGE_CLASS_NAME}
-                              >
-                                规则{" "}
-                                {runtimeComparisonDiff.layerChanges.rulesDelta >
-                                0
-                                  ? "+"
-                                  : ""}
-                                {runtimeComparisonDiff.layerChanges.rulesDelta}
-                              </Badge>
-                            ) : null}
-                            {runtimeComparisonDiff.layerChanges
-                              .workingChanged !== "same" ? (
-                              <Badge
-                                variant="outline"
-                                className={EMERALD_BADGE_CLASS_NAME}
-                              >
-                                工作
-                                {runtimeComparisonDiff.layerChanges
-                                  .workingChanged === "added"
-                                  ? " 新命中"
-                                  : " 取消命中"}
-                              </Badge>
-                            ) : null}
-                            {runtimeComparisonDiff.layerChanges.durableDelta !==
-                            0 ? (
-                              <Badge
-                                variant="outline"
-                                className={EMERALD_BADGE_CLASS_NAME}
-                              >
-                                持久{" "}
-                                {runtimeComparisonDiff.layerChanges
-                                  .durableDelta > 0
-                                  ? "+"
-                                  : ""}
-                                {
-                                  runtimeComparisonDiff.layerChanges
-                                    .durableDelta
-                                }
-                              </Badge>
-                            ) : null}
-                            {runtimeComparisonDiff.layerChanges.teamDelta !==
-                            0 ? (
-                              <Badge
-                                variant="outline"
-                                className={EMERALD_BADGE_CLASS_NAME}
-                              >
-                                Team{" "}
-                                {runtimeComparisonDiff.layerChanges.teamDelta >
-                                0
-                                  ? "+"
-                                  : ""}
-                                {runtimeComparisonDiff.layerChanges.teamDelta}
-                              </Badge>
-                            ) : null}
-                            {runtimeComparisonDiff.layerChanges
-                              .compactionChanged !== "same" ? (
-                              <Badge
-                                variant="outline"
-                                className={EMERALD_BADGE_CLASS_NAME}
-                              >
-                                压缩
-                                {runtimeComparisonDiff.layerChanges
-                                  .compactionChanged === "added"
-                                  ? " 新命中"
-                                  : " 取消命中"}
-                              </Badge>
-                            ) : null}
-                          </div>
-                          {runtimeComparisonDiff.previewChanges.length > 0 ? (
-                            <div className="mt-3 space-y-2">
-                              {runtimeComparisonDiff.previewChanges
-                                .slice(0, 4)
-                                .map((change, changeIndex) => (
-                                  <p
-                                    key={`${change.key}:${changeIndex}`}
-                                    className="text-sm leading-6 text-slate-600"
-                                  >
-                                    {resolveRuntimeHistoryPreviewChangeLabel(
-                                      change,
-                                    )}
-                                  </p>
-                                ))}
-                            </div>
-                          ) : null}
-                        </>
-                      ) : (
-                        <p className="mt-2 text-sm leading-6 text-slate-500">
-                          当前预演与这条基线相比没有明显变化。
-                        </p>
-                      )}
                     </div>
-                  </MemorySurfacePanel>
-                ) : null}
-
-                {hasRuntimeContext ? (
-                  <MemorySurfacePanel
-                    title="最近命中记录"
-                    description="只在当前会话对照时显示。"
-                    actions={
-                      <div className="flex flex-wrap justify-end gap-2">
-                        {RUNTIME_HISTORY_SCOPE_META.map((item) => (
-                          <button
-                            key={item.key}
-                            type="button"
-                            className={cn(
-                              BUTTON_CLASS_NAME,
-                              runtimeHistoryScope === item.key &&
-                                ACTIVE_BUTTON_CLASS_NAME,
-                            )}
-                            onClick={() => setRuntimeHistoryScope(item.key)}
-                          >
-                            {item.label}
-                          </button>
-                        ))}
-                        {runtimePrefetchHistory.length > 0 ? (
-                            <button
-                              type="button"
-                              className={cn(
-                                BUTTON_CLASS_NAME,
-                                "border-amber-200 text-amber-700",
-                              )}
-                              onClick={handleClearRuntimeHistory}
-                            >
-                              清空历史
-                            </button>
-                        ) : null}
-                      </div>
-                    }
-                  >
-                    <div className="space-y-4">
-                      <div className="flex flex-wrap gap-4 text-sm text-slate-500">
-                        <span>
-                          当前范围：{activeRuntimeHistoryScopeMeta.label}
-                        </span>
-                        <span>
-                          命中记录：{runtimeHistorySummary.totalEntries}
-                        </span>
-                        <span>会话：{runtimeHistorySummary.uniqueSessions}</span>
-                        <span>
-                          工作区：{runtimeHistorySummary.uniqueWorkingDirs}
-                        </span>
-                      </div>
-                      {runtimeHistorySummary.totalEntries > 0 ? (
-                        <div className="flex flex-wrap gap-2">
-                          <Badge
-                            variant="outline"
-                            className="border-slate-200 bg-white text-slate-700"
-                          >
-                            规则层 {runtimeHistorySummary.layerEntryHits.rules}/
-                            {runtimeHistorySummary.totalEntries}
-                          </Badge>
-                          <Badge
-                            variant="outline"
-                            className="border-slate-200 bg-white text-slate-700"
-                          >
-                            工作层 {runtimeHistorySummary.layerEntryHits.working}/
-                            {runtimeHistorySummary.totalEntries}
-                          </Badge>
-                          <Badge
-                            variant="outline"
-                            className="border-slate-200 bg-white text-slate-700"
-                          >
-                            持久层 {runtimeHistorySummary.layerEntryHits.durable}/
-                            {runtimeHistorySummary.totalEntries}
-                          </Badge>
-                          <Badge
-                            variant="outline"
-                            className="border-slate-200 bg-white text-slate-700"
-                          >
-                            团队层 {runtimeHistorySummary.layerEntryHits.team}/
-                            {runtimeHistorySummary.totalEntries}
-                          </Badge>
-                          <Badge
-                            variant="outline"
-                            className="border-slate-200 bg-white text-slate-700"
-                          >
-                            压缩层{" "}
-                            {runtimeHistorySummary.layerEntryHits.compaction}/
-                            {runtimeHistorySummary.totalEntries}
-                          </Badge>
-                          <Badge
-                            variant="outline"
-                            className="border-slate-200 bg-white text-slate-700"
-                          >
-                            发生变化 {runtimeHistorySummary.changedEntries} 次
-                          </Badge>
+                    {runtimeComparisonAssessment ? (
+                      <p className="mt-2 text-sm leading-6 text-slate-600">
+                        {describeRuntimeMemoryPrefetchHistoryDiffAssessment(
+                          runtimeComparisonAssessment,
+                        )}
+                      </p>
+                    ) : null}
+                    {runtimeComparisonDiff.changed ? (
+                      <>
+                        <div className="mt-3 text-xs font-medium text-slate-500">
+                          具体变化
                         </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {runtimeComparisonDiff.layerChanges.rulesDelta !==
+                          0 ? (
+                            <Badge
+                              variant="outline"
+                              className={EMERALD_BADGE_CLASS_NAME}
+                            >
+                              规则{" "}
+                              {runtimeComparisonDiff.layerChanges.rulesDelta > 0
+                                ? "+"
+                                : ""}
+                              {runtimeComparisonDiff.layerChanges.rulesDelta}
+                            </Badge>
+                          ) : null}
+                          {runtimeComparisonDiff.layerChanges.workingChanged !==
+                          "same" ? (
+                            <Badge
+                              variant="outline"
+                              className={EMERALD_BADGE_CLASS_NAME}
+                            >
+                              工作
+                              {runtimeComparisonDiff.layerChanges
+                                .workingChanged === "added"
+                                ? " 新命中"
+                                : " 取消命中"}
+                            </Badge>
+                          ) : null}
+                          {runtimeComparisonDiff.layerChanges.durableDelta !==
+                          0 ? (
+                            <Badge
+                              variant="outline"
+                              className={EMERALD_BADGE_CLASS_NAME}
+                            >
+                              持久{" "}
+                              {runtimeComparisonDiff.layerChanges.durableDelta >
+                              0
+                                ? "+"
+                                : ""}
+                              {runtimeComparisonDiff.layerChanges.durableDelta}
+                            </Badge>
+                          ) : null}
+                          {runtimeComparisonDiff.layerChanges.teamDelta !==
+                          0 ? (
+                            <Badge
+                              variant="outline"
+                              className={EMERALD_BADGE_CLASS_NAME}
+                            >
+                              Team{" "}
+                              {runtimeComparisonDiff.layerChanges.teamDelta > 0
+                                ? "+"
+                                : ""}
+                              {runtimeComparisonDiff.layerChanges.teamDelta}
+                            </Badge>
+                          ) : null}
+                          {runtimeComparisonDiff.layerChanges
+                            .compactionChanged !== "same" ? (
+                            <Badge
+                              variant="outline"
+                              className={EMERALD_BADGE_CLASS_NAME}
+                            >
+                              压缩
+                              {runtimeComparisonDiff.layerChanges
+                                .compactionChanged === "added"
+                                ? " 新命中"
+                                : " 取消命中"}
+                            </Badge>
+                          ) : null}
+                        </div>
+                        {runtimeComparisonDiff.previewChanges.length > 0 ? (
+                          <div className="mt-3 space-y-2">
+                            {runtimeComparisonDiff.previewChanges
+                              .slice(0, 4)
+                              .map((change, changeIndex) => (
+                                <p
+                                  key={`${change.key}:${changeIndex}`}
+                                  className="text-sm leading-6 text-slate-600"
+                                >
+                                  {resolveRuntimeHistoryPreviewChangeLabel(
+                                    change,
+                                  )}
+                                </p>
+                              ))}
+                          </div>
+                        ) : null}
+                      </>
+                    ) : (
+                      <p className="mt-2 text-sm leading-6 text-slate-500">
+                        当前预演与这条基线相比没有明显变化。
+                      </p>
+                    )}
+                  </div>
+                </MemorySurfacePanel>
+              ) : null}
+
+              {hasRuntimeContext ? (
+                <MemorySurfacePanel
+                  title="最近命中记录"
+                  description="只在当前会话对照时显示。"
+                  actions={
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {RUNTIME_HISTORY_SCOPE_META.map((item) => (
+                        <button
+                          key={item.key}
+                          type="button"
+                          className={cn(
+                            BUTTON_CLASS_NAME,
+                            runtimeHistoryScope === item.key &&
+                              ACTIVE_BUTTON_CLASS_NAME,
+                          )}
+                          onClick={() => setRuntimeHistoryScope(item.key)}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                      {runtimePrefetchHistory.length > 0 ? (
+                        <button
+                          type="button"
+                          className={cn(
+                            BUTTON_CLASS_NAME,
+                            "border-amber-200 text-amber-700",
+                          )}
+                          onClick={handleClearRuntimeHistory}
+                        >
+                          清空历史
+                        </button>
                       ) : null}
-                      {runtimeHistorySummary.totalEntries > 0 ? (
+                    </div>
+                  }
+                >
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap gap-4 text-sm text-slate-500">
+                      <span>
+                        当前范围：{activeRuntimeHistoryScopeMeta.label}
+                      </span>
+                      <span>
+                        命中记录：{runtimeHistorySummary.totalEntries}
+                      </span>
+                      <span>会话：{runtimeHistorySummary.uniqueSessions}</span>
+                      <span>
+                        工作区：{runtimeHistorySummary.uniqueWorkingDirs}
+                      </span>
+                    </div>
+                    {runtimeHistorySummary.totalEntries > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        <Badge
+                          variant="outline"
+                          className="border-slate-200 bg-white text-slate-700"
+                        >
+                          规则层 {runtimeHistorySummary.layerEntryHits.rules}/
+                          {runtimeHistorySummary.totalEntries}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className="border-slate-200 bg-white text-slate-700"
+                        >
+                          工作层 {runtimeHistorySummary.layerEntryHits.working}/
+                          {runtimeHistorySummary.totalEntries}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className="border-slate-200 bg-white text-slate-700"
+                        >
+                          持久层 {runtimeHistorySummary.layerEntryHits.durable}/
+                          {runtimeHistorySummary.totalEntries}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className="border-slate-200 bg-white text-slate-700"
+                        >
+                          团队层 {runtimeHistorySummary.layerEntryHits.team}/
+                          {runtimeHistorySummary.totalEntries}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className="border-slate-200 bg-white text-slate-700"
+                        >
+                          压缩层{" "}
+                          {runtimeHistorySummary.layerEntryHits.compaction}/
+                          {runtimeHistorySummary.totalEntries}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className="border-slate-200 bg-white text-slate-700"
+                        >
+                          发生变化 {runtimeHistorySummary.changedEntries} 次
+                        </Badge>
+                      </div>
+                    ) : null}
+                    {runtimeHistorySummary.totalEntries > 0 ? (
                       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                         {runtimeHistorySummary.layerStability.map((layer) => {
                           const presentation =
@@ -2611,8 +2642,8 @@ export function MemoryPage({ onNavigate, pageParams }: MemoryPageProps) {
                           );
                         })}
                       </div>
-                      ) : null}
-                      {displayedRuntimePrefetchHistory.length > 0 ? (
+                    ) : null}
+                    {displayedRuntimePrefetchHistory.length > 0 ? (
                       displayedRuntimePrefetchHistory.map((entry, index) => {
                         const previousEntry =
                           filteredRuntimePrefetchHistory[index + 1];
@@ -2908,684 +2939,275 @@ export function MemoryPage({ onNavigate, pageParams }: MemoryPageProps) {
                           </article>
                         );
                       })
-                      ) : (
-                        <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50/70 p-4">
-                          <p className="text-sm leading-6 text-slate-500">
-                            {runtimePrefetchHistory.length > 0 &&
-                            runtimeHistoryScope !== "all"
-                              ? "当前筛选范围还没有命中历史，可以切到“全部”查看最近记录。"
-                              : "当前还没有运行时命中历史。先在对话工作台触发几轮记忆预演，这里会自动沉淀最近记录。"}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </MemorySurfacePanel>
-                ) : null}
-              </>
-            ) : null}
-
-            {!loading && !error && activeSection === "rules" ? (
-              <>
-                <MemorySurfacePanel
-                  title="底层记忆来源与 memdir"
-                  description="这里是支撑灵感库与风格层的底层事实源，优先看作用域、入口和当前命中状态。"
-                  actions={
-                    <div className="flex flex-wrap justify-end gap-2">
-                      <button
-                        type="button"
-                        className={cn(
-                          BUTTON_CLASS_NAME,
-                          EMERALD_BUTTON_CLASS_NAME,
-                          !memdirWorkingDir || memdirActionType !== null
-                            ? "cursor-not-allowed opacity-60"
-                            : "",
-                        )}
-                        disabled={
-                          !memdirWorkingDir || memdirActionType !== null
-                        }
-                        onClick={() => void handleScaffoldMemdir()}
-                      >
-                        {memdirActionType === "scaffold"
-                          ? "初始化中..."
-                          : "初始化 memdir"}
-                      </button>
-                      <button
-                        type="button"
-                        className={cn(
-                          BUTTON_CLASS_NAME,
-                          EMERALD_BUTTON_CLASS_NAME,
-                          !memdirWorkingDir || memdirActionType !== null
-                            ? "cursor-not-allowed opacity-60"
-                            : "",
-                        )}
-                        disabled={
-                          !memdirWorkingDir || memdirActionType !== null
-                        }
-                        onClick={() => void handleCleanupMemdir()}
-                      >
-                        {memdirActionType === "cleanup"
-                          ? "整理中..."
-                          : "整理 memdir"}
-                      </button>
-                    </div>
-                  }
-                >
-                  <div className="mb-4 rounded-3xl border border-emerald-200 bg-emerald-50/80 p-4">
-                    <p className="text-sm font-medium text-emerald-900">
-                      同一 topic 会覆盖旧内容；“整理 memdir”
-                      会去重入口链接、裁剪 README 历史段落，并把旧 topic
-                      日志收口为当前版本。
-                    </p>
-                    <p className="mt-2 text-sm leading-6 text-emerald-800/90">
-                      {memdirWorkingDir
-                        ? `当前工作区：${memdirWorkingDir}`
-                        : "当前未获取到 workspace 路径，暂无法执行 memdir 治理动作。"}
-                    </p>
-                  </div>
-                  {memdirActionNotice ? (
-                    <div
-                      className={cn(
-                        "mb-4 rounded-3xl border px-4 py-3 text-sm",
-                        memdirActionNotice.tone === "success"
-                          ? "border-emerald-200 bg-emerald-50/80 text-emerald-900"
-                          : "border-rose-200 bg-rose-50/80 text-rose-700",
-                      )}
-                    >
-                      {memdirActionNotice.message}
-                    </div>
-                  ) : null}
-                  <div className="grid gap-4 xl:grid-cols-2">
-                    {sourceBuckets.map((bucket) => {
-                      const badge = getMemoryAvailabilityBadge(
-                        bucket.key === "auto" &&
-                          autoIndex?.enabled &&
-                          bucket.status === "missing"
-                          ? "exists"
-                          : bucket.status,
-                      );
-                      const detail =
-                        bucket.key === "auto"
-                          ? autoIndex?.root_dir ||
-                            bucket.primaryPath ||
-                            bucket.emptyState
-                          : bucket.primaryPath || bucket.emptyState;
-                      const helper =
-                        bucket.key === "auto"
-                          ? `入口文件：${autoIndex?.entrypoint || "MEMORY.md"} · 已索引 ${autoIndex?.items.length || 0} 个条目`
-                          : bucket.status === "loaded"
-                            ? `已加载 ${bucket.loadedCount} 条来源`
-                            : bucket.status === "exists"
-                              ? `已发现 ${bucket.existsCount} 条来源，但当前未注入`
-                              : bucket.emptyState;
-                      return (
-                        <article
-                          key={bucket.key}
-                          className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900">
-                                {bucket.label}
-                              </p>
-                              <p className="mt-2 text-sm leading-6 text-slate-500">
-                                {bucket.description}
-                              </p>
-                            </div>
-                            <Badge
-                              variant="outline"
-                              className={badge.className}
-                            >
-                              {badge.label}
-                            </Badge>
-                          </div>
-                          <p className="mt-4 text-xs font-medium uppercase tracking-[0.16em] text-slate-400">
-                            {bucket.scope}
-                          </p>
-                          <p className="mt-2 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700">
-                            {detail}
-                          </p>
-                          <p className="mt-3 text-sm leading-6 text-slate-500">
-                            {helper}
-                          </p>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <Badge
-                              variant="outline"
-                              className={SLATE_OUTLINE_BADGE_CLASS_NAME}
-                            >
-                              来源分类：{bucket.label}
-                            </Badge>
-                            {bucket.provider ? (
-                              <Badge
-                                variant="outline"
-                                className={SLATE_OUTLINE_BADGE_CLASS_NAME}
-                              >
-                                provider：{bucket.provider}
-                              </Badge>
-                            ) : null}
-                            {bucket.latestUpdatedAt ? (
-                              <Badge
-                                variant="outline"
-                                className={SLATE_OUTLINE_BADGE_CLASS_NAME}
-                              >
-                                最近更新：
-                                {formatRelativeTime(bucket.latestUpdatedAt)}
-                              </Badge>
-                            ) : null}
-                          </div>
-                        </article>
-                      );
-                    })}
+                    ) : (
+                      <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50/70 p-4">
+                        <p className="text-sm leading-6 text-slate-500">
+                          {runtimePrefetchHistory.length > 0 &&
+                          runtimeHistoryScope !== "all"
+                            ? "当前筛选范围还没有命中历史，可以切到“全部”查看最近记录。"
+                            : "当前还没有运行时命中历史。先在对话工作台触发几轮记忆预演，这里会自动沉淀最近记录。"}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </MemorySurfacePanel>
+              ) : null}
+            </>
+          ) : null}
 
-                <MemorySurfacePanel
-                  title="当前命中来源明细"
-                  description="下面是运行时实际解析到的来源明细。Lime 底层已经支持托管策略、用户/项目/本地记忆、规则目录、memdir 与 /memories 等来源。"
-                >
-                  <div className="space-y-3">
-                    {rulesSources?.sources.map((source) => (
+          {!loading && !error && activeSection === "rules" ? (
+            <>
+              <MemorySurfacePanel
+                title="底层记忆来源与 memdir"
+                description="这里是支撑灵感库与风格层的底层事实源，优先看作用域、入口和当前命中状态。"
+                actions={
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <button
+                      type="button"
+                      className={cn(
+                        BUTTON_CLASS_NAME,
+                        EMERALD_BUTTON_CLASS_NAME,
+                        !memdirWorkingDir || memdirActionType !== null
+                          ? "cursor-not-allowed opacity-60"
+                          : "",
+                      )}
+                      disabled={!memdirWorkingDir || memdirActionType !== null}
+                      onClick={() => void handleScaffoldMemdir()}
+                    >
+                      {memdirActionType === "scaffold"
+                        ? "初始化中..."
+                        : "初始化 memdir"}
+                    </button>
+                    <button
+                      type="button"
+                      className={cn(
+                        BUTTON_CLASS_NAME,
+                        EMERALD_BUTTON_CLASS_NAME,
+                        !memdirWorkingDir || memdirActionType !== null
+                          ? "cursor-not-allowed opacity-60"
+                          : "",
+                      )}
+                      disabled={!memdirWorkingDir || memdirActionType !== null}
+                      onClick={() => void handleCleanupMemdir()}
+                    >
+                      {memdirActionType === "cleanup"
+                        ? "整理中..."
+                        : "整理 memdir"}
+                    </button>
+                  </div>
+                }
+              >
+                <div className="mb-4 rounded-3xl border border-emerald-200 bg-emerald-50/80 p-4">
+                  <p className="text-sm font-medium text-emerald-900">
+                    同一 topic 会覆盖旧内容；“整理 memdir” 会去重入口链接、裁剪
+                    README 历史段落，并把旧 topic 日志收口为当前版本。
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-emerald-800/90">
+                    {memdirWorkingDir
+                      ? `当前工作区：${memdirWorkingDir}`
+                      : "当前未获取到 workspace 路径，暂无法执行 memdir 治理动作。"}
+                  </p>
+                </div>
+                {memdirActionNotice ? (
+                  <div
+                    className={cn(
+                      "mb-4 rounded-3xl border px-4 py-3 text-sm",
+                      memdirActionNotice.tone === "success"
+                        ? "border-emerald-200 bg-emerald-50/80 text-emerald-900"
+                        : "border-rose-200 bg-rose-50/80 text-rose-700",
+                    )}
+                  >
+                    {memdirActionNotice.message}
+                  </div>
+                ) : null}
+                <div className="grid gap-4 xl:grid-cols-2">
+                  {sourceBuckets.map((bucket) => {
+                    const badge = getMemoryAvailabilityBadge(
+                      bucket.key === "auto" &&
+                        autoIndex?.enabled &&
+                        bucket.status === "missing"
+                        ? "exists"
+                        : bucket.status,
+                    );
+                    const detail =
+                      bucket.key === "auto"
+                        ? autoIndex?.root_dir ||
+                          bucket.primaryPath ||
+                          bucket.emptyState
+                        : bucket.primaryPath || bucket.emptyState;
+                    const helper =
+                      bucket.key === "auto"
+                        ? `入口文件：${autoIndex?.entrypoint || "MEMORY.md"} · 已索引 ${autoIndex?.items.length || 0} 个条目`
+                        : bucket.status === "loaded"
+                          ? `已加载 ${bucket.loadedCount} 条来源`
+                          : bucket.status === "exists"
+                            ? `已发现 ${bucket.existsCount} 条来源，但当前未注入`
+                            : bucket.emptyState;
+                    return (
                       <article
-                        key={`${source.kind}:${source.path}`}
+                        key={bucket.key}
                         className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4"
                       >
-                        <div className="flex flex-wrap items-center gap-2 text-sm">
-                          <span className="rounded-full bg-emerald-700 px-2.5 py-1 text-xs font-medium text-white">
-                            {resolveSourceKindLabel(source.kind)}
-                          </span>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">
+                              {bucket.label}
+                            </p>
+                            <p className="mt-2 text-sm leading-6 text-slate-500">
+                              {bucket.description}
+                            </p>
+                          </div>
+                          <Badge variant="outline" className={badge.className}>
+                            {badge.label}
+                          </Badge>
+                        </div>
+                        <p className="mt-4 text-xs font-medium uppercase tracking-[0.16em] text-slate-400">
+                          {bucket.scope}
+                        </p>
+                        <p className="mt-2 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700">
+                          {detail}
+                        </p>
+                        <p className="mt-3 text-sm leading-6 text-slate-500">
+                          {helper}
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
                           <Badge
                             variant="outline"
                             className={SLATE_OUTLINE_BADGE_CLASS_NAME}
                           >
-                            {resolveSourceBucketLabel(source.source_bucket)}
+                            来源分类：{bucket.label}
                           </Badge>
-                          {source.provider ? (
+                          {bucket.provider ? (
                             <Badge
                               variant="outline"
                               className={SLATE_OUTLINE_BADGE_CLASS_NAME}
                             >
-                              provider：{source.provider}
+                              provider：{bucket.provider}
                             </Badge>
                           ) : null}
-                          {source.memory_type ? (
+                          {bucket.latestUpdatedAt ? (
                             <Badge
                               variant="outline"
-                              className={
-                                MEMORY_TYPE_BADGE_CLASS_NAMES[
-                                  source.memory_type
-                                ]
-                              }
+                              className={SLATE_OUTLINE_BADGE_CLASS_NAME}
                             >
-                              {MEMORY_TYPE_LABELS[source.memory_type]}
+                              最近更新：
+                              {formatRelativeTime(bucket.latestUpdatedAt)}
                             </Badge>
                           ) : null}
-                          <span className="font-medium text-slate-900">
-                            {source.path}
-                          </span>
                         </div>
-                        <p className="mt-2 text-sm leading-6 text-slate-500">
-                          {source.loaded
-                            ? "已加载"
-                            : source.exists
-                              ? "已发现但当前未加载"
-                              : "文件不存在"}
-                          ，共 {source.line_count} 行，导入{" "}
-                          {source.import_count} 个。
-                          {source.updated_at
-                            ? ` 最近更新于 ${formatRelativeTime(source.updated_at)}。`
-                            : ""}
-                        </p>
-                        {source.preview ? (
-                          <pre className="mt-3 overflow-x-auto rounded-2xl border border-sky-100 bg-[image:var(--lime-card-subtle)] p-3 text-xs leading-6 text-slate-700 shadow-sm shadow-sky-950/5">
-                            {source.preview}
-                          </pre>
-                        ) : null}
                       </article>
-                    ))}
-                  </div>
-                </MemorySurfacePanel>
-              </>
-            ) : null}
+                    );
+                  })}
+                </div>
+              </MemorySurfacePanel>
 
-            {!loading && !error && activeSection === "working" ? (
-              <>
-                <MemorySurfacePanel
-                  title="会话工作记忆"
-                  description={
-                    extractionStatus?.status_summary ||
-                    "这里查看 session 级的 task plan、摘录和工作文件；它们服务当前回合，不直接等同于灵感库长期对象。"
-                  }
-                >
-                  <div className="space-y-4">
-                    {workingView?.sessions.length ? (
-                      workingView.sessions.map((session) => (
-                        <article
-                          key={session.session_id}
-                          className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900">
-                                {session.session_id}
-                              </p>
-                              <p className="mt-1 text-sm text-slate-500">
-                                {session.total_entries} 条会话记忆，更新于{" "}
-                                {formatRelativeTime(session.updated_at)}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="mt-4 grid gap-3 md:grid-cols-2">
-                            {session.files.map((file) => (
-                              <div
-                                key={`${session.session_id}:${file.file_type}`}
-                                className="rounded-2xl border border-slate-200 bg-white p-3"
-                              >
-                                <p className="text-sm font-medium text-slate-900">
-                                  {file.file_type}
-                                </p>
-                                <p className="mt-1 text-xs leading-5 text-slate-500">
-                                  {file.path}
-                                </p>
-                                <p className="mt-2 text-sm leading-6 text-slate-500">
-                                  {file.summary}
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                        </article>
-                      ))
-                    ) : (
-                      <p className="text-sm text-slate-500">
-                        当前还没有检测到会话记忆文件。
-                      </p>
-                    )}
-                  </div>
-                </MemorySurfacePanel>
-              </>
-            ) : null}
-
-            {!loading && !error && activeSection === "durable" ? (
-              <>
-                {focusedDurableMemory ? (
-                  <MemorySurfacePanel
-                    title="围绕这条成果继续"
-                    description="这轮结果已经进了灵感库，下一步先从这里接着做，不用重新回首页找入口。"
-                  >
-                    <MemoryCuratedTaskSuggestionPanel
-                      panelTestId="memory-focused-suggestion-panel"
-                      tasks={focusedMemoryCuratedTasks}
-                      referenceEntryCount={
-                        activeRecommendationReferenceEntries.length
-                      }
-                      referenceSummary={featuredMemoryReferenceSummary}
-                      gridClassName="grid gap-4 xl:grid-cols-2"
-                      contextCard={{
-                        badgeLabel: "当前续接成果",
-                        title: focusedDurableMemory.title,
-                        summary: focusedDurableMemory.summary,
-                      }}
-                      emptyState="当前这条成果还没有编出更合适的下一步，先补一条参考或偏好再继续。"
-                      onStartTask={setMemoryLauncherTask}
-                    />
-                  </MemorySurfacePanel>
-                ) : null}
-
-                <MemorySurfacePanel
-                  title="灵感条目"
-                  description="左侧挑一条，右侧直接继续。"
-                  actions={
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        className={cn(
-                          BUTTON_CLASS_NAME,
-                          durableFilter === "all" && ACTIVE_BUTTON_CLASS_NAME,
-                        )}
-                        onClick={() => navigateToMemorySection("durable")}
-                      >
-                        全部
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
-                          {durableCategoryCounts.all}
-                        </span>
-                      </button>
-                      {(Object.keys(CATEGORY_LABELS) as MemoryCategory[]).map(
-                        (category) => (
-                          <button
-                            key={category}
-                            type="button"
-                            className={cn(
-                              BUTTON_CLASS_NAME,
-                              durableFilter === category &&
-                                ACTIVE_BUTTON_CLASS_NAME,
-                            )}
-                            onClick={() => navigateToMemorySection(category)}
-                          >
-                            {CATEGORY_LABELS[category]}
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
-                              {durableCategoryCounts[category]}
-                            </span>
-                          </button>
-                        ),
-                      )}
-                    </div>
-                  }
-                >
-                  {filteredMemories.length ? (
-                    <div className="grid gap-4 xl:grid-cols-[minmax(0,0.92fr)_minmax(320px,0.88fr)]">
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <p className="text-sm text-slate-600">
-                            当前显示 {durablePageStart}-{durablePageEnd} /{" "}
-                            {filteredMemories.length} 条
-                          </p>
-                          <p className="text-xs text-slate-400">
-                            一次看一页，右侧保持当前条目详情
-                          </p>
-                        </div>
-
-                        {pagedFilteredMemories.map((memory) => {
-                          const isFocused = focusedDurableMemory?.id === memory.id;
-                          const isSelected =
-                            selectedDurableMemory?.id === memory.id;
-
-                          return (
-                            <button
-                              key={memory.id}
-                              type="button"
-                              ref={(element) => {
-                                durableEntryRefs.current[memory.id] = element;
-                              }}
-                              data-memory-entry-id={memory.id}
-                              data-testid={`memory-durable-entry-${memory.id}`}
-                            className={cn(
-                                "block w-full rounded-2xl border bg-white p-3.5 text-left transition hover:border-slate-300 hover:bg-slate-50",
-                                isFocused
-                                  ? "border-emerald-300 bg-emerald-50/80 shadow-sm shadow-emerald-950/5"
-                                  : isSelected
-                                    ? "border-slate-300 bg-slate-50 shadow-sm shadow-slate-950/5"
-                                    : "border-slate-200",
-                              )}
-                              onClick={() => handleSelectDurableMemory(memory.id)}
-                            >
-                              <div className="flex items-start justify-between gap-2.5">
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <Badge
-                                      variant="outline"
-                                      className={
-                                        MEMORY_TYPE_BADGE_CLASS_NAMES[
-                                          resolveMemoryType(memory.category)
-                                        ]
-                                      }
-                                    >
-                                      {CATEGORY_LABELS[memory.category]}
-                                    </Badge>
-                                    {isFocused ? (
-                                      <Badge
-                                        variant="outline"
-                                        className={EMERALD_BADGE_CLASS_NAME}
-                                      >
-                                        当前续接
-                                      </Badge>
-                                    ) : null}
-                                  </div>
-                                  <h3 className="mt-1.5 truncate text-sm font-semibold text-slate-900">
-                                    {memory.title}
-                                  </h3>
-                                  <p className="mt-0.5 line-clamp-1 text-xs leading-5 text-slate-500">
-                                    {memory.summary}
-                                  </p>
-                                </div>
-                                <div className="shrink-0 text-right">
-                                  <p className="text-xs text-slate-400">
-                                    {formatRelativeTime(memory.updated_at)}
-                                  </p>
-                                  <span className="mt-1.5 inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500">
-                                    <ArrowRight className="h-3 w-3" />
-                                  </span>
-                                </div>
-                              </div>
-                            </button>
-                          );
-                        })}
-
-                        {durablePageCount > 1 ? (
-                          <div
-                            className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
-                            data-testid="memory-durable-pagination"
-                          >
-                            <p className="text-sm text-slate-500">
-                              第 {durablePage} / {durablePageCount} 页
-                            </p>
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                className={cn(
-                                  BUTTON_CLASS_NAME,
-                                  "disabled:cursor-not-allowed disabled:opacity-45",
-                                )}
-                                data-testid="memory-durable-pagination-first"
-                                onClick={() => handleDurablePageChange(1)}
-                                disabled={durablePage <= 1}
-                              >
-                                首页
-                              </button>
-                              <button
-                                type="button"
-                                className={cn(
-                                  BUTTON_CLASS_NAME,
-                                  "disabled:cursor-not-allowed disabled:opacity-45",
-                                )}
-                                data-testid="memory-durable-pagination-prev"
-                                onClick={() =>
-                                  handleDurablePageChange(durablePage - 1)
-                                }
-                                disabled={durablePage <= 1}
-                              >
-                                上一页
-                              </button>
-                              {durableVisiblePages.map((pageNumber) => (
-                                <button
-                                  key={pageNumber}
-                                  type="button"
-                                  className={cn(
-                                    BUTTON_CLASS_NAME,
-                                    durablePage === pageNumber &&
-                                      ACTIVE_BUTTON_CLASS_NAME,
-                                  )}
-                                  data-testid={`memory-durable-pagination-page-${pageNumber}`}
-                                  onClick={() =>
-                                    handleDurablePageChange(pageNumber)
-                                  }
-                                >
-                                  {pageNumber}
-                                </button>
-                              ))}
-                              <button
-                                type="button"
-                                className={cn(
-                                  BUTTON_CLASS_NAME,
-                                  "disabled:cursor-not-allowed disabled:opacity-45",
-                                )}
-                                data-testid="memory-durable-pagination-next"
-                                onClick={() =>
-                                  handleDurablePageChange(durablePage + 1)
-                                }
-                                disabled={durablePage >= durablePageCount}
-                              >
-                                下一页
-                              </button>
-                              <button
-                                type="button"
-                                className={cn(
-                                  BUTTON_CLASS_NAME,
-                                  "disabled:cursor-not-allowed disabled:opacity-45",
-                                )}
-                                data-testid="memory-durable-pagination-last"
-                                onClick={() =>
-                                  handleDurablePageChange(durablePageCount)
-                                }
-                                disabled={durablePage >= durablePageCount}
-                              >
-                                末页
-                              </button>
-                            </div>
-                          </div>
-                        ) : null}
-                      </div>
-
-                      {selectedDurableMemory ? (
-                        <article
-                          className="rounded-3xl border border-slate-200 bg-slate-50 p-5 shadow-sm shadow-slate-950/5 xl:sticky xl:top-6 xl:self-start"
-                          data-testid="memory-durable-detail-panel"
-                        >
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Badge
-                              variant="outline"
-                              className={EMERALD_OUTLINE_BADGE_CLASS_NAME}
-                            >
-                              {selectedDurableProjection?.projectionLabel ||
-                                "灵感对象"}
-                            </Badge>
-                            <Badge
-                              variant="outline"
-                              className={SLATE_OUTLINE_BADGE_CLASS_NAME}
-                            >
-                              {resolveMemorySourceLabel(selectedDurableMemory)}
-                            </Badge>
-                            {focusedDurableMemory?.id ===
-                            selectedDurableMemory.id ? (
-                              <Badge
-                                variant="outline"
-                                className={EMERALD_BADGE_CLASS_NAME}
-                              >
-                                当前续接
-                              </Badge>
-                            ) : null}
-                          </div>
-
-                          <div className="mt-4">
-                            <h3 className="text-xl font-semibold text-slate-900">
-                              {selectedDurableMemory.title}
-                            </h3>
-                            <p className="mt-2 text-sm leading-6 text-slate-600">
-                              {selectedDurableMemory.summary}
-                            </p>
-                          </div>
-
-                          <div className="mt-4 flex flex-wrap gap-2">
-                            <div className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-                              <span className="text-slate-400">分类</span>
-                              <span className="ml-2 font-medium text-slate-900">
-                                {CATEGORY_LABELS[selectedDurableMemory.category]}
-                              </span>
-                            </div>
-                            <div className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-                              <span className="text-slate-400">更新时间</span>
-                              <span className="ml-2 font-medium text-slate-900">
-                                {formatRelativeTime(
-                                  selectedDurableMemory.updated_at,
-                                )}
-                              </span>
-                            </div>
-                          </div>
-
-                          {selectedDurablePreviewLines.length > 0 ? (
-                            <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
-                              <p className="text-xs font-medium text-slate-400">
-                                预览
-                              </p>
-                              <div className="mt-2 space-y-2">
-                                {selectedDurablePreviewLines.map((line) => (
-                                  <p
-                                    key={line}
-                                    className="text-sm leading-6 text-slate-600"
-                                  >
-                                    {line}
-                                  </p>
-                                ))}
-                              </div>
-                            </div>
-                          ) : null}
-
-                          {selectedDurableProjection?.tags.length ? (
-                            <div className="mt-4 flex flex-wrap gap-2">
-                              {selectedDurableProjection.tags.map((tag) => (
-                                <span
-                                  key={tag}
-                                  className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600"
-                                >
-                                  {tag}
-                                </span>
-                              ))}
-                            </div>
-                          ) : null}
-
-                          <div className="mt-5 flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              className={cn(
-                                BUTTON_CLASS_NAME,
-                                EMERALD_BUTTON_CLASS_NAME,
-                              )}
-                              onClick={() =>
-                                handleBringToCreation(selectedDurableMemory)
-                              }
-                            >
-                              带回创作输入
-                            </button>
-                            <button
-                              type="button"
-                              className={BUTTON_CLASS_NAME}
-                              onClick={() =>
-                                handleOpenInScene(selectedDurableMemory)
-                              }
-                            >
-                              去全部 Skills
-                            </button>
-                          </div>
-                        </article>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-slate-500">
-                      当前筛选下还没有可复用的灵感条目。
-                    </p>
-                  )}
-                </MemorySurfacePanel>
-              </>
-            ) : null}
-
-            {!loading && !error && activeSection === "team" ? (
               <MemorySurfacePanel
-                title="团队影子快照"
-                description="这里展示本地 localStorage 中保存的 repo-scoped 团队影子，便于核对最近一次团队分工。"
+                title="当前命中来源明细"
+                description="下面是运行时实际解析到的来源明细。Lime 底层已经支持托管策略、用户/项目/本地记忆、规则目录、memdir 与 /memories 等来源。"
+              >
+                <div className="space-y-3">
+                  {rulesSources?.sources.map((source) => (
+                    <article
+                      key={`${source.kind}:${source.path}`}
+                      className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4"
+                    >
+                      <div className="flex flex-wrap items-center gap-2 text-sm">
+                        <span className="rounded-full bg-emerald-700 px-2.5 py-1 text-xs font-medium text-white">
+                          {resolveSourceKindLabel(source.kind)}
+                        </span>
+                        <Badge
+                          variant="outline"
+                          className={SLATE_OUTLINE_BADGE_CLASS_NAME}
+                        >
+                          {resolveSourceBucketLabel(source.source_bucket)}
+                        </Badge>
+                        {source.provider ? (
+                          <Badge
+                            variant="outline"
+                            className={SLATE_OUTLINE_BADGE_CLASS_NAME}
+                          >
+                            provider：{source.provider}
+                          </Badge>
+                        ) : null}
+                        {source.memory_type ? (
+                          <Badge
+                            variant="outline"
+                            className={
+                              MEMORY_TYPE_BADGE_CLASS_NAMES[source.memory_type]
+                            }
+                          >
+                            {MEMORY_TYPE_LABELS[source.memory_type]}
+                          </Badge>
+                        ) : null}
+                        <span className="font-medium text-slate-900">
+                          {source.path}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm leading-6 text-slate-500">
+                        {source.loaded
+                          ? "已加载"
+                          : source.exists
+                            ? "已发现但当前未加载"
+                            : "文件不存在"}
+                        ，共 {source.line_count} 行，导入 {source.import_count}{" "}
+                        个。
+                        {source.updated_at
+                          ? ` 最近更新于 ${formatRelativeTime(source.updated_at)}。`
+                          : ""}
+                      </p>
+                      {source.preview ? (
+                        <pre className="mt-3 overflow-x-auto rounded-2xl border border-sky-100 bg-[image:var(--lime-card-subtle)] p-3 text-xs leading-6 text-slate-700 shadow-sm shadow-sky-950/5">
+                          {source.preview}
+                        </pre>
+                      ) : null}
+                    </article>
+                  ))}
+                </div>
+              </MemorySurfacePanel>
+            </>
+          ) : null}
+
+          {!loading && !error && activeSection === "working" ? (
+            <>
+              <MemorySurfacePanel
+                title="会话工作记忆"
+                description={
+                  extractionStatus?.status_summary ||
+                  "这里查看 session 级的 task plan、摘录和工作文件；它们服务当前回合，不直接等同于灵感库长期对象。"
+                }
               >
                 <div className="space-y-4">
-                  {teamSnapshots.length ? (
-                    teamSnapshots.map((snapshot) => (
+                  {workingView?.sessions.length ? (
+                    workingView.sessions.map((session) => (
                       <article
-                        key={snapshot.repoScope}
+                        key={session.session_id}
                         className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4"
                       >
-                        <p className="text-sm font-semibold text-slate-900">
-                          {snapshot.repoScope}
-                        </p>
-                        <div className="mt-3 space-y-2">
-                          {Object.values(snapshot.entries).map((entry) => (
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">
+                              {session.session_id}
+                            </p>
+                            <p className="mt-1 text-sm text-slate-500">
+                              {session.total_entries} 条会话记忆，更新于{" "}
+                              {formatRelativeTime(session.updated_at)}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="mt-4 grid gap-3 md:grid-cols-2">
+                          {session.files.map((file) => (
                             <div
-                              key={entry.key}
+                              key={`${session.session_id}:${file.file_type}`}
                               className="rounded-2xl border border-slate-200 bg-white p-3"
                             >
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <span className="text-sm font-medium text-slate-900">
-                                  {entry.key}
-                                </span>
-                                <span className="text-xs text-slate-400">
-                                  {formatRelativeTime(entry.updatedAt)}
-                                </span>
-                              </div>
+                              <p className="text-sm font-medium text-slate-900">
+                                {file.file_type}
+                              </p>
+                              <p className="mt-1 text-xs leading-5 text-slate-500">
+                                {file.path}
+                              </p>
                               <p className="mt-2 text-sm leading-6 text-slate-500">
-                                {entry.content}
+                                {file.summary}
                               </p>
                             </div>
                           ))}
@@ -3594,49 +3216,457 @@ export function MemoryPage({ onNavigate, pageParams }: MemoryPageProps) {
                     ))
                   ) : (
                     <p className="text-sm text-slate-500">
-                      当前没有本地团队记忆快照。
+                      当前还没有检测到会话记忆文件。
                     </p>
                   )}
                 </div>
               </MemorySurfacePanel>
-            ) : null}
+            </>
+          ) : null}
 
-            {!loading && !error && activeSection === "compaction" ? (
+          {!loading && !error && activeSection === "durable" ? (
+            <>
+              {focusedDurableMemory ? (
+                <MemorySurfacePanel
+                  title="围绕这条成果继续"
+                  description="这轮结果已经进了灵感库，下一步先从这里接着做，不用重新回首页找入口。"
+                >
+                  <MemoryCuratedTaskSuggestionPanel
+                    panelTestId="memory-focused-suggestion-panel"
+                    tasks={focusedMemoryCuratedTasks}
+                    referenceEntryCount={
+                      activeRecommendationReferenceEntries.length
+                    }
+                    referenceSummary={featuredMemoryReferenceSummary}
+                    gridClassName="grid gap-4 xl:grid-cols-2"
+                    contextCard={{
+                      badgeLabel: "当前续接成果",
+                      title: focusedDurableMemory.title,
+                      summary: focusedDurableMemory.summary,
+                    }}
+                    emptyState="当前这条成果还没有编出更合适的下一步，先补一条参考或偏好再继续。"
+                    onStartTask={setMemoryLauncherTask}
+                  />
+                </MemorySurfacePanel>
+              ) : null}
+
               <MemorySurfacePanel
-                title="压缩摘要"
-                description="这些摘要来自 Aster summary cache，用于在长会话中续接更早的历史。"
+                title="灵感条目"
+                description="左侧挑一条，右侧直接继续。"
+                actions={
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className={cn(
+                        BUTTON_CLASS_NAME,
+                        durableFilter === "all" && ACTIVE_BUTTON_CLASS_NAME,
+                      )}
+                      onClick={() => navigateToMemorySection("durable")}
+                    >
+                      全部
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
+                        {durableCategoryCounts.all}
+                      </span>
+                    </button>
+                    {(Object.keys(CATEGORY_LABELS) as MemoryCategory[]).map(
+                      (category) => (
+                        <button
+                          key={category}
+                          type="button"
+                          className={cn(
+                            BUTTON_CLASS_NAME,
+                            durableFilter === category &&
+                              ACTIVE_BUTTON_CLASS_NAME,
+                          )}
+                          onClick={() => navigateToMemorySection(category)}
+                        >
+                          {CATEGORY_LABELS[category]}
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
+                            {durableCategoryCounts[category]}
+                          </span>
+                        </button>
+                      ),
+                    )}
+                  </div>
+                }
               >
-                <div className="space-y-4">
-                  {extractionStatus?.recent_compactions.length ? (
-                    extractionStatus.recent_compactions.map((snapshot) => (
-                      <article
-                        key={`${snapshot.session_id}:${snapshot.created_at}`}
-                        className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4"
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-semibold text-slate-900">
-                              {snapshot.session_id}
-                            </p>
-                            <p className="mt-1 text-sm text-slate-500">
-                              turns={snapshot.turn_count || 0} /{" "}
-                              {formatRelativeTime(snapshot.created_at)}
-                            </p>
+                {filteredMemories.length ? (
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,0.92fr)_minmax(320px,0.88fr)]">
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p className="text-sm text-slate-600">
+                          当前显示 {durablePageStart}-{durablePageEnd} /{" "}
+                          {filteredMemories.length} 条
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          一次看一页，右侧保持当前条目详情
+                        </p>
+                      </div>
+
+                      {pagedFilteredMemories.map((memory) => {
+                        const isFocused =
+                          focusedDurableMemory?.id === memory.id;
+                        const isSelected =
+                          selectedDurableMemory?.id === memory.id;
+
+                        return (
+                          <button
+                            key={memory.id}
+                            type="button"
+                            ref={(element) => {
+                              durableEntryRefs.current[memory.id] = element;
+                            }}
+                            data-memory-entry-id={memory.id}
+                            data-testid={`memory-durable-entry-${memory.id}`}
+                            className={cn(
+                              "block w-full rounded-2xl border bg-white p-3.5 text-left transition hover:border-slate-300 hover:bg-slate-50",
+                              isFocused
+                                ? "border-emerald-300 bg-emerald-50/80 shadow-sm shadow-emerald-950/5"
+                                : isSelected
+                                  ? "border-slate-300 bg-slate-50 shadow-sm shadow-slate-950/5"
+                                  : "border-slate-200",
+                            )}
+                            onClick={() => handleSelectDurableMemory(memory.id)}
+                          >
+                            <div className="flex items-start justify-between gap-2.5">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge
+                                    variant="outline"
+                                    className={
+                                      MEMORY_TYPE_BADGE_CLASS_NAMES[
+                                        resolveMemoryType(memory.category)
+                                      ]
+                                    }
+                                  >
+                                    {CATEGORY_LABELS[memory.category]}
+                                  </Badge>
+                                  {isFocused ? (
+                                    <Badge
+                                      variant="outline"
+                                      className={EMERALD_BADGE_CLASS_NAME}
+                                    >
+                                      当前续接
+                                    </Badge>
+                                  ) : null}
+                                </div>
+                                <h3 className="mt-1.5 truncate text-sm font-semibold text-slate-900">
+                                  {memory.title}
+                                </h3>
+                                <p className="mt-0.5 line-clamp-1 text-xs leading-5 text-slate-500">
+                                  {memory.summary}
+                                </p>
+                              </div>
+                              <div className="shrink-0 text-right">
+                                <p className="text-xs text-slate-400">
+                                  {formatRelativeTime(memory.updated_at)}
+                                </p>
+                                <span className="mt-1.5 inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500">
+                                  <ArrowRight className="h-3 w-3" />
+                                </span>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+
+                      {durablePageCount > 1 ? (
+                        <div
+                          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
+                          data-testid="memory-durable-pagination"
+                        >
+                          <p className="text-sm text-slate-500">
+                            第 {durablePage} / {durablePageCount} 页
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              className={cn(
+                                BUTTON_CLASS_NAME,
+                                "disabled:cursor-not-allowed disabled:opacity-45",
+                              )}
+                              data-testid="memory-durable-pagination-first"
+                              onClick={() => handleDurablePageChange(1)}
+                              disabled={durablePage <= 1}
+                            >
+                              首页
+                            </button>
+                            <button
+                              type="button"
+                              className={cn(
+                                BUTTON_CLASS_NAME,
+                                "disabled:cursor-not-allowed disabled:opacity-45",
+                              )}
+                              data-testid="memory-durable-pagination-prev"
+                              onClick={() =>
+                                handleDurablePageChange(durablePage - 1)
+                              }
+                              disabled={durablePage <= 1}
+                            >
+                              上一页
+                            </button>
+                            {durableVisiblePages.map((pageNumber) => (
+                              <button
+                                key={pageNumber}
+                                type="button"
+                                className={cn(
+                                  BUTTON_CLASS_NAME,
+                                  durablePage === pageNumber &&
+                                    ACTIVE_BUTTON_CLASS_NAME,
+                                )}
+                                data-testid={`memory-durable-pagination-page-${pageNumber}`}
+                                onClick={() =>
+                                  handleDurablePageChange(pageNumber)
+                                }
+                              >
+                                {pageNumber}
+                              </button>
+                            ))}
+                            <button
+                              type="button"
+                              className={cn(
+                                BUTTON_CLASS_NAME,
+                                "disabled:cursor-not-allowed disabled:opacity-45",
+                              )}
+                              data-testid="memory-durable-pagination-next"
+                              onClick={() =>
+                                handleDurablePageChange(durablePage + 1)
+                              }
+                              disabled={durablePage >= durablePageCount}
+                            >
+                              下一页
+                            </button>
+                            <button
+                              type="button"
+                              className={cn(
+                                BUTTON_CLASS_NAME,
+                                "disabled:cursor-not-allowed disabled:opacity-45",
+                              )}
+                              data-testid="memory-durable-pagination-last"
+                              onClick={() =>
+                                handleDurablePageChange(durablePageCount)
+                              }
+                              disabled={durablePage >= durablePageCount}
+                            >
+                              末页
+                            </button>
                           </div>
                         </div>
-                        <p className="mt-3 text-sm leading-6 text-slate-600">
-                          {snapshot.summary_preview}
-                        </p>
+                      ) : null}
+                    </div>
+
+                    {selectedDurableMemory ? (
+                      <article
+                        className="rounded-3xl border border-slate-200 bg-slate-50 p-5 shadow-sm shadow-slate-950/5 xl:sticky xl:top-6 xl:self-start"
+                        data-testid="memory-durable-detail-panel"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge
+                            variant="outline"
+                            className={EMERALD_OUTLINE_BADGE_CLASS_NAME}
+                          >
+                            {selectedDurableProjection?.projectionLabel ||
+                              "灵感对象"}
+                          </Badge>
+                          <Badge
+                            variant="outline"
+                            className={SLATE_OUTLINE_BADGE_CLASS_NAME}
+                          >
+                            {resolveMemorySourceLabel(selectedDurableMemory)}
+                          </Badge>
+                          {focusedDurableMemory?.id ===
+                          selectedDurableMemory.id ? (
+                            <Badge
+                              variant="outline"
+                              className={EMERALD_BADGE_CLASS_NAME}
+                            >
+                              当前续接
+                            </Badge>
+                          ) : null}
+                        </div>
+
+                        <div className="mt-4">
+                          <h3 className="text-xl font-semibold text-slate-900">
+                            {selectedDurableProjection?.title ??
+                              normalizeUserFacingMemoryTitle({
+                                value: selectedDurableMemory.title,
+                                category: selectedDurableMemory.category,
+                              })}
+                          </h3>
+                          <p className="mt-2 text-sm leading-6 text-slate-600">
+                            {selectedDurableProjection?.summary ??
+                              normalizeUserFacingMemorySummary(
+                                selectedDurableMemory.summary ||
+                                  selectedDurableMemory.content,
+                              )}
+                          </p>
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <div className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                            <span className="text-slate-400">分类</span>
+                            <span className="ml-2 font-medium text-slate-900">
+                              {CATEGORY_LABELS[selectedDurableMemory.category]}
+                            </span>
+                          </div>
+                          <div className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                            <span className="text-slate-400">更新时间</span>
+                            <span className="ml-2 font-medium text-slate-900">
+                              {formatRelativeTime(
+                                selectedDurableMemory.updated_at,
+                              )}
+                            </span>
+                          </div>
+                        </div>
+
+                        {selectedDurablePreviewLines.length > 0 ? (
+                          <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+                            <p className="text-xs font-medium text-slate-400">
+                              预览
+                            </p>
+                            <div className="mt-2 space-y-2">
+                              {selectedDurablePreviewLines.map((line) => (
+                                <p
+                                  key={line}
+                                  className="text-sm leading-6 text-slate-600"
+                                >
+                                  {line}
+                                </p>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {selectedDurableProjection?.tags.length ? (
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {selectedDurableProjection.tags.map((tag) => (
+                              <span
+                                key={tag}
+                                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600"
+                              >
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+
+                        <div className="mt-5 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            className={cn(
+                              BUTTON_CLASS_NAME,
+                              EMERALD_BUTTON_CLASS_NAME,
+                            )}
+                            onClick={() =>
+                              handleBringToCreation(selectedDurableMemory)
+                            }
+                          >
+                            带回创作输入
+                          </button>
+                          <button
+                            type="button"
+                            className={BUTTON_CLASS_NAME}
+                            onClick={() =>
+                              handleOpenInScene(selectedDurableMemory)
+                            }
+                          >
+                            去全部 Skills
+                          </button>
+                        </div>
                       </article>
-                    ))
-                  ) : (
-                    <p className="text-sm text-slate-500">
-                      当前还没有上下文压缩摘要。
-                    </p>
-                  )}
-                </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">
+                    当前筛选下还没有可复用的灵感条目。
+                  </p>
+                )}
               </MemorySurfacePanel>
-            ) : null}
+            </>
+          ) : null}
+
+          {!loading && !error && activeSection === "team" ? (
+            <MemorySurfacePanel
+              title="团队影子快照"
+              description="这里展示本地 localStorage 中保存的 repo-scoped 团队影子，便于核对最近一次团队分工。"
+            >
+              <div className="space-y-4">
+                {teamSnapshots.length ? (
+                  teamSnapshots.map((snapshot) => (
+                    <article
+                      key={snapshot.repoScope}
+                      className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4"
+                    >
+                      <p className="text-sm font-semibold text-slate-900">
+                        {snapshot.repoScope}
+                      </p>
+                      <div className="mt-3 space-y-2">
+                        {Object.values(snapshot.entries).map((entry) => (
+                          <div
+                            key={entry.key}
+                            className="rounded-2xl border border-slate-200 bg-white p-3"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="text-sm font-medium text-slate-900">
+                                {entry.key}
+                              </span>
+                              <span className="text-xs text-slate-400">
+                                {formatRelativeTime(entry.updatedAt)}
+                              </span>
+                            </div>
+                            <p className="mt-2 text-sm leading-6 text-slate-500">
+                              {entry.content}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <p className="text-sm text-slate-500">
+                    当前没有本地团队记忆快照。
+                  </p>
+                )}
+              </div>
+            </MemorySurfacePanel>
+          ) : null}
+
+          {!loading && !error && activeSection === "compaction" ? (
+            <MemorySurfacePanel
+              title="压缩摘要"
+              description="这些摘要来自 Aster summary cache，用于在长会话中续接更早的历史。"
+            >
+              <div className="space-y-4">
+                {extractionStatus?.recent_compactions.length ? (
+                  extractionStatus.recent_compactions.map((snapshot) => (
+                    <article
+                      key={`${snapshot.session_id}:${snapshot.created_at}`}
+                      className="rounded-3xl border border-slate-200 bg-slate-50/70 p-4"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {snapshot.session_id}
+                          </p>
+                          <p className="mt-1 text-sm text-slate-500">
+                            turns={snapshot.turn_count || 0} /{" "}
+                            {formatRelativeTime(snapshot.created_at)}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="mt-3 text-sm leading-6 text-slate-600">
+                        {snapshot.summary_preview}
+                      </p>
+                    </article>
+                  ))
+                ) : (
+                  <p className="text-sm text-slate-500">
+                    当前还没有上下文压缩摘要。
+                  </p>
+                )}
+              </div>
+            </MemorySurfacePanel>
+          ) : null}
         </main>
       </div>
 

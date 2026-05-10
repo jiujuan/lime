@@ -203,7 +203,7 @@ describe("CapabilityDraftPanel", () => {
               },
               {
                 key: "stdoutPreview",
-                value: "{\"markdown_report\":\"# 趋势摘要\"}",
+                value: '{"markdown_report":"# 趋势摘要"}',
               },
             ],
           },
@@ -275,7 +275,9 @@ describe("CapabilityDraftPanel", () => {
     expect(container.textContent).toContain("方法");
     expect(container.textContent).toContain("GET");
     expect(container.textContent).toContain("证据 Schema");
-    expect(container.textContent).toContain("注册只会复制为 Workspace 本地 Skill");
+    expect(container.textContent).toContain(
+      "注册只会复制为 Workspace 本地 Skill",
+    );
     const registerButton = Array.from(
       container.querySelectorAll("button"),
     ).find((button) => button.textContent?.includes("注册到 Workspace"));
@@ -339,7 +341,8 @@ describe("CapabilityDraftPanel", () => {
           registrationId: "capreg-1",
           registeredAt: "2026-05-05T01:10:00.000Z",
           skillDirectory: "capability-register",
-          registeredSkillDirectory: "/tmp/work/.agents/skills/capability-register",
+          registeredSkillDirectory:
+            "/tmp/work/.agents/skills/capability-register",
           sourceDraftId: "capdraft-register",
           sourceVerificationReportId: "capver-1",
           generatedFileCount: 4,
@@ -355,7 +358,8 @@ describe("CapabilityDraftPanel", () => {
         registrationId: "capreg-1",
         registeredAt: "2026-05-05T01:10:00.000Z",
         skillDirectory: "capability-register",
-        registeredSkillDirectory: "/tmp/work/.agents/skills/capability-register",
+        registeredSkillDirectory:
+          "/tmp/work/.agents/skills/capability-register",
         sourceDraftId: "capdraft-register",
         sourceVerificationReportId: "capver-1",
         generatedFileCount: 4,
@@ -389,7 +393,9 @@ describe("CapabilityDraftPanel", () => {
     });
     expect(container.textContent).toContain("已注册");
     expect(container.textContent).toContain("已注册目录：capability-register");
-    expect(container.textContent).toContain("运行与自动化仍需后续 runtime gate");
+    expect(container.textContent).toContain(
+      "运行与自动化仍需后续 runtime gate",
+    );
     expect(onRegisteredSkillsChanged).toHaveBeenCalledTimes(1);
     expect(container.textContent).not.toContain("立即运行");
     expect(container.textContent).not.toContain("创建自动化");

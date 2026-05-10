@@ -44,6 +44,33 @@ vi.mock("@/lib/api/modelRegistry", () => ({
   }) => result.source,
 }));
 
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (
+      _key: string,
+      fallbackOrOptions?: string | { defaultValue?: string },
+    ) => {
+      const template =
+        typeof fallbackOrOptions === "string"
+          ? fallbackOrOptions
+          : (fallbackOrOptions?.defaultValue ?? _key);
+
+      if (!fallbackOrOptions || typeof fallbackOrOptions === "string") {
+        return template;
+      }
+
+      return template.replace(/{{\s*(\w+)\s*}}/g, (match, name) => {
+        const value = (fallbackOrOptions as Record<string, unknown>)[name];
+        return value == null ? match : String(value);
+      });
+    },
+    i18n: {
+      language: "zh-CN",
+      resolvedLanguage: "zh-CN",
+    },
+  }),
+}));
+
 vi.mock("./ProviderSetting", () => ({
   ProviderSetting: (props: {
     provider: ProviderWithKeysDisplay | null;
@@ -285,6 +312,8 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
       container.querySelector('[data-testid="enabled-model-list"]'),
     ).not.toBeNull();
     expect(container.textContent ?? "").toContain("启用的模型");
+    expect(container.textContent ?? "").toContain("添加模型");
+    expect(container.textContent ?? "").toContain("导入 / 导出配置");
     expect(container.textContent ?? "").toContain("DeepSeek");
     expect(container.textContent ?? "").not.toContain("OpenAI");
   });

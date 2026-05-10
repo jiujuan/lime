@@ -120,7 +120,13 @@ export interface AsterSessionExecutionRuntimePermissionState {
   blockingProfileKeys?: string[];
   decisionSource: string;
   decisionScope: string;
-  confirmationStatus?: "not_required" | "not_requested" | "requested" | "resolved" | string | null;
+  confirmationStatus?:
+    | "not_required"
+    | "not_requested"
+    | "requested"
+    | "resolved"
+    | string
+    | null;
   confirmationRequestId?: string | null;
   confirmationSource?: string | null;
   notes?: string[];

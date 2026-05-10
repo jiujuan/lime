@@ -21,9 +21,9 @@ describe("agentStreamRuntimeMetricsController", () => {
     expect(
       shouldRecordAgentStreamFirstTextDelta({ firstTextDeltaAt: undefined }),
     ).toBe(true);
-    expect(shouldRecordAgentStreamFirstTextDelta({ firstTextDeltaAt: 130 })).toBe(
-      false,
-    );
+    expect(
+      shouldRecordAgentStreamFirstTextDelta({ firstTextDeltaAt: 130 }),
+    ).toBe(false);
   });
 
   it("应构造 first runtime status 指标上下文", () => {

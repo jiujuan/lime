@@ -154,6 +154,10 @@ function readQcloopStatusSidecars(dirPath) {
     });
 }
 
+function containsAgentQcAction(value) {
+  return /agent[-_]qc|Agent QC|qcloop/.test(String(value || ""));
+}
+
 function loadFacts() {
   const scenarioManifest = readJson("docs/test/agent-qc-scenarios.manifest.json");
   const guiFlowManifest = readJson("docs/test/agent-qc-gui-flows.manifest.json");
@@ -267,21 +271,10 @@ function loadFacts() {
         staleOwnerInterventionDoc.includes("watch-history-output") ||
         staleOwnerInterventionDoc.includes("stale-owner-watch-history.jsonl"),
     },
-    nightly: {
-      hasAgentQcReport: nightly.includes("agent-qc-report"),
-      hasGuiFlowReport: nightly.includes("agent-qc-gui-flow-report"),
-      hasReleasePreview: nightly.includes("release-agent-qc-preview"),
-    },
-    release: {
-      hasHardGate:
-        release.includes("agent-qc-release-summary") &&
-        release.includes("--check") &&
-        !release.includes("--allow-missing-evidence"),
-      requiresP0ScenarioCoverage:
-        release.includes("--require-scenario-manifest") &&
-        release.includes("docs/test/agent-qc-scenarios.manifest.json") &&
-        release.includes("--require-risk") &&
-        release.includes("P0"),
+    githubActions: {
+      releaseDetached: !containsAgentQcAction(release),
+      nightlyDetached: !containsAgentQcAction(nightly),
+      contractsDetached: !containsAgentQcAction(packageJson?.scripts?.["test:contracts"]),
     },
   };
 }

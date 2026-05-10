@@ -47,12 +47,14 @@ export function selectAgentStreamRuntimeSummaryItem(params: {
     return pendingItem.type === "turn_summary" ? pendingItem : null;
   }
 
-  const fallbackItem = [...params.items].reverse().find(
-    (item) =>
-      item.thread_id === params.activeSessionId &&
-      item.type === "turn_summary" &&
-      item.status === "in_progress",
-  );
+  const fallbackItem = [...params.items]
+    .reverse()
+    .find(
+      (item) =>
+        item.thread_id === params.activeSessionId &&
+        item.type === "turn_summary" &&
+        item.status === "in_progress",
+    );
   return fallbackItem?.type === "turn_summary" ? fallbackItem : null;
 }
 

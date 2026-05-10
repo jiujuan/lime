@@ -117,7 +117,8 @@ export function createLayeredDesignAnalyzerModelSlotHttpJsonExecutor(
         const { code, retryable } = resolveHttpErrorCode(response.status);
         throw createLayeredDesignAnalyzerModelSlotTransportError({
           code,
-          message: `Layered design analyzer model slot HTTP JSON executor failed: ${response.status} ${response.statusText ?? ""}`.trim(),
+          message:
+            `Layered design analyzer model slot HTTP JSON executor failed: ${response.status} ${response.statusText ?? ""}`.trim(),
           retryable,
           statusCode: response.status,
           details: createHttpExecutorDetails(endpointUrl, request, {

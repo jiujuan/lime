@@ -117,9 +117,7 @@ export function formatOemCloudDateTime(value?: string) {
   }).format(parsed);
 }
 
-function formatOemCloudAccessModeLabel(
-  value?: OemCloudPartnerHubAccessMode,
-) {
+function formatOemCloudAccessModeLabel(value?: OemCloudPartnerHubAccessMode) {
   switch (value) {
     case "session":
       return "登录会话";
@@ -132,9 +130,7 @@ function formatOemCloudAccessModeLabel(
   }
 }
 
-function formatOemCloudConfigModeLabel(
-  value?: OemCloudPartnerHubConfigMode,
-) {
+function formatOemCloudConfigModeLabel(value?: OemCloudPartnerHubConfigMode) {
   switch (value) {
     case "managed":
       return "托管模式";

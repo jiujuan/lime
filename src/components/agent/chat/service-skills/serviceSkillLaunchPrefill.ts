@@ -4,7 +4,10 @@ import {
 } from "../skill-selection/slashEntryUsage";
 import { resolveSiteSceneSlotValues } from "../workspace/serviceSkillSceneLaunch";
 import type { CreationReplayMetadata } from "../utils/creationReplayMetadata";
-import { buildCreationReplaySlotPrefill } from "./creationReplaySlotPrefill";
+import {
+  buildCreationReplaySlotPrefill,
+  type CreationReplaySlotPrefillCopy,
+} from "./creationReplaySlotPrefill";
 import { getServiceSkillUsageMap } from "./storage";
 import type { ServiceSkillHomeItem, ServiceSkillSlotValues } from "./types";
 
@@ -15,6 +18,7 @@ export interface ServiceSkillLaunchPrefillResult {
 }
 
 export interface ServiceSkillLaunchPrefillCopy {
+  creationReplay?: CreationReplaySlotPrefillCopy;
   filledPrefix?: string;
   extraPrefix?: string;
   itemSeparator?: string;
@@ -205,6 +209,7 @@ export function resolveServiceSkillLaunchPrefill(params: {
   const creationReplayPrefill = buildCreationReplaySlotPrefill(
     skill,
     creationReplay,
+    copy?.creationReplay,
   );
   const slotValues = compactSlotValues({
     ...(recentServicePrefill?.slotValues ||

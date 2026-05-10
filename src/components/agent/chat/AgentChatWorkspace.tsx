@@ -1542,7 +1542,10 @@ export function AgentChatWorkspace({
     imageWorkbenchPreferredProviderUnavailable,
   ]);
   const imageGenerationSelectionWarning = useMemo(() => {
-    if (mediaDefaultsLoading || imageWorkbenchGenerationRuntime.providersLoading) {
+    if (
+      mediaDefaultsLoading ||
+      imageWorkbenchGenerationRuntime.providersLoading
+    ) {
       return "图片服务设置加载中，请稍后生成图层资产。";
     }
 
@@ -8022,45 +8025,44 @@ export function AgentChatWorkspace({
           undefined,
           tracedSendOptions,
         );
-        void sendPromise
-          .then(
-            (result) => {
-              if (request.materializeDraft && materializedSessionId) {
-                commitMaterializedTaskCenterDraftTab(
-                  request.draftTabId,
-                  materializedSessionId,
-                  { preserveInput: result !== true },
-                );
-              }
-              recordAgentUiPerformanceMetric("homeInput.sendDispatch.done", {
-                durationMs: Date.now() - request.submittedAt,
-                requestId: request.id,
-                result,
-                sessionId: dispatchSessionId,
-                source: request.source,
-                workspaceId: taskCenterWorkspaceId,
-              });
-              clearRequest({ keepHomePreview: !request.materializeDraft });
-            },
-            (error) => {
-              if (request.materializeDraft && materializedSessionId) {
-                commitMaterializedTaskCenterDraftTab(
-                  request.draftTabId,
-                  materializedSessionId,
-                  { preserveInput: true },
-                );
-              }
-              recordAgentUiPerformanceMetric("homeInput.sendDispatch.error", {
-                durationMs: Date.now() - request.submittedAt,
-                error: error instanceof Error ? error.message : String(error),
-                requestId: request.id,
-                sessionId: dispatchSessionId,
-                source: request.source,
-                workspaceId: taskCenterWorkspaceId,
-              });
-              clearRequest();
-            },
-          );
+        void sendPromise.then(
+          (result) => {
+            if (request.materializeDraft && materializedSessionId) {
+              commitMaterializedTaskCenterDraftTab(
+                request.draftTabId,
+                materializedSessionId,
+                { preserveInput: result !== true },
+              );
+            }
+            recordAgentUiPerformanceMetric("homeInput.sendDispatch.done", {
+              durationMs: Date.now() - request.submittedAt,
+              requestId: request.id,
+              result,
+              sessionId: dispatchSessionId,
+              source: request.source,
+              workspaceId: taskCenterWorkspaceId,
+            });
+            clearRequest({ keepHomePreview: !request.materializeDraft });
+          },
+          (error) => {
+            if (request.materializeDraft && materializedSessionId) {
+              commitMaterializedTaskCenterDraftTab(
+                request.draftTabId,
+                materializedSessionId,
+                { preserveInput: true },
+              );
+            }
+            recordAgentUiPerformanceMetric("homeInput.sendDispatch.error", {
+              durationMs: Date.now() - request.submittedAt,
+              error: error instanceof Error ? error.message : String(error),
+              requestId: request.id,
+              sessionId: dispatchSessionId,
+              source: request.source,
+              workspaceId: taskCenterWorkspaceId,
+            });
+            clearRequest();
+          },
+        );
       })().catch((error) => {
         recordAgentUiPerformanceMetric("homeInput.sendDispatch.error", {
           durationMs: Date.now() - request.submittedAt,

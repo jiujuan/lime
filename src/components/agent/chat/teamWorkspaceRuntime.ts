@@ -406,7 +406,9 @@ function resolveItemActivityDescriptor(item: AgentThreadItem): {
     case "context_compaction":
       return {
         title: "上下文压缩",
-        detail: normalizeActivityText(item.detail || item.trigger || item.stage),
+        detail: normalizeActivityText(
+          item.detail || item.trigger || item.stage,
+        ),
       };
     default:
       return null;

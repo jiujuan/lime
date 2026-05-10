@@ -45,9 +45,9 @@ describe("historicalMessageHydrationProjection", () => {
   it("应识别需要保留完整结构渲染的历史内容", () => {
     expect(hasStructuredHistoricalContentHint("<a2ui-form />")).toBe(true);
     expect(hasStructuredHistoricalContentHint("```a2ui\n{}\n```")).toBe(true);
-    expect(hasStructuredHistoricalContentHint("<document>body</document>")).toBe(
-      true,
-    );
+    expect(
+      hasStructuredHistoricalContentHint("<document>body</document>"),
+    ).toBe(true);
     expect(hasStructuredHistoricalContentHint("普通 markdown")).toBe(false);
   });
 

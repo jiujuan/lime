@@ -98,7 +98,10 @@ describe("sessionSwitchSnapshotController", () => {
   });
 
   it("应构造 switch start / defer / pending shell 指标上下文", () => {
-    const cachedSnapshot = snapshot([message("message-a"), message("message-b")]);
+    const cachedSnapshot = snapshot([
+      message("message-a"),
+      message("message-b"),
+    ]);
 
     expect(
       buildSessionSwitchStartMetricContext({

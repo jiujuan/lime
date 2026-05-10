@@ -101,10 +101,7 @@ interface EmptyStateComposerPanelProps {
   knowledgeHubOpenRequestKey?: number;
   onToggleKnowledgePack?: (enabled: boolean) => void;
   onSelectKnowledgePack?: (packName: string) => void;
-  onToggleKnowledgeCompanionPack?: (
-    packName: string,
-    enabled: boolean,
-  ) => void;
+  onToggleKnowledgeCompanionPack?: (packName: string, enabled: boolean) => void;
   onStartKnowledgeOrganize?: () => void;
   onManageKnowledgePacks?: () => void;
   showCreationModeSelector: boolean;

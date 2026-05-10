@@ -43,11 +43,7 @@ export function useAgentUiProjectionEventsBySurface(
   const snapshot = useConversationProjectionSnapshot();
   return useMemo(
     () =>
-      selectAgentUiProjectionEventsBySurfaceForScope(
-        snapshot,
-        surface,
-        filter,
-      ),
+      selectAgentUiProjectionEventsBySurfaceForScope(snapshot, surface, filter),
     [filter, snapshot, surface],
   );
 }

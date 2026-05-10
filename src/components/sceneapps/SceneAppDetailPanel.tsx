@@ -110,9 +110,7 @@ export function SceneAppDetailPanel({
         >
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
             <div>
-              <div className="text-sm font-medium text-slate-900">
-                完整说明
-              </div>
+              <div className="text-sm font-medium text-slate-900">完整说明</div>
               <div className="mt-1 text-xs text-slate-500">
                 需要时再看来源、步骤、结果口径和默认判断。
               </div>
@@ -179,30 +177,40 @@ export function SceneAppDetailPanel({
 
             <div className="mt-4 grid gap-4 xl:grid-cols-3">
               <div className="min-w-0 rounded-[24px] border border-slate-200 bg-white p-4">
-                <div className="text-sm font-medium text-slate-900">默认会拿到</div>
+                <div className="text-sm font-medium text-slate-900">
+                  默认会拿到
+                </div>
                 <p className="mt-3 text-sm leading-6 text-slate-600">
                   {detailView.deliveryNarrative}
                 </p>
                 <div className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
                   <div>
-                    <span className="font-medium text-slate-700">默认主结果：</span>
+                    <span className="font-medium text-slate-700">
+                      默认主结果：
+                    </span>
                     {detailView.outputHint}
                   </div>
                   {detailView.deliveryPrimaryPart ? (
                     <div>
-                      <span className="font-medium text-slate-700">默认主件：</span>
+                      <span className="font-medium text-slate-700">
+                        默认主件：
+                      </span>
                       {detailView.deliveryPrimaryPart}
                     </div>
                   ) : null}
                   {detailView.deliveryViewerLabel ? (
                     <div>
-                      <span className="font-medium text-slate-700">默认入口：</span>
+                      <span className="font-medium text-slate-700">
+                        默认入口：
+                      </span>
                       {detailView.deliveryViewerLabel}
                     </div>
                   ) : null}
                   {detailView.artifactProfileRef ? (
                     <div data-testid="sceneapp-detail-artifact-ref">
-                      <span className="font-medium text-slate-700">结果说明：</span>
+                      <span className="font-medium text-slate-700">
+                        结果说明：
+                      </span>
                       {detailView.artifactProfileRef}
                     </div>
                   ) : null}
@@ -238,11 +246,15 @@ export function SceneAppDetailPanel({
                       data-testid="sceneapp-detail-blueprint-ref"
                       className="text-sm leading-6 text-slate-600"
                     >
-                      <span className="font-medium text-slate-700">步骤说明：</span>
+                      <span className="font-medium text-slate-700">
+                        步骤说明：
+                      </span>
                       {detailView.compositionBlueprintRef}
                     </div>
                     <div className="text-sm leading-6 text-slate-600">
-                      <span className="font-medium text-slate-700">阶段数：</span>
+                      <span className="font-medium text-slate-700">
+                        阶段数：
+                      </span>
                       {detailView.compositionStepCount}
                     </div>
                     {detailView.compositionSteps.length ? (
@@ -267,7 +279,8 @@ export function SceneAppDetailPanel({
                   </div>
                 ) : (
                   <p className="mt-3 text-sm leading-6 text-slate-500">
-                    当前这个 Skill 还没有拆出明确步骤，先按当前默认路径继续推进。
+                    当前这个 Skill
+                    还没有拆出明确步骤，先按当前默认路径继续推进。
                   </p>
                 )}
               </div>
@@ -284,7 +297,9 @@ export function SceneAppDetailPanel({
                     data-testid="sceneapp-detail-scorecard-ref"
                     className="mt-3 text-sm leading-6 text-slate-600"
                   >
-                    <span className="font-medium text-slate-700">判断说明：</span>
+                    <span className="font-medium text-slate-700">
+                      判断说明：
+                    </span>
                     {detailView.scorecardProfileRef}
                   </div>
                 ) : null}
@@ -307,7 +322,9 @@ export function SceneAppDetailPanel({
                 )}
                 {detailView.scorecardFailureSignals.length ? (
                   <div className="mt-3">
-                    <div className="text-xs font-medium text-slate-500">先盯这些</div>
+                    <div className="text-xs font-medium text-slate-500">
+                      先盯这些
+                    </div>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {detailView.scorecardFailureSignals.map((signal) => (
                         <span
@@ -348,19 +365,23 @@ export function SceneAppDetailPanel({
                 ) : null}
                 {detailView.planning.unmetRequirements.length ? (
                   <div className="mt-4">
-                    <div className="text-xs font-medium text-slate-500">还差这些</div>
+                    <div className="text-xs font-medium text-slate-500">
+                      还差这些
+                    </div>
                     <div
                       data-testid="sceneapp-detail-planning-unmet"
                       className="mt-2 flex flex-col gap-2"
                     >
-                      {detailView.planning.unmetRequirements.map((message, index) => (
-                        <div
-                          key={`${detailView.id}-planning-unmet-${index}`}
-                          className="rounded-[18px] border border-amber-200 bg-amber-50/70 px-3 py-2 text-sm leading-6 text-amber-800"
-                        >
-                          {message}
-                        </div>
-                      ))}
+                      {detailView.planning.unmetRequirements.map(
+                        (message, index) => (
+                          <div
+                            key={`${detailView.id}-planning-unmet-${index}`}
+                            className="rounded-[18px] border border-amber-200 bg-amber-50/70 px-3 py-2 text-sm leading-6 text-amber-800"
+                          >
+                            {message}
+                          </div>
+                        ),
+                      )}
                     </div>
                   </div>
                 ) : null}
@@ -453,14 +474,16 @@ export function SceneAppDetailPanel({
                                 data-testid="sceneapp-detail-context-layers"
                                 className="mt-2 flex flex-wrap gap-2"
                               >
-                                {detailView.contextPlan.activeLayers.map((layer) => (
-                                  <span
-                                    key={layer.key}
-                                    className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] font-medium text-sky-700"
-                                  >
-                                    {layer.label}
-                                  </span>
-                                ))}
+                                {detailView.contextPlan.activeLayers.map(
+                                  (layer) => (
+                                    <span
+                                      key={layer.key}
+                                      className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] font-medium text-sky-700"
+                                    >
+                                      {layer.label}
+                                    </span>
+                                  ),
+                                )}
                               </div>
                             </div>
                           ) : null}
@@ -468,7 +491,9 @@ export function SceneAppDetailPanel({
                             data-testid="sceneapp-detail-context-reference-count"
                             className="text-sm leading-6 text-slate-600"
                           >
-                            <span className="font-medium text-slate-700">参考对象：</span>
+                            <span className="font-medium text-slate-700">
+                              参考对象：
+                            </span>
                             {detailView.contextPlan.referenceCount} 条
                           </div>
                           {detailView.contextPlan.scopeLabel ? (
@@ -476,180 +501,215 @@ export function SceneAppDetailPanel({
                               data-testid="sceneapp-detail-context-scope"
                               className="text-sm leading-6 text-slate-600"
                             >
-                              <span className="font-medium text-slate-700">作用范围：</span>
+                              <span className="font-medium text-slate-700">
+                                作用范围：
+                              </span>
                               {detailView.contextPlan.scopeLabel}
                             </div>
                           ) : null}
                           {detailView.contextPlan.skillRefs.length ? (
                             <div>
-                              <div className="text-xs font-medium text-slate-500">已接入 Skill</div>
+                              <div className="text-xs font-medium text-slate-500">
+                                已接入 Skill
+                              </div>
                               <div
                                 data-testid="sceneapp-detail-context-skill-refs"
                                 className="mt-2 flex flex-wrap gap-2"
                               >
-                                {detailView.contextPlan.skillRefs.map((skillRef) => (
-                                  <span
-                                    key={skillRef.key}
-                                    className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] font-medium text-violet-700"
-                                  >
-                                    {skillRef.label}
-                                  </span>
-                                ))}
+                                {detailView.contextPlan.skillRefs.map(
+                                  (skillRef) => (
+                                    <span
+                                      key={skillRef.key}
+                                      className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] font-medium text-violet-700"
+                                    >
+                                      {skillRef.label}
+                                    </span>
+                                  ),
+                                )}
                               </div>
                             </div>
                           ) : null}
                           {detailView.contextPlan.memoryRefs.length ? (
                             <div>
-                              <div className="text-xs font-medium text-slate-500">历史经验</div>
+                              <div className="text-xs font-medium text-slate-500">
+                                历史经验
+                              </div>
                               <div className="mt-2 flex flex-wrap gap-2">
-                                {detailView.contextPlan.memoryRefs.map((memoryRef) => (
-                                  <span
-                                    key={memoryRef.key}
-                                    className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-600"
-                                  >
-                                    {memoryRef.label}
-                                  </span>
-                                ))}
+                                {detailView.contextPlan.memoryRefs.map(
+                                  (memoryRef) => (
+                                    <span
+                                      key={memoryRef.key}
+                                      className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-600"
+                                    >
+                                      {memoryRef.label}
+                                    </span>
+                                  ),
+                                )}
                               </div>
                             </div>
                           ) : null}
                           {detailView.contextPlan.toolRefs.length ? (
                             <div>
-                              <div className="text-xs font-medium text-slate-500">可用能力</div>
+                              <div className="text-xs font-medium text-slate-500">
+                                可用能力
+                              </div>
                               <div className="mt-2 flex flex-wrap gap-2">
-                                {detailView.contextPlan.toolRefs.map((toolRef) => (
-                                  <span
-                                    key={toolRef.key}
-                                    className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700"
-                                  >
-                                    {toolRef.label}
-                                  </span>
-                                ))}
+                                {detailView.contextPlan.toolRefs.map(
+                                  (toolRef) => (
+                                    <span
+                                      key={toolRef.key}
+                                      className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700"
+                                    >
+                                      {toolRef.label}
+                                    </span>
+                                  ),
+                                )}
                               </div>
                             </div>
                           ) : null}
                           {detailView.contextPlan.referenceItems.length ? (
                             <div>
-                              <div className="text-xs font-medium text-slate-500">参考条目</div>
+                              <div className="text-xs font-medium text-slate-500">
+                                参考条目
+                              </div>
                               <div
                                 data-testid="sceneapp-detail-context-reference-items"
                                 className="mt-2 grid gap-3"
                               >
-                                {detailView.contextPlan.referenceItems.map((reference) => (
-                                  <div
-                                    key={reference.key}
-                                    className="rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-3"
-                                  >
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <span className="text-sm font-medium text-slate-900">
-                                        {reference.label}
-                                      </span>
-                                      <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em] text-slate-600">
-                                        {reference.sourceLabel}
-                                      </span>
-                                      <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em] text-sky-700">
-                                        {reference.contentTypeLabel}
-                                      </span>
+                                {detailView.contextPlan.referenceItems.map(
+                                  (reference) => (
+                                    <div
+                                      key={reference.key}
+                                      className="rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-3"
+                                    >
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <span className="text-sm font-medium text-slate-900">
+                                          {reference.label}
+                                        </span>
+                                        <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em] text-slate-600">
+                                          {reference.sourceLabel}
+                                        </span>
+                                        <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em] text-sky-700">
+                                          {reference.contentTypeLabel}
+                                        </span>
+                                      </div>
+                                      {reference.summary ? (
+                                        <div className="mt-2 text-sm leading-6 text-slate-600">
+                                          {reference.summary}
+                                        </div>
+                                      ) : null}
+                                      {reference.uri ? (
+                                        <div className="mt-1 break-all text-xs leading-5 text-slate-500">
+                                          {reference.uri}
+                                        </div>
+                                      ) : null}
+                                      {reference.usageLabel ||
+                                      reference.feedbackLabel ? (
+                                        <div className="mt-2 flex flex-wrap gap-2">
+                                          {reference.usageLabel ? (
+                                            <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                                              {reference.usageLabel}
+                                            </span>
+                                          ) : null}
+                                          {reference.feedbackLabel ? (
+                                            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                                              {reference.feedbackLabel}
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                      ) : null}
                                     </div>
-                                    {reference.summary ? (
-                                      <div className="mt-2 text-sm leading-6 text-slate-600">
-                                        {reference.summary}
-                                      </div>
-                                    ) : null}
-                                    {reference.uri ? (
-                                      <div className="mt-1 break-all text-xs leading-5 text-slate-500">
-                                        {reference.uri}
-                                      </div>
-                                    ) : null}
-                                    {reference.usageLabel || reference.feedbackLabel ? (
-                                      <div className="mt-2 flex flex-wrap gap-2">
-                                        {reference.usageLabel ? (
-                                          <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600">
-                                            {reference.usageLabel}
-                                          </span>
-                                        ) : null}
-                                        {reference.feedbackLabel ? (
-                                          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                                            {reference.feedbackLabel}
-                                          </span>
-                                        ) : null}
-                                      </div>
-                                    ) : null}
-                                  </div>
-                                ))}
+                                  ),
+                                )}
                               </div>
                             </div>
                           ) : null}
                           {detailView.contextPlan.feedbackUpdatedAtLabel ? (
                             <div className="text-sm leading-6 text-slate-600">
-                              <span className="font-medium text-slate-700">反馈更新时间：</span>
+                              <span className="font-medium text-slate-700">
+                                反馈更新时间：
+                              </span>
                               {detailView.contextPlan.feedbackUpdatedAtLabel}
                             </div>
                           ) : null}
                           {detailView.contextPlan.feedbackSignals.length ? (
                             <div>
-                              <div className="text-xs font-medium text-slate-500">判断信号</div>
+                              <div className="text-xs font-medium text-slate-500">
+                                判断信号
+                              </div>
                               <div
                                 data-testid="sceneapp-detail-context-feedback-signals"
                                 className="mt-2 flex flex-wrap gap-2"
                               >
-                                {detailView.contextPlan.feedbackSignals.map((signal) => (
-                                  <span
-                                    key={signal.key}
-                                    className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-medium text-rose-700"
-                                  >
-                                    {signal.label}
-                                  </span>
-                                ))}
+                                {detailView.contextPlan.feedbackSignals.map(
+                                  (signal) => (
+                                    <span
+                                      key={signal.key}
+                                      className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-medium text-rose-700"
+                                    >
+                                      {signal.label}
+                                    </span>
+                                  ),
+                                )}
                               </div>
                             </div>
                           ) : null}
                           {detailView.contextPlan.tasteKeywords.length ? (
                             <div>
-                              <div className="text-xs font-medium text-slate-500">偏好关键词</div>
+                              <div className="text-xs font-medium text-slate-500">
+                                偏好关键词
+                              </div>
                               <div
                                 data-testid="sceneapp-detail-context-taste-keywords"
                                 className="mt-2 flex flex-wrap gap-2"
                               >
-                                {detailView.contextPlan.tasteKeywords.map((keyword) => (
-                                  <span
-                                    key={keyword.key}
-                                    className="rounded-full border border-lime-200 bg-lime-50 px-2.5 py-1 text-[11px] font-medium text-lime-700"
-                                  >
-                                    {keyword.label}
-                                  </span>
-                                ))}
+                                {detailView.contextPlan.tasteKeywords.map(
+                                  (keyword) => (
+                                    <span
+                                      key={keyword.key}
+                                      className="rounded-full border border-lime-200 bg-lime-50 px-2.5 py-1 text-[11px] font-medium text-lime-700"
+                                    >
+                                      {keyword.label}
+                                    </span>
+                                  ),
+                                )}
                               </div>
                             </div>
                           ) : null}
                           {detailView.contextPlan.avoidKeywords.length ? (
                             <div>
-                              <div className="text-xs font-medium text-slate-500">避免方向</div>
+                              <div className="text-xs font-medium text-slate-500">
+                                避免方向
+                              </div>
                               <div
                                 data-testid="sceneapp-detail-context-avoid-keywords"
                                 className="mt-2 flex flex-wrap gap-2"
                               >
-                                {detailView.contextPlan.avoidKeywords.map((keyword) => (
-                                  <span
-                                    key={keyword.key}
-                                    className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700"
-                                  >
-                                    {keyword.label}
-                                  </span>
-                                ))}
+                                {detailView.contextPlan.avoidKeywords.map(
+                                  (keyword) => (
+                                    <span
+                                      key={keyword.key}
+                                      className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700"
+                                    >
+                                      {keyword.label}
+                                    </span>
+                                  ),
+                                )}
                               </div>
                             </div>
                           ) : null}
                           {detailView.contextPlan.notes.length ? (
                             <div className="space-y-2">
-                              {detailView.contextPlan.notes.map((note, index) => (
-                                <div
-                                  key={`${detailView.id}-context-note-${index}`}
-                                  className="rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-600"
-                                >
-                                  {note}
-                                </div>
-                              ))}
+                              {detailView.contextPlan.notes.map(
+                                (note, index) => (
+                                  <div
+                                    key={`${detailView.id}-context-note-${index}`}
+                                    className="rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-600"
+                                  >
+                                    {note}
+                                  </div>
+                                ),
+                              )}
                             </div>
                           ) : null}
                         </div>
@@ -664,7 +724,9 @@ export function SceneAppDetailPanel({
               </div>
               <div className="rounded-[24px] border border-slate-200 bg-white p-4">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="text-sm font-medium text-slate-900">默认结果去向</div>
+                  <div className="text-sm font-medium text-slate-900">
+                    默认结果去向
+                  </div>
                   {detailView.projectPackPlan ? (
                     <span
                       data-testid="sceneapp-detail-pack-strategy"
@@ -696,14 +758,16 @@ export function SceneAppDetailPanel({
                         data-testid="sceneapp-detail-pack-required-parts"
                         className="mt-3 flex flex-wrap gap-2"
                       >
-                        {detailView.projectPackPlan.requiredParts.map((part) => (
-                          <span
-                            key={part.key}
-                            className="rounded-full border border-lime-200 bg-lime-50 px-2.5 py-1 text-[11px] font-medium text-lime-700"
-                          >
-                            {part.label}
-                          </span>
-                        ))}
+                        {detailView.projectPackPlan.requiredParts.map(
+                          (part) => (
+                            <span
+                              key={part.key}
+                              className="rounded-full border border-lime-200 bg-lime-50 px-2.5 py-1 text-[11px] font-medium text-lime-700"
+                            >
+                              {part.label}
+                            </span>
+                          ),
+                        )}
                       </div>
                     ) : (
                       <p className="mt-3 text-sm leading-6 text-slate-500">
@@ -726,14 +790,16 @@ export function SceneAppDetailPanel({
                         </summary>
                         <div className="border-t border-slate-200 bg-white px-3 py-3">
                           <div className="space-y-2">
-                            {detailView.projectPackPlan.notes.map((note, index) => (
-                              <div
-                                key={`${detailView.id}-pack-note-${index}`}
-                                className="rounded-[16px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-600"
-                              >
-                                {note}
-                              </div>
-                            ))}
+                            {detailView.projectPackPlan.notes.map(
+                              (note, index) => (
+                                <div
+                                  key={`${detailView.id}-pack-note-${index}`}
+                                  className="rounded-[16px] border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-600"
+                                >
+                                  {note}
+                                </div>
+                              ),
+                            )}
                           </div>
                         </div>
                       </details>
@@ -759,7 +825,9 @@ export function SceneAppDetailPanel({
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <div className="text-sm font-medium text-slate-900">开始生成</div>
+                <div className="text-sm font-medium text-slate-900">
+                  开始生成
+                </div>
                 <p className="mt-1 text-xs leading-5 text-slate-500">
                   只填项目和目标。
                 </p>
@@ -849,7 +917,8 @@ export function SceneAppDetailPanel({
                       "rounded-full border-slate-200 px-4 text-slate-700 hover:bg-slate-50",
                     )}
                     disabled={
-                      Boolean(saveBaselineDisabledReason) || savingContextBaseline
+                      Boolean(saveBaselineDisabledReason) ||
+                      savingContextBaseline
                     }
                     onClick={onSaveContextBaseline}
                   >

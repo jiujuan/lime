@@ -111,9 +111,8 @@ export function startAgentStreamRequest(
   const now = params.deps?.now ?? Date.now;
   const recordMetric =
     params.deps?.recordMetric ?? recordAgentStreamPerformanceMetric;
-  const logActivity = params.deps?.logActivity ?? activityLogger.log.bind(
-    activityLogger,
-  );
+  const logActivity =
+    params.deps?.logActivity ?? activityLogger.log.bind(activityLogger);
 
   params.requestState.requestStartedAt = now();
   recordMetric(

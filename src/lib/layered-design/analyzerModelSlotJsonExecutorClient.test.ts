@@ -168,8 +168,8 @@ function createMinimalJsonRequest(): LayeredDesignAnalyzerModelSlotTransportJson
 describe("layered-design analyzer model slot HTTP JSON executor client", () => {
   it("应把 provider-agnostic HTTP JSON executor 接入 current flat image analyzer", async () => {
     const requests: LayeredDesignAnalyzerModelSlotTransportJsonRequest[] = [];
-    const fetchImpl: LayeredDesignAnalyzerModelSlotHttpJsonExecutorFetch = vi.fn(
-      async (_url, init) => {
+    const fetchImpl: LayeredDesignAnalyzerModelSlotHttpJsonExecutorFetch =
+      vi.fn(async (_url, init) => {
         const request = JSON.parse(
           init.body,
         ) as LayeredDesignAnalyzerModelSlotTransportJsonRequest;
@@ -181,8 +181,7 @@ describe("layered-design analyzer model slot HTTP JSON executor client", () => {
           statusText: "OK",
           json: async () => createHttpExecutorResult(request),
         };
-      },
-    );
+      });
     const analyzer =
       createLayeredDesignFlatImageAnalyzerFromModelSlotHttpJsonExecutor(
         MODEL_SLOT_CONFIGS,

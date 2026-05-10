@@ -123,9 +123,9 @@ function shouldExposeLimeHubLoginPrompt(
 ): boolean {
   return Boolean(
     runtime &&
-      provider.enabled &&
-      isLimeHubProvider(provider) &&
-      !hasOemCloudLogin(runtime),
+    provider.enabled &&
+    isLimeHubProvider(provider) &&
+    !hasOemCloudLogin(runtime),
   );
 }
 
@@ -307,7 +307,8 @@ export function useConfiguredProviders(
 
     const bumpRevision = () => setOemCloudRevision((revision) => revision + 1);
     const unsubscribeSession = subscribeOemCloudSessionChanged(bumpRevision);
-    const unsubscribeBootstrap = subscribeOemCloudBootstrapChanged(bumpRevision);
+    const unsubscribeBootstrap =
+      subscribeOemCloudBootstrapChanged(bumpRevision);
 
     return () => {
       unsubscribeSession();

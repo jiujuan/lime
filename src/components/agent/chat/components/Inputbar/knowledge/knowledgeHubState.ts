@@ -84,8 +84,7 @@ export function resolveKnowledgeHubState({
   if (knowledgePackSelection && !selectedIsReady && canManageKnowledgePacks) {
     return {
       title: "资料待确认",
-      description:
-        `「${currentLabel}」还没有确认。先检查事实、适用场景和风险提示，确认后再用于生成。`,
+      description: `「${currentLabel}」还没有确认。先检查事实、适用场景和风险提示，确认后再用于生成。`,
       primaryAction: "manage",
       primaryLabel: "去确认资料",
       readyCount,

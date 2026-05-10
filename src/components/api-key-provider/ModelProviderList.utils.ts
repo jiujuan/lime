@@ -47,8 +47,8 @@ export function isProviderVisibleInEnabledModelList(
   if (isOemManagedHubProvider(provider)) {
     return Boolean(
       options.exposeOemLoginPrompt &&
-        getEnabledApiKeyCount(provider) === 0 &&
-        !getProviderDefaultModel(provider),
+      getEnabledApiKeyCount(provider) === 0 &&
+      !getProviderDefaultModel(provider),
     );
   }
 
@@ -64,7 +64,9 @@ export function buildEnabledModelItems(
   options: EnabledModelListOptions = {},
 ): EnabledModelItem[] {
   const items = providers
-    .filter((provider) => isProviderVisibleInEnabledModelList(provider, options))
+    .filter((provider) =>
+      isProviderVisibleInEnabledModelList(provider, options),
+    )
     .sort((a, b) => a.sort_order - b.sort_order)
     .map((provider): EnabledModelItem => {
       const modelId = getProviderDefaultModel(provider);

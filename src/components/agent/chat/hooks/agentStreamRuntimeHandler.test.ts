@@ -265,7 +265,7 @@ describe("agentStreamRuntimeHandler", () => {
         },
       },
       logs: [
-        "正在生成工具输入：{\"command\"",
+        '正在生成工具输入：{"command"',
         "正在处理第 2 项",
         "partial output",
       ],

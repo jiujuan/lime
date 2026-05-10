@@ -705,13 +705,12 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                                   <span className="truncate">
                                     {provider.label}
                                   </span>
-                                  {provider.authStatus ===
-                                  "login_required" ? (
+                                  {provider.authStatus === "login_required" ? (
                                     <span className="text-[10px] leading-4 text-amber-700">
                                       需要登录
                                     </span>
                                   ) : providerPromptCacheMode ===
-                                  "explicit_only" ? (
+                                    "explicit_only" ? (
                                     <span className="text-[10px] leading-4 text-amber-700">
                                       显式缓存
                                     </span>
@@ -773,7 +772,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                             需要登录 {selectedProvider?.label ?? "Lime Hub"}
                           </div>
                           <div className="mt-1 text-amber-700">
-                            登录后会自动同步 Lime Hub 的可用模型，下拉框不会再显示本地兜底模型。
+                            登录后会自动同步 Lime Hub
+                            的可用模型，下拉框不会再显示本地兜底模型。
                           </div>
                           {onManageProviders ? (
                             <Button

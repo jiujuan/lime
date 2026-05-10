@@ -2,11 +2,16 @@ import { useEffect } from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { KnowledgePackStatus, KnowledgePackSummary } from "@/lib/api/knowledge";
+import type {
+  KnowledgePackStatus,
+  KnowledgePackSummary,
+} from "@/lib/api/knowledge";
 import type { AgentInitialKnowledgePackSelectionParams } from "@/types/page";
 import { useWorkspaceKnowledgeRuntime } from "./useWorkspaceKnowledgeRuntime";
 
-type WorkspaceKnowledgeRuntime = ReturnType<typeof useWorkspaceKnowledgeRuntime>;
+type WorkspaceKnowledgeRuntime = ReturnType<
+  typeof useWorkspaceKnowledgeRuntime
+>;
 
 const knowledgeApiMocks = vi.hoisted(() => ({
   listKnowledgePacks: vi.fn(),
@@ -99,9 +104,16 @@ describe("useWorkspaceKnowledgeRuntime initial Knowledge selection", () => {
   it("从 Knowledge chooser 回流 Agent 时不应在资料列表加载前丢失显式 data 协同资料", async () => {
     knowledgeApiMocks.listKnowledgePacks.mockResolvedValue({
       packs: [
-        buildPack({ name: "xiejing-persona", type: "personal-ip", defaultForWorkspace: true }),
+        buildPack({
+          name: "xiejing-persona",
+          type: "personal-ip",
+          defaultForWorkspace: true,
+        }),
         buildPack({ name: "content-calendar", type: "content-operations" }),
-        buildPack({ name: "private-domain", type: "private-domain-operations" }),
+        buildPack({
+          name: "private-domain",
+          type: "private-domain-operations",
+        }),
       ],
     });
 

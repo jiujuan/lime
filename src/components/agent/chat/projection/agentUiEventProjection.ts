@@ -1952,7 +1952,9 @@ function buildRequestedFixExecutionEventsFromArtifact(
     const artifactIds =
       resultArtifactIds.length > 0 ? resultArtifactIds : sourceArtifactIds;
     const artifactPaths =
-      resultArtifactPaths.length > 0 ? resultArtifactPaths : sourceArtifactPaths;
+      resultArtifactPaths.length > 0
+        ? resultArtifactPaths
+        : sourceArtifactPaths;
 
     if (
       !requestedFix &&
@@ -1975,7 +1977,7 @@ function buildRequestedFixExecutionEventsFromArtifact(
         ? `${reviewId}:requested-fix:${requestedFixIndex}`
         : sourceArtifactId
           ? `${sourceArtifactId}:requested-fix:${requestedFixIndex}`
-          : context.taskId ?? `requested-fix:${requestedFixIndex}`);
+          : (context.taskId ?? `requested-fix:${requestedFixIndex}`));
     const normalizedWorkItemId = definedString(workItemId);
     if (!normalizedWorkItemId) {
       return;
@@ -2679,7 +2681,9 @@ function buildThreadItemEvents(
       }),
     );
   }
-  events.push(...buildTaskOwnerChangeProjectionEvents(sourceType, item, context));
+  events.push(
+    ...buildTaskOwnerChangeProjectionEvents(sourceType, item, context),
+  );
   return events;
 }
 

@@ -1,4 +1,10 @@
 import type { MemoryCategory, UnifiedMemory } from "@/lib/api/unifiedMemory";
+import {
+  getUserFacingMemoryCategoryLabel,
+  normalizeUserFacingMemorySummary,
+  normalizeUserFacingMemoryTags,
+  normalizeUserFacingMemoryTitle,
+} from "@/lib/memory/userFacingMemoryText";
 
 export type InspirationProjectionKind =
   | "style"
@@ -31,14 +37,6 @@ export interface InspirationTasteSummaryViewModel {
   referenceKeywords: string[];
   avoidKeywords: string[];
 }
-
-const CATEGORY_LABELS: Record<MemoryCategory, string> = {
-  identity: "风格",
-  context: "参考",
-  preference: "偏好",
-  experience: "成果",
-  activity: "收藏",
-};
 
 const CATEGORY_TO_PROJECTION_KIND: Record<
   MemoryCategory,
@@ -179,21 +177,28 @@ export function buildInspirationProjectionEntries(
     .map((memory) => {
       const projectionKind = CATEGORY_TO_PROJECTION_KIND[memory.category];
       const projectionMeta = INSPIRATION_PROJECTION_META[projectionKind];
-      const normalizedSummary = normalizeWhitespace(memory.summary);
-      const normalizedContent = normalizeWhitespace(memory.content);
+      const normalizedSummary = normalizeUserFacingMemorySummary(
+        memory.summary || memory.content,
+      );
+      const normalizedContent = normalizeUserFacingMemorySummary(
+        memory.content || memory.summary,
+      );
 
       return {
         id: memory.id,
-        title: normalizeWhitespace(memory.title) || "未命名灵感",
+        title: normalizeUserFacingMemoryTitle({
+          value: memory.title,
+          category: memory.category,
+        }),
         summary:
           normalizedSummary ||
           truncate(normalizedContent || "等待补充摘要", 96),
         contentPreview: truncate(normalizedContent || normalizedSummary, 120),
         category: memory.category,
-        categoryLabel: CATEGORY_LABELS[memory.category],
+        categoryLabel: getUserFacingMemoryCategoryLabel(memory.category),
         projectionKind,
         projectionLabel: projectionMeta.label,
-        tags: collectKeywordItems(memory.tags, 4),
+        tags: normalizeUserFacingMemoryTags(memory.tags, 4),
         updatedAt: memory.updated_at,
       };
     });

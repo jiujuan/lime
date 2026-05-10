@@ -207,7 +207,9 @@ export function SceneAppRunDetailPanel({
 
       <details className="group mt-3 rounded-[18px] border border-slate-200 bg-slate-50">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2">
-          <span className="text-[11px] font-medium text-slate-600">更多记录</span>
+          <span className="text-[11px] font-medium text-slate-600">
+            更多记录
+          </span>
           <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600 group-open:hidden">
             展开
           </span>
@@ -287,7 +289,9 @@ export function SceneAppRunDetailPanel({
         {runDetailView.deliveryRequiredParts.length ? (
           <details className="group mt-4 rounded-[18px] border border-slate-200 bg-white">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5">
-              <span className="text-xs font-medium text-slate-600">查看部件对照</span>
+              <span className="text-xs font-medium text-slate-600">
+                查看部件对照
+              </span>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600 group-open:hidden">
                 展开
               </span>
@@ -298,7 +302,9 @@ export function SceneAppRunDetailPanel({
             <div className="border-t border-slate-200 p-3">
               <div className="grid gap-3 lg:grid-cols-3">
                 <div>
-                  <div className="text-xs font-medium text-slate-500">原本约定</div>
+                  <div className="text-xs font-medium text-slate-500">
+                    原本约定
+                  </div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {runDetailView.deliveryRequiredParts.map((part) => (
                       <span
@@ -312,7 +318,9 @@ export function SceneAppRunDetailPanel({
                 </div>
 
                 <div>
-                  <div className="text-xs font-medium text-slate-500">已经拿到</div>
+                  <div className="text-xs font-medium text-slate-500">
+                    已经拿到
+                  </div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {runDetailView.deliveryCompletedParts.length ? (
                       runDetailView.deliveryCompletedParts.map((part) => (
@@ -330,7 +338,9 @@ export function SceneAppRunDetailPanel({
                 </div>
 
                 <div>
-                  <div className="text-xs font-medium text-slate-500">还缺什么</div>
+                  <div className="text-xs font-medium text-slate-500">
+                    还缺什么
+                  </div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {runDetailView.deliveryMissingParts.length ? (
                       runDetailView.deliveryMissingParts.map((part) => (
@@ -344,7 +354,9 @@ export function SceneAppRunDetailPanel({
                     ) : runDetailView.deliveryPartCoverageKnown ? (
                       <span className="text-sm text-slate-500">当前无缺件</span>
                     ) : (
-                      <span className="text-sm text-slate-500">部件明细待回流</span>
+                      <span className="text-sm text-slate-500">
+                        部件明细待回流
+                      </span>
                     )}
                   </div>
                 </div>
@@ -364,8 +376,12 @@ export function SceneAppRunDetailPanel({
           >
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
               <div>
-                <div className="text-sm font-medium text-slate-900">启动前约定与带入</div>
-                <div className="mt-1 text-xs text-slate-500">需要时再展开。</div>
+                <div className="text-sm font-medium text-slate-900">
+                  启动前约定与带入
+                </div>
+                <div className="mt-1 text-xs text-slate-500">
+                  需要时再展开。
+                </div>
               </div>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-600 group-open:hidden">
                 展开
@@ -445,7 +461,9 @@ export function SceneAppRunDetailPanel({
                       data-testid="sceneapp-run-detail-context-reference-count"
                       className="rounded-full border border-white bg-white px-2.5 py-1"
                     >
-                      <span className="font-medium text-slate-900">参考对象：</span>
+                      <span className="font-medium text-slate-900">
+                        参考对象：
+                      </span>
                       {runDetailView.contextBaseline.referenceCount} 条
                     </div>
                     {runDetailView.contextBaseline.scopeLabel ? (
@@ -475,16 +493,20 @@ export function SceneAppRunDetailPanel({
                         className="border-t border-slate-200 px-3 py-3"
                       >
                         <div className="flex flex-wrap gap-2">
-                          {runDetailView.contextBaseline.referenceItems.map((item) => (
-                            <span
-                              key={item.key}
-                              className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-700"
-                            >
-                              {item.label}
-                              {item.usageLabel ? ` · ${item.usageLabel}` : ""}
-                              {item.feedbackLabel ? ` · ${item.feedbackLabel}` : ""}
-                            </span>
-                          ))}
+                          {runDetailView.contextBaseline.referenceItems.map(
+                            (item) => (
+                              <span
+                                key={item.key}
+                                className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-700"
+                              >
+                                {item.label}
+                                {item.usageLabel ? ` · ${item.usageLabel}` : ""}
+                                {item.feedbackLabel
+                                  ? ` · ${item.feedbackLabel}`
+                                  : ""}
+                              </span>
+                            ),
+                          )}
                         </div>
                       </div>
                     </details>
@@ -554,7 +576,9 @@ export function SceneAppRunDetailPanel({
       >
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
           <div>
-            <div className="text-sm font-medium text-slate-900">复核、证据和后续动作</div>
+            <div className="text-sm font-medium text-slate-900">
+              复核、证据和后续动作
+            </div>
             <div className="mt-1 text-xs text-slate-500">需要时再展开。</div>
           </div>
           <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-600 group-open:hidden">
@@ -568,7 +592,9 @@ export function SceneAppRunDetailPanel({
         <div className="border-t border-slate-200 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="text-xs font-medium text-slate-500">复核与证据</div>
+              <div className="text-xs font-medium text-slate-500">
+                复核与证据
+              </div>
               <div className="mt-2 text-sm font-medium text-slate-900">
                 {runDetailView.evidenceSourceLabel}
               </div>

@@ -312,21 +312,22 @@ describe("layered-design image task adapter", () => {
       updated?.layers.find((layer) => layer.id === "background-image"),
     ).toMatchObject({
       type: "image",
-      assetId: "record-store-opening-asset-background-generated-task-background",
+      assetId:
+        "record-store-opening-asset-background-generated-task-background",
       source: "generated",
     });
-    expect(updated?.layers.find((layer) => layer.id === "headline-text"))
-      .toMatchObject({
-        type: "text",
-        text: "复古唱片店开业活动",
-      });
+    expect(
+      updated?.layers.find((layer) => layer.id === "headline-text"),
+    ).toMatchObject({
+      type: "text",
+      text: "复古唱片店开业活动",
+    });
   });
 
   it("应记录可恢复的图片任务引用，供后续刷新写回", () => {
     const document = createDocument();
-    const [generationRequest] = createLayeredDesignAssetGenerationPlan(
-      document,
-    );
+    const [generationRequest] =
+      createLayeredDesignAssetGenerationPlan(document);
     const taskRequest = createLayeredDesignImageTaskRequest(
       document,
       generationRequest,
@@ -357,9 +358,8 @@ describe("layered-design image task adapter", () => {
 
   it("应从 editHistory 恢复未写回的图片任务，并在资产替换后停止刷新旧任务", () => {
     const document = createDocument();
-    const [generationRequest] = createLayeredDesignAssetGenerationPlan(
-      document,
-    );
+    const [generationRequest] =
+      createLayeredDesignAssetGenerationPlan(document);
     const taskRequest = createLayeredDesignImageTaskRequest(
       document,
       generationRequest,
@@ -397,9 +397,8 @@ describe("layered-design image task adapter", () => {
 
   it("应通过 get_media_task_artifact 刷新任务，并把成功结果写回目标图层", async () => {
     const document = createDocument();
-    const [generationRequest] = createLayeredDesignAssetGenerationPlan(
-      document,
-    );
+    const [generationRequest] =
+      createLayeredDesignAssetGenerationPlan(document);
     const taskRequest = createLayeredDesignImageTaskRequest(
       document,
       generationRequest,
@@ -436,7 +435,8 @@ describe("layered-design image task adapter", () => {
       result.document.layers.find((layer) => layer.id === "background-image"),
     ).toMatchObject({
       type: "image",
-      assetId: "record-store-opening-asset-background-generated-task-background",
+      assetId:
+        "record-store-opening-asset-background-generated-task-background",
       source: "generated",
     });
   });

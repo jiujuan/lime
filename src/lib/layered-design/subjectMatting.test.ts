@@ -351,8 +351,12 @@ describe("LayeredDesign subject matting adapter", () => {
 
     expect(result.image.data[centerOffset + 3]).toBeGreaterThan(220);
     expect(result.image.data[cornerOffset + 3]).toBeLessThan(16);
-    expect(result.mask.data[centerOffset]).toBe(result.image.data[centerOffset + 3]);
-    expect(result.mask.data[cornerOffset]).toBe(result.image.data[cornerOffset + 3]);
+    expect(result.mask.data[centerOffset]).toBe(
+      result.image.data[centerOffset + 3],
+    );
+    expect(result.mask.data[cornerOffset]).toBe(
+      result.image.data[cornerOffset + 3],
+    );
     expect(result.foregroundPixelCount).toBeGreaterThan(0);
   });
 

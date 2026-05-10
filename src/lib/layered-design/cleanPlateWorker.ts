@@ -91,7 +91,9 @@ function isNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-function isCleanPlateInput(value: unknown): value is LayeredDesignCleanPlateInput {
+function isCleanPlateInput(
+  value: unknown,
+): value is LayeredDesignCleanPlateInput {
   if (!isRecord(value) || typeof value.createdAt !== "string") {
     return false;
   }
@@ -150,8 +152,11 @@ function isWorkerResponseForRequest(
   );
 }
 
-function createWorkerError(response: LayeredDesignCleanPlateWorkerError): Error {
-  const message = response.error?.message ?? "clean plate worker 返回了未知错误";
+function createWorkerError(
+  response: LayeredDesignCleanPlateWorkerError,
+): Error {
+  const message =
+    response.error?.message ?? "clean plate worker 返回了未知错误";
   const error = new Error(message);
   if (response.error?.code) {
     error.name = response.error.code;
@@ -205,7 +210,9 @@ export function createLayeredDesignCleanPlateWorkerProvider(
             timeoutHandle = setTimeout(() => {
               cleanup();
               reject(
-                new Error(`clean plate worker 在 ${timeoutMs}ms 内没有返回结果`),
+                new Error(
+                  `clean plate worker 在 ${timeoutMs}ms 内没有返回结果`,
+                ),
               );
             }, timeoutMs);
           }

@@ -19,18 +19,6 @@ on:
         description: "Git ref to build from (e.g., v0.96.0 or main)"
         required: false
         default: ""
-      agent_qc_evidence_path:
-        description: "Path to Agent QC Evidence Pack JSON; release is blocked if missing or non-pass"
-        required: false
-        default: ".lime/qc/agent-qc-evidence.json"
-      agent_qc_harness_summary_path:
-        description: "Optional harness-eval-summary.json path to include in Agent QC release notes"
-        required: false
-        default: ""
-      agent_qc_harness_trend_path:
-        description: "Optional harness-eval-trend.json path to include in Agent QC release notes"
-        required: false
-        default: ""
 
 permissions:
   contents: write
@@ -63,37 +51,11 @@ jobs:
           TAG="${{ github.event.inputs.version || github.ref_name }}"
           TARGET_REF="${{ github.event.inputs.source_ref || github.sha }}"
           NOTES_FILE="$RUNNER_TEMP/release-notes.md"
-          AGENT_QC_NOTES_FILE="$RUNNER_TEMP/agent-qc-release-notes.md"
-          AGENT_QC_EVIDENCE_PATH="${{ github.event.inputs.agent_qc_evidence_path || '.lime/qc/agent-qc-evidence.json' }}"
-          AGENT_QC_HARNESS_SUMMARY_PATH="${{ github.event.inputs.agent_qc_harness_summary_path || '' }}"
-          AGENT_QC_HARNESS_TREND_PATH="${{ github.event.inputs.agent_qc_harness_trend_path || '' }}"
 
           if [[ "$TAG" == *-* ]]; then
             echo "::error::Stable updater release does not accept prerelease tag: $TAG"
             exit 1
           fi
-
-          if [ ! -f "$AGENT_QC_EVIDENCE_PATH" ]; then
-            echo "::error::Agent QC Evidence Pack is required before release: $AGENT_QC_EVIDENCE_PATH"
-            echo "::error::Run qcloop P0 scenarios, export evidence with npm run agent-qc:export-evidence, then rerun release with agent_qc_evidence_path."
-            exit 1
-          fi
-
-          agent_qc_args=(
-            --evidence "$AGENT_QC_EVIDENCE_PATH"
-            --require-scenario-manifest "docs/test/agent-qc-scenarios.manifest.json"
-            --require-risk "P0"
-            --tag "$TAG"
-            --output "$AGENT_QC_NOTES_FILE"
-            --check
-          )
-          if [ -n "$AGENT_QC_HARNESS_SUMMARY_PATH" ]; then
-            agent_qc_args+=(--harness-summary "$AGENT_QC_HARNESS_SUMMARY_PATH")
-          fi
-          if [ -n "$AGENT_QC_HARNESS_TREND_PATH" ]; then
-            agent_qc_args+=(--harness-trend "$AGENT_QC_HARNESS_TREND_PATH")
-          fi
-          node scripts/agent-qc-release-summary.mjs "${agent_qc_args[@]}"
 
           if [ -f RELEASE_NOTES.md ]; then
             cp RELEASE_NOTES.md "$NOTES_FILE"
@@ -112,10 +74,6 @@ jobs:
               echo "${CHANGELOG}"
             } > "$NOTES_FILE"
           fi
-          {
-            echo
-            cat "$AGENT_QC_NOTES_FILE"
-          } >> "$NOTES_FILE"
 
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release edit "$TAG" \

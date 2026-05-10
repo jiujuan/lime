@@ -5,6 +5,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -156,6 +157,8 @@ function getStatusIcon(tone: InlineStatusTone) {
  * 只保留最常用路径：API Key、模型优先级、接口获取模型、手动添加模型、测试连接。
  */
 export const ProviderSetting: React.FC<ProviderSettingProps> = (props) => {
+  const { t } = useTranslation("settings");
+
   if (!props.provider) {
     return (
       <div
@@ -168,10 +171,15 @@ export const ProviderSetting: React.FC<ProviderSettingProps> = (props) => {
         <div className="w-full max-w-[720px] rounded-[28px] border border-slate-200/80 bg-white p-8 shadow-sm shadow-slate-950/5">
           <div className="flex items-center gap-3 text-slate-900">
             <Sparkles className="h-5 w-5" />
-            <p className="text-lg font-semibold">选择或添加模型</p>
+            <p className="text-lg font-semibold">
+              {t("settings.providers.setting.empty.title", "选择或添加模型")}
+            </p>
           </div>
           <p className="mt-3 text-sm leading-6 text-slate-500">
-            左侧选择一个已启用模型后，这里只展示密钥、模型优先级和测试连接。
+            {t(
+              "settings.providers.setting.empty.description",
+              "左侧选择一个已启用模型后，这里只展示密钥、模型优先级和测试连接。",
+            )}
           </p>
         </div>
       </div>
@@ -205,12 +213,17 @@ export const ProviderSetting: React.FC<ProviderSettingProps> = (props) => {
                       variant="outline"
                       className="border-amber-300 bg-white text-amber-800"
                     >
-                      需要登录
+                      {t(
+                        "settings.providers.setting.loginRequired.badge",
+                        "需要登录",
+                      )}
                     </Badge>
                   </div>
                   <p className="mt-2 text-sm leading-6 text-amber-800">
-                    登录后会自动同步 Lime Hub
-                    的可用模型和本地托管访问凭证；未登录时不会展示本地兜底模型。
+                    {t(
+                      "settings.providers.setting.loginRequired.description",
+                      "登录后会自动同步 Lime Hub 的可用模型和本地托管访问凭证；未登录时不会展示本地兜底模型。",
+                    )}
                   </p>
                 </div>
               </div>
@@ -227,7 +240,10 @@ export const ProviderSetting: React.FC<ProviderSettingProps> = (props) => {
                   data-testid="provider-login-button"
                 >
                   <ExternalLink className="mr-1.5 h-4 w-4" />
-                  去登录
+                  {t(
+                    "settings.providers.setting.loginRequired.action.login",
+                    "去登录",
+                  )}
                 </Button>
               ) : null}
             </div>

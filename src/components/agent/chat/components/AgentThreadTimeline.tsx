@@ -1103,10 +1103,7 @@ function resolveExpandedBlockIndexes(params: {
       turn.status === "failed" ||
       turn.status === "aborted";
 
-    if (
-      shouldExpandFocus &&
-      !collapseInactiveDetails
-    ) {
+    if (shouldExpandFocus && !collapseInactiveDetails) {
       expanded.add(focusBlockIndex);
     }
 

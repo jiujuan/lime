@@ -830,3 +830,79 @@ qcloop full P0 job `1778405842243079000` 仍未自然释放：`.lime/qc/qcloop-s
 本次通过覆盖：DevBridge health、workspace-ready、browser-runtime、site-adapters、agent-service-skill-entry、runtime tool surface、runtime tool surface page、`claw-chat-ready-streaming`、knowledge-gui 和 design-canvas。`claw-chat-ready-streaming` 证据显示 `verdict=pass`，断言覆盖首个流式增量、停止按钮、interrupt scoped to long turn、long turn aborted、recovery turn completed、GUI 可见恢复结果、runtime 持久化和无 runtime mock fallback。
 
 审计影响：`.lime/qc/verify-gui-smoke-current.json` 已从 fail 更新为 pass，但 `local-verify-gate` 仍不能关闭，因为它要求完整 `npm run verify:local` 当前 sidecar 为 pass；`.lime/qc/verify-local-current.json` 仍记录最新 full wrapper 为 fail。下一刀应在并发 Cargo/GUI 负载收敛后重跑完整 `npm run verify:local`，而不是只用单独 GUI smoke pass 替代本地统一门禁。
+
+### 2026-05-11 01:57 补充审计记录：release hard gate 收紧与当前阻塞复核
+
+本轮继续遵守用户约束：不推送、不提交、不打 tag、不发布；不 kill / pause / interrupt / restart 当前 qcloop、GUI smoke、Tauri 或 Cargo 进程；不修改 qcloop SQLite DB；不覆盖官方 `.lime/qc/agent-qc-evidence.json`。
+
+发布门禁修正：`.github/workflows/release.yml` 不再在缺少 Agent QC Evidence Pack 时走 `--allow-missing-evidence` 预览分支。现在 release workflow 在创建 / 刷新 GitHub Release 前必须先找到 `agent_qc_evidence_path`，随后以 `--evidence ... --check --require-scenario-manifest docs/test/agent-qc-scenarios.manifest.json --require-risk P0` 执行 `agent-qc-release-summary`；文件缺失会直接 `exit 1`。这使文档中“发布缺 evidence 必须失败”的口径与 workflow 行为重新一致。
+
+当前只读状态：
+
+| 门禁 | 当前值 | 结论 |
+| --- | --- | --- |
+| completion audit | `16/18`，`status=incomplete` | 缺口只剩 `real-qcloop-evidence` 与 `local-verify-gate`；`release-hard-gate` 已恢复为 PASS |
+| release summary against official evidence | exit `1` | 正确阻断当前 fail evidence；还提示 `command-bridge-contract` 与 `harness-replay-regression` 只有弱结构化 evidenceRefs |
+| qcloop status | `verdict=stale` | job `1778405842243079000` 仍为 `4 success / 1 running / 3 pending / 1 stale` |
+| GUI owner | `blocked` | stale owner `1778405842243079000`，最长约 `29474s` |
+| DB lease | `status=running` | active item `1778405842246191000` / `browser-runtime-site-adapter`，worker PID `69738`，`lock_expires_at=2026-05-11T02:11:06+08:00` |
+| raw process owner | `busy` | activeGuiSmoke=`2`、cargoOrRust=`4`、qcloopRelated=`7`，不能跑完整 `verify:local` 或启动新 full GUI P0 |
+| local verify | `status=fail` | 完整 wrapper 当前仍失败在 `verify:gui-smoke / smoke:claw-chat-ready-streaming`；单独 GUI smoke 最新为 pass，不能替代完整 `verify:local` |
+| secret scan | `status=pass` | `.lime/qc` 当前 `fileCount=315`、`findingCount=0` |
+
+本轮验证：
+
+```bash
+node --check scripts/agent-qc-completion-audit.mjs
+npm run agent-qc:audit -- --format json --output ./.lime/qc/agent-qc-audit-current.json
+npm run agent-qc:audit -- --format markdown --output ./.lime/qc/agent-qc-audit-current.md
+npm run agent-qc:check
+npm run agent-qc:secret-scan -- --root .lime/qc --format json --output ./.lime/qc/secret-scan-current.json --check
+npx vitest run scripts/lib/agent-qc-completion-audit-core.test.ts scripts/lib/agent-qc-release-summary-core.test.ts
+npm run agent-qc:release-summary -- --evidence ./.lime/qc/agent-qc-evidence.json --require-scenario-manifest docs/test/agent-qc-scenarios.manifest.json --require-risk P0 --tag local-agent-qc-audit --output ./.lime/qc/release-agent-qc.current-audit.md --check
+```
+
+结果：前六项通过；最后一项按预期 exit `1`，证明当前官方 fail Evidence Pack 仍不能进入 release。审计影响：`release-hard-gate` 缺口已清除；整体仍不能标记 complete，因为真实 8/8 P0 qcloop Evidence Pack 与完整 `verify:local` 当前 pass 证据仍缺失。
+
+### 2026-05-11 02:02 目标级 prompt-to-artifact 审计刷新
+
+本轮按“实现整体目标”重新拆成可验证交付项，而不是只看 `agent-qc:audit` 的代理信号。新的机器可读审计已写入 `.lime/qc/objective-completion-audit-current.json`，Markdown 摘要为 `.lime/qc/objective-completion-audit-current.md`。
+
+审计覆盖的要求包括：
+
+- `docs/tests` 测试文档入口是否存在。
+- 通用 Agent QC 标准是否仍是标准协议，而不是 Lime-only 文档。
+- 测试组合是否覆盖 GUI / TUI / WebUI、runtime、白盒、黑盒、灰盒、快照、冒烟、Replay 与发布门禁。
+- Lime 是否只作为样本计划和执行矩阵落地。
+- scenario manifest、GUI flow manifest、Evidence schema 与 `agent-qc:check` 是否可用。
+- qcloop job / preflight / status / exporter / release summary / owner gate / stale owner 协议是否落地。
+- release workflow 是否强制真实 Evidence Pack pass 与 P0 覆盖。
+- 官方 `.lime/qc/agent-qc-evidence.json` 是否真实 8/8 P0 pass。
+- 完整 `npm run verify:local` 是否 pass。
+- 本轮是否遵守不推送、不干预进程、不改 DB、不覆盖官方 evidence 的约束。
+- `.lime/qc` sidecar 是否通过 secret scan。
+
+结果：`achieved=false`。失败项仍只有 `real-p0-qcloop-evidence` 与 `local-verify-gate`：官方 Evidence Pack 当前 `status=fail`，isolated full P0 qcloop 仍 `stale`；完整 `verify:local-current` 仍为 `fail`，且 raw process owner 仍 `busy`，所以不能启动新的完整门禁。与此同时，为了避免通用标准继续被误读为 Lime-only，已把 `docs/tests/agent-ops-qc.md` 标题和开头改为通用 Agent 运营级测试体系，把 `docs/tests/ai-agent-testing-guide.md` 标题和收尾改为通用 AI Agent 测试指南；Lime 仍只保留在样本计划、执行矩阵和当前仓库路径示例中。
+
+### 2026-05-11 02:05 审计口径更新：GitHub Actions 解耦，Agent QC 保留为本地 / 人工发布证据
+
+继续审查并发变更后，当前 completion audit 口径已经从“release / nightly 直接执行 Agent QC”切换为“GitHub Actions 不执行 Agent QC / qcloop，Agent QC 由本地或人工发布流程显式运行”。对应事实源：
+
+- `.github/workflows/release.yml` 已移除 `agent_qc_evidence_path`、`agent-qc-release-summary` 和 release notes 拼接逻辑。
+- `.github/workflows/harness-nightly.yml` 已移除 `artifacts/agent-qc/*` 生成和上传。
+- `package.json` 的 `test:contracts` 不再间接串 `npm run agent-qc:check`，但 `agent-qc:check` 仍保留为显式入口。
+- `scripts/agent-qc-completion-audit.mjs` / `scripts/lib/agent-qc-completion-audit-core.mjs` 将原 `nightly-artifacts` / `release-hard-gate` 审计项替换为 `github-actions-detached`。
+
+因此 01:57 记录中的“release workflow hard gate”已经被当前工作树的 GitHub Actions 解耦口径取代。发布前证据硬检查仍保留在本地命令：
+
+```bash
+npm run agent-qc:release-summary -- \
+  --evidence ./.lime/qc/agent-qc-evidence.json \
+  --require-scenario-manifest docs/test/agent-qc-scenarios.manifest.json \
+  --require-risk P0 \
+  --tag local-agent-qc-audit \
+  --output ./.lime/qc/release-agent-qc.current-audit.md \
+  --check
+```
+
+该命令当前仍按预期 exit `1`，阻断官方 fail Evidence Pack。`npx vitest run scripts/lib/agent-qc-completion-audit-core.test.ts` 通过 `16/16`，证明新的 `github-actions-detached` 审计项有测试覆盖。目标级审计已重写为 `.lime/qc/objective-completion-audit-current.json` schema `v3`：`achieved=false`，失败项仍是 `real-p0-qcloop-evidence` 与 `local-verify-gate`。

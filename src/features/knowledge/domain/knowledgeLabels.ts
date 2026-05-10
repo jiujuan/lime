@@ -1,6 +1,11 @@
 import type { KnowledgePackStatus } from "@/lib/api/knowledge";
 
-export type KnowledgeView = "overview" | "import" | "detail" | "save" | "states";
+export type KnowledgeView =
+  | "overview"
+  | "import"
+  | "detail"
+  | "save"
+  | "states";
 export type DetailTab =
   | "overview"
   | "content"

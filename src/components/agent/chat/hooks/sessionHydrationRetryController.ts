@@ -24,8 +24,10 @@ export type DeferredSessionHydrationErrorAction =
       error: unknown;
     };
 
-export interface DeferredSessionHydrationRetryContext
-  extends Record<string, unknown> {
+export interface DeferredSessionHydrationRetryContext extends Record<
+  string,
+  unknown
+> {
   error: string;
   errorCategory: SessionDetailHydrationErrorCategory;
   retryCount: number;
@@ -35,8 +37,10 @@ export interface DeferredSessionHydrationRetryContext
   workspaceId?: string | null;
 }
 
-export interface DeferredSessionHydrationSkipContext
-  extends Record<string, unknown> {
+export interface DeferredSessionHydrationSkipContext extends Record<
+  string,
+  unknown
+> {
   error: string;
   errorCategory: SessionDetailHydrationErrorCategory;
   retryCount: number;

@@ -506,7 +506,10 @@ function renderSettingsContent(
     case SettingsTabs.Developer:
       return withSettingsContentFallback(
         <DeveloperLabSettings initialTab={activeDeveloperLabTab} />,
-        t("settings.layout.loading.developerLab", "正在加载开发者与实验功能..."),
+        t(
+          "settings.layout.loading.developerLab",
+          "正在加载开发者与实验功能...",
+        ),
       );
 
     case SettingsTabs.About:

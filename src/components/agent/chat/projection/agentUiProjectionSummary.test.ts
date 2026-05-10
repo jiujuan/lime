@@ -242,7 +242,9 @@ describe("agentUiProjectionSummary", () => {
           regressionRequirements: ["npm run test:contracts"],
         },
       }),
-    ).toBe("决策：rejected / 审核人：Lime Maintainer / 风险：medium / 清单 2 / 后续 1 / 回归 2 / 修复：补齐权限确认证据 +1 / 回归项：npm run test:contracts");
+    ).toBe(
+      "决策：rejected / 审核人：Lime Maintainer / 风险：medium / 清单 2 / 后续 1 / 回归 2 / 修复：补齐权限确认证据 +1 / 回归项：npm run test:contracts",
+    );
   });
 
   it("应为 work board reassignment 产出结构化详情", () => {

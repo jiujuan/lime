@@ -65,8 +65,11 @@ function completeFacts() {
       guiOwnerReportHasWatchHistory: true,
       docMentionsWatchHistory: true,
     },
-    nightly: { hasAgentQcReport: true, hasGuiFlowReport: true, hasReleasePreview: true },
-    release: { hasHardGate: true, requiresP0ScenarioCoverage: true },
+    githubActions: {
+      releaseDetached: true,
+      nightlyDetached: true,
+      contractsDetached: true,
+    },
   };
 }
 
@@ -230,24 +233,24 @@ describe("agent-qc-completion-audit-core", () => {
     );
   });
 
-  it("release hard gate 缺失时应给出缺口", () => {
+  it("GitHub Release workflow 触发 Agent QC 时应给出缺口", () => {
     const facts = completeFacts();
-    facts.release.hasHardGate = false;
+    facts.githubActions.releaseDetached = false;
 
     const audit = buildAgentQcCompletionAudit(facts);
 
     expect(audit.status).toBe("incomplete");
-    expect(audit.gaps.map((gap) => gap.id)).toContain("release-hard-gate");
+    expect(audit.gaps.map((gap) => gap.id)).toContain("github-actions-detached");
   });
 
-  it("release 未强制 P0 scenario 覆盖时应给出缺口", () => {
+  it("test:contracts 间接触发 Agent QC 时应给出缺口", () => {
     const facts = completeFacts();
-    facts.release.requiresP0ScenarioCoverage = false;
+    facts.githubActions.contractsDetached = false;
 
     const audit = buildAgentQcCompletionAudit(facts);
 
     expect(audit.status).toBe("incomplete");
-    expect(audit.gaps.map((gap) => gap.id)).toContain("release-hard-gate");
+    expect(audit.gaps.map((gap) => gap.id)).toContain("github-actions-detached");
   });
 
   it("verify:local 失败时应给出缺口", () => {

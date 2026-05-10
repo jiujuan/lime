@@ -428,10 +428,7 @@ export function buildInputbarRuntimeStatusLineModel({
     queuedTurnCount: queuedTurns.length,
     pendingRequestCount:
       resolveVisiblePendingActions(pendingActions).length ||
-      resolveVisiblePendingRequestCount(
-        threadRead,
-        submittedActionsInFlight,
-      ),
+      resolveVisiblePendingRequestCount(threadRead, submittedActionsInFlight),
     subtaskStats: resolveSubtaskStats(childSubagentSessions),
     usage,
     startedAt,

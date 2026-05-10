@@ -86,6 +86,61 @@ describe("buildCreationReplaySlotPrefill", () => {
     });
   });
 
+  it("预填提示允许调用方注入本地化 copy", () => {
+    const result = buildCreationReplaySlotPrefill(
+      {
+        ...BASE_SKILL,
+        slotSchema: [
+          {
+            key: "platform",
+            label: "Platform",
+            type: "platform",
+            required: true,
+            defaultValue: "general",
+            placeholder: "Choose platform",
+            options: [
+              { value: "xiaohongshu", label: "Rednote" },
+              { value: "general", label: "General" },
+            ],
+          },
+          {
+            key: "voice_style",
+            label: "Voice",
+            type: "text",
+            required: false,
+            placeholder: "Voice",
+          },
+        ],
+      },
+      {
+        version: 1,
+        kind: "memory_entry",
+        source: {
+          page: "memory",
+          entry_id: "memory-1",
+        },
+        data: {
+          category: "identity",
+          title: "AI Agent 小红书口播",
+          summary: "整体语气更轻快、像真实创作者分享。",
+          tags: ["小红书", "AI Agent", "口播"],
+        },
+      },
+      {
+        sourceLabels: {
+          memoryEntry: "the current idea",
+        },
+        formatFieldSummary: (visibleLabels) => visibleLabels.join(", "),
+        formatHint: (sourceLabel, fieldSummary) =>
+          `Prefilled ${fieldSummary} from ${sourceLabel}. Review before running.`,
+      },
+    );
+
+    expect(result?.hint).toBe(
+      "Prefilled Platform, Voice from the current idea. Review before running.",
+    );
+  });
+
   it("应把技能草稿回放映射到保留信息与重点调整点", () => {
     const result = buildCreationReplaySlotPrefill(
       {

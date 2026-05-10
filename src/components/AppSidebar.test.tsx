@@ -511,12 +511,7 @@ describe("AppSidebar", () => {
       '[data-testid="app-sidebar-footer-area"]',
     );
 
-    expect(mainNavButtons).toEqual([
-      "新建任务",
-      "Skills",
-      "灵感",
-      "项目资料",
-    ]);
+    expect(mainNavButtons).toEqual(["新建任务", "Skills", "灵感", "项目资料"]);
     expect(
       container.querySelector('[data-testid="app-sidebar-footer-nav"]'),
     ).toBeNull();
@@ -907,9 +902,7 @@ describe("AppSidebar", () => {
 
     await act(async () => {
       container
-        .querySelector<HTMLButtonElement>(
-          'button[aria-label="连接 Lime 云端"]',
-        )
+        .querySelector<HTMLButtonElement>('button[aria-label="连接 Lime 云端"]')
         ?.click();
       await Promise.resolve();
     });

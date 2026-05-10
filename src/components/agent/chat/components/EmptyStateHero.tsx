@@ -60,8 +60,6 @@ const dotPulse = keyframes`
   }
 `;
 
-
-
 const HeroSection = styled.section`
   position: relative;
   display: flex;
@@ -170,27 +168,29 @@ const SloganLine = styled.p`
       transparent 35%,
       rgba(255, 255, 255, 0) 42%,
       rgba(255, 255, 255, 0.4) 47%,
-      var(--lime-brand, rgba(134, 239, 172, 0.8)) 49%, 
-      rgba(255, 255, 255, 1) 50%, 
-      rgba(56, 189, 248, 0.8) 51%, 
+      var(--lime-brand, rgba(134, 239, 172, 0.8)) 49%,
+      rgba(255, 255, 255, 1) 50%,
+      rgba(56, 189, 248, 0.8) 51%,
       rgba(255, 255, 255, 0.4) 53%,
       rgba(255, 255, 255, 0) 58%,
       transparent 65%
     ),
     /* Layer 2: Crystal Facet Intersection */
     linear-gradient(
-      70deg,
-      transparent 40%,
-      rgba(255, 255, 255, 0) 46%,
-      rgba(255, 255, 255, 0.4) 49%,
-      rgba(255, 255, 255, 0.9) 50%,
-      rgba(255, 255, 255, 0.4) 51%,
-      rgba(255, 255, 255, 0) 54%,
-      transparent 60%
-    ),
-    /* Layer 3: Base Text Gradient */
-    var(--lime-home-title-gradient);
-  background-size: 250% 100%, 250% 100%, 400% auto;
+        70deg,
+        transparent 40%,
+        rgba(255, 255, 255, 0) 46%,
+        rgba(255, 255, 255, 0.4) 49%,
+        rgba(255, 255, 255, 0.9) 50%,
+        rgba(255, 255, 255, 0.4) 51%,
+        rgba(255, 255, 255, 0) 54%,
+        transparent 60%
+      ),
+    /* Layer 3: Base Text Gradient */ var(--lime-home-title-gradient);
+  background-size:
+    250% 100%,
+    250% 100%,
+    400% auto;
   background-repeat: no-repeat;
   -webkit-background-clip: text, text, text;
   background-clip: text, text, text;

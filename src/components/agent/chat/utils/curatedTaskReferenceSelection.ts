@@ -1,4 +1,11 @@
 import type { MemoryCategory, UnifiedMemory } from "@/lib/api/unifiedMemory";
+import {
+  getUserFacingMemoryCategoryLabel,
+  getUserFacingMemoryFallbackTitle,
+  normalizeUserFacingMemorySummary,
+  normalizeUserFacingMemoryTags,
+  normalizeUserFacingMemoryTitle,
+} from "@/lib/memory/userFacingMemoryText";
 import { buildMemoryEntryCreationReplayRequestMetadata } from "./creationReplayMetadata";
 import type { CreationReplayMetadata } from "./creationReplayMetadata";
 import type { CuratedTaskInputValues } from "./curatedTaskTemplates";
@@ -23,14 +30,6 @@ export interface CuratedTaskReferenceSelection {
   referenceEntries: CuratedTaskReferenceEntry[];
 }
 
-const CATEGORY_LABELS: Record<MemoryCategory, string> = {
-  identity: "风格",
-  context: "参考",
-  preference: "偏好",
-  experience: "成果",
-  activity: "收藏",
-};
-
 const EXPERIENCE_MEMORY_REVIEW_TASK_ID = "account-project-review";
 const EXPERIENCE_MEMORY_TREND_TASK_ID = "daily-trend-briefing";
 const EXPERIENCE_MEMORY_SOCIAL_POST_TASK_ID = "social-post-starter";
@@ -54,29 +53,16 @@ const EXPERIENCE_MEMORY_AUDIENCE_LABELS = [
   "目标用户",
   "用户",
 ] as const;
-const INTERNAL_REFERENCE_TAGS = new Set([
-  "activity",
-  "auto_analysis",
-  "context",
-  "experience",
-  "identity",
-  "preference",
-]);
-const AUTO_ANALYSIS_TITLE_PREFIX =
-  /^自动分析提取（(?:用户表达|AI 响应)）：\s*/;
-const RAW_TECHNICAL_DETAIL_PATTERN =
-  /(?:^-\d{4,}:|^\s*\{|"task_id"|task_id|task_type|execution failed|ran into this error|traceback|api key|fetch failed)/i;
-
 export function getCuratedTaskReferenceCategoryLabel(
   category: MemoryCategory,
 ): string {
-  return CATEGORY_LABELS[category];
+  return getUserFacingMemoryCategoryLabel(category);
 }
 
 export function getCuratedTaskReferenceFallbackTitle(
   category: MemoryCategory,
 ): string {
-  return `未命名${getCuratedTaskReferenceCategoryLabel(category)}`;
+  return getUserFacingMemoryFallbackTitle(category);
 }
 
 function normalizeOptionalText(value?: string | null): string | undefined {
@@ -94,56 +80,6 @@ function truncateText(value: string, maxLength: number): string {
   }
 
   return `${value.slice(0, maxLength - 1).trimEnd()}…`;
-}
-
-function stripInternalMemoryPrefix(value: string): string | undefined {
-  return normalizeOptionalText(value.replace(AUTO_ANALYSIS_TITLE_PREFIX, ""));
-}
-
-function containsRawTechnicalDetail(value: string): boolean {
-  return RAW_TECHNICAL_DETAIL_PATTERN.test(value);
-}
-
-function normalizeUserFacingReferenceTitle(params: {
-  value?: string | null;
-  category: MemoryCategory;
-}): string {
-  const stripped = params.value
-    ? stripInternalMemoryPrefix(params.value)
-    : undefined;
-  if (!stripped) {
-    return getCuratedTaskReferenceFallbackTitle(params.category);
-  }
-
-  return containsRawTechnicalDetail(stripped) ? "运行异常记录" : stripped;
-}
-
-function normalizeUserFacingReferenceSummary(value?: string | null): string {
-  const stripped = value ? stripInternalMemoryPrefix(value) : undefined;
-  if (!stripped) {
-    return "等待补充摘要";
-  }
-
-  if (containsRawTechnicalDetail(stripped)) {
-    return "这条参考来自一次执行异常，默认不展开技术细节。";
-  }
-
-  return stripped;
-}
-
-function isUserFacingReferenceTag(tag: string): boolean {
-  const normalized = tag.toLowerCase();
-  if (INTERNAL_REFERENCE_TAGS.has(normalized)) {
-    return false;
-  }
-  if (normalized.startsWith("fp:")) {
-    return false;
-  }
-  if (tag.length > 24 || containsRawTechnicalDetail(tag)) {
-    return false;
-  }
-
-  return !/^[a-z0-9]+(?:_[a-z0-9]+)+$/.test(normalized);
 }
 
 function dedupeNonEmptyText(
@@ -355,24 +291,12 @@ function normalizeCuratedTaskReferenceEntry(
     return null;
   }
 
-  const title = normalizeUserFacingReferenceTitle({
+  const title = normalizeUserFacingMemoryTitle({
     value: entry.title,
     category: entry.category,
   });
-  const summary = normalizeUserFacingReferenceSummary(entry.summary);
-  const tags = Array.from(
-    new Set(
-      entry.tags
-        .map((tag) => normalizeOptionalText(tag))
-        .filter((tag): tag is string => {
-          if (!tag) {
-            return false;
-          }
-
-          return isUserFacingReferenceTag(tag);
-        }),
-    ),
-  ).slice(0, 6);
+  const summary = normalizeUserFacingMemorySummary(entry.summary);
+  const tags = normalizeUserFacingMemoryTags(entry.tags, 6);
   const sourceKind =
     entry.sourceKind === "sceneapp_execution_summary"
       ? "sceneapp_execution_summary"
@@ -398,7 +322,7 @@ function normalizeCuratedTaskReferenceEntry(
     title,
     summary: truncateText(summary, 120),
     category: entry.category,
-    categoryLabel: CATEGORY_LABELS[entry.category],
+    categoryLabel: getUserFacingMemoryCategoryLabel(entry.category),
     tags,
     ...(Object.keys(taskPrefillByTaskId).length > 0
       ? {
@@ -554,7 +478,7 @@ export function buildCuratedTaskReferenceEntries(
           getCuratedTaskReferenceFallbackTitle(memory.category),
         summary,
         category: memory.category,
-        categoryLabel: CATEGORY_LABELS[memory.category],
+        categoryLabel: getUserFacingMemoryCategoryLabel(memory.category),
         tags: memory.tags,
         taskPrefillByTaskId: buildCuratedTaskPrefillByTaskIdFromMemory(memory),
       };
@@ -580,7 +504,9 @@ export function buildCuratedTaskReferenceEntryFromCreationReplay(
       normalizeOptionalText(creationReplay.data.content_excerpt) ||
       "等待补充摘要",
     category: creationReplay.data.category,
-    categoryLabel: CATEGORY_LABELS[creationReplay.data.category],
+    categoryLabel: getUserFacingMemoryCategoryLabel(
+      creationReplay.data.category,
+    ),
     tags: creationReplay.data.tags || [],
   });
 }

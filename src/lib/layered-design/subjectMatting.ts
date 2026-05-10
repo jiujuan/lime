@@ -127,7 +127,10 @@ function sampleBorderBackgroundColor(
   let green = 0;
   let blue = 0;
   let count = 0;
-  const step = Math.max(1, Math.floor(Math.min(image.width, image.height) / 16));
+  const step = Math.max(
+    1,
+    Math.floor(Math.min(image.width, image.height) / 16),
+  );
 
   for (let x = 0; x < image.width; x += step) {
     for (const y of [0, image.height - 1]) {
@@ -156,7 +159,12 @@ function sampleBorderBackgroundColor(
   };
 }
 
-function computeEllipseAlpha(width: number, height: number, x: number, y: number) {
+function computeEllipseAlpha(
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+) {
   const rx = Math.max(1, width * 0.48);
   const ry = Math.max(1, height * 0.5);
   const dx = (x + 0.5 - width / 2) / rx;
@@ -304,7 +312,8 @@ function scoreAlphaComponent(
   const dx = component.centerX - (width - 1) / 2;
   const dy = component.centerY - (height - 1) / 2;
   const maxDistance = Math.max(1, Math.hypot(width / 2, height / 2));
-  const centerWeight = 1 + (1 - Math.min(Math.hypot(dx, dy) / maxDistance, 1)) * 0.35;
+  const centerWeight =
+    1 + (1 - Math.min(Math.hypot(dx, dy) / maxDistance, 1)) * 0.35;
 
   return component.alphaSum * centerWeight;
 }
@@ -458,7 +467,13 @@ function refineSubjectAlphaMask(
             continue;
           }
 
-          const neighborAlpha = sampleAlpha(alpha, width, height, x + dx, y + dy);
+          const neighborAlpha = sampleAlpha(
+            alpha,
+            width,
+            height,
+            x + dx,
+            y + dy,
+          );
           neighborAlphaSum += neighborAlpha;
           neighborCount += 1;
           if (neighborAlpha >= 96) {
@@ -470,7 +485,9 @@ function refineSubjectAlphaMask(
       if (current >= 64 && strongNeighborCount <= 1) {
         cleaned[index] = 0;
       } else if (current < 32 && strongNeighborCount >= 5) {
-        cleaned[index] = clampByte(neighborAlphaSum / Math.max(1, neighborCount));
+        cleaned[index] = clampByte(
+          neighborAlphaSum / Math.max(1, neighborCount),
+        );
       } else {
         cleaned[index] = current;
       }
@@ -538,7 +555,11 @@ export function applyLayeredDesignSimpleSubjectMattingToRgba(
   const source = image.data;
   const matted = createTransparentPixelImage(width, height);
   const mask = createTransparentPixelImage(width, height);
-  const background = sampleBorderBackgroundColor({ width, height, data: source });
+  const background = sampleBorderBackgroundColor({
+    width,
+    height,
+    data: source,
+  });
   const firstPassAlpha = new Uint8ClampedArray(width * height);
   let detectedForegroundPixelCount = 0;
 
@@ -556,7 +577,7 @@ export function applyLayeredDesignSimpleSubjectMattingToRgba(
         colorAlpha > 0.08 ? ellipseAlpha * 0.65 : 0,
       );
       const alphaByte = clampByte(
-        alpha * ((source[getPixelOffset(width, x, y) + 3] ?? 255)),
+        alpha * (source[getPixelOffset(width, x, y) + 3] ?? 255),
       );
       firstPassAlpha[y * width + x] = alphaByte;
       if (alphaByte >= 32) {
@@ -579,7 +600,7 @@ export function applyLayeredDesignSimpleSubjectMattingToRgba(
       const alphaByte = shouldUseEllipseFallback
         ? clampByte(
             computeEllipseAlpha(width, height, x, y) *
-              ((source[sourceOffset + 3] ?? 255)),
+              (source[sourceOffset + 3] ?? 255),
           )
         : (refinedAlpha[y * width + x] ?? 0);
       const targetOffset = getPixelOffset(width, x, y);
@@ -625,15 +646,15 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
   let binary = "";
   const chunkSize = 0x8000;
   for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+    binary += String.fromCharCode(
+      ...bytes.subarray(offset, offset + chunkSize),
+    );
   }
 
   return `data:${blob.type || "image/png"};base64,${btoa(binary)}`;
 }
 
-function createDefaultBrowserSubjectMattingRasterAdapter():
-  | LayeredDesignSubjectMattingRasterAdapter
-  | null {
+function createDefaultBrowserSubjectMattingRasterAdapter(): LayeredDesignSubjectMattingRasterAdapter | null {
   if (
     typeof OffscreenCanvas !== "function" ||
     typeof createImageBitmap !== "function" ||
@@ -687,7 +708,9 @@ function createDefaultBrowserSubjectMattingRasterAdapter():
         0,
         0,
       );
-      return await blobToDataUrl(await canvas.convertToBlob({ type: "image/png" }));
+      return await blobToDataUrl(
+        await canvas.convertToBlob({ type: "image/png" }),
+      );
     },
   };
 }
@@ -745,7 +768,9 @@ export function createLayeredDesignSimpleSubjectMattingProvider(
         throw new Error("当前环境不支持简单主体 matting");
       }
 
-      const source = await rasterAdapter.decodePngDataUrl(input.subject.crop.src);
+      const source = await rasterAdapter.decodePngDataUrl(
+        input.subject.crop.src,
+      );
       const result = applyLayeredDesignSimpleSubjectMattingToRgba(source);
 
       return {

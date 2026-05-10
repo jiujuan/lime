@@ -342,6 +342,94 @@ describe("MemoryPage", () => {
     expect(bodyText).not.toContain("Claude Code");
   });
 
+  it("灵感首屏不应暴露自动提取前缀、调试长文本和内部标签", async () => {
+    mockListUnifiedMemories.mockResolvedValue([
+      {
+        id: "memory-interrupted",
+        session_id: "session-1",
+        memory_type: "conversation",
+        category: "experience",
+        title: "自动分析提取（AI 响应）：中断测试第 1 行 中断测试第 2 行",
+        summary:
+          "自动分析提取（AI 响应）：中断测试第 1 行 中断测试第 2 行 中断测试第 3 行",
+        content:
+          "自动分析提取（AI 响应）：上一回合已被用户停止，不要继续回答被停止的请求。",
+        updated_at: 1_712_345_678_900,
+        created_at: 1_712_300_000_000,
+        tags: ["auto_analysis", "experience", "fp:debug", "复盘"],
+        metadata: {
+          source: "auto_extracted",
+        },
+      },
+      {
+        id: "memory-normal",
+        session_id: "session-1",
+        memory_type: "conversation",
+        category: "identity",
+        title: "夏日短视频语气",
+        summary: "适合清爽、轻快、有镜头感的小红书口播开场。",
+        content: "第一句先给画面感，再抛出反差点。",
+        updated_at: 1_712_345_670_000,
+        created_at: 1_712_300_000_000,
+        tags: ["小红书", "口播"],
+        metadata: {
+          source: "auto_extracted",
+        },
+      },
+    ]);
+
+    renderPage();
+    await flushPageEffects();
+
+    const bodyText = document.body.textContent ?? "";
+    expect(bodyText).toContain("中断恢复记录");
+    expect(bodyText).toContain(
+      "这条灵感来自一次被停止的运行，默认不展开原始调试文本。",
+    );
+    expect(bodyText).toContain("夏日短视频语气");
+    expect(bodyText).not.toContain("自动分析提取");
+    expect(bodyText).not.toContain("中断测试第 1 行");
+    expect(bodyText).not.toContain("上一回合已被用户停止");
+    expect(bodyText).not.toContain("auto_analysis");
+    expect(bodyText).not.toContain("fp:debug");
+
+    const bringButton = Array.from(
+      document.body.querySelectorAll("button"),
+    ).find((element) => element.textContent?.includes("带回输入"));
+    expect(bringButton).toBeTruthy();
+
+    await act(async () => {
+      bringButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    const launchParams = mockBuildHomeAgentParams.mock.lastCall?.[0] as {
+      initialRequestMetadata?: {
+        harness?: {
+          creation_replay?: {
+            data?: {
+              summary?: string;
+              tags?: string[];
+            };
+          };
+        };
+      };
+      initialUserPrompt?: string;
+    };
+    expect(launchParams.initialUserPrompt).toContain(
+      "这条灵感来自一次被停止的运行，默认不展开原始调试文本。",
+    );
+    expect(launchParams.initialUserPrompt).not.toContain("自动分析提取");
+    expect(launchParams.initialUserPrompt).not.toContain("中断测试第 1 行");
+    expect(launchParams.initialUserPrompt).not.toContain("auto_analysis");
+    expect(
+      launchParams.initialRequestMetadata?.harness?.creation_replay?.data,
+    ).toMatchObject({
+      summary: "这条灵感来自一次被停止的运行，默认不展开原始调试文本。",
+      tags: ["复盘"],
+    });
+  });
+
   it("home 分区应展示灵感概览与风格摘要", async () => {
     renderPage();
     await flushPageEffects();
@@ -824,7 +912,9 @@ describe("MemoryPage", () => {
     await flushPageEffects();
 
     expect(document.body.textContent ?? "").toContain("灵感条目");
-    expect(document.body.textContent ?? "").toContain("左侧挑一条，右侧直接继续。");
+    expect(document.body.textContent ?? "").toContain(
+      "左侧挑一条，右侧直接继续。",
+    );
     expect(document.body.textContent ?? "").toContain("夏日短视频语气");
     expect(document.body.textContent ?? "").not.toContain("灵感对象分层");
 
@@ -1199,7 +1289,9 @@ describe("MemoryPage", () => {
     expect(document.body.textContent ?? "").toContain("第 1 / 3 页");
     expect(document.body.textContent ?? "").toContain("当前显示 1-6 / 13 条");
     expect(
-      document.body.querySelector('[data-testid="memory-durable-entry-memory-page-13"]'),
+      document.body.querySelector(
+        '[data-testid="memory-durable-entry-memory-page-13"]',
+      ),
     ).toBeNull();
     const detailPanel = document.body.querySelector(
       '[data-testid="memory-durable-detail-panel"]',
@@ -1219,7 +1311,9 @@ describe("MemoryPage", () => {
     expect(document.body.textContent ?? "").toContain("第 3 / 3 页");
     expect(document.body.textContent ?? "").toContain("当前显示 13-13 / 13 条");
     expect(
-      document.body.querySelector('[data-testid="memory-durable-entry-memory-page-13"]'),
+      document.body.querySelector(
+        '[data-testid="memory-durable-entry-memory-page-13"]',
+      ),
     ).toBeTruthy();
     expect(document.body.textContent ?? "").toContain("第 13 条分页详情");
 
@@ -1236,7 +1330,9 @@ describe("MemoryPage", () => {
     expect(document.body.textContent ?? "").toContain("第 1 / 3 页");
     expect(document.body.textContent ?? "").toContain("当前显示 1-6 / 13 条");
     expect(
-      document.body.querySelector('[data-testid="memory-durable-entry-memory-page-13"]'),
+      document.body.querySelector(
+        '[data-testid="memory-durable-entry-memory-page-13"]',
+      ),
     ).toBeNull();
 
     const secondPageButton = document.body.querySelector(
@@ -1254,7 +1350,9 @@ describe("MemoryPage", () => {
     expect(document.body.textContent ?? "").toContain("第 2 / 3 页");
     expect(document.body.textContent ?? "").toContain("当前显示 7-12 / 13 条");
     expect(
-      document.body.querySelector('[data-testid="memory-durable-entry-memory-page-7"]'),
+      document.body.querySelector(
+        '[data-testid="memory-durable-entry-memory-page-7"]',
+      ),
     ).toBeTruthy();
   });
 

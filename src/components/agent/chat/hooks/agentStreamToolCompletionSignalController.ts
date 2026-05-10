@@ -36,7 +36,7 @@ export function hasMeaningfulAgentStreamToolCompletionSignal(params: {
 
   return Boolean(
     buildImageTaskPreviewFromToolResult(previewParams) ||
-      buildTaskPreviewFromToolResult(previewParams) ||
-      buildToolResultArtifactFromToolResult(previewParams),
+    buildTaskPreviewFromToolResult(previewParams) ||
+    buildToolResultArtifactFromToolResult(previewParams),
   );
 }

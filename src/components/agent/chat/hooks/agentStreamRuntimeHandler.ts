@@ -987,7 +987,10 @@ export function handleTurnStreamEvent({
         requestState.accumulatedContent = textDeltaPlan.nextAccumulatedContent;
       }
       if (visibleTextDelta) {
-        if (!surfaceThinkingDeltas && !requestState.hiddenThinkingPartsCleared) {
+        if (
+          !surfaceThinkingDeltas &&
+          !requestState.hiddenThinkingPartsCleared
+        ) {
           requestState.hiddenThinkingPartsCleared = true;
           setMessages((prev) =>
             prev.map((msg) =>

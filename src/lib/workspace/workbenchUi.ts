@@ -4,9 +4,7 @@
  * @module lib/workspace/workbenchUi
  */
 
-export {
-  CanvasBreadcrumbHeader,
-} from "@/components/workspace/canvas/shared/CanvasBreadcrumbHeader";
+export { CanvasBreadcrumbHeader } from "@/components/workspace/canvas/shared/CanvasBreadcrumbHeader";
 
 export { LayoutTransition } from "@/components/workspace/layout/LayoutTransition";
 

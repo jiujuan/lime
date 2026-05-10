@@ -364,7 +364,9 @@ function hasRequiredContractValue(
   record: Record<string, unknown>,
   key: string,
 ): boolean {
-  return Object.prototype.hasOwnProperty.call(record, key) && record[key] != null;
+  return (
+    Object.prototype.hasOwnProperty.call(record, key) && record[key] != null
+  );
 }
 
 function createQualityContractValidation(

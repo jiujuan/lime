@@ -353,10 +353,7 @@ export function StatsSettings() {
                 {t("settings.stats.hero.title", "数据统计")}
               </h1>
               <WorkbenchInfoTip
-                ariaLabel={t(
-                  "settings.stats.hero.tipAria",
-                  "使用统计总览说明",
-                )}
+                ariaLabel={t("settings.stats.hero.tipAria", "使用统计总览说明")}
                 content={t(
                   "settings.stats.hero.tip",
                   "管理当前区间的 Token 消耗、活跃天数、模型分布和趋势观察。",
@@ -593,7 +590,10 @@ export function StatsSettings() {
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-medium text-emerald-700">
-                                {t("settings.stats.models.primaryBadge", "#1 主力模型")}
+                                {t(
+                                  "settings.stats.models.primaryBadge",
+                                  "#1 主力模型",
+                                )}
                               </span>
                               <p className="truncate text-base font-semibold text-slate-900">
                                 {topModel?.model}
@@ -602,7 +602,9 @@ export function StatsSettings() {
                             <p className="mt-2 text-sm leading-6 text-slate-500">
                               {t("settings.stats.models.itemMeta", {
                                 conversations: topModel?.conversations || 0,
-                                tokens: formatCompactNumber(topModel?.tokens || 0),
+                                tokens: formatCompactNumber(
+                                  topModel?.tokens || 0,
+                                ),
                                 defaultValue:
                                   "{{conversations}} 次对话 · {{tokens}} Token",
                               })}

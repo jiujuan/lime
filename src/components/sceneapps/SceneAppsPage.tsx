@@ -64,9 +64,8 @@ export function SceneAppsPage({
     isNavigationTargetOwner,
     navigationRequestId,
   });
-  const [governancePanelMode, setGovernancePanelMode] = useState<
-    (typeof GOVERNANCE_PANEL_OPTIONS)[number]["key"]
-  >("governance");
+  const [governancePanelMode, setGovernancePanelMode] =
+    useState<(typeof GOVERNANCE_PANEL_OPTIONS)[number]["key"]>("governance");
   const hasActiveCatalogFilters =
     runtime.searchQuery.trim().length > 0 ||
     runtime.typeFilter !== "all" ||
@@ -335,7 +334,9 @@ export function SceneAppsPage({
                   packRuntimeUsesFallback={runtime.latestPackResultUsesFallback}
                   loading={runtime.scorecardLoading}
                   error={runtime.scorecardError}
-                  latestReviewFeedbackSignal={runtime.latestReviewFeedbackSignal}
+                  latestReviewFeedbackSignal={
+                    runtime.latestReviewFeedbackSignal
+                  }
                   onContinueReviewFeedback={
                     runtime.handleContinueReviewFeedback
                   }
@@ -429,7 +430,8 @@ export function SceneAppsPage({
                           </span>
                         ) : null}
                         {governancePanelMode === "runDetail" &&
-                        runtime.selectedRunDetailView?.deliveryCompletionLabel ? (
+                        runtime.selectedRunDetailView
+                          ?.deliveryCompletionLabel ? (
                           <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-700">
                             {
                               runtime.selectedRunDetailView
@@ -439,10 +441,10 @@ export function SceneAppsPage({
                         ) : null}
                         <span className="min-w-0 truncate text-slate-500">
                           {governancePanelMode === "governance"
-                            ? runtime.governanceView?.nextAction ??
-                              activeGovernancePanelOption.emptySummary
-                            : runtime.selectedRunDetailView?.nextAction ??
-                              activeGovernancePanelOption.emptySummary}
+                            ? (runtime.governanceView?.nextAction ??
+                              activeGovernancePanelOption.emptySummary)
+                            : (runtime.selectedRunDetailView?.nextAction ??
+                              activeGovernancePanelOption.emptySummary)}
                         </span>
                       </div>
                     </div>

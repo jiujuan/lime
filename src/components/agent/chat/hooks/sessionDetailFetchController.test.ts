@@ -31,7 +31,8 @@ function createClock(values: number[]) {
 
 describe("sessionDetailFetchController", () => {
   it("应优先复用 matching prefetch，不再重复调用 getSession", async () => {
-    const registry = createSessionDetailPrefetchRegistry<SessionDetailFetchDetailLike>();
+    const registry =
+      createSessionDetailPrefetchRegistry<SessionDetailFetchDetailLike>();
     registry.set("workspace-a:session-a", {
       signature: "signature-a",
       promise: Promise.resolve(
@@ -62,7 +63,8 @@ describe("sessionDetailFetchController", () => {
   });
 
   it("prefetch 失败时应记录 fallback 并继续拉取详情", async () => {
-    const registry = createSessionDetailPrefetchRegistry<SessionDetailFetchDetailLike>();
+    const registry =
+      createSessionDetailPrefetchRegistry<SessionDetailFetchDetailLike>();
     registry.set("workspace-a:session-a", {
       signature: "signature-a",
       promise: Promise.reject(new Error("prefetch failed")),
@@ -99,7 +101,8 @@ describe("sessionDetailFetchController", () => {
   });
 
   it("resumeSessionStartHooks 时应跳过 prefetch 并透传请求参数", async () => {
-    const registry = createSessionDetailPrefetchRegistry<SessionDetailFetchDetailLike>();
+    const registry =
+      createSessionDetailPrefetchRegistry<SessionDetailFetchDetailLike>();
     registry.set("workspace-a:session-a", {
       signature: "signature-a",
       promise: Promise.resolve(detail(2)),
@@ -124,7 +127,8 @@ describe("sessionDetailFetchController", () => {
   });
 
   it("registry 只删除当前 promise，避免清掉较新的 prefetch", async () => {
-    const registry = createSessionDetailPrefetchRegistry<SessionDetailFetchDetailLike>();
+    const registry =
+      createSessionDetailPrefetchRegistry<SessionDetailFetchDetailLike>();
     const olderPromise = Promise.resolve(detail(1));
     const newerPromise = Promise.resolve(detail(2));
 

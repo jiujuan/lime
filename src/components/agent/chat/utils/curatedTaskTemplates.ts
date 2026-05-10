@@ -102,6 +102,25 @@ export interface CuratedTaskTemplateLaunchPrefill {
   hint?: string;
 }
 
+export interface CuratedTaskPresentationCopy {
+  requiredPrefix?: string;
+  outputPrefix?: string;
+  resultDestinationPrefix?: string;
+  followUpPrefix?: string;
+  recentFilledPrefix?: string;
+  recentReferencePrefix?: string;
+  recentReferenceFallback?: string;
+  itemSeparator?: string;
+  segmentSeparator?: string;
+  formatFactItems?: (visibleItems: string[], totalCount: number) => string;
+  formatRecentReferenceItems?: (
+    visibleTitles: string[],
+    totalCount: number,
+  ) => string;
+  formatRecentReferenceFallback?: (totalCount: number) => string;
+  formatRecentPrefillHint?: (taskTitle: string) => string;
+}
+
 const CURATED_TASK_TEMPLATES: CuratedTaskTemplateDefinition[] = [
   {
     id: "daily-trend-briefing",
@@ -593,6 +612,7 @@ export function resolveCuratedTaskTemplateLaunchPrefill(
     | Pick<CuratedTaskTemplateItem, "id" | "title">
     | Pick<CuratedTaskTemplateDefinition, "id" | "title">
     | null,
+  copy: CuratedTaskPresentationCopy = {},
 ): CuratedTaskTemplateLaunchPrefill | null {
   if (!task) {
     return null;
@@ -615,7 +635,9 @@ export function resolveCuratedTaskTemplateLaunchPrefill(
     inputValues: recentRecord.launchInputValues,
     referenceMemoryIds: recentRecord.referenceMemoryIds,
     referenceEntries: recentRecord.referenceEntries,
-    hint: `已根据你上次启动 ${task.title} 时的参数自动预填，可继续修改后进入生成。`,
+    hint:
+      copy.formatRecentPrefillHint?.(task.title) ??
+      `已根据你上次启动 ${task.title} 时的参数自动预填，可继续修改后进入生成。`,
   };
 }
 
@@ -669,7 +691,20 @@ function matchesTemplateQuery(
   ].some((value) => value.toLowerCase().includes(normalizedQuery));
 }
 
-function summarizeCuratedTaskFactItems(items: string[], limit = 2): string {
+function formatDefaultCuratedTaskFactItems(
+  visibleItems: string[],
+  totalCount: number,
+): string {
+  return visibleItems.length < totalCount
+    ? `${visibleItems.join("、")} 等 ${totalCount} 项`
+    : visibleItems.join("、");
+}
+
+function summarizeCuratedTaskFactItems(
+  items: string[],
+  limit = 2,
+  copy: CuratedTaskPresentationCopy = {},
+): string {
   const normalizedItems = items
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
@@ -677,11 +712,15 @@ function summarizeCuratedTaskFactItems(items: string[], limit = 2): string {
     return "";
   }
 
-  if (normalizedItems.length <= limit) {
-    return normalizedItems.join("、");
-  }
+  const visibleItems =
+    normalizedItems.length <= limit
+      ? normalizedItems
+      : normalizedItems.slice(0, limit);
 
-  return `${normalizedItems.slice(0, limit).join("、")} 等 ${normalizedItems.length} 项`;
+  return (
+    copy.formatFactItems?.(visibleItems, normalizedItems.length) ??
+    formatDefaultCuratedTaskFactItems(visibleItems, normalizedItems.length)
+  );
 }
 
 function normalizeCuratedTaskInputValue(value: string | undefined): string {
@@ -691,29 +730,33 @@ function normalizeCuratedTaskInputValue(value: string | undefined): string {
 export function summarizeCuratedTaskRequiredInputs(
   task: Pick<CuratedTaskTemplateItem, "requiredInputs">,
   limit = 2,
+  copy: CuratedTaskPresentationCopy = {},
 ): string {
-  return summarizeCuratedTaskFactItems(task.requiredInputs, limit);
+  return summarizeCuratedTaskFactItems(task.requiredInputs, limit, copy);
 }
 
 export function summarizeCuratedTaskOptionalReferences(
   task: Pick<CuratedTaskTemplateItem, "optionalReferences">,
   limit = 2,
+  copy: CuratedTaskPresentationCopy = {},
 ): string {
-  return summarizeCuratedTaskFactItems(task.optionalReferences, limit);
+  return summarizeCuratedTaskFactItems(task.optionalReferences, limit, copy);
 }
 
 export function summarizeCuratedTaskOutputContract(
   task: Pick<CuratedTaskTemplateItem, "outputContract">,
   limit = 2,
+  copy: CuratedTaskPresentationCopy = {},
 ): string {
-  return summarizeCuratedTaskFactItems(task.outputContract, limit);
+  return summarizeCuratedTaskFactItems(task.outputContract, limit, copy);
 }
 
 export function summarizeCuratedTaskFollowUpActions(
   task: Pick<CuratedTaskTemplateItem, "followUpActions">,
   limit = 2,
+  copy: CuratedTaskPresentationCopy = {},
 ): string {
-  return summarizeCuratedTaskFactItems(task.followUpActions, limit);
+  return summarizeCuratedTaskFactItems(task.followUpActions, limit, copy);
 }
 
 function summarizeCuratedTaskRecentValue(
@@ -732,8 +775,11 @@ export function buildCuratedTaskRecentUsageDescription(params: {
   task: Pick<CuratedTaskTemplateItem, "requiredInputFields">;
   prefill?: CuratedTaskTemplateLaunchPrefill | null;
   fieldLimit?: number;
+  copy?: CuratedTaskPresentationCopy;
 }): string {
   const fieldLimit = params.fieldLimit ?? 2;
+  const copy = params.copy ?? {};
+  const itemSeparator = copy.itemSeparator ?? "；";
   const launchInputSummaryItems = params.task.requiredInputFields
     .map((field) => {
       const rawValue = params.prefill?.inputValues?.[field.key];
@@ -753,10 +799,13 @@ export function buildCuratedTaskRecentUsageDescription(params: {
   if (launchInputSummaryItems.length > 0) {
     const visibleItems = launchInputSummaryItems.slice(0, fieldLimit);
     segments.push(
-      `上次填写：${visibleItems.join("；")}${
-        launchInputSummaryItems.length > fieldLimit
-          ? ` 等 ${launchInputSummaryItems.length} 项`
-          : ""
+      `${copy.recentFilledPrefix ?? "上次填写："}${
+        copy.formatFactItems?.(visibleItems, launchInputSummaryItems.length) ??
+        `${visibleItems.join(itemSeparator)}${
+          launchInputSummaryItems.length > fieldLimit
+            ? ` 等 ${launchInputSummaryItems.length} 项`
+            : ""
+        }`
       }`,
     );
   }
@@ -771,16 +820,26 @@ export function buildCuratedTaskRecentUsageDescription(params: {
     const visibleTitles = referenceTitles.slice(0, fieldLimit);
     segments.push(
       visibleTitles.length > 0
-        ? `参考：${visibleTitles.join("；")}${
-            referenceTitles.length > fieldLimit
-              ? ` 等 ${referenceTitles.length} 条`
-              : ""
+        ? `${copy.recentReferencePrefix ?? "参考："}${
+            copy.formatRecentReferenceItems?.(
+              visibleTitles,
+              referenceTitles.length,
+            ) ??
+            `${visibleTitles.join(itemSeparator)}${
+              referenceTitles.length > fieldLimit
+                ? ` 等 ${referenceTitles.length} 条`
+                : ""
+            }`
           }`
-        : `参考：${referenceEntries.length} 条参考对象`,
+        : `${copy.recentReferencePrefix ?? "参考："}${
+            copy.formatRecentReferenceFallback?.(referenceEntries.length) ??
+            copy.recentReferenceFallback ??
+            `${referenceEntries.length} 条参考对象`
+          }`,
     );
   }
 
-  return segments.join(" · ");
+  return segments.join(copy.segmentSeparator ?? " · ");
 }
 
 export function buildCuratedTaskFollowUpDescription(
@@ -788,14 +847,20 @@ export function buildCuratedTaskFollowUpDescription(
   options: {
     limit?: number;
     prefix?: string;
+    copy?: CuratedTaskPresentationCopy;
   } = {},
 ): string {
-  const summary = summarizeCuratedTaskFollowUpActions(task, options.limit);
+  const copy = options.copy ?? {};
+  const summary = summarizeCuratedTaskFollowUpActions(
+    task,
+    options.limit,
+    copy,
+  );
   if (!summary) {
     return "";
   }
 
-  return `${options.prefix ?? "下一步："}${summary}`;
+  return `${options.prefix ?? copy.followUpPrefix ?? "下一步："}${summary}`;
 }
 
 export function buildCuratedTaskCapabilityDescription(
@@ -814,9 +879,11 @@ export function buildCuratedTaskCapabilityDescription(
     includeResultDestination?: boolean;
     includeFollowUpActions?: boolean;
     followUpLimit?: number;
+    copy?: CuratedTaskPresentationCopy;
   } = {},
 ): string {
   const segments: string[] = [];
+  const copy = options.copy ?? {};
   const summary = task.summary.trim();
 
   if (options.includeSummary !== false && summary.length > 0) {
@@ -826,28 +893,33 @@ export function buildCuratedTaskCapabilityDescription(
   const requiredSummary = summarizeCuratedTaskRequiredInputs(
     task,
     options.requiredLimit,
+    copy,
   );
   if (requiredSummary) {
-    segments.push(`需要：${requiredSummary}`);
+    segments.push(`${copy.requiredPrefix ?? "需要："}${requiredSummary}`);
   }
 
   const outputSummary = summarizeCuratedTaskOutputContract(
     task,
     options.outputLimit,
+    copy,
   );
   if (outputSummary) {
-    segments.push(`交付：${outputSummary}`);
+    segments.push(`${copy.outputPrefix ?? "交付："}${outputSummary}`);
   }
 
   if (options.includeResultDestination) {
     const resultDestination = task.resultDestination.trim();
     if (resultDestination.length > 0) {
-      segments.push(`去向：${resultDestination}`);
+      segments.push(
+        `${copy.resultDestinationPrefix ?? "去向："}${resultDestination}`,
+      );
     }
   }
 
   if (options.includeFollowUpActions) {
     const followUpSummary = buildCuratedTaskFollowUpDescription(task, {
+      copy,
       limit: options.followUpLimit,
     });
     if (followUpSummary) {
@@ -855,7 +927,7 @@ export function buildCuratedTaskCapabilityDescription(
     }
   }
 
-  return segments.join(" · ");
+  return segments.join(copy.segmentSeparator ?? " · ");
 }
 
 export function getCuratedTaskOutputDestination(

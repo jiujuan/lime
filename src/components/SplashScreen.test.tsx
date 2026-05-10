@@ -74,6 +74,8 @@ describe("SplashScreen", () => {
   it("首帧布局完成后应请求展示隐藏的 Tauri 主窗口", () => {
     renderSplash();
 
-    expect(startupWindowRevealMock.revealStartupWindowWhenReady).toHaveBeenCalledTimes(1);
+    expect(
+      startupWindowRevealMock.revealStartupWindowWhenReady,
+    ).toHaveBeenCalledTimes(1);
   });
 });

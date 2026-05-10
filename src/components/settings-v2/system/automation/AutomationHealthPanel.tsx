@@ -123,14 +123,8 @@ export function AutomationHealthPanel({
           <div className="flex flex-wrap gap-2">
             <Badge variant={status?.running ? "default" : "outline"}>
               {status?.running
-                ? t(
-                    "settings.automation.health.polling.running",
-                    "轮询运行中",
-                  )
-                : t(
-                    "settings.automation.health.polling.stopped",
-                    "轮询已停止",
-                  )}
+                ? t("settings.automation.health.polling.running", "轮询运行中")
+                : t("settings.automation.health.polling.stopped", "轮询已停止")}
             </Badge>
             <Badge variant="outline">
               {t("settings.automation.health.totalExecutions", {
@@ -205,7 +199,8 @@ export function AutomationHealthPanel({
                       {t("settings.automation.health.risk.failureRetry", {
                         failures: job.consecutive_failures,
                         retries: job.retry_count,
-                        defaultValue: "失败 {{failures}} 次，重试 {{retries}} 次",
+                        defaultValue:
+                          "失败 {{failures}} 次，重试 {{retries}} 次",
                       })}
                     </div>
                   </div>
@@ -217,7 +212,8 @@ export function AutomationHealthPanel({
                   {t("settings.automation.health.risk.cooldownUpdated", {
                     cooldown: formatTime(job.auto_disabled_until, locale),
                     updated: formatTime(job.updated_at, locale),
-                    defaultValue: "冷却结束: {{cooldown}} · 更新时间: {{updated}}",
+                    defaultValue:
+                      "冷却结束: {{cooldown}} · 更新时间: {{updated}}",
                   })}
                 </div>
                 {job.detail_message ? (
@@ -230,10 +226,7 @@ export function AutomationHealthPanel({
           </div>
         ) : (
           <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/60 p-6 text-sm text-slate-500">
-            {t(
-              "settings.automation.health.empty",
-              "当前没有高风险持续流程。",
-            )}
+            {t("settings.automation.health.empty", "当前没有高风险持续流程。")}
           </div>
         )}
       </CardContent>

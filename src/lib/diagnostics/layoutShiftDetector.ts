@@ -22,9 +22,10 @@ class LayoutShiftDetector {
   private cumulativeScore = 0;
 
   constructor() {
-    this.enabled = typeof window !== "undefined" &&
+    this.enabled =
+      typeof window !== "undefined" &&
       (window.localStorage.getItem("lime.debug.layout-shift") === "true" ||
-       new URLSearchParams(window.location.search).has("debug-layout-shift"));
+        new URLSearchParams(window.location.search).has("debug-layout-shift"));
 
     if (this.enabled && typeof PerformanceObserver !== "undefined") {
       this.startObserving();
@@ -35,7 +36,10 @@ class LayoutShiftDetector {
     try {
       this.observer = new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) {
-          if (entry.entryType === "layout-shift" && !(entry as any).hadRecentInput) {
+          if (
+            entry.entryType === "layout-shift" &&
+            !(entry as any).hadRecentInput
+          ) {
             const layoutShiftEntry = entry as any;
             this.cumulativeScore += layoutShiftEntry.value;
 

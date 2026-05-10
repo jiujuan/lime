@@ -8,12 +8,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { LayoutMode } from "@/lib/workspace/workflowTypes";
 
 /** 过渡状态 */
-type TransitionState =
-  | "idle"
-  | "entering"
-  | "entered"
-  | "exiting"
-  | "exited";
+type TransitionState = "idle" | "entering" | "entered" | "exiting" | "exited";
 
 /** 过渡配置 */
 export interface TransitionConfig {

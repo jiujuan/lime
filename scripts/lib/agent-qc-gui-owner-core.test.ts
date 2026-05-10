@@ -116,6 +116,44 @@ describe("agent-qc-gui-owner-core", () => {
     expect(report.ownerCount).toBe(1);
   });
 
+  it("同一 running job 应选择 stale 秒数更新的 sidecar", () => {
+    const createSidecar = (staleSeconds: number, generatedAt: string) => ({
+      generatedAt,
+      job: { id: "job-gui", status: "running" },
+      verdict: { status: "stale" },
+      counts: { running: 1, stale: 1 },
+      items: [
+        {
+          scenarioId: "claw-chat-ready-streaming",
+          qcloopStatus: "running",
+          evidenceStatus: "blocked",
+          terminal: false,
+          stale: true,
+          staleSeconds,
+          worker: { status: "running", durationSeconds: staleSeconds },
+        },
+      ],
+    });
+
+    const report = createAgentQcGuiOwnerReport({
+      manifest,
+      statusSidecars: [
+        {
+          path: ".lime/qc/qcloop-status.gui-older.json",
+          status: createSidecar(600, "2026-05-10T00:00:00.000Z"),
+        },
+        {
+          path: ".lime/qc/qcloop-status.gui-current.json",
+          status: createSidecar(900, "2026-05-10T00:05:00.000Z"),
+        },
+      ],
+    });
+
+    expect(report.ownerCount).toBe(1);
+    expect(report.oldestStaleSeconds).toBe(900);
+    expect(report.activeOwners[0].path).toBe(".lime/qc/qcloop-status.gui-current.json");
+  });
+
   it("同一 job 存在终态 sidecar 时应忽略旧 running sidecar", () => {
     const runningSidecar = {
       job: { id: "job-gui", status: "running", terminal: false },

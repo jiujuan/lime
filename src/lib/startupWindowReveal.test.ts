@@ -39,9 +39,12 @@ function appendLoadedStartupLogo() {
 describe("revealStartupWindowWhenReady", () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    vi.stubGlobal("requestAnimationFrame", (callback: (time: number) => void) => {
-      return window.setTimeout(() => callback(performance.now()), 0);
-    });
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      (callback: (time: number) => void) => {
+        return window.setTimeout(() => callback(performance.now()), 0);
+      },
+    );
     tauriRuntimeMock.hasTauriInvokeCapability.mockReturnValue(true);
   });
 

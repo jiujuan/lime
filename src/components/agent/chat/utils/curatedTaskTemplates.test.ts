@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  buildCuratedTaskCapabilityDescription,
+  buildCuratedTaskRecentUsageDescription,
   findCuratedTaskTemplateById,
   listFeaturedHomeCuratedTaskTemplates,
   recordCuratedTaskTemplateUsage,
   resolveCuratedTaskFollowUpActionTarget,
+  resolveCuratedTaskTemplateLaunchPrefill,
+  summarizeCuratedTaskRequiredInputs,
   subscribeCuratedTaskTemplateUsageChanged,
+  type CuratedTaskPresentationCopy,
 } from "./curatedTaskTemplates";
 import { buildCuratedTaskReferenceEntries } from "./curatedTaskReferenceSelection";
 
@@ -47,6 +52,104 @@ describe("curatedTaskTemplates", () => {
 
     expect(callback).toHaveBeenCalledTimes(1);
     unsubscribe();
+  });
+
+  it("Skills 工作台可注入 CuratedTask presentation copy", () => {
+    const template = findCuratedTaskTemplateById("daily-trend-briefing");
+    if (!template) {
+      throw new Error("daily-trend-briefing 模板应存在");
+    }
+
+    const copy: CuratedTaskPresentationCopy = {
+      followUpPrefix: "Next: ",
+      itemSeparator: "; ",
+      outputPrefix: "Delivers: ",
+      recentFilledPrefix: "Last fields: ",
+      recentReferencePrefix: "References: ",
+      requiredPrefix: "Needs: ",
+      resultDestinationPrefix: "Destination: ",
+      segmentSeparator: " | ",
+      formatFactItems: (visibleItems, totalCount) =>
+        visibleItems.length < totalCount
+          ? `${visibleItems.join("; ")} + ${
+              totalCount - visibleItems.length
+            } more`
+          : visibleItems.join("; "),
+      formatRecentPrefillHint: (taskTitle) =>
+        `Prefilled from the last ${taskTitle} launch. Review before generating.`,
+      formatRecentReferenceItems: (visibleTitles, totalCount) =>
+        visibleTitles.length < totalCount
+          ? `${visibleTitles.join("; ")} + ${
+              totalCount - visibleTitles.length
+            } more`
+          : visibleTitles.join("; "),
+    };
+
+    recordCuratedTaskTemplateUsage({
+      templateId: template.id,
+      launchInputValues: {
+        platform_region: "X + TikTok（北美）",
+        theme_target: "AI 内容创作",
+      },
+      referenceEntries: [
+        {
+          id: "memory-reference-1",
+          title: "品牌定位卡",
+          summary: "偏实验感、偏高频更新的内容品牌方向。",
+          category: "identity",
+          categoryLabel: "风格",
+          tags: ["品牌", "风格"],
+        },
+        {
+          id: "memory-reference-2",
+          title: "渠道复盘",
+          summary: "近期更适合先做短链路验证。",
+          category: "experience",
+          categoryLabel: "经验",
+          tags: ["复盘"],
+        },
+      ],
+    });
+
+    const launchPrefill = resolveCuratedTaskTemplateLaunchPrefill(
+      template,
+      copy,
+    );
+
+    expect(launchPrefill?.hint).toBe(
+      `Prefilled from the last ${template.title} launch. Review before generating.`,
+    );
+    expect(summarizeCuratedTaskRequiredInputs(template, 1, copy)).toBe(
+      "主题或赛道 + 1 more",
+    );
+    expect(
+      buildCuratedTaskRecentUsageDescription({
+        copy,
+        fieldLimit: 1,
+        prefill: launchPrefill,
+        task: template,
+      }),
+    ).toBe(
+      "Last fields: 主题或赛道=AI 内容创作 + 1 more | References: 品牌定位卡 + 1 more",
+    );
+    expect(
+      buildCuratedTaskCapabilityDescription(template, {
+        copy,
+        followUpLimit: 1,
+        includeFollowUpActions: true,
+        includeResultDestination: true,
+        includeSummary: false,
+        outputLimit: 1,
+        requiredLimit: 1,
+      }),
+    ).toBe(
+      [
+        "Needs: 主题或赛道 + 1 more",
+        "Delivers: 趋势摘要 + 2 more",
+        "Destination: 趋势摘要会先写回当前内容，方便继续展开选题和主稿。",
+        "Next: 继续展开其中一个选题 + 1 more",
+      ].join(" | "),
+    );
   });
 
   it("成果参考对象应为下游模板生成更明确的续接理由", () => {

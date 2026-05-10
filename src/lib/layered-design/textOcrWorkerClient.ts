@@ -6,16 +6,14 @@ import {
   type LayeredDesignTextOcrWorkerLike,
 } from "./textOcrWorker";
 
-export interface LayeredDesignTextOcrWorkerHandle
-  extends LayeredDesignTextOcrWorkerLike {
+export interface LayeredDesignTextOcrWorkerHandle extends LayeredDesignTextOcrWorkerLike {
   terminate?: () => void;
 }
 
 export type LayeredDesignTextOcrWorkerFactory =
   () => LayeredDesignTextOcrWorkerHandle;
 
-export interface CreateLayeredDesignWorkerTextOcrProviderOptions
-  extends CreateLayeredDesignTextOcrWorkerProviderOptions {
+export interface CreateLayeredDesignWorkerTextOcrProviderOptions extends CreateLayeredDesignTextOcrWorkerProviderOptions {
   workerFactory?: LayeredDesignTextOcrWorkerFactory;
   fallbackProvider?: LayeredDesignFlatImageTextOcrProvider | null;
 }

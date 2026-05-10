@@ -244,7 +244,7 @@ node scripts/check-generated-slop-report.mjs --input "<cleanup-json>"
 
 同时，`scripts/report-generated-slop.mjs`、`scripts/check-generated-slop-report.mjs`、`scripts/harness-eval-history-record.mjs`、`scripts/harness-eval-trend-report.mjs`、`scripts/lib/generated-slop-report-core.mjs`、`scripts/lib/harness-dashboard-core.mjs` 这条 harness cleanup/report 主链，在 `verify:local` 的 smart 模式里默认也按 bridge/contracts 风险处理。
 本地 `verify:local` 输出里如果看到 `bridge 校验（harness cleanup contract）`，说明命中的就是这条 cleanup/report 契约门禁，而不是普通 DevBridge 变更。
-CI 里的 `.github/workflows/quality.yml` 结果摘要现在也会透出 `bridge_reasons`，并写入 `GITHUB_STEP_SUMMARY`，用于区分这次是 `agent_qc_contract`、`harness_cleanup_contract`、`bridge_runtime`，还是 `workflow_full_suite` / `fallback_full_suite` 这类全量触发。
+CI 里的 `.github/workflows/quality.yml` 结果摘要现在也会透出 `bridge_reasons`，并写入 `GITHUB_STEP_SUMMARY`，用于区分这次是 `harness_cleanup_contract`、`bridge_runtime`，还是 `workflow_full_suite` / `fallback_full_suite` 这类全量触发。Agent QC / qcloop 保持为本地与人工证据工具，不进入 GitHub Actions 验证链路。
 结果摘要默认按 `Scope / Required Gates / Notes / Recommended Next Action / Failure` 分段，优先让人一眼看清“为什么触发”“哪些门禁必跑”“最终为什么失败”，以及失败后本地最应该先跑哪条命令。
 如果命中的是 `harness_cleanup_contract`，推荐动作应优先指向 `npm run harness:cleanup-report:check`，而不是只给一条泛化的 bridge 校验建议。
 
@@ -561,19 +561,19 @@ npm run agent-qc:audit
 
 作用：
 
-- 把 Lime 的 Agent Runtime、GUI、行为评测和发布门禁收敛成可审计场景清单
-- 让 qcloop / CI / release workflow 共享同一份 evidence contract
+- 把 Lime 的 Agent Runtime、GUI、行为评测和人工发布证据收敛成可审计场景清单
+- 让 qcloop / 本地人工发布流程共享同一份 evidence contract；GitHub Actions 不执行 Agent QC 验证
 - 防止测试标准自身漂移，例如 scenario 引用了不存在的 npm script
 
 注意：
 
-- `agent-qc:check` 已进入 `npm run test:contracts`，改动 Agent QC manifest、GUI flow manifest 或 schema 时不能按普通 docs-only 跳过
+- `agent-qc:check` 是本地显式入口，不进入 `npm run test:contracts`；GitHub Actions 中的合同验证不再间接跑 Agent QC
 - Agent QC 不替代 `verify:local`、`verify:gui-smoke` 或 `harness:eval`；它负责把这些入口编排成运营级证据链
 - `agent-qc:qcloop-job` 只从 manifest 生成 qcloop payload，不启动 qcloop、不提交任务
 - `agent-qc:export-evidence` 只转换 qcloop job 结果，不会替你跑测试；如果 qcloop item 仍是 `pending/running`，导出的 verdict 必须是 `blocked`
-- `agent-qc:release-summary -- --check` 是 release note / 发布门禁前的证据聚合；缺 Evidence Pack、Evidence Pack 非 `pass`，或未覆盖全部 P0 scenario id 时应阻断发布
-- `.github/workflows/release.yml` 默认强制 `agent_qc_evidence_path` 通过 `agent-qc-release-summary --check` 和 P0 scenario 覆盖校验，否则不创建 release
-- `agent-qc:audit` 是完成度审计；真实 qcloop evidence、真实 GUI evidence 或 release hard gate 缺失时必须保持 `incomplete`
+- `agent-qc:release-summary -- --check` 是本地 / 人工发布证据聚合；缺 Evidence Pack、Evidence Pack 非 `pass`，或未覆盖全部 P0 scenario id 时不能作为绿色 Agent QC 证据
+- `.github/workflows/release.yml` 只创建或刷新 GitHub Release，不读取 Agent QC Evidence Pack
+- `agent-qc:audit` 是完成度审计；真实 qcloop evidence、真实 GUI evidence 缺失，或 GitHub Actions 重新接入 Agent QC 时必须保持 `incomplete`
 
 ## 改动类型与最低门槛
 

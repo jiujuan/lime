@@ -76,10 +76,7 @@ interface InputbarComposerSectionProps {
   knowledgeHubOpenRequestKey?: number;
   onToggleKnowledgePack?: (enabled: boolean) => void;
   onSelectKnowledgePack?: (packName: string) => void;
-  onToggleKnowledgeCompanionPack?: (
-    packName: string,
-    enabled: boolean,
-  ) => void;
+  onToggleKnowledgeCompanionPack?: (packName: string, enabled: boolean) => void;
   onStartKnowledgeOrganize?: () => void;
   onManageKnowledgePacks?: () => void;
   onSelectTeam?: (team: TeamDefinition | null) => void;

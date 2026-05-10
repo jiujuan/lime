@@ -68,17 +68,23 @@ function formatPercent(value: number): string {
   return `${Math.round(value * 1000) / 10}%`;
 }
 
-function isImageCandidate(candidate: LayeredDesignExtractionCandidate): boolean {
+function isImageCandidate(
+  candidate: LayeredDesignExtractionCandidate,
+): boolean {
   return candidate.layer.type === "image" || candidate.layer.type === "effect";
 }
 
-function hasMaskBackedLayer(candidate: LayeredDesignExtractionCandidate): boolean {
+function hasMaskBackedLayer(
+  candidate: LayeredDesignExtractionCandidate,
+): boolean {
   const layer = candidate.layer;
   if (layer.type !== "image" && layer.type !== "effect") {
     return false;
   }
 
-  return Boolean((layer as ImageLayer).maskAssetId) || layer.alphaMode === "mask";
+  return (
+    Boolean((layer as ImageLayer).maskAssetId) || layer.alphaMode === "mask"
+  );
 }
 
 function createAssetLookup(
@@ -107,7 +113,7 @@ function findCleanPlateAsset(
   assetsById: ReadonlyMap<string, GeneratedDesignAsset>,
 ): GeneratedDesignAsset | null {
   const assetId = extraction.cleanPlate.assetId;
-  return assetId ? assetsById.get(assetId) ?? null : null;
+  return assetId ? (assetsById.get(assetId) ?? null) : null;
 }
 
 function hasProductionReadyCapability(
@@ -227,7 +233,8 @@ export function evaluateLayeredDesignExtractionQuality(
       id: "no_selected_candidates",
       severity: "critical",
       title: "未选择候选层",
-      message: "当前将只保留原图背景，不能验证主体移动、文字编辑或图层重排效果。",
+      message:
+        "当前将只保留原图背景，不能验证主体移动、文字编辑或图层重排效果。",
     });
   }
 
@@ -251,7 +258,8 @@ export function evaluateLayeredDesignExtractionQuality(
       id: "subject_mask_missing",
       severity: "warning",
       title: "主体 mask 缺失",
-      message: "已选主体没有可核对 mask，移动主体后边缘质量和透明度需要人工确认。",
+      message:
+        "已选主体没有可核对 mask，移动主体后边缘质量和透明度需要人工确认。",
     });
   }
 
@@ -293,7 +301,8 @@ export function evaluateLayeredDesignExtractionQuality(
       id: "provider_requires_review",
       severity: "warning",
       title: "能力来源需人工复核",
-      message: "本轮 analyzer 使用了实验或需人工复核的能力，导出前仍应检查主体边缘、背景修补和文字结果。",
+      message:
+        "本轮 analyzer 使用了实验或需人工复核的能力，导出前仍应检查主体边缘、背景修补和文字结果。",
     });
   }
 
@@ -310,7 +319,8 @@ export function evaluateLayeredDesignExtractionQuality(
     (sum, candidate) =>
       sum +
       (readFiniteNumber(
-        findCandidatePrimaryAsset(candidate, assetsById)?.params?.totalPixelCount,
+        findCandidatePrimaryAsset(candidate, assetsById)?.params
+          ?.totalPixelCount,
       ) ?? 0),
     0,
   );
@@ -318,9 +328,7 @@ export function evaluateLayeredDesignExtractionQuality(
     const repairRatio =
       subjectTotalPixels > 0 ? subjectHoleRepairCount / subjectTotalPixels : 0;
     const severity =
-      repairRatio >= 0.015
-        ? ("warning" as const)
-        : ("info" as const);
+      repairRatio >= 0.015 ? ("warning" as const) : ("info" as const);
     if (severity === "warning") {
       score -= 6;
     }
@@ -372,14 +380,15 @@ export function evaluateLayeredDesignExtractionQuality(
       id: "subject_mask_coverage_extreme",
       severity: hasNearEmptyMask ? "critical" : "warning",
       title: "主体 mask 覆盖异常",
-      message: subjectMaskCoverageIssues
-        .map(
-          (issue) =>
-            `${issue.candidate.layer.name} 的前景覆盖约 ${formatPercent(
-              issue.coverage,
-            )}`,
-        )
-        .join("；") +
+      message:
+        subjectMaskCoverageIssues
+          .map(
+            (issue) =>
+              `${issue.candidate.layer.name} 的前景覆盖约 ${formatPercent(
+                issue.coverage,
+              )}`,
+          )
+          .join("；") +
         "，进入编辑前应核对主体是否被过度抠除或背景是否被整块带入。",
     });
   }

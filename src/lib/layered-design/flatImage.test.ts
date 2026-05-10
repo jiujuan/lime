@@ -150,24 +150,25 @@ describe("LayeredDesign flat image draft", () => {
 
     const originalCreateElement = document.createElement.bind(document);
     let cropIndex = 0;
-    vi.spyOn(document, "createElement").mockImplementation(
-      ((tagName: string) => {
-        const element = originalCreateElement(tagName);
+    vi.spyOn(document, "createElement").mockImplementation(((
+      tagName: string,
+    ) => {
+      const element = originalCreateElement(tagName);
 
-        if (tagName.toLowerCase() === "canvas") {
-          Object.defineProperty(element, "getContext", {
-            configurable: true,
-            value: () => ({ drawImage: vi.fn() }),
-          });
-          Object.defineProperty(element, "toDataURL", {
-            configurable: true,
-            value: () => `data:image/png;base64,aGV1cmlzdGljLWNyb3At${++cropIndex}`,
-          });
-        }
+      if (tagName.toLowerCase() === "canvas") {
+        Object.defineProperty(element, "getContext", {
+          configurable: true,
+          value: () => ({ drawImage: vi.fn() }),
+        });
+        Object.defineProperty(element, "toDataURL", {
+          configurable: true,
+          value: () =>
+            `data:image/png;base64,aGV1cmlzdGljLWNyb3At${++cropIndex}`,
+        });
+      }
 
-        return element;
-      }) as typeof document.createElement,
-    );
+      return element;
+    }) as typeof document.createElement);
 
     const seed = await createLayeredDesignFlatImageHeuristicSeed({
       image: {

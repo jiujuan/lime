@@ -171,7 +171,8 @@ describe("capabilityDraftsApi", () => {
           registration_id: "capreg-1",
           registered_at: "2026-05-05T01:10:00.000Z",
           skill_directory: "capability-readonly",
-          registered_skill_directory: "/tmp/work/.agents/skills/capability-readonly",
+          registered_skill_directory:
+            "/tmp/work/.agents/skills/capability-readonly",
           source_draft_id: "capdraft-verified",
           source_verification_report_id: "capver-1",
           generated_file_count: 4,
@@ -385,7 +386,8 @@ describe("capabilityDraftsApi", () => {
         name: "只读 CLI 报告",
         description: "把本地只读 CLI 输出整理成 Markdown 报告。",
         directory: "capability-report",
-        registered_skill_directory: "/tmp/work/.agents/skills/capability-report",
+        registered_skill_directory:
+          "/tmp/work/.agents/skills/capability-report",
         registration: {
           registration_id: "capreg-1",
           registered_at: "2026-05-05T01:10:00.000Z",
@@ -591,8 +593,7 @@ describe("capabilityDraftsApi", () => {
     ).resolves.toEqual([
       expect.objectContaining({
         key: "workspace:capability-report",
-        registeredSkillDirectory:
-          "/tmp/work/.agents/skills/capability-report",
+        registeredSkillDirectory: "/tmp/work/.agents/skills/capability-report",
         registration: expect.objectContaining({
           registrationId: "capreg-1",
           sourceDraftId: "capdraft-registered",

@@ -58,48 +58,46 @@ function stubAnalyzerImageAndCanvasEnvironment(): void {
 
   const originalCreateElement = document.createElement.bind(document);
   let dataUrlIndex = 0;
-  vi.spyOn(document, "createElement").mockImplementation(
-    ((tagName: string) => {
-      const element = originalCreateElement(tagName);
+  vi.spyOn(document, "createElement").mockImplementation(((tagName: string) => {
+    const element = originalCreateElement(tagName);
 
-      if (tagName.toLowerCase() === "canvas") {
-        const context = {
-          canvas: element,
-          drawImage: vi.fn(),
-          fillRect: vi.fn(),
-          beginPath: vi.fn(),
-          ellipse: vi.fn(),
-          fill: vi.fn(),
-          getImageData: vi.fn(() => ({
-            data: Uint8ClampedArray.from([240, 241, 242, 255]),
-          })),
-          globalCompositeOperation: "source-over",
-          fillStyle: "#000000",
-        };
+    if (tagName.toLowerCase() === "canvas") {
+      const context = {
+        canvas: element,
+        drawImage: vi.fn(),
+        fillRect: vi.fn(),
+        beginPath: vi.fn(),
+        ellipse: vi.fn(),
+        fill: vi.fn(),
+        getImageData: vi.fn(() => ({
+          data: Uint8ClampedArray.from([240, 241, 242, 255]),
+        })),
+        globalCompositeOperation: "source-over",
+        fillStyle: "#000000",
+      };
 
-        Object.defineProperty(element, "getContext", {
-          configurable: true,
-          value: () => context,
-        });
-        Object.defineProperty(element, "toDataURL", {
-          configurable: true,
-          value: () =>
-            [
-              "data:image/png;base64,aGV1cmlzdGljLWNyb3AtMQ==",
-              "data:image/png;base64,aGV1cmlzdGljLWNyb3AtMg==",
-              "data:image/png;base64,aGV1cmlzdGljLWNyb3AtMw==",
-              "data:image/png;base64,aGV1cmlzdGljLWNyb3AtNA==",
-              "data:image/png;base64,aGV1cmlzdGljLWNyb3AtNQ==",
-              "data:image/png;base64,c3ViamVjdC1tYXNr",
-              "data:image/png;base64,c3ViamVjdC1yZ2Jh",
-              "data:image/png;base64,aGV1cmlzdGljLWNsZWFuLXBsYXRl",
-            ][dataUrlIndex++] ?? "data:image/png;base64,ZmFsbGJhY2s=",
-        });
-      }
+      Object.defineProperty(element, "getContext", {
+        configurable: true,
+        value: () => context,
+      });
+      Object.defineProperty(element, "toDataURL", {
+        configurable: true,
+        value: () =>
+          [
+            "data:image/png;base64,aGV1cmlzdGljLWNyb3AtMQ==",
+            "data:image/png;base64,aGV1cmlzdGljLWNyb3AtMg==",
+            "data:image/png;base64,aGV1cmlzdGljLWNyb3AtMw==",
+            "data:image/png;base64,aGV1cmlzdGljLWNyb3AtNA==",
+            "data:image/png;base64,aGV1cmlzdGljLWNyb3AtNQ==",
+            "data:image/png;base64,c3ViamVjdC1tYXNr",
+            "data:image/png;base64,c3ViamVjdC1yZ2Jh",
+            "data:image/png;base64,aGV1cmlzdGljLWNsZWFuLXBsYXRl",
+          ][dataUrlIndex++] ?? "data:image/png;base64,ZmFsbGJhY2s=",
+      });
+    }
 
-      return element;
-    }) as typeof document.createElement,
-  );
+    return element;
+  }) as typeof document.createElement);
 }
 
 describe("LayeredDesign structured analyzer adapter", () => {
@@ -558,9 +556,11 @@ describe("LayeredDesign structured analyzer adapter", () => {
     const analyze = vi.fn(async () => {
       throw new Error("真实 analyzer 暂不可用");
     });
-    const analyzer = createLayeredDesignFlatImageAnalyzerFromStructuredProvider({
-      analyze,
-    });
+    const analyzer = createLayeredDesignFlatImageAnalyzerFromStructuredProvider(
+      {
+        analyze,
+      },
+    );
 
     const result = await analyzer({
       image: {
@@ -807,47 +807,47 @@ describe("LayeredDesign structured analyzer adapter", () => {
 
     const originalCreateElement = document.createElement.bind(document);
     let dataUrlIndex = 0;
-    vi.spyOn(document, "createElement").mockImplementation(
-      ((tagName: string) => {
-        const element = originalCreateElement(tagName);
+    vi.spyOn(document, "createElement").mockImplementation(((
+      tagName: string,
+    ) => {
+      const element = originalCreateElement(tagName);
 
-        if (tagName.toLowerCase() === "canvas") {
-          const context = {
-            canvas: element,
-            drawImage: vi.fn(),
-            fillRect: vi.fn(),
-            beginPath: vi.fn(),
-            ellipse: vi.fn(),
-            fill: vi.fn(),
-            getImageData: vi.fn(() => ({
-              data: Uint8ClampedArray.from([240, 241, 242, 255]),
-            })),
-            globalCompositeOperation: "source-over",
-            fillStyle: "#000000",
-          };
+      if (tagName.toLowerCase() === "canvas") {
+        const context = {
+          canvas: element,
+          drawImage: vi.fn(),
+          fillRect: vi.fn(),
+          beginPath: vi.fn(),
+          ellipse: vi.fn(),
+          fill: vi.fn(),
+          getImageData: vi.fn(() => ({
+            data: Uint8ClampedArray.from([240, 241, 242, 255]),
+          })),
+          globalCompositeOperation: "source-over",
+          fillStyle: "#000000",
+        };
 
-          Object.defineProperty(element, "getContext", {
-            configurable: true,
-            value: () => context,
-          });
-          Object.defineProperty(element, "toDataURL", {
-            configurable: true,
-            value: () =>
-              [
-                "data:image/png;base64,aGV1cmlzdGljLWNyb3AtMQ==",
-                "data:image/png;base64,aGV1cmlzdGljLWNyb3AtMg==",
-                "data:image/png;base64,aGV1cmlzdGljLWNyb3AtMw==",
-                "data:image/png;base64,aGV1cmlzdGljLWNyb3AtNA==",
-                "data:image/png;base64,c3ViamVjdC1tYXNr",
-                "data:image/png;base64,c3ViamVjdC1yZ2Jh",
-                "data:image/png;base64,aGV1cmlzdGljLWNsZWFuLXBsYXRl",
-              ][dataUrlIndex++] ?? "data:image/png;base64,ZmFsbGJhY2s=",
-          });
-        }
+        Object.defineProperty(element, "getContext", {
+          configurable: true,
+          value: () => context,
+        });
+        Object.defineProperty(element, "toDataURL", {
+          configurable: true,
+          value: () =>
+            [
+              "data:image/png;base64,aGV1cmlzdGljLWNyb3AtMQ==",
+              "data:image/png;base64,aGV1cmlzdGljLWNyb3AtMg==",
+              "data:image/png;base64,aGV1cmlzdGljLWNyb3AtMw==",
+              "data:image/png;base64,aGV1cmlzdGljLWNyb3AtNA==",
+              "data:image/png;base64,c3ViamVjdC1tYXNr",
+              "data:image/png;base64,c3ViamVjdC1yZ2Jh",
+              "data:image/png;base64,aGV1cmlzdGljLWNsZWFuLXBsYXRl",
+            ][dataUrlIndex++] ?? "data:image/png;base64,ZmFsbGJhY2s=",
+        });
+      }
 
-        return element;
-      }) as typeof document.createElement,
-    );
+      return element;
+    }) as typeof document.createElement);
 
     const result = await analyzeLayeredDesignFlatImage({
       image: {
@@ -948,47 +948,47 @@ describe("LayeredDesign structured analyzer adapter", () => {
 
     const originalCreateElement = document.createElement.bind(document);
     let dataUrlIndex = 0;
-    vi.spyOn(document, "createElement").mockImplementation(
-      ((tagName: string) => {
-        const element = originalCreateElement(tagName);
+    vi.spyOn(document, "createElement").mockImplementation(((
+      tagName: string,
+    ) => {
+      const element = originalCreateElement(tagName);
 
-        if (tagName.toLowerCase() === "canvas") {
-          const context = {
-            canvas: element,
-            drawImage: vi.fn(),
-            fillRect: vi.fn(),
-            beginPath: vi.fn(),
-            ellipse: vi.fn(),
-            fill: vi.fn(),
-            getImageData: vi.fn(() => ({
-              data: Uint8ClampedArray.from([240, 241, 242, 255]),
-            })),
-            globalCompositeOperation: "source-over",
-            fillStyle: "#000000",
-          };
+      if (tagName.toLowerCase() === "canvas") {
+        const context = {
+          canvas: element,
+          drawImage: vi.fn(),
+          fillRect: vi.fn(),
+          beginPath: vi.fn(),
+          ellipse: vi.fn(),
+          fill: vi.fn(),
+          getImageData: vi.fn(() => ({
+            data: Uint8ClampedArray.from([240, 241, 242, 255]),
+          })),
+          globalCompositeOperation: "source-over",
+          fillStyle: "#000000",
+        };
 
-          Object.defineProperty(element, "getContext", {
-            configurable: true,
-            value: () => context,
-          });
-          Object.defineProperty(element, "toDataURL", {
-            configurable: true,
-            value: () =>
-              [
-                "data:image/png;base64,aGV1cmlzdGljLWNyb3AtMQ==",
-                "data:image/png;base64,aGV1cmlzdGljLWNyb3AtMg==",
-                "data:image/png;base64,aGV1cmlzdGljLWNyb3AtMw==",
-                "data:image/png;base64,aGV1cmlzdGljLWNyb3AtNA==",
-                "data:image/png;base64,c3ViamVjdC1tYXNr",
-                "data:image/png;base64,c3ViamVjdC1yZ2Jh",
-                "data:image/png;base64,aGV1cmlzdGljLWNsZWFuLXBsYXRl",
-              ][dataUrlIndex++] ?? "data:image/png;base64,ZmFsbGJhY2s=",
-          });
-        }
+        Object.defineProperty(element, "getContext", {
+          configurable: true,
+          value: () => context,
+        });
+        Object.defineProperty(element, "toDataURL", {
+          configurable: true,
+          value: () =>
+            [
+              "data:image/png;base64,aGV1cmlzdGljLWNyb3AtMQ==",
+              "data:image/png;base64,aGV1cmlzdGljLWNyb3AtMg==",
+              "data:image/png;base64,aGV1cmlzdGljLWNyb3AtMw==",
+              "data:image/png;base64,aGV1cmlzdGljLWNyb3AtNA==",
+              "data:image/png;base64,c3ViamVjdC1tYXNr",
+              "data:image/png;base64,c3ViamVjdC1yZ2Jh",
+              "data:image/png;base64,aGV1cmlzdGljLWNsZWFuLXBsYXRl",
+            ][dataUrlIndex++] ?? "data:image/png;base64,ZmFsbGJhY2s=",
+        });
+      }
 
-        return element;
-      }) as typeof document.createElement,
-    );
+      return element;
+    }) as typeof document.createElement);
 
     const result = await analyzeLayeredDesignFlatImage({
       image: {
@@ -1007,7 +1007,9 @@ describe("LayeredDesign structured analyzer adapter", () => {
       ocrText: true,
     });
     expect(
-      result.candidates.find((candidate) => candidate.id === "headline-candidate"),
+      result.candidates.find(
+        (candidate) => candidate.id === "headline-candidate",
+      ),
     ).toMatchObject({
       layer: {
         type: "text",
@@ -1093,7 +1095,9 @@ describe("LayeredDesign structured analyzer adapter", () => {
       },
     });
     expect(
-      result.candidates.find((candidate) => candidate.id === "headline-candidate"),
+      result.candidates.find(
+        (candidate) => candidate.id === "headline-candidate",
+      ),
     ).toMatchObject({
       layer: {
         type: "text",
@@ -1131,47 +1135,47 @@ describe("LayeredDesign structured analyzer adapter", () => {
 
     const originalCreateElement = document.createElement.bind(document);
     let dataUrlIndex = 0;
-    vi.spyOn(document, "createElement").mockImplementation(
-      ((tagName: string) => {
-        const element = originalCreateElement(tagName);
+    vi.spyOn(document, "createElement").mockImplementation(((
+      tagName: string,
+    ) => {
+      const element = originalCreateElement(tagName);
 
-        if (tagName.toLowerCase() === "canvas") {
-          const context = {
-            canvas: element,
-            drawImage: vi.fn(),
-            fillRect: vi.fn(),
-            beginPath: vi.fn(),
-            ellipse: vi.fn(),
-            fill: vi.fn(),
-            getImageData: vi.fn(() => ({
-              data: Uint8ClampedArray.from([240, 241, 242, 255]),
-            })),
-            globalCompositeOperation: "source-over",
-            fillStyle: "#000000",
-          };
+      if (tagName.toLowerCase() === "canvas") {
+        const context = {
+          canvas: element,
+          drawImage: vi.fn(),
+          fillRect: vi.fn(),
+          beginPath: vi.fn(),
+          ellipse: vi.fn(),
+          fill: vi.fn(),
+          getImageData: vi.fn(() => ({
+            data: Uint8ClampedArray.from([240, 241, 242, 255]),
+          })),
+          globalCompositeOperation: "source-over",
+          fillStyle: "#000000",
+        };
 
-          Object.defineProperty(element, "getContext", {
-            configurable: true,
-            value: () => context,
-          });
-          Object.defineProperty(element, "toDataURL", {
-            configurable: true,
-            value: () =>
-              [
-                "data:image/png;base64,aGV1cmlzdGljLWNyb3AtMQ==",
-                "data:image/png;base64,aGV1cmlzdGljLWNyb3AtMg==",
-                "data:image/png;base64,aGV1cmlzdGljLWNyb3AtMw==",
-                "data:image/png;base64,aGV1cmlzdGljLWNyb3AtNA==",
-                "data:image/png;base64,c3ViamVjdC1tYXNr",
-                "data:image/png;base64,c3ViamVjdC1yZ2Jh",
-                "data:image/png;base64,aGV1cmlzdGljLWNsZWFuLXBsYXRl",
-              ][dataUrlIndex++] ?? "data:image/png;base64,ZmFsbGJhY2s=",
-          });
-        }
+        Object.defineProperty(element, "getContext", {
+          configurable: true,
+          value: () => context,
+        });
+        Object.defineProperty(element, "toDataURL", {
+          configurable: true,
+          value: () =>
+            [
+              "data:image/png;base64,aGV1cmlzdGljLWNyb3AtMQ==",
+              "data:image/png;base64,aGV1cmlzdGljLWNyb3AtMg==",
+              "data:image/png;base64,aGV1cmlzdGljLWNyb3AtMw==",
+              "data:image/png;base64,aGV1cmlzdGljLWNyb3AtNA==",
+              "data:image/png;base64,c3ViamVjdC1tYXNr",
+              "data:image/png;base64,c3ViamVjdC1yZ2Jh",
+              "data:image/png;base64,aGV1cmlzdGljLWNsZWFuLXBsYXRl",
+            ][dataUrlIndex++] ?? "data:image/png;base64,ZmFsbGJhY2s=",
+        });
+      }
 
-        return element;
-      }) as typeof document.createElement,
-    );
+      return element;
+    }) as typeof document.createElement);
 
     const detectText = vi.fn(
       async (input: LayeredDesignFlatImageTextOcrProviderInput) => {
@@ -1232,7 +1236,9 @@ describe("LayeredDesign structured analyzer adapter", () => {
       },
     });
     expect(
-      result.candidates.find((candidate) => candidate.id === "headline-candidate"),
+      result.candidates.find(
+        (candidate) => candidate.id === "headline-candidate",
+      ),
     ).toMatchObject({
       layer: {
         type: "text",

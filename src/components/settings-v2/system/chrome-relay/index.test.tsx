@@ -707,9 +707,7 @@ describe("ChromeRelaySettings", () => {
     expect(container.textContent).toContain("Bridge Key:");
     expect(container.textContent).toContain("复制 Google 配置");
     expect(container.textContent).toContain("尚未收到最近页面信息");
-    expect(container.textContent).toContain(
-      "未检测到扩展 observer 连接。",
-    );
+    expect(container.textContent).toContain("未检测到扩展 observer 连接。");
     expect(container.textContent).toContain("测试 Google 扩展");
     expect(container.textContent).toContain("刷新扩展状态");
   });

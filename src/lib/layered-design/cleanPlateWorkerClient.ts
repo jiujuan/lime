@@ -8,16 +8,14 @@ import {
   type LayeredDesignCleanPlateWorkerLike,
 } from "./cleanPlateWorker";
 
-export interface LayeredDesignCleanPlateWorkerHandle
-  extends LayeredDesignCleanPlateWorkerLike {
+export interface LayeredDesignCleanPlateWorkerHandle extends LayeredDesignCleanPlateWorkerLike {
   terminate?: () => void;
 }
 
 export type LayeredDesignCleanPlateWorkerFactory =
   () => LayeredDesignCleanPlateWorkerHandle;
 
-export interface CreateLayeredDesignWorkerCleanPlateProviderOptions
-  extends CreateLayeredDesignCleanPlateWorkerProviderOptions {
+export interface CreateLayeredDesignWorkerCleanPlateProviderOptions extends CreateLayeredDesignCleanPlateWorkerProviderOptions {
   workerFactory?: LayeredDesignCleanPlateWorkerFactory;
   fallbackProvider?: LayeredDesignCleanPlateProvider | null;
 }

@@ -146,7 +146,9 @@ describe("buildAgentEnvelopeDraftPresentation", () => {
     expect(presentation.statusLabel).toBe("等待 Completion Audit");
     expect(presentation.evidenceStatus).toBe("source_metadata_only");
     expect(presentation.evidenceLabel).toContain("evpack-1");
-    expect(presentation.evidenceLabel).toContain("缺 completed completion audit");
+    expect(presentation.evidenceLabel).toContain(
+      "缺 completed completion audit",
+    );
     expect(presentation.actionLabel).toBe("转成 Agent 草案");
     expect(presentation.actionEnabled).toBe(false);
   });

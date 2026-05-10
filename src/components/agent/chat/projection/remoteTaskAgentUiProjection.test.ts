@@ -201,9 +201,9 @@ describe("remoteTaskAgentUiProjection", () => {
         }),
       }),
     );
-    expect(
-      events.some((event) => event.type === "worker.notification"),
-    ).toBe(false);
+    expect(events.some((event) => event.type === "worker.notification")).toBe(
+      false,
+    );
   });
 
   it("应写入 conversationProjectionStore.agentUi 供 Team Workbench 消费", () => {
@@ -329,8 +329,7 @@ describe("remoteTaskAgentUiProjection", () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "worker.notification",
-        workerNotificationId:
-          "gateway:telegram:default:message-1:completed",
+        workerNotificationId: "gateway:telegram:default:message-1:completed",
         surface: "worker_notifications",
         runId: "run-gateway-telegram-1",
         sessionId: "session-gateway-telegram",
@@ -376,24 +375,26 @@ describe("remoteTaskAgentUiProjection", () => {
       }),
     });
 
-    expect(buildRemoteTaskAgentUiProjectionInputFromAgentRun(inputRun))
-      .toMatchObject({
-        remoteTaskId: "gateway:discord:default:message-1",
-        event: "needs_input",
-        status: "needs_input",
-        inputRequired: true,
-        authRequired: undefined,
-        authStatus: undefined,
-      });
-    expect(buildRemoteTaskAgentUiProjectionInputFromAgentRun(authRun))
-      .toMatchObject({
-        remoteTaskId: "gateway:feishu:default:message-auth",
-        event: "auth_required",
-        status: "needs_input",
-        inputRequired: undefined,
-        authRequired: undefined,
-        authStatus: "needs_oauth",
-      });
+    expect(
+      buildRemoteTaskAgentUiProjectionInputFromAgentRun(inputRun),
+    ).toMatchObject({
+      remoteTaskId: "gateway:discord:default:message-1",
+      event: "needs_input",
+      status: "needs_input",
+      inputRequired: true,
+      authRequired: undefined,
+      authStatus: undefined,
+    });
+    expect(
+      buildRemoteTaskAgentUiProjectionInputFromAgentRun(authRun),
+    ).toMatchObject({
+      remoteTaskId: "gateway:feishu:default:message-auth",
+      event: "auth_required",
+      status: "needs_input",
+      inputRequired: undefined,
+      authRequired: undefined,
+      authStatus: "needs_oauth",
+    });
 
     const events = buildAgentUiRemoteTaskProjectionEventsFromAgentRun(authRun);
     expect(events).toContainEqual(
@@ -428,9 +429,9 @@ describe("remoteTaskAgentUiProjection", () => {
         }),
       }),
     );
-    expect(
-      events.some((event) => event.type === "worker.notification"),
-    ).toBe(false);
+    expect(events.some((event) => event.type === "worker.notification")).toBe(
+      false,
+    );
   });
 
   it("应从 remote_task status 与 artifact update metadata 消费非终态 A2A lifecycle", () => {
@@ -465,24 +466,25 @@ describe("remoteTaskAgentUiProjection", () => {
       }),
     });
 
-    expect(buildRemoteTaskAgentUiProjectionInputFromAgentRun(run))
-      .toMatchObject({
-        remoteTaskId: "a2a-task-artifact-1",
-        event: "artifact_updated",
-        status: "running",
-        artifacts: [
-          {
-            artifactId: "a2a-artifact-1",
-            artifactPath: "remote/a2a/report.md",
-            contentRef: "remote-blob://a2a/artifact-1",
-            contentUrl: "https://remote.example/artifacts/1",
-            mimeType: "text/markdown",
-            byteSize: "4096",
-            digest: "sha256:a2a-artifact-1",
-            preview: "远端报告预览",
-          },
-        ],
-      });
+    expect(
+      buildRemoteTaskAgentUiProjectionInputFromAgentRun(run),
+    ).toMatchObject({
+      remoteTaskId: "a2a-task-artifact-1",
+      event: "artifact_updated",
+      status: "running",
+      artifacts: [
+        {
+          artifactId: "a2a-artifact-1",
+          artifactPath: "remote/a2a/report.md",
+          contentRef: "remote-blob://a2a/artifact-1",
+          contentUrl: "https://remote.example/artifacts/1",
+          mimeType: "text/markdown",
+          byteSize: "4096",
+          digest: "sha256:a2a-artifact-1",
+          preview: "远端报告预览",
+        },
+      ],
+    });
 
     const events = buildAgentUiRemoteTaskProjectionEventsFromAgentRun(run);
     expect(events).toContainEqual(
@@ -537,29 +539,31 @@ describe("remoteTaskAgentUiProjection", () => {
       }),
     });
 
-    expect(buildRemoteTaskAgentUiProjectionInputFromAgentRun(run))
-      .toMatchObject({
-        remoteTaskId: "a2a-task-waiting",
-        event: "needs_input",
-        status: "needs_input",
-        remoteStatus: "waiting",
-      });
-    expect(buildAgentUiRemoteTaskProjectionEventsFromAgentRun(run))
-      .toContainEqual(
-        expect.objectContaining({
-          type: "action.required",
-          actionId: "a2a-task-waiting:input",
-          surface: "remote_teammate",
-          control: "answer",
-          runtimeEntity: "external_task",
-          runtimeStatus: "needs_input",
-          payload: expect.objectContaining({
-            actionKind: "remote_task_input_required",
-            remoteEvent: "needs_input",
-            remoteStatus: "waiting",
-          }),
+    expect(
+      buildRemoteTaskAgentUiProjectionInputFromAgentRun(run),
+    ).toMatchObject({
+      remoteTaskId: "a2a-task-waiting",
+      event: "needs_input",
+      status: "needs_input",
+      remoteStatus: "waiting",
+    });
+    expect(
+      buildAgentUiRemoteTaskProjectionEventsFromAgentRun(run),
+    ).toContainEqual(
+      expect.objectContaining({
+        type: "action.required",
+        actionId: "a2a-task-waiting:input",
+        surface: "remote_teammate",
+        control: "answer",
+        runtimeEntity: "external_task",
+        runtimeStatus: "needs_input",
+        payload: expect.objectContaining({
+          actionKind: "remote_task_input_required",
+          remoteEvent: "needs_input",
+          remoteStatus: "waiting",
         }),
-      );
+      }),
+    );
   });
 
   it("应从 remote_task status 消费终态 A2A lifecycle", () => {
@@ -577,23 +581,25 @@ describe("remoteTaskAgentUiProjection", () => {
       }),
     });
 
-    expect(buildRemoteTaskAgentUiProjectionInputFromAgentRun(run))
-      .toMatchObject({
-        remoteTaskId: "a2a-task-terminal",
-        event: "completed",
-        status: "completed",
-        remoteStatus: "completed",
-      });
-    expect(buildAgentUiRemoteTaskProjectionEventsFromAgentRun(run))
-      .toContainEqual(
-        expect.objectContaining({
-          type: "worker.notification",
-          workerNotificationId: "a2a-task-terminal:completed",
-          surface: "worker_notifications",
-          runtimeEntity: "external_task",
-          runtimeStatus: "completed",
-        }),
-      );
+    expect(
+      buildRemoteTaskAgentUiProjectionInputFromAgentRun(run),
+    ).toMatchObject({
+      remoteTaskId: "a2a-task-terminal",
+      event: "completed",
+      status: "completed",
+      remoteStatus: "completed",
+    });
+    expect(
+      buildAgentUiRemoteTaskProjectionEventsFromAgentRun(run),
+    ).toContainEqual(
+      expect.objectContaining({
+        type: "worker.notification",
+        workerNotificationId: "a2a-task-terminal:completed",
+        surface: "worker_notifications",
+        runtimeEntity: "external_task",
+        runtimeStatus: "completed",
+      }),
+    );
   });
 
   it("应让 terminal AgentRun status 优先于 stale remote_task status", () => {
@@ -613,14 +619,15 @@ describe("remoteTaskAgentUiProjection", () => {
       }),
     });
 
-    expect(buildRemoteTaskAgentUiProjectionInputFromAgentRun(run))
-      .toMatchObject({
-        remoteTaskId: "a2a-task-terminal-priority",
-        event: "completed",
-        status: "completed",
-        inputRequired: true,
-        remoteStatus: "running",
-      });
+    expect(
+      buildRemoteTaskAgentUiProjectionInputFromAgentRun(run),
+    ).toMatchObject({
+      remoteTaskId: "a2a-task-terminal-priority",
+      event: "completed",
+      status: "completed",
+      inputRequired: true,
+      remoteStatus: "running",
+    });
     const events = buildAgentUiRemoteTaskProjectionEventsFromAgentRun(run);
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -629,7 +636,9 @@ describe("remoteTaskAgentUiProjection", () => {
         runtimeStatus: "completed",
       }),
     );
-    expect(events.some((event) => event.type === "action.required")).toBe(false);
+    expect(events.some((event) => event.type === "action.required")).toBe(
+      false,
+    );
   });
 
   it("应忽略没有 remote_task provenance 的 agent run", () => {

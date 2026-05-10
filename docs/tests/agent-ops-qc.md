@@ -1,10 +1,10 @@
-# Lime Agent 运营级测试体系
+# Agent 运营级测试体系
 
-> 目标：把 Lime 的测试从“人手工点一遍”升级为“Agent 自动执行、证据可审计、人类只处理例外”的运营级质量系统。
+> 目标：把 Agent 产品测试从“人手工点一遍”升级为“Agent 自动执行、证据可审计、人类只处理例外”的运营级质量系统。
 
 ## 1. 结论
 
-Lime 已经有较丰富的测试基础：`verify:local`、`test:contracts`、`verify:gui-smoke`、`smoke:*`、`harness:eval`、nightly 和发布工作流。下一阶段的关键不是再堆一批零散测试，而是建立一条统一主链：
+成熟 Agent 项目通常已经有较丰富的局部测试基础，例如本仓库的 `verify:local`、`test:contracts`、`verify:gui-smoke`、`smoke:*`、`harness:eval`、nightly 和发布工作流。下一阶段的关键不是再堆一批零散测试，而是建立一条统一主链：
 
 ```text
 改动 / 发布目标
@@ -103,7 +103,7 @@ qcloop 不是替代 `npm`、Rust 或 Playwright，而是把它们编排成可审
 推荐让外层 Agent 创建 qcloop 批次：
 
 ```text
-请读取 http://127.0.0.1:3000/llm-full.txt，然后使用 qcloop 按 docs/test/agent-qc-scenarios.manifest.json 测试当前 Lime 改动。只选择与 diff 风险相关的场景，输出 evidence pack 摘要。
+请读取 http://127.0.0.1:3000/llm-full.txt，然后使用 qcloop 按 docs/test/agent-qc-scenarios.manifest.json 测试当前 Agent 项目改动。只选择与 diff 风险相关的场景，输出 evidence pack 摘要。
 ```
 
 Worker prompt 应遵守：
@@ -176,15 +176,9 @@ npm run agent-qc:release-summary -- \
   --check
 ```
 
-`--check` 的语义是发布门禁：没有 Evidence Pack、Evidence Pack 非 `pass`、未覆盖全部 P0 scenario id，或存在未处理 blocker 时都不能作为绿色发布证据。
+`--check` 的语义是本地 / 人工发布证据检查：没有 Evidence Pack、Evidence Pack 非 `pass`、未覆盖全部 P0 scenario id，或存在未处理 blocker 时都不能作为绿色 Agent QC 证据。
 
-正式 GitHub Release 也执行同一条硬门禁：`.github/workflows/release.yml` 会在创建 / 刷新 release notes 前读取 `agent_qc_evidence_path`，默认值为 `.lime/qc/agent-qc-evidence.json`。文件不存在、`agent-qc-release-summary --check` 非 pass，或 Evidence Pack 未覆盖全部 P0 scenario id 时，release workflow 会直接失败，不再创建“只靠人工点过”的发布。
-
-Nightly 会额外上传 `artifacts/agent-qc/`：
-
-- `agent-qc-report.md/json`：当前场景 manifest 报告。
-- `agent-qc-gui-flow-report.md/json`：当前 GUI / Playwright MCP flow manifest 报告。
-- `release-agent-qc-preview.md/json`：无真实 Evidence Pack 时的 release 摘要预览，状态保持 `blocked`，用于提醒发布前必须补证据。
+Agent QC / qcloop 不进入 GitHub Actions 验证链路。`.github/workflows/release.yml` 只创建或刷新 GitHub Release，`.github/workflows/harness-nightly.yml` 只上传 harness eval 资产，`npm run test:contracts` 不再间接串 `agent-qc:check`。需要 Agent QC 证据时，在本地或人工发布流程中显式运行上面的 report / export / release-summary 命令。
 
 需要判断整体目标是否真的完成时，运行完成度审计：
 
@@ -192,20 +186,20 @@ Nightly 会额外上传 `artifacts/agent-qc/`：
 npm run agent-qc:audit
 ```
 
-该命令会把标准文档、scenario manifest、GUI flow manifest、qcloop payload、Evidence Pack 导出、nightly artifact、真实 qcloop evidence、真实 GUI evidence 和 release hard gate 逐项映射为 `PASS/MISS`。真实 qcloop evidence 必须覆盖 manifest 中所有 P0 scenario id，不能只用相同数量的非 P0 场景凑数。只要真实证据或 release 硬门禁缺失，审计结果就保持 `incomplete`。
+该命令会把标准文档、scenario manifest、GUI flow manifest、qcloop payload、Evidence Pack 导出、GitHub Actions 解耦状态、真实 qcloop evidence、真实 GUI evidence 与本地校验结果逐项映射为 `PASS/MISS`。真实 qcloop evidence 必须覆盖 manifest 中所有 P0 scenario id，不能只用相同数量的非 P0 场景凑数。只要真实证据缺失，或 release / nightly / `test:contracts` 重新接入 Agent QC，审计结果就保持 `incomplete`。
 
 ## 6. 组合测试策略
 
-Agent 产品不能依赖单一测试手段。Lime 的默认组合如下：
+Agent 产品不能依赖单一测试手段。当前仓库样本的默认组合如下：
 
-| 组合 | 用法 | Lime 示例 |
+| 组合 | 用法 | 当前仓库示例 |
 | --- | --- | --- |
 | 白盒 + 黑盒 | 白盒看 transcript，黑盒看用户结果 | tool timeline + GUI 状态 |
 | 快照 + 语义评测 | UI 防结构漂移，Agent 防语义退化 | React snapshot + harness grader |
 | 冒烟 + 长程任务 | PR 快速验证，nightly 跑长链 | `verify:gui-smoke` + `harness:eval:trend` |
 | Mock + Real Backend | 本地可 mock，发布必须真实路径 | DevBridge mock + release startup smoke |
 | 确定性断言 + LLM Judge | 合同用代码断言，开放回答用 rubric | `test:contracts` + grader.md |
-| CI + qcloop | CI 做硬门禁，qcloop 做批量质检 | manifest item + verifier/repair |
+| CI + qcloop | CI 跑通用质量门禁，qcloop 做本地 / 人工批量质检 | manifest item + verifier/repair |
 
 ## 7. 改动类型到测试选择
 
@@ -262,7 +256,7 @@ Quality evidence:
 - Evidence Pack schema：`docs/test/agent-qc-evidence.schema.json`。
 - 核心场景 manifest：`docs/test/agent-qc-scenarios.manifest.json`。
 - manifest 校验与报告脚本：`scripts/agent-qc-report.mjs`。
-- `test:contracts` 接入 `agent-qc:check`，避免 QC 标准自身漂移。
+- `agent-qc:check` 保持为本地显式入口，避免 QC 标准自身漂移；`test:contracts` 不再间接触发 Agent QC。
 - qcloop job 导出脚本：`scripts/agent-qc-export-evidence.mjs`，可把真实 job / items 转成 Evidence Pack sidecar。
 - qcloop 只读状态监控：`scripts/agent-qc-qcloop-status.mjs`，可识别 running / pending / exhausted / stale，并在 worker stdout 明确 `QCLOOP_WORKER_RESULT=BLOCKED` 时保留环境阻断语义。
 - release summary 与 completion audit：`scripts/agent-qc-release-summary.mjs`、`scripts/agent-qc-completion-audit.mjs`，发布门禁只接受官方 pass evidence。

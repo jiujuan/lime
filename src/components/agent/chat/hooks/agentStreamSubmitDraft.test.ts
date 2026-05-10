@@ -158,12 +158,10 @@ describe("agentStreamSubmitDraft", () => {
     let isSending = false;
     const requestAnimationFrameSpy = vi
       .spyOn(window, "requestAnimationFrame")
-      .mockImplementation(
-        (callback: FrameRequestCallback) => {
-          callback(0);
-          return 1;
-        },
-      );
+      .mockImplementation((callback: FrameRequestCallback) => {
+        callback(0);
+        return 1;
+      });
 
     prepareAgentStreamSubmitDraft({
       content: "只回答一个字：好",

@@ -60,11 +60,7 @@ function normalizeDetectedTextRect(
     fallback.height,
   );
   const x = clamp(Math.round(rect.x), 0, Math.max(0, fallback.width - width));
-  const y = clamp(
-    Math.round(rect.y),
-    0,
-    Math.max(0, fallback.height - height),
-  );
+  const y = clamp(Math.round(rect.y), 0, Math.max(0, fallback.height - height));
 
   return { x, y, width, height };
 }
@@ -181,7 +177,9 @@ export function createLayeredDesignPrioritizedTextOcrProvider(
 export function createLayeredDesignWorkerTextCandidateExtractorFromOcrProvider(
   provider: LayeredDesignFlatImageTextOcrProvider,
 ): LayeredDesignWorkerHeuristicTextCandidateExtractor {
-  return async (input): Promise<LayeredDesignWorkerHeuristicTextCandidateExtractorResult> => {
+  return async (
+    input,
+  ): Promise<LayeredDesignWorkerHeuristicTextCandidateExtractorResult> => {
     const cropAsset: GeneratedDesignAsset = {
       id: `${input.candidate.id}-ocr-crop`,
       kind: "text_raster",

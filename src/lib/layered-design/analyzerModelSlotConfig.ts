@@ -105,7 +105,10 @@ function normalizePositiveInteger(
 
 function normalizeTimeoutMs(value: number | undefined): number {
   return Math.min(
-    Math.max(normalizePositiveInteger(value, DEFAULT_TIMEOUT_MS), MIN_TIMEOUT_MS),
+    Math.max(
+      normalizePositiveInteger(value, DEFAULT_TIMEOUT_MS),
+      MIN_TIMEOUT_MS,
+    ),
     MAX_TIMEOUT_MS,
   );
 }
@@ -116,7 +119,10 @@ function createDefaultIoConfig(
 ): Required<LayeredDesignAnalyzerModelSlotIoConfig> {
   return {
     dataUrlPng: normalizeBoolean(input.dataUrlPng, true),
-    alphaOutput: normalizeBoolean(input.alphaOutput, kind === "subject_matting"),
+    alphaOutput: normalizeBoolean(
+      input.alphaOutput,
+      kind === "subject_matting",
+    ),
     maskInput: normalizeBoolean(input.maskInput, kind === "clean_plate"),
     maskOutput: normalizeBoolean(input.maskOutput, kind === "subject_matting"),
     textGeometry: normalizeBoolean(input.textGeometry, kind === "text_ocr"),

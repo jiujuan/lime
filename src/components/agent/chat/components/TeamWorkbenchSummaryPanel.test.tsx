@@ -695,7 +695,9 @@ describe("TeamWorkbenchSummaryPanel", () => {
     });
 
     expect(onWorkbenchAction).toHaveBeenCalledTimes(1);
-    expect(container.textContent).toContain("指派修复 · review-1:requested-fix:1");
+    expect(container.textContent).toContain(
+      "指派修复 · review-1:requested-fix:1",
+    );
     expect(container.textContent).toContain("已回填输入");
     expect(container.textContent).toContain(
       "requested fix 已回填到输入框；发送后才会进入真实执行，不在工作台内伪造完成态。",
@@ -932,7 +934,9 @@ describe("TeamWorkbenchSummaryPanel", () => {
       },
     ]);
 
-    const onWorkbenchAction = vi.fn().mockReturnValue("work_item_source_located");
+    const onWorkbenchAction = vi
+      .fn()
+      .mockReturnValue("work_item_source_located");
     const container = renderPanel({
       currentSessionId: "session-team-1",
       onWorkbenchAction,
@@ -1006,7 +1010,9 @@ describe("TeamWorkbenchSummaryPanel", () => {
       },
     ]);
 
-    const onWorkbenchReassign = vi.fn().mockResolvedValue("seeded_reassignment");
+    const onWorkbenchReassign = vi
+      .fn()
+      .mockResolvedValue("seeded_reassignment");
     const container = renderPanel({
       currentSessionId: "session-team-1",
       childSubagentSessions: [

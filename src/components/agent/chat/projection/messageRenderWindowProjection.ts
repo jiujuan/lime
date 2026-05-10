@@ -87,10 +87,7 @@ export function buildConversationMessageRenderWindowProjection<
     settings: params.settings,
   });
   const renderedMessageCount = shouldUseProgressiveRender
-    ? Math.min(
-        visibleMessages.length,
-        Math.max(0, params.renderedMessageCount),
-      )
+    ? Math.min(visibleMessages.length, Math.max(0, params.renderedMessageCount))
     : visibleMessages.length;
   const hiddenHistoryCount = shouldUseProgressiveRender
     ? Math.max(0, visibleMessages.length - renderedMessageCount)

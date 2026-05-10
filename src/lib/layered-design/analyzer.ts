@@ -40,9 +40,7 @@ export interface AnalyzeLayeredDesignFlatImageParams {
     mimeType?: string;
     hasAlpha?: boolean;
   };
-  structuredAnalyzerProvider?:
-    | LayeredDesignFlatImageStructuredAnalyzerProvider
-    | null;
+  structuredAnalyzerProvider?: LayeredDesignFlatImageStructuredAnalyzerProvider | null;
   textOcrProvider?: LayeredDesignFlatImageTextOcrProvider | null;
   createdAt?: string;
 }
@@ -83,16 +81,14 @@ interface LayeredDesignFlatImageStructuredCandidateBase {
   issues?: LayeredDesignExtractionCandidateIssue[];
 }
 
-export interface LayeredDesignFlatImageStructuredImageCandidate
-  extends LayeredDesignFlatImageStructuredCandidateBase {
+export interface LayeredDesignFlatImageStructuredImageCandidate extends LayeredDesignFlatImageStructuredCandidateBase {
   type: "image";
   image: LayeredDesignFlatImageStructuredAssetInput;
   mask?: LayeredDesignFlatImageStructuredAssetInput;
   prompt?: string;
 }
 
-export interface LayeredDesignFlatImageStructuredTextCandidate
-  extends LayeredDesignFlatImageStructuredCandidateBase {
+export interface LayeredDesignFlatImageStructuredTextCandidate extends LayeredDesignFlatImageStructuredCandidateBase {
   type: "text";
   text: string;
   fontFamily?: string;
@@ -464,7 +460,10 @@ function getTextDetectorConstructor(): TextDetectorConstructorLike | null {
   return typeof textDetector === "function" ? textDetector : null;
 }
 
-function createCanvas(size: { width: number; height: number }): HTMLCanvasElement {
+function createCanvas(size: {
+  width: number;
+  height: number;
+}): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(size.width));
   canvas.height = Math.max(1, Math.round(size.height));
@@ -499,7 +498,10 @@ function createEllipseMaskCanvas(size: {
   height: number;
 }): HTMLCanvasElement {
   const canvas = createCanvas(size);
-  const context = getCanvasContext(canvas, "当前环境不支持本地 analyzer mask 生成");
+  const context = getCanvasContext(
+    canvas,
+    "当前环境不支持本地 analyzer mask 生成",
+  );
   const width = canvas.width;
   const height = canvas.height;
 
@@ -527,7 +529,10 @@ function applyMaskToCropImage(
   maskCanvas: HTMLCanvasElement,
 ): string {
   const canvas = createCanvas(size);
-  const context = getCanvasContext(canvas, "当前环境不支持本地 analyzer 主体抠图");
+  const context = getCanvasContext(
+    canvas,
+    "当前环境不支持本地 analyzer 主体抠图",
+  );
 
   context.drawImage(sourceImage, 0, 0, canvas.width, canvas.height);
   context.globalCompositeOperation = "destination-in";
@@ -544,7 +549,8 @@ function readApproximateBackgroundFill(
     const samples = [
       context.getImageData(0, 0, 1, 1).data,
       context.getImageData(Math.max(0, context.canvas.width - 1), 0, 1, 1).data,
-      context.getImageData(0, Math.max(0, context.canvas.height - 1), 1, 1).data,
+      context.getImageData(0, Math.max(0, context.canvas.height - 1), 1, 1)
+        .data,
       context.getImageData(
         Math.max(0, context.canvas.width - 1),
         Math.max(0, context.canvas.height - 1),
@@ -622,11 +628,7 @@ function normalizeDetectedTextRect(
     fallback.height,
   );
   const x = clamp(Math.round(rect.x), 0, Math.max(0, fallback.width - width));
-  const y = clamp(
-    Math.round(rect.y),
-    0,
-    Math.max(0, fallback.height - height),
-  );
+  const y = clamp(Math.round(rect.y), 0, Math.max(0, fallback.height - height));
 
   return { x, y, width, height };
 }
@@ -845,7 +847,8 @@ function normalizeOcrTextBlocks(
   return blocks
     .map((block) => {
       const confidence =
-        typeof block.confidence === "number" && Number.isFinite(block.confidence)
+        typeof block.confidence === "number" &&
+        Number.isFinite(block.confidence)
           ? clamp(block.confidence, 0, 1)
           : undefined;
 
@@ -859,9 +862,7 @@ function normalizeOcrTextBlocks(
     .filter((item) => item.text.length > 0);
 }
 
-export function createLayeredDesignTextDetectorOcrProvider():
-  | LayeredDesignFlatImageTextOcrProvider
-  | null {
+export function createLayeredDesignTextDetectorOcrProvider(): LayeredDesignFlatImageTextOcrProvider | null {
   const TextDetectorConstructor = getTextDetectorConstructor();
   if (!TextDetectorConstructor) {
     return null;
@@ -909,8 +910,7 @@ export function createLayeredDesignNativeTextOcrProvider(
 }
 
 export function createLayeredDesignNativeStructuredAnalyzerProvider(
-  analyzeNative: AnalyzeLayeredDesignFlatImageNative =
-    analyzeLayeredDesignFlatImageNative,
+  analyzeNative: AnalyzeLayeredDesignFlatImageNative = analyzeLayeredDesignFlatImageNative,
 ): LayeredDesignFlatImageStructuredAnalyzerProvider {
   return {
     analyze: async (input) => {
@@ -958,10 +958,12 @@ async function buildLocalHeuristicStructuredResult(
   textOcrProviderLabel?: string;
 }> {
   const subjectCandidate = seedCandidates.find(
-    (candidate) => candidate.role === "subject" && isImageCandidateInput(candidate),
+    (candidate) =>
+      candidate.role === "subject" && isImageCandidateInput(candidate),
   );
   const textCandidates = seedCandidates.filter(
-    (candidate) => candidate.role === "text" && isImageCandidateInput(candidate),
+    (candidate) =>
+      candidate.role === "text" && isImageCandidateInput(candidate),
   );
   const detectedTextCandidates = (
     await Promise.all(
@@ -1141,7 +1143,9 @@ async function buildLocalHeuristicStructuredResult(
     };
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "本地 heuristic clean plate 生成失败";
+      error instanceof Error
+        ? error.message
+        : "本地 heuristic clean plate 生成失败";
 
     return {
       candidates: seedCandidates.flatMap(
@@ -1211,7 +1215,9 @@ export function createLayeredDesignFlatImageAnalysisResultFromStructuredResult(
           (candidate) => candidate.type === "image" && Boolean(candidate.mask),
         ),
         cleanPlate: cleanPlate.status === "succeeded",
-        ocrText: params.candidates.some((candidate) => candidate.type === "text"),
+        ocrText: params.candidates.some(
+          (candidate) => candidate.type === "text",
+        ),
       },
       ...(params.providerCapabilities && params.providerCapabilities.length > 0
         ? { providerCapabilities: params.providerCapabilities }

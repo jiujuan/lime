@@ -1,7 +1,4 @@
-import {
-  isImageDesignLayer,
-  sortDesignLayers,
-} from "./document";
+import { isImageDesignLayer, sortDesignLayers } from "./document";
 import {
   evaluateLayeredDesignAnalyzerModelSlotConfigReadiness,
   normalizeLayeredDesignAnalyzerModelSlotConfig,
@@ -9,12 +6,8 @@ import {
   type LayeredDesignAnalyzerModelSlotConfigInput,
   type LayeredDesignAnalyzerModelSlotConfigReadiness,
 } from "./analyzerModelSlotConfig";
-import type {
-  LayeredDesignAnalyzerModelSlotExecutionEvidence,
-} from "./analyzerModelSlotRuntime";
-import type {
-  LayeredDesignAnalyzerModelSlotQualityContractValidation,
-} from "./analyzerModelSlotTransport";
+import type { LayeredDesignAnalyzerModelSlotExecutionEvidence } from "./analyzerModelSlotRuntime";
+import type { LayeredDesignAnalyzerModelSlotQualityContractValidation } from "./analyzerModelSlotTransport";
 import {
   evaluateLayeredDesignExtractionQuality,
   type LayeredDesignExtractionQualityAssessment,
@@ -117,13 +110,11 @@ export interface LayeredDesignExportModelSlotExecutionSource {
   layerType?: DesignLayer["type"];
 }
 
-export interface LayeredDesignExportModelSlotExecutionSummary
-  extends LayeredDesignAnalyzerModelSlotExecutionEvidence {
+export interface LayeredDesignExportModelSlotExecutionSummary extends LayeredDesignAnalyzerModelSlotExecutionEvidence {
   sources: LayeredDesignExportModelSlotExecutionSource[];
 }
 
-export interface LayeredDesignExportModelSlotQualityValidationSummary
-  extends LayeredDesignAnalyzerModelSlotQualityContractValidation {
+export interface LayeredDesignExportModelSlotQualityValidationSummary extends LayeredDesignAnalyzerModelSlotQualityContractValidation {
   slotId: LayeredDesignAnalyzerModelSlotExecutionEvidence["slotId"];
   slotKind: LayeredDesignAnalyzerModelSlotExecutionEvidence["slotKind"];
   providerLabel: LayeredDesignAnalyzerModelSlotExecutionEvidence["providerLabel"];
@@ -481,7 +472,11 @@ function renderImageLayerSvg(
 
 function renderTextLayerSvg(layer: TextLayer): string {
   const anchor =
-    layer.align === "center" ? "middle" : layer.align === "right" ? "end" : "start";
+    layer.align === "center"
+      ? "middle"
+      : layer.align === "right"
+        ? "end"
+        : "start";
   const textX =
     layer.align === "center"
       ? layer.x + layer.width / 2
@@ -822,7 +817,9 @@ function readNumber(
   key: string,
 ): number | undefined {
   const field = value[key];
-  return typeof field === "number" && Number.isFinite(field) ? field : undefined;
+  return typeof field === "number" && Number.isFinite(field)
+    ? field
+    : undefined;
 }
 
 function readBoolean(
@@ -897,8 +894,7 @@ function readModelSlotExecutionEvidence(
     fallbackStrategy:
       fallbackStrategy as LayeredDesignAnalyzerModelSlotExecutionEvidence["fallbackStrategy"],
     fallbackUsed,
-    status:
-      status as LayeredDesignAnalyzerModelSlotExecutionEvidence["status"],
+    status: status as LayeredDesignAnalyzerModelSlotExecutionEvidence["status"],
     ...(readOptionalString(raw, "providerId")
       ? { providerId: readOptionalString(raw, "providerId") }
       : {}),
@@ -1044,7 +1040,9 @@ function collectLayeredDesignModelSlotQualityValidations(
   >();
   const addValidation = (
     evidence: LayeredDesignAnalyzerModelSlotExecutionEvidence | undefined,
-    validation: LayeredDesignAnalyzerModelSlotQualityContractValidation | undefined,
+    validation:
+      | LayeredDesignAnalyzerModelSlotQualityContractValidation
+      | undefined,
     source: LayeredDesignExportModelSlotExecutionSource,
   ) => {
     if (!evidence || !validation) {
@@ -1201,7 +1199,8 @@ export function createLayeredDesignExportBundle(
       kind: asset.kind,
       source: asset.src ? (assetFile ? "file" : "reference") : "missing",
       filename: assetFile?.filename,
-      originalSrc: asset.src && !assetFile?.embeddedDataUrl ? asset.src : undefined,
+      originalSrc:
+        asset.src && !assetFile?.embeddedDataUrl ? asset.src : undefined,
       width: asset.width,
       height: asset.height,
       hasAlpha: asset.hasAlpha,

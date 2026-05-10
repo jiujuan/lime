@@ -38,10 +38,12 @@ describe("agentStreamTextRenderFlushController", () => {
         accumulatedContent: "好啊",
       }),
     ).toBe(false);
-    expect(shouldScheduleAgentStreamTextRenderTimer({ hasPendingTimer: false }))
-      .toBe(true);
-    expect(shouldScheduleAgentStreamTextRenderTimer({ hasPendingTimer: true }))
-      .toBe(false);
+    expect(
+      shouldScheduleAgentStreamTextRenderTimer({ hasPendingTimer: false }),
+    ).toBe(true);
+    expect(
+      shouldScheduleAgentStreamTextRenderTimer({ hasPendingTimer: true }),
+    ).toBe(false);
   });
 
   it("应判断换行边界和积压阈值 flush 条件", () => {

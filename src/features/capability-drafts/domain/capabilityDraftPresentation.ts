@@ -34,12 +34,14 @@ const STATUS_PRESENTATION: Record<
   },
   verified_pending_registration: {
     label: "验证通过，待注册",
-    description: "最小验证已通过，可以注册到当前 Workspace，但仍不会运行或接入自动化。",
+    description:
+      "最小验证已通过，可以注册到当前 Workspace，但仍不会运行或接入自动化。",
     tone: "slate",
   },
   registered: {
     label: "已注册",
-    description: "已写入当前 Workspace 的本地 Skill 目录；运行与自动化仍需后续 runtime gate。",
+    description:
+      "已写入当前 Workspace 的本地 Skill 目录；运行与自动化仍需后续 runtime gate。",
     tone: "emerald",
   },
 };
@@ -109,9 +111,7 @@ export function summarizeCapabilityDraftRegistration(
     return "还没有注册到 Workspace。";
   }
   const directory = draft.lastRegistration.skillDirectory.trim();
-  return directory
-    ? `已注册目录：${directory}`
-    : "已注册到当前 Workspace。";
+  return directory ? `已注册目录：${directory}` : "已注册到当前 Workspace。";
 }
 
 export function summarizeCapabilityDraftFailedChecks(

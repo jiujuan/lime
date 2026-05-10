@@ -220,11 +220,13 @@ function buildAgentQcCompletionAudit(facts) {
       "缺少 release summary 入口。",
     ),
     createItem(
-      "nightly-artifacts",
-      "nightly 上传 Agent QC 标准资产报告",
-      facts.nightly?.hasAgentQcReport && facts.nightly?.hasGuiFlowReport && facts.nightly?.hasReleasePreview,
-      ".github/workflows/harness-nightly.yml artifacts/agent-qc/*",
-      "nightly 未完整上传 Agent QC report / GUI flow report / release preview。",
+      "github-actions-detached",
+      "GitHub Actions 不执行 Agent QC 验证",
+      facts.githubActions?.releaseDetached === true &&
+        facts.githubActions?.nightlyDetached === true &&
+        facts.githubActions?.contractsDetached === true,
+      `release=${Boolean(facts.githubActions?.releaseDetached)} nightly=${Boolean(facts.githubActions?.nightlyDetached)} test:contracts=${Boolean(facts.githubActions?.contractsDetached)}`,
+      "release、nightly 或 test:contracts 仍会在 GitHub Actions 中触发 Agent QC / qcloop。",
     ),
     createItem(
       "real-qcloop-evidence",
@@ -240,15 +242,6 @@ function buildAgentQcCompletionAudit(facts) {
       facts.files?.realGuiEvidence,
       facts.files?.realGuiEvidence ? ".lime/qc/gui-evidence" : "未发现 .lime/qc/gui-evidence",
       "尚未执行真实 GUI / Playwright MCP flow 并保存证据。",
-    ),
-    createItem(
-      "release-hard-gate",
-      "release workflow 强制 Evidence Pack pass 且覆盖 P0 场景",
-      facts.release?.hasHardGate === true && facts.release?.requiresP0ScenarioCoverage === true,
-      facts.release?.hasHardGate && facts.release?.requiresP0ScenarioCoverage
-        ? ".github/workflows/release.yml contains agent-qc release gate and P0 scenario coverage"
-        : "release.yml 未完整强制 agent-qc release gate / P0 scenario coverage",
-      "release workflow 尚未强制真实 Evidence Pack pass 或 P0 场景覆盖。",
     ),
     createItem(
       "local-verify-gate",

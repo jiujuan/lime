@@ -504,3 +504,44 @@ evidence=.lime/qc/verify-gui-smoke-reuse-sensenova-session-restore-2026-05-11-01
 | qcloop official P0 Evidence Pack | 仍未关闭；官方 `.lime/qc/agent-qc-evidence.json` 仍为 fail，且 stale qcloop GUI owner 未释放 |
 
 因此，本条从“当前 GUI smoke blocker”降级为“provider 口径 / full local verify 未闭环”缺口；它不能替代完整 `verify:local` 和真实 8/8 P0 qcloop Evidence Pack。
+
+### 5.13 当前门禁刷新（2026-05-11 01:57）
+
+| 门禁 | 当前值 | 结论 |
+| --- | --- | --- |
+| completion audit | `16/18`，`status=incomplete` | `release-hard-gate` 已恢复 PASS；缺口只剩 `real-qcloop-evidence` 与 `local-verify-gate` |
+| release workflow | 缺 Evidence Pack 时 `exit 1`，存在 evidence 时强制 `agent-qc-release-summary --check` | 已去除 release workflow 的 `--allow-missing-evidence` 发布预览分支 |
+| release summary against official evidence | exit `1` | 当前官方 `.lime/qc/agent-qc-evidence.json` 仍为 fail，发布被正确阻断 |
+| qcloop status | `verdict=stale` | job `1778405842243079000` 为 `4 success / 1 running / 3 pending / 1 stale` |
+| GUI owner | `blocked` | stale owner 最长约 `29474s`；仍需 owner 明确确认或自然释放 |
+| DB lease | `status=running` | active item `browser-runtime-site-adapter`，PID `69738`，`lock_expires_at=2026-05-11T02:11:06+08:00` |
+| raw process owner | `busy` | activeGuiSmoke=`2`、cargoOrRust=`4`、qcloopRelated=`7`；本轮不跑完整 `verify:local` |
+| `.lime/qc` secret scan | `pass` | `fileCount=315`、`findingCount=0` |
+
+当前允许继续：只读刷新 qcloop / GUI owner / DB lease / process owner sidecar，维护 docs/tests 和 Agent QC 脚本的小范围逻辑，运行轻量 `agent-qc:*` 与定向 Vitest。当前不允许：处理中断 PID `69738`、修改 qcloop DB、启动新的 full GUI P0、覆盖官方 Evidence Pack、执行 git commit / push / tag / release，或在 raw process owner 仍 busy 时运行完整 `npm run verify:local`。
+
+### 5.14 目标级审计刷新（2026-05-11 02:02）
+
+| 门禁 | 当前值 | 结论 |
+| --- | --- | --- |
+| objective completion audit | `achieved=false` | `.lime/qc/objective-completion-audit-current.json` 明确失败项为 `real-p0-qcloop-evidence` 与 `local-verify-gate` |
+| qcloop status | `verdict=stale` | job `1778405842243079000` 仍 `4 success / 1 running / 3 pending / 1 stale` |
+| GUI owner | `blocked` | stale owner 最长约 `29693s` |
+| DB lease | `status=running` | `browser-runtime-site-adapter` active attempt 仍无 stdout/stderr，`lock_expires_at=2026-05-11T02:14:06+08:00` |
+| raw process owner | `busy` | activeGuiSmoke=`2`、cargoOrRust=`4`、qcloopRelated=`7` |
+| 通用标准口径 | 已补强 | `agent-ops-qc.md` 与 `ai-agent-testing-guide.md` 不再以 Lime 作为标准标题；Lime 样本仍在 `lime-*` 文档中 |
+
+当前整体仍不可标记 complete；下一步仍是等待 owner / process 自然释放，或获得明确 owner 确认后处理 stale worker，然后再跑完整 `verify:local` 与单 owner full P0 qcloop。
+
+### 5.15 GitHub Actions 解耦口径（2026-05-11 02:05）
+
+| 门禁 | 当前值 | 结论 |
+| --- | --- | --- |
+| completion audit | `15/17`，`status=incomplete` | 新口径移除 release/nightly hard gate 项，新增 `github-actions-detached` 且已 PASS |
+| GitHub release workflow | 不再执行 Agent QC | `.github/workflows/release.yml` 只创建 / 刷新 GitHub Release |
+| harness nightly | 不再上传 `artifacts/agent-qc/*` | `.github/workflows/harness-nightly.yml` 只保留 harness eval artifacts |
+| `test:contracts` | 不再串 `agent-qc:check` | Agent QC 校验改为显式本地入口 |
+| release summary 本地 gate | exit `1` against current official evidence | 当前 fail Evidence Pack 仍被 `agent-qc:release-summary --check` 阻断 |
+| objective completion audit | `achieved=false` | `.lime/qc/objective-completion-audit-current.json` schema `v3` 失败项仍为 `real-p0-qcloop-evidence` 与 `local-verify-gate` |
+
+该口径不改变核心发布事实：没有真实 8/8 P0 qcloop pass 和完整 `verify:local` pass 时，仍不能把当前状态标记为整体完成，也不能覆盖官方 `.lime/qc/agent-qc-evidence.json`。

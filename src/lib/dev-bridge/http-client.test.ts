@@ -479,9 +479,9 @@ describe("http-client", () => {
   it("启动关键真相命令应保留更长超时窗口，避免冷启动误判后端不可用", () => {
     expect(resolveBridgeRequestTimeoutMs("aster_agent_init")).toBe(30000);
     expect(resolveBridgeRequestTimeoutMs("workspace_ensure_ready")).toBe(30000);
-    expect(resolveBridgeRequestTimeoutMs("workspace_ensure_default_ready")).toBe(
-      30000,
-    );
+    expect(
+      resolveBridgeRequestTimeoutMs("workspace_ensure_default_ready"),
+    ).toBe(30000);
     expect(resolveBridgeRequestTimeoutMs("sceneapp_list_catalog")).toBe(30000);
     expect(resolveBridgeRequestTimeoutMs("gateway_channel_status")).toBe(5000);
     expect(resolveBridgeRequestTimeoutMs("list_executable_skills")).toBe(5000);

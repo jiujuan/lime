@@ -220,6 +220,41 @@ describe("resolveServiceSkillLaunchPrefill", () => {
     });
   });
 
+  it("creation replay hint 允许通过 launch prefill copy 本地化", () => {
+    const creationReplay: CreationReplayMetadata = {
+      version: 1,
+      kind: "skill_scaffold",
+      source: {
+        page: "skills",
+        source_message_id: "message-1",
+      },
+      data: {
+        name: "AI Agent 行业拆解",
+        description: "参考原文做一版 90 秒总结。",
+        source_excerpt: "参考 https://example.com/report。",
+      },
+    };
+
+    expect(
+      resolveServiceSkillLaunchPrefill({
+        skill: createResearchSkill(),
+        creationReplay,
+        copy: {
+          creationReplay: {
+            sourceLabels: {
+              skillScaffold: "the current Skill draft",
+            },
+            formatFieldSummary: (visibleLabels) => visibleLabels.join(", "),
+            formatHint: (sourceLabel, fieldSummary) =>
+              `Prefilled ${fieldSummary} from ${sourceLabel}. Review before running.`,
+          },
+        },
+      })?.hint,
+    ).toBe(
+      "Prefilled 文章链接/正文, 目标时长 from the current Skill draft. Review before running.",
+    );
+  });
+
   it("没有最近技能参数时，应回退到最近一次成功 scene 输入", () => {
     recordSlashEntryUsage({
       kind: "scene",

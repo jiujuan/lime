@@ -308,9 +308,8 @@ export function AgentThreadTimelineArtifactCard({
       "artifactDocumentId",
       "artifact_document_id",
     ]);
-  const latestArtifactProjection = useLatestAgentUiProjectionEventForArtifact(
-    artifactProjectionId,
-  );
+  const latestArtifactProjection =
+    useLatestAgentUiProjectionEventForArtifact(artifactProjectionId);
   const metadataKind = readMetadataText(metadata, [
     "artifactKind",
     "artifact_kind",

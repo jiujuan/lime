@@ -46,7 +46,9 @@ function agentItem(
   };
 }
 
-function detail(overrides: Partial<AsterSessionDetail> = {}): AsterSessionDetail {
+function detail(
+  overrides: Partial<AsterSessionDetail> = {},
+): AsterSessionDetail {
   return {
     id: "topic-a",
     created_at: 1,

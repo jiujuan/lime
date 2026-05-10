@@ -272,7 +272,9 @@ function normalizeWorkbenchReassignmentValue(
 function normalizeWorkbenchReassignmentKey(
   value?: string | null,
 ): string | null {
-  return normalizeWorkbenchReassignmentValue(value)?.toLocaleLowerCase() ?? null;
+  return (
+    normalizeWorkbenchReassignmentValue(value)?.toLocaleLowerCase() ?? null
+  );
 }
 
 function appendWorkbenchReassignmentCandidate(
@@ -340,12 +342,12 @@ function canReassignWorkbenchItem(
 ): item is AgentUiTeamWorkbenchViewItem {
   return Boolean(
     item &&
-      item.event.surface === "work_board" &&
-      (item.target.workItemId ||
-        item.event.workItemId ||
-        item.target.taskId ||
-        item.event.taskId ||
-        item.action?.targetId),
+    item.event.surface === "work_board" &&
+    (item.target.workItemId ||
+      item.event.workItemId ||
+      item.target.taskId ||
+      item.event.taskId ||
+      item.action?.targetId),
   );
 }
 
@@ -404,10 +406,7 @@ function buildWorkbenchReassignmentCandidates(params: {
   return filtered.length > 0 ? filtered : candidates;
 }
 
-function appendRelatedWorkbenchKey(
-  keys: Set<string>,
-  value?: string | null,
-) {
+function appendRelatedWorkbenchKey(keys: Set<string>, value?: string | null) {
   const normalized = value?.trim();
   if (normalized) {
     keys.add(normalized);
@@ -504,7 +503,11 @@ function appendRelatedWorkbenchEventKeys(
   appendRelatedWorkbenchPayloadText(keys, event.payload, "executionResultRef");
   appendRelatedWorkbenchPayloadList(keys, event.payload, "artifactIds");
   appendRelatedWorkbenchPayloadList(keys, event.payload, "artifactPaths");
-  appendRelatedWorkbenchPayloadList(keys, event.payload, "executionArtifactIds");
+  appendRelatedWorkbenchPayloadList(
+    keys,
+    event.payload,
+    "executionArtifactIds",
+  );
   appendRelatedWorkbenchPayloadList(
     keys,
     event.payload,
@@ -647,7 +650,10 @@ function buildWorkbenchTranscriptZoom(
     item.target.agentId,
     item.event.agentId,
   );
-  const taskId = firstWorkbenchTargetValue(item.target.taskId, item.event.taskId);
+  const taskId = firstWorkbenchTargetValue(
+    item.target.taskId,
+    item.event.taskId,
+  );
 
   return {
     transcriptRef: transcriptRef ?? item.id,
@@ -768,10 +774,8 @@ export function TeamWorkbenchSummaryPanel({
     selectedWorkbenchActionRouteResult,
     setSelectedWorkbenchActionRouteResult,
   ] = useState<string | null>(null);
-  const [
-    selectedReassignmentAssignee,
-    setSelectedReassignmentAssignee,
-  ] = useState("");
+  const [selectedReassignmentAssignee, setSelectedReassignmentAssignee] =
+    useState("");
   const [reassignmentPending, setReassignmentPending] = useState(false);
   const [reassignmentError, setReassignmentError] = useState<string | null>(
     null,
@@ -849,8 +853,7 @@ export function TeamWorkbenchSummaryPanel({
     [selectedWorkbenchItem],
   );
   const selectedWorkbenchActionRouteStatus = useMemo(
-    () =>
-      buildWorkbenchActionRouteStatus(selectedWorkbenchActionRouteResult),
+    () => buildWorkbenchActionRouteStatus(selectedWorkbenchActionRouteResult),
     [selectedWorkbenchActionRouteResult],
   );
   const selectedWorkbenchReassignmentCandidates = useMemo(
@@ -872,8 +875,8 @@ export function TeamWorkbenchSummaryPanel({
   );
   const selectedWorkbenchCanReassign = Boolean(
     onWorkbenchReassign &&
-      canReassignWorkbenchItem(selectedWorkbenchItem) &&
-      selectedWorkbenchReassignmentCandidates.length > 0,
+    canReassignWorkbenchItem(selectedWorkbenchItem) &&
+    selectedWorkbenchReassignmentCandidates.length > 0,
   );
   const selectedTranscriptChildSessionId =
     selectedWorkbenchTranscriptZoom?.childSessionId;
@@ -889,10 +892,9 @@ export function TeamWorkbenchSummaryPanel({
   const selectedTranscriptLiveActivityEntries = useMemo(
     () =>
       selectedTranscriptChildSessionId
-        ? (liveActivityBySessionId[selectedTranscriptChildSessionId] ?? []).slice(
-            0,
-            3,
-          )
+        ? (
+            liveActivityBySessionId[selectedTranscriptChildSessionId] ?? []
+          ).slice(0, 3)
         : [],
     [liveActivityBySessionId, selectedTranscriptChildSessionId],
   );
@@ -986,7 +988,8 @@ export function TeamWorkbenchSummaryPanel({
   );
   const selectedTranscriptHistoryStatus =
     selectedTranscriptHistoryState &&
-    selectedTranscriptHistoryState.sessionId === selectedTranscriptChildSessionId
+    selectedTranscriptHistoryState.sessionId ===
+      selectedTranscriptChildSessionId
       ? selectedTranscriptHistoryState.status
       : null;
   const selectedTranscriptRuntimeState = selectedTranscriptChildSessionId
@@ -1358,8 +1361,9 @@ export function TeamWorkbenchSummaryPanel({
                 ) : null}
               </div>
               <p className="mt-1 text-[10px] leading-4 text-slate-600">
-                这里只定位 Agent UI 标准 surface 中的目标，不从文本推断状态，也不伪造
-                remote / review / handoff 运行时调用。
+                这里只定位 Agent UI 标准 surface
+                中的目标，不从文本推断状态，也不伪造 remote / review / handoff
+                运行时调用。
               </p>
               {selectedWorkbenchActionRouteStatus ? (
                 <div
@@ -1409,8 +1413,8 @@ export function TeamWorkbenchSummaryPanel({
                     </span>
                   </div>
                   <p className="mt-1 text-[10px] leading-4 text-slate-600">
-                    选择目标负责人后只回填 TaskUpdate 指令；发送并执行后，Agent UI
-                    仍以 TaskUpdate 返回的 owner_change / ownerChange
+                    选择目标负责人后只回填 TaskUpdate 指令；发送并执行后，Agent
+                    UI 仍以 TaskUpdate 返回的 owner_change / ownerChange
                     metadata 作为唯一负责人变化 source。
                   </p>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -1444,9 +1448,7 @@ export function TeamWorkbenchSummaryPanel({
                       onClick={() => void handleWorkbenchReassign()}
                       data-agentui-reassignment-submit
                     >
-                      {reassignmentPending
-                        ? "回填中..."
-                        : "回填重指派指令"}
+                      {reassignmentPending ? "回填中..." : "回填重指派指令"}
                     </button>
                   </div>
                   {reassignmentError ? (
@@ -1468,7 +1470,8 @@ export function TeamWorkbenchSummaryPanel({
                   </div>
                   <p className="mt-1 text-[10px] leading-4 text-slate-600">
                     按 agent / task / work item / transcript / artifact ref
-                    精确匹配同一目标的 projection 事件；这里只串联队友状态，不合成新运行时事实。
+                    精确匹配同一目标的 projection
+                    事件；这里只串联队友状态，不合成新运行时事实。
                   </p>
                   <div className="mt-2 space-y-1.5">
                     {selectedWorkbenchRelatedEvents.map((event) => {
@@ -1486,7 +1489,9 @@ export function TeamWorkbenchSummaryPanel({
                             <span>
                               {formatAgentUiProjectionPhase(event.phase)}
                             </span>
-                            {event.surface ? <span>{event.surface}</span> : null}
+                            {event.surface ? (
+                              <span>{event.surface}</span>
+                            ) : null}
                           </div>
                           <div className="mt-0.5 truncate text-[10px] text-slate-500">
                             {formatAgentUiProjectionEventDetail(event)}
@@ -1514,8 +1519,8 @@ export function TeamWorkbenchSummaryPanel({
                   </div>
                   <p className="mt-1 text-[10px] leading-4 text-slate-600">
                     正文由子会话 / Team board 选中成员 activity preview
-                    读取；这里仅展示标准 ref 与焦点，不把队友输出混进主
-                    final answer。
+                    读取；这里仅展示标准 ref 与焦点，不把队友输出混进主 final
+                    answer。
                   </p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">
@@ -1571,8 +1576,8 @@ export function TeamWorkbenchSummaryPanel({
                       ) : null}
                     </div>
                   ) : null}
-                  {(selectedTranscriptQueuedTurns.length > 0 ||
-                    selectedTranscriptEntryGroups.length > 0) ? (
+                  {selectedTranscriptQueuedTurns.length > 0 ||
+                  selectedTranscriptEntryGroups.length > 0 ? (
                     <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                       <div className="flex flex-wrap items-center gap-2 text-[10px]">
                         <span className="font-semibold text-slate-800">
@@ -1676,14 +1681,14 @@ export function TeamWorkbenchSummaryPanel({
                         </span>
                         {selectedTranscriptLiveActivityEntries.length > 0 ? (
                           <span className="rounded-full border border-sky-200 bg-white px-2 py-0.5 text-sky-700">
-                            live{" "}
-                            {selectedTranscriptLiveActivityEntries.length} 条
+                            live {selectedTranscriptLiveActivityEntries.length}{" "}
+                            条
                           </span>
                         ) : null}
                         {selectedTranscriptHistoryEntries.length > 0 ? (
                           <span className="rounded-full border border-emerald-200 bg-white px-2 py-0.5 text-emerald-700">
-                            历史正文{" "}
-                            {selectedTranscriptHistoryEntries.length} 条
+                            历史正文 {selectedTranscriptHistoryEntries.length}{" "}
+                            条
                           </span>
                         ) : null}
                         {selectedTranscriptHistoryStatus === "loading" ? (
@@ -1731,7 +1736,8 @@ export function TeamWorkbenchSummaryPanel({
                     </p>
                   ) : selectedTranscriptChildSessionId ? (
                     <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] leading-4 text-slate-500">
-                      还没有收到这项子会话的 live activity，历史正文也暂无可展示过程；
+                      还没有收到这项子会话的 live
+                      activity，历史正文也暂无可展示过程；
                       如需完整上下文，继续通过 Team board 聚焦对应子任务读取。
                     </p>
                   ) : null}

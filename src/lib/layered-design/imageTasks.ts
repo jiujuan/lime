@@ -14,10 +14,7 @@ import type {
   LayeredDesignDocument,
   LayeredDesignDocumentInput,
 } from "./types";
-import {
-  isImageDesignLayer,
-  normalizeLayeredDesignDocument,
-} from "./document";
+import { isImageDesignLayer, normalizeLayeredDesignDocument } from "./document";
 import {
   createSingleLayerAssetGenerationRequest,
   type LayeredDesignAssetGenerationRequest,
@@ -48,8 +45,7 @@ export interface LayeredDesignImageTaskContext {
   referenceImages?: string[];
 }
 
-export interface CreateLayeredDesignImageTaskArtifactsParams
-  extends LayeredDesignImageTaskContext {
+export interface CreateLayeredDesignImageTaskArtifactsParams extends LayeredDesignImageTaskContext {
   document: LayeredDesignDocumentInput | LayeredDesignDocument;
   requests: LayeredDesignAssetGenerationRequest[];
   createTaskArtifact?: (

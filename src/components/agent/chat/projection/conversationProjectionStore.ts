@@ -313,10 +313,10 @@ function hasAgentUiProjectionScopeFilter(
 ): boolean {
   return Boolean(
     filter?.sessionId ||
-      filter?.threadId ||
-      filter?.runId ||
-      filter?.turnId ||
-      filter?.taskId,
+    filter?.threadId ||
+    filter?.runId ||
+    filter?.turnId ||
+    filter?.taskId,
   );
 }
 

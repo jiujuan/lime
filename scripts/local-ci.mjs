@@ -11,7 +11,6 @@ const rootDir = process.cwd();
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const cargoCommand = process.platform === "win32" ? "cargo.exe" : "cargo";
 const BRIDGE_REASON_LABELS = {
-  agent_qc_contract: "Agent QC contract",
   bridge_contracts: "bridge/contracts",
   bridge_runtime: "DevBridge / mock / bridge runtime",
   fallback_full_suite: "兜底全量",

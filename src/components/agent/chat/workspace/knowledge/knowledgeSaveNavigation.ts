@@ -23,9 +23,7 @@ export function resolveKnowledgeSaveProjectRoot({
   projectRootPath?: string | null;
   knowledgeSelectionWorkingDir?: string | null;
 }): string {
-  return (
-    knowledgeSelectionWorkingDir?.trim() || projectRootPath?.trim() || ""
-  );
+  return knowledgeSelectionWorkingDir?.trim() || projectRootPath?.trim() || "";
 }
 
 export function buildKnowledgeSavePageParams({

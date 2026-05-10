@@ -25,8 +25,8 @@
 - `scripts/agent-qc-export-evidence.mjs`：当前 qcloop job 到 Evidence Pack 的导出入口
 - `scripts/agent-qc-release-summary.mjs`：当前 Agent QC Evidence Pack 到 release note 质量证据的汇总入口
 - `scripts/agent-qc-completion-audit.mjs`：当前 Agent QC 整体目标完成度审计入口
-- `.github/workflows/harness-nightly.yml`：当前会上传 `artifacts/agent-qc/agent-qc-report.*`、`agent-qc-gui-flow-report.*` 与 `release-agent-qc-preview.*`
-- `.github/workflows/release.yml`：当前在创建 GitHub Release 前强制校验 `agent_qc_evidence_path` 对应的 Agent QC Evidence Pack
+- `.github/workflows/harness-nightly.yml`：当前只上传 harness eval / cleanup / dashboard 资产，不进入 Agent QC / qcloop 验证
+- `.github/workflows/release.yml`：当前只创建或刷新 GitHub Release，不读取 Agent QC Evidence Pack
 - `scripts/report-legacy-surfaces.mjs`：当前 legacy / compat 回流护栏
 
 ### compat
@@ -62,7 +62,7 @@
 | 优先级 | 事项                                        | 为什么重要                                          | 当前证据                                                                                                                                                                                                  | 完成定义                                                                                               |
 | ------ | ------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | P1     | Agent eval 仍未完全工程化                   | 价值高，且当前最缺的是把证据沉淀成长期回归资产      | 已补 `docs/test/harness-evals.md`、`harness-evals.manifest.json`、`scripts/harness-eval-runner.mjs`、`scripts/harness-eval-trend-report.mjs` 与 nightly 摘要 / trend 骨架，但真实执行与更多高价值样本仍缺 | 形成稳定任务集、可增长 replay 样本、grader、nightly 输出与趋势指标                                     |
-| P1     | qcloop 真实运行结果尚未导出为 Evidence Pack | 运营级测试需要从“场景清单”进入“每次运行可审计证据” | 已补 Agent QC manifest、evidence schema、报告脚本与 `test:contracts` 门禁；下一步需要 qcloop job 结果按 schema 落盘 | qcloop 批次可导出 `agent-qc-evidence.schema.json` 形状，并被 release / nightly 消费                  |
+| P1     | qcloop 真实运行结果尚未导出为 Evidence Pack | 运营级测试需要从“场景清单”进入“每次运行可审计证据” | 已补 Agent QC manifest、evidence schema 与本地报告脚本；Agent QC 已从 GitHub Actions / `test:contracts` 验证链路移出 | qcloop 批次可导出 `agent-qc-evidence.schema.json` 形状，并可被本地 / 人工发布证据流程消费             |
 | P2     | terminal / server 自包含 smoke 仍可继续扩面 | 最小 GUI smoke 基线已具备，但更细分主链仍缺专项守卫 | 当前 `workspace-ready / browser-runtime / site-adapters` 已覆盖 GUI 最小主链；`smoke:social-workbench` 仍依赖已有 session，terminal / server 还没有各自独立的自包含 smoke 入口                            | 如后续需要继续扩面，应补 terminal 或 server 的独立 smoke，而不是继续把现有 3 条 current smoke 算成缺口 |
 
 ## 4. 建议执行顺序

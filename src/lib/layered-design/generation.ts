@@ -121,10 +121,7 @@ function createGenerationRequest(
   };
 }
 
-function assertImageLayer(
-  layers: DesignLayer[],
-  layerId: string,
-): ImageLayer {
+function assertImageLayer(layers: DesignLayer[], layerId: string): ImageLayer {
   const layer = layers.find((item) => item.id === layerId);
   if (!isImageDesignLayer(layer)) {
     throw new Error(`未找到可生成的图片图层：${layerId}`);

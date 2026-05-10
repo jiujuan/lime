@@ -440,7 +440,9 @@ describe("WorkspaceRegisteredSkillsPanel", () => {
     expect(container.textContent).toContain("凭证引用");
     expect(container.textContent).toContain("readonly_api_session");
     expect(container.textContent).toContain("证据 Schema");
-    expect(container.textContent).toContain("Session approval request artifact");
+    expect(container.textContent).toContain(
+      "Session approval request artifact",
+    );
     expect(container.textContent).toContain("capreg-1:readonly-http-session");
     expect(container.textContent).toContain("pending / 未执行 / 未保存凭证");
     expect(container.textContent).toContain(
@@ -485,7 +487,9 @@ describe("WorkspaceRegisteredSkillsPanel", () => {
     expect(container.textContent).toContain(
       "session_user_approval:boolean_confirmation:required",
     );
-    expect(container.textContent).toContain("runtime_endpoint_input:url:required");
+    expect(container.textContent).toContain(
+      "runtime_endpoint_input:url:required",
+    );
     expect(container.textContent).toContain(
       "credential_reference_confirmation:credential_reference:required",
     );
@@ -494,18 +498,12 @@ describe("WorkspaceRegisteredSkillsPanel", () => {
     expect(container.textContent).toContain("Secret");
     expect(container.textContent).toContain("not_collected");
     expect(container.textContent).toContain("endpointPersistedfalse");
-    expect(container.textContent).toContain(
-      "missing:session_user_approval",
-    );
-    expect(container.textContent).toContain(
-      "missing:runtime_endpoint_input",
-    );
+    expect(container.textContent).toContain("missing:session_user_approval");
+    expect(container.textContent).toContain("missing:runtime_endpoint_input");
     expect(container.textContent).toContain(
       "missing:credential_reference_confirmation",
     );
-    expect(container.textContent).toContain(
-      "missing:evidence_capture_consent",
-    );
+    expect(container.textContent).toContain("missing:evidence_capture_consent");
     expect(container.textContent).toContain("Session submission contract");
     expect(container.textContent).toContain("submission_contract_declared");
     expect(container.textContent).toContain("one_time_session_submission");

@@ -43,28 +43,6 @@ jobs:
             --cleanup-json "./artifacts/harness-cleanup-report.json" \
             --cleanup-markdown "./artifacts/harness-cleanup-report.md" \
             --dashboard-html "./artifacts/harness-dashboard.html"
-          mkdir -p "./artifacts/agent-qc"
-          node scripts/agent-qc-report.mjs \
-            --output "./artifacts/agent-qc/agent-qc-report.md"
-          node scripts/agent-qc-report.mjs \
-            --format json \
-            --output "./artifacts/agent-qc/agent-qc-report.json"
-          node scripts/agent-qc-gui-flow-report.mjs \
-            --output "./artifacts/agent-qc/agent-qc-gui-flow-report.md"
-          node scripts/agent-qc-gui-flow-report.mjs \
-            --format json \
-            --output "./artifacts/agent-qc/agent-qc-gui-flow-report.json"
-          node scripts/agent-qc-release-summary.mjs \
-            --allow-missing-evidence \
-            --require-scenario-manifest "docs/test/agent-qc-scenarios.manifest.json" \
-            --require-risk "P0" \
-            --output "./artifacts/agent-qc/release-agent-qc-preview.md"
-          node scripts/agent-qc-release-summary.mjs \
-            --allow-missing-evidence \
-            --require-scenario-manifest "docs/test/agent-qc-scenarios.manifest.json" \
-            --require-risk "P0" \
-            --format json \
-            --output "./artifacts/agent-qc/release-agent-qc-preview.json"
 
       - name: Upload harness eval artifact
         uses: actions/upload-artifact@v4

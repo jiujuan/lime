@@ -810,7 +810,10 @@ export function AutomationSettings({
           coreErrors.push(
             resolveAutomationLoadErrorMessage(
               statusResult.reason,
-              t("settings.automation.main.load.error.status", "自动化状态加载失败"),
+              t(
+                "settings.automation.main.load.error.status",
+                "自动化状态加载失败",
+              ),
             ),
           );
         }
@@ -822,7 +825,10 @@ export function AutomationSettings({
           coreErrors.push(
             resolveAutomationLoadErrorMessage(
               jobsResult.reason,
-              t("settings.automation.main.load.error.jobs", "持续流程列表加载失败"),
+              t(
+                "settings.automation.main.load.error.jobs",
+                "持续流程列表加载失败",
+              ),
             ),
           );
         }
@@ -1193,7 +1199,8 @@ export function AutomationSettings({
           success: result.success_count,
           failed: result.failed_count,
           timeout: result.timeout_count,
-          defaultValue: "执行完成: 成功 {{success}}，失败 {{failed}}，超时 {{timeout}}",
+          defaultValue:
+            "执行完成: 成功 {{success}}，失败 {{failed}}，超时 {{timeout}}",
         }),
       );
       await refreshAll(true);
@@ -1727,12 +1734,18 @@ export function AutomationSettings({
             ) : null}
             {workspaceOnly && onOpenSettings ? (
               <Button variant="outline" onClick={onOpenSettings}>
-                {t("settings.automation.main.action.openSettings", "持续流程设置")}
+                {t(
+                  "settings.automation.main.action.openSettings",
+                  "持续流程设置",
+                )}
               </Button>
             ) : null}
             {settingsOnly && onOpenWorkspace ? (
               <Button variant="outline" onClick={onOpenWorkspace}>
-                {t("settings.automation.main.action.openWorkspace", "打开持续流程")}
+                {t(
+                  "settings.automation.main.action.openWorkspace",
+                  "打开持续流程",
+                )}
               </Button>
             ) : null}
             <Button
@@ -1951,7 +1964,10 @@ export function AutomationSettings({
                 disabled={schedulerSaving}
               >
                 {schedulerSaving
-                  ? t("settings.automation.scheduler.action.saving", "保存中...")
+                  ? t(
+                      "settings.automation.scheduler.action.saving",
+                      "保存中...",
+                    )
                   : t(
                       "settings.automation.scheduler.action.save",
                       "保存调度器",
@@ -2007,7 +2023,10 @@ export function AutomationSettings({
                   </div>
                   <Button variant="outline" onClick={() => openCreateDialog()}>
                     <Plus className="mr-2 h-4 w-4" />
-                    {t("settings.automation.tasks.action.blankStart", "空白开始")}
+                    {t(
+                      "settings.automation.tasks.action.blankStart",
+                      "空白开始",
+                    )}
                   </Button>
                 </div>
               </CardHeader>
@@ -2244,8 +2263,7 @@ export function AutomationSettings({
                                           {t(
                                             "settings.automation.tasks.list.serviceSkillSlotPreview",
                                             {
-                                              summary:
-                                                serviceSkillSlotPreview,
+                                              summary: serviceSkillSlotPreview,
                                               defaultValue:
                                                 "参数摘要: {{summary}}",
                                             },
@@ -2348,10 +2366,13 @@ export function AutomationSettings({
                                   className="space-y-1"
                                 >
                                   <div>
-                                    {t("settings.automation.tasks.list.nextRun", {
-                                      time: formatTime(job.next_run_at),
-                                      defaultValue: "下次: {{time}}",
-                                    })}
+                                    {t(
+                                      "settings.automation.tasks.list.nextRun",
+                                      {
+                                        time: formatTime(job.next_run_at),
+                                        defaultValue: "下次: {{time}}",
+                                      },
+                                    )}
                                   </div>
                                   <div className="text-xs text-slate-400">
                                     {t(

@@ -55,13 +55,14 @@ describe("layered-design generation seam", () => {
       "effect",
     ]);
     expect(plan.every((request) => request.target === "document")).toBe(true);
-    expect(plan.find((request) => request.layerId === "subject-image"))
-      .toMatchObject({
-        width: 760,
-        height: 980,
-        hasAlpha: true,
-        alphaMode: "embedded",
-      });
+    expect(
+      plan.find((request) => request.layerId === "subject-image"),
+    ).toMatchObject({
+      width: 760,
+      height: 980,
+      hasAlpha: true,
+      alphaMode: "embedded",
+    });
   });
 
   it("单层重生成请求应允许已生成资产再次进入 provider seam", () => {

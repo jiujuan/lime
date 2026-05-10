@@ -103,9 +103,7 @@ describe("LayeredDesignDocument", () => {
       createdAt: CREATED_AT,
     });
 
-    expect(document.schemaVersion).toBe(
-      LAYERED_DESIGN_DOCUMENT_SCHEMA_VERSION,
-    );
+    expect(document.schemaVersion).toBe(LAYERED_DESIGN_DOCUMENT_SCHEMA_VERSION);
     expect(document.layers.map((layer) => layer.id)).toEqual([
       "subject",
       "background",
@@ -433,8 +431,7 @@ describe("LayeredDesignDocument", () => {
       id: "attach-benchmark",
       type: "extraction_reanalyzed",
       actor: "system",
-      summary:
-        "附着 model slot benchmark evidence: sample_manifest_completed",
+      summary: "附着 model slot benchmark evidence: sample_manifest_completed",
       createdAt: UPDATED_AT,
     });
     expect(updated.updatedAt).toBe(UPDATED_AT);

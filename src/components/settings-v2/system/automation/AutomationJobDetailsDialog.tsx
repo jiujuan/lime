@@ -1,7 +1,10 @@
 import { RefreshCw } from "lucide-react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
-import type { AutomationJobRecord, AutomationPayload } from "@/lib/api/automation";
+import type {
+  AutomationJobRecord,
+  AutomationPayload,
+} from "@/lib/api/automation";
 import type { AgentRun } from "@/lib/api/executionRun";
 import type {
   SceneAppAutomationWorkspaceCardViewModel,
@@ -90,11 +93,23 @@ function detailsStatusLabel(
 ): string {
   switch (status) {
     case "queued":
-      return detailsText(t, "settings.automation.details.status.queued", "排队中");
+      return detailsText(
+        t,
+        "settings.automation.details.status.queued",
+        "排队中",
+      );
     case "success":
-      return detailsText(t, "settings.automation.details.status.success", "成功");
+      return detailsText(
+        t,
+        "settings.automation.details.status.success",
+        "成功",
+      );
     case "running":
-      return detailsText(t, "settings.automation.details.status.running", "运行中");
+      return detailsText(
+        t,
+        "settings.automation.details.status.running",
+        "运行中",
+      );
     case "waiting_for_human":
       return detailsText(
         t,
@@ -116,7 +131,11 @@ function detailsStatusLabel(
     case "error":
       return detailsText(t, "settings.automation.details.status.error", "失败");
     case "timeout":
-      return detailsText(t, "settings.automation.details.status.timeout", "超时");
+      return detailsText(
+        t,
+        "settings.automation.details.status.timeout",
+        "超时",
+      );
     default:
       return (
         status ||
@@ -623,11 +642,7 @@ export function AutomationJobDetailsDialog({
                       "settings.automation.details.badge.schedule",
                       "调度：{{schedule}}",
                       {
-                        schedule: detailsScheduleLabel(
-                          t,
-                          job,
-                          i18n.language,
-                        ),
+                        schedule: detailsScheduleLabel(t, job, i18n.language),
                       },
                     )}
                   </span>
@@ -693,10 +708,7 @@ export function AutomationJobDetailsDialog({
                         "settings.automation.details.meta.startMethod",
                         "开始方式: {{payload}}",
                         {
-                          payload: detailsPayloadKindLabel(
-                            t,
-                            job.payload.kind,
-                          ),
+                          payload: detailsPayloadKindLabel(t, job.payload.kind),
                         },
                       )}
                     </div>
@@ -718,11 +730,7 @@ export function AutomationJobDetailsDialog({
                         "settings.automation.details.meta.schedule",
                         "调度: {{schedule}}",
                         {
-                          schedule: detailsScheduleLabel(
-                            t,
-                            job,
-                            i18n.language,
-                          ),
+                          schedule: detailsScheduleLabel(t, job, i18n.language),
                         },
                       )}
                     </div>

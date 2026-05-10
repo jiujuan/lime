@@ -11,9 +11,7 @@ import type {
   LayeredDesignSubjectMattingModelSlot,
   LayeredDesignTextOcrModelSlot,
 } from "./analyzerModelSlots";
-import {
-  createLayeredDesignWorkerHeuristicModelSlotOptions,
-} from "./analyzerModelSlots";
+import { createLayeredDesignWorkerHeuristicModelSlotOptions } from "./analyzerModelSlots";
 import {
   createLayeredDesignAnalyzerModelSlotJsonExecutorFromProviders,
   createLayeredDesignAnalyzerModelSlotTransportFromJsonExecutor,
@@ -52,8 +50,7 @@ export interface LayeredDesignAnalyzerModelSlotsFromTransport {
   textOcrSlot?: LayeredDesignTextOcrModelSlot;
 }
 
-export interface CreateLayeredDesignFlatImageAnalyzerFromModelSlotTransportOptions
-  extends CreateLayeredDesignFlatImageAnalyzerFromStructuredProviderOptions {
+export interface CreateLayeredDesignFlatImageAnalyzerFromModelSlotTransportOptions extends CreateLayeredDesignFlatImageAnalyzerFromStructuredProviderOptions {
   rasterizerFactory?: LayeredDesignWorkerHeuristicRasterizerFactory;
 }
 
@@ -70,7 +67,8 @@ export interface CreateLayeredDesignDefaultAnalyzerModelSlotJsonExecutorOptions 
 }
 
 export interface CreateLayeredDesignFlatImageAnalyzerFromDefaultModelSlotProvidersOptions
-  extends CreateLayeredDesignFlatImageAnalyzerFromModelSlotTransportOptions,
+  extends
+    CreateLayeredDesignFlatImageAnalyzerFromModelSlotTransportOptions,
     CreateLayeredDesignDefaultAnalyzerModelSlotJsonExecutorOptions {}
 
 function findModelSlotConfig(
@@ -190,7 +188,8 @@ export function createLayeredDesignDefaultAnalyzerModelSlotJsonExecutor(
     subjectMattingProvider:
       options.subjectMattingProvider === undefined
         ? createLayeredDesignWorkerSubjectMattingProvider({
-            label: "Worker subject matting provider via model slot JSON executor",
+            label:
+              "Worker subject matting provider via model slot JSON executor",
             fallbackProvider: null,
             ...(options.subjectMattingWorkerOptions ?? {}),
           })

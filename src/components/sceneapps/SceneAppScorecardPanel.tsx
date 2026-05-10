@@ -88,7 +88,9 @@ export function SceneAppScorecardPanel({
                   <span
                     className={cn(
                       "rounded-full border px-2.5 py-1 text-[11px] font-medium",
-                      AGGREGATE_STATUS_CLASSNAMES[scorecardView.aggregate.status],
+                      AGGREGATE_STATUS_CLASSNAMES[
+                        scorecardView.aggregate.status
+                      ],
                     )}
                   >
                     {scorecardView.aggregate.statusLabel}
@@ -183,7 +185,9 @@ export function SceneAppScorecardPanel({
           >
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
               <div>
-                <div className="text-sm font-medium text-slate-900">判断依据</div>
+                <div className="text-sm font-medium text-slate-900">
+                  判断依据
+                </div>
                 <div className="mt-1 text-xs text-slate-500">
                   默认标准和上下文。
                 </div>
@@ -260,7 +264,9 @@ export function SceneAppScorecardPanel({
                       data-testid="sceneapp-scorecard-profile-ref"
                       className="mt-3 text-sm text-slate-700"
                     >
-                      <span className="font-medium text-slate-900">判断说明：</span>
+                      <span className="font-medium text-slate-900">
+                        判断说明：
+                      </span>
                       {scorecardView.profileRef}
                     </div>
                   ) : null}
@@ -309,7 +315,9 @@ export function SceneAppScorecardPanel({
 
                   {scorecardView.topFailureSignalLabel ? (
                     <div className="mt-3 text-sm text-slate-700">
-                      <span className="font-medium text-slate-900">当前最卡的一点：</span>
+                      <span className="font-medium text-slate-900">
+                        当前最卡的一点：
+                      </span>
                       {scorecardView.topFailureSignalLabel}
                     </div>
                   ) : null}
@@ -368,12 +376,16 @@ export function SceneAppScorecardPanel({
                       data-testid="sceneapp-scorecard-context-reference-count"
                       className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1"
                     >
-                      <span className="font-medium text-slate-900">参考对象：</span>
+                      <span className="font-medium text-slate-900">
+                        参考对象：
+                      </span>
                       {scorecardView.contextBaseline.referenceCount} 条
                     </div>
                     {scorecardView.contextBaseline.scopeLabel ? (
                       <div className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
-                        <span className="font-medium text-slate-900">作用范围：</span>
+                        <span className="font-medium text-slate-900">
+                          作用范围：
+                        </span>
                         {scorecardView.contextBaseline.scopeLabel}
                       </div>
                     ) : null}
@@ -397,16 +409,20 @@ export function SceneAppScorecardPanel({
                         className="border-t border-slate-200 bg-white px-3 py-3"
                       >
                         <div className="flex flex-wrap gap-2">
-                          {scorecardView.contextBaseline.referenceItems.map((item) => (
-                            <span
-                              key={item.key}
-                              className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-700"
-                            >
-                              {item.label}
-                              {item.usageLabel ? ` · ${item.usageLabel}` : ""}
-                              {item.feedbackLabel ? ` · ${item.feedbackLabel}` : ""}
-                            </span>
-                          ))}
+                          {scorecardView.contextBaseline.referenceItems.map(
+                            (item) => (
+                              <span
+                                key={item.key}
+                                className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-700"
+                              >
+                                {item.label}
+                                {item.usageLabel ? ` · ${item.usageLabel}` : ""}
+                                {item.feedbackLabel
+                                  ? ` · ${item.feedbackLabel}`
+                                  : ""}
+                              </span>
+                            ),
+                          )}
                         </div>
                       </div>
                     </details>
@@ -417,7 +433,9 @@ export function SceneAppScorecardPanel({
                       data-testid="sceneapp-scorecard-context-taste-summary"
                       className="mt-3 text-sm leading-6 text-slate-700"
                     >
-                      <span className="font-medium text-slate-900">风格方向：</span>
+                      <span className="font-medium text-slate-900">
+                        风格方向：
+                      </span>
                       {scorecardView.contextBaseline.tasteSummary}
                     </div>
                   ) : null}
@@ -433,14 +451,18 @@ export function SceneAppScorecardPanel({
                       data-testid="sceneapp-scorecard-context-feedback-summary"
                       className="mt-3 text-sm leading-6 text-slate-700"
                     >
-                      <span className="font-medium text-slate-900">最近反馈：</span>
+                      <span className="font-medium text-slate-900">
+                        最近反馈：
+                      </span>
                       {scorecardView.contextBaseline.feedbackSummary}
                     </div>
                   ) : null}
 
                   {scorecardView.contextBaseline.feedbackUpdatedAtLabel ? (
                     <div className="mt-2 text-sm text-slate-700">
-                      <span className="font-medium text-slate-900">反馈更新时间：</span>
+                      <span className="font-medium text-slate-900">
+                        反馈更新时间：
+                      </span>
                       {scorecardView.contextBaseline.feedbackUpdatedAtLabel}
                     </div>
                   ) : null}
@@ -450,14 +472,16 @@ export function SceneAppScorecardPanel({
                       data-testid="sceneapp-scorecard-context-feedback-signals"
                       className="mt-3 flex flex-wrap gap-2"
                     >
-                      {scorecardView.contextBaseline.feedbackSignals.map((signal) => (
-                        <span
-                          key={signal.key}
-                          className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-medium text-rose-700"
-                        >
-                          {signal.label}
-                        </span>
-                      ))}
+                      {scorecardView.contextBaseline.feedbackSignals.map(
+                        (signal) => (
+                          <span
+                            key={signal.key}
+                            className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-medium text-rose-700"
+                          >
+                            {signal.label}
+                          </span>
+                        ),
+                      )}
                     </div>
                   ) : null}
                 </div>

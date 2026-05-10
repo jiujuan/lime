@@ -1349,7 +1349,8 @@ export function createLayeredDesignWorkerHeuristicStructuredAnalyzerProvider(
             rasterizer.createRefinedCleanPlateDataUrl ??
             rasterizer.createApproximateCleanPlateDataUrl
           )(subjectSpec.rect));
-        const cleanPlateAsset = refinedCleanPlate?.src ?? fallbackCleanPlateAsset;
+        const cleanPlateAsset =
+          refinedCleanPlate?.src ?? fallbackCleanPlateAsset;
         const cleanPlateSeed = refinedCleanPlate
           ? "worker_heuristic_clean_plate_provider"
           : rasterizer.createRefinedCleanPlateDataUrl

@@ -4,7 +4,12 @@
  * 应用启动时显示专用 Logo、Slogan 与进度动画，然后淡出进入主界面。
  */
 
-import { useEffect, useLayoutEffect, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useState,
+  type CSSProperties,
+} from "react";
 import styled, { keyframes } from "styled-components";
 import { LIME_BRAND_LOGO_SRC, LIME_BRAND_NAME } from "@/lib/branding";
 import { revealStartupWindowWhenReady } from "@/lib/startupWindowReveal";

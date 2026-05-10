@@ -1432,7 +1432,9 @@ describe("SceneAppsPage", () => {
         ?.textContent,
     ).toContain("短视频编排");
     expect(
-      container.querySelector('[data-testid="sceneapp-detail-advanced-sections"]'),
+      container.querySelector(
+        '[data-testid="sceneapp-detail-advanced-sections"]',
+      ),
     ).not.toBeNull();
     expect(
       container.querySelector('[data-testid="sceneapps-detail-layout"]')
@@ -1447,8 +1449,9 @@ describe("SceneAppsPage", () => {
         ?.className,
     ).toContain("min-w-0");
     expect(
-      container.querySelector('[data-testid="sceneapp-detail-pack-runtime-pack"]')
-        ?.className,
+      container.querySelector(
+        '[data-testid="sceneapp-detail-pack-runtime-pack"]',
+      )?.className,
     ).toContain("min-w-0");
     expect(
       container.querySelector(
@@ -1542,9 +1545,8 @@ describe("SceneAppsPage", () => {
       )?.textContent,
     ).toContain("建议继续优化");
     expect(
-      container.querySelector(
-        '[data-testid="sceneapp-scorecard-next-action"]',
-      )?.textContent,
+      container.querySelector('[data-testid="sceneapp-scorecard-next-action"]')
+        ?.textContent,
     ).toContain("先补结果记录");
     expect(
       container.querySelector(
@@ -1639,9 +1641,8 @@ describe("SceneAppsPage", () => {
     ).toContain("结果结构校验问题");
     expect(container.textContent).toContain("当前卡点：复核阻塞");
     expect(
-      container.querySelector(
-        '[data-testid="sceneapp-governance-next-action"]',
-      )?.textContent,
+      container.querySelector('[data-testid="sceneapp-governance-next-action"]')
+        ?.textContent,
     ).toContain("先补结果记录");
 
     await openGovernancePanelContent(container, "runDetail");

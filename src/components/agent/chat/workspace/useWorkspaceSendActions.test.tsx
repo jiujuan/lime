@@ -589,10 +589,8 @@ describe("useWorkspaceSendActions", () => {
   });
 
   it("首轮初始预览绘制不应阻塞消息提交", async () => {
-    const originalRequestAnimationFrameDescriptor = Object.getOwnPropertyDescriptor(
-      window,
-      "requestAnimationFrame",
-    );
+    const originalRequestAnimationFrameDescriptor =
+      Object.getOwnPropertyDescriptor(window, "requestAnimationFrame");
     const requestAnimationFrameSpy = vi.fn(
       (_callback: Parameters<typeof window.requestAnimationFrame>[0]) => 1,
     );

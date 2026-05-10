@@ -296,8 +296,7 @@ describe("useWorkspaceArtifactPreviewActions", () => {
         title: "主应用图层设计",
         content: expect.stringContaining('"id": "main-app-layered-design"'),
         meta: expect.objectContaining({
-          filePath:
-            ".lime/layered-designs/main-app.layered-design/design.json",
+          filePath: ".lime/layered-designs/main-app.layered-design/design.json",
           filename: "design.json",
           platform: "layered-design",
           designId: "main-app-layered-design",

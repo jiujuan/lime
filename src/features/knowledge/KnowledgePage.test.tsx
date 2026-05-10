@@ -11,10 +11,7 @@ import {
   type KnowledgePackDetail,
   type KnowledgePackStatus,
 } from "@/lib/api/knowledge";
-import {
-  getDefaultProject,
-  getProject,
-} from "@/lib/api/project";
+import { getDefaultProject, getProject } from "@/lib/api/project";
 import type { KnowledgePageParams } from "@/types/page";
 import { KnowledgePage } from "./KnowledgePage";
 
@@ -393,7 +390,9 @@ describe("KnowledgePage", () => {
     expect(container.textContent).toContain("让 Lime 记住这个项目");
     const rootSurface = container.querySelector("main");
     expect(rootSurface?.className).toContain("lime-workbench-theme-scope");
-    expect(rootSurface?.className).toContain("bg-[image:var(--lime-stage-surface)]");
+    expect(rootSurface?.className).toContain(
+      "bg-[image:var(--lime-stage-surface)]",
+    );
     expect(container.textContent).toContain("可用于创作");
     expect(container.textContent).toContain("待确认");
     expect(container.textContent).toContain("需要补充");
@@ -500,9 +499,7 @@ describe("KnowledgePage", () => {
     expect(container.textContent).toContain("添加原始资料");
     expect(container.textContent).toContain("Lime 开始整理");
     expect(container.textContent).toContain("当前先支持粘贴正文");
-    expect(container.textContent).toContain(
-      "这里不再设置“默认使用”",
-    );
+    expect(container.textContent).toContain("这里不再设置“默认使用”");
     expect(container.textContent).toContain("没有确认的资料不会自动用于创作");
     expect(container.textContent).toContain("个人 IP");
     expect(container.textContent).toContain("品牌产品");
@@ -683,14 +680,19 @@ describe("KnowledgePage", () => {
     expect(container.textContent).toContain("新建一份资料");
     expect(container.textContent).toContain("保存后需要确认");
     expect(container.textContent).toContain("保存不会自动改变本轮创作资料");
-    expect(container.textContent).toContain("保存后不会立刻用于创作，确认后才会生效");
+    expect(container.textContent).toContain(
+      "保存后不会立刻用于创作，确认后才会生效",
+    );
     expect(container.textContent).not.toContain("新增 2 个内容点");
 
     const sourceTextarea = container.querySelector(
       "textarea",
     ) as HTMLTextAreaElement | null;
     act(() => {
-      updateFieldValue(sourceTextarea, "对话中总结出的创始人口吻和两个新内容点。");
+      updateFieldValue(
+        sourceTextarea,
+        "对话中总结出的创始人口吻和两个新内容点。",
+      );
     });
 
     await clickButton(container, "创始人个人 IP 项目资料");

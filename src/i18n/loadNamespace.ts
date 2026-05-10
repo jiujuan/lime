@@ -38,7 +38,9 @@ export function hasBundledNamespace(
   namespace: LimeNamespace,
 ): boolean {
   const normalizedLocale = normalizeLocale(locale);
-  return resourceModuleKey(normalizedLocale, namespace) in bundledResourceModules;
+  return (
+    resourceModuleKey(normalizedLocale, namespace) in bundledResourceModules
+  );
 }
 
 export function loadNamespaceResource(

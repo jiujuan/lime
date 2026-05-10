@@ -42,26 +42,11 @@ const FRONTEND_TOOLING_FILES = new Set([
 
 const BRIDGE_FILES = new Set([
   "vite.config.ts",
-  "scripts/agent-qc-completion-audit.mjs",
-  "docs/test/agent-qc-evidence.schema.json",
-  "docs/test/agent-qc-gui-flows.manifest.json",
-  "docs/test/agent-qc-scenarios.manifest.json",
-  "scripts/agent-qc-export-evidence.mjs",
-  "scripts/agent-qc-gui-flow-report.mjs",
-  "scripts/agent-qc-qcloop-job.mjs",
-  "scripts/agent-qc-release-summary.mjs",
-  "scripts/agent-qc-report.mjs",
   "scripts/check-command-contracts.mjs",
   "scripts/check-generated-slop-report.mjs",
   "scripts/check-dev-bridge-health.mjs",
   "scripts/harness-eval-history-record.mjs",
   "scripts/harness-eval-trend-report.mjs",
-  "scripts/lib/agent-qc-completion-audit-core.mjs",
-  "scripts/lib/agent-qc-evidence-core.mjs",
-  "scripts/lib/agent-qc-gui-flow-core.mjs",
-  "scripts/lib/agent-qc-qcloop-job-core.mjs",
-  "scripts/lib/agent-qc-release-summary-core.mjs",
-  "scripts/lib/agent-qc-report-core.mjs",
   "scripts/report-generated-slop.mjs",
   "scripts/social-workbench-e2e-smoke.mjs",
   "scripts/chrome-bridge-e2e.mjs",
@@ -78,27 +63,6 @@ const HARNESS_CLEANUP_CONTRACT_FILES = new Set([
   "scripts/report-generated-slop.mjs",
   "scripts/lib/generated-slop-report-core.mjs",
   "scripts/lib/harness-dashboard-core.mjs",
-]);
-
-const AGENT_QC_CONTRACT_FILES = new Set([
-  "docs/tests/agent-ops-qc.md",
-  "docs/tests/agent-qc-p0-scenarios.md",
-  "docs/tests/lime-agent-qc-rollout-plan.md",
-  "docs/test/agent-qc-evidence.schema.json",
-  "scripts/agent-qc-completion-audit.mjs",
-  "docs/test/agent-qc-gui-flows.manifest.json",
-  "docs/test/agent-qc-scenarios.manifest.json",
-  "scripts/agent-qc-export-evidence.mjs",
-  "scripts/agent-qc-gui-flow-report.mjs",
-  "scripts/agent-qc-qcloop-job.mjs",
-  "scripts/agent-qc-release-summary.mjs",
-  "scripts/agent-qc-report.mjs",
-  "scripts/lib/agent-qc-completion-audit-core.mjs",
-  "scripts/lib/agent-qc-evidence-core.mjs",
-  "scripts/lib/agent-qc-gui-flow-core.mjs",
-  "scripts/lib/agent-qc-qcloop-job-core.mjs",
-  "scripts/lib/agent-qc-release-summary-core.mjs",
-  "scripts/lib/agent-qc-report-core.mjs",
 ]);
 
 const INTEGRITY_FILES = new Set([
@@ -302,7 +266,7 @@ function isDocsChange(file) {
 function isDocsOnlyChange(files) {
   return (
     files.length > 0 &&
-    files.every((file) => isDocsChange(file) && !isAgentQcContractChange(file))
+    files.every((file) => isDocsChange(file))
   );
 }
 
@@ -330,10 +294,6 @@ function isHarnessCleanupContractChange(file) {
   return HARNESS_CLEANUP_CONTRACT_FILES.has(file);
 }
 
-function isAgentQcContractChange(file) {
-  return AGENT_QC_CONTRACT_FILES.has(file);
-}
-
 function collectBridgeReasons(
   changedFiles,
   { full = false, fallback = false, workflow = false } = {},
@@ -351,10 +311,6 @@ function collectBridgeReasons(
   }
 
   const reasons = [];
-
-  if (changedFiles.some(isAgentQcContractChange)) {
-    reasons.push("agent_qc_contract");
-  }
 
   if (changedFiles.some(isHarnessCleanupContractChange)) {
     reasons.push("harness_cleanup_contract");

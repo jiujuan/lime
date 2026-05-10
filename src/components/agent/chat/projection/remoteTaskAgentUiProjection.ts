@@ -66,7 +66,9 @@ function normalizeText(value?: string | null): string | undefined {
   return normalized || undefined;
 }
 
-function normalizeRemoteTaskId(input: AgentUiRemoteTaskProjectionInput): string {
+function normalizeRemoteTaskId(
+  input: AgentUiRemoteTaskProjectionInput,
+): string {
   return input.remoteTaskId.trim();
 }
 
@@ -301,7 +303,10 @@ function hasRemoteAuthNeed(input: {
 function normalizeRemoteEventToken(
   value?: string,
 ): AgentUiRemoteTaskProjectionEvent | undefined {
-  const normalized = value?.trim().toLowerCase().replace(/[\s.-]+/g, "_");
+  const normalized = value
+    ?.trim()
+    .toLowerCase()
+    .replace(/[\s.-]+/g, "_");
   switch (normalized) {
     case "created":
     case "new":
@@ -364,7 +369,10 @@ function normalizeRemoteEventToken(
 function normalizeRemoteRuntimeStatusToken(
   value?: string,
 ): AgentUiRuntimeStatus | undefined {
-  const normalized = value?.trim().toLowerCase().replace(/[\s.-]+/g, "_");
+  const normalized = value
+    ?.trim()
+    .toLowerCase()
+    .replace(/[\s.-]+/g, "_");
   switch (normalized) {
     case "queued":
       return "queued";
@@ -420,10 +428,10 @@ function normalizeRemoteRuntimeStatusToken(
   }
 }
 
-function isTerminalRemoteEvent(event: AgentUiRemoteTaskProjectionEvent): boolean {
-  return (
-    event === "completed" || event === "failed" || event === "cancelled"
-  );
+function isTerminalRemoteEvent(
+  event: AgentUiRemoteTaskProjectionEvent,
+): boolean {
+  return event === "completed" || event === "failed" || event === "cancelled";
 }
 
 function resolveRemoteEventFromRunSource(input: {
@@ -674,7 +682,10 @@ export function buildRemoteTaskAgentUiProjectionInputFromAgentRun(
     "state",
     "phase",
   ]);
-  const artifacts = buildRemoteArtifactRefsFromRunMetadata(remoteTask, metadata);
+  const artifacts = buildRemoteArtifactRefsFromRunMetadata(
+    remoteTask,
+    metadata,
+  );
 
   return {
     remoteTaskId,
@@ -759,14 +770,15 @@ export function buildAgentUiRemoteTaskProjectionEvents(
     normalizeText(input.title) ??
     "Remote teammate";
   const artifacts = normalizeArtifactRefs(input.artifacts);
-  const primaryArtifact = artifacts.find(
-    (artifact) =>
-      normalizeText(artifact.contentRef) ||
-      normalizeText(artifact.contentUrl) ||
-      normalizeText(artifact.mimeType) ||
-      normalizeText(artifact.digest) ||
-      normalizeText(artifact.preview),
-  ) ?? artifacts[0];
+  const primaryArtifact =
+    artifacts.find(
+      (artifact) =>
+        normalizeText(artifact.contentRef) ||
+        normalizeText(artifact.contentUrl) ||
+        normalizeText(artifact.mimeType) ||
+        normalizeText(artifact.digest) ||
+        normalizeText(artifact.preview),
+    ) ?? artifacts[0];
   const artifactIds = artifacts.map((artifact) => artifact.artifactId.trim());
   const artifactPaths = artifacts
     .map((artifact) => normalizeText(artifact.artifactPath))
@@ -937,7 +949,9 @@ export function buildAgentUiRemoteTaskProjectionEvents(
   return events.map((event, index) => ({
     ...event,
     sequence:
-      typeof context.sequence === "number" ? context.sequence + index : undefined,
+      typeof context.sequence === "number"
+        ? context.sequence + index
+        : undefined,
   }));
 }
 

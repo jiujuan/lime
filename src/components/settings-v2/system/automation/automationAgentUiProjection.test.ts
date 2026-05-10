@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import type { AutomationJobRecord, AutomationStatus } from "@/lib/api/automation";
+import type {
+  AutomationJobRecord,
+  AutomationStatus,
+} from "@/lib/api/automation";
 import type { AgentRun } from "@/lib/api/executionRun";
 import {
   conversationProjectionStore,

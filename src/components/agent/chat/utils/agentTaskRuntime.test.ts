@@ -409,7 +409,8 @@ describe("agentTaskRuntime", () => {
           completed_at: "2026-05-06T10:00:00Z",
           updated_at: "2026-05-06T10:00:00Z",
           type: "request_user_input",
-          request_id: "runtime_permission_confirmation:turn-runtime-permission-submitted",
+          request_id:
+            "runtime_permission_confirmation:turn-runtime-permission-submitted",
           action_type: "elicitation",
           prompt:
             "当前执行需要确认运行时权限：web_search。确认后才允许继续模型执行；拒绝会保持阻断。",

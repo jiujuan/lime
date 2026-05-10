@@ -227,9 +227,13 @@ export function SceneAppsCatalogPanel({
                 ? aggregateSummary
                 : null;
             const primaryActionLabel =
-              aggregate?.actionLabel ?? item.scorecardActionLabel ?? item.actionLabel;
+              aggregate?.actionLabel ??
+              item.scorecardActionLabel ??
+              item.actionLabel;
             const topFailureSignalLabel =
-              aggregate?.topFailureSignalLabel ?? item.topFailureSignalLabel ?? null;
+              aggregate?.topFailureSignalLabel ??
+              item.topFailureSignalLabel ??
+              null;
             const primaryDestinationLabel =
               aggregate?.destinations?.[0]?.label ?? null;
             const metaHint =

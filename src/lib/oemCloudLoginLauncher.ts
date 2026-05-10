@@ -444,8 +444,8 @@ function isGoogleOauthCompletionForRuntime(
   const sessionTenantSlug = storedSession?.session.tenant.slug?.trim();
   return Boolean(
     sessionTenantId === callbackTenantId &&
-      (sessionTenantId === runtimeTenantId ||
-        sessionTenantSlug === runtimeTenantId),
+    (sessionTenantId === runtimeTenantId ||
+      sessionTenantSlug === runtimeTenantId),
   );
 }
 

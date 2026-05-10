@@ -107,7 +107,10 @@ export interface VerifyCapabilityDraftResult {
   report: CapabilityDraftVerificationReport;
 }
 
-export interface RegisterCapabilityDraftRequest extends Record<string, unknown> {
+export interface RegisterCapabilityDraftRequest extends Record<
+  string,
+  unknown
+> {
   workspaceRoot: string;
   draftId: string;
 }
@@ -237,8 +240,10 @@ export type CapabilityDraftApprovalSessionSubmissionValidationStatus =
   | "validated_pending_runtime_gate"
   | "rejected";
 
-export interface SubmitCapabilityDraftApprovalSessionInputsRequest
-  extends Record<string, unknown> {
+export interface SubmitCapabilityDraftApprovalSessionInputsRequest extends Record<
+  string,
+  unknown
+> {
   workspaceRoot: string;
   approvalId: string;
   sessionId?: string;
@@ -328,8 +333,10 @@ export interface SubmitCapabilityDraftApprovalSessionInputsResult {
   blockedReason: string;
 }
 
-export interface ExecuteCapabilityDraftControlledGetRequest
-  extends Record<string, unknown> {
+export interface ExecuteCapabilityDraftControlledGetRequest extends Record<
+  string,
+  unknown
+> {
   workspaceRoot: string;
   approvalId: string;
   sessionId?: string;
@@ -391,8 +398,10 @@ export interface RegisterCapabilityDraftResult {
   registration: CapabilityDraftRegistrationSummary;
 }
 
-export interface ListWorkspaceRegisteredSkillsRequest
-  extends Record<string, unknown> {
+export interface ListWorkspaceRegisteredSkillsRequest extends Record<
+  string,
+  unknown
+> {
   workspaceRoot: string;
 }
 
@@ -1188,9 +1197,7 @@ function normalizeSessionSubmissionFieldResults(
   }
   return value
     .filter(
-      (
-        item,
-      ): item is RawCapabilityDraftApprovalSessionSubmissionFieldResult =>
+      (item): item is RawCapabilityDraftApprovalSessionSubmissionFieldResult =>
         Boolean(item && typeof item === "object"),
     )
     .map((item): CapabilityDraftApprovalSessionSubmissionFieldResult => {
@@ -1226,7 +1233,12 @@ function normalizeControlledGetPreflight(
     gateId: readString(record, "gateId", "gate_id"),
     approvalId: readString(record, "approvalId", "approval_id"),
     method: readString(record, "method"),
-    methodAllowed: readBoolean(record, false, "methodAllowed", "method_allowed"),
+    methodAllowed: readBoolean(
+      record,
+      false,
+      "methodAllowed",
+      "method_allowed",
+    ),
     endpointSource: readString(record, "endpointSource", "endpoint_source"),
     endpointValidated: readBoolean(
       record,
@@ -1300,7 +1312,12 @@ function normalizeDryPreflightPlan(
     gateId: readString(record, "gateId", "gate_id"),
     approvalId: readString(record, "approvalId", "approval_id"),
     method: readString(record, "method"),
-    methodAllowed: readBoolean(record, false, "methodAllowed", "method_allowed"),
+    methodAllowed: readBoolean(
+      record,
+      false,
+      "methodAllowed",
+      "method_allowed",
+    ),
     requestUrlHash:
       typeof record.requestUrlHash === "string"
         ? record.requestUrlHash
@@ -1394,8 +1411,7 @@ function normalizeApprovalSessionSubmissionResult(
         : typeof record.session_id === "string"
           ? record.session_id
           : null,
-    status:
-      status === "validated_pending_runtime_gate" ? status : "rejected",
+    status: status === "validated_pending_runtime_gate" ? status : "rejected",
     scope: readString(record, "scope"),
     acceptedFieldKeys: normalizeStringArray(
       record.acceptedFieldKeys ?? record.accepted_field_keys,
@@ -1519,13 +1535,16 @@ function normalizeControlledGetExecutionResult(
           ? record.session_id
           : null,
     status:
-      status === "executed" || status === "request_failed"
-        ? status
-        : "blocked",
+      status === "executed" || status === "request_failed" ? status : "blocked",
     scope: readString(record, "scope"),
     gateId: readString(record, "gateId", "gate_id"),
     method: readString(record, "method"),
-    methodAllowed: readBoolean(record, false, "methodAllowed", "method_allowed"),
+    methodAllowed: readBoolean(
+      record,
+      false,
+      "methodAllowed",
+      "method_allowed",
+    ),
     requestUrlHash:
       typeof record.requestUrlHash === "string"
         ? record.requestUrlHash
@@ -1603,7 +1622,12 @@ function normalizeControlledGetExecutionResult(
       "credentialResolved",
       "credential_resolved",
     ),
-    tokenPersisted: readBoolean(record, false, "tokenPersisted", "token_persisted"),
+    tokenPersisted: readBoolean(
+      record,
+      false,
+      "tokenPersisted",
+      "token_persisted",
+    ),
     requestExecutionEnabled: readBoolean(
       record,
       false,
@@ -1754,7 +1778,9 @@ function normalizeRecordStringMap(value: unknown): Record<string, string> {
 
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>)
-      .filter((entry): entry is [string, string] => typeof entry[1] === "string")
+      .filter(
+        (entry): entry is [string, string] => typeof entry[1] === "string",
+      )
       .map(([key, item]) => [key, item.trim()])
       .filter(([, item]) => item.length > 0),
   );
@@ -1962,10 +1988,11 @@ export const capabilityDraftsApi = {
   async executeControlledGet(
     request: ExecuteCapabilityDraftControlledGetRequest,
   ): Promise<ExecuteCapabilityDraftControlledGetResult> {
-    const result = await safeInvoke<RawExecuteCapabilityDraftControlledGetResult>(
-      "capability_draft_execute_controlled_get",
-      { request },
-    );
+    const result =
+      await safeInvoke<RawExecuteCapabilityDraftControlledGetResult>(
+        "capability_draft_execute_controlled_get",
+        { request },
+      );
     return normalizeControlledGetExecutionResult(result ?? {});
   },
 };

@@ -124,7 +124,7 @@ function parseUnixPsLine(line) {
     pgid: Number(match[3]),
     stat: match[4],
     etime: match[5],
-    command: match[6].trim(),
+    command: sanitizeProcessCommand(match[6].trim()),
   };
 }
 
@@ -158,9 +158,17 @@ function collectWindowsProcesses() {
       pgid: null,
       stat: "unknown",
       etime: "unknown",
-      command: String(entry?.CommandLine || "").trim(),
+      command: sanitizeProcessCommand(String(entry?.CommandLine || "").trim()),
     }))
     .filter((entry) => entry.pid > 0 && entry.pid !== process.pid && entry.command.length > 0);
+}
+
+function sanitizeProcessCommand(command) {
+  return String(command || "")
+    .replace(/(--api-key(?:=|\s+))(?:"[^"]+"|'[^']+'|\S+)/gi, "$1<redacted>")
+    .replace(/(api[_-]?key(?:=|:|\s+))(?:"[^"]+"|'[^']+'|\S+)/gi, "$1<redacted>")
+    .replace(/ctx7sk-[A-Za-z0-9-]+/g, "ctx7sk-***")
+    .replace(/sk-[A-Za-z0-9_-]{12,}/g, "sk-***");
 }
 
 function collectProcesses() {

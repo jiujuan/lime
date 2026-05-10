@@ -220,10 +220,7 @@ function averageCleanPlateSamples(
   ) as [number, number, number, number];
 }
 
-function getRgbDistance(
-  left: CleanPlatePixel,
-  right: CleanPlatePixel,
-): number {
+function getRgbDistance(left: CleanPlatePixel, right: CleanPlatePixel): number {
   return Math.hypot(left[0] - right[0], left[1] - right[1], left[2] - right[2]);
 }
 
@@ -572,8 +569,16 @@ export function applyLayeredDesignSimpleCleanPlateInpaintToRgba(
   let output = clonePixelImage(image);
   const left = clampCoordinate(rect.x, 0, output.width - 1);
   const top = clampCoordinate(rect.y, 0, output.height - 1);
-  const right = clampCoordinate(rect.x + rect.width - 1, left, output.width - 1);
-  const bottom = clampCoordinate(rect.y + rect.height - 1, top, output.height - 1);
+  const right = clampCoordinate(
+    rect.x + rect.width - 1,
+    left,
+    output.width - 1,
+  );
+  const bottom = clampCoordinate(
+    rect.y + rect.height - 1,
+    top,
+    output.height - 1,
+  );
   const bounds = { left, top, right, bottom };
   const baseCoverageMap = createTargetCoverageMap(mask, rect, bounds);
   const { coverageMap, haloExpandedPixelCount } = mask
@@ -639,15 +644,15 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
   let binary = "";
   const chunkSize = 0x8000;
   for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+    binary += String.fromCharCode(
+      ...bytes.subarray(offset, offset + chunkSize),
+    );
   }
 
   return `data:${blob.type || "image/png"};base64,${btoa(binary)}`;
 }
 
-function createDefaultBrowserCleanPlateRasterAdapter():
-  | LayeredDesignCleanPlateRasterAdapter
-  | null {
+function createDefaultBrowserCleanPlateRasterAdapter(): LayeredDesignCleanPlateRasterAdapter | null {
   if (
     typeof OffscreenCanvas !== "function" ||
     typeof createImageBitmap !== "function" ||
@@ -804,7 +809,9 @@ export function createLayeredDesignWorkerCleanPlateRefinerFromProvider(
             confidence: input.subject.confidence,
             zIndex: input.subject.zIndex,
             crop: { ...input.subject.crop },
-            ...(input.subject.maskSrc ? { maskSrc: input.subject.maskSrc } : {}),
+            ...(input.subject.maskSrc
+              ? { maskSrc: input.subject.maskSrc }
+              : {}),
           },
         }),
       );

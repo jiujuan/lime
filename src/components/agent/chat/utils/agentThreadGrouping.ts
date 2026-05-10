@@ -870,8 +870,7 @@ function buildPreviewLines(
         item.type === "web_search",
     ) &&
     items.some(
-      (item) =>
-        item.type === "reasoning" || item.type === "context_compaction",
+      (item) => item.type === "reasoning" || item.type === "context_compaction",
     );
 
   for (const item of items) {

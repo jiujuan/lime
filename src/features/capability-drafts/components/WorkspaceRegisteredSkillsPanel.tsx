@@ -112,9 +112,9 @@ function skillRequiresControlledGetEvidence(
     skill.registration.approvalRequests?.some(
       (request) => request.sourceCheckId === READONLY_HTTP_PREFLIGHT_CHECK_ID,
     ) ||
-      skill.registration.verificationGates?.some(
-        (gate) => gate.checkId === READONLY_HTTP_PREFLIGHT_CHECK_ID,
-      ),
+    skill.registration.verificationGates?.some(
+      (gate) => gate.checkId === READONLY_HTTP_PREFLIGHT_CHECK_ID,
+    ),
   );
 }
 
@@ -366,8 +366,8 @@ function WorkspaceRegisteredSkillCard({
             </span>
           </div>
           <p className="mt-1.5 text-[11px] leading-5 text-amber-800">
-            真实 API 执行前必须先消费这条授权请求 artifact；当前只持久化审计入口，
-            不保存 token，也不发请求。
+            真实 API 执行前必须先消费这条授权请求
+            artifact；当前只持久化审计入口， 不保存 token，也不发请求。
           </p>
           {approvalPreview.consumptionGate ? (
             <div className="mt-2 rounded-xl border border-amber-200 bg-white px-2.5 py-2">
@@ -442,9 +442,7 @@ function WorkspaceRegisteredSkillCard({
                     key={label}
                     className="rounded-lg border border-amber-100 bg-amber-50 px-2 py-1"
                   >
-                    <span className="text-[10px] text-amber-600">
-                      {label}
-                    </span>
+                    <span className="text-[10px] text-amber-600">{label}</span>
                     <span className="ml-1 break-words font-mono text-[10px] text-slate-700">
                       {value}
                     </span>
@@ -532,9 +530,7 @@ function WorkspaceRegisteredSkillCard({
                     key={label}
                     className="rounded-lg border border-amber-100 bg-amber-50 px-2 py-1"
                   >
-                    <span className="text-[10px] text-amber-600">
-                      {label}
-                    </span>
+                    <span className="text-[10px] text-amber-600">{label}</span>
                     <span className="ml-1 break-words font-mono text-[10px] text-slate-700">
                       {value}
                     </span>
@@ -543,7 +539,9 @@ function WorkspaceRegisteredSkillCard({
               </div>
               <div className="mt-1.5 text-[10px] leading-4 text-slate-600">
                 uiSubmission=
-                {String(approvalPreview.sessionInputIntake.uiSubmissionEnabled)}{" "}
+                {String(
+                  approvalPreview.sessionInputIntake.uiSubmissionEnabled,
+                )}{" "}
                 / runtimeExecution=
                 {String(
                   approvalPreview.sessionInputIntake.runtimeExecutionEnabled,
@@ -578,10 +576,7 @@ function WorkspaceRegisteredSkillCard({
               </p>
               <div className="mt-1.5 grid gap-1 sm:grid-cols-2">
                 {[
-                  [
-                    "Mode",
-                    approvalPreview.sessionInputSubmissionContract.mode,
-                  ],
+                  ["Mode", approvalPreview.sessionInputSubmissionContract.mode],
                   [
                     "Retention",
                     approvalPreview.sessionInputSubmissionContract
@@ -620,9 +615,7 @@ function WorkspaceRegisteredSkillCard({
                     key={label}
                     className="rounded-lg border border-amber-100 bg-amber-50 px-2 py-1"
                   >
-                    <span className="text-[10px] text-amber-600">
-                      {label}
-                    </span>
+                    <span className="text-[10px] text-amber-600">{label}</span>
                     <span className="ml-1 break-words font-mono text-[10px] text-slate-700">
                       {value}
                     </span>
@@ -813,8 +806,10 @@ export function WorkspaceRegisteredSkillsPanel({
   const [completionAuditSummaries, setCompletionAuditSummaries] = useState<
     Record<string, AgentRuntimeCompletionAuditSummary | undefined>
   >({});
-  const [completionAuditAuditingDirectory, setCompletionAuditAuditingDirectory] =
-    useState<string | null>(null);
+  const [
+    completionAuditAuditingDirectory,
+    setCompletionAuditAuditingDirectory,
+  ] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const normalizedWorkspaceRoot = workspaceRoot?.trim() || null;
@@ -954,7 +949,9 @@ export function WorkspaceRegisteredSkillsPanel({
         const runs = await getAutomationRunHistory(job.id, 5);
         const sessionId = runs.find((run) => run.session_id)?.session_id;
         if (!sessionId) {
-          throw new Error("最近 automation run 没有关联 session，无法导出 evidence。");
+          throw new Error(
+            "最近 automation run 没有关联 session，无法导出 evidence。",
+          );
         }
         const evidencePack = await exportAgentRuntimeEvidencePack(sessionId);
         setCompletionAuditSummaries((previous) => ({

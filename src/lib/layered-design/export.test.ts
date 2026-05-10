@@ -97,14 +97,22 @@ function readBigEndianInt16(view: DataView, offset: number): number {
   return view.getInt16(offset, false);
 }
 
-function readAscii(content: Uint8Array, offset: number, length: number): string {
+function readAscii(
+  content: Uint8Array,
+  offset: number,
+  length: number,
+): string {
   return Array.from(content.slice(offset, offset + length))
     .map((code) => String.fromCharCode(code))
     .join("");
 }
 
 function readPsdLayerCount(content: Uint8Array): number {
-  const view = new DataView(content.buffer, content.byteOffset, content.byteLength);
+  const view = new DataView(
+    content.buffer,
+    content.byteOffset,
+    content.byteLength,
+  );
   let offset = 26;
   const colorModeDataLength = readBigEndianUint32(view, offset);
   offset += 4 + colorModeDataLength;
@@ -124,7 +132,11 @@ function decodePsdText(content: Uint8Array): string {
 }
 
 function readLocalZipEntryNames(content: Uint8Array): string[] {
-  const view = new DataView(content.buffer, content.byteOffset, content.byteLength);
+  const view = new DataView(
+    content.buffer,
+    content.byteOffset,
+    content.byteLength,
+  );
   const decoder = new TextDecoder();
   const names: string[] = [];
   let offset = 0;
@@ -180,9 +192,7 @@ describe("layered-design export", () => {
       provider: "openai",
       modelId: "gpt-image-2",
     });
-    expect(bundle.manifest.psdLikeManifestFile).toBe(
-      "psd-like-manifest.json",
-    );
+    expect(bundle.manifest.psdLikeManifestFile).toBe("psd-like-manifest.json");
     expect(bundle.manifest.trialPsdFile).toBe("trial.psd");
 
     const exportedDocument = JSON.parse(bundle.designFile.content);

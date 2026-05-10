@@ -181,7 +181,8 @@ export function resolveLayeredDesignImageModelCapability(
   }
 
   if (/\b(dall-e|dalle)\b/.test(combined)) {
-    const isDalle2 = combined.includes("dall-e-2") || combined.includes("dalle-2");
+    const isDalle2 =
+      combined.includes("dall-e-2") || combined.includes("dalle-2");
     return createCapability({
       family: "openai-dalle",
       sizePolicy: "allowed_sizes",
@@ -332,13 +333,13 @@ function normalizeAllowedSize(params: {
   const requestedRatio = params.width / params.height;
   const parsedSizes = params.allowedSizes
     .map(parseSize)
-    .filter((size): size is { width: number; height: number } =>
-      Boolean(size),
-    );
+    .filter((size): size is { width: number; height: number } => Boolean(size));
 
   const best = parsedSizes
     .map((size) => {
-      const ratioScore = Math.abs(Math.log(requestedRatio / (size.width / size.height)));
+      const ratioScore = Math.abs(
+        Math.log(requestedRatio / (size.width / size.height)),
+      );
       const areaScore = Math.abs(
         Math.log(requestedArea / (size.width * size.height)),
       );

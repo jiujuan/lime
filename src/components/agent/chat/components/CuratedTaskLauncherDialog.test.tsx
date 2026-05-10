@@ -11,9 +11,39 @@ import {
 } from "@/components/agent/chat/utils/curatedTaskRecommendationSignals";
 import type { UnifiedMemory } from "@/lib/api/unifiedMemory";
 
+const { mockUseTranslation } = vi.hoisted(() => {
+  const mockTranslate = vi.fn((key: string, options?: unknown) => {
+    if (typeof options === "string") {
+      return options;
+    }
+
+    if (options && typeof options === "object") {
+      const values = options as Record<string, unknown>;
+      const template =
+        typeof values.defaultValue === "string" ? values.defaultValue : key;
+      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+        String(values[name] ?? ""),
+      );
+    }
+
+    return key;
+  });
+
+  return {
+    mockUseTranslation: vi.fn((_namespace?: string) => ({
+      i18n: { language: "zh-CN" },
+      t: mockTranslate,
+    })),
+  };
+});
+
 const mockListUnifiedMemories = vi.hoisted(() =>
   vi.fn<() => Promise<UnifiedMemory[]>>(async () => []),
 );
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
+}));
 
 vi.mock("@/lib/api/unifiedMemory", () => ({
   listUnifiedMemories: mockListUnifiedMemories,

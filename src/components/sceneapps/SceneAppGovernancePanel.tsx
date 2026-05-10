@@ -195,7 +195,9 @@ export function SceneAppGovernancePanel({
             ) : null}
             {governanceView.destinations.length ? (
               <div className="mt-4">
-                <div className="text-xs font-medium text-slate-500">建议去向</div>
+                <div className="text-xs font-medium text-slate-500">
+                  建议去向
+                </div>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {governanceView.destinations.map((destination) => (
                     <span
@@ -243,7 +245,9 @@ export function SceneAppGovernancePanel({
       >
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
           <div>
-            <div className="text-sm font-medium text-slate-900">判断依据与材料</div>
+            <div className="text-sm font-medium text-slate-900">
+              判断依据与材料
+            </div>
             <div className="mt-1 text-xs text-slate-500">需要时再展开。</div>
           </div>
           <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 group-open:hidden">
@@ -299,7 +303,9 @@ export function SceneAppGovernancePanel({
                 </div>
                 {governanceView.contextBaseline.scopeLabel ? (
                   <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1">
-                    <span className="font-medium text-slate-900">作用范围：</span>
+                    <span className="font-medium text-slate-900">
+                      作用范围：
+                    </span>
                     {governanceView.contextBaseline.scopeLabel}
                   </div>
                 ) : null}
@@ -322,16 +328,20 @@ export function SceneAppGovernancePanel({
                     className="border-t border-slate-200 px-3 py-3"
                   >
                     <div className="flex flex-wrap gap-2">
-                      {governanceView.contextBaseline.referenceItems.map((item) => (
-                        <span
-                          key={item.key}
-                          className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-700"
-                        >
-                          {item.label}
-                          {item.usageLabel ? ` · ${item.usageLabel}` : ""}
-                          {item.feedbackLabel ? ` · ${item.feedbackLabel}` : ""}
-                        </span>
-                      ))}
+                      {governanceView.contextBaseline.referenceItems.map(
+                        (item) => (
+                          <span
+                            key={item.key}
+                            className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-700"
+                          >
+                            {item.label}
+                            {item.usageLabel ? ` · ${item.usageLabel}` : ""}
+                            {item.feedbackLabel
+                              ? ` · ${item.feedbackLabel}`
+                              : ""}
+                          </span>
+                        ),
+                      )}
                     </div>
                   </div>
                 </details>

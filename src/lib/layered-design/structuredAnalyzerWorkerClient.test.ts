@@ -235,61 +235,63 @@ describe("LayeredDesign worker heuristic analyzer client", () => {
 
   it("worker-first 默认 analyzer 应保留 Worker mask/clean plate 并合并 fallback OCR TextLayer", async () => {
     const worker = new FakeAnalyzerWorker();
-    const fallbackAnalyzer = vi.fn(async (): Promise<LayeredDesignFlatImageAnalysisResult> => ({
-      analysis: {
-        analyzer: {
-          kind: "local_heuristic",
-          label: "Fallback analyzer + Tauri native OCR",
+    const fallbackAnalyzer = vi.fn(
+      async (): Promise<LayeredDesignFlatImageAnalysisResult> => ({
+        analysis: {
+          analyzer: {
+            kind: "local_heuristic",
+            label: "Fallback analyzer + Tauri native OCR",
+          },
+          outputs: {
+            candidateRaster: true,
+            candidateMask: false,
+            cleanPlate: false,
+            ocrText: true,
+          },
+          providerCapabilities: [
+            {
+              kind: "text_ocr",
+              label: "Tauri native OCR",
+              execution: "native_command",
+              modelId: "tauri_native_ocr",
+              supports: {
+                textGeometry: true,
+              },
+              quality: {
+                productionReady: false,
+                requiresHumanReview: true,
+              },
+            },
+          ],
+          generatedAt: CREATED_AT,
         },
-        outputs: {
-          candidateRaster: true,
-          candidateMask: false,
-          cleanPlate: false,
-          ocrText: true,
-        },
-        providerCapabilities: [
+        candidates: [
           {
-            kind: "text_ocr",
-            label: "Tauri native OCR",
-            execution: "native_command",
-            modelId: "tauri_native_ocr",
-            supports: {
-              textGeometry: true,
+            id: "headline-candidate",
+            role: "text",
+            confidence: 0.88,
+            layer: {
+              id: "headline-layer",
+              name: "标题文字",
+              type: "text",
+              text: "OCR 标题",
+              x: 120,
+              y: 80,
+              width: 620,
+              height: 140,
+              zIndex: 40,
+              fontSize: 72,
+              color: "#111111",
+              align: "center",
             },
-            quality: {
-              productionReady: false,
-              requiresHumanReview: true,
-            },
+            assetIds: [],
           },
         ],
-        generatedAt: CREATED_AT,
-      },
-      candidates: [
-        {
-          id: "headline-candidate",
-          role: "text",
-          confidence: 0.88,
-          layer: {
-            id: "headline-layer",
-            name: "标题文字",
-            type: "text",
-            text: "OCR 标题",
-            x: 120,
-            y: 80,
-            width: 620,
-            height: 140,
-            zIndex: 40,
-            fontSize: 72,
-            color: "#111111",
-            align: "center",
-          },
-          assetIds: [],
+        cleanPlate: {
+          status: "not_requested",
         },
-      ],
-      cleanPlate: {
-        status: "not_requested",
-      },
-    }));
+      }),
+    );
     const analyzer = createLayeredDesignWorkerFirstFlatImageAnalyzer({
       fallbackAnalyzer,
       requestIdFactory: () => "worker-first-request",
