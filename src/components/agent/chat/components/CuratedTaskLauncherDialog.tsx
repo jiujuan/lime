@@ -270,7 +270,7 @@ export function CuratedTaskLauncherDialog({
     remainingRequiredFieldCount === 0
       ? t("curatedTask.launcher.readiness.ready", "关键信息已齐，可以直接开始")
       : t("curatedTask.launcher.readiness.missing", {
-          count: formatNumber(remainingRequiredFieldCount, { locale }),
+          count: remainingRequiredFieldCount,
           defaultValue: "还差 {{count}} 项关键信息",
         });
 
@@ -715,9 +715,7 @@ export function CuratedTaskLauncherDialog({
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600">
                         {t("curatedTask.launcher.reference.limitBadge", {
-                          count: formatNumber(MAX_REFERENCE_SELECTION_COUNT, {
-                            locale,
-                          }),
+                          count: MAX_REFERENCE_SELECTION_COUNT,
                           defaultValue: "最多 {{count}} 条",
                         })}
                       </span>
@@ -892,17 +890,13 @@ export function CuratedTaskLauncherDialog({
                 {selectedReferenceEntryIds.length > 0 ? (
                   <div className="mt-4 rounded-[18px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
                     {t("curatedTask.launcher.reference.selected", {
-                      count: formatNumber(selectedReferenceEntryIds.length, {
-                        locale,
-                      }),
+                      count: selectedReferenceEntryIds.length,
                       defaultValue:
                         "已选择 {{count}} 条参考对象，本轮会一起带入生成。",
                     })}
                     {missingSelectedReferenceCount > 0
                       ? t("curatedTask.launcher.reference.missingSelected", {
-                          count: formatNumber(missingSelectedReferenceCount, {
-                            locale,
-                          }),
+                          count: missingSelectedReferenceCount,
                           defaultValue:
                             " 其中 {{count}} 条未出现在最近列表里，但发送时仍会保留。",
                         })
