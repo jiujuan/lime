@@ -122,6 +122,8 @@ export function TeamWorkspaceBoardHeader({
             type="button"
             size="sm"
             variant="outline"
+            className="relative z-10 shrink-0 bg-white"
+            data-testid="team-workspace-return-parent"
             onClick={() => void onReturnToParentSession()}
           >
             <ArrowUpLeft className="mr-1.5 h-3.5 w-3.5" />

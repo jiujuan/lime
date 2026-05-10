@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import type { TFunction } from "i18next";
 import {
   AlertCircle,
   CheckCircle2,
@@ -19,6 +20,7 @@ import {
   Wand2,
   type LucideIcon,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
 import { ShortcutSettings } from "@/components/smart-input/ShortcutSettings";
@@ -79,6 +81,7 @@ const DEFAULT_MEDIA_PREFERENCE: MediaGenerationPreference = {
 
 type PillTone = "neutral" | "success" | "warning";
 type VoiceModelAction = "download" | "delete" | "default" | "test";
+type VoiceSettingsTranslate = TFunction<"settings", undefined>;
 
 function normalizeOptionalText(value?: string | null): string | undefined {
   const normalized = value?.trim();
@@ -162,12 +165,14 @@ function SettingCard({
   icon: Icon,
   children,
   sectionId,
+  tipAriaLabel,
 }: {
   title: string;
   description: string;
   icon: LucideIcon;
   children: ReactNode;
   sectionId?: string;
+  tipAriaLabel: string;
 }) {
   return (
     <section
@@ -185,7 +190,7 @@ function SettingCard({
             {title}
           </h3>
           <WorkbenchInfoTip
-            ariaLabel={`${title}说明`}
+            ariaLabel={tipAriaLabel}
             content={description}
             tone="slate"
           />
@@ -245,24 +250,37 @@ function getVoiceModelDisplayName(entry: VoiceModelCatalogEntry): string {
 }
 
 function getVoiceModelInstallStatusText(
+  t: VoiceSettingsTranslate,
   entry: VoiceModelCatalogEntry,
   state: VoiceModelInstallState | null,
   action: VoiceModelAction | null,
   progress?: VoiceModelDownloadProgressEvent | null,
 ): string {
   if (action === "download") {
-    return progress?.message || "准备下载模型";
+    return (
+      progress?.message ||
+      t("settings.voice.model.status.prepareDownload", "准备下载模型")
+    );
   }
 
   const modelSize = entry.size_bytes
-    ? `约 ${formatBytes(entry.size_bytes)}`
-    : "大小待目录返回";
+    ? t("settings.voice.model.status.approxSize", {
+        size: formatBytes(entry.size_bytes),
+        defaultValue: "约 {{size}}",
+      })
+    : t("settings.voice.model.status.sizePending", "大小待目录返回");
 
   if (state?.installed) {
-    return `已安装（ONNX int8 量化，${modelSize}）`;
+    return t("settings.voice.model.status.installed", {
+      size: modelSize,
+      defaultValue: "已安装（ONNX int8 量化，{{size}}）",
+    });
   }
 
-  return `未安装（ONNX int8 量化，${modelSize}）`;
+  return t("settings.voice.model.status.notInstalled", {
+    size: modelSize,
+    defaultValue: "未安装（ONNX int8 量化，{{size}}）",
+  });
 }
 
 function getVoiceModelDownloadPercent(
@@ -289,48 +307,92 @@ function getErrorMessage(error: unknown, fallback: string): string {
 }
 
 function buildPrimaryShortcutStatus(
+  t: VoiceSettingsTranslate,
   voiceConfig: VoiceInputConfig | null,
   runtimeStatus: VoiceShortcutRuntimeStatus | null,
 ): { text: string; tone: PillTone } {
   if (!voiceConfig) {
-    return { text: "加载中", tone: "neutral" };
+    return {
+      text: t("settings.voice.shortcut.status.loading", "加载中"),
+      tone: "neutral",
+    };
   }
 
   if (!voiceConfig.enabled) {
-    return { text: "未启用，不会注册全局快捷键", tone: "neutral" };
+    return {
+      text: t(
+        "settings.voice.shortcut.status.primaryDisabled",
+        "未启用，不会注册全局快捷键",
+      ),
+      tone: "neutral",
+    };
   }
 
   if (
     runtimeStatus?.shortcut_registered &&
     runtimeStatus.registered_shortcut === voiceConfig.shortcut
   ) {
-    return { text: "运行时已注册", tone: "success" };
+    return {
+      text: t(
+        "settings.voice.shortcut.status.primaryRegistered",
+        "运行时已注册",
+      ),
+      tone: "success",
+    };
   }
 
-  return { text: "配置已保存，但运行时尚未注册", tone: "warning" };
+  return {
+    text: t(
+      "settings.voice.shortcut.status.primaryPending",
+      "配置已保存，但运行时尚未注册",
+    ),
+    tone: "warning",
+  };
 }
 
 function buildTranslateShortcutStatus(
+  t: VoiceSettingsTranslate,
   voiceConfig: VoiceInputConfig | null,
   runtimeStatus: VoiceShortcutRuntimeStatus | null,
 ): { text: string; tone: PillTone } {
   if (!voiceConfig) {
-    return { text: "加载中", tone: "neutral" };
+    return {
+      text: t("settings.voice.shortcut.status.loading", "加载中"),
+      tone: "neutral",
+    };
   }
 
   if (!voiceConfig.translate_shortcut) {
-    return { text: "未设置翻译模式快捷键", tone: "neutral" };
+    return {
+      text: t(
+        "settings.voice.shortcut.status.translateUnset",
+        "未设置翻译模式快捷键",
+      ),
+      tone: "neutral",
+    };
   }
 
   if (!voiceConfig.enabled) {
-    return { text: "需先启用语音输入", tone: "warning" };
+    return {
+      text: t(
+        "settings.voice.shortcut.status.translateNeedsVoice",
+        "需先启用语音输入",
+      ),
+      tone: "warning",
+    };
   }
 
   const hasInstruction = voiceConfig.instructions.some(
     (instruction) => instruction.id === voiceConfig.translate_instruction_id,
   );
   if (!hasInstruction) {
-    return { text: "请先选择翻译模式指令", tone: "warning" };
+    return {
+      text: t(
+        "settings.voice.shortcut.status.translateNeedsInstruction",
+        "请先选择翻译模式指令",
+      ),
+      tone: "warning",
+    };
   }
 
   if (
@@ -338,31 +400,66 @@ function buildTranslateShortcutStatus(
     runtimeStatus.registered_translate_shortcut ===
       voiceConfig.translate_shortcut
   ) {
-    return { text: "翻译模式快捷键已注册", tone: "success" };
+    return {
+      text: t(
+        "settings.voice.shortcut.status.translateRegistered",
+        "翻译模式快捷键已注册",
+      ),
+      tone: "success",
+    };
   }
 
-  return { text: "翻译模式配置已保存，但运行时尚未注册", tone: "warning" };
+  return {
+    text: t(
+      "settings.voice.shortcut.status.translatePending",
+      "翻译模式配置已保存，但运行时尚未注册",
+    ),
+    tone: "warning",
+  };
 }
 
 function buildFnShortcutStatus(
+  t: VoiceSettingsTranslate,
   runtimeStatus: VoiceShortcutRuntimeStatus | null,
 ): { text: string; tone: PillTone } {
   if (!runtimeStatus) {
-    return { text: "Fn 状态加载中", tone: "neutral" };
+    return {
+      text: t("settings.voice.shortcut.status.fnLoading", "Fn 状态加载中"),
+      tone: "neutral",
+    };
   }
 
   if (runtimeStatus.fn_registered) {
-    return { text: "Fn 按住录音已注册", tone: "success" };
+    return {
+      text: t(
+        "settings.voice.shortcut.status.fnRegistered",
+        "Fn 按住录音已注册",
+      ),
+      tone: "success",
+    };
   }
 
   if (runtimeStatus.fn_supported) {
-    return { text: "Fn 支持可用，等待运行时注册", tone: "warning" };
+    return {
+      text: t(
+        "settings.voice.shortcut.status.fnPending",
+        "Fn 支持可用，等待运行时注册",
+      ),
+      tone: "warning",
+    };
   }
 
-  return { text: "当前平台不支持 Fn，已使用快捷键回退", tone: "warning" };
+  return {
+    text: t(
+      "settings.voice.shortcut.status.fnUnsupported",
+      "当前平台不支持 Fn，已使用快捷键回退",
+    ),
+    tone: "warning",
+  };
 }
 
 export function VoiceSettings() {
+  const { t } = useTranslation("settings");
   const [config, setConfig] = useState<Config | null>(null);
   const [voiceConfig, setVoiceConfig] = useState<VoiceInputConfig | null>(null);
   const [voiceShortcutStatus, setVoiceShortcutStatus] =
@@ -433,11 +530,14 @@ export function VoiceSettings() {
       );
     } catch (error) {
       console.error("加载语音设置失败:", error);
-      setMessage({ type: "error", text: "加载语音设置失败" });
+      setMessage({
+        type: "error",
+        text: t("settings.voice.message.loadFailed", "加载语音设置失败"),
+      });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void loadVoiceSettings();
@@ -505,13 +605,19 @@ export function VoiceSettings() {
         if (nextVoiceConfig.enabled !== voiceConfig.enabled) {
           await loadVoiceSettings();
         }
-        showMessage("success", "语音设置已保存");
+        showMessage(
+          "success",
+          t("settings.voice.message.saved", "语音设置已保存"),
+        );
       } catch (error) {
         console.error("保存语音设置失败:", error);
-        showMessage("error", "保存语音设置失败");
+        showMessage(
+          "error",
+          t("settings.voice.message.saveFailed", "保存语音设置失败"),
+        );
       }
     },
-    [loadVoiceSettings, showMessage, voiceConfig],
+    [loadVoiceSettings, showMessage, t, voiceConfig],
   );
 
   const persistGlobalVoicePreference = useCallback(
@@ -536,13 +642,25 @@ export function VoiceSettings() {
         await saveConfig(nextConfig);
         setConfig(nextConfig);
         setGlobalVoicePreference(nextPreference);
-        showMessage("success", "语音生成偏好已保存");
+        showMessage(
+          "success",
+          t(
+            "settings.voice.message.mediaPreferenceSaved",
+            "语音生成偏好已保存",
+          ),
+        );
       } catch (error) {
         console.error("保存语音生成偏好失败:", error);
-        showMessage("error", "保存语音生成偏好失败");
+        showMessage(
+          "error",
+          t(
+            "settings.voice.message.mediaPreferenceSaveFailed",
+            "保存语音生成偏好失败",
+          ),
+        );
       }
     },
-    [config, showMessage],
+    [config, showMessage, t],
   );
 
   const enabledAsrCredentials = useMemo(
@@ -576,7 +694,10 @@ export function VoiceSettings() {
 
   const polishProviderWarning = voiceConfig?.processor.polish_provider
     ? !polishProvider
-      ? `当前润色 Provider 不可用：${voiceConfig.processor.polish_provider}`
+      ? t("settings.voice.processing.warning.providerUnavailable", {
+          provider: voiceConfig.processor.polish_provider,
+          defaultValue: "当前润色 Provider 不可用：{{provider}}",
+        })
       : undefined
     : undefined;
 
@@ -584,22 +705,27 @@ export function VoiceSettings() {
     voiceConfig?.processor.polish_model &&
     polishProvider?.customModels?.length &&
     !polishProvider.customModels.includes(voiceConfig.processor.polish_model)
-      ? `当前润色模型不在 ${polishProvider.label} 的已配置模型中：${voiceConfig.processor.polish_model}`
+      ? t("settings.voice.processing.warning.modelUnavailable", {
+          provider: polishProvider.label,
+          model: voiceConfig.processor.polish_model,
+          defaultValue:
+            "当前润色模型不在 {{provider}} 的已配置模型中：{{model}}",
+        })
       : undefined;
 
   const primaryShortcutStatus = useMemo(
-    () => buildPrimaryShortcutStatus(voiceConfig, voiceShortcutStatus),
-    [voiceConfig, voiceShortcutStatus],
+    () => buildPrimaryShortcutStatus(t, voiceConfig, voiceShortcutStatus),
+    [t, voiceConfig, voiceShortcutStatus],
   );
 
   const translateShortcutStatus = useMemo(
-    () => buildTranslateShortcutStatus(voiceConfig, voiceShortcutStatus),
-    [voiceConfig, voiceShortcutStatus],
+    () => buildTranslateShortcutStatus(t, voiceConfig, voiceShortcutStatus),
+    [t, voiceConfig, voiceShortcutStatus],
   );
 
   const fnShortcutStatus = useMemo(
-    () => buildFnShortcutStatus(voiceShortcutStatus),
-    [voiceShortcutStatus],
+    () => buildFnShortcutStatus(t, voiceShortcutStatus),
+    [t, voiceShortcutStatus],
   );
 
   const primaryVoiceModel = voiceModelCatalog[0] ?? null;
@@ -623,24 +749,50 @@ export function VoiceSettings() {
   const defaultInstructionLabel =
     voiceInstructions.find(
       (instruction) => instruction.id === defaultInstructionId,
-    )?.name ?? "请选择默认润色指令";
+    )?.name ??
+    t(
+      "settings.voice.processing.instruction.defaultPlaceholder",
+      "请选择默认润色指令",
+    );
 
   const translateInstructionLabel =
     voiceInstructions.find(
       (instruction) => instruction.id === translateInstructionId,
-    )?.name ?? "请选择翻译模式指令";
+    )?.name ??
+    t(
+      "settings.voice.processing.instruction.translatePlaceholder",
+      "请选择翻译模式指令",
+    );
 
   const providerHint = providersLoading
-    ? "正在识别当前可用于配音 / TTS 的 Provider。"
+    ? t(
+        "settings.voice.media.providerHint.loading",
+        "正在识别当前可用于配音 / TTS 的 Provider。",
+      )
     : voiceProviders.length === 0
-      ? "当前没有可用语音生成 Provider；请先在设置 -> AI 服务商中配置支持 TTS 的服务。"
-      : "这里只配置配音 / 语音生成任务的默认 Provider、模型与回退策略。";
+      ? t(
+          "settings.voice.media.providerHint.empty",
+          "当前没有可用语音生成 Provider；请先在设置 -> AI 服务商中配置支持 TTS 的服务。",
+        )
+      : t(
+          "settings.voice.media.providerHint.ready",
+          "这里只配置配音 / 语音生成任务的默认 Provider、模型与回退策略。",
+        );
 
   const llmModelHint = providersLoading
-    ? "正在加载可用的润色模型。"
+    ? t(
+        "settings.voice.processing.modelHint.loading",
+        "正在加载可用的润色模型。",
+      )
     : providers.length === 0
-      ? "当前没有可用的对话模型；请先配置至少一个 LLM Provider。"
-      : "默认润色和翻译模式共用同一组模型选择；统一复用聊天页的模型选择器。";
+      ? t(
+          "settings.voice.processing.modelHint.empty",
+          "当前没有可用的对话模型；请先配置至少一个 LLM Provider。",
+        )
+      : t(
+          "settings.voice.processing.modelHint.ready",
+          "默认润色和翻译模式共用同一组模型选择；统一复用聊天页的模型选择器。",
+        );
 
   const handleVoiceEnabledChange = (enabled: boolean) => {
     void persistVoiceConfig((current) => ({
@@ -811,7 +963,7 @@ export function VoiceSettings() {
       downloaded_bytes: 0,
       total_bytes: primaryVoiceModel.size_bytes || null,
       overall_progress: 0,
-      message: "准备下载模型",
+      message: t("settings.voice.model.status.prepareDownload", "准备下载模型"),
     });
     let unlistenProgress: (() => void) | null = null;
     try {
@@ -828,10 +980,22 @@ export function VoiceSettings() {
       setVoiceModelState(result.state);
       setVoiceModelTestError(null);
       setVoiceModelTestResult(null);
-      showMessage("success", "SenseVoice Small 模型已下载");
+      showMessage(
+        "success",
+        t("settings.voice.model.message.downloaded", {
+          model: getVoiceModelDisplayName(primaryVoiceModel),
+          defaultValue: "{{model}} 模型已下载",
+        }),
+      );
     } catch (error) {
       console.error("下载 SenseVoice Small 模型失败:", error);
-      showMessage("error", "下载 SenseVoice Small 模型失败");
+      showMessage(
+        "error",
+        t("settings.voice.model.message.downloadFailed", {
+          model: getVoiceModelDisplayName(primaryVoiceModel),
+          defaultValue: "下载 {{model}} 模型失败",
+        }),
+      );
     } finally {
       unlistenProgress?.();
       setVoiceModelAction(null);
@@ -851,10 +1015,22 @@ export function VoiceSettings() {
       setVoiceModelTestError(null);
       setVoiceModelTestResult(null);
       await loadVoiceSettings();
-      showMessage("success", "SenseVoice Small 模型已删除");
+      showMessage(
+        "success",
+        t("settings.voice.model.message.deleted", {
+          model: getVoiceModelDisplayName(primaryVoiceModel),
+          defaultValue: "{{model}} 模型已删除",
+        }),
+      );
     } catch (error) {
       console.error("删除 SenseVoice Small 模型失败:", error);
-      showMessage("error", "删除 SenseVoice Small 模型失败");
+      showMessage(
+        "error",
+        t("settings.voice.model.message.deleteFailed", {
+          model: getVoiceModelDisplayName(primaryVoiceModel),
+          defaultValue: "删除 {{model}} 模型失败",
+        }),
+      );
     } finally {
       setVoiceModelAction(null);
     }
@@ -869,10 +1045,22 @@ export function VoiceSettings() {
     try {
       await setDefaultVoiceModel(primaryVoiceModel.id);
       await loadVoiceSettings();
-      showMessage("success", "SenseVoice Small 已设为默认识别服务");
+      showMessage(
+        "success",
+        t("settings.voice.model.message.defaultSet", {
+          model: getVoiceModelDisplayName(primaryVoiceModel),
+          defaultValue: "{{model}} 已设为默认识别服务",
+        }),
+      );
     } catch (error) {
       console.error("设置 SenseVoice Small 默认模型失败:", error);
-      showMessage("error", "设置 SenseVoice Small 默认模型失败");
+      showMessage(
+        "error",
+        t("settings.voice.model.message.defaultSetFailed", {
+          model: getVoiceModelDisplayName(primaryVoiceModel),
+          defaultValue: "设置 {{model}} 默认模型失败",
+        }),
+      );
     } finally {
       setVoiceModelAction(null);
     }
@@ -885,10 +1073,15 @@ export function VoiceSettings() {
 
     try {
       const selected = await openDialog({
-        title: "选择 WAV 测试音频",
+        title: t("settings.voice.model.test.dialogTitle", "选择 WAV 测试音频"),
         multiple: false,
         directory: false,
-        filters: [{ name: "WAV 音频", extensions: ["wav"] }],
+        filters: [
+          {
+            name: t("settings.voice.model.test.dialogFilter", "WAV 音频"),
+            extensions: ["wav"],
+          },
+        ],
       });
       const filePath = Array.isArray(selected) ? selected[0] : selected;
       if (!filePath) {
@@ -899,8 +1092,15 @@ export function VoiceSettings() {
       setVoiceModelTestResult(null);
     } catch (error) {
       console.error("选择 SenseVoice Small 测试文件失败:", error);
-      setVoiceModelTestError(getErrorMessage(error, "选择 WAV 文件失败"));
-      showMessage("error", "选择 WAV 文件失败");
+      const errorMessage = getErrorMessage(
+        error,
+        t("settings.voice.model.test.selectFailed", "选择 WAV 文件失败"),
+      );
+      setVoiceModelTestError(errorMessage);
+      showMessage(
+        "error",
+        t("settings.voice.model.test.selectFailed", "选择 WAV 文件失败"),
+      );
     }
   };
 
@@ -911,7 +1111,12 @@ export function VoiceSettings() {
 
     const filePath = voiceModelTestPath.trim();
     if (!filePath) {
-      setVoiceModelTestError("请先输入本机 WAV 文件路径");
+      setVoiceModelTestError(
+        t(
+          "settings.voice.model.test.pathRequired",
+          "请先输入本机 WAV 文件路径",
+        ),
+      );
       return;
     }
 
@@ -924,12 +1129,24 @@ export function VoiceSettings() {
         filePath,
       );
       setVoiceModelTestResult(result);
-      showMessage("success", "SenseVoice Small 测试转写完成");
+      showMessage(
+        "success",
+        t("settings.voice.model.test.completed", {
+          model: getVoiceModelDisplayName(primaryVoiceModel),
+          defaultValue: "{{model}} 测试转写完成",
+        }),
+      );
     } catch (error) {
       console.error("SenseVoice Small 测试转写失败:", error);
-      const errorMessage = getErrorMessage(error, "测试转写失败");
+      const errorMessage = getErrorMessage(
+        error,
+        t("settings.voice.model.test.failed", "测试转写失败"),
+      );
       setVoiceModelTestError(errorMessage);
-      showMessage("error", "测试转写失败");
+      showMessage(
+        "error",
+        t("settings.voice.model.test.failed", "测试转写失败"),
+      );
     } finally {
       setVoiceModelAction(null);
     }
@@ -943,19 +1160,31 @@ export function VoiceSettings() {
     <div className="max-w-[820px] space-y-4">
       {voiceConfig?.enabled && !defaultAsrCredential ? (
         <div className="rounded-[22px] border border-amber-200 bg-amber-50/85 px-4 py-3 text-sm text-amber-800">
-          语音输入已启用，但当前没有默认的语音识别凭证；请先在设置的“语音服务”里设置默认
-          ASR 服务。
+          {t(
+            "settings.voice.warning.noDefaultAsr",
+            "语音输入已启用，但当前没有默认的语音识别凭证；请先在设置的“语音服务”里设置默认 ASR 服务。",
+          )}
         </div>
       ) : null}
 
       <SettingCard
-        title="语音输入"
-        description="管理语音输入的启用状态、全局快捷键、麦克风设备和录音音效。这里的改动会直接影响输入栏听写、悬浮语音窗和翻译模式。"
+        title={t("settings.voice.input.title", "语音输入")}
+        description={t(
+          "settings.voice.input.description",
+          "管理语音输入的启用状态、全局快捷键、麦克风设备和录音音效。这里的改动会直接影响输入栏听写、悬浮语音窗和翻译模式。",
+        )}
         icon={Mic}
+        tipAriaLabel={t("settings.voice.card.tipAria", {
+          title: t("settings.voice.input.title", "语音输入"),
+          defaultValue: "{{title}}说明",
+        })}
       >
         <SettingRow
-          label="语音输入快捷键"
-          description="开启后可在输入栏或全局快捷键中按住录音、松开停止；macOS 优先使用 Fn，其他平台使用主快捷键回退。"
+          label={t("settings.voice.input.shortcut.label", "语音输入快捷键")}
+          description={t(
+            "settings.voice.input.shortcut.description",
+            "开启后可在输入栏或全局快捷键中按住录音、松开停止；macOS 优先使用 Fn，其他平台使用主快捷键回退。",
+          )}
         >
           <div
             className={cn(
@@ -968,12 +1197,20 @@ export function VoiceSettings() {
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0 space-y-1">
                 <p className="text-sm font-semibold text-slate-900">
-                  按住录音，松开识别
+                  {t("settings.voice.input.holdToRecord", "按住录音，松开识别")}
                 </p>
                 <p className="text-xs leading-5 text-slate-500">
                   {defaultAsrCredential
-                    ? `${defaultAsrCredential.name || defaultAsrCredential.provider}（默认识别服务）`
-                    : "尚未配置默认语音识别凭证"}
+                    ? t("settings.voice.input.defaultAsrCredential", {
+                        name:
+                          defaultAsrCredential.name ||
+                          defaultAsrCredential.provider,
+                        defaultValue: "{{name}}（默认识别服务）",
+                      })
+                    : t(
+                        "settings.voice.input.noDefaultAsrCredential",
+                        "尚未配置默认语音识别凭证",
+                      )}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -986,7 +1223,10 @@ export function VoiceSettings() {
                   checked={voiceConfig?.enabled ?? false}
                   onCheckedChange={handleVoiceEnabledChange}
                   disabled={!voiceConfig}
-                  aria-label="切换语音输入"
+                  aria-label={t(
+                    "settings.voice.input.toggleAria",
+                    "切换语音输入",
+                  )}
                   className={
                     voiceConfig?.enabled ? "!bg-emerald-800" : "!bg-slate-300"
                   }
@@ -999,22 +1239,37 @@ export function VoiceSettings() {
                   Fn
                 </span>
                 {voiceShortcutStatus?.fn_note ??
-                  "按住 Fn 开始录音，松开后停止并识别。"}
-                {voiceShortcutStatus?.fn_fallback_shortcut
-                  ? ` 回退快捷键：${voiceShortcutStatus.fn_fallback_shortcut}`
-                  : ""}
+                  t(
+                    "settings.voice.input.fnHoldDescription",
+                    "按住 Fn 开始录音，松开后停止并识别。",
+                  )}
+                {voiceShortcutStatus?.fn_fallback_shortcut ? (
+                  <>
+                    {" "}
+                    {t("settings.voice.input.fnFallbackShortcut", {
+                      shortcut: voiceShortcutStatus.fn_fallback_shortcut,
+                      defaultValue: "回退快捷键：{{shortcut}}",
+                    })}
+                  </>
+                ) : null}
               </div>
             ) : (
               <p className="text-xs leading-5 text-slate-500">
-                语音输入未开启，不会注册 Fn 或全局快捷键。
+                {t(
+                  "settings.voice.input.disabledHint",
+                  "语音输入未开启，不会注册 Fn 或全局快捷键。",
+                )}
               </p>
             )}
           </div>
         </SettingRow>
 
         <SettingRow
-          label="主快捷键"
-          description="用于唤起语音输入的全局快捷键。保存时会同步更新运行时注册状态。"
+          label={t("settings.voice.input.primaryShortcut.label", "主快捷键")}
+          description={t(
+            "settings.voice.input.primaryShortcut.description",
+            "用于唤起语音输入的全局快捷键。保存时会同步更新运行时注册状态。",
+          )}
         >
           <div className="space-y-3">
             <ShortcutSettings
@@ -1030,8 +1285,14 @@ export function VoiceSettings() {
         </SettingRow>
 
         <SettingRow
-          label="翻译模式快捷键"
-          description="可选。设置后会直接以翻译模式启动语音输入，并使用下方指定的翻译指令。"
+          label={t(
+            "settings.voice.input.translateShortcut.label",
+            "翻译模式快捷键",
+          )}
+          description={t(
+            "settings.voice.input.translateShortcut.description",
+            "可选。设置后会直接以翻译模式启动语音输入，并使用下方指定的翻译指令。",
+          )}
         >
           <div className="space-y-3">
             <ShortcutSettings
@@ -1039,7 +1300,10 @@ export function VoiceSettings() {
               onShortcutChange={handleTranslateShortcutChange}
               onValidate={validateShortcut}
               disabled={!voiceConfig}
-              emptyLabel="未设置翻译模式快捷键"
+              emptyLabel={t(
+                "settings.voice.input.translateShortcut.empty",
+                "未设置翻译模式快捷键",
+              )}
               allowClear
             />
             <StatusPill tone={translateShortcutStatus.tone}>
@@ -1049,8 +1313,11 @@ export function VoiceSettings() {
         </SettingRow>
 
         <SettingRow
-          label="Fn 按住录音"
-          description="macOS 下通过原生 FlagsChanged 监听 Fn 按住/松开；权限不足或第三方键盘不可用时继续使用主快捷键回退。"
+          label={t("settings.voice.input.fn.label", "Fn 按住录音")}
+          description={t(
+            "settings.voice.input.fn.description",
+            "macOS 下通过原生 FlagsChanged 监听 Fn 按住/松开；权限不足或第三方键盘不可用时继续使用主快捷键回退。",
+          )}
         >
           <div className="space-y-3 rounded-[18px] bg-slate-50/80 px-4 py-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -1062,17 +1329,30 @@ export function VoiceSettings() {
               </StatusPill>
             </div>
             <p className="text-xs leading-5 text-slate-500">
-              {voiceShortcutStatus?.fn_note ?? "正在读取 Fn 快捷键运行时状态。"}
-              {voiceShortcutStatus?.fn_fallback_shortcut
-                ? ` 回退快捷键：${voiceShortcutStatus.fn_fallback_shortcut}`
-                : ""}
+              {voiceShortcutStatus?.fn_note ??
+                t(
+                  "settings.voice.input.fn.statusLoading",
+                  "正在读取 Fn 快捷键运行时状态。",
+                )}
+              {voiceShortcutStatus?.fn_fallback_shortcut ? (
+                <>
+                  {" "}
+                  {t("settings.voice.input.fnFallbackShortcut", {
+                    shortcut: voiceShortcutStatus.fn_fallback_shortcut,
+                    defaultValue: "回退快捷键：{{shortcut}}",
+                  })}
+                </>
+              ) : null}
             </p>
           </div>
         </SettingRow>
 
         <SettingRow
-          label="麦克风设备"
-          description="录音时优先使用这里选定的设备；如果留空则回退到系统默认输入设备。"
+          label={t("settings.voice.input.microphone.label", "麦克风设备")}
+          description={t(
+            "settings.voice.input.microphone.description",
+            "录音时优先使用这里选定的设备；如果留空则回退到系统默认输入设备。",
+          )}
         >
           <MicrophoneTest
             selectedDeviceId={voiceConfig?.selected_device_id}
@@ -1082,29 +1362,45 @@ export function VoiceSettings() {
         </SettingRow>
 
         <SettingRow
-          label="交互音效"
-          description="控制开始录音、结束录音等反馈音效；会同时影响输入栏和悬浮语音窗。"
+          label={t("settings.voice.input.sound.label", "交互音效")}
+          description={t(
+            "settings.voice.input.sound.description",
+            "控制开始录音、结束录音等反馈音效；会同时影响输入栏和悬浮语音窗。",
+          )}
         >
           <div className="flex items-center justify-end">
             <Switch
               checked={voiceConfig?.sound_enabled ?? true}
               onCheckedChange={handleSoundEnabledChange}
               disabled={!voiceConfig}
-              aria-label="切换交互音效"
+              aria-label={t(
+                "settings.voice.input.sound.toggleAria",
+                "切换交互音效",
+              )}
             />
           </div>
         </SettingRow>
       </SettingCard>
 
       <SettingCard
-        title="语音模型"
-        description="管理本地 ASR 模型的按需下载、安装状态和默认识别服务；模型文件只写入用户数据目录，不进入应用安装包。"
+        title={t("settings.voice.model.title", "语音模型")}
+        description={t(
+          "settings.voice.model.description",
+          "管理本地 ASR 模型的按需下载、安装状态和默认识别服务；模型文件只写入用户数据目录，不进入应用安装包。",
+        )}
         icon={HardDrive}
         sectionId={VOICE_MODEL_SETTINGS_SECTION_ID}
+        tipAriaLabel={t("settings.voice.card.tipAria", {
+          title: t("settings.voice.model.title", "语音模型"),
+          defaultValue: "{{title}}说明",
+        })}
       >
         <SettingRow
           label="SenseVoice Small"
-          description="本地离线 ASR，按需下载。"
+          description={t(
+            "settings.voice.model.senseVoice.description",
+            "本地离线 ASR，按需下载。",
+          )}
         >
           {primaryVoiceModel ? (
             <div className="space-y-4 rounded-[22px] bg-[#f7fbf7] px-4 py-4">
@@ -1126,19 +1422,28 @@ export function VoiceSettings() {
                         {getVoiceModelDisplayName(primaryVoiceModel)}
                       </p>
                       <span className="inline-flex items-center rounded-full border border-emerald-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
-                        本地
+                        {t("settings.voice.model.badge.local", "本地")}
                       </span>
                       {isVoiceModelDefault ? (
-                        <StatusPill tone="success">默认识别服务</StatusPill>
+                        <StatusPill tone="success">
+                          {t(
+                            "settings.voice.model.badge.defaultAsr",
+                            "默认识别服务",
+                          )}
+                        </StatusPill>
                       ) : null}
                     </div>
                     <p className="text-xs leading-5 text-slate-500">
                       {primaryVoiceModel.description ||
-                        "本地离线 ASR，模型按需下载到用户数据目录。"}
+                        t(
+                          "settings.voice.model.senseVoice.fallbackDescription",
+                          "本地离线 ASR，模型按需下载到用户数据目录。",
+                        )}
                     </p>
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-5 text-slate-500">
                       <span>
                         {getVoiceModelInstallStatusText(
+                          t,
                           primaryVoiceModel,
                           voiceModelState,
                           voiceModelAction,
@@ -1164,7 +1469,10 @@ export function VoiceSettings() {
                       <div className="space-y-2">
                         <div className="h-1.5 overflow-hidden rounded-full bg-emerald-100">
                           <div
-                            aria-label="语音模型下载进度"
+                            aria-label={t(
+                              "settings.voice.model.progressAria",
+                              "语音模型下载进度",
+                            )}
                             aria-valuemax={100}
                             aria-valuemin={0}
                             aria-valuenow={voiceModelDownloadPercent}
@@ -1181,12 +1489,17 @@ export function VoiceSettings() {
                     <p className="break-all text-xs leading-5 text-slate-500">
                       {voiceModelState?.installed
                         ? voiceModelState.install_dir
-                        : "按需下载，不内置。"}
+                        : t(
+                            "settings.voice.model.install.onDemand",
+                            "按需下载，不内置。",
+                          )}
                     </p>
                     {voiceModelState?.installed ? (
                       <p className="text-xs leading-5 text-slate-500">
-                        已安装大小：
-                        {formatBytes(voiceModelState.installed_bytes)}
+                        {t("settings.voice.model.install.installedSize", {
+                          size: formatBytes(voiceModelState.installed_bytes),
+                          defaultValue: "已安装大小：{{size}}",
+                        })}
                       </p>
                     ) : null}
                   </div>
@@ -1204,7 +1517,10 @@ export function VoiceSettings() {
                           voiceModelAction !== null || isVoiceModelDefault
                         }
                       >
-                        设为默认
+                        {t(
+                          "settings.voice.model.action.setDefault",
+                          "设为默认",
+                        )}
                       </Button>
                       <Button
                         type="button"
@@ -1214,7 +1530,7 @@ export function VoiceSettings() {
                         disabled={voiceModelAction !== null}
                       >
                         <Trash2 className="mr-1 h-4 w-4" />
-                        删除
+                        {t("settings.voice.model.action.delete", "删除")}
                       </Button>
                     </>
                   ) : (
@@ -1232,25 +1548,32 @@ export function VoiceSettings() {
                       ) : (
                         <Download className="mr-1 h-4 w-4" />
                       )}
-                      {voiceModelAction === "download" ? "下载中" : "下载模型"}
+                      {voiceModelAction === "download"
+                        ? t("settings.voice.model.action.downloading", "下载中")
+                        : t("settings.voice.model.action.download", "下载模型")}
                     </Button>
                   )}
                 </div>
               </div>
               {!voiceModelDownloadReady && !voiceModelState?.installed ? (
                 <p className="text-xs leading-5 text-amber-700">
-                  下载地址未配置。请在 limecore 配置
-                  server.voiceModelAssetBaseUrl 指向 CF R2 公开域名。
+                  {t(
+                    "settings.voice.model.assetBaseMissing",
+                    "下载地址未配置。请在 limecore 配置 server.voiceModelAssetBaseUrl 指向 CF R2 公开域名。",
+                  )}
                 </p>
               ) : null}
 
               <div className="space-y-3 border-t border-slate-200/80 pt-4">
                 <div className="space-y-1">
-                  <p className="text-sm font-medium text-slate-800">测试转写</p>
+                  <p className="text-sm font-medium text-slate-800">
+                    {t("settings.voice.model.test.title", "测试转写")}
+                  </p>
                   <p className="text-xs leading-5 text-slate-500">
-                    选择或输入本机 16-bit PCM WAV 文件路径，直接验证当前
-                    SenseVoice Small
-                    安装与本地推理链路；多声道音频仅使用第一声道。
+                    {t(
+                      "settings.voice.model.test.description",
+                      "选择或输入本机 16-bit PCM WAV 文件路径，直接验证当前 SenseVoice Small 安装与本地推理链路；多声道音频仅使用第一声道。",
+                    )}
                   </p>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
@@ -1264,16 +1587,22 @@ export function VoiceSettings() {
                     }
                   >
                     <FolderOpen className="mr-1 h-4 w-4" />
-                    选择 WAV
+                    {t("settings.voice.model.test.selectWav", "选择 WAV")}
                   </Button>
                   <input
-                    aria-label="WAV 文件路径"
+                    aria-label={t(
+                      "settings.voice.model.test.pathAria",
+                      "WAV 文件路径",
+                    )}
                     className="h-10 min-w-0 flex-1 rounded-[14px] border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-sky-400"
                     value={voiceModelTestPath}
                     onChange={(event) =>
                       setVoiceModelTestPath(event.target.value)
                     }
-                    placeholder="选择或输入 /Users/me/audio.wav"
+                    placeholder={t(
+                      "settings.voice.model.test.pathPlaceholder",
+                      "选择或输入 /Users/me/audio.wav",
+                    )}
                     disabled={
                       !voiceModelState?.installed || voiceModelAction !== null
                     }
@@ -1289,12 +1618,17 @@ export function VoiceSettings() {
                       !voiceModelTestPath.trim()
                     }
                   >
-                    {voiceModelAction === "test" ? "转写中" : "测试转写"}
+                    {voiceModelAction === "test"
+                      ? t("settings.voice.model.test.testing", "转写中")
+                      : t("settings.voice.model.test.action", "测试转写")}
                   </Button>
                 </div>
                 {!voiceModelState?.installed ? (
                   <p className="text-xs leading-5 text-amber-700">
-                    请先下载并安装模型后再测试转写。
+                    {t(
+                      "settings.voice.model.test.needsInstall",
+                      "请先下载并安装模型后再测试转写。",
+                    )}
                   </p>
                 ) : null}
                 {voiceModelTestError ? (
@@ -1305,15 +1639,28 @@ export function VoiceSettings() {
                 {voiceModelTestResult ? (
                   <div className="space-y-2 rounded-[16px] border border-emerald-200 bg-emerald-50 px-3 py-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <StatusPill tone="success">转写完成</StatusPill>
+                      <StatusPill tone="success">
+                        {t(
+                          "settings.voice.model.test.completedBadge",
+                          "转写完成",
+                        )}
+                      </StatusPill>
                       <span className="text-xs text-emerald-700">
                         {voiceModelTestResult.sample_rate} Hz ·{" "}
-                        {voiceModelTestResult.duration_secs.toFixed(2)} 秒 ·{" "}
-                        {voiceModelTestResult.language || "auto"}
+                        {t("settings.voice.model.test.durationSeconds", {
+                          seconds:
+                            voiceModelTestResult.duration_secs.toFixed(2),
+                          defaultValue: "{{seconds}} 秒",
+                        })}{" "}
+                        · {voiceModelTestResult.language || "auto"}
                       </span>
                     </div>
                     <p className="whitespace-pre-wrap text-sm leading-6 text-slate-800">
-                      {voiceModelTestResult.text || "未识别到文本"}
+                      {voiceModelTestResult.text ||
+                        t(
+                          "settings.voice.model.test.emptyText",
+                          "未识别到文本",
+                        )}
                     </p>
                   </div>
                 ) : null}
@@ -1321,33 +1668,52 @@ export function VoiceSettings() {
             </div>
           ) : (
             <div className="rounded-[18px] border border-slate-200/80 bg-slate-50/80 px-4 py-3 text-sm text-slate-500">
-              当前没有可用的本地语音模型清单。
+              {t(
+                "settings.voice.model.emptyCatalog",
+                "当前没有可用的本地语音模型清单。",
+              )}
             </div>
           )}
         </SettingRow>
       </SettingCard>
 
       <SettingCard
-        title="语音处理"
-        description="统一管理默认润色、翻译模式和语音指令。润色与翻译共用同一组 LLM 模型选择，继续复用聊天页的模型选择器。"
+        title={t("settings.voice.processing.title", "语音处理")}
+        description={t(
+          "settings.voice.processing.description",
+          "统一管理默认润色、翻译模式和语音指令。润色与翻译共用同一组 LLM 模型选择，继续复用聊天页的模型选择器。",
+        )}
         icon={Wand2}
+        tipAriaLabel={t("settings.voice.card.tipAria", {
+          title: t("settings.voice.processing.title", "语音处理"),
+          defaultValue: "{{title}}说明",
+        })}
       >
         <SettingRow
-          label="默认启用 AI 润色"
-          description="开启后，普通语音输入会自动按默认润色指令进行后处理；翻译模式不受这个开关影响。"
+          label={t(
+            "settings.voice.processing.polishEnabled.label",
+            "默认启用 AI 润色",
+          )}
+          description={t(
+            "settings.voice.processing.polishEnabled.description",
+            "开启后，普通语音输入会自动按默认润色指令进行后处理；翻译模式不受这个开关影响。",
+          )}
         >
           <div className="flex items-center justify-end">
             <Switch
               checked={voiceConfig?.processor.polish_enabled ?? true}
               onCheckedChange={handlePolishEnabledChange}
               disabled={!voiceConfig}
-              aria-label="切换 AI 润色"
+              aria-label={t(
+                "settings.voice.processing.polishEnabled.toggleAria",
+                "切换 AI 润色",
+              )}
             />
           </div>
         </SettingRow>
 
         <SettingModelSelectorField
-          label="润色与翻译模型"
+          label={t("settings.voice.processing.model.label", "润色与翻译模型")}
           description={llmModelHint}
           warningText={polishProviderWarning ?? polishModelWarning}
           providerType={voiceConfig?.processor.polish_provider ?? ""}
@@ -1359,17 +1725,29 @@ export function VoiceSettings() {
             modelSupportsTaskFamily(model, "chat") ||
             modelSupportsTaskFamily(model, "reasoning")
           }
-          emptyStateTitle="暂无可用润色模型"
+          emptyStateTitle={t(
+            "settings.voice.processing.model.emptyTitle",
+            "暂无可用润色模型",
+          )}
           emptyStateDescription={llmModelHint}
           disabled={!voiceConfig}
         />
 
         <SettingRow
-          label="默认润色指令"
-          description="普通语音输入在开启 AI 润色时会使用这里指定的指令。"
+          label={t(
+            "settings.voice.processing.defaultInstruction.label",
+            "默认润色指令",
+          )}
+          description={t(
+            "settings.voice.processing.defaultInstruction.description",
+            "普通语音输入在开启 AI 润色时会使用这里指定的指令。",
+          )}
         >
           <select
-            aria-label="默认润色指令"
+            aria-label={t(
+              "settings.voice.processing.defaultInstruction.aria",
+              "默认润色指令",
+            )}
             className="h-11 w-full rounded-[16px] border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm outline-none transition focus:border-sky-400"
             value={defaultInstructionId}
             onChange={handleDefaultInstructionSelect}
@@ -1387,11 +1765,20 @@ export function VoiceSettings() {
         </SettingRow>
 
         <SettingRow
-          label="翻译模式指令"
-          description="翻译模式快捷键会执行这里选择的指令；建议指向“翻译为英文”或自定义翻译模板。"
+          label={t(
+            "settings.voice.processing.translateInstruction.label",
+            "翻译模式指令",
+          )}
+          description={t(
+            "settings.voice.processing.translateInstruction.description",
+            "翻译模式快捷键会执行这里选择的指令；建议指向“翻译为英文”或自定义翻译模板。",
+          )}
         >
           <select
-            aria-label="翻译模式指令"
+            aria-label={t(
+              "settings.voice.processing.translateInstruction.aria",
+              "翻译模式指令",
+            )}
             className="h-11 w-full rounded-[16px] border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm outline-none transition focus:border-sky-400"
             value={translateInstructionId}
             onChange={handleTranslateInstructionChange}
@@ -1419,10 +1806,16 @@ export function VoiceSettings() {
       </SettingCard>
 
       <MediaPreferenceSection
-        title="语音服务模型"
-        description="这里只配置配音 / 语音生成任务的默认 Provider、模型与回退策略；语音输入本身的识别、快捷键和润色逻辑请在上方设置。"
-        selectorLabel="默认模型"
-        selectorDescription="统一使用聊天页同款模型选择器；未指定时沿用自动匹配策略。"
+        title={t("settings.voice.media.title", "语音服务模型")}
+        description={t(
+          "settings.voice.media.description",
+          "这里只配置配音 / 语音生成任务的默认 Provider、模型与回退策略；语音输入本身的识别、快捷键和润色逻辑请在上方设置。",
+        )}
+        selectorLabel={t("settings.voice.media.selector.label", "默认模型")}
+        selectorDescription={t(
+          "settings.voice.media.selector.description",
+          "统一使用聊天页同款模型选择器；未指定时沿用自动匹配策略。",
+        )}
         providerType={globalVoicePreference.preferredProviderId ?? ""}
         setProviderType={handleMediaProviderChange}
         model={globalVoicePreference.preferredModelId ?? ""}
@@ -1435,13 +1828,22 @@ export function VoiceSettings() {
         }
         allowFallback={globalVoicePreference.allowFallback ?? true}
         onAllowFallbackChange={handleFallbackChange}
-        fallbackTitle="Provider 不可用时自动回退"
-        fallbackDescription="关闭后，若当前默认语音服务缺失、被禁用或无可用 Key，将直接提示错误。"
-        emptyStateTitle="暂无可用语音模型"
+        fallbackTitle={t(
+          "settings.voice.media.fallback.title",
+          "Provider 不可用时自动回退",
+        )}
+        fallbackDescription={t(
+          "settings.voice.media.fallback.description",
+          "关闭后，若当前默认语音服务缺失、被禁用或无可用 Key，将直接提示错误。",
+        )}
+        emptyStateTitle={t(
+          "settings.voice.media.emptyTitle",
+          "暂无可用语音模型",
+        )}
         emptyStateDescription={providerHint}
         disabled={!config}
         onReset={handleResetPreference}
-        resetLabel="恢复默认"
+        resetLabel={t("settings.voice.media.action.reset", "恢复默认")}
         resetDisabled={
           !hasMediaGenerationPreferenceOverride(globalVoicePreference)
         }

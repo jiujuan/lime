@@ -14,6 +14,8 @@ import {
   useRef,
   useCallback,
 } from "react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import { SettingsSidebar } from "./SettingsSidebar";
 import { SettingsTabs } from "@/types/settings";
@@ -393,6 +395,7 @@ function preloadSettingsTab(tab: SettingsTabs): Promise<unknown> | null {
 function renderSettingsContent(
   tab: SettingsTabs,
   onTabChange: (tab: SettingsTabs) => void,
+  t: TFunction<"settings", undefined>,
   onTabPrefetch?: (tab: SettingsTabs) => void,
   onNavigate?: (page: Page, params?: PageParams) => void,
   initialProviderView?: SettingsProviderView,
@@ -419,76 +422,76 @@ function renderSettingsContent(
           <UserCenterSessionSettings />
           {!hasManagedAccountProfile ? <ProfileSettings /> : null}
         </>,
-        "正在加载账号资料...",
+        t("settings.layout.loading.profile", "正在加载账号资料..."),
       );
 
     case SettingsTabs.Stats:
       return withSettingsContentFallback(
         <StatsSettings />,
-        "正在加载数据统计...",
+        t("settings.layout.loading.stats", "正在加载数据统计..."),
       );
 
     // 通用组
     case SettingsTabs.Appearance:
       return withSettingsContentFallback(
         <AppearanceSettings />,
-        "正在加载外观设置...",
+        t("settings.layout.loading.appearance", "正在加载外观设置..."),
       );
 
     case SettingsTabs.Hotkeys:
       return withSettingsContentFallback(
         <HotkeysSettings />,
-        "正在加载快捷键设置...",
+        t("settings.layout.loading.hotkeys", "正在加载快捷键设置..."),
       );
 
     case SettingsTabs.Memory:
       return withSettingsContentFallback(
         <MemorySettings />,
-        "正在加载记忆设置...",
+        t("settings.layout.loading.memory", "正在加载记忆设置..."),
       );
 
     // 智能体组
     case SettingsTabs.Providers:
       return withSettingsContentFallback(
         <CloudProviderSettings initialView={initialProviderView} />,
-        "正在加载 AI 服务商设置...",
+        t("settings.layout.loading.providers", "正在加载 AI 服务商设置..."),
       );
 
     case SettingsTabs.Skills:
       return withSettingsContentFallback(
         <ExtensionsSettings />,
-        "正在加载技能管理...",
+        t("settings.layout.loading.skills", "正在加载技能管理..."),
       );
 
     case SettingsTabs.MediaServices:
       return withSettingsContentFallback(
         <MediaServicesSettings />,
-        "正在加载服务模型...",
+        t("settings.layout.loading.mediaServices", "正在加载服务模型..."),
       );
 
     // 系统组
     case SettingsTabs.McpServer:
       return withSettingsContentFallback(
         <McpPanel hideHeader />,
-        "正在加载 MCP 服务器...",
+        t("settings.layout.loading.mcpServer", "正在加载 MCP 服务器..."),
       );
 
     case SettingsTabs.WebSearch:
       return withSettingsContentFallback(
         <WebSearchSettings />,
-        "正在加载网络搜索设置...",
+        t("settings.layout.loading.webSearch", "正在加载网络搜索设置..."),
       );
 
     case SettingsTabs.Environment:
       return withSettingsContentFallback(
         <EnvironmentSettings />,
-        "正在加载环境变量...",
+        t("settings.layout.loading.environment", "正在加载环境变量..."),
       );
 
     case SettingsTabs.ChromeRelay:
       return withSettingsContentFallback(
         <ChromeRelaySettings />,
-        "正在加载连接器设置...",
+        t("settings.layout.loading.chromeRelay", "正在加载连接器设置..."),
       );
 
     case SettingsTabs.Automation:
@@ -497,25 +500,25 @@ function renderSettingsContent(
           mode="settings"
           onOpenWorkspace={() => onNavigate?.("automation")}
         />,
-        "正在加载自动化设置...",
+        t("settings.layout.loading.automation", "正在加载自动化设置..."),
       );
 
     case SettingsTabs.Developer:
       return withSettingsContentFallback(
         <DeveloperLabSettings initialTab={activeDeveloperLabTab} />,
-        "正在加载开发者与实验功能...",
+        t("settings.layout.loading.developerLab", "正在加载开发者与实验功能..."),
       );
 
     case SettingsTabs.About:
       return withSettingsContentFallback(
         <AboutSection />,
-        "正在加载关于页面...",
+        t("settings.layout.loading.about", "正在加载关于页面..."),
       );
 
     default:
       return (
         <PlaceholderPage>
-          <p>页面不存在</p>
+          <p>{t("settings.layout.placeholder.notFound", "页面不存在")}</p>
         </PlaceholderPage>
       );
   }
@@ -544,6 +547,7 @@ export function SettingsLayoutV2({
   initialTab,
   initialProviderView,
 }: SettingsLayoutV2Props) {
+  const { t } = useTranslation("settings");
   const [activeTab, setActiveTab] = useState<SettingsTabs>(
     resolveActiveSettingsTab(initialTab),
   );
@@ -626,11 +630,11 @@ export function SettingsLayoutV2({
         <HeaderHomeButton
           type="button"
           onClick={handleBackHome}
-          aria-label="回到首页"
+          aria-label={t("settings.layout.action.backHome", "回到首页")}
           data-testid="settings-home-button"
         >
           <Home />
-          回到首页
+          {t("settings.layout.action.backHome", "回到首页")}
         </HeaderHomeButton>
       </HeaderBar>
       <LayoutContainer className="lime-settings-theme-scope">
@@ -645,6 +649,7 @@ export function SettingsLayoutV2({
             {renderSettingsContent(
               activeTab,
               handleTabChange,
+              t,
               handleTabPrefetch,
               onNavigate,
               activeProviderView,

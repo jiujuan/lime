@@ -1,0 +1,141 @@
+{
+  "manifestVersion": "v1",
+  "title": "Lime Agent QC GUI Flow Manifest",
+  "description": "Playwright MCP / GUI dogfood flows for P0 Agent QC scenarios. This manifest is a machine-readable runbook; it does not execute the browser by itself.",
+  "flows": [
+    {
+      "id": "gui-claw-chat-ready-streaming",
+      "scenarioId": "claw-chat-ready-streaming",
+      "risk": "P0",
+      "surface": "desktop_gui",
+      "preflight": [
+        "Run npm run verify:gui-smoke or reuse an already healthy Lime desktop session.",
+        "Confirm DevBridge health before interacting with the UI.",
+        "Start console and network collection before the first user action."
+      ],
+      "steps": [
+        "Open or focus the Claw / Agent chat workspace.",
+        "Confirm the default workspace is ready and input is enabled.",
+        "Send a short user message that does not require external credentials.",
+        "Observe streaming deltas or equivalent progress state.",
+        "Trigger interrupt while a response is active when the UI exposes interruption.",
+        "Send a follow-up message to confirm the session recovers."
+      ],
+      "assertions": [
+        "workspace ready state is visible before sending",
+        "user message appears exactly once",
+        "assistant response reaches a terminal or interrupted state",
+        "follow-up turn can be submitted after interruption",
+        "no unexpected console error",
+        "no unexpected network error",
+        "mock fallback is explicitly classified if observed"
+      ],
+      "evidenceRequired": [
+        "Playwright MCP action log",
+        "screenshot or trace of ready state",
+        "runtime transcript or request id",
+        "console summary",
+        "network summary",
+        "DevBridge health result"
+      ]
+    },
+    {
+      "id": "gui-browser-runtime-site-adapter",
+      "scenarioId": "browser-runtime-site-adapter",
+      "risk": "P0",
+      "surface": "desktop_gui_browser_runtime",
+      "preflight": [
+        "Run npm run smoke:browser-runtime and npm run smoke:site-adapters if a headless smoke is enough.",
+        "For interactive verification, reuse an existing Lime browser session instead of launching unrelated Chrome windows.",
+        "Enable console and network collection before opening the browser runtime panel."
+      ],
+      "steps": [
+        "Open the browser runtime or site adapter surface.",
+        "Confirm browser runtime status is readable.",
+        "Open the site adapter catalog or readiness panel.",
+        "Inspect at least one current adapter entry.",
+        "Confirm cleanup / detach status after the check if the flow created a browser session."
+      ],
+      "assertions": [
+        "browser runtime status is not stale",
+        "site adapter catalog has current entries",
+        "adapter naming does not drift to deprecated surface keys",
+        "cleanup status is captured",
+        "no unexpected console error",
+        "no unexpected network error"
+      ],
+      "evidenceRequired": [
+        "browser runtime status",
+        "site adapter catalog snapshot",
+        "console summary",
+        "network summary",
+        "cleanup or detach result"
+      ]
+    },
+    {
+      "id": "gui-workspace-ready-session-restore",
+      "scenarioId": "workspace-ready-session-restore",
+      "risk": "P0",
+      "surface": "desktop_gui_workspace",
+      "preflight": [
+        "Run npm run smoke:workspace-ready or confirm an existing Lime session is healthy.",
+        "Record whether the test is fresh start or session restore.",
+        "Confirm DevBridge health before reading workspace state."
+      ],
+      "steps": [
+        "Open the default workspace.",
+        "Confirm primary navigation and workspace content shell render.",
+        "Inspect session restore state if previous sessions exist.",
+        "Open the Agent chat workspace from the restored state.",
+        "Confirm no stale loading state remains."
+      ],
+      "assertions": [
+        "workspace ready smoke and GUI state agree",
+        "primary navigation is visible",
+        "restored session does not block new input",
+        "no stale skeleton or permanent loading state",
+        "DevBridge remains healthy"
+      ],
+      "evidenceRequired": [
+        "workspace smoke log or status",
+        "GUI screenshot or trace",
+        "DevBridge health result",
+        "session restore notes",
+        "console summary"
+      ]
+    },
+    {
+      "id": "gui-release-startup-smoke",
+      "scenarioId": "release-package-startup-smoke",
+      "risk": "P0",
+      "surface": "release_artifact_gui",
+      "preflight": [
+        "Use the release candidate artifact, not only the dev server.",
+        "Record platform, architecture and version.",
+        "Run npm run verify:app-version before treating the artifact as release evidence."
+      ],
+      "steps": [
+        "Install or launch the release candidate.",
+        "Confirm the first window opens.",
+        "Confirm workspace ready state.",
+        "Confirm DevBridge or equivalent runtime bridge health.",
+        "Open the Agent chat entry point without sending credential-dependent requests."
+      ],
+      "assertions": [
+        "release version matches the tag",
+        "application launches without crash",
+        "first workspace becomes ready",
+        "bridge health is captured",
+        "no startup console error blocks the main path"
+      ],
+      "evidenceRequired": [
+        "version check output",
+        "artifact path or release id",
+        "startup screenshot or trace",
+        "workspace ready status",
+        "bridge health result",
+        "platform metadata"
+      ]
+    }
+  ]
+}

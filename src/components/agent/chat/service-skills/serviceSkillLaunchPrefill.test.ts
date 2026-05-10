@@ -146,6 +146,30 @@ describe("resolveServiceSkillLaunchPrefill", () => {
     );
   });
 
+  it("summary 允许调用方注入本地化 copy", () => {
+    expect(
+      buildServiceSkillLaunchPrefillSummary({
+        skill: createResearchSkill(),
+        slotValues: {
+          article_source: "上次沉淀的文章摘要",
+          target_duration: "120 秒",
+          ignored_empty: "会被忽略",
+        },
+        launchUserInput: "Keep the team collaboration angle.",
+        limit: 1,
+        copy: {
+          filledPrefix: "Last fields: ",
+          extraPrefix: "Last note: ",
+          formatFilledItems: (visibleItems, totalCount) =>
+            `${visibleItems.join("; ")} + ${totalCount - visibleItems.length} more`,
+          segmentSeparator: " | ",
+        },
+      }),
+    ).toBe(
+      "Last fields: 文章链接/正文=上次沉淀的文章摘要 + 1 more | Last note: Keep the team collaboration angle.",
+    );
+  });
+
   it("launchUserInput 与已显影槽位重复时，不应再重复显示上次补充", () => {
     expect(
       buildServiceSkillLaunchPrefillSummary({
@@ -213,5 +237,27 @@ describe("resolveServiceSkillLaunchPrefill", () => {
       },
       hint: "已根据你上次成功执行 /x文章转存 时的输入自动预填，可继续修改后执行。",
     });
+  });
+
+  it("最近参数 hint 允许调用方注入本地化 copy", () => {
+    recordServiceSkillUsage({
+      skillId: "service-skill-1",
+      runnerType: "instant",
+      slotValues: {
+        article_source: "上次沉淀的文章摘要",
+      },
+    });
+
+    expect(
+      resolveServiceSkillLaunchPrefill({
+        skill: createResearchSkill(),
+        copy: {
+          formatRecentServiceHint: (skillTitle) =>
+            `Prefilled from the last successful ${skillTitle} run. Review before running.`,
+        },
+      })?.hint,
+    ).toBe(
+      "Prefilled from the last successful 深度研究 run. Review before running.",
+    );
   });
 });

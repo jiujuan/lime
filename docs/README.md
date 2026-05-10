@@ -37,6 +37,15 @@
 - `develop/execution-tracker-p1-p2-roadmap.md`：统一执行追踪后续路线（P1/P2）
 - `tech/harness/README.md`：Lime Harness Engineering 总入口
 - `tech/harness/implementation-blueprint.md`：Lime Harness 分阶段实施蓝图
+- `tests/agent-ops-qc.md`：Agent 运营级测试体系，定义 qcloop 场景、Evidence Pack 与发布门禁
+- `tests/agent-qc-p0-scenarios.md`：Agent QC P0 场景执行手册，定义核心场景证据与失败沉淀规则
+- `tests/lime-agent-qc-rollout-plan.md`：Lime 样本产品的 Agent 运营级测试分阶段落地计划
+- `../scripts/agent-qc-report.mjs`：Agent QC 场景 manifest 报告与合同检查入口
+- `../scripts/agent-qc-gui-flow-report.mjs`：Agent QC GUI / Playwright MCP flow manifest 报告与合同检查入口
+- `../scripts/agent-qc-qcloop-job.mjs`：从 Agent QC manifest 生成 qcloop job payload 的入口
+- `../scripts/agent-qc-export-evidence.mjs`：qcloop job 到 Agent QC Evidence Pack 的导出入口
+- `../scripts/agent-qc-release-summary.mjs`：将 Agent QC Evidence Pack 与 Harness 报告汇总为 release note 质量证据
+- `../scripts/agent-qc-completion-audit.mjs`：Agent QC 整体目标完成度审计入口
 - `aiprompts/query-loop.md`：运行时 Query Loop current 主链与提交边界
 - `aiprompts/prompt-foundation.md`：基础 Prompt current 主链、system prompt 组装顺序与 current/compat 边界
 - `aiprompts/task-agent-taxonomy.md`：Task / Agent / Coordinator current taxonomy 与边界归属

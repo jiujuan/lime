@@ -1,4 +1,7 @@
-import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
+import type {
+  AgentRuntimeWebSearchMode,
+  AsterExecutionStrategy,
+} from "@/lib/api/agentRuntime";
 import type {
   AssistantDraftState,
   SendMessageObserver,
@@ -28,6 +31,7 @@ interface PrepareAgentStreamUserInputSendOptions {
   content: string;
   images: MessageImage[];
   webSearch?: boolean;
+  searchMode?: AgentRuntimeWebSearchMode;
   thinking?: boolean;
   skipUserMessage: boolean;
   executionStrategyOverride?: AsterExecutionStrategy;
@@ -42,6 +46,7 @@ export interface PreparedAgentStreamUserInputSend {
   content: string;
   images: MessageImage[];
   webSearch?: boolean;
+  searchMode?: AgentRuntimeWebSearchMode;
   thinking?: boolean;
   skipUserMessage: boolean;
   effectiveExecutionStrategy: AsterExecutionStrategy;
@@ -97,6 +102,7 @@ export function prepareAgentStreamUserInputSend(
   const requestMetadata = sendOptions?.requestMetadata;
   const messagePurpose = sendOptions?.purpose;
   const assistantDraft = sendOptions?.assistantDraft;
+  const searchMode = sendOptions?.searchMode;
   const skipSessionRestore = sendOptions?.skipSessionRestore === true;
   const skipSessionStartHooks = sendOptions?.skipSessionStartHooks === true;
   const skipPreSubmitResume = sendOptions?.skipPreSubmitResume === true;
@@ -133,6 +139,7 @@ export function prepareAgentStreamUserInputSend(
     content,
     images,
     webSearch,
+    searchMode,
     thinking,
     skipUserMessage,
     effectiveExecutionStrategy,

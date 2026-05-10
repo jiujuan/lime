@@ -144,6 +144,8 @@ const SUBAGENT_TEAMMATE_ALLOWED_TOOL_NAMES: [&str; 5] = [
     "CronList",
     "CronDelete",
 ];
+const CANCELLED_TURN_CONTEXT_MARKER: &str =
+    "上一回合已被用户停止，不要继续回答被停止的请求；等待并仅处理后续用户消息。";
 const AUTO_COMPACTION_DISABLED_CONTEXT_LIMIT_TEXT: &str =
     "Automatic compaction is disabled for this turn. The conversation reached the context limit. Compact the session manually or start a new session before retrying.";
 const PROPOSED_PLAN_OPEN: &str = "<proposed_plan>";
@@ -159,6 +161,12 @@ const FILE_ARTIFACT_METADATA_KEYS: [&str; 9] = [
     "artifact_paths",
     "absolute_path",
 ];
+
+fn cancelled_turn_context_marker_message() -> Message {
+    Message::assistant()
+        .with_text(CANCELLED_TURN_CONTEXT_MARKER)
+        .agent_only()
+}
 
 #[derive(Debug, Clone)]
 struct ResolvedOutputSchema {
@@ -3545,6 +3553,11 @@ impl Agent {
                         }
                         Err(err) => {
                             turn_status = if is_token_cancelled(&cancel_token) {
+                                self.store_add_message(
+                                    &scoped_session_config.id,
+                                    &cancelled_turn_context_marker_message(),
+                                )
+                                .await?;
                                 TurnStatus::Aborted
                             } else {
                                 TurnStatus::Failed
@@ -3687,7 +3700,24 @@ impl Agent {
                 let mut tools_updated = false;
                 let mut did_recovery_compact_this_iteration = false;
 
-                while let Some(next) = stream.next().await {
+                loop {
+                    let next = if cancel_token.is_some() {
+                        match tokio::time::timeout(Duration::from_millis(100), stream.next()).await
+                        {
+                            Ok(next) => next,
+                            Err(_) => {
+                                if is_token_cancelled(&cancel_token) {
+                                    break;
+                                }
+                                continue;
+                            }
+                        }
+                    } else {
+                        stream.next().await
+                    };
+                    let Some(next) = next else {
+                        break;
+                    };
                     if is_token_cancelled(&cancel_token) {
                         break;
                     }
@@ -4062,7 +4092,11 @@ impl Agent {
                         ).await?;
                 }
                 let mut exit_chat = false;
-                if no_tools_called {
+                if is_token_cancelled(&cancel_token) {
+                    messages_to_add.clear();
+                    messages_to_add.push(cancelled_turn_context_marker_message());
+                    exit_chat = true;
+                } else if no_tools_called {
                     if let Some(final_output_tool) = self.final_output_tool.lock().await.as_ref() {
                         if final_output_tool.final_output.is_none() {
                             warn!("Final output tool has not been called yet. Continuing agent loop.");

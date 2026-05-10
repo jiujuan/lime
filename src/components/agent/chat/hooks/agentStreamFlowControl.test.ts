@@ -104,6 +104,7 @@ describe("agentStreamFlowControl", () => {
       assistantMsgId: "assistant-1",
       eventName: "stream-1",
       sessionId: "session-1",
+      turnId: "turn-runtime-1",
       pendingTurnKey: "pending-turn:1",
       pendingItemKey: "pending-item:1",
     };
@@ -160,7 +161,7 @@ describe("agentStreamFlowControl", () => {
     });
 
     expect(removeStreamListener).toHaveBeenCalledWith("stream-1");
-    expect(interruptTurn).toHaveBeenCalledWith("session-1");
+    expect(interruptTurn).toHaveBeenCalledWith("session-1", "turn-runtime-1");
     expect(refreshSessionReadModel).toHaveBeenCalledWith("session-1");
     expect(queuedTurns).toEqual([]);
     expect(threadItems).toEqual([]);

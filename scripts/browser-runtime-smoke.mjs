@@ -25,7 +25,9 @@ const INVOKE_RETRY_DELAY_MS = 1_000;
 const POST_HEALTH_SETTLE_MS = 3_000;
 const POST_LAUNCH_SETTLE_MS = 1_500;
 const READ_PAGE_TIMEOUT_MS = 45_000;
-const SMOKE_PROFILE_KEY = "smoke-browser-runtime";
+const DEFAULT_SMOKE_PROFILE_KEY =
+  process.env.LIME_BROWSER_RUNTIME_SMOKE_PROFILE_KEY ||
+  `smoke-browser-runtime-${process.pid}`;
 
 function printHelp() {
   console.log(`
@@ -43,6 +45,7 @@ Lime Browser Runtime Smoke
   --timeout-ms <ms>        等待健康检查超时，默认 90000
   --interval-ms <ms>       健康检查轮询间隔，默认 1000
   --launch-url <url>       启动浏览器会话的 URL，默认使用内置 data: 测试页
+  --profile-key <key>      smoke 专用浏览器 profile key，默认按进程隔离
   --open-window            显式打开浏览器窗口
   --headless               以无界面浏览器会话执行 smoke，避免弹出空白 Chrome
   --stream-mode <mode>     events | frames | both，默认 both
@@ -85,6 +88,11 @@ function parseArgs(argv) {
       index += 1;
       continue;
     }
+    if (arg === "--profile-key" && argv[index + 1]) {
+      options.profileKey = String(argv[index + 1]).trim();
+      index += 1;
+      continue;
+    }
     if (arg === "--open-window") {
       options.openWindow = true;
       continue;
@@ -110,6 +118,9 @@ function parseArgs(argv) {
   }
   if (!options.launchUrl) {
     throw new Error("--launch-url 不能为空");
+  }
+  if (!options.profileKey) {
+    options.profileKey = DEFAULT_SMOKE_PROFILE_KEY;
   }
 
   return options;
@@ -239,8 +250,9 @@ async function main() {
   await waitForHealth(options);
   await sleep(POST_HEALTH_SETTLE_MS);
 
-  const profileKey = SMOKE_PROFILE_KEY;
+  const profileKey = options.profileKey;
   let sessionId = null;
+  let cleanupStatus = "skipped";
 
   try {
     await closeSmokeProfileSession(
@@ -310,6 +322,38 @@ async function main() {
       "browser_execute_action 未返回对应的 target_id",
     );
 
+    const consoleResult = await invoke(options, "browser_execute_action", {
+      request: {
+        profile_key: profileKey,
+        action: "read_console_messages",
+        args: { since: 0 },
+        timeout_ms: Math.min(options.timeoutMs, READ_PAGE_TIMEOUT_MS),
+      },
+    });
+    assert(
+      consoleResult?.success === true,
+      "browser_execute_action(read_console_messages) 未成功",
+    );
+    const consoleCount = Array.isArray(consoleResult?.data?.messages)
+      ? consoleResult.data.messages.length
+      : 0;
+
+    const networkResult = await invoke(options, "browser_execute_action", {
+      request: {
+        profile_key: profileKey,
+        action: "read_network_requests",
+        args: { since: 0 },
+        timeout_ms: Math.min(options.timeoutMs, READ_PAGE_TIMEOUT_MS),
+      },
+    });
+    assert(
+      networkResult?.success === true,
+      "browser_execute_action(read_network_requests) 未成功",
+    );
+    const networkCount = Array.isArray(networkResult?.data?.events)
+      ? networkResult.data.events.length
+      : 0;
+
     const auditLogs = await invoke(options, "get_browser_action_audit_logs", {
       limit: 10,
     });
@@ -344,7 +388,7 @@ async function main() {
     );
 
     console.log(
-      `[smoke:browser-runtime] 通过 session=${sessionId} target=${sessionState.target_id} profile=${profileKey}`,
+      `[smoke:browser-runtime] 通过 session=${sessionId} target=${sessionState.target_id} profile=${profileKey} consoleEvents=${consoleCount} networkEvents=${networkCount}`,
     );
   } finally {
     if (sessionId) {
@@ -354,7 +398,9 @@ async function main() {
             session_id: sessionId,
           },
         });
+        cleanupStatus = "pass";
       } catch (error) {
+        cleanupStatus = "failed";
         console.warn(
           `[smoke:browser-runtime] 清理会话失败: ${
             error instanceof Error ? error.message : String(error)
@@ -367,6 +413,9 @@ async function main() {
       options,
       profileKey,
       "关闭 smoke profile 失败",
+    );
+    console.log(
+      `[smoke:browser-runtime] cleanup=${cleanupStatus} session=${sessionId ?? "none"} profile=${profileKey}`,
     );
   }
 }

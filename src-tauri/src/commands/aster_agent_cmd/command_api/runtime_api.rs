@@ -2,6 +2,7 @@ use super::*;
 use crate::commands::aster_agent_cmd::dto::AgentRuntimeSessionHistoryCursor;
 use crate::database::lock_db;
 use crate::sceneapp::application::SceneAppService;
+use crate::services::agent_timeline_service::abort_running_turn_by_id;
 use crate::services::execution_tracker_service::ExecutionTracker;
 use crate::services::runtime_analysis_handoff_service::{
     export_runtime_analysis_handoff, RuntimeAnalysisHandoffExportResult,
@@ -30,6 +31,9 @@ use lime_core::database::dao::agent_run::AgentRunDao;
 use lime_core::database::dao::agent_timeline::{AgentThreadItemStatus, AgentThreadTurnStatus};
 use std::path::PathBuf;
 use std::time::Instant;
+use tauri::Manager;
+
+const RUNTIME_INTERRUPT_MESSAGE: &str = "用户已停止当前执行";
 
 const RUNTIME_SESSION_OPEN_HISTORY_LIMIT: usize = 40;
 const RUNTIME_SESSION_MAX_HISTORY_LIMIT: usize = 2_000;
@@ -172,14 +176,33 @@ pub async fn agent_runtime_interrupt_turn(
     request: AgentRuntimeInterruptTurnRequest,
 ) -> Result<bool, String> {
     let session_id = request.session_id;
-    let cancelled = state.cancel_session(&session_id).await;
-    if cancelled {
+    let requested_turn_id = request
+        .turn_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    if requested_turn_id.is_some() {
         let _ = state
             .record_interrupt_request(&session_id, "user", "用户主动停止当前执行")
             .await;
     }
+    let cancelled = state.cancel_session(&session_id).await;
+    if cancelled && requested_turn_id.is_none() {
+        let _ = state
+            .record_interrupt_request(&session_id, "user", "用户主动停止当前执行")
+            .await;
+    }
+    let aborted = if cancelled {
+        false
+    } else if let Some(turn_id) = requested_turn_id.as_deref() {
+        let db = app.state::<DbConnection>();
+        abort_running_turn_by_id(db.inner(), &session_id, turn_id, RUNTIME_INTERRUPT_MESSAGE)?
+    } else {
+        false
+    };
     let cleared = clear_runtime_queue_service(&app, &session_id).await?;
-    Ok(cancelled || !cleared.is_empty())
+    Ok(cancelled || aborted || !cleared.is_empty())
 }
 
 /// 统一运行时：压缩当前会话上下文。

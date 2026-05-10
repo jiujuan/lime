@@ -17,6 +17,7 @@ import type {
 import type {
   AsterApprovalPolicy,
   AgentRuntimeSubmitTurnRequest,
+  AgentRuntimeWebSearchMode,
   AsterExecutionStrategy,
   AsterSandboxPolicy,
   AutoContinueRequestPayload,
@@ -760,6 +761,7 @@ export interface AgentUserPreferences {
   modelPreference?: string;
   thinking?: boolean;
   webSearch?: boolean;
+  searchMode?: AgentRuntimeWebSearchMode;
   approvalPolicy?: AsterApprovalPolicy;
   sandboxPolicy?: AsterSandboxPolicy;
   executionStrategy?: AsterExecutionStrategy;
@@ -1515,6 +1517,9 @@ export function createSubmitTurnRequestFromAgentOp(
       sandbox_policy: preferences?.sandboxPolicy,
       execution_strategy: preferences?.executionStrategy,
       web_search: preferences?.webSearch,
+      ...(preferences?.searchMode
+        ? { search_mode: preferences.searchMode }
+        : {}),
       auto_continue: preferences?.autoContinue,
       system_prompt: op.systemPrompt,
       metadata: op.metadata,

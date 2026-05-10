@@ -1,0 +1,64 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { AsterSessionInfo } from "@/lib/api/agentRuntime";
+import {
+  formatSidebarSessionMeta,
+  resolveSidebarSessionTitle,
+} from "./sidebarSessionFormatting";
+
+const NOW_MS = Date.UTC(2026, 4, 10, 12, 0, 0);
+
+function buildSession(
+  overrides: Partial<AsterSessionInfo> = {},
+): AsterSessionInfo {
+  return {
+    id: "session-1",
+    name: "最近会话",
+    created_at: Math.floor(NOW_MS / 1000),
+    updated_at: Math.floor((NOW_MS - 2 * 60 * 1000) / 1000),
+    archived_at: null,
+    workspace_id: "project-1",
+    ...overrides,
+  };
+}
+
+describe("sidebarSessionFormatting", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("按 UI locale 格式化会话更新时间", () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW_MS);
+
+    expect(
+      formatSidebarSessionMeta(buildSession(), { locale: "zh-CN" }),
+    ).toBe("2分钟前");
+    expect(
+      formatSidebarSessionMeta(buildSession(), { locale: "en-US" }),
+    ).toBe("2m ago");
+  });
+
+  it("归档状态允许组件用 namespace 文案组合 meta", () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW_MS);
+
+    expect(
+      formatSidebarSessionMeta(
+        buildSession({
+          archived_at: Math.floor((NOW_MS - 3 * 60 * 60 * 1000) / 1000),
+        }),
+        {
+          formatArchived: (time) => `Archived ${time}`,
+          locale: "en-US",
+        },
+      ),
+    ).toBe("Archived 3h ago");
+  });
+
+  it("空标题使用调用方传入的本地化兜底", () => {
+    expect(
+      resolveSidebarSessionTitle(
+        buildSession({ name: "   " }),
+        "Untitled conversation",
+      ),
+    ).toBe("Untitled conversation");
+  });
+});

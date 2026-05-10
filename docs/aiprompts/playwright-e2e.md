@@ -230,7 +230,7 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 
 1. 在 `Claw` 对话框输入 `@封面 小红书 标题: 春日咖啡快闪 风格: 清新插画, 1:1 春日咖啡市集封面`
 2. 确认聊天区先进入 skill 执行态，并能看到 `cover_generate` 相关工具轨迹，而不是前端静默直接创建任务
-3. 确认 `@封面` 命中了 `cover_generate` 的 current binding；如当前 binding family 是 `typed local_cli`，确认工具标题与结果摘要对应 runtime 结构化组装的 `Lime CLI` 封面执行链；如当前 binding family 是原生结构化 binding，则确认仍回写同一条 `cover_generate` task file。无论哪种，都不应要求模型先写 Bash；CLI 不可用时，才允许回退 `lime_create_cover_generation_task`
+3. 确认 `@封面` 命中了 `cover_generate` 的 current binding，并沿 `Skill(cover_generate) -> lime_create_cover_generation_task -> 标准 cover_generate task file` 主链提交任务；不应要求模型先写 Bash、生成 HTML/SVG，或退回普通图片任务
 4. 等待任务回流后，确认同一条结果只展示真实 task file 状态，不会额外再插一条前端本地伪造“封面已生成”
 5. 如当前界面已暴露右侧查看区或任务卡，确认其状态与聊天轻卡一致，且任务类型显示为 `cover_generate` / 封面任务
 6. 刷新页面或切换会话再返回原话题，确认最近封面任务仍可从 `.lime/tasks` 恢复

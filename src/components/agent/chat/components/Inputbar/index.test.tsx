@@ -2481,7 +2481,7 @@ describe("Inputbar", () => {
     expect(container.textContent).not.toContain("Native schema");
   });
 
-  it("应在高级设置中渲染 Plan 开关与权限模式，并透传对应回调", async () => {
+  it("应在高级设置中渲染计划执行开关与权限模式，并透传对应回调", async () => {
     const setExecutionStrategy = vi.fn();
     const setAccessMode = vi.fn();
     const { container } = renderInputbar({
@@ -2511,6 +2511,10 @@ describe("Inputbar", () => {
 
     expect(planToggle).toBeTruthy();
     expect(accessSelect).toBeTruthy();
+    expect(planToggle?.textContent).toContain("计划执行");
+    expect(planToggle?.textContent).not.toContain("Plan");
+    expect(planToggle?.getAttribute("aria-label")).toBe("开启计划执行");
+    expect(planToggle?.getAttribute("title")).toBe("开启计划执行");
     expect(container.querySelector('select[aria-label="执行模式"]')).toBeNull();
 
     act(() => {

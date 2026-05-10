@@ -5,12 +5,25 @@ const COVER_SKILL_LAUNCH_DETOUR_DENY_PATTERNS: &[&str] = &[
     TOOL_SEARCH_TOOL_NAME,
     "WebSearch",
     "web_search",
+    "Bash",
     "Read",
     "read",
+    "Write",
+    "write",
+    "Edit",
+    "edit",
     "Glob",
     "glob",
     "Grep",
     "grep",
+    "mcp__lime-browser__*",
+    "browser_*",
+    "mcp__playwright__*",
+    "playwright*",
+    "social_generate_cover_image",
+    LIME_CREATE_IMAGE_TASK_TOOL_NAME,
+    "TaskGet",
+    "TaskOutput",
 ];
 
 fn extract_object_string(
@@ -33,6 +46,49 @@ fn truncate_prompt_text(value: String, max_chars: usize) -> String {
 
     let truncated = value.chars().take(max_chars).collect::<String>();
     format!("{truncated}...(已截断，原始长度 {total_chars} 字)")
+}
+
+fn ensure_cover_skill_launch_workbench_chat_mode(value: &mut serde_json::Value) {
+    let Some(root) = value.as_object_mut() else {
+        return;
+    };
+    let harness = if root.contains_key("harness") {
+        match root
+            .get_mut("harness")
+            .and_then(serde_json::Value::as_object_mut)
+        {
+            Some(harness) => harness,
+            None => return,
+        }
+    } else {
+        root
+    };
+
+    let has_launch = ["cover_skill_launch", "coverSkillLaunch"]
+        .iter()
+        .any(|key| {
+            harness
+                .get(*key)
+                .and_then(serde_json::Value::as_object)
+                .is_some()
+        });
+    if !has_launch {
+        return;
+    }
+
+    harness.insert(
+        "chat_mode".to_string(),
+        serde_json::Value::String("workbench".to_string()),
+    );
+}
+
+pub(crate) fn prepare_cover_skill_launch_request_metadata(
+    request_metadata: Option<&serde_json::Value>,
+) -> Option<serde_json::Value> {
+    let mut metadata = request_metadata.cloned()?;
+    ensure_cover_skill_launch_workbench_chat_mode(&mut metadata);
+
+    Some(metadata)
 }
 
 pub(crate) fn merge_system_prompt_with_cover_skill_launch(
@@ -123,6 +179,9 @@ pub(crate) fn prune_cover_skill_launch_detour_tools_from_registry(
     for tool_name in COVER_SKILL_LAUNCH_DETOUR_DENY_PATTERNS {
         registry.unregister(tool_name);
     }
+    for tool in get_chrome_mcp_tools() {
+        registry.unregister(&format!("mcp__lime-browser__{}", tool.name));
+    }
 }
 
 fn build_cover_skill_launch_system_prompt(
@@ -184,8 +243,10 @@ fn build_cover_skill_launch_system_prompt(
         "- 当前回合已经显式知道要走封面技能主链，不要为了确认技能名、工具名或命令名再去调用 ToolSearch。".to_string(),
         "- 在 Skill(cover_generate) 真正执行前，不要先走 ToolSearch / WebSearch / Read / Glob / Grep 等通用工具发现、检索或读文件链路。".to_string(),
         "- 不要搜索 “cover_generate”、“social_generate_cover_image” 或 “lime task create cover --json” 之类目录信息；当前 cover_task 已经提供了足够上下文。".to_string(),
+        "- 不要直接调用 social_generate_cover_image 或 lime_create_image_generation_task；封面不是普通 image_generate 任务，唯一允许的任务出口是 cover_generate。".to_string(),
+        "- 不要调用浏览器 MCP / Playwright / 页面工具，也不要用 Write/Edit/Bash 自行生成 HTML 封面；封面任务必须先直调 Skill(cover_generate)。".to_string(),
         "- 如果某个通用搜索/读文件工具因为 session policy 被拒绝，不要重复同类调用；应立即改为直调 Skill(cover_generate)。".to_string(),
-        "- Skill 执行后，优先沿 cover_generate skill 的 social_generate_cover_image + Bash / task file 主链提交异步任务；只有 Skill 明确不可用时，才允许直接回退到 lime_create_cover_generation_task。".to_string(),
+        "- Skill 执行后，必须沿 cover_generate skill 的 lime_create_cover_generation_task 主链提交异步 cover_generate 任务文件。".to_string(),
         "- 不要把封面任务退化成普通配图，也不要伪造“封面已生成完成”；在 task file 真正返回结果前，只能汇报任务已提交、排队或执行中。".to_string(),
         format!("- 当前封面任务上下文(JSON)：{cover_task_json}"),
         format!("- 当前入口来源：{entry_source}。"),

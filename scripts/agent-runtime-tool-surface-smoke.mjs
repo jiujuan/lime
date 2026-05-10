@@ -1,36 +1,21 @@
 #!/usr/bin/env node
 
-import { spawnSync } from "node:child_process";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { runVitestSmoke } from "./lib/vitest-smoke-runner.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, "..");
-const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 
 function runVitest(label, args) {
-  console.log(`\n[smoke:agent-runtime-tool-surface] > ${label}`);
-  const result = spawnSync(
-    npmCommand,
-    ["exec", "--", "vitest", "run", ...args],
-    {
-      cwd: rootDir,
-      stdio: "inherit",
-      env: process.env,
-    },
-  );
-
-  if (result.error) {
-    throw result.error;
-  }
-
-  if (typeof result.status === "number" && result.status !== 0) {
-    const error = new Error(`[smoke:agent-runtime-tool-surface] ${label} 失败`);
-    error.exitCode = result.status;
-    throw error;
-  }
+  return runVitestSmoke({
+    rootDir,
+    label,
+    args,
+    logPrefix: "smoke:agent-runtime-tool-surface",
+  });
 }
 
 function main() {
@@ -50,6 +35,9 @@ function main() {
     "src/components/agent/chat/workspace/useWorkspaceConversationSceneRuntime.test.ts",
   ]);
 
+  console.log(
+    '[smoke:agent-runtime-tool-surface] surface.summary: runtime inventory/strip/harness inventory 已一致透传；unsafeToolExposed=false; sources=runtime_tools|persisted_tools|default_policy',
+  );
   console.log("\n[smoke:agent-runtime-tool-surface] 通过");
 }
 

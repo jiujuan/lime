@@ -21,6 +21,75 @@ describe("buildCuratedTaskReferencePromptBlock", () => {
       ]),
     ).toContain("[参考] 品牌风格样本");
   });
+
+  it("应隐藏自动记忆内部标签和原始执行错误细节", () => {
+    const [entry, jsonEntry] = buildCuratedTaskReferenceEntries([
+      {
+        id: "memory-internal-1",
+        session_id: "session-1",
+        memory_type: "conversation",
+        category: "context",
+        title:
+          "自动分析提取（用户表达）：-32603: Execution failed: 未配置 Pexels API Key",
+        content: "",
+        summary:
+          "自动分析提取（用户表达）：-32603: Execution failed: 未配置 Pexels API Key",
+        tags: [
+          "auto_analysis",
+          "context",
+          "fp:-32603: execution failed: 未配置 pexels api key",
+          "用户访谈",
+        ],
+        metadata: {
+          confidence: 0.9,
+          importance: 8,
+          access_count: 1,
+          last_accessed_at: null,
+          source: "manual",
+          embedding: null,
+        },
+        created_at: 1_712_345_670_000,
+        updated_at: 1_712_345_678_000,
+        archived: false,
+      },
+      {
+        id: "memory-internal-2",
+        session_id: "session-1",
+        memory_type: "conversation",
+        category: "preference",
+        title: '{ "success": true, "task_id": "1987aae0" }',
+        content: "",
+        summary: '{ "success": true, "task_id": "1987aae0" }',
+        tags: ["fp:{ \"task_id\": \"1987aae0\" }", "封面"],
+        metadata: {
+          confidence: 0.9,
+          importance: 8,
+          access_count: 1,
+          last_accessed_at: null,
+          source: "manual",
+          embedding: null,
+        },
+        created_at: 1_712_345_670_000,
+        updated_at: 1_712_345_678_000,
+        archived: false,
+      },
+    ]);
+
+    expect(entry).toMatchObject({
+      title: "运行异常记录",
+      summary: "这条参考来自一次执行异常，默认不展开技术细节。",
+      tags: ["用户访谈"],
+    });
+    expect(buildCuratedTaskReferencePromptBlock(entry ? [entry] : [])).not
+      .toContain("auto_analysis");
+    expect(buildCuratedTaskReferencePromptBlock(entry ? [entry] : [])).not
+      .toContain("Pexels API Key");
+    expect(jsonEntry).toMatchObject({
+      title: "运行异常记录",
+      summary: "这条参考来自一次执行异常，默认不展开技术细节。",
+      tags: ["封面"],
+    });
+  });
 });
 
 describe("buildCuratedTaskLaunchRequestMetadata", () => {

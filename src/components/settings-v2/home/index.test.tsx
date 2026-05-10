@@ -4,10 +4,34 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Palette, Brain, ShieldCheck } from "lucide-react";
 import { SettingsGroupKey, SettingsTabs } from "@/types/settings";
 
-const mockUseSettingsCategory = vi.fn();
+const { mockUseSettingsCategory, mockUseTranslation } = vi.hoisted(() => ({
+  mockUseSettingsCategory: vi.fn(),
+  mockUseTranslation: vi.fn((_namespace?: string) => ({
+    t: (key: string, options?: unknown) => {
+      if (typeof options === "string") {
+        return options;
+      }
+
+      if (options && typeof options === "object") {
+        const values = options as Record<string, unknown>;
+        const template =
+          typeof values.defaultValue === "string" ? values.defaultValue : key;
+        return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+          String(values[name] ?? ""),
+        );
+      }
+
+      return key;
+    },
+  })),
+}));
 
 vi.mock("../hooks/useSettingsCategory", () => ({
   useSettingsCategory: () => mockUseSettingsCategory(),
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
 }));
 
 import { SettingsHomePage } from "./index";

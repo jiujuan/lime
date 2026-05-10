@@ -23,23 +23,46 @@ const {
   mockTestTranscribeVoiceModelFile,
   mockOpenDialog,
   mockValidateShortcut,
-} = vi.hoisted(() => ({
-  mockGetConfig: vi.fn(),
-  mockSaveConfig: vi.fn(),
-  mockGetVoiceInputConfig: vi.fn(),
-  mockSaveVoiceInputConfig: vi.fn(),
-  mockGetAsrCredentials: vi.fn(),
-  mockGetVoiceShortcutRuntimeStatus: vi.fn(),
-  mockListVoiceModelCatalog: vi.fn(),
-  mockGetVoiceModelInstallState: vi.fn(),
-  mockDownloadVoiceModel: vi.fn(),
-  mockListenVoiceModelDownloadProgress: vi.fn(),
-  mockDeleteVoiceModel: vi.fn(),
-  mockSetDefaultVoiceModel: vi.fn(),
-  mockTestTranscribeVoiceModelFile: vi.fn(),
-  mockOpenDialog: vi.fn(),
-  mockValidateShortcut: vi.fn(),
-}));
+  mockUseTranslation,
+} = vi.hoisted(() => {
+  const mockTranslate = vi.fn((key: string, options?: unknown) => {
+    if (typeof options === "string") {
+      return options;
+    }
+
+    if (options && typeof options === "object") {
+      const values = options as Record<string, unknown>;
+      const template =
+        typeof values.defaultValue === "string" ? values.defaultValue : key;
+      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+        String(values[name] ?? ""),
+      );
+    }
+
+    return key;
+  });
+
+  return {
+    mockGetConfig: vi.fn(),
+    mockSaveConfig: vi.fn(),
+    mockGetVoiceInputConfig: vi.fn(),
+    mockSaveVoiceInputConfig: vi.fn(),
+    mockGetAsrCredentials: vi.fn(),
+    mockGetVoiceShortcutRuntimeStatus: vi.fn(),
+    mockListVoiceModelCatalog: vi.fn(),
+    mockGetVoiceModelInstallState: vi.fn(),
+    mockDownloadVoiceModel: vi.fn(),
+    mockListenVoiceModelDownloadProgress: vi.fn(),
+    mockDeleteVoiceModel: vi.fn(),
+    mockSetDefaultVoiceModel: vi.fn(),
+    mockTestTranscribeVoiceModelFile: vi.fn(),
+    mockOpenDialog: vi.fn(),
+    mockValidateShortcut: vi.fn(),
+    mockUseTranslation: vi.fn((_namespace?: string) => ({
+      t: mockTranslate,
+    })),
+  };
+});
 
 vi.mock("@/lib/api/appConfig", () => ({
   getConfig: mockGetConfig,
@@ -72,6 +95,10 @@ vi.mock("@/lib/api/experimentalFeatures", () => ({
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: mockOpenDialog,
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
 }));
 
 vi.mock("@/hooks/useConfiguredProviders", () => ({
@@ -507,6 +534,7 @@ describe("VoiceSettings", () => {
     await flushEffects(6);
 
     const text = container.textContent ?? "";
+    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
     expect(text).toContain("语音输入");
     expect(text).toContain("语音模型");
     expect(text).toContain("语音输入快捷键");

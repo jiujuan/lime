@@ -38,6 +38,7 @@ const DEV_BRIDGE_PROVIDER_PROBE_COMMANDS = new Set([
 
 const DEV_BRIDGE_AGENT_LONG_RUNNING_COMMANDS = new Set([
   "agent_generate_title",
+  "execute_skill",
 ]);
 
 const DEV_BRIDGE_LAYERED_DESIGN_PROJECT_COMMANDS = new Set([
@@ -51,6 +52,9 @@ const DEV_BRIDGE_COOLDOWN_BYPASS_COMMANDS = new Set([
   "agent_runtime_submit_turn",
   "agent_runtime_create_session",
   "agent_runtime_send_subagent_input",
+  "list_executable_skills",
+  "get_skill_detail",
+  "execute_skill",
   "get_or_create_default_project",
   "workspace_get",
   "workspace_get_default",

@@ -19,6 +19,31 @@ const {
   mockValidateShortcut: vi.fn(),
 }));
 
+const { mockUseTranslation } = vi.hoisted(() => {
+  const mockTranslate = vi.fn((key: string, options?: unknown) => {
+    if (typeof options === "string") {
+      return options;
+    }
+
+    if (options && typeof options === "object") {
+      const values = options as Record<string, unknown>;
+      const template =
+        typeof values.defaultValue === "string" ? values.defaultValue : key;
+      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+        String(values[name] ?? ""),
+      );
+    }
+
+    return key;
+  });
+
+  return {
+    mockUseTranslation: vi.fn((_namespace?: string) => ({
+      t: mockTranslate,
+    })),
+  };
+});
+
 const { mockGetLogs, mockGetPersistedLogsTail } = vi.hoisted(() => ({
   mockGetLogs: vi.fn(),
   mockGetPersistedLogsTail: vi.fn(),
@@ -118,6 +143,10 @@ vi.mock("@/lib/crashDiagnostic", () => {
       mockOpenCrashDiagnosticDownloadDirectory,
   };
 });
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
+}));
 
 vi.mock("@/components/smart-input/ShortcutSettings", () => ({
   ShortcutSettings: () => <div>快捷键设置占位</div>,

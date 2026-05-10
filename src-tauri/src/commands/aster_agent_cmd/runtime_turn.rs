@@ -48,6 +48,7 @@ const LIME_RUNTIME_IMAGE_INPUT_POLICY_KEY: &str = "image_input_policy";
 const FAST_CHAT_TOOL_SURFACE_DIRECT_ANSWER: &str = "direct_answer";
 const FAST_CHAT_TOOL_SURFACE_LOCAL_WORKSPACE: &str = "local_workspace";
 const RUNTIME_IMAGE_INPUT_UNSUPPORTED_WARNING_CODE: &str = "runtime_image_input_unsupported";
+const RUNTIME_TURN_CANCELLED_MESSAGE: &str = "用户已停止当前执行";
 const AUTO_RUNTIME_MEMORY_MIN_USER_CHARS: usize = 12;
 const AUTO_RUNTIME_MEMORY_MIN_ASSISTANT_CHARS: usize = 48;
 const AUTO_RUNTIME_MEMORY_MIN_TOTAL_CHARS: usize = 160;
@@ -1824,7 +1825,12 @@ async fn prepare_runtime_turn_request(
     );
     let runtime_chat_mode = resolve_runtime_chat_mode(request.metadata.as_ref());
 
-    if matches!(execution_profile, TurnExecutionProfile::FullRuntime) {
+    if should_prewarm_mcp_runtime(
+        request,
+        execution_profile,
+        runtime_chat_mode,
+        request_tool_policy,
+    ) {
         let (_start_ok, start_fail) = ensure_lime_mcp_servers_running(db, mcp_manager).await;
         let (_mcp_ok, mcp_fail) = inject_mcp_extensions(state, mcp_manager).await;
 
@@ -1842,10 +1848,18 @@ async fn prepare_runtime_turn_request(
         }
     } else {
         tracing::info!(
-            "[AsterAgent] FastChat 跳过 MCP runtime 预热: session={}, search_mode={}, chat_mode={:?}",
+            "[AsterAgent] 跳过 MCP runtime 预热: session={}, profile={:?}, search_mode={}, chat_mode={:?}, reason={}",
             session_id,
+            execution_profile,
             request_tool_policy.search_mode.as_str(),
-            runtime_chat_mode
+            runtime_chat_mode,
+            resolve_mcp_prewarm_skip_reason(
+                request,
+                execution_profile,
+                runtime_chat_mode,
+                request_tool_policy,
+            )
+            .unwrap_or("not_required")
         );
     }
 
@@ -1857,6 +1871,7 @@ async fn prepare_runtime_turn_request(
             request.metadata.as_ref(),
             request.images.as_deref(),
         );
+        request.metadata = prepare_cover_skill_launch_request_metadata(request.metadata.as_ref());
         request.metadata =
             prepare_broadcast_skill_launch_request_metadata(request.metadata.as_ref());
         request.metadata =
@@ -3724,6 +3739,62 @@ fn request_metadata_contains_full_runtime_context(
         .unwrap_or(false)
 }
 
+fn request_has_non_search_full_runtime_reason(
+    request: &AsterChatRequest,
+    runtime_chat_mode: RuntimeChatMode,
+) -> bool {
+    let has_images = request
+        .images
+        .as_ref()
+        .is_some_and(|images| !images.is_empty());
+
+    has_images
+        || request.project_id.is_some()
+        || !matches!(runtime_chat_mode, RuntimeChatMode::General)
+        || request_metadata_contains_full_runtime_context(request.metadata.as_ref())
+        || extract_harness_bool(
+            request.metadata.as_ref(),
+            &["allow_model_skills", "allowModelSkills"],
+        )
+        .unwrap_or(false)
+}
+
+fn is_web_search_only_runtime(
+    request: &AsterChatRequest,
+    runtime_chat_mode: RuntimeChatMode,
+    request_tool_policy: &RequestToolPolicy,
+) -> bool {
+    request_tool_policy.allows_web_search()
+        && !request_has_non_search_full_runtime_reason(request, runtime_chat_mode)
+}
+
+fn should_prewarm_mcp_runtime(
+    request: &AsterChatRequest,
+    execution_profile: TurnExecutionProfile,
+    runtime_chat_mode: RuntimeChatMode,
+    request_tool_policy: &RequestToolPolicy,
+) -> bool {
+    matches!(execution_profile, TurnExecutionProfile::FullRuntime)
+        && !is_web_search_only_runtime(request, runtime_chat_mode, request_tool_policy)
+}
+
+fn resolve_mcp_prewarm_skip_reason(
+    request: &AsterChatRequest,
+    execution_profile: TurnExecutionProfile,
+    runtime_chat_mode: RuntimeChatMode,
+    request_tool_policy: &RequestToolPolicy,
+) -> Option<&'static str> {
+    if !matches!(execution_profile, TurnExecutionProfile::FullRuntime) {
+        return Some("fast_chat");
+    }
+
+    if is_web_search_only_runtime(request, runtime_chat_mode, request_tool_policy) {
+        return Some("web_search_only_native_tools");
+    }
+
+    None
+}
+
 fn resolve_fast_chat_tool_surface_mode(
     request: &AsterChatRequest,
     execution_profile: TurnExecutionProfile,
@@ -5074,22 +5145,9 @@ fn resolve_turn_execution_profile(
     request_tool_policy: &RequestToolPolicy,
     auto_continue_enabled: bool,
 ) -> TurnExecutionProfile {
-    let has_images = request
-        .images
-        .as_ref()
-        .is_some_and(|images| !images.is_empty());
-
-    if has_images
-        || request.project_id.is_some()
+    if request_has_non_search_full_runtime_reason(request, runtime_chat_mode)
         || auto_continue_enabled
-        || request_tool_policy.effective_web_search
-        || !matches!(runtime_chat_mode, RuntimeChatMode::General)
-        || request_metadata_contains_full_runtime_context(request.metadata.as_ref())
-        || extract_harness_bool(
-            request.metadata.as_ref(),
-            &["allow_model_skills", "allowModelSkills"],
-        )
-        .unwrap_or(false)
+        || request_tool_policy.requires_web_search()
     {
         TurnExecutionProfile::FullRuntime
     } else {
@@ -5476,6 +5534,19 @@ async fn execute_runtime_stream_attempt(
     )
     .await?;
 
+    if execution.cancelled {
+        tracing::info!(
+            "[AsterAgent] runtime turn cancelled before success finalization: session_id={}, event_name={}, emitted_any={}",
+            session_id,
+            request.event_name,
+            execution.emitted_any
+        );
+        return Err(ReplyAttemptError {
+            message: RUNTIME_TURN_CANCELLED_MESSAGE.to_string(),
+            emitted_any: execution.emitted_any,
+        });
+    }
+
     finalize_runtime_stream_success(
         app,
         db,
@@ -5684,6 +5755,9 @@ where
                 primary_attempt_started_at.elapsed().as_millis()
             );
             Ok(assistant_output)
+        }
+        Err(primary_error) if is_runtime_turn_cancelled_error(&primary_error.message) => {
+            Err(primary_error.message)
         }
         Err(primary_error)
             if effective_strategy == AsterExecutionStrategy::CodeOrchestrated
@@ -5978,6 +6052,7 @@ where
 
     lime_agent::tools::clear_skill_tool_session_access(session_id);
     state.remove_cancel_token(session_id).await;
+    state.clear_interrupt_marker(session_id).await;
     result
 }
 
@@ -6058,6 +6133,10 @@ fn build_runtime_run_finish_decision<T>(
     }
 }
 
+fn is_runtime_turn_cancelled_error(error: &str) -> bool {
+    error.trim() == RUNTIME_TURN_CANCELLED_MESSAGE
+}
+
 async fn finalize_runtime_turn_result(
     agent: &Agent,
     app: &AppHandle,
@@ -6088,6 +6167,7 @@ async fn finalize_runtime_turn_result(
         };
         match result.as_ref() {
             Ok(_) => recorder.complete_turn_success(),
+            Err(error) if is_runtime_turn_cancelled_error(error) => recorder.abort_turn(error),
             Err(error) => recorder.fail_turn(error),
         }
     };
@@ -6159,6 +6239,15 @@ async fn finalize_runtime_turn_result(
             Ok(())
         }
         Err(error) => {
+            if is_runtime_turn_cancelled_error(&error) {
+                if let Err(emit_error) =
+                    app.emit(event_name, &RuntimeAgentEvent::FinalDone { usage: None })
+                {
+                    tracing::error!("[AsterAgent] 发送中断完成事件失败: {}", emit_error);
+                }
+                emit_subagent_status_changed_events(app, session_id).await;
+                return Ok(());
+            }
             if let Some(limit_event) = lime_agent::detect_runtime_limit_event(Some(&error)) {
                 let event = map_runtime_limit_event_to_runtime_agent_event(limit_event);
                 emit_runtime_side_event(app, event_name, timeline_recorder, workspace_root, event);
@@ -7685,15 +7774,85 @@ mod tests {
     }
 
     #[test]
-    fn resolve_turn_execution_profile_should_use_full_runtime_for_explicit_web_search() {
+    fn resolve_turn_execution_profile_should_keep_fast_chat_for_allowed_web_search() {
         let mut request = build_runtime_turn_test_request("帮我搜今天的新闻", None);
         request.web_search = Some(true);
         let policy = lime_agent::resolve_request_tool_policy(Some(true), false);
 
         assert_eq!(
             resolve_turn_execution_profile(&request, RuntimeChatMode::General, &policy, false,),
+            TurnExecutionProfile::FastChat
+        );
+    }
+
+    #[test]
+    fn resolve_turn_execution_profile_should_use_full_runtime_for_required_web_search() {
+        let mut request = build_runtime_turn_test_request("帮我搜今天的新闻", None);
+        request.web_search = Some(true);
+        request.search_mode = Some(RequestToolPolicyMode::Required);
+        let policy = lime_agent::resolve_request_tool_policy_with_mode(
+            Some(true),
+            Some(RequestToolPolicyMode::Required),
+            false,
+        );
+
+        assert_eq!(
+            resolve_turn_execution_profile(&request, RuntimeChatMode::General, &policy, false,),
             TurnExecutionProfile::FullRuntime
         );
+    }
+
+    #[test]
+    fn should_prewarm_mcp_runtime_should_skip_web_search_only_required_turn() {
+        let mut request = build_runtime_turn_test_request("帮我搜今天的新闻", None);
+        request.web_search = Some(true);
+        request.search_mode = Some(RequestToolPolicyMode::Required);
+        let policy = lime_agent::resolve_request_tool_policy_with_mode(
+            Some(true),
+            Some(RequestToolPolicyMode::Required),
+            false,
+        );
+
+        assert!(!should_prewarm_mcp_runtime(
+            &request,
+            TurnExecutionProfile::FullRuntime,
+            RuntimeChatMode::General,
+            &policy,
+        ));
+        assert_eq!(
+            resolve_mcp_prewarm_skip_reason(
+                &request,
+                TurnExecutionProfile::FullRuntime,
+                RuntimeChatMode::General,
+                &policy,
+            ),
+            Some("web_search_only_native_tools")
+        );
+    }
+
+    #[test]
+    fn should_prewarm_mcp_runtime_should_keep_full_context_turns_warm() {
+        let mut request = build_runtime_turn_test_request(
+            "请帮我抓取站点内容",
+            Some(json!({
+                "harness": {
+                    "theme": "general",
+                    "chat_mode": "general",
+                    "service_skill_launch": {
+                        "adapter_name": "github/search"
+                    }
+                }
+            })),
+        );
+        request.web_search = Some(true);
+        let policy = lime_agent::resolve_request_tool_policy(Some(true), false);
+
+        assert!(should_prewarm_mcp_runtime(
+            &request,
+            TurnExecutionProfile::FullRuntime,
+            RuntimeChatMode::General,
+            &policy,
+        ));
     }
 
     #[test]

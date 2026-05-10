@@ -92,10 +92,17 @@ pub struct DevBridgeConfig {
 #[cfg(debug_assertions)]
 impl Default for DevBridgeConfig {
     fn default() -> Self {
-        Self {
-            host: "127.0.0.1".to_string(),
-            port: 3030,
-        }
+        let host = std::env::var("LIME_DEV_BRIDGE_HOST")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| "127.0.0.1".to_string());
+        let port = std::env::var("LIME_DEV_BRIDGE_PORT")
+            .ok()
+            .and_then(|value| value.trim().parse::<u16>().ok())
+            .unwrap_or(3030);
+
+        Self { host, port }
     }
 }
 

@@ -1,8 +1,39 @@
 import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AutomationHealthPanel } from "./AutomationHealthPanel";
+
+const { mockUseTranslation } = vi.hoisted(() => {
+  const mockTranslate = vi.fn((key: string, options?: unknown) => {
+    if (typeof options === "string") return options;
+
+    if (options && typeof options === "object") {
+      const values = options as Record<string, unknown>;
+      const template =
+        typeof values.defaultValue === "string" ? values.defaultValue : key;
+      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+        String(values[name] ?? ""),
+      );
+    }
+
+    return key;
+  });
+
+  return {
+    mockUseTranslation: vi.fn((_namespace?: string) => ({
+      t: mockTranslate,
+      i18n: {
+        language: "zh-CN",
+        resolvedLanguage: "zh-CN",
+      },
+    })),
+  };
+});
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
+}));
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 

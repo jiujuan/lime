@@ -1,22 +1,11 @@
 /**
- * i18next Configuration
+ * i18next 启动入口。
  *
- * Initialize i18next with react-i18next plugin.
- * Note: We use i18next for compatibility but our primary translation
- * mechanism is the Patch Layer (DOM text replacement).
+ * current 主路径使用 key-based resources；DOM Patch 只保留为迁移期兼容层。
  */
 
-import i18n from "i18next";
-import { initReactI18next } from "react-i18next";
+import { initLimeI18n } from "./createI18n";
 
-// Initialize i18next
-i18n.use(initReactI18next).init({
-  lng: "zh", // Default language (Chinese)
-  fallbackLng: "zh",
-  interpolation: {
-    escapeValue: false, // React already escapes by default
-  },
-  react: {
-    useSuspense: false, // Disable suspense as we handle loading differently
-  },
-});
+const i18n = initLimeI18n();
+
+export default i18n;

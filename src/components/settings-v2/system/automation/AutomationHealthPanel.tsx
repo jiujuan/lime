@@ -1,39 +1,58 @@
 import { Activity, AlertTriangle, Clock3, PauseCircle } from "lucide-react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AutomationHealthResult, AutomationStatus } from "@/lib/api/automation";
+import { formatDate } from "@/i18n/format";
 
-function formatTime(value?: string | null): string {
+function formatTime(value?: string | null, locale?: string): string {
   if (!value) {
     return "-";
   }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return date.toLocaleString("zh-CN", { hour12: false });
+  return (
+    formatDate(value, {
+      locale,
+      hour12: false,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }) || value
+  );
 }
 
-function statusLabel(status?: string | null): string {
+function statusLabel(t: TFunction<"settings">, status?: string | null): string {
   switch (status) {
     case "queued":
-      return "排队中";
+      return t("settings.automation.health.status.queued", "排队中");
     case "success":
-      return "成功";
+      return t("settings.automation.health.status.success", "成功");
     case "running":
-      return "运行中";
+      return t("settings.automation.health.status.running", "运行中");
     case "waiting_for_human":
-      return "等待人工处理";
+      return t(
+        "settings.automation.health.status.waitingForHuman",
+        "等待人工处理",
+      );
     case "human_controlling":
-      return "人工接管中";
+      return t(
+        "settings.automation.health.status.humanControlling",
+        "人工接管中",
+      );
     case "agent_resuming":
-      return "恢复给 Agent";
+      return t(
+        "settings.automation.health.status.agentResuming",
+        "恢复给 Agent",
+      );
     case "error":
-      return "失败";
+      return t("settings.automation.health.status.error", "失败");
     case "timeout":
-      return "超时";
+      return t("settings.automation.health.status.timeout", "超时");
     default:
-      return status || "待执行";
+      return status || t("settings.automation.health.status.pending", "待执行");
   }
 }
 
@@ -82,6 +101,8 @@ export function AutomationHealthPanel({
   health: AutomationHealthResult | null;
   status: AutomationStatus | null;
 }) {
+  const { t, i18n } = useTranslation("settings");
+  const locale = i18n.resolvedLanguage || i18n.language;
   const riskyJobs = health?.risky_jobs.slice(0, 6) ?? [];
 
   return (
@@ -89,17 +110,33 @@ export function AutomationHealthPanel({
       <CardHeader className="pb-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle className="text-xl text-slate-900">风险提醒</CardTitle>
+            <CardTitle className="text-xl text-slate-900">
+              {t("settings.automation.health.title", "风险提醒")}
+            </CardTitle>
             <p className="mt-1 text-sm leading-6 text-slate-500">
-              统计只作为辅助提醒，优先处理等待人工、失败和冷却中的持续流程。
+              {t(
+                "settings.automation.health.description",
+                "统计只作为辅助提醒，优先处理等待人工、失败和冷却中的持续流程。",
+              )}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Badge variant={status?.running ? "default" : "outline"}>
-              {status?.running ? "轮询运行中" : "轮询已停止"}
+              {status?.running
+                ? t(
+                    "settings.automation.health.polling.running",
+                    "轮询运行中",
+                  )
+                : t(
+                    "settings.automation.health.polling.stopped",
+                    "轮询已停止",
+                  )}
             </Badge>
             <Badge variant="outline">
-              累计执行 {status?.total_executions ?? 0}
+              {t("settings.automation.health.totalExecutions", {
+                count: status?.total_executions ?? 0,
+                defaultValue: "累计执行 {{count}}",
+              })}
             </Badge>
           </div>
         </div>
@@ -108,30 +145,48 @@ export function AutomationHealthPanel({
         <div className="flex flex-wrap gap-2">
           <SummaryPill
             icon={Activity}
-            label="启用"
+            label={t("settings.automation.health.summary.enabled", "启用")}
             value={health?.enabled_jobs ?? 0}
           />
           <SummaryPill
             icon={Clock3}
-            label="待执行"
+            label={t("settings.automation.health.summary.pending", "待执行")}
             value={health?.pending_jobs ?? 0}
           />
           <SummaryPill
             icon={AlertTriangle}
-            label="24h 失败"
+            label={t(
+              "settings.automation.health.summary.failed24h",
+              "24h 失败",
+            )}
             value={health?.failed_last_24h ?? 0}
           />
           <SummaryPill
             icon={PauseCircle}
-            label="冷却"
+            label={t("settings.automation.health.summary.cooldown", "冷却")}
             value={health?.cooldown_jobs ?? 0}
           />
         </div>
 
         <div className="flex flex-wrap gap-x-4 gap-y-2 rounded-[20px] border border-slate-200/80 bg-slate-50/70 px-4 py-3 text-sm text-slate-500">
-          <span>最近轮询: {formatTime(status?.last_polled_at)}</span>
-          <span>下次轮询: {formatTime(status?.next_poll_at)}</span>
-          <span>最近轮询命中: {status?.last_job_count ?? 0}</span>
+          <span>
+            {t("settings.automation.health.lastPolled", {
+              time: formatTime(status?.last_polled_at, locale),
+              defaultValue: "最近轮询: {{time}}",
+            })}
+          </span>
+          <span>
+            {t("settings.automation.health.nextPoll", {
+              time: formatTime(status?.next_poll_at, locale),
+              defaultValue: "下次轮询: {{time}}",
+            })}
+          </span>
+          <span>
+            {t("settings.automation.health.lastPollHits", {
+              count: status?.last_job_count ?? 0,
+              defaultValue: "最近轮询命中: {{count}}",
+            })}
+          </span>
         </div>
 
         {riskyJobs.length ? (
@@ -147,17 +202,23 @@ export function AutomationHealthPanel({
                       {job.name}
                     </div>
                     <div className="mt-1 text-xs text-slate-500">
-                      失败 {job.consecutive_failures} 次，重试 {job.retry_count}{" "}
-                      次
+                      {t("settings.automation.health.risk.failureRetry", {
+                        failures: job.consecutive_failures,
+                        retries: job.retry_count,
+                        defaultValue: "失败 {{failures}} 次，重试 {{retries}} 次",
+                      })}
                     </div>
                   </div>
                   <Badge variant={statusVariant(job.status)}>
-                    {statusLabel(job.status)}
+                    {statusLabel(t, job.status)}
                   </Badge>
                 </div>
                 <div className="mt-3 text-xs text-slate-500">
-                  冷却结束: {formatTime(job.auto_disabled_until)} · 更新时间:{" "}
-                  {formatTime(job.updated_at)}
+                  {t("settings.automation.health.risk.cooldownUpdated", {
+                    cooldown: formatTime(job.auto_disabled_until, locale),
+                    updated: formatTime(job.updated_at, locale),
+                    defaultValue: "冷却结束: {{cooldown}} · 更新时间: {{updated}}",
+                  })}
                 </div>
                 {job.detail_message ? (
                   <div className="mt-3 rounded-[16px] border border-slate-200/80 bg-white px-3 py-2 text-xs leading-5 text-slate-600">
@@ -169,7 +230,10 @@ export function AutomationHealthPanel({
           </div>
         ) : (
           <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/60 p-6 text-sm text-slate-500">
-            当前没有高风险持续流程。
+            {t(
+              "settings.automation.health.empty",
+              "当前没有高风险持续流程。",
+            )}
           </div>
         )}
       </CardContent>

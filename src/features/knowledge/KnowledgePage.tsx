@@ -1919,17 +1919,27 @@ export function KnowledgePage({ onNavigate, pageParams }: KnowledgePageProps) {
               <h2 className="text-3xl font-semibold text-slate-950">
                 项目资料状态说明
               </h2>
-              <ProjectSelector
-                value={selectedProjectId}
-                onChange={handleProjectChange}
-                placeholder="默认项目"
-                dropdownSide="bottom"
-                dropdownAlign="end"
-                enableManagement
-                density="compact"
-                skipDefaultWorkspaceReadyCheck
-                autoSelectFallback={false}
-              />
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveView("overview")}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950"
+                >
+                  <ListChecks className="h-4 w-4" />
+                  回到项目资料
+                </button>
+                <ProjectSelector
+                  value={selectedProjectId}
+                  onChange={handleProjectChange}
+                  placeholder="默认项目"
+                  dropdownSide="bottom"
+                  dropdownAlign="end"
+                  enableManagement
+                  density="compact"
+                  skipDefaultWorkspaceReadyCheck
+                  autoSelectFallback={false}
+                />
+              </div>
             </div>
             <div className="mt-8 grid gap-4 md:grid-cols-5">
               {statusCards.map((card) => {

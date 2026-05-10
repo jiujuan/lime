@@ -423,7 +423,10 @@ pub struct Config {
     /// 关闭时最小化到托盘（而不是退出应用）
     #[serde(default = "default_minimize_to_tray")]
     pub minimize_to_tray: bool,
-    /// 用户界面语言 ("zh" 或 "en")
+    /// 用户界面语言。
+    ///
+    /// 新配置使用 BCP 47 风格 locale（如 "zh-CN"、"en-US"）或 "auto"；
+    /// 历史配置中的 "zh" / "en" 仅作为前端读取兼容值保留。
     #[serde(default = "default_language")]
     pub language: String,
     /// 模型配置（动态加载 Provider 和模型列表）
@@ -1328,7 +1331,7 @@ fn default_minimize_to_tray() -> bool {
 }
 
 fn default_language() -> String {
-    "zh".to_string()
+    "zh-CN".to_string()
 }
 
 /// 服务器配置

@@ -99,6 +99,7 @@ describe("agentStreamSubmissionLifecycle", () => {
       assistantMsgId: "assistant-1",
       eventName: lifecycle.eventName,
       sessionId: "session-1",
+      turnId: expect.any(String),
       pendingTurnKey: lifecycle.pendingTurnKey,
       pendingItemKey: lifecycle.pendingItemKey,
     });

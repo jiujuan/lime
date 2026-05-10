@@ -36,6 +36,22 @@ export const DEFAULT_CHAT_TOOL_PREFERENCES: ChatToolPreferences = {
   subagent: false,
 };
 
+export function shouldUseCompactGeneralPromptForPreferences(params: {
+  chatMode: "agent" | "general" | "workbench";
+  contentId?: string | null;
+  preferences: ChatToolPreferences;
+}): boolean {
+  if (params.chatMode !== "general" || params.contentId) {
+    return false;
+  }
+
+  return (
+    !params.preferences.thinking &&
+    !params.preferences.task &&
+    !params.preferences.subagent
+  );
+}
+
 const LEGACY_CHAT_TOOL_PREFERENCES_KEY = "lime.chat.tool_preferences.v1";
 const CHAT_TOOL_PREFERENCES_KEY_PREFIX = "lime.chat.tool_preferences";
 const CHAT_TOOL_PREFERENCES_KEY_VERSION = "v3";

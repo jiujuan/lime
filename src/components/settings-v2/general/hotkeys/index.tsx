@@ -20,6 +20,7 @@ import {
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
 import { cn } from "@/lib/utils";
 import {
@@ -37,11 +38,25 @@ import {
 import { resolveHotkeyPlatform } from "@/lib/hotkeys/platform";
 import {
   buildAuditedHotkeyCatalog,
+  createHotkeyCatalogCopy,
   type AuditedHotkeyItem,
   type AuditedHotkeySection,
+  type HotkeyCatalogTranslate,
 } from "./hotkeyCatalog";
 
 type RuntimeAvailability = "ready" | "fallback";
+
+interface HotkeysPageCopy {
+  itemTipAria: (label: string) => string;
+  sectionTipAria: (title: string) => string;
+  scopeGlobal: string;
+  scopeLocal: string;
+  sourceMeta: (source: string) => string;
+  conditionMeta: (condition: string) => string;
+  unsetKey: string;
+  sectionTotal: (count: number) => string;
+  sectionReady: (count: number) => string;
+}
 
 function SummaryChip({
   tone = "neutral",
@@ -85,7 +100,13 @@ function HotkeyStatusBadge({ item }: { item: AuditedHotkeyItem }) {
   );
 }
 
-function HotkeyRow({ item }: { item: AuditedHotkeyItem }) {
+function HotkeyRow({
+  item,
+  copy,
+}: {
+  item: AuditedHotkeyItem;
+  copy: HotkeysPageCopy;
+}) {
   return (
     <article className="rounded-[20px] border border-slate-200/80 bg-white p-4">
       <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
@@ -93,7 +114,7 @@ function HotkeyRow({ item }: { item: AuditedHotkeyItem }) {
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm font-semibold text-slate-900">{item.label}</p>
             <WorkbenchInfoTip
-              ariaLabel={`${item.label}说明`}
+              ariaLabel={copy.itemTipAria(item.label)}
               content={
                 <div className="space-y-1">
                   <p>{item.description}</p>
@@ -104,12 +125,12 @@ function HotkeyRow({ item }: { item: AuditedHotkeyItem }) {
             />
             <HotkeyStatusBadge item={item} />
             <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
-              {item.scope === "global" ? "全局" : "页面内"}
+              {item.scope === "global" ? copy.scopeGlobal : copy.scopeLocal}
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-            <span>来源：{item.source}</span>
-            <span>条件：{item.condition}</span>
+            <span>{copy.sourceMeta(item.source)}</span>
+            <span>{copy.conditionMeta(item.condition)}</span>
           </div>
         </div>
 
@@ -124,7 +145,7 @@ function HotkeyRow({ item }: { item: AuditedHotkeyItem }) {
                   : "border-slate-200 bg-white text-slate-700",
               )}
             >
-              {key}
+              {key === "未设置" ? copy.unsetKey : key}
             </span>
           ))}
         </div>
@@ -140,7 +161,13 @@ const SECTION_ICON_MAP: Record<AuditedHotkeySection["scene"], LucideIcon> = {
   "document-canvas": ScrollText,
 };
 
-function HotkeySectionCard({ section }: { section: AuditedHotkeySection }) {
+function HotkeySectionCard({
+  section,
+  copy,
+}: {
+  section: AuditedHotkeySection;
+  copy: HotkeysPageCopy;
+}) {
   const Icon = SECTION_ICON_MAP[section.scene] || Keyboard;
   const readyCount = section.hotkeys.filter((item) => item.available).length;
 
@@ -152,21 +179,23 @@ function HotkeySectionCard({ section }: { section: AuditedHotkeySection }) {
             <Icon className="h-4 w-4 text-sky-600" />
             {section.title}
             <WorkbenchInfoTip
-              ariaLabel={`${section.title}说明`}
+              ariaLabel={copy.sectionTipAria(section.title)}
               content={section.description}
               tone="slate"
             />
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <SummaryChip>共 {section.hotkeys.length} 项</SummaryChip>
-          <SummaryChip tone="success">可用 {readyCount} 项</SummaryChip>
+          <SummaryChip>{copy.sectionTotal(section.hotkeys.length)}</SummaryChip>
+          <SummaryChip tone="success">
+            {copy.sectionReady(readyCount)}
+          </SummaryChip>
         </div>
       </div>
 
       <div className="mt-5 space-y-3">
         {section.hotkeys.map((item) => (
-          <HotkeyRow key={item.id} item={item} />
+          <HotkeyRow key={item.id} item={item} copy={copy} />
         ))}
       </div>
     </section>
@@ -184,6 +213,7 @@ function LoadingSkeleton() {
 }
 
 export function HotkeysSettings() {
+  const { t } = useTranslation("settings");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [experimentalConfig, setExperimentalConfig] =
@@ -193,6 +223,10 @@ export function HotkeysSettings() {
     useState<HotkeyRuntimeStatus | null>(null);
   const [runtimeAvailability, setRuntimeAvailability] =
     useState<RuntimeAvailability>("ready");
+  const unknownLoadErrorMessage = t(
+    "settings.hotkeys.error.loadUnknown",
+    "加载失败",
+  );
 
   const loadHotkeys = useCallback(async () => {
     setLoading(true);
@@ -214,11 +248,15 @@ export function HotkeysSettings() {
       setRuntimeAvailability(runtimeResult.ok ? "ready" : "fallback");
     } catch (loadError) {
       console.error("加载快捷键信息失败:", loadError);
-      setError(loadError instanceof Error ? loadError.message : "加载失败");
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : unknownLoadErrorMessage,
+      );
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [unknownLoadErrorMessage]);
 
   useEffect(() => {
     void loadHotkeys();
@@ -239,9 +277,58 @@ export function HotkeysSettings() {
       case "windows":
         return "Windows";
       default:
-        return "当前平台";
+        return t("settings.hotkeys.platform.current", "当前平台");
     }
-  }, [platform]);
+  }, [platform, t]);
+
+  const translateCatalog = useCallback<HotkeyCatalogTranslate>(
+    (key, options) => t(key as never, options as never) as unknown as string,
+    [t],
+  );
+
+  const catalogCopy = useMemo(
+    () => createHotkeyCatalogCopy(translateCatalog),
+    [translateCatalog],
+  );
+
+  const pageCopy = useMemo<HotkeysPageCopy>(
+    () => ({
+      itemTipAria: (label: string) =>
+        t("settings.hotkeys.item.tipAria", {
+          label,
+          defaultValue: "{{label}}说明",
+        }),
+      sectionTipAria: (title: string) =>
+        t("settings.hotkeys.section.tipAria", {
+          title,
+          defaultValue: "{{title}}说明",
+        }),
+      scopeGlobal: t("settings.hotkeys.scope.global", "全局"),
+      scopeLocal: t("settings.hotkeys.scope.local", "页面内"),
+      sourceMeta: (source: string) =>
+        t("settings.hotkeys.meta.source", {
+          source,
+          defaultValue: "来源：{{source}}",
+        }),
+      conditionMeta: (condition: string) =>
+        t("settings.hotkeys.meta.condition", {
+          condition,
+          defaultValue: "条件：{{condition}}",
+        }),
+      unsetKey: t("settings.hotkeys.key.unset", "未设置"),
+      sectionTotal: (count: number) =>
+        t("settings.hotkeys.section.total", {
+          count,
+          defaultValue: "共 {{count}} 项",
+        }),
+      sectionReady: (count: number) =>
+        t("settings.hotkeys.section.ready", {
+          count,
+          defaultValue: "可用 {{count}} 项",
+        }),
+    }),
+    [t],
+  );
 
   const catalog = useMemo(() => {
     if (!experimentalConfig || !voiceConfig) {
@@ -253,8 +340,9 @@ export function HotkeysSettings() {
       experimentalConfig,
       voiceConfig,
       runtimeStatus,
+      copy: catalogCopy,
     });
-  }, [experimentalConfig, platform, runtimeStatus, voiceConfig]);
+  }, [catalogCopy, experimentalConfig, platform, runtimeStatus, voiceConfig]);
 
   if (loading) {
     return <LoadingSkeleton />;
@@ -267,20 +355,28 @@ export function HotkeysSettings() {
           <div className="flex items-center justify-between gap-4 rounded-[20px] border border-rose-200 bg-rose-50/90 px-4 py-3 text-sm text-rose-700 shadow-sm shadow-slate-950/5">
             <div className="flex items-center gap-2">
               <AlertCircle className="h-4 w-4" />
-              <span>加载快捷键失败：{error}</span>
+              <span>
+                {t("settings.hotkeys.error.load", {
+                  error,
+                  defaultValue: "加载快捷键失败：{{error}}",
+                })}
+              </span>
             </div>
             <button
               type="button"
               onClick={() => void loadHotkeys()}
               className="rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 transition hover:border-rose-300 hover:bg-rose-50"
             >
-              重试
+              {t("settings.hotkeys.action.retry", "重试")}
             </button>
           </div>
         ) : null}
 
         <div className="rounded-[20px] border border-rose-200 bg-rose-50/90 px-4 py-3 text-sm text-rose-700">
-          快捷键信息暂时不可用，请稍后重试。
+          {t(
+            "settings.hotkeys.error.unavailable",
+            "快捷键信息暂时不可用，请稍后重试。",
+          )}
         </div>
       </div>
     );
@@ -292,14 +388,19 @@ export function HotkeysSettings() {
         <div className="flex items-center justify-between gap-4 rounded-[20px] border border-rose-200 bg-rose-50/90 px-4 py-3 text-sm text-rose-700 shadow-sm shadow-slate-950/5">
           <div className="flex items-center gap-2">
             <AlertCircle className="h-4 w-4" />
-            <span>加载快捷键失败：{error}</span>
+            <span>
+              {t("settings.hotkeys.error.load", {
+                error,
+                defaultValue: "加载快捷键失败：{{error}}",
+              })}
+            </span>
           </div>
           <button
             type="button"
             onClick={() => void loadHotkeys()}
             className="rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 transition hover:border-rose-300 hover:bg-rose-50"
           >
-            重试
+            {t("settings.hotkeys.action.retry", "重试")}
           </button>
         </div>
       ) : null}
@@ -310,43 +411,77 @@ export function HotkeysSettings() {
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-[24px] font-semibold tracking-tight text-slate-900">
-                  快捷键
+                  {t("settings.hotkeys.title", "快捷键")}
                 </h1>
                 <WorkbenchInfoTip
-                  ariaLabel="已审计快捷键说明"
-                  content={`当前按 ${platformLabel} 展示已接入实现的快捷键。全局项读取运行时注册状态，页面内项直接来自对应模块的真实事件匹配逻辑，不再展示手工拼装的占位清单。`}
+                  ariaLabel={t(
+                    "settings.hotkeys.hero.tipAria",
+                    "已审计快捷键说明",
+                  )}
+                  content={t("settings.hotkeys.hero.tip", {
+                    platform: platformLabel,
+                    defaultValue:
+                      "当前按 {{platform}} 展示已接入实现的快捷键。全局项读取运行时注册状态，页面内项直接来自对应模块的真实事件匹配逻辑，不再展示手工拼装的占位清单。",
+                  })}
                   tone="mint"
                 />
               </div>
               <p className="text-sm text-slate-500">
-                查看已接入实现并完成审计的快捷键。
+                {t(
+                  "settings.hotkeys.description",
+                  "查看已接入实现并完成审计的快捷键。",
+                )}
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2 xl:justify-end">
               <SummaryChip>{platformLabel}</SummaryChip>
               <SummaryChip tone="success">
-                全局运行中 {catalog.summary.globalReady} / 3
+                {t("settings.hotkeys.summary.globalReady", {
+                  ready: catalog.summary.globalReady,
+                  total: 3,
+                  defaultValue: "全局运行中 {{ready}} / {{total}}",
+                })}
               </SummaryChip>
               <SummaryChip
                 tone={runtimeAvailability === "ready" ? "success" : "warning"}
               >
                 {runtimeAvailability === "ready"
-                  ? "运行时状态已连接"
-                  : "运行时状态不可读，已回退到配置判断"}
+                  ? t(
+                      "settings.hotkeys.summary.runtime.ready",
+                      "运行时状态已连接",
+                    )
+                  : t(
+                      "settings.hotkeys.summary.runtime.fallback",
+                      "运行时状态不可读，已回退到配置判断",
+                    )}
               </SummaryChip>
-              <SummaryChip>已审计 {catalog.summary.total} 项</SummaryChip>
+              <SummaryChip>
+                {t("settings.hotkeys.summary.audited", {
+                  count: catalog.summary.total,
+                  defaultValue: "已审计 {{count}} 项",
+                })}
+              </SummaryChip>
               <SummaryChip tone="success">
-                可直接使用 {catalog.summary.ready} 项
+                {t("settings.hotkeys.summary.ready", {
+                  count: catalog.summary.ready,
+                  defaultValue: "可直接使用 {{count}} 项",
+                })}
               </SummaryChip>
               <SummaryChip
                 tone={catalog.summary.attention > 0 ? "warning" : "neutral"}
               >
-                需要处理 {catalog.summary.attention} 项
+                {t("settings.hotkeys.summary.attention", {
+                  count: catalog.summary.attention,
+                  defaultValue: "需要处理 {{count}} 项",
+                })}
               </SummaryChip>
               <WorkbenchInfoTip
-                ariaLabel="已审计说明"
-                content="当前页只列出已接入实现且已核对的快捷键。"
+                ariaLabel={t("settings.hotkeys.audit.tipAria", "已审计说明")}
+                content={t(
+                  "settings.hotkeys.audit.tip",
+                  "当前页只列出已接入实现且已核对的快捷键。",
+                )}
                 tone="slate"
               />
             </div>
@@ -356,7 +491,11 @@ export function HotkeysSettings() {
 
       <div className="space-y-4">
         {catalog.sections.map((section) => (
-          <HotkeySectionCard key={section.scene} section={section} />
+          <HotkeySectionCard
+            key={section.scene}
+            section={section}
+            copy={pageCopy}
+          />
         ))}
       </div>
     </div>

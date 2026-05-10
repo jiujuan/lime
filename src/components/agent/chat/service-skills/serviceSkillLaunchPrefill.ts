@@ -14,6 +14,16 @@ export interface ServiceSkillLaunchPrefillResult {
   hint?: string;
 }
 
+export interface ServiceSkillLaunchPrefillCopy {
+  filledPrefix?: string;
+  extraPrefix?: string;
+  itemSeparator?: string;
+  segmentSeparator?: string;
+  formatFilledItems?: (visibleItems: string[], totalCount: number) => string;
+  formatRecentServiceHint?: (skillTitle: string) => string;
+  formatRecentSceneHint?: (sceneTitle: string) => string;
+}
+
 function summarizePrefillValue(value: string, maxLength = 32): string {
   const normalized = value.replace(/\s+/g, " ").trim();
   if (normalized.length <= maxLength) {
@@ -50,13 +60,26 @@ function compactSlotValues(
   return Object.keys(nextValues).length > 0 ? nextValues : undefined;
 }
 
+function formatDefaultFilledItems(
+  visibleItems: string[],
+  totalCount: number,
+  itemSeparator: string,
+): string {
+  return `${visibleItems.join(itemSeparator)}${
+    visibleItems.length < totalCount ? ` 等 ${totalCount} 项` : ""
+  }`;
+}
+
 export function buildServiceSkillLaunchPrefillSummary(params: {
   skill: Pick<ServiceSkillHomeItem, "slotSchema">;
   slotValues?: ServiceSkillSlotValues;
   launchUserInput?: string;
   limit?: number;
+  copy?: ServiceSkillLaunchPrefillCopy;
 }): string {
   const limit = params.limit ?? 2;
+  const copy = params.copy ?? {};
+  const itemSeparator = copy.itemSeparator ?? "；";
   const summaryItems = params.skill.slotSchema
     .map((slot) => {
       const value = compactSlotValues(params.slotValues)?.[slot.key];
@@ -83,21 +106,32 @@ export function buildServiceSkillLaunchPrefillSummary(params: {
   if (summaryItems.length > 0) {
     const visibleItems = summaryItems.slice(0, limit);
     segments.push(
-      `上次填写：${visibleItems.join("；")}${
-        summaryItems.length > limit ? ` 等 ${summaryItems.length} 项` : ""
+      `${copy.filledPrefix ?? "上次填写："}${
+        copy.formatFilledItems?.(visibleItems, summaryItems.length) ??
+        formatDefaultFilledItems(
+          visibleItems,
+          summaryItems.length,
+          itemSeparator,
+        )
       }`,
     );
   }
 
   if (launchUserInput && !hasDuplicatedLaunchUserInput) {
-    segments.push(`上次补充：${summarizePrefillValue(launchUserInput, 40)}`);
+    segments.push(
+      `${copy.extraPrefix ?? "上次补充："}${summarizePrefillValue(
+        launchUserInput,
+        40,
+      )}`,
+    );
   }
 
-  return segments.join(" · ");
+  return segments.join(copy.segmentSeparator ?? " · ");
 }
 
 function resolveRecentServiceSkillPrefill(
   skill: ServiceSkillHomeItem,
+  copy: ServiceSkillLaunchPrefillCopy = {},
 ): ServiceSkillLaunchPrefillResult | undefined {
   const recentUsage = getServiceSkillUsageMap().get(skill.id);
   const slotValues = compactSlotValues(recentUsage?.slotValues);
@@ -109,12 +143,15 @@ function resolveRecentServiceSkillPrefill(
   return {
     ...(slotValues ? { slotValues } : {}),
     ...(launchUserInput ? { launchUserInput } : {}),
-    hint: `已根据你上次成功执行 ${skill.title} 时的参数自动预填，可继续修改后执行。`,
+    hint:
+      copy.formatRecentServiceHint?.(skill.title) ??
+      `已根据你上次成功执行 ${skill.title} 时的参数自动预填，可继续修改后执行。`,
   };
 }
 
 function resolveRecentScenePrefill(
   skill: ServiceSkillHomeItem,
+  copy: ServiceSkillLaunchPrefillCopy = {},
 ): ServiceSkillLaunchPrefillResult | undefined {
   const sceneKey = normalizeOptionalText(skill.sceneBinding?.sceneKey);
   if (!sceneKey) {
@@ -141,23 +178,30 @@ function resolveRecentScenePrefill(
 
   return {
     slotValues,
-    hint: `已根据你上次成功执行 ${skill.sceneBinding?.commandPrefix || skill.title} 时的输入自动预填，可继续修改后执行。`,
+    hint:
+      copy.formatRecentSceneHint?.(
+        skill.sceneBinding?.commandPrefix || skill.title,
+      ) ??
+      `已根据你上次成功执行 ${
+        skill.sceneBinding?.commandPrefix || skill.title
+      } 时的输入自动预填，可继续修改后执行。`,
   };
 }
 
 export function resolveServiceSkillLaunchPrefill(params: {
   skill: ServiceSkillHomeItem | null;
   creationReplay?: CreationReplayMetadata;
+  copy?: ServiceSkillLaunchPrefillCopy;
 }): ServiceSkillLaunchPrefillResult | null {
-  const { skill, creationReplay } = params;
+  const { skill, creationReplay, copy } = params;
   if (!skill) {
     return null;
   }
 
-  const recentServicePrefill = resolveRecentServiceSkillPrefill(skill);
+  const recentServicePrefill = resolveRecentServiceSkillPrefill(skill, copy);
   const recentScenePrefill = recentServicePrefill
     ? undefined
-    : resolveRecentScenePrefill(skill);
+    : resolveRecentScenePrefill(skill, copy);
   const creationReplayPrefill = buildCreationReplaySlotPrefill(
     skill,
     creationReplay,

@@ -96,22 +96,21 @@ use lime_agent::{
     builtin_team_preset_descriptor_by_id, builtin_team_preset_label_by_id, create_subagent_session,
     is_virtual_memory_path, list_child_subagent_sessions, list_subagent_cascade_session_ids,
     list_subagent_status_scope_session_ids, load_subagent_runtime_status,
-    merge_system_prompt_with_runtime_agents, message_suggests_news_expansion,
-    normalize_team_runtime_provider_group, persist_compaction_session_metrics_update,
-    persist_session_extension_data, preview_provider_runtime_wait_snapshot,
-    preview_team_runtime_wait_snapshot, read_session, read_subagent_control_state,
-    release_provider_runtime_permit, release_team_runtime_permit, replace_session_conversation,
-    resolve_provider_runtime_parallel_budget, resolve_virtual_memory_path,
-    snapshot_provider_runtime_lease, snapshot_team_runtime_session, summarize_builtin_skill,
-    virtual_memory_relative_path, write_subagent_control_state, AgentMessage, AgentMessageContent,
-    AgentRuntimeStatus, CompactionSessionMetricsUpdate, ProviderContinuationCapability,
-    ProviderContinuationCapable, ProviderContinuationState, ProviderRuntimeGovernorSnapshot,
-    RuntimeProjectionSnapshot, SessionStateSnapshot, SubagentControlState,
-    SubagentCustomizationState, SubagentRuntimeStatus, SubagentRuntimeStatusKind,
-    SubagentSkillPromptBlock, SubagentSkillSummary, TeamRuntimeGovernorSnapshot,
-    TurnExecutionProfile, TurnInputEnvelopeBuilder, TurnPromptAugmentationStageKind,
-    TurnProviderRoutingSnapshot, TurnRequestToolPolicySnapshot, TurnState, TurnSystemPromptSource,
-    DURABLE_MEMORY_VIRTUAL_ROOT,
+    merge_system_prompt_with_runtime_agents, normalize_team_runtime_provider_group,
+    persist_compaction_session_metrics_update, persist_session_extension_data,
+    preview_provider_runtime_wait_snapshot, preview_team_runtime_wait_snapshot, read_session,
+    read_subagent_control_state, release_provider_runtime_permit, release_team_runtime_permit,
+    replace_session_conversation, resolve_provider_runtime_parallel_budget,
+    resolve_virtual_memory_path, snapshot_provider_runtime_lease, snapshot_team_runtime_session,
+    summarize_builtin_skill, virtual_memory_relative_path, write_subagent_control_state,
+    AgentMessage, AgentMessageContent, AgentRuntimeStatus, CompactionSessionMetricsUpdate,
+    ProviderContinuationCapability, ProviderContinuationCapable, ProviderContinuationState,
+    ProviderRuntimeGovernorSnapshot, RuntimeProjectionSnapshot, SessionStateSnapshot,
+    SubagentControlState, SubagentCustomizationState, SubagentRuntimeStatus,
+    SubagentRuntimeStatusKind, SubagentSkillPromptBlock, SubagentSkillSummary,
+    TeamRuntimeGovernorSnapshot, TurnExecutionProfile, TurnInputEnvelopeBuilder,
+    TurnPromptAugmentationStageKind, TurnProviderRoutingSnapshot, TurnRequestToolPolicySnapshot,
+    TurnState, TurnSystemPromptSource, DURABLE_MEMORY_VIRTUAL_ROOT,
 };
 use lime_services::api_key_provider_service::ApiKeyProviderService;
 use lime_services::mcp_service::McpService;
@@ -437,6 +436,7 @@ pub(crate) use command_api::{
 };
 pub(crate) use cover_skill_launch::{
     append_cover_skill_launch_session_permissions, merge_system_prompt_with_cover_skill_launch,
+    prepare_cover_skill_launch_request_metadata,
     prune_cover_skill_launch_detour_tools_from_registry,
 };
 pub(crate) use deep_search_skill_launch::{
@@ -502,8 +502,6 @@ pub(crate) use provider_runtime_bootstrap::ensure_provider_runtime_ready;
 pub(crate) use provider_runtime_strategy::{
     enrich_provider_config_with_runtime_tool_strategy, RuntimeToolCallStrategy,
 };
-#[cfg(test)]
-use reply_runtime::message_suggests_live_search;
 use reply_runtime::{
     build_runtime_user_message, build_turn_runtime_statuses, complete_runtime_status_projection,
     emit_runtime_status_with_projection, ensure_code_execution_extension_enabled,
@@ -579,17 +577,18 @@ pub(crate) use summary_skill_launch::{
 };
 #[allow(unused_imports)]
 pub(crate) use tool_runtime::social_generate_cover_image_cmd;
-#[cfg(test)]
-#[allow(unused_imports)]
 pub(crate) use tool_runtime::{
-    append_subagent_tool_scope_session_permissions, ensure_default_web_tools_registered,
-    extract_runtime_subagent_result_text, LimeBrowserMcpTool, SocialGenerateCoverImageTool,
-    ToolSearchBridgeTool,
+    append_subagent_tool_scope_session_permissions, apply_workspace_sandbox_permissions, ImageInput,
 };
-pub(crate) use tool_runtime::{apply_workspace_sandbox_permissions, ImageInput};
 pub(crate) use tool_runtime::{
     ensure_browser_mcp_tools_registered, ensure_creation_task_tools_registered,
     ensure_runtime_support_tools_registered, ensure_social_image_tool_registered,
+};
+#[cfg(test)]
+#[allow(unused_imports)]
+pub(crate) use tool_runtime::{
+    ensure_default_web_tools_registered, extract_runtime_subagent_result_text, LimeBrowserMcpTool,
+    SocialGenerateCoverImageTool, ToolSearchBridgeTool,
 };
 pub(crate) use transcription_skill_launch::{
     append_transcription_skill_launch_session_permissions,

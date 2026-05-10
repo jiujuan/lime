@@ -217,7 +217,6 @@ pub struct AgentRuntimeInterruptTurnRequest {
     #[serde(alias = "sessionId")]
     pub session_id: String,
     #[serde(default, alias = "turnId")]
-    #[allow(dead_code)]
     pub turn_id: Option<String>,
 }
 
@@ -1511,25 +1510,13 @@ impl AgentRuntimeThreadReadModel {
         );
         let file_checkpoint_summary =
             runtime_file_checkpoint_service::build_thread_file_checkpoint_summary(detail);
-        let active_turn = detail
-            .turns
-            .iter()
-            .rev()
-            .find(|turn| {
-                matches!(
-                    turn.status,
-                    lime_core::database::dao::agent_timeline::AgentThreadTurnStatus::Running
-                )
-            })
-            .or(latest_turn);
-        let active_turn_running = active_turn
-            .map(|turn| {
-                matches!(
-                    turn.status,
-                    lime_core::database::dao::agent_timeline::AgentThreadTurnStatus::Running
-                )
-            })
-            .unwrap_or(false);
+        let active_running_turn = detail.turns.iter().rev().find(|turn| {
+            matches!(
+                turn.status,
+                lime_core::database::dao::agent_timeline::AgentThreadTurnStatus::Running
+            )
+        });
+        let active_turn_running = active_running_turn.is_some();
         let interrupting = runtime_interrupt_marker.is_some() && active_turn_running;
         let status = if interrupting {
             "interrupting".to_string()
@@ -1663,7 +1650,7 @@ impl AgentRuntimeThreadReadModel {
         Self {
             thread_id: detail.thread_id.clone(),
             status,
-            active_turn_id: active_turn.map(|turn| turn.id.clone()),
+            active_turn_id: active_running_turn.map(|turn| turn.id.clone()),
             pending_requests,
             last_outcome,
             incidents,
@@ -3031,6 +3018,49 @@ mod tests {
         );
         assert_eq!(thread_read.incidents.len(), 1);
         assert_eq!(thread_read.incidents[0].incident_type, "provider_error");
+    }
+
+    #[test]
+    fn thread_read_should_not_keep_aborted_turn_active_after_followup_completed() {
+        let detail = build_session_detail(
+            vec![
+                AgentThreadTurn {
+                    id: "turn-aborted".to_string(),
+                    thread_id: "thread-1".to_string(),
+                    prompt_text: "请输出 160 行".to_string(),
+                    status: AgentThreadTurnStatus::Aborted,
+                    started_at: "2026-03-23T09:10:00Z".to_string(),
+                    completed_at: Some("2026-03-23T09:10:02Z".to_string()),
+                    error_message: Some("用户已停止当前执行".to_string()),
+                    created_at: "2026-03-23T09:10:00Z".to_string(),
+                    updated_at: "2026-03-23T09:10:02Z".to_string(),
+                },
+                AgentThreadTurn {
+                    id: "turn-followup".to_string(),
+                    thread_id: "thread-1".to_string(),
+                    prompt_text: "停止后恢复测试：请只回复“恢复成功”。".to_string(),
+                    status: AgentThreadTurnStatus::Completed,
+                    started_at: "2026-03-23T09:10:05Z".to_string(),
+                    completed_at: Some("2026-03-23T09:10:06Z".to_string()),
+                    error_message: None,
+                    created_at: "2026-03-23T09:10:05Z".to_string(),
+                    updated_at: "2026-03-23T09:10:06Z".to_string(),
+                },
+            ],
+            Vec::new(),
+        );
+
+        let thread_read = AgentRuntimeThreadReadModel::from_session_detail(&detail, &[]);
+
+        assert_eq!(thread_read.status, "completed");
+        assert_eq!(thread_read.active_turn_id, None);
+        assert_eq!(
+            thread_read
+                .diagnostics
+                .as_ref()
+                .and_then(|diagnostics| diagnostics.latest_turn_status.as_deref()),
+            Some("completed")
+        );
     }
 
     #[test]

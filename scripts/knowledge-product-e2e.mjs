@@ -302,8 +302,23 @@ async function openKnowledgeOverview(page, options) {
     text.includes("存到哪里？") ||
     text.includes("整理新资料")
   ) {
+    if (text.includes("项目资料状态说明")) {
+      const backButton = page.getByRole("button", {
+        name: "回到项目资料",
+        exact: true,
+      });
+      if (await backButton.isVisible().catch(() => false)) {
+        await backButton.click({ timeout: options.timeoutMs });
+        await waitText(page, options, "状态说明返回项目资料首页", [
+          "让 Lime 记住这个项目",
+          "项目资料清单",
+        ]);
+        return;
+      }
+    }
+
     await clickSideNav(page, options, "灵感");
-    await waitText(page, options, "灵感页", ["灵感"]);
+    await waitText(page, options, "灵感页", ["收藏过的想法"]);
   }
 
   await clickSideNav(page, options, "项目资料");

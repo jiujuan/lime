@@ -7,6 +7,7 @@ dist/
 src-tauri/.cargo/
 *.exe
 *.pdb
+output/
 
 # IDE
 .vscode/
@@ -66,6 +67,8 @@ docs/roadmap/*
 !docs/roadmap/managed-objective/*.md
 !docs/roadmap/ai-layered-design/
 !docs/roadmap/ai-layered-design/*.md
+!docs/roadmap/i18n/
+!docs/roadmap/i18n/*.md
 docs/gongzonghao/
 docs/bussniss/
 docs/oem/

@@ -52,7 +52,7 @@ export interface CategoryGroup {
  * 返回按分组组织的设置导航项
  */
 export function useSettingsCategory(): CategoryGroup[] {
-  const { t } = useTranslation();
+  const { t } = useTranslation("settings");
 
   return useMemo(() => {
     const groups: CategoryGroup[] = [];

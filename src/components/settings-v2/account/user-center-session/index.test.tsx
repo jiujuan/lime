@@ -2,16 +2,44 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockUseOemCloudAccess, mockFormatOemCloudDateTime } = vi.hoisted(
-  () => ({
+const {
+  mockUseOemCloudAccess,
+  mockFormatOemCloudDateTime,
+  mockUseTranslation,
+} = vi.hoisted(() => {
+  const mockTranslate = vi.fn((key: string, options?: unknown) => {
+    if (typeof options === "string") {
+      return options;
+    }
+
+    if (options && typeof options === "object") {
+      const values = options as Record<string, unknown>;
+      const template =
+        typeof values.defaultValue === "string" ? values.defaultValue : key;
+      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+        String(values[name] ?? ""),
+      );
+    }
+
+    return key;
+  });
+
+  return {
     mockUseOemCloudAccess: vi.fn(),
     mockFormatOemCloudDateTime: vi.fn((value?: string) => `fmt:${value ?? ""}`),
-  }),
-);
+    mockUseTranslation: vi.fn((_namespace?: string) => ({
+      t: mockTranslate,
+    })),
+  };
+});
 
 vi.mock("@/hooks/useOemCloudAccess", () => ({
   useOemCloudAccess: () => mockUseOemCloudAccess(),
   formatOemCloudDateTime: (value?: string) => mockFormatOemCloudDateTime(value),
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
 }));
 
 import { UserCenterSessionSettings } from ".";
@@ -167,6 +195,7 @@ describe("UserCenterSessionSettings", () => {
     expect(text).toContain("默认服务：登录后自动同步");
     expect(text).toContain("使用 Google 一键登录");
     expect(text).toContain("浏览器完成后自动同步");
+    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
   });
 
   it("点击 Google 一键登录时应调用 hook 的 handleGoogleLogin", async () => {

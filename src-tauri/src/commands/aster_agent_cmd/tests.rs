@@ -177,19 +177,6 @@ mod tests {
     }
 
     #[test]
-    fn test_message_suggests_live_search_accepts_explicit_search_verbs() {
-        assert!(message_suggests_live_search(
-            "请帮我搜一下哥德尔不完备定理的历史背景"
-        ));
-        assert!(message_suggests_live_search(
-            "please look up kyoto travel tips"
-        ));
-        assert!(!message_suggests_live_search(
-            "帮我解释一下什么是向量数据库"
-        ));
-    }
-
-    #[test]
     fn test_resolve_workspace_id_from_sources_prefers_request_value() {
         assert_eq!(
             resolve_workspace_id_from_sources(
@@ -1314,10 +1301,19 @@ mod tests {
             .any(|permission| permission.tool == "Read" && !permission.allowed));
         assert!(permissions
             .iter()
+            .any(|permission| permission.tool == "Write" && !permission.allowed));
+        assert!(permissions
+            .iter()
+            .any(|permission| permission.tool == "Edit" && !permission.allowed));
+        assert!(permissions
+            .iter()
             .any(|permission| permission.tool == "Glob" && !permission.allowed));
         assert!(permissions
             .iter()
             .any(|permission| permission.tool == "Grep" && !permission.allowed));
+        assert!(permissions
+            .iter()
+            .any(|permission| permission.tool == "mcp__lime-browser__*" && !permission.allowed));
     }
 
     #[test]
@@ -1342,6 +1338,16 @@ mod tests {
         registry.register(Box::new(DummyTool::new(
             "Read",
             "Read file",
+            serde_json::json!({"type": "object"}),
+        )));
+        registry.register(Box::new(DummyTool::new(
+            "Write",
+            "Write file",
+            serde_json::json!({"type": "object"}),
+        )));
+        registry.register(Box::new(DummyTool::new(
+            "mcp__lime-browser__tabs_context_mcp",
+            "Browser page",
             serde_json::json!({"type": "object"}),
         )));
         registry.register(Box::new(DummyTool::new(
@@ -1371,7 +1377,9 @@ mod tests {
         assert!(registry.contains(LIME_CREATE_IMAGE_TASK_TOOL_NAME));
         assert!(!registry.contains("Bash"));
         assert!(!registry.contains("Read"));
+        assert!(!registry.contains("Write"));
         assert!(!registry.contains("Glob"));
+        assert!(!registry.contains("mcp__lime-browser__tabs_context_mcp"));
         assert!(registry.contains("Skill"));
     }
 
@@ -1413,10 +1421,31 @@ mod tests {
             .any(|permission| permission.tool == "Read" && !permission.allowed));
         assert!(permissions
             .iter()
+            .any(|permission| permission.tool == "Write" && !permission.allowed));
+        assert!(permissions
+            .iter()
+            .any(|permission| permission.tool == "Edit" && !permission.allowed));
+        assert!(permissions
+            .iter()
+            .any(|permission| permission.tool == "Bash" && !permission.allowed));
+        assert!(permissions
+            .iter()
             .any(|permission| permission.tool == "Glob" && !permission.allowed));
         assert!(permissions
             .iter()
             .any(|permission| permission.tool == "Grep" && !permission.allowed));
+        assert!(permissions
+            .iter()
+            .any(|permission| permission.tool == "mcp__lime-browser__*" && !permission.allowed));
+        assert!(permissions.iter().any(|permission| permission.tool
+            == "social_generate_cover_image"
+            && !permission.allowed));
+        assert!(permissions.iter().any(|permission| permission.tool
+            == LIME_CREATE_IMAGE_TASK_TOOL_NAME
+            && !permission.allowed));
+        assert!(permissions
+            .iter()
+            .any(|permission| permission.tool == "TaskOutput" && !permission.allowed));
     }
 
     #[test]
@@ -1444,8 +1473,38 @@ mod tests {
             serde_json::json!({"type": "object"}),
         )));
         registry.register(Box::new(DummyTool::new(
+            "Write",
+            "Write file",
+            serde_json::json!({"type": "object"}),
+        )));
+        registry.register(Box::new(DummyTool::new(
+            "mcp__lime-browser__tabs_context_mcp",
+            "Browser page",
+            serde_json::json!({"type": "object"}),
+        )));
+        registry.register(Box::new(DummyTool::new(
             "Glob",
             "Glob file",
+            serde_json::json!({"type": "object"}),
+        )));
+        registry.register(Box::new(DummyTool::new(
+            "social_generate_cover_image",
+            "Generate cover directly",
+            serde_json::json!({"type": "object"}),
+        )));
+        registry.register(Box::new(DummyTool::new(
+            LIME_CREATE_IMAGE_TASK_TOOL_NAME,
+            "Create image task",
+            serde_json::json!({"type": "object"}),
+        )));
+        registry.register(Box::new(DummyTool::new(
+            LIME_CREATE_COVER_TASK_TOOL_NAME,
+            "Create cover task",
+            serde_json::json!({"type": "object"}),
+        )));
+        registry.register(Box::new(DummyTool::new(
+            "TaskOutput",
+            "Wait for task",
             serde_json::json!({"type": "object"}),
         )));
         registry.register(Box::new(DummyTool::new(
@@ -1458,7 +1517,13 @@ mod tests {
 
         assert!(!registry.contains(TOOL_SEARCH_TOOL_NAME));
         assert!(!registry.contains("Read"));
+        assert!(!registry.contains("Write"));
         assert!(!registry.contains("Glob"));
+        assert!(!registry.contains("mcp__lime-browser__tabs_context_mcp"));
+        assert!(!registry.contains("social_generate_cover_image"));
+        assert!(!registry.contains(LIME_CREATE_IMAGE_TASK_TOOL_NAME));
+        assert!(!registry.contains("TaskOutput"));
+        assert!(registry.contains(LIME_CREATE_COVER_TASK_TOOL_NAME));
         assert!(registry.contains("Skill"));
     }
 
@@ -4797,7 +4862,7 @@ mod tests {
         assert!(merged.contains("\"image_task\":"));
         assert!(merged.contains("不要为了确认技能名、工具名或命令名再去调用 ToolSearch"));
         assert!(merged.contains("当前主会话第一刀必须先调用 Skill(image_generate)"));
-        assert!(merged.contains("不要先走 ToolSearch / WebSearch / Bash / Read / Glob / Grep"));
+        assert!(merged.contains("不要先走 ToolSearch / WebSearch / Bash / Read / Write / Edit / Glob / Grep / 浏览器 MCP / Playwright"));
         assert!(merged.contains("应立即改为直调 Skill(image_generate)"));
         assert!(merged.contains(
             "如果 Skill(image_generate) 返回的 Lime 工具元数据里只有 allowed_tools=[\"lime_create_image_generation_task\"]"
@@ -4858,8 +4923,12 @@ mod tests {
         assert!(merged.contains("\"cover_task\":"));
         assert!(merged.contains("不要为了确认技能名、工具名或命令名再去调用 ToolSearch"));
         assert!(merged.contains("不要先走 ToolSearch / WebSearch / Read / Glob / Grep"));
+        assert!(merged
+            .contains("不要直接调用 social_generate_cover_image 或 lime_create_image_generation_task"));
+        assert!(merged.contains("不要调用浏览器 MCP / Playwright / 页面工具"));
+        assert!(merged.contains("不要用 Write/Edit/Bash 自行生成 HTML 封面"));
         assert!(merged.contains("应立即改为直调 Skill(cover_generate)"));
-        assert!(merged.contains("lime task create cover --json"));
+        assert!(merged.contains("lime_create_cover_generation_task 主链"));
         assert!(merged.contains("不要把封面任务退化成普通配图"));
         assert!(merged.contains("当前任务已经显式进入封面技能主链"));
     }
@@ -5464,6 +5533,34 @@ mod tests {
             Some("workbench")
         );
         assert!(harness.get("broadcast_skill_launch").is_some());
+    }
+
+    #[test]
+    fn test_prepare_cover_skill_launch_request_metadata_sets_workbench_chat_mode() {
+        let metadata = serde_json::json!({
+            "harness": {
+                "cover_skill_launch": {
+                    "skill_name": "cover_generate",
+                    "kind": "cover_task",
+                    "cover_task": {
+                        "prompt": "春日咖啡市集封面"
+                    }
+                }
+            }
+        });
+
+        let prepared = prepare_cover_skill_launch_request_metadata(Some(&metadata))
+            .expect("prepared metadata");
+
+        let harness = prepared
+            .get("harness")
+            .and_then(serde_json::Value::as_object)
+            .expect("harness");
+        assert_eq!(
+            harness.get("chat_mode").and_then(serde_json::Value::as_str),
+            Some("workbench")
+        );
+        assert!(harness.get("cover_skill_launch").is_some());
     }
 
     #[test]

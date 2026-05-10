@@ -138,7 +138,24 @@ fn should_load_subagent_runtime_context(
     detail: &SessionDetail,
     history_limit: Option<usize>,
 ) -> bool {
-    should_load_runtime_overlay(detail, history_limit)
+    history_limit.is_none()
+        || detail.is_persisted_empty()
+        || !detail.turns.is_empty()
+        || !detail.items.is_empty()
+}
+
+fn should_load_runtime_overlay_for_runtime_detail(
+    detail: &SessionDetail,
+    history_limit: Option<usize>,
+) -> bool {
+    detail.is_persisted_empty() || should_load_runtime_overlay(detail, history_limit)
+}
+
+fn should_load_subagent_runtime_context_for_runtime_detail(
+    detail: &SessionDetail,
+    history_limit: Option<usize>,
+) -> bool {
+    should_load_subagent_runtime_context(detail, history_limit)
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -801,6 +818,18 @@ fn sort_runtime_items(items: &mut [AgentThreadItem], turn_started_at: &HashMap<S
     });
 }
 
+fn should_preserve_persisted_terminal_turn(
+    persisted: &AgentThreadTurn,
+    runtime: &AgentThreadTurn,
+) -> bool {
+    matches!(
+        persisted.status,
+        AgentThreadTurnStatus::Completed
+            | AgentThreadTurnStatus::Failed
+            | AgentThreadTurnStatus::Aborted
+    ) && matches!(runtime.status, AgentThreadTurnStatus::Running)
+}
+
 fn apply_aster_runtime_snapshot(detail: &mut SessionDetail, snapshot: &SessionRuntimeSnapshot) {
     if let Some(thread) = snapshot.threads.first() {
         detail.thread_id = thread.thread.id.clone();
@@ -817,7 +846,15 @@ fn apply_aster_runtime_snapshot(detail: &mut SessionDetail, snapshot: &SessionRu
         .collect::<HashMap<_, _>>();
     for thread in &snapshot.threads {
         for turn in &thread.turns {
-            turns_by_id.insert(turn.id.clone(), project_turn_runtime(turn.clone()));
+            let runtime_turn = project_turn_runtime(turn.clone());
+            if turns_by_id
+                .get(&runtime_turn.id)
+                .map(|persisted| should_preserve_persisted_terminal_turn(persisted, &runtime_turn))
+                .unwrap_or(false)
+            {
+                continue;
+            }
+            turns_by_id.insert(runtime_turn.id.clone(), runtime_turn);
         }
     }
     detail.turns = turns_by_id.into_values().collect();
@@ -1518,24 +1555,11 @@ pub async fn get_runtime_session_detail_with_history_page(
         return Ok(detail);
     }
 
-    if detail.is_persisted_empty() {
-        let total_ms = started_at.elapsed().as_millis();
-        tracing::info!(
-            "[SessionStore] get_runtime_session_detail 空会话快路径完成: session_id={}, total_ms={}, detail_ms={}, archive_check_ms={}, history_limit={:?}, history_offset={}, before_message_id={:?}",
-            session_id,
-            total_ms,
-            detail_ms,
-            archive_check_ms,
-            history_limit,
-            history_offset,
-            before_message_id,
-        );
-        return Ok(detail);
-    }
+    let was_persisted_empty = detail.is_persisted_empty();
 
     let load_runtime_overlay = history_offset == 0
         && before_message_id.is_none()
-        && should_load_runtime_overlay(&detail, history_limit);
+        && should_load_runtime_overlay_for_runtime_detail(&detail, history_limit);
 
     let overlay_started_at = Instant::now();
     let (session, runtime_snapshot) = if load_runtime_overlay {
@@ -1632,7 +1656,8 @@ pub async fn get_runtime_session_detail_with_history_page(
 
     let load_subagent_runtime_context = history_offset == 0
         && before_message_id.is_none()
-        && should_load_subagent_runtime_context(&detail, history_limit);
+        && (was_persisted_empty
+            || should_load_subagent_runtime_context_for_runtime_detail(&detail, history_limit));
 
     let child_subagents_started_at = Instant::now();
     if load_subagent_runtime_context {
@@ -1667,6 +1692,24 @@ pub async fn get_runtime_session_detail_with_history_page(
         }
     }
     let parent_context_ms = parent_context_started_at.elapsed().as_millis();
+
+    if was_persisted_empty && detail.is_persisted_empty() {
+        let total_ms = started_at.elapsed().as_millis();
+        tracing::info!(
+            "[SessionStore] get_runtime_session_detail 空会话快路径完成: session_id={}, total_ms={}, detail_ms={}, archive_check_ms={}, overlay_ms={}, child_subagents_ms={}, parent_context_ms={}, history_limit={:?}, history_offset={}, before_message_id={:?}",
+            session_id,
+            total_ms,
+            detail_ms,
+            archive_check_ms,
+            overlay_ms,
+            child_subagents_ms,
+            parent_context_ms,
+            history_limit,
+            history_offset,
+            before_message_id,
+        );
+        return Ok(detail);
+    }
     let total_ms = started_at.elapsed().as_millis();
 
     tracing::info!(
@@ -2060,8 +2103,8 @@ fn convert_agent_message_with_options(
 mod tests {
     use super::*;
     use aster::session::{
-        SessionType as AsterSessionType, SubagentSessionMetadata, ThreadRuntime,
-        ThreadRuntimeSnapshot, TurnRuntime, TurnStatus,
+        SessionRuntimeSnapshot, SessionType as AsterSessionType, SubagentSessionMetadata,
+        ThreadRuntime, ThreadRuntimeSnapshot, TurnRuntime, TurnStatus,
     };
     use chrono::{Duration, Utc};
     use lime_core::agent::types::{FunctionCall, ImageUrl, ToolCall};
@@ -2156,6 +2199,27 @@ mod tests {
         }
     }
 
+    fn build_empty_runtime_detail() -> SessionDetail {
+        SessionDetail {
+            id: "session-empty-runtime".to_string(),
+            name: "空运行态会话".to_string(),
+            created_at: 0,
+            updated_at: 0,
+            thread_id: "session-empty-runtime".to_string(),
+            model: Some("agent:test".to_string()),
+            working_dir: None,
+            workspace_id: None,
+            messages: Vec::new(),
+            execution_strategy: Some("react".to_string()),
+            execution_runtime: None,
+            turns: Vec::new(),
+            items: Vec::new(),
+            todo_items: Vec::new(),
+            child_subagent_sessions: Vec::new(),
+            subagent_parent_context: None,
+        }
+    }
+
     fn insert_test_session_with_message(
         db: &DbConnection,
         session_id: &str,
@@ -2225,6 +2289,50 @@ mod tests {
     }
 
     #[test]
+    fn should_probe_runtime_overlay_for_empty_limited_history() {
+        let detail = build_empty_runtime_detail();
+
+        assert!(detail.is_persisted_empty());
+        assert!(should_load_runtime_overlay_for_runtime_detail(
+            &detail,
+            Some(20)
+        ));
+    }
+
+    #[test]
+    fn apply_runtime_snapshot_should_not_regress_aborted_turn_to_running() {
+        let mut detail = build_detail_with_turn_status(AgentThreadTurnStatus::Aborted);
+        let thread_id = detail.thread_id.clone();
+        let turn_id = detail.turns[0].id.clone();
+        let mut runtime_turn = TurnRuntime::new(
+            turn_id.clone(),
+            detail.id.clone(),
+            thread_id.clone(),
+            Some("测试".to_string()),
+            None,
+        );
+        runtime_turn.status = TurnStatus::Running;
+        let snapshot = SessionRuntimeSnapshot {
+            session_id: detail.id.clone(),
+            threads: vec![ThreadRuntimeSnapshot {
+                thread: ThreadRuntime::new(
+                    thread_id,
+                    detail.id.clone(),
+                    std::path::PathBuf::from("/tmp/lime-runtime-overlay-test"),
+                ),
+                turns: vec![runtime_turn],
+                items: Vec::new(),
+            }],
+        };
+
+        apply_aster_runtime_snapshot(&mut detail, &snapshot);
+
+        assert_eq!(detail.turns.len(), 1);
+        assert_eq!(detail.turns[0].id, turn_id);
+        assert_eq!(detail.turns[0].status, AgentThreadTurnStatus::Aborted);
+    }
+
+    #[test]
     fn should_load_subagent_runtime_context_for_full_history() {
         let detail = build_detail_with_turn_status(AgentThreadTurnStatus::Completed);
 
@@ -2232,10 +2340,10 @@ mod tests {
     }
 
     #[test]
-    fn should_skip_subagent_runtime_context_for_completed_limited_history() {
+    fn should_load_subagent_runtime_context_for_completed_limited_history() {
         let detail = build_detail_with_turn_status(AgentThreadTurnStatus::Completed);
 
-        assert!(!should_load_subagent_runtime_context(&detail, Some(80)));
+        assert!(should_load_subagent_runtime_context(&detail, Some(80)));
     }
 
     #[test]
@@ -2243,6 +2351,17 @@ mod tests {
         let detail = build_detail_with_turn_status(AgentThreadTurnStatus::Running);
 
         assert!(should_load_subagent_runtime_context(&detail, Some(80)));
+    }
+
+    #[test]
+    fn should_probe_subagent_context_for_empty_limited_history() {
+        let detail = build_empty_runtime_detail();
+
+        assert!(detail.is_persisted_empty());
+        assert!(should_load_subagent_runtime_context_for_runtime_detail(
+            &detail,
+            Some(20)
+        ));
     }
 
     fn build_test_subagent_session(

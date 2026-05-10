@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Code2, FlaskConical } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DeveloperSettings } from "../developer";
 import { ExperimentalSettings } from "../experimental";
@@ -14,6 +15,7 @@ export function DeveloperLabSettings({
   initialTab = "developer",
 }: DeveloperLabSettingsProps = {}) {
   const [activeTab, setActiveTab] = useState<DeveloperLabTab>(initialTab);
+  const { t } = useTranslation("settings");
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -32,11 +34,14 @@ export function DeveloperLabSettings({
               <div className="flex flex-wrap items-center gap-2">
                 <Code2 className="h-5 w-5 text-sky-600" />
                 <h1 className="text-[24px] font-semibold tracking-tight text-slate-900">
-                  开发者与实验功能
+                  {t("settings.developerLab.title", "开发者与实验功能")}
                 </h1>
               </div>
               <p className="text-sm leading-6 text-slate-500">
-                调试、诊断和不稳定能力集中在同一处；默认关闭，用完关回。
+                {t(
+                  "settings.developerLab.description",
+                  "调试、诊断和不稳定能力集中在同一处；默认关闭，用完关回。",
+                )}
               </p>
             </div>
 
@@ -47,7 +52,7 @@ export function DeveloperLabSettings({
                 className="gap-2 rounded-[14px] px-4 py-3"
               >
                 <Code2 className="h-4 w-4" />
-                开发者工具
+                {t("settings.developerLab.tabs.developer", "开发者工具")}
               </TabsTrigger>
               <TabsTrigger
                 value="experimental"
@@ -55,7 +60,7 @@ export function DeveloperLabSettings({
                 className="gap-2 rounded-[14px] px-4 py-3"
               >
                 <FlaskConical className="h-4 w-4" />
-                实验功能
+                {t("settings.developerLab.tabs.experimental", "实验功能")}
               </TabsTrigger>
             </TabsList>
           </div>

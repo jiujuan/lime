@@ -1,9 +1,0 @@
-{
-  "type": "object",
-  "keys": [
-    "entries",
-    "clear",
-    "summary"
-  ],
-  "sample": {}
-}

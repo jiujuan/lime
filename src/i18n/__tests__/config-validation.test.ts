@@ -5,7 +5,11 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { isValidLanguage, Language, getTextMap } from "../text-map";
+import {
+  isValidLanguage,
+  Language,
+  getTextMap,
+} from "../legacy-patch/text-map";
 
 describe("Config Validation: Language Types", () => {
   it("should accept valid language codes", () => {

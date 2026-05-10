@@ -10,10 +10,39 @@ const { mockGetConfig, mockGetEnvironmentPreview, mockSaveConfig } = vi.hoisted(
   }),
 );
 
+const { mockUseTranslation } = vi.hoisted(() => {
+  const mockTranslate = vi.fn((key: string, options?: unknown) => {
+    if (typeof options === "string") {
+      return options;
+    }
+
+    if (options && typeof options === "object") {
+      const values = options as Record<string, unknown>;
+      const template =
+        typeof values.defaultValue === "string" ? values.defaultValue : key;
+      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+        String(values[name] ?? ""),
+      );
+    }
+
+    return key;
+  });
+
+  return {
+    mockUseTranslation: vi.fn((_namespace?: string) => ({
+      t: mockTranslate,
+    })),
+  };
+});
+
 vi.mock("@/lib/api/appConfig", () => ({
   getConfig: mockGetConfig,
   getEnvironmentPreview: mockGetEnvironmentPreview,
   saveConfig: mockSaveConfig,
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
 }));
 
 import { EnvironmentSettings } from ".";
@@ -204,7 +233,7 @@ describe("EnvironmentSettings", () => {
     expect(text).toContain("环境变量覆盖");
     expect(text).toContain("合并规则");
     expect(text).toContain("生效预览");
-    expect(text).toContain("已从登录 Shell 导入 PATH 与代理变量");
+    expect(text).toContain("已导入 Shell 环境，共 5 个变量。");
     expect(findInput(container, "environment-variable-key-0").value).toBe(
       "OPENAI_BASE_URL",
     );

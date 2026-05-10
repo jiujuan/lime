@@ -211,6 +211,10 @@ export interface Config {
   ampcode: AmpConfig;
   proxy_url: string | null;
   minimize_to_tray: boolean;
+  /**
+   * UI locale preference. New values use "auto" or BCP 47 locale tags
+   * such as "zh-CN" / "en-US"; legacy "zh" / "en" are normalized on read.
+   */
   language: string;
   experimental?: ExperimentalFeatures;
   tool_calling?: ToolCallingConfig;

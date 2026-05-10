@@ -9,12 +9,31 @@ const {
   mockCloudProviderSettings,
   mockSettingsHomePage,
   mockDeveloperLabSettings,
+  mockUseTranslation,
 } = vi.hoisted(() => ({
   mockSettingsSidebar: vi.fn(),
   mockPreloadDeveloperDefaultSections: vi.fn(),
   mockCloudProviderSettings: vi.fn(),
   mockSettingsHomePage: vi.fn(),
   mockDeveloperLabSettings: vi.fn(),
+  mockUseTranslation: vi.fn((_namespace?: string) => ({
+    t: (key: string, options?: unknown) => {
+      if (typeof options === "string") {
+        return options;
+      }
+
+      if (options && typeof options === "object") {
+        const values = options as Record<string, unknown>;
+        const template =
+          typeof values.defaultValue === "string" ? values.defaultValue : key;
+        return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+          String(values[name] ?? ""),
+        );
+      }
+
+      return key;
+    },
+  })),
 }));
 
 const { mockResolveOemCloudRuntimeContext } = vi.hoisted(() => ({
@@ -97,6 +116,10 @@ vi.mock("../home", () => ({
 }));
 vi.mock("@/lib/api/oemCloudRuntime", () => ({
   resolveOemCloudRuntimeContext: () => mockResolveOemCloudRuntimeContext(),
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
 }));
 
 import { SettingsLayoutV2 } from ".";
@@ -252,6 +275,7 @@ describe("SettingsLayoutV2 Developer Tab", () => {
     expect(header?.getAttribute("data-window-controls-reserved")).toBe("true");
     expect(button).not.toBeNull();
     expect(button?.textContent ?? "").toContain("回到首页");
+    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
     expect(getComputedStyle(header as Element).paddingLeft).toBe("0px");
     expect(getComputedStyle(button as Element).marginLeft).toBe("24px");
     expect(

@@ -34,10 +34,10 @@ export const InputbarExecutionStrategySelect: React.FC<
     <MetaToggleButton
       type="button"
       $checked={planEnabled}
-      aria-label={planEnabled ? "关闭 Plan 模式" : "开启 Plan 模式"}
+      aria-label={planEnabled ? "关闭计划执行" : "开启计划执行"}
       aria-pressed={planEnabled}
       data-testid="inputbar-plan-toggle"
-      title={planEnabled ? "关闭 Plan 模式" : "开启 Plan 模式"}
+      title={planEnabled ? "关闭计划执行" : "开启计划执行"}
       onClick={() =>
         setExecutionStrategy(planEnabled ? "react" : "code_orchestrated")
       }
@@ -46,7 +46,7 @@ export const InputbarExecutionStrategySelect: React.FC<
       <MetaToggleGlyph aria-hidden>
         <ListChecks strokeWidth={1.8} />
       </MetaToggleGlyph>
-      <MetaToggleLabel>Plan</MetaToggleLabel>
+      <MetaToggleLabel>计划执行</MetaToggleLabel>
     </MetaToggleButton>
   );
 };

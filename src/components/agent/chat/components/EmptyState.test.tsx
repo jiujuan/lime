@@ -1526,7 +1526,7 @@ describe("EmptyState", () => {
     );
   });
 
-  it("指定 service skill 即使未从运行时目录注入，也应从 seeded 目录拼接到首页精选区尾部", async () => {
+  it("首页可见 service skill 即使未从运行时目录注入，也应从 seeded 目录拼接到首页精选区尾部", async () => {
     const onSelectServiceSkill = vi.fn<(skill: ServiceSkillHomeItem) => void>();
     const container = renderEmptyState({
       activeTheme: "general",
@@ -1538,11 +1538,11 @@ describe("EmptyState", () => {
       await Promise.resolve();
     });
 
-    expect(container.textContent).toContain("复制视频脚本");
+    expect(container.textContent).toContain("复制轮播帖");
     expect(container.textContent).not.toContain("GitHub 仓库线索检索");
 
     const card = container.querySelector(
-      '[data-testid="home-gallery-entry-service-skill-short-video-script-replication"]',
+      '[data-testid="home-gallery-entry-service-skill-carousel-post-replication"]',
     ) as HTMLButtonElement | null;
     expect(card).toBeTruthy();
 
@@ -1552,8 +1552,8 @@ describe("EmptyState", () => {
 
     expect(onSelectServiceSkill).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: "short-video-script-replication",
-        title: "复制视频脚本",
+        id: "carousel-post-replication",
+        title: "复制轮播帖",
       }),
     );
   });
@@ -2714,6 +2714,9 @@ describe("EmptyState", () => {
       '[data-testid="inputbar-plan-toggle"]',
     ) as HTMLButtonElement | null;
     expect(planButton).toBeTruthy();
+    expect(planButton?.textContent).toContain("计划执行");
+    expect(planButton?.textContent).not.toContain("Plan");
+    expect(planButton?.getAttribute("aria-label")).toBe("开启计划执行");
     const subagentButton = container.querySelector(
       'button[title="任务拆分偏好已关闭"]',
     ) as HTMLButtonElement | null;

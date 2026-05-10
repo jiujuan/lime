@@ -1,4 +1,4 @@
-import { act } from "react";
+import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -27,6 +27,7 @@ const {
   mockWechatChannelProbe,
   mockWechatChannelRemoveAccount,
   mockQrCodeToDataUrl,
+  mockUseTranslation,
 } = vi.hoisted(() => ({
   mockGetConfig: vi.fn(),
   mockSaveConfig: vi.fn(),
@@ -52,6 +53,24 @@ const {
   mockWechatChannelProbe: vi.fn(),
   mockWechatChannelRemoveAccount: vi.fn(),
   mockQrCodeToDataUrl: vi.fn(),
+  mockUseTranslation: vi.fn((_namespace?: string) => ({
+    t: (key: string, options?: unknown) => {
+      if (typeof options === "string") {
+        return options;
+      }
+
+      if (options && typeof options === "object") {
+        const values = options as Record<string, unknown>;
+        const template =
+          typeof values.defaultValue === "string" ? values.defaultValue : key;
+        return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+          String(values[name] ?? ""),
+        );
+      }
+
+      return key;
+    },
+  })),
 }));
 
 vi.mock("@/lib/api/appConfig", () => ({
@@ -118,6 +137,10 @@ vi.mock("qrcode", () => ({
   default: {
     toDataURL: mockQrCodeToDataUrl,
   },
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
 }));
 
 import { ChannelsDebugWorkbench } from "./ChannelsDebugWorkbench";
@@ -195,13 +218,15 @@ function createConfig() {
   } as any;
 }
 
-function renderPage() {
+function renderPage(
+  props: Partial<ComponentProps<typeof ChannelsDebugWorkbench>> = {},
+) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
 
   act(() => {
-    root.render(<ChannelsDebugWorkbench initialSubPage="config" />);
+    root.render(<ChannelsDebugWorkbench initialSubPage="config" {...props} />);
   });
 
   mountedPages.push({ container, root });
@@ -299,5 +324,53 @@ describe("ChannelsDebugWorkbench", () => {
     expect(text).not.toContain("探测账号");
     expect(text).not.toContain("扫码登录");
     expect(text).not.toContain("Discord Gateway 调试工具");
+  });
+
+  it("网关与隧道表单应通过 settings namespace 渲染外层文案", async () => {
+    renderPage({ initialSubPage: "gateway" });
+    await flushEffects(10);
+
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("网关与隧道");
+    expect(text).toContain("Gateway 公共隧道");
+    expect(text).toContain("启用隧道");
+    expect(
+      Array.from(document.body.querySelectorAll("input")).some(
+        (input) => input.placeholder === "默认使用 PATH 中 cloudflared",
+      ),
+    ).toBe(true);
+    expect(text).toContain("同步飞书回调 URL");
+    expect(text).toContain("最近结果");
+  });
+
+  it("Telegram 与 Feishu 运行控制应通过 settings namespace 渲染", async () => {
+    renderPage({ initialDebugTab: "feishu" });
+    await flushEffects(10);
+
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("运行");
+    expect(text).toContain("Feishu Gateway 运行控制");
+    expect(text).toContain("用于状态查询、启停和重启");
+    expect(text).toContain("账号 ID");
+    expect(text).toContain("查询状态");
+    expect(text).toContain("启动");
+    expect(text).toContain("停止");
+    expect(text).toContain("重启");
+    expect(text).toContain("最近结果");
+  });
+
+  it("微信运行控制和兼容扫码排障应通过 settings namespace 渲染", async () => {
+    renderPage({ initialDebugTab: "wechat" });
+    await flushEffects(10);
+
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("微信 Gateway 运行控制");
+    expect(text).toContain("账号 ID 留空时按默认配置解析");
+    expect(text).toContain("列出账号");
+    expect(text).toContain("兼容扫码排障");
+    expect(text).toContain("生成二维码");
+    expect(text).toContain("已配置账号");
+    expect(text).toContain("删除时清理本地缓存数据");
+    expect(text).toContain("最近结果");
   });
 });

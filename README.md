@@ -1,6 +1,6 @@
-<div align="center">
+<div align="center"><a name="readme-top"></a>
 
-<img src="./docs/images/logo-v6.svg" alt="Lime AI 内容工作台 Logo" width="180" />
+<img src="./docs/images/readme-hero.png" alt="Lime README 主视觉：青柠一下，灵感即来" width="100%" />
 
 # Lime
 
@@ -9,6 +9,8 @@
 **给中文创作者用的开源 AI 内容工作台**
 
 AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.
+
+**简体中文** · [English](./README.en.md) · [文档](./docs/README.md) · [发布记录](./RELEASE_NOTES.md) · [问题反馈](https://github.com/limecloud/lime/issues)
 
 <p>
   <a href="https://github.com/limecloud/lime/releases"><img src="https://img.shields.io/github/v/release/limecloud/lime?label=release" alt="Lime GitHub Release" /></a>
@@ -20,6 +22,27 @@ AI content workspace for Chinese creators: desktop writing, research, prompt man
 把资料、灵感、生成、修改和复盘放在一个地方，让一次创作不是一次性聊天，而是一条能继续推进的工作流。
 
 </div>
+
+---
+
+<details>
+<summary><kbd>目录</kbd></summary>
+
+- [Lime 是什么](#lime-是什么)
+- [你可以用 Lime 做什么](#你可以用-lime-做什么)
+- [几个创作者会遇到的真实时刻](#几个创作者会遇到的真实时刻)
+- [一次创作可以这样开始](#一次创作可以这样开始)
+- [核心工作流](#核心工作流)
+- [适合谁](#适合谁)
+- [如果你在找这些工具](#如果你在找这些工具)
+- [不太适合谁](#不太适合谁)
+- [快速开始](#快速开始)
+- [技术栈与平台](#技术栈与平台)
+- [常见问题](#常见问题)
+- [开源协议](#开源协议)
+- [免责声明](#免责声明)
+
+</details>
 
 ---
 
@@ -100,23 +123,23 @@ Lime 可以把稳定有效的做法沉淀成常用任务入口：下次新人写
 
 ---
 
-## 界面预览
+## 核心工作流
 
 ### 从一个任务开始
 
-<img src="./docs/images/screenshot-20260509-094021.png" alt="Lime 新建任务与生成入口预览" />
+<img src="./docs/images/readme-feature-start.png" alt="Lime 从一个任务开始功能图" />
 
 你可以从一句目标开始，把资料、模型、常用做法和最近结果放在同一个地方，不用先面对一整面复杂工具菜单。
 
 ### 在同一个创作空间里持续修改
 
-<img src="./docs/images/screenshot-20260509-165425.png" alt="Lime 生成与执行过程预览" />
+<img src="./docs/images/readme-feature-workspace.png" alt="Lime 同一空间持续打磨功能图" />
 
 生成、追问、修改、查找资料和整理结果都围绕当前任务展开。适合需要多轮打磨的文章、报告、脚本和方案。
 
 ### 使用自己的 AI 服务
 
-<img src="./docs/images/screenshot-20260509-094051.png" alt="Lime AI 服务商与模型配置预览" />
+<img src="./docs/images/readme-feature-provider.png" alt="Lime 使用自己的 AI 服务功能图" />
 
 Lime 本身不提供 AI 模型服务。你可以配置自己的 AI 服务商、服务商密钥和常用模型，让不同内容任务使用不同能力。
 

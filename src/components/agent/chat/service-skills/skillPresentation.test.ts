@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildServiceSkillCapabilityDescription,
   getServiceSkillActionLabel,
+  getServiceSkillOutputDestination,
   getServiceSkillRunnerDescription,
   getServiceSkillRunnerLabel,
+  getServiceSkillTypeLabel,
   listServiceSkillDependencies,
   summarizeServiceSkillRequiredInputs,
 } from "./skillPresentation";
@@ -148,6 +150,71 @@ describe("skillPresentation", () => {
     );
     expect(listServiceSkillDependencies(siteSkill)).toContain(
       "需要当前浏览器里已经打开并登录对应站点。",
+    );
+  });
+
+  it("允许调用方注入本地化 presentation copy", () => {
+    const copy = {
+      actionLabels: { instant: "Start this step" },
+      fallbackRequiredInputs: "No required inputs",
+      formatFactItems: (visibleItems: string[], totalCount: number) =>
+        visibleItems.length < totalCount
+          ? `${visibleItems.join(", ")} + ${totalCount - visibleItems.length} more`
+          : visibleItems.join(", "),
+      outputDefault: "The result returns to Generate.",
+      outputPrefix: "Delivers: ",
+      requiredPrefix: "Needs: ",
+      typeLabels: { service: "Creation workflow" },
+    };
+    const skill = createServiceSkill({
+      slotSchema: [
+        {
+          key: "topic",
+          label: "Topic",
+          placeholder: "Topic",
+          type: "text",
+          required: true,
+        },
+        {
+          key: "audience",
+          label: "Audience",
+          placeholder: "Audience",
+          type: "text",
+          required: true,
+        },
+        {
+          key: "tone",
+          label: "Tone",
+          placeholder: "Tone",
+          type: "text",
+          required: true,
+        },
+      ],
+    });
+
+    expect(
+      summarizeServiceSkillRequiredInputs(skill, {
+        copy,
+        limit: 2,
+      }),
+    ).toBe("Topic, Audience + 1 more");
+    expect(
+      buildServiceSkillCapabilityDescription(
+        createServiceSkill({ outputHint: "Research brief" }),
+        {
+          copy,
+          includeSummary: false,
+        },
+      ),
+    ).toBe("Needs: No required inputs · Delivers: Research brief");
+    expect(getServiceSkillActionLabel(createServiceSkill(), { copy })).toBe(
+      "Start this step",
+    );
+    expect(
+      getServiceSkillOutputDestination(createServiceSkill(), { copy }),
+    ).toBe("The result returns to Generate.");
+    expect(getServiceSkillTypeLabel(createServiceSkill(), { copy })).toBe(
+      "Creation workflow",
     );
   });
 });

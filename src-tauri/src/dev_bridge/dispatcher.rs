@@ -831,6 +831,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn agent_runtime_subagent_control_commands_are_bridged() {
+        let state = make_test_state();
+        let cases = [
+            "agent_runtime_spawn_subagent",
+            "agent_runtime_send_subagent_input",
+            "agent_runtime_wait_subagents",
+            "agent_runtime_resume_subagent",
+            "agent_runtime_close_subagent",
+        ];
+
+        for cmd in cases {
+            let error = handle_command(
+                &state,
+                cmd,
+                Some(serde_json::json!({
+                    "request": {}
+                })),
+            )
+            .await
+            .expect_err("missing app handle should fail after bridge routing");
+
+            let error_text = error.to_string();
+            assert!(
+                error_text.contains("Dev Bridge 未持有 AppHandle"),
+                "command {cmd} should route into agent_sessions bridge, got: {error_text}"
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn agent_generate_title_bridge_requires_app_handle_in_test_state() {
         let state = make_test_state();
 

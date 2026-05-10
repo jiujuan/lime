@@ -2,10 +2,29 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockCheckForUpdates, mockDownloadUpdate } = vi.hoisted(() => ({
-  mockCheckForUpdates: vi.fn(),
-  mockDownloadUpdate: vi.fn(),
-}));
+const { mockCheckForUpdates, mockDownloadUpdate, mockUseTranslation } =
+  vi.hoisted(() => ({
+    mockCheckForUpdates: vi.fn(),
+    mockDownloadUpdate: vi.fn(),
+    mockUseTranslation: vi.fn((_namespace?: string) => ({
+      t: (key: string, options?: unknown) => {
+        if (typeof options === "string") {
+          return options;
+        }
+
+        if (options && typeof options === "object") {
+          const values = options as Record<string, unknown>;
+          const template =
+            typeof values.defaultValue === "string" ? values.defaultValue : key;
+          return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+            String(values[name] ?? ""),
+          );
+        }
+
+        return key;
+      },
+    })),
+  }));
 
 vi.mock("@/lib/api/appUpdate", () => ({
   checkForUpdates: mockCheckForUpdates,
@@ -13,24 +32,7 @@ vi.mock("@/lib/api/appUpdate", () => ({
 }));
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: (key: string, options?: unknown) => {
-      if (typeof options === "string") {
-        return options;
-      }
-
-      if (options && typeof options === "object") {
-        const values = options as Record<string, unknown>;
-        const template =
-          typeof values.defaultValue === "string" ? values.defaultValue : key;
-        return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-          String(values[name] ?? ""),
-        );
-      }
-
-      return key;
-    },
-  }),
+  useTranslation: mockUseTranslation,
 }));
 
 import { AboutSection } from ".";
@@ -149,6 +151,7 @@ describe("AboutSection", () => {
     expect(text).toContain("可更新到 1.10.1");
     expect(text).toContain("检查更新");
     expect(text).toContain("下载更新");
+    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
   });
 
   it("应移除关于页里的营销与能力说明噪音", async () => {

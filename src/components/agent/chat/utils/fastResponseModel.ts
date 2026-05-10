@@ -1,4 +1,5 @@
 import type { ConfiguredProvider } from "@/hooks/useConfiguredProviders";
+import type { AgentRuntimeWebSearchMode } from "@/lib/api/agentRuntime";
 import type { ChatToolPreferences } from "./chatToolPreferences";
 
 export const AGENT_FAST_RESPONSE_MODE_STORAGE_KEY =
@@ -9,6 +10,7 @@ export type AgentFastResponseMode = "auto" | "off";
 export interface AgentFastResponseDecision {
   enabled: boolean;
   reason: string;
+  searchMode?: AgentRuntimeWebSearchMode;
   providerOverride?: string;
   modelOverride?: string;
   label?: string;
@@ -27,6 +29,7 @@ interface ResolveAgentFastResponseModelOptions {
   currentModel?: string | null;
   configuredProviders?: ConfiguredProvider[];
   toolPreferences: ChatToolPreferences;
+  searchMode?: AgentRuntimeWebSearchMode;
   effectiveWebSearch?: boolean;
   effectiveThinking?: boolean;
   hasExplicitProviderOverride?: boolean;
@@ -192,15 +195,37 @@ function isLightweightFirstTurnText(text: string): boolean {
   return !normalized.includes("```");
 }
 
-function hasHeavyToolPreference(params: {
-  toolPreferences: ChatToolPreferences;
+function normalizeSearchMode(
+  mode?: AgentRuntimeWebSearchMode | null,
+): AgentRuntimeWebSearchMode | null {
+  return mode === "disabled" || mode === "allowed" || mode === "required"
+    ? mode
+    : null;
+}
+
+export function resolveAgentFastResponseSearchMode(params: {
+  searchMode?: AgentRuntimeWebSearchMode | null;
   effectiveWebSearch?: boolean;
+  toolPreferences: Pick<ChatToolPreferences, "webSearch">;
+}): AgentRuntimeWebSearchMode {
+  const explicitMode = normalizeSearchMode(params.searchMode);
+  if (explicitMode) {
+    return explicitMode;
+  }
+
+  return params.effectiveWebSearch || params.toolPreferences.webSearch
+    ? "allowed"
+    : "disabled";
+}
+
+function hasHeavyToolPreference(params: {
+  searchMode: AgentRuntimeWebSearchMode;
+  toolPreferences: ChatToolPreferences;
   effectiveThinking?: boolean;
 }): boolean {
   return Boolean(
-    params.effectiveWebSearch ||
+    params.searchMode === "required" ||
     params.effectiveThinking ||
-    params.toolPreferences.webSearch ||
     params.toolPreferences.thinking ||
     params.toolPreferences.task ||
     params.toolPreferences.subagent,
@@ -250,10 +275,15 @@ export function resolveAgentFastResponseModel(
   ) {
     return disabled("non-plain-chat");
   }
+  const searchMode = resolveAgentFastResponseSearchMode({
+    searchMode: options.searchMode,
+    effectiveWebSearch: options.effectiveWebSearch,
+    toolPreferences: options.toolPreferences,
+  });
   if (
     hasHeavyToolPreference({
+      searchMode,
       toolPreferences: options.toolPreferences,
-      effectiveWebSearch: options.effectiveWebSearch,
       effectiveThinking: options.effectiveThinking,
     })
   ) {
@@ -313,6 +343,7 @@ export function resolveAgentFastResponseModel(
     modelOverride,
     label: "快速响应",
     routingChanged,
+    searchMode,
   };
 }
 
@@ -337,17 +368,26 @@ export function buildAgentFastResponseMetadata(
   };
 }
 
-export function buildAgentFastResponseSystemPrompt(now = new Date()): string {
+export function buildAgentFastResponseSystemPrompt(
+  now = new Date(),
+  options: {
+    searchMode?: AgentRuntimeWebSearchMode;
+  } = {},
+): string {
   const date = new Intl.DateTimeFormat("zh-CN", {
     year: "numeric",
     month: "long",
     day: "numeric",
   }).format(now);
+  const searchRule =
+    options.searchMode === "allowed"
+      ? "联网搜索只是候选能力；需要实时或外部证据时再用工具，否则直接回答。"
+      : "不主动联网、不调用工具、不创建文件；证据不足时用一句话说明必要假设。";
 
   return `你是 Lime 的快速响应助手。当前日期：${date}。
 本回合是轻量首轮普通对话，请直接回答用户。
 规则：
 - 严格遵守用户要求的字数、格式和语言；如果用户要求只回答一个字，就只输出一个字。
 - 不输出思维链、推理过程、标题、前后缀或额外寒暄。
-- 不主动联网、不调用工具、不创建文件；证据不足时用一句话说明必要假设。`;
+- ${searchRule}`;
 }

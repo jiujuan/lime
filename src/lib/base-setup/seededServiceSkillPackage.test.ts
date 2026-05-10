@@ -14,7 +14,7 @@ describe("seededServiceSkillPackage", () => {
 
     expect(pkg.id).toBe("lime-seeded-service-skills");
     expect(pkg.version).toBe(SEEDED_SERVICE_SKILL_CATALOG_VERSION);
-    expect(pkg.catalogProjections).toHaveLength(16);
+    expect(pkg.catalogProjections).toHaveLength(17);
     expect(pkg.catalogProjections).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -110,7 +110,7 @@ describe("seededServiceSkillPackage", () => {
 
     expect(catalog.tenantId).toBe(SEEDED_SERVICE_SKILL_CATALOG_TENANT_ID);
     expect(catalog.version).toBe(SEEDED_SERVICE_SKILL_CATALOG_VERSION);
-    expect(catalog.items).toHaveLength(16);
+    expect(catalog.items).toHaveLength(17);
     expect(catalog.items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

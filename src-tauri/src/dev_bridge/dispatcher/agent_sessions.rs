@@ -61,6 +61,11 @@ pub(super) async fn try_handle(
             | "agent_runtime_interrupt_turn"
             | "agent_runtime_compact_session"
             | "agent_runtime_resume_thread"
+            | "agent_runtime_spawn_subagent"
+            | "agent_runtime_send_subagent_input"
+            | "agent_runtime_wait_subagents"
+            | "agent_runtime_resume_subagent"
+            | "agent_runtime_close_subagent"
             | "agent_runtime_create_session"
             | "agent_runtime_list_sessions"
             | "agent_runtime_get_session"
@@ -194,6 +199,156 @@ pub(super) async fn try_handle(
 
             serde_json::to_value(
                 crate::commands::aster_agent_cmd::agent_runtime_resume_thread(
+                    app_handle.clone(),
+                    aster_state,
+                    db,
+                    api_key_provider_service,
+                    logs,
+                    config_manager,
+                    mcp_manager,
+                    automation_state,
+                    request,
+                )
+                .await?,
+            )?
+        }
+        "agent_runtime_spawn_subagent" => {
+            let request = parse_request::<
+                crate::commands::aster_agent_cmd::AgentRuntimeSpawnSubagentRequest,
+            >(args)?;
+            let aster_state = app_handle.state::<crate::agent::AsterAgentState>();
+            let db = app_handle.state::<crate::database::DbConnection>();
+            let api_key_provider_service =
+                app_handle
+                    .state::<crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState>();
+            let logs = app_handle.state::<crate::app::LogState>();
+            let config_manager = app_handle.state::<crate::config::GlobalConfigManagerState>();
+            let mcp_manager = app_handle.state::<crate::mcp::McpManagerState>();
+            let automation_state =
+                app_handle.state::<crate::services::automation_service::AutomationServiceState>();
+
+            serde_json::to_value(
+                crate::commands::aster_agent_cmd::agent_runtime_spawn_subagent(
+                    app_handle.clone(),
+                    aster_state,
+                    db,
+                    api_key_provider_service,
+                    logs,
+                    config_manager,
+                    mcp_manager,
+                    automation_state,
+                    request,
+                )
+                .await?,
+            )?
+        }
+        "agent_runtime_send_subagent_input" => {
+            let request = parse_request::<
+                crate::commands::aster_agent_cmd::AgentRuntimeSendSubagentInputRequest,
+            >(args)?;
+            let aster_state = app_handle.state::<crate::agent::AsterAgentState>();
+            let db = app_handle.state::<crate::database::DbConnection>();
+            let api_key_provider_service =
+                app_handle
+                    .state::<crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState>();
+            let logs = app_handle.state::<crate::app::LogState>();
+            let config_manager = app_handle.state::<crate::config::GlobalConfigManagerState>();
+            let mcp_manager = app_handle.state::<crate::mcp::McpManagerState>();
+            let automation_state =
+                app_handle.state::<crate::services::automation_service::AutomationServiceState>();
+
+            serde_json::to_value(
+                crate::commands::aster_agent_cmd::agent_runtime_send_subagent_input(
+                    app_handle.clone(),
+                    aster_state,
+                    db,
+                    api_key_provider_service,
+                    logs,
+                    config_manager,
+                    mcp_manager,
+                    automation_state,
+                    request,
+                )
+                .await?,
+            )?
+        }
+        "agent_runtime_wait_subagents" => {
+            let request = parse_request::<
+                crate::commands::aster_agent_cmd::AgentRuntimeWaitSubagentsRequest,
+            >(args)?;
+            let aster_state = app_handle.state::<crate::agent::AsterAgentState>();
+            let db = app_handle.state::<crate::database::DbConnection>();
+            let api_key_provider_service =
+                app_handle
+                    .state::<crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState>();
+            let logs = app_handle.state::<crate::app::LogState>();
+            let config_manager = app_handle.state::<crate::config::GlobalConfigManagerState>();
+            let mcp_manager = app_handle.state::<crate::mcp::McpManagerState>();
+            let automation_state =
+                app_handle.state::<crate::services::automation_service::AutomationServiceState>();
+
+            serde_json::to_value(
+                crate::commands::aster_agent_cmd::agent_runtime_wait_subagents(
+                    app_handle.clone(),
+                    aster_state,
+                    db,
+                    api_key_provider_service,
+                    logs,
+                    config_manager,
+                    mcp_manager,
+                    automation_state,
+                    request,
+                )
+                .await?,
+            )?
+        }
+        "agent_runtime_resume_subagent" => {
+            let request = parse_request::<
+                crate::commands::aster_agent_cmd::AgentRuntimeResumeSubagentRequest,
+            >(args)?;
+            let aster_state = app_handle.state::<crate::agent::AsterAgentState>();
+            let db = app_handle.state::<crate::database::DbConnection>();
+            let api_key_provider_service =
+                app_handle
+                    .state::<crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState>();
+            let logs = app_handle.state::<crate::app::LogState>();
+            let config_manager = app_handle.state::<crate::config::GlobalConfigManagerState>();
+            let mcp_manager = app_handle.state::<crate::mcp::McpManagerState>();
+            let automation_state =
+                app_handle.state::<crate::services::automation_service::AutomationServiceState>();
+
+            serde_json::to_value(
+                crate::commands::aster_agent_cmd::agent_runtime_resume_subagent(
+                    app_handle.clone(),
+                    aster_state,
+                    db,
+                    api_key_provider_service,
+                    logs,
+                    config_manager,
+                    mcp_manager,
+                    automation_state,
+                    request,
+                )
+                .await?,
+            )?
+        }
+        "agent_runtime_close_subagent" => {
+            let request = parse_request::<
+                crate::commands::aster_agent_cmd::AgentRuntimeCloseSubagentRequest,
+            >(args)?;
+            let aster_state = app_handle.state::<crate::agent::AsterAgentState>();
+            let db = app_handle.state::<crate::database::DbConnection>();
+            let api_key_provider_service =
+                app_handle
+                    .state::<crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState>();
+            let logs = app_handle.state::<crate::app::LogState>();
+            let config_manager = app_handle.state::<crate::config::GlobalConfigManagerState>();
+            let mcp_manager = app_handle.state::<crate::mcp::McpManagerState>();
+            let automation_state =
+                app_handle.state::<crate::services::automation_service::AutomationServiceState>();
+
+            serde_json::to_value(
+                crate::commands::aster_agent_cmd::agent_runtime_close_subagent(
                     app_handle.clone(),
                     aster_state,
                     db,

@@ -7,12 +7,35 @@ const {
   mockSaveConfig,
   mockGetProviders,
   mockSubscribeProviderDataChanged,
-} = vi.hoisted(() => ({
-  mockGetConfig: vi.fn(),
-  mockSaveConfig: vi.fn(),
-  mockGetProviders: vi.fn(),
-  mockSubscribeProviderDataChanged: vi.fn(),
-}));
+  mockUseTranslation,
+} = vi.hoisted(() => {
+  const mockTranslate = vi.fn((key: string, options?: unknown) => {
+    if (typeof options === "string") {
+      return options;
+    }
+
+    if (options && typeof options === "object") {
+      const values = options as Record<string, unknown>;
+      const template =
+        typeof values.defaultValue === "string" ? values.defaultValue : key;
+      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+        String(values[name] ?? ""),
+      );
+    }
+
+    return key;
+  });
+
+  return {
+    mockGetConfig: vi.fn(),
+    mockSaveConfig: vi.fn(),
+    mockGetProviders: vi.fn(),
+    mockSubscribeProviderDataChanged: vi.fn(),
+    mockUseTranslation: vi.fn((_namespace?: string) => ({
+      t: mockTranslate,
+    })),
+  };
+});
 
 vi.mock("@/lib/api/appConfig", () => ({
   getConfig: (...args: unknown[]) => mockGetConfig(...args),
@@ -28,6 +51,10 @@ vi.mock("@/lib/api/apiKeyProvider", () => ({
 vi.mock("@/lib/providerDataEvents", () => ({
   subscribeProviderDataChanged: (...args: unknown[]) =>
     mockSubscribeProviderDataChanged(...args),
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
 }));
 
 vi.mock("@/components/input-kit", () => ({
@@ -190,6 +217,7 @@ describe("CompanionCapabilityPreferencesCard", () => {
     const container = renderCard();
     await flushEffects();
 
+    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
     expect(container.textContent).toContain("桌宠能力偏好");
     expect(container.textContent).toContain("桌宠通用模型");
     expect(container.textContent).toContain("最近当前 provider/model");

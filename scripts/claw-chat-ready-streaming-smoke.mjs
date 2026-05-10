@@ -1,0 +1,1393 @@
+#!/usr/bin/env node
+
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import process from "node:process";
+import { chromium } from "playwright";
+
+const DEFAULTS = {
+  appUrl: "http://127.0.0.1:1420/",
+  healthUrl: "http://127.0.0.1:3030/health",
+  invokeUrl: "http://127.0.0.1:3030/invoke",
+  timeoutMs: 180_000,
+  intervalMs: 1_000,
+  providerPreference:
+    process.env.LIME_AGENT_QC_PROVIDER ||
+    process.env.LIME_E2E_PROVIDER ||
+    process.env.LIME_DEFAULT_PROVIDER ||
+    "",
+  modelPreference:
+    process.env.LIME_AGENT_QC_MODEL ||
+    process.env.LIME_E2E_MODEL ||
+    process.env.LIME_DEFAULT_MODEL ||
+    "",
+  evidenceDir: path.join(
+    process.cwd(),
+    ".lime",
+    "qc",
+    "gui-evidence",
+    "claw-chat-ready-streaming",
+  ),
+  prefix: "claw-chat-ready-streaming",
+};
+
+const POST_HEALTH_SETTLE_MS = 1_500;
+const ONBOARDING_VERSION = "1.1.0";
+const LONG_PROMPT = [
+  "E2E 中断测试：请输出 160 行。",
+  "每一行都必须使用格式：中断测试第 N 行。",
+  "从 1 开始递增，不要合并行，不要提前总结。",
+  "如果收到停止请求应立即停止，不要补完剩余行。",
+].join("\n");
+const RECOVERY_EXPECTED_TEXT = "复原完成";
+const RECOVERY_PROMPT =
+  "停止后恢复测试：这是一个新的独立回合，请忽略上一条输出 160 行的要求。只输出“复原完成”这四个字，不要输出行号、解释或其他内容。";
+const FAST_RESPONSE_MODE_STORAGE_KEY = "lime:agent-fast-response-mode";
+const TASK_CENTER_OPEN_TASK_EVENT = "lime:task-center:open-task";
+
+function printHelp() {
+  console.log(`
+Lime Claw Chat Ready Streaming Smoke
+
+用途:
+  通过真实 Claw 聊天页面验证 workspace ready、流式增量、中断与恢复下一轮，
+  并输出 GUI / runtime / console / network 四类证据。
+
+用法:
+  npm run smoke:claw-chat-ready-streaming
+  npm run smoke:claw-chat-ready-streaming -- --provider-preference deepseek --model-preference deepseek-v4-flash
+
+选项:
+  --app-url <url>               前端地址，默认 http://127.0.0.1:1420/
+  --health-url <url>            DevBridge 健康检查地址，默认 http://127.0.0.1:3030/health
+  --invoke-url <url>            DevBridge invoke 地址，默认 http://127.0.0.1:3030/invoke
+  --timeout-ms <ms>             总超时，默认 180000
+  --interval-ms <ms>            轮询间隔，默认 1000
+  --provider-preference <id>    可选，显式指定 provider
+  --model-preference <model>    可选，显式指定 model
+  --evidence-dir <path>         证据目录，默认 .lime/qc/gui-evidence/claw-chat-ready-streaming
+  --prefix <name>               证据文件前缀，默认 claw-chat-ready-streaming
+  -h, --help                    显示帮助
+`);
+}
+
+function parseArgs(argv) {
+  const options = { ...DEFAULTS };
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === "--app-url" && argv[index + 1]) {
+      options.appUrl = String(argv[index + 1]).trim();
+      index += 1;
+      continue;
+    }
+    if (arg === "--health-url" && argv[index + 1]) {
+      options.healthUrl = String(argv[index + 1]).trim();
+      index += 1;
+      continue;
+    }
+    if (arg === "--invoke-url" && argv[index + 1]) {
+      options.invokeUrl = String(argv[index + 1]).trim();
+      index += 1;
+      continue;
+    }
+    if (arg === "--timeout-ms" && argv[index + 1]) {
+      options.timeoutMs = Number(argv[index + 1]);
+      index += 1;
+      continue;
+    }
+    if (arg === "--interval-ms" && argv[index + 1]) {
+      options.intervalMs = Number(argv[index + 1]);
+      index += 1;
+      continue;
+    }
+    if (arg === "--provider-preference" && argv[index + 1]) {
+      options.providerPreference = String(argv[index + 1]).trim();
+      index += 1;
+      continue;
+    }
+    if (arg === "--model-preference" && argv[index + 1]) {
+      options.modelPreference = String(argv[index + 1]).trim();
+      index += 1;
+      continue;
+    }
+    if (arg === "--evidence-dir" && argv[index + 1]) {
+      options.evidenceDir = path.resolve(String(argv[index + 1]).trim());
+      index += 1;
+      continue;
+    }
+    if (arg === "--prefix" && argv[index + 1]) {
+      options.prefix = String(argv[index + 1]).trim();
+      index += 1;
+      continue;
+    }
+    if (arg === "--help" || arg === "-h") {
+      printHelp();
+      process.exit(0);
+    }
+  }
+
+  if (!Number.isFinite(options.timeoutMs) || options.timeoutMs < 30_000) {
+    throw new Error("--timeout-ms 必须是 >= 30000 的数字");
+  }
+  if (!Number.isFinite(options.intervalMs) || options.intervalMs < 100) {
+    throw new Error("--interval-ms 必须是 >= 100 的数字");
+  }
+  if (!options.appUrl) {
+    throw new Error("--app-url 不能为空");
+  }
+  if (!options.evidenceDir) {
+    throw new Error("--evidence-dir 不能为空");
+  }
+  if (!options.prefix) {
+    throw new Error("--prefix 不能为空");
+  }
+
+  return options;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function assert(condition, message) {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+function logStage(label) {
+  console.log(`[smoke:claw-chat-ready-streaming] stage=${label}`);
+}
+
+async function waitForHealth(options) {
+  const startedAt = Date.now();
+  let lastError = null;
+
+  while (Date.now() - startedAt < options.timeoutMs) {
+    try {
+      const response = await fetch(options.healthUrl, { method: "GET" });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      console.log(
+        `[smoke:claw-chat-ready-streaming] DevBridge 已就绪 (${Date.now() - startedAt}ms)${
+          payload?.status ? ` status=${payload.status}` : ""
+        }`,
+      );
+      return payload;
+    } catch (error) {
+      lastError = error;
+      await sleep(options.intervalMs);
+    }
+  }
+
+  const detail =
+    lastError instanceof Error
+      ? lastError.message
+      : String(lastError || "unknown error");
+  throw new Error(
+    `[smoke:claw-chat-ready-streaming] DevBridge 未就绪，请先启动 npm run tauri:dev:headless。最后错误: ${detail}`,
+  );
+}
+
+async function invoke(options, cmd, args, timeoutMs = options.timeoutMs) {
+  const response = await fetch(options.invokeUrl, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ cmd, args }),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}; ${text}`);
+  }
+
+  const payload = text ? JSON.parse(text) : null;
+  if (payload?.error) {
+    throw new Error(String(payload.error));
+  }
+
+  return payload?.result;
+}
+
+async function restoreOriginalProviderConfig(options, originalProviderConfig, sessionId) {
+  if (
+    !originalProviderConfig?.providerName ||
+    !originalProviderConfig?.modelName
+  ) {
+    return;
+  }
+
+  const providerSelector =
+    originalProviderConfig.providerSelector || originalProviderConfig.providerName;
+  const request = {
+    provider_id:
+      providerSelector && providerSelector !== originalProviderConfig.providerName
+        ? providerSelector
+        : undefined,
+    provider_name: originalProviderConfig.providerName,
+    model_name: originalProviderConfig.modelName,
+  };
+
+  await invoke(
+    options,
+    "aster_agent_configure_provider",
+    {
+      request,
+      sessionId: sessionId || "agent-qc-provider-restore",
+    },
+    45_000,
+  );
+}
+
+async function waitForCondition(label, predicate, timeoutMs, intervalMs) {
+  const startedAt = Date.now();
+  let lastValue = null;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    lastValue = await predicate();
+    if (lastValue) {
+      return lastValue;
+    }
+    await sleep(intervalMs);
+  }
+
+  throw new Error(
+    `[smoke:claw-chat-ready-streaming] ${label} 超时，最后结果: ${JSON.stringify(lastValue)}`,
+  );
+}
+
+
+function normalizeProviderId(provider) {
+  return String(provider?.id || provider?.provider_id || provider?.providerId || "").trim();
+}
+
+function providerEnabled(provider) {
+  return provider?.enabled !== false;
+}
+
+function pickModelPreference(provider) {
+  const candidates = [
+    provider?.default_model,
+    provider?.defaultModel,
+    ...(Array.isArray(provider?.custom_models) ? provider.custom_models : []),
+    ...(Array.isArray(provider?.customModels) ? provider.customModels : []),
+    ...(Array.isArray(provider?.models) ? provider.models : []),
+  ]
+    .map((value) =>
+      typeof value === "string"
+        ? value
+        : String(value?.name || value?.id || value?.model || "").trim(),
+    )
+    .filter(Boolean);
+
+  return (
+    candidates.find((value) => /flash|mini|lite/i.test(value)) ||
+    candidates[0] ||
+    ""
+  );
+}
+
+function pickProvider(providers, preferredProviderId) {
+  const enabled = providers.filter((provider) => providerEnabled(provider));
+  if (preferredProviderId) {
+    return (
+      enabled.find((provider) => normalizeProviderId(provider) === preferredProviderId) ||
+      enabled.find((provider) => provider?.provider_name === preferredProviderId) ||
+      providers.find((provider) => normalizeProviderId(provider) === preferredProviderId) ||
+      providers.find((provider) => provider?.provider_name === preferredProviderId) ||
+      null
+    );
+  }
+
+  for (const providerId of ["deepseek", "doubao", "lime-hub"]) {
+    const match = enabled.find((provider) => normalizeProviderId(provider) === providerId);
+    if (match) {
+      return match;
+    }
+  }
+
+  return enabled[0] || null;
+}
+
+async function resolveProviderPreference(options, agentStatus, providers) {
+  const explicitProvider = String(options.providerPreference || "").trim();
+  const explicitModel = String(options.modelPreference || "").trim();
+  if (explicitProvider && explicitModel) {
+    return {
+      providerPreference: explicitProvider,
+      modelPreference: explicitModel,
+      source: "explicit",
+    };
+  }
+
+  const statusProvider = String(
+    agentStatus?.provider_selector || agentStatus?.provider_name || "",
+  ).trim();
+  const statusModel = String(agentStatus?.model_name || "").trim();
+  if (!explicitProvider && !explicitModel && statusProvider && statusModel) {
+    return {
+      providerPreference: statusProvider,
+      modelPreference: statusModel,
+      source: "agent-status",
+    };
+  }
+
+  const selected = pickProvider(
+    Array.isArray(providers) ? providers : [],
+    explicitProvider || statusProvider,
+  );
+  const providerId = normalizeProviderId(selected) || String(selected?.provider_name || "").trim();
+  if (!providerId) {
+    throw new Error(
+      "[smoke:claw-chat-ready-streaming] 未找到可用 provider；请传 --provider-preference / --model-preference 或先配置本地 provider",
+    );
+  }
+
+  let providerDetail = selected;
+  try {
+    providerDetail =
+      (await invoke(options, "get_api_key_provider", { id: providerId }, 30_000)) ||
+      selected;
+  } catch (error) {
+    console.warn(
+      `[smoke:claw-chat-ready-streaming] 读取 provider 详情失败，使用列表摘要继续: ${error.message}`,
+    );
+  }
+
+  const modelPreference = explicitModel || statusModel || pickModelPreference(providerDetail);
+  if (!modelPreference) {
+    throw new Error(
+      `[smoke:claw-chat-ready-streaming] provider ${providerId} 缺少可用模型；请传 --model-preference`,
+    );
+  }
+
+  return {
+    providerPreference: providerId,
+    modelPreference,
+    source: explicitProvider || explicitModel ? "partial-explicit" : "auto-enabled-provider",
+  };
+}
+
+function textOfMessage(message) {
+  if (!message || !Array.isArray(message.content)) {
+    return "";
+  }
+  return message.content
+    .map((part) => {
+      if (part && typeof part.text === "string") {
+        return part.text;
+      }
+      if (part && typeof part.output === "string") {
+        return part.output;
+      }
+      return "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function allAssistantText(session) {
+  return (session?.messages || [])
+    .filter((message) => message?.role === "assistant")
+    .map(textOfMessage)
+    .join("\n");
+}
+
+function allAgentItemText(session) {
+  return (session?.items || [])
+    .filter((item) => item?.type === "agent_message")
+    .map((item) => {
+      if (typeof item?.text === "string") {
+        return item.text;
+      }
+      if (typeof item?.content === "string") {
+        return item.content;
+      }
+      return "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function findTurn(session, turnId) {
+  return (session?.turns || []).find((turn) => turn?.id === turnId) || null;
+}
+
+function queuedTurnCount(session) {
+  return Array.isArray(session?.queued_turns) ? session.queued_turns.length : 0;
+}
+
+function normalizeConsoleLine(item) {
+  const location =
+    item.location && item.location.url
+      ? ` @ ${item.location.url}:${item.location.lineNumber ?? ""}`
+      : "";
+  return `[${item.type}] ${item.text}${location}`;
+}
+
+function buildPageSnapshotScript(recoveryExpectedText) {
+  return `(() => {
+    const textareas = Array.from(
+      document.querySelectorAll('textarea[name="agent-chat-message"]'),
+    );
+    const textarea = textareas.at(-1) ?? null;
+    const stopButton =
+      Array.from(document.querySelectorAll("button")).find(
+        (button) => button.getAttribute("aria-label") === "停止",
+      ) ?? null;
+    const sendButton =
+      Array.from(document.querySelectorAll("button")).find(
+        (button) => button.getAttribute("title") === "发送",
+      ) ?? null;
+    const bodyText = document.body?.innerText || "";
+    const streamLinePattern = /中断测试第\\s*\\d+\\s*行/;
+    const finalLinePattern = /中断测试第\\s*160\\s*行/;
+    const recoveryExpected = ${JSON.stringify(recoveryExpectedText)};
+    const streamText = bodyText
+      .split("\\n")
+      .filter((line) => streamLinePattern.test(line))
+      .join("\\n");
+    return {
+      href: window.location.href,
+      ready: Boolean(textarea) && !textarea.disabled,
+      hasTextarea: Boolean(textarea),
+      textareaValue: textarea ? textarea.value : "",
+      sendDisabled: Boolean(sendButton?.disabled),
+      stopVisible: Boolean(stopButton),
+      stoppedMarker: bodyText.includes("用户已停止当前执行"),
+      recoveryVisible: bodyText.includes(recoveryExpected),
+      streamLineCount: streamText ? streamText.split("\\n").filter(Boolean).length : 0,
+      streamTextLength: streamText.length,
+      finalLineSeen: finalLinePattern.test(streamText),
+      buttons: Array.from(document.querySelectorAll("button")).map((button) => ({
+        text: (button.textContent || "").trim(),
+        aria: button.getAttribute("aria-label"),
+        title: button.getAttribute("title"),
+        disabled: Boolean(button.disabled),
+      })),
+    };
+  })()`;
+}
+
+async function readPageSnapshot(page) {
+  return page
+    .evaluate(buildPageSnapshotScript(RECOVERY_EXPECTED_TEXT))
+    .catch(() => null);
+}
+
+function isLikelyDetachedBlankTaskSnapshot(snapshot) {
+  return (
+    Boolean(snapshot?.ready) &&
+    !snapshot?.stopVisible &&
+    !snapshot?.stoppedMarker &&
+    !snapshot?.recoveryVisible &&
+    Number(snapshot?.streamLineCount || 0) === 0 &&
+    Number(snapshot?.streamTextLength || 0) === 0
+  );
+}
+
+async function dispatchTaskCenterOpenTask(page, sessionId, workspaceId) {
+  return page
+    .evaluate(
+      ({ eventName, sessionId: targetSessionId, workspaceId: targetWorkspaceId }) => {
+        const normalizedSessionId = String(targetSessionId || "").trim();
+        if (!normalizedSessionId) {
+          return { dispatched: false, reason: "missing-session-id" };
+        }
+
+        const event = new CustomEvent(eventName, {
+          cancelable: true,
+          detail: {
+            sessionId: normalizedSessionId,
+            workspaceId: targetWorkspaceId || null,
+            source: "conversation_shelf",
+          },
+        });
+        const notCanceled = window.dispatchEvent(event);
+        return { dispatched: true, canceled: !notCanceled };
+      },
+      {
+        eventName: TASK_CENTER_OPEN_TASK_EVENT,
+        sessionId,
+        workspaceId,
+      },
+    )
+    .catch((error) => ({
+      dispatched: false,
+      reason: error instanceof Error ? error.message : String(error),
+    }));
+}
+
+function writeJsonFile(filePath, value) {
+  fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+function consoleNetworkSummary(consoleMessages, failedRequests) {
+  const consoleErrors = consoleMessages.filter(
+    (item) => item.type === "error" || item.type === "pageerror",
+  );
+  const consoleWarnings = consoleMessages.filter(
+    (item) => item.type === "warning",
+  );
+  const mockFallbackLines = consoleMessages
+    .filter((item) => item.text.includes("[Mock]"))
+    .map(normalizeConsoleLine);
+
+  return {
+    consoleErrors,
+    consoleWarnings,
+    mockFallbackLines,
+    networkErrorTop: Object.entries(
+      failedRequests.reduce((acc, item) => {
+        const key = `${item.failure} ${item.url}`;
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      }, {}),
+    )
+      .sort((left, right) => right[1] - left[1])
+      .slice(0, 12),
+  };
+}
+
+function writeConsoleNetworkEvidence(
+  evidenceDir,
+  prefix,
+  consoleMessages,
+  invokes,
+  failedRequests,
+) {
+  const summary = consoleNetworkSummary(consoleMessages, failedRequests);
+  writeJsonFile(path.join(evidenceDir, `${prefix}-network-invoke.json`), {
+    invokes,
+    failedRequests,
+  });
+  fs.writeFileSync(
+    path.join(evidenceDir, `${prefix}-console.txt`),
+    [
+      `Errors: ${summary.consoleErrors.length}`,
+      `Warnings: ${summary.consoleWarnings.length}`,
+      `MockLines: ${summary.mockFallbackLines.length}`,
+      "",
+      ...consoleMessages.map(normalizeConsoleLine),
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  return summary;
+}
+
+function buildStorageBootstrapScript(storageMarker, storageOverrides) {
+  return `(() => {
+    const marker = ${JSON.stringify(storageMarker)};
+    const overrides = ${JSON.stringify(storageOverrides)};
+    const keys = Object.keys(overrides);
+    if (!window.sessionStorage.getItem(marker)) {
+      const original = {};
+      for (const key of keys) {
+        original[key] = window.localStorage.getItem(key);
+      }
+      window.sessionStorage.setItem(marker, JSON.stringify(original));
+    }
+    for (const [key, value] of Object.entries(overrides)) {
+      window.localStorage.setItem(key, String(value));
+    }
+    return true;
+  })()`;
+}
+
+function buildRestoreLocalStorageScript(storageMarker) {
+  return `((marker) => {
+    const raw = window.sessionStorage.getItem(marker);
+    if (!raw) return false;
+    const original = JSON.parse(raw);
+    for (const [key, value] of Object.entries(original)) {
+      if (value === null) {
+        window.localStorage.removeItem(key);
+      } else {
+        window.localStorage.setItem(key, String(value));
+      }
+    }
+    window.sessionStorage.removeItem(marker);
+    return true;
+  })(${JSON.stringify(storageMarker)})`;
+}
+
+async function launchPlaywrightContext() {
+  const userDataDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), `lime-claw-chat-ready-streaming-${process.pid}-`),
+  );
+  const launchOptions = {
+    headless: true,
+    viewport: { width: 1440, height: 960 },
+  };
+
+  try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      ...launchOptions,
+      channel: "chrome",
+    });
+    return { context, userDataDir };
+  } catch (chromeError) {
+    console.warn(
+      `[smoke:claw-chat-ready-streaming] Chrome channel 启动失败，尝试 Playwright 自带 Chromium: ${
+        chromeError instanceof Error ? chromeError.message : String(chromeError)
+      }`,
+    );
+    const context = await chromium.launchPersistentContext(
+      userDataDir,
+      launchOptions,
+    );
+    return { context, userDataDir };
+  }
+}
+
+async function main() {
+  if (typeof fetch !== "function") {
+    throw new Error("当前 Node 运行时不支持 fetch，请使用 Node 18+");
+  }
+
+  const options = parseArgs(process.argv.slice(2));
+  const prefix = options.prefix;
+  const evidenceDir = options.evidenceDir;
+  fs.mkdirSync(evidenceDir, { recursive: true });
+
+  logStage("wait-health");
+  const health = await waitForHealth(options);
+  await sleep(POST_HEALTH_SETTLE_MS);
+
+  logStage("prepare-runtime");
+  const defaultProject =
+    (await invoke(options, "get_or_create_default_project", undefined, 30_000).catch(
+      () => null,
+    )) || null;
+  const workspaceId = defaultProject?.id || "default";
+  const agentStatus = await invoke(options, "aster_agent_init", undefined, 45_000);
+  const providers = await invoke(
+    options,
+    "get_api_key_providers",
+    undefined,
+    30_000,
+  ).catch(() => []);
+  const providerUiState = await invoke(
+    options,
+    "get_provider_ui_state",
+    undefined,
+    30_000,
+  ).catch(() => null);
+
+  const enabledProviders = Array.isArray(providers)
+    ? providers.filter((provider) => providerEnabled(provider))
+    : [];
+  assert(
+    Boolean(agentStatus?.provider_configured) || enabledProviders.length > 0,
+    `当前 Agent provider 未配置，无法执行 Claw 流式 smoke: ${JSON.stringify(agentStatus)}`,
+  );
+  const providerResolution = await resolveProviderPreference(
+    options,
+    agentStatus,
+    enabledProviders,
+  );
+  const preferredProvider = providerResolution.providerPreference;
+  const preferredModel = providerResolution.modelPreference;
+
+  console.log(
+    `[smoke:claw-chat-ready-streaming] live runtime provider: provider=${preferredProvider} model=${preferredModel} source=${providerResolution.source}`,
+  );
+
+  logStage("launch-browser");
+  const { context, userDataDir } = await launchPlaywrightContext();
+  let page = null;
+  const consoleMessages = [];
+  const invokes = [];
+  const failedRequests = [];
+  const storageMarker = `${prefix}:original-local-storage`;
+
+  const summary = {
+    scenarioId: "claw-chat-ready-streaming",
+    prefix,
+    verdict: "fail",
+    appUrl: options.appUrl,
+    bridge: health,
+    workspaceId,
+    providerPreference: preferredProvider,
+    modelPreference: preferredModel,
+    agentStatusBefore: {
+      initialized: Boolean(agentStatus?.initialized),
+      provider_configured: Boolean(agentStatus?.provider_configured),
+      provider_name: agentStatus?.provider_name || null,
+      provider_selector: agentStatus?.provider_selector || null,
+      model_name: agentStatus?.model_name || null,
+      credential_uuid: providerUiState?.credential_uuid ? "[redacted]" : null,
+    },
+    steps: [],
+  };
+  const originalProviderConfig = {
+    providerName: agentStatus?.provider_name || "",
+    providerSelector: agentStatus?.provider_selector || "",
+    modelName: agentStatus?.model_name || "",
+  };
+  let submittedSessionId = "";
+
+  try {
+    const scopedProviderKey = `agent_pref_provider_${workspaceId}`;
+    const scopedModelKey = `agent_pref_model_${workspaceId}`;
+    const scopedMigratedKey = `agent_pref_migrated_${workspaceId}`;
+    const storageOverrides = {
+      lime_onboarding_complete: "true",
+      lime_onboarding_version: ONBOARDING_VERSION,
+      lime_user_profile: "developer",
+      [FAST_RESPONSE_MODE_STORAGE_KEY]: "off",
+      agent_pref_provider: JSON.stringify(preferredProvider),
+      agent_pref_model: JSON.stringify(preferredModel),
+      agent_pref_provider_global: JSON.stringify(preferredProvider),
+      agent_pref_model_global: JSON.stringify(preferredModel),
+      [scopedProviderKey]: JSON.stringify(preferredProvider),
+      [scopedModelKey]: JSON.stringify(preferredModel),
+      [scopedMigratedKey]: JSON.stringify(true),
+    };
+
+    await context.addInitScript(buildStorageBootstrapScript(storageMarker, storageOverrides));
+    page = context.pages()[0] ?? (await context.newPage());
+
+    page.on("console", (message) => {
+      consoleMessages.push({
+        type: message.type(),
+        text: message.text(),
+        location: message.location(),
+      });
+    });
+    page.on("pageerror", (error) => {
+      consoleMessages.push({
+        type: "pageerror",
+        text: error.message,
+        location: {},
+      });
+    });
+    page.on("request", (request) => {
+      const requestUrl = request.url();
+      if (
+        request.method() !== "POST" ||
+        (requestUrl !== options.invokeUrl && !requestUrl.endsWith("/invoke"))
+      ) {
+        return;
+      }
+      const postData = request.postData();
+      if (!postData) {
+        return;
+      }
+      try {
+        const parsed = JSON.parse(postData);
+        invokes.push({
+          at: new Date().toISOString(),
+          cmd: parsed.cmd,
+          args: parsed.args,
+        });
+      } catch {
+        invokes.push({
+          at: new Date().toISOString(),
+          cmd: "<parse-error>",
+          raw: postData,
+        });
+      }
+    });
+    page.on("requestfailed", (request) => {
+      failedRequests.push({
+        url: request.url(),
+        method: request.method(),
+        failure: request.failure()?.errorText || "unknown",
+      });
+    });
+
+    logStage("open-app");
+    await page.goto(options.appUrl, { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => undefined);
+    await page
+      .getByRole("button", { name: "新建任务" })
+      .click({ timeout: 20_000 })
+      .catch(() => undefined);
+
+    logStage("wait-composer-ready");
+    await page.locator('textarea[name="agent-chat-message"]').last().waitFor({
+      state: "visible",
+      timeout: 60_000,
+    });
+    await page.waitForFunction(
+      () => {
+        const textareas = Array.from(
+          document.querySelectorAll('textarea[name="agent-chat-message"]'),
+        );
+        const textarea = textareas.at(-1);
+        return Boolean(textarea && !textarea.disabled);
+      },
+      null,
+      { timeout: 60_000 },
+    );
+    const readySnapshot = await readPageSnapshot(page);
+    assert(readySnapshot, "读取 ready 页面快照失败");
+    summary.readySnapshot = readySnapshot;
+    summary.steps.push("ready");
+    await page.screenshot({
+      path: path.join(evidenceDir, `${prefix}-01-ready.png`),
+      fullPage: true,
+    });
+
+    logStage("submit-long-turn");
+    const longSubmitStart = invokes.length;
+    const textarea = page.locator('textarea[name="agent-chat-message"]').last();
+    await textarea.fill(LONG_PROMPT);
+    await page.getByRole("button", { name: "发送" }).last().click({
+      timeout: 30_000,
+    });
+    const longSubmit = await waitForCondition(
+      "等待长 turn submit",
+      () =>
+        invokes
+          .slice(longSubmitStart)
+          .find(
+            (item) =>
+              item.cmd === "agent_runtime_submit_turn" &&
+              String(item.args?.request?.message || "").includes("E2E 中断测试"),
+          ) || null,
+      30_000,
+      250,
+    );
+    const longRequest = longSubmit.args?.request || {};
+    const sessionId = String(longRequest.session_id || "");
+    const longTurnId = String(longRequest.turn_id || "");
+    assert(sessionId, "长 turn 缺少 session_id");
+    assert(longTurnId, "长 turn 缺少 turn_id");
+    submittedSessionId = sessionId;
+    summary.sessionId = sessionId;
+    summary.longTurnId = longTurnId;
+    summary.longSubmitTurnConfig = longRequest.turn_config || null;
+
+    const firstDelta = await waitForCondition(
+      "等待首个流式增量与停止按钮",
+      async () => {
+        const snapshot = await readPageSnapshot(page);
+        if (!snapshot) {
+          return null;
+        }
+        const session = await invoke(
+          options,
+          "agent_runtime_get_session",
+          { sessionId },
+          20_000,
+        ).catch(() => null);
+        const turn = findTurn(session, longTurnId);
+        if (turn && ["failed", "aborted", "completed"].includes(turn.status)) {
+          summary.preStreamTurn = turn;
+          const errorMessage = String(turn.error_message || turn.errorMessage || "").trim();
+          throw new Error(
+            `[smoke:claw-chat-ready-streaming] 长 turn 在首个流式增量前结束: status=${turn.status}${
+              errorMessage ? ` error=${errorMessage}` : ""
+            }`,
+          );
+        }
+        return snapshot?.stopVisible && snapshot.streamTextLength > 0
+          ? snapshot
+          : null;
+      },
+      90_000,
+      500,
+    );
+    summary.firstDelta = firstDelta;
+    summary.steps.push("running-stop-visible");
+    await page.screenshot({
+      path: path.join(evidenceDir, `${prefix}-02-running-stop-visible.png`),
+      fullPage: true,
+    });
+
+    const runningSession = await waitForCondition(
+      "等待 turn 进入 running",
+      async () => {
+        const session = await invoke(
+          options,
+          "agent_runtime_get_session",
+          { sessionId },
+          20_000,
+        ).catch(() => null);
+        const turn = findTurn(session, longTurnId);
+        return turn?.status === "running" ? { turn, session } : null;
+      },
+      60_000,
+      1_000,
+    );
+    summary.runningTurnObserved = runningSession.turn;
+
+    logStage("interrupt-long-turn");
+    const interruptStart = invokes.length;
+    await page.getByRole("button", { name: "停止" }).last().click({
+      timeout: 30_000,
+    });
+    const interruptInvoke = await waitForCondition(
+      "等待 interrupt invoke",
+      () =>
+        invokes
+          .slice(interruptStart)
+          .find(
+            (item) =>
+              item.cmd === "agent_runtime_interrupt_turn" &&
+              String(item.args?.request?.session_id || "") === sessionId,
+          ) || null,
+      30_000,
+      250,
+    );
+    const interruptRequest = interruptInvoke.args?.request || {};
+    summary.interruptRequest = interruptRequest;
+    summary.interruptHasTurnScope =
+      interruptRequest.session_id === sessionId &&
+      interruptRequest.turn_id === longTurnId;
+    await page.screenshot({
+      path: path.join(evidenceDir, `${prefix}-03-after-stop.png`),
+      fullPage: true,
+    });
+    summary.steps.push("after-stop");
+
+    const interrupted = await waitForCondition(
+      "等待 turn 中断完成",
+      async () => {
+        const session = await invoke(
+          options,
+          "agent_runtime_get_session",
+          { sessionId },
+          20_000,
+        ).catch(() => null);
+        const turn = findTurn(session, longTurnId);
+        return turn && ["aborted", "failed", "completed"].includes(turn.status)
+          ? { turn, session }
+          : null;
+      },
+      120_000,
+      1_000,
+    );
+    let latestSession = interrupted.session;
+    summary.interruptedTurn = interrupted.turn;
+    summary.interruptedTurnStatus = interrupted.turn?.status || null;
+    summary.queueCountAfterInterrupt = queuedTurnCount(latestSession);
+
+    await page.waitForFunction(
+      () => {
+        const textareas = Array.from(
+          document.querySelectorAll('textarea[name="agent-chat-message"]'),
+        );
+        const textarea = textareas.at(-1);
+        return Boolean(textarea && !textarea.disabled);
+      },
+      null,
+      { timeout: 60_000 },
+    ).catch(() => undefined);
+
+    logStage("submit-recovery-turn");
+    const followSubmitStart = invokes.length;
+    await textarea.fill(RECOVERY_PROMPT);
+    await page.getByRole("button", { name: "发送" }).last().click({
+      timeout: 30_000,
+    });
+    const followSubmit = await waitForCondition(
+      "等待恢复 turn submit",
+      () =>
+        invokes
+          .slice(followSubmitStart)
+          .find(
+            (item) =>
+              item.cmd === "agent_runtime_submit_turn" &&
+              String(item.args?.request?.message || "").includes("停止后恢复测试"),
+          ) || null,
+      30_000,
+      250,
+    );
+    const followRequest = followSubmit.args?.request || {};
+    const followTurnId = String(followRequest.turn_id || "");
+    assert(followTurnId, "恢复 turn 缺少 turn_id");
+    summary.followTurnId = followTurnId;
+    summary.followSubmitTurnConfig = followRequest.turn_config || null;
+
+    const followCompleted = await waitForCondition(
+      "等待恢复 turn 完成",
+      async () => {
+        const session = await invoke(
+          options,
+          "agent_runtime_get_session",
+          { sessionId },
+          20_000,
+        ).catch(() => null);
+        const turn = findTurn(session, followTurnId);
+        return turn && ["completed", "failed", "aborted"].includes(turn.status)
+          ? { turn, session }
+          : null;
+      },
+      120_000,
+      1_000,
+    );
+    latestSession = followCompleted.session || latestSession;
+    summary.followTurn = followCompleted.turn;
+    summary.followTurnStatus = followCompleted.turn?.status || null;
+    let recoverySnapshot = null;
+    try {
+      recoverySnapshot = await waitForCondition(
+        "等待 GUI 出现恢复结果",
+        async () => {
+          const snapshot = await readPageSnapshot(page);
+          return snapshot?.recoveryVisible ? snapshot : null;
+        },
+        60_000,
+        500,
+      );
+      summary.recoveryVisibleSource = "live-stream";
+    } catch (recoveryWaitError) {
+      const recoveryWaitMessage =
+        recoveryWaitError instanceof Error
+          ? recoveryWaitError.message
+          : String(recoveryWaitError);
+      summary.recoveryVisibleInitialWait = {
+        passed: false,
+        error: recoveryWaitMessage,
+      };
+      latestSession =
+        (await invoke(options, "agent_runtime_get_session", { sessionId }, 20_000).catch(
+          () => null,
+        )) || latestSession;
+      const persistedAssistantText = [
+        allAssistantText(latestSession),
+        allAgentItemText(latestSession),
+      ]
+        .filter(Boolean)
+        .join("\n");
+      summary.recoveryPersistedBeforeRefresh = persistedAssistantText.includes(
+        RECOVERY_EXPECTED_TEXT,
+      );
+      if (!summary.recoveryPersistedBeforeRefresh) {
+        throw recoveryWaitError;
+      }
+
+      const detachedSnapshot = await readPageSnapshot(page);
+      summary.recoveryDetachedSnapshot = detachedSnapshot;
+      if (isLikelyDetachedBlankTaskSnapshot(detachedSnapshot)) {
+        logStage("restore-session-after-recovery-persisted");
+        summary.recoveryVisibleRestoreDispatch = await dispatchTaskCenterOpenTask(
+          page,
+          sessionId,
+          workspaceId,
+        );
+        recoverySnapshot = await waitForCondition(
+          "等待重新打开目标会话后 GUI 出现恢复结果",
+          async () => {
+            const snapshot = await readPageSnapshot(page);
+            return snapshot?.recoveryVisible ? snapshot : null;
+          },
+          45_000,
+          500,
+        );
+        summary.recoveryVisibleSource =
+          "post-session-restore-runtime-persistence";
+      } else {
+        logStage("refresh-after-recovery-persisted");
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => undefined);
+        recoverySnapshot = await waitForCondition(
+          "等待刷新后 GUI 出现恢复结果",
+          async () => {
+            const snapshot = await readPageSnapshot(page);
+            return snapshot?.recoveryVisible ? snapshot : null;
+          },
+          60_000,
+          500,
+        );
+        summary.recoveryVisibleSource = "post-refresh-runtime-persistence";
+      }
+    }
+    summary.recoverySnapshot = recoverySnapshot;
+    summary.steps.push("recovery-final");
+    await page.screenshot({
+      path: path.join(evidenceDir, `${prefix}-04-recovery-final.png`),
+      fullPage: true,
+    });
+
+    logStage("collect-runtime-evidence");
+    const threadRead = await invoke(
+      options,
+      "agent_runtime_get_thread_read",
+      { sessionId },
+      20_000,
+    ).catch((error) => ({
+      __error: error instanceof Error ? error.message : String(error),
+    }));
+    const assistantText = [
+      allAssistantText(latestSession),
+      allAgentItemText(latestSession),
+    ]
+      .filter(Boolean)
+      .join("\n");
+    const {
+      consoleErrors,
+      consoleWarnings,
+      mockFallbackLines,
+      networkErrorTop,
+    } = consoleNetworkSummary(consoleMessages, failedRequests);
+    const activeTurnId = threadRead?.active_turn_id || threadRead?.activeTurnId || null;
+    const runtimeMockLines = mockFallbackLines.filter((line) =>
+      /agent_runtime_(submit_turn|interrupt_turn|get_session|get_thread_read)/.test(line),
+    );
+    const peripheralMockLines = mockFallbackLines.filter(
+      (line) => !runtimeMockLines.includes(line),
+    );
+
+    summary.threadRead = threadRead?.__error ? { error: threadRead.__error } : threadRead;
+    summary.threadReadStatus =
+      summary.threadRead?.diagnostics?.latest_turn_status ||
+      summary.threadRead?.runtime_summary?.latestTurnStatus ||
+      null;
+    const latestRuntimeRouting =
+      latestSession?.execution_runtime?.routing_decision || {};
+    const followProviderPreferenceHonored =
+      followRequest.turn_config?.provider_preference === preferredProvider ||
+      latestRuntimeRouting?.selectedProvider === preferredProvider ||
+      latestRuntimeRouting?.requestedProvider === preferredProvider;
+    const followModelPreferenceHonored =
+      followRequest.turn_config?.model_preference === preferredModel ||
+      latestRuntimeRouting?.selectedModel === preferredModel ||
+      latestRuntimeRouting?.requestedModel === preferredModel;
+    summary.followRoutingEvidence = {
+      selectedProvider: latestRuntimeRouting?.selectedProvider || null,
+      selectedModel: latestRuntimeRouting?.selectedModel || null,
+      requestedProvider: latestRuntimeRouting?.requestedProvider || null,
+      requestedModel: latestRuntimeRouting?.requestedModel || null,
+      decisionSource: latestRuntimeRouting?.decisionSource || null,
+      note:
+        followRequest.turn_config?.provider_preference ||
+        followRequest.turn_config?.model_preference
+          ? "恢复 turn 显式提交 provider/model。"
+          : "恢复 turn 复用 session_default；以 runtime routing_decision 校验 selected/requested provider/model 未漂移。",
+    };
+    summary.queueCountFinal = queuedTurnCount(latestSession);
+    summary.activeTurnIdFinal = activeTurnId;
+    summary.assistantContainsRecovery = assistantText.includes(
+      RECOVERY_EXPECTED_TEXT,
+    );
+    summary.runtimeStreamLineCount = (
+      assistantText.match(/中断测试第\s*\d+\s*行/g) || []
+    ).length;
+    summary.interruptedAssistantContainsFinalLine =
+      assistantText.includes("中断测试第 160 行");
+    summary.consoleErrorCount = consoleErrors.length;
+    summary.consoleWarningCount = consoleWarnings.length;
+    summary.networkErrorCount = failedRequests.length;
+    summary.networkErrorTop = networkErrorTop;
+    summary.devBridgeCommands = [...new Set(invokes.map((item) => item.cmd))];
+    summary.mockFallbackLines = mockFallbackLines;
+    summary.assertions = {
+      workspaceReady: Boolean(readySnapshot?.ready),
+      devBridgeHealthy: health?.status === "ok" || Boolean(health),
+      streamFirstDeltaSeen: Boolean(firstDelta?.streamTextLength > 0),
+      streamGrowthObserved:
+        Number(recoverySnapshot?.streamTextLength || 0) >=
+          Number(firstDelta?.streamTextLength || 0) ||
+        summary.runtimeStreamLineCount >= Number(firstDelta?.streamLineCount || 1),
+      stopButtonVisible: Boolean(firstDelta?.stopVisible),
+      interruptCommandSeen: summary.devBridgeCommands.includes(
+        "agent_runtime_interrupt_turn",
+      ),
+      interruptScopedToLongTurn: Boolean(summary.interruptHasTurnScope),
+      interruptedTurnAborted: summary.interruptedTurnStatus === "aborted",
+      recoveryTurnCompleted: summary.followTurnStatus === "completed",
+      recoveryPersistedInRuntime: summary.assistantContainsRecovery,
+      recoveryVisibleInGui: Boolean(recoverySnapshot?.recoveryVisible),
+      longProviderPreferenceHonored:
+        longRequest.turn_config?.provider_preference === preferredProvider,
+      longModelPreferenceHonored:
+        longRequest.turn_config?.model_preference === preferredModel,
+      followProviderPreferenceHonored,
+      followModelPreferenceHonored,
+      fastResponseRoutingDisabled:
+        !longRequest.turn_config?.metadata?.harness?.fast_response_routing &&
+        !followRequest.turn_config?.metadata?.harness?.fast_response_routing,
+      noRuntimeMockFallbackSeen: runtimeMockLines.length === 0,
+    };
+    summary.mockFallbackClassification = {
+      runtimeMockLines,
+      peripheralMockLines,
+      note:
+        runtimeMockLines.length === 0
+          ? "未观察到聊天 runtime submit/interrupt/get_session/get_thread_read 的 mock fallback；如有 [Mock] 日志，仅属周边 web-mode 能力。"
+          : "观察到聊天 runtime 关键命令 mock fallback，需视为真实路径失败。",
+    };
+    summary.consoleNetwork = {
+      consoleErrorCount: consoleErrors.length,
+      consoleWarningCount: consoleWarnings.length,
+      networkErrorCount: failedRequests.length,
+      networkErrorTop: summary.networkErrorTop,
+      note:
+        failedRequests.length === 0
+          ? "未观察到 requestfailed。"
+          : "requestfailed 需结合 URL 判断是否为页面 reload/close 导致的 abort，不能直接等同产品失败。",
+    };
+    summary.evidenceFiles = {
+      screenshots: [
+        `${prefix}-01-ready.png`,
+        `${prefix}-02-running-stop-visible.png`,
+        `${prefix}-03-after-stop.png`,
+        `${prefix}-04-recovery-final.png`,
+      ],
+      console: `${prefix}-console.txt`,
+      network: `${prefix}-network-invoke.json`,
+      runtimeSession: `${prefix}-runtime-session.json`,
+      threadRead: `${prefix}-thread-read.json`,
+      summary: `${prefix}-summary.json`,
+    };
+
+    summary.verdict =
+      summary.assertions.workspaceReady &&
+      summary.assertions.devBridgeHealthy &&
+      summary.assertions.streamFirstDeltaSeen &&
+      summary.assertions.streamGrowthObserved &&
+      summary.assertions.stopButtonVisible &&
+      summary.assertions.interruptCommandSeen &&
+      summary.assertions.interruptScopedToLongTurn &&
+      summary.assertions.interruptedTurnAborted &&
+      summary.assertions.recoveryTurnCompleted &&
+      summary.assertions.recoveryPersistedInRuntime &&
+      summary.assertions.recoveryVisibleInGui &&
+      summary.assertions.longProviderPreferenceHonored &&
+      summary.assertions.longModelPreferenceHonored &&
+      summary.assertions.followProviderPreferenceHonored &&
+      summary.assertions.followModelPreferenceHonored &&
+      summary.assertions.fastResponseRoutingDisabled &&
+      summary.assertions.noRuntimeMockFallbackSeen &&
+      summary.queueCountFinal === 0 &&
+      summary.activeTurnIdFinal === null &&
+      summary.consoleErrorCount === 0
+        ? "pass"
+        : "fail";
+
+    writeJsonFile(path.join(evidenceDir, `${prefix}-runtime-session.json`), latestSession);
+    writeJsonFile(path.join(evidenceDir, `${prefix}-thread-read.json`), threadRead);
+    writeConsoleNetworkEvidence(
+      evidenceDir,
+      prefix,
+      consoleMessages,
+      invokes,
+      failedRequests,
+    );
+    writeJsonFile(path.join(evidenceDir, `${prefix}-summary.json`), summary);
+  } catch (error) {
+    summary.error = error instanceof Error ? error.message : String(error);
+    if (page) {
+      summary.failureSnapshot = await readPageSnapshot(page);
+      await page
+        .screenshot({
+          path: path.join(evidenceDir, `${prefix}-99-failure.png`),
+          fullPage: true,
+        })
+        .catch(() => undefined);
+    }
+    const failureEvidence = {
+      screenshots: [`${prefix}-99-failure.png`],
+      console: `${prefix}-console.txt`,
+      network: `${prefix}-network-invoke.json`,
+      runtimeSession: `${prefix}-runtime-session.json`,
+      threadRead: `${prefix}-thread-read.json`,
+      summary: `${prefix}-summary.json`,
+    };
+    summary.evidenceFiles = summary.evidenceFiles || failureEvidence;
+    const failureConsoleNetwork = writeConsoleNetworkEvidence(
+      evidenceDir,
+      prefix,
+      consoleMessages,
+      invokes,
+      failedRequests,
+    );
+    summary.consoleErrorCount = failureConsoleNetwork.consoleErrors.length;
+    summary.consoleWarningCount = failureConsoleNetwork.consoleWarnings.length;
+    summary.networkErrorCount = failedRequests.length;
+    summary.networkErrorTop = failureConsoleNetwork.networkErrorTop;
+    summary.devBridgeCommands = [...new Set(invokes.map((item) => item.cmd))];
+
+    if (submittedSessionId) {
+      const failureSession = await invoke(
+        options,
+        "agent_runtime_get_session",
+        { sessionId: submittedSessionId },
+        20_000,
+      ).catch((sessionError) => ({
+        __error:
+          sessionError instanceof Error ? sessionError.message : String(sessionError),
+      }));
+      const failureThreadRead = await invoke(
+        options,
+        "agent_runtime_get_thread_read",
+        { sessionId: submittedSessionId },
+        20_000,
+      ).catch((threadError) => ({
+        __error: threadError instanceof Error ? threadError.message : String(threadError),
+      }));
+      writeJsonFile(
+        path.join(evidenceDir, `${prefix}-runtime-session.json`),
+        failureSession,
+      );
+      writeJsonFile(
+        path.join(evidenceDir, `${prefix}-thread-read.json`),
+        failureThreadRead,
+      );
+      summary.failureRuntime = {
+        sessionId: submittedSessionId,
+        sessionError: failureSession?.__error || null,
+        threadReadError: failureThreadRead?.__error || null,
+        turns: Array.isArray(failureSession?.turns)
+          ? failureSession.turns.map((turn) => ({
+              id: turn?.id || null,
+              status: turn?.status || null,
+              error: turn?.error || turn?.error_message || null,
+            }))
+          : [],
+        latestTurnStatus:
+          failureThreadRead?.diagnostics?.latest_turn_status ||
+          failureThreadRead?.runtime_summary?.latestTurnStatus ||
+          failureThreadRead?.status ||
+          null,
+      };
+    }
+    writeJsonFile(path.join(evidenceDir, `${prefix}-summary.json`), summary);
+    throw error;
+  } finally {
+    try {
+      if (page) {
+        await page.evaluate(buildRestoreLocalStorageScript(storageMarker)).catch(
+          () => undefined,
+        );
+      }
+      await restoreOriginalProviderConfig(
+        options,
+        originalProviderConfig,
+        submittedSessionId,
+      ).catch((error) => {
+        console.warn(
+          `[smoke:claw-chat-ready-streaming] 恢复原 provider 配置失败: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      });
+    } finally {
+      await context.close().catch(() => undefined);
+      fs.rmSync(userDataDir, { recursive: true, force: true });
+    }
+  }
+
+  console.log(JSON.stringify(summary, null, 2));
+  if (summary.verdict !== "pass") {
+    process.exitCode = 1;
+  }
+}
+
+main().catch((error) => {
+  const detail = error instanceof Error ? error.message : String(error);
+  console.error(`[smoke:claw-chat-ready-streaming] ${detail}`);
+  process.exit(1);
+});

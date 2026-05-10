@@ -243,4 +243,22 @@ describe("buildUserInputSubmitOp", () => {
 
     expect(op.skipPreSubmitResume).toBe(true);
   });
+
+  it("应透传显式搜索模式，不从用户文本推断", () => {
+    const op = buildUserInputSubmitOp({
+      content: "请搜索最新 AI 新闻",
+      images: [],
+      sessionId: "session-search-1",
+      eventName: "aster_stream_search",
+      effectiveExecutionStrategy: "react",
+      effectiveAccessMode: "current",
+      effectiveProviderType: "deepseek",
+      effectiveModel: "deepseek-chat",
+      webSearch: true,
+      searchMode: "required",
+    });
+
+    expect(op.preferences?.webSearch).toBe(true);
+    expect(op.preferences?.searchMode).toBe("required");
+  });
 });

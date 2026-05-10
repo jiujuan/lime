@@ -1017,6 +1017,8 @@ export interface AgentRuntimeReviewDecisionTemplate {
   artifacts: AgentRuntimeReviewDecisionArtifact[];
 }
 
+export type AgentRuntimeWebSearchMode = "disabled" | "allowed" | "required";
+
 export interface AgentTurnConfigSnapshot {
   provider_config?: AsterProviderConfig;
   provider_preference?: string;
@@ -1026,6 +1028,7 @@ export interface AgentTurnConfigSnapshot {
   sandbox_policy?: AsterSandboxPolicy;
   execution_strategy?: AsterExecutionStrategy;
   web_search?: boolean;
+  search_mode?: AgentRuntimeWebSearchMode;
   auto_continue?: AutoContinueRequestPayload;
   system_prompt?: string;
   metadata?: Record<string, unknown>;

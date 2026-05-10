@@ -14,19 +14,46 @@ const {
   mockGetConfig,
   mockSaveConfig,
   mockOpenUrl,
-} = vi.hoisted(() => ({
-  mockUseOemCloudAccess: vi.fn(),
-  mockFormatOemCloudDateTime: vi.fn((value?: string) => `fmt:${value ?? ""}`),
-  mockGetCompanionPetStatus: vi.fn(),
-  mockLaunchCompanionPet: vi.fn(),
-  mockListenCompanionPetStatus: vi.fn(),
-  mockSendCompanionPetCommand: vi.fn(),
-  mockApiKeyProviderGetProviders: vi.fn(),
-  mockSubscribeProviderDataChanged: vi.fn(),
-  mockGetConfig: vi.fn(),
-  mockSaveConfig: vi.fn(),
-  mockOpenUrl: vi.fn(),
-}));
+  mockUseTranslation,
+} = vi.hoisted(() => {
+  const mockTranslate = vi.fn((key: string, options?: unknown) => {
+    if (typeof options === "string") {
+      return options;
+    }
+
+    if (options && typeof options === "object") {
+      const values = options as Record<string, unknown>;
+      const template =
+        typeof values.defaultValue === "string" ? values.defaultValue : key;
+      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+        String(values[name] ?? ""),
+      );
+    }
+
+    return key;
+  });
+
+  return {
+    mockUseOemCloudAccess: vi.fn(),
+    mockFormatOemCloudDateTime: vi.fn((value?: string) => `fmt:${value ?? ""}`),
+    mockGetCompanionPetStatus: vi.fn(),
+    mockLaunchCompanionPet: vi.fn(),
+    mockListenCompanionPetStatus: vi.fn(),
+    mockSendCompanionPetCommand: vi.fn(),
+    mockApiKeyProviderGetProviders: vi.fn(),
+    mockSubscribeProviderDataChanged: vi.fn(),
+    mockGetConfig: vi.fn(),
+    mockSaveConfig: vi.fn(),
+    mockOpenUrl: vi.fn(),
+    mockUseTranslation: vi.fn((_namespace?: string) => ({
+      t: mockTranslate,
+      i18n: {
+        language: "zh-CN",
+        resolvedLanguage: "zh-CN",
+      },
+    })),
+  };
+});
 
 vi.mock("@/components/api-key-provider", () => ({
   ApiKeyProviderSection: () => (
@@ -82,6 +109,10 @@ vi.mock("@/lib/providerDataEvents", () => ({
 
 vi.mock("@/components/openclaw/openUrl", () => ({
   openUrl: (...args: unknown[]) => mockOpenUrl(...args),
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
 }));
 
 vi.mock("@/hooks/useOemCloudAccess", () => ({
@@ -405,6 +436,7 @@ describe("CloudProviderSettings", () => {
       '[data-testid="provider-workspace-tab-companion"]',
     );
 
+    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
     expect(
       container.querySelector('[data-testid="provider-workspace-switcher"]'),
     ).not.toBeNull();

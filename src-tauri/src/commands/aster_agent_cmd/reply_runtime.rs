@@ -24,48 +24,6 @@ fn model_supports_reasoning(model_name: Option<&str>) -> bool {
         || normalized.contains("2.5")
 }
 
-pub(super) fn message_suggests_live_search(message: &str) -> bool {
-    let normalized = message.to_ascii_lowercase();
-    [
-        "搜索",
-        "搜一下",
-        "查一下",
-        "查一查",
-        "检索",
-        "上网查",
-        "联网查",
-        "最新",
-        "今天",
-        "刚刚",
-        "实时",
-        "新闻",
-        "股价",
-        "汇率",
-        "天气",
-        "政策",
-        "法规",
-        "版本",
-        "价格",
-        "热搜",
-        "上线",
-        "发布",
-        "search",
-        "look up",
-        "google",
-        "browse",
-        "now",
-        "today",
-        "latest",
-        "recent",
-        "price",
-        "version",
-        "news",
-        "weather",
-    ]
-    .iter()
-    .any(|keyword| normalized.contains(keyword))
-}
-
 fn message_suggests_planning(message: &str) -> bool {
     let normalized = message.to_ascii_lowercase();
     [
@@ -198,16 +156,12 @@ pub(super) async fn build_turn_runtime_statuses(
     let subagent_enabled =
         resolve_request_subagent_enabled_from_sources(request, session_recent_preferences);
     let reasoning_supported = model_supports_reasoning(model_name);
-    let news_expansion_needed = request_tool_policy.allows_web_search()
-        && message_suggests_news_expansion(&request.message);
     let browser_task_requirement = extract_browser_task_requirement(request.metadata.as_ref());
 
     let initial_checkpoints = vec![
         execution_strategy_label(effective_strategy).to_string(),
         if request_tool_policy.requires_web_search() {
             "当前任务需要先联网核实".to_string()
-        } else if news_expansion_needed {
-            "已识别新闻综述类输入，将先分批联网补充信息".to_string()
         } else if request_tool_policy.allows_web_search() {
             "联网搜索仅作为候选能力待命".to_string()
         } else {
@@ -249,16 +203,6 @@ pub(super) async fn build_turn_runtime_statuses(
                 "搜索结果返回后再形成最终答复".to_string(),
             ],
         )
-    } else if news_expansion_needed {
-        (
-            "先联网扩搜".to_string(),
-            "当前输入属于新闻或最新动态综述类请求，会先分批执行多组联网搜索，再基于结果做主题归纳与交叉核实。"
-                .to_string(),
-            vec![
-                "统一使用 WebSearch 分批补充信息".to_string(),
-                "完成来源整合后再组织最终答复".to_string(),
-            ],
-        )
     } else if subagent_enabled && message_suggests_subagent(&request.message) {
         (
             "优先拆分为多代理".to_string(),
@@ -295,17 +239,6 @@ pub(super) async fn build_turn_runtime_statuses(
             vec![
                 "thinking 已开启".to_string(),
                 "当前模型回退为轻量推理".to_string(),
-            ],
-        )
-    } else if request_tool_policy.allows_web_search()
-        && message_suggests_live_search(&request.message)
-    {
-        (
-            "先联网核实".to_string(),
-            "问题包含明显时效性或实时性特征，先搜索核实再回答更稳妥。".to_string(),
-            vec![
-                "已检测到最新/实时信息需求".to_string(),
-                "搜索完成后继续组织答复".to_string(),
             ],
         )
     } else if message_suggests_planning(&request.message) {

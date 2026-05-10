@@ -38,11 +38,58 @@ const SERVICE_SKILL_TYPE_LABELS: Record<ServiceSkillType, string> = {
   prompt: "提示做法",
 };
 
+export interface ServiceSkillPresentationCopy {
+  runnerLabels?: Partial<Record<ServiceSkillRunnerType, string>>;
+  runnerDescriptions?: Partial<Record<ServiceSkillRunnerType, string>>;
+  actionLabels?: Partial<Record<ServiceSkillRunnerType, string>>;
+  typeLabels?: Partial<Record<ServiceSkillType, string>>;
+  fallbackRequiredInputs?: string;
+  requiredPrefix?: string;
+  outputPrefix?: string;
+  siteRunnerLabel?: string;
+  siteRunnerDescription?: string;
+  requiredSlotActionLabel?: string;
+  siteActionLabel?: string;
+  automationActionLabel?: string;
+  outputProjectResource?: string;
+  outputCurrentContent?: string;
+  outputScheduled?: string;
+  outputManaged?: string;
+  outputDefault?: string;
+  dependencyRequiresModel?: string;
+  dependencyRequiresBrowser?: string;
+  dependencyRequiresProject?: string;
+  formatDependencyRequiresSkillKey?: (skillKey: string) => string;
+  formatFactItems?: (visibleItems: string[], totalCount: number) => string;
+}
+
+interface ServiceSkillPresentationOptions {
+  copy?: ServiceSkillPresentationCopy;
+}
+
 interface BuildServiceSkillCapabilityDescriptionOptions {
   includeSummary?: boolean;
   includeRequiredInputs?: boolean;
   includeOutputHint?: boolean;
   requiredInputsLimit?: number;
+  copy?: ServiceSkillPresentationCopy;
+}
+
+type SummarizeServiceSkillRequiredInputsOptions =
+  | number
+  | {
+      limit?: number;
+      copy?: ServiceSkillPresentationCopy;
+    };
+
+function formatDefaultServiceSkillFactItems(
+  visibleItems: string[],
+  totalCount: number,
+): string {
+  const joinedItems = visibleItems.join("、");
+  return visibleItems.length < totalCount
+    ? `${joinedItems} 等 ${totalCount} 项`
+    : joinedItems;
 }
 
 function uniqueStrings(values: string[]): string[] {
@@ -57,17 +104,24 @@ function hasRequiredSlots(item: Pick<ServiceSkillItem, "slotSchema">): boolean {
   return item.slotSchema.some((slot) => slot.required);
 }
 
-function summarizeServiceSkillFactItems(items: string[], limit = 2): string {
+function summarizeServiceSkillFactItems(
+  items: string[],
+  limit = 2,
+  copy: ServiceSkillPresentationCopy = {},
+): string {
   const normalizedItems = uniqueStrings(items);
   if (normalizedItems.length === 0) {
     return "";
   }
 
-  if (normalizedItems.length <= limit) {
-    return normalizedItems.join("、");
-  }
+  const visibleItems =
+    normalizedItems.length <= limit
+      ? normalizedItems
+      : normalizedItems.slice(0, limit);
+  const formatFactItems =
+    copy.formatFactItems ?? formatDefaultServiceSkillFactItems;
 
-  return `${normalizedItems.slice(0, limit).join("、")} 等 ${normalizedItems.length} 项`;
+  return formatFactItems(visibleItems, normalizedItems.length);
 }
 
 function readServiceSkillBundleMetadata(
@@ -124,23 +178,38 @@ export function resolveServiceSkillType(
   return "service";
 }
 
-export function getServiceSkillTypeLabel(item: ServiceSkillItem): string {
-  return SERVICE_SKILL_TYPE_LABELS[resolveServiceSkillType(item)];
+export function getServiceSkillTypeLabel(
+  item: ServiceSkillItem,
+  options: ServiceSkillPresentationOptions = {},
+): string {
+  const type = resolveServiceSkillType(item);
+  return options.copy?.typeLabels?.[type] ?? SERVICE_SKILL_TYPE_LABELS[type];
+}
+
+function normalizeRequiredInputsOptions(
+  options: SummarizeServiceSkillRequiredInputsOptions = 2,
+): { limit: number; copy: ServiceSkillPresentationCopy } {
+  if (typeof options === "number") {
+    return { limit: options, copy: {} };
+  }
+
+  return { limit: options.limit ?? 2, copy: options.copy ?? {} };
 }
 
 export function summarizeServiceSkillRequiredInputs(
   item: Pick<ServiceSkillItem, "slotSchema">,
-  limit = 2,
+  options: SummarizeServiceSkillRequiredInputsOptions = 2,
 ): string {
+  const { limit, copy } = normalizeRequiredInputsOptions(options);
   const requiredInputLabels = item.slotSchema
     .filter((slot) => slot.required)
     .map((slot) => slot.label);
 
   if (requiredInputLabels.length === 0) {
-    return "当前无必填信息";
+    return copy.fallbackRequiredInputs ?? "当前无必填信息";
   }
 
-  return summarizeServiceSkillFactItems(requiredInputLabels, limit);
+  return summarizeServiceSkillFactItems(requiredInputLabels, limit, copy);
 }
 
 export function buildServiceSkillCapabilityDescription(
@@ -151,6 +220,7 @@ export function buildServiceSkillCapabilityDescription(
   options: BuildServiceSkillCapabilityDescriptionOptions = {},
 ): string {
   const segments: string[] = [];
+  const copy = options.copy ?? {};
 
   if (options.includeSummary ?? true) {
     segments.push(resolveServiceSkillEntryDescription(item));
@@ -158,25 +228,34 @@ export function buildServiceSkillCapabilityDescription(
 
   if (options.includeRequiredInputs ?? true) {
     segments.push(
-      `需要：${summarizeServiceSkillRequiredInputs(
+      `${copy.requiredPrefix ?? "需要："}${summarizeServiceSkillRequiredInputs(
         item,
-        options.requiredInputsLimit,
+        {
+          copy,
+          limit: options.requiredInputsLimit,
+        },
       )}`,
     );
   }
 
   if (options.includeOutputHint ?? true) {
-    segments.push(`交付：${item.outputHint.trim()}`);
+    segments.push(`${copy.outputPrefix ?? "交付："}${item.outputHint.trim()}`);
   }
 
   return segments.join(" · ");
 }
 
-export function getServiceSkillRunnerLabel(item: ServiceSkillItem): string {
+export function getServiceSkillRunnerLabel(
+  item: ServiceSkillItem,
+  options: ServiceSkillPresentationOptions = {},
+): string {
   if (resolveServiceSkillType(item) === "site") {
-    return "接着浏览器继续";
+    return options.copy?.siteRunnerLabel ?? "接着浏览器继续";
   }
-  return RUNNER_LABELS[item.runnerType];
+  return (
+    options.copy?.runnerLabels?.[item.runnerType] ??
+    RUNNER_LABELS[item.runnerType]
+  );
 }
 
 export function getServiceSkillRunnerTone(
@@ -187,26 +266,40 @@ export function getServiceSkillRunnerTone(
 
 export function getServiceSkillRunnerDescription(
   item: ServiceSkillItem,
+  options: ServiceSkillPresentationOptions = {},
 ): string {
   if (resolveServiceSkillType(item) === "site") {
-    return "会接着当前浏览器里已经打开的页面把这一步做完，并把结果带回生成。";
+    return (
+      options.copy?.siteRunnerDescription ??
+      "会接着当前浏览器里已经打开的页面把这一步做完，并把结果带回生成。"
+    );
   }
-  return RUNNER_DESCRIPTIONS[item.runnerType];
+  return (
+    options.copy?.runnerDescriptions?.[item.runnerType] ??
+    RUNNER_DESCRIPTIONS[item.runnerType]
+  );
 }
 
-export function getServiceSkillActionLabel(item: ServiceSkillItem): string {
+export function getServiceSkillActionLabel(
+  item: ServiceSkillItem,
+  options: ServiceSkillPresentationOptions = {},
+): string {
   if (hasRequiredSlots(item)) {
-    return "补齐这一步";
+    return options.copy?.requiredSlotActionLabel ?? "补齐这一步";
   }
 
   if (resolveServiceSkillType(item) === "site") {
-    return "接着继续";
+    return options.copy?.siteActionLabel ?? "接着继续";
   }
-  return LOCAL_ACTION_LABELS[item.runnerType];
+  return (
+    options.copy?.actionLabels?.[item.runnerType] ??
+    LOCAL_ACTION_LABELS[item.runnerType]
+  );
 }
 
 export function getServiceSkillOutputDestination(
   item: ServiceSkillItem,
+  options: ServiceSkillPresentationOptions = {},
 ): string {
   if (item.outputDestination?.trim()) {
     return item.outputDestination.trim();
@@ -222,36 +315,57 @@ export function getServiceSkillOutputDestination(
 
   if (isServiceSkillExecutableAsSiteAdapter(item)) {
     return item.siteCapabilityBinding.saveMode === "project_resource"
-      ? "结果会收进当前项目资料，后面还能继续拿来用。"
-      : "结果会先回到当前内容里，方便接着往下改。";
+      ? (options.copy?.outputProjectResource ??
+          "结果会收进当前项目资料，后面还能继续拿来用。")
+      : (options.copy?.outputCurrentContent ??
+          "结果会先回到当前内容里，方便接着往下改。");
   }
 
   if (item.runnerType === "scheduled") {
-    return "第一轮结果会先回到生成，后面按时间继续接回来。";
+    return (
+      options.copy?.outputScheduled ??
+      "第一轮结果会先回到生成，后面按时间继续接回来。"
+    );
   }
 
   if (item.runnerType === "managed") {
-    return "这轮判断会先回到生成，后面新的结果和提醒也会继续带回来。";
+    return (
+      options.copy?.outputManaged ??
+      "这轮判断会先回到生成，后面新的结果和提醒也会继续带回来。"
+    );
   }
 
-  return "结果会回到生成，方便接着改。";
+  return options.copy?.outputDefault ?? "结果会回到生成，方便接着改。";
 }
 
-export function listServiceSkillDependencies(item: ServiceSkillItem): string[] {
+export function listServiceSkillDependencies(
+  item: ServiceSkillItem,
+  options: ServiceSkillPresentationOptions = {},
+): string[] {
   const requirements: string[] = [];
+  const copy = options.copy ?? {};
 
   if (item.readinessRequirements?.requiresModel) {
-    requirements.push("需要已选择可用模型。");
+    requirements.push(copy.dependencyRequiresModel ?? "需要已选择可用模型。");
   }
   if (item.readinessRequirements?.requiresBrowser) {
-    requirements.push("需要当前浏览器里已经打开并登录对应站点。");
+    requirements.push(
+      copy.dependencyRequiresBrowser ??
+        "需要当前浏览器里已经打开并登录对应站点。",
+    );
   }
   if (item.readinessRequirements?.requiresProject) {
-    requirements.push("建议在目标项目内启动，便于结果直接回写。");
+    requirements.push(
+      copy.dependencyRequiresProject ??
+        "建议在目标项目内启动，便于结果直接回写。",
+    );
   }
   if (item.readinessRequirements?.requiresSkillKey) {
     requirements.push(
-      `需要先启用相关能力：${item.readinessRequirements.requiresSkillKey}。`,
+      copy.formatDependencyRequiresSkillKey?.(
+        item.readinessRequirements.requiresSkillKey,
+      ) ??
+        `需要先启用相关能力：${item.readinessRequirements.requiresSkillKey}。`,
     );
   }
 
@@ -261,9 +375,14 @@ export function listServiceSkillDependencies(item: ServiceSkillItem): string[] {
 export function getServiceSkillPrimaryActionLabel(
   skill: ServiceSkillHomeItem,
   canCreateAutomation: boolean,
+  options: ServiceSkillPresentationOptions = {},
 ): string {
   if (canCreateAutomation) {
-    return "开始持续";
+    return (
+      options.copy?.automationActionLabel ??
+      options.copy?.actionLabels?.scheduled ??
+      "开始持续"
+    );
   }
-  return getServiceSkillActionLabel(skill);
+  return getServiceSkillActionLabel(skill, options);
 }

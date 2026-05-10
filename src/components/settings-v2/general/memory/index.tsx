@@ -5,6 +5,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import type { TFunction } from "i18next";
 import {
   AlertCircle,
   CheckCircle2,
@@ -16,6 +17,7 @@ import {
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
@@ -48,125 +50,312 @@ import {
 } from "@/components/memory/memoryLayerMetrics";
 import { listTeamMemorySnapshots } from "@/lib/teamMemorySync";
 
-const STATUS_OPTIONS = [
-  "高中生",
-  "大学生/本科生",
-  "研究生",
-  "自学者/专业人士",
-  "其他",
+type SettingsTranslationKey =
+  keyof typeof import("@/i18n/resources/zh-CN/settings.json");
+type MemorySettingsTranslate = TFunction<"settings", undefined>;
+
+function memoryText(
+  t: TFunction<"settings">,
+  key: SettingsTranslationKey,
+  defaultValue: string,
+  values: Record<string, string | number | boolean> = {},
+): string {
+  return String(
+    (t as MemorySettingsTranslate)(key, {
+      ...values,
+      defaultValue,
+    }),
+  );
+}
+
+interface ProfileOptionDefinition {
+  value: string;
+  labelKey: SettingsTranslationKey;
+  defaultLabel: string;
+}
+
+interface ProfileOption {
+  value: string;
+  label: string;
+}
+
+const STATUS_OPTION_DEFINITIONS: ProfileOptionDefinition[] = [
+  {
+    value: "高中生",
+    labelKey: "settings.memory.profile.status.highSchool",
+    defaultLabel: "高中生",
+  },
+  {
+    value: "大学生/本科生",
+    labelKey: "settings.memory.profile.status.undergraduate",
+    defaultLabel: "大学生/本科生",
+  },
+  {
+    value: "研究生",
+    labelKey: "settings.memory.profile.status.graduate",
+    defaultLabel: "研究生",
+  },
+  {
+    value: "自学者/专业人士",
+    labelKey: "settings.memory.profile.status.selfLearner",
+    defaultLabel: "自学者/专业人士",
+  },
+  {
+    value: "其他",
+    labelKey: "settings.memory.profile.status.other",
+    defaultLabel: "其他",
+  },
 ];
 
-const STRENGTH_OPTIONS = [
-  "数学/逻辑推理",
-  "计算机科学/编程",
-  "自然科学（物理学、化学、生物学）",
-  "写作/阅读/人文",
-  "商业/经济学",
-  "没有——我还在探索中。",
+const STRENGTH_OPTION_DEFINITIONS: ProfileOptionDefinition[] = [
+  {
+    value: "数学/逻辑推理",
+    labelKey: "settings.memory.profile.strength.math",
+    defaultLabel: "数学/逻辑推理",
+  },
+  {
+    value: "计算机科学/编程",
+    labelKey: "settings.memory.profile.strength.computerScience",
+    defaultLabel: "计算机科学/编程",
+  },
+  {
+    value: "自然科学（物理学、化学、生物学）",
+    labelKey: "settings.memory.profile.strength.naturalScience",
+    defaultLabel: "自然科学（物理学、化学、生物学）",
+  },
+  {
+    value: "写作/阅读/人文",
+    labelKey: "settings.memory.profile.strength.humanities",
+    defaultLabel: "写作/阅读/人文",
+  },
+  {
+    value: "商业/经济学",
+    labelKey: "settings.memory.profile.strength.business",
+    defaultLabel: "商业/经济学",
+  },
+  {
+    value: "没有——我还在探索中。",
+    labelKey: "settings.memory.profile.strength.exploring",
+    defaultLabel: "没有——我还在探索中。",
+  },
 ];
 
-const EXPLANATION_STYLE_OPTIONS = [
-  "将晦涩难懂的概念变得直观易懂",
-  "先举例，后讲理论",
-  "概念结构与全局观",
-  "类比和隐喻",
-  "考试导向型讲解",
-  "我没有偏好——随机应变",
+const EXPLANATION_STYLE_OPTION_DEFINITIONS: ProfileOptionDefinition[] = [
+  {
+    value: "将晦涩难懂的概念变得直观易懂",
+    labelKey: "settings.memory.profile.explanationStyle.intuitive",
+    defaultLabel: "将晦涩难懂的概念变得直观易懂",
+  },
+  {
+    value: "先举例，后讲理论",
+    labelKey: "settings.memory.profile.explanationStyle.examplesFirst",
+    defaultLabel: "先举例，后讲理论",
+  },
+  {
+    value: "概念结构与全局观",
+    labelKey: "settings.memory.profile.explanationStyle.bigPicture",
+    defaultLabel: "概念结构与全局观",
+  },
+  {
+    value: "类比和隐喻",
+    labelKey: "settings.memory.profile.explanationStyle.analogies",
+    defaultLabel: "类比和隐喻",
+  },
+  {
+    value: "考试导向型讲解",
+    labelKey: "settings.memory.profile.explanationStyle.examOriented",
+    defaultLabel: "考试导向型讲解",
+  },
+  {
+    value: "我没有偏好——随机应变",
+    labelKey: "settings.memory.profile.explanationStyle.adaptive",
+    defaultLabel: "我没有偏好——随机应变",
+  },
 ];
 
-const CHALLENGE_OPTIONS = [
-  "照本宣科——把所有细节都直接告诉我（我能应付）",
-  "一步一步地分解",
-  "先从简单的例子或类比入手",
-  "先解释重点和难点在哪里",
-  "多种解释/角度",
+const CHALLENGE_OPTION_DEFINITIONS: ProfileOptionDefinition[] = [
+  {
+    value: "照本宣科——把所有细节都直接告诉我（我能应付）",
+    labelKey: "settings.memory.profile.challenge.literal",
+    defaultLabel: "照本宣科——把所有细节都直接告诉我（我能应付）",
+  },
+  {
+    value: "一步一步地分解",
+    labelKey: "settings.memory.profile.challenge.stepByStep",
+    defaultLabel: "一步一步地分解",
+  },
+  {
+    value: "先从简单的例子或类比入手",
+    labelKey: "settings.memory.profile.challenge.simpleExamples",
+    defaultLabel: "先从简单的例子或类比入手",
+  },
+  {
+    value: "先解释重点和难点在哪里",
+    labelKey: "settings.memory.profile.challenge.hardParts",
+    defaultLabel: "先解释重点和难点在哪里",
+  },
+  {
+    value: "多种解释/角度",
+    labelKey: "settings.memory.profile.challenge.multipleAngles",
+    defaultLabel: "多种解释/角度",
+  },
 ];
 
-const MEMDIR_MEMORY_TYPE_OPTIONS: Array<{
+interface MemdirMemoryTypeOptionDefinition {
+  value: MemdirMemoryType;
+  labelKey: SettingsTranslationKey;
+  defaultLabel: string;
+  descriptionKey: SettingsTranslationKey;
+  defaultDescription: string;
+}
+
+interface MemdirMemoryTypeOption {
   value: MemdirMemoryType;
   label: string;
   description: string;
-}> = [
-  {
-    value: "project",
-    label: "项目记忆",
-    description: "默认推荐，用于项目背景、约束、时间点与分工。",
-  },
-  {
-    value: "feedback",
-    label: "反馈记忆",
-    description: "记录被确认有效的做法与需要持续遵守的规则。",
-  },
-  {
-    value: "user",
-    label: "用户记忆",
-    description: "记录用户背景、长期偏好与协作方式。",
-  },
-  {
-    value: "reference",
-    label: "参考记忆",
-    description: "记录文档、工单、监控和知识库入口。",
-  },
-];
+}
 
-const MEMDIR_WRITE_GUIDES: Record<
+const MEMDIR_MEMORY_TYPE_OPTION_DEFINITIONS: MemdirMemoryTypeOptionDefinition[] =
+  [
+    {
+      value: "project",
+      labelKey: "settings.memory.memdir.type.project.label",
+      defaultLabel: "项目记忆",
+      descriptionKey: "settings.memory.memdir.type.project.description",
+      defaultDescription: "默认推荐，用于项目背景、约束、时间点与分工。",
+    },
+    {
+      value: "feedback",
+      labelKey: "settings.memory.memdir.type.feedback.label",
+      defaultLabel: "反馈记忆",
+      descriptionKey: "settings.memory.memdir.type.feedback.description",
+      defaultDescription: "记录被确认有效的做法与需要持续遵守的规则。",
+    },
+    {
+      value: "user",
+      labelKey: "settings.memory.memdir.type.user.label",
+      defaultLabel: "用户记忆",
+      descriptionKey: "settings.memory.memdir.type.user.description",
+      defaultDescription: "记录用户背景、长期偏好与协作方式。",
+    },
+    {
+      value: "reference",
+      labelKey: "settings.memory.memdir.type.reference.label",
+      defaultLabel: "参考记忆",
+      descriptionKey: "settings.memory.memdir.type.reference.description",
+      defaultDescription: "记录文档、工单、监控和知识库入口。",
+    },
+  ];
+
+interface MemdirRequiredSectionDefinition {
+  labelKey: SettingsTranslationKey;
+  defaultLabel: string;
+}
+
+interface MemdirWriteGuideDefinition {
+  descriptionKey: SettingsTranslationKey;
+  defaultDescription: string;
+  topicPlaceholderKey: SettingsTranslationKey;
+  defaultTopicPlaceholder: string;
+  placeholderKey: SettingsTranslationKey;
+  defaultPlaceholder: string;
+  requiredSections: MemdirRequiredSectionDefinition[];
+  noteKey: SettingsTranslationKey;
+  defaultNote: string;
+}
+
+interface MemdirWriteGuide {
+  description: string;
+  topicPlaceholder: string;
+  placeholder: string;
+  requiredSections: string[];
+  note: string;
+}
+
+const MEMDIR_REQUIRED_SECTIONS = {
+  why: {
+    labelKey: "settings.memory.memdir.requiredSection.why",
+    defaultLabel: "Why",
+  },
+  howToApply: {
+    labelKey: "settings.memory.memdir.requiredSection.howToApply",
+    defaultLabel: "How to apply",
+  },
+  absoluteDate: {
+    labelKey: "settings.memory.memdir.requiredSection.absoluteDate",
+    defaultLabel: "绝对日期",
+  },
+} satisfies Record<string, MemdirRequiredSectionDefinition>;
+
+const MEMDIR_WRITE_GUIDE_DEFINITIONS: Record<
   MemdirMemoryType,
-  {
-    description: string;
-    topicPlaceholder: string;
-    placeholder: string;
-    requiredSections: string[];
-    note: string;
-  }
+  MemdirWriteGuideDefinition
 > = {
   user: {
-    description:
+    descriptionKey: "settings.memory.memdir.guide.user.description",
+    defaultDescription:
       "记录用户背景、长期偏好和协作方式，帮助 Lime 调整解释深浅与默认协作节奏。",
-    topicPlaceholder:
+    topicPlaceholderKey: "settings.memory.memdir.guide.user.topicPlaceholder",
+    defaultTopicPlaceholder:
       "可选：topic，例如 communication-style、domain-background",
-    placeholder:
+    placeholderKey: "settings.memory.memdir.guide.user.placeholder",
+    defaultPlaceholder:
       "例如：用户熟悉 Rust，但第一次接触这个前端；解释前先给结论，再给必要上下文。",
     requiredSections: [],
-    note: "适合沉淀长期稳定的人物画像，不要记录临时任务状态。",
+    noteKey: "settings.memory.memdir.guide.user.note",
+    defaultNote: "适合沉淀长期稳定的人物画像，不要记录临时任务状态。",
   },
   feedback: {
-    description:
+    descriptionKey: "settings.memory.memdir.guide.feedback.description",
+    defaultDescription:
       "沉淀被反复验证有效的做法与明确要避免的模式，避免同一个纠偏再次发生。",
-    topicPlaceholder: "可选：topic，例如 workflow、testing-policy",
-    placeholder:
+    topicPlaceholderKey:
+      "settings.memory.memdir.guide.feedback.topicPlaceholder",
+    defaultTopicPlaceholder: "可选：topic，例如 workflow、testing-policy",
+    placeholderKey: "settings.memory.memdir.guide.feedback.placeholder",
+    defaultPlaceholder:
       "Why:\n- 这条反馈为什么成立，避免了什么问题\n\nHow to apply:\n- 以后什么时候执行\n- 有哪些边界条件",
-    requiredSections: ["Why", "How to apply"],
-    note: "反馈记忆必须说明原因和使用方式，只写一句结论很容易失真。",
+    requiredSections: [
+      MEMDIR_REQUIRED_SECTIONS.why,
+      MEMDIR_REQUIRED_SECTIONS.howToApply,
+    ],
+    noteKey: "settings.memory.memdir.guide.feedback.note",
+    defaultNote: "反馈记忆必须说明原因和使用方式，只写一句结论很容易失真。",
   },
   project: {
-    description:
+    descriptionKey: "settings.memory.memdir.guide.project.description",
+    defaultDescription:
       "补足代码之外的项目背景、里程碑、冻结窗口和协作关系，帮助下一次快速进入上下文。",
-    topicPlaceholder: "可选：topic，例如 release-window、ownership-map",
-    placeholder:
+    topicPlaceholderKey:
+      "settings.memory.memdir.guide.project.topicPlaceholder",
+    defaultTopicPlaceholder: "可选：topic，例如 release-window、ownership-map",
+    placeholderKey: "settings.memory.memdir.guide.project.placeholder",
+    defaultPlaceholder:
       "Why:\n- 这个背景/约束为什么重要\n\nHow to apply:\n- 这会如何影响当前实现或交付\n- 绝对日期：2026-04-15 / 2026-04-15 14:00",
-    requiredSections: ["Why", "How to apply", "绝对日期"],
-    note: "项目记忆不要写“今天/明天/下周”，请改成绝对日期，避免过期后误导后续决策。",
+    requiredSections: [
+      MEMDIR_REQUIRED_SECTIONS.why,
+      MEMDIR_REQUIRED_SECTIONS.howToApply,
+      MEMDIR_REQUIRED_SECTIONS.absoluteDate,
+    ],
+    noteKey: "settings.memory.memdir.guide.project.note",
+    defaultNote:
+      "项目记忆不要写“今天/明天/下周”，请改成绝对日期，避免过期后误导后续决策。",
   },
   reference: {
-    description:
+    descriptionKey: "settings.memory.memdir.guide.reference.description",
+    defaultDescription:
       "记录外部文档、工单、监控、知识库或系统入口，方便下次知道去哪里查最新事实。",
-    topicPlaceholder: "可选：topic，例如 grafana-dashboard、runbook",
-    placeholder:
+    topicPlaceholderKey:
+      "settings.memory.memdir.guide.reference.topicPlaceholder",
+    defaultTopicPlaceholder: "可选：topic，例如 grafana-dashboard、runbook",
+    placeholderKey: "settings.memory.memdir.guide.reference.placeholder",
+    defaultPlaceholder:
       "例如：发布值班看板在 Grafana /d/release-ops；改协议前先查 release runbook 第 3 节。",
     requiredSections: [],
-    note: "参考记忆应优先保存事实源入口，而不是把外部文档内容整段复制进来。",
+    noteKey: "settings.memory.memdir.guide.reference.note",
+    defaultNote:
+      "参考记忆应优先保存事实源入口，而不是把外部文档内容整段复制进来。",
   },
-};
-
-const MEMORY_SOURCE_BUCKET_LABELS: Record<string, string> = {
-  managed: "托管记忆",
-  user: "用户记忆",
-  project: "项目记忆",
-  local: "本地记忆",
-  rules: "项目规则",
-  auto: "记忆目录（memdir）",
-  durable: "/memories",
-  additional: "附加目录",
 };
 
 const PROJECT_RELATIVE_DATE_TOKENS = [
@@ -269,46 +458,141 @@ function parseLines(input: string): string[] {
     .filter((line) => line.length > 0);
 }
 
-function resolveMemdirTypeLabel(type?: MemdirMemoryType | null): string {
-  return (
-    MEMDIR_MEMORY_TYPE_OPTIONS.find((option) => option.value === type)?.label ||
-    "未分类"
+function mapMemdirTypeOptions(
+  t: TFunction<"settings">,
+): MemdirMemoryTypeOption[] {
+  return MEMDIR_MEMORY_TYPE_OPTION_DEFINITIONS.map((definition) => ({
+    value: definition.value,
+    label: memoryText(t, definition.labelKey, definition.defaultLabel),
+    description: memoryText(
+      t,
+      definition.descriptionKey,
+      definition.defaultDescription,
+    ),
+  }));
+}
+
+function resolveMemdirTypeLabel(
+  t: TFunction<"settings">,
+  type?: MemdirMemoryType | null,
+): string {
+  const definition = MEMDIR_MEMORY_TYPE_OPTION_DEFINITIONS.find(
+    (option) => option.value === type,
   );
+  return definition
+    ? memoryText(t, definition.labelKey, definition.defaultLabel)
+    : memoryText(t, "settings.memory.source.bucket.uncategorized", "未分类");
 }
 
-function resolveSourceBucketLabel(bucket?: string | null): string {
-  if (!bucket) {
-    return "未分类";
+function resolveMemdirWriteGuide(
+  t: TFunction<"settings">,
+  type: MemdirMemoryType,
+): MemdirWriteGuide {
+  const definition = MEMDIR_WRITE_GUIDE_DEFINITIONS[type];
+  return {
+    description: memoryText(
+      t,
+      definition.descriptionKey,
+      definition.defaultDescription,
+    ),
+    topicPlaceholder: memoryText(
+      t,
+      definition.topicPlaceholderKey,
+      definition.defaultTopicPlaceholder,
+    ),
+    placeholder: memoryText(
+      t,
+      definition.placeholderKey,
+      definition.defaultPlaceholder,
+    ),
+    requiredSections: definition.requiredSections.map((section) =>
+      memoryText(t, section.labelKey, section.defaultLabel),
+    ),
+    note: memoryText(t, definition.noteKey, definition.defaultNote),
+  };
+}
+
+function resolveSourceBucketLabel(
+  t: TFunction<"settings">,
+  bucket?: string | null,
+): string {
+  switch (bucket) {
+    case "managed":
+      return memoryText(t, "settings.memory.source.bucket.managed", "托管记忆");
+    case "user":
+      return memoryText(t, "settings.memory.source.bucket.user", "用户记忆");
+    case "project":
+      return memoryText(t, "settings.memory.source.bucket.project", "项目记忆");
+    case "local":
+      return memoryText(t, "settings.memory.source.bucket.local", "本地记忆");
+    case "rules":
+      return memoryText(t, "settings.memory.source.bucket.rules", "项目规则");
+    case "auto":
+      return memoryText(
+        t,
+        "settings.memory.source.bucket.auto",
+        "记忆目录（memdir）",
+      );
+    case "durable":
+      return "/memories";
+    case "additional":
+      return memoryText(
+        t,
+        "settings.memory.source.bucket.additional",
+        "附加目录",
+      );
+    default:
+      return (
+        bucket ||
+        memoryText(t, "settings.memory.source.bucket.uncategorized", "未分类")
+      );
   }
-  return MEMORY_SOURCE_BUCKET_LABELS[bucket] || bucket;
 }
 
-function formatRelativeTimeLabel(timestamp?: number | null): string {
+function formatRelativeTimeLabel(
+  t: TFunction<"settings">,
+  timestamp?: number | null,
+): string {
   if (!timestamp) {
-    return "未知时间";
+    return memoryText(t, "settings.memory.source.time.unknown", "未知时间");
   }
   const normalized =
     timestamp > 1_000_000_000_000 ? timestamp : timestamp * 1000;
   const date = new Date(normalized);
   if (Number.isNaN(date.getTime())) {
-    return "未知时间";
+    return memoryText(t, "settings.memory.source.time.unknown", "未知时间");
   }
 
   const diffMs = Date.now() - date.getTime();
   const diffMinutes = Math.floor(diffMs / 60_000);
   if (diffMinutes < 1) {
-    return "刚刚";
+    return memoryText(t, "settings.memory.source.time.justNow", "刚刚");
   }
   if (diffMinutes < 60) {
-    return `${diffMinutes} 分钟前`;
+    return memoryText(
+      t,
+      "settings.memory.source.time.minutesAgo",
+      "{{count}} 分钟前",
+      { count: diffMinutes },
+    );
   }
   const diffHours = Math.floor(diffMinutes / 60);
   if (diffHours < 24) {
-    return `${diffHours} 小时前`;
+    return memoryText(
+      t,
+      "settings.memory.source.time.hoursAgo",
+      "{{count}} 小时前",
+      { count: diffHours },
+    );
   }
   const diffDays = Math.floor(diffHours / 24);
   if (diffDays < 7) {
-    return `${diffDays} 天前`;
+    return memoryText(
+      t,
+      "settings.memory.source.time.daysAgo",
+      "{{count}} 天前",
+      { count: diffDays },
+    );
   }
   return `${date.getMonth() + 1}/${date.getDate()} ${date
     .getHours()
@@ -369,22 +653,36 @@ function findProjectRelativeDateToken(note: string): string | null {
 }
 
 function validateMemdirNote(
+  t: TFunction<"settings">,
   note: string,
   memoryType: MemdirMemoryType,
 ): string | null {
   if (memoryType === "feedback" || memoryType === "project") {
     if (!noteHasSection(note, ["why", "为什么", "原因"])) {
-      return "反馈/项目记忆必须包含 `Why:` 段落。";
+      return memoryText(
+        t,
+        "settings.memory.memdir.validation.missingWhy",
+        "反馈/项目记忆必须包含 `Why:` 段落。",
+      );
     }
     if (!noteHasSection(note, ["how to apply", "如何使用", "如何应用"])) {
-      return "反馈/项目记忆必须包含 `How to apply:` 段落。";
+      return memoryText(
+        t,
+        "settings.memory.memdir.validation.missingHowToApply",
+        "反馈/项目记忆必须包含 `How to apply:` 段落。",
+      );
     }
   }
 
   if (memoryType === "project") {
     const relativeDateToken = findProjectRelativeDateToken(note);
     if (relativeDateToken) {
-      return `项目记忆不能使用相对时间词“${relativeDateToken}”，请改成绝对日期，例如 2026-04-15。`;
+      return memoryText(
+        t,
+        "settings.memory.memdir.validation.relativeDate",
+        "项目记忆不能使用相对时间词“{{token}}”，请改成绝对日期，例如 2026-04-15。",
+        { token: relativeDateToken },
+      );
     }
   }
 
@@ -401,14 +699,17 @@ function resolveActionErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-function formatMemdirCleanupMessage(result: {
-  updated_files: number;
-  curated_topic_files: number;
-  removed_duplicate_links: number;
-  dropped_missing_links: number;
-  removed_duplicate_notes: number;
-  trimmed_notes: number;
-}): string {
+function formatMemdirCleanupMessage(
+  t: TFunction<"settings">,
+  result: {
+    updated_files: number;
+    curated_topic_files: number;
+    removed_duplicate_links: number;
+    dropped_missing_links: number;
+    removed_duplicate_notes: number;
+    trimmed_notes: number;
+  },
+): string {
   const touchedCount =
     result.curated_topic_files +
     result.removed_duplicate_links +
@@ -417,26 +718,49 @@ function formatMemdirCleanupMessage(result: {
     result.trimmed_notes;
 
   if (result.updated_files === 0 || touchedCount === 0) {
-    return "memdir 已经是干净状态，无需整理";
+    return memoryText(
+      t,
+      "settings.memory.memdir.message.cleanupAlreadyClean",
+      "memdir 已经是干净状态，无需整理",
+    );
   }
 
-  return `已整理 memdir：更新 ${result.updated_files} 个文件，收口 ${result.curated_topic_files} 个 topic，清掉 ${result.removed_duplicate_links + result.dropped_missing_links + result.removed_duplicate_notes + result.trimmed_notes} 处重复或过期内容`;
+  return memoryText(
+    t,
+    "settings.memory.memdir.message.cleanupDone",
+    "已整理 memdir：更新 {{updated}} 个文件，收口 {{topics}} 个 topic，清掉 {{touched}} 处重复或过期内容",
+    {
+      updated: result.updated_files,
+      topics: result.curated_topic_files,
+      touched:
+        result.removed_duplicate_links +
+        result.dropped_missing_links +
+        result.removed_duplicate_notes +
+        result.trimmed_notes,
+    },
+  );
 }
 
 interface MultiSelectSectionProps {
   title: string;
   subtitle?: string;
-  options: string[];
+  tipAriaLabel?: string;
+  options: ProfileOption[];
   value: string[];
   onToggle: (value: string) => void;
   multiple?: boolean;
   className?: string;
+  selectedText: string;
+  multiSelectText: string;
+  selectedSingleText: string;
+  pendingSingleText: string;
 }
 
 interface MemoryPanelProps {
   icon: LucideIcon;
   title: string;
   description?: string;
+  tipAriaLabel?: string;
   aside?: ReactNode;
   className?: string;
   children: ReactNode;
@@ -458,6 +782,7 @@ function MemoryPanel({
   icon: Icon,
   title,
   description,
+  tipAriaLabel,
   aside,
   className,
   children,
@@ -476,7 +801,7 @@ function MemoryPanel({
             {title}
             {description ? (
               <WorkbenchInfoTip
-                ariaLabel={`${title}说明`}
+                ariaLabel={tipAriaLabel ?? `${title}说明`}
                 content={description}
                 tone="slate"
               />
@@ -496,19 +821,24 @@ function MemoryPanel({
 function MultiSelectSection({
   title,
   subtitle,
+  tipAriaLabel,
   options,
   value,
   onToggle,
   multiple = true,
   className,
+  selectedText,
+  multiSelectText,
+  selectedSingleText,
+  pendingSingleText,
 }: MultiSelectSectionProps) {
   const badgeText = multiple
     ? value.length > 0
-      ? `${value.length} 个已选`
-      : "可多选"
+      ? selectedText.replace("{{count}}", String(value.length))
+      : multiSelectText
     : value.length > 0
-      ? "已选择"
-      : "待选择";
+      ? selectedSingleText
+      : pendingSingleText;
 
   return (
     <article
@@ -523,7 +853,7 @@ function MultiSelectSection({
             <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
             {subtitle ? (
               <WorkbenchInfoTip
-                ariaLabel={`${title}说明`}
+                ariaLabel={tipAriaLabel ?? `${title}说明`}
                 content={subtitle}
                 tone="slate"
               />
@@ -537,12 +867,12 @@ function MultiSelectSection({
 
       <div className="mt-4 flex flex-wrap gap-2.5">
         {options.map((option) => {
-          const selected = value.includes(option);
+          const selected = value.includes(option.value);
           return (
             <button
-              key={option}
+              key={option.value}
               type="button"
-              onClick={() => onToggle(option)}
+              onClick={() => onToggle(option.value)}
               className={cn(
                 "rounded-full border px-3.5 py-2 text-sm transition shadow-sm",
                 selected
@@ -550,7 +880,7 @@ function MultiSelectSection({
                   : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900",
               )}
             >
-              {option}
+              {option.label}
             </button>
           );
         })}
@@ -566,6 +896,7 @@ function SourceStatusPill({
   loaded: boolean;
   exists: boolean;
 }) {
+  const { t } = useTranslation("settings");
   return (
     <span
       className={cn(
@@ -577,7 +908,11 @@ function SourceStatusPill({
             : "border-slate-200 bg-slate-100 text-slate-500",
       )}
     >
-      {loaded ? "已加载" : exists ? "存在未命中" : "未发现"}
+      {loaded
+        ? memoryText(t, "settings.memory.source.status.loaded", "已加载")
+        : exists
+          ? memoryText(t, "settings.memory.source.status.missed", "存在未命中")
+          : memoryText(t, "settings.memory.source.status.missing", "未发现")}
     </span>
   );
 }
@@ -602,6 +937,7 @@ function LoadingSkeleton() {
 }
 
 export function MemorySettings() {
+  const { t } = useTranslation("settings");
   const [config, setConfig] = useState<Config | null>(null);
   const [draft, setDraft] = useState<MemoryConfig>(() =>
     normalizeMemoryConfig(),
@@ -706,6 +1042,34 @@ export function MemorySettings() {
     () => JSON.stringify(draft) !== JSON.stringify(snapshot),
     [draft, snapshot],
   );
+  const mapProfileOptions = useCallback(
+    (definitions: ProfileOptionDefinition[]): ProfileOption[] =>
+      definitions.map((definition) => ({
+        value: definition.value,
+        label: (t as MemorySettingsTranslate)(
+          definition.labelKey,
+          definition.defaultLabel,
+        ),
+      })),
+    [t],
+  );
+  const statusOptions = useMemo(
+    () => mapProfileOptions(STATUS_OPTION_DEFINITIONS),
+    [mapProfileOptions],
+  );
+  const strengthOptions = useMemo(
+    () => mapProfileOptions(STRENGTH_OPTION_DEFINITIONS),
+    [mapProfileOptions],
+  );
+  const explanationStyleOptions = useMemo(
+    () => mapProfileOptions(EXPLANATION_STYLE_OPTION_DEFINITIONS),
+    [mapProfileOptions],
+  );
+  const challengeOptions = useMemo(
+    () => mapProfileOptions(CHALLENGE_OPTION_DEFINITIONS),
+    [mapProfileOptions],
+  );
+  const memdirTypeOptions = useMemo(() => mapMemdirTypeOptions(t), [t]);
 
   const toggleMulti = (
     key: "strengths" | "explanation_style" | "challenge_preference",
@@ -739,7 +1103,7 @@ export function MemorySettings() {
 
   const handleCancel = () => {
     setDraft(snapshot);
-    setMessage("已恢复为上次保存内容");
+    setMessage(t("settings.memory.message.restored", "已恢复为上次保存内容"));
     setTimeout(() => setMessage(null), 2500);
   };
 
@@ -754,12 +1118,14 @@ export function MemorySettings() {
       await saveConfig(updatedConfig);
       setConfig(updatedConfig);
       setSnapshot(draft);
-      setMessage("记忆设置已保存");
+      setMessage(t("settings.memory.message.saved", "记忆设置已保存"));
       setTimeout(() => setMessage(null), 2500);
       await loadSourceState();
     } catch (error) {
       console.error("保存记忆设置失败:", error);
-      setMessage("保存失败，请稍后重试");
+      setMessage(
+        t("settings.memory.message.saveFailed", "保存失败，请稍后重试"),
+      );
       setTimeout(() => setMessage(null), 2500);
     } finally {
       setSaving(false);
@@ -785,12 +1151,30 @@ export function MemorySettings() {
           enabled: result.enabled,
         },
       }));
-      setMessage(result.enabled ? "记忆目录已开启" : "记忆目录已关闭");
+      setMessage(
+        result.enabled
+          ? memoryText(
+              t,
+              "settings.memory.memdir.message.autoEnabled",
+              "记忆目录已开启",
+            )
+          : memoryText(
+              t,
+              "settings.memory.memdir.message.autoDisabled",
+              "记忆目录已关闭",
+            ),
+      );
       setTimeout(() => setMessage(null), 2500);
       await loadSourceState();
     } catch (error) {
       console.error("切换记忆目录失败:", error);
-      setMessage("切换记忆目录失败");
+      setMessage(
+        memoryText(
+          t,
+          "settings.memory.memdir.message.toggleFailed",
+          "切换记忆目录失败",
+        ),
+      );
       setTimeout(() => setMessage(null), 2500);
     }
   };
@@ -798,12 +1182,18 @@ export function MemorySettings() {
   const handleUpdateAutoNote = async () => {
     const note = autoNote.trim();
     if (!note) {
-      setMessage("请先输入要保存的 memdir 内容");
+      setMessage(
+        memoryText(
+          t,
+          "settings.memory.memdir.message.emptyNote",
+          "请先输入要保存的 memdir 内容",
+        ),
+      );
       setTimeout(() => setMessage(null), 2500);
       return;
     }
 
-    const validationError = validateMemdirNote(note, autoMemoryType);
+    const validationError = validateMemdirNote(t, note, autoMemoryType);
     if (validationError) {
       setMessage(validationError);
       setTimeout(() => setMessage(null), 3000);
@@ -820,11 +1210,26 @@ export function MemorySettings() {
       );
       setAutoIndex(index);
       setAutoNote("");
-      setMessage("已写入 memdir");
+      setMessage(
+        memoryText(
+          t,
+          "settings.memory.memdir.message.noteWritten",
+          "已写入 memdir",
+        ),
+      );
       setTimeout(() => setMessage(null), 2500);
     } catch (error) {
       console.error("写入 memdir 失败:", error);
-      setMessage(resolveActionErrorMessage(error, "写入 memdir 失败"));
+      setMessage(
+        resolveActionErrorMessage(
+          error,
+          memoryText(
+            t,
+            "settings.memory.memdir.message.writeFailed",
+            "写入 memdir 失败",
+          ),
+        ),
+      );
       setTimeout(() => setMessage(null), 3500);
     } finally {
       setSavingAutoNote(false);
@@ -834,7 +1239,13 @@ export function MemorySettings() {
   const handleScaffoldMemdir = async () => {
     const workingDir = effectiveSources?.working_dir?.trim() || undefined;
     if (!workingDir) {
-      setMessage("当前未获取到 workspace 路径，暂无法初始化 memdir");
+      setMessage(
+        memoryText(
+          t,
+          "settings.memory.memdir.message.workspaceMissingScaffold",
+          "当前未获取到 workspace 路径，暂无法初始化 memdir",
+        ),
+      );
       setTimeout(() => setMessage(null), 2500);
       return;
     }
@@ -847,8 +1258,18 @@ export function MemorySettings() {
       ).length;
       setMessage(
         createdCount > 0
-          ? `已初始化 memdir：${result.root_dir}`
-          : `memdir 已存在：${result.root_dir}`,
+          ? memoryText(
+              t,
+              "settings.memory.memdir.message.scaffolded",
+              "已初始化 memdir：{{path}}",
+              { path: result.root_dir },
+            )
+          : memoryText(
+              t,
+              "settings.memory.memdir.message.alreadyExists",
+              "memdir 已存在：{{path}}",
+              { path: result.root_dir },
+            ),
       );
       setTimeout(() => setMessage(null), 3000);
       const [nextIndex, nextSources] = await Promise.all([
@@ -863,7 +1284,13 @@ export function MemorySettings() {
       }
     } catch (error) {
       console.error("初始化 memdir 失败:", error);
-      setMessage("初始化 memdir 失败");
+      setMessage(
+        memoryText(
+          t,
+          "settings.memory.memdir.message.scaffoldFailed",
+          "初始化 memdir 失败",
+        ),
+      );
       setTimeout(() => setMessage(null), 2500);
     } finally {
       setScaffoldingMemdir(false);
@@ -873,7 +1300,13 @@ export function MemorySettings() {
   const handleCleanupMemdir = async () => {
     const workingDir = effectiveSources?.working_dir?.trim() || undefined;
     if (!workingDir) {
-      setMessage("当前未获取到 workspace 路径，暂无法整理 memdir");
+      setMessage(
+        memoryText(
+          t,
+          "settings.memory.memdir.message.workspaceMissingCleanup",
+          "当前未获取到 workspace 路径，暂无法整理 memdir",
+        ),
+      );
       setTimeout(() => setMessage(null), 2500);
       return;
     }
@@ -881,7 +1314,7 @@ export function MemorySettings() {
     setCleaningMemdir(true);
     try {
       const result = await cleanupContextMemdir(workingDir);
-      setMessage(formatMemdirCleanupMessage(result));
+      setMessage(formatMemdirCleanupMessage(t, result));
       setTimeout(() => setMessage(null), 3500);
       const [nextIndex, nextSources] = await Promise.all([
         getContextMemoryAutoIndex().catch(() => null),
@@ -895,7 +1328,16 @@ export function MemorySettings() {
       }
     } catch (error) {
       console.error("整理 memdir 失败:", error);
-      setMessage(resolveActionErrorMessage(error, "整理 memdir 失败"));
+      setMessage(
+        resolveActionErrorMessage(
+          error,
+          memoryText(
+            t,
+            "settings.memory.memdir.message.cleanupFailed",
+            "整理 memdir 失败",
+          ),
+        ),
+      );
       setTimeout(() => setMessage(null), 3000);
     } finally {
       setCleaningMemdir(false);
@@ -907,14 +1349,27 @@ export function MemorySettings() {
   ) => {
     const workingDir = effectiveSources?.working_dir?.trim() || undefined;
     const targetLabelMap: Record<RuntimeAgentsTemplateTarget, string> = {
-      global: "全局",
+      global: memoryText(
+        t,
+        "settings.memory.source.templateTarget.global",
+        "全局",
+      ),
       workspace: "Workspace",
-      workspace_local: "本机私有",
+      workspace_local: memoryText(
+        t,
+        "settings.memory.source.templateTarget.workspaceLocal",
+        "本机私有",
+      ),
     };
 
     if (target !== "global" && !workingDir) {
       setMessage(
-        `当前未获取到 workspace 路径，暂无法生成${targetLabelMap[target]}模板`,
+        memoryText(
+          t,
+          "settings.memory.source.message.workspaceMissingTemplate",
+          "当前未获取到 workspace 路径，暂无法生成{{target}}模板",
+          { target: targetLabelMap[target] },
+        ),
       );
       setTimeout(() => setMessage(null), 2500);
       return;
@@ -929,16 +1384,35 @@ export function MemorySettings() {
       );
       if (result.status === "exists") {
         setMessage(
-          `${targetLabelMap[target]}模板已存在，未覆盖：${result.path}`,
+          memoryText(
+            t,
+            "settings.memory.source.message.templateExists",
+            "{{target}}模板已存在，未覆盖：{{path}}",
+            { path: result.path, target: targetLabelMap[target] },
+          ),
         );
       } else {
-        setMessage(`已生成${targetLabelMap[target]}模板：${result.path}`);
+        setMessage(
+          memoryText(
+            t,
+            "settings.memory.source.message.templateCreated",
+            "已生成{{target}}模板：{{path}}",
+            { path: result.path, target: targetLabelMap[target] },
+          ),
+        );
       }
       setTimeout(() => setMessage(null), 3000);
       await Promise.all([loadSourceState(), loadLayerMetrics()]);
     } catch (error) {
       console.error("生成运行时 AGENTS 模板失败:", error);
-      setMessage(`生成${targetLabelMap[target]}模板失败`);
+      setMessage(
+        memoryText(
+          t,
+          "settings.memory.source.message.templateFailed",
+          "生成{{target}}模板失败",
+          { target: targetLabelMap[target] },
+        ),
+      );
       setTimeout(() => setMessage(null), 2500);
     } finally {
       setScaffoldingTarget(null);
@@ -948,7 +1422,13 @@ export function MemorySettings() {
   const handleEnsureWorkspaceLocalGitignore = async () => {
     const workingDir = effectiveSources?.working_dir?.trim() || undefined;
     if (!workingDir) {
-      setMessage("当前未获取到 workspace 路径，暂无法更新 .gitignore");
+      setMessage(
+        memoryText(
+          t,
+          "settings.memory.source.message.workspaceMissingGitignore",
+          "当前未获取到 workspace 路径，暂无法更新 .gitignore",
+        ),
+      );
       setTimeout(() => setMessage(null), 2500);
       return;
     }
@@ -957,12 +1437,31 @@ export function MemorySettings() {
     try {
       const result = await ensureWorkspaceLocalAgentsGitignore(workingDir);
       const actionText =
-        result.status === "exists" ? "已存在，无需重复添加" : "已写入";
-      setMessage(`${actionText} .gitignore：${result.path}`);
+        result.status === "exists"
+          ? memoryText(
+              t,
+              "settings.memory.source.gitignore.exists",
+              "已存在，无需重复添加",
+            )
+          : memoryText(t, "settings.memory.source.gitignore.written", "已写入");
+      setMessage(
+        memoryText(
+          t,
+          "settings.memory.source.message.gitignoreUpdated",
+          "{{action}} .gitignore：{{path}}",
+          { action: actionText, path: result.path },
+        ),
+      );
       setTimeout(() => setMessage(null), 3000);
     } catch (error) {
       console.error("更新 .gitignore 失败:", error);
-      setMessage("更新 .gitignore 失败");
+      setMessage(
+        memoryText(
+          t,
+          "settings.memory.source.message.gitignoreFailed",
+          "更新 .gitignore 失败",
+        ),
+      );
       setTimeout(() => setMessage(null), 2500);
     } finally {
       setEnsuringGitignore(false);
@@ -992,12 +1491,43 @@ export function MemorySettings() {
     : "--";
   const autoStatusLabel = autoConfig.enabled
     ? autoIndex?.entry_exists
-      ? "已初始化"
-      : "待初始化"
-    : "已关闭";
-  const selectedMemdirGuide = MEMDIR_WRITE_GUIDES[autoMemoryType];
+      ? t("settings.memory.status.initialized", "已初始化")
+      : t("settings.memory.status.pendingInit", "待初始化")
+    : t("settings.memory.status.disabled", "已关闭");
+  const profileDimensionCountText = t(
+    "settings.memory.hero.profileDimensionCount",
+    "4 个维度",
+  );
+  const memoryEnabledText = t("settings.memory.toggle.enabled", "记忆已启用");
+  const memoryDisabledText = t("settings.memory.toggle.disabled", "记忆已关闭");
+  const memoryModeText = t("settings.memory.toggle.mode", {
+    mode: draft.enabled ? memoryEnabledText : memoryDisabledText,
+    defaultValue: "当前模式：{{mode}}。",
+  });
+  const dirtyHintText = dirty
+    ? t("settings.memory.toggle.unsavedHint", " 当前有未保存更改。")
+    : t("settings.memory.toggle.syncedHint", " 当前配置与已保存版本一致。");
+  const questionBadgeTexts = {
+    selectedText: t(
+      "settings.memory.profile.badge.selectedCount",
+      "{{count}} 个已选",
+    ),
+    multiSelectText: t("settings.memory.profile.badge.multiSelect", "可多选"),
+    selectedSingleText: t(
+      "settings.memory.profile.badge.selectedSingle",
+      "已选择",
+    ),
+    pendingSingleText: t(
+      "settings.memory.profile.badge.pendingSingle",
+      "待选择",
+    ),
+  };
+  const selectedMemdirGuide = resolveMemdirWriteGuide(t, autoMemoryType);
   const messageIsError = Boolean(
-    message && /失败|请先|必须|不能|绝对日期/u.test(message),
+    message &&
+    /失败|失敗|失敗しました|실패|failed|cannot|can't|required|请先|必须|不能|必須|必要|絶対日付|절대 날짜|绝对日期/u.test(
+      message,
+    ),
   );
 
   return (
@@ -1026,28 +1556,43 @@ export function MemorySettings() {
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-[24px] font-semibold tracking-tight text-slate-900">
-                  记忆
+                  {t("settings.memory.title", "记忆")}
                 </h1>
                 <WorkbenchInfoTip
-                  ariaLabel="记忆设置说明"
-                  content="管理用户画像、来源链策略与记忆目录入口，让代理在长期使用里更稳定地续接规则、会话与协作状态。"
+                  ariaLabel={t("settings.memory.hero.tipAria", "记忆设置说明")}
+                  content={t(
+                    "settings.memory.hero.tip",
+                    "管理用户画像、来源链策略与记忆目录入口，让代理在长期使用里更稳定地续接规则、会话与协作状态。",
+                  )}
                   tone="mint"
                 />
               </div>
               <p className="text-sm text-slate-500">
-                管理用户画像、来源链策略与记忆目录入口。
+                {t(
+                  "settings.memory.hero.description",
+                  "管理用户画像、来源链策略与记忆目录入口。",
+                )}
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2 xl:justify-end">
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
-                画像完成度：{profileCompletionPercent}%
+                {t("settings.memory.hero.profileCompletion", {
+                  percent: profileCompletionPercent,
+                  defaultValue: "画像完成度：{{percent}}%",
+                })}
               </span>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
-                命中层可用：{readyLayerLabel}
+                {t("settings.memory.hero.readyLayers", {
+                  value: readyLayerLabel,
+                  defaultValue: "命中层可用：{{value}}",
+                })}
               </span>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
-                来源命中：{sourceHitLabel}
+                {t("settings.memory.hero.sourceHits", {
+                  value: sourceHitLabel,
+                  defaultValue: "来源命中：{{value}}",
+                })}
               </span>
               <span
                 className={cn(
@@ -1057,7 +1602,10 @@ export function MemorySettings() {
                     : "border-amber-200 bg-amber-50 text-amber-700",
                 )}
               >
-                记忆目录：{autoStatusLabel}
+                {t("settings.memory.hero.memdirStatus", {
+                  status: autoStatusLabel,
+                  defaultValue: "记忆目录：{{status}}",
+                })}
               </span>
               <span
                 className={cn(
@@ -1067,7 +1615,12 @@ export function MemorySettings() {
                     : "border-emerald-200 bg-emerald-50 text-emerald-700",
                 )}
               >
-                配置状态：{dirty ? "待保存" : "已同步"}
+                {t("settings.memory.hero.configStatus", {
+                  status: dirty
+                    ? t("settings.memory.status.pendingSave", "待保存")
+                    : t("settings.memory.status.synced", "已同步"),
+                  defaultValue: "配置状态：{{status}}",
+                })}
               </span>
             </div>
           </div>
@@ -1077,28 +1630,34 @@ export function MemorySettings() {
               <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-sm font-semibold text-slate-900">
-                    记忆总开关
+                    {t("settings.memory.toggle.title", "记忆总开关")}
                   </p>
                   <WorkbenchInfoTip
-                    ariaLabel="启用记忆说明"
-                    content="启用对话记忆功能，以便更好地理解上下文。"
+                    ariaLabel={t(
+                      "settings.memory.toggle.tipAria",
+                      "启用记忆说明",
+                    )}
+                    content={t(
+                      "settings.memory.toggle.tip",
+                      "启用对话记忆功能，以便更好地理解上下文。",
+                    )}
                     tone="slate"
                   />
                 </div>
                 <p className="text-xs leading-5 text-slate-500">
-                  当前模式：{draft.enabled ? "记忆已启用" : "记忆已关闭"}。
-                  {dirty
-                    ? " 当前有未保存更改。"
-                    : " 当前配置与已保存版本一致。"}
+                  {memoryModeText}
+                  {dirtyHintText}
                 </p>
               </div>
 
               <div className="flex items-center gap-3 self-start rounded-full border border-slate-200 bg-white px-3 py-2">
                 <span className="text-xs font-medium text-slate-600">
-                  {draft.enabled ? "已启用" : "已关闭"}
+                  {draft.enabled
+                    ? t("settings.memory.status.enabled", "已启用")
+                    : t("settings.memory.status.disabled", "已关闭")}
                 </span>
                 <Switch
-                  aria-label="启用记忆"
+                  aria-label={t("settings.memory.toggle.aria", "启用记忆")}
                   checked={draft.enabled}
                   onCheckedChange={(checked) =>
                     setDraft((prev) => ({ ...prev, enabled: checked }))
@@ -1114,7 +1673,7 @@ export function MemorySettings() {
                 disabled={!dirty || saving}
                 className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
               >
-                取消
+                {t("settings.memory.action.cancel", "取消")}
               </button>
               <button
                 type="button"
@@ -1122,7 +1681,9 @@ export function MemorySettings() {
                 disabled={!dirty || saving}
                 className={PRIMARY_INLINE_BUTTON_CLASS}
               >
-                {saving ? "保存中..." : "保存"}
+                {saving
+                  ? t("settings.memory.action.saving", "保存中...")
+                  : t("settings.memory.action.save", "保存")}
               </button>
             </div>
           </div>
@@ -1132,50 +1693,98 @@ export function MemorySettings() {
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1.28fr)_minmax(340px,0.92fr)]">
         <MemoryPanel
           icon={Sparkles}
-          title="偏好画像"
-          description="用更清晰的问卷型结构沉淀你的身份、擅长方向与偏好解释方式。"
+          title={t("settings.memory.profile.title", "偏好画像")}
+          description={t(
+            "settings.memory.profile.description",
+            "用更清晰的问卷型结构沉淀你的身份、擅长方向与偏好解释方式。",
+          )}
+          tipAriaLabel={t("settings.memory.profile.tipAria", "偏好画像说明")}
           aside={
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
-              4 个维度
+              {profileDimensionCountText}
             </span>
           }
         >
           <div className="space-y-4">
             <MultiSelectSection
-              title="以下哪个选项最能形容你现在的状态?"
-              subtitle="单选，用于帮助代理判断你的知识密度和上下文称呼。"
-              options={STATUS_OPTIONS}
+              title={t(
+                "settings.memory.profile.statusQuestion.title",
+                "以下哪个选项最能形容你现在的状态?",
+              )}
+              subtitle={t(
+                "settings.memory.profile.statusQuestion.subtitle",
+                "单选，用于帮助代理判断你的知识密度和上下文称呼。",
+              )}
+              tipAriaLabel={t(
+                "settings.memory.profile.statusQuestion.tipAria",
+                "当前状态说明",
+              )}
+              options={statusOptions}
               value={profile.current_status ? [profile.current_status] : []}
               onToggle={(option) => setStatus(option)}
               multiple={false}
+              {...questionBadgeTexts}
             />
 
             <div className="grid gap-4 xl:grid-cols-2">
               <MultiSelectSection
-                title="你觉得自己有哪些方面比较擅长?"
-                subtitle="可多选，用于强化优先理解的领域。"
-                options={STRENGTH_OPTIONS}
+                title={t(
+                  "settings.memory.profile.strengthQuestion.title",
+                  "你觉得自己有哪些方面比较擅长?",
+                )}
+                subtitle={t(
+                  "settings.memory.profile.strengthQuestion.subtitle",
+                  "可多选，用于强化优先理解的领域。",
+                )}
+                tipAriaLabel={t(
+                  "settings.memory.profile.strengthQuestion.tipAria",
+                  "擅长方向说明",
+                )}
+                options={strengthOptions}
                 value={profile.strengths || []}
                 onToggle={(option) => toggleMulti("strengths", option)}
+                {...questionBadgeTexts}
               />
 
               <MultiSelectSection
-                title="我解释事情时通常更喜欢:"
-                subtitle="可多选，用于调整表达风格与组织方式。"
-                options={EXPLANATION_STYLE_OPTIONS}
+                title={t(
+                  "settings.memory.profile.explanationQuestion.title",
+                  "我解释事情时通常更喜欢:",
+                )}
+                subtitle={t(
+                  "settings.memory.profile.explanationQuestion.subtitle",
+                  "可多选，用于调整表达风格与组织方式。",
+                )}
+                tipAriaLabel={t(
+                  "settings.memory.profile.explanationQuestion.tipAria",
+                  "解释偏好说明",
+                )}
+                options={explanationStyleOptions}
                 value={profile.explanation_style || []}
                 onToggle={(option) => toggleMulti("explanation_style", option)}
+                {...questionBadgeTexts}
               />
 
               <MultiSelectSection
-                title="当你遇到难题/概念时，你更倾向于:"
-                subtitle="可多选，用于决定先讲例子、难点还是拆解步骤。"
-                options={CHALLENGE_OPTIONS}
+                title={t(
+                  "settings.memory.profile.challengeQuestion.title",
+                  "当你遇到难题/概念时，你更倾向于:",
+                )}
+                subtitle={t(
+                  "settings.memory.profile.challengeQuestion.subtitle",
+                  "可多选，用于决定先讲例子、难点还是拆解步骤。",
+                )}
+                tipAriaLabel={t(
+                  "settings.memory.profile.challengeQuestion.tipAria",
+                  "难题偏好说明",
+                )}
+                options={challengeOptions}
                 value={profile.challenge_preference || []}
                 onToggle={(option) =>
                   toggleMulti("challenge_preference", option)
                 }
                 className="xl:col-span-2"
+                {...questionBadgeTexts}
               />
             </div>
           </div>
@@ -1184,8 +1793,21 @@ export function MemorySettings() {
         <div className="space-y-6">
           <MemoryPanel
             icon={Layers3}
-            title="记忆命中层可用性"
-            description="持续检查来源链、会话记忆、持久记忆、团队记忆与会话压缩的参与情况。"
+            title={memoryText(
+              t,
+              "settings.memory.layers.title",
+              "记忆命中层可用性",
+            )}
+            description={memoryText(
+              t,
+              "settings.memory.layers.description",
+              "持续检查来源链、会话记忆、持久记忆、团队记忆与会话压缩的参与情况。",
+            )}
+            tipAriaLabel={memoryText(
+              t,
+              "settings.memory.layers.tipAria",
+              "记忆命中层可用性说明",
+            )}
             aside={
               <button
                 type="button"
@@ -1199,15 +1821,22 @@ export function MemorySettings() {
                     loadingLayerMetrics && "animate-spin",
                   )}
                 />
-                刷新
+                {memoryText(t, "settings.memory.action.refresh", "刷新")}
               </button>
             }
           >
             {layerMetrics ? (
               <div className="space-y-3">
                 <div className="rounded-[20px] border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-600">
-                  已可用 {layerMetrics.readyLayers}/{layerMetrics.totalLayers}{" "}
-                  层
+                  {memoryText(
+                    t,
+                    "settings.memory.layers.readyCount",
+                    "已可用 {{ready}}/{{total}} 层",
+                    {
+                      ready: layerMetrics.readyLayers,
+                      total: layerMetrics.totalLayers,
+                    },
+                  )}
                 </div>
                 {layerMetrics.cards.map((card) => (
                   <div
@@ -1231,7 +1860,17 @@ export function MemorySettings() {
                             : "border-slate-200 bg-slate-100 text-slate-500",
                         )}
                       >
-                        {card.available ? "已生效" : "待完善"}
+                        {card.available
+                          ? memoryText(
+                              t,
+                              "settings.memory.layers.card.available",
+                              "已生效",
+                            )
+                          : memoryText(
+                              t,
+                              "settings.memory.layers.card.pending",
+                              "待完善",
+                            )}
                       </span>
                     </div>
                     <div className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">
@@ -1243,20 +1882,41 @@ export function MemorySettings() {
                   </div>
                 ))}
                 <p className="text-xs leading-5 text-slate-500">
-                  更完整的分层详情、压缩摘要与项目资料附属层都在「记忆」页面查看。
+                  {memoryText(
+                    t,
+                    "settings.memory.layers.footer",
+                    "更完整的分层详情、压缩摘要与项目资料附属层都在「记忆」页面查看。",
+                  )}
                 </p>
               </div>
             ) : (
               <p className="text-sm text-slate-500">
-                正在加载记忆命中层状态...
+                {memoryText(
+                  t,
+                  "settings.memory.layers.loading",
+                  "正在加载记忆命中层状态...",
+                )}
               </p>
             )}
           </MemoryPanel>
 
           <MemoryPanel
             icon={FolderTree}
-            title="来源链状态总览"
-            description="快速查看当前来源链解析策略和命中状态。"
+            title={memoryText(
+              t,
+              "settings.memory.source.overview.title",
+              "来源链状态总览",
+            )}
+            description={memoryText(
+              t,
+              "settings.memory.source.overview.description",
+              "快速查看当前来源链解析策略和命中状态。",
+            )}
+            tipAriaLabel={memoryText(
+              t,
+              "settings.memory.source.overview.tipAria",
+              "来源链状态总览说明",
+            )}
             aside={
               <button
                 type="button"
@@ -1270,28 +1930,56 @@ export function MemorySettings() {
                     loadingSourceState && "animate-spin",
                   )}
                 />
-                刷新来源
+                {memoryText(
+                  t,
+                  "settings.memory.source.overview.refresh",
+                  "刷新来源",
+                )}
               </button>
             }
           >
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
-                <p className="text-xs font-medium text-slate-500">命中来源</p>
+                <p className="text-xs font-medium text-slate-500">
+                  {memoryText(
+                    t,
+                    "settings.memory.source.overview.hitSources",
+                    "命中来源",
+                  )}
+                </p>
                 <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
                   {sourceHitLabel}
                 </p>
               </div>
               <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
                 <p className="text-xs font-medium text-slate-500">
-                  @import 策略
+                  {memoryText(
+                    t,
+                    "settings.memory.source.overview.importPolicy",
+                    "@import 策略",
+                  )}
                 </p>
                 <p className="mt-2 text-lg font-semibold tracking-tight text-slate-900">
-                  {resolveConfig.follow_imports ? "跟随导入" : "关闭导入"}
+                  {resolveConfig.follow_imports
+                    ? memoryText(
+                        t,
+                        "settings.memory.source.overview.followImports",
+                        "跟随导入",
+                      )
+                    : memoryText(
+                        t,
+                        "settings.memory.source.overview.importsDisabled",
+                        "关闭导入",
+                      )}
                 </p>
               </div>
               <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
                 <p className="text-xs font-medium text-slate-500">
-                  最大导入深度
+                  {memoryText(
+                    t,
+                    "settings.memory.source.overview.maxImportDepth",
+                    "最大导入深度",
+                  )}
                 </p>
                 <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
                   {resolveConfig.import_max_depth ?? 5}
@@ -1299,12 +1987,24 @@ export function MemorySettings() {
               </div>
               <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
                 <p className="text-xs font-medium text-slate-500">
-                  额外目录记忆
+                  {memoryText(
+                    t,
+                    "settings.memory.source.overview.additionalDirsMemory",
+                    "额外目录记忆",
+                  )}
                 </p>
                 <p className="mt-2 text-lg font-semibold tracking-tight text-slate-900">
                   {resolveConfig.load_additional_dirs_memory
-                    ? "已加载"
-                    : "未加载"}
+                    ? memoryText(
+                        t,
+                        "settings.memory.source.overview.loaded",
+                        "已加载",
+                      )
+                    : memoryText(
+                        t,
+                        "settings.memory.source.overview.notLoaded",
+                        "未加载",
+                      )}
                 </p>
               </div>
             </div>
@@ -1312,10 +2012,19 @@ export function MemorySettings() {
             <div className="mt-4 rounded-[20px] border border-slate-200/80 bg-slate-50/70 px-4 py-4">
               <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
                 <Files className="h-3.5 w-3.5 text-slate-400" />
-                当前工作目录
+                {memoryText(
+                  t,
+                  "settings.memory.source.overview.currentWorkspace",
+                  "当前工作目录",
+                )}
               </div>
               <p className="mt-2 break-all text-sm leading-6 text-slate-700">
-                {effectiveSources?.working_dir || "未返回工作目录"}
+                {effectiveSources?.working_dir ||
+                  memoryText(
+                    t,
+                    "settings.memory.source.overview.workspaceMissing",
+                    "未返回工作目录",
+                  )}
               </p>
             </div>
           </MemoryPanel>
@@ -1324,17 +2033,40 @@ export function MemorySettings() {
 
       <MemoryPanel
         icon={Database}
-        title="来源链策略"
-        description="统一管理组织策略、项目规则目录和额外仓库记忆的加载规则。"
+        title={memoryText(
+          t,
+          "settings.memory.source.policy.title",
+          "来源链策略",
+        )}
+        description={memoryText(
+          t,
+          "settings.memory.source.policy.description",
+          "统一管理组织策略、项目规则目录和额外仓库记忆的加载规则。",
+        )}
+        tipAriaLabel={memoryText(
+          t,
+          "settings.memory.source.policy.tipAria",
+          "来源链策略说明",
+        )}
       >
         <div className="space-y-4">
           <div className="grid gap-4 xl:grid-cols-2">
             <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
-              <p className="text-sm font-semibold text-slate-900">基础路径</p>
+              <p className="text-sm font-semibold text-slate-900">
+                {memoryText(
+                  t,
+                  "settings.memory.source.policy.basePathsTitle",
+                  "基础路径",
+                )}
+              </p>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <label className="space-y-2">
                   <span className="text-xs font-medium text-slate-500">
-                    组织策略文件
+                    {memoryText(
+                      t,
+                      "settings.memory.source.policy.managedPolicyFile",
+                      "组织策略文件",
+                    )}
                   </span>
                   <input
                     type="text"
@@ -1349,13 +2081,21 @@ export function MemorySettings() {
                       }))
                     }
                     className={INPUT_CLASS_NAME}
-                    placeholder="例如 ~/.lime/AGENTS.md"
+                    placeholder={memoryText(
+                      t,
+                      "settings.memory.source.policy.managedPolicyPlaceholder",
+                      "例如 ~/.lime/AGENTS.md",
+                    )}
                   />
                 </label>
 
                 <label className="space-y-2">
                   <span className="text-xs font-medium text-slate-500">
-                    用户记忆文件
+                    {memoryText(
+                      t,
+                      "settings.memory.source.policy.userMemoryFile",
+                      "用户记忆文件",
+                    )}
                   </span>
                   <input
                     type="text"
@@ -1370,13 +2110,21 @@ export function MemorySettings() {
                       }))
                     }
                     className={INPUT_CLASS_NAME}
-                    placeholder="留空时使用应用默认 ~/.lime/AGENTS.md 路径"
+                    placeholder={memoryText(
+                      t,
+                      "settings.memory.source.policy.userMemoryPlaceholder",
+                      "留空时使用应用默认 ~/.lime/AGENTS.md 路径",
+                    )}
                   />
                 </label>
 
                 <label className="space-y-2 md:col-span-2">
                   <span className="text-xs font-medium text-slate-500">
-                    项目本地私有文件
+                    {memoryText(
+                      t,
+                      "settings.memory.source.policy.projectLocalMemoryFile",
+                      "项目本地私有文件",
+                    )}
                   </span>
                   <input
                     type="text"
@@ -1392,7 +2140,11 @@ export function MemorySettings() {
                       }))
                     }
                     className={INPUT_CLASS_NAME}
-                    placeholder="例如 .lime/AGENTS.local.md"
+                    placeholder={memoryText(
+                      t,
+                      "settings.memory.source.policy.projectLocalMemoryPlaceholder",
+                      "例如 .lime/AGENTS.local.md",
+                    )}
                   />
                 </label>
               </div>
@@ -1401,14 +2153,35 @@ export function MemorySettings() {
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <p className="text-sm font-semibold text-slate-900">
-                      显式生成模板
+                      {memoryText(
+                        t,
+                        "settings.memory.source.policy.templateTitle",
+                        "显式生成模板",
+                      )}
                     </p>
                     <p className="mt-1 text-xs leading-5 text-slate-500">
-                      只在你点击时创建模板文件，不会静默生成，也不会默认覆盖已有内容。
+                      {memoryText(
+                        t,
+                        "settings.memory.source.policy.templateDescription",
+                        "只在你点击时创建模板文件，不会静默生成，也不会默认覆盖已有内容。",
+                      )}
                     </p>
                   </div>
                   <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-medium text-slate-500">
-                    当前 Workspace：{effectiveSources?.working_dir || "未解析"}
+                    {memoryText(
+                      t,
+                      "settings.memory.source.policy.currentWorkspace",
+                      "当前 Workspace：{{path}}",
+                      {
+                        path:
+                          effectiveSources?.working_dir ||
+                          memoryText(
+                            t,
+                            "settings.memory.source.policy.workspaceUnresolved",
+                            "未解析",
+                          ),
+                      },
+                    )}
                   </span>
                 </div>
 
@@ -1422,8 +2195,16 @@ export function MemorySettings() {
                     className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
                   >
                     {scaffoldingTarget === "global"
-                      ? "生成中..."
-                      : "生成全局模板"}
+                      ? memoryText(
+                          t,
+                          "settings.memory.source.policy.generating",
+                          "生成中...",
+                        )
+                      : memoryText(
+                          t,
+                          "settings.memory.source.policy.generateGlobalTemplate",
+                          "生成全局模板",
+                        )}
                   </button>
                   <button
                     type="button"
@@ -1437,8 +2218,16 @@ export function MemorySettings() {
                     className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
                   >
                     {scaffoldingTarget === "workspace"
-                      ? "生成中..."
-                      : "生成 Workspace 模板"}
+                      ? memoryText(
+                          t,
+                          "settings.memory.source.policy.generating",
+                          "生成中...",
+                        )
+                      : memoryText(
+                          t,
+                          "settings.memory.source.policy.generateWorkspaceTemplate",
+                          "生成 Workspace 模板",
+                        )}
                   </button>
                   <button
                     type="button"
@@ -1454,8 +2243,16 @@ export function MemorySettings() {
                     className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
                   >
                     {scaffoldingTarget === "workspace_local"
-                      ? "生成中..."
-                      : "生成本机模板"}
+                      ? memoryText(
+                          t,
+                          "settings.memory.source.policy.generating",
+                          "生成中...",
+                        )
+                      : memoryText(
+                          t,
+                          "settings.memory.source.policy.generateLocalTemplate",
+                          "生成本机模板",
+                        )}
                   </button>
                   <button
                     type="button"
@@ -1466,19 +2263,37 @@ export function MemorySettings() {
                     className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-60"
                   >
                     {ensuringGitignore
-                      ? "写入中..."
-                      : "将本机模板加入 .gitignore"}
+                      ? memoryText(
+                          t,
+                          "settings.memory.source.policy.writing",
+                          "写入中...",
+                        )
+                      : memoryText(
+                          t,
+                          "settings.memory.source.policy.addLocalTemplateGitignore",
+                          "将本机模板加入 .gitignore",
+                        )}
                   </button>
                 </div>
               </div>
             </div>
 
             <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
-              <p className="text-sm font-semibold text-slate-900">解析规则</p>
+              <p className="text-sm font-semibold text-slate-900">
+                {memoryText(
+                  t,
+                  "settings.memory.source.policy.resolveRulesTitle",
+                  "解析规则",
+                )}
+              </p>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <label className="space-y-2">
                   <span className="text-xs font-medium text-slate-500">
-                    最大导入深度
+                    {memoryText(
+                      t,
+                      "settings.memory.source.policy.maxImportDepth",
+                      "最大导入深度",
+                    )}
                   </span>
                   <input
                     type="number"
@@ -1503,7 +2318,11 @@ export function MemorySettings() {
 
                 <label className="space-y-2">
                   <span className="text-xs font-medium text-slate-500">
-                    额外目录数量
+                    {memoryText(
+                      t,
+                      "settings.memory.source.policy.additionalDirCount",
+                      "额外目录数量",
+                    )}
                   </span>
                   <div className="rounded-[16px] border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700">
                     {(resolveConfig.additional_dirs || []).length}
@@ -1513,9 +2332,19 @@ export function MemorySettings() {
 
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 <label className={TOGGLE_ROW_CLASS_NAME}>
-                  <span>跟随 @import</span>
+                  <span>
+                    {memoryText(
+                      t,
+                      "settings.memory.source.policy.followImports",
+                      "跟随 @import",
+                    )}
+                  </span>
                   <Switch
-                    aria-label="跟随 @import"
+                    aria-label={memoryText(
+                      t,
+                      "settings.memory.source.policy.followImportsAria",
+                      "跟随 @import",
+                    )}
                     checked={resolveConfig.follow_imports ?? true}
                     onCheckedChange={(checked) =>
                       setDraft((prev) => ({
@@ -1530,9 +2359,19 @@ export function MemorySettings() {
                 </label>
 
                 <label className={TOGGLE_ROW_CLASS_NAME}>
-                  <span>加载额外目录记忆</span>
+                  <span>
+                    {memoryText(
+                      t,
+                      "settings.memory.source.policy.loadAdditionalDirs",
+                      "加载额外目录记忆",
+                    )}
+                  </span>
                   <Switch
-                    aria-label="加载额外目录记忆"
+                    aria-label={memoryText(
+                      t,
+                      "settings.memory.source.policy.loadAdditionalDirsAria",
+                      "加载额外目录记忆",
+                    )}
                     checked={resolveConfig.load_additional_dirs_memory ?? false}
                     onCheckedChange={(checked) =>
                       setDraft((prev) => ({
@@ -1552,10 +2391,18 @@ export function MemorySettings() {
           <div className="grid gap-4 xl:grid-cols-2">
             <label className="space-y-2 rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
               <span className="text-sm font-semibold text-slate-900">
-                项目记忆文件
+                {memoryText(
+                  t,
+                  "settings.memory.source.policy.projectMemoryFiles",
+                  "项目记忆文件",
+                )}
               </span>
               <span className="text-xs leading-5 text-slate-500">
-                每行一个相对路径，例如 `.lime/AGENTS.md`。
+                {memoryText(
+                  t,
+                  "settings.memory.source.policy.projectMemoryFilesDescription",
+                  "每行一个相对路径，例如 `.lime/AGENTS.md`。",
+                )}
               </span>
               <textarea
                 value={(sourcesConfig.project_memory_paths || []).join("\n")}
@@ -1574,10 +2421,18 @@ export function MemorySettings() {
 
             <label className="space-y-2 rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
               <span className="text-sm font-semibold text-slate-900">
-                项目规则目录
+                {memoryText(
+                  t,
+                  "settings.memory.source.policy.projectRuleDirs",
+                  "项目规则目录",
+                )}
               </span>
               <span className="text-xs leading-5 text-slate-500">
-                每行一个相对路径，用于定义仓库级规则目录。
+                {memoryText(
+                  t,
+                  "settings.memory.source.policy.projectRuleDirsDescription",
+                  "每行一个相对路径，用于定义仓库级规则目录。",
+                )}
               </span>
               <textarea
                 value={(sourcesConfig.project_rule_dirs || []).join("\n")}
@@ -1597,10 +2452,18 @@ export function MemorySettings() {
 
           <label className="space-y-2 rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
             <span className="text-sm font-semibold text-slate-900">
-              额外目录
+              {memoryText(
+                t,
+                "settings.memory.source.policy.additionalDirs",
+                "额外目录",
+              )}
             </span>
             <span className="text-xs leading-5 text-slate-500">
-              每行一个绝对路径，可添加当前仓库之外的参考目录参与记忆解析。
+              {memoryText(
+                t,
+                "settings.memory.source.policy.additionalDirsDescription",
+                "每行一个绝对路径，可添加当前仓库之外的参考目录参与记忆解析。",
+              )}
             </span>
             <textarea
               value={(resolveConfig.additional_dirs || []).join("\n")}
@@ -1614,7 +2477,11 @@ export function MemorySettings() {
                 }))
               }
               className={TEXTAREA_CLASS_NAME}
-              placeholder="例如 /absolute/path/to/extra-repo"
+              placeholder={memoryText(
+                t,
+                "settings.memory.source.policy.additionalDirsPlaceholder",
+                "例如 /absolute/path/to/extra-repo",
+              )}
             />
           </label>
         </div>
@@ -1622,8 +2489,21 @@ export function MemorySettings() {
 
       <MemoryPanel
         icon={Database}
-        title="记忆目录（memdir）"
-        description="管理 MEMORY.md 入口、四类记忆文件、类型化写入和当前索引预览。"
+        title={memoryText(
+          t,
+          "settings.memory.memdir.title",
+          "记忆目录（memdir）",
+        )}
+        description={memoryText(
+          t,
+          "settings.memory.memdir.description",
+          "管理 MEMORY.md 入口、四类记忆文件、类型化写入和当前索引预览。",
+        )}
+        tipAriaLabel={memoryText(
+          t,
+          "settings.memory.memdir.tipAria",
+          "记忆目录说明",
+        )}
         aside={
           <>
             <button
@@ -1632,7 +2512,17 @@ export function MemorySettings() {
               disabled={scaffoldingMemdir}
               className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition hover:border-emerald-300 hover:text-emerald-800 disabled:opacity-60"
             >
-              {scaffoldingMemdir ? "初始化中..." : "初始化 memdir"}
+              {scaffoldingMemdir
+                ? memoryText(
+                    t,
+                    "settings.memory.memdir.action.initializing",
+                    "初始化中...",
+                  )
+                : memoryText(
+                    t,
+                    "settings.memory.memdir.action.initialize",
+                    "初始化 memdir",
+                  )}
             </button>
             <button
               type="button"
@@ -1640,14 +2530,34 @@ export function MemorySettings() {
               disabled={cleaningMemdir}
               className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:bg-white hover:text-slate-900 disabled:opacity-60"
             >
-              {cleaningMemdir ? "整理中..." : "整理 memdir"}
+              {cleaningMemdir
+                ? memoryText(
+                    t,
+                    "settings.memory.memdir.action.cleaning",
+                    "整理中...",
+                  )
+                : memoryText(
+                    t,
+                    "settings.memory.memdir.action.cleanup",
+                    "整理 memdir",
+                  )}
             </button>
             <button
               type="button"
               onClick={handleToggleAutoImmediately}
               className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
             >
-              {autoConfig.enabled ? "立即关闭" : "立即开启"}
+              {autoConfig.enabled
+                ? memoryText(
+                    t,
+                    "settings.memory.memdir.action.disableNow",
+                    "立即关闭",
+                  )
+                : memoryText(
+                    t,
+                    "settings.memory.memdir.action.enableNow",
+                    "立即开启",
+                  )}
             </button>
           </>
         }
@@ -1656,7 +2566,11 @@ export function MemorySettings() {
           <div className="grid gap-4 xl:grid-cols-3">
             <label className="space-y-2 rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
               <span className="text-sm font-semibold text-slate-900">
-                入口文件
+                {memoryText(
+                  t,
+                  "settings.memory.memdir.field.entrypoint",
+                  "入口文件",
+                )}
               </span>
               <input
                 type="text"
@@ -1676,7 +2590,11 @@ export function MemorySettings() {
 
             <label className="space-y-2 rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
               <span className="text-sm font-semibold text-slate-900">
-                加载行数上限
+                {memoryText(
+                  t,
+                  "settings.memory.memdir.field.maxLoadedLines",
+                  "加载行数上限",
+                )}
               </span>
               <input
                 type="number"
@@ -1701,7 +2619,11 @@ export function MemorySettings() {
 
             <label className="space-y-2 rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
               <span className="text-sm font-semibold text-slate-900">
-                memdir 根目录
+                {memoryText(
+                  t,
+                  "settings.memory.memdir.field.rootDir",
+                  "memdir 根目录",
+                )}
               </span>
               <input
                 type="text"
@@ -1716,7 +2638,11 @@ export function MemorySettings() {
                   }))
                 }
                 className={INPUT_CLASS_NAME}
-                placeholder="默认自动推导，可留空"
+                placeholder={memoryText(
+                  t,
+                  "settings.memory.memdir.field.rootDirPlaceholder",
+                  "默认自动推导，可留空",
+                )}
               />
             </label>
           </div>
@@ -1725,15 +2651,23 @@ export function MemorySettings() {
             <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                 <Database className="h-4 w-4 text-emerald-600" />
-                写入 memdir
+                {memoryText(
+                  t,
+                  "settings.memory.memdir.write.title",
+                  "写入 memdir",
+                )}
               </div>
               <div className="mt-4 space-y-3">
                 <div className="grid gap-2">
                   <p className="text-xs leading-5 text-slate-500">
-                    先选择这条记忆应归入哪一类，再决定是否额外拆 topic 文件。
+                    {memoryText(
+                      t,
+                      "settings.memory.memdir.write.description",
+                      "先选择这条记忆应归入哪一类，再决定是否额外拆 topic 文件。",
+                    )}
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {MEMDIR_MEMORY_TYPE_OPTIONS.map((option) => {
+                    {memdirTypeOptions.map((option) => {
                       const active = autoMemoryType === option.value;
                       return (
                         <button
@@ -1756,7 +2690,7 @@ export function MemorySettings() {
                 </div>
                 <div className="rounded-[18px] border border-white/90 bg-white/88 px-4 py-3 shadow-sm">
                   <p className="text-sm font-medium text-slate-900">
-                    {resolveMemdirTypeLabel(autoMemoryType)}
+                    {resolveMemdirTypeLabel(t, autoMemoryType)}
                   </p>
                   <p className="mt-1 text-xs leading-5 text-slate-500">
                     {selectedMemdirGuide.description}
@@ -1768,12 +2702,21 @@ export function MemorySettings() {
                           key={section}
                           className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700"
                         >
-                          必须包含 {section}
+                          {memoryText(
+                            t,
+                            "settings.memory.memdir.requiredSectionBadge",
+                            "必须包含 {{section}}",
+                            { section },
+                          )}
                         </span>
                       ))
                     ) : (
                       <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-500">
-                        可直接写自然语言，不强制模板
+                        {memoryText(
+                          t,
+                          "settings.memory.memdir.noTemplateRequired",
+                          "可直接写自然语言，不强制模板",
+                        )}
                       </span>
                     )}
                   </div>
@@ -1781,9 +2724,11 @@ export function MemorySettings() {
                     {selectedMemdirGuide.note}
                   </p>
                   <p className="mt-2 text-xs leading-5 text-slate-500">
-                    同一 topic
-                    会被视为同一条当前记忆并覆盖更新；如果要保留多条并行结论，请拆成不同
-                    topic。
+                    {memoryText(
+                      t,
+                      "settings.memory.memdir.topicMergeHint",
+                      "同一 topic 会被视为同一条当前记忆并覆盖更新；如果要保留多条并行结论，请拆成不同 topic。",
+                    )}
                   </p>
                 </div>
                 <input
@@ -1805,11 +2750,24 @@ export function MemorySettings() {
                   disabled={savingAutoNote}
                   className={PRIMARY_ACTION_BUTTON_CLASS}
                 >
-                  {savingAutoNote ? "写入中..." : "写入 memdir"}
+                  {savingAutoNote
+                    ? memoryText(
+                        t,
+                        "settings.memory.memdir.action.writing",
+                        "写入中...",
+                      )
+                    : memoryText(
+                        t,
+                        "settings.memory.memdir.action.write",
+                        "写入 memdir",
+                      )}
                 </button>
                 <p className="text-xs leading-5 text-slate-500">
-                  “整理 memdir” 会去重入口链接、裁剪 README 历史段落，并把旧的
-                  topic 日志收口成当前有效版本。
+                  {memoryText(
+                    t,
+                    "settings.memory.memdir.cleanupHint",
+                    "“整理 memdir” 会去重入口链接、裁剪 README 历史段落，并把旧的 topic 日志收口成当前有效版本。",
+                  )}
                 </p>
               </div>
             </div>
@@ -1817,12 +2775,33 @@ export function MemorySettings() {
             <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                 <Files className="h-4 w-4 text-sky-600" />
-                当前索引
+                {memoryText(
+                  t,
+                  "settings.memory.memdir.index.title",
+                  "当前索引",
+                )}
               </div>
               <div className="mt-4 rounded-[18px] border border-white/90 bg-white/88 px-4 py-3 shadow-sm">
                 <p className="text-xs leading-5 text-slate-500">
-                  {autoIndex?.entry_exists ? "已存在" : "未初始化"}
-                  {autoIndex ? ` · ${autoIndex.total_lines} 行` : ""}
+                  {autoIndex?.entry_exists
+                    ? memoryText(
+                        t,
+                        "settings.memory.memdir.index.exists",
+                        "已存在",
+                      )
+                    : memoryText(
+                        t,
+                        "settings.memory.memdir.index.uninitialized",
+                        "未初始化",
+                      )}
+                  {autoIndex
+                    ? memoryText(
+                        t,
+                        "settings.memory.memdir.index.lineCount",
+                        " · {{count}} 行",
+                        { count: autoIndex.total_lines },
+                      )
+                    : ""}
                 </p>
               </div>
               {autoIndex?.preview_lines?.length ? (
@@ -1831,7 +2810,11 @@ export function MemorySettings() {
                 </pre>
               ) : (
                 <p className="mt-4 text-sm leading-6 text-slate-500">
-                  暂无 memdir 入口内容
+                  {memoryText(
+                    t,
+                    "settings.memory.memdir.index.empty",
+                    "暂无 memdir 入口内容",
+                  )}
                 </p>
               )}
               {autoIndex?.items?.length ? (
@@ -1850,17 +2833,32 @@ export function MemorySettings() {
                       <div className="mt-2 flex flex-wrap gap-2">
                         {item.memory_type ? (
                           <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
-                            {resolveMemdirTypeLabel(item.memory_type)}
+                            {resolveMemdirTypeLabel(t, item.memory_type)}
                           </span>
                         ) : null}
                         {item.provider ? (
                           <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
-                            provider：{item.provider}
+                            {memoryText(
+                              t,
+                              "settings.memory.memdir.index.provider",
+                              "provider：{{provider}}",
+                              { provider: item.provider },
+                            )}
                           </span>
                         ) : null}
                         {item.updated_at ? (
                           <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
-                            更新于 {formatRelativeTimeLabel(item.updated_at)}
+                            {memoryText(
+                              t,
+                              "settings.memory.memdir.index.updatedAt",
+                              "更新于 {{time}}",
+                              {
+                                time: formatRelativeTimeLabel(
+                                  t,
+                                  item.updated_at,
+                                ),
+                              },
+                            )}
                           </span>
                         ) : null}
                       </div>
@@ -1880,12 +2878,33 @@ export function MemorySettings() {
 
       <MemoryPanel
         icon={Files}
-        title="来源链命中详情"
-        description="逐项查看来源链是否命中、是否已加载，以及实际预览内容。"
+        title={memoryText(
+          t,
+          "settings.memory.source.detail.title",
+          "来源链命中详情",
+        )}
+        description={memoryText(
+          t,
+          "settings.memory.source.detail.description",
+          "逐项查看来源链是否命中、是否已加载，以及实际预览内容。",
+        )}
+        tipAriaLabel={memoryText(
+          t,
+          "settings.memory.source.detail.tipAria",
+          "来源链命中详情说明",
+        )}
         aside={
           <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
             {effectiveSources
-              ? `命中 ${effectiveSources.loaded_sources}/${effectiveSources.total_sources}`
+              ? memoryText(
+                  t,
+                  "settings.memory.source.detail.hits",
+                  "命中 {{loaded}}/{{total}}",
+                  {
+                    loaded: effectiveSources.loaded_sources,
+                    total: effectiveSources.total_sources,
+                  },
+                )
               : "--"}
           </span>
         }
@@ -1894,13 +2913,32 @@ export function MemorySettings() {
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
-                工作目录：{effectiveSources.working_dir}
+                {memoryText(
+                  t,
+                  "settings.memory.source.detail.workingDir",
+                  "工作目录：{{path}}",
+                  { path: effectiveSources.working_dir },
+                )}
               </span>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
-                跟随 @import：{effectiveSources.follow_imports ? "是" : "否"}
+                {memoryText(
+                  t,
+                  "settings.memory.source.detail.followImports",
+                  "跟随 @import：{{value}}",
+                  {
+                    value: effectiveSources.follow_imports
+                      ? memoryText(t, "settings.memory.source.detail.yes", "是")
+                      : memoryText(t, "settings.memory.source.detail.no", "否"),
+                  },
+                )}
               </span>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
-                导入深度：{effectiveSources.import_max_depth}
+                {memoryText(
+                  t,
+                  "settings.memory.source.detail.importDepth",
+                  "导入深度：{{depth}}",
+                  { depth: effectiveSources.import_max_depth },
+                )}
               </span>
             </div>
 
@@ -1924,7 +2962,17 @@ export function MemorySettings() {
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
-                      来源分类：{resolveSourceBucketLabel(source.source_bucket)}
+                      {memoryText(
+                        t,
+                        "settings.memory.source.detail.sourceBucket",
+                        "来源分类：{{bucket}}",
+                        {
+                          bucket: resolveSourceBucketLabel(
+                            t,
+                            source.source_bucket,
+                          ),
+                        },
+                      )}
                     </span>
                     {source.provider ? (
                       <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
@@ -1933,12 +2981,19 @@ export function MemorySettings() {
                     ) : null}
                     {source.memory_type ? (
                       <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
-                        {resolveMemdirTypeLabel(source.memory_type)}
+                        {resolveMemdirTypeLabel(t, source.memory_type)}
                       </span>
                     ) : null}
                     {source.updated_at ? (
                       <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
-                        最近更新：{formatRelativeTimeLabel(source.updated_at)}
+                        {memoryText(
+                          t,
+                          "settings.memory.source.detail.updatedAt",
+                          "最近更新：{{time}}",
+                          {
+                            time: formatRelativeTimeLabel(t, source.updated_at),
+                          },
+                        )}
                       </span>
                     ) : null}
                   </div>
@@ -1957,7 +3012,13 @@ export function MemorySettings() {
             </div>
           </div>
         ) : (
-          <p className="text-sm text-slate-500">正在加载来源命中结果...</p>
+          <p className="text-sm text-slate-500">
+            {memoryText(
+              t,
+              "settings.memory.source.detail.loading",
+              "正在加载来源命中结果...",
+            )}
+          </p>
         )}
       </MemoryPanel>
     </div>

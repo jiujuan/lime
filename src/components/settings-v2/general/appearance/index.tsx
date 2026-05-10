@@ -31,10 +31,18 @@ import { cn } from "@/lib/utils";
 import { getConfig, saveConfig, type Config } from "@/lib/api/appConfig";
 import type { NavigationEnabledItemId } from "@/lib/api/appConfigTypes";
 import { useOnboardingState } from "@/components/onboarding";
-import { useI18nPatch } from "@/i18n/I18nPatchProvider";
-import type { Language } from "@/i18n/text-map";
+import { useI18nPatch } from "@/i18n/legacy-patch/I18nPatchProvider";
+import { changeLimeLocale } from "@/i18n/createI18n";
+import {
+  UI_LOCALE_OPTIONS,
+  normalizeLocalePreference,
+  resolveLocaleOptionLabel,
+  toLegacyPatchLanguage,
+  type LocalePreference,
+} from "@/i18n/locales";
 import { useSoundContext } from "@/contexts/useSoundContext";
 import { Switch } from "@/components/ui/switch";
+import { useTranslation } from "react-i18next";
 import {
   CONFIGURABLE_FOOTER_SIDEBAR_NAV_ITEMS,
   resolveEnabledSidebarNavItems,
@@ -69,7 +77,7 @@ interface ThemeOption {
 }
 
 interface LanguageOption {
-  id: Language;
+  id: LocalePreference;
   label: string;
   hint: string;
 }
@@ -95,19 +103,6 @@ const THEME_OPTIONS: ThemeOption[] = [
     ...option,
     icon: option.id === "light" ? Sun : option.id === "dark" ? Moon : Monitor,
   })),
-];
-
-const LANGUAGE_OPTIONS: LanguageOption[] = [
-  {
-    id: "zh",
-    label: "中文",
-    hint: "适合主要中文工作流。",
-  },
-  {
-    id: "en",
-    label: "English",
-    hint: "适合英文界面与术语环境。",
-  },
 ];
 
 const HIDDEN_SYSTEM_ENTRY_OPTIONS: HiddenSystemEntryOption[] = [
@@ -211,22 +206,17 @@ function resolveThemeLabel(theme: LimeThemeMode) {
   return THEME_OPTIONS.find((option) => option.id === theme)?.label || "系统";
 }
 
-function resolveLanguageLabel(language: Language) {
-  return (
-    LANGUAGE_OPTIONS.find((option) => option.id === language)?.label || "中文"
-  );
-}
-
 function resolveColorSchemeLabel(colorSchemeId: LimeColorSchemeId) {
   return getLimeColorScheme(colorSchemeId).label;
 }
 
 export function AppearanceSettings() {
+  const { t } = useTranslation("settings");
   const [loading, setLoading] = useState(true);
   const [theme, setTheme] = useState<LimeThemeMode>("system");
   const [colorSchemeId, setColorSchemeId] =
     useState<LimeColorSchemeId>("lime-classic");
-  const [language, setLanguageState] = useState<Language>("zh");
+  const [language, setLanguageState] = useState<LocalePreference>("zh-CN");
   const [
     appendSelectedTextToRecommendation,
     setAppendSelectedTextToRecommendation,
@@ -246,7 +236,7 @@ export function AppearanceSettings() {
     try {
       const loadedConfig = await getConfig();
       setConfig(loadedConfig);
-      setLanguageState((loadedConfig.language || "zh") as Language);
+      setLanguageState(normalizeLocalePreference(loadedConfig.language));
       setAppendSelectedTextToRecommendation(
         loadedConfig.chat_appearance?.append_selected_text_to_recommendation ??
           true,
@@ -314,7 +304,7 @@ export function AppearanceSettings() {
     () => ({
       themeLabel: resolveThemeLabel(theme),
       colorSchemeLabel: resolveColorSchemeLabel(colorSchemeId),
-      languageLabel: resolveLanguageLabel(language),
+      languageLabel: resolveLocaleOptionLabel(language),
       soundsLabel: soundEnabled ? "已开启" : "已关闭",
     }),
     [colorSchemeId, language, soundEnabled, theme],
@@ -326,6 +316,16 @@ export function AppearanceSettings() {
   );
 
   const hiddenSystemEntryCount = enabledNavigationItems.length;
+
+  const languageOptions = useMemo<LanguageOption[]>(
+    () =>
+      UI_LOCALE_OPTIONS.map((option) => ({
+        id: option.id,
+        label: option.label,
+        hint: t(option.hintKey, option.fallbackHint),
+      })),
+    [t],
+  );
 
   const handleThemeChange = useCallback((nextTheme: LimeThemeMode) => {
     const resolvedTheme = persistLimeThemeMode(nextTheme);
@@ -351,7 +351,7 @@ export function AppearanceSettings() {
   }, [colorSchemeId, handleColorSchemeChange]);
 
   const handleLanguageChange = useCallback(
-    async (nextLanguage: Language) => {
+    async (nextLanguage: LocalePreference) => {
       if (!config) {
         return;
       }
@@ -366,15 +366,17 @@ export function AppearanceSettings() {
       setError(null);
       setConfig(nextConfig);
       setLanguageState(nextLanguage);
-      setI18nLanguage(nextLanguage);
+      setI18nLanguage(toLegacyPatchLanguage(nextLanguage));
 
       try {
+        await changeLimeLocale(nextLanguage);
         await saveConfig(nextConfig);
       } catch (err) {
         console.error("保存语言设置失败:", err);
         setConfig(previousConfig);
         setLanguageState(previousLanguage);
-        setI18nLanguage(previousLanguage);
+        setI18nLanguage(toLegacyPatchLanguage(previousLanguage));
+        await changeLimeLocale(previousLanguage);
         setError("保存语言设置失败，请重试。");
       }
     },
@@ -684,23 +686,35 @@ export function AppearanceSettings() {
                   <div>
                     <div className="flex items-center gap-2">
                       <h3 className="text-sm font-semibold text-slate-900">
-                        界面语言
+                        {t(
+                          "settings.appearance.language.title",
+                          "界面语言",
+                        )}
                       </h3>
                       <WorkbenchInfoTip
-                        ariaLabel="界面语言说明"
-                        content="切换设置、工作区与提示文案的主要显示语言。"
+                        ariaLabel={`${t(
+                          "settings.appearance.language.title",
+                          "界面语言",
+                        )}说明`}
+                        content={t(
+                          "settings.appearance.language.tip",
+                          "切换设置、工作区与提示文案的主要显示语言。",
+                        )}
                         tone="slate"
                       />
                     </div>
                   </div>
                 </div>
                 <span className={CURRENT_SUCCESS_PILL_CLASS}>
-                  当前：{resolveLanguageLabel(language)}
+                  {t("settings.appearance.language.current", {
+                    language: resolveLocaleOptionLabel(language),
+                    defaultValue: "当前：{{language}}",
+                  })}
                 </span>
               </div>
 
               <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                {LANGUAGE_OPTIONS.map((option) => {
+                {languageOptions.map((option) => {
                   const active = language === option.id;
                   return (
                     <button

@@ -242,7 +242,7 @@ describe("TaskCenterTabStrip", () => {
     ).toBeTruthy();
   });
 
-  it("应从 conversationProjectionStore.agentUi 展示任务级标准投影提示", () => {
+  it("不应在会话标签暴露 Agent UI 投影计数", () => {
     conversationProjectionStore.recordAgentUiProjectionEvents([
       {
         type: "task.changed",
@@ -282,11 +282,8 @@ describe("TaskCenterTabStrip", () => {
     const projectionBadge = container.querySelector(
       '[data-testid="task-center-tab-agentui-topic-a"]',
     ) as HTMLElement | null;
-    expect(projectionBadge).not.toBeNull();
-    expect(projectionBadge?.textContent).toContain("AgentUI 1");
-    expect(projectionBadge?.getAttribute("title")).toContain(
-      "AgentUI 投影 1 条",
-    );
+    expect(projectionBadge).toBeNull();
+    expect(container.textContent).not.toContain("AgentUI");
     expect(
       container.querySelector('[data-testid="task-center-tab-agentui-topic-b"]'),
     ).toBeNull();

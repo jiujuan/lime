@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, ExternalLink } from "lucide-react";
 import { open as openExternal } from "@tauri-apps/plugin-shell";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { getClipboardPermissionGuide } from "@/lib/crashDiagnostic";
 
@@ -11,12 +12,104 @@ interface ClipboardPermissionGuideCardProps {
 export function ClipboardPermissionGuideCard({
   className,
 }: ClipboardPermissionGuideCardProps) {
+  const { t } = useTranslation("settings");
   const [openError, setOpenError] = useState<string | null>(null);
 
   const guide = useMemo(
     () => getClipboardPermissionGuide(navigator.platform, navigator.userAgent),
     [],
   );
+  const guideText = useMemo(() => {
+    if (guide.platform === "macos") {
+      return {
+        title: t(
+          "settings.system.clipboardPermission.macos.title",
+          guide.title,
+        ),
+        steps: [
+          t(
+            "settings.system.clipboardPermission.macos.step1",
+            guide.steps[0] ?? "",
+          ),
+          t(
+            "settings.system.clipboardPermission.macos.step2",
+            guide.steps[1] ?? "",
+          ),
+          t(
+            "settings.system.clipboardPermission.macos.step3",
+            guide.steps[2] ?? "",
+          ),
+        ],
+      };
+    }
+
+    if (guide.platform === "windows") {
+      return {
+        title: t(
+          "settings.system.clipboardPermission.windows.title",
+          guide.title,
+        ),
+        steps: [
+          t(
+            "settings.system.clipboardPermission.windows.step1",
+            guide.steps[0] ?? "",
+          ),
+          t(
+            "settings.system.clipboardPermission.windows.step2",
+            guide.steps[1] ?? "",
+          ),
+          t(
+            "settings.system.clipboardPermission.windows.step3",
+            guide.steps[2] ?? "",
+          ),
+        ],
+      };
+    }
+
+    if (guide.platform === "linux") {
+      return {
+        title: t(
+          "settings.system.clipboardPermission.linux.title",
+          guide.title,
+        ),
+        steps: [
+          t(
+            "settings.system.clipboardPermission.linux.step1",
+            guide.steps[0] ?? "",
+          ),
+          t(
+            "settings.system.clipboardPermission.linux.step2",
+            guide.steps[1] ?? "",
+          ),
+          t(
+            "settings.system.clipboardPermission.linux.step3",
+            guide.steps[2] ?? "",
+          ),
+        ],
+      };
+    }
+
+    return {
+      title: t(
+        "settings.system.clipboardPermission.generic.title",
+        guide.title,
+      ),
+      steps: [
+        t(
+          "settings.system.clipboardPermission.generic.step1",
+          guide.steps[0] ?? "",
+        ),
+        t(
+          "settings.system.clipboardPermission.generic.step2",
+          guide.steps[1] ?? "",
+        ),
+        t(
+          "settings.system.clipboardPermission.generic.step3",
+          guide.steps[2] ?? "",
+        ),
+      ],
+    };
+  }, [guide, t]);
 
   const handleOpenSettings = async () => {
     if (!guide.settingsUrl) return;
@@ -28,7 +121,12 @@ export function ClipboardPermissionGuideCard({
         window.open(guide.settingsUrl, "_blank");
       } catch {
         setOpenError(
-          error instanceof Error ? error.message : "打开系统设置失败",
+          error instanceof Error
+            ? error.message
+            : t(
+                "settings.system.clipboardPermission.message.openSettingsFailed",
+                "打开系统设置失败",
+              ),
         );
       }
     }
@@ -45,10 +143,10 @@ export function ClipboardPermissionGuideCard({
         <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
         <div className="min-w-0 flex-1 space-y-2">
           <p className="font-medium text-amber-900 dark:text-amber-300">
-            {guide.title}
+            {guideText.title}
           </p>
           <ol className="list-decimal space-y-1 pl-4 text-amber-800 dark:text-amber-400">
-            {guide.steps.map((step) => (
+            {guideText.steps.map((step) => (
               <li key={step}>{step}</li>
             ))}
           </ol>
@@ -58,13 +156,22 @@ export function ClipboardPermissionGuideCard({
               onClick={() => void handleOpenSettings()}
               className="inline-flex items-center gap-1 rounded-md border border-amber-300 px-2.5 py-1 text-xs text-amber-900 transition-colors hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900/40"
             >
-              打开系统设置
+              {t(
+                "settings.system.clipboardPermission.action.openSettings",
+                "打开系统设置",
+              )}
               <ExternalLink className="h-3.5 w-3.5" />
             </button>
           )}
           {openError && (
             <p className="text-xs text-destructive">
-              打开系统设置失败：{openError}
+              {t(
+                "settings.system.clipboardPermission.message.openSettingsFailedWithMessage",
+                {
+                  message: openError,
+                  defaultValue: "打开系统设置失败：{{message}}",
+                },
+              )}
             </p>
           )}
         </div>

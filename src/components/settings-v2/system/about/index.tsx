@@ -19,7 +19,7 @@ const SECONDARY_ACTION_BUTTON_CLASS =
   "inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50";
 
 export function AboutSection() {
-  const { t } = useTranslation();
+  const { t } = useTranslation("settings");
   const [versionInfo, setVersionInfo] = useState<VersionInfo>({
     current: "",
     latest: undefined,
@@ -98,7 +98,7 @@ export function AboutSection() {
           setDownloadResult({
             ...result,
             message: t(
-              "更新已安装，应用将自动重启以完成升级",
+              "settings.about.update.installedRestart",
               "更新已安装，应用将自动重启以完成升级",
             ),
           });
@@ -107,14 +107,20 @@ export function AboutSection() {
         console.error("Download failed:", result.message);
         setDownloadResult({
           ...result,
-          message: t(FRIENDLY_DOWNLOAD_ERROR, FRIENDLY_DOWNLOAD_ERROR),
+          message: t(
+            "settings.about.update.errorDownload",
+            FRIENDLY_DOWNLOAD_ERROR,
+          ),
         });
       }
     } catch (error) {
       console.error("Failed to download update:", error);
       setDownloadResult({
         success: false,
-        message: t(FRIENDLY_DOWNLOAD_ERROR, FRIENDLY_DOWNLOAD_ERROR),
+        message: t(
+          "settings.about.update.errorDownload",
+          FRIENDLY_DOWNLOAD_ERROR,
+        ),
         filePath: undefined,
       });
     } finally {
@@ -122,16 +128,17 @@ export function AboutSection() {
     }
   };
 
-  const versionLabel = t("Version {{version}} ({{build}})", {
-    version: versionInfo.current || t("读取中", "读取中"),
-    build: versionInfo.current || t("读取中", "读取中"),
+  const versionLabel = t("settings.about.version.label", {
+    version:
+      versionInfo.current || t("settings.about.version.loading", "读取中"),
+    build: versionInfo.current || t("settings.about.version.loading", "读取中"),
     defaultValue: "Version {{version}} ({{build}})",
   });
 
   const updateStatus = useMemo(() => {
     if (versionInfo.hasUpdate) {
       return {
-        label: t("可更新到 {{version}}", {
+        label: t("settings.about.status.updateAvailable", {
           version: versionInfo.latest ?? "",
           defaultValue: "可更新到 {{version}}",
         }),
@@ -141,20 +148,20 @@ export function AboutSection() {
 
     if (versionInfo.error) {
       return {
-        label: t(FRIENDLY_UPDATE_ERROR, FRIENDLY_UPDATE_ERROR),
+        label: t("settings.about.update.errorCheck", FRIENDLY_UPDATE_ERROR),
         className: "border-amber-200 bg-amber-50 text-amber-700",
       };
     }
 
     if (versionInfo.latest) {
       return {
-        label: t("当前已是最新版本", "当前已是最新版本"),
+        label: t("settings.about.status.latest", "当前已是最新版本"),
         className: "border-slate-200 bg-slate-100 text-slate-600",
       };
     }
 
     return {
-      label: t("可手动检查更新", "可手动检查更新"),
+      label: t("settings.about.status.manualCheck", "可手动检查更新"),
       className: "border-sky-200 bg-sky-50 text-sky-700",
     };
   }, [t, versionInfo.error, versionInfo.hasUpdate, versionInfo.latest]);
@@ -175,7 +182,7 @@ export function AboutSection() {
         </h2>
         <p className="mt-3 text-base text-slate-700">{versionLabel}</p>
         <p className="mt-2 text-sm text-slate-500">
-          {t("Copyright © 2026 {{brand}}", {
+          {t("settings.about.copyright", {
             brand: LIME_BRAND_NAME,
             defaultValue: "Copyright © 2026 {{brand}}",
           })}
@@ -200,7 +207,7 @@ export function AboutSection() {
             className={SECONDARY_ACTION_BUTTON_CLASS}
           >
             <RefreshCw className={cn("h-4 w-4", checking && "animate-spin")} />
-            {t("检查更新", "检查更新")}
+            {t("settings.about.action.check", "检查更新")}
           </button>
 
           {versionInfo.hasUpdate ? (
@@ -215,8 +222,8 @@ export function AboutSection() {
                   className={cn("h-4 w-4", downloading && "animate-spin")}
                 />
                 {downloading
-                  ? t("下载中...", "下载中...")
-                  : t("下载更新", "下载更新")}
+                  ? t("settings.about.action.downloading", "下载中...")
+                  : t("settings.about.action.download", "下载更新")}
               </button>
               <a
                 href={manualDownloadUrl}
@@ -225,7 +232,7 @@ export function AboutSection() {
                 className={SECONDARY_ACTION_BUTTON_CLASS}
               >
                 <ExternalLink className="h-4 w-4" />
-                {t("网页下载", "网页下载")}
+                {t("settings.about.action.webDownload", "网页下载")}
               </a>
             </>
           ) : null}
@@ -234,7 +241,7 @@ export function AboutSection() {
         {isWindows ? (
           <p className="mx-auto mt-4 max-w-[420px] text-xs leading-5 text-slate-500">
             {t(
-              "Windows 仅提供单一 setup 安装包；需要手动升级或重装时，可直接使用网页下载页中的最新版。",
+              "settings.about.windowsSetupNotice",
               "Windows 仅提供单一 setup 安装包；需要手动升级或重装时，可直接使用网页下载页中的最新版。",
             )}
           </p>
@@ -261,7 +268,7 @@ export function AboutSection() {
                     className="mt-2 inline-flex items-center gap-1 underline hover:no-underline"
                   >
                     <ExternalLink className="h-3 w-3" />
-                    {t("前往网页下载", "前往网页下载")}
+                    {t("settings.about.action.openWebDownload", "前往网页下载")}
                   </a>
                 ) : null}
               </div>

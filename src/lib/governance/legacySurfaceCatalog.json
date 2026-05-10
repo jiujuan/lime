@@ -1499,10 +1499,15 @@
     {
       "id": "i18n-dynamic-template-legacy-surface",
       "classification": "dead-candidate",
-      "description": "已删除的零入口 i18n barrel 与动态模板翻译层，当前前端只保留 Patch Layer 子路径导入与现役翻译运行时",
+      "description": "已删除的零入口 i18n barrel、动态模板翻译层与根层 Patch Layer 文件，当前前端只保留 legacy-patch 子路径兼容导入与现役 key-based 翻译运行时",
       "targets": [
         "src/i18n/index.ts",
-        "src/i18n/dynamic-translation.ts"
+        "src/i18n/dynamic-translation.ts",
+        "src/i18n/I18nPatchProvider.tsx",
+        "src/i18n/dom-replacer.ts",
+        "src/i18n/text-map.ts",
+        "src/i18n/patches/en.json",
+        "src/i18n/patches/zh.json"
       ],
       "allowedPaths": []
     },

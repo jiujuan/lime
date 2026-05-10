@@ -53,4 +53,22 @@ describe("installedSkillPresentation", () => {
       }),
     ).toBe("需要：对话里继续补充目标与约束 · 交付：带着该 Skill 进入生成");
   });
+
+  it("允许调用方注入本地化兜底文案", () => {
+    const skill = createSkill({ description: "" });
+
+    expect(
+      buildInstalledSkillCapabilityDescription(skill, {
+        copy: {
+          defaultPromise: "Reuse this local Skill when it fits.",
+          fallbackRequiredInputs: "Goal and constraints",
+          fallbackOutputHint: "Continue in Generate",
+          requiredPrefix: "Needs: ",
+          outputPrefix: "Delivers: ",
+        },
+      }),
+    ).toBe(
+      "Reuse this local Skill when it fits. · Needs: Goal and constraints · Delivers: Continue in Generate",
+    );
+  });
 });

@@ -83,6 +83,11 @@ describe("mockPriorityCommands", () => {
     expect(
       shouldDisallowMockFallbackInBrowser("agent_runtime_update_session"),
     ).toBe(true);
+    expect(shouldDisallowMockFallbackInBrowser("list_executable_skills")).toBe(
+      true,
+    );
+    expect(shouldDisallowMockFallbackInBrowser("get_skill_detail")).toBe(true);
+    expect(shouldDisallowMockFallbackInBrowser("execute_skill")).toBe(true);
     expect(
       shouldDisallowMockFallbackInBrowser("sceneapp_create_automation_job"),
     ).toBe(true);

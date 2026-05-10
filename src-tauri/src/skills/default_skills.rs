@@ -782,11 +782,10 @@ mod tests {
         assert!(TRANSCRIPTION_GENERATE_SKILL_CONTENT.contains("name: transcription_generate"));
         assert!(BROADCAST_GENERATE_SKILL_CONTENT.contains("name: broadcast_generate"));
         assert!(COVER_GENERATE_SKILL_CONTENT.contains("name: cover_generate"));
-        assert!(COVER_GENERATE_SKILL_CONTENT.contains(
-            "allowed-tools: social_generate_cover_image, Bash, lime_create_cover_generation_task"
-        ));
         assert!(COVER_GENERATE_SKILL_CONTENT
-            .contains("优先调用 `Bash` 执行 `lime task create cover --json` 创建任务"));
+            .contains("allowed-tools: lime_create_cover_generation_task"));
+        assert!(COVER_GENERATE_SKILL_CONTENT
+            .contains("必须直接调用 `lime_create_cover_generation_task` 创建真实封面任务记录"));
         assert!(MODAL_RESOURCE_SEARCH_SKILL_CONTENT.contains("name: modal_resource_search"));
         assert!(IMAGE_GENERATE_SKILL_CONTENT.contains("name: image_generate"));
         assert!(IMAGE_GENERATE_SKILL_CONTENT

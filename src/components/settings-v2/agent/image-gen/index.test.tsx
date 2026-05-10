@@ -2,14 +2,36 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockGetConfig, mockSaveConfig } = vi.hoisted(() => ({
+const { mockGetConfig, mockSaveConfig, mockUseTranslation } = vi.hoisted(() => ({
   mockGetConfig: vi.fn(),
   mockSaveConfig: vi.fn(),
+  mockUseTranslation: vi.fn((_namespace?: string) => ({
+    t: (key: string, options?: unknown) => {
+      if (typeof options === "string") {
+        return options;
+      }
+
+      if (options && typeof options === "object") {
+        const values = options as Record<string, unknown>;
+        const template =
+          typeof values.defaultValue === "string" ? values.defaultValue : key;
+        return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+          String(values[name] ?? ""),
+        );
+      }
+
+      return key;
+    },
+  })),
 }));
 
 vi.mock("@/lib/api/appConfig", () => ({
   getConfig: mockGetConfig,
   saveConfig: mockSaveConfig,
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
 }));
 
 vi.mock("@/components/input-kit", () => ({
@@ -218,6 +240,7 @@ describe("ImageGenSettings", () => {
     const container = renderComponent();
     await flushEffects(3);
 
+    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
     expect(container.textContent).toContain("图片服务模型");
     expect(container.textContent).toContain("Relay OpenAI");
     expect(container.textContent).toContain("gpt-images-2");

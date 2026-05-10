@@ -2,9 +2,31 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockUseComponentDebug } = vi.hoisted(() => ({
-  mockUseComponentDebug: vi.fn(),
-}));
+const { mockUseComponentDebug, mockUseTranslation } = vi.hoisted(() => {
+  const mockTranslate = vi.fn((key: string, options?: unknown) => {
+    if (typeof options === "string") {
+      return options;
+    }
+
+    if (options && typeof options === "object") {
+      const values = options as Record<string, unknown>;
+      const template =
+        typeof values.defaultValue === "string" ? values.defaultValue : key;
+      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+        String(values[name] ?? ""),
+      );
+    }
+
+    return key;
+  });
+
+  return {
+    mockUseComponentDebug: vi.fn(),
+    mockUseTranslation: vi.fn((_namespace?: string) => ({
+      t: mockTranslate,
+    })),
+  };
+});
 
 const { mockGetConfig, mockSaveConfig } = vi.hoisted(() => ({
   mockGetConfig: vi.fn(),
@@ -92,6 +114,10 @@ const {
 
 vi.mock("@/contexts/ComponentDebugContext", () => ({
   useComponentDebug: mockUseComponentDebug,
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
 }));
 
 vi.mock("@/lib/api/appConfig", () => ({
@@ -439,6 +465,7 @@ describe("DeveloperSettings", () => {
     expect(text).toContain("诊断日志");
     expect(text).toContain("Workspace 自愈记录");
     expect(text).toContain("自愈记录卡片占位");
+    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
   });
 
   it("应移除开发页冗余说明卡片和提示噪音", async () => {

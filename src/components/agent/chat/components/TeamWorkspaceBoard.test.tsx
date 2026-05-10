@@ -712,10 +712,11 @@ describe("TeamWorkspaceBoard", () => {
       "页面已刷新为最新状态并生成差异截图。",
     );
 
-    const returnButton = Array.from(container.querySelectorAll("button")).find(
-      (element) => element.textContent?.includes("返回主助手"),
+    const returnButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="team-workspace-return-parent"]',
     );
     expect(returnButton).toBeTruthy();
+    expect(returnButton?.textContent).toContain("返回主助手");
 
     act(() => {
       returnButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));

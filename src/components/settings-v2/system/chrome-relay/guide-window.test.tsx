@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  mockUseTranslation,
   mockOpenDialog,
   mockOpenPathWithDefaultApp,
   mockGetBrowserConnectorSettings,
@@ -15,19 +16,43 @@ const {
   mockOpenBrowserRemoteDebuggingPage,
   mockOpenBrowserConnectorGuideWindowCommand,
   mockHasTauriInvokeCapability,
-} = vi.hoisted(() => ({
-  mockOpenDialog: vi.fn(),
-  mockOpenPathWithDefaultApp: vi.fn(),
-  mockGetBrowserConnectorSettings: vi.fn(),
-  mockGetBrowserConnectorInstallStatus: vi.fn(),
-  mockGetChromeBridgeStatus: vi.fn(),
-  mockGetBrowserBackendsStatus: vi.fn(),
-  mockInstallBrowserConnectorExtension: vi.fn(),
-  mockSetBrowserConnectorInstallRoot: vi.fn(),
-  mockOpenBrowserExtensionsPage: vi.fn(),
-  mockOpenBrowserRemoteDebuggingPage: vi.fn(),
-  mockOpenBrowserConnectorGuideWindowCommand: vi.fn(),
-  mockHasTauriInvokeCapability: vi.fn(),
+} = vi.hoisted(() => {
+  const mockTranslate = vi.fn((key: string, options?: unknown) => {
+    if (typeof options === "string") return options;
+
+    if (options && typeof options === "object") {
+      const values = options as Record<string, unknown>;
+      const template =
+        typeof values.defaultValue === "string" ? values.defaultValue : key;
+      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+        String(values[name] ?? ""),
+      );
+    }
+
+    return key;
+  });
+
+  return {
+    mockUseTranslation: vi.fn((_namespace?: string) => ({
+      t: mockTranslate,
+    })),
+    mockOpenDialog: vi.fn(),
+    mockOpenPathWithDefaultApp: vi.fn(),
+    mockGetBrowserConnectorSettings: vi.fn(),
+    mockGetBrowserConnectorInstallStatus: vi.fn(),
+    mockGetChromeBridgeStatus: vi.fn(),
+    mockGetBrowserBackendsStatus: vi.fn(),
+    mockInstallBrowserConnectorExtension: vi.fn(),
+    mockSetBrowserConnectorInstallRoot: vi.fn(),
+    mockOpenBrowserExtensionsPage: vi.fn(),
+    mockOpenBrowserRemoteDebuggingPage: vi.fn(),
+    mockOpenBrowserConnectorGuideWindowCommand: vi.fn(),
+    mockHasTauriInvokeCapability: vi.fn(),
+  };
+});
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
 }));
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({

@@ -4,6 +4,7 @@ import {
   buildAgentFastResponseMetadata,
   buildAgentFastResponseSystemPrompt,
   resolveAgentFastResponseModel,
+  resolveAgentFastResponseSearchMode,
   shouldUseAgentFastResponseSelection,
 } from "./fastResponseModel";
 
@@ -107,14 +108,41 @@ describe("resolveAgentFastResponseModel", () => {
     ).toBe("explicit-model-override");
   });
 
-  it("工具能力、上下文和历史续聊不应进入快速响应", () => {
+  it("联网搜索 allowed 只提供候选能力，不应靠文本关键词禁用快速响应", () => {
+    const decision = resolveAgentFastResponseModel({
+      ...baseOptions,
+      effectiveWebSearch: true,
+      toolPreferences: {
+        ...baseOptions.toolPreferences,
+        webSearch: true,
+      },
+      sourceText: "请搜索最新 AI 新闻，并用一句话回答",
+    });
+
+    expect(decision.enabled).toBe(true);
+    expect(decision.searchMode).toBe("allowed");
+  });
+
+  it("只有显式 required 搜索模式才应禁用快速响应", () => {
     expect(
       resolveAgentFastResponseModel({
         ...baseOptions,
         effectiveWebSearch: true,
+        searchMode: "required",
+        sourceText: "查一下今天的汇率",
       }).reason,
     ).toBe("heavy-capability-enabled");
 
+    expect(
+      resolveAgentFastResponseSearchMode({
+        searchMode: "required",
+        effectiveWebSearch: true,
+        toolPreferences: baseOptions.toolPreferences,
+      }),
+    ).toBe("required");
+  });
+
+  it("上下文和历史续聊不应进入快速响应", () => {
     expect(
       resolveAgentFastResponseModel({
         ...baseOptions,
@@ -257,6 +285,18 @@ describe("resolveAgentFastResponseModel", () => {
     expect(prompt).toContain("快速响应助手");
     expect(prompt).toContain("只输出一个字");
     expect(prompt).toContain("不主动联网");
+    expect(prompt.length).toBeLessThan(260);
+  });
+
+  it("联网搜索 allowed 时系统提示词应交给模型按需决定是否使用工具", () => {
+    const prompt = buildAgentFastResponseSystemPrompt(
+      new Date("2026-05-01T00:00:00Z"),
+      { searchMode: "allowed" },
+    );
+
+    expect(prompt).toContain("联网搜索只是候选能力");
+    expect(prompt).toContain("需要实时或外部证据时再用工具");
+    expect(prompt).not.toContain("不主动联网");
     expect(prompt.length).toBeLessThan(260);
   });
 });

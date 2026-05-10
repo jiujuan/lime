@@ -47,6 +47,12 @@ const SEEDED_SERVICE_SKILL_PACKAGE: BaseSetupPackage = {
       kind: "skill_bundle",
     },
     {
+      id: "story-video-suite-bundle",
+      source: "builtin",
+      pathOrUri: "seeded://service-skills/story-video-suite",
+      kind: "skill_bundle",
+    },
+    {
       id: "cloud-video-dubbing-bundle",
       source: "builtin",
       pathOrUri: "seeded://service-skills/cloud-video-dubbing",
@@ -206,7 +212,7 @@ const SEEDED_SERVICE_SKILL_PACKAGE: BaseSetupPackage = {
       bindingProfileRef: "agent-turn-instant",
       artifactProfileRef: "short-video-script-replication-artifact",
       scorecardProfileRef: "seeded-service-skill-scorecard",
-      policyProfileRef: "seeded-all-surfaces",
+      policyProfileRef: "seeded-workspace-only",
       readinessRequirements: {
         requiresModel: true,
         requiresProject: true,
@@ -263,6 +269,56 @@ const SEEDED_SERVICE_SKILL_PACKAGE: BaseSetupPackage = {
         "把这篇公众号文章拆成一个 90 秒 Slide 视频提纲。",
         "按文章内容生成一版适合 Bilibili 讲解视频的分镜结构。",
       ],
+      themeTarget: "general",
+      version: SEEDED_SERVICE_SKILL_CATALOG_VERSION,
+    },
+    {
+      id: "story-video-suite",
+      targetCatalog: "service_skill_catalog",
+      entryKey: "story-video-suite",
+      skillKey: "story-video-suite",
+      skillType: "service",
+      title: "短视频编排",
+      summary:
+        "把活动介绍、脚本、分镜、配乐和发布节奏串成一版可继续加工的短视频执行稿。",
+      entryHint:
+        "输入活动、产品或文章素材，我会先拆短视频结构，再补镜头、字幕、配乐和执行顺序。",
+      aliases: ["story-video", "mv-pipeline", "短视频编排", "短视频套件"],
+      category: "视频创作",
+      outputHint: "短视频结构 + 分镜 + 执行清单",
+      triggerHints: [
+        "只有活动或内容素材，还没有短视频结构时使用。",
+        "需要把文案、分镜、字幕、配乐和剪辑顺序先串成一版执行稿时使用。",
+      ],
+      bundleRefId: "story-video-suite-bundle",
+      slotProfileRef: "story-video-suite-slots",
+      bindingProfileRef: "agent-turn-instant",
+      artifactProfileRef: "story-video-suite-artifact",
+      scorecardProfileRef: "seeded-service-skill-scorecard",
+      policyProfileRef: "seeded-workspace-only",
+      readinessRequirements: {
+        requiresModel: true,
+        requiresProject: true,
+      },
+      usageGuidelines: [
+        "先输出可执行结构，不直接伪造视频生成结果。",
+        "如果已有目标平台、时长或素材限制，应在命令中一并写清楚。",
+      ],
+      setupRequirements: [
+        "需要已选择可用模型。",
+        "建议在视频项目内启动，方便执行稿继续沉淀到当前工作区。",
+      ],
+      examples: [
+        "把这个城市露营咖啡节活动介绍编排成 60 秒短视频脚本。",
+        "按小红书风格，把这段新品发布文案改成镜头化短视频执行稿。",
+      ],
+      sceneBinding: {
+        sceneKey: "story-video-suite",
+        commandPrefix: "/story-video-suite",
+        title: "短视频编排",
+        summary: "把文本、分镜、配乐和短视频执行步骤串成一条本地场景链。",
+        aliases: ["story-video", "mv-pipeline", "短视频编排", "短视频套件"],
+      },
       themeTarget: "general",
       version: SEEDED_SERVICE_SKILL_CATALOG_VERSION,
     },
@@ -1098,6 +1154,35 @@ const SEEDED_SERVICE_SKILL_PACKAGE: BaseSetupPackage = {
       ],
     },
     {
+      id: "story-video-suite-slots",
+      slots: [
+        {
+          key: "source_material",
+          label: "活动 / 内容素材",
+          type: "textarea",
+          required: true,
+          placeholder: "粘贴活动介绍、产品卖点、文章摘要或脚本素材",
+        },
+        {
+          key: "target_duration",
+          label: "目标时长",
+          type: "text",
+          required: false,
+          defaultValue: "45-60 秒",
+          placeholder: "例如 30 秒、45-60 秒、90 秒",
+        },
+        {
+          key: "platform",
+          label: "发布平台",
+          type: "platform",
+          required: false,
+          defaultValue: "douyin",
+          placeholder: "选择发布平台",
+          options: [...PLATFORM_OPTIONS],
+        },
+      ],
+    },
+    {
       id: "cloud-video-dubbing-slots",
       slots: [
         {
@@ -1305,6 +1390,15 @@ const SEEDED_SERVICE_SKILL_PACKAGE: BaseSetupPackage = {
       defaultArtifactKind: "analysis",
       outputDestination:
         "结果会写回当前工作区中的提纲文档，方便继续补正文和分镜。",
+    },
+    {
+      id: "story-video-suite-artifact",
+      deliveryContract: "artifact_bundle",
+      requiredParts: ["index.md"],
+      viewerKind: "artifact_bundle",
+      defaultArtifactKind: "brief",
+      outputDestination:
+        "短视频执行稿会写回当前工作区，方便继续补素材、分镜、字幕和剪辑清单。",
     },
     {
       id: "cloud-video-dubbing-artifact",

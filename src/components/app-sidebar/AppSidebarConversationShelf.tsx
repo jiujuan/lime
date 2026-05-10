@@ -7,6 +7,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import styled from "styled-components";
+import { useTranslation } from "react-i18next";
 import {
   Archive,
   Check,
@@ -503,6 +504,32 @@ export function AppSidebarConversationShelf({
   onShowMoreArchived,
   onToggleArchivedCollapsed,
 }: AppSidebarConversationShelfProps) {
+  const { t, i18n } = useTranslation("navigation");
+  const conversationUntitledLabel = t(
+    "navigation.sidebar.conversations.untitled",
+    "未命名对话",
+  );
+  const resolveLocalizedSessionTitle = useCallback(
+    (session: AsterSessionInfo) =>
+      resolveSidebarSessionTitle(session, conversationUntitledLabel),
+    [conversationUntitledLabel],
+  );
+  const formatArchivedConversationMeta = useCallback(
+    (time: string) =>
+      t("navigation.sidebar.conversations.meta.archived", {
+        time,
+        defaultValue: "归档 {{time}}",
+      }),
+    [t],
+  );
+  const formatLocalizedSessionMeta = useCallback(
+    (session: AsterSessionInfo) =>
+      formatSidebarSessionMeta(session, {
+        formatArchived: formatArchivedConversationMeta,
+        locale: i18n.language,
+      }),
+    [formatArchivedConversationMeta, i18n.language],
+  );
   const [menuState, setMenuState] = useState<ConversationMenuState>(null);
   const [favoriteSessionIds, setFavoriteSessionIds] = useState<string[]>(
     loadFavoriteSessionIds,
@@ -655,6 +682,80 @@ export function AppSidebarConversationShelf({
     action();
   }, []);
 
+  const recentTitleLabel = t(
+    "navigation.sidebar.conversations.recentTitle",
+    "最近对话",
+  );
+  const newConversationLabel = t(
+    "navigation.sidebar.conversations.newConversation",
+    "新建对话",
+  );
+  const loadingRecentLabel = t(
+    "navigation.sidebar.conversations.loadingRecent",
+    "正在加载对话",
+  );
+  const emptyRecentLabel = t(
+    "navigation.sidebar.conversations.emptyRecent",
+    "还没有开始对话",
+  );
+  const moreRecentLabel = t(
+    "navigation.sidebar.conversations.moreRecent",
+    "查看更多对话",
+  );
+  const archivedTitleLabel = t(
+    "navigation.sidebar.conversations.archivedTitle",
+    "归档",
+  );
+  const loadingArchivedLabel = t(
+    "navigation.sidebar.conversations.loadingArchived",
+    "正在加载归档",
+  );
+  const emptyArchivedLabel = t(
+    "navigation.sidebar.conversations.emptyArchived",
+    "暂无归档内容",
+  );
+  const moreArchivedLabel = t(
+    "navigation.sidebar.conversations.moreArchived",
+    "查看更多归档",
+  );
+  const favoriteBadgeLabel = t(
+    "navigation.sidebar.conversations.favoriteBadge",
+    "已收藏",
+  );
+  const moreActionsLabel = t(
+    "navigation.sidebar.conversations.moreActions",
+    "更多操作",
+  );
+  const renameActionLabel = t(
+    "navigation.sidebar.conversations.menu.rename",
+    "重命名",
+  );
+  const favoriteActionLabel = t(
+    "navigation.sidebar.conversations.menu.favorite",
+    "收藏",
+  );
+  const unfavoriteActionLabel = t(
+    "navigation.sidebar.conversations.menu.unfavorite",
+    "取消收藏",
+  );
+  const archiveActionLabel = t(
+    "navigation.sidebar.conversations.menu.archive",
+    "归档",
+  );
+  const restoreActionLabel = t(
+    "navigation.sidebar.conversations.menu.restore",
+    "恢复",
+  );
+  const multiselectActionLabel = t(
+    "navigation.sidebar.conversations.menu.multiselect",
+    "多选",
+  );
+  const deleteActionLabel = t(
+    "navigation.sidebar.conversations.menu.delete",
+    "删除",
+  );
+  const doneLabel = t("navigation.sidebar.conversations.done", "完成");
+
   useEffect(() => {
     if (!multiSelectMode || typeof window === "undefined") {
       return;
@@ -678,15 +779,18 @@ export function AppSidebarConversationShelf({
     }
 
     const { session, archived, top, left } = menuState;
-    const title = resolveSidebarSessionTitle(session);
+    const title = resolveLocalizedSessionTitle(session);
     const favorite = favoriteSessionIds.includes(session.id);
-    const archiveLabel = archived ? "恢复" : "归档";
+    const archiveLabel = archived ? restoreActionLabel : archiveActionLabel;
     const ArchiveIcon = archived ? Undo2 : Archive;
 
     return createPortal(
       <ConversationMenuSurface
         role="menu"
-        aria-label={`${title} 操作菜单`}
+        aria-label={t("navigation.sidebar.conversations.menu.ariaLabel", {
+          title,
+          defaultValue: "{{title}} 操作菜单",
+        })}
         style={{ top, left }}
         data-testid="app-sidebar-conversation-menu"
         onClick={(event) => event.stopPropagation()}
@@ -699,7 +803,7 @@ export function AppSidebarConversationShelf({
             onClick={() => runMenuAction(() => onRenameConversation(session))}
           >
             <Pencil />
-            重命名
+            {renameActionLabel}
           </ConversationMenuItem>
         ) : null}
         <ConversationMenuItem
@@ -710,7 +814,7 @@ export function AppSidebarConversationShelf({
           onClick={() => runMenuAction(() => toggleFavoriteSession(session))}
         >
           <Pin />
-          {favorite ? "取消收藏" : "收藏"}
+          {favorite ? unfavoriteActionLabel : favoriteActionLabel}
         </ConversationMenuItem>
         <ConversationMenuItem
           type="button"
@@ -730,7 +834,7 @@ export function AppSidebarConversationShelf({
           onClick={() => runMenuAction(() => enterMultiSelectMode(session))}
         >
           <Check />
-          多选
+          {multiselectActionLabel}
         </ConversationMenuItem>
         {onDeleteConversation ? (
           <ConversationMenuItem
@@ -741,7 +845,7 @@ export function AppSidebarConversationShelf({
             onClick={() => runMenuAction(() => onDeleteConversation(session))}
           >
             <Trash2 />
-            删除
+            {deleteActionLabel}
           </ConversationMenuItem>
         ) : null}
       </ConversationMenuSurface>,
@@ -753,34 +857,37 @@ export function AppSidebarConversationShelf({
     <ConversationShelf data-testid="app-sidebar-conversation-shelf">
       {multiSelectMode ? (
         <ConversationMultiSelectToolbar data-testid="app-sidebar-conversation-multiselect-toolbar">
-          已选择 {selectedSessionIds.size} 个对话
+          {t("navigation.sidebar.conversations.selectedCount", {
+            count: selectedSessionIds.size,
+            defaultValue: "已选择 {{count}} 个对话",
+          })}
           <ConversationMultiSelectDoneButton
             type="button"
             onClick={exitMultiSelectMode}
           >
-            完成
+            {doneLabel}
           </ConversationMultiSelectDoneButton>
         </ConversationMultiSelectToolbar>
       ) : null}
       <ConversationSection>
         <ConversationSectionHeader>
-          <ConversationSectionTitle>最近对话</ConversationSectionTitle>
+          <ConversationSectionTitle>{recentTitleLabel}</ConversationSectionTitle>
           <ConversationActionButton
             type="button"
             onClick={onCreateConversation}
-            aria-label="新建对话"
-            title="新建对话"
+            aria-label={newConversationLabel}
+            title={newConversationLabel}
           >
             <MessageSquarePlus />
           </ConversationActionButton>
         </ConversationSectionHeader>
         <ConversationList data-testid="app-sidebar-recent-conversations">
           {recentLoading
-            ? renderEmptyState("正在加载对话")
+            ? renderEmptyState(loadingRecentLabel)
             : recentSessions.length > 0
               ? recentSessions.map((session) => {
                   const isCurrentConversation = currentSessionId === session.id;
-                  const title = resolveSidebarSessionTitle(session);
+                  const title = resolveLocalizedSessionTitle(session);
                   const favorite = favoriteSessionIds.includes(session.id);
                   const selected = selectedSessionIds.has(session.id);
                   return (
@@ -829,20 +936,26 @@ export function AppSidebarConversationShelf({
                         <ConversationItemLabel>{title}</ConversationItemLabel>
                         {favorite ? (
                           <ConversationFavoriteBadge
-                            title="已收藏"
+                            title={favoriteBadgeLabel}
                             data-testid="app-sidebar-conversation-favorite-badge"
                           >
                             <Pin />
                           </ConversationFavoriteBadge>
                         ) : null}
                         <ConversationItemMeta>
-                          {formatSidebarSessionMeta(session)}
+                          {formatLocalizedSessionMeta(session)}
                         </ConversationItemMeta>
                       </ConversationItemButton>
                       <ConversationItemActionButton
                         type="button"
-                        aria-label={`打开 ${title} 操作菜单`}
-                        title="更多操作"
+                        aria-label={t(
+                          "navigation.sidebar.conversations.openActionMenu",
+                          {
+                            title,
+                            defaultValue: "打开 {{title}} 操作菜单",
+                          },
+                        )}
+                        title={moreActionsLabel}
                         disabled={actionSessionId === session.id}
                         onClick={(event) =>
                           openConversationMenu(event, session, false)
@@ -853,13 +966,13 @@ export function AppSidebarConversationShelf({
                     </ConversationItemRow>
                   );
                 })
-              : renderEmptyState("还没有开始对话")}
+              : renderEmptyState(emptyRecentLabel)}
           {hasMoreRecent ? (
             <ConversationListMoreButton
               type="button"
               onClick={onShowMoreRecent}
             >
-              查看更多对话
+              {moreRecentLabel}
             </ConversationListMoreButton>
           ) : null}
         </ConversationList>
@@ -874,18 +987,18 @@ export function AppSidebarConversationShelf({
             onClick={onToggleArchivedCollapsed}
           >
             <ChevronDown />
-            归档
+            {archivedTitleLabel}
           </ConversationSectionTitleButton>
         </ConversationSectionHeader>
         {!archivedCollapsed ? (
           <ConversationList data-testid="app-sidebar-archived-conversations">
             {archivedLoading
-              ? renderEmptyState("正在加载归档")
+              ? renderEmptyState(loadingArchivedLabel)
               : archivedSessions.length > 0
                 ? archivedSessions.map((session) => {
                     const isCurrentConversation =
                       currentSessionId === session.id;
-                    const title = resolveSidebarSessionTitle(session);
+                    const title = resolveLocalizedSessionTitle(session);
                     const favorite = favoriteSessionIds.includes(session.id);
                     const selected = selectedSessionIds.has(session.id);
                     return (
@@ -934,20 +1047,26 @@ export function AppSidebarConversationShelf({
                           <ConversationItemLabel>{title}</ConversationItemLabel>
                           {favorite ? (
                             <ConversationFavoriteBadge
-                              title="已收藏"
+                              title={favoriteBadgeLabel}
                               data-testid="app-sidebar-conversation-favorite-badge"
                             >
                               <Pin />
                             </ConversationFavoriteBadge>
                           ) : null}
                           <ConversationItemMeta>
-                            {formatSidebarSessionMeta(session)}
+                            {formatLocalizedSessionMeta(session)}
                           </ConversationItemMeta>
                         </ConversationItemButton>
                         <ConversationItemActionButton
                           type="button"
-                          aria-label={`打开 ${title} 操作菜单`}
-                          title="更多操作"
+                          aria-label={t(
+                            "navigation.sidebar.conversations.openActionMenu",
+                            {
+                              title,
+                              defaultValue: "打开 {{title}} 操作菜单",
+                            },
+                          )}
+                          title={moreActionsLabel}
                           disabled={actionSessionId === session.id}
                           onClick={(event) =>
                             openConversationMenu(event, session, true)
@@ -958,13 +1077,13 @@ export function AppSidebarConversationShelf({
                       </ConversationItemRow>
                     );
                   })
-                : renderEmptyState("暂无归档内容")}
+                : renderEmptyState(emptyArchivedLabel)}
             {hasMoreArchived ? (
               <ConversationListMoreButton
                 type="button"
                 onClick={onShowMoreArchived}
               >
-                查看更多归档
+                {moreArchivedLabel}
               </ConversationListMoreButton>
             ) : null}
           </ConversationList>

@@ -42,6 +42,55 @@ fn resolve_artifact_item_source(metadata: Option<&Value>) -> String {
         .unwrap_or_else(|| "artifact_snapshot".to_string())
 }
 
+pub fn abort_running_turn_by_id(
+    db: &DbConnection,
+    thread_id: &str,
+    turn_id: &str,
+    message: &str,
+) -> Result<bool, String> {
+    let normalized_turn_id = turn_id.trim();
+    if thread_id.trim().is_empty() || normalized_turn_id.is_empty() {
+        return Ok(false);
+    }
+
+    let now = Utc::now().to_rfc3339();
+    let conn = lock_db(db)?;
+    let turns = AgentTimelineDao::list_turns_by_thread(&conn, thread_id)
+        .map_err(|e| format!("读取 turn 失败: {e}"))?;
+    let Some(turn) = turns.iter().find(|turn| turn.id == normalized_turn_id) else {
+        return Ok(false);
+    };
+    if !matches!(turn.status, AgentThreadTurnStatus::Running) {
+        return Ok(false);
+    }
+
+    AgentTimelineDao::update_turn_status(
+        &conn,
+        normalized_turn_id,
+        AgentThreadTurnStatus::Aborted,
+        Some(&now),
+        Some(message),
+        &now,
+    )
+    .map_err(|e| format!("更新 turn 中断状态失败: {e}"))?;
+
+    let items = AgentTimelineDao::list_items_by_thread(&conn, thread_id)
+        .map_err(|e| format!("读取 turn item 失败: {e}"))?;
+    for mut item in items
+        .into_iter()
+        .filter(|item| item.turn_id == normalized_turn_id)
+        .filter(|item| matches!(item.status, AgentThreadItemStatus::InProgress))
+    {
+        item.status = AgentThreadItemStatus::Completed;
+        item.completed_at = Some(now.clone());
+        item.updated_at = now.clone();
+        AgentTimelineDao::upsert_item(&conn, &item)
+            .map_err(|e| format!("更新 turn item 中断状态失败: {e}"))?;
+    }
+
+    Ok(true)
+}
+
 #[derive(Debug)]
 pub struct AgentTimelineRecorder {
     db: DbConnection,
@@ -319,6 +368,32 @@ impl AgentTimelineRecorder {
         Ok(events)
     }
 
+    pub fn abort_turn(&mut self, message: &str) -> Result<Vec<RuntimeAgentEvent>, String> {
+        let now = Utc::now().to_rfc3339();
+        self.turn.status = AgentThreadTurnStatus::Aborted;
+        self.turn.completed_at = Some(now.clone());
+        self.turn.error_message = Some(message.to_string());
+        self.turn.updated_at = now.clone();
+
+        let conn = lock_db(&self.db)?;
+        AgentTimelineDao::update_turn_status(
+            &conn,
+            &self.turn_id,
+            AgentThreadTurnStatus::Aborted,
+            Some(&now),
+            Some(message),
+            &now,
+        )
+        .map_err(|e| format!("更新 turn 中断状态失败: {e}"))?;
+        drop(conn);
+
+        let mut events = self.complete_projection_items(AgentThreadItemStatus::Completed)?;
+        events.push(RuntimeAgentEvent::TurnFailed {
+            turn: self.turn.clone(),
+        });
+        Ok(events)
+    }
+
     fn complete_projection_items(
         &mut self,
         status: AgentThreadItemStatus,
@@ -451,7 +526,10 @@ impl AgentTimelineRecorder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lime_core::database::dao::agent_timeline::{AgentThreadTurnStatus, AgentTimelineDao};
+    use lime_core::database::dao::agent_timeline::{
+        AgentThreadItem, AgentThreadItemPayload, AgentThreadItemStatus, AgentThreadTurnStatus,
+        AgentTimelineDao,
+    };
     use lime_core::database::schema::create_tables;
     use rusqlite::Connection;
     use std::sync::{Arc, Mutex};
@@ -493,6 +571,72 @@ mod tests {
         assert!(events
             .iter()
             .any(|event| matches!(event, RuntimeAgentEvent::ItemCompleted { item } if item.id == "error:turn-1")));
+    }
+
+    #[test]
+    fn abort_turn_should_persist_aborted_turn_without_error_item() {
+        let db = setup_db();
+        let mut recorder = AgentTimelineRecorder::create(db.clone(), "thread-1", "turn-1", "hello")
+            .expect("创建 recorder");
+
+        let events = recorder
+            .abort_turn("用户已停止当前执行")
+            .expect("写入中断终态");
+
+        let conn = lock_db(&db).expect("获取数据库锁");
+        let turns = AgentTimelineDao::list_turns_by_thread(&conn, "thread-1").expect("读取 turn");
+        let items = AgentTimelineDao::list_items_by_thread(&conn, "thread-1").expect("读取 item");
+        assert_eq!(turns.len(), 1);
+        assert_eq!(turns[0].status, AgentThreadTurnStatus::Aborted);
+        assert_eq!(
+            turns[0].error_message.as_deref(),
+            Some("用户已停止当前执行")
+        );
+        assert!(items.iter().all(|item| item.id != "error:turn-1"));
+        drop(conn);
+
+        assert!(events
+            .iter()
+            .any(|event| matches!(event, RuntimeAgentEvent::TurnFailed { turn } if turn.status == AgentThreadTurnStatus::Aborted)));
+    }
+
+    #[test]
+    fn abort_running_turn_by_id_should_complete_in_progress_items_without_error_item() {
+        let db = setup_db();
+        AgentTimelineRecorder::create(db.clone(), "thread-1", "turn-1", "hello")
+            .expect("创建 recorder");
+        {
+            let conn = lock_db(&db).expect("获取数据库锁");
+            AgentTimelineDao::upsert_item(
+                &conn,
+                &AgentThreadItem {
+                    id: "item-1".to_string(),
+                    thread_id: "thread-1".to_string(),
+                    turn_id: "turn-1".to_string(),
+                    sequence: 0,
+                    status: AgentThreadItemStatus::InProgress,
+                    started_at: "2026-03-29T00:00:00.000Z".to_string(),
+                    completed_at: None,
+                    updated_at: "2026-03-29T00:00:00.000Z".to_string(),
+                    payload: AgentThreadItemPayload::TurnSummary {
+                        text: "running".to_string(),
+                    },
+                },
+            )
+            .expect("写入测试 item");
+        }
+
+        let aborted = abort_running_turn_by_id(&db, "thread-1", "turn-1", "用户已停止当前执行")
+            .expect("应中断 running turn");
+
+        let conn = lock_db(&db).expect("获取数据库锁");
+        let turns = AgentTimelineDao::list_turns_by_thread(&conn, "thread-1").expect("读取 turn");
+        let items = AgentTimelineDao::list_items_by_thread(&conn, "thread-1").expect("读取 item");
+        assert!(aborted);
+        assert_eq!(turns[0].status, AgentThreadTurnStatus::Aborted);
+        assert_eq!(items[0].status, AgentThreadItemStatus::Completed);
+        assert!(items[0].completed_at.is_some());
+        assert!(items.iter().all(|item| item.id != "error:turn-1"));
     }
 
     #[test]

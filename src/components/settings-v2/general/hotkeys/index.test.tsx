@@ -6,10 +6,29 @@ const {
   mockGetExperimentalConfig,
   mockGetVoiceInputConfig,
   mockGetHotkeyRuntimeStatus,
+  mockUseTranslation,
 } = vi.hoisted(() => ({
   mockGetExperimentalConfig: vi.fn(),
   mockGetVoiceInputConfig: vi.fn(),
   mockGetHotkeyRuntimeStatus: vi.fn(),
+  mockUseTranslation: vi.fn((_namespace?: string) => ({
+    t: (key: string, options?: unknown) => {
+      if (typeof options === "string") {
+        return options;
+      }
+
+      if (options && typeof options === "object") {
+        const values = options as Record<string, unknown>;
+        const template =
+          typeof values.defaultValue === "string" ? values.defaultValue : key;
+        return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+          String(values[name] ?? ""),
+        );
+      }
+
+      return key;
+    },
+  })),
 }));
 
 vi.mock("@/lib/api/experimentalFeatures", () => ({
@@ -22,6 +41,10 @@ vi.mock("@/lib/api/asrProvider", () => ({
 
 vi.mock("@/lib/api/hotkeys", () => ({
   getHotkeyRuntimeStatus: mockGetHotkeyRuntimeStatus,
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
 }));
 
 import { HotkeysSettings } from ".";
@@ -188,6 +211,7 @@ describe("HotkeysSettings", () => {
     await waitForLoad();
 
     const text = getText(container);
+    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
     expect(text).toContain("快捷键");
     expect(text).toContain("查看已接入实现并完成审计的快捷键。");
     expect(text).toContain("全局运行中 2 / 3");

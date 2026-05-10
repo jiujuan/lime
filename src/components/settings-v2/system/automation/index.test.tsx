@@ -9,6 +9,7 @@ import type {
 import { AutomationSettings } from ".";
 
 const {
+  mockUseTranslation,
   mockGetAutomationSchedulerConfig,
   mockGetAutomationStatus,
   mockGetAutomationJobs,
@@ -23,21 +24,45 @@ const {
   mockPrepareSceneAppRunGovernanceArtifacts,
   mockListProjects,
   mockAutomationJobDialog,
-} = vi.hoisted(() => ({
-  mockGetAutomationSchedulerConfig: vi.fn(),
-  mockGetAutomationStatus: vi.fn(),
-  mockGetAutomationJobs: vi.fn(),
-  mockGetAutomationHealth: vi.fn(),
-  mockGetAutomationRunHistory: vi.fn(),
-  mockGetSceneAppDescriptor: vi.fn(),
-  mockGetSceneAppScorecard: vi.fn(),
-  mockListSceneAppRuns: vi.fn(),
-  mockGetSceneAppRunSummary: vi.fn(),
-  mockPlanSceneAppLaunch: vi.fn(),
-  mockPrepareSceneAppRunGovernanceArtifact: vi.fn(),
-  mockPrepareSceneAppRunGovernanceArtifacts: vi.fn(),
-  mockListProjects: vi.fn(),
-  mockAutomationJobDialog: vi.fn(),
+} = vi.hoisted(() => {
+  const mockTranslate = vi.fn((key: string, options?: unknown) => {
+    if (typeof options === "string") return options;
+
+    if (options && typeof options === "object") {
+      const values = options as Record<string, unknown>;
+      const template =
+        typeof values.defaultValue === "string" ? values.defaultValue : key;
+      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+        String(values[name] ?? ""),
+      );
+    }
+
+    return key;
+  });
+
+  return {
+    mockUseTranslation: vi.fn((_namespace?: string) => ({
+      t: mockTranslate,
+    })),
+    mockGetAutomationSchedulerConfig: vi.fn(),
+    mockGetAutomationStatus: vi.fn(),
+    mockGetAutomationJobs: vi.fn(),
+    mockGetAutomationHealth: vi.fn(),
+    mockGetAutomationRunHistory: vi.fn(),
+    mockGetSceneAppDescriptor: vi.fn(),
+    mockGetSceneAppScorecard: vi.fn(),
+    mockListSceneAppRuns: vi.fn(),
+    mockGetSceneAppRunSummary: vi.fn(),
+    mockPlanSceneAppLaunch: vi.fn(),
+    mockPrepareSceneAppRunGovernanceArtifact: vi.fn(),
+    mockPrepareSceneAppRunGovernanceArtifacts: vi.fn(),
+    mockListProjects: vi.fn(),
+    mockAutomationJobDialog: vi.fn(),
+  };
+});
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
 }));
 
 vi.mock("@/lib/api/automation", () => ({

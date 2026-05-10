@@ -751,6 +751,7 @@ describe("KnowledgePage", () => {
     await clickButton(container, "状态说明");
 
     expect(container.textContent).toContain("项目资料状态说明");
+    expect(container.textContent).toContain("回到项目资料");
     for (const label of [
       "没有资料",
       "已可用",
@@ -763,6 +764,11 @@ describe("KnowledgePage", () => {
     expect(container.textContent).toContain(
       "项目资料不是文件夹，它会帮 Lime 在创作时记住口吻、事实和规则。",
     );
+
+    await clickButton(container, "回到项目资料");
+
+    expect(container.textContent).toContain("让 Lime 记住这个项目");
+    expect(container.textContent).toContain("项目资料清单");
   });
 
   it("回到创作应打开输入框项目资料入口", async () => {

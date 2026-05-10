@@ -505,10 +505,14 @@ impl AsterAgentState {
 
     /// 创建新的取消令牌
     pub async fn create_cancel_token(&self, session_id: &str) -> CancellationToken {
+        let should_cancel_immediately = {
+            let markers = self.interrupt_markers.read().await;
+            markers.contains_key(session_id)
+        };
         let token = CancellationToken::new();
-        let mut markers = self.interrupt_markers.write().await;
-        markers.remove(session_id);
-        drop(markers);
+        if should_cancel_immediately {
+            token.cancel();
+        }
         let mut tokens = self.cancel_tokens.write().await;
         tokens.insert(session_id.to_string(), token.clone());
         token
@@ -809,8 +813,9 @@ mod tests {
             Some("用户主动停止当前执行")
         );
 
-        let _token = state.create_cancel_token(session_id).await;
-        assert!(state.get_interrupt_marker(session_id).await.is_none());
+        let token = state.create_cancel_token(session_id).await;
+        assert!(token.is_cancelled());
+        assert!(state.get_interrupt_marker(session_id).await.is_some());
 
         state
             .record_interrupt_request(session_id, "user", "第二次停止")

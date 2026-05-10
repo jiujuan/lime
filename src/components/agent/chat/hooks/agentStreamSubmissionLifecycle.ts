@@ -18,6 +18,7 @@ export interface ActiveStreamState {
   assistantMsgId: string;
   eventName: string;
   sessionId: string;
+  turnId?: string;
   pendingTurnKey?: string;
   pendingItemKey?: string;
 }
@@ -246,6 +247,7 @@ export function createAgentStreamSubmissionLifecycle(
       assistantMsgId,
       eventName,
       sessionId: activeSessionId,
+      turnId: requestTurnId,
       pendingTurnKey,
       pendingItemKey,
     });

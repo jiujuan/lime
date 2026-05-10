@@ -127,6 +127,7 @@ import { resolveWorkflowLayoutBottomSpacing } from "./utils/workflowLayout";
 import {
   alignChatToolPreferencesWithExecutionStrategy,
   loadChatToolPreferences,
+  shouldUseCompactGeneralPromptForPreferences,
 } from "./utils/chatToolPreferences";
 import { isWorkspacePathErrorMessage } from "./hooks/agentChatCoreUtils";
 import { mergeArtifacts } from "./utils/messageArtifacts";
@@ -2262,12 +2263,11 @@ export function AgentChatWorkspace({
   );
   const generalHarnessEntryEnabled = chatMode === "general";
   const shouldUseCompactGeneralSystemPrompt =
-    chatMode === "general" &&
-    !contentId &&
-    !chatToolPreferences.webSearch &&
-    !chatToolPreferences.thinking &&
-    !chatToolPreferences.task &&
-    !chatToolPreferences.subagent;
+    shouldUseCompactGeneralPromptForPreferences({
+      chatMode,
+      contentId,
+      preferences: chatToolPreferences,
+    });
 
   // 生成系统提示词（包含项目 Memory）
   const systemPrompt = useMemo(() => {

@@ -31,6 +31,20 @@ interface StopAgentStreamOptions {
   onInterruptError?: (error: unknown) => void;
 }
 
+function resolveInterruptTurnId(activeStream: ActiveStreamState | null) {
+  const explicitTurnId = activeStream?.turnId?.trim();
+  if (explicitTurnId) {
+    return explicitTurnId;
+  }
+
+  const pendingTurnKey = activeStream?.pendingTurnKey?.trim();
+  if (pendingTurnKey && !pendingTurnKey.startsWith("pending-turn:")) {
+    return pendingTurnKey;
+  }
+
+  return undefined;
+}
+
 interface QueueActionOptions {
   sessionIdRef: MutableRefObject<string | null>;
   refreshSessionReadModel: (targetSessionId?: string) => Promise<boolean>;
@@ -101,7 +115,10 @@ export async function stopActiveAgentStream(options: StopAgentStreamOptions) {
   const activeSessionId = activeStream?.sessionId || sessionIdRef.current;
   if (activeSessionId) {
     try {
-      await runtime.interruptTurn(activeSessionId);
+      await runtime.interruptTurn(
+        activeSessionId,
+        resolveInterruptTurnId(activeStream),
+      );
     } catch (error) {
       onInterruptError?.(error);
     }

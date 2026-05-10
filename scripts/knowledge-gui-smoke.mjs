@@ -12,6 +12,7 @@ const DEFAULTS = {
   invokeUrl: "http://127.0.0.1:3030/invoke",
   timeoutMs: 180_000,
   intervalMs: 1_000,
+  i18nPatchMetricsOutput: "",
 };
 
 const INVOKE_TIMEOUT_CEILING_MS = 180_000;
@@ -135,6 +136,8 @@ Lime Knowledge GUI Smoke
   --invoke-url <url>       DevBridge invoke 地址，默认 http://127.0.0.1:3030/invoke
   --timeout-ms <ms>        总超时，默认 180000
   --interval-ms <ms>       轮询间隔，默认 1000
+  --i18n-patch-metrics-output <path>
+                           导出 window.__I18N_METRICS__ JSON，供 i18n:patch-report 消费
   -h, --help               显示帮助
 `);
 }
@@ -175,6 +178,12 @@ function parseArgs(argv) {
       continue;
     }
 
+    if (arg === "--i18n-patch-metrics-output" && argv[index + 1]) {
+      options.i18nPatchMetricsOutput = String(argv[index + 1]).trim();
+      index += 1;
+      continue;
+    }
+
     if (arg === "--help" || arg === "-h") {
       printHelp();
       process.exit(0);
@@ -200,6 +209,39 @@ function sleep(ms) {
 
 function logStage(label) {
   console.log(`[smoke:knowledge-gui] stage=${label}`);
+}
+
+async function exportI18nPatchMetrics(page, outputPath) {
+  if (!outputPath) {
+    return;
+  }
+
+  try {
+    const metrics = await page.evaluate(() => {
+      const globalMetrics = window.__I18N_METRICS__;
+      if (!globalMetrics) {
+        return null;
+      }
+
+      return JSON.parse(JSON.stringify(globalMetrics));
+    });
+    const resolvedOutputPath = path.resolve(process.cwd(), outputPath);
+    fs.mkdirSync(path.dirname(resolvedOutputPath), { recursive: true });
+    fs.writeFileSync(
+      resolvedOutputPath,
+      JSON.stringify(metrics ?? {}, null, 2),
+      "utf8",
+    );
+    console.log(
+      `[smoke:knowledge-gui] i18n Patch metrics: ${resolvedOutputPath}`,
+    );
+  } catch (error) {
+    console.warn(
+      `[smoke:knowledge-gui] 导出 i18n Patch metrics 失败: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
 }
 
 function isTransientInvokeError(error) {
@@ -1096,6 +1138,7 @@ async function runPlaywrightGuiFlow(options) {
       );
     }
   } finally {
+    await exportI18nPatchMetrics(page, options.i18nPatchMetricsOutput);
     await context.close().catch(() => undefined);
     fs.rmSync(userDataDir, { recursive: true, force: true });
   }

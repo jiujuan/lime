@@ -26,6 +26,9 @@
 - `governance.md` - 新旧并存治理、迁移收口、禁止回流
 - `harness-engine-governance.md` - Harness Engine 事实源、evidence pack、replay / analysis / review 治理规范
 - `quality-workflow.md` - 本地校验、GUI smoke、契约检查、CI 门禁
+- `../tests/agent-ops-qc.md` - Agent 运营级测试体系、qcloop 场景、Evidence Pack 与发布证据门禁
+- `../tests/agent-qc-p0-scenarios.md` - Agent QC P0 场景执行手册、GUI/runtime 证据要求与失败沉淀规则
+- `../tests/lime-agent-qc-rollout-plan.md` - Lime 样本产品的 Agent 运营级测试落地计划
 - `command-runtime.md` - `@` / `/` / 轻卡 / viewer / 功能方案包实施手册
 - `skill-standard.md` - 统一技能标准、skill / adapter / runtime binding 边界
 - `site-adapter-standard.md` - 站点适配器标准、来源导入边界、运行时收敛规则

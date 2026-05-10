@@ -1338,6 +1338,11 @@ describe("legacySurfaceCatalog", () => {
     expect(monitor?.targets).toEqual([
       "src/i18n/index.ts",
       "src/i18n/dynamic-translation.ts",
+      "src/i18n/I18nPatchProvider.tsx",
+      "src/i18n/dom-replacer.ts",
+      "src/i18n/text-map.ts",
+      "src/i18n/patches/en.json",
+      "src/i18n/patches/zh.json",
     ]);
   });
 

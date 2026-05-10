@@ -1,0 +1,240 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lime.local/schemas/agent-qc-evidence.schema.json",
+  "title": "Lime Agent QC Evidence Pack",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "runId",
+    "generatedAt",
+    "subject",
+    "laneResults",
+    "scenarioResults",
+    "verdict"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "v1"
+    },
+    "runId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repo", "ref", "changedFiles"],
+      "properties": {
+        "repo": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "diffBase": {
+          "type": "string"
+        },
+        "changedFiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "riskTags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "laneResults": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["laneId", "status", "commands"],
+        "properties": {
+          "laneId": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/$defs/status"
+          },
+          "commands": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/commandResult"
+            }
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "scenarioResults": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["scenarioId", "status", "evidenceRefs"],
+        "properties": {
+          "scenarioId": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/$defs/status"
+          },
+          "executor": {
+            "type": "string"
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "runtimeTranscriptRef": {
+            "type": "string"
+          },
+          "guiTraceRef": {
+            "type": "string"
+          },
+          "consoleErrorCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "networkErrorCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "evidenceRefs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "failureModes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "humanReview": {
+            "$ref": "#/$defs/humanReview"
+          }
+        }
+      }
+    },
+    "verdict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "summary"],
+      "properties": {
+        "status": {
+          "enum": ["pass", "fail", "blocked", "needs-human-review", "waived"]
+        },
+        "summary": {
+          "type": "string"
+        },
+        "blockers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "waivers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/waiver"
+          }
+        },
+        "nextAction": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "status": {
+      "enum": ["pass", "fail", "blocked", "needs-human-review", "waived", "skipped"]
+    },
+    "commandResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "status"],
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "exitCode": {
+          "type": "integer"
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "logRef": {
+          "type": "string"
+        },
+        "artifactRefs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "humanReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "reason"],
+      "properties": {
+        "required": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "reviewer": {
+          "type": "string"
+        },
+        "decision": {
+          "enum": ["approved", "rejected", "deferred", "not-reviewed"]
+        }
+      }
+    },
+    "waiver": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "reason", "expiresAt"],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

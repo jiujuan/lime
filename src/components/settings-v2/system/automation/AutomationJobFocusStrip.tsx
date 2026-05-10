@@ -2,6 +2,7 @@ import type { SceneAppAutomationWorkspaceCardViewModel } from "@/lib/sceneapp";
 import type { SceneAppRunDetailViewModel } from "@/lib/sceneapp";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useTranslation } from "react-i18next";
 
 interface AutomationJobFocusStripProps {
   jobId: string;
@@ -22,6 +23,7 @@ export function AutomationJobFocusStrip({
   onReviewCurrentProject,
   onOpenSceneAppGovernance,
 }: AutomationJobFocusStripProps) {
+  const { t } = useTranslation("settings");
   const primarySummary =
     summaryCard?.scorecardAggregate?.summary ?? summaryCard?.summary ?? null;
   const nextAction =
@@ -37,7 +39,7 @@ export function AutomationJobFocusStrip({
     >
       <div className="flex flex-wrap items-center gap-2">
         <Badge className="border-sky-200 bg-white text-sky-700 hover:bg-white">
-          现在先继续这条
+          {t("settings.automation.focus.label", "现在先继续这条")}
         </Badge>
         {summaryCard?.title ? (
           <span className="rounded-full border border-white bg-white px-3 py-1 text-xs font-medium text-slate-700">
@@ -53,26 +55,38 @@ export function AutomationJobFocusStrip({
 
       {loading && !primarySummary ? (
         <div className="mt-3 text-xs leading-6 text-slate-600">
-          正在整理这条做法最近一轮的结果和下一步…
+          {t(
+            "settings.automation.focus.loading",
+            "正在整理这条做法最近一轮的结果和下一步…",
+          )}
         </div>
       ) : null}
 
       {primarySummary ? (
         <div className="mt-3 text-xs leading-6 text-slate-700">
-          这轮判断：{primarySummary}
+          {t("settings.automation.focus.strip.primarySummary", {
+            summary: primarySummary,
+            defaultValue: "这轮判断：{{summary}}",
+          })}
         </div>
       ) : null}
 
       {runDetailView ? (
         <div className="mt-1 text-xs leading-6 text-slate-600">
-          最近结果：{runDetailView.statusLabel} ·{" "}
-          {runDetailView.deliveryCompletionLabel}
+          {t("settings.automation.focus.strip.recentResult", {
+            status: runDetailView.statusLabel,
+            completion: runDetailView.deliveryCompletionLabel,
+            defaultValue: "最近结果：{{status}} · {{completion}}",
+          })}
         </div>
       ) : null}
 
       {nextAction ? (
         <div className="mt-1 text-xs leading-6 text-slate-600">
-          先做：{nextAction}
+          {t("settings.automation.focus.strip.nextAction", {
+            action: nextAction,
+            defaultValue: "先做：{{action}}",
+          })}
         </div>
       ) : null}
 
@@ -93,7 +107,7 @@ export function AutomationJobFocusStrip({
                 onReviewCurrentProject();
               }}
             >
-              继续看结果
+              {t("settings.automation.focus.strip.action.review", "继续看结果")}
             </Button>
           ) : null}
           {onOpenSceneAppGovernance ? (
@@ -108,7 +122,10 @@ export function AutomationJobFocusStrip({
                 onOpenSceneAppGovernance();
               }}
             >
-              看最近结果
+              {t(
+                "settings.automation.focus.strip.action.openGovernance",
+                "看最近结果",
+              )}
             </Button>
           ) : null}
         </div>

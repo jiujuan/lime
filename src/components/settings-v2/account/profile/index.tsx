@@ -18,6 +18,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
 import { cn } from "@/lib/utils";
 import {
@@ -31,13 +32,9 @@ type EditableProfileField = "nickname" | "bio" | "email";
 
 interface ProfileFieldMeta {
   key: EditableProfileField;
-  label: string;
-  description: string;
-  placeholder: string;
   icon: LucideIcon;
   editable?: boolean;
   multiline?: boolean;
-  hint: string;
 }
 
 const DEFAULT_USER_PROFILE: UserProfile = {
@@ -51,44 +48,32 @@ const DEFAULT_USER_PROFILE: UserProfile = {
 const PROFILE_FIELDS: ProfileFieldMeta[] = [
   {
     key: "nickname",
-    label: "昵称",
-    description: "展示在工作区与 AI 语境中的称呼。",
-    placeholder: "还没有设置昵称",
     icon: User,
     editable: true,
-    hint: "建议使用你最常用的称呼，便于系统在多处一致展示。",
   },
   {
     key: "bio",
-    label: "个人简介",
-    description: "用几句话说明你的工作背景、兴趣和当前目标。",
-    placeholder: "补充你的角色、关注方向或当前项目，AI 会更快理解你。",
     icon: Edit2,
     editable: true,
     multiline: true,
-    hint: "按 Enter 保存，使用 Shift + Enter 换行。",
   },
   {
     key: "email",
-    label: "邮箱",
-    description: "账号识别邮箱，当前页面仅展示，不支持直接修改。",
-    placeholder: "尚未绑定邮箱",
     icon: Mail,
     editable: false,
-    hint: "如需修改邮箱，请使用账号相关入口或后续专用流程。",
   },
 ];
 
-const SUGGESTED_TAGS = [
-  "编程",
-  "写作",
-  "设计",
-  "数据分析",
-  "产品经理",
-  "创业者",
-  "学生",
-  "研究者",
-];
+const SUGGESTED_TAG_KEYS = [
+  "programming",
+  "writing",
+  "design",
+  "dataAnalysis",
+  "productManager",
+  "founder",
+  "student",
+  "researcher",
+] as const;
 const PRIMARY_ACTION_BUTTON_CLASS =
   "inline-flex items-center gap-2 rounded-[16px] border border-emerald-200 bg-[linear-gradient(135deg,#0ea5e9_0%,#14b8a6_52%,#10b981_100%)] px-4 py-3 text-sm font-medium text-white shadow-sm shadow-emerald-950/15 transition hover:opacity-95";
 const PRIMARY_PILL_BUTTON_CLASS =
@@ -116,6 +101,17 @@ interface ProfileFieldCardProps {
   onEditValueChange: (value: string) => void;
   onSave: () => void;
   onCancel: () => void;
+  actionLabels: {
+    cancel: string;
+    cancelAria: string;
+    edit: string;
+    editAria: string;
+    readOnly: string;
+    save: string;
+    saveAria: string;
+    tipAria: string;
+    tipsHint: string;
+  };
 }
 
 function ProfileFieldCard({
@@ -134,6 +130,7 @@ function ProfileFieldCard({
   onEditValueChange,
   onSave,
   onCancel,
+  actionLabels,
 }: ProfileFieldCardProps) {
   return (
     <article className="rounded-[22px] border border-slate-200/80 bg-white/90 p-4 shadow-sm shadow-slate-950/5">
@@ -146,7 +143,7 @@ function ProfileFieldCard({
             <div className="flex items-center gap-2">
               <p className="text-sm font-semibold text-slate-900">{label}</p>
               <WorkbenchInfoTip
-                ariaLabel={`${label}说明`}
+                ariaLabel={actionLabels.tipAria}
                 content={
                   <div className="space-y-1">
                     <p>{description}</p>
@@ -157,7 +154,7 @@ function ProfileFieldCard({
               />
               {!editable && (
                 <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
-                  只读
+                  {actionLabels.readOnly}
                 </span>
               )}
             </div>
@@ -167,12 +164,12 @@ function ProfileFieldCard({
         {editable && !isEditing && (
           <button
             type="button"
-            aria-label={`编辑${label}`}
+            aria-label={actionLabels.editAria}
             onClick={() => onStartEdit(field, value)}
             className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
           >
             <Edit2 className="h-3.5 w-3.5" />
-            编辑
+            {actionLabels.edit}
           </button>
         )}
       </div>
@@ -236,26 +233,26 @@ function ProfileFieldCard({
 
       <div className="mt-4 flex items-center justify-between gap-3">
         <span className="text-xs leading-5 text-slate-500">
-          通过 Tips 查看说明
+          {actionLabels.tipsHint}
         </span>
         {isEditing && (
           <div className="flex items-center gap-2">
             <button
               type="button"
-              aria-label={`取消编辑${label}`}
+              aria-label={actionLabels.cancelAria}
               onClick={onCancel}
               className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
             >
-              取消
+              {actionLabels.cancel}
             </button>
             <button
               type="button"
-              aria-label={`保存${label}`}
+              aria-label={actionLabels.saveAria}
               onClick={onSave}
               className={PRIMARY_PILL_BUTTON_CLASS}
             >
               <CheckCircle2 className="h-3.5 w-3.5" />
-              保存
+              {actionLabels.save}
             </button>
           </div>
         )}
@@ -265,6 +262,7 @@ function ProfileFieldCard({
 }
 
 export function ProfileSettings() {
+  const { t } = useTranslation("settings");
   const [config, setConfig] = useState<Config | null>(null);
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_USER_PROFILE);
   const [loading, setLoading] = useState(true);
@@ -278,6 +276,62 @@ export function ProfileSettings() {
   } | null>(null);
   const [newTag, setNewTag] = useState("");
   const messageTimerRef = useRef<number | null>(null);
+  const profileFields = PROFILE_FIELDS.map((field) => {
+    const keyPrefix = `settings.profile.field.${field.key}`;
+    const label = t(`${keyPrefix}.label`, {
+      defaultValue:
+        field.key === "nickname"
+          ? "昵称"
+          : field.key === "bio"
+            ? "个人简介"
+            : "邮箱",
+    });
+
+    return {
+      ...field,
+      label,
+      description: t(`${keyPrefix}.description`, {
+        defaultValue:
+          field.key === "nickname"
+            ? "展示在工作区与 AI 语境中的称呼。"
+            : field.key === "bio"
+              ? "用几句话说明你的工作背景、兴趣和当前目标。"
+              : "账号识别邮箱，当前页面仅展示，不支持直接修改。",
+      }),
+      placeholder: t(`${keyPrefix}.placeholder`, {
+        defaultValue:
+          field.key === "nickname"
+            ? "还没有设置昵称"
+            : field.key === "bio"
+              ? "补充你的角色、关注方向或当前项目，AI 会更快理解你。"
+              : "尚未绑定邮箱",
+      }),
+      hint: t(`${keyPrefix}.hint`, {
+        defaultValue:
+          field.key === "nickname"
+            ? "建议使用你最常用的称呼，便于系统在多处一致展示。"
+            : field.key === "bio"
+              ? "按 Enter 保存，使用 Shift + Enter 换行。"
+              : "如需修改邮箱，请使用账号相关入口或后续专用流程。",
+      }),
+      tipAria: t("settings.profile.field.tipAria", {
+        label,
+        defaultValue: "{{label}}说明",
+      }),
+      editAria: t("settings.profile.field.editAria", {
+        label,
+        defaultValue: "编辑{{label}}",
+      }),
+      cancelAria: t("settings.profile.field.cancelAria", {
+        label,
+        defaultValue: "取消编辑{{label}}",
+      }),
+      saveAria: t("settings.profile.field.saveAria", {
+        label,
+        defaultValue: "保存{{label}}",
+      }),
+    };
+  });
 
   useEffect(() => {
     void loadConfig();
@@ -318,7 +372,13 @@ export function ProfileSettings() {
     value: UserProfile[K],
   ) => {
     if (!config) {
-      showMessage("error", "资料配置尚未加载完成，暂时无法保存。");
+      showMessage(
+        "error",
+        t(
+          "settings.profile.message.configPending",
+          "资料配置尚未加载完成，暂时无法保存。",
+        ),
+      );
       return;
     }
 
@@ -342,10 +402,16 @@ export function ProfileSettings() {
       await saveConfig(updatedFullConfig);
       setConfig(updatedFullConfig);
       setProfile(completeProfile);
-      showMessage("success", "资料已保存");
+      showMessage("success", t("settings.profile.message.saved", "资料已保存"));
     } catch (error) {
       console.error("保存用户资料失败:", error);
-      showMessage("error", `保存失败: ${error}`);
+      showMessage(
+        "error",
+        t("settings.profile.message.saveFailed", {
+          error: String(error),
+          defaultValue: "保存失败: {{error}}",
+        }),
+      );
     }
   };
 
@@ -410,13 +476,20 @@ export function ProfileSettings() {
         if (file.size > maxSize) {
           showMessage(
             "error",
-            `文件过大 (${(file.size / 1024 / 1024).toFixed(2)}MB)，最大支持 5MB`,
+            t("settings.profile.message.fileTooLarge", {
+              size: (file.size / 1024 / 1024).toFixed(2),
+              max: 5,
+              defaultValue: "文件过大 ({{size}}MB)，最大支持 {{max}}MB",
+            }),
           );
           return;
         }
 
         await file.arrayBuffer();
-        showMessage("success", "头像上传功能正在完善中");
+        showMessage(
+          "success",
+          t("settings.profile.message.avatarWip", "头像上传功能正在完善中"),
+        );
       };
 
       document.body.appendChild(input);
@@ -424,7 +497,13 @@ export function ProfileSettings() {
       document.body.removeChild(input);
     } catch (error) {
       console.error("上传头像失败:", error);
-      showMessage("error", `上传失败: ${error}`);
+      showMessage(
+        "error",
+        t("settings.profile.message.uploadFailed", {
+          error: String(error),
+          defaultValue: "上传失败: {{error}}",
+        }),
+      );
     }
   };
 
@@ -438,17 +517,36 @@ export function ProfileSettings() {
   const completionPercent = Math.round((completionItems / 4) * 100);
   const statusLabel =
     completionPercent >= 75
-      ? "资料完整"
+      ? t("settings.profile.status.complete", "资料完整")
       : completionPercent >= 40
-        ? "逐步成型"
-        : "待补充";
+        ? t("settings.profile.status.progress", "逐步成型")
+        : t("settings.profile.status.pending", "待补充");
   const statusClassName =
     completionPercent >= 75
       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
       : completionPercent >= 40
         ? "border-sky-200 bg-sky-50 text-sky-700"
         : "border-amber-200 bg-amber-50 text-amber-700";
-  const suggestedTags = SUGGESTED_TAGS.filter(
+  const suggestedTags = SUGGESTED_TAG_KEYS.map((key) =>
+    t(`settings.profile.suggestedTag.${key}`, {
+      defaultValue:
+        key === "programming"
+          ? "编程"
+          : key === "writing"
+            ? "写作"
+            : key === "design"
+              ? "设计"
+              : key === "dataAnalysis"
+                ? "数据分析"
+                : key === "productManager"
+                  ? "产品经理"
+                  : key === "founder"
+                    ? "创业者"
+                    : key === "student"
+                      ? "学生"
+                      : "研究者",
+    }),
+  ).filter(
     (tag) => !tags.includes(tag),
   ).slice(0, 6);
   const quickTags = tags.slice(0, 3);
@@ -498,16 +596,25 @@ export function ProfileSettings() {
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-[24px] font-semibold tracking-tight text-slate-900">
-                  个人资料
+                  {t("settings.profile.hero.title", "个人资料")}
                 </h1>
                 <WorkbenchInfoTip
-                  ariaLabel="个人资料总览说明"
-                  content="管理昵称、简介、邮箱和偏好标签，帮助 Lime 在工作区里更准确地理解你的语境。"
+                  ariaLabel={t(
+                    "settings.profile.hero.tipAria",
+                    "个人资料总览说明",
+                  )}
+                  content={t(
+                    "settings.profile.hero.tip",
+                    "管理昵称、简介、邮箱和偏好标签，帮助 Lime 在工作区里更准确地理解你的语境。",
+                  )}
                   tone="mint"
                 />
               </div>
               <p className="text-sm text-slate-500">
-                管理昵称、简介、邮箱和偏好标签。
+                {t(
+                  "settings.profile.hero.subtitle",
+                  "管理昵称、简介、邮箱和偏好标签。",
+                )}
               </p>
             </div>
 
@@ -518,13 +625,22 @@ export function ProfileSettings() {
                   statusClassName,
                 )}
               >
-                状态：{statusLabel}
+                {t("settings.profile.hero.status", {
+                  status: statusLabel,
+                  defaultValue: "状态：{{status}}",
+                })}
               </span>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
-                完成度：{completionPercent}%
+                {t("settings.profile.hero.completion", {
+                  percent: completionPercent,
+                  defaultValue: "完成度：{{percent}}%",
+                })}
               </span>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
-                标签：{tags.length}
+                {t("settings.profile.hero.tags", {
+                  count: tags.length,
+                  defaultValue: "标签：{{count}}",
+                })}
               </span>
             </div>
           </div>
@@ -535,7 +651,7 @@ export function ProfileSettings() {
                 {profile.avatar_url ? (
                   <img
                     src={profile.avatar_url}
-                    alt="头像"
+                    alt={t("settings.profile.avatar.alt", "头像")}
                     className="h-full w-full object-cover"
                   />
                 ) : (
@@ -544,7 +660,7 @@ export function ProfileSettings() {
               </div>
               <button
                 type="button"
-                aria-label="更新头像"
+                aria-label={t("settings.profile.avatar.update", "更新头像")}
                 onClick={handleUploadAvatar}
                 className={ICON_ACTION_BUTTON_CLASS}
               >
@@ -556,7 +672,8 @@ export function ProfileSettings() {
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="text-xl font-semibold tracking-tight text-slate-900">
-                    {profile.nickname || "未设置昵称"}
+                    {profile.nickname ||
+                      t("settings.profile.avatar.nicknameEmpty", "未设置昵称")}
                   </h2>
                   <span
                     className={cn(
@@ -569,14 +686,18 @@ export function ProfileSettings() {
                 </div>
                 <p className="max-w-2xl text-sm leading-6 text-slate-600">
                   {profile.bio ||
-                    "补充几句你的工作背景、关注方向或使用目标，AI 会更快进入正确语境。"}
+                    t(
+                      "settings.profile.avatar.bioEmpty",
+                      "补充几句你的工作背景、关注方向或使用目标，AI 会更快进入正确语境。",
+                    )}
                 </p>
               </div>
 
               <div className="flex flex-wrap gap-2">
                 <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600">
                   <Mail className="h-3.5 w-3.5 text-slate-400" />
-                  {profile.email || "邮箱待补充"}
+                  {profile.email ||
+                    t("settings.profile.avatar.emailEmpty", "邮箱待补充")}
                 </span>
 
                 {quickTags.length > 0 ? (
@@ -590,22 +711,39 @@ export function ProfileSettings() {
                   ))
                 ) : (
                   <span className="rounded-full border border-dashed border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-500">
-                    添加标签帮助 AI 理解你的领域偏好
+                    {t(
+                      "settings.profile.avatar.tagsEmpty",
+                      "添加标签帮助 AI 理解你的领域偏好",
+                    )}
                   </span>
                 )}
 
                 {extraTagCount > 0 && (
                   <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-500">
-                    +{extraTagCount} 个标签
+                    {t("settings.profile.avatar.extraTags", {
+                      count: extraTagCount,
+                      defaultValue: "+{{count}} 个标签",
+                    })}
                   </span>
                 )}
               </div>
 
               <div className="flex items-center gap-2 text-xs leading-5 text-slate-500">
-                <span>头像格式限制已收纳</span>
+                <span>
+                  {t(
+                    "settings.profile.avatar.limitInline",
+                    "头像格式限制已收纳",
+                  )}
+                </span>
                 <WorkbenchInfoTip
-                  ariaLabel="头像上传限制说明"
-                  content="头像支持 PNG / JPG / GIF / WEBP，单文件不超过 5MB。"
+                  ariaLabel={t(
+                    "settings.profile.avatar.limitAria",
+                    "头像上传限制说明",
+                  )}
+                  content={t(
+                    "settings.profile.avatar.limitTip",
+                    "头像支持 PNG / JPG / GIF / WEBP，单文件不超过 5MB。",
+                  )}
                   tone="slate"
                 />
               </div>
@@ -621,22 +759,31 @@ export function ProfileSettings() {
               <div>
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-semibold text-slate-900">
-                    基础资料
+                    {t("settings.profile.basic.title", "基础资料")}
                   </p>
                   <WorkbenchInfoTip
-                    ariaLabel="基础资料说明"
-                    content="这些信息会参与欢迎语、工作区称呼和部分个性化提示生成。"
+                    ariaLabel={t(
+                      "settings.profile.basic.tipAria",
+                      "基础资料说明",
+                    )}
+                    content={t(
+                      "settings.profile.basic.tip",
+                      "这些信息会参与欢迎语、工作区称呼和部分个性化提示生成。",
+                    )}
                     tone="slate"
                   />
                 </div>
               </div>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
-                {PROFILE_FIELDS.length} 项
+                {t("settings.profile.basic.itemCount", {
+                  count: profileFields.length,
+                  defaultValue: "{{count}} 项",
+                })}
               </span>
             </div>
 
             <div className="mt-5 space-y-4">
-              {PROFILE_FIELDS.map((field) => (
+              {profileFields.map((field) => (
                 <ProfileFieldCard
                   key={field.key}
                   field={field.key}
@@ -654,6 +801,20 @@ export function ProfileSettings() {
                   onEditValueChange={setEditValue}
                   onSave={handleSaveEdit}
                   onCancel={handleCancelEdit}
+                  actionLabels={{
+                    cancel: t("settings.profile.action.cancel", "取消"),
+                    cancelAria: field.cancelAria,
+                    edit: t("settings.profile.action.edit", "编辑"),
+                    editAria: field.editAria,
+                    readOnly: t("settings.profile.field.readOnly", "只读"),
+                    save: t("settings.profile.action.save", "保存"),
+                    saveAria: field.saveAria,
+                    tipAria: field.tipAria,
+                    tipsHint: t(
+                      "settings.profile.field.tipsHint",
+                      "通过 Tips 查看说明",
+                    ),
+                  }}
                 />
               ))}
             </div>
@@ -666,16 +827,25 @@ export function ProfileSettings() {
               <div>
                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                   <Tag className="h-4 w-4 text-emerald-600" />
-                  偏好标签
+                  {t("settings.profile.tags.title", "偏好标签")}
                   <WorkbenchInfoTip
-                    ariaLabel="偏好标签说明"
-                    content="标签帮助 AI 判断你更关注的主题和表达风格。"
+                    ariaLabel={t(
+                      "settings.profile.tags.tipAria",
+                      "偏好标签说明",
+                    )}
+                    content={t(
+                      "settings.profile.tags.tip",
+                      "标签帮助 AI 判断你更关注的主题和表达风格。",
+                    )}
                     tone="slate"
                   />
                 </div>
               </div>
               <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-                {tags.length} 个已选
+                {t("settings.profile.tags.selectedCount", {
+                  count: tags.length,
+                  defaultValue: "{{count}} 个已选",
+                })}
               </span>
             </div>
 
@@ -689,7 +859,10 @@ export function ProfileSettings() {
                     <span>{tag}</span>
                     <button
                       type="button"
-                      aria-label={`移除标签${tag}`}
+                      aria-label={t("settings.profile.tags.removeAria", {
+                        tag,
+                        defaultValue: "移除标签{{tag}}",
+                      })}
                       onClick={() => handleRemoveTag(tag)}
                       className="rounded-full p-0.5 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700"
                     >
@@ -699,7 +872,10 @@ export function ProfileSettings() {
                 ))
               ) : (
                 <div className="rounded-[20px] border border-dashed border-slate-300 bg-slate-50/60 px-4 py-3 text-sm leading-6 text-slate-500">
-                  还没有添加标签。可以从推荐标签开始，也可以输入自定义领域。
+                  {t(
+                    "settings.profile.tags.empty",
+                    "还没有添加标签。可以从推荐标签开始，也可以输入自定义领域。",
+                  )}
                 </div>
               )}
             </div>
@@ -709,7 +885,7 @@ export function ProfileSettings() {
                 htmlFor="profile-new-tag"
                 className="text-xs font-medium tracking-[0.12em] text-slate-500"
               >
-                CUSTOM TAG
+                {t("settings.profile.tags.customLabel", "CUSTOM TAG")}
               </label>
               <div className="mt-2 flex gap-2">
                 <input
@@ -723,7 +899,10 @@ export function ProfileSettings() {
                       handleAddTag();
                     }
                   }}
-                  placeholder="例如：全栈工程、内容策略、效率工具"
+                  placeholder={t(
+                    "settings.profile.tags.customPlaceholder",
+                    "例如：全栈工程、内容策略、效率工具",
+                  )}
                   className="flex-1 rounded-[16px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-slate-300"
                 />
                 <button
@@ -732,14 +911,14 @@ export function ProfileSettings() {
                   className={PRIMARY_ACTION_BUTTON_CLASS}
                 >
                   <Plus className="h-4 w-4" />
-                  添加标签
+                  {t("settings.profile.tags.add", "添加标签")}
                 </button>
               </div>
             </div>
 
             <div className="mt-5">
               <p className="text-xs font-medium tracking-[0.12em] text-slate-500">
-                推荐标签
+                {t("settings.profile.tags.recommended", "推荐标签")}
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {suggestedTags.map((tag) => (
@@ -761,20 +940,31 @@ export function ProfileSettings() {
           <article className="rounded-[26px] border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-950/5">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
               <Sparkles className="h-4 w-4 text-sky-600" />
-              资料如何被使用
+              {t("settings.profile.usage.title", "资料如何被使用")}
               <WorkbenchInfoTip
-                ariaLabel="资料如何被使用说明"
+                ariaLabel={t(
+                  "settings.profile.usage.tipAria",
+                  "资料如何被使用说明",
+                )}
                 content={
                   <div className="space-y-1">
                     <p>
-                      昵称和简介会帮助 AI
-                      在开场、建议和工作区提示中更自然地引用你的背景。
+                      {t(
+                        "settings.profile.usage.tipNickname",
+                        "昵称和简介会帮助 AI 在开场、建议和工作区提示中更自然地引用你的背景。",
+                      )}
                     </p>
                     <p>
-                      标签只用于偏好判断，不会替代系统提示词，也不会自动暴露给外部服务。
+                      {t(
+                        "settings.profile.usage.tipTags",
+                        "标签只用于偏好判断，不会替代系统提示词，也不会自动暴露给外部服务。",
+                      )}
                     </p>
                     <p>
-                      邮箱由账号体系维护，当前页面仅做展示，避免在多入口出现不一致状态。
+                      {t(
+                        "settings.profile.usage.tipEmail",
+                        "邮箱由账号体系维护，当前页面仅做展示，避免在多入口出现不一致状态。",
+                      )}
                     </p>
                   </div>
                 }
@@ -782,7 +972,7 @@ export function ProfileSettings() {
               />
             </div>
             <div className="mt-4 rounded-[22px] border border-slate-100 bg-slate-50/70 px-4 py-3 text-xs leading-5 text-slate-500">
-              说明已收纳到标题旁 Tips。
+              {t("settings.profile.usage.inline", "说明已收纳到标题旁 Tips。")}
             </div>
           </article>
         </div>

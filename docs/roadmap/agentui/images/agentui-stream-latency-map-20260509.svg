@@ -2,134 +2,125 @@
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#f8fbff"/>
-      <stop offset="48%" stop-color="#effbf7"/>
-      <stop offset="100%" stop-color="#f8fafc"/>
+      <stop offset="46%" stop-color="#eefcf7"/>
+      <stop offset="100%" stop-color="#fff8ed"/>
     </linearGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#0f172a" flood-opacity="0.10"/>
+    <linearGradient id="hot" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#fb7185"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+    <filter id="shadow" x="-18%" y="-18%" width="136%" height="136%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#0f172a" flood-opacity="0.11"/>
     </filter>
     <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
       <path d="M2,2 L10,6 L2,10 Z" fill="#334155"/>
     </marker>
     <style>
-      .title { font: 800 42px ui-sans-serif, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; fill:#0f172a; }
-      .subtitle { font: 500 22px ui-sans-serif, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; fill:#475569; }
-      .label { font: 700 20px ui-sans-serif, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; fill:#0f172a; }
-      .small { font: 500 16px ui-sans-serif, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; fill:#475569; }
-      .tiny { font: 600 14px ui-sans-serif, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; fill:#64748b; }
-      .num { font: 900 24px ui-sans-serif, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; fill:#0f172a; }
-      .line { stroke:#334155; stroke-width:3; fill:none; marker-end:url(#arrow); }
-      .soft-line { stroke:#94a3b8; stroke-width:2; fill:none; stroke-dasharray:8 8; }
-      .card { rx:26; fill:#ffffff; stroke:#dbe5ee; stroke-width:1.5; filter:url(#shadow); }
-      .mini-card { rx:20; fill:#ffffff; stroke:#dbe5ee; stroke-width:1.4; }
+      .title { font: 850 42px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#0f172a; }
+      .subtitle { font: 500 21px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#475569; }
+      .section { font: 800 22px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#0f172a; }
+      .label { font: 750 19px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#0f172a; }
+      .small { font: 500 16px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#475569; }
+      .tiny { font: 600 14px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#64748b; }
+      .num { font: 900 28px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#0f172a; }
+      .num-hot { font: 950 32px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#be123c; }
+      .card { rx:28; fill:#ffffff; stroke:#dbe5ee; stroke-width:1.5; filter:url(#shadow); }
+      .mini { rx:20; fill:#ffffff; stroke:#dbe5ee; stroke-width:1.4; }
       .green { fill:#ecfdf5; stroke:#a7f3d0; }
       .blue { fill:#eff6ff; stroke:#bfdbfe; }
       .amber { fill:#fffbeb; stroke:#fde68a; }
       .rose { fill:#fff1f2; stroke:#fecdd3; }
       .slate { fill:#f8fafc; stroke:#dbe5ee; }
-      .pill-green { fill:#dcfce7; stroke:#86efac; }
-      .pill-blue { fill:#dbeafe; stroke:#93c5fd; }
-      .pill-amber { fill:#fef3c7; stroke:#fcd34d; }
-      .pill-rose { fill:#ffe4e6; stroke:#fda4af; }
+      .pill { font: 750 13px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; }
+      .line { stroke:#334155; stroke-width:3; fill:none; marker-end:url(#arrow); }
+      .dash { stroke:#94a3b8; stroke-width:2; fill:none; stroke-dasharray:8 8; }
     </style>
   </defs>
 
   <rect width="1600" height="1100" fill="url(#bg)"/>
-  <circle cx="1390" cy="100" r="190" fill="#dbeafe" opacity="0.38"/>
-  <circle cx="126" cy="930" r="240" fill="#bbf7d0" opacity="0.28"/>
-  <circle cx="1480" cy="920" r="170" fill="#fde68a" opacity="0.22"/>
+  <circle cx="1410" cy="120" r="210" fill="#dbeafe" opacity="0.42"/>
+  <circle cx="165" cy="930" r="250" fill="#bbf7d0" opacity="0.28"/>
+  <circle cx="1480" cy="945" r="180" fill="#fed7aa" opacity="0.26"/>
 
-  <text x="90" y="84" class="title">Lime 首响慢：真正卡在哪里？</text>
-  <text x="92" y="124" class="subtitle">结论：前端已经能很快进入“思考中”，剩下最难的是 Provider 首 token 返回；本轮对齐的是“不要让流式输出拖慢整棵消息树”。</text>
+  <text x="86" y="82" class="title">Lime 首字 Token 慢点复查图</text>
+  <text x="88" y="122" class="subtitle">2026-05-10 真实 GUI 复测：前端首响已经足够快，真正拖慢 TTFT 的是 WebSearch allowed 误入 FullRuntime 后的 MCP / 工具面预热。</text>
 
-  <rect x="90" y="165" width="1420" height="300" class="card"/>
-  <text x="125" y="215" class="label">一条消息从点击发送到可见输出，会经过 4 段</text>
+  <rect x="86" y="158" width="1428" height="315" class="card"/>
+  <text x="122" y="210" class="section">点击发送到首字可见的实测链路</text>
 
-  <rect x="125" y="255" width="255" height="145" class="mini-card green"/>
-  <text x="150" y="292" class="num">0 - 1s</text>
-  <text x="150" y="326" class="label">前端首响</text>
-  <text x="150" y="358" class="small">草稿卡、监听绑定、运行状态、</text>
-  <text x="150" y="383" class="small">“思考中”占位快速出现。</text>
+  <rect x="122" y="250" width="230" height="142" class="mini green"/>
+  <text x="148" y="286" class="num">50ms</text>
+  <text x="148" y="322" class="label">首页 pending</text>
+  <text x="148" y="352" class="small">草稿壳和占位态出现</text>
+  <text x="148" y="376" class="tiny">assistantDraftPaint 88ms</text>
 
-  <line x1="392" y1="328" x2="472" y2="328" class="line"/>
+  <line x1="365" y1="321" x2="435" y2="321" class="line"/>
 
-  <rect x="485" y="255" width="320" height="145" class="mini-card amber"/>
-  <text x="510" y="292" class="num">3s - 13s+</text>
-  <text x="510" y="326" class="label">Provider 等待 / 思考</text>
-  <text x="510" y="358" class="small">排队、路由、模型首 token 生成。</text>
-  <text x="510" y="383" class="small">这是当前最难被前端直接消除的段。</text>
+  <rect x="450" y="250" width="230" height="142" class="mini blue"/>
+  <text x="476" y="286" class="num">298ms</text>
+  <text x="476" y="322" class="label">运行态到达</text>
+  <text x="476" y="352" class="small">firstEvent 297ms</text>
+  <text x="476" y="376" class="tiny">submitAccepted 258ms</text>
 
-  <line x1="817" y1="328" x2="897" y2="328" class="line"/>
+  <line x1="693" y1="321" x2="763" y2="321" class="line"/>
 
-  <rect x="910" y="255" width="255" height="145" class="mini-card blue"/>
-  <text x="935" y="292" class="num">~172ms</text>
-  <text x="935" y="326" class="label">首 token 到可见</text>
-  <text x="935" y="358" class="small">前端收到第一个正文 delta 后，</text>
-  <text x="935" y="383" class="small">很快 flush 到页面。</text>
+  <rect x="778" y="236" width="300" height="170" class="mini rose"/>
+  <text x="804" y="276" class="num-hot">6372ms</text>
+  <text x="804" y="314" class="label">提交准备阻塞</text>
+  <text x="804" y="344" class="small">context7 MCP 启动约 3.6s</text>
+  <text x="804" y="368" class="small">playwright MCP 启动约 2.5s</text>
+  <text x="804" y="392" class="tiny">旧逻辑：allowed search 也触发 FullRuntime</text>
 
-  <line x1="1177" y1="328" x2="1257" y2="328" class="line"/>
+  <line x1="1092" y1="321" x2="1162" y2="321" class="line"/>
 
-  <rect x="1270" y="255" width="205" height="145" class="mini-card green"/>
-  <text x="1295" y="292" class="num">后续输出</text>
-  <text x="1295" y="326" class="label">小批次稳定显示</text>
-  <text x="1295" y="358" class="small">96ms 合并、换行即时、</text>
-  <text x="1295" y="383" class="small">积压 120 字即时追赶。</text>
+  <rect x="1177" y="250" width="250" height="142" class="mini amber"/>
+  <text x="1203" y="286" class="num">3553ms</text>
+  <text x="1203" y="322" class="label">模型 / policy 首字</text>
+  <text x="1203" y="352" class="small">headers 456ms</text>
+  <text x="1203" y="376" class="tiny">first provider msg 1139ms</text>
 
-  <rect x="125" y="422" width="1350" height="1" fill="#e2e8f0"/>
-  <text x="125" y="445" class="tiny">这就是为什么你会感觉“卡住”：页面已进入处理态，但模型还没吐第一个正文 token；如果每个小 delta 都刷新完整消息树，后续还会抖。</text>
+  <line x1="1438" y1="321" x2="1480" y2="321" class="line"/>
 
-  <rect x="90" y="500" width="680" height="385" class="card"/>
-  <text x="125" y="550" class="label">参考对象为什么体感快？</text>
+  <rect x="1218" y="408" width="250" height="44" rx="22" fill="#fff7ed" stroke="#fed7aa"/>
+  <text x="1240" y="436" class="pill" fill="#9a3412">首正文到可见仅 130ms</text>
 
-  <rect x="125" y="585" width="285" height="245" class="mini-card blue"/>
-  <text x="150" y="625" class="label">Codex</text>
-  <text x="150" y="660" class="small">1. OutputItemAdded 先告诉 UI：</text>
-  <text x="170" y="685" class="small">“一个输出项开始了”。</text>
-  <text x="150" y="720" class="small">2. OutputTextDelta 立即进流。</text>
-  <text x="150" y="755" class="small">3. TUI 不逐字符重排历史：</text>
-  <text x="170" y="780" class="small">换行边界提交，积压后 catch-up。</text>
+  <text x="122" y="440" class="tiny">总结果：firstThinkingDelta 9024ms，firstTextDelta 10656ms，firstTextPaint 10786ms。前端 paint 不是主瓶颈。</text>
 
-  <rect x="445" y="585" width="285" height="245" class="mini-card green"/>
-  <text x="470" y="625" class="label">Claude Code</text>
-  <text x="470" y="660" class="small">1. stream_request_start 先切状态。</text>
-  <text x="470" y="695" class="small">2. thinking / text / tool 各自 spinner。</text>
-  <text x="470" y="730" class="small">3. streamingText 单独热路径，</text>
-  <text x="490" y="755" class="small">messages 走 deferred。</text>
-  <text x="470" y="790" class="small">4. 只显示换行完成的流式文本。</text>
+  <rect x="86" y="510" width="690" height="380" class="card"/>
+  <text x="122" y="560" class="section">这次补查到的真实慢点</text>
 
-  <rect x="90" y="915" width="680" height="105" class="mini-card slate"/>
-  <text x="125" y="955" class="label">Lime 这次已对齐的部分</text>
-  <text x="125" y="982" class="small">状态先到，首字即时；后续正文改成 96ms 小批次 + 换行即时 + 120 字积压追赶。</text>
-  <text x="125" y="1008" class="small">目标是避免 MessageList 被每个小 delta 高频拖动重算。</text>
+  <rect x="122" y="592" width="610" height="72" class="mini rose"/>
+  <text x="150" y="624" class="label">1. WebSearch allowed 被当成重型执行入口</text>
+  <text x="150" y="650" class="small">只是“允许联网”，不等于本轮必须启动完整 MCP 工具面。</text>
 
-  <rect x="830" y="500" width="680" height="520" class="card"/>
-  <text x="865" y="550" class="label">现在的困难边界</text>
+  <rect x="122" y="682" width="610" height="72" class="mini rose"/>
+  <text x="150" y="714" class="label">2. FullRuntime 无差别预热 enabled_lime MCP</text>
+  <text x="150" y="740" class="small">简单短问也会串行启动 context7 / playwright，直接吃掉 6s+。</text>
 
-  <rect x="865" y="585" width="285" height="260" class="mini-card green"/>
-  <text x="890" y="625" class="label">前端能继续修</text>
-  <rect x="890" y="650" width="88" height="30" rx="15" class="pill-green"/>
-  <text x="908" y="671" class="tiny">已做</text>
-  <text x="890" y="710" class="small">• 立即显示“思考中”</text>
-  <text x="890" y="742" class="small">• 默认隐藏 raw reasoning</text>
-  <text x="890" y="774" class="small">• 输出节奏更稳，不抖动</text>
-  <text x="890" y="806" class="small">• 过程文件卡与完成态一致</text>
+  <rect x="122" y="772" width="610" height="72" class="mini amber"/>
+  <text x="150" y="804" class="label">3. 搜索开启时前端 Prompt 退出紧凑模式</text>
+  <text x="150" y="830" class="small">首轮输入体积变大，进一步放大 provider 首 token 等待。</text>
 
-  <rect x="1185" y="585" width="285" height="260" class="mini-card rose"/>
-  <text x="1210" y="625" class="label">前端不能硬修</text>
-  <rect x="1210" y="650" width="108" height="30" rx="15" class="pill-rose"/>
-  <text x="1228" y="671" class="tiny">仍困难</text>
-  <text x="1210" y="710" class="small">• Provider 排队 / 限流</text>
-  <text x="1210" y="742" class="small">• 模型首 token 生成时间</text>
-  <text x="1210" y="774" class="small">• 模型权限 / 白名单错误</text>
-  <text x="1210" y="806" class="small">• 快速路由与显示模型不一致</text>
+  <rect x="824" y="510" width="690" height="380" class="card"/>
+  <text x="860" y="560" class="section">本轮优化后的路由原则</text>
 
-  <line x1="1007" y1="862" x2="1007" y2="900" class="soft-line"/>
-  <line x1="1327" y1="862" x2="1327" y2="900" class="soft-line"/>
+  <rect x="860" y="592" width="610" height="72" class="mini green"/>
+  <text x="888" y="624" class="label">Allowed Search：仍走 FastChat</text>
+  <text x="888" y="650" class="small">WebSearch / WebFetch 原生工具保留，模型按需搜索，但不启动 MCP。</text>
 
-  <rect x="865" y="875" width="605" height="105" class="mini-card amber"/>
-  <text x="890" y="915" class="label">下一刀最有价值</text>
-  <text x="890" y="948" class="small">把“Provider / 模型 / 路由层为什么还没吐首字”做成用户可理解诊断：</text>
-  <text x="890" y="973" class="small">显示真实请求模型、慢等待原因、可自动回退选项，而不是在前端伪造进度。</text>
+  <rect x="860" y="682" width="610" height="72" class="mini green"/>
+  <text x="888" y="714" class="label">Required Search：只保留搜索约束，不预热 MCP</text>
+  <text x="888" y="740" class="small">明确 required 时可等待 WebSearch preflight，但 context7 / playwright 不应前置。</text>
 
-  <text x="90" y="1060" class="tiny">图中样例来自 2026-05-09 本地 Playwright 复测：assistantDraftPaint 75ms，firstRuntimeStatus 927ms，firstTextDelta 13285ms，firstTextPaint 172ms。</text>
+  <rect x="860" y="772" width="610" height="72" class="mini green"/>
+  <text x="888" y="804" class="label">Full Context：有真实技能 / 项目 / 浏览器需求才预热</text>
+  <text x="888" y="830" class="small">service skill、图片任务、项目上下文、多代理等仍保持重型 runtime。</text>
+
+  <rect x="86" y="925" width="1428" height="110" class="card"/>
+  <text x="122" y="970" class="section">慢点排序与预期收益</text>
+  <text x="122" y="1002" class="small">优先级 1：MCP / tool surface startup 约 6.37s，本轮通过 search-only 快路径移除；优先级 2：provider / policy 首字约 3.55s，后续继续看模型路由、Prompt 体积和缓存；优先级 3：前端首字 paint 约 0.13s，暂非瓶颈。</text>
+  <text x="122" y="1028" class="tiny">数据源：2026-05-10 Lime Playwright 真实复测 + Tauri TTFT 日志。优化提交后需继续用同一句短问复测 submit preparation 与 firstTextDelta。</text>
+
+  <rect x="1145" y="72" width="330" height="52" rx="26" fill="#ecfdf5" stroke="#86efac"/>
+  <text x="1174" y="105" class="pill" fill="#166534">已复查：前端快，后端预热慢</text>
 </svg>

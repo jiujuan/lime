@@ -1,11 +1,15 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockDeveloperSettings, mockExperimentalSettings } = vi.hoisted(() => ({
-  mockDeveloperSettings: vi.fn(),
-  mockExperimentalSettings: vi.fn(),
-}));
+const { mockDeveloperSettings, mockExperimentalSettings, mockUseTranslation } =
+  vi.hoisted(() => ({
+    mockDeveloperSettings: vi.fn(),
+    mockExperimentalSettings: vi.fn(),
+    mockUseTranslation: vi.fn((_namespace?: string) => ({
+      t: (_key: string, fallback: string) => fallback,
+    })),
+  }));
 
 vi.mock("../developer", () => ({
   DeveloperSettings: (props: unknown) => {
@@ -19,6 +23,10 @@ vi.mock("../experimental", () => ({
     mockExperimentalSettings(props);
     return <div>实验功能占位</div>;
   },
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
 }));
 
 import { DeveloperLabSettings } from ".";
@@ -45,9 +53,18 @@ function renderComponent(
   return container;
 }
 
+beforeEach(() => {
+  (
+    globalThis as typeof globalThis & {
+      IS_REACT_ACT_ENVIRONMENT?: boolean;
+    }
+  ).IS_REACT_ACT_ENVIRONMENT = true;
+});
+
 afterEach(() => {
   mockDeveloperSettings.mockReset();
   mockExperimentalSettings.mockReset();
+  mockUseTranslation.mockClear();
 
   while (mounted.length > 0) {
     const current = mounted.pop();
@@ -67,6 +84,7 @@ describe("DeveloperLabSettings", () => {
     const container = renderComponent();
     const text = container.textContent ?? "";
 
+    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
     expect(text).toContain("开发者与实验功能");
     expect(text).toContain("开发者工具占位");
     expect(text).not.toContain("实验功能占位");

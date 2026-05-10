@@ -2,6 +2,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
 import type {
   AsterExecutionStrategy,
+  AgentRuntimeWebSearchMode,
   AsterSessionExecutionRuntime,
   AutoContinueRequestPayload,
   QueuedTurnSnapshot,
@@ -53,6 +54,7 @@ interface ExecuteAgentStreamSubmitOptions {
   effectiveExecutionStrategy: AsterExecutionStrategy;
   modelOverride?: string;
   webSearch?: boolean;
+  searchMode?: AgentRuntimeWebSearchMode;
   thinking?: boolean;
   autoContinue?: AutoContinueRequestPayload;
   systemPrompt?: string;
@@ -135,6 +137,7 @@ export async function executeAgentStreamSubmit(
     effectiveExecutionStrategy,
     modelOverride,
     webSearch,
+    searchMode,
     thinking,
     autoContinue,
     systemPrompt,
@@ -279,6 +282,7 @@ export async function executeAgentStreamSubmit(
           effectiveModel,
           modelOverride,
           webSearch,
+          searchMode,
           thinking,
           autoContinue,
         }),

@@ -2,14 +2,38 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockGetConfig, mockSaveConfig } = vi.hoisted(() => ({
-  mockGetConfig: vi.fn(),
-  mockSaveConfig: vi.fn(),
-}));
+const { mockGetConfig, mockSaveConfig, mockUseTranslation } = vi.hoisted(
+  () => ({
+    mockGetConfig: vi.fn(),
+    mockSaveConfig: vi.fn(),
+    mockUseTranslation: vi.fn((_namespace?: string) => ({
+      t: (key: string, options?: unknown) => {
+        if (typeof options === "string") {
+          return options;
+        }
+
+        if (options && typeof options === "object") {
+          const values = options as Record<string, unknown>;
+          const template =
+            typeof values.defaultValue === "string" ? values.defaultValue : key;
+          return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+            String(values[name] ?? ""),
+          );
+        }
+
+        return key;
+      },
+    })),
+  }),
+);
 
 vi.mock("@/lib/api/appConfig", () => ({
   getConfig: mockGetConfig,
   saveConfig: mockSaveConfig,
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
 }));
 
 vi.mock("@/components/input-kit", () => ({
@@ -172,6 +196,7 @@ describe("MediaServicesSettings", () => {
     await flushEffects();
 
     const text = container.textContent ?? "";
+    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
     expect(text).toContain("服务模型");
     expect(text).toContain("话题自动命名助理");
     expect(text).toContain("AI 图片话题命名助理");

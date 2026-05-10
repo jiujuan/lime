@@ -16,10 +16,11 @@
 
 import React, { useEffect, useState } from "react";
 import { getConfig, type Config } from "@/lib/api/appConfig";
-import { I18nPatchProvider } from "./I18nPatchProvider";
+import { I18nPatchProvider } from "./legacy-patch/I18nPatchProvider";
 import { StartupLoadingScreen } from "./StartupLoadingScreen";
-import { Language } from "./text-map";
 import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
+import { changeLimeLocale } from "./createI18n";
+import { toLegacyPatchLanguage } from "./locales";
 
 const CONFIG_LOAD_TIMEOUT_MS = 2500;
 const READY_COMMIT_TIMEOUT_MS = 48;
@@ -66,7 +67,17 @@ export function withI18nPatch<P extends object>(
         setIsReady(true);
       };
 
-      const applyConfig = (nextConfig: Config) => {
+      const applyConfig = async (nextConfig: Config) => {
+        if (cancelled) {
+          return;
+        }
+
+        try {
+          await changeLimeLocale(nextConfig.language || "auto");
+        } catch (error) {
+          console.warn("[i18n] Failed to apply key-based locale:", error);
+        }
+
         if (cancelled) {
           return;
         }
@@ -105,12 +116,12 @@ export function withI18nPatch<P extends object>(
         } else {
           console.warn(`[i18n] ${reason}`);
         }
-        applyConfig({ language: "zh" } as Config);
+        void applyConfig({ language: "zh-CN" } as Config);
       };
 
       // 如果不在 Tauri 环境，使用默认配置
       if (!isTauriEnvironment()) {
-        applyConfig({ language: "zh" } as Config);
+        void applyConfig({ language: "zh-CN" } as Config);
         return () => {
           cancelled = true;
         };
@@ -126,7 +137,7 @@ export function withI18nPatch<P extends object>(
             window.clearTimeout(timeoutId);
             timeoutId = null;
           }
-          applyConfig(c);
+          void applyConfig(c);
         })
         .catch((err) => {
           if (timeoutId !== null) {
@@ -165,7 +176,7 @@ export function withI18nPatch<P extends object>(
         }}
       >
         <I18nPatchProvider
-          initialLanguage={(config.language || "zh") as Language}
+          initialLanguage={toLegacyPatchLanguage(config.language || "zh-CN")}
         >
           <Component {...props} />
         </I18nPatchProvider>

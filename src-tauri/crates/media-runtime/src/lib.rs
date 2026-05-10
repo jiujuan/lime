@@ -1635,7 +1635,7 @@ fn parse_sse_event(raw_event: &str) -> Option<(String, String)> {
 
 fn extract_responses_image_generation_result(
     response_body_raw: &str,
-) -> Result<(Value, Value), TaskErrorRecord> {
+) -> Result<(Value, Value), Box<TaskErrorRecord>> {
     let mut event_count = 0u32;
     let mut output_item_count = 0u32;
 
@@ -1696,12 +1696,12 @@ fn extract_responses_image_generation_result(
         ));
     }
 
-    Err(build_image_task_error(
+    Err(Box::new(build_image_task_error(
         "image_result_empty",
         "Responses 图片生成已返回成功，但 SSE 流里没有 image_generation_call.result",
         false,
         "result",
-    ))
+    )))
 }
 
 fn summarize_response_body(body: &str) -> String {
@@ -1967,7 +1967,7 @@ async fn request_single_responses_image_generation(
         ));
     }
 
-    extract_responses_image_generation_result(&response_body_raw)
+    extract_responses_image_generation_result(&response_body_raw).map_err(|error| *error)
 }
 
 async fn request_single_image_generation_for_executor(

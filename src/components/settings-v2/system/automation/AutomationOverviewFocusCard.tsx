@@ -6,6 +6,7 @@ import type {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useTranslation } from "react-i18next";
 
 interface AutomationOverviewFocusCardProps {
   job: AutomationJobRecord | null;
@@ -32,6 +33,7 @@ export function AutomationOverviewFocusCard({
   onOpenSceneAppGovernance,
   onReviewCurrentProject,
 }: AutomationOverviewFocusCardProps) {
+  const { t } = useTranslation("settings");
   const focusSummary =
     summaryCard?.scorecardAggregate?.summary ??
     summaryCard?.summary ??
@@ -58,10 +60,13 @@ export function AutomationOverviewFocusCard({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <CardTitle className="text-xl text-slate-900">
-              现在先继续这条
+              {t("settings.automation.focus.title", "现在先继续这条")}
             </CardTitle>
             <p className="mt-1 text-sm leading-6 text-slate-500">
-              持续流程里只抬一条最值得续上的做法和下一步。
+              {t(
+                "settings.automation.focus.description",
+                "持续流程里只抬一条最值得续上的做法和下一步。",
+              )}
             </p>
           </div>
           {summaryCard ? (
@@ -72,13 +77,19 @@ export function AutomationOverviewFocusCard({
       <CardContent className="space-y-4">
         {!job ? (
           <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/60 p-6 text-sm leading-6 text-slate-500">
-            还没有持续接上的做法。等一条持续流程真的带着结果跑起来后，这里会自动接上。
+            {t(
+              "settings.automation.focus.empty",
+              "还没有持续接上的做法。等一条持续流程真的带着结果跑起来后，这里会自动接上。",
+            )}
           </div>
         ) : null}
 
         {job && loading && !summaryCard ? (
           <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/60 p-6 text-sm leading-6 text-slate-500">
-            正在整理这条做法最近一轮的结果和下一步…
+            {t(
+              "settings.automation.focus.loading",
+              "正在整理这条做法最近一轮的结果和下一步…",
+            )}
           </div>
         ) : null}
 
@@ -116,7 +127,10 @@ export function AutomationOverviewFocusCard({
                 ) : null}
                 {focusNextAction ? (
                   <div className="mt-2 text-sm leading-6 text-slate-600">
-                    先做：{focusNextAction}
+                    {t("settings.automation.focus.nextAction", {
+                      action: focusNextAction,
+                      defaultValue: "先做：{{action}}",
+                    })}
                   </div>
                 ) : null}
               </div>
@@ -125,7 +139,7 @@ export function AutomationOverviewFocusCard({
             {runDetailView ? (
               <div className="mt-4 rounded-[18px] border border-white bg-white px-4 py-3">
                 <div className="text-xs font-medium text-slate-500">
-                  最近结果
+                  {t("settings.automation.focus.recentResult", "最近结果")}
                 </div>
                 <div className="mt-2 text-sm font-medium text-slate-900">
                   {runDetailView.statusLabel} ·{" "}
@@ -147,7 +161,10 @@ export function AutomationOverviewFocusCard({
                   data-testid="automation-overview-review-current-project"
                   onClick={onReviewCurrentProject}
                 >
-                  继续看这轮结果
+                  {t(
+                    "settings.automation.focus.action.review",
+                    "继续看这轮结果",
+                  )}
                 </Button>
               ) : null}
               {onOpenSceneAppGovernance ? (
@@ -158,7 +175,10 @@ export function AutomationOverviewFocusCard({
                   data-testid="automation-overview-open-governance"
                   onClick={onOpenSceneAppGovernance}
                 >
-                  看最近结果
+                  {t(
+                    "settings.automation.focus.action.openGovernance",
+                    "看最近结果",
+                  )}
                 </Button>
               ) : null}
               {onOpenSceneAppDetail ? (
@@ -169,7 +189,10 @@ export function AutomationOverviewFocusCard({
                   data-testid="automation-overview-open-detail"
                   onClick={onOpenSceneAppDetail}
                 >
-                  回补这轮信息
+                  {t(
+                    "settings.automation.focus.action.openDetail",
+                    "回补这轮信息",
+                  )}
                 </Button>
               ) : null}
               {onOpenJobDetails ? (
@@ -180,7 +203,10 @@ export function AutomationOverviewFocusCard({
                   data-testid="automation-overview-open-job-details"
                   onClick={onOpenJobDetails}
                 >
-                  看这条详情
+                  {t(
+                    "settings.automation.focus.action.openJobDetails",
+                    "看这条详情",
+                  )}
                 </Button>
               ) : null}
             </div>

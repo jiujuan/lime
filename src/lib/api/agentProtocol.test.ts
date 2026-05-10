@@ -72,6 +72,24 @@ describe("agentProtocol", () => {
     });
   });
 
+  it("应透传显式联网搜索模式而不是从文本关键词推断", () => {
+    expect(
+      createSubmitTurnRequestFromAgentOp({
+        type: "user_input",
+        text: "请搜索最新 AI 新闻",
+        sessionId: "session-search",
+        eventName: "aster_stream_session-search",
+        preferences: {
+          webSearch: true,
+          searchMode: "required",
+        },
+      }).turn_config,
+    ).toMatchObject({
+      web_search: true,
+      search_mode: "required",
+    });
+  });
+
   it("缺少 workspaceId 时不应在 runtime submit request 中生成 workspace_id", () => {
     expect(
       createSubmitTurnRequestFromAgentOp({

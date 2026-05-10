@@ -3,6 +3,26 @@ import { describe, expect, it } from "vitest";
 import { detectTasks } from "./quality-task-planner.mjs";
 
 describe("quality-task-planner", () => {
+  it("应把 Agent QC manifest/schema 归到 bridge/contracts 风险", () => {
+    const tasks = detectTasks([
+      "docs/tests/agent-ops-qc.md",
+      "docs/tests/agent-qc-p0-scenarios.md",
+      "docs/tests/lime-agent-qc-rollout-plan.md",
+      "docs/test/agent-qc-scenarios.manifest.json",
+      "docs/test/agent-qc-evidence.schema.json",
+      "docs/test/agent-qc-gui-flows.manifest.json",
+      "scripts/lib/agent-qc-completion-audit-core.mjs",
+      "scripts/lib/agent-qc-evidence-core.mjs",
+      "scripts/lib/agent-qc-gui-flow-core.mjs",
+      "scripts/lib/agent-qc-qcloop-job-core.mjs",
+      "scripts/lib/agent-qc-release-summary-core.mjs",
+    ]);
+
+    expect(tasks.bridge).toBe(true);
+    expect(tasks.bridgeReasons).toContain("agent_qc_contract");
+    expect(tasks.docsOnly).toBe(false);
+  });
+
   it("应把 harness cleanup/report 主链文件归到 bridge/contracts 风险", () => {
     const tasks = detectTasks([
       "scripts/lib/generated-slop-report-core.mjs",

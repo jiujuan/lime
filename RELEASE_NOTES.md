@@ -1,3 +1,70 @@
+## Lime v1.33.0
+
+发布日期：`2026-05-11`
+递交范围：完整 dirty worktree，包含 tracked、deleted 与新增文件；`.lime/` 等本地运行态忽略目录不纳入发布提交。
+
+> 发布说明：上一版 release tag 为 `v1.32.0`。本版按用户要求升级到 `v1.33.0`，并把本轮待递交的全部源码、文档、脚本、测试与发布证据索引纳入 release notes。
+
+### 发布概览
+
+- 应用版本从 `1.32.0` 升级到 `1.33.0`，同步 `package.json`、`package-lock.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`、`src-tauri/tauri.conf.json`、`src-tauri/tauri.conf.headless.json`、`packages/lime-cli-npm/package.json` 与 `@limecloud/lime-cli` 发布示例。
+- Agent QC 发布门禁补齐 scenario / GUI flow / Evidence Pack schema、qcloop job / status / preflight / export / release-summary / audit 脚本，以及 GitHub release workflow 的 P0 Evidence Pack 硬门禁。
+- Agent Runtime 与 Team / Workspace 主链补齐 approval sandbox、Claw chat ready streaming、tool surface、service skill entry、browser runtime、knowledge GUI 与 GUI owner 检查脚本，降低只靠浅层 smoke 误判的风险。
+- i18n 主链从 legacy DOM Patch 迁到 key-based resources：新增 `createI18n`、namespace loader、locale resources、格式化工具与覆盖测试，旧 patch 文件移入 `src/i18n/legacy-patch/` 并从 current 入口退场。
+- 设置 v2、侧边栏、Agent 输入栏、任务中心、Skills 页面与系统诊断页完成一批用户可见回归，覆盖账号、统计、用户中心、Provider、媒体能力、语音、快捷键、环境、渠道日志与工作区修复历史。
+- 对话功能 E2E 证据新增到 `output/dialogue-feature-e2e-20260510/`，覆盖 24 个对话 / 任务 / artifact / 搜索 / 多媒体场景截图、manifest 与审计 JSON。
+- 清理旧版本临时证据与旧实现残留：删除根目录旧 Playwright JSON、旧 qcloop 截图、旧 i18n patch 入口文件，避免 `v1.32.0` 以前的临时产物继续混入 release 范围。
+
+### 用户可见更新
+
+#### 1. Agent 对话、任务与工作台
+
+- Agent 输入栏、轻量预览、任务中心 tab、Team Workspace board、curated task reference selection 与 fast response model 增加更稳定的状态与测试覆盖。
+- Claw chat ready streaming smoke 固化为可复跑入口，覆盖 ready 状态、流式输出、cancel / provider fixed 场景与 GUI evidence 记录。
+- AppSidebar 会话 shelf 与会话格式化补齐测试，历史会话、队列状态和工作区入口展示更稳定。
+
+#### 2. 设置页与能力配置
+
+- 设置 v2 增强账号资料、统计、用户中心会话、Provider、媒体服务、图片 / 视频 / 语音能力、快捷键、开发者、环境和渠道日志页面。
+- Companion capability preferences、MediaPreferenceSection 与 Provider 页面补齐能力偏好和模型配置回归。
+- WorkspaceRepairHistoryCard、ChannelLogTailPanel 与渠道日志 filter 补齐可见状态和过滤测试。
+
+#### 3. 本地化与旧版本清理
+
+- current i18n resources 覆盖 `zh-CN`、`zh-TW`、`en-US`、`ja-JP`、`ko-KR` 的 `common`、`navigation`、`workspace`、`agent`、`settings`、`errors` namespace。
+- 新增缺失翻译检测、legacy patch metrics report 与 namespace load / locale / format / type 测试，避免新增用户可见文案回落到旧 DOM patch。
+- 旧 `I18nPatchProvider`、`dom-replacer`、`patches/*.json` 与 `text-map` 已从 current 位置删除，仅作为 `legacy-patch` 迁移目录保留。
+
+### 开发者与治理更新
+
+- Agent QC 文档新增 `docs/test/*.json`、`docs/tests/*`、completion audit、current blockers、evidence contract、qcloop operations、rollout plan 与 stale worker 分析，发布证据口径回到仓库内版本化事实源。
+- `npm run test:contracts` 增加 `agent-qc:check`，同时校验 Agent QC scenario manifest 与 GUI flow manifest。
+- `scripts/quality-task-planner`、`local-ci`、`verify-gui-smoke` 和各 smoke runner 同步 Agent QC / GUI 主路径任务选择。
+- `.github/workflows/release.yml` 和 nightly harness workflow 补齐 Agent QC 发布门禁，不再允许缺 P0 Evidence Pack 的 release note 进入绿色发布。
+- `legacySurfaceCatalog`、`agentCommandCatalog`、DevBridge dispatcher、mockPriorityCommands 与 tauri mock 同步 runtime / tool / QC 新边界。
+- Rust 发布门禁收口三处稳定性问题：MCP tool search 精确 inner tool name 优先于后缀命中，Fal queue 超时测试禁用本机代理并加宽 client timeout，Agent 流式策略测试改用注入式内存 `SessionStore`，避免全量并发测试写全局 SQLite 时出现 I/O 抖动。
+
+### 已知边界
+
+- 官方 Agent QC Evidence Pack 仍必须由真实 qcloop 8/8 P0 pass 后导出；历史 sidecar、source-tree smoke 或 `.lime/qc` 本地运行态文件不能替代发布证据。
+- `output/dialogue-feature-e2e-20260510/` 是本轮对话功能 E2E 证据，不等同于 installer artifact 验证。
+- release workflow 已具备硬门禁；GitHub Release artifact 仍由 tag 推送后的发布流水线生成。
+
+### 校验状态
+
+- `npm run verify:app-version`：通过，版本一致性为 `1.33.0`。
+- `cargo fmt --manifest-path "src-tauri/Cargo.toml" --all`：通过。
+- `cargo test --manifest-path "src-tauri/Cargo.toml" --workspace --locked`：通过；使用 `CARGO_HOME=/tmp/lime-cargo-home-v133` 与 `CARGO_TARGET_DIR=src-tauri/target-release-v133-temp-home` 避开本机全局 Cargo 缓存损坏。
+- `npm run lint:rust`：通过；已修复 `lime-media-runtime` 大 Err variant clippy warning，并在后续 MCP / server / agent 测试稳定性修复后复跑通过。
+- `npm run lint`：通过。
+- `npm test`：通过，`54/54` 批退出码为 `0`。
+- `npm run test:contracts`：通过，覆盖 command / harness / modality / harness cleanup / agent-qc scenario 与 GUI flow manifest contract。
+- `git diff --check`：通过。
+
+---
+
+**完整变更**: `v1.32.0` -> `v1.33.0`
+
 ## Lime v1.32.0
 
 发布日期：`2026-05-10`

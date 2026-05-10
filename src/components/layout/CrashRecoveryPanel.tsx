@@ -29,6 +29,7 @@ import {
   buildCrashRecoveryReloadUrl,
   isModuleImportFailureErrorMessage,
 } from "./CrashRecoveryPanel.helpers";
+import { useTranslation } from "react-i18next";
 
 interface CrashRecoveryPanelProps {
   error: Error | null;
@@ -41,6 +42,7 @@ export function CrashRecoveryPanel({
   componentStack,
   onRetry,
 }: CrashRecoveryPanelProps) {
+  const { t } = useTranslation("errors");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{
     type: "success" | "error";
@@ -150,53 +152,81 @@ export function CrashRecoveryPanel({
           text:
             actionError instanceof Error
               ? actionError.message
-              : "生成诊断信息失败",
+              : t(
+                  "errors.crashRecovery.message.generateDiagnosticFailed",
+                  "生成诊断信息失败",
+                ),
         });
       } finally {
         setBusy(false);
       }
     },
-    [buildPayload],
+    [buildPayload, t],
   );
 
   const handleCopyTemplate = useCallback(() => {
     void runAction(
       (payload) => copyCrashDiagnosticToClipboard(payload),
-      "诊断信息已复制，可直接发送给开发者",
+      t(
+        "errors.crashRecovery.message.diagnosticCopied",
+        "诊断信息已复制，可直接发送给开发者",
+      ),
     );
-  }, [runAction]);
+  }, [runAction, t]);
 
   const handleCopyJson = useCallback(() => {
     void runAction(
       (payload) => copyCrashDiagnosticJsonToClipboard(payload),
-      "纯 JSON 诊断信息已复制",
+      t(
+        "errors.crashRecovery.message.diagnosticJsonCopied",
+        "纯 JSON 诊断信息已复制",
+      ),
     );
-  }, [runAction]);
+  }, [runAction, t]);
 
   const handleExportJson = useCallback(() => {
-    void runAction(async (payload) => {
-      const result = exportCrashDiagnosticToJson(payload, { sceneTag });
-      let openedPath: string | null = null;
-      try {
-        const opened = await openCrashDiagnosticDownloadDirectory();
-        openedPath = opened.openedPath;
-      } catch {
-        openedPath = null;
-      }
-      setMessage({
-        type: "success",
-        text: openedPath
-          ? `诊断文件已导出：${result.fileName}，并已打开目录：${openedPath}`
-          : `诊断文件已导出：${result.fileName}（位置：${result.locationHint}）`,
-      });
-    }, "诊断文件已导出");
-  }, [sceneTag, runAction]);
+    void runAction(
+      async (payload) => {
+        const result = exportCrashDiagnosticToJson(payload, { sceneTag });
+        let openedPath: string | null = null;
+        try {
+          const opened = await openCrashDiagnosticDownloadDirectory();
+          openedPath = opened.openedPath;
+        } catch {
+          openedPath = null;
+        }
+        setMessage({
+          type: "success",
+          text: openedPath
+            ? t("errors.crashRecovery.message.diagnosticExportedAndOpened", {
+                fileName: result.fileName,
+                path: openedPath,
+                defaultValue:
+                  "诊断文件已导出：{{fileName}}，并已打开目录：{{path}}",
+              })
+            : t("errors.crashRecovery.message.diagnosticExported", {
+                fileName: result.fileName,
+                location: result.locationHint,
+                defaultValue:
+                  "诊断文件已导出：{{fileName}}（位置：{{location}}）",
+              }),
+        });
+      },
+      t(
+        "errors.crashRecovery.message.diagnosticExportedShort",
+        "诊断文件已导出",
+      ),
+    );
+  }, [sceneTag, runAction, t]);
 
   const handleSelectNewDirectory = useCallback(async () => {
     if (!oldWorkspacePath) {
       setMessage({
         type: "error",
-        text: "无法从错误信息中提取 workspace 路径",
+        text: t(
+          "errors.crashRecovery.message.workspacePathExtractFailed",
+          "无法从错误信息中提取 workspace 路径",
+        ),
       });
       return;
     }
@@ -211,7 +241,10 @@ export function CrashRecoveryPanel({
       if (!workspace) {
         setMessage({
           type: "error",
-          text: `未找到路径为 ${oldWorkspacePath} 的 workspace`,
+          text: t("errors.crashRecovery.message.workspaceNotFound", {
+            path: oldWorkspacePath,
+            defaultValue: "未找到路径为 {{path}} 的 workspace",
+          }),
         });
         return;
       }
@@ -222,39 +255,65 @@ export function CrashRecoveryPanel({
           rootPath: newPath,
         },
         {
-          successMessage: "Workspace 路径已更新",
+          successMessage: t(
+            "errors.crashRecovery.message.workspacePathUpdatedShort",
+            "Workspace 路径已更新",
+          ),
           showSuccessWhenGuideAlreadySeen: false,
         },
       );
       setMessage({
         type: "success",
-        text: `Workspace 路径已更新为：${newPath}`,
+        text: t("errors.crashRecovery.message.workspacePathUpdated", {
+          path: newPath,
+          defaultValue: "Workspace 路径已更新为：{{path}}",
+        }),
       });
       onRetry();
     } catch (err) {
       setMessage({
         type: "error",
-        text: err instanceof Error ? err.message : "更新 workspace 路径失败",
+        text:
+          err instanceof Error
+            ? err.message
+            : t(
+                "errors.crashRecovery.message.workspacePathUpdateFailed",
+                "更新 workspace 路径失败",
+              ),
       });
     } finally {
       setBusy(false);
     }
-  }, [oldWorkspacePath, onRetry]);
+  }, [oldWorkspacePath, onRetry, t]);
 
   const handleOpenDownloadDirectory = useCallback(() => {
-    void runAction(async () => {
-      const result = await openCrashDiagnosticDownloadDirectory();
-      setMessage({
-        type: "success",
-        text: `已打开下载目录：${result.openedPath}`,
-      });
-    }, "已打开下载目录");
-  }, [runAction]);
+    void runAction(
+      async () => {
+        const result = await openCrashDiagnosticDownloadDirectory();
+        setMessage({
+          type: "success",
+          text: t("errors.crashRecovery.message.downloadDirectoryOpened", {
+            path: result.openedPath,
+            defaultValue: "已打开下载目录：{{path}}",
+          }),
+        });
+      },
+      t(
+        "errors.crashRecovery.message.downloadDirectoryOpenedShort",
+        "已打开下载目录",
+      ),
+    );
+  }, [runAction, t]);
 
   const handleClearDiagnosticHistory = useCallback(async () => {
     const confirmed =
       typeof window === "undefined" ||
-      window.confirm(CLEAR_CRASH_DIAGNOSTIC_HISTORY_CONFIRM_TEXT);
+      window.confirm(
+        t(
+          "errors.crashRecovery.confirm.clearDiagnosticHistory",
+          CLEAR_CRASH_DIAGNOSTIC_HISTORY_CONFIRM_TEXT,
+        ),
+      );
     if (!confirmed) {
       return;
     }
@@ -266,17 +325,26 @@ export function CrashRecoveryPanel({
       await clearCrashDiagnosticHistory();
       setMessage({
         type: "success",
-        text: "已清空旧诊断信息，后续复制将只包含新的诊断数据",
+        text: t(
+          "errors.crashRecovery.message.diagnosticHistoryCleared",
+          "已清空旧诊断信息，后续复制将只包含新的诊断数据",
+        ),
       });
     } catch (err) {
       setMessage({
         type: "error",
-        text: err instanceof Error ? err.message : "清空旧诊断信息失败",
+        text:
+          err instanceof Error
+            ? err.message
+            : t(
+                "errors.crashRecovery.message.clearDiagnosticHistoryFailed",
+                "清空旧诊断信息失败",
+              ),
       });
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [t]);
 
   const handleForceResourceReload = useCallback(() => {
     if (typeof window === "undefined") {
@@ -297,10 +365,16 @@ export function CrashRecoveryPanel({
       setBusy(false);
       setMessage({
         type: "error",
-        text: err instanceof Error ? err.message : "刷新资源失败",
+        text:
+          err instanceof Error
+            ? err.message
+            : t(
+                "errors.crashRecovery.message.resourceReloadFailed",
+                "刷新资源失败",
+              ),
       });
     }
-  }, []);
+  }, [t]);
 
   return (
     <div className="flex h-screen w-screen items-center justify-center bg-background px-6">
@@ -311,33 +385,50 @@ export function CrashRecoveryPanel({
           </div>
           <div className="min-w-0">
             <h2 className="text-lg font-semibold">
-              应用发生错误，已进入恢复模式
+              {t("errors.crashRecovery.title", "应用发生错误，已进入恢复模式")}
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              建议先复制或导出诊断信息，再点击
-              {isModuleImportFailure ? "“强制刷新资源”" : "“重试恢复”"}
-              继续使用。
+              {t(
+                "errors.crashRecovery.descriptionPrefix",
+                "建议先复制或导出诊断信息，再点击",
+              )}
+              {isModuleImportFailure
+                ? t(
+                    "errors.crashRecovery.descriptionAction.forceReload",
+                    "“强制刷新资源”",
+                  )
+                : t(
+                    "errors.crashRecovery.descriptionAction.retry",
+                    "“重试恢复”",
+                  )}
+              {t("errors.crashRecovery.descriptionSuffix", "继续使用。")}
             </p>
           </div>
         </div>
 
         {error?.message && (
           <div className="mb-4 rounded-md border border-rose-200 bg-rose-50/70 px-3 py-2 text-xs text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-300">
-            最近错误：{error.message}
+            {t("errors.crashRecovery.latestError", {
+              message: error.message,
+              defaultValue: "最近错误：{{message}}",
+            })}
           </div>
         )}
 
         {isModuleImportFailure && (
           <div className="mb-4 rounded-md border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200">
-            检测到前端模块资源加载失败。请优先点击“强制刷新资源”，让应用重新请求最新模块；若仍反复出现，再清理
+            {t(
+              "errors.crashRecovery.moduleImportFailure.prefix",
+              "检测到前端模块资源加载失败。请优先点击“强制刷新资源”，让应用重新请求最新模块；若仍反复出现，再清理",
+            )}
             <code className="mx-1 rounded bg-slate-100 px-1 py-0.5 text-slate-700 dark:bg-white/10 dark:text-slate-100">
               node_modules/.vite
             </code>
-            和
+            {t("errors.crashRecovery.moduleImportFailure.middle", "和")}
             <code className="mx-1 rounded bg-slate-100 px-1 py-0.5 text-slate-700 dark:bg-white/10 dark:text-slate-100">
               node_modules/.vite-tauri
             </code>
-            后重启。
+            {t("errors.crashRecovery.moduleImportFailure.suffix", "后重启。")}
           </div>
         )}
 
@@ -370,7 +461,7 @@ export function CrashRecoveryPanel({
               )}
             >
               <FolderOpen className="h-3.5 w-3.5" />
-              重新选择目录
+              {t("errors.crashRecovery.action.selectDirectory", "重新选择目录")}
             </button>
           ) : null}
           <button
@@ -383,7 +474,10 @@ export function CrashRecoveryPanel({
             )}
           >
             <Trash2 className="h-3.5 w-3.5" />
-            清空旧诊断信息
+            {t(
+              "errors.crashRecovery.action.clearDiagnosticHistory",
+              "清空旧诊断信息",
+            )}
           </button>
           <button
             type="button"
@@ -394,7 +488,7 @@ export function CrashRecoveryPanel({
               busy && "cursor-not-allowed opacity-50",
             )}
           >
-            复制诊断信息
+            {t("errors.crashRecovery.action.copyDiagnostic", "复制诊断信息")}
           </button>
           <button
             type="button"
@@ -405,7 +499,7 @@ export function CrashRecoveryPanel({
               busy && "cursor-not-allowed opacity-50",
             )}
           >
-            复制纯 JSON
+            {t("errors.crashRecovery.action.copyJson", "复制纯 JSON")}
           </button>
           <button
             type="button"
@@ -417,7 +511,7 @@ export function CrashRecoveryPanel({
             )}
           >
             <Download className="h-3.5 w-3.5" />
-            导出诊断 JSON
+            {t("errors.crashRecovery.action.exportJson", "导出诊断 JSON")}
           </button>
           <button
             type="button"
@@ -428,7 +522,10 @@ export function CrashRecoveryPanel({
               busy && "cursor-not-allowed opacity-50",
             )}
           >
-            打开下载目录
+            {t(
+              "errors.crashRecovery.action.openDownloadDirectory",
+              "打开下载目录",
+            )}
           </button>
           {isModuleImportFailure ? (
             <button
@@ -441,7 +538,7 @@ export function CrashRecoveryPanel({
               )}
             >
               <RefreshCw className="h-3.5 w-3.5" />
-              强制刷新资源
+              {t("errors.crashRecovery.action.forceReload", "强制刷新资源")}
             </button>
           ) : null}
           <button
@@ -454,7 +551,9 @@ export function CrashRecoveryPanel({
             )}
           >
             <RefreshCw className="h-3.5 w-3.5" />
-            {isModuleImportFailure ? "仅重试恢复" : "重试恢复"}
+            {isModuleImportFailure
+              ? t("errors.crashRecovery.action.retryOnly", "仅重试恢复")
+              : t("errors.crashRecovery.action.retry", "重试恢复")}
           </button>
         </div>
       </div>

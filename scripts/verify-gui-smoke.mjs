@@ -6,6 +6,10 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import {
+  createI18nPatchMetricsReport,
+  renderI18nPatchMetricsTextReport,
+} from "./lib/i18n-patch-metrics-report-core.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -39,6 +43,18 @@ const HEADLESS_TAURI_CONFIG_PATH = path.join(
   rootDir,
   "src-tauri",
   "tauri.conf.headless.json",
+);
+const DEFAULT_I18N_PATCH_METRICS_OUTPUT = path.join(
+  rootDir,
+  ".lime",
+  "i18n",
+  "patch-metrics.json",
+);
+const DEFAULT_I18N_PATCH_REPORT_OUTPUT = path.join(
+  rootDir,
+  ".lime",
+  "i18n",
+  "patch-metrics-report.json",
 );
 const tauriCommand =
   process.platform === "win32"
@@ -173,6 +189,9 @@ const DEFAULTS = {
   intervalMs: 1_000,
   reuseRunning: false,
   includeKnowledgeProductE2e: false,
+  i18nPatchMetricsOutput: DEFAULT_I18N_PATCH_METRICS_OUTPUT,
+  i18nPatchReportOutput: DEFAULT_I18N_PATCH_REPORT_OUTPUT,
+  skipI18nPatchMetrics: false,
   sampleProjectName: "Lime Smoke Workspace",
 };
 DEFAULTS.timeoutMs = resolveDefaultTimeoutMs(DEFAULTS.cargoTargetDir);
@@ -213,6 +232,11 @@ Lime GUI 冒烟入口
   --reuse-running             复用已启动的 headless Tauri，不主动拉起
   --include-knowledge-product-e2e
                              额外执行项目资料产品 E2E 闭环验收
+  --i18n-patch-metrics-output <path>
+                             导出 GUI 页面上的 window.__I18N_METRICS__，默认 .lime/i18n/patch-metrics.json
+  --i18n-patch-report-output <path>
+                             写入 Patch metrics JSON 报告，默认 .lime/i18n/patch-metrics-report.json
+  --skip-i18n-patch-metrics  跳过 Patch metrics 导出与报告
   -h, --help                  显示帮助
 `);
 }
@@ -278,6 +302,27 @@ function parseArgs(argv) {
       continue;
     }
 
+    if (arg === "--i18n-patch-metrics-output" && argv[index + 1]) {
+      options.i18nPatchMetricsOutput = path.resolve(
+        String(argv[index + 1]).trim(),
+      );
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--i18n-patch-report-output" && argv[index + 1]) {
+      options.i18nPatchReportOutput = path.resolve(
+        String(argv[index + 1]).trim(),
+      );
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--skip-i18n-patch-metrics") {
+      options.skipI18nPatchMetrics = true;
+      continue;
+    }
+
     if (arg === "--help" || arg === "-h") {
       printHelp();
       process.exit(0);
@@ -313,6 +358,15 @@ function parseArgs(argv) {
 
   if (!options.cargoTargetDir) {
     throw new Error("--cargo-target-dir 不能为空");
+  }
+
+  if (!options.skipI18nPatchMetrics) {
+    if (!options.i18nPatchMetricsOutput) {
+      throw new Error("--i18n-patch-metrics-output 不能为空");
+    }
+    if (!options.i18nPatchReportOutput) {
+      throw new Error("--i18n-patch-report-output 不能为空");
+    }
   }
 
   return options;
@@ -853,6 +907,45 @@ async function cleanupStaleGuiSmokeChromeProfiles(
     console.warn(`[verify:gui-smoke] ${label}: ${detail}`);
     return null;
   }
+}
+
+function writeI18nPatchMetricsReport(options) {
+  if (options.skipI18nPatchMetrics) {
+    return;
+  }
+
+  if (!fs.existsSync(options.i18nPatchMetricsOutput)) {
+    console.warn(
+      `[verify:gui-smoke] 未发现 i18n Patch metrics: ${options.i18nPatchMetricsOutput}`,
+    );
+    return;
+  }
+
+  const metrics = JSON.parse(
+    fs.readFileSync(options.i18nPatchMetricsOutput, "utf8"),
+  );
+  const report = createI18nPatchMetricsReport({
+    metrics,
+    sourcePath: path.relative(rootDir, options.i18nPatchMetricsOutput),
+  });
+  fs.mkdirSync(path.dirname(options.i18nPatchReportOutput), {
+    recursive: true,
+  });
+  fs.writeFileSync(
+    options.i18nPatchReportOutput,
+    JSON.stringify(report, null, 2),
+    "utf8",
+  );
+  console.log(
+    renderI18nPatchMetricsTextReport(report)
+      .trim()
+      .split("\n")
+      .map((line) => `[verify:gui-smoke] ${line}`)
+      .join("\n"),
+  );
+  console.log(
+    `[verify:gui-smoke] i18n Patch metrics report: ${options.i18nPatchReportOutput}`,
+  );
 }
 
 function listListeningCommandsForPort(port) {
@@ -1481,7 +1574,7 @@ async function main() {
       npmCommand,
       [
         "run",
-        "smoke:knowledge-gui",
+        "smoke:claw-chat-ready-streaming",
         "--",
         "--app-url",
         options.appUrl,
@@ -1494,9 +1587,38 @@ async function main() {
         "--interval-ms",
         String(options.intervalMs),
       ],
+      "smoke:claw-chat-ready-streaming",
+      options.timeoutMs + 30_000,
+    );
+
+    await runCommand(
+      npmCommand,
+      [
+        "run",
+        "smoke:knowledge-gui",
+        "--",
+        "--app-url",
+        options.appUrl,
+        "--health-url",
+        options.healthUrl,
+        "--invoke-url",
+        options.invokeUrl,
+        "--timeout-ms",
+        String(options.timeoutMs),
+        "--interval-ms",
+        String(options.intervalMs),
+        ...(options.skipI18nPatchMetrics
+          ? []
+          : [
+              "--i18n-patch-metrics-output",
+              options.i18nPatchMetricsOutput,
+            ]),
+      ],
       "smoke:knowledge-gui",
       options.timeoutMs + 30_000,
     );
+
+    writeI18nPatchMetricsReport(options);
 
     if (options.includeKnowledgeProductE2e) {
       await runCommand(

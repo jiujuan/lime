@@ -1,4 +1,5 @@
 import type { ComponentProps } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
 import { Label } from "@/components/ui/label";
@@ -60,6 +61,17 @@ export function MediaPreferenceSection({
   onReset,
   resetDisabled = false,
 }: MediaPreferenceSectionProps) {
+  const { t } = useTranslation("settings");
+  const tipAria = (label: string) =>
+    t("settings.mediaGeneration.tipAria", {
+      label,
+      defaultValue: "{{label}}说明",
+    });
+  const autoSelectLabel = t(
+    "settings.mediaGeneration.selector.auto",
+    "自动选择",
+  );
+
   return (
     <section className="overflow-visible rounded-[24px] border border-slate-200/80 bg-white shadow-sm shadow-slate-950/5">
       <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -68,7 +80,7 @@ export function MediaPreferenceSection({
             {title}
           </h3>
           <WorkbenchInfoTip
-            ariaLabel={`${title}说明`}
+            ariaLabel={tipAria(title)}
             content={description}
             tone="slate"
           />
@@ -82,7 +94,7 @@ export function MediaPreferenceSection({
             disabled={disabled || resetDisabled}
             className="rounded-full border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
           >
-            {resetLabel ?? "恢复默认"}
+            {resetLabel ?? t("settings.mediaGeneration.action.reset", "恢复默认")}
           </Button>
         ) : null}
       </div>
@@ -103,7 +115,7 @@ export function MediaPreferenceSection({
           providerFilter={providerFilter}
           modelFilter={modelFilter}
           getFallbackModels={getFallbackModels}
-          placeholderLabel="自动选择"
+          placeholderLabel={autoSelectLabel}
           layoutLabelWidthClassName="md:grid-cols-[180px_minmax(0,1fr)]"
         />
 
@@ -112,7 +124,7 @@ export function MediaPreferenceSection({
             <Label className="flex items-center gap-2 text-sm font-medium text-slate-800">
               <span>{fallbackTitle}</span>
               <WorkbenchInfoTip
-                ariaLabel={`${fallbackTitle}说明`}
+                ariaLabel={tipAria(fallbackTitle)}
                 content={fallbackDescription}
                 tone="slate"
               />

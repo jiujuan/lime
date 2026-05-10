@@ -14,7 +14,7 @@ vi.mock("@/lib/api/appConfig", () => ({
   saveConfig: (config: unknown) => mockSaveConfig(config),
 }));
 
-vi.mock("@/i18n/I18nPatchProvider", () => ({
+vi.mock("@/i18n/legacy-patch/I18nPatchProvider", () => ({
   useI18nPatch: () => ({
     setLanguage: mockSetLanguage,
   }),
@@ -35,6 +35,7 @@ vi.mock("@/components/onboarding", () => ({
 }));
 
 import { AppearanceSettings } from "./index";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { LIME_COLOR_SCHEME_STORAGE_KEY } from "@/lib/appearance/colorSchemes";
 import { LIME_THEME_STORAGE_KEY } from "@/lib/appearance/themeMode";
 
@@ -108,7 +109,7 @@ async function leaveTip(trigger: HTMLButtonElement | null) {
   });
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -135,6 +136,7 @@ beforeEach(() => {
   document.documentElement.removeAttribute("data-lime-theme-effective");
   document.documentElement.removeAttribute("data-lime-color-scheme");
   document.documentElement.removeAttribute("style");
+  await changeLimeLocale("zh-CN");
   mockGetConfig.mockResolvedValue(createMockConfig());
   mockSaveConfig.mockResolvedValue(undefined);
 });
@@ -164,6 +166,8 @@ afterEach(() => {
   document.documentElement.removeAttribute("data-lime-theme-effective");
   document.documentElement.classList.remove("dark");
   document.documentElement.removeAttribute("style");
+  document.documentElement.removeAttribute("lang");
+  document.documentElement.removeAttribute("dir");
 });
 
 describe("AppearanceSettings", () => {
@@ -178,7 +182,7 @@ describe("AppearanceSettings", () => {
     expect(text).toContain("管理主题、语言、提示音效、推荐行为和底部入口。");
     expect(text).toContain("主题：跟随系统");
     expect(text).toContain("配色：墨绿");
-    expect(text).toContain("语言：中文");
+    expect(text).toContain("语言：简体中文");
     expect(text).toContain("提示音效：已开启");
     expect(text).toContain("基础外观");
     expect(text).toContain("主题模式");
@@ -207,6 +211,26 @@ describe("AppearanceSettings", () => {
     expect(text).toContain("重新运行引导");
     expect(text).not.toContain("已合并旧入口");
     expect(buttonTexts).not.toContain("设置");
+  });
+
+  it("切换界面语言时应写入 BCP 47 locale 并同步兼容 Patch 语言", async () => {
+    const { container } = await renderPage();
+    const englishButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("English"),
+    );
+
+    expect(englishButton).toBeInstanceOf(HTMLButtonElement);
+
+    await act(async () => {
+      englishButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(mockSetLanguage).toHaveBeenCalledWith("en");
+    expect(mockSaveConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ language: "en-US" }),
+    );
+    expect(document.documentElement.lang).toBe("en-US");
   });
 
   it("切换推荐行为时应保留 workspace_preferences 的其他配置", async () => {

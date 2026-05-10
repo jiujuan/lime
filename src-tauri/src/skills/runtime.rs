@@ -1,8 +1,13 @@
 use crate::agent::AsterAgentState;
+use crate::agent_tools::catalog::WorkspaceToolSurface;
+use crate::agent_tools::execution::{
+    build_workspace_execution_permissions, ToolExecutionResolverInput,
+    WorkspaceExecutionPermissionInput,
+};
 use crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState;
 use crate::commands::aster_agent_cmd::{
-    ensure_browser_mcp_tools_registered, ensure_creation_task_tools_registered,
-    ensure_social_image_tool_registered,
+    append_subagent_tool_scope_session_permissions, ensure_browser_mcp_tools_registered,
+    ensure_creation_task_tools_registered, ensure_social_image_tool_registered,
 };
 use crate::commands::skill_error::{
     format_skill_error, SKILL_ERR_PROVIDER_UNAVAILABLE, SKILL_ERR_SESSION_INIT_FAILED,
@@ -12,8 +17,10 @@ use crate::database::dao::agent_run::AgentRunStatus;
 use crate::database::DbConnection;
 use crate::services::execution_tracker_service::RunFinishDecision;
 use crate::services::memory_profile_prompt_service::{build_memory_prompt, MemoryPromptContext};
+use aster::permission::{PermissionScope, ToolPermission, ToolPermissionManager};
 use lime_skills::LoadedSkillDefinition;
 use std::path::Path;
+use std::sync::Arc;
 
 use super::execution::SkillExecutionResult;
 use super::execution_callback::TauriExecutionCallback;
@@ -59,6 +66,86 @@ fn build_skill_memory_prompt(
     };
 
     build_memory_prompt(&config, context)
+}
+
+fn resolve_skill_workspace_root(db: &DbConnection, session_id: &str) -> String {
+    lime_agent::get_session_sync(db, session_id)
+        .ok()
+        .and_then(|session| session.working_dir)
+        .map(|path| path.trim().to_string())
+        .filter(|path| !path.is_empty())
+        .or_else(|| {
+            std::env::current_dir()
+                .ok()
+                .map(|path| path.to_string_lossy().to_string())
+                .filter(|path| !path.trim().is_empty())
+        })
+        .unwrap_or_else(|| std::env::temp_dir().to_string_lossy().to_string())
+}
+
+fn build_skill_tool_scope_metadata(skill: &LoadedSkillDefinition) -> Option<serde_json::Value> {
+    let allowed_tools = skill
+        .allowed_tools
+        .as_ref()
+        .filter(|tools| !tools.is_empty())?;
+
+    Some(serde_json::json!({
+        "subagent": {
+            "allowed_tools": allowed_tools,
+        },
+    }))
+}
+
+fn build_skill_workspace_permissions(
+    skill: &LoadedSkillDefinition,
+    session_id: &str,
+    workspace_root: &str,
+    config_manager: &GlobalConfigManagerState,
+) -> Vec<ToolPermission> {
+    let config = config_manager.config();
+    let metadata = build_skill_tool_scope_metadata(skill);
+    let mut permissions =
+        build_workspace_execution_permissions(WorkspaceExecutionPermissionInput {
+            surface: WorkspaceToolSurface::workbench(),
+            workspace_root,
+            auto_mode: false,
+            execution_policy_input: ToolExecutionResolverInput {
+                persisted_policy: Some(&config.agent.tool_execution),
+                request_metadata: metadata.as_ref(),
+            },
+        });
+    append_subagent_tool_scope_session_permissions(&mut permissions, session_id, metadata.as_ref());
+    permissions
+}
+
+async fn configure_skill_workspace_permissions(
+    db: &DbConnection,
+    config_manager: &GlobalConfigManagerState,
+    aster_state: &AsterAgentState,
+    skill: &LoadedSkillDefinition,
+    session_id: &str,
+) -> Result<(), String> {
+    let workspace_root = resolve_skill_workspace_root(db, session_id);
+    let permissions =
+        build_skill_workspace_permissions(skill, session_id, &workspace_root, config_manager);
+    let agent_arc = aster_state.get_agent_arc();
+    let guard = agent_arc.read().await;
+    let agent = guard
+        .as_ref()
+        .ok_or_else(|| "Agent not initialized".to_string())?;
+    let registry_arc = agent.tool_registry().clone();
+    drop(guard);
+
+    let mut permission_manager = ToolPermissionManager::new(None);
+    for permission in permissions {
+        permission_manager.add_permission(permission, PermissionScope::Session);
+    }
+    registry_arc
+        .write()
+        .await
+        .set_permission_manager(Arc::new(permission_manager));
+
+    Ok(())
 }
 
 fn resolve_requested_provider(
@@ -206,6 +293,14 @@ pub async fn prepare_skill_execution(
         aster_state,
     )
     .await?;
+    configure_skill_workspace_permissions(db, config_manager, aster_state, skill, session_id)
+        .await
+        .map_err(|error| {
+            format_skill_error(
+                SKILL_ERR_SESSION_INIT_FAILED,
+                format!("配置 Skill 工具权限失败: {error}"),
+            )
+        })?;
 
     let (requested_provider, requested_model) =
         resolve_requested_provider(skill, provider_override, model_override);
@@ -231,6 +326,141 @@ pub async fn prepare_skill_execution(
         memory_prompt: build_skill_memory_prompt(db, config_manager, session_id),
         provider_selection,
     })
+}
+
+#[cfg(test)]
+mod permission_tests {
+    use super::build_skill_workspace_permissions;
+    use crate::agent_tools::catalog::LIME_CREATE_IMAGE_TASK_TOOL_NAME;
+    use crate::config::GlobalConfigManager;
+    use aster::permission::{PermissionContext, PermissionScope, ToolPermissionManager};
+    use lime_core::config::Config;
+    use lime_skills::LoadedSkillDefinition;
+    use serde_json::json;
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    fn build_loaded_skill(allowed_tools: Option<Vec<&str>>) -> LoadedSkillDefinition {
+        LoadedSkillDefinition {
+            skill_name: "image_generate".to_string(),
+            display_name: "配图".to_string(),
+            description: "测试 skill".to_string(),
+            markdown_content: "test".to_string(),
+            license: None,
+            metadata: HashMap::new(),
+            allowed_tools: allowed_tools.map(|tools| {
+                tools
+                    .into_iter()
+                    .map(|tool| tool.to_string())
+                    .collect::<Vec<_>>()
+            }),
+            argument_hint: None,
+            when_to_use: None,
+            when_to_use_config: None,
+            model: None,
+            provider: None,
+            disable_model_invocation: false,
+            execution_mode: "prompt".to_string(),
+            workflow_ref: None,
+            workflow_steps: Vec::new(),
+            standard_compliance: Default::default(),
+        }
+    }
+
+    fn permission_manager_for_skill(
+        skill: &LoadedSkillDefinition,
+        session_id: &str,
+    ) -> ToolPermissionManager {
+        let manager = GlobalConfigManager::new(
+            Config::default(),
+            PathBuf::from("/tmp/lime-skill-config.yaml"),
+        );
+        let config_manager = crate::config::GlobalConfigManagerState(Arc::new(manager));
+        let permissions = build_skill_workspace_permissions(
+            skill,
+            session_id,
+            "/tmp/lime-skill",
+            &config_manager,
+        );
+        let mut manager = ToolPermissionManager::new(None);
+        for permission in permissions {
+            manager.add_permission(permission, PermissionScope::Session);
+        }
+        manager
+    }
+
+    fn permission_context(session_id: &str) -> PermissionContext {
+        PermissionContext {
+            working_directory: PathBuf::from("/tmp/lime-skill"),
+            session_id: session_id.to_string(),
+            ..PermissionContext::default()
+        }
+    }
+
+    #[test]
+    fn skill_allowed_tools_allow_image_task_tool_in_current_session() {
+        let skill = build_loaded_skill(Some(vec![LIME_CREATE_IMAGE_TASK_TOOL_NAME]));
+        let manager = permission_manager_for_skill(&skill, "skill-session-1");
+
+        let result = manager.is_allowed(
+            LIME_CREATE_IMAGE_TASK_TOOL_NAME,
+            &HashMap::new(),
+            &permission_context("skill-session-1"),
+        );
+
+        assert!(
+            result.allowed,
+            "image_generate allowed-tools 应授权当前 skill session 调用图片任务工具: {:?}",
+            result.reason
+        );
+    }
+
+    #[test]
+    fn skill_allowed_tools_keep_other_tools_denied_in_current_session() {
+        let skill = build_loaded_skill(Some(vec![LIME_CREATE_IMAGE_TASK_TOOL_NAME]));
+        let manager = permission_manager_for_skill(&skill, "skill-session-1");
+
+        let result = manager.is_allowed(
+            "WebSearch",
+            &HashMap::new(),
+            &permission_context("skill-session-1"),
+        );
+
+        assert!(!result.allowed);
+        assert_eq!(
+            result.reason,
+            Some("subagent current surface 已启用 allowed_tools 白名单".to_string())
+        );
+    }
+
+    #[test]
+    fn skill_without_allowed_tools_keeps_workbench_defaults() {
+        let skill = build_loaded_skill(None);
+        let manager = permission_manager_for_skill(&skill, "skill-session-1");
+
+        let result = manager.is_allowed(
+            LIME_CREATE_IMAGE_TASK_TOOL_NAME,
+            &HashMap::new(),
+            &permission_context("skill-session-1"),
+        );
+
+        assert!(result.allowed);
+    }
+
+    #[test]
+    fn skill_allowed_tools_do_not_allow_unknown_tools() {
+        let skill = build_loaded_skill(Some(vec![LIME_CREATE_IMAGE_TASK_TOOL_NAME]));
+        let manager = permission_manager_for_skill(&skill, "skill-session-1");
+
+        let result = manager.is_allowed(
+            "unknown_tool",
+            &HashMap::from([("payload".to_string(), json!("test"))]),
+            &permission_context("skill-session-1"),
+        );
+
+        assert!(!result.allowed);
+    }
 }
 
 pub fn build_skill_run_start_metadata(

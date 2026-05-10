@@ -10,9 +10,23 @@
 
 - `docs/test/README.md`：当前测试入口与命令索引
 - `docs/test/e2e-tests.md`：当前浏览器续测与 E2E 总览入口
+- `docs/tests/agent-ops-qc.md`：当前 Agent 运营级测试体系、qcloop 场景与 Evidence Pack 门禁
+- `docs/tests/agent-qc-p0-scenarios.md`：当前 Agent QC P0 场景执行、GUI/runtime 证据与失败沉淀手册
+- `docs/tests/lime-agent-qc-rollout-plan.md`：当前 Lime 样本产品的 Agent 运营级测试分阶段落地计划
+- `docs/test/agent-qc-scenarios.manifest.json`：当前 Agent QC 机器可读场景清单
+- `docs/test/agent-qc-evidence.schema.json`：当前 Agent QC Evidence Pack schema
+- `docs/test/agent-qc-gui-flows.manifest.json`：当前 Agent QC GUI / Playwright MCP flow 清单
 - `docs/aiprompts/playwright-e2e.md`：当前浏览器续测 / Playwright MCP 事实源
 - `package.json`：当前统一测试命令入口
 - `scripts/local-ci.mjs`：当前本地智能校验入口
+- `scripts/agent-qc-report.mjs`：当前 Agent QC 场景报告与合同检查入口
+- `scripts/agent-qc-gui-flow-report.mjs`：当前 Agent QC GUI flow 报告与合同检查入口
+- `scripts/agent-qc-qcloop-job.mjs`：当前 Agent QC manifest 到 qcloop job payload 的生成入口
+- `scripts/agent-qc-export-evidence.mjs`：当前 qcloop job 到 Evidence Pack 的导出入口
+- `scripts/agent-qc-release-summary.mjs`：当前 Agent QC Evidence Pack 到 release note 质量证据的汇总入口
+- `scripts/agent-qc-completion-audit.mjs`：当前 Agent QC 整体目标完成度审计入口
+- `.github/workflows/harness-nightly.yml`：当前会上传 `artifacts/agent-qc/agent-qc-report.*`、`agent-qc-gui-flow-report.*` 与 `release-agent-qc-preview.*`
+- `.github/workflows/release.yml`：当前在创建 GitHub Release 前强制校验 `agent_qc_evidence_path` 对应的 Agent QC Evidence Pack
 - `scripts/report-legacy-surfaces.mjs`：当前 legacy / compat 回流护栏
 
 ### compat
@@ -48,6 +62,7 @@
 | 优先级 | 事项                                        | 为什么重要                                          | 当前证据                                                                                                                                                                                                  | 完成定义                                                                                               |
 | ------ | ------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | P1     | Agent eval 仍未完全工程化                   | 价值高，且当前最缺的是把证据沉淀成长期回归资产      | 已补 `docs/test/harness-evals.md`、`harness-evals.manifest.json`、`scripts/harness-eval-runner.mjs`、`scripts/harness-eval-trend-report.mjs` 与 nightly 摘要 / trend 骨架，但真实执行与更多高价值样本仍缺 | 形成稳定任务集、可增长 replay 样本、grader、nightly 输出与趋势指标                                     |
+| P1     | qcloop 真实运行结果尚未导出为 Evidence Pack | 运营级测试需要从“场景清单”进入“每次运行可审计证据” | 已补 Agent QC manifest、evidence schema、报告脚本与 `test:contracts` 门禁；下一步需要 qcloop job 结果按 schema 落盘 | qcloop 批次可导出 `agent-qc-evidence.schema.json` 形状，并被 release / nightly 消费                  |
 | P2     | terminal / server 自包含 smoke 仍可继续扩面 | 最小 GUI smoke 基线已具备，但更细分主链仍缺专项守卫 | 当前 `workspace-ready / browser-runtime / site-adapters` 已覆盖 GUI 最小主链；`smoke:social-workbench` 仍依赖已有 session，terminal / server 还没有各自独立的自包含 smoke 入口                            | 如后续需要继续扩面，应补 terminal 或 server 的独立 smoke，而不是继续把现有 3 条 current smoke 算成缺口 |
 
 ## 4. 建议执行顺序

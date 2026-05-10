@@ -1,6 +1,45 @@
 import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("react-i18next", () => {
+  const interpolate = (
+    template: string,
+    values: Record<string, unknown>,
+  ): string =>
+    Object.entries(values).reduce((text, [name, value]) => {
+      if (name === "defaultValue") {
+        return text;
+      }
+      const replacement = String(value);
+      return text
+        .split(`{{${name}}}`)
+        .join(replacement)
+        .split(`{{ ${name} }}`)
+        .join(replacement);
+    }, template);
+
+  return {
+    useTranslation: () => ({
+      i18n: { language: "zh-CN" },
+      t: (
+        key: string,
+        defaultValueOrOptions?: string | Record<string, unknown>,
+        options?: Record<string, unknown>,
+      ) => {
+        if (typeof defaultValueOrOptions === "string") {
+          return interpolate(defaultValueOrOptions, options ?? {});
+        }
+        const values = defaultValueOrOptions ?? {};
+        return interpolate(
+          typeof values.defaultValue === "string" ? values.defaultValue : key,
+          values,
+        );
+      },
+    }),
+  };
+});
+
 import { AutomationJobDetailsDialog } from "./AutomationJobDetailsDialog";
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];

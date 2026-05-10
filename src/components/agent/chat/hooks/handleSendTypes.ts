@@ -1,4 +1,5 @@
 import type { AssistantDraftState, SlashSkillRequest } from "./agentChatShared";
+import type { AgentRuntimeWebSearchMode } from "@/lib/api/agentRuntime";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
 import type { InputCapabilitySendRoute } from "../skill-selection/inputCapabilitySelection";
 
@@ -20,6 +21,7 @@ export interface HandleSendOptions {
   providerOverride?: string;
   modelOverride?: string;
   systemPromptOverride?: string;
+  searchMode?: AgentRuntimeWebSearchMode;
   assistantDraft?: AssistantDraftState;
   skipSessionRestore?: boolean;
   skipSessionStartHooks?: boolean;

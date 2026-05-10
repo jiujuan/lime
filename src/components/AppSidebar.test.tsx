@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentPageParams, Page, PageParams } from "@/types/page";
 import { SettingsTabs } from "@/types/settings";
 import { AppSidebar } from "./AppSidebar";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import {
   TASK_CENTER_CREATE_DRAFT_TASK_EVENT,
   TASK_CENTER_OPEN_TASK_EVENT,
@@ -75,7 +76,7 @@ vi.mock("@/lib/api/appConfig", () => ({
   subscribeAppConfigChanged: mockSubscribeAppConfigChanged,
 }));
 
-vi.mock("@/i18n/I18nPatchProvider", () => ({
+vi.mock("@/i18n/legacy-patch/I18nPatchProvider", () => ({
   useI18nPatch: () => ({
     language: "zh",
     setLanguage: mockSetI18nLanguage,
@@ -277,8 +278,9 @@ function buildMockReferralDashboard() {
 }
 
 describe("AppSidebar", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    await changeLimeLocale("zh-CN");
     localStorage.clear();
     delete window.__LIME_BOOTSTRAP__;
     delete window.__LIME_OEM_CLOUD__;
@@ -923,6 +925,46 @@ describe("AppSidebar", () => {
     expect(container.textContent).not.toContain("正在打开...");
   });
 
+  it("英文界面下未连接账号菜单应展示本地化云端入口", async () => {
+    await changeLimeLocale("en-US");
+
+    const container = mountSidebarContainer({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "new-task",
+      } as AgentPageParams,
+    });
+    await flushEffects(2);
+
+    expect(container.textContent).toContain("Local ready");
+    expect(container.textContent).toContain("Open Source Use");
+    expect(container.textContent).not.toContain("开源使用");
+
+    await openAccountMenu(container);
+
+    const accountMenu = container.querySelector(
+      '[data-testid="app-sidebar-account-menu"]',
+    );
+    expect(accountMenu?.textContent).toContain("Open Source Use");
+    expect(accountMenu?.textContent).toContain("Free plan");
+    expect(accountMenu?.textContent).toContain("Model Settings");
+    expect(accountMenu?.textContent).toContain("About");
+    expect(accountMenu?.textContent).toContain("Connect Lime Cloud");
+
+    await act(async () => {
+      accountMenu
+        ?.querySelector<HTMLButtonElement>(
+          'button[aria-label="Connect Lime Cloud"]',
+        )
+        ?.click();
+      await Promise.resolve();
+    });
+
+    expect(mockToastSuccess).toHaveBeenCalledWith(
+      "Opened the Lime Cloud login page. Finish authorization in your browser.",
+    );
+  });
+
   it("开源使用说明应折叠到信息图标中", async () => {
     const container = mountSidebarContainer({
       currentPage: "agent",
@@ -1038,11 +1080,92 @@ describe("AppSidebar", () => {
 
     expect(mockSetI18nLanguage).toHaveBeenCalledWith("en");
     expect(mockSaveConfig).toHaveBeenCalledWith(
-      expect.objectContaining({ language: "en" }),
+      expect.objectContaining({ language: "en-US" }),
     );
+    expect(document.documentElement.lang).toBe("en-US");
+    expect(
+      container.querySelector('button[aria-label="New Task"]'),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("Project Knowledge");
+    expect(container.textContent).toContain("Recent Conversations");
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="Search Tasks"]')
+        ?.click();
+      await Promise.resolve();
+    });
+
+    const searchDialog = document.body.querySelector(
+      '[data-testid="app-sidebar-search-dialog"]',
+    );
+    const searchInput = document.body.querySelector<HTMLInputElement>(
+      '[data-testid="app-sidebar-search-input"]',
+    );
+    expect(searchDialog?.textContent).toContain("New Conversation");
+    expect(searchDialog?.textContent).toContain(
+      "Select a project workspace first",
+    );
+    expect(searchInput?.placeholder).toBe("Search conversation titles");
     expect(
       container.querySelector('[data-testid="app-sidebar-language-menu"]'),
     ).toBeNull();
+  });
+
+  it("英文界面下会话兜底标题与时间 meta 应跟随当前 locale", async () => {
+    const nowMs = Date.UTC(2026, 4, 10, 12, 0, 0);
+    const dateNowSpy = vi.spyOn(Date, "now").mockReturnValue(nowMs);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    try {
+      await changeLimeLocale("en-US");
+      mockListAgentRuntimeSessions.mockResolvedValue([
+        {
+          id: "session-untitled",
+          name: "   ",
+          created_at: Math.floor(nowMs / 1000),
+          updated_at: Math.floor((nowMs - 2 * 60 * 1000) / 1000),
+          archived_at: null,
+          workspace_id: "project-1",
+        },
+      ]);
+
+      const container = mountSidebarContainer({
+        currentPage: "agent",
+        currentPageParams: {
+          agentEntry: "claw",
+          projectId: "project-1",
+        } as AgentPageParams,
+      });
+      await flushEffects(2);
+
+      expect(container.textContent).toContain("Untitled conversation");
+      expect(container.textContent).toContain("2m ago");
+      expect(container.textContent).not.toContain("未命名对话");
+
+      await act(async () => {
+        container
+          .querySelector<HTMLButtonElement>(
+            'button[aria-label="Open Untitled conversation action menu"]',
+          )
+          ?.click();
+        await Promise.resolve();
+      });
+
+      const menu = document.body.querySelector(
+        '[data-testid="app-sidebar-conversation-menu"]',
+      );
+      expect(menu?.textContent).toContain("Delete");
+
+      await clickConversationMenuItem("app-sidebar-conversation-menu-delete");
+      await flushEffects();
+
+      expect(confirmSpy).toHaveBeenCalledWith(
+        'Delete "Untitled conversation"? This cannot be undone.',
+      );
+    } finally {
+      dateNowSpy.mockRestore();
+      confirmSpy.mockRestore();
+    }
   });
 
   it("用户弹框中的收缩入口应导航到真实页面", async () => {

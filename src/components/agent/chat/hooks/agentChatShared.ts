@@ -2,6 +2,7 @@ import type {
   AsterExecutionStrategy,
   AsterSessionInfo,
   AutoContinueRequestPayload,
+  AgentRuntimeWebSearchMode,
 } from "@/lib/api/agentRuntime";
 import type {
   AgentRuntimeStatus,
@@ -89,6 +90,7 @@ export interface SendMessageOptions {
   providerOverride?: string;
   modelOverride?: string;
   systemPromptOverride?: string;
+  searchMode?: AgentRuntimeWebSearchMode;
   skipSessionRestore?: boolean;
   skipSessionStartHooks?: boolean;
   skipPreSubmitResume?: boolean;

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { TFunction } from "i18next";
 import {
   AlertCircle,
   Bot,
@@ -9,11 +10,13 @@ import {
   LoaderCircle,
   RefreshCw,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
 import { ApiKeyProviderSection } from "@/components/api-key-provider";
 import { openUrl } from "@/components/openclaw/openUrl";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useOemCloudAccess } from "@/hooks/useOemCloudAccess";
+import { formatDate } from "@/i18n/format";
 import {
   getCompanionPetStatus,
   launchCompanionPet,
@@ -85,6 +88,7 @@ function RuntimeSummaryItem(props: {
   label: string;
   value: string;
   hint?: string;
+  hintAriaLabel?: string;
 }) {
   return (
     <div className="rounded-[16px] border border-slate-200/80 bg-slate-50/80 px-3.5 py-3">
@@ -93,7 +97,7 @@ function RuntimeSummaryItem(props: {
           <span>{props.label}</span>
           {props.hint ? (
             <WorkbenchInfoTip
-              ariaLabel={`${props.label}说明`}
+              ariaLabel={props.hintAriaLabel ?? props.label}
               content={props.hint}
               tone="slate"
             />
@@ -107,14 +111,14 @@ function RuntimeSummaryItem(props: {
   );
 }
 
-function formatCompanionError(error: unknown): string {
+function formatCompanionError(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) {
     return error.message;
   }
   if (typeof error === "string" && error.trim()) {
     return error;
   }
-  return "未知错误";
+  return fallback;
 }
 
 function shouldShowCompanionInstallGuide(
@@ -136,36 +140,56 @@ function shouldShowCompanionInstallGuide(
   );
 }
 
-function formatCompanionCapabilityLabel(capability: string): string {
+function formatCompanionCapabilityLabel(
+  t: ProviderSettingsTranslate,
+  capability: string,
+): string {
   switch (capability) {
     case "provider-overview":
-      return "Provider 概览";
+      return t(
+        "settings.providers.companion.bridge.capability.providerOverview",
+        "Provider 概览",
+      );
     case "provider-sync-request":
-      return "主动请求同步";
+      return t(
+        "settings.providers.companion.bridge.capability.syncRequest",
+        "主动请求同步",
+      );
     default:
       return capability;
   }
 }
 
 function formatCompanionVisualStateLabel(
+  t: ProviderSettingsTranslate,
   state: CompanionPetStatus["last_state"],
 ): string {
   switch (state) {
     case "hidden":
-      return "隐藏";
+      return t(
+        "settings.providers.companion.bridge.visualState.hidden",
+        "隐藏",
+      );
     case "walking":
-      return "游走";
+      return t(
+        "settings.providers.companion.bridge.visualState.walking",
+        "游走",
+      );
     case "thinking":
-      return "思考中";
+      return t(
+        "settings.providers.companion.bridge.visualState.thinking",
+        "思考中",
+      );
     case "done":
-      return "完成";
+      return t("settings.providers.companion.bridge.visualState.done", "完成");
     case "idle":
     default:
-      return "待命";
+      return t("settings.providers.companion.bridge.visualState.idle", "待命");
   }
 }
 
 function formatCompanionPlatformLabel(
+  t: ProviderSettingsTranslate,
   platform: string | null | undefined,
 ): string {
   switch (platform) {
@@ -176,26 +200,42 @@ function formatCompanionPlatformLabel(
     case "linux":
       return "Linux";
     default:
-      return platform?.trim() || "未上报平台";
+      return (
+        platform?.trim() ||
+        t("settings.providers.companion.bridge.platform.unknown", "未上报平台")
+      );
   }
 }
 
-function formatCompanionDateTime(value: Date | null): string {
+function formatCompanionDateTime(
+  t: ProviderSettingsTranslate,
+  value: Date | null,
+  locale?: string | null,
+): string {
   if (!value) {
-    return "尚未同步";
+    return t(
+      "settings.providers.companion.bridge.preview.lastSyncNever",
+      "尚未同步",
+    );
   }
 
-  return new Intl.DateTimeFormat("zh-CN", {
+  return formatDate(value, {
+    locale,
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
     hour12: false,
-  }).format(value);
+  });
 }
 
 function CompanionProviderBridgeCard() {
+  const { t, i18n } = useTranslation("settings");
+  const unknownErrorLabel = t(
+    "settings.providers.companion.bridge.message.unknownError",
+    "未知错误",
+  );
   const [status, setStatus] = useState<CompanionPetStatus | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [refreshingStatus, setRefreshingStatus] = useState(false);
@@ -241,7 +281,10 @@ function CompanionProviderBridgeCard() {
       } catch (error) {
         if (!cancelled) {
           setPreviewError(
-            `读取桌宠摘要预览失败：${formatCompanionError(error)}`,
+            t("settings.providers.companion.bridge.message.previewLoadFailed", {
+              error: formatCompanionError(error, unknownErrorLabel),
+              defaultValue: "读取桌宠摘要预览失败：{{error}}",
+            }),
           );
         }
       } finally {
@@ -265,7 +308,13 @@ function CompanionProviderBridgeCard() {
         if (!cancelled) {
           setActionFeedback({
             tone: "error",
-            message: `读取桌宠状态失败：${formatCompanionError(error)}`,
+            message: t(
+              "settings.providers.companion.bridge.message.statusLoadFailed",
+              {
+                error: formatCompanionError(error, unknownErrorLabel),
+                defaultValue: "读取桌宠状态失败：{{error}}",
+              },
+            ),
           });
         }
       } finally {
@@ -293,7 +342,13 @@ function CompanionProviderBridgeCard() {
         if (!cancelled) {
           setActionFeedback({
             tone: "error",
-            message: `监听桌宠状态失败：${formatCompanionError(error)}`,
+            message: t(
+              "settings.providers.companion.bridge.message.statusListenFailed",
+              {
+                error: formatCompanionError(error, unknownErrorLabel),
+                defaultValue: "监听桌宠状态失败：{{error}}",
+              },
+            ),
           });
         }
       });
@@ -311,7 +366,7 @@ function CompanionProviderBridgeCard() {
         unsubscribeProviderData();
       }
     };
-  }, []);
+  }, [t, unknownErrorLabel]);
 
   useEffect(() => {
     if (status?.connected) {
@@ -333,7 +388,13 @@ function CompanionProviderBridgeCard() {
           })
           .catch((error) => {
             setPreviewError(
-              `读取桌宠摘要预览失败：${formatCompanionError(error)}`,
+              t(
+                "settings.providers.companion.bridge.message.previewLoadFailed",
+                {
+                  error: formatCompanionError(error, unknownErrorLabel),
+                  defaultValue: "读取桌宠摘要预览失败：{{error}}",
+                },
+              ),
             );
           })
           .finally(() => {
@@ -344,7 +405,13 @@ function CompanionProviderBridgeCard() {
     } catch (error) {
       setActionFeedback({
         tone: "error",
-        message: `刷新桌宠状态失败：${formatCompanionError(error)}`,
+        message: t(
+          "settings.providers.companion.bridge.message.refreshFailed",
+          {
+            error: formatCompanionError(error, unknownErrorLabel),
+            defaultValue: "刷新桌宠状态失败：{{error}}",
+          },
+        ),
       });
     } finally {
       setRefreshingStatus(false);
@@ -363,15 +430,25 @@ function CompanionProviderBridgeCard() {
         setActionFeedback({
           tone: "success",
           message:
-            result.message || "已请求开启桌宠，请等待 Lime Pet 建立连接。",
+            result.message ||
+            t(
+              "settings.providers.companion.bridge.message.launchRequested",
+              "已请求开启桌宠，请等待 Lime Pet 建立连接。",
+            ),
         });
       } else {
         setActionFeedback({
           tone: "error",
           message: shouldPromptInstall
-            ? "当前设备还没有安装 Lime Pet，请先安装桌宠应用后再开启。"
+            ? t(
+                "settings.providers.companion.bridge.message.installRequired",
+                "当前设备还没有安装 Lime Pet，请先安装桌宠应用后再开启。",
+              )
             : result.message ||
-              "当前没有可用的 Lime Pet 可执行产物，请先安装桌宠应用。",
+              t(
+                "settings.providers.companion.bridge.message.executableMissing",
+                "当前没有可用的 Lime Pet 可执行产物，请先安装桌宠应用。",
+              ),
         });
       }
 
@@ -380,7 +457,10 @@ function CompanionProviderBridgeCard() {
     } catch (error) {
       setActionFeedback({
         tone: "error",
-        message: `启动桌宠失败：${formatCompanionError(error)}`,
+        message: t("settings.providers.companion.bridge.message.launchFailed", {
+          error: formatCompanionError(error, unknownErrorLabel),
+          defaultValue: "启动桌宠失败：{{error}}",
+        }),
       });
     } finally {
       setLaunchingPet(false);
@@ -393,7 +473,10 @@ function CompanionProviderBridgeCard() {
     if (!providerOverviewPreview) {
       setActionFeedback({
         tone: "error",
-        message: "桌宠摘要预览尚未准备完成，请稍后再试。",
+        message: t(
+          "settings.providers.companion.bridge.message.previewNotReady",
+          "桌宠摘要预览尚未准备完成，请稍后再试。",
+        ),
       });
       return;
     }
@@ -401,7 +484,10 @@ function CompanionProviderBridgeCard() {
     if (!connected) {
       setActionFeedback({
         tone: "error",
-        message: "桌宠尚未连接，暂时无法同步摘要。",
+        message: t(
+          "settings.providers.companion.bridge.message.notConnected",
+          "桌宠尚未连接，暂时无法同步摘要。",
+        ),
       });
       return;
     }
@@ -409,7 +495,10 @@ function CompanionProviderBridgeCard() {
     if (!supportsProviderOverview) {
       setActionFeedback({
         tone: "error",
-        message: "当前桌宠未声明 Provider 概览能力，暂时无法接收摘要。",
+        message: t(
+          "settings.providers.companion.bridge.message.capabilityMissing",
+          "当前桌宠未声明 Provider 概览能力，暂时无法接收摘要。",
+        ),
       });
       return;
     }
@@ -424,20 +513,29 @@ function CompanionProviderBridgeCard() {
       if (!result.delivered) {
         setActionFeedback({
           tone: "error",
-          message: "桌宠连接存在但本次摘要未送达，请检查 Companion 连接状态。",
+          message: t(
+            "settings.providers.companion.bridge.message.notDelivered",
+            "桌宠连接存在但本次摘要未送达，请检查 Companion 连接状态。",
+          ),
         });
         return;
       }
 
       setActionFeedback({
         tone: "success",
-        message: `已同步 ${providerOverviewPreview.total_provider_count} 个服务商摘要到桌宠。`,
+        message: t("settings.providers.companion.bridge.message.synced", {
+          count: providerOverviewPreview.total_provider_count,
+          defaultValue: "已同步 {{count}} 个服务商摘要到桌宠。",
+        }),
       });
       setLastManualSyncAt(new Date());
     } catch (error) {
       setActionFeedback({
         tone: "error",
-        message: `同步桌宠摘要失败：${formatCompanionError(error)}`,
+        message: t("settings.providers.companion.bridge.message.syncFailed", {
+          error: formatCompanionError(error, unknownErrorLabel),
+          defaultValue: "同步桌宠摘要失败：{{error}}",
+        }),
       });
     } finally {
       setSyncingPreview(false);
@@ -451,89 +549,169 @@ function CompanionProviderBridgeCard() {
   );
   const endpoint = status?.endpoint || DEFAULT_COMPANION_ENDPOINT;
   const lastState = formatCompanionVisualStateLabel(
+    t,
     status?.last_state || "idle",
   );
   const capabilityText =
     status && status.capabilities.length > 0
-      ? status.capabilities.map(formatCompanionCapabilityLabel).join(" / ")
-      : "未声明";
+      ? status.capabilities
+          .map((capability) => formatCompanionCapabilityLabel(t, capability))
+          .join(" / ")
+      : t(
+          "settings.providers.companion.bridge.capability.undeclared",
+          "未声明",
+        );
   const previewProviders = providerOverviewPreview?.providers || [];
-  const petIdentity = status?.client_id?.trim() || "等待桌宠上报";
+  const petIdentity =
+    status?.client_id?.trim() ||
+    t("settings.providers.companion.bridge.identity.pending", "等待桌宠上报");
   const syncDiagnostic = (() => {
     if (previewLoading) {
       return {
-        label: "整理摘要中",
-        hint: "正在从当前服务商配置整理桌宠预览。",
+        label: t(
+          "settings.providers.companion.bridge.diagnostic.previewLoading.label",
+          "整理摘要中",
+        ),
+        hint: t(
+          "settings.providers.companion.bridge.diagnostic.previewLoading.hint",
+          "正在从当前服务商配置整理桌宠预览。",
+        ),
       };
     }
     if (previewError) {
       return {
-        label: "预览异常",
+        label: t(
+          "settings.providers.companion.bridge.diagnostic.previewError.label",
+          "预览异常",
+        ),
         hint: previewError,
       };
     }
     if (!serverListening) {
       return {
-        label: "宿主未监听",
-        hint: "Companion 服务尚未监听，本地桌宠暂时无法接入。",
+        label: t(
+          "settings.providers.companion.bridge.diagnostic.hostMissing.label",
+          "宿主未监听",
+        ),
+        hint: t(
+          "settings.providers.companion.bridge.diagnostic.hostMissing.hint",
+          "Companion 服务尚未监听，本地桌宠暂时无法接入。",
+        ),
       };
     }
     if (!connected) {
       return {
-        label: "等待桌宠连接",
-        hint: "Companion 已监听，可点击“开启桌宠”或检查桌宠是否已连上本地入口。",
+        label: t(
+          "settings.providers.companion.bridge.diagnostic.waitingConnection.label",
+          "等待桌宠连接",
+        ),
+        hint: t(
+          "settings.providers.companion.bridge.diagnostic.waitingConnection.hint",
+          "Companion 已监听，可点击“开启桌宠”或检查桌宠是否已连上本地入口。",
+        ),
       };
     }
     if (!supportsProviderOverview) {
       return {
-        label: "能力未声明",
-        hint: "当前桌宠已连接，但尚未声明 Provider 概览能力，Lime 不会强行下发摘要。",
+        label: t(
+          "settings.providers.companion.bridge.diagnostic.capabilityMissing.label",
+          "能力未声明",
+        ),
+        hint: t(
+          "settings.providers.companion.bridge.diagnostic.capabilityMissing.hint",
+          "当前桌宠已连接，但尚未声明 Provider 概览能力，Lime 不会强行下发摘要。",
+        ),
       };
     }
     if (syncingPreview) {
       return {
-        label: "同步中",
-        hint: "正在把当前脱敏摘要发送给桌宠。",
+        label: t(
+          "settings.providers.companion.bridge.diagnostic.syncing.label",
+          "同步中",
+        ),
+        hint: t(
+          "settings.providers.companion.bridge.diagnostic.syncing.hint",
+          "正在把当前脱敏摘要发送给桌宠。",
+        ),
       };
     }
     return {
-      label: "可立即同步",
-      hint: "桌宠已连接且已声明 Provider 概览能力，可以手动下发当前摘要。",
+      label: t(
+        "settings.providers.companion.bridge.diagnostic.ready.label",
+        "可立即同步",
+      ),
+      hint: t(
+        "settings.providers.companion.bridge.diagnostic.ready.hint",
+        "桌宠已连接且已声明 Provider 概览能力，可以手动下发当前摘要。",
+      ),
     };
   })();
   const readinessChecks = [
     {
       key: "host",
-      label: "Companion 宿主已监听",
+      label: t(
+        "settings.providers.companion.bridge.readiness.host.label",
+        "Companion 宿主已监听",
+      ),
       done: serverListening,
       pending: false,
       detail: serverListening
-        ? "Lime 已监听本地桌宠入口。"
-        : "当前还没有可用的本地桌宠入口。",
+        ? t(
+            "settings.providers.companion.bridge.readiness.host.ready",
+            "Lime 已监听本地桌宠入口。",
+          )
+        : t(
+            "settings.providers.companion.bridge.readiness.host.missing",
+            "当前还没有可用的本地桌宠入口。",
+          ),
     },
     {
       key: "connection",
-      label: "桌宠已建立连接",
+      label: t(
+        "settings.providers.companion.bridge.readiness.connection.label",
+        "桌宠已建立连接",
+      ),
       done: connected,
       pending: false,
       detail: connected
-        ? "桌宠已经接入 Lime Companion。"
-        : "需要启动桌宠，或检查它是否连到了本地入口。",
+        ? t(
+            "settings.providers.companion.bridge.readiness.connection.ready",
+            "桌宠已经接入 Lime Companion。",
+          )
+        : t(
+            "settings.providers.companion.bridge.readiness.connection.missing",
+            "需要启动桌宠，或检查它是否连到了本地入口。",
+          ),
     },
     {
       key: "capability",
-      label: "桌宠声明 Provider 概览能力",
+      label: t(
+        "settings.providers.companion.bridge.readiness.capability.label",
+        "桌宠声明 Provider 概览能力",
+      ),
       done: supportsProviderOverview,
       pending: connected && !supportsProviderOverview,
       detail: supportsProviderOverview
-        ? "桌宠已声明可接收 provider-overview 摘要。"
+        ? t(
+            "settings.providers.companion.bridge.readiness.capability.ready",
+            "桌宠已声明可接收 provider-overview 摘要。",
+          )
         : connected
-          ? "当前桌宠已连接，但尚未声明 Provider 概览能力。"
-          : "桌宠连接建立后，Lime 会等待能力声明。",
+          ? t(
+              "settings.providers.companion.bridge.readiness.capability.pending",
+              "当前桌宠已连接，但尚未声明 Provider 概览能力。",
+            )
+          : t(
+              "settings.providers.companion.bridge.readiness.capability.waitingConnection",
+              "桌宠连接建立后，Lime 会等待能力声明。",
+            ),
     },
     {
       key: "preview",
-      label: "脱敏摘要已准备完成",
+      label: t(
+        "settings.providers.companion.bridge.readiness.preview.label",
+        "脱敏摘要已准备完成",
+      ),
       done:
         !previewLoading &&
         !previewError &&
@@ -541,29 +719,53 @@ function CompanionProviderBridgeCard() {
         previewProviders.length >= 0,
       pending: previewLoading,
       detail: previewLoading
-        ? "正在从当前服务商配置整理脱敏摘要。"
+        ? t(
+            "settings.providers.companion.bridge.readiness.preview.loading",
+            "正在从当前服务商配置整理脱敏摘要。",
+          )
         : previewError
           ? previewError
-          : `当前已准备 ${providerOverviewPreview?.total_provider_count ?? 0} 个服务商摘要。`,
+          : t("settings.providers.companion.bridge.readiness.preview.ready", {
+              count: providerOverviewPreview?.total_provider_count ?? 0,
+              defaultValue: "当前已准备 {{count}} 个服务商摘要。",
+            }),
     },
   ] as const;
   const nextAction = (() => {
     if (!serverListening) {
-      return "先让 Lime 完整启动 Companion 宿主，再连接桌宠。";
+      return t(
+        "settings.providers.companion.bridge.nextAction.startHost",
+        "先让 Lime 完整启动 Companion 宿主，再连接桌宠。",
+      );
     }
     if (!connected) {
-      return "点击“开启桌宠”，或检查桌宠是否已连接到本地 Companion 地址。";
+      return t(
+        "settings.providers.companion.bridge.nextAction.connectPet",
+        "点击“开启桌宠”，或检查桌宠是否已连接到本地 Companion 地址。",
+      );
     }
     if (!supportsProviderOverview) {
-      return "先让桌宠在 ready 事件里声明 Provider 概览能力，再尝试同步摘要。";
+      return t(
+        "settings.providers.companion.bridge.nextAction.declareCapability",
+        "先让桌宠在 ready 事件里声明 Provider 概览能力，再尝试同步摘要。",
+      );
     }
     if (previewLoading) {
-      return "等待 Lime 整理完当前 Provider 脱敏摘要。";
+      return t(
+        "settings.providers.companion.bridge.nextAction.waitPreview",
+        "等待 Lime 整理完当前 Provider 脱敏摘要。",
+      );
     }
     if (previewError) {
-      return "先修复摘要预览异常，再把脱敏摘要发送给桌宠。";
+      return t(
+        "settings.providers.companion.bridge.nextAction.fixPreview",
+        "先修复摘要预览异常，再把脱敏摘要发送给桌宠。",
+      );
     }
-    return "当前链路已就绪，可以直接点击“立即同步到桌宠”。";
+    return t(
+      "settings.providers.companion.bridge.nextAction.ready",
+      "当前链路已就绪，可以直接点击“立即同步到桌宠”。",
+    );
   })();
 
   return (
@@ -585,10 +787,19 @@ function CompanionProviderBridgeCard() {
                 <InfoPill
                   label={
                     connected
-                      ? "桌宠已连接"
+                      ? t(
+                          "settings.providers.companion.bridge.status.connected",
+                          "桌宠已连接",
+                        )
                       : serverListening
-                        ? "等待桌宠连接"
-                        : "本地 Companion 未监听"
+                        ? t(
+                            "settings.providers.companion.bridge.status.waitingConnection",
+                            "等待桌宠连接",
+                          )
+                        : t(
+                            "settings.providers.companion.bridge.status.notListening",
+                            "本地 Companion 未监听",
+                          )
                   }
                   tone={
                     connected ? "emerald" : serverListening ? "amber" : "slate"
@@ -597,14 +808,26 @@ function CompanionProviderBridgeCard() {
                 <InfoPill
                   label={
                     supportsProviderOverview
-                      ? "自动同步 Provider 概览"
-                      : "未声明 Provider 概览"
+                      ? t(
+                          "settings.providers.companion.bridge.status.autoSync",
+                          "自动同步 Provider 概览",
+                        )
+                      : t(
+                          "settings.providers.companion.bridge.status.providerOverviewMissing",
+                          "未声明 Provider 概览",
+                        )
                   }
                   tone={supportsProviderOverview ? "emerald" : "slate"}
                 />
                 <WorkbenchInfoTip
-                  ariaLabel="桌宠 Companion 说明"
-                  content="桌宠通过本地 Companion 通道复用 Lime 的 AI 服务商状态，只接收脱敏后的可用性摘要，不会直接读取 API Key、OAuth 凭证或本地凭证文件。"
+                  ariaLabel={t(
+                    "settings.providers.companion.bridge.intro.tipAria",
+                    "桌宠 Companion 说明",
+                  )}
+                  content={t(
+                    "settings.providers.companion.bridge.intro.tip",
+                    "桌宠通过本地 Companion 通道复用 Lime 的 AI 服务商状态，只接收脱敏后的可用性摘要，不会直接读取 API Key、OAuth 凭证或本地凭证文件。",
+                  )}
                   tone="mint"
                 />
               </div>
@@ -613,34 +836,103 @@ function CompanionProviderBridgeCard() {
 
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             <RuntimeSummaryItem
-              label="桥接状态"
+              label={t(
+                "settings.providers.companion.bridge.summary.bridge.label",
+                "桥接状态",
+              )}
               value={
-                connected ? "已接通" : serverListening ? "等待连接" : "未监听"
+                connected
+                  ? t(
+                      "settings.providers.companion.bridge.summary.bridge.connected",
+                      "已接通",
+                    )
+                  : serverListening
+                    ? t(
+                        "settings.providers.companion.bridge.summary.bridge.waiting",
+                        "等待连接",
+                      )
+                    : t(
+                        "settings.providers.companion.bridge.summary.bridge.notListening",
+                        "未监听",
+                      )
               }
-              hint="Lime 负责本地 Companion 宿主，桌宠作为独立原生壳接入。"
+              hintAriaLabel={t(
+                "settings.providers.companion.bridge.summary.bridge.tipAria",
+                "桥接状态说明",
+              )}
+              hint={t(
+                "settings.providers.companion.bridge.summary.bridge.hint",
+                "Lime 负责本地 Companion 宿主，桌宠作为独立原生壳接入。",
+              )}
             />
             <RuntimeSummaryItem
-              label="最近状态"
+              label={t(
+                "settings.providers.companion.bridge.summary.recent.label",
+                "最近状态",
+              )}
               value={lastState}
+              hintAriaLabel={t(
+                "settings.providers.companion.bridge.summary.recent.tipAria",
+                "最近状态说明",
+              )}
               hint={
                 status?.last_event
-                  ? `最近事件：${status.last_event}`
-                  : "尚未收到桌宠事件"
+                  ? t(
+                      "settings.providers.companion.bridge.summary.recent.event",
+                      {
+                        event: status.last_event,
+                        defaultValue: "最近事件：{{event}}",
+                      },
+                    )
+                  : t(
+                      "settings.providers.companion.bridge.summary.recent.empty",
+                      "尚未收到桌宠事件",
+                    )
               }
             />
             <RuntimeSummaryItem
-              label="能力"
+              label={t(
+                "settings.providers.companion.bridge.summary.capability.label",
+                "能力",
+              )}
               value={capabilityText}
-              hint="能力由桌宠在 ready 事件里声明，Lime 只按声明下发脱敏数据。"
+              hintAriaLabel={t(
+                "settings.providers.companion.bridge.summary.capability.tipAria",
+                "能力说明",
+              )}
+              hint={t(
+                "settings.providers.companion.bridge.summary.capability.hint",
+                "能力由桌宠在 ready 事件里声明，Lime 只按声明下发脱敏数据。",
+              )}
             />
             <RuntimeSummaryItem
-              label="桌宠身份"
+              label={t(
+                "settings.providers.companion.bridge.summary.identity.label",
+                "桌宠身份",
+              )}
               value={petIdentity}
-              hint={`平台：${formatCompanionPlatformLabel(status?.platform)}`}
+              hintAriaLabel={t(
+                "settings.providers.companion.bridge.summary.identity.tipAria",
+                "桌宠身份说明",
+              )}
+              hint={t(
+                "settings.providers.companion.bridge.summary.identity.platform",
+                {
+                  platform: formatCompanionPlatformLabel(t, status?.platform),
+                  defaultValue: "平台：{{platform}}",
+                },
+              )}
             />
             <RuntimeSummaryItem
-              label="同步诊断"
+              label={t(
+                "settings.providers.companion.bridge.summary.diagnostic.label",
+                "同步诊断",
+              )}
               value={syncDiagnostic.label}
+              hintAriaLabel={t(
+                "settings.providers.companion.bridge.summary.diagnostic.tipAria",
+                "同步诊断说明",
+              )}
               hint={syncDiagnostic.hint}
             />
           </div>
@@ -649,16 +941,30 @@ function CompanionProviderBridgeCard() {
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-900">
-                  <span>接入检查</span>
+                  <span>
+                    {t(
+                      "settings.providers.companion.bridge.readiness.title",
+                      "接入检查",
+                    )}
+                  </span>
                   <WorkbenchInfoTip
-                    ariaLabel="桌宠接入检查说明"
-                    content="按“宿主监听、桌宠连接、能力声明、摘要准备”这四步排查桌宠接入状态。"
+                    ariaLabel={t(
+                      "settings.providers.companion.bridge.readiness.tipAria",
+                      "桌宠接入检查说明",
+                    )}
+                    content={t(
+                      "settings.providers.companion.bridge.readiness.tip",
+                      "按“宿主监听、桌宠连接、能力声明、摘要准备”这四步排查桌宠接入状态。",
+                    )}
                     tone="slate"
                   />
                 </div>
               </div>
               <div className="rounded-[14px] border border-slate-200/80 bg-white px-3 py-2 text-xs text-slate-600">
-                当前建议：
+                {t(
+                  "settings.providers.companion.bridge.nextAction.label",
+                  "当前建议：",
+                )}
                 <span className="font-medium text-slate-800">{nextAction}</span>
               </div>
             </div>
@@ -709,28 +1015,70 @@ function CompanionProviderBridgeCard() {
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-900">
-                  <span>桌宠视角预览</span>
+                  <span>
+                    {t(
+                      "settings.providers.companion.bridge.preview.title",
+                      "桌宠视角预览",
+                    )}
+                  </span>
                   <WorkbenchInfoTip
-                    ariaLabel="桌宠视角预览说明"
-                    content="这里展示 Lime 准备发给桌宠的服务商脱敏摘要，会基于当前 AI 服务商配置生成，但不会带出原始凭证。"
+                    ariaLabel={t(
+                      "settings.providers.companion.bridge.preview.tipAria",
+                      "桌宠视角预览说明",
+                    )}
+                    content={t(
+                      "settings.providers.companion.bridge.preview.tip",
+                      "这里展示 Lime 准备发给桌宠的服务商脱敏摘要，会基于当前 AI 服务商配置生成，但不会带出原始凭证。",
+                    )}
                     tone="slate"
                   />
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <InfoPill
-                  label={`服务商 ${providerOverviewPreview?.total_provider_count ?? 0}`}
+                  label={t(
+                    "settings.providers.companion.bridge.preview.total",
+                    {
+                      count: providerOverviewPreview?.total_provider_count ?? 0,
+                      defaultValue: "服务商 {{count}}",
+                    },
+                  )}
                 />
                 <InfoPill
-                  label={`可用 ${providerOverviewPreview?.available_provider_count ?? 0}`}
+                  label={t(
+                    "settings.providers.companion.bridge.preview.available",
+                    {
+                      count:
+                        providerOverviewPreview?.available_provider_count ?? 0,
+                      defaultValue: "可用 {{count}}",
+                    },
+                  )}
                   tone="emerald"
                 />
                 <InfoPill
-                  label={`需关注 ${providerOverviewPreview?.needs_attention_provider_count ?? 0}`}
+                  label={t(
+                    "settings.providers.companion.bridge.preview.attention",
+                    {
+                      count:
+                        providerOverviewPreview?.needs_attention_provider_count ??
+                        0,
+                      defaultValue: "需关注 {{count}}",
+                    },
+                  )}
                   tone="amber"
                 />
                 <InfoPill
-                  label={`最近同步 ${formatCompanionDateTime(lastManualSyncAt)}`}
+                  label={t(
+                    "settings.providers.companion.bridge.preview.lastSync",
+                    {
+                      time: formatCompanionDateTime(
+                        t,
+                        lastManualSyncAt,
+                        i18n.resolvedLanguage || i18n.language,
+                      ),
+                      defaultValue: "最近同步 {{time}}",
+                    },
+                  )}
                 />
                 <button
                   type="button"
@@ -750,20 +1098,29 @@ function CompanionProviderBridgeCard() {
                   ) : (
                     <RefreshCw className="h-3.5 w-3.5" />
                   )}
-                  立即同步到桌宠
+                  {t(
+                    "settings.providers.companion.bridge.preview.action.sync",
+                    "立即同步到桌宠",
+                  )}
                 </button>
               </div>
             </div>
 
             <div className="mt-3 rounded-[14px] border border-slate-200/80 bg-white px-3 py-2 text-xs text-slate-500">
-              Companion 地址：
+              {t(
+                "settings.providers.companion.bridge.preview.endpoint",
+                "Companion 地址：",
+              )}
               <span className="font-medium text-slate-700">{endpoint}</span>
             </div>
 
             {previewLoading ? (
               <div className="mt-4 flex items-center gap-2 text-sm text-slate-500">
                 <LoaderCircle className="h-4 w-4 animate-spin" />
-                正在整理桌宠摘要预览...
+                {t(
+                  "settings.providers.companion.bridge.preview.loading",
+                  "正在整理桌宠摘要预览...",
+                )}
               </div>
             ) : previewProviders.length > 0 ? (
               <div
@@ -785,17 +1142,53 @@ function CompanionProviderBridgeCard() {
                         </p>
                       </div>
                       <InfoPill
-                        label={provider.available ? "可用" : "不可用"}
+                        label={
+                          provider.available
+                            ? t(
+                                "settings.providers.companion.bridge.preview.provider.available",
+                                "可用",
+                              )
+                            : t(
+                                "settings.providers.companion.bridge.preview.provider.unavailable",
+                                "不可用",
+                              )
+                        }
                         tone={provider.available ? "emerald" : "amber"}
                       />
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
-                      <span>配置 {provider.total_count}</span>
-                      <span>健康 {provider.healthy_count}</span>
+                      <span>
+                        {t(
+                          "settings.providers.companion.bridge.preview.provider.configCount",
+                          {
+                            count: provider.total_count,
+                            defaultValue: "配置 {{count}}",
+                          },
+                        )}
+                      </span>
+                      <span>
+                        {t(
+                          "settings.providers.companion.bridge.preview.provider.healthyCount",
+                          {
+                            count: provider.healthy_count,
+                            defaultValue: "健康 {{count}}",
+                          },
+                        )}
+                      </span>
                       {provider.needs_attention ? (
-                        <span className="text-amber-700">需要关注</span>
+                        <span className="text-amber-700">
+                          {t(
+                            "settings.providers.companion.bridge.preview.provider.needsAttention",
+                            "需要关注",
+                          )}
+                        </span>
                       ) : (
-                        <span className="text-emerald-700">状态稳定</span>
+                        <span className="text-emerald-700">
+                          {t(
+                            "settings.providers.companion.bridge.preview.provider.stable",
+                            "状态稳定",
+                          )}
+                        </span>
                       )}
                     </div>
                   </div>
@@ -803,7 +1196,10 @@ function CompanionProviderBridgeCard() {
               </div>
             ) : (
               <div className="mt-4 rounded-[16px] border border-dashed border-slate-300 bg-white px-4 py-3 text-sm text-slate-500">
-                当前还没有可供桌宠消费的服务商摘要。配置任一服务商后，这里会显示脱敏后的可用性信息。
+                {t(
+                  "settings.providers.companion.bridge.preview.empty",
+                  "当前还没有可供桌宠消费的服务商摘要。配置任一服务商后，这里会显示脱敏后的可用性信息。",
+                )}
               </div>
             )}
           </div>
@@ -811,7 +1207,13 @@ function CompanionProviderBridgeCard() {
           {status?.last_error ? (
             <NoticeBar
               tone="error"
-              message={`桌宠最近一次错误：${status.last_error}`}
+              message={t(
+                "settings.providers.companion.bridge.message.lastError",
+                {
+                  error: status.last_error,
+                  defaultValue: "桌宠最近一次错误：{{error}}",
+                },
+              )}
             />
           ) : null}
 
@@ -827,11 +1229,16 @@ function CompanionProviderBridgeCard() {
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-amber-900">
-                    还没有安装 Lime Pet
+                    {t(
+                      "settings.providers.companion.bridge.install.title",
+                      "还没有安装 Lime Pet",
+                    )}
                   </p>
                   <p className="text-sm leading-6 text-amber-800">
-                    先安装桌宠客户端，再回到这里点击“开启桌宠”，Lime
-                    会继续负责本地 Companion 宿主与状态同步。
+                    {t(
+                      "settings.providers.companion.bridge.install.description",
+                      "先安装桌宠客户端，再回到这里点击“开启桌宠”，Lime 会继续负责本地 Companion 宿主与状态同步。",
+                    )}
                   </p>
                 </div>
                 <button
@@ -841,7 +1248,10 @@ function CompanionProviderBridgeCard() {
                   data-testid="companion-install-button"
                 >
                   <ExternalLink className="h-4 w-4" />
-                  下载安装 Lime Pet
+                  {t(
+                    "settings.providers.companion.bridge.install.action.download",
+                    "下载安装 Lime Pet",
+                  )}
                 </button>
               </div>
             </div>
@@ -869,7 +1279,15 @@ function CompanionProviderBridgeCard() {
                 (loadingStatus || refreshingStatus) && "animate-spin",
               )}
             />
-            {loadingStatus ? "读取状态中" : "刷新桌宠状态"}
+            {loadingStatus
+              ? t(
+                  "settings.providers.companion.bridge.action.loadingStatus",
+                  "读取状态中",
+                )
+              : t(
+                  "settings.providers.companion.bridge.action.refresh",
+                  "刷新桌宠状态",
+                )}
           </button>
           <button
             type="button"
@@ -883,7 +1301,15 @@ function CompanionProviderBridgeCard() {
             ) : (
               <Bot className="h-4 w-4" />
             )}
-            {connected ? "重新打开桌宠" : "开启桌宠"}
+            {connected
+              ? t(
+                  "settings.providers.companion.bridge.action.reopen",
+                  "重新打开桌宠",
+                )
+              : t(
+                  "settings.providers.companion.bridge.action.launch",
+                  "开启桌宠",
+                )}
           </button>
         </div>
       </div>
@@ -892,38 +1318,51 @@ function CompanionProviderBridgeCard() {
 }
 
 type ProviderWorkspaceView = SettingsProviderView;
+type ProviderSettingsTranslate = TFunction<"settings", undefined>;
 
-const PROVIDER_WORKSPACE_VIEW_META: Array<{
+function createProviderWorkspaceViewMeta(t: ProviderSettingsTranslate): Array<{
   value: ProviderWorkspaceView;
   label: string;
   summary: string;
   icon: typeof KeyRound;
-}> = [
-  {
-    value: "settings",
-    label: "服务商设置",
-    summary: "Provider / API Key / 模型",
-    icon: KeyRound,
-  },
-  {
-    value: "cloud",
-    label: "云端服务",
-    summary: "Offer / 目录 / 会话",
-    icon: Cloud,
-  },
-  {
-    value: "companion",
-    label: "桌宠管理",
-    summary: "Companion / 同步 / 诊断",
-    icon: Bot,
-  },
-];
+}> {
+  return [
+    {
+      value: "settings",
+      label: t("settings.providers.workspaceView.settings.label", "服务商设置"),
+      summary: t(
+        "settings.providers.workspaceView.settings.summary",
+        "Provider / API Key / 模型",
+      ),
+      icon: KeyRound,
+    },
+    {
+      value: "cloud",
+      label: t("settings.providers.workspaceView.cloud.label", "云端服务"),
+      summary: t(
+        "settings.providers.workspaceView.cloud.summary",
+        "Offer / 目录 / 会话",
+      ),
+      icon: Cloud,
+    },
+    {
+      value: "companion",
+      label: t("settings.providers.workspaceView.companion.label", "桌宠管理"),
+      summary: t(
+        "settings.providers.workspaceView.companion.summary",
+        "Companion / 同步 / 诊断",
+      ),
+      icon: Bot,
+    },
+  ];
+}
 
 export interface CloudProviderSettingsProps {
   initialView?: ProviderWorkspaceView;
 }
 
 export function CloudProviderSettings(props: CloudProviderSettingsProps) {
+  const { t } = useTranslation("settings");
   const { initialView } = props;
   const {
     runtime,
@@ -938,8 +1377,14 @@ export function CloudProviderSettings(props: CloudProviderSettingsProps) {
   } = useOemCloudAccess();
 
   const isOemRuntime = Boolean(runtime);
-  const cloudBrandLabel = hubProviderName?.trim() || "Lime 云端";
+  const cloudBrandLabel =
+    hubProviderName?.trim() ||
+    t("settings.providers.cloud.brandFallback", "Lime 云端");
   const showProviderSettingsEntry = true;
+  const providerWorkspaceViewMeta = useMemo(
+    () => createProviderWorkspaceViewMeta(t),
+    [t],
+  );
   const workspaceViews = useMemo(() => {
     const orderedViews: ProviderWorkspaceView[] = [];
 
@@ -956,10 +1401,9 @@ export function CloudProviderSettings(props: CloudProviderSettingsProps) {
     }
 
     return orderedViews.map(
-      (view) =>
-        PROVIDER_WORKSPACE_VIEW_META.find((item) => item.value === view)!,
+      (view) => providerWorkspaceViewMeta.find((item) => item.value === view)!,
     );
-  }, [isOemRuntime, showProviderSettingsEntry]);
+  }, [isOemRuntime, providerWorkspaceViewMeta, showProviderSettingsEntry]);
   const defaultView = useMemo<ProviderWorkspaceView>(() => {
     if (
       initialView &&
@@ -985,7 +1429,12 @@ export function CloudProviderSettings(props: CloudProviderSettingsProps) {
     async (path = "/welcome") => {
       if (!runtime) {
         setCloudOpenInfo(null);
-        setCloudOpenError("当前版本未配置云端用户中心入口。");
+        setCloudOpenError(
+          t(
+            "settings.providers.cloud.message.userCenterMissing",
+            "当前版本未配置云端用户中心入口。",
+          ),
+        );
         return;
       }
 
@@ -1000,19 +1449,36 @@ export function CloudProviderSettings(props: CloudProviderSettingsProps) {
         if (!session) {
           await handleGoogleLogin();
           setCloudOpenInfo(
-            `已打开 ${cloudBrandLabel} 登录页，请在浏览器完成授权。`,
+            t("settings.providers.cloud.message.loginOpened", {
+              brand: cloudBrandLabel,
+              defaultValue: "已打开 {{brand}} 登录页，请在浏览器完成授权。",
+            }),
           );
           return;
         }
 
         await openUserCenter(path);
-        setCloudOpenInfo(`已在浏览器打开 ${cloudBrandLabel} 用户中心。`);
+        setCloudOpenInfo(
+          t("settings.providers.cloud.message.userCenterOpened", {
+            brand: cloudBrandLabel,
+            defaultValue: "已在浏览器打开 {{brand}} 用户中心。",
+          }),
+        );
       } catch (error) {
         const detail =
           error instanceof Error && error.message.trim()
             ? error.message.trim()
-            : "请稍后重试，或检查系统浏览器是否可用。";
-        setCloudOpenError(`打开 ${cloudBrandLabel} 用户中心失败：${detail}`);
+            : t(
+                "settings.providers.cloud.message.browserRetry",
+                "请稍后重试，或检查系统浏览器是否可用。",
+              );
+        setCloudOpenError(
+          t("settings.providers.cloud.message.userCenterOpenFailed", {
+            brand: cloudBrandLabel,
+            detail,
+            defaultValue: "打开 {{brand}} 用户中心失败：{{detail}}",
+          }),
+        );
       }
     },
     [
@@ -1023,6 +1489,7 @@ export function CloudProviderSettings(props: CloudProviderSettingsProps) {
       openUserCenter,
       runtime,
       session,
+      t,
     ],
   );
 

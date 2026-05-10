@@ -48,11 +48,20 @@ docs/test/
 ├── integration-tests.md        # 集成测试指南
 ├── e2e-tests.md               # 浏览器续测与 E2E 总览
 ├── agent-evaluation.md        # Agent 评估指南（核心文档）
+├── agent-qc-evidence.schema.json        # Agent QC Evidence Pack schema
+├── agent-qc-gui-flows.manifest.json     # Agent QC GUI / Playwright MCP flow 清单
+├── agent-qc-scenarios.manifest.json     # Agent QC 核心场景清单
 ├── harness-evals.md           # Harness eval 任务集与 runner 入口
 └── test-cases/                # 测试用例模板
     ├── converter-tests.md     # 协议转换器测试用例
     ├── provider-tests.md      # Provider 测试用例
     └── agent-tests.md         # Agent 测试用例
+
+docs/tests/
+├── agent-ops-qc.md            # Agent 运营级测试体系与证据门禁
+├── agent-qc-p0-scenarios.md   # Agent QC P0 场景执行手册
+├── lime-agent-qc-rollout-plan.md # Lime 样本产品落地计划
+└── lime-agent-qc-current-blockers.md # 当前 P0 qcloop 阻断记录
 ```
 
 ## 文档索引
@@ -65,6 +74,13 @@ docs/test/
 | [e2e-tests.md](e2e-tests.md)                                     | 当前浏览器续测与 E2E 入口    | Playwright MCP / DevBridge 主路径验证 |
 | [../aiprompts/playwright-e2e.md](../aiprompts/playwright-e2e.md) | 浏览器续测详细事实源         | 继续测试、复现、控制台与 Bridge 排障  |
 | [agent-evaluation.md](agent-evaluation.md)                       | Agent 评估指南               | AI Agent 行为评估                     |
+| [../tests/agent-ops-qc.md](../tests/agent-ops-qc.md)                               | Agent 运营级测试体系         | qcloop、证据包、发布门禁、运营回归    |
+| [../tests/agent-qc-p0-scenarios.md](../tests/agent-qc-p0-scenarios.md)             | Agent QC P0 场景执行手册     | 核心场景执行、证据要求、失败沉淀      |
+| [../tests/lime-agent-qc-rollout-plan.md](../tests/lime-agent-qc-rollout-plan.md)   | Lime 落地计划                | 分阶段构建 qcloop 证据链、GUI/Runtime 深测、release gate |
+| [../tests/lime-agent-qc-current-blockers.md](../tests/lime-agent-qc-current-blockers.md) | 当前 P0 阻断记录        | 真实 qcloop fail evidence、root cause、关闭条件 |
+| [agent-qc-scenarios.manifest.json](agent-qc-scenarios.manifest.json) | Agent QC 场景清单         | 机器可读场景、lane、命令、证据要求    |
+| [agent-qc-evidence.schema.json](agent-qc-evidence.schema.json)   | Evidence Pack schema         | 测试证据、场景结果、verdict 合同      |
+| [agent-qc-gui-flows.manifest.json](agent-qc-gui-flows.manifest.json) | GUI flow 清单             | Playwright MCP 步骤、断言、证据要求   |
 | [harness-evals.md](harness-evals.md)                             | Harness eval 任务集与 runner | Replay 样本、grader、nightly 摘要     |
 | [test-cases/converter-tests.md](test-cases/converter-tests.md)   | 转换器测试用例               | OpenAI ↔ Claude 转换                  |
 | [test-cases/provider-tests.md](test-cases/provider-tests.md)     | Provider 测试用例            | API Key Provider、协议转换和 API 调用 |
@@ -129,6 +145,22 @@ npm run harness:eval:promote -- --session-id "session-123" --slug "pending-reque
 ```bash
 npm run harness:eval:trend
 ```
+
+### 运行 Agent QC 场景报告 / 合同检查
+
+```bash
+npm run agent-qc:report
+npm run agent-qc:report:json
+npm run agent-qc:gui-flow:report
+npm run agent-qc:gui-flow:check
+npm run agent-qc:check
+npm run agent-qc:qcloop-job -- --risk P0 --output "./.lime/qc/qcloop-p0-job.json" --check
+npm run agent-qc:export-evidence -- --job-id "<qcloop-job-id>" --output "./.lime/qc/agent-qc-evidence.json" --check
+npm run agent-qc:release-summary -- --evidence "./.lime/qc/agent-qc-evidence.json" --require-scenario-manifest "docs/test/agent-qc-scenarios.manifest.json" --require-risk P0 --tag "<release-tag>" --output "./.lime/qc/release-agent-qc.md" --check
+npm run agent-qc:audit
+```
+
+`agent-qc:check` 已进入 `npm run test:contracts`，用于防止运营级测试场景、证据 schema 和 npm script 入口漂移。
 
 ### 记录 Harness eval 历史窗口
 

@@ -4,6 +4,7 @@ import {
   DEFAULT_CHAT_TOOL_PREFERENCES,
   loadChatToolPreferences,
   saveChatToolPreferences,
+  shouldUseCompactGeneralPromptForPreferences,
 } from "./chatToolPreferences";
 
 describe("chatToolPreferences", () => {
@@ -72,5 +73,33 @@ describe("chatToolPreferences", () => {
     expect(loadChatToolPreferences("another-theme")).toEqual(
       DEFAULT_CHAT_TOOL_PREFERENCES,
     );
+  });
+
+  it("通用首轮仅开启联网搜索时仍应使用紧凑 Prompt", () => {
+    expect(
+      shouldUseCompactGeneralPromptForPreferences({
+        chatMode: "general",
+        contentId: null,
+        preferences: {
+          webSearch: true,
+          thinking: false,
+          task: false,
+          subagent: false,
+        },
+      }),
+    ).toBe(true);
+
+    expect(
+      shouldUseCompactGeneralPromptForPreferences({
+        chatMode: "general",
+        contentId: null,
+        preferences: {
+          webSearch: true,
+          thinking: true,
+          task: false,
+          subagent: false,
+        },
+      }),
+    ).toBe(false);
   });
 });

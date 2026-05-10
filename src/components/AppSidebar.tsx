@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import * as LucideIcons from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { getPluginsForSurface, PluginUIInfo } from "@/lib/api/pluginUI";
 import { AgentPageParams, Page, PageParams } from "@/types/page";
 import { SettingsTabs } from "@/types/settings";
@@ -153,8 +154,15 @@ import {
   type LimeThemeChangedEventDetail,
   type LimeThemeMode,
 } from "@/lib/appearance/themeMode";
-import { useI18nPatch } from "@/i18n/I18nPatchProvider";
-import type { Language } from "@/i18n/text-map";
+import { useI18nPatch } from "@/i18n/legacy-patch/I18nPatchProvider";
+import { changeLimeLocale } from "@/i18n/createI18n";
+import {
+  UI_LOCALE_OPTIONS,
+  normalizeLocalePreference,
+  resolveLocaleOptionLabel,
+  toLegacyPatchLanguage,
+  type LocalePreference,
+} from "@/i18n/locales";
 
 interface AppSidebarProps {
   currentPage: Page;
@@ -181,23 +189,24 @@ const SIDEBAR_NEW_TASK_HOME_SESSION_LOAD_DEFER_MS = 0;
 const SIDEBAR_CONVERSATION_NAVIGATION_DEFER_MS =
   SIDEBAR_SESSION_ENTRY_REFRESH_DEFER_MS;
 const SIDEBAR_SEARCH_HOVER_PREFETCH_DELAY_MS = 900;
+const SIDEBAR_NAV_LABEL_KEYS: Record<string, string> = {
+  automation: "navigation.sidebar.items.automation",
+  channels: "navigation.sidebar.items.channels",
+  companion: "navigation.sidebar.items.companion",
+  "home-general": "navigation.sidebar.items.homeGeneral",
+  knowledge: "navigation.sidebar.items.knowledge",
+  memory: "navigation.sidebar.items.memory",
+  openclaw: "navigation.sidebar.items.openclaw",
+  plugins: "navigation.sidebar.items.plugins",
+  settings: "navigation.sidebar.items.settings",
+  skills: "navigation.sidebar.items.skills",
+};
 
-const APP_SIDEBAR_LANGUAGE_OPTIONS: Array<{
-  id: Language;
-  label: string;
-  hint: string;
-}> = [
-  {
-    id: "zh",
-    label: "中文",
-    hint: "中文界面",
-  },
-  {
-    id: "en",
-    label: "English",
-    hint: "English UI",
-  },
-];
+const APP_SIDEBAR_LANGUAGE_OPTIONS = UI_LOCALE_OPTIONS.map((option) => ({
+  id: option.id,
+  label: option.label,
+  hint: option.fallbackHint,
+}));
 
 function buildSidebarSessionRequestLimit(
   visibleCount: number,
@@ -2185,18 +2194,20 @@ function normalizeSidebarSearchText(value: string): string {
 function matchesSidebarSessionTitle(
   session: AsterSessionInfo,
   normalizedQuery: string,
+  fallbackTitle: string,
 ): boolean {
   if (!normalizedQuery) {
     return true;
   }
 
   return normalizeSidebarSearchText(
-    resolveSidebarSessionTitle(session),
+    resolveSidebarSessionTitle(session, fallbackTitle),
   ).includes(normalizedQuery);
 }
 
 function resolveAccountDisplayName(
   sessionState: OemCloudStoredSessionState | null,
+  fallbackDisplayName: string,
 ): string {
   const user = sessionState?.session.user;
   const fallbackEmailName = user?.email?.split("@")[0]?.trim();
@@ -2204,7 +2215,7 @@ function resolveAccountDisplayName(
     user?.displayName?.trim() ||
     user?.username?.trim() ||
     fallbackEmailName ||
-    "开源使用"
+    fallbackDisplayName
   );
 }
 
@@ -2251,6 +2262,7 @@ function parseAccountUsagePercent(value: string | undefined): number | null {
 
 function resolveAccountPlanSummary(
   bootstrap: OemCloudBootstrapResponse | null,
+  fallbackPlanLabel: string,
 ): {
   planLabel: string;
   usageLabel: string | null;
@@ -2259,7 +2271,7 @@ function resolveAccountPlanSummary(
   const preference = bootstrap?.providerPreference;
   if (!preference) {
     return {
-      planLabel: "免费版",
+      planLabel: fallbackPlanLabel,
       usageLabel: null,
       usagePercent: null,
     };
@@ -2274,7 +2286,7 @@ function resolveAccountPlanSummary(
   const usageLabel = matchedOffer?.creditsSummary?.trim() || null;
 
   return {
-    planLabel: matchedOffer?.currentPlan?.trim() || "免费版",
+    planLabel: matchedOffer?.currentPlan?.trim() || fallbackPlanLabel,
     usageLabel,
     usagePercent: parseAccountUsagePercent(usageLabel ?? undefined),
   };
@@ -2291,13 +2303,17 @@ function resolveAccountInitial(name: string): string {
 
 function resolveCloudBrandLabel(
   bootstrap: OemCloudBootstrapResponse | null,
+  fallbackBrandLabel: string,
+  cloudSuffixLabel: string,
 ): string {
   const appName = bootstrap?.app?.name?.trim();
   if (!appName) {
-    return "Lime 云端";
+    return fallbackBrandLabel;
   }
 
-  return /云|Cloud|Hub/i.test(appName) ? appName : `${appName} 云端`;
+  return /云|Cloud|Hub/i.test(appName)
+    ? appName
+    : `${appName} ${cloudSuffixLabel}`;
 }
 
 function formatReferralCredits(value: number | undefined): string {
@@ -2308,17 +2324,6 @@ function formatReferralCredits(value: number | undefined): string {
   return `${value.toLocaleString("zh-CN")} 积分`;
 }
 
-function normalizeSidebarLanguage(language?: string): Language {
-  return language === "en" ? "en" : "zh";
-}
-
-function resolveSidebarLanguageLabel(language: Language): string {
-  return (
-    APP_SIDEBAR_LANGUAGE_OPTIONS.find((option) => option.id === language)
-      ?.label ?? "中文"
-  );
-}
-
 export function AppSidebar({
   currentPage,
   currentPageParams,
@@ -2327,6 +2332,76 @@ export function AppSidebar({
   onNavigate,
   onStartWindowDrag,
 }: AppSidebarProps) {
+  const { t, i18n } = useTranslation("navigation");
+  const conversationUntitledLabel = t(
+    "navigation.sidebar.conversations.untitled",
+    "未命名对话",
+  );
+  const resolveLocalizedSessionTitle = useCallback(
+    (session: AsterSessionInfo) =>
+      resolveSidebarSessionTitle(session, conversationUntitledLabel),
+    [conversationUntitledLabel],
+  );
+  const formatArchivedConversationMeta = useCallback(
+    (time: string) =>
+      t("navigation.sidebar.conversations.meta.archived", {
+        time,
+        defaultValue: "归档 {{time}}",
+      }),
+    [t],
+  );
+  const formatLocalizedSessionMeta = useCallback(
+    (session: AsterSessionInfo) =>
+      formatSidebarSessionMeta(session, {
+        formatArchived: formatArchivedConversationMeta,
+        locale: i18n.language,
+      }),
+    [formatArchivedConversationMeta, i18n.language],
+  );
+  const renameConversationPromptLabel = t(
+    "navigation.sidebar.conversations.rename.prompt",
+    "重命名对话",
+  );
+  const renameConversationSuccessLabel = t(
+    "navigation.sidebar.conversations.rename.success",
+    "已重命名对话",
+  );
+  const renameConversationErrorLabel = t(
+    "navigation.sidebar.conversations.rename.error",
+    "重命名失败，请稍后重试",
+  );
+  const formatDeleteConversationConfirm = useCallback(
+    (title: string) =>
+      t("navigation.sidebar.conversations.delete.confirm", {
+        title,
+        defaultValue: "确定要删除“{{title}}”吗？删除后无法恢复。",
+      }),
+    [t],
+  );
+  const deleteConversationSuccessLabel = t(
+    "navigation.sidebar.conversations.delete.success",
+    "已删除对话",
+  );
+  const deleteConversationErrorLabel = t(
+    "navigation.sidebar.conversations.delete.error",
+    "删除失败，请稍后重试",
+  );
+  const accountFreePlanLabel = t(
+    "navigation.sidebar.account.freePlan",
+    "免费版",
+  );
+  const accountOpenSourceTitleLabel = t(
+    "navigation.sidebar.account.openSource.title",
+    "开源使用",
+  );
+  const accountDefaultCloudBrandLabel = t(
+    "navigation.sidebar.account.defaultCloudBrand",
+    "Lime 云端",
+  );
+  const accountCloudSuffixLabel = t(
+    "navigation.sidebar.account.cloudSuffix",
+    "云端",
+  );
   const activePage = requestedPage ?? currentPage;
   const activePageParams = requestedPageParams ?? currentPageParams;
   const activeNavigationTarget = {
@@ -2422,7 +2497,7 @@ export function AppSidebar({
   const [appearancePopoverOpen, setAppearancePopoverOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [languageMenuOpen, setLanguageMenuOpen] = useState(false);
-  const [language, setLanguageState] = useState<Language>("zh");
+  const [language, setLanguageState] = useState<LocalePreference>("zh-CN");
   const [cloudSessionState, setCloudSessionState] =
     useState<OemCloudStoredSessionState | null>(() =>
       typeof window === "undefined" ? null : getStoredOemCloudSessionState(),
@@ -2590,7 +2665,7 @@ export function AppSidebar({
           config.navigation?.enabled_items,
         );
         setEnabledNavItems(resolvedItems);
-        setLanguageState(normalizeSidebarLanguage(config.language));
+        setLanguageState(normalizeLocalePreference(config.language));
       } catch (error) {
         console.error("加载配置失败:", error);
       }
@@ -2603,19 +2678,34 @@ export function AppSidebar({
     });
   }, []);
 
+  const localizeSidebarNavItem = useCallback(
+    (item: SidebarNavItem): SidebarNavItem => {
+      const key = SIDEBAR_NAV_LABEL_KEYS[item.id];
+      if (!key) {
+        return item;
+      }
+
+      return {
+        ...item,
+        label: t(key, item.label),
+      };
+    },
+    [t],
+  );
+
   const filteredMainNavItems = useMemo<SidebarNavItem[]>(() => {
     return MAIN_SIDEBAR_NAV_ITEMS.filter(
       (item) =>
         item.configurable === false || enabledNavItems.includes(item.id),
-    );
-  }, [enabledNavItems]);
+    ).map(localizeSidebarNavItem);
+  }, [enabledNavItems, localizeSidebarNavItem]);
 
   const filteredFooterNavItems = useMemo<SidebarNavItem[]>(() => {
     return FOOTER_SIDEBAR_NAV_ITEMS.filter(
       (item) =>
         item.configurable === false || enabledNavItems.includes(item.id),
-    );
-  }, [enabledNavItems]);
+    ).map(localizeSidebarNavItem);
+  }, [enabledNavItems, localizeSidebarNavItem]);
 
   useEffect(() => {
     if (!enabledNavItems.includes(SIDEBAR_PLUGIN_CENTER_NAV_ITEM_ID)) {
@@ -3468,9 +3558,17 @@ export function AppSidebar({
     }
 
     return recentSidebarSessions.filter((session) =>
-      matchesSidebarSessionTitle(session, normalizedSidebarSearchQuery),
+      matchesSidebarSessionTitle(
+        session,
+        normalizedSidebarSearchQuery,
+        conversationUntitledLabel,
+      ),
     );
-  }, [normalizedSidebarSearchQuery, recentSidebarSessions]);
+  }, [
+    conversationUntitledLabel,
+    normalizedSidebarSearchQuery,
+    recentSidebarSessions,
+  ]);
   const sidebarSearchResultSessions = useMemo(() => {
     if (!normalizedSidebarSearchQuery) {
       return buildVisibleSidebarSessions({
@@ -3822,8 +3920,10 @@ export function AppSidebar({
 
   const handleRenameConversation = useCallback(
     async (session: AsterSessionInfo) => {
-      const currentTitle = resolveSidebarSessionTitle(session);
-      const nextTitle = window.prompt("重命名对话", currentTitle)?.trim();
+      const currentTitle = resolveLocalizedSessionTitle(session);
+      const nextTitle = window
+        .prompt(renameConversationPromptLabel, currentTitle)
+        ?.trim();
       if (!nextTitle || nextTitle === currentTitle) {
         return;
       }
@@ -3851,11 +3951,11 @@ export function AppSidebar({
           session_id: session.id,
           name: nextTitle,
         });
-        toast.success("已重命名对话");
+        toast.success(renameConversationSuccessLabel);
         await refreshSidebarSessions();
       } catch (error) {
         console.error("重命名会话失败:", error);
-        toast.error("重命名失败，请稍后重试");
+        toast.error(renameConversationErrorLabel);
         await refreshSidebarSessions();
       } finally {
         setSidebarSessionActionId((current) =>
@@ -3863,7 +3963,13 @@ export function AppSidebar({
         );
       }
     },
-    [refreshSidebarSessions],
+    [
+      refreshSidebarSessions,
+      renameConversationErrorLabel,
+      renameConversationPromptLabel,
+      renameConversationSuccessLabel,
+      resolveLocalizedSessionTitle,
+    ],
   );
 
   const handleToggleSessionArchive = useCallback(
@@ -3912,10 +4018,8 @@ export function AppSidebar({
 
   const handleDeleteConversation = useCallback(
     async (session: AsterSessionInfo) => {
-      const title = resolveSidebarSessionTitle(session);
-      const confirmed = window.confirm(
-        `确定要删除“${title}”吗？删除后无法恢复。`,
-      );
+      const title = resolveLocalizedSessionTitle(session);
+      const confirmed = window.confirm(formatDeleteConversationConfirm(title));
       if (!confirmed) {
         return;
       }
@@ -3930,7 +4034,7 @@ export function AppSidebar({
 
       try {
         await deleteAgentRuntimeSession(session.id);
-        toast.success("已删除对话");
+        toast.success(deleteConversationSuccessLabel);
         if (currentSessionId === session.id) {
           handleNavigateToNewTask();
         } else {
@@ -3938,7 +4042,7 @@ export function AppSidebar({
         }
       } catch (error) {
         console.error("删除会话失败:", error);
-        toast.error("删除失败，请稍后重试");
+        toast.error(deleteConversationErrorLabel);
         await refreshSidebarSessions();
       } finally {
         setSidebarSessionActionId((current) =>
@@ -3946,20 +4050,37 @@ export function AppSidebar({
         );
       }
     },
-    [currentSessionId, handleNavigateToNewTask, refreshSidebarSessions],
+    [
+      currentSessionId,
+      deleteConversationErrorLabel,
+      deleteConversationSuccessLabel,
+      formatDeleteConversationConfirm,
+      handleNavigateToNewTask,
+      refreshSidebarSessions,
+      resolveLocalizedSessionTitle,
+    ],
   );
 
   const currentColorScheme = getLimeColorScheme(colorSchemeId);
   const currentThemeLabel =
     LIME_THEME_MODE_OPTIONS.find((option) => option.id === themeState.themeMode)
       ?.label ?? "跟随系统";
-  const currentLanguageLabel = resolveSidebarLanguageLabel(language);
-  const accountDisplayName = resolveAccountDisplayName(cloudSessionState);
+  const currentLanguageLabel = resolveLocaleOptionLabel(language);
+  const accountDisplayName = resolveAccountDisplayName(
+    cloudSessionState,
+    accountOpenSourceTitleLabel,
+  );
   const accountEmail = resolveAccountEmail(cloudSessionState);
   const accountTenantLabel = resolveAccountTenantLabel(cloudSessionState);
-  const accountPlanSummary = resolveAccountPlanSummary(cloudBootstrapState);
-  const cloudBrandLabel = resolveCloudBrandLabel(cloudBootstrapState);
-  const connectCloudLabel = `连接 ${cloudBrandLabel}`;
+  const accountPlanSummary = resolveAccountPlanSummary(
+    cloudBootstrapState,
+    accountFreePlanLabel,
+  );
+  const cloudBrandLabel = resolveCloudBrandLabel(
+    cloudBootstrapState,
+    accountDefaultCloudBrandLabel,
+    accountCloudSuffixLabel,
+  );
   const accountAvatarUrl = cloudSessionState?.session.user.avatarUrl?.trim();
   const accountInitial = resolveAccountInitial(accountDisplayName);
   const hasCloudAccount = Boolean(cloudSessionState);
@@ -3967,9 +4088,194 @@ export function AppSidebar({
     [accountEmail, accountTenantLabel].filter(Boolean).join(" · ") ||
     accountDisplayName;
   const inviteEntryVisible = inviteFeatureEnabled;
+  const homeLabel = t("navigation.sidebar.home.label", "Lime 首页");
+  const homeAriaLabel = t(
+    "navigation.sidebar.home.ariaLabel",
+    "返回 Lime 首页",
+  );
+  const collapseNavigationLabel = t(
+    "navigation.sidebar.actions.collapse",
+    "折叠导航栏",
+  );
+  const expandNavigationLabel = t(
+    "navigation.sidebar.actions.expand",
+    "展开导航栏",
+  );
+  const navigationToggleLabel = collapsed
+    ? expandNavigationLabel
+    : collapseNavigationLabel;
+  const searchTaskLabel = t("navigation.sidebar.search.label", "搜索任务");
+  const searchConversationTitleLabel = t(
+    "navigation.sidebar.search.inputLabel",
+    "搜索对话标题",
+  );
+  const closeSearchDialogLabel = t(
+    "navigation.sidebar.search.close",
+    "关闭搜索弹窗",
+  );
+  const createConversationLabel = t(
+    "navigation.sidebar.search.createConversation",
+    "新建对话",
+  );
+  const searchMatchesLabel = t(
+    "navigation.sidebar.search.section.matches",
+    "匹配结果",
+  );
+  const searchRecentLabel = t(
+    "navigation.sidebar.search.section.recent",
+    "最近",
+  );
+  const searchLoadingLabel = t(
+    "navigation.sidebar.search.loading",
+    "正在加载对话",
+  );
+  const searchSelectProjectFirstLabel = t(
+    "navigation.sidebar.search.selectProjectFirst",
+    "请先选择项目工作区",
+  );
+  const searchEmptyMatchesLabel = t(
+    "navigation.sidebar.search.emptyMatches",
+    "没有匹配的对话标题",
+  );
+  const searchEmptyRecentLabel = t(
+    "navigation.sidebar.search.emptyRecent",
+    "还没有最近对话",
+  );
+  const searchLoadingMoreLabel = t(
+    "navigation.sidebar.search.loadingMore",
+    "正在加载...",
+  );
+  const searchMoreMatchesLabel = t(
+    "navigation.sidebar.search.moreMatches",
+    "查看更多匹配结果",
+  );
+  const searchMoreRecentLabel = t(
+    "navigation.sidebar.search.moreRecent",
+    "查看更多对话",
+  );
+  const pluginExtensionsTitle = t(
+    "navigation.sidebar.sections.pluginExtensions",
+    "插件扩展",
+  );
+  const languageMenuLabel = t(
+    "navigation.sidebar.account.language",
+    "语言",
+  );
+  const interfaceLanguageLabel = t(
+    "navigation.sidebar.account.interfaceLanguage",
+    "界面语言",
+  );
+  const selectLanguageLabel = t(
+    "navigation.sidebar.account.selectLanguage",
+    "选择语言",
+  );
+  const accountOpenUserMenuLabel = t(
+    "navigation.sidebar.account.openMenu",
+    "打开用户菜单",
+  );
+  const accountMenuLabel = t(
+    "navigation.sidebar.account.menu",
+    "用户菜单",
+  );
+  const accountCloudStateLabel = t(
+    "navigation.sidebar.account.state.cloud",
+    "云端",
+  );
+  const accountLocalStateLabel = t(
+    "navigation.sidebar.account.state.local",
+    "本地可用",
+  );
+  const accountLocalTooltipLabel = t(
+    "navigation.sidebar.account.localTooltip",
+    "开源使用 · 本地可用",
+  );
+  const connectCloudLabel = t(
+    "navigation.sidebar.account.connectCloud",
+    {
+      brand: cloudBrandLabel,
+      defaultValue: "连接 {{brand}}",
+    },
+  );
+  const accountLoginPendingLabel = t(
+    "navigation.sidebar.account.login.opening",
+    "正在打开...",
+  );
+  const accountLoginOpenedLabel = t(
+    "navigation.sidebar.account.login.opened",
+    {
+      brand: cloudBrandLabel,
+      defaultValue: "已打开 {{brand}} 登录页，请在浏览器完成授权",
+    },
+  );
+  const accountLoginFailedFallbackLabel = t(
+    "navigation.sidebar.account.login.failed",
+    {
+      brand: cloudBrandLabel,
+      defaultValue: "打开 {{brand}} 登录页失败",
+    },
+  );
+  const accountUserCenterLabel = t(
+    "navigation.sidebar.account.userCenter",
+    "用户中心",
+  );
+  const accountUserCenterOpenedLabel = t(
+    "navigation.sidebar.account.userCenterOpened",
+    {
+      brand: cloudBrandLabel,
+      defaultValue: "已打开 {{brand}} 用户中心",
+    },
+  );
+  const accountUserCenterFailedFallbackLabel = t(
+    "navigation.sidebar.account.userCenterFailed",
+    {
+      brand: cloudBrandLabel,
+      defaultValue: "打开 {{brand}} 用户中心失败",
+    },
+  );
+  const accountModelSettingsLabel = t(
+    "navigation.sidebar.account.modelSettings",
+    "模型设置",
+  );
+  const accountAboutLabel = t("navigation.sidebar.account.about", "关于");
+  const accountLogoutLabel = t(
+    "navigation.sidebar.account.logout",
+    "退出登录",
+  );
+  const accountLogoutPendingLabel = t(
+    "navigation.sidebar.account.logoutPending",
+    "退出中...",
+  );
+  const accountViewPlanDetailsLabel = t(
+    "navigation.sidebar.account.viewPlanDetails",
+    "查看套餐详情",
+  );
+  const accountViewDetailsLabel = t(
+    "navigation.sidebar.account.viewDetails",
+    "查看详情",
+  );
+  const accountOpenSourceInfoLabel = t(
+    "navigation.sidebar.account.openSource.info",
+    "开源使用说明",
+  );
+  const accountOpenSourceDescriptionLabel = t(
+    "navigation.sidebar.account.openSource.description",
+    {
+      brand: cloudBrandLabel,
+      defaultValue:
+        "本地开源功能可直接使用；你可以先进入模型设置配置本地渠道，也可以按需连接 {{brand}} 同步账号、积分、套餐和商业化能力。",
+    },
+  );
+  const accountNoLoginAvailableLabel = t(
+    "navigation.sidebar.account.openSource.noLogin",
+    "不登录也可用",
+  );
+  const accountLocalModelConfigurableLabel = t(
+    "navigation.sidebar.account.openSource.localModel",
+    "本地模型可配置",
+  );
   const accountButtonTooltip = hasCloudAccount
     ? `${accountDisplayName}${accountEmail ? ` · ${accountEmail}` : ""}`
-    : "开源使用 · 本地可用";
+    : accountLocalTooltipLabel;
   const inviteShare = inviteDashboard?.share;
   const invitePolicy = inviteDashboard?.policy;
   const inviteHeadline = inviteShare?.headline?.trim() || "邀请好友加入内测";
@@ -4021,20 +4327,20 @@ export function AppSidebar({
         browserTarget,
         waitForCompletion: false,
       });
-      toast.success(`已打开 ${cloudBrandLabel} 登录页，请在浏览器完成授权`);
+      toast.success(accountLoginOpenedLabel);
       setAccountMenuOpen(false);
       setLanguageMenuOpen(false);
     } catch (error) {
       const message =
         error instanceof Error && error.message.trim()
           ? error.message.trim()
-          : `打开 ${cloudBrandLabel} 登录页失败`;
+          : accountLoginFailedFallbackLabel;
       setAccountLoginError(message);
       toast.error(message);
     } finally {
       setAccountLoginPending(false);
     }
-  }, [cloudBrandLabel]);
+  }, [accountLoginFailedFallbackLabel, accountLoginOpenedLabel]);
 
   const handleOpenAccountUserCenter = useCallback(
     async (path = "/welcome") => {
@@ -4050,16 +4356,16 @@ export function AppSidebar({
             browserTarget,
           },
         );
-        toast.success(`已打开 ${cloudBrandLabel} 用户中心`);
+        toast.success(accountUserCenterOpenedLabel);
       } catch (error) {
         const message =
           error instanceof Error && error.message.trim()
             ? error.message.trim()
-            : `打开 ${cloudBrandLabel} 用户中心失败`;
+            : accountUserCenterFailedFallbackLabel;
         toast.error(message);
       }
     },
-    [cloudBrandLabel],
+    [accountUserCenterFailedFallbackLabel, accountUserCenterOpenedLabel],
   );
 
   const handleAccountLogout = useCallback(async () => {
@@ -4105,7 +4411,7 @@ export function AppSidebar({
   );
 
   const handleLanguageChange = useCallback(
-    async (nextLanguage: Language) => {
+    async (nextLanguage: LocalePreference) => {
       const previousLanguage = language;
       if (nextLanguage === previousLanguage) {
         setLanguageMenuOpen(false);
@@ -4113,10 +4419,11 @@ export function AppSidebar({
       }
 
       setLanguageState(nextLanguage);
-      setI18nLanguage(nextLanguage);
+      setI18nLanguage(toLegacyPatchLanguage(nextLanguage));
       setLanguageMenuOpen(false);
 
       try {
+        await changeLimeLocale(nextLanguage);
         const config = await getConfig();
         await saveConfig({
           ...config,
@@ -4125,7 +4432,8 @@ export function AppSidebar({
       } catch (error) {
         console.error("保存语言设置失败:", error);
         setLanguageState(previousLanguage);
-        setI18nLanguage(previousLanguage);
+        setI18nLanguage(toLegacyPatchLanguage(previousLanguage));
+        await changeLimeLocale(previousLanguage);
       }
     },
     [language, setI18nLanguage],
@@ -4167,15 +4475,15 @@ export function AppSidebar({
                     }),
                   )
                 }
-                aria-label="返回 Lime 首页"
-                title="返回 Lime 首页"
+                aria-label={homeAriaLabel}
+                title={homeAriaLabel}
               >
                 <Avatar>
                   <img src={LIME_BRAND_LOGO_SRC} alt={LIME_BRAND_NAME} />
                 </Avatar>
                 <UserName $collapsed={collapsed}>{LIME_BRAND_NAME}</UserName>
               </UserButton>,
-              "Lime 首页",
+              homeLabel,
             )}
 
             {inviteEntryVisible
@@ -4201,12 +4509,12 @@ export function AppSidebar({
             {maybeWrapWithTooltip(
               <IconActionButton
                 onClick={() => setCollapsed((value) => !value)}
-                title={collapsed ? "展开导航栏" : "折叠导航栏"}
-                aria-label={collapsed ? "展开导航栏" : "折叠导航栏"}
+                title={navigationToggleLabel}
+                aria-label={navigationToggleLabel}
               >
                 {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
               </IconActionButton>,
-              collapsed ? "展开导航栏" : "折叠导航栏",
+              navigationToggleLabel,
             )}
           </HeaderTopRow>
 
@@ -4214,16 +4522,16 @@ export function AppSidebar({
             <SearchButton
               $collapsed={collapsed}
               onClick={openSidebarSearchDialog}
-              title="搜索任务"
-              aria-label="搜索任务"
+              title={searchTaskLabel}
+              aria-label={searchTaskLabel}
               aria-haspopup="dialog"
               aria-expanded={sidebarSearchOpen ? true : undefined}
               data-testid="app-sidebar-search-button"
             >
               <Search size={14} />
-              <span>搜索任务</span>
+              <span>{searchTaskLabel}</span>
             </SearchButton>,
-            "搜索任务",
+            searchTaskLabel,
           )}
         </HeaderArea>
 
@@ -4269,7 +4577,9 @@ export function AppSidebar({
 
           {shouldShowPluginExtensionsSection && (
             <Section $collapsed={collapsed}>
-              <SectionTitle $collapsed={collapsed}>插件扩展</SectionTitle>
+              <SectionTitle $collapsed={collapsed}>
+                {pluginExtensionsTitle}
+              </SectionTitle>
               {assistantItems.map((item) => renderNavItem(item))}
             </Section>
           )}
@@ -4434,7 +4744,7 @@ export function AppSidebar({
                   setLanguageMenuOpen(false);
                   setAccountMenuOpen((current) => !current);
                 }}
-                aria-label="打开用户菜单"
+                aria-label={accountOpenUserMenuLabel}
                 aria-expanded={accountMenuOpen}
                 aria-haspopup="dialog"
                 data-testid="app-sidebar-account-button"
@@ -4460,7 +4770,9 @@ export function AppSidebar({
                 ) : null}
                 <AccountTrailing $collapsed={collapsed}>
                   <AccountStateBadge $connected={hasCloudAccount}>
-                    {hasCloudAccount ? "云端" : "本地可用"}
+                    {hasCloudAccount
+                      ? accountCloudStateLabel
+                      : accountLocalStateLabel}
                   </AccountStateBadge>
                   <ChevronDown />
                 </AccountTrailing>
@@ -4472,13 +4784,13 @@ export function AppSidebar({
               <AccountMenuPopover
                 $collapsed={collapsed}
                 role="dialog"
-                aria-label="用户菜单"
+                aria-label={accountMenuLabel}
                 data-testid="app-sidebar-account-menu"
               >
                 {hasCloudAccount ? (
                   <AccountPlanButton
                     type="button"
-                    aria-label="查看套餐详情"
+                    aria-label={accountViewPlanDetailsLabel}
                     data-testid="app-sidebar-cloud-account-card"
                     onClick={() =>
                       void handleOpenAccountUserCenter("/billing?tab=usage")
@@ -4489,7 +4801,7 @@ export function AppSidebar({
                         {accountPlanSummary.planLabel}
                       </AccountPlanTitle>
                       <AccountPlanDetailsPill>
-                        查看详情
+                        {accountViewDetailsLabel}
                         <ChevronRight />
                       </AccountPlanDetailsPill>
                     </AccountPlanHeader>
@@ -4511,27 +4823,27 @@ export function AppSidebar({
                   <AccountPlanCard data-testid="app-sidebar-open-source-card">
                     <AccountPlanHeader>
                       <AccountPlanTitle>
-                        <span>开源使用</span>
+                        <span>{accountOpenSourceTitleLabel}</span>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <AccountInfoIconButton
                               type="button"
-                              aria-label="开源使用说明"
+                              aria-label={accountOpenSourceInfoLabel}
                               onClick={(event) => event.stopPropagation()}
                             >
                               <Info />
                             </AccountInfoIconButton>
                           </TooltipTrigger>
                           <TooltipContent side="right">
-                            {`本地开源功能可直接使用；你可以先进入模型设置配置本地渠道，也可以按需连接 ${cloudBrandLabel} 同步账号、积分、套餐和商业化能力。`}
+                            {accountOpenSourceDescriptionLabel}
                           </TooltipContent>
                         </Tooltip>
                       </AccountPlanTitle>
-                      <AccountPlanBadge>免费版</AccountPlanBadge>
+                      <AccountPlanBadge>{accountFreePlanLabel}</AccountPlanBadge>
                     </AccountPlanHeader>
                     <AccountPlanDetail>
-                      <span>不登录也可用</span>
-                      <span>本地模型可配置</span>
+                      <span>{accountNoLoginAvailableLabel}</span>
+                      <span>{accountLocalModelConfigurableLabel}</span>
                     </AccountPlanDetail>
                     <AccountPlanActions>
                       <AccountPlanActionButton
@@ -4543,12 +4855,12 @@ export function AppSidebar({
                       >
                         <LogIn />
                         {accountLoginPending
-                          ? "正在打开..."
+                          ? accountLoginPendingLabel
                           : connectCloudLabel}
                       </AccountPlanActionButton>
                       <AccountPlanActionButton
                         type="button"
-                        aria-label="模型设置"
+                        aria-label={accountModelSettingsLabel}
                         onClick={() =>
                           handleAccountMenuNavigate({
                             tab: SettingsTabs.Providers,
@@ -4557,7 +4869,7 @@ export function AppSidebar({
                         }
                       >
                         <KeyRound />
-                        模型设置
+                        {accountModelSettingsLabel}
                       </AccountPlanActionButton>
                     </AccountPlanActions>
                     {accountLoginError ? (
@@ -4597,14 +4909,14 @@ export function AppSidebar({
                     <AccountMenuItem
                       type="button"
                       $active={languageMenuOpen}
-                      aria-label="语言"
+                      aria-label={languageMenuLabel}
                       aria-expanded={languageMenuOpen}
                       aria-haspopup="menu"
                       onClick={() => setLanguageMenuOpen((current) => !current)}
                     >
                       <AccountMenuItemLeading>
                         <Languages />
-                        语言
+                        {languageMenuLabel}
                       </AccountMenuItemLeading>
                       <AccountMenuItemTrailing>
                         {currentLanguageLabel}
@@ -4614,10 +4926,12 @@ export function AppSidebar({
                     {languageMenuOpen ? (
                       <AccountSubmenuPopover
                         role="menu"
-                        aria-label="选择语言"
+                        aria-label={selectLanguageLabel}
                         data-testid="app-sidebar-language-menu"
                       >
-                        <AccountSubmenuTitle>界面语言</AccountSubmenuTitle>
+                        <AccountSubmenuTitle>
+                          {interfaceLanguageLabel}
+                        </AccountSubmenuTitle>
                         {APP_SIDEBAR_LANGUAGE_OPTIONS.map((option) => {
                           const active = option.id === language;
 
@@ -4628,7 +4942,13 @@ export function AppSidebar({
                               $active={active}
                               role="menuitemradio"
                               aria-checked={active}
-                              aria-label={`切换语言为${option.label}`}
+                              aria-label={t(
+                                "navigation.sidebar.account.switchLanguage",
+                                {
+                                  language: option.label,
+                                  defaultValue: "切换语言为{{language}}",
+                                },
+                              )}
                               onClick={() =>
                                 void handleLanguageChange(option.id)
                               }
@@ -4651,21 +4971,21 @@ export function AppSidebar({
                   {hasCloudAccount ? (
                     <AccountMenuItem
                       type="button"
-                      aria-label="用户中心"
+                      aria-label={accountUserCenterLabel}
                       onClick={() =>
                         void handleOpenAccountUserCenter("/welcome")
                       }
                     >
                       <AccountMenuItemLeading>
                         <ExternalLink />
-                        用户中心
+                        {accountUserCenterLabel}
                       </AccountMenuItemLeading>
                       <ChevronRight />
                     </AccountMenuItem>
                   ) : null}
                   <AccountMenuItem
                     type="button"
-                    aria-label="模型设置"
+                    aria-label={accountModelSettingsLabel}
                     onClick={() =>
                       handleAccountMenuNavigate({
                         tab: SettingsTabs.Providers,
@@ -4675,7 +4995,7 @@ export function AppSidebar({
                   >
                     <AccountMenuItemLeading>
                       <KeyRound />
-                      模型设置
+                      {accountModelSettingsLabel}
                     </AccountMenuItemLeading>
                     <ChevronRight />
                   </AccountMenuItem>
@@ -4696,14 +5016,14 @@ export function AppSidebar({
                   ) : null}
                   <AccountMenuItem
                     type="button"
-                    aria-label="关于"
+                    aria-label={accountAboutLabel}
                     onClick={() =>
                       handleAccountMenuNavigate({ tab: SettingsTabs.About })
                     }
                   >
                     <AccountMenuItemLeading>
                       <Info />
-                      关于
+                      {accountAboutLabel}
                     </AccountMenuItemLeading>
                     <ChevronRight />
                   </AccountMenuItem>
@@ -4714,12 +5034,14 @@ export function AppSidebar({
                         type="button"
                         $danger
                         disabled={accountLogoutPending}
-                        aria-label="退出登录"
+                        aria-label={accountLogoutLabel}
                         onClick={() => void handleAccountLogout()}
                       >
                         <AccountMenuItemLeading>
                           <LogOut />
-                          {accountLogoutPending ? "退出中..." : "退出登录"}
+                          {accountLogoutPending
+                            ? accountLogoutPendingLabel
+                            : accountLogoutLabel}
                         </AccountMenuItemLeading>
                       </AccountMenuItem>
                     </>
@@ -4744,8 +5066,8 @@ export function AppSidebar({
               ref={sidebarSearchInputRef}
               value={sidebarSearchQuery}
               onChange={(event) => setSidebarSearchQuery(event.target.value)}
-              placeholder="搜索对话标题"
-              aria-label="搜索对话标题"
+              placeholder={searchConversationTitleLabel}
+              aria-label={searchConversationTitleLabel}
               data-testid="app-sidebar-search-input"
             />
             <SidebarSearchShortcut aria-hidden="true">
@@ -4754,7 +5076,7 @@ export function AppSidebar({
             </SidebarSearchShortcut>
             <SidebarSearchCloseButton
               type="button"
-              aria-label="关闭搜索弹窗"
+              aria-label={closeSearchDialogLabel}
               onClick={closeSidebarSearchDialog}
             >
               <X />
@@ -4768,24 +5090,26 @@ export function AppSidebar({
               data-testid="app-sidebar-search-new-conversation"
             >
               <MessageSquarePlus />
-              <SidebarSearchCreateText>新建对话</SidebarSearchCreateText>
+              <SidebarSearchCreateText>
+                {createConversationLabel}
+              </SidebarSearchCreateText>
               <SidebarSearchEnterHint aria-hidden="true">
                 ↵
               </SidebarSearchEnterHint>
             </SidebarSearchCreateButton>
 
             <SidebarSearchSectionLabel>
-              {sidebarSearchHasQuery ? "匹配结果" : "最近"}
+              {sidebarSearchHasQuery ? searchMatchesLabel : searchRecentLabel}
             </SidebarSearchSectionLabel>
 
             {shouldShowSessionLoadingState ? (
               <SidebarSearchEmptyState role="status">
-                正在加载对话
+                {searchLoadingLabel}
               </SidebarSearchEmptyState>
             ) : sidebarSearchResultSessions.length > 0 ? (
               <SidebarSearchResultList>
                 {sidebarSearchResultSessions.map((session) => {
-                  const title = resolveSidebarSessionTitle(session);
+                  const title = resolveLocalizedSessionTitle(session);
                   const isCurrentConversation = currentSessionId === session.id;
                   return (
                     <SidebarSearchResultButton
@@ -4809,7 +5133,7 @@ export function AppSidebar({
                         {title}
                       </SidebarSearchResultTitle>
                       <SidebarSearchResultMeta>
-                        {formatSidebarSessionMeta(session)}
+                        {formatLocalizedSessionMeta(session)}
                       </SidebarSearchResultMeta>
                     </SidebarSearchResultButton>
                   );
@@ -4818,10 +5142,10 @@ export function AppSidebar({
             ) : (
               <SidebarSearchEmptyState role="status">
                 {!currentProjectId
-                  ? "请先选择项目工作区"
+                  ? searchSelectProjectFirstLabel
                   : sidebarSearchHasQuery
-                    ? "没有匹配的对话标题"
-                    : "还没有最近对话"}
+                    ? searchEmptyMatchesLabel
+                    : searchEmptyRecentLabel}
               </SidebarSearchEmptyState>
             )}
 
@@ -4837,10 +5161,10 @@ export function AppSidebar({
                 data-testid="app-sidebar-search-more"
               >
                 {sidebarSessionsLoading
-                  ? "正在加载..."
+                  ? searchLoadingMoreLabel
                   : sidebarSearchHasQuery
-                    ? "查看更多匹配结果"
-                    : "查看更多对话"}
+                    ? searchMoreMatchesLabel
+                    : searchMoreRecentLabel}
                 <ChevronDown />
               </SidebarSearchMoreButton>
             ) : null}

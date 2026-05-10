@@ -89,7 +89,7 @@ export interface AgentRuntimeAdapter {
   ): Promise<string>;
   submitOp(op: AgentOp): Promise<void>;
   compactSession(sessionId: string, eventName: string): Promise<void>;
-  interruptTurn(sessionId: string): Promise<boolean>;
+  interruptTurn(sessionId: string, turnId?: string): Promise<boolean>;
   resumeThread(sessionId: string): Promise<boolean>;
   promoteQueuedTurn(sessionId: string, queuedTurnId: string): Promise<boolean>;
   removeQueuedTurn(sessionId: string, queuedTurnId: string): Promise<boolean>;
@@ -226,9 +226,10 @@ export function createAgentRuntimeAdapter({
         event_name: eventName,
       });
     },
-    async interruptTurn(sessionId) {
+    async interruptTurn(sessionId, turnId) {
       return client.interruptAgentRuntimeTurn({
         session_id: sessionId,
+        ...(turnId ? { turn_id: turnId } : {}),
       });
     },
     async resumeThread(sessionId) {

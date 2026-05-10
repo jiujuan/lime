@@ -19,6 +19,7 @@ import {
   type CategoryItem,
 } from "../hooks/useSettingsCategory";
 import { SettingsGroupKey, SettingsTabs } from "@/types/settings";
+import { useTranslation } from "react-i18next";
 
 interface SettingsHomePageProps {
   onTabChange: (tab: SettingsTabs) => void;
@@ -41,32 +42,37 @@ function hasQuickAccessMeta(item: CategoryItem) {
 const groupMeta: Record<
   DisplayGroupKey,
   {
-    description: string;
+    descriptionKey: string;
+    fallbackDescription: string;
     accentClassName: string;
     iconClassName: string;
     icon: LucideIcon;
   }
 > = {
   account: {
-    description: "个人资料、数据统计与账号相关信息。",
+    descriptionKey: "settings.home.group.account.description",
+    fallbackDescription: "个人资料、数据统计与账号相关信息。",
     accentClassName: "from-slate-200/70 via-white to-white",
     iconClassName: "border-slate-200 bg-slate-100 text-slate-700",
     icon: Settings2,
   },
   general: {
-    description: "外观、快捷键、记忆等全局体验配置。",
+    descriptionKey: "settings.home.group.general.description",
+    fallbackDescription: "外观、快捷键、记忆等全局体验配置。",
     accentClassName: "from-sky-200/60 via-white to-white",
     iconClassName: "border-sky-200 bg-sky-100 text-sky-700",
     icon: Palette,
   },
   agent: {
-    description: "服务商、技能与媒体能力的统一配置。",
+    descriptionKey: "settings.home.group.agent.description",
+    fallbackDescription: "服务商、技能与媒体能力的统一配置。",
     accentClassName: "from-emerald-200/70 via-white to-white",
     iconClassName: "border-emerald-200 bg-emerald-100 text-emerald-700",
     icon: Brain,
   },
   system: {
-    description: "连接器、MCP、环境变量与运行治理设置。",
+    descriptionKey: "settings.home.group.system.description",
+    fallbackDescription: "连接器、MCP、环境变量与运行治理设置。",
     accentClassName: "from-amber-200/65 via-white to-white",
     iconClassName: "border-amber-200 bg-amber-100 text-amber-700",
     icon: ShieldCheck,
@@ -77,30 +83,40 @@ const quickAccessMeta: Partial<
   Record<
     SettingsTabs,
     {
-      title: string;
-      description: string;
+      titleKey: string;
+      fallbackTitle: string;
+      descriptionKey: string;
+      fallbackDescription: string;
       icon: LucideIcon;
     }
   >
 > = {
   [SettingsTabs.Appearance]: {
-    title: "外观",
-    description: "主题、语言与提示音效",
+    titleKey: "settings.home.quickAccess.appearance.title",
+    fallbackTitle: "外观",
+    descriptionKey: "settings.home.quickAccess.appearance.description",
+    fallbackDescription: "主题、语言与提示音效",
     icon: Palette,
   },
   [SettingsTabs.Providers]: {
-    title: "AI 服务商",
-    description: "凭证与服务来源管理",
+    titleKey: "settings.home.quickAccess.providers.title",
+    fallbackTitle: "AI 服务商",
+    descriptionKey: "settings.home.quickAccess.providers.description",
+    fallbackDescription: "凭证与服务来源管理",
     icon: Brain,
   },
   [SettingsTabs.Skills]: {
-    title: "技能管理",
-    description: "管理内置、本地与远程 Skill",
+    titleKey: "settings.home.quickAccess.skills.title",
+    fallbackTitle: "技能管理",
+    descriptionKey: "settings.home.quickAccess.skills.description",
+    fallbackDescription: "管理内置、本地与远程 Skill",
     icon: Blocks,
   },
   [SettingsTabs.MediaServices]: {
-    title: "服务模型",
-    description: "统一管理助理、媒体与语音识别模型",
+    titleKey: "settings.home.quickAccess.mediaServices.title",
+    fallbackTitle: "服务模型",
+    descriptionKey: "settings.home.quickAccess.mediaServices.description",
+    fallbackDescription: "统一管理助理、媒体与语音识别模型",
     icon: ImageIcon,
   },
 };
@@ -112,6 +128,7 @@ export function SettingsHomePage({
   onNavigate,
 }: SettingsHomePageProps) {
   const groups = useSettingsCategory();
+  const { t } = useTranslation("settings");
 
   const overview = useMemo(() => {
     const visibleGroups = groups.filter(isDisplayGroup);
@@ -143,39 +160,57 @@ export function SettingsHomePage({
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-[24px] font-semibold tracking-tight text-slate-900">
-                设置首页
-              </h1>
-              <WorkbenchInfoTip
-                ariaLabel="设置首页说明"
-                content="快速进入常用设置并查看各分组入口，减少在多层菜单之间来回寻找。"
+                <h1 className="text-[24px] font-semibold tracking-tight text-slate-900">
+                {t("settings.home.title", "设置首页")}
+                </h1>
+                <WorkbenchInfoTip
+                ariaLabel={t("settings.home.hero.tipAria", "设置首页说明")}
+                content={t(
+                  "settings.home.hero.tip",
+                  "快速进入常用设置并查看各分组入口，减少在多层菜单之间来回寻找。",
+                )}
                 tone="mint"
               />
             </div>
             <p className="text-sm text-slate-500">
-              快速进入常用设置并查看各分组入口。
+              {t(
+                "settings.home.description",
+                "快速进入常用设置并查看各分组入口。",
+              )}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 xl:justify-end">
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
-              设置分组：{overview.visibleGroups.length}
+              {t("settings.home.summary.groups", {
+                count: overview.visibleGroups.length,
+                defaultValue: "设置分组：{{count}}",
+              })}
             </span>
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
-              可配置项：{overview.totalItems}
+              {t("settings.home.summary.items", {
+                count: overview.totalItems,
+                defaultValue: "可配置项：{{count}}",
+              })}
             </span>
             <span
               className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
                 overview.experimentalCount > 0
                   ? "border-amber-200 bg-amber-50 text-amber-700"
                   : "border-emerald-200 bg-emerald-50 text-emerald-700"
-              }`}
+                }`}
             >
-              实验功能：{overview.experimentalCount}
+              {t("settings.home.summary.experimental", {
+                count: overview.experimentalCount,
+                defaultValue: "实验功能：{{count}}",
+              })}
             </span>
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
-              常用入口：
-              {overview.quickAccessItems.length + (onOpenCompanion ? 1 : 0)}
+              {t("settings.home.summary.quickAccess", {
+                count:
+                  overview.quickAccessItems.length + (onOpenCompanion ? 1 : 0),
+                defaultValue: "常用入口：{{count}}",
+              })}
             </span>
           </div>
         </div>
@@ -187,20 +222,33 @@ export function SettingsHomePage({
             <div>
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                 <Sparkles className="h-4 w-4 text-emerald-600" />
-                常用入口
+                {t("settings.home.quickAccess.title", "常用入口")}
                 <WorkbenchInfoTip
-                  ariaLabel="常用入口说明"
-                  content="把最常走的页面留在首屏，进入后再展开更细的设置项。"
+                  ariaLabel={t(
+                    "settings.home.quickAccess.tipAria",
+                    "常用入口说明",
+                  )}
+                  content={t(
+                    "settings.home.quickAccess.tip",
+                    "把最常走的页面留在首屏，进入后再展开更细的设置项。",
+                  )}
                   tone="slate"
                 />
               </div>
               <p className="mt-1 text-sm text-slate-500">
-                把高频页面放在首屏，减少设置中心内部跳转成本。
+                {t(
+                  "settings.home.quickAccess.description",
+                  "把高频页面放在首屏，减少设置中心内部跳转成本。",
+                )}
               </p>
             </div>
 
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
-              {overview.quickAccessItems.length + (onOpenCompanion ? 1 : 0)} 项
+              {t("settings.home.quickAccess.count", {
+                count:
+                  overview.quickAccessItems.length + (onOpenCompanion ? 1 : 0),
+                defaultValue: "{{count}} 项",
+              })}
             </span>
           </div>
 
@@ -211,6 +259,11 @@ export function SettingsHomePage({
                 return null;
               }
               const ItemIcon = meta.icon;
+              const title = t(meta.titleKey, meta.fallbackTitle);
+              const description = t(
+                meta.descriptionKey,
+                meta.fallbackDescription,
+              );
               return (
                 <article
                   key={item.key}
@@ -231,14 +284,17 @@ export function SettingsHomePage({
                       <ArrowRight className="h-4 w-4 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-slate-600" />
                     </div>
                     <p className="mt-4 text-base font-semibold text-slate-900">
-                      {meta.title}
+                      {title}
                     </p>
                   </button>
 
                   <div className="mt-3 flex justify-end">
                     <WorkbenchInfoTip
-                      ariaLabel={`${meta.title}说明`}
-                      content={meta.description}
+                      ariaLabel={t("settings.home.quickAccess.cardTipAria", {
+                        title,
+                        defaultValue: "{{title}}说明",
+                      })}
+                      content={description}
                       tone="slate"
                     />
                   </div>
@@ -262,14 +318,20 @@ export function SettingsHomePage({
                     <ArrowRight className="h-4 w-4 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-slate-600" />
                   </div>
                   <p className="mt-4 text-base font-semibold text-slate-900">
-                    桌宠
+                    {t("settings.home.companion.title", "桌宠")}
                   </p>
                 </button>
 
                 <div className="mt-3 flex justify-end">
                   <WorkbenchInfoTip
-                    ariaLabel="桌宠说明"
-                    content="开启桌宠、安装引导与连接诊断。"
+                    ariaLabel={t(
+                      "settings.home.companion.tipAria",
+                      "桌宠说明",
+                    )}
+                    content={t(
+                      "settings.home.companion.description",
+                      "开启桌宠、安装引导与连接诊断。",
+                    )}
                     tone="slate"
                   />
                 </div>
@@ -287,15 +349,24 @@ export function SettingsHomePage({
           <div className="space-y-1.5">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
               <Sparkles className="h-4 w-4 text-sky-600" />
-              当前入口
+              {t("settings.home.current.title", "当前入口")}
               <WorkbenchInfoTip
-                ariaLabel="当前入口说明"
-                content="前台只保留 current Skills；下面这些就是现在直接进入的主路径和辅助路径。"
+                ariaLabel={t(
+                  "settings.home.current.tipAria",
+                  "当前入口说明",
+                )}
+                content={t(
+                  "settings.home.current.tip",
+                  "前台只保留 current Skills；下面这些就是现在直接进入的主路径和辅助路径。",
+                )}
                 tone="slate"
               />
             </div>
             <p className="text-sm leading-6 text-slate-600">
-              当前前台入口统一落到下面这几处，直接按最新路径进入。
+              {t(
+                "settings.home.current.description",
+                "当前前台入口统一落到下面这几处，直接按最新路径进入。",
+              )}
             </p>
           </div>
 
@@ -306,7 +377,7 @@ export function SettingsHomePage({
                 onClick={() => onNavigate("skills")}
                 className="inline-flex items-center rounded-2xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
               >
-                去 Skills
+                {t("settings.home.current.actions.skills", "去 Skills")}
               </button>
             ) : null}
             {onNavigate ? (
@@ -315,7 +386,7 @@ export function SettingsHomePage({
                 onClick={() => onNavigate("automation")}
                 className="inline-flex items-center rounded-2xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
               >
-                打开持续流程
+                {t("settings.home.current.actions.automation", "打开持续流程")}
               </button>
             ) : null}
             {onNavigate ? (
@@ -324,7 +395,7 @@ export function SettingsHomePage({
                 onClick={() => onNavigate("channels")}
                 className="inline-flex items-center rounded-2xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
               >
-                打开消息渠道
+                {t("settings.home.current.actions.channels", "打开消息渠道")}
               </button>
             ) : null}
             {onNavigate ? (
@@ -333,7 +404,7 @@ export function SettingsHomePage({
                 onClick={() => onNavigate("resources")}
                 className="inline-flex items-center rounded-2xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
               >
-                打开项目资料
+                {t("settings.home.current.actions.resources", "打开项目资料")}
               </button>
             ) : null}
           </div>
@@ -342,31 +413,49 @@ export function SettingsHomePage({
         <div className="mt-5 grid gap-3 xl:grid-cols-2">
           <article className="rounded-[22px] border border-slate-200 bg-white/90 p-4 shadow-sm shadow-slate-950/5">
             <div className="text-sm font-semibold text-slate-900">
-              全部 Skills
+              {t("settings.home.current.skills.title", "全部 Skills")}
             </div>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              从“Skills”里的“查看全部 Skills”进入，直接看完整流程。
+              {t(
+                "settings.home.current.skills.description",
+                "从“Skills”里的“查看全部 Skills”进入，直接看完整流程。",
+              )}
             </p>
           </article>
 
           <article className="rounded-[22px] border border-slate-200 bg-white/90 p-4 shadow-sm shadow-slate-950/5">
-            <div className="text-sm font-semibold text-slate-900">持续流程</div>
+            <div className="text-sm font-semibold text-slate-900">
+              {t("settings.home.current.automation.title", "持续流程")}
+            </div>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              在系统区直接进入，聚焦任务创建、运行和回跳续接。
+              {t(
+                "settings.home.current.automation.description",
+                "在系统区直接进入，聚焦任务创建、运行和回跳续接。",
+              )}
             </p>
           </article>
 
           <article className="rounded-[22px] border border-slate-200 bg-white/90 p-4 shadow-sm shadow-slate-950/5">
-            <div className="text-sm font-semibold text-slate-900">消息渠道</div>
+            <div className="text-sm font-semibold text-slate-900">
+              {t("settings.home.current.channels.title", "消息渠道")}
+            </div>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              在系统区直接进入，集中处理外部消息连接和渠道配置。
+              {t(
+                "settings.home.current.channels.description",
+                "在系统区直接进入，集中处理外部消息连接和渠道配置。",
+              )}
             </p>
           </article>
 
           <article className="rounded-[22px] border border-slate-200 bg-white/90 p-4 shadow-sm shadow-slate-950/5">
-            <div className="text-sm font-semibold text-slate-900">项目资料</div>
+            <div className="text-sm font-semibold text-slate-900">
+              {t("settings.home.current.resources.title", "项目资料")}
+            </div>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              作为辅助页保留，负责浏览和整理项目资料；默认资料导航优先看灵感库。
+              {t(
+                "settings.home.current.resources.description",
+                "作为辅助页保留，负责浏览和整理项目资料；默认资料导航优先看灵感库。",
+              )}
             </p>
           </article>
         </div>
@@ -376,6 +465,10 @@ export function SettingsHomePage({
         {overview.visibleGroups.map((group) => {
           const meta = groupMeta[group.key];
           const GroupIcon = meta.icon;
+          const groupDescription = t(
+            meta.descriptionKey,
+            meta.fallbackDescription,
+          );
 
           return (
             <article
@@ -400,14 +493,17 @@ export function SettingsHomePage({
                       <div className="mt-1">
                         <WorkbenchInfoTip
                           ariaLabel={`${group.title}说明`}
-                          content={meta.description}
+                          content={groupDescription}
                           tone="slate"
                         />
                       </div>
                     </div>
                   </div>
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                    {group.items.length} 项
+                    {t("settings.home.group.count", {
+                      count: group.items.length,
+                      defaultValue: "{{count}} 项",
+                    })}
                   </span>
                 </div>
 
@@ -427,7 +523,12 @@ export function SettingsHomePage({
                             {item.label}
                           </div>
                           <div className="mt-0.5 text-xs text-slate-500">
-                            {item.experimental ? "实验能力" : "进入配置"}
+                            {item.experimental
+                              ? t(
+                                  "settings.home.item.experimental",
+                                  "实验能力",
+                                )
+                              : t("settings.home.item.configure", "进入配置")}
                           </div>
                         </div>
                       </div>

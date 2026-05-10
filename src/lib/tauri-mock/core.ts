@@ -6435,7 +6435,7 @@ const defaultMocks: Record<string, any> = {
     },
     proxy_url: null,
     minimize_to_tray: false,
-    language: "zh",
+    language: "zh-CN",
     experimental: {
       screenshot_chat: {
         enabled: false,

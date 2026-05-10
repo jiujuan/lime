@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Dispatch, SetStateAction } from "react";
-import type { AutoContinueRequestPayload } from "@/lib/api/agentRuntime";
+import type {
+  AgentRuntimeWebSearchMode,
+  AutoContinueRequestPayload,
+} from "@/lib/api/agentRuntime";
 import type {
   ServiceModelPreferenceConfig,
   ServiceModelsConfig,
@@ -3032,6 +3035,7 @@ interface WorkspaceResolvedSendState {
   sendBoundary: GeneralWorkbenchSendBoundaryState;
   effectiveToolPreferences: ChatToolPreferences;
   effectiveWebSearch?: boolean;
+  effectiveSearchMode?: AgentRuntimeWebSearchMode;
   effectiveThinking?: boolean;
   submissionPreviewKey: string;
 }
@@ -3317,6 +3321,11 @@ export function useWorkspaceSendActions({
         browserRequirementMatch.requirement !== "optional"
           ? false
           : requestedWebSearch;
+      const effectiveSearchMode =
+        browserRequirementMatch &&
+        browserRequirementMatch.requirement !== "optional"
+          ? "disabled"
+          : sendOptions?.searchMode;
       const effectiveThinking = thinking ?? effectiveToolPreferences.thinking;
 
       const preparedActiveContextPrompt =
@@ -5342,6 +5351,7 @@ export function useWorkspaceSendActions({
           sendBoundary,
           effectiveToolPreferences,
           effectiveWebSearch,
+          effectiveSearchMode,
           effectiveThinking,
           submissionPreviewKey,
           sendExecutionStrategy,
@@ -5388,6 +5398,7 @@ export function useWorkspaceSendActions({
         sendBoundary,
         effectiveToolPreferences,
         effectiveWebSearch,
+        effectiveSearchMode,
         effectiveThinking,
         submissionPreviewKey,
         sendExecutionStrategy,
@@ -5471,6 +5482,7 @@ export function useWorkspaceSendActions({
           currentModel,
           configuredProviders,
           toolPreferences: effectiveToolPreferences,
+          searchMode: effectiveSearchMode,
           effectiveWebSearch,
           effectiveThinking,
           hasExplicitProviderOverride: Boolean(
@@ -5508,6 +5520,7 @@ export function useWorkspaceSendActions({
             nextRequestMetadata,
             fastResponseDecision,
           ),
+          ...(effectiveSearchMode ? { searchMode: effectiveSearchMode } : {}),
           providerOverride:
             sendOptions?.providerOverride ??
             serviceModelSendOverrides.providerOverride ??
@@ -5523,7 +5536,9 @@ export function useWorkspaceSendActions({
           systemPromptOverride:
             sendOptions?.systemPromptOverride ??
             (fastResponseDecision.enabled
-              ? buildAgentFastResponseSystemPrompt()
+              ? buildAgentFastResponseSystemPrompt(undefined, {
+                  searchMode: fastResponseDecision.searchMode,
+                })
               : undefined),
           assistantDraft: fastResponseAssistantDraft,
         };

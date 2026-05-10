@@ -888,7 +888,7 @@ impl McpClientManager {
         let tags = tool.tags.as_deref().unwrap_or(&[]);
         let inner_tool_name = extract_mcp_runtime_inner_tool_name(&tool.server_name, &tool.name)
             .unwrap_or(&tool.name);
-        let score = [
+        let mut score = [
             lime_core::tool_calling::score_tool_match(&tool.name, &tool.description, tags, query),
             lime_core::tool_calling::score_tool_match(
                 inner_tool_name,
@@ -900,6 +900,10 @@ impl McpClientManager {
         .into_iter()
         .max()
         .unwrap_or(0);
+
+        if inner_tool_name.eq_ignore_ascii_case(query) {
+            score += 10;
+        }
 
         if tool.always_visible.unwrap_or(false) {
             return score + 5;

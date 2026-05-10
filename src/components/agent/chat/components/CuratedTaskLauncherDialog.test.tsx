@@ -216,6 +216,63 @@ describe("CuratedTaskLauncherDialog", () => {
     expect(dialog?.textContent).toContain("相关线索：科技蓝、留白");
   });
 
+  it("启动参考对象不应向普通用户暴露自动记忆内部标签和原始错误", async () => {
+    const task = findCuratedTaskTemplateById("daily-trend-briefing");
+    expect(task).not.toBeNull();
+    mockListUnifiedMemories.mockResolvedValue([
+      {
+        id: "memory-internal-error",
+        session_id: "session-1",
+        memory_type: "conversation",
+        category: "context",
+        title:
+          "自动分析提取（用户表达）：-32603: Execution failed: 未配置 Pexels API Key",
+        content: "",
+        summary:
+          "自动分析提取（用户表达）：-32603: Execution failed: 未配置 Pexels API Key",
+        tags: [
+          "auto_analysis",
+          "context",
+          "fp:-32603: execution failed: 未配置 pexels api key",
+          "用户访谈",
+        ],
+        metadata: {
+          confidence: 0.9,
+          importance: 8,
+          access_count: 1,
+          last_accessed_at: null,
+          source: "manual",
+          embedding: null,
+        },
+        created_at: 1_712_345_670_000,
+        updated_at: 1_712_345_678_000,
+        archived: false,
+      },
+    ]);
+
+    await act(async () => {
+      root.render(
+        <CuratedTaskLauncherDialog
+          open
+          task={task}
+          onOpenChange={() => undefined}
+          onConfirm={() => undefined}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const dialog = document.body.querySelector('[role="dialog"]');
+    expect(dialog?.textContent).toContain("运行异常记录");
+    expect(dialog?.textContent).toContain(
+      "这条参考来自一次执行异常，默认不展开技术细节。",
+    );
+    expect(dialog?.textContent).toContain("相关线索：用户访谈");
+    expect(dialog?.textContent).not.toContain("auto_analysis");
+    expect(dialog?.textContent).not.toContain("Pexels API Key");
+    expect(dialog?.textContent).not.toContain("-32603");
+  });
+
   it("命中最近判断偏好的结果模板时，应在 launcher 内显影判断提示", async () => {
     const task = findCuratedTaskTemplateById("account-project-review");
     expect(task).not.toBeNull();

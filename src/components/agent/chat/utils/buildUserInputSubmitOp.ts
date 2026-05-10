@@ -3,6 +3,7 @@ import type {
   AsterExecutionStrategy,
   AsterSessionExecutionRuntime,
   AutoContinueRequestPayload,
+  AgentRuntimeWebSearchMode,
   ImageInput,
 } from "@/lib/api/agentRuntime";
 import type { AgentAccessMode } from "../hooks/agentChatStorage";
@@ -44,6 +45,7 @@ export interface BuildUserInputSubmitOpOptions {
   effectiveModel: string;
   modelOverride?: string;
   webSearch?: boolean;
+  searchMode?: AgentRuntimeWebSearchMode;
   thinking?: boolean;
   autoContinue?: AutoContinueRequestPayload;
 }
@@ -72,6 +74,7 @@ export function buildUserInputSubmitOp(
     effectiveModel,
     modelOverride,
     webSearch,
+    searchMode,
     thinking,
     autoContinue,
   } = options;
@@ -114,6 +117,7 @@ export function buildUserInputSubmitOp(
         ? effectiveExecutionStrategy
         : undefined,
       webSearch: compaction.shouldSubmitWebSearch ? webSearch : undefined,
+      ...(searchMode ? { searchMode } : {}),
       autoContinue,
     },
     systemPrompt,

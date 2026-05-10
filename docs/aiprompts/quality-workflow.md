@@ -24,6 +24,12 @@
 
 - `docs/aiprompts/command-runtime.md`
 
+如果改动涉及 Agent 运营级测试、qcloop 批量质检、Evidence Pack 或发布证据门禁，先补读：
+
+- `docs/tests/agent-ops-qc.md`
+- `docs/tests/agent-qc-p0-scenarios.md`
+- `docs/tests/lime-agent-qc-rollout-plan.md`
+
 ## 交付定义
 
 对 Lime 来说，“代码通过检查” 不等于 “产品可以交付”。
@@ -34,7 +40,8 @@
 2. **边界变更已同步** - 命令、桥接、配置、版本等结构性改动完成成组更新
 3. **GUI 主路径可运行** - 涉及 GUI 壳、Bridge、Workspace、主页面路径时，最小冒烟通过
 4. **用户可见回归已补齐** - 用户可见 UI 改动有稳定断言或既有 snapshot 回归
-5. **文档与锁文件不掉队** - 相关文档、schema、锁文件与实际实现保持一致
+5. **本地化事实源正确** - 新增或改动的用户可见产品文案进入 key-based i18n resources，不依赖 legacy DOM Patch 兜底
+6. **文档与锁文件不掉队** - 相关文档、schema、锁文件与实际实现保持一致
 
 ## 路线图任务防跑偏
 
@@ -127,6 +134,9 @@
 
 ### 3. 用户可见 UI 改动必须补稳定回归
 
+- 新增功能的按钮、标题、空态、toast、confirm、prompt、placeholder、aria/title 与错误提示必须走 current i18n：`useTranslation(ns)` / `Trans` + `src/i18n/resources/<locale>/<namespace>.json`
+- legacy DOM Patch 只允许作为迁移期兜底，不允许成为新功能或新文案的本地化事实源；确需临时例外时，必须写入对应路线图或执行计划并说明退出条件
+- 动态用户可见文案使用 i18next interpolation / plural / context；日期、数字、相对时间、列表和排序优先复用 `src/i18n/format.ts`
 - 优先补现有 `*.test.tsx` 的关键文案、状态与交互断言
 - 如果目标区域已有 snapshot / 结构化快照机制，沿用现有机制
 - 不要因为“只是 UI”就跳过回归
@@ -234,7 +244,7 @@ node scripts/check-generated-slop-report.mjs --input "<cleanup-json>"
 
 同时，`scripts/report-generated-slop.mjs`、`scripts/check-generated-slop-report.mjs`、`scripts/harness-eval-history-record.mjs`、`scripts/harness-eval-trend-report.mjs`、`scripts/lib/generated-slop-report-core.mjs`、`scripts/lib/harness-dashboard-core.mjs` 这条 harness cleanup/report 主链，在 `verify:local` 的 smart 模式里默认也按 bridge/contracts 风险处理。
 本地 `verify:local` 输出里如果看到 `bridge 校验（harness cleanup contract）`，说明命中的就是这条 cleanup/report 契约门禁，而不是普通 DevBridge 变更。
-CI 里的 `.github/workflows/quality.yml` 结果摘要现在也会透出 `bridge_reasons`，并写入 `GITHUB_STEP_SUMMARY`，用于区分这次是 `harness_cleanup_contract`、`bridge_runtime`，还是 `workflow_full_suite` / `fallback_full_suite` 这类全量触发。
+CI 里的 `.github/workflows/quality.yml` 结果摘要现在也会透出 `bridge_reasons`，并写入 `GITHUB_STEP_SUMMARY`，用于区分这次是 `agent_qc_contract`、`harness_cleanup_contract`、`bridge_runtime`，还是 `workflow_full_suite` / `fallback_full_suite` 这类全量触发。
 结果摘要默认按 `Scope / Required Gates / Notes / Recommended Next Action / Failure` 分段，优先让人一眼看清“为什么触发”“哪些门禁必跑”“最终为什么失败”，以及失败后本地最应该先跑哪条命令。
 如果命中的是 `harness_cleanup_contract`，推荐动作应优先指向 `npm run harness:cleanup-report:check`，而不是只给一条泛化的 bridge 校验建议。
 
@@ -525,6 +535,45 @@ CI 里的 `.github/workflows/quality.yml` 结果摘要现在也会透出 `bridge
 
 - 不要把所有页面默认都推进到重型 E2E
 - 先跑最小 smoke，再决定是否需要完整交互验证
+
+### Layer 5：Agent QC 运营证据
+
+入口：
+
+```bash
+npm run agent-qc:report
+npm run agent-qc:gui-flow:report
+npm run agent-qc:check
+npm run agent-qc:qcloop-job -- --risk P0 --output "./.lime/qc/qcloop-p0-job.json" --check
+npm run agent-qc:export-evidence -- --job-id "<qcloop-job-id>" --output "./.lime/qc/agent-qc-evidence.json" --check
+npm run agent-qc:release-summary -- --evidence "./.lime/qc/agent-qc-evidence.json" --require-scenario-manifest "docs/test/agent-qc-scenarios.manifest.json" --require-risk P0 --tag "<release-tag>" --output "./.lime/qc/release-agent-qc.md" --check
+npm run agent-qc:audit
+```
+
+事实源：
+
+- `docs/tests/agent-ops-qc.md`
+- `docs/tests/agent-qc-p0-scenarios.md`
+- `docs/tests/lime-agent-qc-rollout-plan.md`
+- `docs/test/agent-qc-scenarios.manifest.json`
+- `docs/test/agent-qc-evidence.schema.json`
+- `docs/test/agent-qc-gui-flows.manifest.json`
+
+作用：
+
+- 把 Lime 的 Agent Runtime、GUI、行为评测和发布门禁收敛成可审计场景清单
+- 让 qcloop / CI / release workflow 共享同一份 evidence contract
+- 防止测试标准自身漂移，例如 scenario 引用了不存在的 npm script
+
+注意：
+
+- `agent-qc:check` 已进入 `npm run test:contracts`，改动 Agent QC manifest、GUI flow manifest 或 schema 时不能按普通 docs-only 跳过
+- Agent QC 不替代 `verify:local`、`verify:gui-smoke` 或 `harness:eval`；它负责把这些入口编排成运营级证据链
+- `agent-qc:qcloop-job` 只从 manifest 生成 qcloop payload，不启动 qcloop、不提交任务
+- `agent-qc:export-evidence` 只转换 qcloop job 结果，不会替你跑测试；如果 qcloop item 仍是 `pending/running`，导出的 verdict 必须是 `blocked`
+- `agent-qc:release-summary -- --check` 是 release note / 发布门禁前的证据聚合；缺 Evidence Pack、Evidence Pack 非 `pass`，或未覆盖全部 P0 scenario id 时应阻断发布
+- `.github/workflows/release.yml` 默认强制 `agent_qc_evidence_path` 通过 `agent-qc-release-summary --check` 和 P0 scenario 覆盖校验，否则不创建 release
+- `agent-qc:audit` 是完成度审计；真实 qcloop evidence、真实 GUI evidence 或 release hard gate 缺失时必须保持 `incomplete`
 
 ## 改动类型与最低门槛
 

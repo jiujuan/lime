@@ -5,7 +5,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { getTextMap, Language } from "../text-map";
+import type { I18nPatchRunMetrics } from "../legacy-patch/dom-replacer";
+import { getTextMap, Language } from "../legacy-patch/text-map";
 
 describe("Edge Cases: Text Map", () => {
   it("should return Chinese text map for zh language", () => {
@@ -72,6 +73,11 @@ declare global {
     __I18N_METRICS__?: {
       patchTimes: number[];
       languageChanges: number;
+      totalRuns: number;
+      totalReplacedNodes: number;
+      totalMatchedSegments: number;
+      runs: I18nPatchRunMetrics[];
+      lastRun: I18nPatchRunMetrics | null;
     };
   }
 }
@@ -81,6 +87,11 @@ describe("Edge Cases: Metrics Tracking", () => {
     window.__I18N_METRICS__ = {
       patchTimes: [],
       languageChanges: 0,
+      totalRuns: 0,
+      totalReplacedNodes: 0,
+      totalMatchedSegments: 0,
+      runs: [],
+      lastRun: null,
     };
   });
 

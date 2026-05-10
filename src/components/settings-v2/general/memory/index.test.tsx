@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  mockUseTranslation,
   mockGetConfig,
   mockSaveConfig,
   mockGetMemoryEffectiveSources,
@@ -16,20 +17,44 @@ const {
   mockToggleMemoryAuto,
   mockUpdateMemoryAutoNote,
   mockGetUnifiedMemoryStats,
-} = vi.hoisted(() => ({
-  mockGetConfig: vi.fn(),
-  mockSaveConfig: vi.fn(),
-  mockGetMemoryEffectiveSources: vi.fn(),
-  mockGetMemoryExtractionStatus: vi.fn(),
-  mockGetMemoryAutoIndex: vi.fn(),
-  mockGetWorkingMemory: vi.fn(),
-  mockCleanupContextMemdir: vi.fn(),
-  mockEnsureWorkspaceLocalAgentsGitignore: vi.fn(),
-  mockScaffoldContextMemdir: vi.fn(),
-  mockScaffoldRuntimeAgentsTemplate: vi.fn(),
-  mockToggleMemoryAuto: vi.fn(),
-  mockUpdateMemoryAutoNote: vi.fn(),
-  mockGetUnifiedMemoryStats: vi.fn(),
+} = vi.hoisted(() => {
+  const mockTranslate = vi.fn((key: string, options?: unknown) => {
+    if (typeof options === "string") return options;
+
+    if (options && typeof options === "object") {
+      const values = options as Record<string, unknown>;
+      const template =
+        typeof values.defaultValue === "string" ? values.defaultValue : key;
+      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+        String(values[name] ?? ""),
+      );
+    }
+
+    return key;
+  });
+
+  return {
+    mockUseTranslation: vi.fn((_namespace?: string) => ({
+      t: mockTranslate,
+    })),
+    mockGetConfig: vi.fn(),
+    mockSaveConfig: vi.fn(),
+    mockGetMemoryEffectiveSources: vi.fn(),
+    mockGetMemoryExtractionStatus: vi.fn(),
+    mockGetMemoryAutoIndex: vi.fn(),
+    mockGetWorkingMemory: vi.fn(),
+    mockCleanupContextMemdir: vi.fn(),
+    mockEnsureWorkspaceLocalAgentsGitignore: vi.fn(),
+    mockScaffoldContextMemdir: vi.fn(),
+    mockScaffoldRuntimeAgentsTemplate: vi.fn(),
+    mockToggleMemoryAuto: vi.fn(),
+    mockUpdateMemoryAutoNote: vi.fn(),
+    mockGetUnifiedMemoryStats: vi.fn(),
+  };
+});
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
 }));
 
 vi.mock("@/lib/api/appConfig", () => ({
@@ -343,7 +368,7 @@ describe("MemorySettings", () => {
     );
     await leaveTip(heroTip);
 
-    const questionTip = await hoverTip("以下哪个选项最能形容你现在的状态?说明");
+    const questionTip = await hoverTip("当前状态说明");
     expect(getBodyText()).toContain(
       "单选，用于帮助代理判断你的知识密度和上下文称呼。",
     );
@@ -361,7 +386,9 @@ describe("MemorySettings", () => {
     expect(text).toContain("记忆总开关");
     expect(text).toContain("偏好画像");
     expect(text).toContain("记忆命中层可用性");
+    expect(text).toContain("来源链状态总览");
     expect(text).toContain("来源链策略");
+    expect(text).toContain("来源链命中详情");
     expect(text).toContain("记忆目录（memdir）");
   });
 

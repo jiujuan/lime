@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect } from "vitest";
-import enPatch from "../patches/en.json";
-import zhPatch from "../patches/zh.json";
+import enPatch from "../legacy-patch/patches/en.json";
+import zhPatch from "../legacy-patch/patches/zh.json";
 
 describe("Translation Coverage", () => {
   describe("Patch File Validity", () => {

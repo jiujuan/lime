@@ -20,6 +20,43 @@ import { recordCuratedTaskTemplateUsage } from "@/components/agent/chat/utils/cu
 import type { SkillsPageParams } from "@/types/page";
 import { SkillsWorkspacePage } from "./SkillsWorkspacePage";
 
+const { mockUseTranslation } = vi.hoisted(() => {
+  const mockTranslate = vi.fn((key: string, options?: unknown) => {
+    if (typeof options === "string") {
+      return options;
+    }
+
+    if (options && typeof options === "object") {
+      const values = options as Record<string, unknown>;
+      const template =
+        typeof values.defaultValue === "string" ? values.defaultValue : key;
+      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+        String(values[name] ?? ""),
+      );
+    }
+
+    return key;
+  });
+
+  return {
+    mockUseTranslation: vi.fn((_namespace?: string) => ({
+      i18n: { language: "zh-CN" },
+      t: mockTranslate,
+    })),
+  };
+});
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
+}));
+
+vi.mock(
+  "@/components/settings-v2/system/automation/AutomationJobDialog",
+  () => ({
+    AutomationJobDialog: () => null,
+  }),
+);
+
 const mockRefreshServiceSkills = vi.fn();
 const mockRecordUsage = vi.fn();
 const mockRefreshLocalSkills = vi.fn();
@@ -410,6 +447,7 @@ describe("SkillsWorkspacePage", () => {
   it("应默认渲染轻量 Skills 入口，并把右侧桥接区收成最近与本地 Skills", () => {
     const { container } = renderPage();
 
+    expect(mockUseTranslation).toHaveBeenCalledWith("agent");
     expect(container.textContent).toContain("Skills");
     expect(container.textContent).toContain("选择一个 Skill 开始创作");
     expect(container.textContent).toContain("推荐");
@@ -501,6 +539,40 @@ describe("SkillsWorkspacePage", () => {
       view: "catalog",
       search: "GitHub",
     });
+  });
+
+  it("搜索仅命中本地 Skill 时不应展示全局无结果误导", () => {
+    mockLocalSkills = [
+      {
+        key: "local:zeta-private",
+        name: "Zeta 私有能力",
+        description: "只存在于本地的私有能力。",
+        directory: "zeta-private",
+        installed: true,
+        sourceKind: "other",
+        catalogSource: "user",
+        metadata: {
+          lime_when_to_use: "当你需要使用 Zeta 私有能力时使用。",
+          lime_argument_hint: "目标和限制",
+        },
+      },
+    ] as Skill[];
+    const { container } = renderPage();
+
+    const searchInput = container.querySelector(
+      'input[placeholder="搜索想拿的结果、这一步或 Skill 名"]',
+    ) as HTMLInputElement | null;
+    act(() => {
+      updateFieldValue(searchInput, "Zeta");
+    });
+
+    expect(container.textContent).toContain("Zeta 私有能力");
+    expect(container.textContent).toContain(
+      "结果模板暂无匹配；右侧已有可继续的 Skill",
+    );
+    expect(container.textContent).toContain("分类暂无匹配，但已找到可用 Skill");
+    expect(container.textContent).not.toContain("当前搜索下暂无结果模板");
+    expect(container.textContent).not.toContain("当前搜索下暂无 Skill 分组");
   });
 
   it("应把创作场景入口收成页头的查看全部按钮", () => {

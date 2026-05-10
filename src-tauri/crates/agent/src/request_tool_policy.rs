@@ -10,8 +10,8 @@ use crate::protocol_projection::project_runtime_event;
 use crate::write_artifact_events::WriteArtifactEventEmitter;
 use aster::agents::{Agent, AgentEvent as AsterAgentEvent};
 use aster::conversation::message::{Message, MessageContent, SystemNotificationType};
+use aster::session::SessionManager;
 use aster::tools::ToolContext;
-use chrono::{Datelike, Local, NaiveDate};
 use futures::{stream, StreamExt};
 use lime_core::env_compat;
 use regex::Regex;
@@ -52,7 +52,6 @@ const STREAM_EVENT_DIAG_WARN_TEXT_DELTA_CHARS: usize = 2_000;
 const STREAM_EVENT_DIAG_WARN_TOOL_OUTPUT_CHARS: usize = 8_000;
 const STREAM_EVENT_DIAG_WARN_CONTEXT_STEPS: usize = 24;
 const TEXT_DELTA_BATCH_BACKLOG_CHARS: usize = 120;
-const NEWS_PREFLIGHT_QUERY_LIMIT: usize = 4;
 const NEWS_PREFLIGHT_QUERY_PARALLELISM: usize = 4;
 const NEWS_PREFLIGHT_QUERY_OUTPUT_CHAR_LIMIT: usize = 1_600;
 const NEWS_PREFLIGHT_CONTEXT_CHAR_LIMIT: usize = 6_000;
@@ -63,7 +62,8 @@ const ASTER_AUTO_COMPACTION_COMPLETE_TEXT: &str = "Compaction complete";
 const ASTER_AUTO_COMPACTION_THINKING_TEXT: &str = "aster is compacting the conversation...";
 const ASTER_AUTO_COMPACTION_ERROR_PREFIX: &str = "Ran into this error trying to compact:";
 const ASTER_AUTO_COMPACTION_DISABLED_TEXT: &str = "Automatic compaction is disabled for this turn. The conversation reached the context limit. Compact the session manually or start a new session before retrying.";
-const OPTIONAL_WEB_SEARCH_PREFLIGHT_TIMEOUT_MS: u64 = 1_500;
+const CANCELLED_TURN_CONTEXT_MARKER: &str =
+    "上一回合已被用户停止，不要继续回答被停止的请求；等待并仅处理后续用户消息。";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
@@ -165,19 +165,6 @@ impl WebSearchExecutionTracker {
         }
     }
 
-    fn absorb(&mut self, mut other: Self) {
-        for tool_id in other.ordered_tool_ids.drain(..) {
-            if self.attempts_by_id.contains_key(&tool_id) {
-                continue;
-            }
-
-            if let Some(record) = other.attempts_by_id.remove(&tool_id) {
-                self.ordered_tool_ids.push(tool_id.clone());
-                self.attempts_by_id.insert(tool_id, record);
-            }
-        }
-    }
-
     pub fn validate_web_search_requirement(
         &self,
         policy: &RequestToolPolicy,
@@ -262,7 +249,6 @@ pub struct PreflightToolExecution {
     pub planned_queries: Vec<String>,
     pub system_prompt_appendix: Option<String>,
     pub coverage_summary: Option<String>,
-    pub expanded_news_search: bool,
 }
 
 pub struct WebSearchPreflightRequest<'a> {
@@ -282,7 +268,6 @@ impl PreflightToolExecution {
             planned_queries: Vec::new(),
             system_prompt_appendix: None,
             coverage_summary: None,
-            expanded_news_search: false,
         }
     }
 }
@@ -460,6 +445,52 @@ pub struct StreamReplyExecution {
     pub event_errors: Vec<String>,
     pub emitted_any: bool,
     pub attempts_summary: String,
+    pub cancelled: bool,
+}
+
+fn is_reply_cancelled(cancel_token: &Option<CancellationToken>) -> bool {
+    cancel_token
+        .as_ref()
+        .is_some_and(CancellationToken::is_cancelled)
+}
+
+fn build_stream_reply_execution(
+    text_output: String,
+    event_errors: Vec<String>,
+    emitted_any: bool,
+    attempts_summary: String,
+    cancelled: bool,
+) -> StreamReplyExecution {
+    StreamReplyExecution {
+        text_output,
+        event_errors,
+        emitted_any,
+        attempts_summary,
+        cancelled,
+    }
+}
+
+fn cancelled_turn_context_marker_message() -> Message {
+    Message::assistant()
+        .with_text(CANCELLED_TURN_CONTEXT_MARKER)
+        .agent_only()
+}
+
+async fn persist_cancelled_turn_context_marker(agent: &Agent, session_id: &str) {
+    let message = cancelled_turn_context_marker_message();
+    let result = if let Some(store) = agent.session_store() {
+        store.add_message(session_id, &message).await
+    } else {
+        SessionManager::add_message(session_id, &message).await
+    };
+
+    if let Err(error) = result {
+        tracing::warn!(
+            "[AsterAgent][ReplyPolicy] 写入取消上下文标记失败，已降级继续: session_id={}, error={}",
+            session_id,
+            error
+        );
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -858,93 +889,6 @@ fn normalize_tool_name(value: &str) -> String {
         .collect::<String>()
 }
 
-pub fn message_suggests_news_expansion(message: &str) -> bool {
-    let trimmed = message.trim();
-    if trimmed.is_empty() {
-        return false;
-    }
-
-    let normalized = trimmed.to_ascii_lowercase();
-    let has_news_keyword = [
-        "新闻",
-        "快讯",
-        "头条",
-        "要闻",
-        "news",
-        "headline",
-        "headlines",
-        "briefing",
-        "roundup",
-        "recap",
-        "digest",
-    ]
-    .iter()
-    .any(|keyword| normalized.contains(keyword));
-    if !has_news_keyword {
-        return false;
-    }
-
-    let has_time_keyword = [
-        "今天",
-        "今日",
-        "昨天",
-        "昨晚",
-        "最新",
-        "实时",
-        "本周",
-        "这周",
-        "today",
-        "latest",
-        "breaking",
-        "march",
-        "april",
-        "may",
-        "june",
-        "july",
-        "august",
-        "september",
-        "october",
-        "november",
-        "december",
-        "january",
-        "february",
-    ]
-    .iter()
-    .any(|keyword| normalized.contains(keyword));
-    let has_summary_keyword = [
-        "汇总",
-        "综述",
-        "盘点",
-        "整理",
-        "总结",
-        "写一篇",
-        "写成",
-        "简报",
-        "日报",
-        "报道",
-        "summary",
-        "summarize",
-        "wrap up",
-        "report",
-        "brief",
-        "briefing",
-    ]
-    .iter()
-    .any(|keyword| normalized.contains(keyword));
-    let has_explicit_date = Regex::new(r"\d{1,2}月\d{1,2}日")
-        .ok()
-        .map(|re| re.is_match(trimmed))
-        .unwrap_or(false)
-        || Regex::new(
-            r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+\d{1,2}\b",
-        )
-        .ok()
-        .map(|re| re.is_match(&normalized))
-        .unwrap_or(false);
-
-    has_time_keyword || has_summary_keyword || has_explicit_date
-}
-
 pub fn merge_system_prompt_with_web_search_preflight_context(
     base_prompt: Option<String>,
     appendix: Option<String>,
@@ -965,201 +909,15 @@ pub fn merge_system_prompt_with_web_search_preflight_context(
     }
 }
 
-fn should_run_web_search_preflight(policy: &RequestToolPolicy, message_text: &str) -> bool {
+fn should_run_web_search_preflight(policy: &RequestToolPolicy, _message_text: &str) -> bool {
     if !is_web_search_preflight_enabled() {
         return false;
     }
 
     policy.requires_web_search()
-        || (policy.allows_web_search() && message_suggests_news_expansion(message_text))
 }
 
-fn split_before_followup_clause(message_text: &str) -> String {
-    let mut candidate = message_text.trim().replace('\n', " ");
-    for delimiter in [
-        "，并",
-        ",并",
-        "并将",
-        "并且",
-        "然后",
-        "再把",
-        "再将",
-        "再帮我",
-        " afterwards ",
-        " and then ",
-        " then ",
-    ] {
-        if let Some((head, _)) = candidate.split_once(delimiter) {
-            candidate = head.trim().to_string();
-            break;
-        }
-    }
-    candidate
-}
-
-fn sanitize_news_search_clause(message_text: &str) -> String {
-    let mut candidate = split_before_followup_clause(message_text);
-    for prefix in [
-        "请帮我",
-        "帮我",
-        "麻烦你",
-        "请你",
-        "请",
-        "帮忙",
-        "替我",
-        "能否",
-        "可以",
-    ] {
-        candidate = candidate.trim_start_matches(prefix).trim().to_string();
-    }
-    for verb in [
-        "找一下",
-        "搜一下",
-        "搜索",
-        "查一下",
-        "查找",
-        "检索",
-        "收集",
-        "整理",
-        "找",
-        "搜",
-        "查",
-    ] {
-        candidate = candidate.trim_start_matches(verb).trim().to_string();
-    }
-
-    let collapsed = candidate
-        .replace(['？', '?', '。', '，', ','], " ")
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-    if collapsed.is_empty() {
-        derive_preflight_query(message_text)
-    } else {
-        collapsed
-    }
-}
-
-fn month_name(month: u32) -> &'static str {
-    match month {
-        1 => "January",
-        2 => "February",
-        3 => "March",
-        4 => "April",
-        5 => "May",
-        6 => "June",
-        7 => "July",
-        8 => "August",
-        9 => "September",
-        10 => "October",
-        11 => "November",
-        12 => "December",
-        _ => "March",
-    }
-}
-
-fn resolve_topic_labels(message_text: &str) -> (&'static str, &'static str) {
-    let normalized = message_text.to_ascii_lowercase();
-    if normalized.contains("国际")
-        || normalized.contains("international")
-        || normalized.contains("world")
-    {
-        ("国际新闻", "international news")
-    } else if normalized.contains("国内") || normalized.contains("china") {
-        ("国内新闻", "china news")
-    } else if normalized.contains("科技")
-        || normalized.contains("ai ")
-        || normalized.contains("ai新闻")
-    {
-        ("科技新闻", "technology news")
-    } else {
-        ("新闻", "news")
-    }
-}
-
-fn resolve_absolute_news_date(message_text: &str, today: NaiveDate) -> Option<(String, String)> {
-    let normalized = message_text.to_ascii_lowercase();
-    if normalized.contains("今天") || normalized.contains("今日") || normalized.contains("today")
-    {
-        return Some((
-            format!("{}年{}月{}日", today.year(), today.month(), today.day()),
-            format!(
-                "{} {} {}",
-                month_name(today.month()),
-                today.day(),
-                today.year()
-            ),
-        ));
-    }
-
-    if let Ok(re) = Regex::new(r"(?P<month>\d{1,2})月(?P<day>\d{1,2})日") {
-        if let Some(captures) = re.captures(message_text) {
-            let month = captures
-                .name("month")
-                .and_then(|value| value.as_str().parse::<u32>().ok())?;
-            let day = captures
-                .name("day")
-                .and_then(|value| value.as_str().parse::<u32>().ok())?;
-            if (1..=12).contains(&month) && (1..=31).contains(&day) {
-                return Some((
-                    format!("{}年{}月{}日", today.year(), month, day),
-                    format!("{} {} {}", month_name(month), day, today.year()),
-                ));
-            }
-        }
-    }
-
-    None
-}
-
-fn dedup_queries(values: Vec<String>) -> Vec<String> {
-    let mut seen = HashSet::new();
-    let mut result = Vec::new();
-    for value in values {
-        let normalized = value.trim();
-        if normalized.is_empty() {
-            continue;
-        }
-        let key = normalized.to_ascii_lowercase();
-        if seen.insert(key) {
-            result.push(normalized.to_string());
-        }
-    }
-    result
-}
-
-fn build_news_preflight_queries_with_reference(
-    message_text: &str,
-    today: NaiveDate,
-) -> Vec<String> {
-    let base_clause = sanitize_news_search_clause(message_text);
-    let (zh_topic, en_topic) = resolve_topic_labels(message_text);
-    let mut queries = vec![derive_preflight_query(&base_clause)];
-
-    if let Some((zh_date, en_date)) = resolve_absolute_news_date(message_text, today) {
-        queries.push(format!("{zh_date} {zh_topic}"));
-        queries.push(format!("{en_date} {en_topic}"));
-        queries.push(format!("{en_date} world headlines"));
-    } else {
-        queries.push(format!("{base_clause} {zh_topic}"));
-        queries.push(format!("{base_clause} {en_topic}"));
-        queries.push(format!("{base_clause} latest headlines"));
-    }
-
-    dedup_queries(queries)
-        .into_iter()
-        .take(NEWS_PREFLIGHT_QUERY_LIMIT)
-        .collect()
-}
-
-fn build_preflight_queries(message_text: &str, policy: &RequestToolPolicy) -> Vec<String> {
-    if message_suggests_news_expansion(message_text) && policy.allows_web_search() {
-        return build_news_preflight_queries_with_reference(
-            message_text,
-            Local::now().date_naive(),
-        );
-    }
-
+fn build_preflight_queries(message_text: &str, _policy: &RequestToolPolicy) -> Vec<String> {
     vec![derive_preflight_query(message_text)]
 }
 
@@ -1506,9 +1264,7 @@ fn resolve_reply_retry_mode(
         return ReplyRetryMode::None;
     }
 
-    if preflight_execution.system_prompt_appendix.is_some()
-        || preflight_execution.expanded_news_search
-        || !tracker.ordered_tool_ids.is_empty()
+    if preflight_execution.system_prompt_appendix.is_some() || !tracker.ordered_tool_ids.is_empty()
     {
         return ReplyRetryMode::WebSearchSynthesis;
     }
@@ -1583,6 +1339,7 @@ where
         session_id,
         user_message.as_concat_text().chars().count()
     );
+    let cancel_probe = cancel_token.clone();
     let mut stream = agent
         .reply(user_message, session_config, cancel_token)
         .await
@@ -1595,7 +1352,19 @@ where
         started_at.elapsed().as_millis()
     );
 
-    while let Some(event_result) = stream.next().await {
+    loop {
+        let event_result = match cancel_probe.as_ref() {
+            Some(token) => {
+                tokio::select! {
+                    _ = token.cancelled() => break,
+                    next = stream.next() => next,
+                }
+            }
+            None => stream.next().await,
+        };
+        let Some(event_result) = event_result else {
+            break;
+        };
         match event_result {
             Ok(agent_event) => {
                 let provider_error_for_event = match &agent_event {
@@ -1750,7 +1519,7 @@ fn extract_inline_agent_provider_error(message: &Message) -> Option<String> {
 /// 当开启联网搜索时，在正式回复前执行 WebSearch 预检索。
 ///
 /// 目标：
-/// - 在需要时通过执行层主动完成新闻类扩搜，而不是只依赖模型自己多次调用搜索。
+/// - 仅在显式 `required` 搜索模式下先完成一次必需 WebSearch。
 /// - 统一生成 tool_start/tool_end 事件，供前端 harness 展示。
 /// - 将预检索结果压缩注入 system prompt，帮助模型做更深的事实整合。
 /// - 若本回合被明确要求必须先搜索，且预检索全部失败，则由上层中断本次回答。
@@ -1808,8 +1577,6 @@ pub async fn execute_web_search_preflight_if_needed(
             }
         })
         .collect::<Vec<_>>();
-    let expanded_news_search = planned_queries.len() > 1;
-
     let working_directory = working_directory
         .map(Path::to_path_buf)
         .or_else(|| std::env::current_dir().ok())
@@ -1917,7 +1684,6 @@ pub async fn execute_web_search_preflight_if_needed(
             planned_queries: planned_query_texts,
             system_prompt_appendix,
             coverage_summary,
-            expanded_news_search,
         })
     }
 }
@@ -1961,6 +1727,7 @@ where
 {
     let started_at = Instant::now();
     let message_text = user_message.as_concat_text();
+    let cancel_probe = cancel_token.clone();
     let mut web_search_tracker = WebSearchExecutionTracker::default();
     tracing::info!(
         "[AsterAgent][TTFT] stream policy start: session_id={}, message_chars={}, search_mode={}",
@@ -1969,8 +1736,7 @@ where
         request_tool_policy.search_mode.as_str()
     );
 
-    // 对于 Required 模式，preflight 是必须的，必须等待完成
-    // 对于 Allowed 模式，preflight 是可选优化，设置超时避免阻塞首字
+    // 只在显式 Required 模式做预检索；Allowed 只是暴露工具候选能力，由模型按需决定。
     let preflight = if request_tool_policy.requires_web_search() {
         execute_web_search_preflight_if_needed(
             WebSearchPreflightRequest {
@@ -1986,36 +1752,7 @@ where
         )
         .await
     } else {
-        let mut optional_preflight_tracker = WebSearchExecutionTracker::default();
-        match tokio::time::timeout(
-            std::time::Duration::from_millis(OPTIONAL_WEB_SEARCH_PREFLIGHT_TIMEOUT_MS),
-            execute_web_search_preflight_if_needed(
-                WebSearchPreflightRequest {
-                    agent,
-                    session_id: &session_config.id,
-                    message_text: &message_text,
-                    working_directory,
-                    cancel_token: cancel_token.clone(),
-                    turn_context: session_config.turn_context.clone(),
-                    policy: request_tool_policy,
-                },
-                &mut optional_preflight_tracker,
-            ),
-        )
-        .await
-        {
-            Ok(result) => {
-                web_search_tracker.absorb(optional_preflight_tracker);
-                result
-            }
-            Err(_) => {
-                tracing::warn!(
-                    "[AsterAgent][TTFT] optional web search preflight timed out ({}ms), proceeding without preflight context",
-                    OPTIONAL_WEB_SEARCH_PREFLIGHT_TIMEOUT_MS
-                );
-                Ok(PreflightToolExecution::none())
-            }
-        }
+        Ok(PreflightToolExecution::none())
     };
     let preflight_execution = match preflight {
         Ok(preflight_execution) => {
@@ -2081,8 +1818,8 @@ where
                 diagnostics.saved_site_content_count
             );
             let fallback_text = text_chunks.join("").trim().to_string();
-            return Ok(StreamReplyExecution {
-                text_output: if fallback_text.is_empty() {
+            return Ok(build_stream_reply_execution(
+                if fallback_text.is_empty() {
                     match build_output_preserved_reply_fallback(&diagnostics) {
                         Some(output) => output,
                         None => return Err(error),
@@ -2092,10 +1829,22 @@ where
                 },
                 event_errors,
                 emitted_any,
-                attempts_summary: web_search_tracker.format_attempts(),
-            });
+                web_search_tracker.format_attempts(),
+                is_reply_cancelled(&cancel_probe),
+            ));
         }
         return Err(error);
+    }
+
+    if is_reply_cancelled(&cancel_probe) {
+        persist_cancelled_turn_context_marker(agent, &session_config.id).await;
+        return Ok(build_stream_reply_execution(
+            text_chunks.join(""),
+            event_errors,
+            emitted_any,
+            web_search_tracker.format_attempts(),
+            true,
+        ));
     }
 
     let current_text_output = text_chunks.join("");
@@ -2155,12 +1904,13 @@ where
                     else {
                         return Err(error);
                     };
-                    return Ok(StreamReplyExecution {
-                        text_output: fallback_text,
+                    return Ok(build_stream_reply_execution(
+                        fallback_text,
                         event_errors,
                         emitted_any,
-                        attempts_summary: web_search_tracker.format_attempts(),
-                    });
+                        web_search_tracker.format_attempts(),
+                        is_reply_cancelled(&cancel_probe),
+                    ));
                 }
                 return Err(error);
             }
@@ -2207,12 +1957,13 @@ where
                     else {
                         return Err(error);
                     };
-                    return Ok(StreamReplyExecution {
-                        text_output: fallback_text,
+                    return Ok(build_stream_reply_execution(
+                        fallback_text,
                         event_errors,
                         emitted_any,
-                        attempts_summary: web_search_tracker.format_attempts(),
-                    });
+                        web_search_tracker.format_attempts(),
+                        is_reply_cancelled(&cancel_probe),
+                    ));
                 }
                 return Err(error);
             }
@@ -2260,17 +2011,29 @@ where
                     else {
                         return Err(error);
                     };
-                    return Ok(StreamReplyExecution {
-                        text_output: fallback_text,
+                    return Ok(build_stream_reply_execution(
+                        fallback_text,
                         event_errors,
                         emitted_any,
-                        attempts_summary: web_search_tracker.format_attempts(),
-                    });
+                        web_search_tracker.format_attempts(),
+                        is_reply_cancelled(&cancel_probe),
+                    ));
                 }
                 return Err(error);
             }
         }
         ReplyRetryMode::None => {}
+    }
+
+    if is_reply_cancelled(&cancel_probe) {
+        persist_cancelled_turn_context_marker(agent, &session_config.id).await;
+        return Ok(build_stream_reply_execution(
+            text_chunks.join(""),
+            event_errors,
+            emitted_any,
+            web_search_tracker.format_attempts(),
+            true,
+        ));
     }
 
     if let Err(validation_error) =
@@ -2311,12 +2074,13 @@ where
                 diagnostics.tool_end_count,
                 web_search_tracker.format_attempts()
             );
-            return Ok(StreamReplyExecution {
-                text_output: fallback_text,
+            return Ok(build_stream_reply_execution(
+                fallback_text,
                 event_errors,
                 emitted_any,
-                attempts_summary: web_search_tracker.format_attempts(),
-            });
+                web_search_tracker.format_attempts(),
+                is_reply_cancelled(&cancel_probe),
+            ));
         }
         return Err(ReplyAttemptError {
             message: build_empty_final_reply_error_message(&diagnostics, &web_search_tracker),
@@ -2324,12 +2088,13 @@ where
         });
     }
 
-    Ok(StreamReplyExecution {
-        text_output: final_text_output,
+    Ok(build_stream_reply_execution(
+        final_text_output,
         event_errors,
         emitted_any,
-        attempts_summary: web_search_tracker.format_attempts(),
-    })
+        web_search_tracker.format_attempts(),
+        false,
+    ))
 }
 
 fn is_web_search_preflight_enabled() -> bool {
@@ -2362,15 +2127,293 @@ fn derive_preflight_query(message_text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aster::conversation::Conversation;
     use aster::providers::base::{Provider, ProviderMetadata, ProviderUsage, Usage};
     use aster::providers::errors::ProviderError;
-    use aster::session::{SessionManager, SessionType, TurnContextOverride, TurnStatus};
+    use aster::session::{
+        ChatHistoryMatch, CommitOptions, CommitReport, MemoryCategory, MemoryHealth, MemoryRecord,
+        MemorySearchResult, Session, SessionInsights, SessionStore, SessionType, TokenStatsUpdate,
+        TurnContextOverride, TurnStatus,
+    };
     use aster::tools::{PermissionCheckResult, Tool, ToolError, ToolResult};
     use async_trait::async_trait;
     use std::collections::HashMap;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
+
+    struct TestSessionStore {
+        session: Mutex<Session>,
+    }
+
+    impl TestSessionStore {
+        fn new(session: Session) -> Self {
+            Self {
+                session: Mutex::new(session),
+            }
+        }
+
+        fn current_session(&self, include_messages: bool) -> Session {
+            let mut session = self.session.lock().expect("锁测试 session").clone();
+            if !include_messages {
+                session.conversation = None;
+            }
+            session
+        }
+    }
+
+    fn create_test_session_store(name: &str) -> (Arc<TestSessionStore>, Session) {
+        let now = chrono::Utc::now();
+        let session = Session {
+            id: format!("test-{}-{}", name, Uuid::new_v4()),
+            working_dir: PathBuf::default(),
+            name: name.to_string(),
+            user_set_name: false,
+            session_type: SessionType::Hidden,
+            created_at: now,
+            updated_at: now,
+            extension_data: Default::default(),
+            total_tokens: None,
+            input_tokens: None,
+            output_tokens: None,
+            cached_input_tokens: None,
+            cache_creation_input_tokens: None,
+            accumulated_total_tokens: None,
+            accumulated_input_tokens: None,
+            accumulated_output_tokens: None,
+            schedule_id: None,
+            recipe: None,
+            user_recipe_values: None,
+            conversation: Some(Conversation::default()),
+            message_count: 0,
+            provider_name: None,
+            model_config: None,
+        };
+        (Arc::new(TestSessionStore::new(session.clone())), session)
+    }
+
+    #[async_trait]
+    impl SessionStore for TestSessionStore {
+        async fn create_session(
+            &self,
+            _working_dir: PathBuf,
+            _name: String,
+            _session_type: SessionType,
+        ) -> anyhow::Result<Session> {
+            Ok(self.current_session(true))
+        }
+
+        async fn get_session(&self, _id: &str, include_messages: bool) -> anyhow::Result<Session> {
+            Ok(self.current_session(include_messages))
+        }
+
+        async fn add_message(&self, _session_id: &str, message: &Message) -> anyhow::Result<()> {
+            let mut session = self.session.lock().expect("锁测试 session");
+            let conversation = session
+                .conversation
+                .get_or_insert_with(Conversation::default);
+            conversation.push(message.clone());
+            session.message_count = conversation.len();
+            session.updated_at = chrono::Utc::now();
+            Ok(())
+        }
+
+        async fn replace_conversation(
+            &self,
+            _session_id: &str,
+            conversation: &Conversation,
+        ) -> anyhow::Result<()> {
+            let mut session = self.session.lock().expect("锁测试 session");
+            session.conversation = Some(conversation.clone());
+            session.message_count = conversation.len();
+            session.updated_at = chrono::Utc::now();
+            Ok(())
+        }
+
+        async fn list_sessions(&self) -> anyhow::Result<Vec<Session>> {
+            Ok(vec![self.current_session(false)])
+        }
+
+        async fn list_sessions_by_types(
+            &self,
+            _types: &[SessionType],
+        ) -> anyhow::Result<Vec<Session>> {
+            Ok(vec![self.current_session(false)])
+        }
+
+        async fn delete_session(&self, _id: &str) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn get_insights(&self) -> anyhow::Result<SessionInsights> {
+            Ok(SessionInsights {
+                total_sessions: 1,
+                total_tokens: 0,
+            })
+        }
+
+        async fn export_session(&self, _id: &str) -> anyhow::Result<String> {
+            Ok("{}".to_string())
+        }
+
+        async fn import_session(&self, _json: &str) -> anyhow::Result<Session> {
+            Ok(self.current_session(true))
+        }
+
+        async fn copy_session(
+            &self,
+            _session_id: &str,
+            _new_name: String,
+        ) -> anyhow::Result<Session> {
+            Ok(self.current_session(true))
+        }
+
+        async fn truncate_conversation(
+            &self,
+            _session_id: &str,
+            _timestamp: i64,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn update_session_name(
+            &self,
+            _session_id: &str,
+            name: String,
+            user_set: bool,
+        ) -> anyhow::Result<()> {
+            let mut session = self.session.lock().expect("锁测试 session");
+            session.name = name;
+            session.user_set_name = user_set;
+            session.updated_at = chrono::Utc::now();
+            Ok(())
+        }
+
+        async fn update_working_dir(
+            &self,
+            _session_id: &str,
+            working_dir: PathBuf,
+        ) -> anyhow::Result<()> {
+            let mut session = self.session.lock().expect("锁测试 session");
+            session.working_dir = working_dir;
+            session.updated_at = chrono::Utc::now();
+            Ok(())
+        }
+
+        async fn update_session_type(
+            &self,
+            _session_id: &str,
+            session_type: SessionType,
+        ) -> anyhow::Result<()> {
+            let mut session = self.session.lock().expect("锁测试 session");
+            session.session_type = session_type;
+            session.updated_at = chrono::Utc::now();
+            Ok(())
+        }
+
+        async fn update_extension_data(
+            &self,
+            _session_id: &str,
+            extension_data: aster::session::extension_data::ExtensionData,
+        ) -> anyhow::Result<()> {
+            let mut session = self.session.lock().expect("锁测试 session");
+            session.extension_data = extension_data;
+            session.updated_at = chrono::Utc::now();
+            Ok(())
+        }
+
+        async fn update_token_stats(
+            &self,
+            _session_id: &str,
+            _stats: TokenStatsUpdate,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn update_provider_config(
+            &self,
+            _session_id: &str,
+            provider_name: Option<String>,
+            model_config: Option<aster::model::ModelConfig>,
+        ) -> anyhow::Result<()> {
+            let mut session = self.session.lock().expect("锁测试 session");
+            if let Some(provider_name) = provider_name {
+                session.provider_name = Some(provider_name);
+            }
+            if let Some(model_config) = model_config {
+                session.model_config = Some(model_config);
+            }
+            session.updated_at = chrono::Utc::now();
+            Ok(())
+        }
+
+        async fn update_recipe(
+            &self,
+            _session_id: &str,
+            _recipe: Option<aster::recipe::Recipe>,
+            _user_recipe_values: Option<HashMap<String, String>>,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn search_chat_history(
+            &self,
+            _query: &str,
+            _limit: Option<usize>,
+            _after_date: Option<chrono::DateTime<chrono::Utc>>,
+            _before_date: Option<chrono::DateTime<chrono::Utc>>,
+            _exclude_session_id: Option<String>,
+        ) -> anyhow::Result<Vec<ChatHistoryMatch>> {
+            Ok(Vec::new())
+        }
+
+        async fn commit_session(
+            &self,
+            _id: &str,
+            _options: CommitOptions,
+        ) -> anyhow::Result<CommitReport> {
+            Ok(CommitReport {
+                session_id: "test-session-store".to_string(),
+                messages_scanned: 0,
+                memories_created: 0,
+                memories_merged: 0,
+                source_start_ts: None,
+                source_end_ts: None,
+                warnings: Vec::new(),
+            })
+        }
+
+        async fn search_memories(
+            &self,
+            _query: &str,
+            _limit: Option<usize>,
+            _session_scope: Option<&str>,
+            _categories: Option<Vec<MemoryCategory>>,
+        ) -> anyhow::Result<Vec<MemorySearchResult>> {
+            Ok(Vec::new())
+        }
+
+        async fn retrieve_context_memories(
+            &self,
+            _session_id: &str,
+            _query: &str,
+            _limit: usize,
+        ) -> anyhow::Result<Vec<MemoryRecord>> {
+            Ok(Vec::new())
+        }
+
+        async fn memory_stats(&self) -> anyhow::Result<aster::session::MemoryStats> {
+            Ok(aster::session::MemoryStats::default())
+        }
+
+        async fn memory_health(&self) -> anyhow::Result<MemoryHealth> {
+            Ok(MemoryHealth {
+                healthy: true,
+                message: "test session store".to_string(),
+            })
+        }
+    }
 
     struct TurnContextGatedWebSearchTool;
 
@@ -2502,6 +2545,62 @@ mod tests {
                 message,
                 ProviderUsage::new("gpt-5.3-codex".to_string(), Usage::default()),
             ))
+        }
+
+        fn get_model_config(&self) -> aster::model::ModelConfig {
+            aster::model::ModelConfig::new("gpt-5.3-codex").expect("test model config")
+        }
+    }
+
+    struct SlowStreamingProvider;
+
+    #[async_trait]
+    impl Provider for SlowStreamingProvider {
+        fn metadata() -> ProviderMetadata
+        where
+            Self: Sized,
+        {
+            ProviderMetadata::empty()
+        }
+
+        fn get_name(&self) -> &str {
+            "slow-streaming-provider"
+        }
+
+        async fn complete_with_model(
+            &self,
+            _model_config: &aster::model::ModelConfig,
+            _system: &str,
+            _messages: &[Message],
+            _tools: &[rmcp::model::Tool],
+        ) -> Result<(Message, ProviderUsage), ProviderError> {
+            Ok((
+                Message::assistant().with_text("非流式兜底不应被调用"),
+                ProviderUsage::new("gpt-5.3-codex".to_string(), Usage::default()),
+            ))
+        }
+
+        async fn stream(
+            &self,
+            _system: &str,
+            _messages: &[Message],
+            _tools: &[rmcp::model::Tool],
+        ) -> Result<aster::providers::base::MessageStream, ProviderError> {
+            Ok(Box::pin(async_stream::try_stream! {
+                yield (
+                    Some(Message::assistant().with_text("第一段")),
+                    None,
+                );
+                tokio::time::sleep(Duration::from_secs(30)).await;
+                yield (
+                    Some(Message::assistant().with_text("第二段")),
+                    Some(ProviderUsage::new("gpt-5.3-codex".to_string(), Usage::default())),
+                );
+            }))
+        }
+
+        fn supports_streaming(&self) -> bool {
+            true
         }
 
         fn get_model_config(&self) -> aster::model::ModelConfig {
@@ -2751,22 +2850,35 @@ mod tests {
     }
 
     #[test]
-    fn tracker_absorb_preserves_completed_optional_preflight_attempts() {
-        let policy = resolve_request_tool_policy(Some(true), false);
-        let mut target = WebSearchExecutionTracker::default();
-        let mut optional_tracker = WebSearchExecutionTracker::default();
-        optional_tracker.record_tool_start(&policy, "tool-1", "WebSearch");
-        optional_tracker.record_tool_end(&policy, "tool-1", true, None);
+    fn allowed_web_search_should_not_run_preflight_from_message_keywords() {
+        let policy = resolve_request_tool_policy_with_mode(
+            Some(true),
+            Some(RequestToolPolicyMode::Allowed),
+            false,
+        );
 
-        target.absorb(optional_tracker);
-
-        assert_eq!(target.ordered_tool_ids, vec!["tool-1".to_string()]);
+        assert!(!should_run_web_search_preflight(
+            &policy,
+            "请搜索今天最新 AI 新闻"
+        ));
         assert_eq!(
-            target
-                .attempts_by_id
-                .get("tool-1")
-                .and_then(|record| record.success),
-            Some(true)
+            build_preflight_queries("请搜索今天最新 AI 新闻", &policy),
+            vec!["请搜索今天最新 AI 新闻".to_string()]
+        );
+    }
+
+    #[test]
+    fn required_web_search_should_run_preflight_without_keyword_detection() {
+        let policy = resolve_request_tool_policy_with_mode(
+            Some(true),
+            Some(RequestToolPolicyMode::Required),
+            false,
+        );
+
+        assert!(should_run_web_search_preflight(&policy, "继续"));
+        assert_eq!(
+            build_preflight_queries("继续", &policy),
+            vec!["继续".to_string()]
         );
     }
 
@@ -2996,28 +3108,6 @@ mod tests {
     }
 
     #[test]
-    fn detects_news_expansion_for_daily_news_summary_requests() {
-        assert!(message_suggests_news_expansion("帮我汇总3月13日国际新闻"));
-        assert!(message_suggests_news_expansion(
-            "Please summarize the latest world news for March 13"
-        ));
-        assert!(!message_suggests_news_expansion("帮我解释一下牛顿第二定律"));
-    }
-
-    #[test]
-    fn builds_news_preflight_queries_with_absolute_date_variants() {
-        let queries = build_news_preflight_queries_with_reference(
-            "帮我汇总3月13日国际新闻",
-            NaiveDate::from_ymd_opt(2026, 3, 13).expect("valid date"),
-        );
-
-        assert_eq!(queries[0], "汇总3月13日国际新闻");
-        assert!(queries.contains(&"2026年3月13日 国际新闻".to_string()));
-        assert!(queries.contains(&"March 13 2026 international news".to_string()));
-        assert!(queries.contains(&"March 13 2026 world headlines".to_string()));
-    }
-
-    #[test]
     fn merges_web_search_preflight_context_without_duplication() {
         let merged = merge_system_prompt_with_web_search_preflight_context(
             Some("base".to_string()),
@@ -3137,14 +3227,8 @@ mod tests {
     #[tokio::test]
     async fn stream_message_reply_with_policy_should_surface_disabled_auto_compaction_limit_from_aster(
     ) {
-        let session = SessionManager::create_session(
-            PathBuf::default(),
-            "lime-auto-compact-disabled".to_string(),
-            SessionType::Hidden,
-        )
-        .await
-        .expect("应创建测试 session");
-        let agent = Agent::new();
+        let (store, session) = create_test_session_store("lime-auto-compact-disabled");
+        let agent = Agent::new().with_session_store(store.clone());
         agent
             .update_provider(Arc::new(ContextLengthExceededProvider), &session.id)
             .await
@@ -3206,14 +3290,8 @@ mod tests {
 
     #[tokio::test]
     async fn stream_message_reply_with_policy_should_retry_empty_reply_without_tool_activity() {
-        let session = SessionManager::create_session(
-            PathBuf::default(),
-            "lime-empty-reply-retry".to_string(),
-            SessionType::Hidden,
-        )
-        .await
-        .expect("应创建测试 session");
-        let agent = Agent::new();
+        let (store, session) = create_test_session_store("lime-empty-reply-retry");
+        let agent = Agent::new().with_session_store(store.clone());
         let attempts = Arc::new(AtomicUsize::new(0));
         agent
             .update_provider(
@@ -3265,16 +3343,85 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn stream_message_reply_with_policy_should_drain_inline_provider_error_and_mark_turn_failed(
-    ) {
-        let session = SessionManager::create_session(
-            PathBuf::default(),
-            "lime-inline-provider-error".to_string(),
-            SessionType::Hidden,
+    async fn stream_message_reply_with_policy_should_return_cancelled_without_waiting_next_chunk() {
+        let (store, session) = create_test_session_store("lime-stream-cancel");
+        let agent = Agent::new().with_session_store(store.clone());
+        agent
+            .update_provider(Arc::new(SlowStreamingProvider), &session.id)
+            .await
+            .expect("应配置测试 provider");
+
+        let session_config = aster::agents::SessionConfig {
+            id: session.id.clone(),
+            thread_id: None,
+            turn_id: Some("turn-stream-cancel".to_string()),
+            schedule_id: None,
+            max_turns: None,
+            retry_config: None,
+            system_prompt: None,
+            system_prompt_override: None,
+            include_context_trace: None,
+            turn_context: None,
+        };
+        let policy = resolve_request_tool_policy(Some(false), false);
+        let cancel_token = CancellationToken::new();
+        let cancel_for_task = cancel_token.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            cancel_for_task.cancel();
+        });
+
+        let reply = tokio::time::timeout(
+            Duration::from_secs(2),
+            stream_message_reply_with_policy(
+                &agent,
+                Message::user().with_text("请流式输出"),
+                None,
+                session_config,
+                Some(cancel_token),
+                &policy,
+                |_| {},
+            ),
         )
         .await
-        .expect("应创建测试 session");
-        let agent = Agent::new();
+        .expect("取消后不应继续等待 provider 下一段")
+        .expect("取消应作为可识别执行结果返回");
+
+        assert!(reply.cancelled);
+        assert!(
+            !reply.text_output.contains("第二段"),
+            "取消后不应等待或拼接 provider 的后续分片"
+        );
+
+        let stored_session = store
+            .get_session(&session.id, true)
+            .await
+            .expect("应读取取消后的 session");
+        let stored_conversation = stored_session.conversation.expect("应有会话上下文");
+        let stored_messages = stored_conversation.iter().collect::<Vec<_>>();
+        assert_eq!(
+            stored_messages
+                .iter()
+                .filter(|message| message.is_user_visible())
+                .count(),
+            1,
+            "取消上下文标记不应作为普通用户消息展示"
+        );
+        assert!(
+            stored_messages.iter().any(|message| {
+                !message.is_user_visible()
+                    && message.is_agent_visible()
+                    && message.as_concat_text().contains("上一回合已被用户停止")
+            }),
+            "取消后应写入仅 Agent 可见的上下文标记，避免下一轮继续回答已停止请求"
+        );
+    }
+
+    #[tokio::test]
+    async fn stream_message_reply_with_policy_should_drain_inline_provider_error_and_mark_turn_failed(
+    ) {
+        let (store, session) = create_test_session_store("lime-inline-provider-error");
+        let agent = Agent::new().with_session_store(store.clone());
         agent
             .update_provider(Arc::new(AuthenticationErrorProvider), &session.id)
             .await

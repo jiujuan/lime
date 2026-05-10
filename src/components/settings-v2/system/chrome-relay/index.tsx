@@ -19,6 +19,7 @@ import {
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getConfig } from "@/lib/api/appConfig";
@@ -140,19 +141,6 @@ const BACKEND_OPTIONS: BrowserBackendType[] = [
   "cdp_direct",
 ];
 
-const BACKEND_LABELS: Record<BrowserBackendType, string> = {
-  aster_compat: "Aster 协议适配",
-  lime_extension_bridge: "Lime 扩展桥接",
-  cdp_direct: "CDP 直连",
-};
-
-const BACKEND_DESCRIPTIONS: Record<BrowserBackendType, string> = {
-  aster_compat: "优先复用现有 Aster 兼容链路，适合需要兼容旧协议接入的场景。",
-  lime_extension_bridge:
-    "通过浏览器扩展回传页面信息并执行命令，适合人工观察和轻量控制。",
-  cdp_direct: "直接走 Chrome DevTools Protocol，适合实时调试与会话接管。",
-};
-
 function createPolicyKey(policy: BrowserBackendPolicy | null) {
   if (!policy) {
     return "";
@@ -230,12 +218,16 @@ function StatusPill({
   );
 }
 
-function DeferredPanelFallback({ label }: { label: string }) {
+function DeferredPanelFallback({ message }: { message: string }) {
   return (
     <div className="rounded-[20px] border border-dashed border-slate-300 bg-slate-50/70 p-4 text-sm leading-6 text-slate-500">
-      正在准备{label}...
+      {message}
     </div>
   );
+}
+
+function getRelayErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function resolveBackendTone(item?: BrowserBackendStatusItem | null) {
@@ -260,31 +252,8 @@ function getSystemConnectorStatusTone(
   return "warning" as const;
 }
 
-function getSystemConnectorStatusLabel(
-  connector: Pick<
-    SystemConnectorSnapshot,
-    "available" | "authorization_status" | "enabled"
-  >,
-) {
-  if (!connector.available) {
-    return "当前平台不支持";
-  }
-  if (connector.enabled && connector.authorization_status === "authorized") {
-    return "已启用";
-  }
-  switch (connector.authorization_status) {
-    case "authorized":
-      return "已授权";
-    case "denied":
-      return "授权被拒绝";
-    case "error":
-      return "授权异常";
-    default:
-      return "等待授权";
-  }
-}
-
 export function ChromeRelaySettings() {
+  const { t } = useTranslation("settings");
   const [activeEngine, setActiveEngine] = useState<SearchEngine>("google");
   const [activePrimaryTab, setActivePrimaryTab] =
     useState<RelayPrimaryTab>("core");
@@ -397,9 +366,13 @@ export function ChromeRelaySettings() {
         if (!silent) {
           pushMessage({
             type: "error",
-            text: `刷新连接器设置失败: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
+            text: t(
+              "settings.chromeRelay.main.message.refreshConnectorSettingsFailed",
+              {
+                defaultValue: "刷新连接器设置失败: {{message}}",
+                message: getRelayErrorMessage(error),
+              },
+            ),
           });
         }
       } finally {
@@ -408,7 +381,7 @@ export function ChromeRelaySettings() {
         }
       }
     },
-    [pushMessage],
+    [pushMessage, t],
   );
 
   const refreshConnectorInstallStatus = useCallback(
@@ -423,9 +396,13 @@ export function ChromeRelaySettings() {
         if (!silent) {
           pushMessage({
             type: "error",
-            text: `刷新浏览器连接器安装状态失败: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
+            text: t(
+              "settings.chromeRelay.main.message.refreshInstallStatusFailed",
+              {
+                defaultValue: "刷新浏览器连接器安装状态失败: {{message}}",
+                message: getRelayErrorMessage(error),
+              },
+            ),
           });
         }
       } finally {
@@ -434,7 +411,7 @@ export function ChromeRelaySettings() {
         }
       }
     },
-    [pushMessage],
+    [pushMessage, t],
   );
 
   const refreshSessions = useCallback(
@@ -449,9 +426,10 @@ export function ChromeRelaySettings() {
         if (!silent) {
           pushMessage({
             type: "error",
-            text: `刷新会话失败: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
+            text: t("settings.chromeRelay.main.message.refreshSessionsFailed", {
+              defaultValue: "刷新会话失败: {{message}}",
+              message: getRelayErrorMessage(error),
+            }),
           });
         }
       } finally {
@@ -460,7 +438,7 @@ export function ChromeRelaySettings() {
         }
       }
     },
-    [pushMessage],
+    [pushMessage, t],
   );
 
   const refreshBridgeStatus = useCallback(
@@ -479,9 +457,10 @@ export function ChromeRelaySettings() {
         if (!silent) {
           pushMessage({
             type: "error",
-            text: `刷新扩展连接状态失败: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
+            text: t("settings.chromeRelay.main.message.refreshBridgeFailed", {
+              defaultValue: "刷新扩展连接状态失败: {{message}}",
+              message: getRelayErrorMessage(error),
+            }),
           });
         }
       } finally {
@@ -490,7 +469,7 @@ export function ChromeRelaySettings() {
         }
       }
     },
-    [pushMessage],
+    [pushMessage, t],
   );
 
   const refreshBackendStatus = useCallback(
@@ -524,9 +503,10 @@ export function ChromeRelaySettings() {
         if (!silent) {
           pushMessage({
             type: "error",
-            text: `刷新浏览器后端状态失败: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
+            text: t("settings.chromeRelay.main.message.refreshBackendFailed", {
+              defaultValue: "刷新浏览器后端状态失败: {{message}}",
+              message: getRelayErrorMessage(error),
+            }),
           });
         }
       } finally {
@@ -535,7 +515,7 @@ export function ChromeRelaySettings() {
         }
       }
     },
-    [pushMessage],
+    [pushMessage, t],
   );
 
   const refreshAll = useCallback(
@@ -623,27 +603,41 @@ export function ChromeRelaySettings() {
           url: target.settingsUrl,
         });
         if (!result.success) {
-          throw new Error(result.error || "创建窗口失败");
+          throw new Error(
+            result.error ||
+              t("settings.chromeRelay.main.message.createWindowFailed", {
+                defaultValue: "创建窗口失败",
+              }),
+          );
         }
         pushMessage({
           type: "success",
           text: result.reused
-            ? `已复用 ${target.label} 会话 (PID ${result.pid ?? "-"})`
-            : `已启动 ${target.label} 会话 (PID ${result.pid ?? "-"})`,
+            ? t("settings.chromeRelay.main.message.sessionReused", {
+                defaultValue: "已复用 {{label}} 会话 (PID {{pid}})",
+                label: target.label,
+                pid: result.pid ?? "-",
+              })
+            : t("settings.chromeRelay.main.message.sessionStarted", {
+                defaultValue: "已启动 {{label}} 会话 (PID {{pid}})",
+                label: target.label,
+                pid: result.pid ?? "-",
+              }),
         });
         await refreshSessions(true);
       } catch (error) {
         pushMessage({
           type: "error",
-          text: `打开设置窗口失败: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          text: t("settings.chromeRelay.main.message.openSettingsFailed", {
+            defaultValue: "打开设置窗口失败: {{message}}",
+            message: getRelayErrorMessage(error),
+          }),
         });
       } finally {
         setOpeningEngine(null);
       }
     },
-    [pushMessage, refreshSessions],
+    [pushMessage, refreshSessions, t],
   );
 
   const closeSession = useCallback(
@@ -654,21 +648,28 @@ export function ChromeRelaySettings() {
         const closed = await closeChromeProfileSession(target.profileKey);
         pushMessage({
           type: closed ? "success" : "error",
-          text: closed ? "会话已关闭" : "未找到运行中的会话",
+          text: closed
+            ? t("settings.chromeRelay.main.message.sessionClosed", {
+                defaultValue: "会话已关闭",
+              })
+            : t("settings.chromeRelay.main.message.sessionNotFound", {
+                defaultValue: "未找到运行中的会话",
+              }),
         });
         await refreshSessions(true);
       } catch (error) {
         pushMessage({
           type: "error",
-          text: `关闭会话失败: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          text: t("settings.chromeRelay.main.message.closeSessionFailed", {
+            defaultValue: "关闭会话失败: {{message}}",
+            message: getRelayErrorMessage(error),
+          }),
         });
       } finally {
         setClosingProfileKey(null);
       }
     },
-    [pushMessage, refreshSessions],
+    [pushMessage, refreshSessions, t],
   );
 
   const handleLaunchBrowserAssist = useCallback(async () => {
@@ -683,24 +684,27 @@ export function ChromeRelaySettings() {
       setRuntimeSessionId(result.session.session_id);
       pushMessage({
         type: "success",
-        text: `浏览器协助已启动：${
-          result.session.target_title ||
-          result.session.target_url ||
-          selectedEngine.assistUrl
-        }`,
+        text: t("settings.chromeRelay.main.message.browserAssistStarted", {
+          defaultValue: "浏览器协助已启动：{{target}}",
+          target:
+            result.session.target_title ||
+            result.session.target_url ||
+            selectedEngine.assistUrl,
+        }),
       });
       await refreshAll(true);
     } catch (error) {
       pushMessage({
         type: "error",
-        text: `启动浏览器协助失败: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        text: t("settings.chromeRelay.main.message.launchAssistFailed", {
+          defaultValue: "启动浏览器协助失败: {{message}}",
+          message: getRelayErrorMessage(error),
+        }),
       });
     } finally {
       setLaunchingAssist(false);
     }
-  }, [pushMessage, refreshAll, selectedEngine]);
+  }, [pushMessage, refreshAll, selectedEngine, t]);
 
   const handleOpenDebuggerWindow = useCallback(async () => {
     try {
@@ -712,19 +716,22 @@ export function ChromeRelaySettings() {
       );
       pushMessage({
         type: "success",
-        text: "已打开独立浏览器调试窗口",
+        text: t("settings.chromeRelay.main.message.debugWindowOpened", {
+          defaultValue: "已打开独立浏览器调试窗口",
+        }),
       });
     } catch (error) {
       pushMessage({
         type: "error",
-        text: `打开独立调试窗口失败: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        text: t("settings.chromeRelay.main.message.openDebugWindowFailed", {
+          defaultValue: "打开独立调试窗口失败: {{message}}",
+          message: getRelayErrorMessage(error),
+        }),
       });
     } finally {
       setOpeningDebugger(false);
     }
-  }, [pushMessage, runtimeSessionId, selectedEngine.profileKey]);
+  }, [pushMessage, runtimeSessionId, selectedEngine.profileKey, t]);
 
   const handleOpenConnectorGuide = useCallback(
     async (mode: BrowserConnectorGuideMode) => {
@@ -735,21 +742,26 @@ export function ChromeRelaySettings() {
           type: "success",
           text:
             mode === "extension"
-              ? "已打开扩展连接引导窗口"
-              : "已打开 CDP 直连配置引导窗口",
+              ? t("settings.chromeRelay.main.message.extensionGuideOpened", {
+                  defaultValue: "已打开扩展连接引导窗口",
+                })
+              : t("settings.chromeRelay.main.message.cdpGuideOpened", {
+                  defaultValue: "已打开 CDP 直连配置引导窗口",
+                }),
         });
       } catch (error) {
         pushMessage({
           type: "error",
-          text: `打开连接器引导失败: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          text: t("settings.chromeRelay.main.message.openGuideFailed", {
+            defaultValue: "打开连接器引导失败: {{message}}",
+            message: getRelayErrorMessage(error),
+          }),
         });
       } finally {
         setOpeningGuideMode(null);
       }
     },
-    [pushMessage],
+    [pushMessage, t],
   );
 
   const handleSetConnectorEnabled = useCallback(
@@ -761,20 +773,27 @@ export function ChromeRelaySettings() {
         await refreshConnectorInstallStatus(true);
         pushMessage({
           type: "success",
-          text: checked ? "浏览器连接器已开启" : "浏览器连接器已关闭",
+          text: checked
+            ? t("settings.chromeRelay.main.message.connectorEnabled", {
+                defaultValue: "浏览器连接器已开启",
+              })
+            : t("settings.chromeRelay.main.message.connectorDisabled", {
+                defaultValue: "浏览器连接器已关闭",
+              }),
         });
       } catch (error) {
         pushMessage({
           type: "error",
-          text: `更新浏览器连接器开关失败: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          text: t("settings.chromeRelay.main.message.updateConnectorFailed", {
+            defaultValue: "更新浏览器连接器开关失败: {{message}}",
+            message: getRelayErrorMessage(error),
+          }),
         });
       } finally {
         setSavingConnectorEnabled(false);
       }
     },
-    [pushMessage, refreshConnectorInstallStatus],
+    [pushMessage, refreshConnectorInstallStatus, t],
   );
 
   const handleOpenBrowserExtensionsPage = useCallback(async () => {
@@ -784,36 +803,46 @@ export function ChromeRelaySettings() {
     } catch (error) {
       pushMessage({
         type: "error",
-        text: `打开 Chrome 扩展页面失败: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        text: t("settings.chromeRelay.main.message.openExtensionsFailed", {
+          defaultValue: "打开 Chrome 扩展页面失败: {{message}}",
+          message: getRelayErrorMessage(error),
+        }),
       });
     } finally {
       setOpeningExtensionsPage(false);
     }
-  }, [pushMessage]);
+  }, [pushMessage, t]);
 
   const copyPlainText = useCallback(
     async (text: string, label: string) => {
       try {
         if (!navigator.clipboard?.writeText) {
-          throw new Error("当前环境不支持剪贴板写入");
+          throw new Error(
+            t("settings.chromeRelay.main.message.clipboardUnsupported", {
+              defaultValue: "当前环境不支持剪贴板写入",
+            }),
+          );
         }
         await navigator.clipboard.writeText(text);
         pushMessage({
           type: "success",
-          text: `${label} 已复制到剪贴板`,
+          text: t("settings.chromeRelay.main.message.copySuccess", {
+            defaultValue: "{{label}} 已复制到剪贴板",
+            label,
+          }),
         });
       } catch (error) {
         pushMessage({
           type: "error",
-          text: `复制 ${label} 失败: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          text: t("settings.chromeRelay.main.message.copyFailed", {
+            defaultValue: "复制 {{label}} 失败: {{message}}",
+            label,
+            message: getRelayErrorMessage(error),
+          }),
         });
       }
     },
-    [pushMessage],
+    [pushMessage, t],
   );
 
   const handleOpenRemoteDebuggingPage = useCallback(async () => {
@@ -823,14 +852,15 @@ export function ChromeRelaySettings() {
     } catch (error) {
       pushMessage({
         type: "error",
-        text: `打开 Chrome 远程调试页失败: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        text: t("settings.chromeRelay.main.message.openRemoteFailed", {
+          defaultValue: "打开 Chrome 远程调试页失败: {{message}}",
+          message: getRelayErrorMessage(error),
+        }),
       });
     } finally {
       setOpeningRemoteDebuggingPage(false);
     }
-  }, [pushMessage]);
+  }, [pushMessage, t]);
 
   const handleDisconnectBrowserConnector = useCallback(async () => {
     try {
@@ -842,20 +872,28 @@ export function ChromeRelaySettings() {
         text:
           result.disconnected_observer_count > 0 ||
           result.disconnected_control_count > 0
-            ? `已断开 ${result.disconnected_observer_count} 个扩展观察连接和 ${result.disconnected_control_count} 个控制连接`
-            : "当前没有可断开的扩展连接",
+            ? t("settings.chromeRelay.main.message.connectorDisconnected", {
+                defaultValue:
+                  "已断开 {{observerCount}} 个扩展观察连接和 {{controlCount}} 个控制连接",
+                observerCount: result.disconnected_observer_count,
+                controlCount: result.disconnected_control_count,
+              })
+            : t("settings.chromeRelay.main.message.noConnectorToDisconnect", {
+                defaultValue: "当前没有可断开的扩展连接",
+              }),
       });
     } catch (error) {
       pushMessage({
         type: "error",
-        text: `断开扩展连接失败: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        text: t("settings.chromeRelay.main.message.disconnectFailed", {
+          defaultValue: "断开扩展连接失败: {{message}}",
+          message: getRelayErrorMessage(error),
+        }),
       });
     } finally {
       setDisconnectingConnector(false);
     }
-  }, [pushMessage]);
+  }, [pushMessage, t]);
 
   const handleSetSystemConnectorEnabled = useCallback(
     async (id: string, enabled: boolean) => {
@@ -872,7 +910,10 @@ export function ChromeRelaySettings() {
         if (!enabled) {
           pushMessage({
             type: "success",
-            text: `${updatedConnector.label} 已关闭`,
+            text: t("settings.chromeRelay.main.message.systemConnectorClosed", {
+              defaultValue: "{{label}} 已关闭",
+              label: updatedConnector.label,
+            }),
           });
           return;
         }
@@ -882,7 +923,13 @@ export function ChromeRelaySettings() {
         ) {
           pushMessage({
             type: "success",
-            text: `${updatedConnector.label} 已授权并启用`,
+            text: t(
+              "settings.chromeRelay.main.message.systemConnectorAuthorized",
+              {
+                defaultValue: "{{label}} 已授权并启用",
+                label: updatedConnector.label,
+              },
+            ),
           });
           return;
         }
@@ -890,20 +937,24 @@ export function ChromeRelaySettings() {
           type: "error",
           text:
             updatedConnector.last_error ||
-            `${updatedConnector.label} 当前未获得系统授权`,
+            t("settings.chromeRelay.main.message.systemConnectorUnauthorized", {
+              defaultValue: "{{label}} 当前未获得系统授权",
+              label: updatedConnector.label,
+            }),
         });
       } catch (error) {
         pushMessage({
           type: "error",
-          text: `更新系统连接器失败: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          text: t("settings.chromeRelay.main.message.updateSystemConnectorFailed", {
+            defaultValue: "更新系统连接器失败: {{message}}",
+            message: getRelayErrorMessage(error),
+          }),
         });
       } finally {
         setUpdatingSystemConnectorId(null);
       }
     },
-    [pushMessage],
+    [pushMessage, t],
   );
 
   const handleSetBrowserActionCapabilityEnabled = useCallback(
@@ -919,21 +970,41 @@ export function ChromeRelaySettings() {
         pushMessage({
           type: "success",
           text: updatedCapability
-            ? `${updatedCapability.label} 已${enabled ? "开启" : "关闭"}`
-            : `浏览器动作已${enabled ? "开启" : "关闭"}`,
+            ? t("settings.chromeRelay.main.message.actionCapabilityUpdated", {
+                defaultValue: "{{label}} 已{{state}}",
+                label: updatedCapability.label,
+                state: enabled
+                  ? t("settings.chromeRelay.main.status.enabled", {
+                      defaultValue: "开启",
+                    })
+                  : t("settings.chromeRelay.main.status.disabled", {
+                      defaultValue: "关闭",
+                    }),
+              })
+            : t("settings.chromeRelay.main.message.browserActionUpdated", {
+                defaultValue: "浏览器动作已{{state}}",
+                state: enabled
+                  ? t("settings.chromeRelay.main.status.enabled", {
+                      defaultValue: "开启",
+                    })
+                  : t("settings.chromeRelay.main.status.disabled", {
+                      defaultValue: "关闭",
+                    }),
+              }),
         });
       } catch (error) {
         pushMessage({
           type: "error",
-          text: `更新浏览器动作配置失败: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          text: t("settings.chromeRelay.main.message.updateActionFailed", {
+            defaultValue: "更新浏览器动作配置失败: {{message}}",
+            message: getRelayErrorMessage(error),
+          }),
         });
       } finally {
         setUpdatingBrowserActionCapabilityKey(null);
       }
     },
-    [pushMessage, refreshBackendStatus],
+    [pushMessage, refreshBackendStatus, t],
   );
 
   const copyBridgeConfig = useCallback(
@@ -941,14 +1012,20 @@ export function ChromeRelaySettings() {
       if (!bridgeEndpoint) {
         pushMessage({
           type: "error",
-          text: "桥接端点尚未加载，无法复制配置",
+          text: t("settings.chromeRelay.main.message.bridgeEndpointMissing", {
+            defaultValue: "桥接端点尚未加载，无法复制配置",
+          }),
         });
         return;
       }
 
       try {
         if (!navigator.clipboard?.writeText) {
-          throw new Error("当前环境不支持剪贴板写入");
+          throw new Error(
+            t("settings.chromeRelay.main.message.clipboardUnsupported", {
+              defaultValue: "当前环境不支持剪贴板写入",
+            }),
+          );
         }
         await navigator.clipboard.writeText(
           JSON.stringify(
@@ -963,18 +1040,22 @@ export function ChromeRelaySettings() {
         );
         pushMessage({
           type: "success",
-          text: `${label} 配置已复制到剪贴板`,
+          text: t("settings.chromeRelay.main.message.copyConfigSuccess", {
+            defaultValue: "{{label}} 配置已复制到剪贴板",
+            label,
+          }),
         });
       } catch (error) {
         pushMessage({
           type: "error",
-          text: `复制扩展配置失败: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          text: t("settings.chromeRelay.main.message.copyConfigFailed", {
+            defaultValue: "复制扩展配置失败: {{message}}",
+            message: getRelayErrorMessage(error),
+          }),
         });
       }
     },
-    [bridgeEndpoint, pushMessage],
+    [bridgeEndpoint, pushMessage, t],
   );
 
   const testBridgeCommand = useCallback(
@@ -982,14 +1063,18 @@ export function ChromeRelaySettings() {
       if (!bridgeEndpoint?.server_running) {
         pushMessage({
           type: "error",
-          text: "服务未运行，无法执行扩展桥接测试",
+          text: t("settings.chromeRelay.main.message.bridgeServiceNotRunning", {
+            defaultValue: "服务未运行，无法执行扩展桥接测试",
+          }),
         });
         return;
       }
       if (!hasObserverConnected) {
         pushMessage({
           type: "error",
-          text: "未检测到扩展 observer 连接，请先完成扩展接入",
+          text: t("settings.chromeRelay.main.message.bridgeObserverMissing", {
+            defaultValue: "未检测到扩展 observer 连接，请先完成扩展接入",
+          }),
         });
         return;
       }
@@ -1005,19 +1090,32 @@ export function ChromeRelaySettings() {
           timeout_ms: 45000,
         });
         if (!result.success) {
-          throw new Error(result.error || "命令执行失败");
+          throw new Error(
+            result.error ||
+              t("settings.chromeRelay.main.message.commandExecutionFailed", {
+                defaultValue: "命令执行失败",
+              }),
+          );
         }
         pushMessage({
           type: "success",
-          text: `扩展桥接测试成功：${result.page_info?.title || "已打开目标页面"}`,
+          text: t("settings.chromeRelay.main.message.bridgeTestSuccess", {
+            defaultValue: "扩展桥接测试成功：{{target}}",
+            target:
+              result.page_info?.title ||
+              t("settings.chromeRelay.main.message.bridgeTestFallback", {
+                defaultValue: "已打开目标页面",
+              }),
+          }),
         });
         await refreshBridgeStatus(true);
       } catch (error) {
         pushMessage({
           type: "error",
-          text: `扩展桥接测试失败: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          text: t("settings.chromeRelay.main.message.bridgeTestFailed", {
+            defaultValue: "扩展桥接测试失败: {{message}}",
+            message: getRelayErrorMessage(error),
+          }),
         });
       } finally {
         setTestingBridgeEngine(null);
@@ -1028,6 +1126,7 @@ export function ChromeRelaySettings() {
       hasObserverConnected,
       pushMessage,
       refreshBridgeStatus,
+      t,
     ],
   );
 
@@ -1048,6 +1147,50 @@ export function ChromeRelaySettings() {
     [],
   );
 
+  const getBackendLabel = useCallback(
+    (backend: BrowserBackendType) => {
+      switch (backend) {
+        case "aster_compat":
+          return t("settings.chromeRelay.main.backend.asterCompat.label", {
+            defaultValue: "Aster 协议适配",
+          });
+        case "lime_extension_bridge":
+          return t("settings.chromeRelay.main.backend.extensionBridge.label", {
+            defaultValue: "Lime 扩展桥接",
+          });
+        case "cdp_direct":
+          return t("settings.chromeRelay.main.backend.cdpDirect.label", {
+            defaultValue: "CDP 直连",
+          });
+      }
+    },
+    [t],
+  );
+  const getBackendDescription = useCallback(
+    (backend: BrowserBackendType) => {
+      switch (backend) {
+        case "aster_compat":
+          return t("settings.chromeRelay.main.backend.asterCompat.description", {
+            defaultValue:
+              "优先复用现有 Aster 兼容链路，适合需要兼容旧协议接入的场景。",
+          });
+        case "lime_extension_bridge":
+          return t(
+            "settings.chromeRelay.main.backend.extensionBridge.description",
+            {
+              defaultValue:
+                "通过浏览器扩展回传页面信息并执行命令，适合人工观察和轻量控制。",
+            },
+          );
+        case "cdp_direct":
+          return t("settings.chromeRelay.main.backend.cdpDirect.description", {
+            defaultValue:
+              "直接走 Chrome DevTools Protocol，适合实时调试与会话接管。",
+          });
+      }
+    },
+    [t],
+  );
   const saveBackendPolicy = useCallback(async () => {
     if (!draftBackendPolicy) {
       return;
@@ -1068,20 +1211,23 @@ export function ChromeRelaySettings() {
       setDraftBackendPolicy(finalPolicy);
       pushMessage({
         type: "success",
-        text: "浏览器后端策略已保存",
+        text: t("settings.chromeRelay.main.message.backendPolicySaved", {
+          defaultValue: "浏览器后端策略已保存",
+        }),
       });
       await refreshBackendStatus(true);
     } catch (error) {
       pushMessage({
         type: "error",
-        text: `保存后端策略失败: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        text: t("settings.chromeRelay.main.message.saveBackendPolicyFailed", {
+          defaultValue: "保存后端策略失败: {{message}}",
+          message: getRelayErrorMessage(error),
+        }),
       });
     } finally {
       setSavingBackendPolicy(false);
     }
-  }, [draftBackendPolicy, pushMessage, refreshBackendStatus]);
+  }, [draftBackendPolicy, pushMessage, refreshBackendStatus, t]);
 
   const testBackendAction = useCallback(
     async (backend: BrowserBackendType) => {
@@ -1091,9 +1237,15 @@ export function ChromeRelaySettings() {
       if (backendStatus && !backendStatus.available) {
         pushMessage({
           type: "error",
-          text: `${BACKEND_LABELS[backend]} 当前不可用: ${
-            backendStatus.reason || "缺少可用连接"
-          }`,
+          text: t("settings.chromeRelay.main.message.backendUnavailable", {
+            defaultValue: "{{label}} 当前不可用: {{reason}}",
+            label: getBackendLabel(backend),
+            reason:
+              backendStatus.reason ||
+              t("settings.chromeRelay.main.message.backendUnavailableFallback", {
+                defaultValue: "缺少可用连接",
+              }),
+          }),
         });
         return;
       }
@@ -1112,11 +1264,19 @@ export function ChromeRelaySettings() {
           timeout_ms: 45000,
         });
         if (!result.success) {
-          throw new Error(result.error || "执行失败");
+          throw new Error(
+            result.error ||
+              t("settings.chromeRelay.main.message.backendActionFailed", {
+                defaultValue: "执行失败",
+              }),
+          );
         }
         pushMessage({
           type: "success",
-          text: `${BACKEND_LABELS[backend]} 测试成功`,
+          text: t("settings.chromeRelay.main.message.backendTestSuccess", {
+            defaultValue: "{{label}} 测试成功",
+            label: getBackendLabel(backend),
+          }),
         });
         await Promise.all([
           refreshBridgeStatus(true),
@@ -1125,9 +1285,11 @@ export function ChromeRelaySettings() {
       } catch (error) {
         pushMessage({
           type: "error",
-          text: `${BACKEND_LABELS[backend]} 测试失败: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          text: t("settings.chromeRelay.main.message.backendTestFailed", {
+            defaultValue: "{{label}} 测试失败: {{message}}",
+            label: getBackendLabel(backend),
+            message: getRelayErrorMessage(error),
+          }),
         });
       } finally {
         setTestingBackend(null);
@@ -1135,10 +1297,12 @@ export function ChromeRelaySettings() {
     },
     [
       backendsStatus?.backends,
+      getBackendLabel,
       pushMessage,
       refreshBackendStatus,
       refreshBridgeStatus,
       selectedEngine,
+      t,
     ],
   );
 
@@ -1165,14 +1329,45 @@ export function ChromeRelaySettings() {
       write: items.filter((item) => item.group === "write"),
     };
   }, [browserConnectorSettings?.browser_action_capabilities]);
+  const getEngineDescription = useCallback(
+    (engine: SearchEngine) =>
+      engine === "google"
+        ? t("settings.chromeRelay.main.engine.google.description", {
+            defaultValue: "独立 Profile 用于搜索偏好、语言和地区设置。",
+          })
+        : t("settings.chromeRelay.main.engine.xiaohongshu.description", {
+            defaultValue: "独立 Profile 用于账号登录、内容浏览和扩展桥接。",
+          }),
+    [t],
+  );
+  const getEngineSettingsButtonLabel = useCallback(
+    (engine: SearchEngine) =>
+      engine === "google"
+        ? t("settings.chromeRelay.main.engine.google.settingsButton", {
+            defaultValue: "打开 Google 设置",
+          })
+        : t("settings.chromeRelay.main.engine.xiaohongshu.settingsButton", {
+            defaultValue: "打开小红书设置",
+          }),
+    [t],
+  );
   const renderProfilePanel = (keyPrefix = "") => (
     <SurfacePanel
       icon={Globe}
-      title="Profile 会话"
-      description="为搜索和桥接准备独立浏览器 Profile。每个会话都可以单独打开、关闭，并观察当前调试端口。"
+      title={t(
+        "settings.chromeRelay.main.profile.title",
+        "Profile 会话",
+      )}
+      description={t(
+        "settings.chromeRelay.main.profile.description",
+        "为搜索和桥接准备独立浏览器 Profile。每个会话都可以单独打开、关闭，并观察当前调试端口。",
+      )}
       aside={
         <StatusPill tone={selectedSession ? "success" : "neutral"}>
-          当前查看 {selectedEngine.label}
+          {t("settings.chromeRelay.main.profile.currentEngine", {
+            defaultValue: "当前查看 {{label}}",
+            label: selectedEngine.label,
+          })}
         </StatusPill>
       }
     >
@@ -1193,11 +1388,19 @@ export function ChromeRelaySettings() {
                       {target.label}
                     </p>
                     <p className="text-sm leading-6 text-slate-500">
-                      {target.description}
+                      {getEngineDescription(engine)}
                     </p>
                   </div>
                   <StatusPill tone={session ? "success" : "warning"}>
-                    {session ? "会话运行中" : "尚未启动"}
+                    {session
+                      ? t(
+                          "settings.chromeRelay.main.profile.status.running",
+                          "会话运行中",
+                        )
+                      : t(
+                          "settings.chromeRelay.main.profile.status.pending",
+                          "尚未启动",
+                        )}
                   </StatusPill>
                 </div>
 
@@ -1205,7 +1408,10 @@ export function ChromeRelaySettings() {
                   <div className="grid gap-3 text-sm text-slate-600 sm:grid-cols-2">
                     <div className="rounded-[18px] border border-slate-200/80 bg-white/90 p-3">
                       <p className="text-xs font-medium text-slate-500">
-                        进程 / 来源
+                        {t(
+                          "settings.chromeRelay.main.profile.field.processSource",
+                          "进程 / 来源",
+                        )}
                       </p>
                       <p className="mt-2 font-medium text-slate-900">
                         PID {session.pid}
@@ -1216,7 +1422,10 @@ export function ChromeRelaySettings() {
                     </div>
                     <div className="rounded-[18px] border border-slate-200/80 bg-white/90 p-3">
                       <p className="text-xs font-medium text-slate-500">
-                        调试端口
+                        {t(
+                          "settings.chromeRelay.main.profile.field.debugPort",
+                          "调试端口",
+                        )}
                       </p>
                       <p className="mt-2 font-medium text-slate-900">
                         {session.remote_debugging_port}
@@ -1227,7 +1436,10 @@ export function ChromeRelaySettings() {
                     </div>
                     <div className="rounded-[18px] border border-slate-200/80 bg-white/90 p-3 sm:col-span-2">
                       <p className="text-xs font-medium text-slate-500">
-                        最近页面
+                        {t(
+                          "settings.chromeRelay.main.profile.field.lastPage",
+                          "最近页面",
+                        )}
                       </p>
                       <p className="mt-2 break-all text-sm text-slate-700">
                         {session.last_url}
@@ -1236,7 +1448,10 @@ export function ChromeRelaySettings() {
                   </div>
                 ) : (
                   <div className="rounded-[20px] border border-dashed border-slate-200 bg-slate-50/70 p-4 text-sm leading-6 text-slate-500">
-                    当前还没有运行中的独立会话。先打开设置窗口，或直接使用上方的一键浏览器协助。
+                    {t(
+                      "settings.chromeRelay.main.profile.empty",
+                      "当前还没有运行中的独立会话。先打开设置窗口，或直接使用上方的一键浏览器协助。",
+                    )}
                   </div>
                 )}
               </div>
@@ -1250,8 +1465,8 @@ export function ChromeRelaySettings() {
                 >
                   <ExternalLink className="h-4 w-4" />
                   {openingEngine === engine
-                    ? "打开中..."
-                    : target.settingsButtonLabel}
+                    ? t("settings.chromeRelay.main.action.opening", "打开中...")
+                    : getEngineSettingsButtonLabel(engine)}
                 </button>
                 <button
                   type="button"
@@ -1260,8 +1475,11 @@ export function ChromeRelaySettings() {
                   className={SECONDARY_BUTTON_CLASS_NAME}
                 >
                   {closingProfileKey === target.profileKey
-                    ? "关闭中..."
-                    : "关闭会话"}
+                    ? t("settings.chromeRelay.main.action.closing", "关闭中...")
+                    : t(
+                        "settings.chromeRelay.main.action.closeSession",
+                        "关闭会话",
+                      )}
                 </button>
               </div>
             </div>
@@ -1274,8 +1492,14 @@ export function ChromeRelaySettings() {
   const renderBackendPanel = () => (
     <SurfacePanel
       icon={Layers3}
-      title="浏览器后端策略"
-      description="统一编排 Aster 协议适配、扩展桥接与 CDP 直连，并决定失败时是否自动回退。"
+      title={t(
+        "settings.chromeRelay.main.backendPolicy.title",
+        "浏览器后端策略",
+      )}
+      description={t(
+        "settings.chromeRelay.main.backendPolicy.description",
+        "统一编排 Aster 协议适配、扩展桥接与 CDP 直连，并决定失败时是否自动回退。",
+      )}
     >
       <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-4">
@@ -1283,10 +1507,16 @@ export function ChromeRelaySettings() {
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-slate-900">
-                  默认测试目标
+                  {t(
+                    "settings.chromeRelay.main.backendPolicy.target.title",
+                    "默认测试目标",
+                  )}
                 </p>
                 <p className="text-sm leading-6 text-slate-500">
-                  该目标会用于后端测试和一键浏览器协助，减少多处切换。
+                  {t(
+                    "settings.chromeRelay.main.backendPolicy.target.description",
+                    "该目标会用于后端测试和一键浏览器协助，减少多处切换。",
+                  )}
                 </p>
               </div>
               <select
@@ -1306,13 +1536,24 @@ export function ChromeRelaySettings() {
 
             <div className="mt-4 flex flex-col gap-3 rounded-[20px] border border-slate-200/80 bg-white/85 p-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="space-y-1">
-                <p className="text-sm font-semibold text-slate-900">自动回退</p>
+                <p className="text-sm font-semibold text-slate-900">
+                  {t(
+                    "settings.chromeRelay.main.backendPolicy.autoFallback.title",
+                    "自动回退",
+                  )}
+                </p>
                 <p className="text-sm leading-6 text-slate-500">
-                  当前后端失败时，自动切换到下一个优先级继续执行。
+                  {t(
+                    "settings.chromeRelay.main.backendPolicy.autoFallback.description",
+                    "当前后端失败时，自动切换到下一个优先级继续执行。",
+                  )}
                 </p>
               </div>
               <Switch
-                aria-label="自动回退到下一后端"
+                aria-label={t(
+                  "settings.chromeRelay.main.backendPolicy.autoFallback.aria",
+                  "自动回退到下一后端",
+                )}
                 checked={draftBackendPolicy?.auto_fallback ?? true}
                 onCheckedChange={(checked) =>
                   setDraftBackendPolicy((prev) =>
@@ -1340,10 +1581,16 @@ export function ChromeRelaySettings() {
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                     <div className="space-y-2">
                       <p className="text-sm font-semibold text-slate-900">
-                        {`优先级 ${index + 1}`}
+                        {t(
+                          "settings.chromeRelay.main.backendPolicy.priority.label",
+                          {
+                            defaultValue: "优先级 {{index}}",
+                            index: index + 1,
+                          },
+                        )}
                       </p>
                       <p className="text-sm leading-6 text-slate-500">
-                        {BACKEND_DESCRIPTIONS[selectedBackend]}
+                        {getBackendDescription(selectedBackend)}
                       </p>
                     </div>
 
@@ -1363,7 +1610,7 @@ export function ChromeRelaySettings() {
                             key={`backend-option-${index}-${option}`}
                             value={option}
                           >
-                            {BACKEND_LABELS[option]}
+                            {getBackendLabel(option)}
                           </option>
                         ))}
                       </select>
@@ -1374,8 +1621,14 @@ export function ChromeRelaySettings() {
                         className={SECONDARY_BUTTON_CLASS_NAME}
                       >
                         {testingBackend === selectedBackend
-                          ? "测试中..."
-                          : "测试"}
+                          ? t(
+                              "settings.chromeRelay.main.backendPolicy.action.testing",
+                              "测试中...",
+                            )
+                          : t(
+                              "settings.chromeRelay.main.backendPolicy.action.test",
+                              "测试",
+                            )}
                       </button>
                     </div>
                   </div>
@@ -1387,9 +1640,17 @@ export function ChromeRelaySettings() {
 
         <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/70 p-4">
           <div className="space-y-1">
-            <p className="text-sm font-semibold text-slate-900">当前可用性</p>
+            <p className="text-sm font-semibold text-slate-900">
+              {t(
+                "settings.chromeRelay.main.backendPolicy.availability.title",
+                "当前可用性",
+              )}
+            </p>
             <p className="text-sm leading-6 text-slate-500">
-              后端状态来自运行时即时快照，用于判断当前是否具备可执行链路。
+              {t(
+                "settings.chromeRelay.main.backendPolicy.availability.description",
+                "后端状态来自运行时即时快照，用于判断当前是否具备可执行链路。",
+              )}
             </p>
           </div>
 
@@ -1401,20 +1662,38 @@ export function ChromeRelaySettings() {
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-sm font-semibold text-slate-900">
-                    {BACKEND_LABELS[item.backend]}
+                    {getBackendLabel(item.backend)}
                   </p>
                   <StatusPill tone={resolveBackendTone(item)}>
-                    {item.available ? "可用" : item.reason || "待检查"}
+                    {item.available
+                      ? t(
+                          "settings.chromeRelay.main.backendPolicy.availability.status.available",
+                          "可用",
+                        )
+                      : item.reason ||
+                        t(
+                          "settings.chromeRelay.main.backendPolicy.availability.status.pendingCheck",
+                          "待检查",
+                        )}
                   </StatusPill>
                 </div>
                 <p className="mt-2 text-sm leading-6 text-slate-500">
-                  {item.reason || BACKEND_DESCRIPTIONS[item.backend]}
+                  {item.reason || getBackendDescription(item.backend)}
                 </p>
                 <p className="mt-2 text-xs leading-5 text-slate-500">
-                  能力:{" "}
-                  {item.capabilities.length > 0
-                    ? item.capabilities.join(" / ")
-                    : "等待运行时返回"}
+                  {t(
+                    "settings.chromeRelay.main.backendPolicy.availability.capabilities",
+                    {
+                      defaultValue: "能力: {{capabilities}}",
+                      capabilities:
+                        item.capabilities.length > 0
+                          ? item.capabilities.join(" / ")
+                          : t(
+                              "settings.chromeRelay.main.backendPolicy.availability.capabilitiesPending",
+                              "等待运行时返回",
+                            ),
+                    },
+                  )}
                 </p>
               </div>
             ))}
@@ -1422,14 +1701,36 @@ export function ChromeRelaySettings() {
 
           <div className="mt-4 rounded-[20px] border border-slate-200/80 bg-white/90 p-4 text-sm leading-6 text-slate-600">
             <p>
-              Aster native-host:{" "}
+              {t(
+                "settings.chromeRelay.main.backendPolicy.nativeHost.configuredLabel",
+                "Aster native-host",
+              )}
+              :{" "}
               {backendsStatus?.aster_native_host_configured
-                ? "已配置"
-                : "未配置"}
+                ? t(
+                    "settings.chromeRelay.main.backendPolicy.nativeHost.configured",
+                    "已配置",
+                  )
+                : t(
+                    "settings.chromeRelay.main.backendPolicy.nativeHost.unconfigured",
+                    "未配置",
+                  )}
             </p>
             <p>
-              平台支持:{" "}
-              {backendsStatus?.aster_native_host_supported ? "是" : "否"}
+              {t(
+                "settings.chromeRelay.main.backendPolicy.nativeHost.platformSupportedLabel",
+                "平台支持",
+              )}
+              :{" "}
+              {backendsStatus?.aster_native_host_supported
+                ? t(
+                    "settings.chromeRelay.main.backendPolicy.nativeHost.yes",
+                    "是",
+                  )
+                : t(
+                    "settings.chromeRelay.main.backendPolicy.nativeHost.no",
+                    "否",
+                  )}
             </p>
           </div>
 
@@ -1440,7 +1741,15 @@ export function ChromeRelaySettings() {
               disabled={!hasBackendPolicyChanges || savingBackendPolicy}
               className={PRIMARY_BUTTON_CLASS_NAME}
             >
-              {savingBackendPolicy ? "保存中..." : "保存后端策略"}
+              {savingBackendPolicy
+                ? t(
+                    "settings.chromeRelay.main.backendPolicy.action.saving",
+                    "保存中...",
+                  )
+                : t(
+                    "settings.chromeRelay.main.backendPolicy.action.save",
+                    "保存后端策略",
+                  )}
             </button>
             <button
               type="button"
@@ -1454,7 +1763,10 @@ export function ChromeRelaySettings() {
                   refreshingBackends ? "animate-spin" : "",
                 )}
               />
-              刷新后端状态
+              {t(
+                "settings.chromeRelay.main.backendPolicy.action.refresh",
+                "刷新后端状态",
+              )}
             </button>
           </div>
         </div>
@@ -1465,13 +1777,27 @@ export function ChromeRelaySettings() {
   const renderBridgePanel = () => (
     <SurfacePanel
       icon={Sparkles}
-      title="Chrome 扩展桥接"
-      description="该桥接负责让浏览器扩展回传页面信息并接收控制命令，适合在独立 Profile 中补充观察与辅助执行。"
+      title={t(
+        "settings.chromeRelay.main.bridge.title",
+        "Chrome 扩展桥接",
+      )}
+      description={t(
+        "settings.chromeRelay.main.bridge.description",
+        "该桥接负责让浏览器扩展回传页面信息并接收控制命令，适合在独立 Profile 中补充观察与辅助执行。",
+      )}
       aside={
         <StatusPill
           tone={bridgeEndpoint?.server_running ? "success" : "warning"}
         >
-          {bridgeEndpoint?.server_running ? "桥接服务运行中" : "桥接服务未运行"}
+          {bridgeEndpoint?.server_running
+            ? t(
+                "settings.chromeRelay.main.bridge.status.serviceRunning",
+                "桥接服务运行中",
+              )
+            : t(
+                "settings.chromeRelay.main.bridge.status.serviceStopped",
+                "桥接服务未运行",
+              )}
         </StatusPill>
       }
     >
@@ -1491,16 +1817,31 @@ export function ChromeRelaySettings() {
                 : "border-amber-200 bg-amber-50 text-amber-700",
             )}
           >
-            {hasObserverConnected ? "扩展已接入 observer" : "待接入 observer"}
+            {hasObserverConnected
+              ? t(
+                  "settings.chromeRelay.main.bridge.status.observerConnected",
+                  "扩展已接入 observer",
+                )
+              : t(
+                  "settings.chromeRelay.main.bridge.status.observerPending",
+                  "待接入 observer",
+                )}
           </span>
         </div>
 
         <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/70 p-4">
           <div className="space-y-1">
-            <p className="text-sm font-semibold text-slate-900">扩展接入信息</p>
+            <p className="text-sm font-semibold text-slate-900">
+              {t(
+                "settings.chromeRelay.main.bridge.access.title",
+                "扩展接入信息",
+              )}
+            </p>
             <p className="text-sm leading-6 text-slate-500">
-              在目标 Chrome Profile 的扩展弹窗里填写以下 WebSocket 端点与 Bridge
-              Key。
+              {t(
+                "settings.chromeRelay.main.bridge.access.description",
+                "在目标 Chrome Profile 的扩展弹窗里填写以下 WebSocket 端点与 Bridge Key。",
+              )}
             </p>
           </div>
 
@@ -1532,14 +1873,20 @@ export function ChromeRelaySettings() {
                     className={SECONDARY_BUTTON_CLASS_NAME}
                   >
                     <Copy className="h-4 w-4" />
-                    {`复制 ${ENGINE_DEFINITIONS[engine].label} 配置`}
+                    {t("settings.chromeRelay.main.bridge.action.copyConfig", {
+                      defaultValue: "复制 {{label}} 配置",
+                      label: ENGINE_DEFINITIONS[engine].label,
+                    })}
                   </button>
                 ))}
               </div>
             </div>
           ) : (
             <div className="mt-4 rounded-[20px] border border-dashed border-slate-200 bg-white/70 p-4 text-sm leading-6 text-slate-500">
-              尚未获取到桥接端点信息，请先刷新状态或确认后端服务已经启动。
+              {t(
+                "settings.chromeRelay.main.bridge.endpointMissing",
+                "尚未获取到桥接端点信息，请先刷新状态或确认后端服务已经启动。",
+              )}
             </div>
           )}
         </div>
@@ -1556,16 +1903,30 @@ export function ChromeRelaySettings() {
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-sm font-semibold text-slate-900">
-                    {ENGINE_DEFINITIONS[engine].label} observer
+                    {t("settings.chromeRelay.main.bridge.observer.title", {
+                      defaultValue: "{{label}} observer",
+                      label: ENGINE_DEFINITIONS[engine].label,
+                    })}
                   </p>
                   <StatusPill tone={observer ? "success" : "warning"}>
-                    {observer ? observer.client_id : "未连接"}
+                    {observer
+                      ? observer.client_id
+                      : t(
+                          "settings.chromeRelay.main.bridge.observer.notConnected",
+                          "未连接",
+                        )}
                   </StatusPill>
                 </div>
                 <p className="mt-2 text-sm leading-6 text-slate-500">
                   {observer?.last_page_info?.title
-                    ? `最近页面：${observer.last_page_info.title}`
-                    : "尚未收到最近页面信息"}
+                    ? t("settings.chromeRelay.main.bridge.observer.lastPage", {
+                        defaultValue: "最近页面：{{title}}",
+                        title: observer.last_page_info.title,
+                      })
+                    : t(
+                        "settings.chromeRelay.main.bridge.observer.noLastPage",
+                        "尚未收到最近页面信息",
+                      )}
                 </p>
               </div>
             );
@@ -1574,8 +1935,10 @@ export function ChromeRelaySettings() {
 
         {!hasObserverConnected ? (
           <div className="rounded-[20px] border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm leading-6 text-amber-800">
-            未检测到扩展 observer 连接。请在对应 Chrome Profile 安装并打开 Lime
-            Browser Bridge 扩展，然后填入上面的 Observer WS 与 Bridge Key。
+            {t(
+              "settings.chromeRelay.main.bridge.observerMissingHint",
+              "未检测到扩展 observer 连接。请在对应 Chrome Profile 安装并打开 Lime Browser Bridge 扩展，然后填入上面的 Observer WS 与 Bridge Key。",
+            )}
           </div>
         ) : null}
 
@@ -1589,8 +1952,14 @@ export function ChromeRelaySettings() {
               className={SECONDARY_BUTTON_CLASS_NAME}
             >
               {testingBridgeEngine === engine
-                ? "测试中..."
-                : `测试 ${ENGINE_DEFINITIONS[engine].label} 扩展`}
+                ? t(
+                    "settings.chromeRelay.main.bridge.action.testing",
+                    "测试中...",
+                  )
+                : t("settings.chromeRelay.main.bridge.action.testExtension", {
+                    defaultValue: "测试 {{label}} 扩展",
+                    label: ENGINE_DEFINITIONS[engine].label,
+                  })}
             </button>
           ))}
           <button
@@ -1602,7 +1971,10 @@ export function ChromeRelaySettings() {
             <RefreshCw
               className={cn("h-4 w-4", refreshingBridge ? "animate-spin" : "")}
             />
-            刷新扩展状态
+            {t(
+              "settings.chromeRelay.main.bridge.action.refreshStatus",
+              "刷新扩展状态",
+            )}
           </button>
         </div>
       </div>
@@ -1620,24 +1992,38 @@ export function ChromeRelaySettings() {
     return (
       <SurfacePanel
         icon={Layers3}
-        title="浏览器动作配置"
-        description="按读取和写入分组管理浏览器动作能力。关闭后不再分发到浏览器。"
+        title={t(
+          "settings.chromeRelay.main.browserAction.title",
+          "浏览器动作配置",
+        )}
+        description={t(
+          "settings.chromeRelay.main.browserAction.description",
+          "按读取和写入分组管理浏览器动作能力。关闭后不再分发到浏览器。",
+        )}
       >
         <div className="grid gap-4 lg:grid-cols-2">
           {[
             {
-              title: "读取权限",
+              id: "read",
+              title: t(
+                "settings.chromeRelay.main.browserAction.group.read",
+                "读取权限",
+              ),
               items: browserActionCapabilityGroups.read,
             },
             {
-              title: "写入权限",
+              id: "write",
+              title: t(
+                "settings.chromeRelay.main.browserAction.group.write",
+                "写入权限",
+              ),
               items: browserActionCapabilityGroups.write,
             },
           ]
             .filter((section) => section.items.length > 0)
             .map((section) => (
               <div
-                key={section.title}
+                key={section.id}
                 className="rounded-[20px] border border-slate-200 bg-slate-50 p-3"
               >
                 <p className="text-xs font-semibold tracking-[0.12em] text-slate-500">
@@ -1656,7 +2042,13 @@ export function ChromeRelaySettings() {
                           </p>
                         </div>
                         <Switch
-                          aria-label={`切换${capability.label}`}
+                          aria-label={t(
+                            "settings.chromeRelay.main.browserAction.toggleAria",
+                            {
+                              defaultValue: "切换{{label}}",
+                              label: capability.label,
+                            },
+                          )}
                           checked={capability.enabled}
                           disabled={
                             updatingBrowserActionCapabilityKey ===
@@ -1683,68 +2075,122 @@ export function ChromeRelaySettings() {
   const renderOverviewPanel = () => (
     <SurfacePanel
       icon={Sparkles}
-      title="当前概览"
-      description="把最常用的观察点和入口压缩在一屏内，详情再进入对应页签查看。"
+      title={t("settings.chromeRelay.main.overview.title", "当前概览")}
+      description={t(
+        "settings.chromeRelay.main.overview.description",
+        "把最常用的观察点和入口压缩在一屏内，详情再进入对应页签查看。",
+      )}
     >
       <div className="grid gap-3 md:grid-cols-2">
         <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-slate-900">
-                Profile 会话
+                {t(
+                  "settings.chromeRelay.main.overview.profile.title",
+                  "Profile 会话",
+                )}
               </p>
               <p className="mt-1 text-xs leading-5 text-slate-500">
-                当前目标 {selectedEngine.label}
-                ，可快速检查独立浏览器是否已启动。
+                {t("settings.chromeRelay.main.overview.profile.description", {
+                  defaultValue:
+                    "当前目标 {{label}}，可快速检查独立浏览器是否已启动。",
+                  label: selectedEngine.label,
+                })}
               </p>
             </div>
             <StatusPill tone={selectedSession ? "success" : "warning"}>
-              {selectedSession ? "已启动" : "未启动"}
+              {selectedSession
+                ? t(
+                    "settings.chromeRelay.main.overview.profile.started",
+                    "已启动",
+                  )
+                : t(
+                    "settings.chromeRelay.main.overview.profile.pending",
+                    "未启动",
+                  )}
             </StatusPill>
           </div>
           <p className="mt-3 text-sm leading-6 text-slate-500">
-            运行中的独立 Profile 数量：{runtimeSummary.runningProfiles}
+            {t("settings.chromeRelay.main.overview.profile.runningCount", {
+              defaultValue: "运行中的独立 Profile 数量：{{count}}",
+              count: runtimeSummary.runningProfiles,
+            })}
           </p>
           <button
             type="button"
             onClick={() => setActiveSectionTab("profile")}
             className={cn(SECONDARY_BUTTON_CLASS_NAME, "mt-4")}
           >
-            查看 Profile 详情
+            {t(
+              "settings.chromeRelay.main.overview.action.viewProfile",
+              "查看 Profile 详情",
+            )}
           </button>
         </div>
 
         <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold text-slate-900">扩展桥接</p>
+              <p className="text-sm font-semibold text-slate-900">
+                {t(
+                  "settings.chromeRelay.main.overview.bridge.title",
+                  "扩展桥接",
+                )}
+              </p>
               <p className="mt-1 text-xs leading-5 text-slate-500">
-                observer / control 连接情况决定扩展侧链路是否可用。
+                {t(
+                  "settings.chromeRelay.main.overview.bridge.description",
+                  "observer / control 连接情况决定扩展侧链路是否可用。",
+                )}
               </p>
             </div>
             <StatusPill tone={hasObserverConnected ? "success" : "warning"}>
-              {hasObserverConnected ? "已连通" : "待接入"}
+              {hasObserverConnected
+                ? t(
+                    "settings.chromeRelay.main.overview.bridge.connected",
+                    "已连通",
+                  )
+                : t(
+                    "settings.chromeRelay.main.overview.bridge.pending",
+                    "待接入",
+                  )}
             </StatusPill>
           </div>
           <p className="mt-3 text-sm leading-6 text-slate-500">
-            observer / control 当前连接数：
-            {runtimeSummary.observerCount}/{runtimeSummary.controlCount}
+            {t("settings.chromeRelay.main.overview.bridge.connectionCount", {
+              defaultValue:
+                "observer / control 当前连接数：{{observerCount}}/{{controlCount}}",
+              observerCount: runtimeSummary.observerCount,
+              controlCount: runtimeSummary.controlCount,
+            })}
           </p>
           <button
             type="button"
             onClick={() => setActiveSectionTab("bridge")}
             className={cn(SECONDARY_BUTTON_CLASS_NAME, "mt-4")}
           >
-            查看桥接详情
+            {t(
+              "settings.chromeRelay.main.overview.action.viewBridge",
+              "查看桥接详情",
+            )}
           </button>
         </div>
 
         <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold text-slate-900">后端策略</p>
+              <p className="text-sm font-semibold text-slate-900">
+                {t(
+                  "settings.chromeRelay.main.overview.backend.title",
+                  "后端策略",
+                )}
+              </p>
               <p className="mt-1 text-xs leading-5 text-slate-500">
-                默认优先级与自动回退开关决定动作链路如何降级。
+                {t(
+                  "settings.chromeRelay.main.overview.backend.description",
+                  "默认优先级与自动回退开关决定动作链路如何降级。",
+                )}
               </p>
             </div>
             <StatusPill
@@ -1755,48 +2201,82 @@ export function ChromeRelaySettings() {
               }
             >
               {(draftBackendPolicy?.auto_fallback ?? true)
-                ? "自动回退开"
-                : "自动回退关"}
+                ? t(
+                    "settings.chromeRelay.main.overview.backend.fallbackOn",
+                    "自动回退开",
+                  )
+                : t(
+                    "settings.chromeRelay.main.overview.backend.fallbackOff",
+                    "自动回退关",
+                  )}
             </StatusPill>
           </div>
           <p className="mt-3 text-sm font-medium leading-6 text-slate-900">
             {(draftBackendPolicy?.priority ?? BACKEND_OPTIONS)
-              .map((backend) => BACKEND_LABELS[backend])
+              .map((backend) => getBackendLabel(backend))
               .join(" / ")}
           </p>
           <p className="mt-1 text-xs leading-5 text-slate-500">
-            当前优先级顺序
+            {t(
+              "settings.chromeRelay.main.overview.backend.priorityLabel",
+              "当前优先级顺序",
+            )}
           </p>
           <button
             type="button"
             onClick={() => setActiveSectionTab("backend")}
             className={cn(SECONDARY_BUTTON_CLASS_NAME, "mt-4")}
           >
-            查看后端详情
+            {t(
+              "settings.chromeRelay.main.overview.action.viewBackend",
+              "查看后端详情",
+            )}
           </button>
         </div>
 
         <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold text-slate-900">实时调试</p>
+              <p className="text-sm font-semibold text-slate-900">
+                {t(
+                  "settings.chromeRelay.main.overview.debug.title",
+                  "实时调试",
+                )}
+              </p>
               <p className="mt-1 text-xs leading-5 text-slate-500">
-                需要观察页面、接管输入或排查事件流时再进入调试页签。
+                {t(
+                  "settings.chromeRelay.main.overview.debug.description",
+                  "需要观察页面、接管输入或排查事件流时再进入调试页签。",
+                )}
               </p>
             </div>
             <StatusPill tone={runtimeSessionId ? "success" : "neutral"}>
-              {runtimeSessionId ? "已有会话" : "按需进入"}
+              {runtimeSessionId
+                ? t(
+                    "settings.chromeRelay.main.overview.debug.hasSession",
+                    "已有会话",
+                  )
+                : t(
+                    "settings.chromeRelay.main.overview.debug.onDemand",
+                    "按需进入",
+                  )}
             </StatusPill>
           </div>
           <p className="mt-3 text-sm leading-6 text-slate-500">
-            当前可复用的 CDP 会话：{runtimeSummary.cdpAliveProfiles}
+            {t("settings.chromeRelay.main.overview.debug.reusableCount", {
+              defaultValue: "当前可复用的 CDP 会话：{{count}}",
+              count: runtimeSummary.cdpAliveProfiles,
+            })}
           </p>
           <button
             type="button"
             onClick={() => setActiveSectionTab("debug")}
             className={cn(SECONDARY_BUTTON_CLASS_NAME, "mt-4")}
           >
-            打开实时调试
+            {t(
+              "settings.chromeRelay.main.overview.action.openDebug",
+              "打开实时调试",
+            )}
           </button>
         </div>
       </div>
@@ -1806,35 +2286,53 @@ export function ChromeRelaySettings() {
   const renderUsagePanel = () => (
     <SurfacePanel
       icon={Sparkles}
-      title="使用建议"
-      description="按这个顺序处理，页面状态会更稳定，也更容易复用到浏览器协助和实时调试。"
+      title={t("settings.chromeRelay.main.usage.title", "使用建议")}
+      description={t(
+        "settings.chromeRelay.main.usage.description",
+        "按这个顺序处理，页面状态会更稳定，也更容易复用到浏览器协助和实时调试。",
+      )}
     >
       <div className="space-y-3">
         <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/70 p-4">
           <p className="text-sm font-semibold text-slate-900">
-            1. 先准备独立 Profile
+            {t(
+              "settings.chromeRelay.main.usage.step1.title",
+              "1. 先准备独立 Profile",
+            )}
           </p>
           <p className="mt-2 text-sm leading-6 text-slate-500">
-            先为 Google
-            或小红书打开独立设置窗口，确认账号、语言与内容偏好已经稳定。
+            {t(
+              "settings.chromeRelay.main.usage.step1.description",
+              "先为 Google 或小红书打开独立设置窗口，确认账号、语言与内容偏好已经稳定。",
+            )}
           </p>
         </div>
         <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/70 p-4">
           <p className="text-sm font-semibold text-slate-900">
-            2. 再接通扩展桥接
+            {t(
+              "settings.chromeRelay.main.usage.step2.title",
+              "2. 再接通扩展桥接",
+            )}
           </p>
           <p className="mt-2 text-sm leading-6 text-slate-500">
-            observer
-            连上以后，扩展才会持续回传页面信息。这样排查桥接链路会更直观。
+            {t(
+              "settings.chromeRelay.main.usage.step2.description",
+              "observer 连上以后，扩展才会持续回传页面信息。这样排查桥接链路会更直观。",
+            )}
           </p>
         </div>
         <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/70 p-4">
           <p className="text-sm font-semibold text-slate-900">
-            3. 需要人工介入时再开调试窗口
+            {t(
+              "settings.chromeRelay.main.usage.step3.title",
+              "3. 需要人工介入时再开调试窗口",
+            )}
           </p>
           <p className="mt-2 text-sm leading-6 text-slate-500">
-            顶部的独立调试窗口和底部实时调试面板都能复用当前目标 Profile，
-            适合需要观察页面变化或临时接管输入的时刻。
+            {t(
+              "settings.chromeRelay.main.usage.step3.description",
+              "顶部的独立调试窗口和底部实时调试面板都能复用当前目标 Profile，适合需要观察页面变化或临时接管输入的时刻。",
+            )}
           </p>
         </div>
       </div>
@@ -1844,10 +2342,22 @@ export function ChromeRelaySettings() {
   const renderDebugPanel = () => (
     <SurfacePanel
       icon={Bug}
-      title="浏览器实时调试"
-      description="底部直接复用浏览器实时会话面板。适合观察事件流、查看画面并在必要时接管当前页面。"
+      title={t("settings.chromeRelay.main.debug.title", "浏览器实时调试")}
+      description={t(
+        "settings.chromeRelay.main.debug.description",
+        "底部直接复用浏览器实时会话面板。适合观察事件流、查看画面并在必要时接管当前页面。",
+      )}
     >
-      <Suspense fallback={<DeferredPanelFallback label="浏览器实时调试" />}>
+      <Suspense
+        fallback={
+          <DeferredPanelFallback
+            message={t(
+              "settings.chromeRelay.main.debug.loading",
+              "正在准备浏览器实时调试...",
+            )}
+          />
+        }
+      >
         <div className="min-w-0 overflow-x-auto">
           <BrowserRuntimeDebugPanel
             sessions={sessions}
@@ -1872,12 +2382,20 @@ export function ChromeRelaySettings() {
         : "neutral";
   const connectorInstallStatusLabel =
     browserConnectorInstallStatus?.status === "installed"
-      ? "已安装"
+      ? t("settings.chromeRelay.main.installStatus.installed", {
+          defaultValue: "已安装",
+        })
       : browserConnectorInstallStatus?.status === "update_available"
-        ? "可更新"
+        ? t("settings.chromeRelay.main.installStatus.updateAvailable", {
+            defaultValue: "可更新",
+          })
         : browserConnectorInstallStatus?.status === "broken"
-          ? "安装异常"
-          : "未安装";
+          ? t("settings.chromeRelay.main.installStatus.broken", {
+              defaultValue: "安装异常",
+            })
+          : t("settings.chromeRelay.main.installStatus.notInstalled", {
+              defaultValue: "未安装",
+            });
   const connectorEnabled = browserConnectorSettings?.enabled ?? true;
   const hasControlConnected = runtimeSummary.controlCount > 0;
   const hasCdpDirectAvailable = runtimeSummary.cdpAliveProfiles > 0;
@@ -1890,8 +2408,56 @@ export function ChromeRelaySettings() {
     (item) => item.enabled,
   ).length;
   const systemConnectorTitle = /mac/i.test(window.navigator.platform)
-    ? "macOS 连接器"
-    : "系统连接器";
+    ? t("settings.chromeRelay.main.systemConnector.macTitle", {
+        defaultValue: "macOS 连接器",
+      })
+    : t("settings.chromeRelay.main.systemConnector.genericTitle", {
+        defaultValue: "系统连接器",
+      });
+  const getSystemConnectorStatusLabel = useCallback(
+    (
+      connector: Pick<
+        SystemConnectorSnapshot,
+        "available" | "authorization_status" | "enabled"
+      >,
+    ) => {
+      if (!connector.available) {
+        return t(
+          "settings.chromeRelay.main.systemConnector.status.unsupportedPlatform",
+          {
+            defaultValue: "当前平台不支持",
+          },
+        );
+      }
+      if (connector.enabled && connector.authorization_status === "authorized") {
+        return t("settings.chromeRelay.main.systemConnector.status.enabled", {
+          defaultValue: "已启用",
+        });
+      }
+      switch (connector.authorization_status) {
+        case "authorized":
+          return t(
+            "settings.chromeRelay.main.systemConnector.status.authorized",
+            {
+              defaultValue: "已授权",
+            },
+          );
+        case "denied":
+          return t("settings.chromeRelay.main.systemConnector.status.denied", {
+            defaultValue: "授权被拒绝",
+          });
+        case "error":
+          return t("settings.chromeRelay.main.systemConnector.status.error", {
+            defaultValue: "授权异常",
+          });
+        default:
+          return t("settings.chromeRelay.main.systemConnector.status.pending", {
+            defaultValue: "等待授权",
+          });
+      }
+    },
+    [t],
+  );
   const getSectionTabClassName = (tab: RelaySectionTab) =>
     cn(
       SECTION_TAB_TRIGGER_CLASS_NAME,
@@ -1949,7 +2515,7 @@ export function ChromeRelaySettings() {
             onClick={() => setMessage(null)}
             className="rounded-full border border-current/20 bg-white px-3 py-1.5 text-xs font-medium transition hover:bg-white/90"
           >
-            关闭
+            {t("settings.chromeRelay.main.action.closeMessage", "关闭")}
           </button>
         </div>
       ) : null}
@@ -1964,25 +2530,38 @@ export function ChromeRelaySettings() {
             <>
               <section className="mx-auto w-full max-w-[640px] space-y-6">
                 <div className="text-center text-sm font-medium text-muted-foreground">
-                  浏览器
+                  {t("settings.chromeRelay.main.core.eyebrow", "浏览器")}
                 </div>
 
                 <div className="rounded-[18px] border border-border bg-card px-4 py-3 text-card-foreground shadow-sm shadow-slate-950/5">
                   <p className="text-xs font-medium text-muted-foreground">
-                    系统环境
+                    {t(
+                      "settings.chromeRelay.main.core.systemEnvironment.title",
+                      "系统环境",
+                    )}
                   </p>
                   <div className="mt-3 flex flex-wrap items-center gap-4 text-sm">
                     <span className="font-semibold text-foreground">
                       {window.navigator.platform.toLowerCase().includes("mac")
                         ? "macOS"
-                        : window.navigator.platform || "当前系统"}
+                        : window.navigator.platform ||
+                          t(
+                            "settings.chromeRelay.main.core.systemEnvironment.currentSystem",
+                            "当前系统",
+                          )}
                     </span>
                     <span className="h-4 w-px bg-border" />
                     <span className="text-muted-foreground">
-                      系统架构{" "}
+                      {t(
+                        "settings.chromeRelay.main.core.systemEnvironment.archLabel",
+                        "系统架构",
+                      )}{" "}
                       {window.navigator.platform.includes("arm")
                         ? "arm64"
-                        : "当前架构"}
+                        : t(
+                            "settings.chromeRelay.main.core.systemEnvironment.currentArch",
+                            "当前架构",
+                          )}
                     </span>
                   </div>
                 </div>
@@ -1990,7 +2569,10 @@ export function ChromeRelaySettings() {
                 <section className="rounded-[22px] bg-card p-5 text-card-foreground shadow-sm shadow-slate-950/5">
                   <div className="flex items-center justify-between gap-3">
                     <h2 className="text-base font-semibold text-foreground">
-                      浏览器列表
+                      {t(
+                        "settings.chromeRelay.main.core.browserList.title",
+                        "浏览器列表",
+                      )}
                     </h2>
                     <button
                       type="button"
@@ -2016,7 +2598,10 @@ export function ChromeRelaySettings() {
                             : "",
                         )}
                       />
-                      重新扫描
+                      {t(
+                        "settings.chromeRelay.main.action.rescan",
+                        "重新扫描",
+                      )}
                     </button>
                   </div>
 
@@ -2031,18 +2616,31 @@ export function ChromeRelaySettings() {
                             <h3 className="text-sm font-semibold text-foreground">
                               Google Chrome
                             </h3>
-                            <StatusPill tone="success">使用中</StatusPill>
+                            <StatusPill tone="success">
+                              {t(
+                                "settings.chromeRelay.main.core.browserList.inUse",
+                                "使用中",
+                              )}
+                            </StatusPill>
                           </div>
                           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                             <StatusPill tone="neutral">M144+</StatusPill>
-                            <span>当前 Chrome</span>
+                            <span>
+                              {t(
+                                "settings.chromeRelay.main.core.browserList.currentChrome",
+                                "当前 Chrome",
+                              )}
+                            </span>
                             <span>Chromium</span>
                           </div>
                         </div>
                       </div>
                       <button
                         type="button"
-                        aria-label="开启浏览器连接器"
+                        aria-label={t(
+                          "settings.chromeRelay.main.core.browserList.toggleConnectorAria",
+                          "开启浏览器连接器",
+                        )}
                         onClick={() =>
                           void handleSetConnectorEnabled(!connectorEnabled)
                         }
@@ -2054,7 +2652,10 @@ export function ChromeRelaySettings() {
                     </div>
 
                     <p className="mt-4 pl-[52px] text-xs leading-5 text-muted-foreground">
-                      功能最完整 — 支持扩展中继和 CDP 直连两种方式。
+                      {t(
+                        "settings.chromeRelay.main.core.chrome.description",
+                        "功能最完整 — 支持扩展中继和 CDP 直连两种方式。",
+                      )}
                     </p>
 
                     <div className="mt-4 space-y-3 pl-[52px]">
@@ -2063,12 +2664,23 @@ export function ChromeRelaySettings() {
                           <div className="min-w-0 space-y-1">
                             <div className="flex flex-wrap items-center gap-2">
                               <p className="text-sm font-semibold text-foreground">
-                                通过扩展连接
+                                {t(
+                                  "settings.chromeRelay.main.core.extension.title",
+                                  "通过扩展连接",
+                                )}
                               </p>
-                              <StatusPill tone="success">推荐</StatusPill>
+                              <StatusPill tone="success">
+                                {t(
+                                  "settings.chromeRelay.main.status.recommended",
+                                  "推荐",
+                                )}
+                              </StatusPill>
                             </div>
                             <p className="text-xs leading-5 text-muted-foreground">
-                              通过浏览器扩展连接，适用于所有 Chromium 浏览器。
+                              {t(
+                                "settings.chromeRelay.main.core.extension.description",
+                                "通过浏览器扩展连接，适用于所有 Chromium 浏览器。",
+                              )}
                             </p>
                           </div>
                           <button
@@ -2080,8 +2692,14 @@ export function ChromeRelaySettings() {
                             className={SECONDARY_BUTTON_CLASS_NAME}
                           >
                             {openingGuideMode === "extension"
-                              ? "打开中..."
-                              : "连接引导"}
+                              ? t(
+                                  "settings.chromeRelay.main.action.opening",
+                                  "打开中...",
+                                )
+                              : t(
+                                  "settings.chromeRelay.main.action.connectionGuide",
+                                  "连接引导",
+                                )}
                           </button>
                         </div>
                         <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
@@ -2102,13 +2720,18 @@ export function ChromeRelaySettings() {
                           <div className="min-w-0 space-y-1">
                             <div className="flex flex-wrap items-center gap-2">
                               <p className="text-sm font-semibold text-foreground">
-                                CDP 直连
+                                {t(
+                                  "settings.chromeRelay.main.core.cdp.title",
+                                  "CDP 直连",
+                                )}
                               </p>
                               <StatusPill tone="neutral">Beta</StatusPill>
                             </div>
                             <p className="text-xs leading-5 text-muted-foreground">
-                              通过 Chrome DevTools Protocol 直连，推荐 Chrome
-                              M144+。
+                              {t(
+                                "settings.chromeRelay.main.core.cdp.description",
+                                "通过 Chrome DevTools Protocol 直连，推荐 Chrome M144+。",
+                              )}
                             </p>
                           </div>
                           <button
@@ -2118,14 +2741,23 @@ export function ChromeRelaySettings() {
                             className={SECONDARY_BUTTON_CLASS_NAME}
                           >
                             {openingGuideMode === "cdp"
-                              ? "打开中..."
-                              : "配置引导"}
+                              ? t(
+                                  "settings.chromeRelay.main.action.opening",
+                                  "打开中...",
+                                )
+                              : t(
+                                  "settings.chromeRelay.main.action.configGuide",
+                                  "配置引导",
+                                )}
                           </button>
                         </div>
                         <div className="mt-3 space-y-2 text-xs text-muted-foreground">
                           <p className="flex items-center gap-2">
                             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                            Chrome M144+，版本符合要求
+                            {t(
+                              "settings.chromeRelay.main.core.cdp.versionOk",
+                              "Chrome M144+，版本符合要求",
+                            )}
                           </p>
                           <p className="flex items-center gap-2">
                             <span
@@ -2137,8 +2769,14 @@ export function ChromeRelaySettings() {
                               )}
                             />
                             {hasCdpDirectAvailable
-                              ? "已通过 Chrome 连接"
-                              : "等待 Chrome 连接"}
+                              ? t(
+                                  "settings.chromeRelay.main.core.cdp.connected",
+                                  "已通过 Chrome 连接",
+                                )
+                              : t(
+                                  "settings.chromeRelay.main.core.cdp.waiting",
+                                  "等待 Chrome 连接",
+                                )}
                           </p>
                           <p className="flex flex-wrap items-center gap-2">
                             <span
@@ -2149,7 +2787,19 @@ export function ChromeRelaySettings() {
                                   : "bg-amber-500",
                               )}
                             />
-                            调试会话{runtimeSessionId ? "已连接" : "未连接"}
+                            {t(
+                              "settings.chromeRelay.main.core.cdp.debugSessionPrefix",
+                              "调试会话",
+                            )}
+                            {runtimeSessionId
+                              ? t(
+                                  "settings.chromeRelay.main.core.cdp.debugConnected",
+                                  "已连接",
+                                )
+                              : t(
+                                  "settings.chromeRelay.main.core.cdp.debugDisconnected",
+                                  "未连接",
+                                )}
                             {!runtimeSessionId ? (
                               <button
                                 type="button"
@@ -2157,7 +2807,15 @@ export function ChromeRelaySettings() {
                                 disabled={launchingAssist}
                                 className="rounded-md bg-sky-500 px-2 py-1 text-[11px] font-semibold text-white transition hover:bg-sky-600 disabled:opacity-50"
                               >
-                                {launchingAssist ? "请求中..." : "发送连接请求"}
+                                {launchingAssist
+                                  ? t(
+                                      "settings.chromeRelay.main.action.requesting",
+                                      "请求中...",
+                                    )
+                                  : t(
+                                      "settings.chromeRelay.main.action.requestConnection",
+                                      "发送连接请求",
+                                    )}
                               </button>
                             ) : null}
                           </p>
@@ -2175,11 +2833,22 @@ export function ChromeRelaySettings() {
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="text-sm font-semibold text-muted-foreground">
-                              内置 Chromium
+                              {t(
+                                "settings.chromeRelay.main.core.builtinChromium.title",
+                                "内置 Chromium",
+                              )}
                             </p>
-                            <StatusPill tone="neutral">未安装</StatusPill>
                             <StatusPill tone="neutral">
-                              尚未支持，敬请期待
+                              {t(
+                                "settings.chromeRelay.main.installStatus.notInstalled",
+                                "未安装",
+                              )}
+                            </StatusPill>
+                            <StatusPill tone="neutral">
+                              {t(
+                                "settings.chromeRelay.main.status.comingSoon",
+                                "尚未支持，敬请期待",
+                              )}
                             </StatusPill>
                           </div>
                           <p className="text-xs text-muted-foreground">
@@ -2199,7 +2868,12 @@ export function ChromeRelaySettings() {
                             <p className="text-sm font-semibold text-muted-foreground">
                               Safari
                             </p>
-                            <StatusPill tone="neutral">不支持</StatusPill>
+                            <StatusPill tone="neutral">
+                              {t(
+                                "settings.chromeRelay.main.status.unsupported",
+                                "不支持",
+                              )}
+                            </StatusPill>
                           </div>
                           <p className="text-xs text-muted-foreground">
                             WebKit
@@ -2210,7 +2884,10 @@ export function ChromeRelaySettings() {
                   </div>
 
                   <p className="mt-4 text-xs text-muted-foreground">
-                    目前仅支持 Google Chrome，其他浏览器支持即将推出。
+                    {t(
+                      "settings.chromeRelay.main.core.onlyChrome",
+                      "目前仅支持 Google Chrome，其他浏览器支持即将推出。",
+                    )}
                   </p>
                 </section>
 
@@ -2219,11 +2896,16 @@ export function ChromeRelaySettings() {
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <h3 className="text-sm font-semibold text-foreground">
-                          高级工具
+                          {t(
+                            "settings.chromeRelay.main.core.advanced.title",
+                            "高级工具",
+                          )}
                         </h3>
                         <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                          Profile
-                          会话、动作配置、后端策略和实时调试集中放在这里。
+                          {t(
+                            "settings.chromeRelay.main.core.advanced.description",
+                            "Profile 会话、动作配置、后端策略和实时调试集中放在这里。",
+                          )}
                         </p>
                       </div>
                       <button
@@ -2231,7 +2913,10 @@ export function ChromeRelaySettings() {
                         onClick={() => setActivePrimaryTab("advanced")}
                         className={SECONDARY_BUTTON_CLASS_NAME}
                       >
-                        打开高级工具
+                        {t(
+                          "settings.chromeRelay.main.action.openAdvancedTools",
+                          "打开高级工具",
+                        )}
                       </button>
                     </div>
                   </div>
@@ -2250,7 +2935,10 @@ export function ChromeRelaySettings() {
                   onClick={() => setActivePrimaryTab("core")}
                   className={SECONDARY_BUTTON_CLASS_NAME}
                 >
-                  返回浏览器列表
+                  {t(
+                    "settings.chromeRelay.main.action.backToBrowserList",
+                    "返回浏览器列表",
+                  )}
                 </button>
               </div>
               <section
@@ -2264,10 +2952,16 @@ export function ChromeRelaySettings() {
                 <article className="rounded-[26px] border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-950/5 sm:p-6">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <h3 className="text-lg font-semibold text-slate-900">
-                      连接方式
+                      {t(
+                        "settings.chromeRelay.main.connectionMethod.title",
+                        "连接方式",
+                      )}
                     </h3>
                     <p className="text-xs leading-5 text-slate-500">
-                      常用优先扩展，调试再用 CDP。
+                      {t(
+                        "settings.chromeRelay.main.connectionMethod.description",
+                        "常用优先扩展，调试再用 CDP。",
+                      )}
                     </p>
                   </div>
 
@@ -2276,10 +2970,16 @@ export function ChromeRelaySettings() {
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
                           <p className="text-sm font-semibold text-slate-900">
-                            浏览器扩展
+                            {t(
+                              "settings.chromeRelay.main.connectionMethod.extension.title",
+                              "浏览器扩展",
+                            )}
                           </p>
                           <p className="mt-1 text-xs leading-5 text-slate-500">
-                            安装一次，长期自动连接。
+                            {t(
+                              "settings.chromeRelay.main.connectionMethod.extension.description",
+                              "安装一次，长期自动连接。",
+                            )}
                           </p>
                         </div>
                         <StatusPill
@@ -2290,12 +2990,21 @@ export function ChromeRelaySettings() {
                           }
                         >
                           {hasObserverConnected && hasControlConnected
-                            ? "推荐"
-                            : "待完成"}
+                            ? t(
+                                "settings.chromeRelay.main.connectionMethod.extension.status.recommended",
+                                "推荐",
+                              )
+                            : t(
+                                "settings.chromeRelay.main.connectionMethod.extension.status.pending",
+                                "待完成",
+                              )}
                         </StatusPill>
                       </div>
                       <p className="mt-4 text-sm leading-6 text-slate-600">
-                        安装步骤已移入独立引导窗口；这里保留快捷入口和调试操作。
+                        {t(
+                          "settings.chromeRelay.main.connectionMethod.extension.body",
+                          "安装步骤已移入独立引导窗口；这里保留快捷入口和调试操作。",
+                        )}
                       </p>
                       <div className="mt-4 flex flex-wrap items-center gap-2">
                         <button
@@ -2308,8 +3017,14 @@ export function ChromeRelaySettings() {
                         >
                           <Link2 className="h-4 w-4" />
                           {openingGuideMode === "extension"
-                            ? "打开中..."
-                            : "连接引导"}
+                            ? t(
+                                "settings.chromeRelay.main.action.opening",
+                                "打开中...",
+                              )
+                            : t(
+                                "settings.chromeRelay.main.action.connectionGuide",
+                                "连接引导",
+                              )}
                         </button>
                         <button
                           type="button"
@@ -2318,7 +3033,15 @@ export function ChromeRelaySettings() {
                           className={SECONDARY_BUTTON_CLASS_NAME}
                         >
                           <Link2 className="h-4 w-4" />
-                          {openingExtensionsPage ? "打开中..." : "打开扩展页"}
+                          {openingExtensionsPage
+                            ? t(
+                                "settings.chromeRelay.main.action.opening",
+                                "打开中...",
+                              )
+                            : t(
+                                "settings.chromeRelay.main.connectionMethod.extension.action.openExtensions",
+                                "打开扩展页",
+                              )}
                         </button>
                         <button
                           type="button"
@@ -2331,7 +3054,10 @@ export function ChromeRelaySettings() {
                           className={SECONDARY_BUTTON_CLASS_NAME}
                         >
                           <Copy className="h-4 w-4" />
-                          复制扩展页地址
+                          {t(
+                            "settings.chromeRelay.main.connectionMethod.extension.action.copyExtensionsUrl",
+                            "复制扩展页地址",
+                          )}
                         </button>
                       </div>
                     </div>
@@ -2340,20 +3066,37 @@ export function ChromeRelaySettings() {
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
                           <p className="text-sm font-semibold text-slate-900">
-                            CDP 直连
+                            {t(
+                              "settings.chromeRelay.main.connectionMethod.cdp.title",
+                              "CDP 直连",
+                            )}
                           </p>
                           <p className="mt-1 text-xs leading-5 text-slate-500">
-                            零扩展，适合临时调试和人工接管。
+                            {t(
+                              "settings.chromeRelay.main.connectionMethod.cdp.description",
+                              "零扩展，适合临时调试和人工接管。",
+                            )}
                           </p>
                         </div>
                         <StatusPill
                           tone={hasCdpDirectAvailable ? "success" : "warning"}
                         >
-                          {hasCdpDirectAvailable ? "已就绪" : "待接入"}
+                          {hasCdpDirectAvailable
+                            ? t(
+                                "settings.chromeRelay.main.connectionMethod.cdp.status.ready",
+                                "已就绪",
+                              )
+                            : t(
+                                "settings.chromeRelay.main.connectionMethod.cdp.status.pending",
+                                "待接入",
+                              )}
                         </StatusPill>
                       </div>
                       <p className="mt-4 text-sm leading-6 text-slate-600">
-                        直连步骤已移入独立引导窗口；这里保留远程调试快捷入口。
+                        {t(
+                          "settings.chromeRelay.main.connectionMethod.cdp.body",
+                          "直连步骤已移入独立引导窗口；这里保留远程调试快捷入口。",
+                        )}
                       </p>
                       <div className="mt-4 flex flex-wrap items-center gap-2">
                         <button
@@ -2364,8 +3107,14 @@ export function ChromeRelaySettings() {
                         >
                           <ExternalLink className="h-4 w-4" />
                           {openingGuideMode === "cdp"
-                            ? "打开中..."
-                            : "配置引导"}
+                            ? t(
+                                "settings.chromeRelay.main.action.opening",
+                                "打开中...",
+                              )
+                            : t(
+                                "settings.chromeRelay.main.action.configGuide",
+                                "配置引导",
+                              )}
                         </button>
                         <button
                           type="button"
@@ -2375,8 +3124,14 @@ export function ChromeRelaySettings() {
                         >
                           <ExternalLink className="h-4 w-4" />
                           {openingRemoteDebuggingPage
-                            ? "打开中..."
-                            : "打开远程调试页"}
+                            ? t(
+                                "settings.chromeRelay.main.action.opening",
+                                "打开中...",
+                              )
+                            : t(
+                                "settings.chromeRelay.main.connectionMethod.cdp.action.openRemoteDebugging",
+                                "打开远程调试页",
+                              )}
                         </button>
                         <button
                           type="button"
@@ -2389,7 +3144,10 @@ export function ChromeRelaySettings() {
                           className={SECONDARY_BUTTON_CLASS_NAME}
                         >
                           <Copy className="h-4 w-4" />
-                          复制远程调试地址
+                          {t(
+                            "settings.chromeRelay.main.connectionMethod.cdp.action.copyRemoteDebuggingUrl",
+                            "复制远程调试地址",
+                          )}
                         </button>
                       </div>
                     </div>
@@ -2399,13 +3157,22 @@ export function ChromeRelaySettings() {
                     <button
                       type="button"
                       onClick={() =>
-                        void copyBridgeConfig("default", "默认浏览器连接器")
+                        void copyBridgeConfig(
+                          "default",
+                          t(
+                            "settings.chromeRelay.main.connectionMethod.defaultConnectorLabel",
+                            "默认浏览器连接器",
+                          ),
+                        )
                       }
                       disabled={!bridgeEndpoint}
                       className={SECONDARY_BUTTON_CLASS_NAME}
                     >
                       <Copy className="h-4 w-4" />
-                      复制配置
+                      {t(
+                        "settings.chromeRelay.main.action.copyConfig",
+                        "复制配置",
+                      )}
                     </button>
                     <button
                       type="button"
@@ -2413,7 +3180,15 @@ export function ChromeRelaySettings() {
                       disabled={!hasObserverConnected || disconnectingConnector}
                       className={SECONDARY_BUTTON_CLASS_NAME}
                     >
-                      {disconnectingConnector ? "断开中..." : "断开已连接扩展"}
+                      {disconnectingConnector
+                        ? t(
+                            "settings.chromeRelay.main.action.disconnecting",
+                            "断开中...",
+                          )
+                        : t(
+                            "settings.chromeRelay.main.action.disconnectConnectedExtension",
+                            "断开已连接扩展",
+                          )}
                     </button>
                   </div>
                 </article>
@@ -2426,12 +3201,21 @@ export function ChromeRelaySettings() {
                           {systemConnectorTitle}
                         </h3>
                         <p className="text-sm leading-6 text-slate-500">
-                          按需开启系统能力，把授权和系统访问集中放在这里。
+                          {t(
+                            "settings.chromeRelay.main.systemConnector.description",
+                            "按需开启系统能力，把授权和系统访问集中放在这里。",
+                          )}
                         </p>
                       </div>
                       <span className="text-sm font-medium text-slate-500">
-                        {enabledSystemConnectorCount} / {systemConnectorCount}{" "}
-                        已启用
+                        {t(
+                          "settings.chromeRelay.main.systemConnector.enabledCount",
+                          {
+                            defaultValue: "{{enabled}} / {{count}} 已启用",
+                            enabled: enabledSystemConnectorCount,
+                            count: systemConnectorCount,
+                          },
+                        )}
                       </span>
                     </div>
 
@@ -2457,7 +3241,14 @@ export function ChromeRelaySettings() {
                             </p>
                             {connector.capabilities.length > 0 ? (
                               <p className="text-xs leading-5 text-slate-500">
-                                能力：{connector.capabilities.join(" / ")}
+                                {t(
+                                  "settings.chromeRelay.main.systemConnector.capabilities",
+                                  {
+                                    defaultValue: "能力：{{capabilities}}",
+                                    capabilities:
+                                      connector.capabilities.join(" / "),
+                                  },
+                                )}
                               </p>
                             ) : null}
                             {connector.last_error ? (
@@ -2467,7 +3258,13 @@ export function ChromeRelaySettings() {
                             ) : null}
                           </div>
                           <Switch
-                            aria-label={`切换${connector.label}`}
+                            aria-label={t(
+                              "settings.chromeRelay.main.systemConnector.toggleAria",
+                              {
+                                defaultValue: "切换{{label}}",
+                                label: connector.label,
+                              },
+                            )}
                             checked={connector.enabled}
                             disabled={
                               !connector.available ||
@@ -2493,10 +3290,16 @@ export function ChromeRelaySettings() {
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div className="space-y-1">
                     <h3 className="text-lg font-semibold text-slate-900">
-                      高级控制
+                      {t(
+                        "settings.chromeRelay.main.advancedControl.title",
+                        "高级控制",
+                      )}
                     </h3>
                     <p className="text-sm leading-6 text-slate-500">
-                      这里集中放 Profile 会话、扩展桥接、后端策略和实时调试。
+                      {t(
+                        "settings.chromeRelay.main.advancedControl.description",
+                        "这里集中放 Profile 会话、扩展桥接、后端策略和实时调试。",
+                      )}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -2507,7 +3310,15 @@ export function ChromeRelaySettings() {
                       className={PRIMARY_BUTTON_CLASS_NAME}
                     >
                       <ExternalLink className="h-4 w-4" />
-                      {launchingAssist ? "启动中..." : "一键启动浏览器协助"}
+                      {launchingAssist
+                        ? t(
+                            "settings.chromeRelay.main.action.launching",
+                            "启动中...",
+                          )
+                        : t(
+                            "settings.chromeRelay.main.action.launchBrowserAssist",
+                            "一键启动浏览器协助",
+                          )}
                     </button>
                     <button
                       type="button"
@@ -2516,7 +3327,12 @@ export function ChromeRelaySettings() {
                       className={SECONDARY_BUTTON_CLASS_NAME}
                     >
                       <Bug className="h-4 w-4" />
-                      {openingDebugger ? "打开中..." : "打开独立调试窗口"}
+                      {openingDebugger
+                        ? t("settings.chromeRelay.main.action.opening", "打开中...")
+                        : t(
+                            "settings.chromeRelay.main.action.openStandaloneDebugger",
+                            "打开独立调试窗口",
+                          )}
                     </button>
                     <button
                       type="button"
@@ -2542,7 +3358,10 @@ export function ChromeRelaySettings() {
                             : "",
                         )}
                       />
-                      刷新状态
+                      {t(
+                        "settings.chromeRelay.main.action.refreshStatus",
+                        "刷新状态",
+                      )}
                     </button>
                   </div>
                 </div>
@@ -2562,7 +3381,10 @@ export function ChromeRelaySettings() {
                       >
                         {renderSectionTabLabel(
                           "overview",
-                          "总览",
+                          t(
+                            "settings.chromeRelay.main.tab.overview",
+                            "总览",
+                          ),
                           Sparkles,
                           runtimeSummary.pendingCommands,
                         )}
@@ -2584,7 +3406,7 @@ export function ChromeRelaySettings() {
                       >
                         {renderSectionTabLabel(
                           "bridge",
-                          "桥接",
+                          t("settings.chromeRelay.main.tab.bridge", "桥接"),
                           Copy,
                           runtimeSummary.observerCount,
                         )}
@@ -2595,7 +3417,7 @@ export function ChromeRelaySettings() {
                       >
                         {renderSectionTabLabel(
                           "backend",
-                          "后端",
+                          t("settings.chromeRelay.main.tab.backend", "后端"),
                           Layers3,
                           availableBackendCount,
                         )}
@@ -2606,7 +3428,7 @@ export function ChromeRelaySettings() {
                       >
                         {renderSectionTabLabel(
                           "debug",
-                          "调试",
+                          t("settings.chromeRelay.main.tab.debug", "调试"),
                           Bug,
                           runtimeSummary.cdpAliveProfiles,
                         )}

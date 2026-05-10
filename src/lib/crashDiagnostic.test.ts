@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as logsApi from "@/lib/api/logs";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import {
   buildCrashDiagnosticPayload,
   buildCrashDiagnosticFileName,
@@ -35,6 +36,14 @@ const payload = {
   },
   frontend_crash_logs: [],
 };
+
+beforeEach(async () => {
+  await changeLimeLocale("zh-CN");
+});
+
+afterEach(async () => {
+  await changeLimeLocale("zh-CN");
+});
 
 describe("copyCrashDiagnosticToClipboard", () => {
   afterEach(() => {
@@ -143,6 +152,17 @@ describe("diagnostic clipboard text", () => {
     expect(text).toContain("你的任务");
     expect(text).toContain("诊断数据（JSON）");
     expect(text).toContain('"platform": "MacIntel"');
+  });
+
+  it("切换英文后应输出本地化诊断正文", async () => {
+    await changeLimeLocale("en-US");
+
+    const text = buildCrashDiagnosticClipboardText(payload);
+
+    expect(text).toContain("Lime Diagnostic Request");
+    expect(text).toContain("Automatic Summary");
+    expect(text).toContain("Version: 0.76.0");
+    expect(text).toContain("Diagnostic Data (JSON)");
   });
 });
 

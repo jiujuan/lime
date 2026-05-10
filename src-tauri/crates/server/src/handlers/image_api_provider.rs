@@ -1895,7 +1895,8 @@ mod tests {
         });
 
         let client = Client::builder()
-            .timeout(Duration::from_millis(250))
+            .no_proxy()
+            .timeout(Duration::from_secs(2))
             .build()
             .expect("build client");
         let result = request_fal_queue_images_with_options(
@@ -1911,8 +1912,14 @@ mod tests {
         .await;
 
         let error = result.expect_err("queue timeout should fail");
-        assert!(error.contains("Fal 队列任务超过"));
-        assert!(error.contains("IN_QUEUE"));
+        assert!(
+            error.contains("Fal 队列任务超过"),
+            "unexpected queue timeout error: {error}"
+        );
+        assert!(
+            error.contains("IN_QUEUE"),
+            "unexpected queue status error: {error}"
+        );
 
         server.abort();
     }

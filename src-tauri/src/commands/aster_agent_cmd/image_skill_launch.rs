@@ -16,10 +16,18 @@ const IMAGE_SKILL_LAUNCH_DETOUR_DENY_PATTERNS: &[&str] = &[
     "Bash",
     "Read",
     "read",
+    "Write",
+    "write",
+    "Edit",
+    "edit",
     "Glob",
     "glob",
     "Grep",
     "grep",
+    "mcp__lime-browser__*",
+    "browser_*",
+    "mcp__playwright__*",
+    "playwright*",
 ];
 
 fn extract_object_string(
@@ -351,6 +359,9 @@ pub(crate) fn prune_image_skill_launch_detour_tools_from_registry(
     for tool_name in IMAGE_SKILL_LAUNCH_DETOUR_DENY_PATTERNS {
         registry.unregister(tool_name);
     }
+    for tool in get_chrome_mcp_tools() {
+        registry.unregister(&format!("mcp__lime-browser__{}", tool.name));
+    }
 }
 
 fn build_image_skill_launch_system_prompt(
@@ -427,7 +438,7 @@ fn build_image_skill_launch_system_prompt(
         ),
         "- 当前回合已经显式知道要走图片技能主链，不要为了确认技能名、工具名或命令名再去调用 ToolSearch。".to_string(),
         "- 当前主会话第一刀必须先调用 Skill(image_generate)，但这不等于任务已经创建。".to_string(),
-        "- 在 Skill(image_generate) 真正执行前，不要先走 ToolSearch / WebSearch / Bash / Read / Glob / Grep 等通用工具发现、检索或读文件链路。".to_string(),
+        "- 在 Skill(image_generate) 真正执行前，不要先走 ToolSearch / WebSearch / Bash / Read / Write / Edit / Glob / Grep / 浏览器 MCP / Playwright 等通用工具发现、检索、脚本、文件或页面链路。".to_string(),
         "- 不要搜索 “Skill image_generate”、“lime media image generate --json”、“lime_create_image_generation_task” 之类目录信息；当前 image_task 已经提供了足够上下文。".to_string(),
         "- 如果某个通用搜索/读文件工具因为 session policy 被拒绝，不要重复同类调用；应立即改为直调 Skill(image_generate)。".to_string(),
         "- 如果 Skill(image_generate) 返回的 Lime 工具元数据里只有 allowed_tools=[\"lime_create_image_generation_task\"]，而没有 task_id/path/status，说明任务尚未创建；当前主会话必须立刻继续调用 lime_create_image_generation_task。".to_string(),

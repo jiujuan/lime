@@ -77,6 +77,7 @@ describe("teamWorkspaceBoardPresentationSelectors", () => {
     expect(classNames.boardShellClassName).toContain("bg-white");
     expect(classNames.boardShellClassName).toContain("custom-shell");
     expect(classNames.boardHeaderClassName).toContain("sticky top-0");
+    expect(classNames.boardHeaderClassName).toContain("z-40");
     expect(classNames.canvasStageHeight).toBe("clamp(560px, 76vh, 980px)");
     expect(classNames.detailCardClassName).toContain("rounded-[20px]");
     expect(classNames.railCardClassName).toContain("space-y-3");

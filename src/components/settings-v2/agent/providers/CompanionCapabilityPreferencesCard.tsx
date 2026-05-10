@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Bot, CheckCircle2, Volume2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   apiKeyProviderApi,
   type ProviderWithKeysDisplay,
@@ -23,6 +24,12 @@ const CARD_CLASS_NAME =
 const DEFAULT_MEDIA_PREFERENCE: MediaGenerationPreference = {
   allowFallback: true,
 };
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message.trim()
+    ? error.message
+    : fallback;
+}
 
 function PreferenceMessage(props: {
   tone: "success" | "error";
@@ -91,6 +98,7 @@ function normalizeProviderSelection(value?: string | null): string {
 }
 
 export function CompanionCapabilityPreferencesCard() {
+  const { t } = useTranslation("settings");
   const [config, setConfig] = useState<Config | null>(null);
   const [providers, setProviders] = useState<ProviderWithKeysDisplay[]>([]);
   const [configLoading, setConfigLoading] = useState(true);
@@ -140,7 +148,16 @@ export function CompanionCapabilityPreferencesCard() {
         if (!cancelled) {
           showMessage(
             "error",
-            `读取桌宠偏好失败：${error instanceof Error ? error.message : "未知错误"}`,
+            t("settings.providers.companion.preference.message.loadFailed", {
+              error: getErrorMessage(
+                error,
+                t(
+                  "settings.providers.companion.preference.message.unknownError",
+                  "未知错误",
+                ),
+              ),
+              defaultValue: "读取桌宠偏好失败：{{error}}",
+            }),
           );
         }
       } finally {
@@ -165,7 +182,19 @@ export function CompanionCapabilityPreferencesCard() {
         if (!cancelled) {
           showMessage(
             "error",
-            `读取桌宠可用服务失败：${error instanceof Error ? error.message : "未知错误"}`,
+            t(
+              "settings.providers.companion.preference.message.providersFailed",
+              {
+                error: getErrorMessage(
+                  error,
+                  t(
+                    "settings.providers.companion.preference.message.unknownError",
+                    "未知错误",
+                  ),
+                ),
+                defaultValue: "读取桌宠可用服务失败：{{error}}",
+              },
+            ),
           );
         }
       } finally {
@@ -186,7 +215,7 @@ export function CompanionCapabilityPreferencesCard() {
       cancelled = true;
       unsubscribeProviderData();
     };
-  }, []);
+  }, [t]);
 
   const showMessage = (tone: "success" | "error", text: string) => {
     if (messageTimerRef.current !== null) {
@@ -210,11 +239,26 @@ export function CompanionCapabilityPreferencesCard() {
       await saveConfig(nextConfig);
       setConfig(nextConfig);
       setGeneralPreference(nextPreference);
-      showMessage("success", "桌宠能力偏好已保存");
+      showMessage(
+        "success",
+        t(
+          "settings.providers.companion.preference.message.saved",
+          "桌宠能力偏好已保存",
+        ),
+      );
     } catch (error) {
       showMessage(
         "error",
-        `保存桌宠偏好失败：${error instanceof Error ? error.message : "未知错误"}`,
+        t("settings.providers.companion.preference.message.saveFailed", {
+          error: getErrorMessage(
+            error,
+            t(
+              "settings.providers.companion.preference.message.unknownError",
+              "未知错误",
+            ),
+          ),
+          defaultValue: "保存桌宠偏好失败：{{error}}",
+        }),
       );
     } finally {
       setSaving(false);
@@ -246,7 +290,10 @@ export function CompanionCapabilityPreferencesCard() {
 
   const generalProviderUnavailableLabel =
     generalPreference.preferredProviderId && !selectedGeneralProvider
-      ? `当前配置不可用：${generalPreference.preferredProviderId}`
+      ? t("settings.providers.companion.preference.warning.unavailable", {
+          provider: generalPreference.preferredProviderId,
+          defaultValue: "当前配置不可用：{{provider}}",
+        })
       : undefined;
 
   const handleGeneralProviderChange = (value: string) => {
@@ -276,21 +323,32 @@ export function CompanionCapabilityPreferencesCard() {
             </div>
             <div className="space-y-2">
               <h3 className="text-lg font-semibold text-slate-900">
-                桌宠能力偏好
+                {t(
+                  "settings.providers.companion.preference.title",
+                  "桌宠能力偏好",
+                )}
               </h3>
               <p className="text-sm leading-6 text-slate-600">
-                用与聊天页相同的模型选择器，为 Lime
-                青柠精灵单独指定当前已接入主链的通用模型。
-                本地、自管云端与品牌云端继续复用同一套筛选口径。
+                {t(
+                  "settings.providers.companion.preference.description",
+                  "用与聊天页相同的模型选择器，为 Lime 青柠精灵单独指定当前已接入主链的通用模型。本地、自管云端与品牌云端继续复用同一套筛选口径。",
+                )}
               </p>
             </div>
           </div>
         </div>
         <div className="rounded-[18px] border border-slate-200/80 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-600">
-          <p className="font-medium text-slate-800">当前主链</p>
+          <p className="font-medium text-slate-800">
+            {t(
+              "settings.providers.companion.preference.currentChain.title",
+              "当前主链",
+            )}
+          </p>
           <p>
-            当前只暴露已接入双击鼓励、三击下一步建议等 quick action
-            的通用模型设置。
+            {t(
+              "settings.providers.companion.preference.currentChain.description",
+              "当前只暴露已接入双击鼓励、三击下一步建议等 quick action 的通用模型设置。",
+            )}
           </p>
         </div>
       </div>
@@ -303,10 +361,22 @@ export function CompanionCapabilityPreferencesCard() {
 
       <div className="mt-5">
         <MediaPreferenceSection
-          title="桌宠通用模型"
-          description="用于双击鼓励、三击下一步建议等桌宠动作。留空时会先跟随最近当前 provider/model，再回退自动可用服务。"
-          selectorLabel="默认模型"
-          selectorDescription="统一复用聊天页同款模型选择器，只展示当前桌宠 quick action 真正可消费的 Provider。"
+          title={t(
+            "settings.providers.companion.preference.general.title",
+            "桌宠通用模型",
+          )}
+          description={t(
+            "settings.providers.companion.preference.general.description",
+            "用于双击鼓励、三击下一步建议等桌宠动作。留空时会先跟随最近当前 provider/model，再回退自动可用服务。",
+          )}
+          selectorLabel={t(
+            "settings.providers.companion.preference.general.selector.label",
+            "默认模型",
+          )}
+          selectorDescription={t(
+            "settings.providers.companion.preference.general.selector.description",
+            "统一复用聊天页同款模型选择器，只展示当前桌宠 quick action 真正可消费的 Provider。",
+          )}
           selectionWarningText={generalProviderUnavailableLabel}
           activeTheme="general"
           providerType={generalPreference.preferredProviderId ?? ""}
@@ -331,19 +401,40 @@ export function CompanionCapabilityPreferencesCard() {
               allowFallback: value,
             })
           }
-          fallbackTitle="桌宠通用模型不可用时自动回退"
-          fallbackDescription="关闭后，若桌宠专用 Provider 缺失、被禁用或没有可用 Key，将直接提示错误，不再回退当前 provider 或自动可用服务。"
-          emptyStateTitle="暂无可用桌宠通用模型"
+          fallbackTitle={t(
+            "settings.providers.companion.preference.general.fallback.title",
+            "桌宠通用模型不可用时自动回退",
+          )}
+          fallbackDescription={t(
+            "settings.providers.companion.preference.general.fallback.description",
+            "关闭后，若桌宠专用 Provider 缺失、被禁用或没有可用 Key，将直接提示错误，不再回退当前 provider 或自动可用服务。",
+          )}
+          emptyStateTitle={t(
+            "settings.providers.companion.preference.general.empty.title",
+            "暂无可用桌宠通用模型",
+          )}
           emptyStateDescription={
             providersLoading
-              ? "正在加载桌宠可聊天服务..."
+              ? t(
+                  "settings.providers.companion.preference.general.empty.loading",
+                  "正在加载桌宠可聊天服务...",
+                )
               : generalProviders.length === 0
-                ? "暂无可聊天 Provider，请先到服务商设置里配置至少一个可用聊天服务。"
-                : "留空时会先跟随当前对话的 provider/model，再回退自动选择可用服务。"
+                ? t(
+                    "settings.providers.companion.preference.general.empty.noProvider",
+                    "暂无可聊天 Provider，请先到服务商设置里配置至少一个可用聊天服务。",
+                  )
+                : t(
+                    "settings.providers.companion.preference.general.empty.ready",
+                    "留空时会先跟随当前对话的 provider/model，再回退自动选择可用服务。",
+                  )
           }
           disabled={!config || configLoading || saving}
           onReset={() => void savePreference(DEFAULT_MEDIA_PREFERENCE)}
-          resetLabel="恢复通用默认"
+          resetLabel={t(
+            "settings.providers.companion.preference.general.action.reset",
+            "恢复通用默认",
+          )}
           resetDisabled={
             !hasMediaGenerationPreferenceOverride(generalPreference)
           }
@@ -353,11 +444,18 @@ export function CompanionCapabilityPreferencesCard() {
       <div className="mt-5 rounded-[18px] border border-slate-200/80 bg-slate-50 px-4 py-4 text-xs leading-6 text-slate-600">
         <div className="flex items-center gap-2 text-slate-800">
           <Volume2 className="h-4 w-4 text-slate-500" />
-          <span className="font-medium">回退说明</span>
+          <span className="font-medium">
+            {t(
+              "settings.providers.companion.preference.fallbackNote.title",
+              "回退说明",
+            )}
+          </span>
         </div>
         <p className="mt-2">
-          通用模型优先级：桌宠专用配置 &gt; 最近当前 provider/model &gt;
-          自动可用 Provider。
+          {t(
+            "settings.providers.companion.preference.fallbackNote.description",
+            "通用模型优先级：桌宠专用配置 > 最近当前 provider/model > 自动可用 Provider。",
+          )}
         </p>
       </div>
     </article>

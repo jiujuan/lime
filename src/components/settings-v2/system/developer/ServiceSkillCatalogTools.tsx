@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { DatabaseZap, ScrollText, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Textarea } from "@/components/ui/textarea";
 import {
   clearServiceSkillCatalogCache,
@@ -23,6 +24,7 @@ function toErrorText(error: unknown, fallback: string) {
 }
 
 export function ServiceSkillCatalogTools() {
+  const { t } = useTranslation("settings");
   const [busy, setBusy] = useState(false);
   const [catalogEditorValue, setCatalogEditorValue] = useState("");
   const [serviceCatalog, setServiceCatalog] =
@@ -45,10 +47,16 @@ export function ServiceSkillCatalogTools() {
       console.error("加载服务型技能目录失败:", error);
       showMessage({
         type: "error",
-        text: toErrorText(error, "读取服务型技能目录失败"),
+        text: toErrorText(
+          error,
+          t(
+            "settings.developer.serviceSkillCatalog.message.loadFailed",
+            "读取服务型技能目录失败",
+          ),
+        ),
       });
     });
-  }, [loadServiceSkillCatalog, showMessage]);
+  }, [loadServiceSkillCatalog, showMessage, t]);
 
   useEffect(() => {
     return subscribeServiceSkillCatalogChanged(() => {
@@ -56,11 +64,17 @@ export function ServiceSkillCatalogTools() {
         console.error("刷新服务型技能目录失败:", error);
         showMessage({
           type: "error",
-          text: toErrorText(error, "刷新服务型技能目录失败"),
+          text: toErrorText(
+            error,
+            t(
+              "settings.developer.serviceSkillCatalog.message.refreshFailed",
+              "刷新服务型技能目录失败",
+            ),
+          ),
         });
       });
     });
-  }, [loadServiceSkillCatalog, showMessage]);
+  }, [loadServiceSkillCatalog, showMessage, t]);
 
   const handleHydrateCatalogEditor = useCallback(async () => {
     setBusy(true);
@@ -78,25 +92,37 @@ export function ServiceSkillCatalogTools() {
       );
       showMessage({
         type: "success",
-        text: "已把当前目录写入调试编辑器",
+        text: t(
+          "settings.developer.serviceSkillCatalog.message.hydrated",
+          "已把当前目录写入调试编辑器",
+        ),
       });
     } catch (error) {
       console.error("读取服务型技能目录失败:", error);
       showMessage({
         type: "error",
-        text: toErrorText(error, "读取服务型技能目录失败"),
+        text: toErrorText(
+          error,
+          t(
+            "settings.developer.serviceSkillCatalog.message.readFailed",
+            "读取服务型技能目录失败",
+          ),
+        ),
       });
     } finally {
       setBusy(false);
     }
-  }, [loadServiceSkillCatalog, showMessage]);
+  }, [loadServiceSkillCatalog, showMessage, t]);
 
   const handleApplyCatalogPayload = useCallback(async () => {
     const raw = catalogEditorValue.trim();
     if (!raw) {
       showMessage({
         type: "error",
-        text: "请先输入 serviceSkillCatalog JSON",
+        text: t(
+          "settings.developer.serviceSkillCatalog.message.emptyPayload",
+          "请先输入 serviceSkillCatalog JSON",
+        ),
       });
       return;
     }
@@ -109,25 +135,37 @@ export function ServiceSkillCatalogTools() {
         extractServiceSkillCatalogFromBootstrapPayload(parsed);
       if (!previewCatalog) {
         throw new Error(
-          "JSON 中未找到合法的 serviceSkillCatalog，可传目录本体或 { serviceSkillCatalog: ... }",
+          t(
+            "settings.developer.serviceSkillCatalog.message.invalidPayload",
+            "JSON 中未找到合法的 serviceSkillCatalog，可传目录本体或 { serviceSkillCatalog: ... }",
+          ),
         );
       }
 
       emitServiceSkillCatalogBootstrap(parsed);
       showMessage({
         type: "success",
-        text: `已通过 bootstrap 事件注入目录：${previewCatalog.items.length} 项`,
+        text: t("settings.developer.serviceSkillCatalog.message.injected", {
+          count: previewCatalog.items.length,
+          defaultValue: "已通过 bootstrap 事件注入目录：{{count}} 项",
+        }),
       });
     } catch (error) {
       console.error("注入服务型技能目录失败:", error);
       showMessage({
         type: "error",
-        text: toErrorText(error, "注入服务型技能目录失败"),
+        text: toErrorText(
+          error,
+          t(
+            "settings.developer.serviceSkillCatalog.message.injectFailed",
+            "注入服务型技能目录失败",
+          ),
+        ),
       });
     } finally {
       setBusy(false);
     }
-  }, [catalogEditorValue, showMessage]);
+  }, [catalogEditorValue, showMessage, t]);
 
   const handleClearServiceSkillCatalog = useCallback(async () => {
     setBusy(true);
@@ -137,18 +175,27 @@ export function ServiceSkillCatalogTools() {
       const catalog = await loadServiceSkillCatalog();
       showMessage({
         type: "success",
-        text: `已清空远端目录缓存，当前回退到 seeded：${catalog.items.length} 项`,
+        text: t("settings.developer.serviceSkillCatalog.message.cleared", {
+          count: catalog.items.length,
+          defaultValue: "已清空远端目录缓存，当前回退到 seeded：{{count}} 项",
+        }),
       });
     } catch (error) {
       console.error("清空服务型技能目录缓存失败:", error);
       showMessage({
         type: "error",
-        text: toErrorText(error, "清空服务型技能目录缓存失败"),
+        text: toErrorText(
+          error,
+          t(
+            "settings.developer.serviceSkillCatalog.message.clearFailed",
+            "清空服务型技能目录缓存失败",
+          ),
+        ),
       });
     } finally {
       setBusy(false);
     }
-  }, [loadServiceSkillCatalog, showMessage]);
+  }, [loadServiceSkillCatalog, showMessage, t]);
 
   return (
     <div className="space-y-4">
@@ -157,23 +204,34 @@ export function ServiceSkillCatalogTools() {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
           <p className="text-xs font-medium tracking-[0.12em] text-slate-500">
-            Tenant
+            {t("settings.developer.serviceSkillCatalog.stat.tenant", "Tenant")}
           </p>
           <p className="mt-3 text-lg font-semibold text-slate-900">
-            {serviceCatalog?.tenantId ?? "加载中"}
+            {serviceCatalog?.tenantId ??
+              t(
+                "settings.developer.serviceSkillCatalog.status.loading",
+                "加载中",
+              )}
           </p>
         </div>
         <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
           <p className="text-xs font-medium tracking-[0.12em] text-slate-500">
-            Version
+            {t(
+              "settings.developer.serviceSkillCatalog.stat.version",
+              "Version",
+            )}
           </p>
           <p className="mt-3 text-lg font-semibold text-slate-900">
-            {serviceCatalog?.version ?? "加载中"}
+            {serviceCatalog?.version ??
+              t(
+                "settings.developer.serviceSkillCatalog.status.loading",
+                "加载中",
+              )}
           </p>
         </div>
         <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
           <p className="text-xs font-medium tracking-[0.12em] text-slate-500">
-            Items
+            {t("settings.developer.serviceSkillCatalog.stat.items", "Items")}
           </p>
           <p className="mt-3 text-lg font-semibold text-slate-900">
             {serviceCatalog?.items.length ?? 0}
@@ -181,10 +239,17 @@ export function ServiceSkillCatalogTools() {
         </div>
         <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
           <p className="text-xs font-medium tracking-[0.12em] text-slate-500">
-            Synced At
+            {t(
+              "settings.developer.serviceSkillCatalog.stat.syncedAt",
+              "Synced At",
+            )}
           </p>
           <p className="mt-3 text-sm font-semibold text-slate-900">
-            {serviceCatalog?.syncedAt ?? "加载中"}
+            {serviceCatalog?.syncedAt ??
+              t(
+                "settings.developer.serviceSkillCatalog.status.loading",
+                "加载中",
+              )}
           </p>
         </div>
       </div>
@@ -192,13 +257,29 @@ export function ServiceSkillCatalogTools() {
       <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
-            <p className="text-sm font-semibold text-slate-900">当前目录摘要</p>
+            <p className="text-sm font-semibold text-slate-900">
+              {t(
+                "settings.developer.serviceSkillCatalog.summary.title",
+                "当前目录摘要",
+              )}
+            </p>
             <p className="text-sm leading-6 text-slate-500">
-              这里展示当前客户端实际生效的目录。若首页服务型技能没刷新，先看这里是否已经同步。
+              {t(
+                "settings.developer.serviceSkillCatalog.summary.description",
+                "这里展示当前客户端实际生效的目录。若首页服务型技能没刷新，先看这里是否已经同步。",
+              )}
             </p>
           </div>
           <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500">
-            {busy ? "目录操作执行中" : "目录状态空闲"}
+            {busy
+              ? t(
+                  "settings.developer.serviceSkillCatalog.status.busy",
+                  "目录操作执行中",
+                )
+              : t(
+                  "settings.developer.serviceSkillCatalog.status.idle",
+                  "目录状态空闲",
+                )}
           </span>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
@@ -212,7 +293,10 @@ export function ServiceSkillCatalogTools() {
           ))}
           {(serviceCatalog?.items.length ?? 0) > 4 ? (
             <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-500">
-              还有 {(serviceCatalog?.items.length ?? 0) - 4} 项
+              {t("settings.developer.serviceSkillCatalog.summary.moreItems", {
+                count: (serviceCatalog?.items.length ?? 0) - 4,
+                defaultValue: "还有 {{count}} 项",
+              })}
             </span>
           ) : null}
         </div>
@@ -221,19 +305,31 @@ export function ServiceSkillCatalogTools() {
       <div className="space-y-3 rounded-[22px] border border-slate-200/80 bg-white p-4">
         <div className="space-y-1">
           <p className="text-sm font-semibold text-slate-900">
-            Bootstrap Payload 调试输入
+            {t(
+              "settings.developer.serviceSkillCatalog.editor.title",
+              "Bootstrap Payload 调试输入",
+            )}
           </p>
           <p className="text-sm leading-6 text-slate-500">
-            支持两种格式：目录本体，或
+            {t(
+              "settings.developer.serviceSkillCatalog.editor.descriptionPrefix",
+              "支持两种格式：目录本体，或",
+            )}
             <code className="mx-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-700">
               {"{ serviceSkillCatalog: ... }"}
             </code>
-            包装对象。点击“通过事件注入”会走和服务端运行时推送相同的客户端链路。
+            {t(
+              "settings.developer.serviceSkillCatalog.editor.descriptionSuffix",
+              "包装对象。点击“通过事件注入”会走和服务端运行时推送相同的客户端链路。",
+            )}
           </p>
         </div>
 
         <Textarea
-          aria-label="服务型技能目录调试输入"
+          aria-label={t(
+            "settings.developer.serviceSkillCatalog.editor.aria",
+            "服务型技能目录调试输入",
+          )}
           value={catalogEditorValue}
           onChange={(event) => setCatalogEditorValue(event.target.value)}
           placeholder='{\n  "serviceSkillCatalog": {\n    "version": "tenant-2026-03-24",\n    "tenantId": "tenant-demo",\n    "syncedAt": "2026-03-24T12:00:00.000Z",\n    "items": []\n  }\n}'
@@ -248,7 +344,10 @@ export function ServiceSkillCatalogTools() {
             className={SECONDARY_BUTTON_CLASS_NAME}
           >
             <ScrollText className="h-4 w-4" />
-            载入当前目录
+            {t(
+              "settings.developer.serviceSkillCatalog.action.loadCurrent",
+              "载入当前目录",
+            )}
           </button>
           <button
             type="button"
@@ -257,7 +356,10 @@ export function ServiceSkillCatalogTools() {
             className={SECONDARY_BUTTON_CLASS_NAME}
           >
             <DatabaseZap className="h-4 w-4" />
-            通过事件注入
+            {t(
+              "settings.developer.serviceSkillCatalog.action.inject",
+              "通过事件注入",
+            )}
           </button>
           <button
             type="button"
@@ -266,7 +368,10 @@ export function ServiceSkillCatalogTools() {
             className={DANGER_BUTTON_CLASS_NAME}
           >
             <Trash2 className="h-4 w-4" />
-            清空目录缓存
+            {t(
+              "settings.developer.serviceSkillCatalog.action.clearCache",
+              "清空目录缓存",
+            )}
           </button>
         </div>
       </div>

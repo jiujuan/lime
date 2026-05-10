@@ -12,6 +12,7 @@ import React, {
   useRef,
   type ReactNode,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Eye,
@@ -52,6 +53,7 @@ import {
 } from "@/lib/api/channelsRuntime";
 import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
 import { ChannelLogTailPanel } from "./ChannelLogTailPanel";
+import { formatDate } from "@/i18n/format";
 import { cn } from "@/lib/utils";
 import QRCode from "qrcode";
 
@@ -123,9 +125,13 @@ const DEFAULT_WECHAT_CDN_BASE_URL = "https://novac2c.cdn.weixin.qq.com/c2c";
 const DEFAULT_WECHAT_BOT_TYPE = "3";
 const WECHAT_RUNTIME_POLL_INTERVAL_MS = 2000;
 
-function formatRuntimeTimestamp(timestamp?: string | null): string {
+function formatRuntimeTimestamp(
+  timestamp: string | null | undefined,
+  fallback: string,
+  locale?: string,
+): string {
   if (!timestamp) {
-    return "暂无";
+    return fallback;
   }
 
   const date = new Date(timestamp);
@@ -133,7 +139,11 @@ function formatRuntimeTimestamp(timestamp?: string | null): string {
     return timestamp;
   }
 
-  return date.toLocaleString();
+  return formatDate(date, {
+    locale,
+    dateStyle: "short",
+    timeStyle: "medium",
+  });
 }
 
 type WechatLoginWaitResultLike = {
@@ -409,6 +419,7 @@ function QrCodePreview({
   value: string;
   className?: string;
 }) {
+  const { t } = useTranslation("settings");
   const [dataUrl, setDataUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -453,7 +464,10 @@ function QrCodePreview({
           className,
         )}
       >
-        二维码生成失败：{error}
+        {t("settings.channels.wechatRuntime.qr.error", {
+          error,
+          defaultValue: "二维码生成失败：{{error}}",
+        })}
       </div>
     );
   }
@@ -466,7 +480,10 @@ function QrCodePreview({
           className,
         )}
       >
-        正在生成二维码...
+        {t(
+          "settings.channels.wechatRuntime.qr.generating",
+          "正在生成二维码...",
+        )}
       </div>
     );
   }
@@ -474,7 +491,7 @@ function QrCodePreview({
   return (
     <img
       src={dataUrl}
-      alt="微信扫码二维码"
+      alt={t("settings.channels.wechatRuntime.qr.alt", "微信扫码二维码")}
       className={cn("h-full w-full object-contain", className)}
     />
   );
@@ -491,6 +508,7 @@ function GatewayTunnelPanel({
   defaultFeishuAccountId?: string;
   onReloadConfig: () => Promise<void>;
 }) {
+  const { t } = useTranslation("settings");
   const tunnel = config.tunnel ?? DEFAULT_GATEWAY.tunnel!;
   const cloudflare = tunnel.cloudflare ?? {};
   const [busyAction, setBusyAction] = useState<string | null>(null);
@@ -500,6 +518,38 @@ function GatewayTunnelPanel({
   );
 
   const busy = busyAction !== null;
+  const actionLabels = useMemo(
+    () => ({
+      detect_cloudflared: t(
+        "settings.channels.gatewayTunnel.action.detectCloudflared",
+        "检测 cloudflared",
+      ),
+      install_cloudflared: t(
+        "settings.channels.gatewayTunnel.action.installCloudflared",
+        "一键安装 cloudflared",
+      ),
+      probe: t("settings.channels.gatewayTunnel.action.probe", "探测"),
+      create: t(
+        "settings.channels.gatewayTunnel.action.create",
+        "创建隧道",
+      ),
+      start: t("settings.channels.gatewayTunnel.action.start", "启动"),
+      stop: t("settings.channels.gatewayTunnel.action.stop", "停止"),
+      restart: t("settings.channels.gatewayTunnel.action.restart", "重启"),
+      status: t(
+        "settings.channels.gatewayTunnel.action.status",
+        "查询状态",
+      ),
+      sync: t(
+        "settings.channels.gatewayTunnel.action.syncFeishu",
+        "同步飞书回调 URL",
+      ),
+    }),
+    [t],
+  );
+  const busyActionLabel = busyAction
+    ? (actionLabels[busyAction as keyof typeof actionLabels] ?? busyAction)
+    : null;
 
   const patchTunnel = (
     patch: Partial<NonNullable<GatewayConfig["tunnel"]>>,
@@ -548,15 +598,22 @@ function GatewayTunnelPanel({
   return (
     <div className={PANEL_CLASS_NAME}>
       <div>
-        <h3 className="text-sm font-medium">Gateway 公共隧道</h3>
+        <h3 className="text-sm font-medium">
+          {t("settings.channels.gatewayTunnel.title", "Gateway 公共隧道")}
+        </h3>
         <p className="text-xs text-muted-foreground">
-          全局 webhook 公网入口配置（供 Feishu/Telegram 等渠道复用）
+          {t(
+            "settings.channels.gatewayTunnel.description",
+            "全局 webhook 公网入口配置（供 Feishu/Telegram 等渠道复用）",
+          )}
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <label className="space-y-1">
-          <span className="text-xs text-muted-foreground">启用隧道</span>
+          <span className="text-xs text-muted-foreground">
+            {t("settings.channels.gatewayTunnel.field.enabled", "启用隧道")}
+          </span>
           <button
             type="button"
             role="switch"
@@ -574,18 +631,27 @@ function GatewayTunnelPanel({
           </button>
         </label>
         <label className="space-y-1">
-          <span className="text-xs text-muted-foreground">Provider</span>
+          <span className="text-xs text-muted-foreground">
+            {t("settings.channels.gatewayTunnel.field.provider", "Provider")}
+          </span>
           <select
             value={(tunnel.provider || "cloudflare").toLowerCase()}
             onChange={(event) => patchTunnel({ provider: event.target.value })}
             className="h-9 w-full rounded-md border bg-background px-3 text-sm"
           >
             <option value="cloudflare">cloudflare</option>
-            <option value="ngrok">ngrok（预留）</option>
+            <option value="ngrok">
+              {t(
+                "settings.channels.gatewayTunnel.option.ngrokReserved",
+                "ngrok（预留）",
+              )}
+            </option>
           </select>
         </label>
         <label className="space-y-1">
-          <span className="text-xs text-muted-foreground">模式</span>
+          <span className="text-xs text-muted-foreground">
+            {t("settings.channels.gatewayTunnel.field.mode", "模式")}
+          </span>
           <select
             value={(tunnel.mode || "managed").toLowerCase()}
             onChange={(event) => patchTunnel({ mode: event.target.value })}
@@ -597,14 +663,20 @@ function GatewayTunnelPanel({
         </label>
         <label className="space-y-1">
           <span className="text-xs text-muted-foreground">
-            cloudflared 二进制（可选）
+            {t(
+              "settings.channels.gatewayTunnel.field.binaryPath",
+              "cloudflared 二进制（可选）",
+            )}
           </span>
           <input
             value={tunnel.binary_path || ""}
             onChange={(event) =>
               patchTunnel({ binary_path: event.target.value || undefined })
             }
-            placeholder="默认使用 PATH 中 cloudflared"
+            placeholder={t(
+              "settings.channels.gatewayTunnel.placeholder.binaryPath",
+              "默认使用 PATH 中 cloudflared",
+            )}
             className="h-9 w-full rounded-md border bg-background px-3 text-sm"
           />
         </label>
@@ -612,7 +684,9 @@ function GatewayTunnelPanel({
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <label className="space-y-1">
-          <span className="text-xs text-muted-foreground">本地 Host</span>
+          <span className="text-xs text-muted-foreground">
+            {t("settings.channels.gatewayTunnel.field.localHost", "本地 Host")}
+          </span>
           <input
             value={tunnel.local_host || "127.0.0.1"}
             onChange={(event) =>
@@ -623,7 +697,9 @@ function GatewayTunnelPanel({
           />
         </label>
         <label className="space-y-1">
-          <span className="text-xs text-muted-foreground">本地 Port</span>
+          <span className="text-xs text-muted-foreground">
+            {t("settings.channels.gatewayTunnel.field.localPort", "本地 Port")}
+          </span>
           <input
             type="number"
             min={1}
@@ -640,7 +716,10 @@ function GatewayTunnelPanel({
         </label>
         <label className="space-y-1">
           <span className="text-xs text-muted-foreground">
-            公网基础 URL（可选）
+            {t(
+              "settings.channels.gatewayTunnel.field.publicBaseUrl",
+              "公网基础 URL（可选）",
+            )}
           </span>
           <input
             value={tunnel.public_base_url || ""}
@@ -657,7 +736,12 @@ function GatewayTunnelPanel({
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <label className="space-y-1">
-          <span className="text-xs text-muted-foreground">Tunnel Name</span>
+          <span className="text-xs text-muted-foreground">
+            {t(
+              "settings.channels.gatewayTunnel.field.tunnelName",
+              "Tunnel Name",
+            )}
+          </span>
           <input
             value={cloudflare.tunnel_name || ""}
             onChange={(event) =>
@@ -668,7 +752,9 @@ function GatewayTunnelPanel({
           />
         </label>
         <label className="space-y-1">
-          <span className="text-xs text-muted-foreground">Tunnel ID</span>
+          <span className="text-xs text-muted-foreground">
+            {t("settings.channels.gatewayTunnel.field.tunnelId", "Tunnel ID")}
+          </span>
           <input
             value={cloudflare.tunnel_id || ""}
             onChange={(event) =>
@@ -679,7 +765,9 @@ function GatewayTunnelPanel({
           />
         </label>
         <label className="space-y-1">
-          <span className="text-xs text-muted-foreground">DNS Name</span>
+          <span className="text-xs text-muted-foreground">
+            {t("settings.channels.gatewayTunnel.field.dnsName", "DNS Name")}
+          </span>
           <input
             value={cloudflare.dns_name || ""}
             onChange={(event) =>
@@ -692,7 +780,10 @@ function GatewayTunnelPanel({
       </div>
 
       <PasswordInput
-        label="Run Token（可选，优先于 tunnel_id）"
+        label={t(
+          "settings.channels.gatewayTunnel.field.runToken",
+          "Run Token（可选，优先于 tunnel_id）",
+        )}
         value={cloudflare.run_token || ""}
         onChange={(value) => patchCloudflare({ run_token: value || undefined })}
         placeholder="cloudflared tunnel run --token ..."
@@ -700,7 +791,10 @@ function GatewayTunnelPanel({
 
       <div>
         <label className="block text-sm font-medium mb-1.5">
-          Credentials File（可选）
+          {t(
+            "settings.channels.gatewayTunnel.field.credentialsFile",
+            "Credentials File（可选）",
+          )}
         </label>
         <input
           value={cloudflare.credentials_file || ""}
@@ -717,7 +811,10 @@ function GatewayTunnelPanel({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <label className="space-y-1">
           <span className="text-xs text-muted-foreground">
-            同步回调账号 ID（Feishu）
+            {t(
+              "settings.channels.gatewayTunnel.field.feishuAccountId",
+              "同步回调账号 ID（Feishu）",
+            )}
           </span>
           <input
             value={feishuAccountId}
@@ -739,21 +836,24 @@ function GatewayTunnelPanel({
           }
           className="rounded-md border px-3 py-1.5 text-xs transition-colors disabled:opacity-50"
         >
-          检测 cloudflared
+          {actionLabels.detect_cloudflared}
         </button>
         <button
           type="button"
           disabled={busy}
           onClick={() => {
             const confirmed = window.confirm(
-              [
-                "⚠️ 危险操作检测！",
-                "操作类型：系统安装 cloudflared",
-                "影响范围：将调用系统包管理器（brew/apt/winget 等）安装全局命令",
-                "风险评估：可能触发管理员权限申请、网络下载失败或修改系统包状态",
-                "",
-                "请确认是否继续？",
-              ].join("\n"),
+              t(
+                "settings.channels.gatewayTunnel.confirm.installCloudflared",
+                [
+                  "⚠️ 危险操作检测！",
+                  "操作类型：系统安装 cloudflared",
+                  "影响范围：将调用系统包管理器（brew/apt/winget 等）安装全局命令",
+                  "风险评估：可能触发管理员权限申请、网络下载失败或修改系统包状态",
+                  "",
+                  "请确认是否继续？",
+                ].join("\n"),
+              ),
             );
             if (!confirmed) {
               return;
@@ -768,7 +868,7 @@ function GatewayTunnelPanel({
           }}
           className="rounded-md border px-3 py-1.5 text-xs transition-colors disabled:opacity-50"
         >
-          一键安装 cloudflared
+          {actionLabels.install_cloudflared}
         </button>
         <button
           type="button"
@@ -778,7 +878,7 @@ function GatewayTunnelPanel({
           }
           className="rounded-md border px-3 py-1.5 text-xs transition-colors disabled:opacity-50"
         >
-          探测
+          {actionLabels.probe}
         </button>
         <button
           type="button"
@@ -794,7 +894,7 @@ function GatewayTunnelPanel({
           }
           className="rounded-md border px-3 py-1.5 text-xs transition-colors disabled:opacity-50"
         >
-          创建隧道
+          {actionLabels.create}
         </button>
         <button
           type="button"
@@ -804,7 +904,7 @@ function GatewayTunnelPanel({
           }
           className="rounded-md border px-3 py-1.5 text-xs transition-colors disabled:opacity-50"
         >
-          启动
+          {actionLabels.start}
         </button>
         <button
           type="button"
@@ -814,7 +914,7 @@ function GatewayTunnelPanel({
           }
           className="rounded-md border px-3 py-1.5 text-xs transition-colors disabled:opacity-50"
         >
-          停止
+          {actionLabels.stop}
         </button>
         <button
           type="button"
@@ -824,7 +924,7 @@ function GatewayTunnelPanel({
           }
           className="rounded-md border px-3 py-1.5 text-xs transition-colors disabled:opacity-50"
         >
-          重启
+          {actionLabels.restart}
         </button>
         <button
           type="button"
@@ -834,7 +934,7 @@ function GatewayTunnelPanel({
           }
           className="rounded-md border px-3 py-1.5 text-xs transition-colors disabled:opacity-50"
         >
-          查询状态
+          {actionLabels.status}
         </button>
         <button
           type="button"
@@ -850,20 +950,26 @@ function GatewayTunnelPanel({
           }
           className="rounded-md border px-3 py-1.5 text-xs transition-colors disabled:opacity-50"
         >
-          同步飞书回调 URL
+          {actionLabels.sync}
         </button>
       </div>
 
       {busyAction && (
         <div className="text-xs text-muted-foreground">
-          正在执行：{busyAction}
+          {t("settings.channels.gatewayTunnel.state.running", {
+            action: busyActionLabel,
+            defaultValue: "正在执行：{{action}}",
+          })}
         </div>
       )}
 
       <div className="space-y-1">
-        <div className="text-xs text-muted-foreground">最近结果</div>
+        <div className="text-xs text-muted-foreground">
+          {t("settings.channels.gatewayTunnel.result.title", "最近结果")}
+        </div>
         <pre className="max-h-56 overflow-auto rounded-md border bg-muted/40 p-3 text-xs whitespace-pre-wrap break-all">
-          {output || "暂无结果"}
+          {output ||
+            t("settings.channels.gatewayTunnel.result.empty", "暂无结果")}
         </pre>
       </div>
     </div>
@@ -871,6 +977,7 @@ function GatewayTunnelPanel({
 }
 
 function TelegramGatewayDebugPanel() {
+  const { t } = useTranslation("settings");
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [accountId, setAccountId] = useState("default");
   const [pollTimeoutSecs, setPollTimeoutSecs] = useState("25");
@@ -908,20 +1015,43 @@ function TelegramGatewayDebugPanel() {
     } catch (error) {
       const text = error instanceof Error ? error.message : String(error);
       setOutput(JSON.stringify({ action, ok: false, error: text }, null, 2));
-      setMessage({ type: "error", text: `执行失败: ${text}` });
+      setMessage({
+        type: "error",
+        text: t("settings.channels.gatewayRuntime.message.actionFailed", {
+          error: text,
+          defaultValue: "执行失败: {{error}}",
+        }),
+      });
     } finally {
       setBusyAction(null);
     }
   };
 
   const busy = busyAction !== null;
+  const actionLabels = {
+    status: t("settings.channels.gatewayRuntime.action.status", "查询状态"),
+    start: t("settings.channels.gatewayRuntime.action.start", "启动"),
+    stop: t("settings.channels.gatewayRuntime.action.stop", "停止"),
+    restart: t("settings.channels.gatewayRuntime.action.restart", "重启"),
+  };
+  const busyActionLabel = busyAction
+    ? (actionLabels[busyAction as keyof typeof actionLabels] ?? busyAction)
+    : null;
 
   return (
     <div className={PANEL_CLASS_NAME}>
       <div>
-        <h3 className="text-sm font-medium">Telegram Gateway 运行控制</h3>
+        <h3 className="text-sm font-medium">
+          {t(
+            "settings.channels.gatewayRuntime.telegram.title",
+            "Telegram Gateway 运行控制",
+          )}
+        </h3>
         <p className="text-xs text-muted-foreground">
-          用于状态查询、启停和重启；连通性检测已并入上方 IM 配置弹窗。
+          {t(
+            "settings.channels.gatewayRuntime.description",
+            "用于状态查询、启停和重启；连通性检测已并入上方 IM 配置弹窗。",
+          )}
         </p>
       </div>
 
@@ -939,7 +1069,9 @@ function TelegramGatewayDebugPanel() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <label className="space-y-1">
-          <span className="text-xs text-muted-foreground">账号 ID</span>
+          <span className="text-xs text-muted-foreground">
+            {t("settings.channels.gatewayRuntime.field.accountId", "账号 ID")}
+          </span>
           <input
             value={accountId}
             onChange={(event) => setAccountId(event.target.value)}
@@ -948,7 +1080,12 @@ function TelegramGatewayDebugPanel() {
           />
         </label>
         <label className="space-y-1">
-          <span className="text-xs text-muted-foreground">轮询超时（秒）</span>
+          <span className="text-xs text-muted-foreground">
+            {t(
+              "settings.channels.gatewayRuntime.field.pollTimeoutSecs",
+              "轮询超时（秒）",
+            )}
+          </span>
           <input
             value={pollTimeoutSecs}
             onChange={(event) => setPollTimeoutSecs(event.target.value)}
@@ -965,13 +1102,16 @@ function TelegramGatewayDebugPanel() {
             void runAction(
               "status",
               async () => gatewayChannelStatus({ channel: "telegram" }),
-              "Gateway 状态已刷新",
+              t(
+                "settings.channels.gatewayRuntime.message.statusRefreshed",
+                "Gateway 状态已刷新",
+              ),
             )
           }
           disabled={busy}
           className="rounded-md border px-3 py-1.5 text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          查询状态
+          {actionLabels.status}
         </button>
         <button
           type="button"
@@ -984,13 +1124,16 @@ function TelegramGatewayDebugPanel() {
                   accountId: resolveAccountId(),
                   pollTimeoutSecs: resolvePollTimeoutSecs(),
                 }),
-              "Gateway 已启动",
+              t(
+                "settings.channels.gatewayRuntime.message.started",
+                "Gateway 已启动",
+              ),
             )
           }
           disabled={busy}
           className="rounded-md border px-3 py-1.5 text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          启动
+          {actionLabels.start}
         </button>
         <button
           type="button"
@@ -1002,13 +1145,16 @@ function TelegramGatewayDebugPanel() {
                   channel: "telegram",
                   accountId: resolveAccountId(),
                 }),
-              "Gateway 已停止",
+              t(
+                "settings.channels.gatewayRuntime.message.stopped",
+                "Gateway 已停止",
+              ),
             )
           }
           disabled={busy}
           className="rounded-md border px-3 py-1.5 text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          停止
+          {actionLabels.stop}
         </button>
         <button
           type="button"
@@ -1027,7 +1173,13 @@ function TelegramGatewayDebugPanel() {
                     warning:
                       error instanceof Error
                         ? error.message
-                        : `stop 失败: ${String(error)}`,
+                        : t(
+                            "settings.channels.gatewayRuntime.message.stopFailedWarning",
+                            {
+                              error: String(error),
+                              defaultValue: "stop 失败: {{error}}",
+                            },
+                          ),
                   };
                 }
                 const startResult = await gatewayChannelStart({
@@ -1044,26 +1196,35 @@ function TelegramGatewayDebugPanel() {
                   status: statusResult,
                 };
               },
-              "Gateway 已重启",
+              t(
+                "settings.channels.gatewayRuntime.message.restarted",
+                "Gateway 已重启",
+              ),
             )
           }
           disabled={busy}
           className="rounded-md border px-3 py-1.5 text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          重启
+          {actionLabels.restart}
         </button>
       </div>
 
       {busyAction && (
         <div className="text-xs text-muted-foreground">
-          正在执行：{busyAction}
+          {t("settings.channels.gatewayRuntime.state.running", {
+            action: busyActionLabel,
+            defaultValue: "正在执行：{{action}}",
+          })}
         </div>
       )}
 
       <div className="space-y-1">
-        <div className="text-xs text-muted-foreground">最近结果</div>
+        <div className="text-xs text-muted-foreground">
+          {t("settings.channels.gatewayRuntime.result.title", "最近结果")}
+        </div>
         <pre className="max-h-56 overflow-auto rounded-md border bg-muted/40 p-3 text-xs whitespace-pre-wrap break-all">
-          {output || "暂无结果"}
+          {output ||
+            t("settings.channels.gatewayRuntime.result.empty", "暂无结果")}
         </pre>
       </div>
     </div>
@@ -1071,6 +1232,7 @@ function TelegramGatewayDebugPanel() {
 }
 
 function FeishuGatewayDebugPanel() {
+  const { t } = useTranslation("settings");
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [accountId, setAccountId] = useState("default");
   const [output, setOutput] = useState("");
@@ -1099,20 +1261,43 @@ function FeishuGatewayDebugPanel() {
     } catch (error) {
       const text = error instanceof Error ? error.message : String(error);
       setOutput(JSON.stringify({ action, ok: false, error: text }, null, 2));
-      setMessage({ type: "error", text: `执行失败: ${text}` });
+      setMessage({
+        type: "error",
+        text: t("settings.channels.gatewayRuntime.message.actionFailed", {
+          error: text,
+          defaultValue: "执行失败: {{error}}",
+        }),
+      });
     } finally {
       setBusyAction(null);
     }
   };
 
   const busy = busyAction !== null;
+  const actionLabels = {
+    status: t("settings.channels.gatewayRuntime.action.status", "查询状态"),
+    start: t("settings.channels.gatewayRuntime.action.start", "启动"),
+    stop: t("settings.channels.gatewayRuntime.action.stop", "停止"),
+    restart: t("settings.channels.gatewayRuntime.action.restart", "重启"),
+  };
+  const busyActionLabel = busyAction
+    ? (actionLabels[busyAction as keyof typeof actionLabels] ?? busyAction)
+    : null;
 
   return (
     <div className={PANEL_CLASS_NAME}>
       <div>
-        <h3 className="text-sm font-medium">Feishu Gateway 运行控制</h3>
+        <h3 className="text-sm font-medium">
+          {t(
+            "settings.channels.gatewayRuntime.feishu.title",
+            "Feishu Gateway 运行控制",
+          )}
+        </h3>
         <p className="text-xs text-muted-foreground">
-          用于状态查询、启停和重启；连通性检测已并入上方 IM 配置弹窗。
+          {t(
+            "settings.channels.gatewayRuntime.description",
+            "用于状态查询、启停和重启；连通性检测已并入上方 IM 配置弹窗。",
+          )}
         </p>
       </div>
 
@@ -1130,7 +1315,9 @@ function FeishuGatewayDebugPanel() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <label className="space-y-1">
-          <span className="text-xs text-muted-foreground">账号 ID</span>
+          <span className="text-xs text-muted-foreground">
+            {t("settings.channels.gatewayRuntime.field.accountId", "账号 ID")}
+          </span>
           <input
             value={accountId}
             onChange={(event) => setAccountId(event.target.value)}
@@ -1147,13 +1334,16 @@ function FeishuGatewayDebugPanel() {
             void runAction(
               "status",
               async () => gatewayChannelStatus({ channel: "feishu" }),
-              "Gateway 状态已刷新",
+              t(
+                "settings.channels.gatewayRuntime.message.statusRefreshed",
+                "Gateway 状态已刷新",
+              ),
             )
           }
           disabled={busy}
           className="rounded-md border px-3 py-1.5 text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          查询状态
+          {actionLabels.status}
         </button>
         <button
           type="button"
@@ -1165,13 +1355,16 @@ function FeishuGatewayDebugPanel() {
                   channel: "feishu",
                   accountId: resolveAccountId(),
                 }),
-              "Gateway 已启动",
+              t(
+                "settings.channels.gatewayRuntime.message.started",
+                "Gateway 已启动",
+              ),
             )
           }
           disabled={busy}
           className="rounded-md border px-3 py-1.5 text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          启动
+          {actionLabels.start}
         </button>
         <button
           type="button"
@@ -1183,13 +1376,16 @@ function FeishuGatewayDebugPanel() {
                   channel: "feishu",
                   accountId: resolveAccountId(),
                 }),
-              "Gateway 已停止",
+              t(
+                "settings.channels.gatewayRuntime.message.stopped",
+                "Gateway 已停止",
+              ),
             )
           }
           disabled={busy}
           className="rounded-md border px-3 py-1.5 text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          停止
+          {actionLabels.stop}
         </button>
         <button
           type="button"
@@ -1208,7 +1404,13 @@ function FeishuGatewayDebugPanel() {
                     warning:
                       error instanceof Error
                         ? error.message
-                        : `stop 失败: ${String(error)}`,
+                        : t(
+                            "settings.channels.gatewayRuntime.message.stopFailedWarning",
+                            {
+                              error: String(error),
+                              defaultValue: "stop 失败: {{error}}",
+                            },
+                          ),
                   };
                 }
                 const startResult = await gatewayChannelStart({
@@ -1224,26 +1426,35 @@ function FeishuGatewayDebugPanel() {
                   status: statusResult,
                 };
               },
-              "Gateway 已重启",
+              t(
+                "settings.channels.gatewayRuntime.message.restarted",
+                "Gateway 已重启",
+              ),
             )
           }
           disabled={busy}
           className="rounded-md border px-3 py-1.5 text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          重启
+          {actionLabels.restart}
         </button>
       </div>
 
       {busyAction && (
         <div className="text-xs text-muted-foreground">
-          正在执行：{busyAction}
+          {t("settings.channels.gatewayRuntime.state.running", {
+            action: busyActionLabel,
+            defaultValue: "正在执行：{{action}}",
+          })}
         </div>
       )}
 
       <div className="space-y-1">
-        <div className="text-xs text-muted-foreground">最近结果</div>
+        <div className="text-xs text-muted-foreground">
+          {t("settings.channels.gatewayRuntime.result.title", "最近结果")}
+        </div>
         <pre className="max-h-56 overflow-auto rounded-md border bg-muted/40 p-3 text-xs whitespace-pre-wrap break-all">
-          {output || "暂无结果"}
+          {output ||
+            t("settings.channels.gatewayRuntime.result.empty", "暂无结果")}
         </pre>
       </div>
     </div>
@@ -1257,6 +1468,7 @@ function WechatGatewayDebugPanel({
   config: WechatBotConfig;
   onReloadConfig: () => Promise<void>;
 }) {
+  const { t, i18n } = useTranslation("settings");
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [accountId, setAccountId] = useState(
     config.default_account || "default",
@@ -1445,12 +1657,18 @@ function WechatGatewayDebugPanel({
     });
     const qrPayload = result.qrcodeUrl?.trim();
     if (!qrPayload) {
-      throw new Error(result.message || "微信接口未返回可用二维码");
+      throw new Error(
+        result.message ||
+          t(
+            "settings.channels.wechatRuntime.error.noQrCode",
+            "微信接口未返回可用二维码",
+          ),
+      );
     }
     setLoginSessionKey(result.sessionKey);
     setQrCodeUrl(qrPayload);
     return result;
-  }, [accounts, loginSessionKey, resolveBaseUrl, resolveBotType]);
+  }, [accounts, loginSessionKey, resolveBaseUrl, resolveBotType, t]);
 
   const finalizeLoginSuccess = useCallback(
     async (rawResult: unknown) => {
@@ -1492,7 +1710,12 @@ function WechatGatewayDebugPanel({
     async (sessionKeyOverride?: string) => {
       const sessionKey = (sessionKeyOverride || loginSessionKey).trim();
       if (!sessionKey) {
-        throw new Error("请先生成二维码，或填写已有 session_key");
+        throw new Error(
+          t(
+            "settings.channels.wechatRuntime.error.missingSessionKey",
+            "请先生成二维码，或填写已有 session_key",
+          ),
+        );
       }
 
       return wechatChannelLoginWait({
@@ -1509,6 +1732,7 @@ function WechatGatewayDebugPanel({
       resolveBaseUrl,
       resolveBotType,
       resolveLoginTimeoutMs,
+      t,
     ],
   );
 
@@ -1531,7 +1755,13 @@ function WechatGatewayDebugPanel({
     } catch (error) {
       const text = error instanceof Error ? error.message : String(error);
       setOutput(JSON.stringify({ action, ok: false, error: text }, null, 2));
-      setMessage({ type: "error", text: `执行失败: ${text}` });
+      setMessage({
+        type: "error",
+        text: t("settings.channels.gatewayRuntime.message.actionFailed", {
+          error: text,
+          defaultValue: "执行失败: {{error}}",
+        }),
+      });
     } finally {
       setBusyAction(null);
     }
@@ -1555,7 +1785,10 @@ function WechatGatewayDebugPanel({
         setOutput(JSON.stringify(result, null, 2));
         setMessage({
           type: "success",
-          text: "已自动生成首张二维码，可直接扫码登录",
+          text: t(
+            "settings.channels.wechatRuntime.message.bootstrapQrReady",
+            "已自动生成首张二维码，可直接扫码登录",
+          ),
         });
         setTimeout(() => setMessage(null), 2500);
       } catch (error) {
@@ -1570,7 +1803,13 @@ function WechatGatewayDebugPanel({
             2,
           ),
         );
-        setMessage({ type: "error", text: `二维码生成失败: ${text}` });
+        setMessage({
+          type: "error",
+          text: t("settings.channels.wechatRuntime.message.qrFailed", {
+            error: text,
+            defaultValue: "二维码生成失败: {{error}}",
+          }),
+        });
       } finally {
         if (!cancelled) {
           setBusyAction(null);
@@ -1583,7 +1822,7 @@ function WechatGatewayDebugPanel({
     return () => {
       cancelled = true;
     };
-  }, [accounts.length, accountsLoaded, busyAction, qrCodeUrl, startLogin]);
+  }, [accounts.length, accountsLoaded, busyAction, qrCodeUrl, startLogin, t]);
 
   useEffect(() => {
     const sessionKey = loginSessionKey.trim();
@@ -1601,7 +1840,10 @@ function WechatGatewayDebugPanel({
       setBusyAction("login_wait");
       setMessage({
         type: "success",
-        text: "二维码已生成，正在后台等待扫码确认",
+        text: t(
+          "settings.channels.wechatRuntime.message.waitingForScan",
+          "二维码已生成，正在后台等待扫码确认",
+        ),
       });
       try {
         const result = await waitForLoginResult(sessionKey);
@@ -1614,13 +1856,21 @@ function WechatGatewayDebugPanel({
         if (normalizedResult.connected) {
           setMessage({
             type: "success",
-            text: "微信登录成功，网关已自动启动",
+            text: t(
+              "settings.channels.wechatRuntime.message.loginStarted",
+              "微信登录成功，网关已自动启动",
+            ),
           });
           setTimeout(() => setMessage(null), 2500);
         } else {
           setMessage({
             type: "error",
-            text: normalizedResult.message || "微信登录未完成",
+            text:
+              normalizedResult.message ||
+              t(
+                "settings.channels.wechatRuntime.message.loginIncomplete",
+                "微信登录未完成",
+              ),
           });
         }
       } catch (error) {
@@ -1635,7 +1885,13 @@ function WechatGatewayDebugPanel({
             2,
           ),
         );
-        setMessage({ type: "error", text: `等待登录失败: ${text}` });
+        setMessage({
+          type: "error",
+          text: t("settings.channels.wechatRuntime.message.waitFailed", {
+            error: text,
+            defaultValue: "等待登录失败: {{error}}",
+          }),
+        });
       } finally {
         if (!cancelled) {
           setBusyAction(null);
@@ -1651,7 +1907,7 @@ function WechatGatewayDebugPanel({
     return () => {
       cancelled = true;
     };
-  }, [finalizeLoginSuccess, loginSessionKey, qrCodeUrl, waitForLoginResult]);
+  }, [finalizeLoginSuccess, loginSessionKey, qrCodeUrl, t, waitForLoginResult]);
 
   useEffect(() => {
     const sessionKey = loginSessionKey.trim();
@@ -1711,14 +1967,29 @@ function WechatGatewayDebugPanel({
     }
 
     const confirmed = window.confirm(
-      [
-        "⚠️ 危险操作检测！",
-        `操作类型：删除微信账号 ${normalized}${purgeDataOnRemove ? " 并清理本地数据" : ""}`,
-        `影响范围：将停止该账号的微信网关实例，并从渠道配置中移除该账号${purgeDataOnRemove ? "，同时删除本地缓存与同步状态" : ""}`,
-        `风险评估：删除后需要重新扫码或手动恢复配置${purgeDataOnRemove ? "，本地数据不可恢复" : ""}`,
-        "",
-        "请确认是否继续？",
-      ].join("\n"),
+      t("settings.channels.wechatRuntime.confirm.removeAccount", {
+        accountId: normalized,
+        purgeAction: purgeDataOnRemove
+          ? t(
+              "settings.channels.wechatRuntime.confirm.removeAccount.purgeAction",
+              " 并清理本地数据",
+            )
+          : "",
+        purgeScope: purgeDataOnRemove
+          ? t(
+              "settings.channels.wechatRuntime.confirm.removeAccount.purgeScope",
+              "，同时删除本地缓存与同步状态",
+            )
+          : "",
+        purgeRisk: purgeDataOnRemove
+          ? t(
+              "settings.channels.wechatRuntime.confirm.removeAccount.purgeRisk",
+              "，本地数据不可恢复",
+            )
+          : "",
+        defaultValue:
+          "⚠️ 危险操作检测！\n操作类型：删除微信账号 {{accountId}}{{purgeAction}}\n影响范围：将停止该账号的微信网关实例，并从渠道配置中移除该账号{{purgeScope}}\n风险评估：删除后需要重新扫码或手动恢复配置{{purgeRisk}}\n\n请确认是否继续？",
+      }),
     );
     if (!confirmed) {
       return;
@@ -1737,7 +2008,10 @@ function WechatGatewayDebugPanel({
           purgeData: purgeDataOnRemove,
         };
       },
-      "微信账号已删除",
+      t(
+        "settings.channels.wechatRuntime.message.accountRemoved",
+        "微信账号已删除",
+      ),
       async () => {
         await loadAccounts(true);
         await onReloadConfig();
@@ -1751,14 +2025,51 @@ function WechatGatewayDebugPanel({
   };
 
   const busy = busyAction !== null;
+  const actionLabels = {
+    status: t("settings.channels.gatewayRuntime.action.status", "查询状态"),
+    list_accounts: t(
+      "settings.channels.wechatRuntime.action.listAccounts",
+      "列出账号",
+    ),
+    start: t("settings.channels.gatewayRuntime.action.start", "启动"),
+    stop: t("settings.channels.gatewayRuntime.action.stop", "停止"),
+    restart: t("settings.channels.gatewayRuntime.action.restart", "重启"),
+    login_start: t(
+      "settings.channels.wechatRuntime.action.generateQr",
+      "生成二维码",
+    ),
+    login_wait: t(
+      "settings.channels.wechatRuntime.action.waitLogin",
+      "等待登录结果",
+    ),
+    remove_account: t(
+      "settings.channels.wechatRuntime.action.removeAccount",
+      "删除账号",
+    ),
+  };
+  const busyActionLabel = busyAction
+    ? (actionLabels[busyAction as keyof typeof actionLabels] ?? busyAction)
+    : null;
+  const emptyValue = t("settings.channels.wechatRuntime.value.empty", "暂无");
+  const unknownValue = t(
+    "settings.channels.wechatRuntime.value.unknown",
+    "未记录",
+  );
 
   return (
     <div className={PANEL_CLASS_NAME}>
       <div>
-        <h3 className="text-sm font-medium">微信 Gateway 运行控制</h3>
+        <h3 className="text-sm font-medium">
+          {t(
+            "settings.channels.wechatRuntime.title",
+            "微信 Gateway 运行控制",
+          )}
+        </h3>
         <p className="text-xs text-muted-foreground">
-          默认保留状态查询、启停与账号清理；扫码和连通性检测已并入上方 IM
-          配置弹窗。
+          {t(
+            "settings.channels.wechatRuntime.description",
+            "默认保留状态查询、启停与账号清理；扫码和连通性检测已并入上方 IM 配置弹窗。",
+          )}
         </p>
       </div>
 
@@ -1776,15 +2087,22 @@ function WechatGatewayDebugPanel({
 
       <div className={`${SOFT_CARD_CLASS_NAME} space-y-3`}>
         <div>
-          <h4 className="text-sm font-medium text-slate-900">运行控制</h4>
+          <h4 className="text-sm font-medium text-slate-900">
+            {t("settings.channels.wechatRuntime.runtime.title", "运行控制")}
+          </h4>
           <p className="mt-1 text-xs leading-5 text-slate-500">
-            账号 ID 留空时按默认配置解析；多账号场景建议显式指定。
+            {t(
+              "settings.channels.wechatRuntime.runtime.description",
+              "账号 ID 留空时按默认配置解析；多账号场景建议显式指定。",
+            )}
           </p>
         </div>
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <label className="space-y-1">
-            <span className="text-xs text-muted-foreground">账号 ID</span>
+            <span className="text-xs text-muted-foreground">
+              {t("settings.channels.gatewayRuntime.field.accountId", "账号 ID")}
+            </span>
             <input
               value={accountId}
               onChange={(event) => setAccountId(event.target.value)}
@@ -1794,7 +2112,10 @@ function WechatGatewayDebugPanel({
           </label>
           <label className="space-y-1">
             <span className="text-xs text-muted-foreground">
-              轮询超时（秒）
+              {t(
+                "settings.channels.gatewayRuntime.field.pollTimeoutSecs",
+                "轮询超时（秒）",
+              )}
             </span>
             <input
               value={pollTimeoutSecs}
@@ -1804,7 +2125,9 @@ function WechatGatewayDebugPanel({
             />
           </label>
           <label className="space-y-1">
-            <span className="text-xs text-muted-foreground">Base URL</span>
+            <span className="text-xs text-muted-foreground">
+              {t("settings.channels.wechatRuntime.field.baseUrl", "Base URL")}
+            </span>
             <input
               value={baseUrl}
               onChange={(event) => setBaseUrl(event.target.value)}
@@ -1821,13 +2144,16 @@ function WechatGatewayDebugPanel({
               void runAction(
                 "status",
                 async () => gatewayChannelStatus({ channel: "wechat" }),
-                "Gateway 状态已刷新",
+                t(
+                  "settings.channels.gatewayRuntime.message.statusRefreshed",
+                  "Gateway 状态已刷新",
+                ),
               )
             }
             disabled={busy}
             className="rounded-md border px-3 py-1.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
-            查询状态
+            {actionLabels.status}
           </button>
           <button
             type="button"
@@ -1835,13 +2161,16 @@ function WechatGatewayDebugPanel({
               void runAction(
                 "list_accounts",
                 async () => loadAccounts(false),
-                "微信账号列表已刷新",
+                t(
+                  "settings.channels.wechatRuntime.message.accountsRefreshed",
+                  "微信账号列表已刷新",
+                ),
               )
             }
             disabled={busy}
             className="rounded-md border px-3 py-1.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
-            列出账号
+            {actionLabels.list_accounts}
           </button>
           <button
             type="button"
@@ -1854,13 +2183,16 @@ function WechatGatewayDebugPanel({
                     accountId: resolveAccountId(),
                     pollTimeoutSecs: resolvePollTimeoutSecs(),
                   }),
-                "Gateway 已启动",
+                t(
+                  "settings.channels.gatewayRuntime.message.started",
+                  "Gateway 已启动",
+                ),
               )
             }
             disabled={busy}
             className="rounded-md border px-3 py-1.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
-            启动
+            {actionLabels.start}
           </button>
           <button
             type="button"
@@ -1872,13 +2204,16 @@ function WechatGatewayDebugPanel({
                     channel: "wechat",
                     accountId: resolveAccountId(),
                   }),
-                "Gateway 已停止",
+                t(
+                  "settings.channels.gatewayRuntime.message.stopped",
+                  "Gateway 已停止",
+                ),
               )
             }
             disabled={busy}
             className="rounded-md border px-3 py-1.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
-            停止
+            {actionLabels.stop}
           </button>
           <button
             type="button"
@@ -1897,7 +2232,13 @@ function WechatGatewayDebugPanel({
                       warning:
                         error instanceof Error
                           ? error.message
-                          : `stop 失败: ${String(error)}`,
+                          : t(
+                              "settings.channels.gatewayRuntime.message.stopFailedWarning",
+                              {
+                                error: String(error),
+                                defaultValue: "stop 失败: {{error}}",
+                              },
+                            ),
                     };
                   }
                   const startResult = await gatewayChannelStart({
@@ -1914,13 +2255,16 @@ function WechatGatewayDebugPanel({
                     status: statusResult,
                   };
                 },
-                "Gateway 已重启",
+                t(
+                  "settings.channels.gatewayRuntime.message.restarted",
+                  "Gateway 已重启",
+                ),
               )
             }
             disabled={busy}
             className="rounded-md border px-3 py-1.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
-            重启
+            {actionLabels.restart}
           </button>
         </div>
       </div>
@@ -1928,9 +2272,17 @@ function WechatGatewayDebugPanel({
       <details className={`${SOFT_CARD_CLASS_NAME} group`}>
         <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
           <div>
-            <h4 className="text-sm font-medium text-slate-900">兼容扫码排障</h4>
+            <h4 className="text-sm font-medium text-slate-900">
+              {t(
+                "settings.channels.wechatRuntime.compat.title",
+                "兼容扫码排障",
+              )}
+            </h4>
             <p className="mt-1 text-xs leading-5 text-slate-500">
-              只有当上方 IM 配置里的扫码流程异常时，再展开这里做兼容排查。
+              {t(
+                "settings.channels.wechatRuntime.compat.description",
+                "只有当上方 IM 配置里的扫码流程异常时，再展开这里做兼容排查。",
+              )}
             </p>
           </div>
           <span className="text-xs text-slate-400 transition group-open:rotate-90">
@@ -1941,7 +2293,12 @@ function WechatGatewayDebugPanel({
         <div className="mt-3 space-y-3 border-t border-slate-200 pt-3">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <label className="space-y-1">
-              <span className="text-xs text-muted-foreground">Bot Type</span>
+              <span className="text-xs text-muted-foreground">
+                {t(
+                  "settings.channels.wechatRuntime.field.botType",
+                  "Bot Type",
+                )}
+              </span>
               <input
                 value={botType}
                 onChange={(event) => setBotType(event.target.value)}
@@ -1951,7 +2308,10 @@ function WechatGatewayDebugPanel({
             </label>
             <label className="space-y-1">
               <span className="text-xs text-muted-foreground">
-                登录超时（毫秒）
+                {t(
+                  "settings.channels.wechatRuntime.field.loginTimeoutMs",
+                  "登录超时（毫秒）",
+                )}
               </span>
               <input
                 value={loginTimeoutMs}
@@ -1962,23 +2322,35 @@ function WechatGatewayDebugPanel({
             </label>
             <label className="space-y-1 md:col-span-2">
               <span className="text-xs text-muted-foreground">
-                Session Key（可选，留空自动生成）
+                {t(
+                  "settings.channels.wechatRuntime.field.sessionKey",
+                  "Session Key（可选，留空自动生成）",
+                )}
               </span>
               <input
                 value={loginSessionKey}
                 onChange={(event) => setLoginSessionKey(event.target.value)}
-                placeholder="自动生成"
+                placeholder={t(
+                  "settings.channels.wechatRuntime.placeholder.autoGenerate",
+                  "自动生成",
+                )}
                 className="h-9 w-full rounded-md border bg-background px-3 text-sm font-mono"
               />
             </label>
             <label className="space-y-1 md:col-span-2">
               <span className="text-xs text-muted-foreground">
-                登录后保存的账号名称（可选）
+                {t(
+                  "settings.channels.wechatRuntime.field.accountName",
+                  "登录后保存的账号名称（可选）",
+                )}
               </span>
               <input
                 value={accountName}
                 onChange={(event) => setAccountName(event.target.value)}
-                placeholder="运营微信 / 小助手"
+                placeholder={t(
+                  "settings.channels.wechatRuntime.placeholder.accountName",
+                  "运营微信 / 小助手",
+                )}
                 className="h-9 w-full rounded-md border bg-background px-3 text-sm"
               />
             </label>
@@ -1988,12 +2360,19 @@ function WechatGatewayDebugPanel({
             <button
               type="button"
               onClick={() =>
-                void runAction("login_start", startLogin, "二维码已生成")
+                void runAction(
+                  "login_start",
+                  startLogin,
+                  t(
+                    "settings.channels.wechatRuntime.message.qrReady",
+                    "二维码已生成",
+                  ),
+                )
               }
               disabled={busy}
               className="rounded-md border px-3 py-1.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
-              生成二维码
+              {actionLabels.login_start}
             </button>
             <button
               type="button"
@@ -2001,14 +2380,17 @@ function WechatGatewayDebugPanel({
                 void runAction(
                   "login_wait",
                   waitForLoginResult,
-                  "登录结果已返回",
+                  t(
+                    "settings.channels.wechatRuntime.message.loginReturned",
+                    "登录结果已返回",
+                  ),
                   finalizeLoginSuccess,
                 )
               }
               disabled={busy}
               className="rounded-md border px-3 py-1.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
-              等待登录结果
+              {actionLabels.login_wait}
             </button>
           </div>
 
@@ -2019,15 +2401,34 @@ function WechatGatewayDebugPanel({
                   <QrCodePreview value={qrCodeUrl} />
                 </div>
                 <div className="space-y-2 text-sm text-slate-500">
-                  <p className="font-medium text-slate-900">当前二维码已就绪</p>
+                  <p className="font-medium text-slate-900">
+                    {t(
+                      "settings.channels.wechatRuntime.qr.readyTitle",
+                      "当前二维码已就绪",
+                    )}
+                  </p>
                   <p className="leading-6">
-                    请使用微信扫码并在手机上确认连接。当前页面会自动等待登录完成并写回配置。
+                    {t(
+                      "settings.channels.wechatRuntime.qr.readyDescription",
+                      "请使用微信扫码并在手机上确认连接。当前页面会自动等待登录完成并写回配置。",
+                    )}
                   </p>
                   <p className="text-xs leading-5 text-slate-500">
-                    当前页面会把微信返回的二维码内容本地转码显示，不依赖远程图片加载。
+                    {t(
+                      "settings.channels.wechatRuntime.qr.localRenderNote",
+                      "当前页面会把微信返回的二维码内容本地转码显示，不依赖远程图片加载。",
+                    )}
                   </p>
                   <p className="text-xs leading-5 text-slate-500">
-                    session_key：{loginSessionKey || "未生成"}
+                    {t("settings.channels.wechatRuntime.qr.sessionKey", {
+                      sessionKey:
+                        loginSessionKey ||
+                        t(
+                          "settings.channels.wechatRuntime.value.notGenerated",
+                          "未生成",
+                        ),
+                      defaultValue: "session_key：{{sessionKey}}",
+                    })}
                   </p>
                 </div>
               </div>
@@ -2035,10 +2436,16 @@ function WechatGatewayDebugPanel({
           ) : (
             <div className="rounded-[18px] border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-500">
               <p className="font-medium text-slate-900">
-                当前还没有可扫码二维码
+                {t(
+                  "settings.channels.wechatRuntime.qr.emptyTitle",
+                  "当前还没有可扫码二维码",
+                )}
               </p>
               <p className="mt-2 leading-6">
-                请先点击“生成二维码”。如果接口没有返回二维码内容，下面的“最近结果”会直接显示错误原因。
+                {t(
+                  "settings.channels.wechatRuntime.qr.emptyDescription",
+                  "请先点击“生成二维码”。如果接口没有返回二维码内容，下面的“最近结果”会直接显示错误原因。",
+                )}
               </p>
             </div>
           )}
@@ -2048,9 +2455,17 @@ function WechatGatewayDebugPanel({
       <div className={`${SOFT_CARD_CLASS_NAME} space-y-3`}>
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
-            <h4 className="text-sm font-medium text-slate-900">已配置账号</h4>
+            <h4 className="text-sm font-medium text-slate-900">
+              {t(
+                "settings.channels.wechatRuntime.accounts.title",
+                "已配置账号",
+              )}
+            </h4>
             <p className="mt-1 text-xs leading-5 text-slate-500">
-              这里展示扫码写入或手工配置后实际可见的微信账号目录。
+              {t(
+                "settings.channels.wechatRuntime.accounts.description",
+                "这里展示扫码写入或手工配置后实际可见的微信账号目录。",
+              )}
             </p>
           </div>
           <label className="inline-flex items-center gap-2 text-xs text-slate-500">
@@ -2059,20 +2474,32 @@ function WechatGatewayDebugPanel({
               checked={purgeDataOnRemove}
               onChange={(event) => setPurgeDataOnRemove(event.target.checked)}
             />
-            删除时清理本地缓存数据
+            {t(
+              "settings.channels.wechatRuntime.field.purgeDataOnRemove",
+              "删除时清理本地缓存数据",
+            )}
           </label>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-slate-600">
-            运行中账号：{runtimeStatus?.running_accounts ?? 0}
+            {t("settings.channels.wechatRuntime.accounts.runningCount", {
+              count: runtimeStatus?.running_accounts ?? 0,
+              defaultValue: "运行中账号：{{count}}",
+            })}
           </span>
           <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-slate-600">
-            已配置账号：{accounts.length}
+            {t("settings.channels.wechatRuntime.accounts.configuredCount", {
+              count: accounts.length,
+              defaultValue: "已配置账号：{{count}}",
+            })}
           </span>
           {runtimeError ? (
             <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-rose-700">
-              状态轮询失败：{runtimeError}
+              {t("settings.channels.wechatRuntime.message.statusPollFailed", {
+                error: runtimeError,
+                defaultValue: "状态轮询失败：{{error}}",
+              })}
             </span>
           ) : null}
         </div>
@@ -2103,7 +2530,15 @@ function WechatGatewayDebugPanel({
                               : "border-slate-200 bg-slate-50 text-slate-500",
                           )}
                         >
-                          {item.enabled ? "已启用" : "已禁用"}
+                          {item.enabled
+                            ? t(
+                                "settings.channels.wechatRuntime.state.enabled",
+                                "已启用",
+                              )
+                            : t(
+                                "settings.channels.wechatRuntime.state.disabled",
+                                "已禁用",
+                              )}
                         </span>
                         <span
                           className={cn(
@@ -2113,39 +2548,108 @@ function WechatGatewayDebugPanel({
                               : "border-slate-200 bg-slate-50 text-slate-500",
                           )}
                         >
-                          {runtime?.running ? "运行中" : "未运行"}
+                          {runtime?.running
+                            ? t(
+                                "settings.channels.wechatRuntime.state.running",
+                                "运行中",
+                              )
+                            : t(
+                                "settings.channels.wechatRuntime.state.notRunning",
+                                "未运行",
+                              )}
                         </span>
                       </div>
                       <div className="grid gap-1 text-xs leading-5 text-slate-500">
-                        <p>Token：{item.hasToken ? "已保存" : "未保存"}</p>
                         <p>
-                          Base URL：
-                          {item.baseUrl ||
-                            config.base_url ||
-                            DEFAULT_WECHAT_BASE_URL}
+                          {t("settings.channels.wechatRuntime.accounts.token", {
+                            status: item.hasToken
+                              ? t(
+                                  "settings.channels.wechatRuntime.value.saved",
+                                  "已保存",
+                                )
+                              : t(
+                                  "settings.channels.wechatRuntime.value.notSaved",
+                                  "未保存",
+                                ),
+                            defaultValue: "Token：{{status}}",
+                          })}
                         </p>
                         <p>
-                          CDN URL：
-                          {item.cdnBaseUrl ||
-                            config.cdn_base_url ||
-                            DEFAULT_WECHAT_CDN_BASE_URL}
-                        </p>
-                        <p>扫码用户 ID：{item.scannerUserId || "未记录"}</p>
-                        <p>
-                          最近轮询：
-                          {formatRuntimeTimestamp(runtime?.lastUpdateAt)}
+                          {t("settings.channels.wechatRuntime.accounts.baseUrl", {
+                            value:
+                              item.baseUrl ||
+                              config.base_url ||
+                              DEFAULT_WECHAT_BASE_URL,
+                            defaultValue: "Base URL：{{value}}",
+                          })}
                         </p>
                         <p>
-                          最近消息：
-                          {formatRuntimeTimestamp(runtime?.lastMessageAt)}
+                          {t("settings.channels.wechatRuntime.accounts.cdnUrl", {
+                            value:
+                              item.cdnBaseUrl ||
+                              config.cdn_base_url ||
+                              DEFAULT_WECHAT_CDN_BASE_URL,
+                            defaultValue: "CDN URL：{{value}}",
+                          })}
                         </p>
                         <p>
-                          Sync Buf：
-                          {runtime?.syncBufPresent ? "已存在" : "暂无"}
+                          {t(
+                            "settings.channels.wechatRuntime.accounts.scannerUserId",
+                            {
+                              value: item.scannerUserId || unknownValue,
+                              defaultValue: "扫码用户 ID：{{value}}",
+                            },
+                          )}
+                        </p>
+                        <p>
+                          {t(
+                            "settings.channels.wechatRuntime.accounts.lastPoll",
+                            {
+                              value: formatRuntimeTimestamp(
+                                runtime?.lastUpdateAt,
+                                emptyValue,
+                                i18n.language,
+                              ),
+                              defaultValue: "最近轮询：{{value}}",
+                            },
+                          )}
+                        </p>
+                        <p>
+                          {t(
+                            "settings.channels.wechatRuntime.accounts.lastMessage",
+                            {
+                              value: formatRuntimeTimestamp(
+                                runtime?.lastMessageAt,
+                                emptyValue,
+                                i18n.language,
+                              ),
+                              defaultValue: "最近消息：{{value}}",
+                            },
+                          )}
+                        </p>
+                        <p>
+                          {t(
+                            "settings.channels.wechatRuntime.accounts.syncBuf",
+                            {
+                              status: runtime?.syncBufPresent
+                                ? t(
+                                    "settings.channels.wechatRuntime.value.present",
+                                    "已存在",
+                                  )
+                                : emptyValue,
+                              defaultValue: "Sync Buf：{{status}}",
+                            },
+                          )}
                         </p>
                         {runtime?.lastError ? (
                           <p className="text-rose-600">
-                            最近错误：{runtime.lastError}
+                            {t(
+                              "settings.channels.wechatRuntime.accounts.lastError",
+                              {
+                                error: runtime.lastError,
+                                defaultValue: "最近错误：{{error}}",
+                              },
+                            )}
                           </p>
                         ) : null}
                       </div>
@@ -2157,7 +2661,10 @@ function WechatGatewayDebugPanel({
                         onClick={() => setAccountId(item.accountId)}
                         className="rounded-md border px-3 py-1.5 text-xs transition-colors hover:bg-slate-50"
                       >
-                        设为当前账号
+                        {t(
+                          "settings.channels.wechatRuntime.action.setCurrentAccount",
+                          "设为当前账号",
+                        )}
                       </button>
                       <button
                         type="button"
@@ -2165,7 +2672,7 @@ function WechatGatewayDebugPanel({
                         disabled={busy}
                         className="rounded-md border border-rose-200 px-3 py-1.5 text-xs text-rose-700 transition-colors hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        删除账号
+                        {actionLabels.remove_account}
                       </button>
                     </div>
                   </div>
@@ -2175,21 +2682,30 @@ function WechatGatewayDebugPanel({
           </div>
         ) : (
           <p className="text-xs text-slate-500">
-            还没有微信账号。可以先去上方微信配置扫码接入；只有主流程异常时再用这里的兼容扫码排障。
+            {t(
+              "settings.channels.wechatRuntime.accounts.empty",
+              "还没有微信账号。可以先去上方微信配置扫码接入；只有主流程异常时再用这里的兼容扫码排障。",
+            )}
           </p>
         )}
       </div>
 
       {busyAction && (
         <div className="text-xs text-muted-foreground">
-          正在执行：{busyAction}
+          {t("settings.channels.gatewayRuntime.state.running", {
+            action: busyActionLabel,
+            defaultValue: "正在执行：{{action}}",
+          })}
         </div>
       )}
 
       <div className="space-y-1">
-        <div className="text-xs text-muted-foreground">最近结果</div>
+        <div className="text-xs text-muted-foreground">
+          {t("settings.channels.gatewayRuntime.result.title", "最近结果")}
+        </div>
         <pre className="max-h-56 overflow-auto rounded-md border bg-muted/40 p-3 text-xs whitespace-pre-wrap break-all">
-          {output || "暂无结果"}
+          {output ||
+            t("settings.channels.gatewayRuntime.result.empty", "暂无结果")}
         </pre>
       </div>
     </div>
@@ -2221,6 +2737,7 @@ export function ChannelsDebugWorkbench({
   initialSubPage = "logs",
   initialDebugTab = "telegram",
 }: ChannelsDebugWorkbenchProps) {
+  const { t } = useTranslation("settings");
   const normalizedInitialSubPage: ChannelSubPage =
     initialSubPage === "overview" || initialSubPage === "config"
       ? "logs"
@@ -2281,12 +2798,24 @@ export function ChannelsDebugWorkbench({
           gateway,
         }),
       );
-      setMessage({ type: "success", text: "日志与检查配置已保存" });
+      setMessage({
+        type: "success",
+        text: t(
+          "settings.channels.workbench.message.saved",
+          "日志与检查配置已保存",
+        ),
+      });
       onConfigSaved?.();
       setTimeout(() => setMessage(null), 3000);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      setMessage({ type: "error", text: `保存失败: ${msg}` });
+      setMessage({
+        type: "error",
+        text: t("settings.channels.workbench.message.saveFailed", {
+          error: msg,
+          defaultValue: "保存失败: {{error}}",
+        }),
+      });
     }
     setSaving(false);
   };
@@ -2307,8 +2836,8 @@ export function ChannelsDebugWorkbench({
   }
 
   const SUB_PAGE_LABELS: Record<ChannelSubPage, string> = {
-    gateway: "网关",
-    logs: "日志",
+    gateway: t("settings.channels.workbench.scope.gateway", "网关"),
+    logs: t("settings.channels.workbench.scope.logs", "日志"),
   };
 
   const subPages: Array<{
@@ -2319,14 +2848,20 @@ export function ChannelsDebugWorkbench({
   }> = [
     {
       key: "gateway",
-      label: "网关",
-      description: "公网入口与回调同步",
+      label: t("settings.channels.workbench.scope.gateway", "网关"),
+      description: t(
+        "settings.channels.workbench.subpage.gateway.description",
+        "公网入口与回调同步",
+      ),
       icon: Network,
     },
     {
       key: "logs",
-      label: "日志",
-      description: "日志与运行排障",
+      label: t("settings.channels.workbench.scope.logs", "日志"),
+      description: t(
+        "settings.channels.workbench.subpage.logs.description",
+        "日志与运行排障",
+      ),
       icon: ScrollText,
     },
   ];
@@ -2352,25 +2887,46 @@ export function ChannelsDebugWorkbench({
 
       <SurfacePanel
         icon={LayoutDashboard}
-        title="日志与检查"
-        description="这里只保留网关、日志和运行检查。"
+        title={t("settings.channels.workbench.title", "日志与检查")}
+        description={t(
+          "settings.channels.workbench.description",
+          "这里只保留网关、日志和运行检查。",
+        )}
         aside={
           <>
             <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-medium text-slate-500">
-              当前查看：{currentScopeLabel}
+              {t("settings.channels.workbench.currentScope", {
+                scope: currentScopeLabel,
+                defaultValue: "当前查看：{{scope}}",
+              })}
             </span>
             <WorkbenchInfoTip
-              ariaLabel="日志与检查范围说明"
-              label="收口说明"
+              ariaLabel={t(
+                "settings.channels.workbench.tip.scopeAria",
+                "日志与检查范围说明",
+              )}
+              label={t(
+                "settings.channels.workbench.tip.scopeLabel",
+                "收口说明",
+              )}
               tone="slate"
               variant="pill"
               align="end"
               content={
                 <GuideTipContent
                   steps={[
-                    "旧的概览与配置入口已统一收口到这里，避免在多个子页重复暴露同类入口。",
-                    "网关页用于处理公网入口、隧道与回调同步；日志页用于观察日志、启停与状态查询。",
-                    "配置表单不再作为主入口展示，排障时优先在这里完成状态确认与问题复现。",
+                    t(
+                      "settings.channels.workbench.tip.scope.step.legacy",
+                      "旧的概览与配置入口已统一收口到这里，避免在多个子页重复暴露同类入口。",
+                    ),
+                    t(
+                      "settings.channels.workbench.tip.scope.step.gateway",
+                      "网关页用于处理公网入口、隧道与回调同步；日志页用于观察日志、启停与状态查询。",
+                    ),
+                    t(
+                      "settings.channels.workbench.tip.scope.step.config",
+                      "配置表单不再作为主入口展示，排障时优先在这里完成状态确认与问题复现。",
+                    ),
                   ]}
                 />
               }
@@ -2430,7 +2986,9 @@ export function ChannelsDebugWorkbench({
                       : "border-slate-200 bg-white text-slate-500",
                   )}
                 >
-                  {isActive ? "当前" : "切换"}
+                  {isActive
+                    ? t("settings.channels.workbench.subpage.current", "当前")
+                    : t("settings.channels.workbench.subpage.switch", "切换")}
                 </span>
               </button>
             );
@@ -2442,8 +3000,11 @@ export function ChannelsDebugWorkbench({
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.18fr)_minmax(320px,0.82fr)]">
           <SurfacePanel
             icon={Network}
-            title="网关与隧道"
-            description="统一管理公网隧道、回调同步与连通性探测。"
+            title={t("settings.channels.workbench.gateway.title", "网关与隧道")}
+            description={t(
+              "settings.channels.workbench.gateway.description",
+              "统一管理公网隧道、回调同步与连通性探测。",
+            )}
             aside={
               <>
                 <span
@@ -2454,22 +3015,48 @@ export function ChannelsDebugWorkbench({
                       : "border-slate-200 bg-slate-100 text-slate-500",
                   )}
                 >
-                  {tunnelEnabled ? "隧道已启用" : "隧道未启用"}
+                  {tunnelEnabled
+                    ? t(
+                        "settings.channels.workbench.gateway.tunnel.enabled",
+                        "隧道已启用",
+                      )
+                    : t(
+                        "settings.channels.workbench.gateway.tunnel.disabled",
+                        "隧道未启用",
+                      )}
                 </span>
                 <WorkbenchInfoTip
-                  ariaLabel="网关与隧道配置步骤"
-                  label="配置步骤"
+                  ariaLabel={t(
+                    "settings.channels.workbench.gateway.tip.aria",
+                    "网关与隧道配置步骤",
+                  )}
+                  label={t(
+                    "settings.channels.workbench.gateway.tip.label",
+                    "配置步骤",
+                  )}
                   tone="slate"
                   variant="pill"
                   align="end"
                   content={
                     <GuideTipContent
                       steps={[
-                        "先确认本地网关地址（local host/port）可访问，再配置 tunnel 参数。",
-                        "Cloudflare 模式优先设置 tunnel_name 与 dns_name，再执行“创建隧道”。",
-                        "隧道启动后执行“同步飞书回调 URL”，确保飞书侧回调地址一致。",
+                        t(
+                          "settings.channels.workbench.gateway.tip.step.local",
+                          "先确认本地网关地址（local host/port）可访问，再配置 tunnel 参数。",
+                        ),
+                        t(
+                          "settings.channels.workbench.gateway.tip.step.cloudflare",
+                          "Cloudflare 模式优先设置 tunnel_name 与 dns_name，再执行“创建隧道”。",
+                        ),
+                        t(
+                          "settings.channels.workbench.gateway.tip.step.syncFeishu",
+                          "隧道启动后执行“同步飞书回调 URL”，确保飞书侧回调地址一致。",
+                        ),
                       ]}
-                      note="建议每次变更后都先“查询状态”，再到日志页观察是否有连接异常。"
+                      note={t(
+                        "settings.channels.workbench.gateway.tip.note",
+                        "建议每次变更后都先“查询状态”，再到日志页观察是否有连接异常。",
+                      )}
                     />
                   }
                 />
@@ -2488,21 +3075,33 @@ export function ChannelsDebugWorkbench({
 
           <SurfacePanel
             icon={LayoutDashboard}
-            title="当前摘要"
-            description="快速核对当前 tunnel 关键参数。"
+            title={t("settings.channels.workbench.summary.title", "当前摘要")}
+            description={t(
+              "settings.channels.workbench.summary.description",
+              "快速核对当前 tunnel 关键参数。",
+            )}
           >
             <div className="space-y-2.5">
               <CompactSummaryRow
-                label="本地入口"
+                label={t(
+                  "settings.channels.workbench.summary.localEntry",
+                  "本地入口",
+                )}
                 value={`${gateway.tunnel?.local_host || "127.0.0.1"}:${gateway.tunnel?.local_port ?? 3000}`}
                 mono
               />
               <CompactSummaryRow
-                label="Tunnel 模式"
+                label={t(
+                  "settings.channels.workbench.summary.tunnelMode",
+                  "Tunnel 模式",
+                )}
                 value={`${gateway.tunnel?.provider || "cloudflare"} / ${gateway.tunnel?.mode || "managed"}`}
               />
               <CompactSummaryRow
-                label="飞书默认账号"
+                label={t(
+                  "settings.channels.workbench.summary.feishuDefaultAccount",
+                  "飞书默认账号",
+                )}
                 value={channels.feishu.default_account || "default"}
                 mono
               />
@@ -2515,21 +3114,39 @@ export function ChannelsDebugWorkbench({
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.02fr)_minmax(0,0.98fr)]">
           <SurfacePanel
             icon={ScrollText}
-            title="日志"
-            description="观察渠道网关 / RPC 日志。"
+            title={t("settings.channels.workbench.scope.logs", "日志")}
+            description={t(
+              "settings.channels.workbench.logs.description",
+              "观察渠道网关 / RPC 日志。",
+            )}
             aside={
               <WorkbenchInfoTip
-                ariaLabel="日志排查说明"
-                label="排查说明"
+                ariaLabel={t(
+                  "settings.channels.workbench.logs.tip.aria",
+                  "日志排查说明",
+                )}
+                label={t(
+                  "settings.channels.workbench.logs.tip.label",
+                  "排查说明",
+                )}
                 tone="slate"
                 variant="pill"
                 align="end"
                 content={
                   <GuideTipContent
                     steps={[
-                      "先选择过滤模式（如 TelegramGateway / WechatGateway / RPC），缩小观察范围。",
-                      "遇到历史噪音可先“清空日志”，再复现问题获取干净样本。",
-                      "如果日志无输出，先去“运行”页执行状态查询确认服务已启动。",
+                      t(
+                        "settings.channels.workbench.logs.tip.step.filter",
+                        "先选择过滤模式（如 TelegramGateway / WechatGateway / RPC），缩小观察范围。",
+                      ),
+                      t(
+                        "settings.channels.workbench.logs.tip.step.clear",
+                        "遇到历史噪音可先“清空日志”，再复现问题获取干净样本。",
+                      ),
+                      t(
+                        "settings.channels.workbench.logs.tip.step.status",
+                        "如果日志无输出，先去“运行”页执行状态查询确认服务已启动。",
+                      ),
                     ]}
                   />
                 }
@@ -2541,8 +3158,11 @@ export function ChannelsDebugWorkbench({
 
           <SurfacePanel
             icon={Network}
-            title="运行"
-            description="启停、状态与兼容排障。"
+            title={t("settings.channels.workbench.runtime.title", "运行")}
+            description={t(
+              "settings.channels.workbench.runtime.description",
+              "启停、状态与兼容排障。",
+            )}
           >
             <Tabs
               value={activeDebugTab}
@@ -2560,13 +3180,13 @@ export function ChannelsDebugWorkbench({
                   value="feishu"
                   className={SECTION_TAB_TRIGGER_CLASS_NAME}
                 >
-                  飞书
+                  {t("settings.channels.workbench.runtime.tab.feishu", "飞书")}
                 </TabsTrigger>
                 <TabsTrigger
                   value="wechat"
                   className={SECTION_TAB_TRIGGER_CLASS_NAME}
                 >
-                  微信
+                  {t("settings.channels.workbench.runtime.tab.wechat", "微信")}
                 </TabsTrigger>
               </TabsList>
 
@@ -2594,7 +3214,9 @@ export function ChannelsDebugWorkbench({
         <div className="sticky bottom-0 mt-6 flex flex-col gap-3 rounded-[22px] border border-slate-200/80 bg-white/95 p-4 shadow-lg shadow-slate-950/10 backdrop-blur lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <AlertCircle className="h-4 w-4 text-yellow-500" />
-            <span>未保存的更改</span>
+            <span>
+              {t("settings.channels.workbench.dirty.unsaved", "未保存的更改")}
+            </span>
             <span className="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">
               {currentScopeLabel}
             </span>
@@ -2605,7 +3227,7 @@ export function ChannelsDebugWorkbench({
               className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
             >
               <RotateCcw className="h-3.5 w-3.5" />
-              取消
+              {t("settings.channels.workbench.action.cancel", "取消")}
             </button>
             <button
               onClick={handleSave}
@@ -2617,7 +3239,7 @@ export function ChannelsDebugWorkbench({
               ) : (
                 <Save className="h-3.5 w-3.5" />
               )}
-              保存
+              {t("settings.channels.workbench.action.save", "保存")}
             </button>
           </div>
         </div>

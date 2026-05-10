@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { getConfig, saveConfig, type Config } from "@/lib/api/appConfig";
 import {
   findConfiguredProviderBySelection,
@@ -24,6 +25,7 @@ const DEFAULT_MEDIA_PREFERENCE: MediaGenerationPreference = {
 };
 
 export function ImageGenSettings() {
+  const { t } = useTranslation("settings");
   const [config, setConfig] = useState<Config | null>(null);
   const [message, setMessage] = useState<{
     type: "success" | "error";
@@ -86,13 +88,19 @@ export function ImageGenSettings() {
 
   const providerUnavailableLabel =
     globalImagePreference.preferredProviderId && !selectedProvider
-      ? `当前配置不可用：${globalImagePreference.preferredProviderId}`
+      ? t("settings.mediaGeneration.warning.unavailable", {
+          id: globalImagePreference.preferredProviderId,
+          defaultValue: "当前配置不可用：{{id}}",
+        })
       : undefined;
 
   const modelUnavailableLabel =
     globalImagePreference.preferredModelId &&
     !availableModelIds.includes(globalImagePreference.preferredModelId)
-      ? `当前配置不可用：${globalImagePreference.preferredModelId}`
+      ? t("settings.mediaGeneration.warning.unavailable", {
+          id: globalImagePreference.preferredModelId,
+          defaultValue: "当前配置不可用：{{id}}",
+        })
       : undefined;
 
   const showMessage = (type: "success" | "error", text: string) => {
@@ -121,10 +129,16 @@ export function ImageGenSettings() {
       await saveConfig(updatedConfig);
       setConfig(updatedConfig);
       setGlobalImagePreference(nextPreference);
-      showMessage("success", "设置已保存");
+      showMessage(
+        "success",
+        t("settings.mediaGeneration.message.saved", "设置已保存"),
+      );
     } catch (error) {
       console.error("保存图片服务配置失败:", error);
-      showMessage("error", "保存失败");
+      showMessage(
+        "error",
+        t("settings.mediaGeneration.message.saveFailed", "保存失败"),
+      );
     }
   };
 
@@ -190,18 +204,36 @@ export function ImageGenSettings() {
   );
 
   const providerHint = providersLoading
-    ? "只展示已声明图片生成能力的 Provider。"
+    ? t(
+        "settings.mediaGeneration.image.hint.loading",
+        "只展示已声明图片生成能力的 Provider。",
+      )
     : imageProviders.length === 0
-      ? "当前没有可用图片 Provider；请先在设置 -> AI 服务商中为可出图服务配置模型或自定义模型。"
-      : "只展示已声明图片生成能力的 Provider；后续接入品牌云端目录时也会复用同一筛选口径。";
+      ? t(
+          "settings.mediaGeneration.image.hint.empty",
+          "当前没有可用图片 Provider；请先在设置 -> AI 服务商中为可出图服务配置模型或自定义模型。",
+        )
+      : t(
+          "settings.mediaGeneration.image.hint.ready",
+          "只展示已声明图片生成能力的 Provider；后续接入品牌云端目录时也会复用同一筛选口径。",
+        );
 
   return (
     <div className="max-w-[820px] space-y-4">
       <MediaPreferenceSection
-        title="图片服务模型"
-        description="这里只配置图片生成任务的默认 Provider、模型与回退策略；默认图片数量等全局参数统一收口到同页下方的 AI 图片设置。"
-        selectorLabel="默认模型"
-        selectorDescription="统一使用聊天页同款模型选择器；未指定时沿用自动匹配策略。"
+        title={t("settings.mediaGeneration.image.title", "图片服务模型")}
+        description={t(
+          "settings.mediaGeneration.image.description",
+          "这里只配置图片生成任务的默认 Provider、模型与回退策略；默认图片数量等全局参数统一收口到同页下方的 AI 图片设置。",
+        )}
+        selectorLabel={t(
+          "settings.mediaGeneration.selector.label",
+          "默认模型",
+        )}
+        selectorDescription={t(
+          "settings.mediaGeneration.selector.description",
+          "统一使用聊天页同款模型选择器；未指定时沿用自动匹配策略。",
+        )}
         selectionWarningText={providerUnavailableLabel ?? modelUnavailableLabel}
         providerType={globalImagePreference.preferredProviderId ?? ""}
         setProviderType={handleProviderChange}
@@ -226,13 +258,22 @@ export function ImageGenSettings() {
         getFallbackModels={getImageFallbackModels}
         allowFallback={globalImagePreference.allowFallback ?? true}
         onAllowFallbackChange={handleFallbackChange}
-        fallbackTitle="Provider 不可用时自动回退"
-        fallbackDescription="关闭后，若当前默认图片服务缺失、被禁用或无可用 Key，将直接提示错误。"
-        emptyStateTitle="暂无可用图片模型"
+        fallbackTitle={t(
+          "settings.mediaGeneration.fallback.title",
+          "Provider 不可用时自动回退",
+        )}
+        fallbackDescription={t(
+          "settings.mediaGeneration.image.fallback.description",
+          "关闭后，若当前默认图片服务缺失、被禁用或无可用 Key，将直接提示错误。",
+        )}
+        emptyStateTitle={t(
+          "settings.mediaGeneration.image.empty.title",
+          "暂无可用图片模型",
+        )}
         emptyStateDescription={providerHint}
         disabled={!config}
         onReset={handleResetPreference}
-        resetLabel="恢复默认"
+        resetLabel={t("settings.mediaGeneration.action.reset", "恢复默认")}
         resetDisabled={
           !hasMediaGenerationPreferenceOverride(globalImagePreference)
         }

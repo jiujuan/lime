@@ -2,17 +2,48 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockGetUsageStats, mockGetModelUsageRanking, mockGetDailyUsageTrends } =
-  vi.hoisted(() => ({
+const {
+  mockGetUsageStats,
+  mockGetModelUsageRanking,
+  mockGetDailyUsageTrends,
+  mockUseTranslation,
+} = vi.hoisted(() => {
+  const t = (key: string, options?: unknown) => {
+    if (typeof options === "string") {
+      return options;
+    }
+
+    if (options && typeof options === "object") {
+      const values = options as Record<string, unknown>;
+      const template =
+        typeof values.defaultValue === "string" ? values.defaultValue : key;
+      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+        String(values[name] ?? ""),
+      );
+    }
+
+    return key;
+  };
+
+  return {
     mockGetUsageStats: vi.fn(),
     mockGetModelUsageRanking: vi.fn(),
     mockGetDailyUsageTrends: vi.fn(),
-  }));
+    mockUseTranslation: vi.fn(() => ({
+      i18n: { language: "zh-CN" },
+      t,
+    })),
+  };
+});
 
 vi.mock("@/lib/api/usageStats", () => ({
   getUsageStats: mockGetUsageStats,
   getModelUsageRanking: mockGetModelUsageRanking,
   getDailyUsageTrends: mockGetDailyUsageTrends,
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
 }));
 
 import { StatsSettings } from ".";
@@ -168,6 +199,7 @@ describe("StatsSettings", () => {
     expect(text).toContain("每日使用趋势");
     expect(text).toContain("活跃度日历");
     expect(text).toContain("gpt-4.1");
+    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
   });
 
   it("切换时间范围后应重新拉取对应统计", async () => {

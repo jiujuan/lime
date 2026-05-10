@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  mockUseTranslation,
   mockOpenDialog,
   mockGetConfig,
   mockSetBrowserConnectorInstallRoot,
@@ -23,27 +24,51 @@ const {
   mockGetBrowserBackendPolicy,
   mockGetBrowserBackendsStatus,
   mockOpenBrowserConnectorGuideWindow,
-} = vi.hoisted(() => ({
-  mockOpenDialog: vi.fn(),
-  mockGetConfig: vi.fn(),
-  mockSetBrowserConnectorInstallRoot: vi.fn(),
-  mockGetBrowserConnectorSettings: vi.fn(),
-  mockGetBrowserConnectorInstallStatus: vi.fn(),
-  mockInstallBrowserConnectorExtension: vi.fn(),
-  mockSetBrowserConnectorEnabled: vi.fn(),
-  mockSetSystemConnectorEnabled: vi.fn(),
-  mockSetBrowserActionCapabilityEnabled: vi.fn(),
-  mockOpenBrowserExtensionsPage: vi.fn(),
-  mockOpenBrowserRemoteDebuggingPage: vi.fn(),
-  mockLaunchBrowserSession: vi.fn(),
-  mockOpenBrowserRuntimeDebuggerWindow: vi.fn(),
-  mockGetChromeProfileSessions: vi.fn(),
-  mockGetChromeBridgeEndpointInfo: vi.fn(),
-  mockGetChromeBridgeStatus: vi.fn(),
-  mockDisconnectBrowserConnectorSession: vi.fn(),
-  mockGetBrowserBackendPolicy: vi.fn(),
-  mockGetBrowserBackendsStatus: vi.fn(),
-  mockOpenBrowserConnectorGuideWindow: vi.fn(),
+} = vi.hoisted(() => {
+  const mockTranslate = vi.fn((key: string, options?: unknown) => {
+    if (typeof options === "string") return options;
+
+    if (options && typeof options === "object") {
+      const values = options as Record<string, unknown>;
+      const template =
+        typeof values.defaultValue === "string" ? values.defaultValue : key;
+      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+        String(values[name] ?? ""),
+      );
+    }
+
+    return key;
+  });
+
+  return {
+    mockUseTranslation: vi.fn((_namespace?: string) => ({
+      t: mockTranslate,
+    })),
+    mockOpenDialog: vi.fn(),
+    mockGetConfig: vi.fn(),
+    mockSetBrowserConnectorInstallRoot: vi.fn(),
+    mockGetBrowserConnectorSettings: vi.fn(),
+    mockGetBrowserConnectorInstallStatus: vi.fn(),
+    mockInstallBrowserConnectorExtension: vi.fn(),
+    mockSetBrowserConnectorEnabled: vi.fn(),
+    mockSetSystemConnectorEnabled: vi.fn(),
+    mockSetBrowserActionCapabilityEnabled: vi.fn(),
+    mockOpenBrowserExtensionsPage: vi.fn(),
+    mockOpenBrowserRemoteDebuggingPage: vi.fn(),
+    mockLaunchBrowserSession: vi.fn(),
+    mockOpenBrowserRuntimeDebuggerWindow: vi.fn(),
+    mockGetChromeProfileSessions: vi.fn(),
+    mockGetChromeBridgeEndpointInfo: vi.fn(),
+    mockGetChromeBridgeStatus: vi.fn(),
+    mockDisconnectBrowserConnectorSession: vi.fn(),
+    mockGetBrowserBackendPolicy: vi.fn(),
+    mockGetBrowserBackendsStatus: vi.fn(),
+    mockOpenBrowserConnectorGuideWindow: vi.fn(),
+  };
+});
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
 }));
 
 vi.mock("@/lib/api/appConfig", () => ({
@@ -663,6 +688,32 @@ describe("ChromeRelaySettings", () => {
     );
   });
 
+  it("扩展桥接页应渲染接入信息与测试入口", async () => {
+    const container = renderComponent();
+    await flushEffects();
+    await openAdvancedTab(container);
+
+    const tabButton = findTabButton(container, "桥接");
+    await act(async () => {
+      tabButton.click();
+      await flushEffects();
+    });
+
+    expect(container.textContent).toContain("Chrome 扩展桥接");
+    expect(container.textContent).toContain("桥接服务运行中");
+    expect(container.textContent).toContain("待接入 observer");
+    expect(container.textContent).toContain("扩展接入信息");
+    expect(container.textContent).toContain("Observer WS:");
+    expect(container.textContent).toContain("Bridge Key:");
+    expect(container.textContent).toContain("复制 Google 配置");
+    expect(container.textContent).toContain("尚未收到最近页面信息");
+    expect(container.textContent).toContain(
+      "未检测到扩展 observer 连接。",
+    );
+    expect(container.textContent).toContain("测试 Google 扩展");
+    expect(container.textContent).toContain("刷新扩展状态");
+  });
+
   it("默认不再展示扩展桥接诊断详情与能力清单", async () => {
     mockGetBrowserBackendsStatus.mockResolvedValueOnce({
       policy: {
@@ -718,10 +769,59 @@ describe("ChromeRelaySettings", () => {
     expect(container.textContent).not.toContain("处理弹窗");
   });
 
+  it("后端策略页应渲染策略配置与可用性摘要", async () => {
+    mockGetBrowserBackendsStatus.mockResolvedValueOnce({
+      policy: {
+        priority: ["aster_compat", "lime_extension_bridge", "cdp_direct"],
+        auto_fallback: true,
+      },
+      bridge_observer_count: 0,
+      bridge_control_count: 0,
+      running_profile_count: 0,
+      cdp_alive_profile_count: 0,
+      aster_native_host_supported: true,
+      aster_native_host_configured: false,
+      backends: [
+        {
+          backend: "aster_compat",
+          available: false,
+          reason: null,
+          capabilities: [],
+        },
+      ],
+    });
+
+    const container = renderComponent();
+    await flushEffects();
+    await openAdvancedTab(container);
+
+    const tabButton = findTabButton(container, "后端");
+    await act(async () => {
+      tabButton.click();
+      await flushEffects();
+    });
+
+    expect(container.textContent).toContain("浏览器后端策略");
+    expect(container.textContent).toContain("默认测试目标");
+    expect(container.textContent).toContain("自动回退");
+    expect(container.textContent).toContain("优先级 1");
+    expect(container.textContent).toContain("当前可用性");
+    expect(container.textContent).toContain("能力: 等待运行时返回");
+    expect(container.textContent).toContain("Aster native-host: 未配置");
+    expect(container.textContent).toContain("平台支持: 是");
+    expect(
+      container.querySelector('button[aria-label="自动回退到下一后端"]'),
+    ).not.toBeNull();
+  });
+
   it("应允许切换浏览器动作配置", async () => {
     const container = renderComponent();
     await flushEffects();
     await openAdvancedTab(container);
+
+    expect(container.textContent).toContain("浏览器动作配置");
+    expect(container.textContent).toContain("读取权限");
+    expect(container.textContent).toContain("写入权限");
 
     const target = container.querySelector(
       'button[aria-label="切换页面内查找"]',
@@ -738,6 +838,35 @@ describe("ChromeRelaySettings", () => {
       enabled: false,
     });
     expect(container.textContent).toContain("页面内查找 已关闭");
+  });
+
+  it("应渲染系统连接器卡片并允许切换系统能力", async () => {
+    const container = renderComponent();
+    await flushEffects();
+    await openAdvancedTab(container);
+
+    expect(container.textContent).toContain(
+      "按需开启系统能力，把授权和系统访问集中放在这里。",
+    );
+    expect(container.textContent).toContain("0 / 1 已启用");
+    expect(container.textContent).toContain("等待授权");
+    expect(container.textContent).toContain(
+      "能力：list_events / create_event / update_event",
+    );
+
+    const target = container.querySelector('button[aria-label="切换日历"]');
+    expect(target).not.toBeNull();
+
+    await act(async () => {
+      (target as HTMLButtonElement).click();
+      await flushEffects();
+    });
+
+    expect(mockSetSystemConnectorEnabled).toHaveBeenCalledWith({
+      id: "calendar",
+      enabled: true,
+    });
+    expect(container.textContent).toContain("日历 已授权并启用");
   });
 
   it("系统连接器为空时不应渲染 macOS 连接器卡片", async () => {
