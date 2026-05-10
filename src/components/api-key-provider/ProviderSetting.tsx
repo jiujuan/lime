@@ -265,6 +265,7 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
   loading = false,
   className,
 }) => {
+  const { t } = useTranslation("settings");
   const [modelList, setModelList] = useState<string[]>(
     provider?.custom_models ?? [],
   );
@@ -668,7 +669,10 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
                       className="border-amber-200 bg-amber-50 text-amber-700"
                       data-testid="provider-prompt-cache-badge"
                     >
-                      显式缓存
+                      {t(
+                        "settings.providers.setting.body.badge.explicitCache",
+                        "显式缓存",
+                      )}
                     </Badge>
                   ) : null}
                 </div>
@@ -688,7 +692,10 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
                     className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
                     data-testid="provider-api-key-link"
                   >
-                    去获取 API 密钥
+                    {t(
+                      "settings.providers.setting.body.action.getApiKey",
+                      "去获取 API 密钥",
+                    )}
                     <ExternalLink className="h-3.5 w-3.5" />
                   </a>
                 ) : null}
@@ -709,7 +716,15 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
                     ) : (
                       <Trash2 className="mr-1.5 h-3.5 w-3.5" />
                     )}
-                    {deletingProvider ? "删除中..." : "删除配置"}
+                    {deletingProvider
+                      ? t(
+                          "settings.providers.setting.body.action.deleting",
+                          "删除中...",
+                        )
+                      : t(
+                          "settings.providers.setting.body.action.delete",
+                          "删除配置",
+                        )}
                   </Button>
                 ) : null}
               </div>
@@ -738,10 +753,23 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
                   htmlFor="provider-api-key"
                   className="text-sm text-slate-600"
                 >
-                  API 密钥{providerApiKeyRequired ? "" : "（可选）"}
+                  {providerApiKeyRequired
+                    ? t(
+                        "settings.providers.setting.body.apiKey.label",
+                        "API 密钥",
+                      )
+                    : t(
+                        "settings.providers.setting.body.apiKey.optionalLabel",
+                        "API 密钥（可选）",
+                      )}
                 </Label>
                 {hasApiKey ? (
-                  <span className="text-xs text-emerald-600">已配置</span>
+                  <span className="text-xs text-emerald-600">
+                    {t(
+                      "settings.providers.setting.body.apiKey.configured",
+                      "已配置",
+                    )}
+                  </span>
                 ) : null}
               </div>
               <div className="relative">
@@ -760,7 +788,15 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
                     setApiKeyDraft(event.target.value);
                   }}
                   placeholder={
-                    providerApiKeyRequired ? "输入 API 密钥" : "本地服务可留空"
+                    providerApiKeyRequired
+                      ? t(
+                          "settings.providers.setting.body.apiKey.placeholder",
+                          "输入 API 密钥",
+                        )
+                      : t(
+                          "settings.providers.setting.body.apiKey.optionalPlaceholder",
+                          "本地服务可留空",
+                        )
                   }
                   className="h-12 rounded-[18px] border-slate-200 bg-white px-4 pr-11"
                   autoCapitalize="none"
@@ -773,7 +809,10 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
                   type="button"
                   onClick={() => setShowApiKey((previous) => !previous)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-700"
-                  aria-label="显示或隐藏 API 密钥"
+                  aria-label={t(
+                    "settings.providers.setting.body.apiKey.toggleVisibility",
+                    "显示或隐藏 API 密钥",
+                  )}
                   data-testid="provider-api-key-eye-button"
                 >
                   <Eye className="h-4 w-4" />
@@ -789,9 +828,17 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
             <div className="space-y-3" data-testid="model-priority-section">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <Label className="text-sm text-slate-600">模型优先级</Label>
+                  <Label className="text-sm text-slate-600">
+                    {t(
+                      "settings.providers.setting.body.models.title",
+                      "模型优先级",
+                    )}
+                  </Label>
                   <p className="mt-1 text-xs text-slate-500">
-                    只使用接口返回或你手动添加的模型，不再显示本地兜底模型。
+                    {t(
+                      "settings.providers.setting.body.models.description",
+                      "只使用接口返回或你手动添加的模型，不再显示本地兜底模型。",
+                    )}
                   </p>
                 </div>
                 <Button
@@ -810,7 +857,10 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
                   ) : (
                     <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
                   )}
-                  从接口获取
+                  {t(
+                    "settings.providers.setting.body.models.action.fetch",
+                    "从接口获取",
+                  )}
                 </Button>
               </div>
 
@@ -841,13 +891,23 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
                 >
                   <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div className="text-xs font-medium text-slate-500">
-                      接口模型（显示 {suggestedApiModels.length} /{" "}
-                      {availableApiModels.length} 个，点击添加）
+                      {t(
+                        "settings.providers.setting.body.models.apiSuggestions",
+                        {
+                          visible: suggestedApiModels.length,
+                          total: availableApiModels.length,
+                          defaultValue:
+                            "接口模型（显示 {{visible}} / {{total}} 个，点击添加）",
+                        },
+                      )}
                     </div>
                     <Input
                       value={apiModelQuery}
                       onChange={(event) => setApiModelQuery(event.target.value)}
-                      placeholder="筛选接口模型"
+                      placeholder={t(
+                        "settings.providers.setting.body.models.filterPlaceholder",
+                        "筛选接口模型",
+                      )}
                       className="h-8 rounded-full border-slate-200 bg-white px-3 text-xs normal-case sm:w-[220px]"
                       autoCapitalize="none"
                       autoCorrect="off"
@@ -879,7 +939,10 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
                       </div>
                     ) : (
                       <div className="rounded-[14px] border border-dashed border-slate-200 bg-white px-3 py-4 text-center text-xs text-slate-500">
-                        没有匹配的接口模型。
+                        {t(
+                          "settings.providers.setting.body.models.noApiMatches",
+                          "没有匹配的接口模型。",
+                        )}
                       </div>
                     )}
                   </div>
@@ -908,7 +971,10 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
                         <span className="text-slate-400">::</span>
                         {index === 0 ? (
                           <Badge className="border border-amber-200 bg-amber-50 px-2 py-0 text-[11px] text-amber-700 hover:bg-amber-50">
-                            主模型
+                            {t(
+                              "settings.providers.setting.body.models.primaryBadge",
+                              "主模型",
+                            )}
                           </Badge>
                         ) : null}
                         <span className="min-w-0 flex-1 truncate normal-case">
@@ -923,7 +989,10 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
                             className="text-xs font-medium text-slate-500 hover:text-slate-900"
                           >
                             <Star className="mr-1 inline h-3 w-3" />
-                            设为主模型
+                            {t(
+                              "settings.providers.setting.body.models.action.setPrimary",
+                              "设为主模型",
+                            )}
                           </button>
                         ) : null}
                         <button
@@ -932,7 +1001,13 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
                             void handleRemoveModel(modelId);
                           }}
                           className="text-slate-400 hover:text-rose-600"
-                          aria-label={`移除模型 ${modelId}`}
+                          aria-label={t(
+                            "settings.providers.setting.body.models.action.removeAria",
+                            {
+                              model: modelId,
+                              defaultValue: "移除模型 {{model}}",
+                            },
+                          )}
                         >
                           <X className="h-4 w-4" />
                         </button>
@@ -941,7 +1016,10 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
                   </div>
                 ) : (
                   <div className="rounded-[18px] border border-dashed border-slate-200 bg-white px-4 py-5 text-sm text-slate-500">
-                    暂无模型。请从接口获取后选择，或手动添加模型 ID。
+                    {t(
+                      "settings.providers.setting.body.models.empty",
+                      "暂无模型。请从接口获取后选择，或手动添加模型 ID。",
+                    )}
                   </div>
                 )}
 
@@ -955,7 +1033,10 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
                         void handleAddModelDraft();
                       }
                     }}
-                    placeholder="输入模型 ID，按 Enter 添加"
+                    placeholder={t(
+                      "settings.providers.setting.body.models.draftPlaceholder",
+                      "输入模型 ID，按 Enter 添加",
+                    )}
                     className="h-11 rounded-[16px] border-slate-200 bg-white px-4 normal-case"
                     autoCapitalize="none"
                     autoCorrect="off"
@@ -974,7 +1055,10 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
                     data-testid="model-draft-add-button"
                   >
                     <Plus className="mr-1 h-4 w-4" />
-                    添加模型
+                    {t(
+                      "settings.providers.setting.body.models.action.add",
+                      "添加模型",
+                    )}
                   </Button>
                 </div>
               </div>
@@ -995,16 +1079,33 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
                 ) : (
                   <CheckCircle2 className="mr-2 h-4 w-4" />
                 )}
-                {testingConnection ? "测试中..." : "测试连接"}
+                {testingConnection
+                  ? t(
+                      "settings.providers.setting.body.connection.testing",
+                      "测试中...",
+                    )
+                  : t(
+                      "settings.providers.setting.body.connection.test",
+                      "测试连接",
+                    )}
               </Button>
 
               {!canTestConnection && !testingConnection ? (
                 <p className="text-center text-xs text-slate-500">
                   {modelList.length === 0
-                    ? "先添加一个模型，再测试连接。"
+                    ? t(
+                        "settings.providers.setting.body.connection.needModel",
+                        "先添加一个模型，再测试连接。",
+                      )
                     : providerApiKeyRequired && !hasApiKey && !canUseDraftApiKey
-                      ? "先填写 API 密钥，再测试连接。"
-                      : "当前暂不可测试。"}
+                      ? t(
+                          "settings.providers.setting.body.connection.needApiKey",
+                          "先填写 API 密钥，再测试连接。",
+                        )
+                      : t(
+                          "settings.providers.setting.body.connection.unavailable",
+                          "当前暂不可测试。",
+                        )}
                 </p>
               ) : null}
 
