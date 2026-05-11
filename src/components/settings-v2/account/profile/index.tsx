@@ -654,7 +654,7 @@ export function ProfileSettings() {
               </span>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
                 {t("settings.profile.hero.tags", {
-                  count: tagsCountLabel,
+                  count: tags.length,
                   defaultValue: "标签：{{count}}",
                 })}
               </span>
@@ -737,7 +737,7 @@ export function ProfileSettings() {
                 {extraTagCount > 0 && (
                   <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-500">
                     {t("settings.profile.avatar.extraTags", {
-                      count: extraTagCountLabel,
+                      count: extraTagCount,
                       defaultValue: "+{{count}} 个标签",
                     })}
                   </span>
@@ -792,7 +792,7 @@ export function ProfileSettings() {
               </div>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
                 {t("settings.profile.basic.itemCount", {
-                  count: profileFieldCountLabel,
+                  count: profileFields.length,
                   defaultValue: "{{count}} 项",
                 })}
               </span>
@@ -859,7 +859,7 @@ export function ProfileSettings() {
               </div>
               <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
                 {t("settings.profile.tags.selectedCount", {
-                  count: tagsCountLabel,
+                  count: tags.length,
                   defaultValue: "{{count}} 个已选",
                 })}
               </span>

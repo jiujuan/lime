@@ -315,7 +315,7 @@ describe("UserCenterSessionSettings", () => {
   it("应按当前 locale 格式化会话时间与能力数量", () => {
     mockUseTranslation.mockImplementationOnce((_namespace?: string) => ({
       i18n: { language: "en-US" },
-      t: (key: string, options?: unknown) => {
+      t: vi.fn((key: string, options?: unknown) => {
         if (typeof options === "string") {
           return options;
         }
@@ -330,7 +330,7 @@ describe("UserCenterSessionSettings", () => {
         }
 
         return key;
-      },
+      }),
     }));
     mockUseOemCloudAccess.mockReturnValue(
       createAccessState({

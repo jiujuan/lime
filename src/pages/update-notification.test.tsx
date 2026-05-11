@@ -143,8 +143,8 @@ describe("UpdateNotificationPage", () => {
     let resolveDownload: (() => void) | undefined;
     mockDownloadUpdate.mockImplementationOnce(
       () =>
-        new Promise<void>((resolve) => {
-          resolveDownload = resolve;
+        new Promise<undefined>((resolve) => {
+          resolveDownload = () => resolve(undefined);
         }),
     );
     const container = await renderUpdateNotification(

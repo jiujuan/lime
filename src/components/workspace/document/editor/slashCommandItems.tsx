@@ -53,7 +53,8 @@ const SLASH_COMMAND_I18N_PREFIX = "workspace.document.editor.slashCommand";
 
 function getWorkspaceTranslator(): WorkspaceTranslator {
   const instance = i18next.isInitialized ? i18next : initLimeI18n();
-  return (key: string) => String(instance.t(key, { ns: "workspace" }));
+  const t = instance.getFixedT(instance.language, "workspace");
+  return (key: string) => String(t(key as never));
 }
 
 function getWorkspaceText(key: string): string {
