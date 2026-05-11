@@ -125,6 +125,7 @@ struct ReviewDecisionContext {
     verification_summary: Option<Value>,
     verification_failure_outcomes: Vec<String>,
     verification_recovered_outcomes: Vec<String>,
+    agent_runtime_profile: Option<Value>,
     #[serde(default)]
     limit_status: String,
     #[serde(default)]
@@ -358,6 +359,7 @@ fn build_review_decision_document(
             verification_summary: verification_context.summary.clone(),
             verification_failure_outcomes: verification_context.failure_outcomes.clone(),
             verification_recovered_outcomes: verification_context.recovered_outcomes.clone(),
+            agent_runtime_profile: verification_context.agent_runtime_profile.clone(),
             limit_status: verification_context.limit_status.clone(),
             capability_gap: verification_context.capability_gap.clone(),
             user_locked_capability_summary: verification_context
@@ -419,6 +421,9 @@ fn build_review_decision_markdown(document: &ReviewDecisionDocument) -> String {
         &document.review_context.verification_recovered_outcomes,
         "- 无",
     );
+    let agent_runtime_profile = format_markdown_agent_runtime_profile(
+        document.review_context.agent_runtime_profile.as_ref(),
+    );
     let permission_status = empty_fallback(&document.review_context.permission_status, "未导出");
     let permission_confirmation = empty_fallback(
         &document.review_context.permission_confirmation_summary,
@@ -464,6 +469,7 @@ fn build_review_decision_markdown(document: &ReviewDecisionDocument) -> String {
 	- 模型锁定能力缺口：{user_locked_capability}\n\
 	- 权限状态：`{permission_status}`\n\
 	- 权限确认：{permission_confirmation}\n\
+	- AgentRuntime Profile：{agent_runtime_profile}\n\
 	- analysis 目录：`{analysis_relative_root}`\n\
 - handoff 目录：`{handoff_bundle_relative_root}`\n\
 - evidence 目录：`{evidence_pack_relative_root}`\n\
@@ -520,6 +526,7 @@ fn build_review_decision_markdown(document: &ReviewDecisionDocument) -> String {
         user_locked_capability = user_locked_capability,
         permission_status = permission_status,
         permission_confirmation = permission_confirmation,
+        agent_runtime_profile = agent_runtime_profile,
         analysis_relative_root = document.review_context.analysis_relative_root,
         handoff_bundle_relative_root = document.review_context.handoff_bundle_relative_root,
         evidence_pack_relative_root = document.review_context.evidence_pack_relative_root,
@@ -582,6 +589,36 @@ fn build_review_checklist(verification_context: &ReviewDecisionVerificationConte
     }
 
     checklist
+}
+
+fn format_markdown_agent_runtime_profile(profile: Option<&Value>) -> String {
+    let Some(profile) = profile else {
+        return "未导出".to_string();
+    };
+    let schema_version = value_string(profile.pointer("/schemaVersion"));
+    let runtime_id = value_string(profile.pointer("/runtimeId"));
+    let profile_status = value_string(profile.pointer("/profileStatus"));
+    let active_turn_id = value_string(profile.pointer("/activeTurnId"));
+
+    let mut parts = Vec::new();
+    if !schema_version.is_empty() {
+        parts.push(format!("schema=`{schema_version}`"));
+    }
+    if !runtime_id.is_empty() {
+        parts.push(format!("runtime=`{runtime_id}`"));
+    }
+    if !profile_status.is_empty() {
+        parts.push(format!("status=`{profile_status}`"));
+    }
+    if !active_turn_id.is_empty() {
+        parts.push(format!("activeTurn=`{active_turn_id}`"));
+    }
+
+    if parts.is_empty() {
+        "未导出".to_string()
+    } else {
+        parts.join(" · ")
+    }
 }
 
 fn user_locked_capability_acceptance_block_message(
@@ -677,6 +714,7 @@ struct ReviewDecisionVerificationContext {
     summary: Option<Value>,
     failure_outcomes: Vec<String>,
     recovered_outcomes: Vec<String>,
+    agent_runtime_profile: Option<Value>,
     limit_status: String,
     capability_gap: String,
     user_locked_capability_summary: String,
@@ -750,6 +788,14 @@ fn load_analysis_verification_context(
             .pointer("/observability/verificationRecoveredOutcomes")
             .map(value_string_list)
             .unwrap_or_default(),
+        agent_runtime_profile: payload
+            .pointer("/observability/agentRuntimeProfile")
+            .cloned()
+            .or_else(|| {
+                payload
+                    .pointer("/evidence/runtime/agentRuntimeProfile")
+                    .cloned()
+            }),
         limit_status: value_string(payload.pointer("/summary/limitStatus")),
         capability_gap: value_string(payload.pointer("/summary/capabilityGap")),
         user_locked_capability_summary: value_string(
@@ -1470,6 +1516,7 @@ mod tests {
                     updated_at: "2026-03-27T10:01:00Z".to_string(),
                     payload: AgentThreadItemPayload::TurnSummary {
                         text: "外部分析已可导出，下一步需要固定人工审核记录。".to_string(),
+                        metadata: None,
                     },
                 },
             ],
@@ -1487,7 +1534,9 @@ mod tests {
         AgentRuntimeThreadReadModel {
             thread_id: "thread-1".to_string(),
             status: "waiting_request".to_string(),
+            profile_status: "blocked".to_string(),
             active_turn_id: Some("turn-1".to_string()),
+            turns: Vec::new(),
             pending_requests: vec![AgentRuntimeRequestView {
                 id: "req-1".to_string(),
                 thread_id: "thread-1".to_string(),
@@ -1512,6 +1561,11 @@ mod tests {
                 image_count: 0,
                 position: 1,
             }],
+            tool_calls: Vec::new(),
+            model_routing: None,
+            evidence_summary: Default::default(),
+            telemetry_summary: Default::default(),
+            context_summary: None,
             interrupt_state: None,
             updated_at: Some("2026-03-27T10:01:20Z".to_string()),
             latest_compaction_boundary: None,
@@ -1855,6 +1909,9 @@ mod tests {
         assert!(markdown.contains("aster-rust"));
         assert!(markdown.contains("pending_review"));
         assert!(markdown.contains("结构化验证摘要"));
+        assert!(markdown.contains("AgentRuntime Profile"));
+        assert!(markdown.contains("schema=`lime-profile-0.4.0`"));
+        assert!(markdown.contains("runtime=`lime_runtime_local`"));
         assert!(markdown.contains("当前没有结构化验证摘要"));
         assert!(markdown.contains("阻塞 / 提示失败"));
         assert!(markdown.contains("已恢复结果"));
@@ -1867,6 +1924,9 @@ mod tests {
         assert!(json.contains("\"decisionStatus\": \"pending_review\""));
         assert!(json.contains("\"executionEnvironmentReference\": \"codex\""));
         assert!(json.contains("\"runtimeFactSource\": \"aster-rust\""));
+        assert!(json.contains("\"agentRuntimeProfile\""));
+        assert!(json.contains("\"schemaVersion\": \"lime-profile-0.4.0\""));
+        assert!(json.contains("\"runtimeId\": \"lime_runtime_local\""));
         assert!(json.contains("\"verificationSummary\": null"));
         assert!(json.contains("\"verificationFailureOutcomes\": []"));
         assert!(json.contains("\"verificationRecoveredOutcomes\": []"));

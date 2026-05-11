@@ -8144,26 +8144,6 @@ const defaultMocks: Record<string, any> = {
   enable_skill: () => ({ success: true }),
   disable_skill: () => ({ success: true }),
 
-  // 插件相关
-  get_plugins_with_ui: () => [],
-  get_plugin_status: () => ({
-    enabled: true,
-    plugin_count: 0,
-    plugins_dir: "/mock/plugins",
-  }),
-  get_plugins: () => [],
-  list_installed_plugins: () => [],
-  enable_plugin: () => ({ success: true }),
-  disable_plugin: () => ({ success: true }),
-  reload_plugins: () => ({ success: true }),
-  unload_plugin: () => ({ success: true }),
-  uninstall_plugin: () => ({ success: true }),
-  launch_plugin_ui: () => ({}),
-  list_plugin_tasks: () => [],
-  get_plugin_task: () => null,
-  cancel_plugin_task: () => true,
-  get_plugin_queue_stats: () => [],
-
   // Provider 目录相关
   get_relay_providers: () => [],
   list_relay_providers: () => [],

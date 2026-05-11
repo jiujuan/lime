@@ -476,9 +476,7 @@ describe("TeamWorkbenchSummaryPanel", () => {
     });
     expect(container.textContent).toContain("打开详情 · child-1:turn-child-1");
     expect(container.textContent).toContain("队友记录详情");
-    expect(container.textContent).toContain(
-      "记录引用：child-1:turn-child-1",
-    );
+    expect(container.textContent).toContain("记录引用：child-1:turn-child-1");
     expect(container.textContent).toContain("子会话：child-1");
     expect(container.textContent).toContain("最新回合：turn-child-1");
     expect(container.textContent).toContain("子会话概览");

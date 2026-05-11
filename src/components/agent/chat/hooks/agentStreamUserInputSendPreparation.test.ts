@@ -278,6 +278,31 @@ describe("agentStreamUserInputSendPreparation", () => {
     expect(result.systemPrompt).toBe("快速响应系统提示");
   });
 
+  it("快速响应元数据应透传首字前轻量状态展示策略", () => {
+    vi.spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000118")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000119");
+
+    const result = prepareAgentStreamUserInputSend({
+      content: "只回答 OK",
+      images: [],
+      skipUserMessage: false,
+      options: {
+        requestMetadata: {
+          harness: {
+            fast_response_routing: {
+              mode: "auto",
+              runtime_status_presentation: "transient",
+            },
+          },
+        },
+      },
+      env: createEnv(),
+    });
+
+    expect(result.runtimeStatusPresentation).toBe("transient");
+  });
+
   it("恢复态 thread 仍忙时也应直接进入 queue 模式", () => {
     vi.spyOn(crypto, "randomUUID")
       .mockReturnValueOnce("00000000-0000-0000-0000-000000000004")

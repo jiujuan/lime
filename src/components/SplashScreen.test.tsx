@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { SplashScreen } from "./SplashScreen";
 
 const startupWindowRevealMock = vi.hoisted(() => ({
@@ -31,17 +32,19 @@ function renderSplash() {
 }
 
 describe("SplashScreen", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.useFakeTimers();
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    await changeLimeLocale("en-US");
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     for (const item of mountedSplashes.splice(0)) {
       act(() => item.root.unmount());
       item.container.remove();
     }
     startupWindowRevealMock.revealStartupWindowWhenReady.mockClear();
+    await changeLimeLocale("zh-CN");
     vi.useRealTimers();
     vi.unstubAllGlobals();
   });
@@ -69,6 +72,17 @@ describe("SplashScreen", () => {
     expect(logoStack?.style.justifyContent).toBe("center");
     expect(logo?.hasAttribute("data-lime-startup-logo")).toBe(true);
     expect(logo?.style.objectFit).toBe("contain");
+  });
+
+  it("启动画面文案应走 common namespace 英文资源", () => {
+    const { container } = renderSplash();
+
+    expect(container.textContent).toContain("Tap Lime, inspiration arrives");
+    expect(container.textContent).toContain(
+      "From one thought to polished copy, images, videos, and finished work",
+    );
+    expect(container.textContent).not.toContain("青柠一下");
+    expect(container.textContent).not.toContain("成稿、成图");
   });
 
   it("首帧布局完成后应请求展示隐藏的 Tauri 主窗口", () => {

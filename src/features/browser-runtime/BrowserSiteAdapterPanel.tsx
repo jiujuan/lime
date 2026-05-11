@@ -774,13 +774,10 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
                       adapter: nextResult.adapter,
                     },
                   )
-                : t(
-                    "workspace.browserSiteAdapter.feedback.runSavedToProject",
-                    {
-                      adapter: nextResult.adapter,
-                      projectName: selectedProjectName,
-                    },
-                  )
+                : t("workspace.browserSiteAdapter.feedback.runSavedToProject", {
+                    adapter: nextResult.adapter,
+                    projectName: selectedProjectName,
+                  })
               : t("workspace.browserSiteAdapter.feedback.runCompleted", {
                   adapter: nextResult.adapter,
                 }),
@@ -1109,9 +1106,12 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
                           {recommendation.adapter.name}
                         </div>
                         <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-muted-foreground">
-                          {t("workspace.browserSiteAdapter.recommendations.score", {
-                            score: formatCount(recommendation.score),
-                          })}
+                          {t(
+                            "workspace.browserSiteAdapter.recommendations.score",
+                            {
+                              score: formatCount(recommendation.score),
+                            },
+                          )}
                         </span>
                       </div>
                       <div className="mt-1 text-[11px] text-muted-foreground">
@@ -1543,9 +1543,7 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
                       {projects.length === 0 ? (
                         <option value="">
                           {projectLoading
-                            ? t(
-                                "workspace.browserSiteAdapter.project.loading",
-                              )
+                            ? t("workspace.browserSiteAdapter.project.loading")
                             : t("workspace.browserSiteAdapter.project.empty")}
                         </option>
                       ) : (
@@ -1596,7 +1594,9 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
                 <div className="mt-2 text-[11px] text-muted-foreground">
                   {shouldWriteToCurrentContent
                     ? t("workspace.browserSiteAdapter.savePanel.currentPending")
-                    : t("workspace.browserSiteAdapter.savePanel.projectPending")}
+                    : t(
+                        "workspace.browserSiteAdapter.savePanel.projectPending",
+                      )}
                 </div>
               ) : null}
               {result && !result.ok ? (

@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { SettingsTabs } from "@/types/settings";
 
 const {
@@ -9,31 +10,12 @@ const {
   mockCloudProviderSettings,
   mockSettingsHomePage,
   mockDeveloperLabSettings,
-  mockUseTranslation,
 } = vi.hoisted(() => ({
   mockSettingsSidebar: vi.fn(),
   mockPreloadDeveloperDefaultSections: vi.fn(),
   mockCloudProviderSettings: vi.fn(),
   mockSettingsHomePage: vi.fn(),
   mockDeveloperLabSettings: vi.fn(),
-  mockUseTranslation: vi.fn((_namespace?: string) => ({
-    t: (key: string, options?: unknown) => {
-      if (typeof options === "string") {
-        return options;
-      }
-
-      if (options && typeof options === "object") {
-        const values = options as Record<string, unknown>;
-        const template =
-          typeof values.defaultValue === "string" ? values.defaultValue : key;
-        return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-          String(values[name] ?? ""),
-        );
-      }
-
-      return key;
-    },
-  })),
 }));
 
 const { mockResolveOemCloudRuntimeContext } = vi.hoisted(() => ({
@@ -118,10 +100,6 @@ vi.mock("@/lib/api/oemCloudRuntime", () => ({
   resolveOemCloudRuntimeContext: () => mockResolveOemCloudRuntimeContext(),
 }));
 
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
-}));
-
 import { SettingsLayoutV2 } from ".";
 
 interface Mounted {
@@ -162,19 +140,20 @@ async function flushEffects(times = 6) {
   });
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
 
+  await changeLimeLocale("en-US");
   mockResolveOemCloudRuntimeContext.mockReturnValue({
     baseUrl: "https://user.example.com",
   });
 });
 
-afterEach(() => {
+afterEach(async () => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
   mockSettingsSidebar.mockReset();
@@ -194,6 +173,8 @@ afterEach(() => {
     });
     current.container.remove();
   }
+
+  await changeLimeLocale("zh-CN");
 });
 
 describe("SettingsLayoutV2 Profile Tab", () => {
@@ -274,8 +255,8 @@ describe("SettingsLayoutV2 Developer Tab", () => {
     expect(header?.classList.contains("lime-settings-theme-scope")).toBe(true);
     expect(header?.getAttribute("data-window-controls-reserved")).toBe("true");
     expect(button).not.toBeNull();
-    expect(button?.textContent ?? "").toContain("回到首页");
-    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
+    expect(button?.textContent ?? "").toContain("Back Home");
+    expect(button?.getAttribute("aria-label")).toBe("Back Home");
     expect(getComputedStyle(header as Element).paddingLeft).toBe("0px");
     expect(getComputedStyle(button as Element).marginLeft).toBe("24px");
     expect(

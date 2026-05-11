@@ -36,7 +36,63 @@ vi.mock("react-i18next", () => ({
         [key: string]: unknown;
       },
     ) => {
-      const template = options?.defaultValue ?? key;
+      const translations: Record<string, string> = {
+        "common.cancel": "取消",
+        "common.delete": "删除",
+        "common.loading": "加载中...",
+        "common.save": "保存",
+        "common.projectSelector.action.createProject": "新建项目",
+        "common.projectSelector.action.createWorkspace": "新建工作区",
+        "common.projectSelector.action.deleteEntity": "删除{{entity}}",
+        "common.projectSelector.action.deleting": "删除中...",
+        "common.projectSelector.action.rename": "重命名",
+        "common.projectSelector.action.saving": "保存中...",
+        "common.projectSelector.badge.default": "默认",
+        "common.projectSelector.current.label": "当前{{entity}}：",
+        "common.projectSelector.delete.dangerDescription":
+          "仅删除项目记录，不删除本地目录和已有文件。",
+        "common.projectSelector.delete.dangerTitle": "此操作不可恢复",
+        "common.projectSelector.delete.description":
+          "确定要删除{{entity}}{{name}}吗？",
+        "common.projectSelector.delete.title": "删除{{entity}}",
+        "common.projectSelector.empty": "未找到匹配项目",
+        "common.projectSelector.entity.project": "项目",
+        "common.projectSelector.entity.workspace": "工作区",
+        "common.projectSelector.header.count": "{{count}} 个{{entity}}",
+        "common.projectSelector.header.description":
+          "在这里切换、搜索和管理可见{{entity}}列表。",
+        "common.projectSelector.header.title": "选择{{entity}}",
+        "common.projectSelector.management.defaultLocked":
+          "默认{{entity}}不可重命名或删除",
+        "common.projectSelector.management.description.project":
+          "当前只管理可见项目，不影响本地目录与已有文件。",
+        "common.projectSelector.management.description.workspace":
+          "当前只管理可见工作区，不影响本地目录与已有文件。",
+        "common.projectSelector.management.title.project": "项目管理",
+        "common.projectSelector.management.title.workspace": "工作区管理",
+        "common.projectSelector.meta.default": "默认项目",
+        "common.projectSelector.meta.pending": "待选择项目",
+        "common.projectSelector.path.notSet": "未设置目录",
+        "common.projectSelector.placeholder.project": "选择项目",
+        "common.projectSelector.placeholder.workspace": "选择工作区",
+        "common.projectSelector.rename.description":
+          "更新{{entity}}名称，不会修改本地目录路径。",
+        "common.projectSelector.rename.placeholder": "输入新的项目名称",
+        "common.projectSelector.rename.title": "重命名{{entity}}",
+        "common.projectSelector.search.placeholder": "搜索{{entity}}",
+        "common.projectSelector.toast.created": "{{entity}}已创建",
+        "common.projectSelector.toast.deleted":
+          "{{entity}}已删除，本地目录未删除",
+        "common.projectSelector.toast.deleteFailed": "删除失败：{{message}}",
+        "common.projectSelector.toast.nameRequired": "{{entity}}名称不能为空",
+        "common.projectSelector.toast.renamed": "{{entity}}名称已更新",
+        "common.projectSelector.toast.renameFailed": "重命名失败：{{message}}",
+        "common.projectSelector.workspaceType.blog": "博客",
+        "common.projectSelector.workspaceType.general": "通用",
+        "common.projectSelector.workspaceType.persistent": "持久化",
+        "common.projectSelector.workspaceType.temporary": "临时",
+      };
+      const template = options?.defaultValue ?? translations[key] ?? key;
       return template.replace(/{{(\w+)}}/g, (_, name: string) =>
         String(options?.[name] ?? ""),
       );

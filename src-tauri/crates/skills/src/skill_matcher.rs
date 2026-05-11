@@ -248,6 +248,7 @@ mod tests {
             description: String::new(),
             markdown_content: String::new(),
             license: None,
+            compatibility: None,
             metadata: std::collections::HashMap::new(),
             allowed_tools: None,
             argument_hint: None,

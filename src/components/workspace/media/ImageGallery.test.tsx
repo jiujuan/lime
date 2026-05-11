@@ -25,7 +25,9 @@ import { ImageGallery } from "./ImageGallery";
 
 const mountedRoots: MountedRoot[] = [];
 
-function renderGallery(props: Partial<ComponentProps<typeof ImageGallery>> = {}) {
+function renderGallery(
+  props: Partial<ComponentProps<typeof ImageGallery>> = {},
+) {
   return renderIntoDom(
     <ImageGallery projectId="project-1" {...props} />,
     mountedRoots,

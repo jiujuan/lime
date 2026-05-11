@@ -39,7 +39,7 @@ export function AutomationJobFocusStrip({
     >
       <div className="flex flex-wrap items-center gap-2">
         <Badge className="border-sky-200 bg-white text-sky-700 hover:bg-white">
-          {t("settings.automation.focus.label", "现在先继续这条")}
+          {t("settings.automation.focus.label")}
         </Badge>
         {summaryCard?.title ? (
           <span className="rounded-full border border-white bg-white px-3 py-1 text-xs font-medium text-slate-700">
@@ -55,10 +55,7 @@ export function AutomationJobFocusStrip({
 
       {loading && !primarySummary ? (
         <div className="mt-3 text-xs leading-6 text-slate-600">
-          {t(
-            "settings.automation.focus.loading",
-            "正在整理这条做法最近一轮的结果和下一步…",
-          )}
+          {t("settings.automation.focus.loading")}
         </div>
       ) : null}
 
@@ -66,7 +63,6 @@ export function AutomationJobFocusStrip({
         <div className="mt-3 text-xs leading-6 text-slate-700">
           {t("settings.automation.focus.strip.primarySummary", {
             summary: primarySummary,
-            defaultValue: "这轮判断：{{summary}}",
           })}
         </div>
       ) : null}
@@ -76,7 +72,6 @@ export function AutomationJobFocusStrip({
           {t("settings.automation.focus.strip.recentResult", {
             status: runDetailView.statusLabel,
             completion: runDetailView.deliveryCompletionLabel,
-            defaultValue: "最近结果：{{status}} · {{completion}}",
           })}
         </div>
       ) : null}
@@ -85,7 +80,6 @@ export function AutomationJobFocusStrip({
         <div className="mt-1 text-xs leading-6 text-slate-600">
           {t("settings.automation.focus.strip.nextAction", {
             action: nextAction,
-            defaultValue: "先做：{{action}}",
           })}
         </div>
       ) : null}
@@ -107,7 +101,7 @@ export function AutomationJobFocusStrip({
                 onReviewCurrentProject();
               }}
             >
-              {t("settings.automation.focus.strip.action.review", "继续看结果")}
+              {t("settings.automation.focus.strip.action.review")}
             </Button>
           ) : null}
           {onOpenSceneAppGovernance ? (
@@ -122,10 +116,7 @@ export function AutomationJobFocusStrip({
                 onOpenSceneAppGovernance();
               }}
             >
-              {t(
-                "settings.automation.focus.strip.action.openGovernance",
-                "看最近结果",
-              )}
+              {t("settings.automation.focus.strip.action.openGovernance")}
             </Button>
           ) : null}
         </div>

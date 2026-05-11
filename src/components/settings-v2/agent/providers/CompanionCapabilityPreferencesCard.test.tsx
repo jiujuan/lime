@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import settingsZhCN from "@/i18n/resources/zh-CN/settings.json";
 
 const {
   mockGetConfig,
@@ -9,31 +10,12 @@ const {
   mockSubscribeProviderDataChanged,
   mockUseTranslation,
 } = vi.hoisted(() => {
-  const mockTranslate = vi.fn((key: string, options?: unknown) => {
-    if (typeof options === "string") {
-      return options;
-    }
-
-    if (options && typeof options === "object") {
-      const values = options as Record<string, unknown>;
-      const template =
-        typeof values.defaultValue === "string" ? values.defaultValue : key;
-      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-        String(values[name] ?? ""),
-      );
-    }
-
-    return key;
-  });
-
   return {
     mockGetConfig: vi.fn(),
     mockSaveConfig: vi.fn(),
     mockGetProviders: vi.fn(),
     mockSubscribeProviderDataChanged: vi.fn(),
-    mockUseTranslation: vi.fn((_namespace?: string) => ({
-      t: mockTranslate,
-    })),
+    mockUseTranslation: vi.fn(),
   };
 });
 
@@ -78,6 +60,37 @@ vi.mock("@/components/input-kit", () => ({
 }));
 
 import { CompanionCapabilityPreferencesCard } from "./CompanionCapabilityPreferencesCard";
+
+const settingsDictionary = settingsZhCN as Record<string, string>;
+
+function interpolateTemplate(
+  template: string,
+  values?: Record<string, unknown>,
+): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+    String(values?.[name] ?? ""),
+  );
+}
+
+function createTranslate(dictionary: Record<string, string>) {
+  return (key: string, options?: unknown) => {
+    if (typeof options === "string") {
+      return options;
+    }
+
+    if (options && typeof options === "object") {
+      const values = options as Record<string, unknown>;
+      const template =
+        dictionary[key] ||
+        (typeof values.defaultValue === "string" ? values.defaultValue : key);
+      return interpolateTemplate(template, values);
+    }
+
+    return dictionary[key] || key;
+  };
+}
+
+const translate = createTranslate(settingsDictionary);
 
 interface MountedCard {
   container: HTMLDivElement;
@@ -127,6 +140,9 @@ beforeEach(() => {
 
   vi.useFakeTimers();
   vi.clearAllMocks();
+  mockUseTranslation.mockImplementation((_namespace?: string) => ({
+    t: translate,
+  }));
 
   mockGetConfig.mockResolvedValue({
     workspace_preferences: {

@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import settingsZhCN from "@/i18n/resources/zh-CN/settings.json";
 
 const {
   mockUseOemCloudAccess,
@@ -16,23 +17,6 @@ const {
   mockOpenUrl,
   mockUseTranslation,
 } = vi.hoisted(() => {
-  const mockTranslate = vi.fn((key: string, options?: unknown) => {
-    if (typeof options === "string") {
-      return options;
-    }
-
-    if (options && typeof options === "object") {
-      const values = options as Record<string, unknown>;
-      const template =
-        typeof values.defaultValue === "string" ? values.defaultValue : key;
-      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-        String(values[name] ?? ""),
-      );
-    }
-
-    return key;
-  });
-
   return {
     mockUseOemCloudAccess: vi.fn(),
     mockFormatOemCloudDateTime: vi.fn((value?: string) => `fmt:${value ?? ""}`),
@@ -45,13 +29,7 @@ const {
     mockGetConfig: vi.fn(),
     mockSaveConfig: vi.fn(),
     mockOpenUrl: vi.fn(),
-    mockUseTranslation: vi.fn((_namespace?: string) => ({
-      t: mockTranslate,
-      i18n: {
-        language: "zh-CN",
-        resolvedLanguage: "zh-CN",
-      },
-    })),
+    mockUseTranslation: vi.fn(),
   };
 });
 
@@ -125,6 +103,37 @@ vi.mock("@/hooks/useOemCloudAccess", () => ({
 }));
 
 import { CloudProviderSettings } from ".";
+
+const settingsDictionary = settingsZhCN as Record<string, string>;
+
+function interpolateTemplate(
+  template: string,
+  values?: Record<string, unknown>,
+): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+    String(values?.[name] ?? ""),
+  );
+}
+
+function createTranslate(dictionary: Record<string, string>) {
+  return (key: string, options?: unknown) => {
+    if (typeof options === "string") {
+      return options;
+    }
+
+    if (options && typeof options === "object") {
+      const values = options as Record<string, unknown>;
+      const template =
+        dictionary[key] ||
+        (typeof values.defaultValue === "string" ? values.defaultValue : key);
+      return interpolateTemplate(template, values);
+    }
+
+    return dictionary[key] || key;
+  };
+}
+
+const translate = createTranslate(settingsDictionary);
 
 interface MountedPage {
   container: HTMLDivElement;
@@ -346,6 +355,14 @@ beforeEach(() => {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+
+  mockUseTranslation.mockImplementation((_namespace?: string) => ({
+    t: translate,
+    i18n: {
+      language: "zh-CN",
+      resolvedLanguage: "zh-CN",
+    },
+  }));
 
   mockUseOemCloudAccess.mockReturnValue(createAccessState());
   mockGetCompanionPetStatus.mockResolvedValue(createPetStatus());

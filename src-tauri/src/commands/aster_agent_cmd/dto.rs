@@ -580,11 +580,61 @@ pub struct AgentRuntimeThreadDiagnostics {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentRuntimeThreadTurnProfileView {
+    pub turn_id: String,
+    pub status: String,
+    pub native_status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentRuntimeThreadToolCallView {
+    pub tool_call_id: String,
+    pub turn_id: String,
+    pub tool_name: String,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub success: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentRuntimeThreadEvidenceSummary {
+    #[serde(default)]
+    pub evidence_refs: Vec<String>,
+    #[serde(default)]
+    pub verification_outcomes: Vec<serde_json::Value>,
+}
+
+impl Default for AgentRuntimeThreadEvidenceSummary {
+    fn default() -> Self {
+        build_thread_evidence_summary()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentRuntimeThreadTelemetrySummary {
+    #[serde(default)]
+    pub trace_ids: Vec<String>,
+    pub join_status: String,
+}
+
+impl Default for AgentRuntimeThreadTelemetrySummary {
+    fn default() -> Self {
+        build_thread_telemetry_summary()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentRuntimeThreadReadModel {
     pub thread_id: String,
     pub status: String,
+    #[serde(default = "default_thread_profile_status")]
+    pub profile_status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub active_turn_id: Option<String>,
+    #[serde(default)]
+    pub turns: Vec<AgentRuntimeThreadTurnProfileView>,
     #[serde(default)]
     pub pending_requests: Vec<AgentRuntimeRequestView>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -593,6 +643,16 @@ pub struct AgentRuntimeThreadReadModel {
     pub incidents: Vec<AgentRuntimeIncidentView>,
     #[serde(default)]
     pub queued_turns: Vec<QueuedTurnSnapshot>,
+    #[serde(default)]
+    pub tool_calls: Vec<AgentRuntimeThreadToolCallView>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_routing: Option<serde_json::Value>,
+    #[serde(default)]
+    pub evidence_summary: AgentRuntimeThreadEvidenceSummary,
+    #[serde(default)]
+    pub telemetry_summary: AgentRuntimeThreadTelemetrySummary,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context_summary: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub interrupt_state: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1465,6 +1525,181 @@ fn read_auxiliary_runtime_string_vec(
     })
 }
 
+fn normalize_profile_status(native_status: &str) -> String {
+    match native_status {
+        "idle" | "queued" | "running" | "completed" | "failed" | "stale" | "unknown" => {
+            native_status.to_string()
+        }
+        "aborted" | "cancelled" => "cancelled".to_string(),
+        "waiting_request" | "waiting_input" | "waiting_permission" | "interrupting" | "blocked" => {
+            "blocked".to_string()
+        }
+        _ => "unknown".to_string(),
+    }
+}
+
+fn default_thread_profile_status() -> String {
+    "unknown".to_string()
+}
+
+fn build_thread_profile_turns(detail: &SessionDetail) -> Vec<AgentRuntimeThreadTurnProfileView> {
+    detail
+        .turns
+        .iter()
+        .map(|turn| {
+            let native_status = turn.status.as_str().to_string();
+            AgentRuntimeThreadTurnProfileView {
+                turn_id: turn.id.clone(),
+                status: normalize_profile_status(&native_status),
+                native_status,
+            }
+        })
+        .collect()
+}
+
+fn build_thread_tool_calls(detail: &SessionDetail) -> Vec<AgentRuntimeThreadToolCallView> {
+    detail
+        .items
+        .iter()
+        .filter_map(|item| {
+            let lime_core::database::dao::agent_timeline::AgentThreadItemPayload::ToolCall {
+                tool_name,
+                success,
+                error,
+                ..
+            } = &item.payload
+            else {
+                return None;
+            };
+
+            let status = if matches!(
+                item.status,
+                lime_core::database::dao::agent_timeline::AgentThreadItemStatus::InProgress
+            ) {
+                "running"
+            } else if matches!(
+                item.status,
+                lime_core::database::dao::agent_timeline::AgentThreadItemStatus::Failed
+            ) || success == &Some(false)
+            {
+                "failed"
+            } else {
+                "completed"
+            };
+
+            Some(AgentRuntimeThreadToolCallView {
+                tool_call_id: item.id.clone(),
+                turn_id: item.turn_id.clone(),
+                tool_name: tool_name.clone(),
+                status: status.to_string(),
+                success: *success,
+                error: error.clone(),
+            })
+        })
+        .collect()
+}
+
+fn build_thread_model_routing_summary(
+    task_kind: Option<&str>,
+    service_model_slot: Option<&str>,
+    routing_mode: Option<&str>,
+    decision_source: Option<&str>,
+    decision_reason: Option<&str>,
+    selected_provider: Option<&str>,
+    selected_model: Option<&str>,
+    requested_provider: Option<&str>,
+    requested_model: Option<&str>,
+    candidate_count: Option<u32>,
+    fallback_chain: Option<&Vec<String>>,
+    capability_gap: Option<&str>,
+    estimated_cost_class: Option<&str>,
+    single_candidate_only: Option<bool>,
+) -> Option<serde_json::Value> {
+    if task_kind.is_none()
+        && service_model_slot.is_none()
+        && routing_mode.is_none()
+        && decision_source.is_none()
+        && decision_reason.is_none()
+        && selected_provider.is_none()
+        && selected_model.is_none()
+        && requested_provider.is_none()
+        && requested_model.is_none()
+        && candidate_count.is_none()
+        && fallback_chain.is_none()
+        && capability_gap.is_none()
+        && estimated_cost_class.is_none()
+        && single_candidate_only.is_none()
+    {
+        return None;
+    }
+
+    Some(serde_json::json!({
+        "taskKind": task_kind,
+        "serviceModelSlot": service_model_slot,
+        "routingMode": routing_mode,
+        "decisionSource": decision_source,
+        "decisionReason": decision_reason,
+        "selectedProvider": selected_provider,
+        "selectedModel": selected_model,
+        "requestedProvider": requested_provider,
+        "requestedModel": requested_model,
+        "candidateCount": candidate_count,
+        "fallbackChain": fallback_chain,
+        "capabilityGap": capability_gap,
+        "estimatedCostClass": estimated_cost_class,
+        "singleCandidateOnly": single_candidate_only,
+    }))
+}
+
+fn build_thread_evidence_summary() -> AgentRuntimeThreadEvidenceSummary {
+    AgentRuntimeThreadEvidenceSummary {
+        evidence_refs: Vec::new(),
+        verification_outcomes: Vec::new(),
+    }
+}
+
+fn build_thread_telemetry_summary() -> AgentRuntimeThreadTelemetrySummary {
+    AgentRuntimeThreadTelemetrySummary {
+        trace_ids: Vec::new(),
+        join_status: "unavailable".to_string(),
+    }
+}
+
+fn build_thread_context_summary(
+    turn_context_summary: Option<&lime_agent::protocol::AgentTurnContextSummary>,
+    latest_compaction_boundary: Option<&AgentRuntimeCompactionBoundarySnapshot>,
+) -> Option<serde_json::Value> {
+    if turn_context_summary.is_none() && latest_compaction_boundary.is_none() {
+        return None;
+    }
+
+    let mut summary = serde_json::Map::new();
+    summary.insert("owner".to_string(), serde_json::json!("AgentContext"));
+
+    let mut sources = Vec::new();
+    if let Some(context) = turn_context_summary {
+        if let Ok(serde_json::Value::Object(context_object)) = serde_json::to_value(context) {
+            summary.extend(context_object);
+        }
+        sources.push("turn_context");
+    }
+
+    if let Some(boundary) = latest_compaction_boundary {
+        summary.insert("latestCompaction".to_string(), serde_json::json!(boundary));
+        sources.push("context_compaction");
+    }
+
+    let source = if sources.len() == 1 {
+        sources[0]
+    } else {
+        "mixed"
+    };
+    summary.insert("source".to_string(), serde_json::json!(source));
+    summary.insert("sources".to_string(), serde_json::json!(sources));
+
+    Some(serde_json::Value::Object(summary))
+}
+
 impl AgentRuntimeThreadReadModel {
     #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn from_session_detail(
@@ -1646,15 +1881,103 @@ impl AgentRuntimeThreadReadModel {
                 &["routing_decision", "estimated_cost_class"],
             )
         });
+        let task_kind = task_profile
+            .map(|profile| profile.kind.clone())
+            .or(auxiliary_task_kind);
+        let service_model_slot = task_profile
+            .and_then(|profile| profile.service_model_slot.clone())
+            .or(auxiliary_service_model_slot);
+        let routing_mode = routing_decision
+            .map(|decision| decision.routing_mode.clone())
+            .or(auxiliary_routing_mode);
+        let decision_source = routing_decision
+            .map(|decision| decision.decision_source.clone())
+            .or(auxiliary_decision_source);
+        let decision_reason = routing_decision
+            .map(|decision| decision.decision_reason.clone())
+            .or(auxiliary_decision_reason);
+        let selected_provider =
+            routing_decision.and_then(|decision| decision.selected_provider.clone());
+        let selected_model = routing_decision.and_then(|decision| decision.selected_model.clone());
+        let requested_provider =
+            routing_decision.and_then(|decision| decision.requested_provider.clone());
+        let requested_model =
+            routing_decision.and_then(|decision| decision.requested_model.clone());
+        let candidate_count = routing_decision
+            .map(|decision| decision.candidate_count)
+            .or(auxiliary_candidate_count);
+        let fallback_chain = routing_decision
+            .and_then(|decision| {
+                if decision.fallback_chain.is_empty() {
+                    None
+                } else {
+                    Some(decision.fallback_chain.clone())
+                }
+            })
+            .or(auxiliary_fallback_chain);
+        let capability_gap = routing_decision
+            .and_then(|decision| decision.capability_gap.clone())
+            .or_else(|| {
+                limit_state
+                    .as_ref()
+                    .and_then(|state| state.capability_gap.clone())
+            })
+            .or(auxiliary_capability_gap);
+        let estimated_cost_class = routing_decision
+            .and_then(|decision| decision.estimated_cost_class.clone())
+            .or_else(|| {
+                cost_state
+                    .as_ref()
+                    .and_then(|state| state.estimated_cost_class.clone())
+            })
+            .or(auxiliary_estimated_cost_class);
+        let single_candidate_only = limit_state
+            .as_ref()
+            .map(|state| state.single_candidate_only);
+        let profile_status = normalize_profile_status(&status);
+        let turns = build_thread_profile_turns(detail);
+        let tool_calls = build_thread_tool_calls(detail);
+        let model_routing = build_thread_model_routing_summary(
+            task_kind.as_deref(),
+            service_model_slot.as_deref(),
+            routing_mode.as_deref(),
+            decision_source.as_deref(),
+            decision_reason.as_deref(),
+            selected_provider.as_deref(),
+            selected_model.as_deref(),
+            requested_provider.as_deref(),
+            requested_model.as_deref(),
+            candidate_count,
+            fallback_chain.as_ref(),
+            capability_gap.as_deref(),
+            estimated_cost_class.as_deref(),
+            single_candidate_only,
+        );
+        let evidence_summary = build_thread_evidence_summary();
+        let telemetry_summary = build_thread_telemetry_summary();
+        let context_summary = build_thread_context_summary(
+            detail
+                .execution_runtime
+                .as_ref()
+                .and_then(|runtime| runtime.context_summary.as_ref()),
+            latest_compaction_boundary.as_ref(),
+        );
 
         Self {
             thread_id: detail.thread_id.clone(),
             status,
+            profile_status,
             active_turn_id: active_running_turn.map(|turn| turn.id.clone()),
+            turns,
             pending_requests,
             last_outcome,
             incidents,
             queued_turns: queued_turns.to_vec(),
+            tool_calls,
+            model_routing,
+            evidence_summary,
+            telemetry_summary,
+            context_summary,
             interrupt_state,
             updated_at: latest_turn
                 .map(|turn| turn.updated_at.clone())
@@ -1662,52 +1985,16 @@ impl AgentRuntimeThreadReadModel {
             latest_compaction_boundary,
             file_checkpoint_summary,
             diagnostics,
-            task_kind: task_profile
-                .map(|profile| profile.kind.clone())
-                .or(auxiliary_task_kind),
-            service_model_slot: task_profile
-                .and_then(|profile| profile.service_model_slot.clone())
-                .or(auxiliary_service_model_slot),
-            routing_mode: routing_decision
-                .map(|decision| decision.routing_mode.clone())
-                .or(auxiliary_routing_mode),
-            decision_source: routing_decision
-                .map(|decision| decision.decision_source.clone())
-                .or(auxiliary_decision_source),
-            decision_reason: routing_decision
-                .map(|decision| decision.decision_reason.clone())
-                .or(auxiliary_decision_reason),
-            candidate_count: routing_decision
-                .map(|decision| decision.candidate_count)
-                .or(auxiliary_candidate_count),
-            fallback_chain: routing_decision
-                .and_then(|decision| {
-                    if decision.fallback_chain.is_empty() {
-                        None
-                    } else {
-                        Some(decision.fallback_chain.clone())
-                    }
-                })
-                .or(auxiliary_fallback_chain),
-            capability_gap: routing_decision
-                .and_then(|decision| decision.capability_gap.clone())
-                .or_else(|| {
-                    limit_state
-                        .as_ref()
-                        .and_then(|state| state.capability_gap.clone())
-                })
-                .or(auxiliary_capability_gap),
-            estimated_cost_class: routing_decision
-                .and_then(|decision| decision.estimated_cost_class.clone())
-                .or_else(|| {
-                    cost_state
-                        .as_ref()
-                        .and_then(|state| state.estimated_cost_class.clone())
-                })
-                .or(auxiliary_estimated_cost_class),
-            single_candidate_only: limit_state
-                .as_ref()
-                .map(|state| state.single_candidate_only),
+            task_kind,
+            service_model_slot,
+            routing_mode,
+            decision_source,
+            decision_reason,
+            candidate_count,
+            fallback_chain,
+            capability_gap,
+            estimated_cost_class,
+            single_candidate_only,
             oem_policy,
             runtime_summary,
             auxiliary_task_runtime,
@@ -2297,6 +2584,7 @@ pub(crate) fn build_last_outcome(detail: &SessionDetail) -> Option<AgentRuntimeO
         .find_map(|item| match &item.payload {
             lime_core::database::dao::agent_timeline::AgentThreadItemPayload::TurnSummary {
                 text,
+                ..
             } if item.turn_id == latest_turn.id => Some(text.clone()),
             _ => None,
         });
@@ -2917,7 +3205,10 @@ mod tests {
         let thread_read = AgentRuntimeThreadReadModel::from_session_detail(&detail, &[]);
 
         assert_eq!(thread_read.status, "waiting_request");
+        assert_eq!(thread_read.profile_status, "blocked");
         assert_eq!(thread_read.active_turn_id.as_deref(), Some("turn-1"));
+        assert_eq!(thread_read.turns.len(), 1);
+        assert_eq!(thread_read.turns[0].status, "running");
         assert_eq!(thread_read.pending_requests.len(), 1);
         assert_eq!(thread_read.pending_requests[0].id, "req-1");
         assert_eq!(thread_read.incidents.len(), 1);
@@ -3008,7 +3299,10 @@ mod tests {
         let thread_read = AgentRuntimeThreadReadModel::from_session_detail(&detail, &queued_turns);
 
         assert_eq!(thread_read.status, "failed");
+        assert_eq!(thread_read.profile_status, "failed");
         assert_eq!(thread_read.queued_turns.len(), 1);
+        assert_eq!(thread_read.telemetry_summary.join_status, "unavailable");
+        assert!(thread_read.evidence_summary.evidence_refs.is_empty());
         assert_eq!(
             thread_read
                 .last_outcome
@@ -3090,6 +3384,7 @@ mod tests {
             mode: None,
             latest_turn_id: Some("turn-1".to_string()),
             latest_turn_status: Some("failed".to_string()),
+            context_summary: None,
             recent_access_mode: None,
             recent_preferences: None,
             recent_team_selection: None,
@@ -3261,6 +3556,232 @@ mod tests {
                 .map(|value| value.event_kind.as_str()),
             Some("rate_limit_hit")
         );
+        assert_eq!(
+            thread_read
+                .model_routing
+                .as_ref()
+                .and_then(|value| value.get("candidateCount"))
+                .and_then(serde_json::Value::as_u64),
+            Some(1)
+        );
+        assert_eq!(
+            thread_read
+                .model_routing
+                .as_ref()
+                .and_then(|value| value.get("singleCandidateOnly"))
+                .and_then(serde_json::Value::as_bool),
+            Some(true)
+        );
+        assert_eq!(
+            thread_read
+                .model_routing
+                .as_ref()
+                .and_then(|value| value.get("selectedModel"))
+                .and_then(serde_json::Value::as_str),
+            Some("gpt-5.4-mini")
+        );
+        assert_eq!(
+            thread_read
+                .model_routing
+                .as_ref()
+                .and_then(|value| value.get("decisionSource"))
+                .and_then(serde_json::Value::as_str),
+            Some("service_model_setting")
+        );
+    }
+
+    #[test]
+    fn thread_read_should_project_tool_calls_for_profile_consumers() {
+        let detail = build_session_detail(
+            vec![AgentThreadTurn {
+                id: "turn-tool".to_string(),
+                thread_id: "thread-1".to_string(),
+                prompt_text: "读取文件".to_string(),
+                status: AgentThreadTurnStatus::Completed,
+                started_at: "2026-03-23T09:10:00Z".to_string(),
+                completed_at: Some("2026-03-23T09:10:05Z".to_string()),
+                error_message: None,
+                created_at: "2026-03-23T09:10:00Z".to_string(),
+                updated_at: "2026-03-23T09:10:05Z".to_string(),
+            }],
+            vec![AgentThreadItem {
+                id: "tool-item-1".to_string(),
+                thread_id: "thread-1".to_string(),
+                turn_id: "turn-tool".to_string(),
+                sequence: 1,
+                status: AgentThreadItemStatus::Completed,
+                started_at: "2026-03-23T09:10:01Z".to_string(),
+                completed_at: Some("2026-03-23T09:10:02Z".to_string()),
+                updated_at: "2026-03-23T09:10:02Z".to_string(),
+                payload: AgentThreadItemPayload::ToolCall {
+                    tool_name: "Read".to_string(),
+                    arguments: None,
+                    output: Some("hello".to_string()),
+                    success: Some(true),
+                    error: None,
+                    metadata: None,
+                },
+            }],
+        );
+
+        let thread_read = AgentRuntimeThreadReadModel::from_session_detail(&detail, &[]);
+
+        assert_eq!(thread_read.profile_status, "completed");
+        assert_eq!(thread_read.tool_calls.len(), 1);
+        assert_eq!(thread_read.tool_calls[0].tool_call_id, "tool-item-1");
+        assert_eq!(thread_read.tool_calls[0].turn_id, "turn-tool");
+        assert_eq!(thread_read.tool_calls[0].tool_name, "Read");
+        assert_eq!(thread_read.tool_calls[0].status, "completed");
+        assert_eq!(thread_read.tool_calls[0].success, Some(true));
+    }
+
+    #[test]
+    fn thread_read_should_project_context_summary_for_profile_consumers() {
+        let mut detail = build_session_detail(
+            vec![AgentThreadTurn {
+                id: "turn-context".to_string(),
+                thread_id: "thread-1".to_string(),
+                prompt_text: "使用项目知识库".to_string(),
+                status: AgentThreadTurnStatus::Running,
+                started_at: "2026-03-23T09:10:00Z".to_string(),
+                completed_at: None,
+                error_message: None,
+                created_at: "2026-03-23T09:10:00Z".to_string(),
+                updated_at: "2026-03-23T09:10:05Z".to_string(),
+            }],
+            Vec::new(),
+        );
+        detail.execution_runtime = Some(
+            serde_json::from_value(serde_json::json!({
+                "session_id": "session-1",
+                "source": "runtime_snapshot",
+                "latest_turn_id": "turn-context",
+                "latest_turn_status": "running",
+                "context_summary": {
+                    "memory_budget": {
+                        "used_tokens": 640,
+                        "max_tokens": 1200,
+                        "status": "ready",
+                        "source": "knowledge_context_resolver"
+                    },
+                    "retrieval_refs": [
+                        {
+                            "source_id": "knowledge_pack:brand:compiled/splits/brief.md",
+                            "kind": "knowledge_pack",
+                            "title": "brand:brief",
+                            "path": "compiled/splits/brief.md",
+                            "scope": "workspace",
+                            "status": "ready",
+                            "source": "knowledge_context_resolver"
+                        }
+                    ],
+                    "missing_context": [
+                        {
+                            "id": "knowledge_warning:0",
+                            "kind": "knowledge_warning",
+                            "label": "sources/missing.md",
+                            "status": "unknown",
+                            "reason": "缺少来源",
+                            "source": "knowledge_context_resolver"
+                        }
+                    ],
+                    "team_memory_refs": [
+                        {
+                            "key": "team.selection",
+                            "repo_scope": "/repo/lime",
+                            "updated_at": 1710000000,
+                            "source": "team_memory_shadow"
+                        }
+                    ]
+                }
+            }))
+            .expect("execution runtime"),
+        );
+
+        let thread_read = AgentRuntimeThreadReadModel::from_session_detail(&detail, &[]);
+        let context_summary = thread_read.context_summary.expect("context summary");
+
+        assert_eq!(
+            context_summary
+                .get("owner")
+                .and_then(serde_json::Value::as_str),
+            Some("AgentContext")
+        );
+        assert_eq!(
+            context_summary
+                .get("source")
+                .and_then(serde_json::Value::as_str),
+            Some("turn_context")
+        );
+        assert_eq!(
+            context_summary
+                .pointer("/memory_budget/used_tokens")
+                .and_then(serde_json::Value::as_u64),
+            Some(640)
+        );
+        assert_eq!(
+            context_summary
+                .pointer("/retrieval_refs/0/source_id")
+                .and_then(serde_json::Value::as_str),
+            Some("knowledge_pack:brand:compiled/splits/brief.md")
+        );
+        assert_eq!(
+            context_summary
+                .pointer("/missing_context/0/status")
+                .and_then(serde_json::Value::as_str),
+            Some("unknown")
+        );
+        assert_eq!(
+            context_summary
+                .pointer("/team_memory_refs/0/key")
+                .and_then(serde_json::Value::as_str),
+            Some("team.selection")
+        );
+        assert!(context_summary
+            .pointer("/team_memory_refs/0/content")
+            .is_none());
+    }
+
+    #[test]
+    fn thread_context_summary_should_merge_compaction_boundary_refs() {
+        let runtime_summary: lime_agent::protocol::AgentTurnContextSummary =
+            serde_json::from_value(serde_json::json!({
+                "memory_budget": {
+                    "used_tokens": 320,
+                    "status": "trimmed",
+                    "source": "knowledge_context_resolver"
+                }
+            }))
+            .expect("context summary");
+        let boundary = AgentRuntimeCompactionBoundarySnapshot {
+            session_id: "session-1".to_string(),
+            summary_preview: "保留研究目标与来源摘要".to_string(),
+            turn_count: Some(4),
+            created_at: "2026-03-23T09:10:20Z".to_string(),
+            trigger: Some("token_budget".to_string()),
+            detail: Some("保留研究目标与来源摘要".to_string()),
+        };
+
+        let summary = build_thread_context_summary(Some(&runtime_summary), Some(&boundary))
+            .expect("context summary");
+
+        assert_eq!(
+            summary.get("source").and_then(serde_json::Value::as_str),
+            Some("mixed")
+        );
+        assert_eq!(
+            summary
+                .pointer("/latestCompaction/trigger")
+                .and_then(serde_json::Value::as_str),
+            Some("token_budget")
+        );
+        assert_eq!(
+            summary
+                .get("sources")
+                .and_then(serde_json::Value::as_array)
+                .map(Vec::len),
+            Some(2)
+        );
     }
 
     #[test]
@@ -3392,6 +3913,7 @@ mod tests {
             mode: None,
             latest_turn_id: Some("turn-approval".to_string()),
             latest_turn_status: Some("running".to_string()),
+            context_summary: None,
             recent_access_mode: None,
             recent_preferences: None,
             recent_team_selection: None,
@@ -3566,6 +4088,7 @@ mod tests {
             mode: None,
             latest_turn_id: Some("turn-approval".to_string()),
             latest_turn_status: Some("completed".to_string()),
+            context_summary: None,
             recent_access_mode: None,
             recent_preferences: None,
             recent_team_selection: None,
@@ -3636,6 +4159,7 @@ mod tests {
             mode: None,
             latest_turn_id: None,
             latest_turn_status: None,
+            context_summary: None,
             recent_access_mode: None,
             recent_preferences: None,
             recent_team_selection: None,

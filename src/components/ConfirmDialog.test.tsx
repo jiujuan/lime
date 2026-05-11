@@ -1,22 +1,8 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { ConfirmDialog } from "./ConfirmDialog";
-
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: (key: string, options?: { defaultValue?: string }) =>
-      (
-        {
-          "common.cancel": "Cancel",
-          "common.confirm": "Confirm",
-          "common.confirmDialog.title": "Confirm action",
-        } as Record<string, string>
-      )[key] ??
-      options?.defaultValue ??
-      key,
-  }),
-}));
 
 interface MountedDialog {
   container: HTMLDivElement;
@@ -44,15 +30,16 @@ function renderConfirmDialog() {
   mountedDialogs.push({ container, root });
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("en-US");
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mountedDialogs.length > 0) {
     const mounted = mountedDialogs.pop();
     if (!mounted) {
@@ -64,6 +51,7 @@ afterEach(() => {
     mounted.container.remove();
   }
   document.body.replaceChildren();
+  await changeLimeLocale("zh-CN");
 });
 
 describe("ConfirmDialog", () => {
@@ -74,5 +62,7 @@ describe("ConfirmDialog", () => {
     expect(document.body.textContent).toContain("Cancel");
     expect(document.body.textContent).toContain("Confirm");
     expect(document.body.textContent).toContain("This cannot be undone.");
+    expect(document.body.textContent).not.toContain("确认操作");
+    expect(document.body.textContent).not.toContain("确定");
   });
 });

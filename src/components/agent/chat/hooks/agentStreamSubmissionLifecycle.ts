@@ -2,6 +2,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
 import type { QueuedTurnSnapshot } from "@/lib/api/agentRuntime";
 import type { Message } from "../types";
+import type { AgentRuntimeStatusPresentation } from "../utils/fastResponseRouting";
 import {
   removeThreadItemState,
   removeThreadTurnState,
@@ -55,6 +56,7 @@ interface CreateSubmissionLifecycleOptions {
   userMsgId: string | null;
   content: string;
   expectingQueue: boolean;
+  runtimeStatusPresentation?: AgentRuntimeStatusPresentation;
   initialThreadId: string;
   listenerMapRef: MutableRefObject<Map<string, () => void>>;
   setActiveStream: (nextActive: ActiveStreamState | null) => void;
@@ -82,6 +84,7 @@ export function createAgentStreamSubmissionLifecycle(
     userMsgId,
     content,
     expectingQueue,
+    runtimeStatusPresentation = "timeline",
     initialThreadId,
     listenerMapRef,
     setActiveStream,
@@ -124,6 +127,7 @@ export function createAgentStreamSubmissionLifecycle(
   const pendingItemKey = createPendingItemKey(pendingTurnKey);
   const requestTurnId = crypto.randomUUID();
   const eventName = `aster_stream_${assistantMsgId}`;
+  const shouldCreateRuntimeSummary = runtimeStatusPresentation !== "transient";
   const toolLogIdByToolId = new Map<string, string>();
   const toolStartedAtByToolId = new Map<string, number>();
   const toolNameByToolId = new Map<string, string>();
@@ -279,19 +283,21 @@ export function createAgentStreamSubmissionLifecycle(
         updated_at: updatedAt,
       }),
     );
-    setThreadItems((prev) =>
-      upsertThreadItemState(prev, {
-        id: pendingItemKey,
-        thread_id: activeSessionId,
-        turn_id: pendingTurnKey,
-        sequence: 0,
-        status: "in_progress",
-        started_at: optimisticStartedAt,
-        updated_at: updatedAt,
-        type: "turn_summary",
-        text: formatAgentRuntimeStatusSummary(effectiveWaitingRuntimeStatus),
-      }),
-    );
+    if (shouldCreateRuntimeSummary) {
+      setThreadItems((prev) =>
+        upsertThreadItemState(prev, {
+          id: pendingItemKey,
+          thread_id: activeSessionId,
+          turn_id: pendingTurnKey,
+          sequence: 0,
+          status: "in_progress",
+          started_at: optimisticStartedAt,
+          updated_at: updatedAt,
+          type: "turn_summary",
+          text: formatAgentRuntimeStatusSummary(effectiveWaitingRuntimeStatus),
+        }),
+      );
+    }
   };
 
   const registerListener = (nextUnlisten: () => void) => {
@@ -321,19 +327,21 @@ export function createAgentStreamSubmissionLifecycle(
         updated_at: optimisticStartedAt,
       }),
     );
-    setThreadItems((prev) =>
-      upsertThreadItemState(prev, {
-        id: pendingItemKey,
-        thread_id: initialThreadId,
-        turn_id: pendingTurnKey,
-        sequence: 0,
-        status: "in_progress",
-        started_at: optimisticStartedAt,
-        updated_at: optimisticStartedAt,
-        type: "turn_summary",
-        text: formatAgentRuntimeStatusSummary(assistantMsg.runtimeStatus),
-      }),
-    );
+    if (shouldCreateRuntimeSummary) {
+      setThreadItems((prev) =>
+        upsertThreadItemState(prev, {
+          id: pendingItemKey,
+          thread_id: initialThreadId,
+          turn_id: pendingTurnKey,
+          sequence: 0,
+          status: "in_progress",
+          started_at: optimisticStartedAt,
+          updated_at: optimisticStartedAt,
+          type: "turn_summary",
+          text: formatAgentRuntimeStatusSummary(assistantMsg.runtimeStatus),
+        }),
+      );
+    }
     setCurrentTurnId(pendingTurnKey);
   }
 

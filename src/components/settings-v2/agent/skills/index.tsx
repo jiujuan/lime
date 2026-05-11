@@ -9,18 +9,10 @@ export function ExtensionsSettings() {
     <div className="space-y-5">
       <div className="max-w-3xl">
         <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-          <span>
-            {t("settings.agent.skills.advancedEntry.title", "高级技能入口")}
-          </span>
+          <span>{t("settings.agent.skills.advancedEntry.title")}</span>
           <WorkbenchInfoTip
-            ariaLabel={t(
-              "settings.agent.skills.advancedEntry.tipAria",
-              "高级技能入口说明",
-            )}
-            content={t(
-              "settings.agent.skills.advancedEntry.tip",
-              "Claw 左侧导航已经提供面向最终用户的技能主入口；这里仅保留本地导入、仓库管理与标准检查等高级能力。",
-            )}
+            ariaLabel={t("settings.agent.skills.advancedEntry.tipAria")}
+            content={t("settings.agent.skills.advancedEntry.tip")}
             tone="slate"
           />
           <a
@@ -29,7 +21,7 @@ export function ExtensionsSettings() {
             rel="noopener noreferrer"
             className="ml-1 text-primary hover:underline"
           >
-            {t("settings.agent.skills.advancedEntry.feedback", "问题反馈")}
+            {t("settings.agent.skills.advancedEntry.feedback")}
           </a>
         </div>
       </div>

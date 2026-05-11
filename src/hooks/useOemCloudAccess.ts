@@ -314,41 +314,26 @@ export function useOemCloudAccess() {
       cloudSynced: t("common.oemCloudAccess.auth.cloudSynced", {
         defaultValue: "云端登录成功，已同步目录。",
       }),
-      googleDesktopOpened: t(
-        "common.oemCloudAccess.auth.googleDesktopOpened",
-        {
-          defaultValue:
-            "已打开系统浏览器，请完成 Google 授权；如果浏览器出现确认页，请继续完成，桌面端会自动同步登录结果。",
-        },
-      ),
+      googleDesktopOpened: t("common.oemCloudAccess.auth.googleDesktopOpened", {
+        defaultValue:
+          "已打开系统浏览器，请完成 Google 授权；如果浏览器出现确认页，请继续完成，桌面端会自动同步登录结果。",
+      }),
       userCenterOpened: t("common.oemCloudAccess.auth.userCenterOpened", {
         defaultValue:
           "已打开 Lime 云端登录页，请在浏览器完成授权，桌面端会自动同步登录结果。",
       }),
-      openFailedFallback: t(
-        "common.oemCloudAccess.auth.openFailedFallback",
-        {
-          defaultValue: "打开 Lime 云端登录页失败",
-        },
-      ),
-      syncFailedFallback: t(
-        "common.oemCloudAccess.auth.syncFailedFallback",
-        {
-          defaultValue: "同步云端登录结果失败",
-        },
-      ),
-      browserPreopenTitle: t(
-        "common.oemCloudAccess.auth.browserPreopenTitle",
-        {
-          defaultValue: "正在打开登录页...",
-        },
-      ),
-      browserPreopenBody: t(
-        "common.oemCloudAccess.auth.browserPreopenBody",
-        {
-          defaultValue: "正在打开登录页，请稍候...",
-        },
-      ),
+      openFailedFallback: t("common.oemCloudAccess.auth.openFailedFallback", {
+        defaultValue: "打开 Lime 云端登录页失败",
+      }),
+      syncFailedFallback: t("common.oemCloudAccess.auth.syncFailedFallback", {
+        defaultValue: "同步云端登录结果失败",
+      }),
+      browserPreopenTitle: t("common.oemCloudAccess.auth.browserPreopenTitle", {
+        defaultValue: "正在打开登录页...",
+      }),
+      browserPreopenBody: t("common.oemCloudAccess.auth.browserPreopenBody", {
+        defaultValue: "正在打开登录页，请稍候...",
+      }),
       systemBrowserOpenFailed: t(
         "common.oemCloudAccess.auth.systemBrowserOpenFailed",
         {
@@ -393,12 +378,9 @@ export function useOemCloudAccess() {
           defaultValue: "支付已确认，Token 积分余额已同步到客户端。",
         },
       ),
-      confirmedPlanInfo: t(
-        "common.oemCloudAccess.payment.confirmedPlanInfo",
-        {
-          defaultValue: "支付已确认，套餐权益已同步，可以继续使用云端模型。",
-        },
-      ),
+      confirmedPlanInfo: t("common.oemCloudAccess.payment.confirmedPlanInfo", {
+        defaultValue: "支付已确认，套餐权益已同步，可以继续使用云端模型。",
+      }),
       confirmedCreditInfo: t(
         "common.oemCloudAccess.payment.confirmedCreditInfo",
         {
@@ -438,15 +420,13 @@ export function useOemCloudAccess() {
       returnUnpaidWatcher: t(
         "common.oemCloudAccess.payment.returnUnpaidWatcher",
         {
-          defaultValue: "支付页已返回未完成状态，请重新发起支付或刷新云端状态。",
+          defaultValue:
+            "支付页已返回未完成状态，请重新发起支付或刷新云端状态。",
         },
       ),
-      returnUnpaidInfo: t(
-        "common.oemCloudAccess.payment.returnUnpaidInfo",
-        {
-          defaultValue: "支付页已返回未完成状态，云端状态已同步。",
-        },
-      ),
+      returnUnpaidInfo: t("common.oemCloudAccess.payment.returnUnpaidInfo", {
+        defaultValue: "支付页已返回未完成状态，云端状态已同步。",
+      }),
       returnSyncFailedFallback: t(
         "common.oemCloudAccess.payment.returnSyncFailedFallback",
         {
@@ -1039,7 +1019,9 @@ export function useOemCloudAccess() {
         }
 
         if (isAuthExpired(error)) {
-          clearCloudStateRef.current(cloudCopyRef.current.session.expiredRelogin);
+          clearCloudStateRef.current(
+            cloudCopyRef.current.session.expiredRelogin,
+          );
         } else {
           setErrorMessage(
             buildErrorMessage(
@@ -1126,7 +1108,9 @@ export function useOemCloudAccess() {
             clearCloudState(cloudCopy.session.invalidRelogin);
             return;
           }
-          setErrorMessage(buildErrorMessage(error, authCopy.syncFailedFallback));
+          setErrorMessage(
+            buildErrorMessage(error, authCopy.syncFailedFallback),
+          );
         });
     };
 
@@ -1464,10 +1448,7 @@ export function useOemCloudAccess() {
       setInfoMessage(
         cloudCopy.emailCode.sent(
           response.maskedEmail,
-          Math.max(
-            1,
-            Math.round(response.expiresInSeconds / 60),
-          ),
+          Math.max(1, Math.round(response.expiresInSeconds / 60)),
         ),
       );
     } catch (error) {
@@ -1655,10 +1636,7 @@ export function useOemCloudAccess() {
           return;
         }
         setErrorMessage(
-          buildErrorMessage(
-            error,
-            cloudCopy.provider.loadDetailFailedFallback,
-          ),
+          buildErrorMessage(error, cloudCopy.provider.loadDetailFailedFallback),
         );
       } finally {
         setLoadingDetail(false);
@@ -1872,7 +1850,12 @@ export function useOemCloudAccess() {
     return `${matchedOffer.displayName}${
       preference.defaultModel ? ` · ${preference.defaultModel}` : ""
     }`;
-  }, [cloudCopy.labels.localProviderSummary, offers, preference, hubProviderName]);
+  }, [
+    cloudCopy.labels.localProviderSummary,
+    offers,
+    preference,
+    hubProviderName,
+  ]);
 
   const defaultProviderSourceLabel = useMemo(() => {
     if (!preference) {

@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useCallback, memo } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Copy,
   Check,
@@ -22,10 +23,7 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { artifactRegistry } from "@/lib/artifact/registry";
 import type { Artifact } from "@/lib/artifact/types";
-import {
-  formatArtifactWritePhaseLabel,
-  resolveArtifactWritePhase,
-} from "@/components/agent/chat/utils/messageArtifacts";
+import { resolveArtifactWritePhase } from "@/components/agent/chat/utils/messageArtifacts";
 
 /** 视图模式类型 */
 type ViewMode = "source" | "preview";
@@ -35,6 +33,30 @@ type PreviewSize = "mobile" | "tablet" | "desktop";
 
 /** 支持预览的语言列表 */
 const PREVIEWABLE_LANGUAGES = ["html", "svg"];
+
+const ARTIFACT_TYPE_LABEL_KEYS = {
+  document: "workspace.artifactToolbar.type.document",
+  code: "workspace.artifactToolbar.type.code",
+  html: "workspace.artifactToolbar.type.html",
+  svg: "workspace.artifactToolbar.type.svg",
+  mermaid: "workspace.artifactToolbar.type.mermaid",
+  react: "workspace.artifactToolbar.type.react",
+  browser_assist: "workspace.artifactToolbar.type.browserAssist",
+  "canvas:document": "workspace.artifactToolbar.type.canvasDocument",
+  "canvas:video": "workspace.artifactToolbar.type.canvasVideo",
+  "canvas:design": "workspace.artifactToolbar.type.canvasDesign",
+} as const satisfies Record<Artifact["type"], string>;
+
+const ARTIFACT_WRITE_PHASE_LABEL_KEYS = {
+  preparing: "workspace.artifactToolbar.writePhase.preparing",
+  streaming: "workspace.artifactToolbar.writePhase.streaming",
+  persisted: "workspace.artifactToolbar.writePhase.persisted",
+  completed: "workspace.artifactToolbar.writePhase.completed",
+  failed: "workspace.artifactToolbar.writePhase.failed",
+} as const satisfies Record<
+  NonNullable<ReturnType<typeof resolveArtifactWritePhase>>,
+  string
+>;
 
 /**
  * 工具栏按钮组件 Props
@@ -91,10 +113,11 @@ interface SizeSelectorProps {
   value: PreviewSize;
   onChange: (value: PreviewSize) => void;
   tone?: "dark" | "light";
+  labels: Record<PreviewSize, string>;
 }
 
 const SizeSelector: React.FC<SizeSelectorProps> = memo(
-  ({ value, onChange, tone = "dark" }) => (
+  ({ value, onChange, tone = "dark", labels }) => (
     <div
       className={cn(
         "inline-flex items-center rounded p-0.5",
@@ -114,7 +137,7 @@ const SizeSelector: React.FC<SizeSelectorProps> = memo(
               ? "text-muted-foreground hover:text-foreground"
               : "text-gray-500 hover:text-white",
         )}
-        title="手机"
+        title={labels.mobile}
       >
         <Smartphone className="w-3.5 h-3.5" />
       </button>
@@ -131,7 +154,7 @@ const SizeSelector: React.FC<SizeSelectorProps> = memo(
               ? "text-muted-foreground hover:text-foreground"
               : "text-gray-500 hover:text-white",
         )}
-        title="平板"
+        title={labels.tablet}
       >
         <Tablet className="w-3.5 h-3.5" />
       </button>
@@ -148,7 +171,7 @@ const SizeSelector: React.FC<SizeSelectorProps> = memo(
               ? "text-muted-foreground hover:text-foreground"
               : "text-gray-500 hover:text-white",
         )}
-        title="桌面"
+        title={labels.desktop}
       >
         <Monitor className="w-3.5 h-3.5" />
       </button>
@@ -338,6 +361,7 @@ export const ArtifactToolbar: React.FC<ArtifactToolbarProps> = memo(
     displayBadgeLabel,
     actionsSlot,
   }) => {
+    const { t } = useTranslation("workspace");
     const [copied, setCopied] = useState(false);
 
     // 获取渲染器信息
@@ -352,6 +376,15 @@ export const ArtifactToolbar: React.FC<ArtifactToolbarProps> = memo(
     const supportsSharedViewMode =
       !isBrowserAssist && (isDocument || canPreview);
     const writePhase = resolveArtifactWritePhase(artifact);
+    const typeLabel = entry ? t(ARTIFACT_TYPE_LABEL_KEYS[artifact.type]) : null;
+    const writePhaseLabel = writePhase
+      ? t(ARTIFACT_WRITE_PHASE_LABEL_KEYS[writePhase])
+      : null;
+    const previewSizeLabels = {
+      mobile: t("workspace.artifactToolbar.previewSize.mobile"),
+      tablet: t("workspace.artifactToolbar.previewSize.tablet"),
+      desktop: t("workspace.artifactToolbar.previewSize.desktop"),
+    } satisfies Record<PreviewSize, string>;
 
     /**
      * 复制内容到剪贴板
@@ -470,14 +503,14 @@ export const ArtifactToolbar: React.FC<ArtifactToolbarProps> = memo(
         {/* 标题区域 */}
         <div className="flex-1 flex items-center gap-3 min-w-0">
           {/* 类型图标 */}
-          {entry && (
+          {typeLabel && (
             <span
               className={cn(
                 "text-xs shrink-0",
                 tone === "light" ? "text-muted-foreground" : "text-gray-400",
               )}
             >
-              {entry.displayName}
+              {typeLabel}
             </span>
           )}
           {/* 语言标签（代码类型） */}
@@ -500,7 +533,7 @@ export const ArtifactToolbar: React.FC<ArtifactToolbarProps> = memo(
           >
             {artifact.title}
           </span>
-          {writePhase ? (
+          {writePhaseLabel ? (
             <Badge
               variant="outline"
               className={cn(
@@ -510,7 +543,7 @@ export const ArtifactToolbar: React.FC<ArtifactToolbarProps> = memo(
                   : "border-white/15 text-gray-300",
               )}
             >
-              {formatArtifactWritePhaseLabel(writePhase)}
+              {writePhaseLabel}
             </Badge>
           ) : null}
           {displayBadgeLabel ? (
@@ -552,7 +585,7 @@ export const ArtifactToolbar: React.FC<ArtifactToolbarProps> = memo(
                       ? "text-muted-foreground hover:text-foreground"
                       : "text-gray-400 hover:text-white",
                 )}
-                title="源码"
+                title={t("workspace.artifactToolbar.view.source")}
               >
                 <Code className="w-3 h-3" />
               </button>
@@ -569,7 +602,7 @@ export const ArtifactToolbar: React.FC<ArtifactToolbarProps> = memo(
                       ? "text-muted-foreground hover:text-foreground"
                       : "text-gray-400 hover:text-white",
                 )}
-                title="预览"
+                title={t("workspace.artifactToolbar.view.preview")}
               >
                 <Eye className="w-3 h-3" />
               </button>
@@ -582,6 +615,7 @@ export const ArtifactToolbar: React.FC<ArtifactToolbarProps> = memo(
               value={previewSize}
               onChange={onPreviewSizeChange}
               tone={tone}
+              labels={previewSizeLabels}
             />
           )}
 
@@ -590,7 +624,11 @@ export const ArtifactToolbar: React.FC<ArtifactToolbarProps> = memo(
               {/* 复制按钮 */}
               <ToolbarButton
                 onClick={handleCopy}
-                title={copied ? "已复制" : "复制内容"}
+                title={
+                  copied
+                    ? t("workspace.artifactToolbar.action.copied")
+                    : t("workspace.artifactToolbar.action.copyContent")
+                }
                 tone={tone}
               >
                 {copied ? (
@@ -603,7 +641,7 @@ export const ArtifactToolbar: React.FC<ArtifactToolbarProps> = memo(
               {/* 下载按钮 */}
               <ToolbarButton
                 onClick={handleDownload}
-                title="下载文件"
+                title={t("workspace.artifactToolbar.action.download")}
                 tone={tone}
               >
                 <Download className="w-4 h-4" />
@@ -613,7 +651,11 @@ export const ArtifactToolbar: React.FC<ArtifactToolbarProps> = memo(
               {supportsSourceToggle && (
                 <ToolbarButton
                   onClick={handleToggleSource}
-                  title={showSource ? "显示预览" : "显示源码"}
+                  title={
+                    showSource
+                      ? t("workspace.artifactToolbar.action.showPreview")
+                      : t("workspace.artifactToolbar.action.showSource")
+                  }
                   active={showSource}
                   tone={tone}
                 >
@@ -628,7 +670,7 @@ export const ArtifactToolbar: React.FC<ArtifactToolbarProps> = memo(
               {/* 新窗口打开按钮 */}
               <ToolbarButton
                 onClick={handleOpenInWindow}
-                title="在新窗口中打开"
+                title={t("workspace.artifactToolbar.action.openInWindow")}
                 tone={tone}
               >
                 <ExternalLink className="w-4 h-4" />
@@ -640,7 +682,11 @@ export const ArtifactToolbar: React.FC<ArtifactToolbarProps> = memo(
 
           {/* 关闭按钮 */}
           {onClose && (
-            <ToolbarButton onClick={handleClose} title="关闭" tone={tone}>
+            <ToolbarButton
+              onClick={handleClose}
+              title={t("workspace.artifactToolbar.action.close")}
+              tone={tone}
+            >
               <X className="w-4 h-4" />
             </ToolbarButton>
           )}

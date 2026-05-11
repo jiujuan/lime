@@ -360,7 +360,7 @@ export function SettingsSidebar({
                   <ItemLabel>{item.label}</ItemLabel>
                   {item.experimental && (
                     <ExperimentalBadge>
-                      {t("settings.layout.sidebar.experimentalBadge", "实验")}
+                      {t("settings.layout.sidebar.experimentalBadge")}
                     </ExperimentalBadge>
                   )}
                 </NavItem>
@@ -379,20 +379,14 @@ export function SettingsSidebar({
           type="button"
           aria-expanded={floatingOpen}
           aria-controls={floatingPanelId}
-          aria-label={t(
-            "settings.layout.sidebar.floatingNav.openAria",
-            "打开设置导航",
-          )}
+          aria-label={t("settings.layout.sidebar.floatingNav.openAria")}
           data-testid="settings-floating-nav-button"
           onClick={() => setFloatingOpen((value) => !value)}
         >
           {ActiveIcon ? <ActiveIcon /> : null}
           <FloatingButtonLabel>
             {activeItem?.label ??
-              t(
-                "settings.layout.sidebar.floatingNav.fallbackLabel",
-                "设置导航",
-              )}
+              t("settings.layout.sidebar.floatingNav.fallbackLabel")}
           </FloatingButtonLabel>
           <ChevronDown />
         </FloatingNavButton>
@@ -420,10 +414,7 @@ export function SettingsSidebar({
                       <ItemLabel>{item.label}</ItemLabel>
                       {item.experimental && (
                         <ExperimentalBadge>
-                          {t(
-                            "settings.layout.sidebar.experimentalBadge",
-                            "实验",
-                          )}
+                          {t("settings.layout.sidebar.experimentalBadge")}
                         </ExperimentalBadge>
                       )}
                     </NavItem>

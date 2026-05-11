@@ -1,3 +1,5 @@
+use super::agentruntime_profile::AgentRuntimeProfileStream;
+use super::runtime_turn::emit_agent_runtime_profile_event;
 use super::session_runtime::delete_runtime_session_internal_with_runtime;
 use super::*;
 use lime_agent::AgentEvent as RuntimeAgentEvent;
@@ -129,6 +131,52 @@ fn build_permission_confirmation_response(
         "userData": request.user_data,
         "source": "runtime_permission_confirmation",
     })
+}
+
+fn action_response_profile_result(request: &AgentRuntimeRespondActionRequest) -> &'static str {
+    if request.confirmed {
+        "allow"
+    } else {
+        "deny"
+    }
+}
+
+fn action_response_profile_turn_id(request: &AgentRuntimeRespondActionRequest) -> Option<String> {
+    request
+        .action_scope
+        .as_ref()
+        .and_then(|scope| scope.turn_id.clone())
+}
+
+fn maybe_emit_action_resolved_profile_event(
+    app: &AppHandle,
+    request: &AgentRuntimeRespondActionRequest,
+) {
+    let Some(event_name) = normalize_optional_text(request.event_name.clone()) else {
+        return;
+    };
+    let Some(scope) = request.action_scope.as_ref() else {
+        return;
+    };
+    let Some(thread_id) = normalize_optional_text(scope.thread_id.clone()) else {
+        return;
+    };
+    let turn_id = action_response_profile_turn_id(request)
+        .unwrap_or_else(|| format!("action_{}", request.request_id));
+    let Ok(stream) = AgentRuntimeProfileStream::new(request.session_id.clone(), thread_id, turn_id)
+    else {
+        return;
+    };
+
+    emit_agent_runtime_profile_event(
+        app,
+        event_name.as_str(),
+        stream.action_resolved(
+            request.request_id.as_str(),
+            action_response_profile_result(request),
+            request.confirmed,
+        ),
+    );
 }
 
 fn build_user_lock_capability_response(
@@ -402,23 +450,31 @@ pub async fn agent_runtime_respond_action(
     request: AgentRuntimeRespondActionRequest,
 ) -> Result<(), String> {
     if is_runtime_permission_confirmation_request_id(&request.request_id) {
-        return complete_runtime_permission_confirmation_request(
+        let result = complete_runtime_permission_confirmation_request(
             &app,
             normalize_optional_text(request.event_name.clone()).as_deref(),
             db.inner(),
             &request,
         );
+        if result.is_ok() {
+            maybe_emit_action_resolved_profile_event(&app, &request);
+        }
+        return result;
     }
     if is_runtime_user_lock_capability_request_id(&request.request_id) {
-        return complete_runtime_user_lock_capability_request(
+        let result = complete_runtime_user_lock_capability_request(
             &app,
             normalize_optional_text(request.event_name.clone()).as_deref(),
             db.inner(),
             &request,
         );
+        if result.is_ok() {
+            maybe_emit_action_resolved_profile_event(&app, &request);
+        }
+        return result;
     }
 
-    match request.action_type {
+    let result = match request.action_type {
         AgentRuntimeActionType::ToolConfirmation => {
             confirm_runtime_action_internal(
                 state.inner(),
@@ -456,7 +512,11 @@ pub async fn agent_runtime_respond_action(
                 submitted_user_data,
             )
         }
+    };
+    if result.is_ok() {
+        maybe_emit_action_resolved_profile_event(&app, &request);
     }
+    result
 }
 
 async fn submit_runtime_elicitation_response_internal(

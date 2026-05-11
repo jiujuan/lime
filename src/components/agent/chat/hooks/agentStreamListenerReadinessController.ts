@@ -35,6 +35,28 @@ export function extractAgentStreamRuntimeEventType(
   return typeof type === "string" && type.trim() ? type : null;
 }
 
+export function extractAgentStreamRuntimeEventSchemaVersion(
+  payload: unknown,
+): string | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return null;
+  }
+
+  const record = payload as {
+    schemaVersion?: unknown;
+    schema_version?: unknown;
+  };
+  const schemaVersion =
+    typeof record.schemaVersion === "string"
+      ? record.schemaVersion
+      : typeof record.schema_version === "string"
+        ? record.schema_version
+        : null;
+
+  const normalizedSchemaVersion = schemaVersion?.trim();
+  return normalizedSchemaVersion ? normalizedSchemaVersion : null;
+}
+
 export function buildAgentStreamListenerBoundContext(
   params: AgentStreamListenerBoundContextParams,
 ): Record<string, unknown> {

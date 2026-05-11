@@ -33,6 +33,7 @@ const MIN_IMAGE_COUNT = 1;
 const MAX_IMAGE_COUNT = 6;
 
 type ServiceModelKey =
+  | "responsive_chat"
   | "topic"
   | "generation_topic"
   | "translation"
@@ -61,133 +62,82 @@ function createServiceModelSections(
 ): ServiceModelSectionDefinition[] {
   return [
     {
-      key: "topic",
-      title: t(
-        "settings.mediaServices.sections.topic.title",
-        "话题自动命名助理",
-      ),
+      key: "responsive_chat",
+      title: t("settings.mediaServices.sections.responsiveChat.title"),
       description: t(
-        "settings.mediaServices.sections.topic.description",
-        "指定用于会话话题自动命名的模型。",
+        "settings.mediaServices.sections.responsiveChat.description",
       ),
-      modelHint: t(
-        "settings.mediaServices.sections.topic.modelHint",
-        "默认使用对话或推理模型；未显式指定时沿用自动选择。",
-      ),
+      modelHint: t("settings.mediaServices.sections.responsiveChat.modelHint"),
+      taskFamilies: ["chat"],
+    },
+    {
+      key: "topic",
+      title: t("settings.mediaServices.sections.topic.title"),
+      description: t("settings.mediaServices.sections.topic.description"),
+      modelHint: t("settings.mediaServices.sections.topic.modelHint"),
       taskFamilies: ["chat", "reasoning"],
     },
     {
       key: "generation_topic",
-      title: t(
-        "settings.mediaServices.sections.generationTopic.title",
-        "AI 图片话题命名助理",
-      ),
+      title: t("settings.mediaServices.sections.generationTopic.title"),
       description: t(
         "settings.mediaServices.sections.generationTopic.description",
-        "指定用于图片任务自动命名话题的模型，优先使用视觉理解模型。",
       ),
-      modelHint: t(
-        "settings.mediaServices.sections.generationTopic.modelHint",
-        "优先展示视觉理解模型；若当前没有 VLM，会自动回退到通用对话模型。",
-      ),
+      modelHint: t("settings.mediaServices.sections.generationTopic.modelHint"),
       taskFamilies: ["vision_understanding", "chat", "reasoning"],
     },
     {
       key: "translation",
-      title: t(
-        "settings.mediaServices.sections.translation.title",
-        "消息内容翻译助理",
-      ),
-      description: t(
-        "settings.mediaServices.sections.translation.description",
-        "指定用于翻译消息内容的模型。",
-      ),
-      modelHint: t(
-        "settings.mediaServices.sections.translation.modelHint",
-        "适合选择稳定的对话或推理模型。",
-      ),
+      title: t("settings.mediaServices.sections.translation.title"),
+      description: t("settings.mediaServices.sections.translation.description"),
+      modelHint: t("settings.mediaServices.sections.translation.modelHint"),
       taskFamilies: ["chat", "reasoning"],
     },
     {
       key: "history_compress",
-      title: t(
-        "settings.mediaServices.sections.historyCompress.title",
-        "会话历史压缩助理",
-      ),
+      title: t("settings.mediaServices.sections.historyCompress.title"),
       description: t(
         "settings.mediaServices.sections.historyCompress.description",
-        "指定用于压缩会话历史上下文的模型。",
       ),
-      modelHint: t(
-        "settings.mediaServices.sections.historyCompress.modelHint",
-        "适合选择长上下文、稳定输出的对话模型。",
-      ),
+      modelHint: t("settings.mediaServices.sections.historyCompress.modelHint"),
       taskFamilies: ["chat", "reasoning"],
     },
     {
       key: "agent_meta",
-      title: t(
-        "settings.mediaServices.sections.agentMeta.title",
-        "助理信息生成助理",
-      ),
-      description: t(
-        "settings.mediaServices.sections.agentMeta.description",
-        "指定用于生成助理名称、简介与标签等信息的模型。",
-      ),
-      modelHint: t(
-        "settings.mediaServices.sections.agentMeta.modelHint",
-        "适合选择善于总结与命名的通用模型。",
-      ),
+      title: t("settings.mediaServices.sections.agentMeta.title"),
+      description: t("settings.mediaServices.sections.agentMeta.description"),
+      modelHint: t("settings.mediaServices.sections.agentMeta.modelHint"),
       taskFamilies: ["chat", "reasoning"],
     },
     {
       key: "input_completion",
-      title: t(
-        "settings.mediaServices.sections.inputCompletion.title",
-        "输入自动补全助理",
-      ),
+      title: t("settings.mediaServices.sections.inputCompletion.title"),
       description: t(
         "settings.mediaServices.sections.inputCompletion.description",
-        "控制输入联想、补全面板与快捷能力提示是否启用。",
       ),
-      modelHint: t(
-        "settings.mediaServices.sections.inputCompletion.modelHint",
-        "当前主链只消费启停开关，不再展示未接入执行面的模型选择。",
-      ),
+      modelHint: t("settings.mediaServices.sections.inputCompletion.modelHint"),
       taskFamilies: ["chat", "reasoning"],
       supportsModelSelection: false,
       allowDisable: true,
     },
     {
       key: "prompt_rewrite",
-      title: t(
-        "settings.mediaServices.sections.promptRewrite.title",
-        "提示词重写助理",
-      ),
+      title: t("settings.mediaServices.sections.promptRewrite.title"),
       description: t(
         "settings.mediaServices.sections.promptRewrite.description",
-        "指定用于重写与润色提示词的模型。",
       ),
-      modelHint: t(
-        "settings.mediaServices.sections.promptRewrite.modelHint",
-        "关闭后，将直接使用原始输入，不再自动重写提示词。",
-      ),
+      modelHint: t("settings.mediaServices.sections.promptRewrite.modelHint"),
       taskFamilies: ["chat", "reasoning"],
       allowDisable: true,
     },
     {
       key: "resource_prompt_rewrite",
-      title: t(
-        "settings.mediaServices.sections.resourcePromptRewrite.title",
-        "项目资料提词重写助理",
-      ),
+      title: t("settings.mediaServices.sections.resourcePromptRewrite.title"),
       description: t(
         "settings.mediaServices.sections.resourcePromptRewrite.description",
-        "指定用于基于项目资料上下文改写提问的模型。",
       ),
       modelHint: t(
         "settings.mediaServices.sections.resourcePromptRewrite.modelHint",
-        "关闭后，项目资料提问不会再自动补全上下文重写。",
       ),
       taskFamilies: ["chat", "reasoning"],
       allowDisable: true,
@@ -329,16 +279,10 @@ export function MediaServicesSettings() {
       const nextConfig = updater(config);
       await saveConfig(nextConfig);
       setConfig(nextConfig);
-      showMessage(
-        "success",
-        t("settings.mediaServices.message.saved", "设置已保存"),
-      );
+      showMessage("success", t("settings.mediaServices.message.saved"));
     } catch (error) {
       console.error("保存服务模型配置失败:", error);
-      showMessage(
-        "error",
-        t("settings.mediaServices.message.saveFailed", "保存失败"),
-      );
+      showMessage("error", t("settings.mediaServices.message.saveFailed"));
     }
   };
 
@@ -418,25 +362,16 @@ export function MediaServicesSettings() {
       <section className="space-y-1.5">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-[24px] font-semibold tracking-tight text-slate-900">
-            {t("settings.mediaServices.title", "服务模型")}
+            {t("settings.mediaServices.title")}
           </h1>
           <WorkbenchInfoTip
-            ariaLabel={t(
-              "settings.mediaServices.hero.tipAria",
-              "服务模型总览说明",
-            )}
-            content={t(
-              "settings.mediaServices.hero.tip",
-              "统一管理当前已经接入主链的命名、翻译、提词重写与媒体生成默认模型，继续复用本地、自管云端和品牌云端同一套模型 taxonomy。",
-            )}
+            ariaLabel={t("settings.mediaServices.hero.tipAria")}
+            content={t("settings.mediaServices.hero.tip")}
             tone="mint"
           />
         </div>
         <p className="text-sm text-slate-500">
-          {t(
-            "settings.mediaServices.description",
-            "只保留当前已接入调用链的服务模型默认项，整页统一复用同一套模型选择组件。",
-          )}
+          {t("settings.mediaServices.description")}
         </p>
       </section>
 
@@ -454,7 +389,6 @@ export function MediaServicesSettings() {
             description={section.description}
             tipAriaLabel={t("settings.mediaServices.card.tipAria", {
               title: section.title,
-              defaultValue: "{{title}}说明",
             })}
             dimmed={disabled}
             headerExtra={
@@ -474,37 +408,26 @@ export function MediaServicesSettings() {
           >
             {section.supportsModelSelection === false ? (
               <SettingRow
-                label={t(
-                  "settings.mediaServices.common.currentBehavior.label",
-                  "当前行为",
-                )}
+                label={t("settings.mediaServices.common.currentBehavior.label")}
                 description={section.modelHint}
               >
                 <div className="rounded-[18px] border border-slate-200/80 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-600">
                   {t(
                     "settings.mediaServices.common.inputCompletion.currentBehavior",
-                    "当前输入补全链只消费启停开关，避免继续暴露未接入执行面的模型选择。",
                   )}
                 </div>
               </SettingRow>
             ) : (
               <SettingModelSelectorField
-                label={t(
-                  "settings.mediaServices.common.model.label",
-                  "服务模型",
-                )}
+                label={t("settings.mediaServices.common.model.label")}
                 description={section.modelHint}
                 disabled={!config || disabled}
                 emptyStateTitle={t(
                   "settings.mediaServices.common.model.emptyTitle",
-                  "暂无可用服务模型",
                 )}
                 emptyStateDescription={
                   section.emptyHint ??
-                  t(
-                    "settings.mediaServices.common.model.emptyDescription",
-                    "当前没有符合该能力的模型；请先在 AI 服务商里配置对应模型。",
-                  )
+                  t("settings.mediaServices.common.model.emptyDescription")
                 }
                 providerType={preference.preferredProviderId ?? ""}
                 setProviderType={(value) => {
@@ -536,13 +459,9 @@ export function MediaServicesSettings() {
 
             {section.allowCustomPrompt ? (
               <SettingRow
-                label={t(
-                  "settings.mediaServices.customPrompt.label",
-                  "自定义提示词",
-                )}
+                label={t("settings.mediaServices.customPrompt.label")}
                 description={t(
                   "settings.mediaServices.customPrompt.description",
-                  "填写后，系统助理将在生成内容时继续使用这里的自定义提示词。",
                 )}
               >
                 {promptVisible ? (
@@ -551,7 +470,6 @@ export function MediaServicesSettings() {
                     disabled={!config || disabled}
                     placeholder={t(
                       "settings.mediaServices.customPrompt.placeholder",
-                      "输入自定义提示词",
                     )}
                     className="min-h-[120px] rounded-2xl border-slate-200 bg-white text-sm text-slate-900 shadow-none focus-visible:ring-slate-300"
                     onChange={(event) => {
@@ -590,10 +508,7 @@ export function MediaServicesSettings() {
                     }}
                   >
                     <Pencil className="mr-2 h-4 w-4" />
-                    {t(
-                      "settings.mediaServices.customPrompt.add",
-                      "添加自定义提示词",
-                    )}
+                    {t("settings.mediaServices.customPrompt.add")}
                   </Button>
                 )}
               </SettingRow>
@@ -603,24 +518,16 @@ export function MediaServicesSettings() {
       })}
 
       <SettingCard
-        title={t("settings.mediaServices.imageSettings.title", "AI 图片设置")}
-        description={t(
-          "settings.mediaServices.imageSettings.description",
-          "统一管理图片生成任务的默认数量。",
-        )}
+        title={t("settings.mediaServices.imageSettings.title")}
+        description={t("settings.mediaServices.imageSettings.description")}
         tipAriaLabel={t("settings.mediaServices.card.tipAria", {
-          title: t("settings.mediaServices.imageSettings.title", "AI 图片设置"),
-          defaultValue: "{{title}}说明",
+          title: t("settings.mediaServices.imageSettings.title"),
         })}
       >
         <SettingRow
-          label={t(
-            "settings.mediaServices.imageSettings.count.label",
-            "默认图片数量",
-          )}
+          label={t("settings.mediaServices.imageSettings.count.label")}
           description={t(
             "settings.mediaServices.imageSettings.count.description",
-            "设置图像生成面板在创建新任务时的默认图片数量。",
           )}
         >
           <div className="flex items-center gap-4">

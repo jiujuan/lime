@@ -797,6 +797,11 @@ pub struct ServiceModelsConfig {
         default,
         skip_serializing_if = "ServiceModelPreferenceConfig::is_default"
     )]
+    pub responsive_chat: ServiceModelPreferenceConfig,
+    #[serde(
+        default,
+        skip_serializing_if = "ServiceModelPreferenceConfig::is_default"
+    )]
     pub topic: ServiceModelPreferenceConfig,
     #[serde(
         default,
@@ -2988,6 +2993,16 @@ mod unit_tests {
         config
             .workspace_preferences
             .service_models
+            .responsive_chat
+            .preferred_provider_id = Some("gemini".to_string());
+        config
+            .workspace_preferences
+            .service_models
+            .responsive_chat
+            .preferred_model_id = Some("gemini-2.5-flash".to_string());
+        config
+            .workspace_preferences
+            .service_models
             .topic
             .preferred_provider_id = Some("openai".to_string());
         config
@@ -3011,6 +3026,24 @@ mod unit_tests {
         let parsed: Config = serde_json::from_value(value)
             .expect("config should deserialize service model preferences");
 
+        assert_eq!(
+            parsed
+                .workspace_preferences
+                .service_models
+                .responsive_chat
+                .preferred_provider_id
+                .as_deref(),
+            Some("gemini")
+        );
+        assert_eq!(
+            parsed
+                .workspace_preferences
+                .service_models
+                .responsive_chat
+                .preferred_model_id
+                .as_deref(),
+            Some("gemini-2.5-flash")
+        );
         assert_eq!(
             parsed
                 .workspace_preferences

@@ -1,5 +1,6 @@
 import React from "react";
 import { AlertTriangle, ShieldAlert } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -38,6 +39,8 @@ function resolveIncidentShellClassName(
 export const AgentIncidentPanel: React.FC<AgentIncidentPanelProps> = ({
   incidents,
 }) => {
+  const { t } = useTranslation("agent");
+
   if (incidents.length === 0) {
     return (
       <div
@@ -46,7 +49,7 @@ export const AgentIncidentPanel: React.FC<AgentIncidentPanelProps> = ({
       >
         <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
           <ShieldAlert className="h-4 w-4" />
-          <span>当前未发现活跃 incident</span>
+          <span>{t("agentChat.incidentPanel.empty")}</span>
         </div>
       </div>
     );
@@ -71,7 +74,9 @@ export const AgentIncidentPanel: React.FC<AgentIncidentPanelProps> = ({
               variant="outline"
               className={resolveIncidentBadgeClassName(incident.tone)}
             >
-              {incident.severityLabel}优先级
+              {t("agentChat.incidentPanel.priorityBadge", {
+                severity: incident.severityLabel,
+              })}
             </Badge>
             <span className="text-xs text-muted-foreground">
               {incident.statusLabel}

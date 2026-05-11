@@ -20,14 +20,35 @@ describe("i18n namespace loader", () => {
         [...CORE_NAMESPACES].sort(),
       );
       expect(resources[locale].common).toHaveProperty("common.save");
+      expect(resources[locale].common).toHaveProperty("common.cancel");
+      expect(resources[locale].common).toHaveProperty("common.confirm");
+      expect(resources[locale].common).toHaveProperty("common.app.loadingPage");
       expect(resources[locale].common).toHaveProperty(
-        "common.app.loadingPage",
+        "common.splashScreen.slogan",
+      );
+      expect(resources[locale].common).toHaveProperty(
+        "common.splashScreen.subtitle",
+      );
+      expect(resources[locale].common).toHaveProperty(
+        "common.startupLoading.title",
+      );
+      expect(resources[locale].common).toHaveProperty(
+        "common.startupLoading.description",
       );
       expect(resources[locale].common).toHaveProperty(
         "common.confirmDialog.title",
       );
       expect(resources[locale].common).toHaveProperty(
         "common.projectSelector.placeholder.project",
+      );
+      expect(resources[locale].common).toHaveProperty(
+        "common.projectSelector.management.title.workspace",
+      );
+      expect(resources[locale].common).toHaveProperty(
+        "common.projectSelector.toast.renameFailed",
+      );
+      expect(resources[locale].common).toHaveProperty(
+        "common.projectSelector.delete.dangerDescription",
       );
       expect(resources[locale].common).toHaveProperty(
         "common.createProjectDialog.title",
@@ -49,6 +70,12 @@ describe("i18n namespace loader", () => {
       );
       expect(resources[locale].common).toHaveProperty(
         "common.smartInput.status.recording",
+      );
+      expect(resources[locale].common).toHaveProperty(
+        "common.shortcutSettings.label",
+      );
+      expect(resources[locale].common).toHaveProperty(
+        "common.shortcutSettings.error.invalid",
       );
       expect(resources[locale].common).toHaveProperty(
         "common.execution.latestRunStatus.status.success",
@@ -79,6 +106,115 @@ describe("i18n namespace loader", () => {
       );
       expect(resources[locale].common).toHaveProperty(
         "common.oemLimeHubProviderSync.managedKeyAlias",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "skills.repoManager.title",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "skills.contentDialog.loading",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "skills.contentDialog.section.metadata",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "skills.contentDialog.emptyInspection",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "skills.repoManager.action.add",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "skills.repoManager.message.addFailed",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "skills.skillCard.source.builtin",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "skills.skillCard.action.install",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "skills.skillCard.compliance.standard",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "skills.workflowProgress.empty",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "skills.workflowProgress.status.retrying",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "skills.workflowProgress.summary.running",
+      );
+      expect(resources[locale].agent).toHaveProperty("skills.page.title");
+      expect(resources[locale].agent).toHaveProperty(
+        "skills.page.action.refresh",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "skills.page.sections.remote.empty",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "skills.scaffoldDialog.title",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "skills.scaffoldDialog.action.create",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "skills.scaffoldDialog.validation.directory",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "skills.executionDialog.mode.workflow",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "skills.executionDialog.argumentHint",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "skills.executionDialog.loadFailed.title",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "capabilityDraft.panel.title",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "capabilityDraft.panel.action.verify",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "capabilityDraft.panel.feedback.registered",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "capabilityDraft.panel.summary.filesWithMore",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.sessionOverview.panel.title",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.sessionOverview.status.turn.running",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.sessionOverview.timeline.empty",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.sessionOverview.queue.imageCount",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.searchResultPreview.expandMore",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.searchResultPreview.previewAria",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.harnessVerification.section.title",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.harnessVerification.artifact.description",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.incidentPanel.empty",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.incidentPanel.priorityBadge",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkbenchSurface.title",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkbenchSurface.actionTarget",
       );
       expect(resources[locale].workspace).toHaveProperty(
         "workspace.browserExistingSession.presentation.status.attached.label",
@@ -158,8 +294,134 @@ describe("i18n namespace loader", () => {
       expect(resources[locale].workspace).toHaveProperty(
         "workspace.runtimeAgentsGuide.initialized.title",
       );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.artifactToolbar.type.code",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.artifactToolbar.writePhase.streaming",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.artifactToolbar.action.copyContent",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.artifactRenderer.empty.failed.title",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.artifactRenderer.fallback.unknownType",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.canvasAdapter.action.openFullEditor",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.canvasBreadcrumb.backHome",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.canvasAdapter.designPreview.visibleLayers",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.browserAssistRenderer.launching.title",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.browserAssistRenderer.replay.title",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.artifactDocument.kind.report",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.artifactDocument.stats.blocks.label",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.artifactDocumentBlock.citation.titleFallback",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.a2uiSubmissionNotice.action.expand",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.pendingA2UI.status.progressStep",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.resourceManager.pdf.missingTitle",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.resourceManager.pdf.frameTitle",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.resourceManager.media.titleFallback",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.resourceManager.media.error.description",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.resourceManager.unsupported.title",
+      );
+      expect(resources[locale].workspace).toHaveProperty(
+        "workspace.resourceManager.unsupported.mimeType",
+      );
       expect(resources[locale].settings).toHaveProperty(
         "settings.layout.sidebar.experimentalBadge",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.layout.action.backHome",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.layout.loading.profile",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.layout.placeholder.notFound",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.layout.sidebar.floatingNav.openAria",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.about.version.label",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.about.update.errorDownload",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.chromeRelay.guide.header.extension.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.chromeRelay.guide.action.openRemoteDebugging",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.chromeRelay.guide.message.copySuccess",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.chromeRelay.main.engine.xiaohongshu.label",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.chromeRelay.main.profile.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.chromeRelay.main.profile.status.running",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.chromeRelay.main.action.openAdvancedTools",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.chromeRelay.main.message.copyConfigSuccess",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.group.system",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.tab.developerLab",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.developerLab.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.developerLab.tabs.experimental",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.developer.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.developer.serviceSkill.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.developer.siteAdapterCatalog.message.injected",
       );
       expect(resources[locale].settings).toHaveProperty(
         "settings.appearance.hero.title",
@@ -171,7 +433,50 @@ describe("i18n namespace loader", () => {
         "settings.experimental.updateCheck.title",
       );
       expect(resources[locale].settings).toHaveProperty(
+        "settings.experimental.updateCheck.autoCheck.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.experimental.updateCheck.metrics.updateNow",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.experimental.updateCheck.remindLaterUntil",
+      );
+      expect(resources[locale].settings).toHaveProperty(
         "settings.home.group.tipAria",
+      );
+      expect(resources[locale].settings).toHaveProperty("settings.home.title");
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.home.summary.groups",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.home.quickAccess.cardTipAria",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.home.current.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.hotkeys.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.hotkeys.summary.globalReady",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.hotkeys.catalog.scene.global.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.hotkeys.catalog.status.voiceTranslate.ready.source",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.memory.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.memory.hero.profileCompletion",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.memory.memdir.message.emptyNote",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.memory.source.detail.followImports",
       );
       expect(resources[locale].settings).toHaveProperty(
         "settings.webSearch.providers.googleEngine.label",
@@ -186,16 +491,181 @@ describe("i18n namespace loader", () => {
         "settings.automation.details.serviceSkill.executionCompatNote",
       );
       expect(resources[locale].settings).toHaveProperty(
+        "settings.automation.details.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.automation.details.badge.workspace",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.automation.details.legacy.message",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.automation.history.action.refresh",
+      );
+      expect(resources[locale].settings).toHaveProperty(
         "settings.automation.serviceSkill.runner.instant",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.automation.jobDialog.title.create",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.automation.jobDialog.badge.startMethod",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.automation.jobDialog.legacy.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.automation.jobDialog.footer.create",
       );
       expect(resources[locale].settings).toHaveProperty(
         "settings.automation.details.statusDetail.blocking",
       );
       expect(resources[locale].settings).toHaveProperty(
+        "settings.automation.focus.label",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.automation.focus.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.automation.focus.action.openDetail",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.automation.focus.strip.recentResult",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.automation.health.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.automation.health.status.waitingForHuman",
+      );
+      expect(resources[locale].settings).toHaveProperty(
         "settings.stats.heatmap.rangeValue",
       );
       expect(resources[locale].settings).toHaveProperty(
+        "settings.stats.range.week.label",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.stats.segment.messages",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.channels.logTail.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.channels.logTail.error.invalidRegex",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.system.clipboardPermission.macos.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.system.clipboardPermission.message.openSettingsFailedWithMessage",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.system.workspaceRepair.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.system.workspaceRepair.message.copiedAll",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.mediaServices.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.mediaServices.sections.responsiveChat.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.mediaServices.card.tipAria",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.providers.importExport.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.providers.importExport.export.action.generate",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.providers.importExport.import.result.importedProviders",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.providers.importExport.import.result.errors",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.mediaGeneration.image.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.mediaGeneration.video.hint.ready",
+      );
+      expect(resources[locale].settings).toHaveProperty(
         "settings.userCenterSession.value.expiresAt.unknown",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.userCenterSession.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.userCenterSession.login.google.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.agent.skills.advancedEntry.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.agent.skills.advancedEntry.tipAria",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.voice.input.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.voice.model.action.download",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.voice.shortcut.status.fnUnsupported",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.voice.processing.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.voice.media.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.voice.model.message.downloaded",
+      );
+      expect(resources[locale].errors).toHaveProperty(
+        "errors.artifactFallback.title.renderFailed",
+      );
+      expect(resources[locale].errors).toHaveProperty(
+        "errors.artifactFallback.action.copyErrorReport",
+      );
+      expect(resources[locale].errors).toHaveProperty(
+        "errors.svgRenderer.error.renderFailed",
+      );
+      expect(resources[locale].errors).toHaveProperty(
+        "errors.codeRenderer.action.copyCode",
+      );
+      expect(resources[locale].errors).toHaveProperty(
+        "errors.codeRenderer.error.emptyContent",
+      );
+      expect(resources[locale].errors).toHaveProperty(
+        "errors.htmlRenderer.error.renderFailed",
+      );
+      expect(resources[locale].errors).toHaveProperty(
+        "errors.htmlRenderer.action.refreshPreview",
+      );
+      expect(resources[locale].errors).toHaveProperty(
+        "errors.mermaidRenderer.error.syntax",
+      );
+      expect(resources[locale].errors).toHaveProperty(
+        "errors.mermaidRenderer.action.exportDiagram",
+      );
+      expect(resources[locale].errors).toHaveProperty(
+        "errors.crashRecovery.title",
+      );
+      expect(resources[locale].errors).toHaveProperty(
+        "errors.crashRecovery.action.forceReload",
+      );
+      expect(resources[locale].errors).toHaveProperty(
+        "errors.crashRecovery.action.retryOnly",
+      );
+      expect(resources[locale].errors).toHaveProperty(
+        "errors.crashRecovery.message.diagnosticExportedAndOpened",
+      );
+      expect(resources[locale].errors).toHaveProperty(
+        "errors.crashRecovery.moduleImportFailure.prefix",
       );
     }
   });
@@ -371,10 +841,98 @@ describe("i18n namespace loader", () => {
       ],
     ).toBe("参考图格式不支持，请重新上传图片");
     expect(
+      loadNamespaceResource("fr-FR", "workspace")[
+        "workspace.artifactDocument.kind.report"
+      ],
+    ).toBe("报告");
+    expect(
+      loadNamespaceResource("fr-FR", "workspace")[
+        "workspace.artifactDocument.stats.blocks.label"
+      ],
+    ).toBe("结构块");
+    expect(
+      loadNamespaceResource("fr-FR", "workspace")[
+        "workspace.artifactDocumentBlock.citation.titleFallback"
+      ],
+    ).toBe("参考来源");
+    expect(
+      loadNamespaceResource("fr-FR", "workspace")[
+        "workspace.a2uiSubmissionNotice.action.expand"
+      ],
+    ).toBe("展开");
+    expect(
+      loadNamespaceResource("fr-FR", "workspace")[
+        "workspace.pendingA2UI.status.progressStep"
+      ],
+    ).toBe("第 {{currentStep}}/{{totalSteps}} 步");
+    expect(
       loadNamespaceResource("fr-FR", "settings")[
         "settings.layout.sidebar.experimentalBadge"
       ],
     ).toBe("实验");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
+        "settings.about.version.label"
+      ],
+    ).toBe("Version {{version}} ({{build}})");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
+        "settings.about.update.errorDownload"
+      ],
+    ).toBe("暂时无法自动安装更新，请使用网页下载最新版。");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
+        "settings.chromeRelay.guide.header.extension.title"
+      ],
+    ).toBe("安装 Lime Browser Bridge");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
+        "settings.chromeRelay.guide.action.openRemoteDebugging"
+      ],
+    ).toBe("打开 chrome://inspect/#remote-debugging");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
+        "settings.chromeRelay.guide.message.copySuccess"
+      ],
+    ).toBe("{{label}} 已复制到剪贴板");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
+        "settings.chromeRelay.main.engine.xiaohongshu.label"
+      ],
+    ).toBe("小红书");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
+        "settings.chromeRelay.main.profile.title"
+      ],
+    ).toBe("Profile 会话");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
+        "settings.chromeRelay.main.profile.status.running"
+      ],
+    ).toBe("会话运行中");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
+        "settings.chromeRelay.main.action.openAdvancedTools"
+      ],
+    ).toBe("打开高级工具");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
+        "settings.chromeRelay.main.message.copyConfigSuccess"
+      ],
+    ).toBe("{{label}} 配置已复制到剪贴板");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")["settings.developer.title"],
+    ).toBe("开发者");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
+        "settings.developer.serviceSkill.title"
+      ],
+    ).toBe("服务型技能目录联调");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
+        "settings.developer.siteAdapterCatalog.message.injected"
+      ],
+    ).toBe("已通过 bootstrap 事件注入站点脚本目录：{{count}} 项");
     expect(
       loadNamespaceResource("fr-FR", "settings")[
         "settings.appearance.hero.title"
@@ -390,6 +948,174 @@ describe("i18n namespace loader", () => {
         "settings.experimental.updateCheck.title"
       ],
     ).toBe("自动更新检查");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")["settings.experimental.title"],
+    ).toBe("实验功能");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
+        "settings.experimental.webMcp.title"
+      ],
+    ).toBe("WebMCP（预留）");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
+        "settings.experimental.message.webMcpEnabled"
+      ],
+    ).toBe("WebMCP 预留入口已启用");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
+        "settings.experimental.crashReporting.environment.label"
+      ],
+    ).toBe("环境");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
+        "settings.environment.hero.title"
+      ],
+    ).toBe("环境变量");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
+        "settings.environment.summary.shellImport"
+      ],
+    ).toBe("Shell 导入：{{status}}");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
+        "settings.environment.preview.overriddenSources"
+      ],
+    ).toBe("已覆盖来源：{{sources}}");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
+        "settings.stats.range.week.label"
+      ],
+    ).toBe("本周");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
+        "settings.stats.segment.messages"
+      ],
+    ).toBe("{{count}} 条消息");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
+        "settings.agent.skills.advancedEntry.title"
+      ],
+    ).toBe("高级技能入口");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
+        "settings.agent.skills.advancedEntry.tipAria"
+      ],
+    ).toBe("高级技能入口说明");
+    expect(
+      loadNamespaceResource("fr-FR", "agent")["skills.repoManager.title"],
+    ).toBe("仓库管理");
+    expect(
+      loadNamespaceResource("fr-FR", "agent")["skills.contentDialog.loading"],
+    ).toBe("正在检查 Skill 包...");
+    expect(
+      loadNamespaceResource("fr-FR", "agent")[
+        "skills.contentDialog.section.metadata"
+      ],
+    ).toBe("元数据");
+    expect(
+      loadNamespaceResource("fr-FR", "agent")[
+        "skills.contentDialog.emptyInspection"
+      ],
+    ).toBe("暂无 Skill 检查结果");
+    expect(
+      loadNamespaceResource("fr-FR", "agent")["skills.repoManager.action.add"],
+    ).toBe("添加仓库");
+    expect(
+      loadNamespaceResource("fr-FR", "agent")[
+        "skills.repoManager.message.addFailed"
+      ],
+    ).toBe("添加失败: {{message}}");
+    expect(
+      loadNamespaceResource("fr-FR", "agent")[
+        "skills.skillCard.source.builtin"
+      ],
+    ).toBe("内置");
+    expect(
+      loadNamespaceResource("fr-FR", "agent")[
+        "skills.skillCard.action.install"
+      ],
+    ).toBe("安装");
+    expect(
+      loadNamespaceResource("fr-FR", "agent")[
+        "skills.skillCard.compliance.standard"
+      ],
+    ).toBe("标准");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")["settings.voice.input.title"],
+    ).toBe("语音输入");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
+        "settings.voice.model.action.download"
+      ],
+    ).toBe("下载模型");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
+        "settings.voice.shortcut.status.fnUnsupported"
+      ],
+    ).toBe("当前平台不支持 Fn，已使用快捷键回退");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
+        "settings.voice.processing.title"
+      ],
+    ).toBe("语音处理");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")["settings.voice.media.title"],
+    ).toBe("语音服务模型");
+    expect(
+      loadNamespaceResource("fr-FR", "settings")[
+        "settings.voice.model.message.downloaded"
+      ],
+    ).toBe("{{model}} 模型已下载");
+    expect(
+      loadNamespaceResource("fr-FR", "errors")[
+        "errors.artifactFallback.title.renderFailed"
+      ],
+    ).toBe("渲染失败");
+    expect(
+      loadNamespaceResource("fr-FR", "errors")[
+        "errors.svgRenderer.error.renderFailed"
+      ],
+    ).toBe("SVG 渲染失败");
+    expect(
+      loadNamespaceResource("fr-FR", "errors")[
+        "errors.codeRenderer.action.copyCode"
+      ],
+    ).toBe("复制代码");
+    expect(
+      loadNamespaceResource("fr-FR", "errors")[
+        "errors.htmlRenderer.error.renderFailed"
+      ],
+    ).toBe("HTML 渲染失败");
+    expect(
+      loadNamespaceResource("fr-FR", "errors")[
+        "errors.mermaidRenderer.error.syntax"
+      ],
+    ).toBe("Mermaid 语法错误");
+    expect(
+      loadNamespaceResource("fr-FR", "errors")["errors.crashRecovery.title"],
+    ).toBe("应用发生错误，已进入恢复模式");
+    expect(
+      loadNamespaceResource("fr-FR", "errors")[
+        "errors.crashRecovery.action.forceReload"
+      ],
+    ).toBe("强制刷新资源");
+    expect(
+      loadNamespaceResource("fr-FR", "errors")[
+        "errors.crashRecovery.action.retryOnly"
+      ],
+    ).toBe("仅重试恢复");
+    expect(
+      loadNamespaceResource("fr-FR", "errors")[
+        "errors.crashRecovery.message.diagnosticExportedAndOpened"
+      ],
+    ).toBe("诊断文件已导出：{{fileName}}，并已打开目录：{{path}}");
+    expect(
+      loadNamespaceResource("fr-FR", "errors")[
+        "errors.crashRecovery.moduleImportFailure.prefix"
+      ],
+    ).toBe(
+      "检测到前端模块资源加载失败。请优先点击“强制刷新资源”，让应用重新请求最新模块；若仍反复出现，再清理",
+    );
   });
 
   it("应内联主导航 namespace 的首屏文案", () => {

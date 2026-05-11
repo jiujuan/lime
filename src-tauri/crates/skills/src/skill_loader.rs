@@ -52,6 +52,7 @@ pub struct SkillFrontmatter {
     pub name: Option<String>,
     pub description: Option<String>,
     pub license: Option<String>,
+    pub compatibility: Option<String>,
     #[serde(default)]
     pub metadata: HashMap<String, String>,
     pub allowed_tools: Option<Vec<String>>,
@@ -78,6 +79,7 @@ pub struct LoadedSkillDefinition {
     pub description: String,
     pub markdown_content: String,
     pub license: Option<String>,
+    pub compatibility: Option<String>,
     pub metadata: HashMap<String, String>,
     pub allowed_tools: Option<Vec<String>>,
     pub argument_hint: Option<String>,
@@ -167,6 +169,7 @@ fn build_skill_frontmatter_from_manifest(parsed: &ParsedSkillManifest) -> SkillF
         name: parsed.metadata.name.clone(),
         description: parsed.metadata.description.clone(),
         license: parsed.metadata.license.clone(),
+        compatibility: parsed.metadata.compatibility.clone(),
         metadata,
         allowed_tools: (!parsed.metadata.allowed_tools.is_empty())
             .then(|| parsed.metadata.allowed_tools.clone()),
@@ -197,7 +200,12 @@ pub fn parse_allowed_tools(value: Option<&str>) -> Option<Vec<String>> {
                     .collect(),
             )
         } else {
-            Some(vec![v.trim().to_string()])
+            Some(
+                v.split_whitespace()
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect(),
+            )
         }
     })
 }
@@ -288,6 +296,7 @@ pub fn load_skill_from_file(
         .map_err(|e| format!("检查 Skill 包失败: {}", e))?;
 
     frontmatter.license = inspection.license.clone();
+    frontmatter.compatibility = inspection.compatibility.clone();
     frontmatter.metadata = inspection.metadata.clone();
     if !inspection.allowed_tools.is_empty() {
         frontmatter.allowed_tools = Some(inspection.allowed_tools.clone());
@@ -340,6 +349,7 @@ pub fn load_skill_from_file(
         description,
         markdown_content,
         license: inspection.license,
+        compatibility: inspection.compatibility,
         metadata: frontmatter.metadata,
         allowed_tools,
         argument_hint: frontmatter.argument_hint,
@@ -432,8 +442,24 @@ pub fn find_skill_by_name(skill_name: &str) -> Result<LoadedSkillDefinition, Str
 
 #[cfg(test)]
 mod tests {
-    use super::{load_skill_from_file, load_skills_from_directory};
+    use super::{load_skill_from_file, load_skills_from_directory, parse_allowed_tools};
     use tempfile::TempDir;
+
+    #[test]
+    fn parse_allowed_tools_should_support_standard_space_separated_values() {
+        assert_eq!(
+            parse_allowed_tools(Some("Bash(git:*) Bash(jq:*) Read")),
+            Some(vec![
+                "Bash(git:*)".to_string(),
+                "Bash(jq:*)".to_string(),
+                "Read".to_string()
+            ])
+        );
+        assert_eq!(
+            parse_allowed_tools(Some("tool1, tool2")),
+            Some(vec!["tool1".to_string(), "tool2".to_string()])
+        );
+    }
 
     #[test]
     fn load_skill_from_file_should_surface_invalid_workflow_reference() {

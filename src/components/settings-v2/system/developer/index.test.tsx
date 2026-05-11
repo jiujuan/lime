@@ -1,32 +1,11 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
-const { mockUseComponentDebug, mockUseTranslation } = vi.hoisted(() => {
-  const mockTranslate = vi.fn((key: string, options?: unknown) => {
-    if (typeof options === "string") {
-      return options;
-    }
-
-    if (options && typeof options === "object") {
-      const values = options as Record<string, unknown>;
-      const template =
-        typeof values.defaultValue === "string" ? values.defaultValue : key;
-      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-        String(values[name] ?? ""),
-      );
-    }
-
-    return key;
-  });
-
-  return {
-    mockUseComponentDebug: vi.fn(),
-    mockUseTranslation: vi.fn((_namespace?: string) => ({
-      t: mockTranslate,
-    })),
-  };
-});
+const { mockUseComponentDebug } = vi.hoisted(() => ({
+  mockUseComponentDebug: vi.fn(),
+}));
 
 const { mockGetConfig, mockSaveConfig } = vi.hoisted(() => ({
   mockGetConfig: vi.fn(),
@@ -116,10 +95,6 @@ vi.mock("@/contexts/ComponentDebugContext", () => ({
   useComponentDebug: mockUseComponentDebug,
 }));
 
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
-}));
-
 vi.mock("@/lib/api/appConfig", () => ({
   getConfig: mockGetConfig,
   saveConfig: mockSaveConfig,
@@ -179,11 +154,13 @@ vi.mock("@/lib/webview-api", () => ({
 }));
 
 vi.mock("../shared/ClipboardPermissionGuideCard", () => ({
-  ClipboardPermissionGuideCard: () => <div>剪贴板权限卡片占位</div>,
+  ClipboardPermissionGuideCard: () => (
+    <div>Clipboard permission card placeholder</div>
+  ),
 }));
 
 vi.mock("../shared/WorkspaceRepairHistoryCard", () => ({
-  WorkspaceRepairHistoryCard: () => <div>自愈记录卡片占位</div>,
+  WorkspaceRepairHistoryCard: () => <div>Repair history card placeholder</div>,
 }));
 
 import { DeveloperSettings } from ".";
@@ -347,7 +324,7 @@ function getBodyText() {
   return document.body.textContent ?? "";
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -355,6 +332,7 @@ beforeEach(() => {
   ).IS_REACT_ACT_ENVIRONMENT = true;
 
   vi.clearAllMocks();
+  await changeLimeLocale("en-US");
 
   mockUseComponentDebug.mockReturnValue({
     enabled: false,
@@ -432,7 +410,7 @@ beforeEach(() => {
   );
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mounted.length > 0) {
     const target = mounted.pop();
     if (!target) {
@@ -446,26 +424,29 @@ afterEach(() => {
   }
 
   vi.clearAllMocks();
+  await changeLimeLocale("zh-CN");
 });
 
 describe("DeveloperSettings", () => {
-  it("应渲染清理后的开发者页和必要分区", async () => {
+  it("应渲染清理后的Developer页和必要分区", async () => {
     const container = renderComponent();
     await flushEffects();
 
     const text = container.textContent ?? "";
-    expect(text).toContain("开发者");
-    expect(text).toContain("排查问题时打开，用完关回去。");
-    expect(text).toContain("调试开关");
-    expect(text).toContain("工作台调试信息");
-    expect(text).toContain("服务型技能目录联调");
-    expect(text).toContain("站点脚本目录联调");
-    expect(text).toContain("正在准备站点脚本目录联调");
-    expect(text).toContain("组件视图调试");
-    expect(text).toContain("诊断日志");
-    expect(text).toContain("Workspace 自愈记录");
-    expect(text).toContain("自愈记录卡片占位");
-    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
+    expect(text).toContain("Developer");
+    expect(text).toContain(
+      "Turn these on while troubleshooting, then turn them off again.",
+    );
+    expect(text).toContain("Debug Toggles");
+    expect(text).toContain("Workspace debug info");
+    expect(text).toContain("Service Skill Catalog Debugging");
+    expect(text).toContain("Site Script Catalog Debugging");
+    expect(text).toContain("Preparing Site Script Catalog Debugging");
+    expect(text).toContain("Component view debug");
+    expect(text).toContain("Diagnostic Logs");
+    expect(text).toContain("Workspace Repair History");
+    expect(text).toContain("Repair history card placeholder");
+    expect(text).not.toContain("settings.developer");
   });
 
   it("应移除开发页冗余说明卡片和提示噪音", async () => {
@@ -483,16 +464,18 @@ describe("DeveloperSettings", () => {
       "首屏先保留处理工作台、组件调试和诊断动作，目录联调、自愈记录与权限卡片按需加载，减少进入设置后的等待感。",
     );
     expect(
-      document.body.querySelector("button[aria-label='开发者设置首屏说明']"),
+      document.body.querySelector(
+        "button[aria-label='Developer settings hero details']",
+      ),
     ).toBeNull();
     expect(
       document.body.querySelector(
-        "button[aria-label='处理工作台调试信息说明']",
+        "button[aria-label='Workspace debug info details']",
       ),
     ).toBeNull();
   });
 
-  it("切换组件调试开关后应调用 setEnabled", async () => {
+  it("切换组件Debug Toggles后应调用 setEnabled", async () => {
     const setEnabled = vi.fn();
     mockUseComponentDebug.mockReturnValue({
       enabled: false,
@@ -503,7 +486,7 @@ describe("DeveloperSettings", () => {
     });
 
     const container = renderComponent();
-    await clickButton(findSwitch(container, "切换组件视图调试"));
+    await clickButton(findSwitch(container, "Toggle component view debug"));
 
     expect(setEnabled).toHaveBeenCalledTimes(1);
     expect(setEnabled).toHaveBeenCalledWith(true);
@@ -513,7 +496,7 @@ describe("DeveloperSettings", () => {
     const container = renderComponent();
     await flushEffects();
 
-    await clickButton(findSwitch(container, "切换处理工作台调试信息"));
+    await clickButton(findSwitch(container, "Toggle workspace debug info"));
 
     expect(mockSaveConfig).toHaveBeenCalledTimes(1);
     expect(mockSaveConfig).toHaveBeenCalledWith(
@@ -523,13 +506,15 @@ describe("DeveloperSettings", () => {
         }),
       }),
     );
-    expect(container.textContent).toContain("已开启处理工作台调试信息收集");
+    expect(container.textContent).toContain(
+      "Workspace debug collection is on. Tool inventory and environment summaries load when Harness opens.",
+    );
   });
 
-  it("点击复制诊断信息后应构建并复制诊断载荷", async () => {
+  it("点击Copy diagnostics后应构建并复制诊断载荷", async () => {
     const container = renderComponent();
 
-    await clickButton(findButton(container, "复制诊断信息"));
+    await clickButton(findButton(container, "Copy diagnostics"));
     await flushEffects();
 
     expect(mockCollectRuntimeSnapshotForDiagnostic).toHaveBeenCalledTimes(1);
@@ -537,7 +522,9 @@ describe("DeveloperSettings", () => {
     expect(mockCopyCrashDiagnosticToClipboard).toHaveBeenCalledWith({
       payload: "diagnostic",
     });
-    expect(container.textContent).toContain("诊断信息已复制，可直接发给开发者");
+    expect(container.textContent).toContain(
+      "Diagnostics copied. You can send them directly to developers.",
+    );
   });
 
   it("复制诊断因剪贴板权限失败时应显示权限指引", async () => {
@@ -552,32 +539,42 @@ describe("DeveloperSettings", () => {
     try {
       const container = renderComponent();
 
-      await clickButton(findButton(container, "复制诊断信息"));
+      await clickButton(findButton(container, "Copy diagnostics"));
       await flushEffects();
 
-      expect(container.textContent).toContain("剪贴板权限卡片占位");
+      expect(container.textContent).toContain(
+        "Clipboard permission card placeholder",
+      );
       expect(container.textContent).toContain("clipboard denied");
     } finally {
       consoleErrorSpy.mockRestore();
     }
   });
 
-  it("点击载入当前目录后应把 serviceSkillCatalog 写入调试输入框", async () => {
+  it("点击Load Current Catalog后应把 serviceSkillCatalog 写入调试输入框", async () => {
     const container = renderComponent();
     await waitForLazyPanels();
 
-    await clickButton(findButton(container, "载入当前目录"));
+    await clickButton(findButton(container, "Load Current Catalog"));
     await flushEffects();
 
-    const textarea = findTextarea(container, "服务型技能目录调试输入");
+    const textarea = findTextarea(
+      container,
+      "Service skill catalog debug input",
+    );
     expect(textarea.value).toContain('"tenantId": "tenant-demo"');
-    expect(container.textContent).toContain("已把当前目录写入调试编辑器");
+    expect(container.textContent).toContain(
+      "Current catalog written to debug editor",
+    );
   });
 
-  it("输入 JSON 后通过事件注入应调用 bootstrap 桥接", async () => {
+  it("输入 JSON 后Inject via Event应调用 bootstrap 桥接", async () => {
     const container = renderComponent();
     await waitForLazyPanels();
-    const textarea = findTextarea(container, "服务型技能目录调试输入");
+    const textarea = findTextarea(
+      container,
+      "Service skill catalog debug input",
+    );
 
     await inputTextarea(
       textarea,
@@ -589,7 +586,7 @@ describe("DeveloperSettings", () => {
         2,
       ),
     );
-    await clickButton(findButton(container, "通过事件注入"));
+    await clickButton(findButton(container, "Inject via Event"));
     await flushEffects();
 
     expect(
@@ -609,23 +606,23 @@ describe("DeveloperSettings", () => {
       }),
     );
     expect(container.textContent).toContain(
-      "已通过 bootstrap 事件注入目录：2 项",
+      "Injected catalog through bootstrap event: 2 items",
     );
   });
 
-  it("清空目录缓存后应回退 seeded 目录并展示提示", async () => {
+  it("Clear Catalog Cache后应回退 seeded 目录并展示提示", async () => {
     mockGetServiceSkillCatalog.mockResolvedValueOnce(remoteCatalog);
     mockGetServiceSkillCatalog.mockResolvedValueOnce(seededCatalog);
 
     const container = renderComponent();
     await waitForLazyPanels();
 
-    await clickButton(findButton(container, "清空目录缓存"));
+    await clickButton(findButton(container, "Clear Catalog Cache"));
     await flushEffects();
 
     expect(mockClearServiceSkillCatalogCache).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain(
-      "已清空远端目录缓存，当前回退到 seeded：1 项",
+      "Remote catalog cache cleared; falling back to seeded: 1 items",
     );
   });
 
@@ -633,8 +630,8 @@ describe("DeveloperSettings", () => {
     const container = renderComponent();
     await waitForLazyPanels();
 
-    expect(container.textContent).toContain("站点脚本目录联调");
-    expect(container.textContent).toContain("应用内置");
+    expect(container.textContent).toContain("Site Script Catalog Debugging");
+    expect(container.textContent).toContain("Bundled");
     expect(container.textContent).toContain("github/search");
     expect(container.textContent).toContain("zhihu/hot");
   });
@@ -642,7 +639,7 @@ describe("DeveloperSettings", () => {
   it("导入外部来源 YAML 后应调用 Lime 标准导入命令并刷新摘要", async () => {
     const container = renderComponent();
     await waitForLazyPanels();
-    const textarea = findTextarea(container, "站点来源 YAML 导入输入");
+    const textarea = findTextarea(container, "Site source YAML import input");
 
     mockSiteGetAdapterCatalogStatus.mockResolvedValueOnce({
       exists: true,
@@ -679,7 +676,7 @@ describe("DeveloperSettings", () => {
         "      (() => [])()",
       ].join("\n"),
     );
-    await clickButton(findButton(container, "导入到 Lime 标准"));
+    await clickButton(findButton(container, "Import to Lime Standard"));
     await flushEffects();
 
     expect(mockSiteImportAdapterYamlBundle).toHaveBeenCalledWith(
@@ -690,16 +687,19 @@ describe("DeveloperSettings", () => {
     expect(mockSiteGetAdapterCatalogStatus).toHaveBeenCalledTimes(2);
     expect(mockSiteListAdapters).toHaveBeenCalledTimes(2);
     expect(container.textContent).toContain(
-      "已按 Lime 标准导入 1 项外部适配器，当前生效 1 项",
+      "Imported 1 external adapters to the Lime standard; 1 are currently effective",
     );
-    expect(container.textContent).toContain("外部导入");
+    expect(container.textContent).toContain("Imported");
     expect(container.textContent).toContain("reddit/hot");
   });
 
   it("输入 JSON 后注入站点脚本目录应调用 bootstrap 桥接", async () => {
     const container = renderComponent();
     await waitForLazyPanels();
-    const textarea = findTextarea(container, "站点脚本目录调试输入");
+    const textarea = findTextarea(
+      container,
+      "Site adapter catalog debug input",
+    );
 
     await inputTextarea(
       textarea,
@@ -713,7 +713,7 @@ describe("DeveloperSettings", () => {
         2,
       ),
     );
-    await clickButton(findButton(container, "注入站点目录"));
+    await clickButton(findButton(container, "Inject Site Catalog"));
     await flushEffects();
 
     expect(
@@ -733,20 +733,20 @@ describe("DeveloperSettings", () => {
       }),
     );
     expect(container.textContent).toContain(
-      "已通过 bootstrap 事件注入站点脚本目录：2 项",
+      "Injected site adapter catalog through bootstrap event: 2 items",
     );
   });
 
-  it("清空站点脚本目录缓存后应提示回退到应用内置", async () => {
+  it("清空站点脚本目录缓存后应提示回退到Bundled", async () => {
     const container = renderComponent();
     await waitForLazyPanels();
 
-    await clickButton(findButton(container, "清空站点目录缓存"));
+    await clickButton(findButton(container, "Clear Site Catalog Cache"));
     await flushEffects();
 
     expect(mockClearSiteAdapterCatalogCache).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain(
-      "已清空站点脚本目录缓存，当前回退到应用内置：2 项",
+      "Site adapter catalog cache cleared; falling back to bundled: 2 items",
     );
   });
 
@@ -756,7 +756,7 @@ describe("DeveloperSettings", () => {
 
     expect(mockSiteGetAdapterCatalogStatus).toHaveBeenCalledTimes(1);
     expect(mockSiteListAdapters).toHaveBeenCalledTimes(1);
-    expect(container.textContent).toContain("应用内置");
+    expect(container.textContent).toContain("Bundled");
 
     mockSiteGetAdapterCatalogStatus.mockResolvedValueOnce({
       exists: true,
@@ -797,7 +797,7 @@ describe("DeveloperSettings", () => {
 
     expect(mockSiteGetAdapterCatalogStatus).toHaveBeenCalledTimes(2);
     expect(mockSiteListAdapters).toHaveBeenCalledTimes(2);
-    expect(container.textContent).toContain("服务端同步");
+    expect(container.textContent).toContain("Server Synced");
     expect(container.textContent).toContain("bilibili/hot");
     expect(container.textContent).toContain("tenant-site-2026-03-27");
   });

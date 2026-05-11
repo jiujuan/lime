@@ -113,6 +113,8 @@
 
 如果本轮是在清退旧 onboarding 插件安装流或 Provider Switch 命令面，`get_switch_providers`、`get_current_switch_provider`、`add_switch_provider`、`update_switch_provider`、`delete_switch_provider`、`switch_provider`、`import_default_config`、`read_live_provider_settings`、`check_config_sync_status`、`sync_from_external_config` 也必须同步从前端常量、Rust 注册、services、默认 mock 与 GUI 入口中撤掉；当前 onboarding 只允许保留语音体验链，不再保留 `config-switch` 推荐安装面。最低校验至少包含 `npm run test:contracts` 与 `npm run governance:legacy-report`。
 
+如果本轮是在清退插件中心模块，插件安装 / 管理 / UI / RPC 命令族也必须同步从 `src/lib/api` 网关、页面入口、设置入口、Rust 注册、DevBridge 与默认 mock 中撤掉；当前 GUI 不再保留插件中心或动态插件侧栏入口。最低校验至少包含 `npm run test:contracts`、`npm run governance:legacy-report` 与受影响前端回归。
+
 如果本轮涉及 `companion_*` 桌宠命令族，还要同步检查本地 companion `WebSocket` 入口、前端 `src/lib/api/companion.ts` 网关、Rust 注册、治理目录册以及浏览器模式 mock 返回形态；浏览器模式下这组命令默认也要保持可 mock，不要让桌宠接入把默认页面渲染链路卡死。
 
 如果本轮涉及 team runtime 工具面或主线程用户消息工具，还要同步检查 Rust catalog / inventory、runtime 注册、浏览器 fallback mock 与前端 tool display；`Agent / TeamCreate / TeamDelete / SendMessage / ListPeers` 必须保持同一组 current surface，`SendUserMessage` 也必须继续停留在 current 主线程工具面，不要把已删除的 `SubAgentTask` compat 工具重新接回 Rust catalog、runtime 注册、mock 或前端 tool display。

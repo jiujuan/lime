@@ -5,6 +5,7 @@
  */
 
 import React, { memo, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { FileText, Loader2 } from "lucide-react";
 import type { ArtifactRendererProps } from "@/lib/artifact/types";
 import { MarkdownRenderer } from "@/components/agent/chat/components/MarkdownRenderer";
@@ -18,10 +19,11 @@ interface ViewModeToggleProps {
   value: ViewMode;
   onChange: (value: ViewMode) => void;
   tone?: "dark" | "light";
+  labels: Record<ViewMode, string>;
 }
 
 const ViewModeToggle: React.FC<ViewModeToggleProps> = memo(
-  ({ value, onChange, tone = "dark" }) => (
+  ({ value, onChange, tone = "dark", labels }) => (
     <div
       className={`inline-flex items-center rounded p-0.5 ${
         tone === "light" ? "bg-black/5" : "bg-white/5"
@@ -30,6 +32,7 @@ const ViewModeToggle: React.FC<ViewModeToggleProps> = memo(
       <button
         type="button"
         onClick={() => onChange("preview")}
+        title={labels.preview}
         className={`px-2 py-1 text-xs rounded transition-all ${
           value === "preview"
             ? tone === "light"
@@ -40,11 +43,12 @@ const ViewModeToggle: React.FC<ViewModeToggleProps> = memo(
               : "text-gray-400 hover:text-white"
         }`}
       >
-        预览
+        {labels.preview}
       </button>
       <button
         type="button"
         onClick={() => onChange("source")}
+        title={labels.source}
         className={`px-2 py-1 text-xs rounded transition-all ${
           value === "source"
             ? tone === "light"
@@ -55,7 +59,7 @@ const ViewModeToggle: React.FC<ViewModeToggleProps> = memo(
               : "text-gray-400 hover:text-white"
         }`}
       >
-        源码
+        {labels.source}
       </button>
     </div>
   ),
@@ -71,6 +75,7 @@ export const DocumentRenderer: React.FC<ArtifactRendererProps> = memo(
     viewMode: externalViewMode,
     tone = "dark",
   }) => {
+    const { t } = useTranslation("workspace");
     const [internalViewMode, setInternalViewMode] =
       useState<ViewMode>("preview");
     const viewMode = externalViewMode ?? internalViewMode;
@@ -104,6 +109,10 @@ export const DocumentRenderer: React.FC<ArtifactRendererProps> = memo(
       artifact.meta.filePath.trim()
         ? artifact.meta.filePath.trim()
         : undefined;
+    const viewModeLabels = {
+      preview: t("workspace.documentRenderer.view.preview"),
+      source: t("workspace.documentRenderer.view.source"),
+    } satisfies Record<ViewMode, string>;
 
     return (
       <div
@@ -133,7 +142,9 @@ export const DocumentRenderer: React.FC<ArtifactRendererProps> = memo(
               {isStreaming ? (
                 <span className="flex items-center gap-1 text-xs text-blue-400 shrink-0">
                   <Loader2 className="w-3 h-3 animate-spin" />
-                  <span>生成中...</span>
+                  <span>
+                    {t("workspace.documentRenderer.status.generating")}
+                  </span>
                 </span>
               ) : null}
             </div>
@@ -141,6 +152,7 @@ export const DocumentRenderer: React.FC<ArtifactRendererProps> = memo(
               value={viewMode}
               onChange={setInternalViewMode}
               tone={tone}
+              labels={viewModeLabels}
             />
           </div>
         )}

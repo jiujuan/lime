@@ -4,7 +4,6 @@ import {
   BookOpen,
   MessageCircleMore,
   Plus,
-  Puzzle,
   Settings,
   Sparkles,
   Workflow,
@@ -114,14 +113,6 @@ export const FOOTER_SIDEBAR_NAV_ITEMS: SidebarNavItemDefinition[] = [
     page: "channels",
     isActive: (currentPage) => currentPage === "channels",
     configurable: false,
-  },
-  {
-    id: "plugins",
-    label: "插件中心",
-    icon: Puzzle,
-    page: "plugins",
-    isActive: (currentPage) => currentPage === "plugins",
-    configurable: true,
   },
   {
     id: "companion",

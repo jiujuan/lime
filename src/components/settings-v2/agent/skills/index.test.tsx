@@ -1,16 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-const { mockUseTranslation } = vi.hoisted(() => ({
-  mockUseTranslation: vi.fn((_namespace?: string) => ({
-    t: (key: string, fallback?: string) => fallback ?? key,
-  })),
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
-}));
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 vi.mock("@/components/skills/SkillsPage", () => ({
   SkillsPage: ({ hideHeader }: { hideHeader?: boolean }) => (
@@ -42,7 +33,7 @@ function renderComponent() {
   return container;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -50,9 +41,10 @@ beforeEach(() => {
   ).IS_REACT_ACT_ENVIRONMENT = true;
 
   vi.clearAllMocks();
+  await changeLimeLocale("en-US");
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mounted.length > 0) {
     const target = mounted.pop();
     if (!target) {
@@ -64,22 +56,24 @@ afterEach(() => {
     });
     target.container.remove();
   }
+
+  await changeLimeLocale("zh-CN");
 });
 
 describe("ExtensionsSettings", () => {
-  it("应通过 settings namespace 渲染高级技能入口文案", () => {
+  it("应通过 settings namespace 渲染英文高级技能入口文案", () => {
     const container = renderComponent();
     const text = container.textContent ?? "";
 
-    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
-    expect(text).toContain("高级技能入口");
-    expect(text).toContain("问题反馈");
+    expect(text).toContain("Advanced Skill Entry");
+    expect(text).toContain("Issue Feedback");
+    expect(text).not.toContain("高级技能入口");
     expect(
       container.querySelector("[data-testid='skills-page']")?.textContent,
     ).toContain("hideHeader=true");
 
     const helpTrigger = container.querySelector(
-      "button[aria-label='高级技能入口说明']",
+      "button[aria-label='Advanced skill entry help']",
     );
     expect(helpTrigger).toBeInstanceOf(HTMLButtonElement);
     expect(text).not.toContain("settings.agent.skills.advancedEntry");

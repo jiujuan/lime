@@ -11,6 +11,7 @@ import {
   type CSSProperties,
 } from "react";
 import styled, { keyframes } from "styled-components";
+import { useTranslation } from "react-i18next";
 import { LIME_BRAND_LOGO_SRC, LIME_BRAND_NAME } from "@/lib/branding";
 import { revealStartupWindowWhenReady } from "@/lib/startupWindowReveal";
 
@@ -320,6 +321,7 @@ export function SplashScreen({
   duration = 420,
   exitDuration = 160,
 }: SplashScreenProps) {
+  const { t } = useTranslation("common");
   const [isExiting, setIsExiting] = useState(false);
 
   useLayoutEffect(() => {
@@ -380,8 +382,8 @@ export function SplashScreen({
         </LogoStack>
         <CopyBlock>
           <CopyGlow />
-          <Slogan>青柠一下，灵感即来</Slogan>
-          <Subtitle>从一句想法，到成稿、成图、成片、成事</Subtitle>
+          <Slogan>{t("common.splashScreen.slogan")}</Slogan>
+          <Subtitle>{t("common.splashScreen.subtitle")}</Subtitle>
         </CopyBlock>
         <ProgressTrack aria-hidden>
           <ProgressBar />

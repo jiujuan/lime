@@ -3,6 +3,7 @@ import {
   buildAgentStreamFirstEventContext,
   buildAgentStreamFirstEventDeferredContext,
   buildAgentStreamListenerBoundContext,
+  extractAgentStreamRuntimeEventSchemaVersion,
   extractAgentStreamRuntimeEventType,
   shouldDeferAgentStreamFirstEventTimeout,
   shouldIgnoreAgentStreamInactivityResult,
@@ -19,6 +20,25 @@ describe("agentStreamListenerReadinessController", () => {
     expect(extractAgentStreamRuntimeEventType({ type: "   " })).toBeNull();
     expect(extractAgentStreamRuntimeEventType(["runtime_status"])).toBeNull();
     expect(extractAgentStreamRuntimeEventType(null)).toBeNull();
+  });
+
+  it("应提取 AgentRuntime profile schema version", () => {
+    expect(
+      extractAgentStreamRuntimeEventSchemaVersion({
+        type: "turn.submitted",
+        schemaVersion: "lime-profile-0.4.0",
+      }),
+    ).toBe("lime-profile-0.4.0");
+    expect(
+      extractAgentStreamRuntimeEventSchemaVersion({
+        type: "turn.submitted",
+        schema_version: "lime-profile-0.4.0",
+      }),
+    ).toBe("lime-profile-0.4.0");
+    expect(
+      extractAgentStreamRuntimeEventSchemaVersion({ schemaVersion: "   " }),
+    ).toBeNull();
+    expect(extractAgentStreamRuntimeEventSchemaVersion(null)).toBeNull();
   });
 
   it("应构造 listener bound 与 first event 指标上下文", () => {

@@ -18,7 +18,6 @@ describe("sidebarNav", () => {
       "设置",
       "持续流程",
       "消息渠道",
-      "插件中心",
       "桌宠",
     ]);
   });
@@ -36,7 +35,7 @@ describe("sidebarNav", () => {
         "plugins",
         "companion",
       ]),
-    ).toEqual(["plugins", "companion"]);
+    ).toEqual(["companion"]);
   });
 
   it("没有显式设置时不应默认恢复任何可选入口", () => {

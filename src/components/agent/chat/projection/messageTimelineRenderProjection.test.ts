@@ -50,6 +50,22 @@ function item(id: string, turnId: string): AgentThreadItem {
   } as AgentThreadItem;
 }
 
+function internalSummaryItem(id: string, turnId: string): AgentThreadItem {
+  return {
+    id,
+    turn_id: turnId,
+    type: "turn_summary",
+    sequence: 1,
+    started_at: "2026-05-05T00:00:00.000Z",
+    text: "runtime status should stay outside the conversation timeline",
+    metadata: {
+      sourceType: "runtime_status",
+      surface: "runtime_status",
+      visibility: "diagnostics",
+    },
+  } as AgentThreadItem;
+}
+
 describe("messageTimelineRenderProjection", () => {
   it("不允许构建历史 timeline 时应返回空映射", () => {
     expect(
@@ -89,6 +105,23 @@ describe("messageTimelineRenderProjection", () => {
       turn: { id: "turn-current" },
       items: [{ id: "item-1" }],
     });
+  });
+
+  it("当前 turn timeline 不应把内部路由摘要暴露给默认聊天流", () => {
+    const projection = buildCurrentTurnTimelineProjection({
+      activeCurrentTurnId: "turn-current",
+      activeCurrentTurn: turn("turn-current"),
+      lastAssistantMessageId: "message-tail",
+      timelineByMessageId: new Map(),
+      renderedThreadItems: [
+        internalSummaryItem("summary-internal", "turn-current"),
+        item("tool-visible", "turn-current"),
+      ],
+    });
+
+    expect(projection?.items).toEqual([
+      expect.objectContaining({ id: "tool-visible" }),
+    ]);
   });
 
   it("当前 turn 已显式绑定其它消息时不应回退到最后一条 assistant", () => {

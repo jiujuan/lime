@@ -46,9 +46,9 @@ describe("tauri-mock/core invoke", () => {
   it("mock 优先命令直接返回默认 mock，不访问 bridge", async () => {
     vi.mocked(shouldPreferMockInBrowser).mockReturnValueOnce(true);
 
-    await expect(
-      invoke("list_plugin_tasks", { taskState: null, limit: 300 }),
-    ).resolves.toEqual([]);
+    await expect(invoke("companion_get_pet_status")).resolves.toEqual(
+      expect.objectContaining({ connected: false }),
+    );
 
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });
@@ -1943,7 +1943,6 @@ describe("tauri-mock/core invoke", () => {
       }),
     );
   });
-
 
   it("旧 Agent 命令别名应直接报废弃错误，不再静默返回 mock 成功结果", async () => {
     mocks.isDevBridgeAvailable.mockReturnValue(false);

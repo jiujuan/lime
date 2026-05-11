@@ -227,8 +227,7 @@ describe("buildInputCapabilitySections", () => {
     const inputCapabilityCopy = buildInputCapabilitySectionsCopy(
       (key, defaultValue, values) => {
         const overrides: Record<string, string> = {
-          "inputCapabilities.heading.resultTemplatesEmpty":
-            "Get Results First",
+          "inputCapabilities.heading.resultTemplatesEmpty": "Get Results First",
           "inputCapabilities.review.action": "Continue with {{title}}",
         };
         const template = overrides[key] ?? defaultValue;
@@ -268,8 +267,7 @@ describe("buildInputCapabilitySections", () => {
       (key, defaultValue, values) => {
         const overrides: Record<string, string> = {
           "inputCapabilities.heading.recentMention": "Recently Used",
-          "inputCapabilities.inputGroup.generateExpression":
-            "Create / Express",
+          "inputCapabilities.inputGroup.generateExpression": "Create / Express",
           "inputCapabilities.mentionRegistry.badge":
             "Unified invocation registry",
           "inputCapabilities.mentionRegistry.titleWithRecent":
@@ -309,9 +307,7 @@ describe("buildInputCapabilitySections", () => {
     );
 
     expect(recentSection?.heading).toBe("Recently Used");
-    expect(recentSection?.banner?.badge).toBe(
-      "Unified invocation registry",
-    );
+    expect(recentSection?.banner?.badge).toBe("Unified invocation registry");
     expect(recentSection?.banner?.title).toBe(
       "Resume recent or switch executor",
     );

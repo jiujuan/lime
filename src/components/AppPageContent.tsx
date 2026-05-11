@@ -56,10 +56,6 @@ const loadMemoryPage = () =>
   import("./memory").then((module) => ({
     default: module.MemoryPage,
   }));
-const loadPluginsPage = () =>
-  import("./plugins/PluginsPage").then((module) => ({
-    default: module.PluginsPage,
-  }));
 const loadSkillsWorkspacePage = () =>
   import("./skills").then((module) => ({
     default: module.SkillsWorkspacePage,
@@ -124,7 +120,6 @@ function scheduleAgentChatPagePreload(): void {
 
 const ResourcesPage = lazy(loadResourcesPage);
 const MemoryPage = lazy(loadMemoryPage);
-const PluginsPage = lazy(loadPluginsPage);
 const SkillsWorkspacePage = lazy(loadSkillsWorkspacePage);
 const KnowledgePage = lazy(loadKnowledgePage);
 const BrowserRuntimeWorkspace = lazy(loadBrowserRuntimeWorkspace);
@@ -366,16 +361,6 @@ export function AppPageContent({
           }
           initialSaveTitle={browserRuntimeParams.initialSaveTitle}
         />
-      </PageWrapper>
-    );
-
-    return wrapWithSceneApps(content);
-  }
-
-  if (activePage === "plugins") {
-    const content = (
-      <PageWrapper $isActive={true}>
-        <PluginsPage onNavigate={onNavigate} />
       </PageWrapper>
     );
 

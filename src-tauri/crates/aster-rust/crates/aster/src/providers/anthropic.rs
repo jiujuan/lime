@@ -55,6 +55,7 @@ fn should_use_bearer_auth_for_anthropic_host(host: &str) -> bool {
         "api.z.ai/api/anthropic",
         "moonshot.cn/anthropic",
         "moonshot.ai/anthropic",
+        "api.kimi.com/coding",
         "minimaxi.com/anthropic",
         "minimax.io/anthropic",
         "coding.dashscope.aliyuncs.com/apps/anthropic",
@@ -63,6 +64,10 @@ fn should_use_bearer_auth_for_anthropic_host(host: &str) -> bool {
     ]
     .iter()
     .any(|needle| normalized_host.contains(needle))
+}
+
+fn is_official_anthropic_host(host: &str) -> bool {
+    normalize_anthropic_host(host).contains("api.anthropic.com")
 }
 
 fn parse_config_url(host: &str) -> Option<Url> {
@@ -131,11 +136,50 @@ fn resolve_anthropic_auth(host: &str, secret: String) -> AuthMethod {
     }
 }
 
+fn resolve_anthropic_auth_from_env(host: &str) -> Result<(String, AuthMethod)> {
+    let config = crate::config::Config::global();
+    let sanitized_host = strip_host_url_metadata(host);
+
+    if !is_official_anthropic_host(&sanitized_host) {
+        if let Ok(api_key) = config.get_secret::<String>("ANTHROPIC_AUTH_TOKEN") {
+            return Ok((api_key.clone(), AuthMethod::BearerToken(api_key)));
+        }
+    }
+
+    if should_use_bearer_auth_for_anthropic_host(&sanitized_host) {
+        let api_key: String = config
+            .get_secret::<String>("ANTHROPIC_AUTH_TOKEN")
+            .or_else(|_| config.get_secret::<String>("ANTHROPIC_API_KEY"))?;
+        Ok((api_key.clone(), AuthMethod::BearerToken(api_key)))
+    } else {
+        let api_key: String = config
+            .get_secret::<String>("ANTHROPIC_API_KEY")
+            .or_else(|_| config.get_secret::<String>("ANTHROPIC_AUTH_TOKEN"))?;
+        Ok((
+            api_key.clone(),
+            AuthMethod::ApiKey {
+                header_name: "x-api-key".to_string(),
+                key: api_key,
+            },
+        ))
+    }
+}
+
 fn build_anthropic_api_client(host: &str, auth_secret: String) -> Result<ApiClient> {
     let sanitized_host = strip_host_url_metadata(host);
     let should_add_x_api_key_header = should_use_bearer_auth_for_anthropic_host(&sanitized_host);
     let auth = resolve_anthropic_auth(&sanitized_host, auth_secret.clone());
 
+    build_anthropic_api_client_with_auth(host, auth_secret, auth, should_add_x_api_key_header)
+}
+
+fn build_anthropic_api_client_with_auth(
+    host: &str,
+    auth_secret: String,
+    auth: AuthMethod,
+    should_add_x_api_key_header: bool,
+) -> Result<ApiClient> {
+    let sanitized_host = strip_host_url_metadata(host);
     let mut api_client = ApiClient::new(sanitized_host, auth)?
         .with_header("anthropic-version", ANTHROPIC_API_VERSION)?;
 
@@ -170,18 +214,17 @@ impl AnthropicProvider {
             .or_else(|_| config.get_param("ANTHROPIC_BASE_URL"))
             .unwrap_or_else(|_| "https://api.anthropic.com".to_string());
         let sanitized_host = strip_host_url_metadata(&host);
-        let api_key: String = if should_use_bearer_auth_for_anthropic_host(&sanitized_host) {
-            config
-                .get_secret("ANTHROPIC_AUTH_TOKEN")
-                .or_else(|_| config.get_secret("ANTHROPIC_API_KEY"))?
-        } else {
-            config
-                .get_secret("ANTHROPIC_API_KEY")
-                .or_else(|_| config.get_secret("ANTHROPIC_AUTH_TOKEN"))?
-        };
+        let (api_key, auth) = resolve_anthropic_auth_from_env(&host)?;
+        let should_add_x_api_key_header =
+            should_use_bearer_auth_for_anthropic_host(&sanitized_host);
 
         let automatic_prompt_cache = supports_automatic_prompt_cache_for_host(&sanitized_host);
-        let api_client = build_anthropic_api_client(&host, api_key)?;
+        let api_client = build_anthropic_api_client_with_auth(
+            &host,
+            api_key,
+            auth,
+            should_add_x_api_key_header,
+        )?;
 
         Ok(Self {
             api_client,
@@ -483,6 +526,9 @@ mod tests {
         assert!(should_use_bearer_auth_for_anthropic_host(
             "https://coding-intl.dashscope.aliyuncs.com/apps/anthropic"
         ));
+        assert!(should_use_bearer_auth_for_anthropic_host(
+            "https://api.kimi.com/coding/"
+        ));
     }
 
     #[test]
@@ -490,14 +536,16 @@ mod tests {
         assert!(!should_use_bearer_auth_for_anthropic_host(
             "https://api.anthropic.com"
         ));
-        assert!(!should_use_bearer_auth_for_anthropic_host(
-            "https://api.kimi.com/coding/"
-        ));
     }
 
     #[test]
     fn test_resolve_anthropic_auth_uses_expected_auth_method() {
         match resolve_anthropic_auth("https://api.minimaxi.com/anthropic", "k1".to_string()) {
+            AuthMethod::BearerToken(token) => assert_eq!(token, "k1"),
+            _ => panic!("expected bearer token auth"),
+        }
+
+        match resolve_anthropic_auth("https://api.kimi.com/coding/", "k1".to_string()) {
             AuthMethod::BearerToken(token) => assert_eq!(token, "k1"),
             _ => panic!("expected bearer token auth"),
         }
@@ -518,6 +566,27 @@ mod tests {
             "k1".to_string(),
         )
         .expect("api client should build");
+        let headers = api_client.default_headers_for_test();
+
+        assert_eq!(
+            headers
+                .get("anthropic-version")
+                .and_then(|value| value.to_str().ok()),
+            Some("2023-06-01")
+        );
+        assert_eq!(
+            headers
+                .get("x-api-key")
+                .and_then(|value| value.to_str().ok()),
+            Some("k1")
+        );
+    }
+
+    #[test]
+    fn test_kimi_code_host_adds_dual_auth_headers_to_api_client() {
+        let api_client =
+            build_anthropic_api_client("https://api.kimi.com/coding/", "k1".to_string())
+                .expect("api client should build");
         let headers = api_client.default_headers_for_test();
 
         assert_eq!(

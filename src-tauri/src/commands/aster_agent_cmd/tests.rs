@@ -3860,6 +3860,21 @@ mod tests {
     }
 
     #[test]
+    fn test_fast_response_runtime_status_uses_transient_projection() {
+        let metadata = serde_json::json!({
+            "harness": {
+                "fast_response_routing": {
+                    "mode": "auto",
+                    "runtime_status_presentation": "transient"
+                }
+            }
+        });
+
+        assert!(!should_project_runtime_status_to_timeline(Some(&metadata)));
+        assert!(should_project_runtime_status_to_timeline(None));
+    }
+
+    #[test]
     fn test_resolve_request_web_search_preference_from_sources_prefers_request_flag() {
         let metadata = serde_json::json!({
             "harness": {
@@ -6885,6 +6900,52 @@ mod tests {
             &[
                 "preload_service_skill_launch_execution",
                 "apply_service_skill_preload_prompt_stage(",
+            ],
+        );
+    }
+
+    #[test]
+    fn test_runtime_turn_source_emits_task_profile_events_on_current_runtime_chain() {
+        let source = runtime_turn_source();
+        let submit_slice = source_slice(
+            &source,
+            "runtime_turn_prepared_execution.emit_profile_turn_submitted(app, &request.event_name);",
+            "let guard = agent_arc.read().await;",
+        );
+        assert_markers_in_order(
+            submit_slice,
+            &[
+                "emit_profile_turn_submitted",
+                "emit_profile_task_started",
+            ],
+        );
+
+        let finalize_slice = source_slice(
+            &source,
+            "async fn finalize_runtime_turn_result(",
+            "match result {",
+        );
+        assert_markers_in_order(
+            finalize_slice,
+            &[
+                "build_runtime_task_completed_profile_event",
+                "profile_stream.turn_completed",
+                "build_runtime_task_failed_profile_events",
+                "profile_stream.turn_failed",
+            ],
+        );
+
+        let pre_model_failure_slice = source_slice(
+            &source,
+            "fn fail_runtime_turn_before_model_execution(",
+            "let error_event = RuntimeAgentEvent::Error",
+        );
+        assert_markers_in_order(
+            pre_model_failure_slice,
+            &[
+                "build_runtime_task_failed_profile_events",
+                "profile_stream.turn_failed",
+                "profile_stream.snapshot_updated(\"failed\")",
             ],
         );
     }

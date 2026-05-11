@@ -731,7 +731,9 @@ function applyCuratedTaskTemplateCopy(
 
   return {
     ...template,
-    ...(templateCopy.categoryLabel ? { categoryLabel: templateCopy.categoryLabel } : {}),
+    ...(templateCopy.categoryLabel
+      ? { categoryLabel: templateCopy.categoryLabel }
+      : {}),
     ...(templateCopy.outputHint ? { outputHint: templateCopy.outputHint } : {}),
     ...(templateCopy.resultDestination
       ? { resultDestination: templateCopy.resultDestination }

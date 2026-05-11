@@ -26,9 +26,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  type AutomationServiceSkillContext,
-} from "./serviceSkillContext";
+import { type AutomationServiceSkillContext } from "./serviceSkillContext";
 import {
   defaultAutomationPresentationCopy,
   deliveryStatusVariant,
@@ -56,12 +54,9 @@ type SettingsTranslate = TFunction<"settings">;
 function detailsText(
   t: SettingsTranslate,
   key: string,
-  defaultValue: string,
   values: Record<string, string | number | boolean> = {},
 ): string {
-  const translated = String(
-    t(key as never, { ...values, defaultValue } as never),
-  );
+  const translated = String(t(key as never, values as never));
   return Object.entries(values).reduce((text, [name, value]) => {
     const replacement = String(value);
     return text
@@ -80,219 +75,125 @@ function buildDetailsPresentationCopy(
     legacyBrowserAutomationNotice: detailsText(
       t,
       "settings.automation.details.legacy.message",
-      "浏览器自动化已下线，系统不会再自动启动 Chrome。请删除旧流程，并改建为 Agent 对话持续流程。",
     ),
     legacyBrowserAutomationStatus: detailsText(
       t,
       "settings.automation.details.status.offline",
-      "已下线",
     ),
     scheduleHours: (count) =>
-      detailsText(
-        t,
-        "settings.automation.details.schedule.hours",
-        "每 {{count}} 小时",
-        { count },
-      ),
+      detailsText(t, "settings.automation.details.schedule.hours", { count }),
     scheduleMinutes: (count) =>
-      detailsText(
-        t,
-        "settings.automation.details.schedule.minutes",
-        "每 {{count}} 分钟",
-        { count },
-      ),
+      detailsText(t, "settings.automation.details.schedule.minutes", { count }),
     scheduleSeconds: (count) =>
-      detailsText(
-        t,
-        "settings.automation.details.schedule.seconds",
-        "每 {{count}} 秒",
-        { count },
-      ),
+      detailsText(t, "settings.automation.details.schedule.seconds", { count }),
     scheduleCron: (expr) =>
-      detailsText(
-        t,
-        "settings.automation.details.schedule.cron",
-        "Cron: {{expr}}",
-        { expr },
-      ),
+      detailsText(t, "settings.automation.details.schedule.cron", { expr }),
     scheduleAt: (time) =>
-      detailsText(
-        t,
-        "settings.automation.details.schedule.at",
-        "一次性: {{time}}",
-        { time },
-      ),
+      detailsText(t, "settings.automation.details.schedule.at", { time }),
     payloadBrowserSession: detailsText(
       t,
       "settings.automation.details.payload.browserSession",
-      "浏览器自动化",
     ),
     payloadAgentTurn: detailsText(
       t,
       "settings.automation.details.payload.agentTurn",
-      "Agent 对话",
     ),
     legacyPayloadProfile: (profile) =>
-      detailsText(
-        t,
-        "settings.automation.details.legacy.payload.profile",
-        "资料: {{profile}}",
-        { profile },
-      ),
+      detailsText(t, "settings.automation.details.legacy.payload.profile", {
+        profile,
+      }),
     legacyPayloadEnvironment: (environment) =>
-      detailsText(
-        t,
-        "settings.automation.details.legacy.payload.environment",
-        "环境预设: {{environment}}",
-        { environment },
-      ),
+      detailsText(t, "settings.automation.details.legacy.payload.environment", {
+        environment,
+      }),
     legacyPayloadUrl: (url) =>
-      detailsText(
-        t,
-        "settings.automation.details.legacy.payload.url",
-        "启动地址: {{url}}",
-        { url },
-      ),
+      detailsText(t, "settings.automation.details.legacy.payload.url", { url }),
     legacyPayloadTargetId: (targetId) =>
-      detailsText(
-        t,
-        "settings.automation.details.legacy.payload.targetId",
-        "Target ID: {{targetId}}",
-        { targetId },
-      ),
+      detailsText(t, "settings.automation.details.legacy.payload.targetId", {
+        targetId,
+      }),
     legacyPayloadWindow: (status) =>
-      detailsText(
-        t,
-        "settings.automation.details.legacy.payload.window",
-        "调试窗口: {{status}}",
-        { status },
-      ),
+      detailsText(t, "settings.automation.details.legacy.payload.window", {
+        status,
+      }),
     legacyPayloadWindowOpen: detailsText(
       t,
       "settings.automation.details.legacy.payload.windowOpen",
-      "打开",
     ),
     legacyPayloadWindowClosed: detailsText(
       t,
       "settings.automation.details.legacy.payload.windowClosed",
-      "关闭",
     ),
     legacyPayloadStreamMode: (streamMode) =>
-      detailsText(
-        t,
-        "settings.automation.details.legacy.payload.streamMode",
-        "流模式: {{streamMode}}",
-        { streamMode },
-      ),
-    statusQueued: detailsText(
-      t,
-      "settings.automation.details.status.queued",
-      "排队中",
-    ),
-    statusSuccess: detailsText(
-      t,
-      "settings.automation.details.status.success",
-      "成功",
-    ),
-    statusRunning: detailsText(
-      t,
-      "settings.automation.details.status.running",
-      "运行中",
-    ),
+      detailsText(t, "settings.automation.details.legacy.payload.streamMode", {
+        streamMode,
+      }),
+    statusQueued: detailsText(t, "settings.automation.details.status.queued"),
+    statusSuccess: detailsText(t, "settings.automation.details.status.success"),
+    statusRunning: detailsText(t, "settings.automation.details.status.running"),
     statusWaitingForHuman: detailsText(
       t,
       "settings.automation.details.status.waitingForHuman",
-      "等待人工处理",
     ),
     statusHumanControlling: detailsText(
       t,
       "settings.automation.details.status.humanControlling",
-      "人工接管中",
     ),
     statusAgentResuming: detailsText(
       t,
       "settings.automation.details.status.agentResuming",
-      "恢复给 Agent",
     ),
-    statusError: detailsText(
-      t,
-      "settings.automation.details.status.error",
-      "失败",
-    ),
-    statusTimeout: detailsText(
-      t,
-      "settings.automation.details.status.timeout",
-      "超时",
-    ),
-    statusPending: detailsText(
-      t,
-      "settings.automation.details.status.pending",
-      "待执行",
-    ),
+    statusError: detailsText(t, "settings.automation.details.status.error"),
+    statusTimeout: detailsText(t, "settings.automation.details.status.timeout"),
+    statusPending: detailsText(t, "settings.automation.details.status.pending"),
     deliveryModeAnnounce: detailsText(
       t,
       "settings.automation.details.delivery.mode.announce",
-      "运行完成后投递",
     ),
     deliveryModeNone: detailsText(
       t,
       "settings.automation.details.delivery.mode.none",
-      "未启用",
     ),
     deliveryChannelLocalFile: detailsText(
       t,
       "settings.automation.details.delivery.channel.localFile",
-      "本地文件",
     ),
     outputSchemaJson: detailsText(
       t,
       "settings.automation.details.delivery.schema.json",
-      "JSON 对象",
     ),
     outputSchemaTable: detailsText(
       t,
       "settings.automation.details.delivery.schema.table",
-      "表格",
     ),
     outputSchemaCsv: detailsText(
       t,
       "settings.automation.details.delivery.schema.csv",
-      "CSV",
     ),
     outputSchemaLinks: detailsText(
       t,
       "settings.automation.details.delivery.schema.links",
-      "链接列表",
     ),
     outputSchemaText: detailsText(
       t,
       "settings.automation.details.delivery.schema.text",
-      "文本摘要",
     ),
     outputFormatJson: detailsText(
       t,
       "settings.automation.details.delivery.format.json",
-      "JSON 编码",
     ),
     outputFormatText: detailsText(
       t,
       "settings.automation.details.delivery.format.text",
-      "文本编码",
     ),
     serviceSkillTaskLine: (title) =>
-      detailsText(
-        t,
-        "settings.automation.details.serviceSkill.taskLine",
-        "技能：{{title}}",
-        { title },
-      ),
+      detailsText(t, "settings.automation.details.serviceSkill.taskLine", {
+        title,
+      }),
     serviceSkillMoreItems: (count) =>
-      detailsText(
-        t,
-        "settings.automation.details.serviceSkill.moreItems",
-        " 等 {{count}} 项",
-        { count },
-      ),
+      detailsText(t, "settings.automation.details.serviceSkill.moreItems", {
+        count,
+      }),
   };
 }
 
@@ -320,53 +221,30 @@ function detailsStatusLabel(
 ): string {
   switch (status) {
     case "queued":
-      return detailsText(
-        t,
-        "settings.automation.details.status.queued",
-        "排队中",
-      );
+      return detailsText(t, "settings.automation.details.status.queued");
     case "success":
-      return detailsText(
-        t,
-        "settings.automation.details.status.success",
-        "成功",
-      );
+      return detailsText(t, "settings.automation.details.status.success");
     case "running":
-      return detailsText(
-        t,
-        "settings.automation.details.status.running",
-        "运行中",
-      );
+      return detailsText(t, "settings.automation.details.status.running");
     case "waiting_for_human":
       return detailsText(
         t,
         "settings.automation.details.status.waitingForHuman",
-        "等待人工处理",
       );
     case "human_controlling":
       return detailsText(
         t,
         "settings.automation.details.status.humanControlling",
-        "人工接管中",
       );
     case "agent_resuming":
-      return detailsText(
-        t,
-        "settings.automation.details.status.agentResuming",
-        "恢复给 Agent",
-      );
+      return detailsText(t, "settings.automation.details.status.agentResuming");
     case "error":
-      return detailsText(t, "settings.automation.details.status.error", "失败");
+      return detailsText(t, "settings.automation.details.status.error");
     case "timeout":
-      return detailsText(
-        t,
-        "settings.automation.details.status.timeout",
-        "超时",
-      );
+      return detailsText(t, "settings.automation.details.status.timeout");
     default:
       return (
-        status ||
-        detailsText(t, "settings.automation.details.status.pending", "待执行")
+        status || detailsText(t, "settings.automation.details.status.pending")
       );
   }
 }
@@ -376,16 +254,8 @@ function detailsPayloadKindLabel(
   kind: AutomationPayload["kind"],
 ): string {
   return kind === "browser_session"
-    ? detailsText(
-        t,
-        "settings.automation.details.payload.browserSession",
-        "浏览器自动化",
-      )
-    : detailsText(
-        t,
-        "settings.automation.details.payload.agentTurn",
-        "Agent 对话",
-      );
+    ? detailsText(t, "settings.automation.details.payload.browserSession")
+    : detailsText(t, "settings.automation.details.payload.agentTurn");
 }
 
 function detailsAccessModeLabel(
@@ -402,17 +272,11 @@ function detailsAccessModeLabel(
       readOnly: detailsText(
         t,
         "settings.automation.details.accessMode.readOnly",
-        "只读",
       ),
-      current: detailsText(
-        t,
-        "settings.automation.details.accessMode.current",
-        "按需确认",
-      ),
+      current: detailsText(t, "settings.automation.details.accessMode.current"),
       fullAccess: detailsText(
         t,
         "settings.automation.details.accessMode.fullAccess",
-        "完全访问",
       ),
       policyReadOnly: "",
       policyCurrent: "",
@@ -429,42 +293,27 @@ function detailsScheduleLabel(
   if (job.schedule.kind === "every") {
     const secs = job.schedule.every_secs;
     if (secs % 3600 === 0) {
-      return detailsText(
-        t,
-        "settings.automation.details.schedule.hours",
-        "每 {{count}} 小时",
-        { count: secs / 3600 },
-      );
+      return detailsText(t, "settings.automation.details.schedule.hours", {
+        count: secs / 3600,
+      });
     }
     if (secs % 60 === 0) {
-      return detailsText(
-        t,
-        "settings.automation.details.schedule.minutes",
-        "每 {{count}} 分钟",
-        { count: secs / 60 },
-      );
+      return detailsText(t, "settings.automation.details.schedule.minutes", {
+        count: secs / 60,
+      });
     }
-    return detailsText(
-      t,
-      "settings.automation.details.schedule.seconds",
-      "每 {{count}} 秒",
-      { count: secs },
-    );
+    return detailsText(t, "settings.automation.details.schedule.seconds", {
+      count: secs,
+    });
   }
   if (job.schedule.kind === "cron") {
-    return detailsText(
-      t,
-      "settings.automation.details.schedule.cron",
-      "Cron: {{expr}}",
-      { expr: job.schedule.expr },
-    );
+    return detailsText(t, "settings.automation.details.schedule.cron", {
+      expr: job.schedule.expr,
+    });
   }
-  return detailsText(
-    t,
-    "settings.automation.details.schedule.at",
-    "一次性: {{time}}",
-    { time: formatDetailsTime(job.schedule.at, locale) },
-  );
+  return detailsText(t, "settings.automation.details.schedule.at", {
+    time: formatDetailsTime(job.schedule.at, locale),
+  });
 }
 
 function detailsDeliveryModeLabel(
@@ -472,16 +321,8 @@ function detailsDeliveryModeLabel(
   job: AutomationJobRecord,
 ): string {
   return job.delivery.mode === "announce"
-    ? detailsText(
-        t,
-        "settings.automation.details.delivery.mode.announce",
-        "运行完成后投递",
-      )
-    : detailsText(
-        t,
-        "settings.automation.details.delivery.mode.none",
-        "未启用",
-      );
+    ? detailsText(t, "settings.automation.details.delivery.mode.announce")
+    : detailsText(t, "settings.automation.details.delivery.mode.none");
 }
 
 function detailsDeliveryChannelLabel(
@@ -493,25 +334,21 @@ function detailsDeliveryChannelLabel(
       return detailsText(
         t,
         "settings.automation.details.delivery.channel.webhook",
-        "Webhook",
       );
     case "telegram":
       return detailsText(
         t,
         "settings.automation.details.delivery.channel.telegram",
-        "Telegram",
       );
     case "local_file":
       return detailsText(
         t,
         "settings.automation.details.delivery.channel.localFile",
-        "本地文件",
       );
     case "google_sheets":
       return detailsText(
         t,
         "settings.automation.details.delivery.channel.googleSheets",
-        "Google Sheets",
       );
     default:
       return "-";
@@ -524,36 +361,22 @@ function detailsOutputSchemaLabel(
 ): string {
   switch (schema) {
     case "json":
-      return detailsText(
-        t,
-        "settings.automation.details.delivery.schema.json",
-        "JSON 对象",
-      );
+      return detailsText(t, "settings.automation.details.delivery.schema.json");
     case "table":
       return detailsText(
         t,
         "settings.automation.details.delivery.schema.table",
-        "表格",
       );
     case "csv":
-      return detailsText(
-        t,
-        "settings.automation.details.delivery.schema.csv",
-        "CSV",
-      );
+      return detailsText(t, "settings.automation.details.delivery.schema.csv");
     case "links":
       return detailsText(
         t,
         "settings.automation.details.delivery.schema.links",
-        "链接列表",
       );
     case "text":
     default:
-      return detailsText(
-        t,
-        "settings.automation.details.delivery.schema.text",
-        "文本摘要",
-      );
+      return detailsText(t, "settings.automation.details.delivery.schema.text");
   }
 }
 
@@ -562,16 +385,8 @@ function detailsOutputFormatLabel(
   format?: string | null,
 ): string {
   return format === "json"
-    ? detailsText(
-        t,
-        "settings.automation.details.delivery.format.json",
-        "JSON 编码",
-      )
-    : detailsText(
-        t,
-        "settings.automation.details.delivery.format.text",
-        "文本编码",
-      );
+    ? detailsText(t, "settings.automation.details.delivery.format.json")
+    : detailsText(t, "settings.automation.details.delivery.format.text");
 }
 
 function detailsPayloadDescription(
@@ -583,75 +398,49 @@ function detailsPayloadDescription(
   }
 
   const lines = [
-    detailsText(
-      t,
-      "settings.automation.details.legacy.message",
-      "浏览器自动化已下线，系统不会再自动启动 Chrome。请删除旧流程，并改建为 Agent 对话持续流程。",
-    ),
-    detailsText(
-      t,
-      "settings.automation.details.legacy.payload.profile",
-      "资料: {{profile}}",
-      { profile: payload.profile_key ?? payload.profile_id },
-    ),
+    detailsText(t, "settings.automation.details.legacy.message"),
+    detailsText(t, "settings.automation.details.legacy.payload.profile", {
+      profile: payload.profile_key ?? payload.profile_id,
+    }),
   ];
   if (payload.environment_preset_id) {
     lines.push(
-      detailsText(
-        t,
-        "settings.automation.details.legacy.payload.environment",
-        "环境预设: {{environment}}",
-        { environment: payload.environment_preset_id },
-      ),
+      detailsText(t, "settings.automation.details.legacy.payload.environment", {
+        environment: payload.environment_preset_id,
+      }),
     );
   }
   if (payload.url) {
     lines.push(
-      detailsText(
-        t,
-        "settings.automation.details.legacy.payload.url",
-        "启动地址: {{url}}",
-        { url: payload.url },
-      ),
+      detailsText(t, "settings.automation.details.legacy.payload.url", {
+        url: payload.url,
+      }),
     );
   }
   if (payload.target_id) {
     lines.push(
-      detailsText(
-        t,
-        "settings.automation.details.legacy.payload.targetId",
-        "Target ID: {{targetId}}",
-        { targetId: payload.target_id },
-      ),
+      detailsText(t, "settings.automation.details.legacy.payload.targetId", {
+        targetId: payload.target_id,
+      }),
     );
   }
   lines.push(
-    detailsText(
-      t,
-      "settings.automation.details.legacy.payload.window",
-      "调试窗口: {{status}}",
-      {
-        status: payload.open_window
-          ? detailsText(
-              t,
-              "settings.automation.details.legacy.payload.windowOpen",
-              "打开",
-            )
-          : detailsText(
-              t,
-              "settings.automation.details.legacy.payload.windowClosed",
-              "关闭",
-            ),
-      },
-    ),
+    detailsText(t, "settings.automation.details.legacy.payload.window", {
+      status: payload.open_window
+        ? detailsText(
+            t,
+            "settings.automation.details.legacy.payload.windowOpen",
+          )
+        : detailsText(
+            t,
+            "settings.automation.details.legacy.payload.windowClosed",
+          ),
+    }),
   );
   lines.push(
-    detailsText(
-      t,
-      "settings.automation.details.legacy.payload.streamMode",
-      "流模式: {{streamMode}}",
-      { streamMode: payload.stream_mode },
-    ),
+    detailsText(t, "settings.automation.details.legacy.payload.streamMode", {
+      streamMode: payload.stream_mode,
+    }),
   );
   return lines.join("\n");
 }
@@ -751,12 +540,10 @@ export function AutomationJobDetailsDialog({
   const serviceSkillExecutionCompatLabel = detailsText(
     t,
     "settings.automation.tasks.list.badge.serviceSkillLegacyCompat",
-    "旧目录兼容",
   );
   const serviceSkillExecutionCompatNote = detailsText(
     t,
     "settings.automation.details.serviceSkill.executionCompatNote",
-    "沿用旧目录兼容标记，实际仍在客户端执行。",
   );
   const followupDestinations = sceneAppRunDetailView
     ? buildSceneAppExecutionFollowupDestinations(sceneAppRunDetailView)
@@ -825,47 +612,30 @@ export function AutomationJobDetailsDialog({
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <DialogTitle className="text-[22px] font-semibold tracking-tight text-slate-900">
-                    {detailsText(
-                      t,
-                      "settings.automation.details.title",
-                      "持续流程详情",
-                    )}
+                    {detailsText(t, "settings.automation.details.title")}
                   </DialogTitle>
                   <WorkbenchInfoTip
                     ariaLabel={detailsText(
                       t,
                       "settings.automation.details.tipAria",
-                      "持续流程详情说明",
                     )}
-                    content={detailsText(
-                      t,
-                      "settings.automation.details.tip",
-                      "查看这条持续流程的状态、输出去向和最近运行；需要迁移旧浏览器流程时，也在这里确认遗留配置和风险提示。",
-                    )}
+                    content={detailsText(t, "settings.automation.details.tip")}
                     tone="mint"
                   />
                 </div>
                 <DialogDescription className="text-sm text-slate-500">
-                  {detailsText(
-                    t,
-                    "settings.automation.details.description",
-                    "查看这条持续流程的状态、输出去向和最近运行。",
-                  )}
+                  {detailsText(t, "settings.automation.details.description")}
                 </DialogDescription>
                 <div className="flex flex-wrap gap-2">
                   <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
-                    {detailsText(
-                      t,
-                      "settings.automation.details.badge.job",
-                      "这条：{{name}}",
-                      { name: job.name },
-                    )}
+                    {detailsText(t, "settings.automation.details.badge.job", {
+                      name: job.name,
+                    })}
                   </span>
                   <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
                     {detailsText(
                       t,
                       "settings.automation.details.badge.workspace",
-                      "归属：{{workspace}}",
                       { workspace: workspaceName ?? job.workspace_id },
                     )}
                   </span>
@@ -873,7 +643,6 @@ export function AutomationJobDetailsDialog({
                     {detailsText(
                       t,
                       "settings.automation.details.badge.schedule",
-                      "调度：{{schedule}}",
                       {
                         schedule: detailsScheduleLabel(t, job, i18n.language),
                       },
@@ -883,7 +652,6 @@ export function AutomationJobDetailsDialog({
                     {detailsText(
                       t,
                       "settings.automation.details.badge.payload",
-                      "方式：{{payload}}",
                       {
                         payload: detailsPayloadKindLabel(t, job.payload.kind),
                       },
@@ -899,7 +667,6 @@ export function AutomationJobDetailsDialog({
                     {detailsText(
                       t,
                       "settings.automation.details.badge.status",
-                      "当前状态：{{status}}",
                       { status: detailsStatusLabel(t, job.last_status) },
                     )}
                   </span>
@@ -928,7 +695,6 @@ export function AutomationJobDetailsDialog({
                           {detailsText(
                             t,
                             "settings.automation.details.status.offline",
-                            "已下线",
                           )}
                         </Badge>
                       ) : null}
@@ -939,7 +705,6 @@ export function AutomationJobDetailsDialog({
                       {detailsText(
                         t,
                         "settings.automation.details.meta.startMethod",
-                        "开始方式: {{payload}}",
                         {
                           payload: detailsPayloadKindLabel(t, job.payload.kind),
                         },
@@ -950,7 +715,6 @@ export function AutomationJobDetailsDialog({
                         {detailsText(
                           t,
                           "settings.automation.details.meta.accessMode",
-                          "权限模式: {{accessMode}}",
                           {
                             accessMode: detailsAccessModeLabel(t, job.payload),
                           },
@@ -961,7 +725,6 @@ export function AutomationJobDetailsDialog({
                       {detailsText(
                         t,
                         "settings.automation.details.meta.schedule",
-                        "调度: {{schedule}}",
                         {
                           schedule: detailsScheduleLabel(t, job, i18n.language),
                         },
@@ -971,7 +734,6 @@ export function AutomationJobDetailsDialog({
                       {detailsText(
                         t,
                         "settings.automation.details.meta.nextRun",
-                        "下次执行: {{time}}",
                         {
                           time: formatDetailsTime(
                             job.next_run_at,
@@ -984,7 +746,6 @@ export function AutomationJobDetailsDialog({
                       {detailsText(
                         t,
                         "settings.automation.details.meta.lastRun",
-                        "最近执行: {{time}}",
                         {
                           time: formatDetailsTime(
                             job.last_run_at,
@@ -997,7 +758,6 @@ export function AutomationJobDetailsDialog({
                       {detailsText(
                         t,
                         "settings.automation.details.meta.lastError",
-                        "最后错误: {{error}}",
                         { error: job.last_error || "-" },
                       )}
                     </div>
@@ -1008,14 +768,12 @@ export function AutomationJobDetailsDialog({
                         {detailsText(
                           t,
                           "settings.automation.details.legacy.title",
-                          "浏览器自动化已下线",
                         )}
                       </div>
                       <div className="mt-2">
                         {detailsText(
                           t,
                           "settings.automation.details.legacy.message",
-                          "浏览器自动化已下线，系统不会再自动启动 Chrome。请删除旧流程，并改建为 Agent 对话持续流程。",
                         )}
                       </div>
                     </div>
@@ -1029,7 +787,6 @@ export function AutomationJobDetailsDialog({
                         {detailsText(
                           t,
                           "settings.automation.details.serviceSkill.title",
-                          "技能流程上下文",
                         )}
                       </div>
                       <div className="flex flex-wrap gap-2">
@@ -1051,7 +808,6 @@ export function AutomationJobDetailsDialog({
                         {detailsText(
                           t,
                           "settings.automation.details.serviceSkill.skill",
-                          "技能: {{title}}",
                           { title: serviceSkillContext.title },
                         )}
                       </div>
@@ -1059,7 +815,6 @@ export function AutomationJobDetailsDialog({
                         {detailsText(
                           t,
                           "settings.automation.details.serviceSkill.source",
-                          "目录来源: {{source}}",
                           { source: serviceSkillContext.sourceLabel },
                         )}
                       </div>
@@ -1067,7 +822,6 @@ export function AutomationJobDetailsDialog({
                         {detailsText(
                           t,
                           "settings.automation.details.serviceSkill.theme",
-                          "主题: {{theme}}",
                           { theme: serviceSkillContext.theme || "-" },
                         )}
                       </div>
@@ -1075,7 +829,6 @@ export function AutomationJobDetailsDialog({
                         {detailsText(
                           t,
                           "settings.automation.details.serviceSkill.content",
-                          "主稿绑定: {{content}}",
                           { content: serviceSkillContext.contentId || "-" },
                         )}
                       </div>
@@ -1091,7 +844,6 @@ export function AutomationJobDetailsDialog({
                           {detailsText(
                             t,
                             "settings.automation.details.serviceSkill.slotSummary",
-                            "参数摘要",
                           )}
                         </div>
                         <div className="mt-2 grid gap-2 text-xs leading-5 text-slate-600 md:grid-cols-2">
@@ -1112,7 +864,6 @@ export function AutomationJobDetailsDialog({
                           {detailsText(
                             t,
                             "settings.automation.details.serviceSkill.userInput",
-                            "补充要求",
                           )}
                         </div>
                         <div className="mt-1">
@@ -1135,14 +886,12 @@ export function AutomationJobDetailsDialog({
                             {detailsText(
                               t,
                               "settings.automation.details.sceneApp.title",
-                              "接回生成",
                             )}
                           </div>
                           <div className="mt-1 text-sm leading-6 text-slate-600">
                             {detailsText(
                               t,
                               "settings.automation.details.sceneApp.description",
-                              "这条持续流程已经接回生成；除了调度状态，还会继续回流这轮结果、结果材料和下一步判断。",
                             )}
                           </div>
                         </div>
@@ -1158,7 +907,6 @@ export function AutomationJobDetailsDialog({
                           {detailsText(
                             t,
                             "settings.automation.details.sceneApp.loading",
-                            "正在回流这条持续流程对应的做法摘要…",
                           )}
                         </div>
                       ) : null}
@@ -1179,7 +927,6 @@ export function AutomationJobDetailsDialog({
                               {detailsText(
                                 t,
                                 "settings.automation.details.sceneApp.nextAction",
-                                "先做：{{action}}",
                                 { action: sceneAppSummaryCard.nextAction },
                               )}
                             </div>
@@ -1191,7 +938,6 @@ export function AutomationJobDetailsDialog({
                                 {detailsText(
                                   t,
                                   "settings.automation.details.sceneApp.overview",
-                                  "持续流程概览",
                                 )}
                               </div>
                               <div className="mt-2 text-sm font-medium text-slate-900">
@@ -1203,7 +949,6 @@ export function AutomationJobDetailsDialog({
                                 {detailsText(
                                   t,
                                   "settings.automation.details.sceneApp.recentResult",
-                                  "最近结果",
                                 )}
                               </div>
                               <div className="mt-2 text-sm font-medium text-slate-900">
@@ -1222,7 +967,6 @@ export function AutomationJobDetailsDialog({
                                   {detailsText(
                                     t,
                                     "settings.automation.details.sceneApp.scorecard",
-                                    "这轮判断",
                                   )}
                                 </div>
                                 <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
@@ -1257,7 +1001,6 @@ export function AutomationJobDetailsDialog({
                                 {detailsText(
                                   t,
                                   "settings.automation.details.sceneApp.nextAction",
-                                  "先做：{{action}}",
                                   {
                                     action:
                                       sceneAppSummaryCard.scorecardAggregate
@@ -1307,7 +1050,6 @@ export function AutomationJobDetailsDialog({
                                             {detailsText(
                                               t,
                                               "settings.automation.details.sceneApp.currentJobHint",
-                                              "当前就在这条持续流程里，无需再跳转一次。",
                                             )}
                                           </div>
                                         ) : null}
@@ -1328,7 +1070,6 @@ export function AutomationJobDetailsDialog({
                               {detailsText(
                                 t,
                                 "settings.automation.details.sceneApp.action.openDetail",
-                                "回补这轮信息",
                               )}
                             </Button>
                             <Button
@@ -1339,7 +1080,6 @@ export function AutomationJobDetailsDialog({
                               {detailsText(
                                 t,
                                 "settings.automation.details.sceneApp.action.openGovernance",
-                                "看这轮结果",
                               )}
                             </Button>
                           </div>
@@ -1383,7 +1123,6 @@ export function AutomationJobDetailsDialog({
                         {detailsText(
                           t,
                           "settings.automation.details.delivery.contractTitle",
-                          "输出契约",
                         )}
                       </div>
                       <Badge
@@ -1401,7 +1140,6 @@ export function AutomationJobDetailsDialog({
                         {detailsText(
                           t,
                           "settings.automation.details.delivery.target",
-                          "输出目标: {{target}}",
                           {
                             target:
                               job.delivery.mode === "announce"
@@ -1417,7 +1155,6 @@ export function AutomationJobDetailsDialog({
                         {detailsText(
                           t,
                           "settings.automation.details.delivery.schema",
-                          "输出契约: {{schema}}",
                           {
                             schema: detailsOutputSchemaLabel(
                               t,
@@ -1430,7 +1167,6 @@ export function AutomationJobDetailsDialog({
                         {detailsText(
                           t,
                           "settings.automation.details.delivery.format",
-                          "投递编码: {{format}}",
                           {
                             format: detailsOutputFormatLabel(
                               t,
@@ -1445,7 +1181,6 @@ export function AutomationJobDetailsDialog({
                         {detailsText(
                           t,
                           "settings.automation.details.delivery.address",
-                          "目标地址: {{address}}",
                           {
                             address:
                               job.delivery.mode === "announce"
@@ -1458,25 +1193,21 @@ export function AutomationJobDetailsDialog({
                         {detailsText(
                           t,
                           "settings.automation.details.delivery.failurePolicy",
-                          "失败策略: {{policy}}",
                           {
                             policy:
                               job.delivery.mode !== "announce"
                                 ? detailsText(
                                     t,
                                     "settings.automation.details.delivery.policy.disabled",
-                                    "未启用",
                                   )
                                 : job.delivery.best_effort
                                   ? detailsText(
                                       t,
                                       "settings.automation.details.delivery.policy.bestEffort",
-                                      "投递失败不阻塞本轮",
                                     )
                                   : detailsText(
                                       t,
                                       "settings.automation.details.delivery.policy.strict",
-                                      "投递失败记为本轮失败",
                                     ),
                           },
                         )}
@@ -1494,7 +1225,6 @@ export function AutomationJobDetailsDialog({
                         {detailsText(
                           t,
                           "settings.automation.details.delivery.lastTitle",
-                          "最近一次投递结果",
                         )}
                       </div>
                       <Badge
@@ -1509,17 +1239,14 @@ export function AutomationJobDetailsDialog({
                             ? detailsText(
                                 t,
                                 "settings.automation.details.delivery.status.success",
-                                "投递成功",
                               )
                             : detailsText(
                                 t,
                                 "settings.automation.details.delivery.status.failed",
-                                "投递失败",
                               )
                           : detailsText(
                               t,
                               "settings.automation.details.delivery.status.empty",
-                              "暂无记录",
                             )}
                       </Badge>
                     </div>
@@ -1530,7 +1257,6 @@ export function AutomationJobDetailsDialog({
                             {detailsText(
                               t,
                               "settings.automation.details.delivery.last.attemptedAt",
-                              "时间: {{time}}",
                               {
                                 time: formatDetailsTime(
                                   job.last_delivery.attempted_at,
@@ -1543,7 +1269,6 @@ export function AutomationJobDetailsDialog({
                             {detailsText(
                               t,
                               "settings.automation.details.delivery.last.channel",
-                              "渠道: {{channel}}",
                               {
                                 channel: detailsDeliveryChannelLabel(
                                   t,
@@ -1556,7 +1281,6 @@ export function AutomationJobDetailsDialog({
                             {detailsText(
                               t,
                               "settings.automation.details.delivery.last.target",
-                              "目标: {{target}}",
                               { target: job.last_delivery.target || "-" },
                             )}
                           </div>
@@ -1564,7 +1288,6 @@ export function AutomationJobDetailsDialog({
                             {detailsText(
                               t,
                               "settings.automation.details.delivery.last.contract",
-                              "契约: {{schema}} / {{format}}",
                               {
                                 schema: detailsOutputSchemaLabel(
                                   t,
@@ -1581,7 +1304,6 @@ export function AutomationJobDetailsDialog({
                             {detailsText(
                               t,
                               "settings.automation.details.delivery.last.attemptId",
-                              "投递键: {{id}}",
                               {
                                 id:
                                   job.last_delivery.delivery_attempt_id || "-",
@@ -1592,7 +1314,6 @@ export function AutomationJobDetailsDialog({
                             {detailsText(
                               t,
                               "settings.automation.details.delivery.last.retry",
-                              "执行重试: {{executionRetry}} / 投递尝试: {{deliveryAttempts}}",
                               {
                                 executionRetry:
                                   job.last_delivery.execution_retry_count ?? 0,
@@ -1605,7 +1326,6 @@ export function AutomationJobDetailsDialog({
                             {detailsText(
                               t,
                               "settings.automation.details.delivery.last.result",
-                              "结果: {{message}}",
                               { message: job.last_delivery.message },
                             )}
                           </div>
@@ -1615,7 +1335,6 @@ export function AutomationJobDetailsDialog({
                             detailsText(
                               t,
                               "settings.automation.details.delivery.last.noPreview",
-                              "无输出预览",
                             )}
                         </div>
                       </>
@@ -1625,12 +1344,10 @@ export function AutomationJobDetailsDialog({
                           ? detailsText(
                               t,
                               "settings.automation.details.delivery.last.emptyAnnounce",
-                              "这条持续流程还没产生投递记录。",
                             )
                           : detailsText(
                               t,
                               "settings.automation.details.delivery.last.emptyDisabled",
-                              "这条持续流程当前未启用输出投递。",
                             )}
                       </div>
                     )}
@@ -1642,7 +1359,6 @@ export function AutomationJobDetailsDialog({
                     {detailsText(
                       t,
                       "settings.automation.details.payload.currentTitle",
-                      "当前起手内容",
                     )}
                   </div>
                   <div className="mt-3 whitespace-pre-wrap rounded-[14px] border border-slate-200/80 bg-slate-50 px-3 py-3 text-sm leading-6 text-slate-600">
@@ -1653,7 +1369,7 @@ export function AutomationJobDetailsDialog({
                 <div className="space-y-3">
                   <div className="flex items-center justify-between gap-3">
                     <div className="text-sm font-medium text-slate-900">
-                      {t("settings.automation.history.title", "最近运行")}
+                      {t("settings.automation.history.title")}
                     </div>
                     <Button
                       size="sm"
@@ -1661,7 +1377,7 @@ export function AutomationJobDetailsDialog({
                       onClick={() => void onRefreshHistory(job.id)}
                     >
                       <RefreshCw className="mr-2 h-4 w-4" />
-                      {t("settings.automation.history.action.refresh", "刷新")}
+                      {t("settings.automation.history.action.refresh")}
                     </Button>
                   </div>
 
@@ -1706,13 +1422,11 @@ export function AutomationJobDetailsDialog({
                             <span>
                               {t("settings.automation.history.meta.id", {
                                 id: run.id,
-                                defaultValue: "ID: {{id}}",
                               })}
                             </span>
                             <span>
                               {t("settings.automation.history.meta.session", {
                                 session: resolveRunSessionId(run) ?? "-",
-                                defaultValue: "Session: {{session}}",
                               })}
                             </span>
                             <span>
@@ -1721,7 +1435,6 @@ export function AutomationJobDetailsDialog({
                                   run.finished_at,
                                   i18n.language,
                                 ),
-                                defaultValue: "完成: {{time}}",
                               })}
                             </span>
                           </div>
@@ -1743,7 +1456,6 @@ export function AutomationJobDetailsDialog({
                                 <div className="text-xs font-medium text-slate-900">
                                   {t(
                                     "settings.automation.history.serviceSkill.title",
-                                    "技能流程运行上下文",
                                   )}
                                 </div>
                                 <Badge variant="outline">
@@ -1756,9 +1468,7 @@ export function AutomationJobDetailsDialog({
                                 </Badge>
                                 {runServiceSkillContext.executionLocationLegacyCompat ? (
                                   <Badge variant="outline">
-                                    {
-                                      serviceSkillExecutionCompatLabel
-                                    }
+                                    {serviceSkillExecutionCompatLabel}
                                   </Badge>
                                 ) : null}
                               </div>
@@ -1778,7 +1488,6 @@ export function AutomationJobDetailsDialog({
                                     "settings.automation.history.serviceSkill.slotPreview",
                                     {
                                       summary: runServiceSkillSlotPreview,
-                                      defaultValue: "参数摘要: {{summary}}",
                                     },
                                   )}
                                 </div>
@@ -1789,7 +1498,6 @@ export function AutomationJobDetailsDialog({
                                     "settings.automation.history.serviceSkill.userInput",
                                     {
                                       input: runServiceSkillContext.userInput,
-                                      defaultValue: "补充要求: {{input}}",
                                     },
                                   )}
                                 </div>
@@ -1811,7 +1519,6 @@ export function AutomationJobDetailsDialog({
                                         t,
                                         delivery.channel,
                                       ),
-                                      defaultValue: "输出投递 / {{channel}}",
                                     },
                                   )}
                                 </span>
@@ -1823,11 +1530,9 @@ export function AutomationJobDetailsDialog({
                                   {delivery.success
                                     ? t(
                                         "settings.automation.history.delivery.success",
-                                        "成功",
                                       )
                                     : t(
                                         "settings.automation.history.delivery.failed",
-                                        "失败",
                                       )}
                                 </Badge>
                               </div>
@@ -1839,10 +1544,7 @@ export function AutomationJobDetailsDialog({
                           {run.error_message ? (
                             <div className="mt-3 rounded-[16px] border border-rose-100 bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-600">
                               <div className="font-medium">
-                                {t(
-                                  "settings.automation.history.errorReason",
-                                  "失败原因",
-                                )}
+                                {t("settings.automation.history.errorReason")}
                               </div>
                               <div className="mt-1">{run.error_message}</div>
                             </div>
@@ -1852,10 +1554,7 @@ export function AutomationJobDetailsDialog({
                     })
                   ) : (
                     <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
-                      {t(
-                        "settings.automation.history.empty",
-                        "还没有运行记录。",
-                      )}
+                      {t("settings.automation.history.empty")}
                     </div>
                   )}
                 </div>

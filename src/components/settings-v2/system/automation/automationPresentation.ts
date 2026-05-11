@@ -126,10 +126,7 @@ export const defaultAutomationPresentationCopy: AutomationPresentationCopy = {
   serviceSkillContextCopy: defaultAutomationServiceSkillContextCopy,
 };
 
-export function formatTime(
-  value?: string | null,
-  locale?: string,
-): string {
+export function formatTime(value?: string | null, locale?: string): string {
   if (!value) {
     return "-";
   }
@@ -202,7 +199,9 @@ export function describePayload(
   }
 
   const lines = [copy.legacyBrowserAutomationNotice];
-  lines.push(copy.legacyPayloadProfile(payload.profile_key ?? payload.profile_id));
+  lines.push(
+    copy.legacyPayloadProfile(payload.profile_key ?? payload.profile_id),
+  );
   if (payload.environment_preset_id) {
     lines.push(copy.legacyPayloadEnvironment(payload.environment_preset_id));
   }

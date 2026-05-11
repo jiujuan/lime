@@ -47,33 +47,16 @@ export function LatestRunStatusBadge({
   const { t } = useTranslation("common");
   const [latestRun, setLatestRun] = useState<AgentRun | null>(null);
   const resolvedLabel =
-    label ??
-    t("common.execution.latestRunStatus.defaultLabel", {
-      defaultValue: "最近执行",
-    });
-  const noRecordLabel = t("common.execution.latestRunStatus.noRecord", {
-    defaultValue: "暂无记录",
-  });
+    label ?? t("common.execution.latestRunStatus.defaultLabel");
+  const noRecordLabel = t("common.execution.latestRunStatus.noRecord");
   const statusLabels: Record<AgentRunStatus, string> = useMemo(
     () => ({
-      queued: t("common.execution.latestRunStatus.status.queued", {
-        defaultValue: "排队中",
-      }),
-      running: t("common.execution.latestRunStatus.status.running", {
-        defaultValue: "运行中",
-      }),
-      success: t("common.execution.latestRunStatus.status.success", {
-        defaultValue: "成功",
-      }),
-      error: t("common.execution.latestRunStatus.status.error", {
-        defaultValue: "失败",
-      }),
-      canceled: t("common.execution.latestRunStatus.status.canceled", {
-        defaultValue: "已取消",
-      }),
-      timeout: t("common.execution.latestRunStatus.status.timeout", {
-        defaultValue: "超时",
-      }),
+      queued: t("common.execution.latestRunStatus.status.queued"),
+      running: t("common.execution.latestRunStatus.status.running"),
+      success: t("common.execution.latestRunStatus.status.success"),
+      error: t("common.execution.latestRunStatus.status.error"),
+      canceled: t("common.execution.latestRunStatus.status.canceled"),
+      timeout: t("common.execution.latestRunStatus.status.timeout"),
     }),
     [t],
   );
@@ -119,10 +102,7 @@ export function LatestRunStatusBadge({
         <span>{resolvedLabel}</span>
         <Badge variant={statusVariant(latestRun.status)}>{statusText}</Badge>
         <span className="truncate">
-          {t("common.execution.latestRunStatus.timeLabel", {
-            defaultValue: "时间",
-          })}
-          :{" "}
+          {t("common.execution.latestRunStatus.timeLabel")}:{" "}
           {formatTime(latestRun.started_at)}
         </span>
       </div>

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { AgentIncidentPanel } from "./AgentIncidentPanel";
 import type { ThreadReliabilityIncidentDisplay } from "../utils/threadReliabilityView";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 interface MountedHarness {
   container: HTMLDivElement;
@@ -13,15 +14,16 @@ interface MountedHarness {
 
 const mountedRoots: MountedHarness[] = [];
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("en-US");
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mountedRoots.length > 0) {
     const mounted = mountedRoots.pop();
     if (!mounted) break;
@@ -30,6 +32,8 @@ afterEach(() => {
     });
     mounted.container.remove();
   }
+  document.body.innerHTML = "";
+  await changeLimeLocale("zh-CN");
 });
 
 function renderPanel(incidents: ThreadReliabilityIncidentDisplay[]) {
@@ -46,44 +50,50 @@ function renderPanel(incidents: ThreadReliabilityIncidentDisplay[]) {
 }
 
 describe("AgentIncidentPanel", () => {
-  it("无 active incident 时应展示空态", () => {
+  it("uses agent namespace resources for the empty state", () => {
     const container = renderPanel([]);
+    const text = container.textContent ?? "";
 
     expect(
       container.querySelector('[data-testid="agent-incident-panel-empty"]'),
     ).not.toBeNull();
-    expect(container.textContent).toContain("当前未发现活跃 incident");
+    expect(text).toContain("No active incidents detected");
+    expect(text).not.toContain("当前未发现活跃 incident");
   });
 
-  it("存在 active incident 时应展示标题、说明与状态", () => {
+  it("keeps incident data dynamic while localizing the priority badge chrome", () => {
     const container = renderPanel([
       {
         id: "incident-1",
         incidentType: "approval_timeout",
-        title: "审批等待超过阈值",
-        detail: "当前线程等待工具确认时间过长",
-        statusLabel: "进行中",
-        severityLabel: "高",
+        title: "Approval wait exceeded threshold",
+        detail: "The thread has waited too long for tool confirmation",
+        statusLabel: "Running",
+        severityLabel: "High",
         tone: "failed",
       },
       {
         id: "incident-2",
         incidentType: "waiting_user_input",
-        title: "线程正在等待人工处理",
-        detail: "等待你确认是否继续发布",
-        statusLabel: "进行中",
-        severityLabel: "中",
+        title: "Thread is waiting for manual handling",
+        detail: "Waiting for confirmation before publishing",
+        statusLabel: "Running",
+        severityLabel: "Medium",
         tone: "waiting",
       },
     ]);
+    const text = container.textContent ?? "";
 
     expect(
       container.querySelector('[data-testid="agent-incident-panel"]'),
     ).not.toBeNull();
-    expect(container.textContent).toContain("审批等待超过阈值");
-    expect(container.textContent).toContain("当前线程等待工具确认时间过长");
-    expect(container.textContent).toContain("高优先级");
-    expect(container.textContent).toContain("线程正在等待人工处理");
-    expect(container.textContent).toContain("等待你确认是否继续发布");
+    expect(text).toContain("Approval wait exceeded threshold");
+    expect(text).toContain(
+      "The thread has waited too long for tool confirmation",
+    );
+    expect(text).toContain("High priority");
+    expect(text).toContain("Thread is waiting for manual handling");
+    expect(text).toContain("Waiting for confirmation before publishing");
+    expect(text).not.toContain("优先级");
   });
 });

@@ -40,21 +40,9 @@ export function ConfirmDialog({
   };
 
   const styles = variantStyles[variant];
-  const resolvedTitle =
-    title ??
-    t("common.confirmDialog.title", {
-      defaultValue: "确认操作",
-    });
-  const resolvedConfirmText =
-    confirmText ??
-    t("common.confirm", {
-      defaultValue: "确定",
-    });
-  const resolvedCancelText =
-    cancelText ??
-    t("common.cancel", {
-      defaultValue: "取消",
-    });
+  const resolvedTitle = title ?? t("common.confirmDialog.title");
+  const resolvedConfirmText = confirmText ?? t("common.confirm");
+  const resolvedCancelText = cancelText ?? t("common.cancel");
 
   return (
     <Modal

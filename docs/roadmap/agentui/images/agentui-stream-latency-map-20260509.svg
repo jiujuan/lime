@@ -1,9 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1100" viewBox="0 0 1600 1100">
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1120" viewBox="0 0 1600 1120">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#f8fbff"/>
-      <stop offset="46%" stop-color="#eefcf7"/>
-      <stop offset="100%" stop-color="#fff8ed"/>
+      <stop offset="0%" stop-color="#f7fbff"/>
+      <stop offset="44%" stop-color="#eefcf6"/>
+      <stop offset="100%" stop-color="#fff7ed"/>
     </linearGradient>
     <linearGradient id="hot" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0%" stop-color="#fb7185"/>
@@ -16,14 +16,14 @@
       <path d="M2,2 L10,6 L2,10 Z" fill="#334155"/>
     </marker>
     <style>
-      .title { font: 850 42px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#0f172a; }
-      .subtitle { font: 500 21px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#475569; }
+      .title { font: 850 41px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#0f172a; }
+      .subtitle { font: 500 20px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#475569; }
       .section { font: 800 22px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#0f172a; }
-      .label { font: 750 19px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#0f172a; }
-      .small { font: 500 16px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#475569; }
-      .tiny { font: 600 14px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#64748b; }
-      .num { font: 900 28px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#0f172a; }
-      .num-hot { font: 950 32px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#be123c; }
+      .label { font: 750 18px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#0f172a; }
+      .small { font: 500 15.5px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#475569; }
+      .tiny { font: 600 13.5px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#64748b; }
+      .num { font: 900 27px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#0f172a; }
+      .num-hot { font: 950 31px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#be123c; }
       .card { rx:28; fill:#ffffff; stroke:#dbe5ee; stroke-width:1.5; filter:url(#shadow); }
       .mini { rx:20; fill:#ffffff; stroke:#dbe5ee; stroke-width:1.4; }
       .green { fill:#ecfdf5; stroke:#a7f3d0; }
@@ -31,96 +31,106 @@
       .amber { fill:#fffbeb; stroke:#fde68a; }
       .rose { fill:#fff1f2; stroke:#fecdd3; }
       .slate { fill:#f8fafc; stroke:#dbe5ee; }
+      .violet { fill:#f5f3ff; stroke:#ddd6fe; }
       .pill { font: 750 13px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; }
       .line { stroke:#334155; stroke-width:3; fill:none; marker-end:url(#arrow); }
       .dash { stroke:#94a3b8; stroke-width:2; fill:none; stroke-dasharray:8 8; }
     </style>
   </defs>
 
-  <rect width="1600" height="1100" fill="url(#bg)"/>
+  <rect width="1600" height="1120" fill="url(#bg)"/>
   <circle cx="1410" cy="120" r="210" fill="#dbeafe" opacity="0.42"/>
-  <circle cx="165" cy="930" r="250" fill="#bbf7d0" opacity="0.28"/>
-  <circle cx="1480" cy="945" r="180" fill="#fed7aa" opacity="0.26"/>
+  <circle cx="165" cy="948" r="260" fill="#bbf7d0" opacity="0.28"/>
+  <circle cx="1480" cy="965" r="185" fill="#fed7aa" opacity="0.26"/>
 
-  <text x="86" y="82" class="title">Lime 首字 Token 慢点复查图</text>
-  <text x="88" y="122" class="subtitle">2026-05-10 真实 GUI 复测：前端首响已经足够快，真正拖慢 TTFT 的是 WebSearch allowed 误入 FullRuntime 后的 MCP / 工具面预热。</text>
+  <text x="86" y="78" class="title">Lime 首字 Token 慢点复查图 v2</text>
+  <text x="88" y="118" class="subtitle">2026-05-11 更新：首字慢不靠删除 extension/MCP prompt context 解决；只精简 provider 工具 schema，并保持上下文与 broker 工具可达。</text>
 
-  <rect x="86" y="158" width="1428" height="315" class="card"/>
-  <text x="122" y="210" class="section">点击发送到首字可见的实测链路</text>
+  <rect x="1148" y="67" width="335" height="52" rx="26" fill="#ecfdf5" stroke="#86efac"/>
+  <text x="1178" y="100" class="pill" fill="#166534">已纠偏：context 保留，schema 收敛</text>
 
-  <rect x="122" y="250" width="230" height="142" class="mini green"/>
-  <text x="148" y="286" class="num">50ms</text>
-  <text x="148" y="322" class="label">首页 pending</text>
-  <text x="148" y="352" class="small">草稿壳和占位态出现</text>
-  <text x="148" y="376" class="tiny">assistantDraftPaint 88ms</text>
+  <rect x="86" y="156" width="1428" height="300" class="card"/>
+  <text x="122" y="207" class="section">点击发送到首字可见的链路归因</text>
 
-  <line x1="365" y1="321" x2="435" y2="321" class="line"/>
+  <rect x="122" y="247" width="218" height="136" class="mini green"/>
+  <text x="148" y="283" class="num">&lt;100ms</text>
+  <text x="148" y="317" class="label">前端占位态</text>
+  <text x="148" y="346" class="small">draft / pending paint 快</text>
+  <text x="148" y="370" class="tiny">不是主瓶颈</text>
 
-  <rect x="450" y="250" width="230" height="142" class="mini blue"/>
-  <text x="476" y="286" class="num">298ms</text>
-  <text x="476" y="322" class="label">运行态到达</text>
-  <text x="476" y="352" class="small">firstEvent 297ms</text>
-  <text x="476" y="376" class="tiny">submitAccepted 258ms</text>
+  <line x1="353" y1="315" x2="420" y2="315" class="line"/>
 
-  <line x1="693" y1="321" x2="763" y2="321" class="line"/>
+  <rect x="435" y="247" width="232" height="136" class="mini blue"/>
+  <text x="461" y="283" class="num">~300ms</text>
+  <text x="461" y="317" class="label">runtime 事件</text>
+  <text x="461" y="346" class="small">submit accepted / first event</text>
+  <text x="461" y="370" class="tiny">桥接响应正常</text>
 
-  <rect x="778" y="236" width="300" height="170" class="mini rose"/>
-  <text x="804" y="276" class="num-hot">6372ms</text>
-  <text x="804" y="314" class="label">提交准备阻塞</text>
-  <text x="804" y="344" class="small">context7 MCP 启动约 3.6s</text>
-  <text x="804" y="368" class="small">playwright MCP 启动约 2.5s</text>
-  <text x="804" y="392" class="tiny">旧逻辑：allowed search 也触发 FullRuntime</text>
+  <line x1="680" y1="315" x2="747" y2="315" class="line"/>
 
-  <line x1="1092" y1="321" x2="1162" y2="321" class="line"/>
+  <rect x="762" y="231" width="292" height="168" class="mini rose"/>
+  <text x="790" y="272" class="num-hot">旧：6s+</text>
+  <text x="790" y="309" class="label">FullRuntime 预热</text>
+  <text x="790" y="338" class="small">search-only 误触 MCP 启动</text>
+  <text x="790" y="362" class="small">context7 / playwright 前置</text>
+  <text x="790" y="386" class="tiny">已改：web-search-only 不预热 MCP</text>
 
-  <rect x="1177" y="250" width="250" height="142" class="mini amber"/>
-  <text x="1203" y="286" class="num">3553ms</text>
-  <text x="1203" y="322" class="label">模型 / policy 首字</text>
-  <text x="1203" y="352" class="small">headers 456ms</text>
-  <text x="1203" y="376" class="tiny">first provider msg 1139ms</text>
+  <line x1="1068" y1="315" x2="1135" y2="315" class="line"/>
 
-  <line x1="1438" y1="321" x2="1480" y2="321" class="line"/>
+  <rect x="1150" y="231" width="300" height="168" class="mini amber"/>
+  <text x="1178" y="272" class="num-hot">新：payload</text>
+  <text x="1178" y="309" class="label">provider 首字等待</text>
+  <text x="1178" y="338" class="small">Anthropic / OpenAI / Gemini</text>
+  <text x="1178" y="362" class="small">工具 schema 从 50+ 收敛到 broker 面</text>
+  <text x="1178" y="386" class="tiny">stream 空内容时有诊断与 fallback</text>
 
-  <rect x="1218" y="408" width="250" height="44" rx="22" fill="#fff7ed" stroke="#fed7aa"/>
-  <text x="1240" y="436" class="pill" fill="#9a3412">首正文到可见仅 130ms</text>
+  <text x="122" y="428" class="tiny">旧数据仍有效：firstTextPaint 慢主要来自后端准备与 provider 首 token。v2 把“启动 MCP”和“发送 50+ tool schema”从首轮路径里拆开。</text>
 
-  <text x="122" y="440" class="tiny">总结果：firstThinkingDelta 9024ms，firstTextDelta 10656ms，firstTextPaint 10786ms。前端 paint 不是主瓶颈。</text>
+  <rect x="86" y="492" width="690" height="382" class="card"/>
+  <text x="122" y="543" class="section">对标后确定不能做的事</text>
 
-  <rect x="86" y="510" width="690" height="380" class="card"/>
-  <text x="122" y="560" class="section">这次补查到的真实慢点</text>
+  <rect x="122" y="576" width="610" height="76" class="mini rose"/>
+  <text x="150" y="608" class="label">1. 不能删除完整 extension/MCP prompt context</text>
+  <text x="150" y="634" class="small">ClaudeCode 与 Warp 都保留上下文，只把工具加载 / MCP 执行面分层。</text>
 
-  <rect x="122" y="592" width="610" height="72" class="mini rose"/>
-  <text x="150" y="624" class="label">1. WebSearch allowed 被当成重型执行入口</text>
-  <text x="150" y="650" class="small">只是“允许联网”，不等于本轮必须启动完整 MCP 工具面。</text>
+  <rect x="122" y="670" width="610" height="76" class="mini amber"/>
+  <text x="150" y="702" class="label">2. 不能把 allowed search 等同于重型 runtime</text>
+  <text x="150" y="728" class="small">allowed 只是能力许可；required / skill / browser 才需要更重准备。</text>
 
-  <rect x="122" y="682" width="610" height="72" class="mini rose"/>
-  <text x="150" y="714" class="label">2. FullRuntime 无差别预热 enabled_lime MCP</text>
-  <text x="150" y="740" class="small">简单短问也会串行启动 context7 / playwright，直接吃掉 6s+。</text>
+  <rect x="122" y="764" width="610" height="76" class="mini amber"/>
+  <text x="150" y="796" class="label">3. 不能让 provider 看到所有 MCP 具体工具 schema</text>
+  <text x="150" y="822" class="small">具体 MCP 工具通过 ToolSearch / resource broker / 延迟加载触达。</text>
 
-  <rect x="122" y="772" width="610" height="72" class="mini amber"/>
-  <text x="150" y="804" class="label">3. 搜索开启时前端 Prompt 退出紧凑模式</text>
-  <text x="150" y="830" class="small">首轮输入体积变大，进一步放大 provider 首 token 等待。</text>
+  <rect x="824" y="492" width="690" height="382" class="card"/>
+  <text x="860" y="543" class="section">v2 当前策略</text>
 
-  <rect x="824" y="510" width="690" height="380" class="card"/>
-  <text x="860" y="560" class="section">本轮优化后的路由原则</text>
+  <rect x="860" y="576" width="610" height="76" class="mini green"/>
+  <text x="888" y="608" class="label">完整上下文：保留</text>
+  <text x="888" y="634" class="small">system prompt 仍包含 extension instructions 与 MCP resource 说明。</text>
 
-  <rect x="860" y="592" width="610" height="72" class="mini green"/>
-  <text x="888" y="624" class="label">Allowed Search：仍走 FastChat</text>
-  <text x="888" y="650" class="small">WebSearch / WebFetch 原生工具保留，模型按需搜索，但不启动 MCP。</text>
+  <rect x="860" y="670" width="610" height="76" class="mini green"/>
+  <text x="888" y="702" class="label">初始 schema：compact broker surface</text>
+  <text x="888" y="728" class="small">ToolSearch + 本地核心工具 + MCP resource broker，避免 50+ tools 入参。</text>
 
-  <rect x="860" y="682" width="610" height="72" class="mini green"/>
-  <text x="888" y="714" class="label">Required Search：只保留搜索约束，不预热 MCP</text>
-  <text x="888" y="740" class="small">明确 required 时可等待 WebSearch preflight，但 context7 / playwright 不应前置。</text>
+  <rect x="860" y="764" width="610" height="76" class="mini green"/>
+  <text x="888" y="796" class="label">跨协议一致：Anthropic / OpenAI / Gemini</text>
+  <text x="888" y="822" class="small">同一组 prepared tools 进入各 provider payload，避免只修 Anthropic。</text>
 
-  <rect x="860" y="772" width="610" height="72" class="mini green"/>
-  <text x="888" y="804" class="label">Full Context：有真实技能 / 项目 / 浏览器需求才预热</text>
-  <text x="888" y="830" class="small">service skill、图片任务、项目上下文、多代理等仍保持重型 runtime。</text>
+  <rect x="86" y="910" width="452" height="120" class="card"/>
+  <text x="122" y="956" class="section">ClaudeCode 参考</text>
+  <text x="122" y="988" class="small">ToolSearch / deferred tools 负责动态加载。</text>
+  <text x="122" y="1014" class="small">MCP prompt / skills / resources 不被粗暴删除。</text>
 
-  <rect x="86" y="925" width="1428" height="110" class="card"/>
-  <text x="122" y="970" class="section">慢点排序与预期收益</text>
-  <text x="122" y="1002" class="small">优先级 1：MCP / tool surface startup 约 6.37s，本轮通过 search-only 快路径移除；优先级 2：provider / policy 首字约 3.55s，后续继续看模型路由、Prompt 体积和缓存；优先级 3：前端首字 paint 约 0.13s，暂非瓶颈。</text>
-  <text x="122" y="1028" class="tiny">数据源：2026-05-10 Lime Playwright 真实复测 + Tauri TTFT 日志。优化提交后需继续用同一句短问复测 submit preparation 与 firstTextDelta。</text>
+  <rect x="574" y="910" width="452" height="120" class="card"/>
+  <text x="610" y="956" class="section">Warp 参考</text>
+  <text x="610" y="988" class="small">supported_tools 是能力枚举。</text>
+  <text x="610" y="1014" class="small">mcp_context 独立携带 server/tools/resources。</text>
 
-  <rect x="1145" y="72" width="330" height="52" rx="26" fill="#ecfdf5" stroke="#86efac"/>
-  <text x="1174" y="105" class="pill" fill="#166534">已复查：前端快，后端预热慢</text>
+  <rect x="1062" y="910" width="452" height="120" class="card"/>
+  <text x="1098" y="956" class="section">下一步复测</text>
+  <text x="1098" y="988" class="small">同一句短问记录 TTFT / firstTextDelta。</text>
+  <text x="1098" y="1014" class="small">重点看 submit preparation 与 provider payload。</text>
+
+  <rect x="86" y="1050" width="1428" height="42" rx="21" fill="#f8fafc" stroke="#dbe5ee"/>
+  <text x="122" y="1077" class="tiny">更新口径：v2 解决首字慢的低风险主刀是“schema 收敛 + search-only 不预热 MCP + stream 诊断 fallback”，不是 prompt context 删除。</text>
 </svg>

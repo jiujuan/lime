@@ -39,14 +39,10 @@ import {
   Search,
   PanelLeftClose,
   PanelLeftOpen,
-  Activity,
   X,
-  LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
-import * as LucideIcons from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { getPluginsForSurface, PluginUIInfo } from "@/lib/api/pluginUI";
 import { AgentPageParams, Page, PageParams } from "@/types/page";
 import { SettingsTabs } from "@/types/settings";
 import {
@@ -85,7 +81,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Modal } from "@/components/Modal";
-import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
 import { LIME_BRAND_LOGO_SRC, LIME_BRAND_NAME } from "@/lib/branding";
 import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayIdleTask";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
@@ -177,9 +172,6 @@ type SidebarNavItem = SidebarNavItemDefinition;
 
 const APP_SIDEBAR_COLLAPSED_STORAGE_KEY = "lime.app-sidebar.collapsed";
 const APP_SIDEBAR_COLLAPSE_EVENT = "lime:app-sidebar-collapse";
-const SIDEBAR_PLUGIN_CENTER_NAV_ITEM_ID = "plugins";
-const SIDEBAR_PLUGIN_IDLE_TIMEOUT_MS = 1200;
-const SIDEBAR_PLUGIN_BROWSER_IDLE_TIMEOUT_MS = 6000;
 const SIDEBAR_RECENT_SESSION_PAGE_SIZE = 10;
 const SIDEBAR_ARCHIVED_SESSION_PAGE_SIZE = 8;
 const SIDEBAR_SEARCH_RESULT_LIMIT = 8;
@@ -196,7 +188,6 @@ const SIDEBAR_NAV_LABEL_KEYS: Record<string, string> = {
   "home-general": "navigation.sidebar.items.homeGeneral",
   knowledge: "navigation.sidebar.items.knowledge",
   memory: "navigation.sidebar.items.memory",
-  plugins: "navigation.sidebar.items.plugins",
   settings: "navigation.sidebar.items.settings",
   skills: "navigation.sidebar.items.skills",
 };
@@ -229,17 +220,6 @@ function splitSidebarSessionResult(params: {
     sessions: sessions.slice(0, targetCount),
     hasMore: sessions.length > targetCount,
   };
-}
-
-function scheduleSidebarPluginLoad(task: () => void): () => void {
-  const minimumDelayMs = hasTauriInvokeCapability()
-    ? SIDEBAR_PLUGIN_IDLE_TIMEOUT_MS
-    : SIDEBAR_PLUGIN_BROWSER_IDLE_TIMEOUT_MS;
-
-  return scheduleMinimumDelayIdleTask(task, {
-    minimumDelayMs,
-    idleTimeoutMs: SIDEBAR_PLUGIN_IDLE_TIMEOUT_MS,
-  });
 }
 
 function hasCachedSidebarSessionEntry(
@@ -845,22 +825,6 @@ const MainNavList = styled.div`
   flex-direction: column;
   gap: 4px;
   margin-bottom: 12px;
-`;
-
-const Section = styled.div<{ $collapsed?: boolean }>`
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 12px;
-`;
-
-const SectionTitle = styled.div<{ $collapsed?: boolean }>`
-  padding: 0 10px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--sidebar-muted);
-  opacity: 0.9;
-  display: ${({ $collapsed }) => ($collapsed ? "none" : "block")};
 `;
 
 const NavButton = styled.button<{ $active?: boolean; $collapsed?: boolean }>`
@@ -2130,13 +2094,6 @@ const AccountMenuDivider = styled.div`
   background: var(--lime-divider-subtle, rgba(226, 240, 226, 0.82));
 `;
 
-function getIconByName(iconName: string): LucideIcon {
-  const IconComponent = (
-    LucideIcons as unknown as Record<string, LucideIcon | undefined>
-  )[iconName];
-  return IconComponent || Activity;
-}
-
 function sortSidebarSessions(sessions: AsterSessionInfo[]): AsterSessionInfo[] {
   return sessions
     .filter((session) => !isAuxiliaryAgentSessionId(session.id))
@@ -2525,8 +2482,6 @@ export function AppSidebar({
   const [enabledNavItems, setEnabledNavItems] = useState<string[]>(
     DEFAULT_ENABLED_SIDEBAR_NAV_ITEM_IDS,
   );
-  const [sidebarPlugins, setSidebarPlugins] = useState<PluginUIInfo[]>([]);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const sidebarSessionsRef = useRef<AsterSessionInfo[]>([]);
   const archivedSidebarSessionsRef = useRef<AsterSessionInfo[]>([]);
   const [sidebarSessions, setSidebarSessions] = useState<AsterSessionInfo[]>(
@@ -2701,64 +2656,6 @@ export function AppSidebar({
         item.configurable === false || enabledNavItems.includes(item.id),
     ).map(localizeSidebarNavItem);
   }, [enabledNavItems, localizeSidebarNavItem]);
-
-  useEffect(() => {
-    if (!enabledNavItems.includes(SIDEBAR_PLUGIN_CENTER_NAV_ITEM_ID)) {
-      setSidebarPlugins([]);
-      return;
-    }
-
-    let cancelled = false;
-
-    const loadSidebarPlugins = async (forceRefresh = false) => {
-      try {
-        const plugins = await getPluginsForSurface("sidebar", { forceRefresh });
-        if (!cancelled) {
-          setSidebarPlugins(plugins);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          console.error("加载侧边栏插件失败:", error);
-        }
-      }
-    };
-
-    if (refreshTrigger > 0) {
-      void loadSidebarPlugins(true);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    const cancelScheduledLoad = scheduleSidebarPluginLoad(() => {
-      void loadSidebarPlugins();
-    });
-
-    return () => {
-      cancelled = true;
-      cancelScheduledLoad();
-    };
-  }, [enabledNavItems, refreshTrigger]);
-
-  useEffect(() => {
-    const handleStorageChange = (event: StorageEvent) => {
-      if (event.key === "plugin-changed") {
-        setRefreshTrigger((prev) => prev + 1);
-      }
-    };
-
-    const handlePluginChange = () => {
-      setRefreshTrigger((prev) => prev + 1);
-    };
-
-    window.addEventListener("storage", handleStorageChange);
-    window.addEventListener("plugin-changed", handlePluginChange);
-
-    return () => {
-      window.removeEventListener("storage", handleStorageChange);
-      window.removeEventListener("plugin-changed", handlePluginChange);
-    };
-  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -3474,20 +3371,6 @@ export function AppSidebar({
     shouldLoadWorkspaceScopedConversations,
   ]);
 
-  const assistantItems = useMemo<SidebarNavItem[]>(() => {
-    return sidebarPlugins.map((plugin) => {
-      const pluginPageId = `plugin:${plugin.pluginId}` as Page;
-      return {
-        id: plugin.pluginId,
-        label: plugin.name,
-        icon: getIconByName(plugin.icon),
-        page: pluginPageId,
-      };
-    });
-  }, [sidebarPlugins]);
-  const shouldShowPluginExtensionsSection =
-    enabledNavItems.includes(SIDEBAR_PLUGIN_CENTER_NAV_ITEM_ID) &&
-    assistantItems.length > 0;
   const recentSidebarSessions = useMemo(() => {
     if (!currentProjectId) {
       return [];
@@ -4331,10 +4214,6 @@ export function AppSidebar({
     "navigation.sidebar.search.moreRecent",
     "查看更多对话",
   );
-  const pluginExtensionsTitle = t(
-    "navigation.sidebar.sections.pluginExtensions",
-    "插件扩展",
-  );
   const languageMenuLabel = t("navigation.sidebar.account.language", "语言");
   const interfaceLanguageLabel = t(
     "navigation.sidebar.account.interfaceLanguage",
@@ -4449,7 +4328,8 @@ export function AppSidebar({
     "navigation.sidebar.invite.dialog.close",
     "关闭邀请弹窗",
   );
-  const inviteBrandName = inviteShare?.brandName ?? accountTenantLabel ?? "Lime";
+  const inviteBrandName =
+    inviteShare?.brandName ?? accountTenantLabel ?? "Lime";
   const inviteEyebrowLabel = t("navigation.sidebar.invite.dialog.eyebrow", {
     brand: inviteBrandName,
     defaultValue: "{{brand}} 邀请",
@@ -4491,10 +4371,7 @@ export function AppSidebar({
     "navigation.sidebar.invite.status.loading",
     "正在从云端同步邀请信息...",
   );
-  const inviteRetryLabel = t(
-    "navigation.sidebar.invite.actions.retry",
-    "重试",
-  );
+  const inviteRetryLabel = t("navigation.sidebar.invite.actions.retry", "重试");
   const inviteCodeLabel = t("navigation.sidebar.invite.fields.code", "邀请码");
   const inviteCopyLabel = t("navigation.sidebar.invite.actions.copy", "复制");
   const inviteDownloadUrlLabel = t(
@@ -4850,15 +4727,6 @@ export function AppSidebar({
               }
             />
           ) : null}
-
-          {shouldShowPluginExtensionsSection && (
-            <Section $collapsed={collapsed}>
-              <SectionTitle $collapsed={collapsed}>
-                {pluginExtensionsTitle}
-              </SectionTitle>
-              {assistantItems.map((item) => renderNavItem(item))}
-            </Section>
-          )}
         </MenuScroll>
 
         <FooterArea

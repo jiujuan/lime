@@ -16,6 +16,7 @@ import {
   Search,
   Settings,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useSkills } from "@/hooks/useSkills";
 import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
 import { SkillCard } from "./SkillCard";
@@ -59,20 +60,24 @@ const primaryActionButtonClassName = `${actionButtonClassName} border border-eme
 const sectionStyleMap = {
   builtin: {
     icon: Package,
-    displayTitle: "内置",
+    srOnlyKey: "skills.page.sections.builtin.srOnly",
     iconClassName: "bg-orange-50 text-orange-600 border border-orange-200",
   },
   local: {
     icon: FolderOpen,
-    displayTitle: "本地",
+    srOnlyKey: "skills.page.sections.local.srOnly",
     iconClassName: "bg-slate-50 text-slate-600 border border-slate-200",
   },
   remote: {
     icon: Cloud,
-    displayTitle: "远程",
+    srOnlyKey: "skills.page.sections.remote.srOnly",
     iconClassName: "bg-emerald-50 text-emerald-600 border border-emerald-200",
   },
 } as const;
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
 
 export const SkillsPage = forwardRef<SkillsPageRef, SkillsPageProps>(
   (
@@ -86,6 +91,7 @@ export const SkillsPage = forwardRef<SkillsPageRef, SkillsPageProps>(
     },
     ref,
   ) => {
+    const { t } = useTranslation("agent");
     const [app] = useState<AppType>(initialApp);
     const [searchQuery, setSearchQuery] = useState("");
     const [filterStatus, setFilterStatus] = useState<
@@ -152,7 +158,11 @@ export const SkillsPage = forwardRef<SkillsPageRef, SkillsPageProps>(
       try {
         await install(directory);
       } catch (e) {
-        alert(`安装失败: ${e instanceof Error ? e.message : String(e)}`);
+        alert(
+          t("skills.page.message.installFailed", {
+            message: getErrorMessage(e),
+          }),
+        );
       } finally {
         setInstallingSkills((prev) => {
           const next = new Set(prev);
@@ -167,7 +177,11 @@ export const SkillsPage = forwardRef<SkillsPageRef, SkillsPageProps>(
       try {
         await uninstall(directory);
       } catch (e) {
-        alert(`卸载失败: ${e instanceof Error ? e.message : String(e)}`);
+        alert(
+          t("skills.page.message.uninstallFailed", {
+            message: getErrorMessage(e),
+          }),
+        );
       } finally {
         setInstallingSkills((prev) => {
           const next = new Set(prev);
@@ -200,7 +214,10 @@ export const SkillsPage = forwardRef<SkillsPageRef, SkillsPageProps>(
         try {
           await refresh();
         } catch (refreshError) {
-          console.error("刷新 Skills 列表失败:", refreshError);
+          console.error(
+            "[SkillsPage] refresh failed after scaffold create:",
+            refreshError,
+          );
         }
         onScaffoldCreated?.(createdSkill);
 
@@ -219,7 +236,7 @@ export const SkillsPage = forwardRef<SkillsPageRef, SkillsPageProps>(
       const selected = await openDialog({
         directory: true,
         multiple: false,
-        title: "选择一个包含 SKILL.md 的技能目录",
+        title: t("skills.page.import.dialogTitle"),
       });
 
       if (!selected || Array.isArray(selected)) {
@@ -231,7 +248,11 @@ export const SkillsPage = forwardRef<SkillsPageRef, SkillsPageProps>(
         await skillsApi.importLocalSkill(selected, app);
         await refresh();
       } catch (e) {
-        alert(`导入失败: ${e instanceof Error ? e.message : String(e)}`);
+        alert(
+          t("skills.page.message.importFailed", {
+            message: getErrorMessage(e),
+          }),
+        );
       } finally {
         setImportingLocalSkill(false);
       }
@@ -294,7 +315,9 @@ export const SkillsPage = forwardRef<SkillsPageRef, SkillsPageProps>(
           return;
         }
         setContentError(
-          `检查失败: ${e instanceof Error ? e.message : String(e)}`,
+          t("skills.page.message.inspectFailed", {
+            message: getErrorMessage(e),
+          }),
         );
       } finally {
         if (requestId === contentRequestIdRef.current) {
@@ -338,9 +361,17 @@ export const SkillsPage = forwardRef<SkillsPageRef, SkillsPageProps>(
     const installedCount = skills.filter((s) => s.installed).length;
     const uninstalledCount = skills.length - installedCount;
     const filterOptions = [
-      { key: "all", label: "全部", count: skills.length },
-      { key: "installed", label: "已安装", count: installedCount },
-      { key: "uninstalled", label: "未安装", count: uninstalledCount },
+      { key: "all", label: t("skills.page.filter.all"), count: skills.length },
+      {
+        key: "installed",
+        label: t("skills.page.filter.installed"),
+        count: installedCount,
+      },
+      {
+        key: "uninstalled",
+        label: t("skills.page.filter.uninstalled"),
+        count: uninstalledCount,
+      },
     ] as const;
 
     return (
@@ -351,29 +382,24 @@ export const SkillsPage = forwardRef<SkillsPageRef, SkillsPageProps>(
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <h1 className="text-2xl font-semibold text-slate-900">
-                    Skills
+                    {t("skills.page.title")}
                   </h1>
                   <WorkbenchInfoTip
-                    ariaLabel="技能工作台说明"
+                    ariaLabel={t("skills.page.tip.workspace.aria")}
                     tone="sky"
                     content={
-                      <span>
-                        统一查看安装状态、仓库来源与可读内容，减少在不同入口之间来回切换。
-                      </span>
+                      <span>{t("skills.page.tip.workspace.content")}</span>
                     }
                   />
                   <WorkbenchInfoTip
-                    ariaLabel="技能使用规则"
+                    ariaLabel={t("skills.page.tip.usage.aria")}
                     tone="mint"
-                    content={
-                      <span>
-                        Built-in Skills
-                        为应用内置技能，默认可用且不可卸载。本地与远程技能可按来源安装、检查或导入。
-                      </span>
-                    }
+                    content={<span>{t("skills.page.tip.usage.content")}</span>}
                   />
                 </div>
-                <p className="text-sm text-slate-600">管理和使用 AI 技能扩展</p>
+                <p className="text-sm text-slate-600">
+                  {t("skills.page.description")}
+                </p>
               </div>
             )}
 
@@ -388,7 +414,7 @@ export const SkillsPage = forwardRef<SkillsPageRef, SkillsPageProps>(
                     loading || remoteLoading ? "animate-spin" : ""
                   }`}
                 />
-                刷新
+                {t("skills.page.action.refresh")}
               </button>
               <button
                 onClick={() => {
@@ -398,7 +424,7 @@ export const SkillsPage = forwardRef<SkillsPageRef, SkillsPageProps>(
                 className={primaryActionButtonClassName}
               >
                 <Plus className="h-4 w-4" />
-                新建 Skill
+                {t("skills.page.action.newSkill")}
               </button>
               <button
                 onClick={() => void handleImportLocalSkill()}
@@ -408,14 +434,16 @@ export const SkillsPage = forwardRef<SkillsPageRef, SkillsPageProps>(
                 <FolderOpen
                   className={`h-4 w-4 ${importingLocalSkill ? "animate-pulse" : ""}`}
                 />
-                {importingLocalSkill ? "导入中..." : "导入 Skill"}
+                {importingLocalSkill
+                  ? t("skills.page.action.importing")
+                  : t("skills.page.action.import")}
               </button>
               <button
                 onClick={() => setRepoManagerOpen(true)}
                 className={secondaryActionButtonClassName}
               >
                 <Settings className="h-4 w-4" />
-                仓库
+                {t("skills.page.action.repositories")}
               </button>
             </div>
           </div>
@@ -433,7 +461,7 @@ export const SkillsPage = forwardRef<SkillsPageRef, SkillsPageProps>(
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                placeholder="搜索 Skills..."
+                placeholder={t("skills.page.search.placeholder")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-700 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
@@ -476,10 +504,10 @@ export const SkillsPage = forwardRef<SkillsPageRef, SkillsPageProps>(
         {!hasVisibleSkills && !loading && isFiltering ? (
           <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50/70 px-6 py-12 text-center text-slate-500">
             <p className="text-base font-medium text-slate-700">
-              没有找到匹配的技能
+              {t("skills.page.empty.noMatches.title")}
             </p>
             <p className="mt-2 text-sm">
-              可以尝试调整搜索关键词，或切换安装状态筛选。
+              {t("skills.page.empty.noMatches.description")}
             </p>
           </div>
         ) : (
@@ -506,7 +534,7 @@ export const SkillsPage = forwardRef<SkillsPageRef, SkillsPageProps>(
                         <div className="space-y-0.5">
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium text-slate-900">
-                              {section.title}
+                              {t(section.titleKey)}
                             </span>
                             <span className="text-xs text-slate-500">
                               {section.skills.length}
@@ -516,10 +544,10 @@ export const SkillsPage = forwardRef<SkillsPageRef, SkillsPageProps>(
                             )}
                           </div>
                           <p className="text-xs text-slate-500">
-                            {section.description}
+                            {t(section.descriptionKey)}
                           </p>
                           <span className="sr-only">
-                            {sectionStyle.displayTitle}
+                            {t(sectionStyle.srOnlyKey)}
                           </span>
                         </div>
                       </div>
@@ -530,10 +558,10 @@ export const SkillsPage = forwardRef<SkillsPageRef, SkillsPageProps>(
                     {section.skills.length === 0 ? (
                       <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
                         {isSectionLoading
-                          ? "正在加载..."
+                          ? t("skills.page.loading")
                           : section.key === "remote"
-                            ? '暂无远程缓存，点击"刷新"同步已启用仓库。'
-                            : "暂无 Skills"}
+                            ? t("skills.page.sections.remote.empty")
+                            : t("skills.page.empty.noSkills")}
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">

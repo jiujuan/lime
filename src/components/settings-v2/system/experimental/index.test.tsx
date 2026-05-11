@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 const { mockGetConfig, mockSaveConfig } = vi.hoisted(() => ({
   mockGetConfig: vi.fn(),
@@ -18,31 +19,6 @@ const {
   mockUpdateScreenshotShortcut: vi.fn(),
   mockValidateShortcut: vi.fn(),
 }));
-
-const { mockUseTranslation } = vi.hoisted(() => {
-  const mockTranslate = vi.fn((key: string, options?: unknown) => {
-    if (typeof options === "string") {
-      return options;
-    }
-
-    if (options && typeof options === "object") {
-      const values = options as Record<string, unknown>;
-      const template =
-        typeof values.defaultValue === "string" ? values.defaultValue : key;
-      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-        String(values[name] ?? ""),
-      );
-    }
-
-    return key;
-  });
-
-  return {
-    mockUseTranslation: vi.fn((_namespace?: string) => ({
-      t: mockTranslate,
-    })),
-  };
-});
 
 const { mockGetLogs, mockGetPersistedLogsTail } = vi.hoisted(() => ({
   mockGetLogs: vi.fn(),
@@ -144,24 +120,22 @@ vi.mock("@/lib/crashDiagnostic", () => {
   };
 });
 
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
-}));
-
 vi.mock("@/components/smart-input/ShortcutSettings", () => ({
-  ShortcutSettings: () => <div>快捷键设置占位</div>,
+  ShortcutSettings: () => <div>Shortcut settings placeholder</div>,
 }));
 
 vi.mock("./UpdateCheckSettings", () => ({
-  UpdateCheckSettings: () => <div>更新设置占位</div>,
+  UpdateCheckSettings: () => <div>Update settings placeholder</div>,
 }));
 
 vi.mock("../shared/ClipboardPermissionGuideCard", () => ({
-  ClipboardPermissionGuideCard: () => <div>剪贴板权限占位</div>,
+  ClipboardPermissionGuideCard: () => (
+    <div>Clipboard permission placeholder</div>
+  ),
 }));
 
 vi.mock("../shared/WorkspaceRepairHistoryCard", () => ({
-  WorkspaceRepairHistoryCard: () => <div>工作区自愈占位</div>,
+  WorkspaceRepairHistoryCard: () => <div>Workspace repair placeholder</div>,
 }));
 
 import { ExperimentalSettings } from ".";
@@ -226,12 +200,14 @@ async function clickButton(button: HTMLButtonElement) {
   });
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+
+  await changeLimeLocale("en-US");
 
   Object.defineProperty(window.navigator, "userAgent", {
     configurable: true,
@@ -301,7 +277,7 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mounted.length > 0) {
     const target = mounted.pop();
     if (!target) {
@@ -315,6 +291,7 @@ afterEach(() => {
   }
 
   vi.clearAllMocks();
+  await changeLimeLocale("zh-CN");
 });
 
 describe("ExperimentalSettings", () => {
@@ -328,10 +305,13 @@ describe("ExperimentalSettings", () => {
       "把还在试验中的能力统一放到一处管理，但不要把风险提示藏起来",
     );
     expect(text).not.toContain("更多实验功能即将推出");
-    expect(text).toContain("实验功能");
-    expect(text).toContain("不稳定能力集中开关，用完及时关回。");
+    expect(text).toContain("Experimental Features");
+    expect(text).toContain(
+      "Centralized switches for unstable capabilities. Turn them back off after use.",
+    );
     expect(text).toContain("Tool Calling 2.0");
-    expect(text).toContain("截图对话");
+    expect(text).toContain("Screenshot Chat");
+    expect(text).not.toContain("settings.experimental");
     expect(text).not.toContain("当前空闲");
   });
 
@@ -364,8 +344,8 @@ describe("ExperimentalSettings", () => {
     await waitForLoad();
 
     const text = getText(container);
-    expect(text).toContain("更新设置占位");
-    expect(text).toContain("工作区自愈占位");
+    expect(text).toContain("Update settings placeholder");
+    expect(text).toContain("Workspace repair placeholder");
     expect(text).not.toContain("语音设置占位");
   });
 
@@ -374,13 +354,20 @@ describe("ExperimentalSettings", () => {
     await waitForLoad();
 
     const text = getText(container);
-    expect(text).toContain("WebMCP（预留）");
+    expect(text).toContain("WebMCP (Reserved)");
     expect(text).not.toContain("当前默认关闭，不参与实际执行链");
-    expect(text).toContain("仅保留配置位，当前不切换执行链。");
-    expect(text).toContain("开启后只写入配置，不改变浏览器执行路径。");
+    expect(text).toContain(
+      "Keeps only the config bit and does not switch the execution path yet.",
+    );
+    expect(text).toContain(
+      "When enabled, Lime only writes the config and does not change the browser execution path.",
+    );
     expect(text).not.toContain("现阶段浏览器业务仍走 Bridge / CDP 主线");
 
-    const switchButton = findSwitchByLabel(container, "切换 WebMCP 预留入口");
+    const switchButton = findSwitchByLabel(
+      container,
+      "Toggle WebMCP reserved entry",
+    );
     expect(switchButton.getAttribute("aria-checked")).toBe("false");
   });
 
@@ -388,7 +375,9 @@ describe("ExperimentalSettings", () => {
     const container = renderComponent();
     await waitForLoad();
 
-    await clickButton(findSwitchByLabel(container, "切换 WebMCP 预留入口"));
+    await clickButton(
+      findSwitchByLabel(container, "Toggle WebMCP reserved entry"),
+    );
     await waitForLoad();
 
     expect(mockSaveExperimentalConfig).toHaveBeenCalledTimes(1);
@@ -403,6 +392,6 @@ describe("ExperimentalSettings", () => {
         },
       }),
     );
-    expect(getText(container)).toContain("WebMCP 预留入口已启用");
+    expect(getText(container)).toContain("WebMCP reserved entry enabled");
   });
 });

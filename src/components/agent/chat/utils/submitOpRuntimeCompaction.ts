@@ -25,6 +25,10 @@ const HARNESS_THEME_KEYS = ["theme", "harness_theme", "harnessTheme"] as const;
 const HARNESS_SESSION_MODE_KEYS = ["session_mode", "sessionMode"] as const;
 const HARNESS_GATE_KEY_KEYS = ["gate_key", "gateKey"] as const;
 const HARNESS_RUN_TITLE_KEYS = ["run_title", "runTitle", "title"] as const;
+const HARNESS_FAST_RESPONSE_ROUTING_KEYS = [
+  "fast_response_routing",
+  "fastResponseRouting",
+] as const;
 const HARNESS_TEAM_SELECTION_PRESET_KEYS = [
   "preferred_team_preset_id",
   "preferredTeamPresetId",
@@ -188,6 +192,22 @@ function readHarnessArrayFromRequestMetadata(
   }
 
   return null;
+}
+
+function hasHarnessObjectFromRequestMetadata(
+  requestMetadata: Record<string, unknown> | undefined,
+  keys: readonly string[],
+): boolean {
+  if (!requestMetadata) {
+    return false;
+  }
+
+  const nestedHarness = requestMetadata.harness;
+  const harness = isPlainRecord(nestedHarness)
+    ? (nestedHarness as Record<string, unknown>)
+    : requestMetadata;
+
+  return keys.some((key) => isPlainRecord(harness[key]));
 }
 
 function omitHarnessFieldsFromRequestMetadata(
@@ -409,16 +429,24 @@ export function buildSubmitOpRuntimeCompaction(
   const knownProviderSelector =
     syncedProviderSelector || runtimeProviderSelector;
   const knownModelName = syncedModelName || runtimeModelName;
+  const hasFastResponseRouting = hasHarnessObjectFromRequestMetadata(
+    requestMetadata,
+    HARNESS_FAST_RESPONSE_ROUTING_KEYS,
+  );
+  const hasExplicitModelOverride = Boolean(modelOverride?.trim());
   const shouldSubmitProviderPreference =
-    !knownProviderSelector ||
-    normalizeRuntimeIdentifier(knownProviderSelector) !==
-      normalizeRuntimeIdentifier(effectiveProviderType);
+    !hasFastResponseRouting &&
+    (!knownProviderSelector ||
+      normalizeRuntimeIdentifier(knownProviderSelector) !==
+        normalizeRuntimeIdentifier(effectiveProviderType));
   const shouldSubmitModelPreference =
-    Boolean(modelOverride?.trim()) ||
-    shouldSubmitProviderPreference ||
-    !knownModelName ||
-    normalizeRuntimeIdentifier(knownModelName) !==
-      normalizeRuntimeIdentifier(effectiveModel);
+    hasFastResponseRouting && !hasExplicitModelOverride
+      ? false
+      : hasExplicitModelOverride ||
+        shouldSubmitProviderPreference ||
+        !knownModelName ||
+        normalizeRuntimeIdentifier(knownModelName) !==
+          normalizeRuntimeIdentifier(effectiveModel);
 
   const knownExecutionStrategy =
     syncedExecutionStrategy?.trim() ||

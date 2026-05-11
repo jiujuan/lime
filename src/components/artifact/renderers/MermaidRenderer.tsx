@@ -13,6 +13,7 @@ import React, {
   useEffect,
   memo,
 } from "react";
+import { useTranslation } from "react-i18next";
 import mermaid from "mermaid";
 import {
   Eye,
@@ -61,38 +62,72 @@ const ZOOM_LEVELS = {
 /**
  * 主题配置
  */
-const THEME_OPTIONS: {
+type MermaidThemeLabelKey =
+  | "errors.mermaidRenderer.theme.default"
+  | "errors.mermaidRenderer.theme.dark"
+  | "errors.mermaidRenderer.theme.forest"
+  | "errors.mermaidRenderer.theme.neutral";
+
+const THEME_OPTIONS = [
+  {
+    value: "default",
+    labelKey: "errors.mermaidRenderer.theme.default",
+    icon: <Sun className="w-3.5 h-3.5" />,
+  },
+  {
+    value: "dark",
+    labelKey: "errors.mermaidRenderer.theme.dark",
+    icon: <Moon className="w-3.5 h-3.5" />,
+  },
+  {
+    value: "forest",
+    labelKey: "errors.mermaidRenderer.theme.forest",
+    icon: <Sun className="w-3.5 h-3.5" />,
+  },
+  {
+    value: "neutral",
+    labelKey: "errors.mermaidRenderer.theme.neutral",
+    icon: <Sun className="w-3.5 h-3.5" />,
+  },
+] as const satisfies ReadonlyArray<{
   value: MermaidTheme;
-  label: string;
+  labelKey: MermaidThemeLabelKey;
   icon: React.ReactNode;
-}[] = [
-  { value: "default", label: "默认", icon: <Sun className="w-3.5 h-3.5" /> },
-  { value: "dark", label: "深色", icon: <Moon className="w-3.5 h-3.5" /> },
-  { value: "forest", label: "森林", icon: <Sun className="w-3.5 h-3.5" /> },
-  { value: "neutral", label: "中性", icon: <Sun className="w-3.5 h-3.5" /> },
-];
+}>;
 
 /**
  * 流式指示器组件
  */
-const StreamingIndicator: React.FC = memo(() => (
-  <div className="absolute bottom-2 right-2 flex items-center gap-1.5 px-2 py-1 rounded bg-blue-500/20 text-blue-400 text-xs">
-    <Loader2 className="w-3 h-3 animate-spin" />
-    <span>生成中...</span>
-  </div>
-));
+const StreamingIndicator: React.FC = memo(() => {
+  const { t } = useTranslation("errors");
+
+  return (
+    <div className="absolute bottom-2 right-2 flex items-center gap-1.5 px-2 py-1 rounded bg-blue-500/20 text-blue-400 text-xs">
+      <Loader2 className="w-3 h-3 animate-spin" />
+      <span>{t("errors.mermaidRenderer.status.streaming")}</span>
+    </div>
+  );
+});
 StreamingIndicator.displayName = "StreamingIndicator";
 
 /**
  * 流式占位符组件
  */
-const StreamingPlaceholder: React.FC = memo(() => (
-  <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-    <Loader2 className="w-12 h-12 text-blue-400 mb-4 animate-spin" />
-    <h3 className="text-lg font-medium text-gray-900 mb-2">正在生成图表...</h3>
-    <p className="text-sm text-gray-500">请等待内容生成完成后查看预览</p>
-  </div>
-));
+const StreamingPlaceholder: React.FC = memo(() => {
+  const { t } = useTranslation("errors");
+
+  return (
+    <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+      <Loader2 className="w-12 h-12 text-blue-400 mb-4 animate-spin" />
+      <h3 className="text-lg font-medium text-gray-900 mb-2">
+        {t("errors.mermaidRenderer.streamingPlaceholder.title")}
+      </h3>
+      <p className="text-sm text-gray-500">
+        {t("errors.mermaidRenderer.streamingPlaceholder.description")}
+      </p>
+    </div>
+  );
+});
 StreamingPlaceholder.displayName = "StreamingPlaceholder";
 
 /**
@@ -104,38 +139,42 @@ interface ViewModeToggleProps {
 }
 
 const ViewModeToggle: React.FC<ViewModeToggleProps> = memo(
-  ({ value, onChange }) => (
-    <div className="inline-flex items-center rounded-md bg-gray-100 p-1">
-      <button
-        type="button"
-        onClick={() => onChange("preview")}
-        className={cn(
-          "inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-all",
-          value === "preview"
-            ? "bg-white text-gray-900 shadow-sm"
-            : "text-gray-600 hover:text-gray-900",
-        )}
-        title="预览模式"
-      >
-        <Eye className="w-3.5 h-3.5" />
-        <span>预览</span>
-      </button>
-      <button
-        type="button"
-        onClick={() => onChange("source")}
-        className={cn(
-          "inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-all",
-          value === "source"
-            ? "bg-white text-gray-900 shadow-sm"
-            : "text-gray-600 hover:text-gray-900",
-        )}
-        title="源码模式"
-      >
-        <Code2 className="w-3.5 h-3.5" />
-        <span>源码</span>
-      </button>
-    </div>
-  ),
+  ({ value, onChange }) => {
+    const { t } = useTranslation("errors");
+
+    return (
+      <div className="inline-flex items-center rounded-md bg-gray-100 p-1">
+        <button
+          type="button"
+          onClick={() => onChange("preview")}
+          className={cn(
+            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-all",
+            value === "preview"
+              ? "bg-white text-gray-900 shadow-sm"
+              : "text-gray-600 hover:text-gray-900",
+          )}
+          title={t("errors.mermaidRenderer.view.previewTitle")}
+        >
+          <Eye className="w-3.5 h-3.5" />
+          <span>{t("errors.mermaidRenderer.view.preview")}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange("source")}
+          className={cn(
+            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-all",
+            value === "source"
+              ? "bg-white text-gray-900 shadow-sm"
+              : "text-gray-600 hover:text-gray-900",
+          )}
+          title={t("errors.mermaidRenderer.view.sourceTitle")}
+        >
+          <Code2 className="w-3.5 h-3.5" />
+          <span>{t("errors.mermaidRenderer.view.source")}</span>
+        </button>
+      </div>
+    );
+  },
 );
 ViewModeToggle.displayName = "ViewModeToggle";
 
@@ -149,6 +188,7 @@ interface ZoomControlsProps {
 
 const ZoomControls: React.FC<ZoomControlsProps> = memo(
   ({ zoom, onZoomChange }) => {
+    const { t } = useTranslation("errors");
     const handleZoomIn = useCallback(() => {
       onZoomChange(Math.min(zoom + ZOOM_LEVELS.step, ZOOM_LEVELS.max));
     }, [zoom, onZoomChange]);
@@ -174,7 +214,7 @@ const ZoomControls: React.FC<ZoomControlsProps> = memo(
             "text-gray-500 hover:text-gray-700 hover:bg-gray-100",
             "disabled:opacity-50 disabled:cursor-not-allowed",
           )}
-          title="缩小"
+          title={t("errors.mermaidRenderer.zoom.out")}
         >
           <ZoomOut className="w-4 h-4" />
         </button>
@@ -190,7 +230,7 @@ const ZoomControls: React.FC<ZoomControlsProps> = memo(
             "text-gray-500 hover:text-gray-700 hover:bg-gray-100",
             "disabled:opacity-50 disabled:cursor-not-allowed",
           )}
-          title="放大"
+          title={t("errors.mermaidRenderer.zoom.in")}
         >
           <ZoomIn className="w-4 h-4" />
         </button>
@@ -201,7 +241,7 @@ const ZoomControls: React.FC<ZoomControlsProps> = memo(
             "inline-flex items-center justify-center w-7 h-7 rounded transition-all",
             "text-gray-500 hover:text-gray-700 hover:bg-gray-100",
           )}
-          title="适应视图"
+          title={t("errors.mermaidRenderer.zoom.fit")}
         >
           <Maximize2 className="w-4 h-4" />
         </button>
@@ -222,6 +262,7 @@ interface ThemeSelectorProps {
 
 const ThemeSelector: React.FC<ThemeSelectorProps> = memo(
   ({ value, onChange }) => {
+    const { t } = useTranslation("errors");
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -251,10 +292,10 @@ const ThemeSelector: React.FC<ThemeSelectorProps> = memo(
             "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium transition-all",
             "text-gray-600 hover:text-gray-900 hover:bg-gray-100 border border-gray-200",
           )}
-          title="切换主题"
+          title={t("errors.mermaidRenderer.action.switchTheme")}
         >
           {currentTheme?.icon}
-          <span>{currentTheme?.label}</span>
+          <span>{currentTheme ? t(currentTheme.labelKey) : null}</span>
           <ChevronDown
             className={cn(
               "w-3 h-3 transition-transform",
@@ -280,7 +321,7 @@ const ThemeSelector: React.FC<ThemeSelectorProps> = memo(
                 )}
               >
                 {theme.icon}
-                <span>{theme.label}</span>
+                <span>{t(theme.labelKey)}</span>
               </button>
             ))}
           </div>
@@ -301,6 +342,7 @@ interface ExportMenuProps {
 }
 
 const ExportMenu: React.FC<ExportMenuProps> = memo(({ onExport, disabled }) => {
+  const { t } = useTranslation("errors");
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -329,10 +371,10 @@ const ExportMenu: React.FC<ExportMenuProps> = memo(({ onExport, disabled }) => {
           "text-gray-600 hover:text-gray-900 hover:bg-gray-100 border border-gray-200",
           "disabled:opacity-50 disabled:cursor-not-allowed",
         )}
-        title="导出图表"
+        title={t("errors.mermaidRenderer.action.exportDiagram")}
       >
         <Download className="w-3.5 h-3.5" />
-        <span>导出</span>
+        <span>{t("errors.mermaidRenderer.action.export")}</span>
         <ChevronDown
           className={cn("w-3 h-3 transition-transform", isOpen && "rotate-180")}
         />
@@ -348,7 +390,7 @@ const ExportMenu: React.FC<ExportMenuProps> = memo(({ onExport, disabled }) => {
             className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left text-gray-700 hover:bg-gray-50 transition-colors"
           >
             <FileCode className="w-3.5 h-3.5" />
-            <span>导出 SVG</span>
+            <span>{t("errors.mermaidRenderer.action.exportSvg")}</span>
           </button>
           <button
             type="button"
@@ -359,7 +401,7 @@ const ExportMenu: React.FC<ExportMenuProps> = memo(({ onExport, disabled }) => {
             className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left text-gray-700 hover:bg-gray-50 transition-colors"
           >
             <FileImage className="w-3.5 h-3.5" />
-            <span>导出 PNG</span>
+            <span>{t("errors.mermaidRenderer.action.exportPng")}</span>
           </button>
         </div>
       )}
@@ -378,25 +420,31 @@ interface ErrorDisplayProps {
 }
 
 const ErrorDisplay: React.FC<ErrorDisplayProps> = memo(
-  ({ message, source }) => (
-    <div className="flex flex-col h-full">
-      <div className="flex items-start gap-3 p-4 bg-red-50 border-b border-red-100">
-        <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-        <div>
-          <h3 className="text-sm font-medium text-red-800 mb-1">
-            Mermaid 语法错误
-          </h3>
-          <p className="text-xs text-red-600">{message}</p>
+  ({ message, source }) => {
+    const { t } = useTranslation("errors");
+
+    return (
+      <div className="flex flex-col h-full">
+        <div className="flex items-start gap-3 p-4 bg-red-50 border-b border-red-100">
+          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <h3 className="text-sm font-medium text-red-800 mb-1">
+              {t("errors.mermaidRenderer.error.syntax")}
+            </h3>
+            <p className="text-xs text-red-600">{message}</p>
+          </div>
+        </div>
+        <div className="flex-1 overflow-auto p-4 bg-gray-50">
+          <h4 className="text-xs font-medium text-gray-500 mb-2">
+            {t("errors.mermaidRenderer.section.sourceContent")}
+          </h4>
+          <pre className="text-xs text-gray-700 font-mono whitespace-pre-wrap break-all bg-white p-3 rounded border border-gray-200">
+            {source}
+          </pre>
         </div>
       </div>
-      <div className="flex-1 overflow-auto p-4 bg-gray-50">
-        <h4 className="text-xs font-medium text-gray-500 mb-2">源码内容：</h4>
-        <pre className="text-xs text-gray-700 font-mono whitespace-pre-wrap break-all bg-white p-3 rounded border border-gray-200">
-          {source}
-        </pre>
-      </div>
-    </div>
-  ),
+    );
+  },
 );
 ErrorDisplay.displayName = "ErrorDisplay";
 
@@ -422,7 +470,15 @@ function downloadBlob(blob: Blob, filename: string): void {
  * @param svgString - SVG 字符串
  * @returns Promise<HTMLCanvasElement>
  */
-async function svgToCanvas(svgString: string): Promise<HTMLCanvasElement> {
+interface SvgToCanvasMessages {
+  canvasContextUnavailable: string;
+  imageLoadFailed: string;
+}
+
+async function svgToCanvas(
+  svgString: string,
+  messages: SvgToCanvasMessages,
+): Promise<HTMLCanvasElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const svgBlob = new Blob([svgString], {
@@ -440,7 +496,7 @@ async function svgToCanvas(svgString: string): Promise<HTMLCanvasElement> {
       const ctx = canvas.getContext("2d");
       if (!ctx) {
         URL.revokeObjectURL(url);
-        reject(new Error("无法获取 Canvas 2D 上下文"));
+        reject(new Error(messages.canvasContextUnavailable));
         return;
       }
 
@@ -458,7 +514,7 @@ async function svgToCanvas(svgString: string): Promise<HTMLCanvasElement> {
 
     img.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(new Error("SVG 图像加载失败"));
+      reject(new Error(messages.imageLoadFailed));
     };
 
     img.src = url;
@@ -490,6 +546,7 @@ function generateMermaidId(): string {
  */
 export const MermaidRenderer: React.FC<ArtifactRendererProps> = memo(
   ({ artifact, isStreaming = false }) => {
+    const { t } = useTranslation("errors");
     // 视图模式状态
     const [viewMode, setViewMode] = useState<ViewMode>("preview");
     // 渲染后的 SVG 内容
@@ -561,7 +618,10 @@ export const MermaidRenderer: React.FC<ArtifactRendererProps> = memo(
           setSvg(renderedSvg);
           setError(null);
         } catch (e) {
-          const errorMessage = e instanceof Error ? e.message : "图表渲染失败";
+          const errorMessage =
+            e instanceof Error
+              ? e.message
+              : t("errors.mermaidRenderer.error.renderFailed");
           console.error(
             "[MermaidRenderer] Error rendering diagram:",
             errorMessage,
@@ -579,7 +639,7 @@ export const MermaidRenderer: React.FC<ArtifactRendererProps> = memo(
       };
 
       renderDiagram();
-    }, [artifact.content, artifact.id, isStreaming, theme]);
+    }, [artifact.content, artifact.id, isStreaming, theme, t]);
 
     /**
      * 导出图表
@@ -598,7 +658,14 @@ export const MermaidRenderer: React.FC<ArtifactRendererProps> = memo(
             downloadBlob(blob, `${filename}.svg`);
           } else {
             // 导出 PNG
-            const canvas = await svgToCanvas(svg);
+            const canvas = await svgToCanvas(svg, {
+              canvasContextUnavailable: t(
+                "errors.mermaidRenderer.error.canvasContextUnavailable",
+              ),
+              imageLoadFailed: t(
+                "errors.mermaidRenderer.error.svgImageLoadFailed",
+              ),
+            });
             canvas.toBlob((blob) => {
               if (blob) {
                 downloadBlob(blob, `${filename}.png`);
@@ -606,7 +673,10 @@ export const MermaidRenderer: React.FC<ArtifactRendererProps> = memo(
             }, "image/png");
           }
         } catch (e) {
-          const errorMessage = e instanceof Error ? e.message : "导出失败";
+          const errorMessage =
+            e instanceof Error
+              ? e.message
+              : t("errors.mermaidRenderer.error.exportFailed");
           console.error(
             "[MermaidRenderer] Error exporting diagram:",
             errorMessage,
@@ -614,7 +684,7 @@ export const MermaidRenderer: React.FC<ArtifactRendererProps> = memo(
           );
         }
       },
-      [svg, artifact.meta.filename, artifact.title],
+      [svg, artifact.meta.filename, artifact.title, t],
     );
 
     /**
@@ -690,7 +760,9 @@ export const MermaidRenderer: React.FC<ArtifactRendererProps> = memo(
               /* 空内容状态 */
               <div className="flex flex-col items-center justify-center h-full p-8 text-center">
                 <Code2 className="w-12 h-12 text-gray-300 mb-4" />
-                <p className="text-sm text-gray-500">暂无图表内容</p>
+                <p className="text-sm text-gray-500">
+                  {t("errors.mermaidRenderer.empty")}
+                </p>
               </div>
             )
           ) : (

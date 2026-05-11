@@ -1012,7 +1012,7 @@ fn collect_latest_turn_summary(detail: &SessionDetail) -> Option<String> {
         .iter()
         .rev()
         .find_map(|item| match &item.payload {
-            AgentThreadItemPayload::TurnSummary { text } => {
+            AgentThreadItemPayload::TurnSummary { text, .. } => {
                 normalize_optional_text(Some(text.clone()))
             }
             _ => None,
@@ -1182,6 +1182,7 @@ mod tests {
                     updated_at: "2026-03-27T10:00:30Z".to_string(),
                     payload: AgentThreadItemPayload::TurnSummary {
                         text: "已完成后端导出链路，下一步补前端入口。".to_string(),
+                        metadata: None,
                     },
                 },
             ],
@@ -1241,7 +1242,9 @@ mod tests {
         AgentRuntimeThreadReadModel {
             thread_id: "thread-1".to_string(),
             status: "running".to_string(),
+            profile_status: "running".to_string(),
             active_turn_id: Some("turn-1".to_string()),
+            turns: Vec::new(),
             pending_requests: vec![crate::commands::aster_agent_cmd::AgentRuntimeRequestView {
                 id: "req-1".to_string(),
                 thread_id: "thread-1".to_string(),
@@ -1266,6 +1269,11 @@ mod tests {
                 image_count: 0,
                 position: 1,
             }],
+            tool_calls: Vec::new(),
+            model_routing: None,
+            evidence_summary: Default::default(),
+            telemetry_summary: Default::default(),
+            context_summary: None,
             interrupt_state: None,
             updated_at: Some("2026-03-27T10:01:00Z".to_string()),
             latest_compaction_boundary: None,

@@ -1,9 +1,9 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 const {
-  mockUseTranslation,
   mockOpenDialog,
   mockGetConfig,
   mockSetBrowserConnectorInstallRoot,
@@ -25,25 +25,7 @@ const {
   mockGetBrowserBackendsStatus,
   mockOpenBrowserConnectorGuideWindow,
 } = vi.hoisted(() => {
-  const mockTranslate = vi.fn((key: string, options?: unknown) => {
-    if (typeof options === "string") return options;
-
-    if (options && typeof options === "object") {
-      const values = options as Record<string, unknown>;
-      const template =
-        typeof values.defaultValue === "string" ? values.defaultValue : key;
-      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-        String(values[name] ?? ""),
-      );
-    }
-
-    return key;
-  });
-
   return {
-    mockUseTranslation: vi.fn((_namespace?: string) => ({
-      t: mockTranslate,
-    })),
     mockOpenDialog: vi.fn(),
     mockGetConfig: vi.fn(),
     mockSetBrowserConnectorInstallRoot: vi.fn(),
@@ -66,10 +48,6 @@ const {
     mockOpenBrowserConnectorGuideWindow: vi.fn(),
   };
 });
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
-}));
 
 vi.mock("@/lib/api/appConfig", () => ({
   getConfig: mockGetConfig,
@@ -208,14 +186,14 @@ function findTabButton(
 }
 
 async function openAdvancedTab(container: HTMLElement) {
-  const tabButton = findButton(container, "打开高级工具");
+  const tabButton = findButton(container, "Open Advanced Tools");
   await act(async () => {
     tabButton.click();
     await flushEffects();
   });
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -227,6 +205,9 @@ beforeEach(() => {
       writeText: mockWriteClipboardText,
     },
   });
+
+  await changeLimeLocale("en-US");
+
   mockWriteClipboardText.mockResolvedValue(undefined);
 
   mockOpenDialog.mockResolvedValue("/Users/test/connectors");
@@ -456,7 +437,7 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mounted.length > 0) {
     const target = mounted.pop();
     if (!target) break;
@@ -466,6 +447,7 @@ afterEach(() => {
     target.container.remove();
   }
   vi.clearAllMocks();
+  await changeLimeLocale("zh-CN");
 });
 
 describe("ChromeRelaySettings", () => {
@@ -473,19 +455,21 @@ describe("ChromeRelaySettings", () => {
     const container = renderComponent();
     await flushEffects();
 
-    expect(container.textContent).toContain("浏览器列表");
+    expect(container.textContent).toContain("Browser List");
     expect(container.textContent).toContain("Google Chrome");
-    expect(container.textContent).toContain("通过扩展连接");
-    expect(container.textContent).toContain("CDP 直连");
-    expect(container.textContent).not.toContain("连接方式");
-    expect(container.textContent).not.toContain("高级控制");
+    expect(container.textContent).toContain("Connect via Extension");
+    expect(container.textContent).toContain("CDP Direct");
+    expect(container.textContent).not.toContain("Connection Methods");
+    expect(container.textContent).not.toContain("Advanced Control");
+    expect(container.textContent).not.toContain("浏览器列表");
+    expect(container.textContent).not.toContain("settings.chromeRelay.main");
     expect(
       container.querySelector('[data-testid="browser-runtime-panel"]'),
     ).toBeNull();
 
     await openAdvancedTab(container);
 
-    const tabButton = findTabButton(container, "调试");
+    const tabButton = findTabButton(container, "Debug");
     await act(async () => {
       tabButton.click();
       await flushEffects();
@@ -525,7 +509,7 @@ describe("ChromeRelaySettings", () => {
     await flushEffects();
     await openAdvancedTab(container);
 
-    const button = findButton(container, "复制配置");
+    const button = findButton(container, "Copy Config");
     await act(async () => {
       button.click();
       await flushEffects();
@@ -539,7 +523,7 @@ describe("ChromeRelaySettings", () => {
       '"bridgeKey": "proxy_cast"',
     );
     expect(container.textContent).toContain(
-      "默认浏览器连接器 配置已复制到剪贴板",
+      "Default Browser Connector configuration copied to the clipboard",
     );
   });
 
@@ -548,7 +532,7 @@ describe("ChromeRelaySettings", () => {
     await flushEffects();
     await openAdvancedTab(container);
 
-    const button = findButton(container, "一键启动浏览器协助");
+    const button = findButton(container, "Start Browser Assist");
     await act(async () => {
       button.click();
       await flushEffects();
@@ -561,7 +545,7 @@ describe("ChromeRelaySettings", () => {
       open_window: true,
       stream_mode: "both",
     });
-    expect(container.textContent).toContain("浏览器协助已启动");
+    expect(container.textContent).toContain("Browser assist started");
   });
 
   it("点击按钮时应打开独立浏览器调试窗口", async () => {
@@ -569,25 +553,27 @@ describe("ChromeRelaySettings", () => {
     await flushEffects();
     await openAdvancedTab(container);
 
-    const button = findButton(container, "打开独立调试窗口");
+    const button = findButton(container, "Open Standalone Debugger");
     await act(async () => {
       button.click();
       await flushEffects();
     });
 
     expect(mockOpenBrowserRuntimeDebuggerWindow).toHaveBeenCalledTimes(1);
-    expect(container.textContent).toContain("已打开独立浏览器调试窗口");
+    expect(container.textContent).toContain(
+      "Standalone browser debug window opened",
+    );
   });
 
   it("核心页应提供扩展与 CDP 独立引导入口", async () => {
     const container = renderComponent();
     await flushEffects();
 
-    expect(container.textContent).not.toContain("连接方式");
-    expect(container.textContent).toContain("连接引导");
-    expect(container.textContent).toContain("配置引导");
+    expect(container.textContent).not.toContain("Connection Methods");
+    expect(container.textContent).toContain("Connection Guide");
+    expect(container.textContent).toContain("Configuration Guide");
 
-    const extensionGuideButton = findButton(container, "连接引导");
+    const extensionGuideButton = findButton(container, "Connection Guide");
     await act(async () => {
       extensionGuideButton.click();
       await flushEffects();
@@ -597,7 +583,7 @@ describe("ChromeRelaySettings", () => {
       mode: "extension",
     });
 
-    const cdpGuideButton = findButton(container, "配置引导");
+    const cdpGuideButton = findButton(container, "Configuration Guide");
     await act(async () => {
       cdpGuideButton.click();
       await flushEffects();
@@ -614,11 +600,11 @@ describe("ChromeRelaySettings", () => {
 
     await openAdvancedTab(container);
 
-    expect(container.textContent).toContain("连接方式");
-    expect(container.textContent).toContain("浏览器扩展");
-    expect(container.textContent).toContain("CDP 直连");
+    expect(container.textContent).toContain("Connection Methods");
+    expect(container.textContent).toContain("Browser Extension");
+    expect(container.textContent).toContain("CDP Direct");
 
-    const extensionButton = findButton(container, "打开扩展页");
+    const extensionButton = findButton(container, "Open Extensions Page");
     await act(async () => {
       extensionButton.click();
       await flushEffects();
@@ -626,7 +612,10 @@ describe("ChromeRelaySettings", () => {
 
     expect(mockOpenBrowserExtensionsPage).toHaveBeenCalledTimes(1);
 
-    const remoteDebuggingButton = findButton(container, "打开远程调试页");
+    const remoteDebuggingButton = findButton(
+      container,
+      "Open Remote Debugging Page",
+    );
     await act(async () => {
       remoteDebuggingButton.click();
       await flushEffects();
@@ -676,7 +665,7 @@ describe("ChromeRelaySettings", () => {
 
     await openAdvancedTab(container);
 
-    const button = findButton(container, "断开已连接扩展");
+    const button = findButton(container, "Disconnect Connected Extension");
     await act(async () => {
       button.click();
       await flushEffects();
@@ -684,7 +673,7 @@ describe("ChromeRelaySettings", () => {
 
     expect(mockDisconnectBrowserConnectorSession).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain(
-      "已断开 1 个扩展观察连接和 1 个控制连接",
+      "Disconnected 1 extension observer connection(s) and 1 control connection(s)",
     );
   });
 
@@ -693,23 +682,27 @@ describe("ChromeRelaySettings", () => {
     await flushEffects();
     await openAdvancedTab(container);
 
-    const tabButton = findTabButton(container, "桥接");
+    const tabButton = findTabButton(container, "Bridge");
     await act(async () => {
       tabButton.click();
       await flushEffects();
     });
 
-    expect(container.textContent).toContain("Chrome 扩展桥接");
-    expect(container.textContent).toContain("桥接服务运行中");
-    expect(container.textContent).toContain("待接入 observer");
-    expect(container.textContent).toContain("扩展接入信息");
+    expect(container.textContent).toContain("Chrome Extension Bridge");
+    expect(container.textContent).toContain("Bridge service running");
+    expect(container.textContent).toContain("Observer pending");
+    expect(container.textContent).toContain("Extension Access Info");
     expect(container.textContent).toContain("Observer WS:");
     expect(container.textContent).toContain("Bridge Key:");
-    expect(container.textContent).toContain("复制 Google 配置");
-    expect(container.textContent).toContain("尚未收到最近页面信息");
-    expect(container.textContent).toContain("未检测到扩展 observer 连接。");
-    expect(container.textContent).toContain("测试 Google 扩展");
-    expect(container.textContent).toContain("刷新扩展状态");
+    expect(container.textContent).toContain("Copy Google Config");
+    expect(container.textContent).toContain(
+      "No recent page information received yet",
+    );
+    expect(container.textContent).toContain(
+      "No extension observer connection detected.",
+    );
+    expect(container.textContent).toContain("Test Google Extension");
+    expect(container.textContent).toContain("Refresh Extension Status");
   });
 
   it("默认不再展示扩展桥接诊断详情与能力清单", async () => {
@@ -793,22 +786,28 @@ describe("ChromeRelaySettings", () => {
     await flushEffects();
     await openAdvancedTab(container);
 
-    const tabButton = findTabButton(container, "后端");
+    const tabButton = findTabButton(container, "Backend");
     await act(async () => {
       tabButton.click();
       await flushEffects();
     });
 
-    expect(container.textContent).toContain("浏览器后端策略");
-    expect(container.textContent).toContain("默认测试目标");
-    expect(container.textContent).toContain("自动回退");
-    expect(container.textContent).toContain("优先级 1");
-    expect(container.textContent).toContain("当前可用性");
-    expect(container.textContent).toContain("能力: 等待运行时返回");
-    expect(container.textContent).toContain("Aster native-host: 未配置");
-    expect(container.textContent).toContain("平台支持: 是");
+    expect(container.textContent).toContain("Browser Backend Policy");
+    expect(container.textContent).toContain("Default Test Target");
+    expect(container.textContent).toContain("Auto Fallback");
+    expect(container.textContent).toContain("Priority 1");
+    expect(container.textContent).toContain("Current Availability");
+    expect(container.textContent).toContain(
+      "Capabilities: Waiting for runtime response",
+    );
+    expect(container.textContent).toContain(
+      "Aster native-host: Not configured",
+    );
+    expect(container.textContent).toContain("Platform Support: Yes");
     expect(
-      container.querySelector('button[aria-label="自动回退到下一后端"]'),
+      container.querySelector(
+        'button[aria-label="Automatically fall back to the next backend"]',
+      ),
     ).not.toBeNull();
   });
 
@@ -817,12 +816,12 @@ describe("ChromeRelaySettings", () => {
     await flushEffects();
     await openAdvancedTab(container);
 
-    expect(container.textContent).toContain("浏览器动作配置");
-    expect(container.textContent).toContain("读取权限");
-    expect(container.textContent).toContain("写入权限");
+    expect(container.textContent).toContain("Browser Action Configuration");
+    expect(container.textContent).toContain("Read Permissions");
+    expect(container.textContent).toContain("Write Permissions");
 
     const target = container.querySelector(
-      'button[aria-label="切换页面内查找"]',
+      'button[aria-label="Toggle 页面内查找"]',
     );
     expect(target).not.toBeNull();
 
@@ -835,7 +834,7 @@ describe("ChromeRelaySettings", () => {
       key: "find",
       enabled: false,
     });
-    expect(container.textContent).toContain("页面内查找 已关闭");
+    expect(container.textContent).toContain("页面内查找 disabled");
   });
 
   it("应渲染系统连接器卡片并允许切换系统能力", async () => {
@@ -844,15 +843,15 @@ describe("ChromeRelaySettings", () => {
     await openAdvancedTab(container);
 
     expect(container.textContent).toContain(
-      "按需开启系统能力，把授权和系统访问集中放在这里。",
+      "Enable system capabilities as needed, with authorization and OS access managed here.",
     );
-    expect(container.textContent).toContain("0 / 1 已启用");
-    expect(container.textContent).toContain("等待授权");
+    expect(container.textContent).toContain("0 / 1 enabled");
+    expect(container.textContent).toContain("Awaiting authorization");
     expect(container.textContent).toContain(
-      "能力：list_events / create_event / update_event",
+      "Capabilities: list_events / create_event / update_event",
     );
 
-    const target = container.querySelector('button[aria-label="切换日历"]');
+    const target = container.querySelector('button[aria-label="Toggle 日历"]');
     expect(target).not.toBeNull();
 
     await act(async () => {
@@ -864,7 +863,7 @@ describe("ChromeRelaySettings", () => {
       id: "calendar",
       enabled: true,
     });
-    expect(container.textContent).toContain("日历 已授权并启用");
+    expect(container.textContent).toContain("日历 authorized and enabled");
   });
 
   it("系统连接器为空时不应渲染 macOS 连接器卡片", async () => {
@@ -879,7 +878,7 @@ describe("ChromeRelaySettings", () => {
     await flushEffects();
     await openAdvancedTab(container);
 
-    expect(container.textContent).not.toContain("macOS 连接器");
-    expect(container.textContent).not.toContain("0 / 0 已启用");
+    expect(container.textContent).not.toContain("macOS Connector");
+    expect(container.textContent).not.toContain("0 / 0 enabled");
   });
 });

@@ -135,7 +135,7 @@ import {
 } from "../utils/workflowStepPresentation";
 import { buildThreadReliabilityView } from "../utils/threadReliabilityView";
 import { resolveTeamWorkspaceStableProcessingLabel } from "../utils/teamWorkspaceCopy";
-import { isInternalRoutingRuntimeStatus } from "../utils/turnSummaryPresentation";
+import { isRuntimeStatusDiagnosticsOnly } from "../utils/turnSummaryPresentation";
 import type { TeamRoleDefinition } from "../utils/teamDefinitions";
 import type { TeamMemorySnapshot } from "@/lib/teamMemorySync";
 import { AgentThreadReliabilityPanel } from "./AgentThreadReliabilityPanel";
@@ -1162,7 +1162,7 @@ function formatRuntimeProgressLabel(
 function buildRuntimeTaskPresentation(
   runtimeStatus: HarnessSessionState["runtimeStatus"],
 ): RuntimeTaskPresentation | null {
-  if (!runtimeStatus || isInternalRoutingRuntimeStatus(runtimeStatus)) {
+  if (!runtimeStatus || isRuntimeStatusDiagnosticsOnly(runtimeStatus)) {
     return null;
   }
 

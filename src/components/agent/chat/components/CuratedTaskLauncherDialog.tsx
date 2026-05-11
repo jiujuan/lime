@@ -383,7 +383,10 @@ export function CuratedTaskLauncherDialog({
       return null;
     }
 
-    return findCuratedTaskTemplateById(suggestedTaskId, curatedTaskTemplateCopy);
+    return findCuratedTaskTemplateById(
+      suggestedTaskId,
+      curatedTaskTemplateCopy,
+    );
   }, [curatedTaskTemplateCopy, reviewFeedbackProjection]);
 
   const activeReviewBaselineSnapshot = useMemo(() => {

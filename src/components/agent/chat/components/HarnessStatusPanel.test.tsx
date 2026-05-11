@@ -9,6 +9,7 @@ import {
   areLightweightRenderersRegistered,
   registerLightweightRenderers,
 } from "@/components/artifact/renderers";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { HarnessStatusPanel } from "./HarnessStatusPanel";
 import { RuntimeReviewDecisionDialog } from "./RuntimeReviewDecisionDialog";
 import type { HarnessSessionState } from "../utils/harnessState";
@@ -639,12 +640,13 @@ function createAlignedRuntimeToolInventory(): AgentRuntimeToolInventory {
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
 
   if (!areLightweightRenderersRegistered()) {
     registerLightweightRenderers();

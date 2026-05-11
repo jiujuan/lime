@@ -204,17 +204,19 @@ function resolveFrameCoordinate(params: {
   };
 }
 
-function resolveLiveViewPlaceholder(params: {
-  sessionCount: number;
-  hasAttachIntent: boolean;
-  openingSession: boolean;
-  refreshingState: boolean;
-  sessionState: {
-    connected: boolean;
-    lifecycle_state: string;
-  } | null;
-},
-copy: LiveViewPlaceholderCopy) {
+function resolveLiveViewPlaceholder(
+  params: {
+    sessionCount: number;
+    hasAttachIntent: boolean;
+    openingSession: boolean;
+    refreshingState: boolean;
+    sessionState: {
+      connected: boolean;
+      lifecycle_state: string;
+    } | null;
+  },
+  copy: LiveViewPlaceholderCopy,
+) {
   const {
     sessionCount,
     hasAttachIntent,
@@ -283,7 +285,10 @@ function describeAuditRecord(
     return {
       title: record.success ? copy.launchSuccess : copy.launchFailure,
       subject:
-        record.url || record.session_id || record.target_id || copy.targetMissing,
+        record.url ||
+        record.session_id ||
+        record.target_id ||
+        copy.targetMissing,
       meta: [
         record.environment_preset_name,
         record.reused === undefined
@@ -623,13 +628,16 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
     initialProfileKey ||
     "";
   const auditSessionId = runtime.sessionState?.session_id || "";
-  const liveViewPlaceholder = resolveLiveViewPlaceholder({
-    sessionCount: sessions.length,
-    hasAttachIntent,
-    openingSession: runtime.openingSession,
-    refreshingState: runtime.refreshingState,
-    sessionState: runtime.sessionState,
-  }, liveViewPlaceholderCopy);
+  const liveViewPlaceholder = resolveLiveViewPlaceholder(
+    {
+      sessionCount: sessions.length,
+      hasAttachIntent,
+      openingSession: runtime.openingSession,
+      refreshingState: runtime.refreshingState,
+      sessionState: runtime.sessionState,
+    },
+    liveViewPlaceholderCopy,
+  );
   const effectiveLiveViewPlaceholder = showAttachPresentation
     ? attachPresentation.placeholder
     : liveViewPlaceholder;
@@ -812,7 +820,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                       disabled={switchingAttachTabId === tab.id}
                     >
                       {switchingAttachTabId === tab.id
-                        ? t("workspace.browserRuntimeDebug.attachTabs.switching")
+                        ? t(
+                            "workspace.browserRuntimeDebug.attachTabs.switching",
+                          )
                         : t(
                             "workspace.browserRuntimeDebug.attachTabs.switchTo",
                           )}
@@ -1584,7 +1594,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                             </div>
                             <div className="text-[11px] text-muted-foreground">
                               {t("workspace.browserRuntimeDebug.events.count", {
-                                value: formatCount(runtime.consoleEvents.length),
+                                value: formatCount(
+                                  runtime.consoleEvents.length,
+                                ),
                               })}
                             </div>
                           </div>
@@ -1626,7 +1638,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                             </div>
                             <div className="text-[11px] text-muted-foreground">
                               {t("workspace.browserRuntimeDebug.events.count", {
-                                value: formatCount(runtime.networkEvents.length),
+                                value: formatCount(
+                                  runtime.networkEvents.length,
+                                ),
                               })}
                             </div>
                           </div>
@@ -1774,9 +1788,7 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                     ? t(
                         "workspace.browserRuntimeDebug.liveView.directControlHint",
                       )
-                    : t(
-                        "workspace.browserRuntimeDebug.liveView.takeOverHint",
-                      )}
+                    : t("workspace.browserRuntimeDebug.liveView.takeOverHint")}
               </div>
             </div>
           </div>
@@ -1844,7 +1856,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                       <Play className="h-3.5 w-3.5" />
                       {runtime.controlBusy
                         ? t("workspace.browserRuntimeDebug.actions.processing")
-                        : t("workspace.browserRuntimeDebug.actions.doneContinue")}
+                        : t(
+                            "workspace.browserRuntimeDebug.actions.doneContinue",
+                          )}
                     </button>
                     <button
                       type="button"
@@ -1880,7 +1894,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                       disabled={runtime.controlBusy}
                     >
                       <Play className="h-3.5 w-3.5" />
-                      {t("workspace.browserRuntimeDebug.actions.continueDirect")}
+                      {t(
+                        "workspace.browserRuntimeDebug.actions.continueDirect",
+                      )}
                     </button>
                   </>
                 ) : (
@@ -1909,7 +1925,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                 >
                   {runtime.streaming
                     ? t("workspace.browserRuntimeDebug.actions.stopLiveView")
-                    : t("workspace.browserRuntimeDebug.actions.restoreLiveView")}
+                    : t(
+                        "workspace.browserRuntimeDebug.actions.restoreLiveView",
+                      )}
                 </button>
 
                 <button
@@ -2089,7 +2107,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                     disabled={!currentUrl}
                   >
                     <Globe className="h-3.5 w-3.5" />
-                    {t("workspace.browserRuntimeDebug.actions.continueInChrome")}
+                    {t(
+                      "workspace.browserRuntimeDebug.actions.continueInChrome",
+                    )}
                   </button>
                 </div>
 

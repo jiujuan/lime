@@ -289,6 +289,32 @@ pub(super) async fn build_turn_runtime_statuses(
     ))
 }
 
+pub(super) fn should_project_runtime_status_to_timeline(
+    request_metadata: Option<&serde_json::Value>,
+) -> bool {
+    let Some(fast_response_routing) = extract_harness_nested_object(
+        request_metadata,
+        &["fast_response_routing", "fastResponseRouting"],
+    ) else {
+        return true;
+    };
+
+    let presentation = fast_response_routing
+        .get("runtime_status_presentation")
+        .or_else(|| fast_response_routing.get("runtimeStatusPresentation"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim);
+
+    !matches!(presentation, Some("transient"))
+}
+
+fn emit_transient_runtime_status(app: &AppHandle, event_name: &str, status: AgentRuntimeStatus) {
+    let runtime_event = RuntimeAgentEvent::RuntimeStatus { status };
+    if let Err(error) = app.emit(event_name, &runtime_event) {
+        tracing::warn!("[AsterAgent] 发送 runtime_status 失败: {}", error);
+    }
+}
+
 fn emit_projected_runtime_item_event(
     app: &AppHandle,
     event_name: &str,
@@ -320,40 +346,40 @@ pub(super) async fn emit_runtime_status_with_projection(
     workspace_root: &str,
     session_config: &aster::agents::SessionConfig,
     status: AgentRuntimeStatus,
+    project_to_timeline: bool,
 ) {
-    match agent
-        .upsert_runtime_status_item(
-            session_config,
-            status.phase.clone(),
-            status.title.clone(),
-            status.detail.clone(),
-            status.checkpoints.clone(),
-        )
-        .await
-    {
-        Ok(agent_event) => {
-            for event in project_runtime_event(agent_event) {
-                emit_projected_runtime_item_event(
-                    app,
-                    event_name,
-                    timeline_recorder,
-                    workspace_root,
-                    event,
+    if project_to_timeline {
+        match agent
+            .upsert_runtime_status_item(
+                session_config,
+                status.phase.clone(),
+                status.title.clone(),
+                status.detail.clone(),
+                status.checkpoints.clone(),
+            )
+            .await
+        {
+            Ok(agent_event) => {
+                for event in project_runtime_event(agent_event) {
+                    emit_projected_runtime_item_event(
+                        app,
+                        event_name,
+                        timeline_recorder,
+                        workspace_root,
+                        event,
+                    );
+                }
+            }
+            Err(error) => {
+                tracing::warn!(
+                    "[AsterAgent] 写入 runtime_status item 失败，降级仅发送 transient 事件: {}",
+                    error
                 );
             }
         }
-        Err(error) => {
-            tracing::warn!(
-                "[AsterAgent] 写入 runtime_status item 失败，降级仅发送 transient 事件: {}",
-                error
-            );
-        }
     }
 
-    let runtime_event = RuntimeAgentEvent::RuntimeStatus { status };
-    if let Err(error) = app.emit(event_name, &runtime_event) {
-        tracing::warn!("[AsterAgent] 发送 runtime_status 失败: {}", error);
-    }
+    emit_transient_runtime_status(app, event_name, status);
 }
 
 pub(super) async fn complete_runtime_status_projection(

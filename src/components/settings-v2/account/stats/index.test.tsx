@@ -1,49 +1,21 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
-const {
-  mockGetUsageStats,
-  mockGetModelUsageRanking,
-  mockGetDailyUsageTrends,
-  mockUseTranslation,
-} = vi.hoisted(() => {
-  const t = (key: string, options?: unknown) => {
-    if (typeof options === "string") {
-      return options;
-    }
-
-    if (options && typeof options === "object") {
-      const values = options as Record<string, unknown>;
-      const template =
-        typeof values.defaultValue === "string" ? values.defaultValue : key;
-      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-        String(values[name] ?? ""),
-      );
-    }
-
-    return key;
-  };
-
-  return {
-    mockGetUsageStats: vi.fn(),
-    mockGetModelUsageRanking: vi.fn(),
-    mockGetDailyUsageTrends: vi.fn(),
-    mockUseTranslation: vi.fn(() => ({
-      i18n: { language: "zh-CN" },
-      t,
-    })),
-  };
-});
+const { mockGetUsageStats, mockGetModelUsageRanking, mockGetDailyUsageTrends } =
+  vi.hoisted(() => {
+    return {
+      mockGetUsageStats: vi.fn(),
+      mockGetModelUsageRanking: vi.fn(),
+      mockGetDailyUsageTrends: vi.fn(),
+    };
+  });
 
 vi.mock("@/lib/api/usageStats", () => ({
   getUsageStats: mockGetUsageStats,
   getModelUsageRanking: mockGetModelUsageRanking,
   getDailyUsageTrends: mockGetDailyUsageTrends,
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
 }));
 
 import { StatsSettings } from ".";
@@ -54,30 +26,6 @@ interface Mounted {
 }
 
 const mounted: Mounted[] = [];
-
-function createStatsTranslator(overrides: Record<string, string>) {
-  return (key: string, options?: unknown) => {
-    const resolveTemplate = () => {
-      if (overrides[key]) {
-        return overrides[key];
-      }
-      if (typeof options === "string") {
-        return options;
-      }
-      if (options && typeof options === "object") {
-        const values = options as Record<string, unknown>;
-        if (typeof values.defaultValue === "string") {
-          return values.defaultValue;
-        }
-      }
-      return key;
-    };
-
-    return resolveTemplate().replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-      String((options as Record<string, unknown> | undefined)?.[name] ?? ""),
-    );
-  };
-}
 
 function renderComponent(): HTMLDivElement {
   const container = document.createElement("div");
@@ -135,7 +83,7 @@ async function clickButton(button: HTMLButtonElement) {
   });
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -143,11 +91,7 @@ beforeEach(() => {
   ).IS_REACT_ACT_ENVIRONMENT = true;
 
   vi.clearAllMocks();
-  const defaultT = createStatsTranslator({});
-  mockUseTranslation.mockImplementation(() => ({
-    i18n: { language: "zh-CN" },
-    t: defaultT,
-  }));
+  await changeLimeLocale("zh-CN");
 
   mockGetUsageStats.mockResolvedValue({
     total_conversations: 240,
@@ -196,7 +140,7 @@ beforeEach(() => {
   ]);
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mounted.length > 0) {
     const target = mounted.pop();
     if (!target) {
@@ -210,6 +154,7 @@ afterEach(() => {
   }
 
   vi.clearAllMocks();
+  await changeLimeLocale("zh-CN");
 });
 
 describe("StatsSettings", () => {
@@ -227,24 +172,19 @@ describe("StatsSettings", () => {
     expect(text).toContain("主力模型：gpt-4.1");
     expect(text).toContain("每日使用趋势");
     expect(text).toContain("活跃度日历");
+    expect(text).toContain("覆盖范围：3/1 至 3/3");
+    expect(text).not.toContain("3/1 - 3/3");
     expect(text).toContain("gpt-4.1");
-    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
   });
 
   it("应使用 settings namespace 生成热力图日期范围", async () => {
-    const englishT = createStatsTranslator({
-      "settings.stats.heatmap.rangeValue": "{{start}} to {{end}}",
-    });
-    mockUseTranslation.mockImplementation(() => ({
-      i18n: { language: "en-US" },
-      t: englishT,
-    }));
+    await changeLimeLocale("en-US");
 
     const container = renderComponent();
     await waitForLoad();
 
-    expect(container.textContent ?? "").toContain("3/1 to 3/3");
-    expect(container.textContent ?? "").not.toContain("3/1 - 3/3");
+    expect(container.textContent ?? "").toContain("3/1 - 3/3");
+    expect(container.textContent ?? "").not.toContain("3/1 至 3/3");
     expect(container.textContent ?? "").toContain("18K Token");
     expect(container.textContent ?? "").not.toContain("18.0K Token");
   });

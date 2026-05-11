@@ -1,6 +1,7 @@
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SkillScaffoldDialog } from "./SkillScaffoldDialog";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import {
   cleanupMountedRoots,
   clickButtonByText,
@@ -12,32 +13,6 @@ import {
   setupReactActEnvironment,
   type MountedRoot,
 } from "@/components/workspace/hooks/testUtils";
-
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: (
-      _key: string,
-      fallbackOrOptions?: string | ({ defaultValue?: string } & Record<
-        string,
-        unknown
-      >),
-      options?: Record<string, unknown>,
-    ) => {
-      const values: Record<string, unknown> & { defaultValue?: string } =
-        typeof fallbackOrOptions === "object" && fallbackOrOptions !== null
-          ? fallbackOrOptions
-          : (options ?? {});
-      const template =
-        typeof fallbackOrOptions === "string"
-          ? fallbackOrOptions
-          : (values.defaultValue ?? _key);
-
-      return template.replace(/\{\{(\w+)\}\}/g, (_match, name: string) =>
-        String(values[name] ?? ""),
-      );
-    },
-  }),
-}));
 
 const mountedRoots: MountedRoot[] = [];
 
@@ -66,25 +41,29 @@ function renderDialog(overrides: Partial<SkillScaffoldDialogProps> = {}) {
   );
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   setupReactActEnvironment();
+  await changeLimeLocale("zh-CN");
 });
 
-afterEach(() => {
+afterEach(async () => {
   cleanupMountedRoots(mountedRoots);
+  await changeLimeLocale("zh-CN");
 });
 
 describe("SkillScaffoldDialog", () => {
-  it("展示标准脚手架表单并允许切换创建位置", () => {
+  it("应通过 agent namespace 渲染英文脚手架表单并允许切换创建位置", async () => {
+    await changeLimeLocale("en-US");
     renderDialog();
 
-    expect(document.body.textContent).toContain("新建 Skill");
+    expect(document.body.textContent).toContain("New Skill");
     expect(document.body.textContent).toContain(
-      "当前工作区的 `./.agents/skills`",
+      "current workspace `./.agents/skills` directory",
     );
+    expect(document.body.textContent).not.toContain("新建 Skill");
 
-    clickButtonByText(document.body, "用户级", { exact: true });
-    expect(document.body.textContent).toContain("应用级 Skills 目录");
+    clickButtonByText(document.body, "User", { exact: true });
+    expect(document.body.textContent).toContain("app-level Skills directory");
   });
 
   it("提交时应回传标准脚手架请求", async () => {

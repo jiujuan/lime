@@ -22,91 +22,43 @@ export function ClipboardPermissionGuideCard({
   const guideText = useMemo(() => {
     if (guide.platform === "macos") {
       return {
-        title: t(
-          "settings.system.clipboardPermission.macos.title",
-          guide.title,
-        ),
+        title: t("settings.system.clipboardPermission.macos.title"),
         steps: [
-          t(
-            "settings.system.clipboardPermission.macos.step1",
-            guide.steps[0] ?? "",
-          ),
-          t(
-            "settings.system.clipboardPermission.macos.step2",
-            guide.steps[1] ?? "",
-          ),
-          t(
-            "settings.system.clipboardPermission.macos.step3",
-            guide.steps[2] ?? "",
-          ),
+          t("settings.system.clipboardPermission.macos.step1"),
+          t("settings.system.clipboardPermission.macos.step2"),
+          t("settings.system.clipboardPermission.macos.step3"),
         ],
       };
     }
 
     if (guide.platform === "windows") {
       return {
-        title: t(
-          "settings.system.clipboardPermission.windows.title",
-          guide.title,
-        ),
+        title: t("settings.system.clipboardPermission.windows.title"),
         steps: [
-          t(
-            "settings.system.clipboardPermission.windows.step1",
-            guide.steps[0] ?? "",
-          ),
-          t(
-            "settings.system.clipboardPermission.windows.step2",
-            guide.steps[1] ?? "",
-          ),
-          t(
-            "settings.system.clipboardPermission.windows.step3",
-            guide.steps[2] ?? "",
-          ),
+          t("settings.system.clipboardPermission.windows.step1"),
+          t("settings.system.clipboardPermission.windows.step2"),
+          t("settings.system.clipboardPermission.windows.step3"),
         ],
       };
     }
 
     if (guide.platform === "linux") {
       return {
-        title: t(
-          "settings.system.clipboardPermission.linux.title",
-          guide.title,
-        ),
+        title: t("settings.system.clipboardPermission.linux.title"),
         steps: [
-          t(
-            "settings.system.clipboardPermission.linux.step1",
-            guide.steps[0] ?? "",
-          ),
-          t(
-            "settings.system.clipboardPermission.linux.step2",
-            guide.steps[1] ?? "",
-          ),
-          t(
-            "settings.system.clipboardPermission.linux.step3",
-            guide.steps[2] ?? "",
-          ),
+          t("settings.system.clipboardPermission.linux.step1"),
+          t("settings.system.clipboardPermission.linux.step2"),
+          t("settings.system.clipboardPermission.linux.step3"),
         ],
       };
     }
 
     return {
-      title: t(
-        "settings.system.clipboardPermission.generic.title",
-        guide.title,
-      ),
+      title: t("settings.system.clipboardPermission.generic.title"),
       steps: [
-        t(
-          "settings.system.clipboardPermission.generic.step1",
-          guide.steps[0] ?? "",
-        ),
-        t(
-          "settings.system.clipboardPermission.generic.step2",
-          guide.steps[1] ?? "",
-        ),
-        t(
-          "settings.system.clipboardPermission.generic.step3",
-          guide.steps[2] ?? "",
-        ),
+        t("settings.system.clipboardPermission.generic.step1"),
+        t("settings.system.clipboardPermission.generic.step2"),
+        t("settings.system.clipboardPermission.generic.step3"),
       ],
     };
   }, [guide, t]);
@@ -125,7 +77,6 @@ export function ClipboardPermissionGuideCard({
             ? error.message
             : t(
                 "settings.system.clipboardPermission.message.openSettingsFailed",
-                "打开系统设置失败",
               ),
         );
       }
@@ -156,10 +107,7 @@ export function ClipboardPermissionGuideCard({
               onClick={() => void handleOpenSettings()}
               className="inline-flex items-center gap-1 rounded-md border border-amber-300 px-2.5 py-1 text-xs text-amber-900 transition-colors hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900/40"
             >
-              {t(
-                "settings.system.clipboardPermission.action.openSettings",
-                "打开系统设置",
-              )}
+              {t("settings.system.clipboardPermission.action.openSettings")}
               <ExternalLink className="h-3.5 w-3.5" />
             </button>
           )}
@@ -169,7 +117,6 @@ export function ClipboardPermissionGuideCard({
                 "settings.system.clipboardPermission.message.openSettingsFailedWithMessage",
                 {
                   message: openError,
-                  defaultValue: "打开系统设置失败：{{message}}",
                 },
               )}
             </p>

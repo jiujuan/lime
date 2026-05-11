@@ -525,6 +525,8 @@ pub struct SessionExecutionRuntime {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub latest_turn_status: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub context_summary: Option<crate::protocol::AgentTurnContextSummary>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub recent_access_mode: Option<SessionExecutionRuntimeAccessMode>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub recent_preferences: Option<SessionExecutionRuntimePreferences>,
@@ -1259,6 +1261,7 @@ pub fn build_session_execution_runtime(
         mode: None,
         latest_turn_id: None,
         latest_turn_status: None,
+        context_summary: None,
         recent_access_mode: None,
         recent_preferences: None,
         recent_team_selection: None,
@@ -1289,6 +1292,9 @@ pub fn build_session_execution_runtime(
         if let Some(latest_turn) = resolve_latest_turn(snapshot) {
             runtime.latest_turn_id = Some(latest_turn.id.clone());
             runtime.latest_turn_status = Some(map_turn_status(latest_turn.status));
+            runtime.context_summary = crate::protocol_projection::project_turn_context_summary(
+                latest_turn.context_override.as_ref(),
+            );
             runtime.output_schema_runtime = latest_turn.output_schema_runtime.clone();
             runtime.model_name = latest_turn
                 .output_schema_runtime
@@ -1386,6 +1392,7 @@ pub fn build_session_execution_runtime(
         && runtime.recent_gate_key.is_none()
         && runtime.recent_run_title.is_none()
         && runtime.recent_content_id.is_none()
+        && runtime.context_summary.is_none()
         && runtime.task_profile.is_none()
         && runtime.routing_decision.is_none()
         && runtime.limit_state.is_none()
@@ -1575,6 +1582,94 @@ mod tests {
             Some("gpt-5.2")
         );
         assert!(runtime.recent_preferences.is_none());
+    }
+
+    #[test]
+    fn projects_context_summary_from_latest_turn_metadata() {
+        let now = Utc::now();
+        let snapshot = SessionRuntimeSnapshot {
+            session_id: "session-context".to_string(),
+            threads: vec![ThreadRuntimeSnapshot {
+                thread: ThreadRuntime::new(
+                    "thread-context",
+                    "session-context",
+                    PathBuf::from("/tmp/workspace"),
+                ),
+                turns: vec![TurnRuntime {
+                    id: "turn-context".to_string(),
+                    session_id: "session-context".to_string(),
+                    thread_id: "thread-context".to_string(),
+                    status: TurnStatus::Running,
+                    input_text: Some("使用项目资料".to_string()),
+                    error_message: None,
+                    context_override: Some(TurnContextOverride {
+                        metadata: [(
+                            "agentui_context".to_string(),
+                            json!({
+                                "memory_budget": {
+                                    "used_tokens": 640,
+                                    "max_tokens": 1200,
+                                    "status": "ready",
+                                    "source": "knowledge_context_resolver"
+                                },
+                                "retrieval_refs": [
+                                    {
+                                        "source_id": "knowledge_pack:brand:compiled/splits/brief.md",
+                                        "kind": "knowledge_pack",
+                                        "title": "brand:brief",
+                                        "path": "compiled/splits/brief.md",
+                                        "scope": "workspace",
+                                        "status": "ready",
+                                        "source": "knowledge_context_resolver"
+                                    }
+                                ],
+                                "missing_context": [
+                                    {
+                                        "id": "knowledge_warning:0",
+                                        "kind": "knowledge_warning",
+                                        "label": "sources/missing.md",
+                                        "status": "unknown",
+                                        "reason": "缺少来源",
+                                        "source": "knowledge_context_resolver"
+                                    }
+                                ]
+                            }),
+                        )]
+                        .into_iter()
+                        .collect(),
+                        ..TurnContextOverride::default()
+                    }),
+                    output_schema_runtime: None,
+                    created_at: now,
+                    started_at: Some(now),
+                    completed_at: None,
+                    updated_at: now,
+                }],
+                items: Vec::new(),
+            }],
+        };
+
+        let runtime = build_session_execution_runtime(
+            "session-context",
+            None,
+            Some("react".to_string()),
+            Some(&snapshot),
+            None,
+        )
+        .expect("runtime");
+        let summary = runtime.context_summary.expect("context summary");
+
+        assert_eq!(
+            summary.memory_budget.and_then(|budget| budget.used_tokens),
+            Some(640)
+        );
+        assert_eq!(summary.retrieval_refs.len(), 1);
+        assert_eq!(
+            summary.retrieval_refs[0].source_id,
+            "knowledge_pack:brand:compiled/splits/brief.md"
+        );
+        assert_eq!(summary.missing_context.len(), 1);
+        assert_eq!(summary.missing_context[0].label, "sources/missing.md");
     }
 
     #[test]
@@ -2426,6 +2521,7 @@ mod tests {
             mode: None,
             latest_turn_id: Some("turn-fallback".to_string()),
             latest_turn_status: Some("completed".to_string()),
+            context_summary: None,
             recent_access_mode: None,
             recent_preferences: None,
             recent_team_selection: None,

@@ -422,76 +422,76 @@ function renderSettingsContent(
           <UserCenterSessionSettings />
           {!hasManagedAccountProfile ? <ProfileSettings /> : null}
         </>,
-        t("settings.layout.loading.profile", "正在加载账号资料..."),
+        t("settings.layout.loading.profile"),
       );
 
     case SettingsTabs.Stats:
       return withSettingsContentFallback(
         <StatsSettings />,
-        t("settings.layout.loading.stats", "正在加载数据统计..."),
+        t("settings.layout.loading.stats"),
       );
 
     // 通用组
     case SettingsTabs.Appearance:
       return withSettingsContentFallback(
         <AppearanceSettings />,
-        t("settings.layout.loading.appearance", "正在加载外观设置..."),
+        t("settings.layout.loading.appearance"),
       );
 
     case SettingsTabs.Hotkeys:
       return withSettingsContentFallback(
         <HotkeysSettings />,
-        t("settings.layout.loading.hotkeys", "正在加载快捷键设置..."),
+        t("settings.layout.loading.hotkeys"),
       );
 
     case SettingsTabs.Memory:
       return withSettingsContentFallback(
         <MemorySettings />,
-        t("settings.layout.loading.memory", "正在加载记忆设置..."),
+        t("settings.layout.loading.memory"),
       );
 
     // 智能体组
     case SettingsTabs.Providers:
       return withSettingsContentFallback(
         <CloudProviderSettings initialView={initialProviderView} />,
-        t("settings.layout.loading.providers", "正在加载 AI 服务商设置..."),
+        t("settings.layout.loading.providers"),
       );
 
     case SettingsTabs.Skills:
       return withSettingsContentFallback(
         <ExtensionsSettings />,
-        t("settings.layout.loading.skills", "正在加载技能管理..."),
+        t("settings.layout.loading.skills"),
       );
 
     case SettingsTabs.MediaServices:
       return withSettingsContentFallback(
         <MediaServicesSettings />,
-        t("settings.layout.loading.mediaServices", "正在加载服务模型..."),
+        t("settings.layout.loading.mediaServices"),
       );
 
     // 系统组
     case SettingsTabs.McpServer:
       return withSettingsContentFallback(
         <McpPanel hideHeader />,
-        t("settings.layout.loading.mcpServer", "正在加载 MCP 服务器..."),
+        t("settings.layout.loading.mcpServer"),
       );
 
     case SettingsTabs.WebSearch:
       return withSettingsContentFallback(
         <WebSearchSettings />,
-        t("settings.layout.loading.webSearch", "正在加载网络搜索设置..."),
+        t("settings.layout.loading.webSearch"),
       );
 
     case SettingsTabs.Environment:
       return withSettingsContentFallback(
         <EnvironmentSettings />,
-        t("settings.layout.loading.environment", "正在加载环境变量..."),
+        t("settings.layout.loading.environment"),
       );
 
     case SettingsTabs.ChromeRelay:
       return withSettingsContentFallback(
         <ChromeRelaySettings />,
-        t("settings.layout.loading.chromeRelay", "正在加载连接器设置..."),
+        t("settings.layout.loading.chromeRelay"),
       );
 
     case SettingsTabs.Automation:
@@ -500,28 +500,25 @@ function renderSettingsContent(
           mode="settings"
           onOpenWorkspace={() => onNavigate?.("automation")}
         />,
-        t("settings.layout.loading.automation", "正在加载自动化设置..."),
+        t("settings.layout.loading.automation"),
       );
 
     case SettingsTabs.Developer:
       return withSettingsContentFallback(
         <DeveloperLabSettings initialTab={activeDeveloperLabTab} />,
-        t(
-          "settings.layout.loading.developerLab",
-          "正在加载开发者与实验功能...",
-        ),
+        t("settings.layout.loading.developerLab"),
       );
 
     case SettingsTabs.About:
       return withSettingsContentFallback(
         <AboutSection />,
-        t("settings.layout.loading.about", "正在加载关于页面..."),
+        t("settings.layout.loading.about"),
       );
 
     default:
       return (
         <PlaceholderPage>
-          <p>{t("settings.layout.placeholder.notFound", "页面不存在")}</p>
+          <p>{t("settings.layout.placeholder.notFound")}</p>
         </PlaceholderPage>
       );
   }
@@ -633,11 +630,11 @@ export function SettingsLayoutV2({
         <HeaderHomeButton
           type="button"
           onClick={handleBackHome}
-          aria-label={t("settings.layout.action.backHome", "回到首页")}
+          aria-label={t("settings.layout.action.backHome")}
           data-testid="settings-home-button"
         >
           <Home />
-          {t("settings.layout.action.backHome", "回到首页")}
+          {t("settings.layout.action.backHome")}
         </HeaderHomeButton>
       </HeaderBar>
       <LayoutContainer className="lime-settings-theme-scope">

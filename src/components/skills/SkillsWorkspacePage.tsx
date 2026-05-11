@@ -175,8 +175,7 @@ function buildWorkspaceRuntimeEnablePrompt(
   return [
     copy.formatIntro?.(skillName, binding.directory) ??
       `请在本回合使用 Workspace 本地 Skill「${skillName}」（skill: project:${binding.directory}）。`,
-    copy.readSkill ??
-      "先读取这个 Skill 的说明与约束，再基于当前任务完成交付。",
+    copy.readSkill ?? "先读取这个 Skill 的说明与约束，再基于当前任务完成交付。",
     copy.needsInput ??
       "如果输入信息不足，请先提出最少必要问题；不要创建自动化、定时任务或 marketplace 发布。",
   ].join("\n");

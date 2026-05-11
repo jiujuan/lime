@@ -589,25 +589,6 @@ const fileSystemCommandSelectors = [
     "文件打开/定位相关后端命令请统一通过 `src/lib/api/fileSystem.ts` 暴露的网关函数调用，避免在 Hook / 组件中继续直接拼接命令名。",
 }));
 
-const pluginGatewayCommandSelectors = [
-  "get_plugin_status",
-  "get_plugins",
-  "list_installed_plugins",
-  "list_plugin_tasks",
-  "get_plugin_queue_stats",
-  "get_plugin_task",
-  "enable_plugin",
-  "disable_plugin",
-  "reload_plugins",
-  "unload_plugin",
-  "uninstall_plugin",
-  "cancel_plugin_task",
-].map((command) => ({
-  selector: `CallExpression[callee.name='safeInvoke'][arguments.0.value='${command}'], CallExpression[callee.name='invoke'][arguments.0.value='${command}']`,
-  message:
-    "插件运行态/管理相关后端命令请统一通过 `src/lib/api/plugins.ts` 暴露的网关函数调用，避免在 Hook / 组件中继续直接拼接命令名。",
-}));
-
 const fileBrowserCommandSelectors = [
   "list_dir",
   "read_file_preview_cmd",
@@ -1121,7 +1102,6 @@ export default [
         ...brandPersonaGatewayCommandSelectors,
         ...posterMaterialGatewayCommandSelectors,
         ...fileSystemCommandSelectors,
-        ...pluginGatewayCommandSelectors,
         ...fileBrowserCommandSelectors,
         ...appUpdateCommandSelectors,
         ...screenshotChatCommandSelectors,
@@ -1203,8 +1183,6 @@ export default [
       "src/lib/api/subAgentScheduler.ts",
       "src/lib/api/fileSystem.ts",
       "src/lib/api/memory.ts",
-      "src/lib/api/plugins.ts",
-      "src/lib/api/pluginUI.ts",
       "src/lib/api/fileBrowser.ts",
       "src/lib/api/a2uiForm.ts",
       "src/lib/api/appUpdate.ts",

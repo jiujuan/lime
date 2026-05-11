@@ -914,7 +914,7 @@ fn extract_team_memory_shadow_object(
     })
 }
 
-fn build_turn_context_summary(
+pub(crate) fn build_turn_context_summary(
     turn_context: Option<&TurnContextOverride>,
 ) -> Option<TauriTurnContextSummary> {
     let metadata = &turn_context?.metadata;
@@ -1297,12 +1297,27 @@ fn convert_item_payload(payload: ItemRuntimePayload) -> AgentThreadItemPayload {
         }
         ItemRuntimePayload::Plan { text } => AgentThreadItemPayload::Plan { text },
         ItemRuntimePayload::RuntimeStatus {
-            phase: _,
+            phase,
             title,
             detail,
             checkpoints,
         } => AgentThreadItemPayload::TurnSummary {
             text: format_runtime_status_text(&title, &detail, &checkpoints),
+            metadata: Some(serde_json::json!({
+                "sourceType": "runtime_status",
+                "source": "runtime_status",
+                "surface": "runtime_status",
+                "visibility": "diagnostics",
+                "persistence": "transient",
+                "agentui": {
+                    "eventClass": "run.status",
+                    "surface": "runtime_status",
+                    "visibility": "diagnostics",
+                },
+                "runtimeStatus": {
+                    "phase": phase,
+                },
+            })),
         },
         ItemRuntimePayload::FileArtifact {
             path,
@@ -2360,11 +2375,24 @@ mod tests {
         assert_eq!(events.len(), 1);
         match &events[0] {
             TauriAgentEvent::ItemUpdated { item } => match &item.payload {
-                AgentThreadItemPayload::TurnSummary { text } => {
+                AgentThreadItemPayload::TurnSummary { text, metadata } => {
                     assert!(text.contains("先规划再输出"));
                     assert!(!text.contains("已决定："));
                     assert!(text.contains("当前请求更像计划拆解"));
                     assert!(text.contains("• 检测到计划需求"));
+                    let metadata = metadata.as_ref().expect("runtime status metadata");
+                    assert_eq!(
+                        metadata
+                            .get("sourceType")
+                            .and_then(serde_json::Value::as_str),
+                        Some("runtime_status")
+                    );
+                    assert_eq!(
+                        metadata
+                            .get("visibility")
+                            .and_then(serde_json::Value::as_str),
+                        Some("diagnostics")
+                    );
                 }
                 other => panic!("Unexpected payload: {other:?}"),
             },

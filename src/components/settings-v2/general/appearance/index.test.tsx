@@ -203,7 +203,6 @@ describe("AppearanceSettings", () => {
     expect(text).toContain("可选系统入口");
     expect(text).not.toContain("持续流程");
     expect(text).not.toContain("消息渠道");
-    expect(text).toContain("插件中心");
     expect(text).toContain("桌宠");
     expect(text).toContain("推荐行为");
     expect(text).toContain("推荐自动附带选中内容");
@@ -233,7 +232,7 @@ describe("AppearanceSettings", () => {
     expect(text).toContain("Random");
     expect(text).toContain("Setup & Recovery");
     expect(text).toContain("Optional System Entries");
-    expect(text).toContain("Plugin Center");
+    expect(text).not.toContain("Plugin Center");
     expect(text).toContain("Recommendation Behavior");
     expect(text).not.toContain("管理主题、语言");
   });
@@ -403,7 +402,7 @@ describe("AppearanceSettings", () => {
   it("切换可选系统入口时应写回 navigation.enabled_items 并保留其他配置", async () => {
     const { container } = await renderPage();
     const switchButton = container.querySelector(
-      'button[aria-label="切换显示插件中心入口"]',
+      'button[aria-label="切换显示桌宠入口"]',
     );
 
     await act(async () => {
@@ -413,7 +412,7 @@ describe("AppearanceSettings", () => {
 
     const savedConfig = mockSaveConfig.mock.calls.at(-1)?.[0] as any;
 
-    expect(savedConfig.navigation.enabled_items).toEqual(["plugins"]);
+    expect(savedConfig.navigation.enabled_items).toEqual(["companion"]);
     expect(
       savedConfig.workspace_preferences.media_defaults.voice
         .preferredProviderId,

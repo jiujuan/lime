@@ -1,4 +1,5 @@
 import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";
+import { shouldHideTurnSummaryFromConversation } from "./turnSummaryPresentation";
 
 const HIDDEN_CONVERSATION_WARNING_CODES = new Set([
   "artifact_document_repaired",
@@ -114,6 +115,14 @@ function shouldHideAuxiliaryRuntimeProjectionItem(
 
 function shouldHideConversationThreadItem(item: AgentThreadItem): boolean {
   if (shouldHideAuxiliaryRuntimeProjectionItem(item)) {
+    return true;
+  }
+
+  if (item.type === "turn_summary") {
+    return shouldHideTurnSummaryFromConversation(item);
+  }
+
+  if (item.type === "context_compaction") {
     return true;
   }
 
@@ -557,7 +566,10 @@ export function buildMessageTurnTimeline(
         },
       ) ||
       (turnEntry.startMs === null || canUseSingleAssistantFallback
-        ? pickLastUnassignedAssistantMessage(assistantEntries, assignedMessageIds)
+        ? pickLastUnassignedAssistantMessage(
+            assistantEntries,
+            assignedMessageIds,
+          )
         : null);
 
     if (!assistantMessage) {

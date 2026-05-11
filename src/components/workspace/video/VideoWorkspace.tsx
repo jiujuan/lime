@@ -912,7 +912,8 @@ function resolveTaskSyncCopy(
           defaultValue: "已同步到项目资料",
         }),
         hint: t("workspace.video.workspace.taskSync.saved.hint", {
-          defaultValue: "当前结果已经沉淀到项目资料，可继续复用或组合后续命令。",
+          defaultValue:
+            "当前结果已经沉淀到项目资料，可继续复用或组合后续命令。",
         }),
       };
     }
@@ -1524,135 +1525,129 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
       Boolean,
     ).length;
 
-    const summaryCards = useMemo(
-      () => {
-        const locale = i18n.language;
-        return [
-          {
-            label: t("workspace.video.workspace.summary.currentModel.label", {
-              defaultValue: "当前模型",
+    const summaryCards = useMemo(() => {
+      const locale = i18n.language;
+      return [
+        {
+          label: t("workspace.video.workspace.summary.currentModel.label", {
+            defaultValue: "当前模型",
+          }),
+          value:
+            state.model ||
+            t("workspace.video.workspace.summary.currentModel.pending", {
+              defaultValue: "待选择",
             }),
-            value:
-              state.model ||
-              t("workspace.video.workspace.summary.currentModel.pending", {
-                defaultValue: "待选择",
-              }),
-            hint:
-              state.providerId ||
-              t("workspace.video.workspace.summary.currentModel.providerHint", {
-                defaultValue: "请先在左侧选择视频服务",
-              }),
-            tipAria: t(
-              "workspace.video.workspace.summary.currentModel.tipAria",
-              {
-                defaultValue: "当前模型说明",
-              },
-            ),
-          },
-          {
-            label: t("workspace.video.workspace.summary.outputSpec.label", {
-              defaultValue: "输出规格",
+          hint:
+            state.providerId ||
+            t("workspace.video.workspace.summary.currentModel.providerHint", {
+              defaultValue: "请先在左侧选择视频服务",
             }),
-            value: `${state.aspectRatio} · ${state.resolution}`,
-            hint: t(
-              "workspace.video.workspace.summary.outputSpec.durationSeconds",
-              {
-                defaultValue: "时长 {{value}} 秒",
-                value: formatNumber(state.duration, { locale }),
-              },
-            ),
-            tipAria: t("workspace.video.workspace.summary.outputSpec.tipAria", {
-              defaultValue: "输出规格说明",
-            }),
-          },
-          {
-            label: t("workspace.video.workspace.summary.referenceImages.label", {
-              defaultValue: "参考图",
-            }),
-            value:
-              referenceCount > 0
-                ? t(
-                    "workspace.video.workspace.summary.referenceImages.value",
-                    {
-                      count: referenceCount,
-                      defaultValue: "{{value}} 张参考图",
-                      value: formatNumber(referenceCount, { locale }),
-                    },
-                  )
-                : t(
-                    "workspace.video.workspace.summary.referenceImages.textOnly",
-                    {
-                      defaultValue: "纯文生视频",
-                    },
-                  ),
-            hint:
-              referenceCount > 0
-                ? t(
-                    "workspace.video.workspace.summary.referenceImages.hintWithReference",
-                    {
-                      defaultValue: "可用于锁定开场、结尾或主体一致性",
-                    },
-                  )
-                : t(
-                    "workspace.video.workspace.summary.referenceImages.hintTextOnly",
-                    {
-                      defaultValue: "先验证镜头，再逐步加入约束",
-                    },
-                  ),
-            tipAria: t(
-              "workspace.video.workspace.summary.referenceImages.tipAria",
-              {
-                defaultValue: "参考图说明",
-              },
-            ),
-          },
-          {
-            label: t("workspace.video.workspace.summary.taskSync.label", {
-              defaultValue: "任务同步",
-            }),
-            value: projectId
-              ? t("workspace.video.workspace.summary.taskSync.auto", {
-                  defaultValue: "结果自动同步",
-                })
-              : t("workspace.video.workspace.summary.taskSync.projectRequired", {
-                  defaultValue: "需先选择项目",
-                }),
-            hint: projectId
-              ? t("workspace.video.workspace.summary.taskSync.autoHint", {
-                  defaultValue: "成功后会沉淀到项目资料",
+          tipAria: t("workspace.video.workspace.summary.currentModel.tipAria", {
+            defaultValue: "当前模型说明",
+          }),
+        },
+        {
+          label: t("workspace.video.workspace.summary.outputSpec.label", {
+            defaultValue: "输出规格",
+          }),
+          value: `${state.aspectRatio} · ${state.resolution}`,
+          hint: t(
+            "workspace.video.workspace.summary.outputSpec.durationSeconds",
+            {
+              defaultValue: "时长 {{value}} 秒",
+              value: formatNumber(state.duration, { locale }),
+            },
+          ),
+          tipAria: t("workspace.video.workspace.summary.outputSpec.tipAria", {
+            defaultValue: "输出规格说明",
+          }),
+        },
+        {
+          label: t("workspace.video.workspace.summary.referenceImages.label", {
+            defaultValue: "参考图",
+          }),
+          value:
+            referenceCount > 0
+              ? t("workspace.video.workspace.summary.referenceImages.value", {
+                  count: referenceCount,
+                  defaultValue: "{{value}} 张参考图",
+                  value: formatNumber(referenceCount, { locale }),
                 })
               : t(
-                  "workspace.video.workspace.summary.taskSync.projectRequiredHint",
+                  "workspace.video.workspace.summary.referenceImages.textOnly",
                   {
-                    defaultValue: "当前无法提交视频任务",
+                    defaultValue: "纯文生视频",
                   },
                 ),
-            tipAria: t("workspace.video.workspace.summary.taskSync.tipAria", {
-              defaultValue: "任务同步说明",
-            }),
-          },
-        ];
-      },
-      [
-        i18n.language,
-        projectId,
-        referenceCount,
-        state.aspectRatio,
-        state.duration,
-        state.model,
-        state.providerId,
-        state.resolution,
-        t,
-      ],
-    );
+          hint:
+            referenceCount > 0
+              ? t(
+                  "workspace.video.workspace.summary.referenceImages.hintWithReference",
+                  {
+                    defaultValue: "可用于锁定开场、结尾或主体一致性",
+                  },
+                )
+              : t(
+                  "workspace.video.workspace.summary.referenceImages.hintTextOnly",
+                  {
+                    defaultValue: "先验证镜头，再逐步加入约束",
+                  },
+                ),
+          tipAria: t(
+            "workspace.video.workspace.summary.referenceImages.tipAria",
+            {
+              defaultValue: "参考图说明",
+            },
+          ),
+        },
+        {
+          label: t("workspace.video.workspace.summary.taskSync.label", {
+            defaultValue: "任务同步",
+          }),
+          value: projectId
+            ? t("workspace.video.workspace.summary.taskSync.auto", {
+                defaultValue: "结果自动同步",
+              })
+            : t("workspace.video.workspace.summary.taskSync.projectRequired", {
+                defaultValue: "需先选择项目",
+              }),
+          hint: projectId
+            ? t("workspace.video.workspace.summary.taskSync.autoHint", {
+                defaultValue: "成功后会沉淀到项目资料",
+              })
+            : t(
+                "workspace.video.workspace.summary.taskSync.projectRequiredHint",
+                {
+                  defaultValue: "当前无法提交视频任务",
+                },
+              ),
+          tipAria: t("workspace.video.workspace.summary.taskSync.tipAria", {
+            defaultValue: "任务同步说明",
+          }),
+        },
+      ];
+    }, [
+      i18n.language,
+      projectId,
+      referenceCount,
+      state.aspectRatio,
+      state.duration,
+      state.model,
+      state.providerId,
+      state.resolution,
+      t,
+    ]);
 
     const workspaceStatus = useMemo(() => {
       const locale = i18n.language;
       if (state.status === "generating") {
         return {
-          label: t("workspace.video.workspace.session.status.generating.label", {
-            defaultValue: "生成中",
-          }),
+          label: t(
+            "workspace.video.workspace.session.status.generating.label",
+            {
+              defaultValue: "生成中",
+            },
+          ),
           tone: "processing" as const,
           detail:
             focusedTask?.progress != null
@@ -1705,12 +1700,9 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
           tone: "error" as const,
           detail:
             state.errorMessage ??
-            t(
-              "workspace.video.workspace.session.status.error.fallbackDetail",
-              {
-                defaultValue: "请检查提示词、模型配置或参考图。",
-              },
-            ),
+            t("workspace.video.workspace.session.status.error.fallbackDetail", {
+              defaultValue: "请检查提示词、模型配置或参考图。",
+            }),
         };
       }
       return {
@@ -1860,12 +1852,9 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
                       })}
                     </HeroTitle>
                     <WorkbenchInfoTip
-                      ariaLabel={t(
-                        "workspace.video.workspace.hero.tipAria",
-                        {
-                          defaultValue: "视频创作说明",
-                        },
-                      )}
+                      ariaLabel={t("workspace.video.workspace.hero.tipAria", {
+                        defaultValue: "视频创作说明",
+                      })}
                       content={t("workspace.video.workspace.hero.tipContent", {
                         defaultValue:
                           "用一句清晰的场景描述启动视频生成，再逐步补充镜头运动、情绪和画面锚点。先让结构成立，再慢慢叠加参考图与参数约束。",

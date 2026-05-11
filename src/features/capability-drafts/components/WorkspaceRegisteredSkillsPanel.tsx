@@ -168,7 +168,9 @@ function findRegistrationEvidenceValue(
   copy: ReadonlyHttpApprovalPreviewCopy,
 ) {
   const evidence = gate.evidence.find((item) => item.key === key);
-  return evidence ? formatRegistrationEvidenceValue(evidence) : copy.notRecorded;
+  return evidence
+    ? formatRegistrationEvidenceValue(evidence)
+    : copy.notRecorded;
 }
 
 function buildReadonlyHttpApprovalPreview(
@@ -369,8 +371,7 @@ function WorkspaceRegisteredSkillCard({
           ? t(
               "capabilityDraft.registeredPanel.agentEnvelope.evidence.controlledGet.executed",
               {
-                defaultValue:
-                  "，受控 GET {{executed}}/{{artifacts}} executed",
+                defaultValue: "，受控 GET {{executed}}/{{artifacts}} executed",
                 artifacts: formatNumber(parts.controlledGetArtifactCount, {
                   locale,
                 }),
@@ -417,10 +418,9 @@ function WorkspaceRegisteredSkillCard({
           controlledGetLabel,
           decision: parts.decision,
           ownerRunCount: formatNumber(parts.ownerRunCount, { locale }),
-          successfulOwnerRunCount: formatNumber(
-            parts.successfulOwnerRunCount,
-            { locale },
-          ),
+          successfulOwnerRunCount: formatNumber(parts.successfulOwnerRunCount, {
+            locale,
+          }),
           suffix,
           toolCallCount: formatNumber(parts.workspaceSkillToolCallCount, {
             locale,
@@ -501,16 +501,22 @@ function WorkspaceRegisteredSkillCard({
           reportId,
         }),
       formatPendingEvidencePack: (packId) =>
-        t("capabilityDraft.registeredPanel.agentEnvelope.evidence.pendingPack", {
-          defaultValue:
-            "Evidence：已关联 evidence pack {{packId}}，但还缺 completed completion audit，不能固化为 Agent。",
-          packId,
-        }),
+        t(
+          "capabilityDraft.registeredPanel.agentEnvelope.evidence.pendingPack",
+          {
+            defaultValue:
+              "Evidence：已关联 evidence pack {{packId}}，但还缺 completed completion audit，不能固化为 Agent。",
+            packId,
+          },
+        ),
       formatPermissionWithSummary: (summary) =>
-        t("capabilityDraft.registeredPanel.agentEnvelope.permission.withSummary", {
-          defaultValue: "权限：{{summary}}。",
-          summary,
-        }),
+        t(
+          "capabilityDraft.registeredPanel.agentEnvelope.permission.withSummary",
+          {
+            defaultValue: "权限：{{summary}}。",
+            summary,
+          },
+        ),
       formatRunbook: (name) =>
         t("capabilityDraft.registeredPanel.agentEnvelope.runbook", {
           defaultValue: "Runbook：{{name}}",
@@ -565,141 +571,146 @@ function WorkspaceRegisteredSkillCard({
     }),
     [buildCompletionAuditLabel, t],
   );
-  const managedAutomationCopy = useMemo<WorkspaceSkillManagedAutomationPresentationCopy>(
-    () => ({
-      auditBlocked: t(
-        "capabilityDraft.registeredPanel.managedJob.audit.blocked",
-        "Completion Audit：blocked，需处理失败原因。",
-      ),
-      auditMissing: t(
-        "capabilityDraft.registeredPanel.managedJob.audit.missing",
-        "Completion Audit：缺少运行与 evidence，不能判定完成。",
-      ),
-      auditPaused: t(
-        "capabilityDraft.registeredPanel.managedJob.audit.paused",
-        "Completion Audit：paused，恢复并产生运行证据后再审计。",
-      ),
-      auditPlanned: t(
-        "capabilityDraft.registeredPanel.managedJob.audit.planned",
-        "Completion Audit：planned，等待首次运行证据。",
-      ),
-      auditRunning: t(
-        "capabilityDraft.registeredPanel.managedJob.audit.running",
-        "Completion Audit：运行中，等待 automation run 结束后再审计。",
-      ),
-      auditVerifying: t(
-        "capabilityDraft.registeredPanel.managedJob.audit.verifying",
-        "Completion Audit：运行成功后仍需 artifact / timeline / evidence 审计，暂不直接标记 completed。",
-      ),
-      formatAtSchedule: (at) =>
-        t("capabilityDraft.registeredPanel.managedJob.schedule.at", {
-          defaultValue: "一次性 {{at}}",
-          at,
-        }),
-      formatAuditBlocked: (error) =>
-        error
-          ? t(
-              "capabilityDraft.registeredPanel.managedJob.audit.blockedWithError",
-              {
-                defaultValue: "Completion Audit：blocked，需处理失败原因：{{error}}",
-                error,
-              },
-            )
-          : t(
-              "capabilityDraft.registeredPanel.managedJob.audit.blocked",
-              "Completion Audit：blocked，需处理失败原因。",
-            ),
-      formatCronSchedule: (expr, timezone) =>
-        t("capabilityDraft.registeredPanel.managedJob.schedule.cron", {
-          defaultValue: "Cron {{expr}}{{timezone}}",
-          expr,
-          timezone: timezone
+  const managedAutomationCopy =
+    useMemo<WorkspaceSkillManagedAutomationPresentationCopy>(
+      () => ({
+        auditBlocked: t(
+          "capabilityDraft.registeredPanel.managedJob.audit.blocked",
+          "Completion Audit：blocked，需处理失败原因。",
+        ),
+        auditMissing: t(
+          "capabilityDraft.registeredPanel.managedJob.audit.missing",
+          "Completion Audit：缺少运行与 evidence，不能判定完成。",
+        ),
+        auditPaused: t(
+          "capabilityDraft.registeredPanel.managedJob.audit.paused",
+          "Completion Audit：paused，恢复并产生运行证据后再审计。",
+        ),
+        auditPlanned: t(
+          "capabilityDraft.registeredPanel.managedJob.audit.planned",
+          "Completion Audit：planned，等待首次运行证据。",
+        ),
+        auditRunning: t(
+          "capabilityDraft.registeredPanel.managedJob.audit.running",
+          "Completion Audit：运行中，等待 automation run 结束后再审计。",
+        ),
+        auditVerifying: t(
+          "capabilityDraft.registeredPanel.managedJob.audit.verifying",
+          "Completion Audit：运行成功后仍需 artifact / timeline / evidence 审计，暂不直接标记 completed。",
+        ),
+        formatAtSchedule: (at) =>
+          t("capabilityDraft.registeredPanel.managedJob.schedule.at", {
+            defaultValue: "一次性 {{at}}",
+            at,
+          }),
+        formatAuditBlocked: (error) =>
+          error
             ? t(
-                "capabilityDraft.registeredPanel.managedJob.schedule.timezone",
+                "capabilityDraft.registeredPanel.managedJob.audit.blockedWithError",
                 {
-                  defaultValue: " · {{timezone}}",
-                  timezone,
+                  defaultValue:
+                    "Completion Audit：blocked，需处理失败原因：{{error}}",
+                  error,
                 },
               )
-            : "",
-        }),
-      formatEverySchedule: (seconds) =>
-        t("capabilityDraft.registeredPanel.managedJob.schedule.every", {
-          defaultValue: "每 {{seconds}} 秒",
-          seconds: formatNumber(seconds, { locale }),
-        }),
-      formatLastRun: (lastRun, error) =>
-        t("capabilityDraft.registeredPanel.managedJob.lastRun.withValue", {
-          defaultValue: "最近运行：{{lastRun}}{{error}}",
-          error: error
-            ? t("capabilityDraft.registeredPanel.managedJob.lastRun.error", {
-                defaultValue: " · {{error}}",
-                error,
-              })
-            : "",
-          lastRun,
-        }),
-      formatManagedObjective: (state) =>
-        t("capabilityDraft.registeredPanel.managedJob.objective.withState", {
-          defaultValue: "Managed Objective：{{state}}",
-          state,
-        }),
-      formatSchedule: (schedule, nextRun) =>
-        t("capabilityDraft.registeredPanel.managedJob.schedule.withValue", {
-          defaultValue: "Schedule：{{schedule}}{{nextRun}}",
-          nextRun: nextRun
-            ? t("capabilityDraft.registeredPanel.managedJob.schedule.nextRun", {
-                defaultValue: " · 下次 {{nextRun}}",
-                nextRun,
-              })
-            : "",
-          schedule,
-        }),
-      formatStatus: (state, lastStatus) =>
-        t("capabilityDraft.registeredPanel.managedJob.status.withValue", {
-          defaultValue: "Managed Job：{{state}} · {{lastStatus}}",
-          lastStatus,
-          state,
-        }),
-      lastRunNone: t(
-        "capabilityDraft.registeredPanel.managedJob.lastRun.none",
-        "最近运行：暂无",
-      ),
-      lastRunValueNone: t(
-        "capabilityDraft.registeredPanel.managedJob.lastRun.valueNone",
-        "暂无",
-      ),
-      managedObjectivePlanned: t(
-        "capabilityDraft.registeredPanel.managedJob.objective.planned",
-        "Managed Objective：planned，等待绑定 automation job。",
-      ),
-      notCreatedSchedule: t(
-        "capabilityDraft.registeredPanel.managedJob.schedule.notCreated",
-        "Schedule：等待创建 automation job 草案。",
-      ),
-      notCreatedStatus: t(
-        "capabilityDraft.registeredPanel.managedJob.status.notCreated",
-        "Managed Job：未创建",
-      ),
-      notRunStatus: t(
-        "capabilityDraft.registeredPanel.managedJob.status.notRun",
-        "尚未运行",
-      ),
-      stateEnabled: t(
-        "capabilityDraft.registeredPanel.managedJob.state.enabled",
-        "已启用",
-      ),
-      statePaused: t(
-        "capabilityDraft.registeredPanel.managedJob.state.paused",
-        "草案暂停",
-      ),
-      unknownSchedule: t(
-        "capabilityDraft.registeredPanel.managedJob.schedule.unknown",
-        "未知调度",
-      ),
-    }),
-    [locale, t],
-  );
+            : t(
+                "capabilityDraft.registeredPanel.managedJob.audit.blocked",
+                "Completion Audit：blocked，需处理失败原因。",
+              ),
+        formatCronSchedule: (expr, timezone) =>
+          t("capabilityDraft.registeredPanel.managedJob.schedule.cron", {
+            defaultValue: "Cron {{expr}}{{timezone}}",
+            expr,
+            timezone: timezone
+              ? t(
+                  "capabilityDraft.registeredPanel.managedJob.schedule.timezone",
+                  {
+                    defaultValue: " · {{timezone}}",
+                    timezone,
+                  },
+                )
+              : "",
+          }),
+        formatEverySchedule: (seconds) =>
+          t("capabilityDraft.registeredPanel.managedJob.schedule.every", {
+            defaultValue: "每 {{seconds}} 秒",
+            seconds: formatNumber(seconds, { locale }),
+          }),
+        formatLastRun: (lastRun, error) =>
+          t("capabilityDraft.registeredPanel.managedJob.lastRun.withValue", {
+            defaultValue: "最近运行：{{lastRun}}{{error}}",
+            error: error
+              ? t("capabilityDraft.registeredPanel.managedJob.lastRun.error", {
+                  defaultValue: " · {{error}}",
+                  error,
+                })
+              : "",
+            lastRun,
+          }),
+        formatManagedObjective: (state) =>
+          t("capabilityDraft.registeredPanel.managedJob.objective.withState", {
+            defaultValue: "Managed Objective：{{state}}",
+            state,
+          }),
+        formatSchedule: (schedule, nextRun) =>
+          t("capabilityDraft.registeredPanel.managedJob.schedule.withValue", {
+            defaultValue: "Schedule：{{schedule}}{{nextRun}}",
+            nextRun: nextRun
+              ? t(
+                  "capabilityDraft.registeredPanel.managedJob.schedule.nextRun",
+                  {
+                    defaultValue: " · 下次 {{nextRun}}",
+                    nextRun,
+                  },
+                )
+              : "",
+            schedule,
+          }),
+        formatStatus: (state, lastStatus) =>
+          t("capabilityDraft.registeredPanel.managedJob.status.withValue", {
+            defaultValue: "Managed Job：{{state}} · {{lastStatus}}",
+            lastStatus,
+            state,
+          }),
+        lastRunNone: t(
+          "capabilityDraft.registeredPanel.managedJob.lastRun.none",
+          "最近运行：暂无",
+        ),
+        lastRunValueNone: t(
+          "capabilityDraft.registeredPanel.managedJob.lastRun.valueNone",
+          "暂无",
+        ),
+        managedObjectivePlanned: t(
+          "capabilityDraft.registeredPanel.managedJob.objective.planned",
+          "Managed Objective：planned，等待绑定 automation job。",
+        ),
+        notCreatedSchedule: t(
+          "capabilityDraft.registeredPanel.managedJob.schedule.notCreated",
+          "Schedule：等待创建 automation job 草案。",
+        ),
+        notCreatedStatus: t(
+          "capabilityDraft.registeredPanel.managedJob.status.notCreated",
+          "Managed Job：未创建",
+        ),
+        notRunStatus: t(
+          "capabilityDraft.registeredPanel.managedJob.status.notRun",
+          "尚未运行",
+        ),
+        stateEnabled: t(
+          "capabilityDraft.registeredPanel.managedJob.state.enabled",
+          "已启用",
+        ),
+        statePaused: t(
+          "capabilityDraft.registeredPanel.managedJob.state.paused",
+          "草案暂停",
+        ),
+        unknownSchedule: t(
+          "capabilityDraft.registeredPanel.managedJob.schedule.unknown",
+          "未知调度",
+        ),
+      }),
+      [locale, t],
+    );
   const bindingBlocked = binding?.binding_status === "blocked";
   const runtimeEnableReady =
     binding?.binding_status === "ready_for_manual_enable";
@@ -781,7 +792,10 @@ function WorkspaceRegisteredSkillCard({
       <div className="mt-3 space-y-1 text-[11px] leading-5 text-slate-500">
         <div>
           <span className="font-medium text-slate-700">
-            {t("capabilityDraft.registeredPanel.card.field.directory", "目录：")}
+            {t(
+              "capabilityDraft.registeredPanel.card.field.directory",
+              "目录：",
+            )}
           </span>
           {skill.directory}
         </div>
@@ -796,7 +810,10 @@ function WorkspaceRegisteredSkillCard({
         </div>
         <div>
           <span className="font-medium text-slate-700">
-            {t("capabilityDraft.registeredPanel.card.field.permission", "权限：")}
+            {t(
+              "capabilityDraft.registeredPanel.card.field.permission",
+              "权限：",
+            )}
           </span>
           {summarizePermissionSummary(skill, summaryCopy)}
         </div>
@@ -822,7 +839,10 @@ function WorkspaceRegisteredSkillCard({
           {summarizeBindingStatus(binding, summaryCopy)}
         </div>
         <div className="text-sky-700">
-          {t("capabilityDraft.registeredPanel.card.field.nextGate", "下一道 gate：")}
+          {t(
+            "capabilityDraft.registeredPanel.card.field.nextGate",
+            "下一道 gate：",
+          )}
           {binding?.next_gate ||
             t(
               "capabilityDraft.registeredPanel.card.nextGateFallback",
@@ -924,8 +944,7 @@ function WorkspaceRegisteredSkillCard({
                   {
                     defaultValue: "credentialStorage={{value}}",
                     value: String(
-                      approvalPreview.consumptionGate
-                        .credentialStorageEnabled,
+                      approvalPreview.consumptionGate.credentialStorageEnabled,
                     ),
                   },
                 )}

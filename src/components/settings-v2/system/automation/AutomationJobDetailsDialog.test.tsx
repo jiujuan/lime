@@ -1,58 +1,21 @@
 import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-vi.mock("react-i18next", () => {
-  const interpolate = (
-    template: string,
-    values: Record<string, unknown>,
-  ): string =>
-    Object.entries(values).reduce((text, [name, value]) => {
-      if (name === "defaultValue") {
-        return text;
-      }
-      const replacement = String(value);
-      return text
-        .split(`{{${name}}}`)
-        .join(replacement)
-        .split(`{{ ${name} }}`)
-        .join(replacement);
-    }, template);
-
-  return {
-    useTranslation: () => ({
-      i18n: { language: "zh-CN" },
-      t: (
-        key: string,
-        defaultValueOrOptions?: string | Record<string, unknown>,
-        options?: Record<string, unknown>,
-      ) => {
-        if (typeof defaultValueOrOptions === "string") {
-          return interpolate(defaultValueOrOptions, options ?? {});
-        }
-        const values = defaultValueOrOptions ?? {};
-        return interpolate(
-          typeof values.defaultValue === "string" ? values.defaultValue : key,
-          values,
-        );
-      },
-    }),
-  };
-});
-
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { AutomationJobDetailsDialog } from "./AutomationJobDetailsDialog";
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("en-US");
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mountedRoots.length > 0) {
     const mounted = mountedRoots.pop();
     if (!mounted) {
@@ -64,6 +27,7 @@ afterEach(() => {
     mounted.container.remove();
   }
   vi.clearAllMocks();
+  await changeLimeLocale("zh-CN");
 });
 
 async function renderDialog(
@@ -255,7 +219,7 @@ describe("AutomationJobDetailsDialog", () => {
       },
     });
 
-    expect(getBodyText()).toContain("这轮判断");
+    expect(getBodyText()).toContain("This Run Judgment");
     expect(getBodyText()).toContain("先补复核与修复");
     expect(getBodyText()).toContain("建议继续优化");
     expect(getBodyText()).toContain("复核阻塞");
@@ -403,18 +367,18 @@ describe("AutomationJobDetailsDialog", () => {
   it("应把头部长说明收进 tip 并展示轻量摘要", async () => {
     await renderDialog();
 
-    expect(getBodyText()).toContain("持续流程详情");
+    expect(getBodyText()).toContain("Ongoing Flow Details");
     expect(getBodyText()).toContain(
-      "查看这条持续流程的状态、输出去向和最近运行。",
+      "Review this ongoing flow's status, output destination, and recent runs.",
     );
-    expect(getBodyText()).toContain("归属：默认工作区");
+    expect(getBodyText()).toContain("Workspace: 默认工作区");
     expect(getBodyText()).not.toContain(
-      "查看这条持续流程的状态、输出去向和最近运行；需要迁移旧浏览器流程时，也在这里确认遗留配置和风险提示。",
+      "When migrating legacy browser flows, confirm the legacy configuration and risk notice here too.",
     );
 
-    const headerTip = await hoverTip("持续流程详情说明");
+    const headerTip = await hoverTip("Ongoing flow detail help");
     expect(getBodyText()).toContain(
-      "查看这条持续流程的状态、输出去向和最近运行；需要迁移旧浏览器流程时，也在这里确认遗留配置和风险提示。",
+      "When migrating legacy browser flows, confirm the legacy configuration and risk notice here too.",
     );
     await leaveTip(headerTip);
   });
@@ -424,7 +388,7 @@ describe("AutomationJobDetailsDialog", () => {
     await renderDialog({ onRefreshHistory });
 
     const refreshButton = Array.from(document.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("刷新"),
+      (button) => button.textContent?.includes("Refresh"),
     ) as HTMLButtonElement | undefined;
 
     await act(async () => {
@@ -630,6 +594,6 @@ describe("AutomationJobDetailsDialog", () => {
       } as any,
     });
 
-    expect(getBodyText()).toContain("权限模式: 完全访问");
+    expect(getBodyText()).toContain("Access Mode: Full access");
   });
 });

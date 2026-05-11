@@ -1,5 +1,6 @@
 import { AlertCircle, Music, Volume2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   getResourceFormatLabel,
   getResourcePreviewTargetLabel,
@@ -10,8 +11,11 @@ interface MediaPlaybackResourceRendererProps {
   item: ResourceManagerItem;
 }
 
-function getPlaybackTitle(item: ResourceManagerItem): string {
-  return item.title || item.metadata?.slotLabel?.toString() || "媒体播放";
+function getPlaybackTitle(
+  item: ResourceManagerItem,
+  titleFallback: string,
+): string {
+  return item.title || item.metadata?.slotLabel?.toString() || titleFallback;
 }
 
 function getPlaybackDescription(item: ResourceManagerItem): string | null {
@@ -21,6 +25,7 @@ function getPlaybackDescription(item: ResourceManagerItem): string | null {
 export function MediaPlaybackResourceRenderer({
   item,
 }: MediaPlaybackResourceRendererProps) {
+  const { t } = useTranslation("workspace");
   const isVideo = item.kind === "video";
   const [loadFailed, setLoadFailed] = useState(false);
   const formatLabel = getResourceFormatLabel(item);
@@ -38,11 +43,12 @@ export function MediaPlaybackResourceRenderer({
             <AlertCircle className="h-7 w-7" />
           </div>
           <h2 className="mt-5 text-lg font-semibold text-slate-950">
-            {isVideo ? "视频暂时无法播放" : "音频暂时无法播放"}
+            {isVideo
+              ? t("workspace.resourceManager.media.error.videoTitle")
+              : t("workspace.resourceManager.media.error.audioTitle")}
           </h2>
           <p className="mt-2 text-sm leading-6 text-slate-500">
-            当前媒体地址无法被 WebView
-            原生播放器读取，可以尝试下载、定位文件或用系统应用打开。
+            {t("workspace.resourceManager.media.error.description")}
           </p>
           {formatLabel ? (
             <div className="mt-4 inline-flex rounded-full bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
@@ -67,7 +73,7 @@ export function MediaPlaybackResourceRenderer({
           className="max-h-full max-w-full rounded-[18px] bg-black shadow-lg shadow-slate-950/15"
           onError={() => setLoadFailed(true)}
         >
-          当前环境不支持视频播放。
+          {t("workspace.resourceManager.media.videoUnsupported")}
         </video>
       </div>
     );
@@ -89,7 +95,10 @@ export function MediaPlaybackResourceRenderer({
           ))}
         </div>
         <h2 className="mt-6 text-lg font-semibold text-slate-950">
-          {getPlaybackTitle(item)}
+          {getPlaybackTitle(
+            item,
+            t("workspace.resourceManager.media.titleFallback"),
+          )}
         </h2>
         {formatLabel ? (
           <div className="mt-3 inline-flex rounded-full bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
@@ -104,7 +113,7 @@ export function MediaPlaybackResourceRenderer({
         <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <div className="mb-3 flex items-center justify-center gap-2 text-xs font-medium text-slate-500">
             <Volume2 className="h-3.5 w-3.5" />
-            WebView 原生音频控制
+            {t("workspace.resourceManager.media.audioControlLabel")}
           </div>
           <audio
             key={item.id}
@@ -115,7 +124,7 @@ export function MediaPlaybackResourceRenderer({
             className="w-full"
             onError={() => setLoadFailed(true)}
           >
-            当前环境不支持音频播放。
+            {t("workspace.resourceManager.media.audioUnsupported")}
           </audio>
         </div>
       </div>

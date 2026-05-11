@@ -248,66 +248,32 @@ export function ProjectSelector({
   const compactPanel = compact || workspaceTab;
   const open = openProp ?? internalOpen;
   const entityLabel = workspaceTab
-    ? t("common.projectSelector.entity.workspace", {
-        defaultValue: "工作区",
-      })
-    : t("common.projectSelector.entity.project", {
-        defaultValue: "项目",
-      });
+    ? t("common.projectSelector.entity.workspace", {})
+    : t("common.projectSelector.entity.project", {});
   const createEntityLabel = workspaceTab
-    ? t("common.projectSelector.action.createWorkspace", {
-        defaultValue: "新建工作区",
-      })
-    : t("common.projectSelector.action.createProject", {
-        defaultValue: "新建项目",
-      });
+    ? t("common.projectSelector.action.createWorkspace", {})
+    : t("common.projectSelector.action.createProject", {});
   const managementTitle = workspaceTab
-    ? t("common.projectSelector.management.title.workspace", {
-        defaultValue: "工作区管理",
-      })
-    : t("common.projectSelector.management.title.project", {
-        defaultValue: "项目管理",
-      });
+    ? t("common.projectSelector.management.title.workspace", {})
+    : t("common.projectSelector.management.title.project", {});
   const managementDescription = workspaceTab
-    ? t("common.projectSelector.management.description.workspace", {
-        defaultValue: "当前只管理可见工作区，不影响本地目录与已有文件。",
-      })
-    : t("common.projectSelector.management.description.project", {
-        defaultValue: "当前只管理可见项目，不影响本地目录与已有文件。",
-      });
+    ? t("common.projectSelector.management.description.workspace", {})
+    : t("common.projectSelector.management.description.project", {});
   const resolvedPlaceholder =
     placeholder ??
     (workspaceTab
-      ? t("common.projectSelector.placeholder.workspace", {
-          defaultValue: "选择工作区",
-        })
-      : t("common.projectSelector.placeholder.project", {
-          defaultValue: "选择项目",
-        }));
+      ? t("common.projectSelector.placeholder.workspace", {})
+      : t("common.projectSelector.placeholder.project", {}));
   const projectSelectorCopy = useMemo<ProjectSelectorTextCopy>(
     () => ({
-      defaultProjectBadge: t("common.projectSelector.meta.default", {
-        defaultValue: "默认项目",
-      }),
-      noDirectory: t("common.projectSelector.path.notSet", {
-        defaultValue: "未设置目录",
-      }),
-      pendingProject: t("common.projectSelector.meta.pending", {
-        defaultValue: "待选择项目",
-      }),
+      defaultProjectBadge: t("common.projectSelector.meta.default", {}),
+      noDirectory: t("common.projectSelector.path.notSet", {}),
+      pendingProject: t("common.projectSelector.meta.pending", {}),
       workspaceTypeLabels: {
-        persistent: t("common.projectSelector.workspaceType.persistent", {
-          defaultValue: "持久化",
-        }),
-        temporary: t("common.projectSelector.workspaceType.temporary", {
-          defaultValue: "临时",
-        }),
-        blog: t("common.projectSelector.workspaceType.blog", {
-          defaultValue: "博客",
-        }),
-        general: t("common.projectSelector.workspaceType.general", {
-          defaultValue: "通用",
-        }),
+        persistent: t("common.projectSelector.workspaceType.persistent", {}),
+        temporary: t("common.projectSelector.workspaceType.temporary", {}),
+        blog: t("common.projectSelector.workspaceType.blog", {}),
+        general: t("common.projectSelector.workspaceType.general", {}),
       },
     }),
     [t],
@@ -567,7 +533,6 @@ export function ProjectSelector({
     handleOpenChange(false);
     toast.success(
       t("common.projectSelector.toast.created", {
-        defaultValue: "{{entity}}已创建",
         entity: entityLabel,
       }),
     );
@@ -594,7 +559,6 @@ export function ProjectSelector({
     if (!nextName) {
       toast.error(
         t("common.projectSelector.toast.nameRequired", {
-          defaultValue: "{{entity}}名称不能为空",
           entity: entityLabel,
         }),
       );
@@ -608,14 +572,12 @@ export function ProjectSelector({
       setRenameTargetId(null);
       toast.success(
         t("common.projectSelector.toast.renamed", {
-          defaultValue: "{{entity}}名称已更新",
           entity: entityLabel,
         }),
       );
     } catch (error) {
       toast.error(
         t("common.projectSelector.toast.renameFailed", {
-          defaultValue: "重命名失败：{{message}}",
           message: error instanceof Error ? error.message : String(error),
         }),
       );
@@ -662,14 +624,12 @@ export function ProjectSelector({
       setDeleteTargetId(null);
       toast.success(
         t("common.projectSelector.toast.deleted", {
-          defaultValue: "{{entity}}已删除，本地目录未删除",
           entity: entityLabel,
         }),
       );
     } catch (error) {
       toast.error(
         t("common.projectSelector.toast.deleteFailed", {
-          defaultValue: "删除失败：{{message}}",
           message: error instanceof Error ? error.message : String(error),
         }),
       );
@@ -681,7 +641,6 @@ export function ProjectSelector({
   const managementHint =
     selectedProject && !canRenameProject(selectedProject)
       ? t("common.projectSelector.management.defaultLocked", {
-          defaultValue: "默认{{entity}}不可重命名或删除",
           entity: entityLabel,
         })
       : null;
@@ -764,9 +723,7 @@ export function ProjectSelector({
                       </span>
                       {selectedProject?.isDefault ? (
                         <span className="shrink-0 rounded-full border border-amber-200/80 bg-amber-50 px-2 py-0.5 text-[10px] font-medium leading-none text-amber-700">
-                          {t("common.projectSelector.badge.default", {
-                            defaultValue: "默认",
-                          })}
+                          {t("common.projectSelector.badge.default", {})}
                         </span>
                       ) : null}
                     </span>
@@ -778,9 +735,7 @@ export function ProjectSelector({
                         </span>
                         {selectedProject?.isDefault ? (
                           <span className="shrink-0 rounded-full border border-amber-200/80 bg-amber-50 px-2 py-0.5 text-[10px] font-medium leading-none text-amber-700">
-                            {t("common.projectSelector.badge.default", {
-                              defaultValue: "默认",
-                            })}
+                            {t("common.projectSelector.badge.default", {})}
                           </span>
                         ) : null}
                       </span>
@@ -828,14 +783,11 @@ export function ProjectSelector({
                   <div>
                     <div className="text-sm font-semibold text-slate-900">
                       {t("common.projectSelector.header.title", {
-                        defaultValue: "选择{{entity}}",
                         entity: entityLabel,
                       })}
                     </div>
                     <div className="mt-1 text-xs leading-5 text-slate-500">
                       {t("common.projectSelector.header.description", {
-                        defaultValue:
-                          "在这里切换{{entity}}、搜索{{entity}}，并管理当前可见{{entity}}列表。",
                         entity: entityLabel,
                       })}
                     </div>
@@ -846,7 +798,6 @@ export function ProjectSelector({
                   >
                     {t("common.projectSelector.header.count", {
                       count: filteredProjects.length,
-                      defaultValue: "{{count}} 个{{entity}}",
                       entity: entityLabel,
                     })}
                   </Badge>
@@ -856,7 +807,6 @@ export function ProjectSelector({
                   <div className="rounded-[18px] border border-white/90 bg-white/85 px-3 py-2 text-[11px] leading-5 text-slate-600 shadow-sm">
                     <span className="font-medium text-slate-800">
                       {t("common.projectSelector.current.label", {
-                        defaultValue: "当前{{entity}}：",
                         entity: entityLabel,
                       })}
                     </span>
@@ -869,10 +819,12 @@ export function ProjectSelector({
                   <Input
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder={t("common.projectSelector.search.placeholder", {
-                      defaultValue: "搜索{{entity}}",
-                      entity: entityLabel,
-                    })}
+                    placeholder={t(
+                      "common.projectSelector.search.placeholder",
+                      {
+                        entity: entityLabel,
+                      },
+                    )}
                     className={cn(
                       compactPanel ? "h-9" : "h-10",
                       "border-slate-200/80 bg-white/85 pl-9 focus-visible:border-slate-300 focus-visible:ring-1 focus-visible:ring-slate-300 focus-visible:ring-offset-0",
@@ -894,13 +846,11 @@ export function ProjectSelector({
                 >
                   {displayLoading ? (
                     <div className="rounded-[22px] border border-dashed border-slate-300/80 bg-white/80 px-4 py-8 text-center text-sm text-slate-500">
-                      {t("common.loading", { defaultValue: "加载中..." })}
+                      {t("common.loading", {})}
                     </div>
                   ) : filteredProjects.length === 0 ? (
                     <div className="rounded-[22px] border border-dashed border-slate-300/80 bg-white/80 px-4 py-8 text-center text-sm text-slate-500">
-                      {t("common.projectSelector.empty", {
-                        defaultValue: "未找到匹配项目",
-                      })}
+                      {t("common.projectSelector.empty", {})}
                     </div>
                   ) : (
                     filteredProjects.map((project) => {
@@ -954,9 +904,10 @@ export function ProjectSelector({
                                   variant="outline"
                                   className="border-amber-200/80 bg-amber-50 text-[10px] font-medium text-amber-700"
                                 >
-                                  {t("common.projectSelector.badge.default", {
-                                    defaultValue: "默认",
-                                  })}
+                                  {t(
+                                    "common.projectSelector.badge.default",
+                                    {},
+                                  )}
                                 </Badge>
                               ) : null}
                               <Badge
@@ -1054,9 +1005,7 @@ export function ProjectSelector({
                     disabled={!canRenameProject(selectedProject)}
                   >
                     <Pencil className="h-3.5 w-3.5" />
-                    {t("common.projectSelector.action.rename", {
-                      defaultValue: "重命名",
-                    })}
+                    {t("common.projectSelector.action.rename", {})}
                   </Button>
                   <Button
                     type="button"
@@ -1070,7 +1019,7 @@ export function ProjectSelector({
                     disabled={!canDeleteProject(selectedProject)}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
-                    {t("common.delete", { defaultValue: "删除" })}
+                    {t("common.delete", {})}
                   </Button>
                 </div>
                 {managementHint ? (
@@ -1107,13 +1056,11 @@ export function ProjectSelector({
           <DialogHeader className="border-b border-white/80 px-6 py-5">
             <DialogTitle>
               {t("common.projectSelector.rename.title", {
-                defaultValue: "重命名{{entity}}",
                 entity: entityLabel,
               })}
             </DialogTitle>
             <DialogDescription>
               {t("common.projectSelector.rename.description", {
-                defaultValue: "更新{{entity}}名称，不会修改本地目录路径。",
                 entity: entityLabel,
               })}
             </DialogDescription>
@@ -1122,9 +1069,7 @@ export function ProjectSelector({
             <Input
               value={renameName}
               onChange={(event) => setRenameName(event.target.value)}
-              placeholder={t("common.projectSelector.rename.placeholder", {
-                defaultValue: "输入新的项目名称",
-              })}
+              placeholder={t("common.projectSelector.rename.placeholder", {})}
               autoFocus
             />
           </div>
@@ -1141,7 +1086,7 @@ export function ProjectSelector({
               }}
               disabled={isRenaming}
             >
-              {t("common.cancel", { defaultValue: "取消" })}
+              {t("common.cancel", {})}
             </Button>
             <Button
               type="button"
@@ -1149,10 +1094,8 @@ export function ProjectSelector({
               disabled={isRenaming}
             >
               {isRenaming
-                ? t("common.projectSelector.action.saving", {
-                    defaultValue: "保存中...",
-                  })
-                : t("common.save", { defaultValue: "保存" })}
+                ? t("common.projectSelector.action.saving", {})
+                : t("common.save", {})}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1173,13 +1116,11 @@ export function ProjectSelector({
           <DialogHeader className="border-b border-white/80 px-6 py-5">
             <DialogTitle className="text-destructive">
               {t("common.projectSelector.delete.title", {
-                defaultValue: "删除{{entity}}",
                 entity: entityLabel,
               })}
             </DialogTitle>
             <DialogDescription>
               {t("common.projectSelector.delete.description", {
-                defaultValue: "确定要删除{{entity}}{{name}}吗？",
                 entity: entityLabel,
                 name: deleteTarget ? `「${deleteTarget.name}」` : "",
               })}
@@ -1188,14 +1129,10 @@ export function ProjectSelector({
           <div className="px-6 py-5">
             <div className="rounded-[22px] border border-destructive/20 bg-destructive/5 px-4 py-4 text-sm">
               <p className="font-medium text-destructive">
-                {t("common.projectSelector.delete.dangerTitle", {
-                  defaultValue: "此操作不可恢复",
-                })}
+                {t("common.projectSelector.delete.dangerTitle", {})}
               </p>
               <p className="mt-1 text-muted-foreground">
-                {t("common.projectSelector.delete.dangerDescription", {
-                  defaultValue: "仅删除项目记录，不删除本地目录和已有文件。",
-                })}
+                {t("common.projectSelector.delete.dangerDescription", {})}
               </p>
             </div>
           </div>
@@ -1212,7 +1149,7 @@ export function ProjectSelector({
               }}
               disabled={isDeleting}
             >
-              {t("common.cancel", { defaultValue: "取消" })}
+              {t("common.cancel", {})}
             </Button>
             <Button
               type="button"
@@ -1221,11 +1158,8 @@ export function ProjectSelector({
               disabled={isDeleting}
             >
               {isDeleting
-                ? t("common.projectSelector.action.deleting", {
-                    defaultValue: "删除中...",
-                  })
+                ? t("common.projectSelector.action.deleting", {})
                 : t("common.projectSelector.action.deleteEntity", {
-                    defaultValue: "删除{{entity}}",
                     entity: entityLabel,
                   })}
             </Button>

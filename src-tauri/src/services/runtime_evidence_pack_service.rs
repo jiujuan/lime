@@ -4,7 +4,9 @@
 //! 导出为最小可复盘的问题证据包。
 
 use crate::agent::SessionDetail;
-use crate::commands::aster_agent_cmd::AgentRuntimeThreadReadModel;
+use crate::commands::aster_agent_cmd::{
+    AgentRuntimeThreadReadModel, LIME_AGENT_RUNTIME_ID, LIME_AGENT_RUNTIME_PROFILE_SCHEMA_VERSION,
+};
 use crate::commands::modality_runtime_contracts::{
     AUDIO_TRANSCRIPTION_CONTRACT_KEY, AUDIO_TRANSCRIPTION_LIMECORE_POLICY_REFS,
     AUDIO_TRANSCRIPTION_ROUTING_SLOT, BROWSER_CONTROL_CONTRACT_KEY,
@@ -25,6 +27,7 @@ use crate::commands::modality_runtime_contracts::{
 };
 use crate::database::DbConnection;
 use crate::services::artifact_document_validator::ARTIFACT_DOCUMENT_SCHEMA_VERSION;
+use crate::services::runtime_agent_profile_projection_service::build_agent_runtime_profile_spine_json;
 use crate::services::runtime_file_checkpoint_service::list_file_checkpoints;
 use crate::services::workspace_health_service::ensure_workspace_ready_with_auto_relocate;
 use crate::workspace::WorkspaceManager;
@@ -698,6 +701,7 @@ fn build_runtime_json(
     known_gaps: &[String],
     exported_at: &str,
 ) -> Result<String, String> {
+    let profile_spine = build_agent_runtime_profile_spine_json(detail, thread_read);
     let payload = json!({
         "schemaVersion": "v1",
         "source": {
@@ -705,6 +709,7 @@ fn build_runtime_json(
             "runtimeSubstrate": "aster_session_thread_runtime",
             "productSurface": "lime_workspace_evidence_pack"
         },
+        "agentRuntimeProfile": profile_spine,
         "session": {
             "sessionId": detail.id,
             "threadId": detail.thread_id,
@@ -2179,7 +2184,7 @@ fn collect_latest_turn_summary(detail: &SessionDetail) -> Option<String> {
         .iter()
         .rev()
         .find_map(|item| match &item.payload {
-            AgentThreadItemPayload::TurnSummary { text } => {
+            AgentThreadItemPayload::TurnSummary { text, .. } => {
                 normalize_optional_text(Some(text.clone()))
             }
             _ => None,
@@ -2527,6 +2532,13 @@ fn request_log_matches_session(
 
 fn build_thread_runtime_facts_json(thread_read: &AgentRuntimeThreadReadModel) -> Value {
     json!({
+        "profileStatus": thread_read.profile_status,
+        "turns": thread_read.turns,
+        "toolCalls": thread_read.tool_calls,
+        "modelRouting": thread_read.model_routing,
+        "contextSummary": thread_read.context_summary,
+        "evidenceSummary": thread_read.evidence_summary,
+        "telemetrySummary": thread_read.telemetry_summary,
         "taskKind": thread_read.task_kind,
         "serviceModelSlot": thread_read.service_model_slot,
         "routingMode": thread_read.routing_mode,
@@ -2750,7 +2762,7 @@ fn summarize_item_payload(payload: &AgentThreadItemPayload) -> (&'static str, Op
         AgentThreadItemPayload::Plan { text } => {
             ("plan", normalize_optional_text(Some(truncate_text(text))))
         }
-        AgentThreadItemPayload::TurnSummary { text } => (
+        AgentThreadItemPayload::TurnSummary { text, .. } => (
             "turn_summary",
             normalize_optional_text(Some(truncate_text(text))),
         ),
@@ -2792,16 +2804,27 @@ fn build_runtime_observability_summary_json(
         "schemaVersion": "v1",
         "correlation": {
             "correlationKeys": [
+                "runtime_id",
+                "profile_schema_version",
                 "session_id",
                 "thread_id",
                 "turn_id",
+                "tool_call_id",
+                "trace_id",
+                "evidence_ref",
                 "pending_request_id",
                 "queued_turn_id",
                 "subagent_session_id"
             ],
+            "runtimeId": LIME_AGENT_RUNTIME_ID,
+            "profileSchemaVersion": LIME_AGENT_RUNTIME_PROFILE_SCHEMA_VERSION,
             "sessionId": detail.id,
             "threadId": detail.thread_id,
             "activeTurnId": thread_read.active_turn_id,
+            "turnIds": thread_read.turns.iter().map(|turn| turn.turn_id.clone()).collect::<Vec<_>>(),
+            "toolCallIds": thread_read.tool_calls.iter().map(|tool| tool.tool_call_id.clone()).collect::<Vec<_>>(),
+            "traceIds": thread_read.telemetry_summary.trace_ids,
+            "evidenceRefs": thread_read.evidence_summary.evidence_refs,
             "pendingRequestIds": thread_read.pending_requests.iter().map(|item| item.id.clone()).collect::<Vec<_>>(),
             "queuedTurnIds": thread_read.queued_turns.iter().map(|item| item.queued_turn_id.clone()).collect::<Vec<_>>(),
             "subagentSessionIds": detail.child_subagent_sessions.iter().map(|item| item.id.clone()).collect::<Vec<_>>()
@@ -6352,6 +6375,7 @@ mod tests {
                     updated_at: "2026-03-27T10:00:30Z".to_string(),
                     payload: AgentThreadItemPayload::TurnSummary {
                         text: "已拿到 handoff 四件套，下一步补问题证据包。".to_string(),
+                        metadata: None,
                     },
                 },
             ],
@@ -6365,7 +6389,15 @@ mod tests {
         AgentRuntimeThreadReadModel {
             thread_id: "thread-1".to_string(),
             status: "running".to_string(),
+            profile_status: "running".to_string(),
             active_turn_id: Some("turn-1".to_string()),
+            turns: vec![
+                crate::commands::aster_agent_cmd::AgentRuntimeThreadTurnProfileView {
+                    turn_id: "turn-1".to_string(),
+                    status: "running".to_string(),
+                    native_status: "running".to_string(),
+                },
+            ],
             pending_requests: vec![crate::commands::aster_agent_cmd::AgentRuntimeRequestView {
                 id: "req-1".to_string(),
                 thread_id: "thread-1".to_string(),
@@ -6390,6 +6422,45 @@ mod tests {
                 image_count: 0,
                 position: 1,
             }],
+            tool_calls: vec![
+                crate::commands::aster_agent_cmd::AgentRuntimeThreadToolCallView {
+                    tool_call_id: "tool-1".to_string(),
+                    turn_id: "turn-1".to_string(),
+                    tool_name: "Read".to_string(),
+                    status: "completed".to_string(),
+                    success: Some(true),
+                    error: None,
+                },
+            ],
+            model_routing: Some(json!({
+                "taskKind": "translation",
+                "serviceModelSlot": "translation",
+                "routingMode": "single_candidate",
+                "decisionSource": "service_model_setting",
+                "selectedModel": "gpt-5.4-mini",
+                "candidateCount": 1,
+                "estimatedCostClass": "low",
+                "singleCandidateOnly": true
+            })),
+            evidence_summary: crate::commands::aster_agent_cmd::AgentRuntimeThreadEvidenceSummary {
+                evidence_refs: vec!["evidence://session-1/runtime".to_string()],
+                verification_outcomes: Vec::new(),
+            },
+            telemetry_summary:
+                crate::commands::aster_agent_cmd::AgentRuntimeThreadTelemetrySummary {
+                    trace_ids: vec!["trace-turn-1".to_string()],
+                    join_status: "matched".to_string(),
+                },
+            context_summary: Some(json!({
+                "owner": "AgentContext",
+                "source": "turn_context",
+                "retrieval_refs": [
+                    {
+                        "source_id": "knowledge_pack:brief",
+                        "kind": "knowledge_pack"
+                    }
+                ]
+            })),
             interrupt_state: None,
             updated_at: Some("2026-03-27T10:01:00Z".to_string()),
             latest_compaction_boundary: None,
@@ -8111,6 +8182,316 @@ mod tests {
         assert!(artifacts.contains("\"checkpoint_id\": \"artifact-1\""));
         assert!(artifacts.contains("\"matchedRequestCount\": 1"));
         assert!(!artifacts.contains("\"verification\""));
+    }
+
+    #[test]
+    fn evidence_runtime_should_export_agent_runtime_profile_spine() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let detail = build_detail();
+        let thread_read = build_thread_read();
+
+        let result =
+            export_runtime_evidence_pack(&detail, &thread_read, temp_dir.path()).expect("export");
+
+        assert_eq!(
+            result
+                .observability_summary
+                .pointer("/correlation/runtimeId")
+                .and_then(Value::as_str),
+            Some(LIME_AGENT_RUNTIME_ID)
+        );
+        assert_eq!(
+            result
+                .observability_summary
+                .pointer("/correlation/profileSchemaVersion")
+                .and_then(Value::as_str),
+            Some(LIME_AGENT_RUNTIME_PROFILE_SCHEMA_VERSION)
+        );
+        assert_eq!(
+            result
+                .observability_summary
+                .pointer("/correlation/turnIds/0")
+                .and_then(Value::as_str),
+            Some("turn-1")
+        );
+        assert_eq!(
+            result
+                .observability_summary
+                .pointer("/correlation/toolCallIds/0")
+                .and_then(Value::as_str),
+            Some("tool-1")
+        );
+        assert_eq!(
+            result
+                .observability_summary
+                .pointer("/correlation/traceIds/0")
+                .and_then(Value::as_str),
+            Some("trace-turn-1")
+        );
+
+        let runtime_path = temp_dir
+            .path()
+            .join(".lime/harness/sessions/session-1/evidence/runtime.json");
+        let runtime_raw = fs::read_to_string(runtime_path).expect("runtime");
+        let runtime = serde_json::from_str::<Value>(&runtime_raw).expect("parse runtime json");
+
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/schemaVersion")
+                .and_then(Value::as_str),
+            Some(LIME_AGENT_RUNTIME_PROFILE_SCHEMA_VERSION)
+        );
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/runtimeId")
+                .and_then(Value::as_str),
+            Some(LIME_AGENT_RUNTIME_ID)
+        );
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/correlationRefs/evidenceRefs/0")
+                .and_then(Value::as_str),
+            Some("evidence://session-1/runtime")
+        );
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/actions/0/actionId")
+                .and_then(Value::as_str),
+            Some("req-1")
+        );
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/events/0/type")
+                .and_then(Value::as_str),
+            Some("permission.evaluated")
+        );
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/events/0/payload/owner")
+                .and_then(Value::as_str),
+            Some("AgentPolicy")
+        );
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/events/1/type")
+                .and_then(Value::as_str),
+            Some("action.required")
+        );
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/events/1/payload/actionId")
+                .and_then(Value::as_str),
+            Some("req-1")
+        );
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/events/2/type")
+                .and_then(Value::as_str),
+            Some("tool.started")
+        );
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/events/2/payload/toolCallId")
+                .and_then(Value::as_str),
+            Some("tool-1")
+        );
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/events/3/type")
+                .and_then(Value::as_str),
+            Some("tool.result")
+        );
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/events/3/payload/success")
+                .and_then(Value::as_bool),
+            Some(true)
+        );
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/events/4/type")
+                .and_then(Value::as_str),
+            Some("task.profile.resolved")
+        );
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/events/4/payload/taskKind")
+                .and_then(Value::as_str),
+            Some("translation")
+        );
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/events/5/type")
+                .and_then(Value::as_str),
+            Some("routing.single_candidate")
+        );
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/events/5/payload/selectedModel")
+                .and_then(Value::as_str),
+            Some("gpt-5.4-mini")
+        );
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/events/6/type")
+                .and_then(Value::as_str),
+            Some("cost.estimated")
+        );
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/events/6/payload/estimatedCostClass")
+                .and_then(Value::as_str),
+            Some("low")
+        );
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/events/7/type")
+                .and_then(Value::as_str),
+            Some("limit.changed")
+        );
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/events/7/payload/singleCandidateOnly")
+                .and_then(Value::as_bool),
+            Some(true)
+        );
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/events/8/type")
+                .and_then(Value::as_str),
+            Some("task.created")
+        );
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/events/8/payload/taskId")
+                .and_then(Value::as_str),
+            Some("task_thread-1")
+        );
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/events/9/type")
+                .and_then(Value::as_str),
+            Some("task.attempt.started")
+        );
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/events/9/payload/attemptId")
+                .and_then(Value::as_str),
+            Some("attempt_turn-1")
+        );
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/actions/0/policyRefs/owner")
+                .and_then(Value::as_str),
+            Some("AgentPolicy")
+        );
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/actions/0/policyRefs/decisionKind")
+                .and_then(Value::as_str),
+            Some("ask")
+        );
+        assert_eq!(
+            runtime
+                .pointer("/agentRuntimeProfile/actions/0/policyRefs/approvalRequestId")
+                .and_then(Value::as_str),
+            Some("req-1")
+        );
+        assert_eq!(
+            runtime
+                .pointer("/thread/runtimeFacts/contextSummary/owner")
+                .and_then(Value::as_str),
+            Some("AgentContext")
+        );
+    }
+
+    #[test]
+    fn evidence_runtime_should_export_task_retry_profile_events() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let mut detail = build_detail();
+        detail.turns = vec![AgentThreadTurn {
+            id: "turn-failed".to_string(),
+            thread_id: "thread-1".to_string(),
+            prompt_text: "继续重试 provider 请求".to_string(),
+            status: AgentThreadTurnStatus::Failed,
+            started_at: "2026-03-27T10:00:00Z".to_string(),
+            completed_at: Some("2026-03-27T10:00:05Z".to_string()),
+            error_message: Some("Provider 错误: rate limit".to_string()),
+            created_at: "2026-03-27T10:00:00Z".to_string(),
+            updated_at: "2026-03-27T10:00:05Z".to_string(),
+        }];
+        detail.items = Vec::new();
+        let queued_turns = vec![QueuedTurnSnapshot {
+            queued_turn_id: "queued-retry-1".to_string(),
+            message_preview: "继续重试".to_string(),
+            message_text: "继续重试 provider 请求".to_string(),
+            created_at: 1_774_607_210,
+            image_count: 0,
+            position: 1,
+        }];
+        let thread_read = AgentRuntimeThreadReadModel::from_session_detail(&detail, &queued_turns);
+
+        export_runtime_evidence_pack(&detail, &thread_read, temp_dir.path()).expect("export");
+
+        let runtime_path = temp_dir
+            .path()
+            .join(".lime/harness/sessions/session-1/evidence/runtime.json");
+        let runtime_raw = fs::read_to_string(runtime_path).expect("runtime");
+        let runtime = serde_json::from_str::<Value>(&runtime_raw).expect("parse runtime json");
+        let events = runtime
+            .pointer("/agentRuntimeProfile/events")
+            .and_then(Value::as_array)
+            .expect("profile events");
+        let event_types = events
+            .iter()
+            .filter_map(|event| event.get("type").and_then(Value::as_str))
+            .collect::<Vec<_>>();
+
+        assert!(event_types.contains(&"task.created"));
+        assert!(event_types.contains(&"task.attempt.started"));
+        assert!(event_types.contains(&"task.attempt.failed"));
+        assert!(event_types.contains(&"task.retrying"));
+        assert!(!event_types.contains(&"task.failed"));
+
+        let attempt_failed = events
+            .iter()
+            .find(|event| event.get("type").and_then(Value::as_str) == Some("task.attempt.failed"))
+            .expect("attempt failed event");
+        assert_eq!(
+            attempt_failed
+                .pointer("/payload/failureCategory")
+                .and_then(Value::as_str),
+            Some("provider_error")
+        );
+        assert_eq!(
+            attempt_failed
+                .pointer("/payload/retryable")
+                .and_then(Value::as_bool),
+            Some(true)
+        );
+
+        let retrying = events
+            .iter()
+            .find(|event| event.get("type").and_then(Value::as_str) == Some("task.retrying"))
+            .expect("retrying event");
+        assert_eq!(
+            retrying
+                .pointer("/payload/failedAttemptId")
+                .and_then(Value::as_str),
+            Some("attempt_turn-failed")
+        );
+        assert_eq!(
+            retrying
+                .pointer("/payload/queuedTurnId")
+                .and_then(Value::as_str),
+            Some("queued-retry-1")
+        );
+        assert_eq!(
+            retrying
+                .pointer("/payload/nextAttemptIndex")
+                .and_then(Value::as_u64),
+            Some(2)
+        );
     }
 
     #[test]

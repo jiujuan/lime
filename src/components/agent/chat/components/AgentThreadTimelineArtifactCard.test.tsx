@@ -232,9 +232,7 @@ describe("AgentThreadTimelineArtifactCard", () => {
     ) as HTMLElement | null;
     expect(badge).not.toBeNull();
     expect(badge?.textContent).toContain("AgentUI Artifact 预览");
-    expect(badge?.getAttribute("title")).toContain(
-      "Agent UI 标准投影",
-    );
+    expect(badge?.getAttribute("title")).toContain("Agent UI 标准投影");
     expect(badge?.getAttribute("title")).toContain("产物快照");
     expect(badge?.getAttribute("title")).not.toContain("artifact_snapshot");
   });

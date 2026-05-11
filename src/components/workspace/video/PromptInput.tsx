@@ -207,26 +207,19 @@ export const PromptInput: React.FC<PromptInputProps> = memo(
       return [
         state.model
           ? t("workspace.video.promptInput.meta.modelSelected", {
-              defaultValue: "模型 {{model}}",
               model: state.model,
             })
-          : t("workspace.video.promptInput.meta.modelPending", {
-              defaultValue: "待选择模型",
-            }),
+          : t("workspace.video.promptInput.meta.modelPending"),
         `${state.aspectRatio} · ${state.resolution}`,
         t("workspace.video.promptInput.meta.durationSeconds", {
-          defaultValue: "{{value}}s",
           value: formatNumber(state.duration, { locale }),
         }),
         referenceCount > 0
           ? t("workspace.video.promptInput.meta.referenceImages", {
               count: referenceCount,
-              defaultValue: "{{value}} 张参考图",
               value: formatNumber(referenceCount, { locale }),
             })
-          : t("workspace.video.promptInput.meta.textToVideo", {
-              defaultValue: "纯文生视频",
-            }),
+          : t("workspace.video.promptInput.meta.textToVideo"),
       ];
     }, [
       i18n.language,
@@ -257,25 +250,14 @@ export const PromptInput: React.FC<PromptInputProps> = memo(
         <InputShell>
           <InputHeader>
             <HeaderContent>
-              <Eyebrow>
-                {t("workspace.video.promptInput.eyebrow", {
-                  defaultValue: "VIDEO STUDIO",
-                })}
-              </Eyebrow>
+              <Eyebrow>{t("workspace.video.promptInput.eyebrow")}</Eyebrow>
               <TitleRow>
                 <InputTitle>
-                  {t("workspace.video.promptInput.title", {
-                    defaultValue: "描述你想生成的画面、镜头与节奏",
-                  })}
+                  {t("workspace.video.promptInput.title")}
                 </InputTitle>
                 <WorkbenchInfoTip
-                  ariaLabel={t("workspace.video.promptInput.promptTip.aria", {
-                    defaultValue: "提示词说明",
-                  })}
-                  content={t("workspace.video.promptInput.promptTip.content", {
-                    defaultValue:
-                      "先写主体、场景和运动方式，再补充光线、氛围或镜头语言，生成结果会自动回流到项目资料。",
-                  })}
+                  ariaLabel={t("workspace.video.promptInput.promptTip.aria")}
+                  content={t("workspace.video.promptInput.promptTip.content")}
                   tone="sky"
                 />
               </TitleRow>
@@ -297,10 +279,7 @@ export const PromptInput: React.FC<PromptInputProps> = memo(
                 e.target.style.height = `${Math.min(e.target.scrollHeight, 260)}px`;
               }}
               onKeyDown={handleKeyDown}
-              placeholder={t("workspace.video.promptInput.placeholder", {
-                defaultValue:
-                  "例如：黄昏海边，女孩沿着潮湿木栈道慢跑，镜头低机位跟拍后缓慢拉远，风吹起外套边角，整体偏电影感与暖金色。",
-              })}
+              placeholder={t("workspace.video.promptInput.placeholder")}
               rows={1}
             />
           </TextareaSurface>
@@ -308,18 +287,12 @@ export const PromptInput: React.FC<PromptInputProps> = memo(
           <FooterRow>
             <FooterTips>
               <WorkbenchInfoTip
-                ariaLabel={t("workspace.video.promptInput.shortcut.aria", {
-                  defaultValue: "快捷键说明",
-                })}
-                label={t("workspace.video.promptInput.shortcut.label", {
-                  defaultValue: "快捷键",
-                })}
+                ariaLabel={t("workspace.video.promptInput.shortcut.aria")}
+                label={t("workspace.video.promptInput.shortcut.label")}
                 variant="pill"
                 tone="sky"
                 align="start"
-                content={t("workspace.video.promptInput.shortcut.content", {
-                  defaultValue: "按 Enter 直接生成，Shift + Enter 换行。",
-                })}
+                content={t("workspace.video.promptInput.shortcut.content")}
               />
             </FooterTips>
             <GenerateButton
@@ -329,12 +302,8 @@ export const PromptInput: React.FC<PromptInputProps> = memo(
             >
               <Sparkles size={18} />
               {state.status === "generating"
-                ? t("workspace.video.promptInput.action.generating", {
-                    defaultValue: "生成中",
-                  })
-                : t("workspace.video.promptInput.action.generate", {
-                    defaultValue: "生成视频",
-                  })}
+                ? t("workspace.video.promptInput.action.generating")
+                : t("workspace.video.promptInput.action.generate")}
             </GenerateButton>
           </FooterRow>
         </InputShell>

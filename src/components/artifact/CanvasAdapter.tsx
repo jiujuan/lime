@@ -14,6 +14,7 @@ import React, {
   type ComponentProps,
 } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { Loader2, Maximize2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Artifact } from "@/lib/artifact/types";
@@ -71,38 +72,63 @@ interface CanvasAdapterProps {
 // 辅助组件
 // ============================================================================
 
+const CANVAS_TYPE_LABEL_KEYS = {
+  document: "workspace.canvasAdapter.canvasType.document",
+  video: "workspace.canvasAdapter.canvasType.video",
+  design: "workspace.canvasAdapter.canvasType.design",
+} as const satisfies Record<keyof typeof CANVAS_TYPE_LABELS, string>;
+
+const LAYER_TYPE_LABEL_KEYS = {
+  image: "workspace.canvasAdapter.layerType.image",
+  text: "workspace.canvasAdapter.layerType.text",
+  shape: "workspace.canvasAdapter.layerType.shape",
+  effect: "workspace.canvasAdapter.layerType.effect",
+  group: "workspace.canvasAdapter.layerType.group",
+  fallback: "workspace.canvasAdapter.layerType.fallback",
+} as const;
+
 /**
  * Canvas 加载骨架屏
  */
-const CanvasLoadingSkeleton: React.FC = memo(() => (
-  <div className="flex items-center justify-center h-full min-h-[300px] bg-[#1e2227]">
-    <div className="flex flex-col items-center gap-3 text-gray-400">
-      <Loader2 className="w-8 h-8 animate-spin" />
-      <span className="text-sm">加载 Canvas...</span>
+const CanvasLoadingSkeleton: React.FC = memo(() => {
+  const { t } = useTranslation("workspace");
+
+  return (
+    <div className="flex items-center justify-center h-full min-h-[300px] bg-[#1e2227]">
+      <div className="flex flex-col items-center gap-3 text-gray-400">
+        <Loader2 className="w-8 h-8 animate-spin" />
+        <span className="text-sm">{t("workspace.canvasAdapter.loading")}</span>
+      </div>
     </div>
-  </div>
-));
+  );
+});
 CanvasLoadingSkeleton.displayName = "CanvasLoadingSkeleton";
 
 /**
  * Canvas 不支持提示
  */
 const CanvasUnsupportedMessage: React.FC<{ canvasType: string }> = memo(
-  ({ canvasType }) => (
-    <div className="flex flex-col items-center justify-center h-full min-h-[300px] bg-[#1e2227]">
-      <div className="text-center p-6">
-        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-yellow-500/20 flex items-center justify-center">
-          <span className="text-2xl">⚠️</span>
+  ({ canvasType }) => {
+    const { t } = useTranslation("workspace");
+
+    return (
+      <div className="flex flex-col items-center justify-center h-full min-h-[300px] bg-[#1e2227]">
+        <div className="text-center p-6">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-yellow-500/20 flex items-center justify-center">
+            <span className="text-2xl">⚠️</span>
+          </div>
+          <h3 className="text-lg font-medium text-white mb-2">
+            {t("workspace.canvasAdapter.unsupported.title")}
+          </h3>
+          <p className="text-sm text-gray-400">
+            {t("workspace.canvasAdapter.unsupported.detail", {
+              type: canvasType,
+            })}
+          </p>
         </div>
-        <h3 className="text-lg font-medium text-white mb-2">
-          不支持的 Canvas 类型
-        </h3>
-        <p className="text-sm text-gray-400">
-          类型 "{canvasType}" 暂不支持在此处渲染
-        </p>
       </div>
-    </div>
-  ),
+    );
+  },
 );
 CanvasUnsupportedMessage.displayName = "CanvasUnsupportedMessage";
 
@@ -112,20 +138,23 @@ function isDesignCanvasState(
   return state.type === "design";
 }
 
-function getLayerTypeLabel(type: string): string {
+function getLayerTypeLabel(
+  type: string,
+  t: ReturnType<typeof useTranslation<"workspace">>["t"],
+): string {
   switch (type) {
     case "image":
-      return "图片";
+      return t(LAYER_TYPE_LABEL_KEYS.image);
     case "text":
-      return "文字";
+      return t(LAYER_TYPE_LABEL_KEYS.text);
     case "shape":
-      return "形状";
+      return t(LAYER_TYPE_LABEL_KEYS.shape);
     case "effect":
-      return "效果";
+      return t(LAYER_TYPE_LABEL_KEYS.effect);
     case "group":
-      return "组";
+      return t(LAYER_TYPE_LABEL_KEYS.group);
     default:
-      return "图层";
+      return t(LAYER_TYPE_LABEL_KEYS.fallback);
   }
 }
 
@@ -158,6 +187,7 @@ export const CanvasAdapter: React.FC<CanvasAdapterProps> = memo(
     canvasFactoryProps,
     className,
   }) => {
+    const { t } = useTranslation("workspace");
     // 获取 Canvas 类型
     const canvasType = useMemo(
       () => getCanvasTypeFromArtifact(artifact.type),
@@ -238,7 +268,7 @@ export const CanvasAdapter: React.FC<CanvasAdapterProps> = memo(
      */
     const handleOpenFullEditor = useCallback(() => {
       setIsFullEditorMode(true);
-      console.log("[CanvasAdapter] 打开完整 Canvas 编辑器:", artifact.type);
+      console.log("[CanvasAdapter] Open full Canvas editor:", artifact.type);
     }, [artifact.type]);
 
     // 不支持的 Canvas 类型
@@ -260,8 +290,9 @@ export const CanvasAdapter: React.FC<CanvasAdapterProps> = memo(
     }
 
     // 获取显示信息
-    const label =
-      CANVAS_TYPE_LABELS[canvasType as keyof typeof CANVAS_TYPE_LABELS];
+    const label = t(
+      CANVAS_TYPE_LABEL_KEYS[canvasType as keyof typeof CANVAS_TYPE_LABELS],
+    );
     const icon =
       CANVAS_TYPE_ICONS[canvasType as keyof typeof CANVAS_TYPE_ICONS];
 
@@ -322,38 +353,52 @@ export const CanvasAdapter: React.FC<CanvasAdapterProps> = memo(
               </h3>
               <p className="mt-1 text-xs text-slate-500">
                 {document.canvas.width} x {document.canvas.height} /{" "}
-                {document.layers.length} 个图层 / {imageLayerCount} 个图片层 /{" "}
-                {document.status}
+                {t("workspace.canvasAdapter.designPreview.layerCount", {
+                  count: document.layers.length,
+                })}{" "}
+                /{" "}
+                {t("workspace.canvasAdapter.designPreview.imageLayerCount", {
+                  count: imageLayerCount,
+                })}{" "}
+                / {document.status}
               </p>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-4">
               <div className="rounded-lg border border-slate-200 bg-white p-3">
-                <p className="text-xs font-semibold text-slate-500">显示图层</p>
+                <p className="text-xs font-semibold text-slate-500">
+                  {t("workspace.canvasAdapter.designPreview.visibleLayers")}
+                </p>
                 <p className="mt-1 text-lg font-semibold text-slate-950">
                   {visibleLayers.length}
                 </p>
               </div>
               <div className="rounded-lg border border-slate-200 bg-white p-3">
-                <p className="text-xs font-semibold text-slate-500">资产</p>
+                <p className="text-xs font-semibold text-slate-500">
+                  {t("workspace.canvasAdapter.designPreview.assets")}
+                </p>
                 <p className="mt-1 text-lg font-semibold text-slate-950">
                   {document.assets.length}
                 </p>
               </div>
               <div className="rounded-lg border border-slate-200 bg-white p-3">
-                <p className="text-xs font-semibold text-slate-500">已生成</p>
+                <p className="text-xs font-semibold text-slate-500">
+                  {t("workspace.canvasAdapter.designPreview.generated")}
+                </p>
                 <p className="mt-1 text-lg font-semibold text-slate-950">
                   {generatedAssetCount}
                 </p>
               </div>
               <div className="rounded-lg border border-slate-200 bg-white p-3">
-                <p className="text-xs font-semibold text-slate-500">当前层</p>
+                <p className="text-xs font-semibold text-slate-500">
+                  {t("workspace.canvasAdapter.designPreview.currentLayer")}
+                </p>
                 <p className="mt-1 truncate text-sm font-semibold text-slate-950">
                   {document.layers.find(
                     (layer) => layer.id === state.selectedLayerId,
                   )?.name ||
                     document.layers[0]?.name ||
-                    "未选择"}
+                    t("workspace.canvasAdapter.designPreview.notSelected")}
                 </p>
               </div>
             </div>
@@ -361,10 +406,12 @@ export const CanvasAdapter: React.FC<CanvasAdapterProps> = memo(
             <div className="rounded-lg border border-slate-200 bg-white p-3">
               <div className="flex items-center justify-between gap-3">
                 <h4 className="text-sm font-semibold text-slate-950">
-                  图层摘要
+                  {t("workspace.canvasAdapter.designPreview.layerSummary")}
                 </h4>
                 <span className="text-xs font-medium text-slate-500">
-                  top {layerSummary.length}
+                  {t("workspace.canvasAdapter.designPreview.topLayers", {
+                    count: layerSummary.length,
+                  })}
                 </span>
               </div>
               <div className="mt-2 divide-y divide-slate-100">
@@ -378,14 +425,18 @@ export const CanvasAdapter: React.FC<CanvasAdapterProps> = memo(
                         {layer.name}
                       </p>
                       <p className="mt-0.5 text-xs text-slate-500">
-                        {getLayerTypeLabel(layer.type)} / z {layer.zIndex}
+                        {getLayerTypeLabel(layer.type, t)} / z {layer.zIndex}
                       </p>
                     </div>
                     <span className="text-xs text-slate-500">
-                      {layer.visible ? "显示" : "隐藏"}
+                      {layer.visible
+                        ? t("workspace.canvasAdapter.layer.visible")
+                        : t("workspace.canvasAdapter.layer.hidden")}
                     </span>
                     <span className="text-xs text-slate-500">
-                      {layer.locked ? "锁定" : "可编辑"}
+                      {layer.locked
+                        ? t("workspace.canvasAdapter.layer.locked")
+                        : t("workspace.canvasAdapter.layer.editable")}
                     </span>
                   </div>
                 ))}
@@ -401,7 +452,7 @@ export const CanvasAdapter: React.FC<CanvasAdapterProps> = memo(
       isFullEditorMode && fullEditorRoot
         ? createPortal(
             <div
-              aria-label="图层设计完整编辑器"
+              aria-label={t("workspace.canvasAdapter.fullEditor.ariaLabel")}
               aria-modal="true"
               className="fixed inset-0 z-[99990] flex flex-col bg-[#1e2227]"
               data-testid="canvas-full-editor"
@@ -411,14 +462,14 @@ export const CanvasAdapter: React.FC<CanvasAdapterProps> = memo(
                 <div className="flex min-w-0 items-center gap-2">
                   <span className="text-lg">{icon}</span>
                   <span className="truncate text-sm font-medium text-white">
-                    {label} Canvas · 完整编辑器
+                    {t("workspace.canvasAdapter.fullEditor.title", { label })}
                   </span>
                 </div>
                 <button
-                  aria-label="关闭完整编辑器"
+                  aria-label={t("workspace.canvasAdapter.fullEditor.close")}
                   onClick={handleClose}
                   className="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-200 transition-colors hover:bg-gray-700"
-                  title="关闭完整编辑器"
+                  title={t("workspace.canvasAdapter.fullEditor.close")}
                   type="button"
                 >
                   <X className="h-4 w-4" />
@@ -439,23 +490,23 @@ export const CanvasAdapter: React.FC<CanvasAdapterProps> = memo(
           <div className="flex items-center gap-2">
             <span className="text-lg">{icon}</span>
             <span className="text-sm font-medium text-white">
-              {label} Canvas
+              {t("workspace.canvasAdapter.header.title", { label })}
             </span>
             {isStreaming && (
               <span className="px-2 py-0.5 text-xs bg-blue-500/20 text-blue-400 rounded">
-                生成中...
+                {t("workspace.canvasAdapter.status.generating")}
               </span>
             )}
           </div>
           <button
-            aria-label="在完整编辑器中打开"
+            aria-label={t("workspace.canvasAdapter.action.openFullEditor")}
             onClick={handleOpenFullEditor}
             className="flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
-            title="在完整编辑器中打开"
+            title={t("workspace.canvasAdapter.action.openFullEditor")}
             type="button"
           >
             <Maximize2 className="w-4 h-4" />
-            <span>编辑</span>
+            <span>{t("workspace.canvasAdapter.action.edit")}</span>
           </button>
         </div>
 

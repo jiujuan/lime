@@ -1,4 +1,5 @@
 import { AlertCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { ResourceManagerItem } from "./types";
 
 interface PdfResourceRendererProps {
@@ -6,6 +7,7 @@ interface PdfResourceRendererProps {
 }
 
 export function PdfResourceRenderer({ item }: PdfResourceRendererProps) {
+  const { t } = useTranslation("workspace");
   const src = item.src?.trim();
 
   if (!src) {
@@ -16,10 +18,10 @@ export function PdfResourceRenderer({ item }: PdfResourceRendererProps) {
             <AlertCircle className="h-7 w-7" />
           </div>
           <h2 className="mt-5 text-lg font-semibold text-slate-950">
-            PDF 缺少可预览地址
+            {t("workspace.resourceManager.pdf.missingTitle")}
           </h2>
           <p className="mt-2 text-sm leading-6 text-slate-500">
-            当前资源没有本地路径或可加载 URL，暂时无法在窗口内预览。
+            {t("workspace.resourceManager.pdf.missingDescription")}
           </p>
         </div>
       </div>
@@ -30,7 +32,7 @@ export function PdfResourceRenderer({ item }: PdfResourceRendererProps) {
     <iframe
       key={item.id}
       src={src}
-      title={item.title || "PDF 预览"}
+      title={item.title || t("workspace.resourceManager.pdf.frameTitle")}
       data-testid="resource-manager-pdf-frame"
       className="min-h-0 flex-1 border-0 bg-white"
     />

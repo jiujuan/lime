@@ -32,7 +32,23 @@ const LIME_RUNTIME_TOOL_SURFACE_KEY: &str = "tool_surface";
 const LIME_RUNTIME_IMAGE_INPUT_POLICY_KEY: &str = "image_input_policy";
 const TURN_TOOL_SURFACE_DIRECT_ANSWER: &str = "direct_answer";
 const TURN_TOOL_SURFACE_LOCAL_WORKSPACE: &str = "local_workspace";
+const TURN_TOOL_SURFACE_COMPACT_TOOLS: &str = "compact_tools";
 const LOCAL_WORKSPACE_TOOL_NAMES: &[&str] = &["Bash", "Read", "Write", "Edit", "Glob", "Grep"];
+const COMPACT_TOOL_SURFACE_TOOL_NAMES: &[&str] = &[
+    "ToolSearch",
+    "ListMcpResourcesTool",
+    "ReadMcpResourceTool",
+    "extensionmanager__search_available_extensions",
+    "extensionmanager__manage_extensions",
+    "Read",
+    "Glob",
+    "Grep",
+    "Bash",
+    "Edit",
+    "Write",
+    "Agent",
+    "StructuredOutput",
+];
 const DIRECT_ANSWER_TURN_GUIDANCE: &str = "【当前回合执行约束】本回合应优先直接回答。除非信息明显不足或用户明确要求，否则不要调用工具，也不要把简单回复扩展成多阶段流程。";
 const LOCAL_WORKSPACE_TURN_GUIDANCE: &str = "【当前回合执行约束】本回合只允许使用本地工作区工具。先用最少的侦查动作定位关键文件，优先小范围目录/文件列表与精确搜索；通常先控制在 3 到 6 次工具调用内拿到关键证据，只有前一步明确暴露新线索时再继续深入。若需要连续侦查，请把相互独立的读取/搜索收敛成一批，并在同一条回复里一起发起 2 到 4 个彼此独立的只读工具调用，让运行时并行执行；先完成这一批，再直接输出 1 到 2 句用户可见的结论正文，说明已经确认了什么、还缺什么、为什么还要继续，不要额外输出“阶段结论”标题，再决定是否继续下一批。如果用户消息里已经点名绝对路径、仓库根或具体文件，就把这些显式路径当作本回合唯一优先入口；第一批只围绕这些路径展开，不要先扫描当前默认工作区或无关目录。读取文件时聚焦与问题直接相关的入口、注册表、配置和代码片段，避免重复枚举大目录、避免一次性展开超长目录或整文件全文，也不要把大段原文直接抄回最终回答，改用结论加文件路径。";
 
@@ -170,6 +186,12 @@ fn is_local_workspace_tool(tool_name: &str) -> bool {
         .any(|candidate| candidate.eq_ignore_ascii_case(tool_name))
 }
 
+fn is_compact_tool_surface_tool(tool_name: &str) -> bool {
+    COMPACT_TOOL_SURFACE_TOOL_NAMES
+        .iter()
+        .any(|candidate| candidate.eq_ignore_ascii_case(tool_name))
+}
+
 fn normalize_turn_metadata_tool_list(value: Option<&Value>) -> Vec<String> {
     let Some(items) = value.and_then(Value::as_array) else {
         return Vec::new();
@@ -250,6 +272,10 @@ fn filter_tools_for_turn_surface(
         Some(TURN_TOOL_SURFACE_DIRECT_ANSWER) => Vec::new(),
         Some(TURN_TOOL_SURFACE_LOCAL_WORKSPACE) => {
             tools.retain(|tool| is_local_workspace_tool(&tool.name));
+            tools
+        }
+        Some(TURN_TOOL_SURFACE_COMPACT_TOOLS) => {
+            tools.retain(|tool| is_compact_tool_surface_tool(&tool.name));
             tools
         }
         _ => tools,
@@ -556,11 +582,37 @@ impl Agent {
         };
 
         Ok(Box::pin(try_stream! {
-            let mut first_provider_message_seen = false;
+            let mut first_provider_content_seen = false;
             while let Some(next) = stream.next().await {
-                let (mut message, usage) = next?;
-                if !first_provider_message_seen {
-                    first_provider_message_seen = true;
+                let (mut message, usage) = match next {
+                    Ok(next) => next,
+                    Err(error)
+                        if !first_provider_content_seen
+                            && error.to_string().contains(
+                                "Anthropic stream ended without assistant content or tool call",
+                            ) =>
+                    {
+                        tracing::warn!(
+                            "[AsterAgent][TTFT] empty provider stream before first message, retrying non-stream fallback: provider={}, model={}, elapsed_ms={}, error={}",
+                            provider.get_name(),
+                            model_config.model_name,
+                            started_at.elapsed().as_millis(),
+                            error
+                        );
+                        let (message, usage) = provider
+                            .complete_with_model(
+                                &model_config,
+                                system_prompt.as_str(),
+                                messages_for_provider.messages(),
+                                &tools,
+                            )
+                            .await?;
+                        (Some(message), Some(usage))
+                    }
+                    Err(error) => Err(error)?,
+                };
+                if message.is_some() && !first_provider_content_seen {
+                    first_provider_content_seen = true;
                     tracing::info!(
                         "[AsterAgent][TTFT] first provider stream message decoded: provider={}, model={}, elapsed_ms={}",
                         provider.get_name(),
@@ -779,6 +831,7 @@ impl Agent {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agents::mcp_client::{Error as McpClientError, McpClientTrait};
     use crate::conversation::message::{Message, MessageContent, ToolRequest};
     use crate::model::ModelConfig;
     use crate::providers::base::{Provider, ProviderUsage, Usage};
@@ -788,9 +841,19 @@ mod tests {
     use crate::session::{Session, TurnContextOverride};
     use async_trait::async_trait;
     use chrono::{DateTime, Utc};
+    use rmcp::model::{
+        CallToolResult, GetPromptResult, Implementation, InitializeResult, JsonObject,
+        ListPromptsResult, ListResourcesResult, ListToolsResult, ProtocolVersion,
+        ReadResourceResult, ResourcesCapability, ServerCapabilities, ServerInfo,
+        ServerNotification,
+    };
     use rmcp::object;
     use std::collections::HashMap;
     use std::path::PathBuf;
+    use tokio::sync::{mpsc, Mutex};
+    use tokio_util::sync::CancellationToken;
+
+    const MCP_CONTEXT_SENTINEL: &str = "MCP_CONTEXT_SENTINEL_SHOULD_STAY";
 
     #[derive(Clone)]
     struct MockProvider {
@@ -867,6 +930,93 @@ mod tests {
                 Message::assistant().with_text("ok"),
                 ProviderUsage::new(model_config.model_name.clone(), Usage::default()),
             ))
+        }
+    }
+
+    struct PromptContextMockClient;
+
+    #[async_trait]
+    impl McpClientTrait for PromptContextMockClient {
+        fn get_info(&self) -> Option<&InitializeResult> {
+            None
+        }
+
+        async fn list_resources(
+            &self,
+            _next_cursor: Option<String>,
+            _cancellation_token: CancellationToken,
+        ) -> Result<ListResourcesResult, McpClientError> {
+            Err(McpClientError::TransportClosed)
+        }
+
+        async fn read_resource(
+            &self,
+            _uri: &str,
+            _cancellation_token: CancellationToken,
+        ) -> Result<ReadResourceResult, McpClientError> {
+            Err(McpClientError::TransportClosed)
+        }
+
+        async fn list_tools(
+            &self,
+            _next_cursor: Option<String>,
+            _cancellation_token: CancellationToken,
+        ) -> Result<ListToolsResult, McpClientError> {
+            Ok(ListToolsResult {
+                tools: vec![Tool::new(
+                    "heavy_tool".to_string(),
+                    "Heavy MCP tool that should stay out of compact provider payload".to_string(),
+                    object!({ "type": "object", "properties": {} }),
+                )],
+                next_cursor: None,
+                meta: None,
+            })
+        }
+
+        async fn call_tool(
+            &self,
+            _name: &str,
+            _arguments: Option<JsonObject>,
+            _cancellation_token: CancellationToken,
+        ) -> Result<CallToolResult, McpClientError> {
+            Err(McpClientError::TransportClosed)
+        }
+
+        async fn list_prompts(
+            &self,
+            _next_cursor: Option<String>,
+            _cancellation_token: CancellationToken,
+        ) -> Result<ListPromptsResult, McpClientError> {
+            Err(McpClientError::TransportClosed)
+        }
+
+        async fn get_prompt(
+            &self,
+            _name: &str,
+            _arguments: Value,
+            _cancellation_token: CancellationToken,
+        ) -> Result<GetPromptResult, McpClientError> {
+            Err(McpClientError::TransportClosed)
+        }
+
+        async fn subscribe(&self) -> mpsc::Receiver<ServerNotification> {
+            let (_tx, rx) = mpsc::channel(1);
+            rx
+        }
+    }
+
+    fn prompt_context_server_info() -> ServerInfo {
+        ServerInfo {
+            protocol_version: ProtocolVersion::V_2025_03_26,
+            capabilities: ServerCapabilities {
+                resources: Some(ResourcesCapability::default()),
+                ..Default::default()
+            },
+            server_info: Implementation {
+                name: "latency-probe".to_string(),
+                ..Default::default()
+            },
+            instructions: Some(MCP_CONTEXT_SENTINEL.to_string()),
         }
     }
 
@@ -1204,6 +1354,134 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn prepare_tools_and_prompt_keeps_only_compact_broker_tools_for_compact_turn_surface(
+    ) -> anyhow::Result<()> {
+        let agent = crate::agents::Agent::new();
+        agent
+            .set_scheduler(std::sync::Arc::new(MockScheduler))
+            .await;
+
+        let session = SessionManager::create_session(
+            std::path::PathBuf::default(),
+            "test-compact-tool-surface".to_string(),
+            SessionType::User,
+        )
+        .await?;
+
+        let model_config = ModelConfig::new("claude-sonnet-4-5").unwrap();
+        let provider = std::sync::Arc::new(MockProvider {
+            model_config,
+            observed_models: None,
+        });
+        agent.update_provider(provider, &session.id).await?;
+
+        let working_dir = std::env::current_dir()?;
+        let (tools, _toolshim_tools, _system_prompt) = crate::session_context::with_turn_context(
+            Some(build_turn_context_with_tool_surface(
+                TURN_TOOL_SURFACE_COMPACT_TOOLS,
+            )),
+            async {
+                agent
+                    .prepare_tools_and_prompt(
+                        &working_dir,
+                        None,
+                        false,
+                        &ModelConfig::new("claude-sonnet-4-5").unwrap(),
+                    )
+                    .await
+            },
+        )
+        .await?;
+
+        let names: Vec<String> = tools.iter().map(|tool| tool.name.to_string()).collect();
+        assert!(!names.is_empty());
+        assert!(names.len() <= COMPACT_TOOL_SURFACE_TOOL_NAMES.len());
+        assert!(names.iter().all(|name| is_compact_tool_surface_tool(name)));
+        assert!(names.iter().any(|name| name == "ToolSearch"));
+        assert!(names.iter().any(|name| name == "Read"));
+        assert!(!names.iter().any(|name| name == "TeamCreate"));
+        assert!(!names.iter().any(|name| name == "TeamDelete"));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn compact_turn_surface_preserves_extension_prompt_context() -> anyhow::Result<()> {
+        let agent = crate::agents::Agent::new();
+        agent
+            .set_scheduler(std::sync::Arc::new(MockScheduler))
+            .await;
+
+        let session = SessionManager::create_session(
+            std::path::PathBuf::default(),
+            "test-compact-extension-prompt-context".to_string(),
+            SessionType::User,
+        )
+        .await?;
+
+        let model_config = ModelConfig::new("claude-sonnet-4-5").unwrap();
+        let provider = std::sync::Arc::new(MockProvider {
+            model_config,
+            observed_models: None,
+        });
+        agent.update_provider(provider, &session.id).await?;
+
+        let client: std::sync::Arc<Mutex<Box<dyn McpClientTrait>>> =
+            std::sync::Arc::new(Mutex::new(Box::new(PromptContextMockClient)));
+        agent
+            .extension_manager
+            .add_client(
+                "mcp__latency_probe".to_string(),
+                crate::agents::extension::ExtensionConfig::Builtin {
+                    name: "mcp__latency_probe".to_string(),
+                    display_name: Some("latency-probe".to_string()),
+                    description: "Latency probe MCP".to_string(),
+                    timeout: None,
+                    bundled: Some(false),
+                    available_tools: Vec::new(),
+                    deferred_loading: false,
+                    always_expose_tools: Vec::new(),
+                    allowed_caller: None,
+                },
+                client,
+                Some(prompt_context_server_info()),
+                None,
+            )
+            .await;
+
+        let working_dir = std::env::current_dir()?;
+        let (tools, _toolshim_tools, system_prompt) = crate::session_context::with_turn_context(
+            Some(build_turn_context_with_tool_surface(
+                TURN_TOOL_SURFACE_COMPACT_TOOLS,
+            )),
+            async {
+                agent
+                    .prepare_tools_and_prompt(
+                        &working_dir,
+                        None,
+                        false,
+                        &ModelConfig::new("claude-sonnet-4-5").unwrap(),
+                    )
+                    .await
+            },
+        )
+        .await?;
+
+        let names: Vec<String> = tools.iter().map(|tool| tool.name.to_string()).collect();
+        assert!(names.iter().all(|name| is_compact_tool_surface_tool(name)));
+        assert!(names.iter().any(|name| name == "ListMcpResourcesTool"));
+        assert!(names.iter().any(|name| name == "ReadMcpResourceTool"));
+        assert!(!names
+            .iter()
+            .any(|name| name == "mcp__latency_probe__heavy_tool"));
+        assert!(system_prompt.contains(MCP_CONTEXT_SENTINEL));
+        assert!(system_prompt.contains("ListMcpResourcesTool"));
+        assert!(!system_prompt.contains("【当前回合执行约束】"));
+
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn prepare_tools_and_prompt_filters_turn_scoped_allowed_tools() -> anyhow::Result<()> {
         let agent = crate::agents::Agent::new();
 
@@ -1242,6 +1520,55 @@ mod tests {
 
         let names: Vec<String> = tools.iter().map(|tool| tool.name.to_string()).collect();
         assert_eq!(names, vec!["Grep".to_string(), "Read".to_string()]);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn prepare_tools_and_prompt_applies_tool_scope_after_compact_surface(
+    ) -> anyhow::Result<()> {
+        let agent = crate::agents::Agent::new();
+
+        let session = SessionManager::create_session(
+            std::path::PathBuf::default(),
+            "test-compact-tool-scope".to_string(),
+            SessionType::Hidden,
+        )
+        .await?;
+
+        let model_config = ModelConfig::new("claude-sonnet-4-5").unwrap();
+        let provider = std::sync::Arc::new(MockProvider {
+            model_config,
+            observed_models: None,
+        });
+        agent.update_provider(provider, &session.id).await?;
+
+        let mut turn_context =
+            build_turn_context_with_tool_surface(TURN_TOOL_SURFACE_COMPACT_TOOLS);
+        turn_context.metadata.insert(
+            "subagent".to_string(),
+            json!({
+                "allowed_tools": ["Read", "Grep", "ListMcpResourcesTool"],
+                "disallowed_tools": ["Grep"],
+            }),
+        );
+
+        let working_dir = std::env::current_dir()?;
+        let (tools, _toolshim_tools, _system_prompt) =
+            crate::session_context::with_turn_context(Some(turn_context), async {
+                agent
+                    .prepare_tools_and_prompt(
+                        &working_dir,
+                        None,
+                        false,
+                        &ModelConfig::new("claude-sonnet-4-5").unwrap(),
+                    )
+                    .await
+            })
+            .await?;
+
+        let names: Vec<String> = tools.iter().map(|tool| tool.name.to_string()).collect();
+        assert_eq!(names, vec!["Read".to_string()]);
 
         Ok(())
     }

@@ -1,8 +1,9 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentUiProjectionEvent } from "../projection/agentUiEventProjection";
 import { AgentUiTeamWorkbenchSurfaceView } from "./AgentUiTeamWorkbenchSurfaceView";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 interface MountedHarness {
   container: HTMLDivElement;
@@ -10,6 +11,15 @@ interface MountedHarness {
 }
 
 const mountedRoots: MountedHarness[] = [];
+
+beforeEach(async () => {
+  (
+    globalThis as typeof globalThis & {
+      IS_REACT_ACT_ENVIRONMENT?: boolean;
+    }
+  ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
+});
 
 afterEach(() => {
   while (mountedRoots.length > 0) {

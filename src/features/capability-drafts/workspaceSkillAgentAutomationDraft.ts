@@ -375,8 +375,8 @@ export function buildWorkspaceSkillManagedAutomationPresentation(
   }
 
   const stateLabel = job.enabled
-    ? copy?.stateEnabled ?? "已启用"
-    : copy?.statePaused ?? "草案暂停";
+    ? (copy?.stateEnabled ?? "已启用")
+    : (copy?.statePaused ?? "草案暂停");
   const objectiveState = resolveManagedObjectiveState(job);
   const lastStatus = job.last_status ?? copy?.notRunStatus ?? "尚未运行";
   const lastRun = job.last_run_at ?? copy?.lastRunValueNone ?? "暂无";
@@ -443,7 +443,10 @@ function buildCompletionAuditLabel(
     );
   }
   if (objectiveState === "paused") {
-    return copy?.auditPaused ?? "Completion Audit：paused，恢复并产生运行证据后再审计。";
+    return (
+      copy?.auditPaused ??
+      "Completion Audit：paused，恢复并产生运行证据后再审计。"
+    );
   }
   return copy?.auditPlanned ?? "Completion Audit：planned，等待首次运行证据。";
 }

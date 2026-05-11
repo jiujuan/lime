@@ -78,6 +78,7 @@ export interface ServiceModelPreferenceConfig {
 }
 
 export interface ServiceModelsConfig {
+  responsive_chat?: ServiceModelPreferenceConfig;
   topic?: ServiceModelPreferenceConfig;
   generation_topic?: ServiceModelPreferenceConfig;
   translation?: ServiceModelPreferenceConfig;
@@ -100,11 +101,7 @@ export interface WorkspacePreferencesConfig {
   service_models?: ServiceModelsConfig;
 }
 
-export type NavigationEnabledItemId =
-  | "automation"
-  | "channels"
-  | "plugins"
-  | "companion";
+export type NavigationEnabledItemId = "automation" | "channels" | "companion";
 
 export interface NavigationConfig {
   schema_version?: number;

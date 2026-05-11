@@ -16,7 +16,6 @@ import {
   Monitor,
   Moon,
   Palette,
-  Puzzle,
   RotateCcw,
   Sparkles,
   Sun,
@@ -108,10 +107,6 @@ const HIDDEN_SYSTEM_ENTRY_BASE_OPTIONS: Pick<
   HiddenSystemEntryOption,
   "id" | "icon"
 >[] = [
-  {
-    id: "plugins",
-    icon: Puzzle,
-  },
   {
     id: "companion",
     icon: Bot,
@@ -229,10 +224,7 @@ export function AppearanceSettings() {
     } catch (err) {
       console.error("加载外观设置失败:", err);
       setError(
-        t(
-          "settings.appearance.error.load",
-          "加载外观设置失败，请稍后重试。",
-        ),
+        t("settings.appearance.error.load", "加载外观设置失败，请稍后重试。"),
       );
       setConfig(null);
     } finally {
@@ -621,10 +613,7 @@ export function AppearanceSettings() {
             "settings.appearance.base.description",
             "先确定全局主题、语言和声音反馈，再统一工作区里的视觉节奏。",
           )}
-          tipAriaLabel={t(
-            "settings.appearance.base.tipAria",
-            "基础外观说明",
-          )}
+          tipAriaLabel={t("settings.appearance.base.tipAria", "基础外观说明")}
         >
           <div className="space-y-5">
             <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-4">
@@ -803,16 +792,13 @@ export function AppearanceSettings() {
                         {t("settings.appearance.language.title", "界面语言")}
                       </h3>
                       <WorkbenchInfoTip
-                        ariaLabel={t(
-                          "settings.appearance.language.tipAria",
-                          {
-                            title: t(
-                              "settings.appearance.language.title",
-                              "界面语言",
-                            ),
-                            defaultValue: "{{title}}说明",
-                          },
-                        )}
+                        ariaLabel={t("settings.appearance.language.tipAria", {
+                          title: t(
+                            "settings.appearance.language.title",
+                            "界面语言",
+                          ),
+                          defaultValue: "{{title}}说明",
+                        })}
                         content={t(
                           "settings.appearance.language.tip",
                           "切换设置、工作区与提示文案的主要显示语言。",
@@ -973,10 +959,7 @@ export function AppearanceSettings() {
                 className={PRIMARY_ACTION_BUTTON_CLASS}
               >
                 <RotateCcw className="h-4 w-4" />
-                {t(
-                  "settings.appearance.recovery.action.rerun",
-                  "重新运行引导",
-                )}
+                {t("settings.appearance.recovery.action.rerun", "重新运行引导")}
               </button>
             </div>
           </div>
@@ -984,7 +967,7 @@ export function AppearanceSettings() {
       </section>
 
       <SurfacePanel
-        icon={Puzzle}
+        icon={Bot}
         iconClassName="text-cyan-600"
         title={t("settings.appearance.systemEntries.title", "可选系统入口")}
         description={t(
@@ -1163,8 +1146,8 @@ export function AppearanceSettings() {
                   <Switch
                     checked={appendSelectedTextToRecommendation}
                     onCheckedChange={(checked) => {
-                        void handleRecommendationSelectionToggle(checked);
-                      }}
+                      void handleRecommendationSelectionToggle(checked);
+                    }}
                     aria-label={t(
                       "settings.appearance.recommendation.appendSelected.toggleAria",
                       "切换推荐自动附带选中内容",

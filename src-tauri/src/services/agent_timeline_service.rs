@@ -620,6 +620,7 @@ mod tests {
                     updated_at: "2026-03-29T00:00:00.000Z".to_string(),
                     payload: AgentThreadItemPayload::TurnSummary {
                         text: "running".to_string(),
+                        metadata: None,
                     },
                 },
             )

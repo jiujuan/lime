@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Keyboard, Check, X, AlertCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 // ============================================================
@@ -115,14 +116,16 @@ export function ShortcutSettings({
   onShortcutChange,
   onValidate,
   disabled = false,
-  emptyLabel = "未设置快捷键",
+  emptyLabel,
   allowClear = false,
 }: ShortcutSettingsProps) {
+  const { t } = useTranslation("common");
   // 状态
   const [isRecording, setIsRecording] = useState(false);
   const [recordedShortcut, setRecordedShortcut] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const emptyShortcutLabel = emptyLabel ?? t("common.shortcutSettings.empty");
 
   // Refs
   const inputRef = useRef<HTMLDivElement>(null);
@@ -155,11 +158,15 @@ export function ShortcutSettings({
       setRecordedShortcut(null);
       setIsRecording(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "清空失败");
+      setError(
+        err instanceof Error
+          ? err.message
+          : t("common.shortcutSettings.error.clearFailed"),
+      );
     } finally {
       setIsSaving(false);
     }
-  }, [allowClear, currentShortcut, disabled, onShortcutChange]);
+  }, [allowClear, currentShortcut, disabled, onShortcutChange, t]);
 
   // 保存快捷键
   const saveShortcut = useCallback(async () => {
@@ -173,7 +180,7 @@ export function ShortcutSettings({
       if (onValidate) {
         const isValid = await onValidate(recordedShortcut);
         if (!isValid) {
-          setError("快捷键格式无效");
+          setError(t("common.shortcutSettings.error.invalid"));
           setIsSaving(false);
           return;
         }
@@ -184,11 +191,15 @@ export function ShortcutSettings({
       setIsRecording(false);
       setRecordedShortcut(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "保存失败");
+      setError(
+        err instanceof Error
+          ? err.message
+          : t("common.shortcutSettings.error.saveFailed"),
+      );
     } finally {
       setIsSaving(false);
     }
-  }, [recordedShortcut, onShortcutChange, onValidate]);
+  }, [recordedShortcut, onShortcutChange, onValidate, t]);
 
   // 键盘事件处理
   useEffect(() => {
@@ -229,7 +240,9 @@ export function ShortcutSettings({
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <Keyboard className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-medium">快捷键</span>
+        <span className="text-sm font-medium">
+          {t("common.shortcutSettings.label")}
+        </span>
       </div>
 
       <div className="flex items-center gap-2">
@@ -249,12 +262,12 @@ export function ShortcutSettings({
             <span className="text-muted-foreground">
               {recordedShortcut
                 ? formatShortcutDisplay(recordedShortcut)
-                : "按下快捷键组合..."}
+                : t("common.shortcutSettings.recording.placeholder")}
             </span>
           ) : displayShortcut ? (
             <span>{formatShortcutDisplay(displayShortcut)}</span>
           ) : (
-            <span className="text-muted-foreground">{emptyLabel}</span>
+            <span className="text-muted-foreground">{emptyShortcutLabel}</span>
           )}
         </div>
 
@@ -270,7 +283,7 @@ export function ShortcutSettings({
                   ? "bg-green-500/10 text-green-600 hover:bg-green-500/20"
                   : "text-muted-foreground opacity-50 cursor-not-allowed",
               )}
-              title="保存"
+              title={t("common.shortcutSettings.action.save")}
             >
               <Check className="h-4 w-4" />
             </button>
@@ -278,7 +291,7 @@ export function ShortcutSettings({
               onClick={cancelRecording}
               disabled={isSaving}
               className="p-2 rounded text-muted-foreground hover:bg-muted transition-colors"
-              title="取消"
+              title={t("common.shortcutSettings.action.cancel")}
             >
               <X className="h-4 w-4" />
             </button>
@@ -295,9 +308,9 @@ export function ShortcutSettings({
                     ? "opacity-50 cursor-not-allowed"
                     : "hover:bg-muted",
                 )}
-                title="清空"
+                title={t("common.shortcutSettings.action.clear")}
               >
-                清空
+                {t("common.shortcutSettings.action.clear")}
               </button>
             ) : null}
             <button
@@ -308,7 +321,7 @@ export function ShortcutSettings({
                 disabled ? "opacity-50 cursor-not-allowed" : "hover:bg-muted",
               )}
             >
-              修改
+              {t("common.shortcutSettings.action.edit")}
             </button>
           </>
         )}
@@ -325,7 +338,7 @@ export function ShortcutSettings({
       {/* 录制提示 */}
       {isRecording && !error && (
         <p className="text-xs text-muted-foreground">
-          按下想要设置的快捷键组合，按 ESC 取消
+          {t("common.shortcutSettings.recording.hint")}
         </p>
       )}
     </div>

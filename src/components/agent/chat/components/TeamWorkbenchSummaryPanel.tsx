@@ -195,22 +195,19 @@ function buildWorkbenchActionRouteStatus(
     case "unsupported_remote":
       return {
         label: "远端未接入",
-        detail:
-          "远端队友需要接入真实远端入口或 A2A 任务记录后才能运行时控制。",
+        detail: "远端队友需要接入真实远端入口或 A2A 任务记录后才能运行时控制。",
         className: "border-amber-200 bg-amber-50 text-amber-700",
       };
     case "unsupported_review":
       return {
         label: "审核未接入",
-        detail:
-          "评审记录已定位；真实审核回调与重指派写回仍需后续接入。",
+        detail: "评审记录已定位；真实审核回调与重指派写回仍需后续接入。",
         className: "border-amber-200 bg-amber-50 text-amber-700",
       };
     case "unsupported_handoff":
       return {
         label: "交接未接入",
-        detail:
-          "交接记录已定位；真实接收、退回、恢复记录接入前不伪造状态。",
+        detail: "交接记录已定位；真实接收、退回、恢复记录接入前不伪造状态。",
         className: "border-amber-200 bg-amber-50 text-amber-700",
       };
     case "unsupported_work_item":
@@ -1422,7 +1419,8 @@ export function TeamWorkbenchSummaryPanel({
                 ) : null}
               </div>
               <p className="mt-1 text-[10px] leading-4 text-slate-600">
-                这里只定位 Agent UI 标准工作区中的目标，不从文本推断状态，也不伪造远端、评审或交接运行时调用。
+                这里只定位 Agent UI
+                标准工作区中的目标，不从文本推断状态，也不伪造远端、评审或交接运行时调用。
               </p>
               {selectedWorkbenchActionRouteStatus ? (
                 <div
@@ -1472,8 +1470,8 @@ export function TeamWorkbenchSummaryPanel({
                     </span>
                   </div>
                   <p className="mt-1 text-[10px] leading-4 text-slate-600">
-                    选择目标负责人后只回填负责人更新指令；发送并执行后，Agent
-                    UI 仍以运行时返回的负责人变化作为唯一事实。
+                    选择目标负责人后只回填负责人更新指令；发送并执行后，Agent UI
+                    仍以运行时返回的负责人变化作为唯一事实。
                   </p>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <select
@@ -1576,7 +1574,8 @@ export function TeamWorkbenchSummaryPanel({
                     </span>
                   </div>
                   <p className="mt-1 text-[10px] leading-4 text-slate-600">
-                    正文由子会话 / 团队任务板选中成员活动预览读取；这里仅展示标准引用与焦点，不把队友输出混进主回复。
+                    正文由子会话 /
+                    团队任务板选中成员活动预览读取；这里仅展示标准引用与焦点，不把队友输出混进主回复。
                   </p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">

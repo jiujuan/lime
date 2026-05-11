@@ -27,32 +27,23 @@ function formatTime(value?: string | null, locale?: string): string {
 function statusLabel(t: TFunction<"settings">, status?: string | null): string {
   switch (status) {
     case "queued":
-      return t("settings.automation.health.status.queued", "排队中");
+      return t("settings.automation.health.status.queued");
     case "success":
-      return t("settings.automation.health.status.success", "成功");
+      return t("settings.automation.health.status.success");
     case "running":
-      return t("settings.automation.health.status.running", "运行中");
+      return t("settings.automation.health.status.running");
     case "waiting_for_human":
-      return t(
-        "settings.automation.health.status.waitingForHuman",
-        "等待人工处理",
-      );
+      return t("settings.automation.health.status.waitingForHuman");
     case "human_controlling":
-      return t(
-        "settings.automation.health.status.humanControlling",
-        "人工接管中",
-      );
+      return t("settings.automation.health.status.humanControlling");
     case "agent_resuming":
-      return t(
-        "settings.automation.health.status.agentResuming",
-        "恢复给 Agent",
-      );
+      return t("settings.automation.health.status.agentResuming");
     case "error":
-      return t("settings.automation.health.status.error", "失败");
+      return t("settings.automation.health.status.error");
     case "timeout":
-      return t("settings.automation.health.status.timeout", "超时");
+      return t("settings.automation.health.status.timeout");
     default:
-      return status || t("settings.automation.health.status.pending", "待执行");
+      return status || t("settings.automation.health.status.pending");
   }
 }
 
@@ -111,25 +102,21 @@ export function AutomationHealthPanel({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <CardTitle className="text-xl text-slate-900">
-              {t("settings.automation.health.title", "风险提醒")}
+              {t("settings.automation.health.title")}
             </CardTitle>
             <p className="mt-1 text-sm leading-6 text-slate-500">
-              {t(
-                "settings.automation.health.description",
-                "统计只作为辅助提醒，优先处理等待人工、失败和冷却中的持续流程。",
-              )}
+              {t("settings.automation.health.description")}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Badge variant={status?.running ? "default" : "outline"}>
               {status?.running
-                ? t("settings.automation.health.polling.running", "轮询运行中")
-                : t("settings.automation.health.polling.stopped", "轮询已停止")}
+                ? t("settings.automation.health.polling.running")
+                : t("settings.automation.health.polling.stopped")}
             </Badge>
             <Badge variant="outline">
               {t("settings.automation.health.totalExecutions", {
                 count: status?.total_executions ?? 0,
-                defaultValue: "累计执行 {{count}}",
               })}
             </Badge>
           </div>
@@ -139,25 +126,22 @@ export function AutomationHealthPanel({
         <div className="flex flex-wrap gap-2">
           <SummaryPill
             icon={Activity}
-            label={t("settings.automation.health.summary.enabled", "启用")}
+            label={t("settings.automation.health.summary.enabled")}
             value={health?.enabled_jobs ?? 0}
           />
           <SummaryPill
             icon={Clock3}
-            label={t("settings.automation.health.summary.pending", "待执行")}
+            label={t("settings.automation.health.summary.pending")}
             value={health?.pending_jobs ?? 0}
           />
           <SummaryPill
             icon={AlertTriangle}
-            label={t(
-              "settings.automation.health.summary.failed24h",
-              "24h 失败",
-            )}
+            label={t("settings.automation.health.summary.failed24h")}
             value={health?.failed_last_24h ?? 0}
           />
           <SummaryPill
             icon={PauseCircle}
-            label={t("settings.automation.health.summary.cooldown", "冷却")}
+            label={t("settings.automation.health.summary.cooldown")}
             value={health?.cooldown_jobs ?? 0}
           />
         </div>
@@ -166,19 +150,16 @@ export function AutomationHealthPanel({
           <span>
             {t("settings.automation.health.lastPolled", {
               time: formatTime(status?.last_polled_at, locale),
-              defaultValue: "最近轮询: {{time}}",
             })}
           </span>
           <span>
             {t("settings.automation.health.nextPoll", {
               time: formatTime(status?.next_poll_at, locale),
-              defaultValue: "下次轮询: {{time}}",
             })}
           </span>
           <span>
             {t("settings.automation.health.lastPollHits", {
               count: status?.last_job_count ?? 0,
-              defaultValue: "最近轮询命中: {{count}}",
             })}
           </span>
         </div>
@@ -199,8 +180,6 @@ export function AutomationHealthPanel({
                       {t("settings.automation.health.risk.failureRetry", {
                         failures: job.consecutive_failures,
                         retries: job.retry_count,
-                        defaultValue:
-                          "失败 {{failures}} 次，重试 {{retries}} 次",
                       })}
                     </div>
                   </div>
@@ -212,8 +191,6 @@ export function AutomationHealthPanel({
                   {t("settings.automation.health.risk.cooldownUpdated", {
                     cooldown: formatTime(job.auto_disabled_until, locale),
                     updated: formatTime(job.updated_at, locale),
-                    defaultValue:
-                      "冷却结束: {{cooldown}} · 更新时间: {{updated}}",
                   })}
                 </div>
                 {job.detail_message ? (
@@ -226,7 +203,7 @@ export function AutomationHealthPanel({
           </div>
         ) : (
           <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/60 p-6 text-sm text-slate-500">
-            {t("settings.automation.health.empty", "当前没有高风险持续流程。")}
+            {t("settings.automation.health.empty")}
           </div>
         )}
       </CardContent>

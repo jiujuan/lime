@@ -1,137 +1,163 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   buildHarnessEvidenceVerificationCardPresentations,
   resolveHarnessVerificationOutcomeBadgePresentation,
 } from "./harnessVerificationPresentation";
+import { changeLimeLocale, getLimeI18n } from "@/i18n/createI18n";
+
+function buildPresentationOptions() {
+  return {
+    locale: "en-US",
+    t: getLimeI18n().getFixedT("en-US", "agent"),
+  };
+}
 
 describe("harnessVerificationPresentation", () => {
+  beforeEach(async () => {
+    await changeLimeLocale("en-US");
+  });
+
+  afterEach(async () => {
+    await changeLimeLocale("zh-CN");
+  });
+
   it("应统一 outcome 徽标文案与样式", () => {
+    const { t } = buildPresentationOptions();
+
     expect(
-      resolveHarnessVerificationOutcomeBadgePresentation("success"),
+      resolveHarnessVerificationOutcomeBadgePresentation("success", t),
     ).toEqual({
-      label: "通过",
+      label: "Passed",
       variant: "secondary",
     });
     expect(
-      resolveHarnessVerificationOutcomeBadgePresentation("blocking_failure"),
+      resolveHarnessVerificationOutcomeBadgePresentation("blocking_failure", t),
     ).toEqual({
-      label: "阻塞失败",
+      label: "Blocking failure",
       variant: "destructive",
     });
     expect(
-      resolveHarnessVerificationOutcomeBadgePresentation("advisory_failure"),
+      resolveHarnessVerificationOutcomeBadgePresentation("advisory_failure", t),
     ).toEqual({
-      label: "提示失败",
+      label: "Advisory failure",
       variant: "outline",
     });
     expect(
-      resolveHarnessVerificationOutcomeBadgePresentation("recovered"),
+      resolveHarnessVerificationOutcomeBadgePresentation("recovered", t),
     ).toEqual({
-      label: "已恢复",
+      label: "Recovered",
       variant: "outline",
     });
-    expect(resolveHarnessVerificationOutcomeBadgePresentation()).toEqual({
-      label: "未定",
+    expect(
+      resolveHarnessVerificationOutcomeBadgePresentation(undefined, t),
+    ).toEqual({
+      label: "Unknown",
       variant: "outline",
     });
   });
 
   it("应把 evidence verification summary 统一转换成前端展示卡片", () => {
     expect(
-      buildHarnessEvidenceVerificationCardPresentations({
-        artifact_validator: {
-          applicable: true,
-          record_count: 1,
-          issue_count: 2,
-          repaired_count: 1,
-          fallback_used_count: 0,
-          outcome: "blocking_failure",
+      buildHarnessEvidenceVerificationCardPresentations(
+        {
+          artifact_validator: {
+            applicable: true,
+            record_count: 1,
+            issue_count: 2,
+            repaired_count: 1,
+            fallback_used_count: 0,
+            outcome: "blocking_failure",
+          },
+          browser_verification: {
+            record_count: 2,
+            success_count: 1,
+            failure_count: 1,
+            unknown_count: 0,
+            outcome: "advisory_failure",
+          },
+          gui_smoke: {
+            status: "failed",
+            exit_code: 1,
+            passed: false,
+            has_output_preview: true,
+            outcome: "recovered",
+          },
+          focus_verification_failure_outcomes: [],
+          focus_verification_recovered_outcomes: [],
         },
-        browser_verification: {
-          record_count: 2,
-          success_count: 1,
-          failure_count: 1,
-          unknown_count: 0,
-          outcome: "advisory_failure",
-        },
-        gui_smoke: {
-          status: "failed",
-          exit_code: 1,
-          passed: false,
-          has_output_preview: true,
-          outcome: "recovered",
-        },
-        focus_verification_failure_outcomes: [],
-        focus_verification_recovered_outcomes: [],
-      }),
+        buildPresentationOptions(),
+      ),
     ).toEqual([
       {
         key: "artifact_validator",
-        title: "Artifact 校验",
+        title: "Artifact Validation",
         badge: {
-          label: "阻塞失败",
+          label: "Blocking failure",
           variant: "destructive",
         },
-        description: "记录 1 · issues 2 · repaired 1 · fallback 0",
+        description: "Records 1 · issues 2 · repaired 1 · fallback 0",
       },
       {
         key: "browser_verification",
-        title: "浏览器验证",
+        title: "Browser Verification",
         badge: {
-          label: "提示失败",
+          label: "Advisory failure",
           variant: "outline",
         },
-        description: "记录 2 · 成功 1 · 失败 1 · 未判定 0",
+        description: "Records 2 · success 1 · failed 1 · unknown 0",
       },
       {
         key: "gui_smoke",
         title: "GUI Smoke",
         badge: {
-          label: "已恢复",
+          label: "Recovered",
           variant: "outline",
         },
-        description: "状态 failed · exit 1 · 未通过",
+        description: "Status failed · exit 1 · Failed",
       },
     ]);
   });
 
   it("应为缺失或不适用的验证提供统一兜底文案", () => {
     expect(
-      buildHarnessEvidenceVerificationCardPresentations({
-        artifact_validator: {
-          applicable: false,
-          record_count: 0,
-          issue_count: 0,
-          repaired_count: 0,
-          fallback_used_count: 0,
+      buildHarnessEvidenceVerificationCardPresentations(
+        {
+          artifact_validator: {
+            applicable: false,
+            record_count: 0,
+            issue_count: 0,
+            repaired_count: 0,
+            fallback_used_count: 0,
+          },
+          browser_verification: undefined,
+          gui_smoke: {
+            passed: true,
+            has_output_preview: false,
+          },
+          focus_verification_failure_outcomes: [],
+          focus_verification_recovered_outcomes: [],
         },
-        browser_verification: undefined,
-        gui_smoke: {
-          passed: true,
-          has_output_preview: false,
-        },
-        focus_verification_failure_outcomes: [],
-        focus_verification_recovered_outcomes: [],
-      }),
+        buildPresentationOptions(),
+      ),
     ).toEqual([
       {
         key: "artifact_validator",
-        title: "Artifact 校验",
+        title: "Artifact Validation",
         badge: {
-          label: "未定",
+          label: "Unknown",
           variant: "outline",
         },
-        description: "当前没有适用的 Artifact 校验。",
+        description: "No applicable artifact validation.",
       },
       {
         key: "gui_smoke",
         title: "GUI Smoke",
         badge: {
-          label: "未定",
+          label: "Unknown",
           variant: "outline",
         },
-        description: "状态 未知 · exit 未知 · 已通过",
+        description: "Status Unknown · exit Unknown · Passed",
       },
     ]);
   });

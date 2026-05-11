@@ -15,6 +15,7 @@ export async function submitAgentStreamUserInput(
   const { preparedSend, env } = options;
   const {
     assistantMsg,
+    runtimeStatusPresentation,
     assistantMsgId,
     userMsgId,
     content,
@@ -45,6 +46,7 @@ export async function submitAgentStreamUserInput(
     userMsgId,
     content,
     expectingQueue,
+    runtimeStatusPresentation,
     initialThreadId:
       env.sessionIdRef.current || `local-thread:${assistantMsgId}`,
     listenerMapRef: env.listenerMapRef,

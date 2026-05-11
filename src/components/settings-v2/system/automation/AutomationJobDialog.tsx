@@ -90,49 +90,29 @@ function buildAutomationAccessModeCopy(
   t: SettingsTranslate,
 ): AutomationAccessModeCopy {
   return {
-    readOnly: t(
-      "settings.automation.jobDialog.accessMode.readOnly",
-      "只读",
-    ),
-    current: t(
-      "settings.automation.jobDialog.accessMode.current",
-      "按需确认",
-    ),
-    fullAccess: t(
-      "settings.automation.jobDialog.accessMode.fullAccess",
-      "完全访问",
-    ),
+    readOnly: t("settings.automation.jobDialog.accessMode.readOnly"),
+    current: t("settings.automation.jobDialog.accessMode.current"),
+    fullAccess: t("settings.automation.jobDialog.accessMode.fullAccess"),
     policyReadOnly: t(
       "settings.automation.jobDialog.accessMode.policy.readOnly",
-      "正式策略会写成 on-request + read-only。",
     ),
-    policyCurrent: t(
-      "settings.automation.jobDialog.accessMode.policy.current",
-      "正式策略会写成 on-request + workspace-write。",
-    ),
+    policyCurrent: t("settings.automation.jobDialog.accessMode.policy.current"),
     policyFullAccess: t(
       "settings.automation.jobDialog.accessMode.policy.fullAccess",
-      "正式策略会写成 never + danger-full-access。",
     ),
   };
 }
 
 function legacyBrowserAutomationMessage(t: SettingsTranslate): string {
-  return t(
-    "settings.automation.jobDialog.legacy.message",
-    "浏览器自动化已下线，系统不会再自动启动 Chrome。请删除这条旧流程，并改用 Agent 对话持续流程重建。",
-  );
+  return t("settings.automation.jobDialog.legacy.message");
 }
 
 function translateWithValues(
   t: SettingsTranslate,
   key: string,
-  defaultValue: string,
   values: Record<string, string | number | boolean>,
 ): string {
-  const translated = String(
-    t(key as never, { ...values, defaultValue } as never),
-  );
+  const translated = String(t(key as never, values as never));
   return Object.entries(values).reduce((text, [name, value]) => {
     const replacement = String(value);
     return text
@@ -325,10 +305,7 @@ function buildSchedule(
     const every_secs = Number(form.every_secs);
     if (!Number.isFinite(every_secs) || every_secs < 60) {
       throw new Error(
-        t(
-          "settings.automation.jobDialog.validation.intervalMin",
-          "轮询间隔不能小于 60 秒",
-        ),
+        t("settings.automation.jobDialog.validation.intervalMin"),
       );
     }
     return { kind: "every", every_secs };
@@ -337,10 +314,7 @@ function buildSchedule(
   if (form.schedule_kind === "cron") {
     if (!form.cron_expr.trim()) {
       throw new Error(
-        t(
-          "settings.automation.jobDialog.validation.cronRequired",
-          "Cron 表达式不能为空",
-        ),
+        t("settings.automation.jobDialog.validation.cronRequired"),
       );
     }
     return {
@@ -351,22 +325,12 @@ function buildSchedule(
   }
 
   if (!form.at_local) {
-    throw new Error(
-      t(
-        "settings.automation.jobDialog.validation.atRequired",
-        "一次性触发时间不能为空",
-      ),
-    );
+    throw new Error(t("settings.automation.jobDialog.validation.atRequired"));
   }
 
   const date = new Date(form.at_local);
   if (Number.isNaN(date.getTime())) {
-    throw new Error(
-      t(
-        "settings.automation.jobDialog.validation.atInvalid",
-        "一次性触发时间格式无效",
-      ),
-    );
+    throw new Error(t("settings.automation.jobDialog.validation.atInvalid"));
   }
 
   return {
@@ -382,16 +346,12 @@ function scheduleHint(
   if (form.schedule_kind === "every") {
     const secs = Number(form.every_secs);
     if (!Number.isFinite(secs) || secs <= 0) {
-      return t(
-        "settings.automation.jobDialog.schedule.hint.fixed",
-        "按固定秒级间隔轮询。",
-      );
+      return t("settings.automation.jobDialog.schedule.hint.fixed");
     }
     if (secs % 3600 === 0) {
       return translateWithValues(
         t,
         "settings.automation.jobDialog.schedule.hint.hours",
-        "每 {{count}} 小时执行一次",
         { count: secs / 3600 },
       );
     }
@@ -399,90 +359,55 @@ function scheduleHint(
       return translateWithValues(
         t,
         "settings.automation.jobDialog.schedule.hint.minutes",
-        "每 {{count}} 分钟执行一次",
         { count: secs / 60 },
       );
     }
     return translateWithValues(
       t,
       "settings.automation.jobDialog.schedule.hint.seconds",
-      "每 {{count}} 秒执行一次",
       { count: secs },
     );
   }
   if (form.schedule_kind === "cron") {
-    return t(
-      "settings.automation.jobDialog.schedule.hint.cron",
-      "使用 Cron 表达式驱动执行。",
-    );
+    return t("settings.automation.jobDialog.schedule.hint.cron");
   }
   return form.at_local
-    ? t(
-        "settings.automation.jobDialog.schedule.hint.atReady",
-        "一次性触发，到点后自动停用。",
-      )
-    : t(
-        "settings.automation.jobDialog.schedule.hint.atSelect",
-        "选择一次性触发时间。",
-      );
+    ? t("settings.automation.jobDialog.schedule.hint.atReady")
+    : t("settings.automation.jobDialog.schedule.hint.atSelect");
 }
 
 function buildLegacyBrowserPayloadSummary(
   t: SettingsTranslate,
   payload: BrowserSessionAutomationPayload,
 ): Array<{ label: string; value: string }> {
-  const notSet = t(
-    "settings.automation.jobDialog.legacy.summary.notSet",
-    "未设置",
-  );
+  const notSet = t("settings.automation.jobDialog.legacy.summary.notSet");
   return [
     {
-      label: t(
-        "settings.automation.jobDialog.legacy.summary.profile",
-        "浏览器资料",
-      ),
+      label: t("settings.automation.jobDialog.legacy.summary.profile"),
       value: payload.profile_key ?? payload.profile_id,
     },
     {
-      label: t("settings.automation.jobDialog.legacy.summary.url", "启动地址"),
+      label: t("settings.automation.jobDialog.legacy.summary.url"),
       value:
         payload.url?.trim() ||
-        t(
-          "settings.automation.jobDialog.legacy.summary.defaultUrl",
-          "使用资料默认启动地址",
-        ),
+        t("settings.automation.jobDialog.legacy.summary.defaultUrl"),
     },
     {
-      label: t(
-        "settings.automation.jobDialog.legacy.summary.environment",
-        "环境预设",
-      ),
+      label: t("settings.automation.jobDialog.legacy.summary.environment"),
       value: payload.environment_preset_id?.trim() || notSet,
     },
     {
-      label: t(
-        "settings.automation.jobDialog.legacy.summary.targetId",
-        "Target ID",
-      ),
+      label: t("settings.automation.jobDialog.legacy.summary.targetId"),
       value: payload.target_id?.trim() || notSet,
     },
     {
-      label: t(
-        "settings.automation.jobDialog.legacy.summary.window",
-        "调试窗口",
-      ),
+      label: t("settings.automation.jobDialog.legacy.summary.window"),
       value: payload.open_window
-        ? t("settings.automation.jobDialog.legacy.summary.windowOpen", "打开")
-        : t(
-            "settings.automation.jobDialog.legacy.summary.windowClosed",
-            "关闭",
-          ),
+        ? t("settings.automation.jobDialog.legacy.summary.windowOpen")
+        : t("settings.automation.jobDialog.legacy.summary.windowClosed"),
     },
     {
-      label: t(
-        "settings.automation.jobDialog.legacy.summary.streamMode",
-        "流模式",
-      ),
+      label: t("settings.automation.jobDialog.legacy.summary.streamMode"),
       value: payload.stream_mode,
     },
   ];
@@ -494,12 +419,12 @@ function scheduleKindLabel(
 ): string {
   switch (scheduleKind) {
     case "every":
-      return t("settings.automation.jobDialog.schedule.kind.every", "固定间隔");
+      return t("settings.automation.jobDialog.schedule.kind.every");
     case "cron":
-      return t("settings.automation.jobDialog.schedule.kind.cron", "Cron");
+      return t("settings.automation.jobDialog.schedule.kind.cron");
     case "at":
     default:
-      return t("settings.automation.jobDialog.schedule.kind.at", "一次性");
+      return t("settings.automation.jobDialog.schedule.kind.at");
   }
 }
 
@@ -509,15 +434,12 @@ function accessModeLabel(
 ): string {
   switch (accessMode) {
     case "read-only":
-      return t("settings.automation.jobDialog.accessMode.readOnly", "只读");
+      return t("settings.automation.jobDialog.accessMode.readOnly");
     case "current":
-      return t("settings.automation.jobDialog.accessMode.current", "按需确认");
+      return t("settings.automation.jobDialog.accessMode.current");
     case "full-access":
     default:
-      return t(
-        "settings.automation.jobDialog.accessMode.fullAccess",
-        "完全访问",
-      );
+      return t("settings.automation.jobDialog.accessMode.fullAccess");
   }
 }
 
@@ -527,21 +449,12 @@ function accessModePolicySummary(
 ): string {
   switch (accessMode) {
     case "read-only":
-      return t(
-        "settings.automation.jobDialog.accessMode.policy.readOnly",
-        "正式策略会写成 on-request + read-only。",
-      );
+      return t("settings.automation.jobDialog.accessMode.policy.readOnly");
     case "current":
-      return t(
-        "settings.automation.jobDialog.accessMode.policy.current",
-        "正式策略会写成 on-request + workspace-write。",
-      );
+      return t("settings.automation.jobDialog.accessMode.policy.current");
     case "full-access":
     default:
-      return t(
-        "settings.automation.jobDialog.accessMode.policy.fullAccess",
-        "正式策略会写成 never + danger-full-access。",
-      );
+      return t("settings.automation.jobDialog.accessMode.policy.fullAccess");
   }
 }
 
@@ -553,23 +466,19 @@ function deliveryTargetPlaceholder(
     case "telegram":
       return t(
         "settings.automation.jobDialog.delivery.target.placeholder.telegram",
-        "bot_token:chat_id",
       );
     case "google_sheets":
       return t(
         "settings.automation.jobDialog.delivery.target.placeholder.googleSheets",
-        "spreadsheet_id=...;sheet=AgentOutput;credentials_file=ABSOLUTE_PATH_TO_SERVICE_ACCOUNT.json",
       );
     case "local_file":
       return t(
         "settings.automation.jobDialog.delivery.target.placeholder.localFile",
-        "输入输出文件绝对路径",
       );
     case "webhook":
     default:
       return t(
         "settings.automation.jobDialog.delivery.target.placeholder.webhook",
-        "https://example.com/webhook",
       );
   }
 }
@@ -580,26 +489,16 @@ function deliveryChannelDescription(
 ): string {
   switch (channel) {
     case "webhook":
-      return t(
-        "settings.automation.jobDialog.delivery.description.webhook",
-        "Webhook 适合系统对接；当前会携带 output_schema、output_format、结构化 output_data，以及稳定的 delivery_attempt_id 幂等键。",
-      );
+      return t("settings.automation.jobDialog.delivery.description.webhook");
     case "google_sheets":
       return t(
         "settings.automation.jobDialog.delivery.description.googleSheets",
-        "Google Sheets 使用 service account 直连，目标格式为 spreadsheet_id=...;sheet=...;credentials_file=绝对路径，可选 include_header=true 和 value_input_option=USER_ENTERED；追加行会自动带 delivery_attempt_id 等元数据列。",
       );
     case "local_file":
-      return t(
-        "settings.automation.jobDialog.delivery.description.localFile",
-        "本地文件适合先落最小输出闭环；text 会按契约渲染，json 会写入结构化结果。",
-      );
+      return t("settings.automation.jobDialog.delivery.description.localFile");
     case "telegram":
     default:
-      return t(
-        "settings.automation.jobDialog.delivery.description.telegram",
-        "Telegram 继续作为兼容通知通道，只发送文本提醒，不承诺结构化输出契约。",
-      );
+      return t("settings.automation.jobDialog.delivery.description.telegram");
   }
 }
 
@@ -661,31 +560,19 @@ export function AutomationJobDialog({
       workspaces.find((workspace) => workspace.id === form.workspace_id)
         ?.name ??
       form.workspace_id ??
-      t("settings.automation.jobDialog.workspace.none", "未选择"),
+      t("settings.automation.jobDialog.workspace.none"),
     [form.workspace_id, t, workspaces],
   );
   const dialogTitle =
     mode === "create"
-      ? t("settings.automation.jobDialog.title.create", "新建持续流程")
-      : t("settings.automation.jobDialog.title.edit", "调整持续流程");
+      ? t("settings.automation.jobDialog.title.create")
+      : t("settings.automation.jobDialog.title.edit");
   const dialogSummary = isLegacyBrowserJob
-    ? t(
-        "settings.automation.jobDialog.description.legacy",
-        "查看历史配置快照并迁移到 Agent 对话持续流程。",
-      )
-    : t(
-        "settings.automation.jobDialog.description.create",
-        "配置流程名称、节奏、启动提示和输出去向。",
-      );
+    ? t("settings.automation.jobDialog.description.legacy")
+    : t("settings.automation.jobDialog.description.create");
   const dialogTipContent = isLegacyBrowserJob
-    ? t(
-        "settings.automation.jobDialog.tip.legacy",
-        "浏览器自动化已下线，当前弹窗只保留历史配置展示与迁移参考，不允许继续保存。",
-      )
-    : t(
-        "settings.automation.jobDialog.tip.create",
-        "用这条持续流程承接 Agent 对话里已经跑顺的做法，统一管理节奏、归属位置、输出去向和运行历史。",
-      );
+    ? t("settings.automation.jobDialog.tip.legacy")
+    : t("settings.automation.jobDialog.tip.create");
   const scheduleLabel = scheduleKindLabel(t, form.schedule_kind);
   const accessLabel = accessModeLabel(t, form.agent_access_mode);
   const accessModeOptions = useMemo(
@@ -704,28 +591,19 @@ export function AutomationJobDialog({
 
       if (!form.name.trim()) {
         throw new Error(
-          t(
-            "settings.automation.jobDialog.validation.nameRequired",
-            "流程名称不能为空",
-          ),
+          t("settings.automation.jobDialog.validation.nameRequired"),
         );
       }
       if (!form.workspace_id.trim()) {
         throw new Error(
-          t(
-            "settings.automation.jobDialog.validation.workspaceRequired",
-            "请选择归属位置",
-          ),
+          t("settings.automation.jobDialog.validation.workspaceRequired"),
         );
       }
 
       const schedule = buildSchedule(form, t);
       if (!form.prompt.trim()) {
         throw new Error(
-          t(
-            "settings.automation.jobDialog.validation.promptRequired",
-            "启动提示不能为空",
-          ),
+          t("settings.automation.jobDialog.validation.promptRequired"),
         );
       }
       const runtimePolicies = createRuntimePoliciesFromAccessMode(
@@ -753,26 +631,17 @@ export function AutomationJobDialog({
         (!Number.isFinite(timeout_secs) || timeout_secs <= 0)
       ) {
         throw new Error(
-          t(
-            "settings.automation.jobDialog.validation.timeoutPositive",
-            "超时时间必须为正整数",
-          ),
+          t("settings.automation.jobDialog.validation.timeoutPositive"),
         );
       }
       if (!Number.isFinite(max_retries) || max_retries < 1) {
         throw new Error(
-          t(
-            "settings.automation.jobDialog.validation.maxRetriesMin",
-            "最大重试次数不能小于 1",
-          ),
+          t("settings.automation.jobDialog.validation.maxRetriesMin"),
         );
       }
       if (form.delivery_mode === "announce" && !form.delivery_target.trim()) {
         throw new Error(
-          t(
-            "settings.automation.jobDialog.validation.deliveryTargetRequired",
-            "请输入输出目标",
-          ),
+          t("settings.automation.jobDialog.validation.deliveryTargetRequired"),
         );
       }
       const delivery = buildDeliveryConfig(form);
@@ -816,10 +685,7 @@ export function AutomationJobDialog({
       setError(
         submitError instanceof Error
           ? submitError.message
-          : t(
-              "settings.automation.jobDialog.validation.saveFailed",
-              "保存持续流程失败",
-            ),
+          : t("settings.automation.jobDialog.validation.saveFailed"),
       );
     }
   }
@@ -838,10 +704,7 @@ export function AutomationJobDialog({
                   {dialogTitle}
                 </DialogTitle>
                 <WorkbenchInfoTip
-                  ariaLabel={t(
-                    "settings.automation.jobDialog.tipAria",
-                    "持续流程弹窗说明",
-                  )}
+                  ariaLabel={t("settings.automation.jobDialog.tipAria")}
                   content={dialogTipContent}
                   tone="mint"
                 />
@@ -854,7 +717,6 @@ export function AutomationJobDialog({
                   {translateWithValues(
                     t,
                     "settings.automation.jobDialog.badge.workspace",
-                    "归属：{{workspace}}",
                     { workspace: workspaceLabel },
                   )}
                 </span>
@@ -862,7 +724,6 @@ export function AutomationJobDialog({
                   {translateWithValues(
                     t,
                     "settings.automation.jobDialog.badge.schedule",
-                    "调度：{{schedule}}",
                     { schedule: scheduleLabel },
                   )}
                 </span>
@@ -876,17 +737,12 @@ export function AutomationJobDialog({
                   {translateWithValues(
                     t,
                     "settings.automation.jobDialog.badge.startMethod",
-                    "开始方式：{{method}}",
                     {
                       method: isLegacyBrowserJob
                         ? t(
                             "settings.automation.jobDialog.payload.browserSession",
-                            "浏览器自动化",
                           )
-                        : t(
-                            "settings.automation.jobDialog.payload.agentTurn",
-                            "Agent 对话",
-                          ),
+                        : t("settings.automation.jobDialog.payload.agentTurn"),
                     },
                   )}
                 </span>
@@ -900,17 +756,14 @@ export function AutomationJobDialog({
                   {translateWithValues(
                     t,
                     "settings.automation.jobDialog.badge.delivery",
-                    "输出投递：{{status}}",
                     {
                       status:
                         form.delivery_mode === "announce"
                           ? t(
                               "settings.automation.jobDialog.delivery.status.enabled",
-                              "已启用",
                             )
                           : t(
                               "settings.automation.jobDialog.delivery.status.disabled",
-                              "未启用",
                             ),
                     },
                   )}
@@ -920,7 +773,6 @@ export function AutomationJobDialog({
                     {translateWithValues(
                       t,
                       "settings.automation.jobDialog.badge.permission",
-                      "权限：{{accessMode}}",
                       { accessMode: accessLabel },
                     )}
                   </span>
@@ -937,22 +789,12 @@ export function AutomationJobDialog({
                   {translateWithValues(
                     t,
                     "settings.automation.jobDialog.badge.status",
-                    "当前状态：{{status}}",
                     {
                       status: isLegacyBrowserJob
-                        ? t(
-                            "settings.automation.jobDialog.status.offline",
-                            "已下线",
-                          )
+                        ? t("settings.automation.jobDialog.status.offline")
                         : form.enabled
-                          ? t(
-                              "settings.automation.jobDialog.status.enabled",
-                              "已启用",
-                            )
-                          : t(
-                              "settings.automation.jobDialog.status.disabled",
-                              "已停用",
-                            ),
+                          ? t("settings.automation.jobDialog.status.enabled")
+                          : t("settings.automation.jobDialog.status.disabled"),
                     },
                   )}
                 </span>
@@ -967,10 +809,7 @@ export function AutomationJobDialog({
             <div className="grid gap-5 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="automation-job-name">
-                  {t(
-                    "settings.automation.jobDialog.field.name.label",
-                    "流程名称",
-                  )}
+                  {t("settings.automation.jobDialog.field.name.label")}
                 </Label>
                 <Input
                   id="automation-job-name"
@@ -983,16 +822,12 @@ export function AutomationJobDialog({
                   }
                   placeholder={t(
                     "settings.automation.jobDialog.field.name.placeholder",
-                    "例如：每日品牌线索巡检",
                   )}
                 />
               </div>
               <div className="space-y-2">
                 <Label>
-                  {t(
-                    "settings.automation.jobDialog.field.workspace.label",
-                    "归属位置",
-                  )}
+                  {t("settings.automation.jobDialog.field.workspace.label")}
                 </Label>
                 <Select
                   value={form.workspace_id}
@@ -1004,7 +839,6 @@ export function AutomationJobDialog({
                     <SelectValue
                       placeholder={t(
                         "settings.automation.jobDialog.field.workspace.placeholder",
-                        "选择归属位置",
                       )}
                     />
                   </SelectTrigger>
@@ -1021,10 +855,7 @@ export function AutomationJobDialog({
 
             <div className="mt-5 space-y-2">
               <Label htmlFor="automation-job-description">
-                {t(
-                  "settings.automation.jobDialog.field.description.label",
-                  "流程说明",
-                )}
+                {t("settings.automation.jobDialog.field.description.label")}
               </Label>
               <Textarea
                 id="automation-job-description"
@@ -1037,7 +868,6 @@ export function AutomationJobDialog({
                 }
                 placeholder={t(
                   "settings.automation.jobDialog.field.description.placeholder",
-                  "说明这条持续流程跑起来后希望得到什么结果",
                 )}
                 className="min-h-[90px]"
               />
@@ -1046,10 +876,7 @@ export function AutomationJobDialog({
             <div className="mt-5 grid gap-5 md:grid-cols-4">
               <div className="space-y-2">
                 <Label>
-                  {t(
-                    "settings.automation.jobDialog.field.startMethod.label",
-                    "开始方式",
-                  )}
+                  {t("settings.automation.jobDialog.field.startMethod.label")}
                 </Label>
                 <Select value={form.payload_kind} disabled>
                   <SelectTrigger>
@@ -1057,16 +884,12 @@ export function AutomationJobDialog({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="agent_turn">
-                      {t(
-                        "settings.automation.jobDialog.payload.agentTurn",
-                        "Agent 对话",
-                      )}
+                      {t("settings.automation.jobDialog.payload.agentTurn")}
                     </SelectItem>
                     {isLegacyBrowserJob ? (
                       <SelectItem value="browser_session">
                         {t(
                           "settings.automation.jobDialog.payload.browserSession",
-                          "浏览器自动化",
                         )}
                       </SelectItem>
                     ) : null}
@@ -1075,10 +898,7 @@ export function AutomationJobDialog({
               </div>
               <div className="space-y-2">
                 <Label>
-                  {t(
-                    "settings.automation.jobDialog.field.executionMode.label",
-                    "执行模式",
-                  )}
+                  {t("settings.automation.jobDialog.field.executionMode.label")}
                 </Label>
                 <Select
                   value={form.execution_mode}
@@ -1096,30 +916,20 @@ export function AutomationJobDialog({
                     <SelectItem value="intelligent">
                       {t(
                         "settings.automation.jobDialog.executionMode.intelligent",
-                        "智能执行",
                       )}
                     </SelectItem>
                     <SelectItem value="skill">
-                      {t(
-                        "settings.automation.jobDialog.executionMode.skill",
-                        "技能执行",
-                      )}
+                      {t("settings.automation.jobDialog.executionMode.skill")}
                     </SelectItem>
                     <SelectItem value="log_only">
-                      {t(
-                        "settings.automation.jobDialog.executionMode.logOnly",
-                        "只记录",
-                      )}
+                      {t("settings.automation.jobDialog.executionMode.logOnly")}
                     </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label>
-                  {t(
-                    "settings.automation.jobDialog.field.maxRetries.label",
-                    "最大重试",
-                  )}
+                  {t("settings.automation.jobDialog.field.maxRetries.label")}
                 </Label>
                 <Input
                   value={form.max_retries}
@@ -1135,10 +945,7 @@ export function AutomationJobDialog({
               </div>
               <div className="space-y-2">
                 <Label>
-                  {t(
-                    "settings.automation.jobDialog.field.timeout.label",
-                    "超时秒数",
-                  )}
+                  {t("settings.automation.jobDialog.field.timeout.label")}
                 </Label>
                 <Input
                   value={form.timeout_secs}
@@ -1152,7 +959,6 @@ export function AutomationJobDialog({
                   }
                   placeholder={t(
                     "settings.automation.jobDialog.field.timeout.placeholder",
-                    "留空表示不限制",
                   )}
                 />
               </div>
@@ -1164,7 +970,6 @@ export function AutomationJobDialog({
                   <Label>
                     {t(
                       "settings.automation.jobDialog.field.scheduleKind.label",
-                      "调度方式",
                     )}
                   </Label>
                   <Select
@@ -1181,22 +986,13 @@ export function AutomationJobDialog({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="every">
-                        {t(
-                          "settings.automation.jobDialog.schedule.kind.every",
-                          "固定间隔",
-                        )}
+                        {t("settings.automation.jobDialog.schedule.kind.every")}
                       </SelectItem>
                       <SelectItem value="cron">
-                        {t(
-                          "settings.automation.jobDialog.schedule.kind.cron",
-                          "Cron",
-                        )}
+                        {t("settings.automation.jobDialog.schedule.kind.cron")}
                       </SelectItem>
                       <SelectItem value="at">
-                        {t(
-                          "settings.automation.jobDialog.schedule.kind.at",
-                          "一次性",
-                        )}
+                        {t("settings.automation.jobDialog.schedule.kind.at")}
                       </SelectItem>
                     </SelectContent>
                   </Select>
@@ -1205,10 +1001,7 @@ export function AutomationJobDialog({
                 {form.schedule_kind === "every" ? (
                   <div className="space-y-2 md:col-span-2">
                     <Label>
-                      {t(
-                        "settings.automation.jobDialog.field.interval.label",
-                        "间隔秒数",
-                      )}
+                      {t("settings.automation.jobDialog.field.interval.label")}
                     </Label>
                     <Input
                       value={form.every_secs}
@@ -1228,10 +1021,7 @@ export function AutomationJobDialog({
                   <>
                     <div className="space-y-2 md:col-span-2">
                       <Label>
-                        {t(
-                          "settings.automation.jobDialog.field.cron.label",
-                          "Cron 表达式",
-                        )}
+                        {t("settings.automation.jobDialog.field.cron.label")}
                       </Label>
                       <Input
                         value={form.cron_expr}
@@ -1248,7 +1038,6 @@ export function AutomationJobDialog({
                       <Label>
                         {t(
                           "settings.automation.jobDialog.field.timezone.label",
-                          "时区",
                         )}
                       </Label>
                       <Input
@@ -1268,10 +1057,7 @@ export function AutomationJobDialog({
                 {form.schedule_kind === "at" ? (
                   <div className="space-y-2 md:col-span-2">
                     <Label>
-                      {t(
-                        "settings.automation.jobDialog.field.at.label",
-                        "触发时间",
-                      )}
+                      {t("settings.automation.jobDialog.field.at.label")}
                     </Label>
                     <Input
                       value={form.at_local}
@@ -1296,10 +1082,7 @@ export function AutomationJobDialog({
               <div className="mt-5 space-y-4">
                 <div className="rounded-[24px] border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-6 text-amber-800">
                   <div className="font-medium text-amber-900">
-                    {t(
-                      "settings.automation.jobDialog.legacy.title",
-                      "浏览器自动化已下线",
-                    )}
+                    {t("settings.automation.jobDialog.legacy.title")}
                   </div>
                   <div className="mt-2">
                     {legacyBrowserAutomationMessage(t)}
@@ -1307,10 +1090,7 @@ export function AutomationJobDialog({
                 </div>
                 <div className="rounded-[24px] border border-slate-200/80 bg-slate-50 px-4 py-4">
                   <div className="text-sm font-medium text-slate-900">
-                    {t(
-                      "settings.automation.jobDialog.legacy.snapshotTitle",
-                      "历史配置快照",
-                    )}
+                    {t("settings.automation.jobDialog.legacy.snapshotTitle")}
                   </div>
                   <div className="mt-3 grid gap-3 text-sm text-slate-600 md:grid-cols-2">
                     {legacyBrowserSummary.map((item) => (
@@ -1323,10 +1103,7 @@ export function AutomationJobDialog({
                     ))}
                   </div>
                   <div className="mt-3 text-xs leading-5 text-slate-500">
-                    {t(
-                      "settings.automation.jobDialog.legacy.snapshotNote",
-                      "这份配置只保留展示，不允许继续保存或执行。",
-                    )}
+                    {t("settings.automation.jobDialog.legacy.snapshotNote")}
                   </div>
                 </div>
               </div>
@@ -1334,10 +1111,7 @@ export function AutomationJobDialog({
               <>
                 <div className="mt-5 space-y-2">
                   <Label htmlFor="automation-job-prompt">
-                    {t(
-                      "settings.automation.jobDialog.field.prompt.label",
-                      "启动提示",
-                    )}
+                    {t("settings.automation.jobDialog.field.prompt.label")}
                   </Label>
                   <Textarea
                     id="automation-job-prompt"
@@ -1350,7 +1124,6 @@ export function AutomationJobDialog({
                     }
                     placeholder={t(
                       "settings.automation.jobDialog.field.prompt.placeholder",
-                      "描述这条持续流程每次启动时要做什么",
                     )}
                     className="min-h-[120px] sm:min-h-[140px]"
                   />
@@ -1360,7 +1133,6 @@ export function AutomationJobDialog({
                   <Label htmlFor="automation-job-system-prompt">
                     {t(
                       "settings.automation.jobDialog.field.systemPrompt.label",
-                      "附加系统指令",
                     )}
                   </Label>
                   <Textarea
@@ -1374,7 +1146,6 @@ export function AutomationJobDialog({
                     }
                     placeholder={t(
                       "settings.automation.jobDialog.field.systemPrompt.placeholder",
-                      "可选，控制这条持续流程的执行风格",
                     )}
                     className="min-h-[96px] sm:min-h-[110px]"
                   />
@@ -1385,13 +1156,11 @@ export function AutomationJobDialog({
                       <div className="text-sm font-medium text-slate-900">
                         {t(
                           "settings.automation.jobDialog.toggle.enabled.label",
-                          "启用这条",
                         )}
                       </div>
                       <div className="text-xs text-slate-500">
                         {t(
                           "settings.automation.jobDialog.toggle.enabled.description",
-                          "关闭后这条持续流程不再参与轮询",
                         )}
                       </div>
                     </div>
@@ -1407,13 +1176,11 @@ export function AutomationJobDialog({
                       <div className="text-sm font-medium text-slate-900">
                         {t(
                           "settings.automation.jobDialog.toggle.webSearch.label",
-                          "允许 Web 搜索",
                         )}
                       </div>
                       <div className="text-xs text-slate-500">
                         {t(
                           "settings.automation.jobDialog.toggle.webSearch.description",
-                          "为这条持续流程单独开启搜索能力",
                         )}
                       </div>
                     </div>
@@ -1429,10 +1196,7 @@ export function AutomationJobDialog({
                   </div>
                   <div className="rounded-[18px] border border-slate-200/80 bg-slate-50/70 px-4 py-3">
                     <div className="text-sm font-medium text-slate-900">
-                      {t(
-                        "settings.automation.jobDialog.accessMode.label",
-                        "权限模式",
-                      )}
+                      {t("settings.automation.jobDialog.accessMode.label")}
                     </div>
                     <div className="mt-1 text-xs text-slate-500">
                       {accessModePolicySummary(t, form.agent_access_mode)}
@@ -1450,7 +1214,6 @@ export function AutomationJobDialog({
                         <SelectTrigger
                           aria-label={t(
                             "settings.automation.jobDialog.accessMode.aria",
-                            "自动化权限模式",
                           )}
                         >
                           <SelectValue />
@@ -1471,10 +1234,7 @@ export function AutomationJobDialog({
                   <div className="grid gap-5 md:grid-cols-4">
                     <div className="space-y-2">
                       <Label>
-                        {t(
-                          "settings.automation.jobDialog.delivery.mode.label",
-                          "输出模式",
-                        )}
+                        {t("settings.automation.jobDialog.delivery.mode.label")}
                       </Label>
                       <Select
                         value={form.delivery_mode}
@@ -1492,13 +1252,11 @@ export function AutomationJobDialog({
                           <SelectItem value="none">
                             {t(
                               "settings.automation.jobDialog.delivery.mode.none",
-                              "关闭",
                             )}
                           </SelectItem>
                           <SelectItem value="announce">
                             {t(
                               "settings.automation.jobDialog.delivery.mode.announce",
-                              "运行完成后投递",
                             )}
                           </SelectItem>
                         </SelectContent>
@@ -1511,7 +1269,6 @@ export function AutomationJobDialog({
                           <Label>
                             {t(
                               "settings.automation.jobDialog.delivery.channel.label",
-                              "输出目标",
                             )}
                           </Label>
                           <Select
@@ -1545,25 +1302,21 @@ export function AutomationJobDialog({
                               <SelectItem value="webhook">
                                 {t(
                                   "settings.automation.jobDialog.delivery.channel.webhook",
-                                  "Webhook",
                                 )}
                               </SelectItem>
                               <SelectItem value="google_sheets">
                                 {t(
                                   "settings.automation.jobDialog.delivery.channel.googleSheets",
-                                  "Google Sheets",
                                 )}
                               </SelectItem>
                               <SelectItem value="local_file">
                                 {t(
                                   "settings.automation.jobDialog.delivery.channel.localFile",
-                                  "本地文件",
                                 )}
                               </SelectItem>
                               <SelectItem value="telegram">
                                 {t(
                                   "settings.automation.jobDialog.delivery.channel.telegram",
-                                  "Telegram",
                                 )}
                               </SelectItem>
                             </SelectContent>
@@ -1573,7 +1326,6 @@ export function AutomationJobDialog({
                           <Label>
                             {t(
                               "settings.automation.jobDialog.delivery.schema.label",
-                              "输出契约",
                             )}
                           </Label>
                           <Select
@@ -1594,31 +1346,26 @@ export function AutomationJobDialog({
                               <SelectItem value="text">
                                 {t(
                                   "settings.automation.jobDialog.delivery.schema.text",
-                                  "文本摘要",
                                 )}
                               </SelectItem>
                               <SelectItem value="json">
                                 {t(
                                   "settings.automation.jobDialog.delivery.schema.json",
-                                  "JSON 对象",
                                 )}
                               </SelectItem>
                               <SelectItem value="table">
                                 {t(
                                   "settings.automation.jobDialog.delivery.schema.table",
-                                  "表格",
                                 )}
                               </SelectItem>
                               <SelectItem value="csv">
                                 {t(
                                   "settings.automation.jobDialog.delivery.schema.csv",
-                                  "CSV",
                                 )}
                               </SelectItem>
                               <SelectItem value="links">
                                 {t(
                                   "settings.automation.jobDialog.delivery.schema.links",
-                                  "链接列表",
                                 )}
                               </SelectItem>
                             </SelectContent>
@@ -1628,7 +1375,6 @@ export function AutomationJobDialog({
                           <Label>
                             {t(
                               "settings.automation.jobDialog.delivery.format.label",
-                              "输出格式",
                             )}
                           </Label>
                           <Select
@@ -1649,13 +1395,11 @@ export function AutomationJobDialog({
                               <SelectItem value="text">
                                 {t(
                                   "settings.automation.jobDialog.delivery.format.text",
-                                  "文本摘要",
                                 )}
                               </SelectItem>
                               <SelectItem value="json">
                                 {t(
                                   "settings.automation.jobDialog.delivery.format.json",
-                                  "结构化 JSON",
                                 )}
                               </SelectItem>
                             </SelectContent>
@@ -1671,7 +1415,6 @@ export function AutomationJobDialog({
                         <Label>
                           {t(
                             "settings.automation.jobDialog.delivery.target.label",
-                            "目标地址",
                           )}
                         </Label>
                         <Input
@@ -1693,13 +1436,11 @@ export function AutomationJobDialog({
                           <div className="text-sm font-medium text-slate-900">
                             {t(
                               "settings.automation.jobDialog.delivery.bestEffort.label",
-                              "投递失败不阻塞本轮",
                             )}
                           </div>
                           <div className="text-xs text-slate-500">
                             {t(
                               "settings.automation.jobDialog.delivery.bestEffort.description",
-                              "关闭后投递失败也会记为本轮运行失败",
                             )}
                           </div>
                         </div>
@@ -1736,7 +1477,7 @@ export function AutomationJobDialog({
               onClick={() => onOpenChange(false)}
               disabled={saving}
             >
-              {t("settings.automation.jobDialog.footer.cancel", "取消")}
+              {t("settings.automation.jobDialog.footer.cancel")}
             </Button>
             <Button
               type="button"
@@ -1744,21 +1485,12 @@ export function AutomationJobDialog({
               disabled={saving || isLegacyBrowserJob}
             >
               {saving
-                ? t("settings.automation.jobDialog.footer.saving", "保存中...")
+                ? t("settings.automation.jobDialog.footer.saving")
                 : isLegacyBrowserJob
-                  ? t(
-                      "settings.automation.jobDialog.footer.legacyDisabled",
-                      "该类型不可保存",
-                    )
+                  ? t("settings.automation.jobDialog.footer.legacyDisabled")
                   : mode === "create"
-                    ? t(
-                        "settings.automation.jobDialog.footer.create",
-                        "创建持续流程",
-                      )
-                    : t(
-                        "settings.automation.jobDialog.footer.save",
-                        "保存修改",
-                      )}
+                    ? t("settings.automation.jobDialog.footer.create")
+                    : t("settings.automation.jobDialog.footer.save")}
             </Button>
           </DialogFooter>
         </div>

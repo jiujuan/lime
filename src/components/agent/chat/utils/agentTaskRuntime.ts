@@ -16,7 +16,7 @@ import {
   type ToolBatchSummaryDescriptor,
 } from "./toolBatchGrouping";
 import { resolveAgentThreadToolProcessPreview } from "./toolProcessSummary";
-import { isInternalRoutingTurnSummaryText } from "./turnSummaryPresentation";
+import { shouldHideTurnSummaryFromConversation } from "./turnSummaryPresentation";
 import {
   isPendingRuntimeActionConfirmation,
   isPendingRuntimeActionConfirmationThreadItem,
@@ -402,7 +402,7 @@ function resolveCompletedSummary(
     if (
       item?.type === "turn_summary" &&
       item.status === "completed" &&
-      !isInternalRoutingTurnSummaryText(item.text)
+      !shouldHideTurnSummaryFromConversation(item)
     ) {
       latestTurnSummary = item;
       break;

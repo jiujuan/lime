@@ -155,6 +155,8 @@ pub fn export_runtime_replay_case(
         extract_observability_summary_from_runtime_payload(&evidence_runtime_payload);
     let modality_runtime_contracts =
         extract_modality_runtime_contracts_from_runtime_payload(&evidence_runtime_payload);
+    let agent_runtime_profile =
+        extract_agent_runtime_profile_from_runtime_payload(&evidence_runtime_payload);
     let success_criteria = build_success_criteria(
         detail,
         thread_read,
@@ -189,6 +191,7 @@ pub fn export_runtime_replay_case(
                 &pending_requests,
                 &observability_summary,
                 &modality_runtime_contracts,
+                &agent_runtime_profile,
                 workspace_root.as_path(),
                 exported_at.as_str(),
             )?,
@@ -240,6 +243,7 @@ pub fn export_runtime_replay_case(
                 &recent_artifacts,
                 &observability_summary,
                 &modality_runtime_contracts,
+                &agent_runtime_profile,
                 exported_at.as_str(),
             )?,
         )?,
@@ -336,6 +340,13 @@ fn extract_modality_runtime_contracts_from_runtime_payload(payload: &Value) -> V
         })
 }
 
+fn extract_agent_runtime_profile_from_runtime_payload(payload: &Value) -> Value {
+    payload
+        .pointer("/agentRuntimeProfile")
+        .cloned()
+        .unwrap_or(Value::Null)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn build_input_json(
     detail: &SessionDetail,
@@ -351,6 +362,7 @@ fn build_input_json(
     pending_requests: &[ReplayPendingRequestInput],
     observability_summary: &Value,
     modality_runtime_contracts: &Value,
+    agent_runtime_profile: &Value,
     workspace_root: &Path,
     exported_at: &str,
 ) -> Result<String, String> {
@@ -434,6 +446,7 @@ fn build_input_json(
             "incidents": &thread_read.incidents,
             "runtimeFacts": build_replay_runtime_facts(thread_read, modality_runtime_contracts),
             "modalityRuntimeContracts": modality_runtime_contracts,
+            "agentRuntimeProfile": agent_runtime_profile,
         },
         "observability": observability_summary,
         "linkedArtifacts": {
@@ -579,6 +592,7 @@ fn build_evidence_links_json(
     recent_artifacts: &[String],
     observability_summary: &Value,
     modality_runtime_contracts: &Value,
+    agent_runtime_profile: &Value,
     exported_at: &str,
 ) -> Result<String, String> {
     let payload = json!({
@@ -597,6 +611,7 @@ fn build_evidence_links_json(
         },
         "observabilitySummary": observability_summary,
         "modalityRuntimeContracts": modality_runtime_contracts,
+        "agentRuntimeProfile": agent_runtime_profile,
         "recentArtifacts": recent_artifacts,
     });
 
@@ -2567,7 +2582,7 @@ fn collect_latest_turn_summary(detail: &SessionDetail) -> Option<String> {
         .iter()
         .rev()
         .find_map(|item| match &item.payload {
-            AgentThreadItemPayload::TurnSummary { text } => {
+            AgentThreadItemPayload::TurnSummary { text, .. } => {
                 normalize_optional_text(Some(text.clone()))
             }
             _ => None,
@@ -2676,7 +2691,7 @@ fn collect_pending_request_inputs(
 fn summarize_item_payload(payload: &AgentThreadItemPayload) -> Option<String> {
     match payload {
         AgentThreadItemPayload::Plan { text }
-        | AgentThreadItemPayload::TurnSummary { text }
+        | AgentThreadItemPayload::TurnSummary { text, .. }
         | AgentThreadItemPayload::AgentMessage { text, .. }
         | AgentThreadItemPayload::Reasoning { text, .. } => {
             normalize_optional_text(Some(truncate_text(text, 160)))
@@ -2887,6 +2902,7 @@ mod tests {
                     payload: AgentThreadItemPayload::TurnSummary {
                         text: "已完成 handoff 与 evidence，下一步把真实案例沉淀成 replay case。"
                             .to_string(),
+                        metadata: None,
                     },
                 },
             ],
@@ -2939,7 +2955,9 @@ mod tests {
         AgentRuntimeThreadReadModel {
             thread_id: "thread-1".to_string(),
             status: "waiting_request".to_string(),
+            profile_status: "blocked".to_string(),
             active_turn_id: Some("turn-1".to_string()),
+            turns: Vec::new(),
             pending_requests: vec![crate::commands::aster_agent_cmd::AgentRuntimeRequestView {
                 id: "req-1".to_string(),
                 thread_id: "thread-1".to_string(),
@@ -2964,6 +2982,11 @@ mod tests {
                 image_count: 0,
                 position: 1,
             }],
+            tool_calls: Vec::new(),
+            model_routing: None,
+            evidence_summary: Default::default(),
+            telemetry_summary: Default::default(),
+            context_summary: None,
             interrupt_state: None,
             updated_at: Some("2026-03-27T10:02:00Z".to_string()),
             latest_compaction_boundary: None,
@@ -3394,6 +3417,9 @@ mod tests {
         assert!(input.contains("\"pending_request\""));
         assert!(input.contains("\"observability\""));
         assert!(input.contains("\"requestTelemetry\""));
+        assert!(input.contains("\"agentRuntimeProfile\""));
+        assert!(input.contains("\"schemaVersion\": \"lime-profile-0.4.0\""));
+        assert!(input.contains("\"runtimeId\": \"lime_runtime_local\""));
         assert!(input.contains("\"permissionState\""));
         assert!(input.contains("\"requires_confirmation\""));
         assert!(!input.contains("\"artifactValidator\""));
@@ -3412,6 +3438,8 @@ mod tests {
         assert!(links.contains("\"handoffBundle\""));
         assert!(links.contains("\"evidencePack\""));
         assert!(links.contains("\"observabilitySummary\""));
+        assert!(links.contains("\"agentRuntimeProfile\""));
+        assert!(links.contains("\"schemaVersion\": \"lime-profile-0.4.0\""));
         assert!(!links.contains("\"artifactValidator\""));
     }
 

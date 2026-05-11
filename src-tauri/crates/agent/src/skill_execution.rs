@@ -436,6 +436,7 @@ mod tests {
             description: "测试 skill".to_string(),
             markdown_content: "test".to_string(),
             license: None,
+            compatibility: None,
             metadata: HashMap::new(),
             allowed_tools: allowed_tools.map(|tools| {
                 tools

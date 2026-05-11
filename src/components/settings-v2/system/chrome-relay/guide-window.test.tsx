@@ -1,9 +1,9 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 const {
-  mockUseTranslation,
   mockOpenDialog,
   mockOpenPathWithDefaultApp,
   mockGetBrowserConnectorSettings,
@@ -17,25 +17,7 @@ const {
   mockOpenBrowserConnectorGuideWindowCommand,
   mockHasTauriInvokeCapability,
 } = vi.hoisted(() => {
-  const mockTranslate = vi.fn((key: string, options?: unknown) => {
-    if (typeof options === "string") return options;
-
-    if (options && typeof options === "object") {
-      const values = options as Record<string, unknown>;
-      const template =
-        typeof values.defaultValue === "string" ? values.defaultValue : key;
-      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-        String(values[name] ?? ""),
-      );
-    }
-
-    return key;
-  });
-
   return {
-    mockUseTranslation: vi.fn((_namespace?: string) => ({
-      t: mockTranslate,
-    })),
     mockOpenDialog: vi.fn(),
     mockOpenPathWithDefaultApp: vi.fn(),
     mockGetBrowserConnectorSettings: vi.fn(),
@@ -50,10 +32,6 @@ const {
     mockHasTauriInvokeCapability: vi.fn(),
   };
 });
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
-}));
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: (...args: unknown[]) => mockOpenDialog(...args),
@@ -127,12 +105,15 @@ function findButton(container: HTMLElement, text: string): HTMLButtonElement {
   return target as HTMLButtonElement;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+
+  await changeLimeLocale("en-US");
+
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: {
@@ -203,7 +184,7 @@ beforeEach(() => {
   mockOpenBrowserConnectorGuideWindowCommand.mockResolvedValue(undefined);
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mounted.length > 0) {
     const target = mounted.pop();
     if (!target) break;
@@ -214,6 +195,7 @@ afterEach(() => {
   }
   vi.clearAllMocks();
   window.history.pushState({}, "", "/");
+  await changeLimeLocale("zh-CN");
 });
 
 describe("BrowserConnectorGuideWindow", () => {
@@ -221,16 +203,20 @@ describe("BrowserConnectorGuideWindow", () => {
     const container = renderGuide("/browser-connector-guide?mode=extension");
     await flushEffects();
 
-    expect(container.textContent).toContain("安装 Lime Browser Bridge");
-    expect(container.textContent).toContain("打开 chrome://extensions");
-    expect(container.textContent).toContain("同步并打开扩展文件夹");
+    expect(container.textContent).toContain("Install Lime Browser Bridge");
+    expect(container.textContent).toContain("Open chrome://extensions");
     expect(container.textContent).toContain(
-      "不要直接加载仓库源码里的 extensions/lime-chrome",
+      "Sync and open the extension folder",
     );
+    expect(container.textContent).toContain(
+      "Do not load the repository source directory extensions/lime-chrome",
+    );
+    expect(container.textContent).not.toContain("安装 Lime Browser Bridge");
+    expect(container.textContent).not.toContain("settings.chromeRelay.guide");
 
     const openExtensionsButton = findButton(
       container,
-      "打开 chrome://extensions",
+      "Open chrome://extensions",
     );
     await act(async () => {
       openExtensionsButton.click();
@@ -238,7 +224,7 @@ describe("BrowserConnectorGuideWindow", () => {
     });
     expect(mockOpenBrowserExtensionsPage).toHaveBeenCalledTimes(1);
 
-    const installButton = findButton(container, "同步扩展");
+    const installButton = findButton(container, "Sync Extension");
     await act(async () => {
       installButton.click();
       await flushEffects();
@@ -248,7 +234,10 @@ describe("BrowserConnectorGuideWindow", () => {
       profile_key: "default",
     });
 
-    const chooseDirectoryButton = findButton(container, "重新选择目录");
+    const chooseDirectoryButton = findButton(
+      container,
+      "Choose Directory Again",
+    );
     await act(async () => {
       chooseDirectoryButton.click();
       await flushEffects();
@@ -276,15 +265,17 @@ describe("BrowserConnectorGuideWindow", () => {
     const container = renderGuide("/browser-connector-guide?mode=cdp");
     await flushEffects();
 
-    expect(container.textContent).toContain("启用浏览器直连");
+    expect(container.textContent).toContain("Enable Direct Browser Connection");
     expect(container.textContent).toContain(
-      "打开 chrome://inspect/#remote-debugging",
+      "Open chrome://inspect/#remote-debugging",
     );
-    expect(container.textContent).toContain("允许 Lime 连接");
+    expect(container.textContent).toContain("Allow Lime to connect");
+    expect(container.textContent).not.toContain("启用浏览器直连");
+    expect(container.textContent).not.toContain("settings.chromeRelay.guide");
 
     const remoteDebuggingButton = findButton(
       container,
-      "打开 chrome://inspect/#remote-debugging",
+      "Open chrome://inspect/#remote-debugging",
     );
     await act(async () => {
       remoteDebuggingButton.click();
@@ -299,16 +290,18 @@ describe("BrowserConnectorGuideWindow", () => {
     );
     await flushEffects();
 
-    expect(container.textContent).toContain("启用浏览器直连");
-    expect(container.textContent).not.toContain("安装 Lime Browser Bridge");
+    expect(container.textContent).toContain("Enable Direct Browser Connection");
+    expect(container.textContent).not.toContain("Install Lime Browser Bridge");
   });
 
   it("未知 mode 应回退到扩展连接引导", async () => {
     const container = renderGuide("/browser-connector-guide?mode=unknown");
     await flushEffects();
 
-    expect(container.textContent).toContain("安装 Lime Browser Bridge");
-    expect(container.textContent).not.toContain("启用浏览器直连");
+    expect(container.textContent).toContain("Install Lime Browser Bridge");
+    expect(container.textContent).not.toContain(
+      "Enable Direct Browser Connection",
+    );
   });
 
   it("非 Tauri 环境打开引导时应回退到浏览器窗口", async () => {

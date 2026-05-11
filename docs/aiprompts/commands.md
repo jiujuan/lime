@@ -48,6 +48,8 @@
 
 旧 onboarding 插件安装流与 Provider Switch 命令链也已经下线。`get_switch_providers`、`get_current_switch_provider`、`add_switch_provider`、`update_switch_provider`、`delete_switch_provider`、`switch_provider`、`import_default_config`、`read_live_provider_settings`、`check_config_sync_status`、`sync_from_external_config` 都应视为 `dead`；初装引导当前只保留语音体验流程，不再允许通过 `config-switch`、插件推荐或配置切换 UI 重新接回这条旧链。
 
+插件中心与桌面插件安装 / 管理命令族已经下线。`get_plugin_status`、`get_plugins`、`get_plugin_info`、`enable_plugin`、`disable_plugin`、`update_plugin_config`、`get_plugin_config`、`reload_plugins`、`unload_plugin`、`get_plugins_dir`、`list_plugin_tasks`、`get_plugin_task`、`cancel_plugin_task`、`get_plugin_queue_stats`、`install_plugin_from_file`、`install_plugin_from_url`、`uninstall_plugin`、`list_installed_plugins`、`get_installed_plugin`、`is_plugin_installed`、`get_plugins_with_ui`、`get_plugin_ui`、`handle_plugin_action`、`read_plugin_manifest_cmd`、`launch_plugin_ui`、`frontend_debug_log`、`plugin_rpc_connect`、`plugin_rpc_disconnect`、`plugin_rpc_call` 都应视为 `dead`；不得重新接回前端插件中心、DevBridge、mock 或 `tauri::generate_handler!`。
+
 图库素材链路也遵循同一原则。当前主入口为 `src/lib/api/galleryMaterials.ts`，统一承接：
 
 - `create_gallery_material_metadata`

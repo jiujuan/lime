@@ -1,4 +1,5 @@
 import type { ComponentProps } from "react";
+import { useTranslation } from "react-i18next";
 import { ModelSelector } from "@/components/input-kit";
 import { Label } from "@/components/ui/label";
 
@@ -40,10 +41,14 @@ export function SettingModelSelectorField({
   popoverSide = "bottom",
   allowAutoProvider = true,
   allowAutoModel = true,
-  placeholderLabel = "自动选择",
+  placeholderLabel,
   suppressAutoSelection = true,
   ...selectorProps
 }: SettingModelSelectorFieldProps) {
+  const { t } = useTranslation("settings");
+  const resolvedPlaceholderLabel =
+    placeholderLabel ?? t("settings.mediaGeneration.selector.auto");
+
   return (
     <div
       className={`grid gap-3 px-5 py-4 ${layoutLabelWidthClassName} md:items-center`}
@@ -59,7 +64,7 @@ export function SettingModelSelectorField({
           popoverSide={popoverSide}
           allowAutoProvider={allowAutoProvider}
           allowAutoModel={allowAutoModel}
-          placeholderLabel={placeholderLabel}
+          placeholderLabel={resolvedPlaceholderLabel}
           suppressAutoSelection={suppressAutoSelection}
         />
         {warningText ? (

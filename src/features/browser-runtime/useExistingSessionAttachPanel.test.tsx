@@ -115,7 +115,8 @@ const ATTACH_PANEL_COPY: ExistingSessionAttachPanelCopy = {
       default:
         "Attach current Chrome can take over a live session when available.",
       checking: "Checking the current Chrome bridge connection...",
-      waiting: "Install and connect Lime Browser Bridge in the current browser.",
+      waiting:
+        "Install and connect Lime Browser Bridge in the current browser.",
       reading: "Reading the current Chrome page summary...",
     },
     actions: {

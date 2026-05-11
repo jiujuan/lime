@@ -1,34 +1,16 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 const {
   mockGetExperimentalConfig,
   mockGetVoiceInputConfig,
   mockGetHotkeyRuntimeStatus,
-  mockUseTranslation,
 } = vi.hoisted(() => ({
   mockGetExperimentalConfig: vi.fn(),
   mockGetVoiceInputConfig: vi.fn(),
   mockGetHotkeyRuntimeStatus: vi.fn(),
-  mockUseTranslation: vi.fn((_namespace?: string) => ({
-    t: (key: string, options?: unknown) => {
-      if (typeof options === "string") {
-        return options;
-      }
-
-      if (options && typeof options === "object") {
-        const values = options as Record<string, unknown>;
-        const template =
-          typeof values.defaultValue === "string" ? values.defaultValue : key;
-        return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-          String(values[name] ?? ""),
-        );
-      }
-
-      return key;
-    },
-  })),
 }));
 
 vi.mock("@/lib/api/experimentalFeatures", () => ({
@@ -41,10 +23,6 @@ vi.mock("@/lib/api/asrProvider", () => ({
 
 vi.mock("@/lib/api/hotkeys", () => ({
   getHotkeyRuntimeStatus: mockGetHotkeyRuntimeStatus,
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
 }));
 
 import { HotkeysSettings } from ".";
@@ -130,13 +108,14 @@ async function clickButton(button: HTMLButtonElement) {
   });
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
 
+  await changeLimeLocale("en-US");
   Object.defineProperty(window.navigator, "platform", {
     configurable: true,
     value: "MacIntel",
@@ -189,7 +168,7 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mounted.length > 0) {
     const target = mounted.pop();
     if (!target) {
@@ -203,6 +182,7 @@ afterEach(() => {
   }
 
   vi.clearAllMocks();
+  await changeLimeLocale("zh-CN");
 });
 
 describe("HotkeysSettings", () => {
@@ -211,15 +191,15 @@ describe("HotkeysSettings", () => {
     await waitForLoad();
 
     const text = getText(container);
-    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
-    expect(text).toContain("快捷键");
-    expect(text).toContain("查看已接入实现并完成审计的快捷键。");
-    expect(text).toContain("全局运行中 2 / 3");
-    expect(text).toContain("运行时状态已连接");
-    expect(text).toContain("已审计 8 项");
+    expect(text).toContain("Hotkeys");
+    expect(text).toContain("Review implemented and audited hotkeys.");
+    expect(text).toContain("Global running 2 / 3");
+    expect(text).toContain("Runtime status connected");
+    expect(text).toContain("8 audited");
     expect(text).not.toContain("终端页面");
-    expect(text).toContain("共 2 项");
-    expect(text).toContain("文档画布");
+    expect(text).toContain("2 total");
+    expect(text).toContain("Document Canvas");
+    expect(text).not.toContain("settings.hotkeys");
   });
 
   it("运行时状态读取失败时应回退到配置判断", async () => {
@@ -229,8 +209,8 @@ describe("HotkeysSettings", () => {
     await waitForLoad();
 
     const text = getText(container);
-    expect(text).toContain("运行时状态不可读，已回退到配置判断");
-    expect(text).toContain("全局运行中 2 / 3");
+    expect(text).toContain("Runtime status unreadable; using config fallback");
+    expect(text).toContain("Global running 2 / 3");
   });
 
   it("加载失败后应支持重试", async () => {
@@ -253,13 +233,13 @@ describe("HotkeysSettings", () => {
       const container = renderComponent();
       await waitForLoad();
 
-      expect(getText(container)).toContain("加载快捷键失败：网络异常");
+      expect(getText(container)).toContain("Failed to load hotkeys: 网络异常");
 
-      await clickButton(findButtonByText(container, "重试"));
+      await clickButton(findButtonByText(container, "Retry"));
       await waitForLoad();
 
       expect(mockGetExperimentalConfig).toHaveBeenCalledTimes(2);
-      expect(getText(container)).toContain("快捷键");
+      expect(getText(container)).toContain("Hotkeys");
     } finally {
       consoleErrorSpy.mockRestore();
     }
@@ -308,10 +288,10 @@ describe("HotkeysSettings", () => {
     await waitForLoad();
 
     const text = getText(container);
-    expect(text).toContain("功能未启用");
-    expect(text).toContain("未注册到系统");
-    expect(text).toContain("未绑定翻译指令");
-    expect(text).toContain("未设置");
+    expect(text).toContain("Feature disabled");
+    expect(text).toContain("Not registered");
+    expect(text).toContain("Instruction not bound");
+    expect(text).toContain("Not set");
     expect(text).not.toContain("__lime_unset_shortcut__");
   });
 
@@ -320,17 +300,19 @@ describe("HotkeysSettings", () => {
     await waitForLoad();
 
     expect(getBodyText()).not.toContain(
-      "当前按 macOS 展示已接入实现的快捷键。全局项读取运行时注册状态，页面内项直接来自对应模块的真实事件匹配逻辑，不再展示手工拼装的占位清单。",
+      "Showing implemented hotkeys for macOS. Global items read runtime registration status",
     );
 
-    const heroTip = await hoverTip("已审计快捷键说明");
+    const heroTip = await hoverTip("Audited hotkeys info");
     expect(getBodyText()).toContain(
-      "当前按 macOS 展示已接入实现的快捷键。全局项读取运行时注册状态，页面内项直接来自对应模块的真实事件匹配逻辑，不再展示手工拼装的占位清单。",
+      "Showing implemented hotkeys for macOS. Global items read runtime registration status",
     );
     await leaveTip(heroTip);
 
-    const statTip = await hoverTip("已审计说明");
-    expect(getBodyText()).toContain("当前页只列出已接入实现且已核对的快捷键。");
+    const statTip = await hoverTip("Audit info");
+    expect(getBodyText()).toContain(
+      "This page only lists hotkeys that are implemented and verified.",
+    );
     await leaveTip(statTip);
   });
 });

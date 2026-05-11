@@ -138,7 +138,7 @@ function BrowserConnectorGuideContent() {
     installDirectory ??
     installStatus?.install_root_dir ??
     settings?.install_root_dir ??
-    t("settings.chromeRelay.guide.installPath.empty", "尚未选择扩展目录");
+    t("settings.chromeRelay.guide.installPath.empty");
   const hasObserverConnected = (bridgeStatus?.observer_count ?? 0) > 0;
   const hasControlConnected = (bridgeStatus?.control_count ?? 0) > 0;
   const cdpAliveCount = backendsStatus?.cdp_alive_profile_count ?? 0;
@@ -162,7 +162,6 @@ function BrowserConnectorGuideContent() {
         type: "error",
         text: t("settings.chromeRelay.guide.message.refreshFailed", {
           message: error instanceof Error ? error.message : String(error),
-          defaultValue: "刷新连接器状态失败: {{message}}",
         }),
       });
     } finally {
@@ -211,7 +210,6 @@ function BrowserConnectorGuideContent() {
           type: "success",
           text: t("settings.chromeRelay.guide.message.extensionSynced", {
             path: result.install_dir,
-            defaultValue: "扩展已同步到 {{path}}",
           }),
         });
         await refreshState();
@@ -220,7 +218,6 @@ function BrowserConnectorGuideContent() {
           type: "error",
           text: t("settings.chromeRelay.guide.message.syncExtensionFailed", {
             message: error instanceof Error ? error.message : String(error),
-            defaultValue: "同步扩展失败: {{message}}",
           }),
         });
       } finally {
@@ -239,7 +236,6 @@ function BrowserConnectorGuideContent() {
         type: "error",
         text: t("settings.chromeRelay.guide.message.openExtensionsFailed", {
           message: error instanceof Error ? error.message : String(error),
-          defaultValue: "打开 Chrome 扩展页失败: {{message}}",
         }),
       });
     } finally {
@@ -256,7 +252,6 @@ function BrowserConnectorGuideContent() {
         type: "error",
         text: t("settings.chromeRelay.guide.message.openRemoteFailed", {
           message: error instanceof Error ? error.message : String(error),
-          defaultValue: "打开远程调试页失败: {{message}}",
         }),
       });
     } finally {
@@ -268,10 +263,7 @@ function BrowserConnectorGuideContent() {
     if (!installDirectory) {
       setMessage({
         type: "error",
-        text: t(
-          "settings.chromeRelay.guide.message.installDirectoryMissing",
-          "尚未检测到已同步的扩展目录",
-        ),
+        text: t("settings.chromeRelay.guide.message.installDirectoryMissing"),
       });
       return;
     }
@@ -284,7 +276,6 @@ function BrowserConnectorGuideContent() {
         type: "error",
         text: t("settings.chromeRelay.guide.message.openInstallDirFailed", {
           message: error instanceof Error ? error.message : String(error),
-          defaultValue: "打开扩展目录失败: {{message}}",
         }),
       });
     } finally {
@@ -297,10 +288,7 @@ function BrowserConnectorGuideContent() {
       try {
         if (!navigator.clipboard?.writeText) {
           throw new Error(
-            t(
-              "settings.chromeRelay.guide.message.clipboardUnsupported",
-              "当前环境不支持剪贴板写入",
-            ),
+            t("settings.chromeRelay.guide.message.clipboardUnsupported"),
           );
         }
         await navigator.clipboard.writeText(text);
@@ -308,7 +296,6 @@ function BrowserConnectorGuideContent() {
           type: "success",
           text: t("settings.chromeRelay.guide.message.copySuccess", {
             label,
-            defaultValue: "{{label}} 已复制到剪贴板",
           }),
         });
       } catch (error) {
@@ -317,7 +304,6 @@ function BrowserConnectorGuideContent() {
           text: t("settings.chromeRelay.guide.message.copyFailed", {
             label,
             message: error instanceof Error ? error.message : String(error),
-            defaultValue: "复制 {{label}} 失败: {{message}}",
           }),
         });
       }
@@ -328,25 +314,13 @@ function BrowserConnectorGuideContent() {
   const installStatusLabel = useMemo(() => {
     switch (installStatus?.status) {
       case "installed":
-        return t(
-          "settings.chromeRelay.guide.installStatus.installed",
-          "扩展已同步",
-        );
+        return t("settings.chromeRelay.guide.installStatus.installed");
       case "update_available":
-        return t(
-          "settings.chromeRelay.guide.installStatus.updateAvailable",
-          "扩展可更新",
-        );
+        return t("settings.chromeRelay.guide.installStatus.updateAvailable");
       case "broken":
-        return t(
-          "settings.chromeRelay.guide.installStatus.broken",
-          "扩展目录异常",
-        );
+        return t("settings.chromeRelay.guide.installStatus.broken");
       default:
-        return t(
-          "settings.chromeRelay.guide.installStatus.pending",
-          "尚未同步扩展",
-        );
+        return t("settings.chromeRelay.guide.installStatus.pending");
     }
   }, [installStatus?.status, t]);
   const installStatusTone = getInstallStatusTone(installStatus);
@@ -354,32 +328,16 @@ function BrowserConnectorGuideContent() {
     () =>
       mode === "extension"
         ? {
-            title: t(
-              "settings.chromeRelay.guide.header.extension.title",
-              "安装 Lime Browser Bridge",
-            ),
-            eyebrow: t(
-              "settings.chromeRelay.guide.header.extension.eyebrow",
-              "扩展连接",
-            ),
+            title: t("settings.chromeRelay.guide.header.extension.title"),
+            eyebrow: t("settings.chromeRelay.guide.header.extension.eyebrow"),
             description: t(
               "settings.chromeRelay.guide.header.extension.description",
-              "把扩展同步到用户目录，再让 Chrome 加载这个目录。",
             ),
           }
         : {
-            title: t(
-              "settings.chromeRelay.guide.header.cdp.title",
-              "启用浏览器直连",
-            ),
-            eyebrow: t(
-              "settings.chromeRelay.guide.header.cdp.eyebrow",
-              "CDP 直连",
-            ),
-            description: t(
-              "settings.chromeRelay.guide.header.cdp.description",
-              "你的 Chrome 可通过 DevTools Protocol 连接，无需安装扩展。",
-            ),
+            title: t("settings.chromeRelay.guide.header.cdp.title"),
+            eyebrow: t("settings.chromeRelay.guide.header.cdp.eyebrow"),
+            description: t("settings.chromeRelay.guide.header.cdp.description"),
           },
     [mode, t],
   );
@@ -411,7 +369,7 @@ function BrowserConnectorGuideContent() {
             <RefreshCw
               className={cn("h-4 w-4", refreshing ? "animate-spin" : "")}
             />
-            {t("settings.chromeRelay.guide.action.refresh", "刷新状态")}
+            {t("settings.chromeRelay.guide.action.refresh")}
           </button>
         </header>
 
@@ -443,36 +401,23 @@ function BrowserConnectorGuideContent() {
                 }
               >
                 {hasObserverConnected && hasControlConnected
-                  ? t(
-                      "settings.chromeRelay.guide.bridge.connected",
-                      "Chrome 已连接",
-                    )
-                  : t(
-                      "settings.chromeRelay.guide.bridge.pending",
-                      "Chrome 待连接",
-                    )}
+                  ? t("settings.chromeRelay.guide.bridge.connected")
+                  : t("settings.chromeRelay.guide.bridge.pending")}
               </StatusPill>
               <span className="text-sm text-slate-500">
                 {t("settings.chromeRelay.guide.bridge.counts", {
                   observer: bridgeStatus?.observer_count ?? 0,
                   control: bridgeStatus?.control_count ?? 0,
-                  defaultValue: "observer / control：{{observer}}/{{control}}",
                 })}
               </span>
             </div>
 
             <StepBlock
               index={1}
-              title={t(
-                "settings.chromeRelay.guide.extension.step1.title",
-                "打开 Chrome 扩展管理页面",
-              )}
+              title={t("settings.chromeRelay.guide.extension.step1.title")}
             >
               <p>
-                {t(
-                  "settings.chromeRelay.guide.extension.step1.description",
-                  "打开页面后，先开启右上角的“开发者模式”。",
-                )}
+                {t("settings.chromeRelay.guide.extension.step1.description")}
               </p>
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 <button
@@ -483,46 +428,31 @@ function BrowserConnectorGuideContent() {
                 >
                   <ExternalLink className="h-4 w-4" />
                   {openingExtensionsPage
-                    ? t(
-                        "settings.chromeRelay.guide.action.opening",
-                        "打开中...",
-                      )
-                    : t(
-                        "settings.chromeRelay.guide.action.openExtensions",
-                        "打开 chrome://extensions",
-                      )}
+                    ? t("settings.chromeRelay.guide.action.opening")
+                    : t("settings.chromeRelay.guide.action.openExtensions")}
                 </button>
                 <button
                   type="button"
                   onClick={() =>
                     void copyPlainText(
                       "chrome://extensions",
-                      t(
-                        "settings.chromeRelay.guide.label.extensionsUrl",
-                        "扩展页地址",
-                      ),
+                      t("settings.chromeRelay.guide.label.extensionsUrl"),
                     )
                   }
                   className={SECONDARY_BUTTON_CLASS_NAME}
                 >
                   <Copy className="h-4 w-4" />
-                  {t("settings.chromeRelay.guide.action.copyUrl", "复制地址")}
+                  {t("settings.chromeRelay.guide.action.copyUrl")}
                 </button>
               </div>
             </StepBlock>
 
             <StepBlock
               index={2}
-              title={t(
-                "settings.chromeRelay.guide.extension.step2.title",
-                "同步并打开扩展文件夹",
-              )}
+              title={t("settings.chromeRelay.guide.extension.step2.title")}
             >
               <p>
-                {t(
-                  "settings.chromeRelay.guide.extension.step2.description",
-                  "扩展文件夹必须来自 Lime 同步出的用户目录。",
-                )}
+                {t("settings.chromeRelay.guide.extension.step2.description")}
               </p>
               <div className="mt-3 rounded-[12px] border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-xs text-slate-700">
                 {visibleInstallPath}
@@ -536,14 +466,8 @@ function BrowserConnectorGuideContent() {
                 >
                   <FolderOpen className="h-4 w-4" />
                   {installing
-                    ? t(
-                        "settings.chromeRelay.guide.action.syncing",
-                        "同步中...",
-                      )
-                    : t(
-                        "settings.chromeRelay.guide.action.syncExtension",
-                        "同步扩展",
-                      )}
+                    ? t("settings.chromeRelay.guide.action.syncing")
+                    : t("settings.chromeRelay.guide.action.syncExtension")}
                 </button>
                 <button
                   type="button"
@@ -551,10 +475,7 @@ function BrowserConnectorGuideContent() {
                   disabled={installing}
                   className={SECONDARY_BUTTON_CLASS_NAME}
                 >
-                  {t(
-                    "settings.chromeRelay.guide.action.chooseDirectoryAgain",
-                    "重新选择目录",
-                  )}
+                  {t("settings.chromeRelay.guide.action.chooseDirectoryAgain")}
                 </button>
                 <button
                   type="button"
@@ -564,79 +485,52 @@ function BrowserConnectorGuideContent() {
                 >
                   <FolderOpen className="h-4 w-4" />
                   {openingInstallDirectory
-                    ? t(
-                        "settings.chromeRelay.guide.action.opening",
-                        "打开中...",
-                      )
-                    : t(
-                        "settings.chromeRelay.guide.action.openFolder",
-                        "打开文件夹",
-                      )}
+                    ? t("settings.chromeRelay.guide.action.opening")
+                    : t("settings.chromeRelay.guide.action.openFolder")}
                 </button>
                 <button
                   type="button"
                   onClick={() =>
                     void copyPlainText(
                       visibleInstallPath,
-                      t(
-                        "settings.chromeRelay.guide.label.extensionDirectory",
-                        "扩展目录",
-                      ),
+                      t("settings.chromeRelay.guide.label.extensionDirectory"),
                     )
                   }
                   disabled={!installDirectory}
                   className={SECONDARY_BUTTON_CLASS_NAME}
                 >
                   <Copy className="h-4 w-4" />
-                  {t("settings.chromeRelay.guide.action.copyPath", "复制路径")}
+                  {t("settings.chromeRelay.guide.action.copyPath")}
                 </button>
               </div>
             </StepBlock>
 
             <StepBlock
               index={3}
-              title={t(
-                "settings.chromeRelay.guide.extension.step3.title",
-                "将扩展文件夹拖入 Chrome",
-              )}
+              title={t("settings.chromeRelay.guide.extension.step3.title")}
             >
               <p>
-                {t(
-                  "settings.chromeRelay.guide.extension.step3.prefix",
-                  "将同步出的",
-                )}{" "}
+                {t("settings.chromeRelay.guide.extension.step3.prefix")}{" "}
                 <strong>Lime Browser Connector</strong>{" "}
-                {t(
-                  "settings.chromeRelay.guide.extension.step3.middle",
-                  "文件夹拖到",
-                )}{" "}
+                {t("settings.chromeRelay.guide.extension.step3.middle")}{" "}
                 <code className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-700">
                   chrome://extensions
                 </code>{" "}
-                {t(
-                  "settings.chromeRelay.guide.extension.step3.suffix",
-                  "页面，Chrome 会立即安装。",
-                )}
+                {t("settings.chromeRelay.guide.extension.step3.suffix")}
               </p>
               <p className="mt-3 rounded-[14px] border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
-                {t(
-                  "settings.chromeRelay.guide.extension.sourceWarning.prefix",
-                  "不要直接加载仓库源码里的",
-                )}{" "}
+                {t("settings.chromeRelay.guide.extension.sourceWarning.prefix")}{" "}
                 <code>extensions/lime-chrome</code>
                 {t(
                   "settings.chromeRelay.guide.extension.sourceWarning.middle",
-                  "；源码目录不带",
                 )}{" "}
                 <code>auto_config.json</code>
                 {t(
                   "settings.chromeRelay.guide.extension.sourceWarning.suffix",
-                  "，扩展会提示缺少",
                 )}{" "}
                 <code>serverUrl / bridgeKey</code>
                 {t(
                   "settings.chromeRelay.guide.extension.sourceWarning.afterKeys",
-                  "。",
                 )}
               </p>
             </StepBlock>
@@ -646,43 +540,25 @@ function BrowserConnectorGuideContent() {
             <div className="flex flex-wrap items-center gap-2 rounded-[18px] border border-slate-200 bg-white px-4 py-3 shadow-sm shadow-slate-950/5">
               <CheckCircle2 className="h-4 w-4 text-emerald-600" />
               <StatusPill tone="success">
-                {t(
-                  "settings.chromeRelay.guide.cdp.supported",
-                  "Chrome 支持直连 CDP",
-                )}
+                {t("settings.chromeRelay.guide.cdp.supported")}
               </StatusPill>
               <StatusPill tone={cdpAliveCount > 0 ? "success" : "warning"}>
                 {cdpAliveCount > 0
-                  ? t(
-                      "settings.chromeRelay.guide.cdp.sessionReady",
-                      "已有可用会话",
-                    )
-                  : t(
-                      "settings.chromeRelay.guide.cdp.sessionPending",
-                      "等待调试会话",
-                    )}
+                  ? t("settings.chromeRelay.guide.cdp.sessionReady")
+                  : t("settings.chromeRelay.guide.cdp.sessionPending")}
               </StatusPill>
               <span className="text-sm text-slate-500">
                 {t("settings.chromeRelay.guide.cdp.sessionCount", {
                   count: cdpAliveCount,
-                  defaultValue: "可复用 CDP 会话：{{count}}",
                 })}
               </span>
             </div>
 
             <StepBlock
               index={1}
-              title={t(
-                "settings.chromeRelay.guide.cdp.step1.title",
-                "启用远程调试",
-              )}
+              title={t("settings.chromeRelay.guide.cdp.step1.title")}
             >
-              <p>
-                {t(
-                  "settings.chromeRelay.guide.cdp.step1.description",
-                  "打开远程调试页面，把远程调试开关切换为“开启”。",
-                )}
-              </p>
+              <p>{t("settings.chromeRelay.guide.cdp.step1.description")}</p>
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 <button
                   type="button"
@@ -692,13 +568,9 @@ function BrowserConnectorGuideContent() {
                 >
                   <ExternalLink className="h-4 w-4" />
                   {openingRemoteDebuggingPage
-                    ? t(
-                        "settings.chromeRelay.guide.action.opening",
-                        "打开中...",
-                      )
+                    ? t("settings.chromeRelay.guide.action.opening")
                     : t(
                         "settings.chromeRelay.guide.action.openRemoteDebugging",
-                        "打开 chrome://inspect/#remote-debugging",
                       )}
                 </button>
                 <button
@@ -706,48 +578,29 @@ function BrowserConnectorGuideContent() {
                   onClick={() =>
                     void copyPlainText(
                       REMOTE_DEBUGGING_URL,
-                      t(
-                        "settings.chromeRelay.guide.label.remoteDebuggingUrl",
-                        "远程调试地址",
-                      ),
+                      t("settings.chromeRelay.guide.label.remoteDebuggingUrl"),
                     )
                   }
                   className={SECONDARY_BUTTON_CLASS_NAME}
                 >
                   <Copy className="h-4 w-4" />
-                  {t("settings.chromeRelay.guide.action.copyUrl", "复制地址")}
+                  {t("settings.chromeRelay.guide.action.copyUrl")}
                 </button>
               </div>
             </StepBlock>
 
             <StepBlock
               index={2}
-              title={t(
-                "settings.chromeRelay.guide.cdp.step2.title",
-                "允许 Lime 连接",
-              )}
+              title={t("settings.chromeRelay.guide.cdp.step2.title")}
             >
-              <p>
-                {t(
-                  "settings.chromeRelay.guide.cdp.step2.description",
-                  "当 Lime 请求调试会话时，Chrome 会弹出权限对话框。点击允许后，Lime 就能复用当前浏览器标签页。",
-                )}
-              </p>
+              <p>{t("settings.chromeRelay.guide.cdp.step2.description")}</p>
             </StepBlock>
 
             <StepBlock
               index={3}
-              title={t(
-                "settings.chromeRelay.guide.cdp.step3.title",
-                "设置完成",
-              )}
+              title={t("settings.chromeRelay.guide.cdp.step3.title")}
             >
-              <p>
-                {t(
-                  "settings.chromeRelay.guide.cdp.step3.description",
-                  "CDP 直连适合临时调试、人工接管和无需扩展的基础浏览器控制。如果需要长期观察页面变化，仍建议优先使用扩展连接。",
-                )}
-              </p>
+              <p>{t("settings.chromeRelay.guide.cdp.step3.description")}</p>
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 <button
                   type="button"
@@ -758,10 +611,7 @@ function BrowserConnectorGuideContent() {
                   className={SECONDARY_BUTTON_CLASS_NAME}
                 >
                   <Link2 className="h-4 w-4" />
-                  {t(
-                    "settings.chromeRelay.guide.action.viewExtensionGuide",
-                    "查看扩展连接引导",
-                  )}
+                  {t("settings.chromeRelay.guide.action.viewExtensionGuide")}
                 </button>
               </div>
             </StepBlock>

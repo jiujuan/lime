@@ -1,6 +1,7 @@
 import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";
 import {
   buildMessageTurnTimeline,
+  filterConversationThreadItems,
   type MessageTurnTimeline,
 } from "../utils/threadTimelineView";
 import {
@@ -87,7 +88,10 @@ export function buildCurrentTurnTimelineProjection(params: {
       (message) => message.id === params.lastAssistantMessageId,
     );
     const lastAssistantTurnId = lastAssistant?.runtimeTurnId?.trim();
-    if (lastAssistantTurnId && lastAssistantTurnId !== params.activeCurrentTurnId) {
+    if (
+      lastAssistantTurnId &&
+      lastAssistantTurnId !== params.activeCurrentTurnId
+    ) {
       return null;
     }
   }
@@ -95,8 +99,10 @@ export function buildCurrentTurnTimelineProjection(params: {
   return {
     messageId: mappedMessageId || params.lastAssistantMessageId,
     turn: params.activeCurrentTurn,
-    items: params.renderedThreadItems.filter(
-      (item) => item.turn_id === params.activeCurrentTurnId,
+    items: filterConversationThreadItems(
+      params.renderedThreadItems.filter(
+        (item) => item.turn_id === params.activeCurrentTurnId,
+      ),
     ),
   };
 }

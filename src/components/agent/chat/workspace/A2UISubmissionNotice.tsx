@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, ChevronDown } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 
 export interface A2UISubmissionNoticeData {
@@ -107,6 +108,7 @@ export function A2UISubmissionNotice({
   notice,
   visible,
 }: A2UISubmissionNoticeProps) {
+  const { t } = useTranslation("workspace");
   const [expanded, setExpanded] = useState(false);
 
   const canExpand = useMemo(() => notice.summary.length > 42, [notice.summary]);
@@ -129,7 +131,11 @@ export function A2UISubmissionNotice({
             $expanded={expanded}
             onClick={() => setExpanded((prev) => !prev)}
           >
-            <span>{expanded ? "收起" : "展开"}</span>
+            <span>
+              {expanded
+                ? t("workspace.a2uiSubmissionNotice.action.collapse", "收起")
+                : t("workspace.a2uiSubmissionNotice.action.expand", "展开")}
+            </span>
             <ChevronDown />
           </ToggleButton>
         ) : null}

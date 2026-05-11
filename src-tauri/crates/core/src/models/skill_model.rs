@@ -7,6 +7,7 @@ use std::path::Path;
 const SKILL_FRONTMATTER_NAME: &str = "name";
 const SKILL_FRONTMATTER_DESCRIPTION: &str = "description";
 const SKILL_FRONTMATTER_LICENSE: &str = "license";
+const SKILL_FRONTMATTER_COMPATIBILITY: &str = "compatibility";
 const SKILL_FRONTMATTER_METADATA: &str = "metadata";
 const SKILL_FRONTMATTER_ALLOWED_TOOLS: &str = "allowed-tools";
 const SKILL_FRONTMATTER_ALLOWED_TOOLS_ALIAS: &str = "allowed_tools";
@@ -127,6 +128,8 @@ pub struct Skill {
     pub repo_branch: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub license: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compatibility: Option<String>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, String>,
     #[serde(
@@ -160,6 +163,7 @@ pub struct SkillMetadata {
     pub name: Option<String>,
     pub description: Option<String>,
     pub license: Option<String>,
+    pub compatibility: Option<String>,
     #[serde(default)]
     pub metadata: HashMap<String, String>,
     #[serde(default)]
@@ -199,6 +203,8 @@ pub struct SkillPackageInspection {
     pub content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub license: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compatibility: Option<String>,
     #[serde(default)]
     pub metadata: HashMap<String, String>,
     #[serde(rename = "allowedTools", default)]
@@ -249,6 +255,7 @@ pub fn parse_skill_manifest_from_content(content: &str) -> Result<ParsedSkillMan
                 name: None,
                 description: None,
                 license: None,
+                compatibility: None,
                 metadata: HashMap::new(),
                 allowed_tools: Vec::new(),
             },
@@ -283,6 +290,11 @@ pub fn parse_skill_manifest_from_content(content: &str) -> Result<ParsedSkillMan
         "缺少必填字段 `description`",
     );
     let license = optional_string_field(mapping, SKILL_FRONTMATTER_LICENSE, &mut validation_errors);
+    let compatibility = optional_string_field(
+        mapping,
+        SKILL_FRONTMATTER_COMPATIBILITY,
+        &mut validation_errors,
+    );
     let allowed_tools = parse_allowed_tools_field(mapping, &mut validation_errors);
     let metadata = parse_metadata_field(mapping, &mut validation_errors);
 
@@ -306,6 +318,7 @@ pub fn parse_skill_manifest_from_content(content: &str) -> Result<ParsedSkillMan
             name,
             description,
             license,
+            compatibility,
             metadata,
             allowed_tools,
         },
@@ -375,7 +388,7 @@ fn parse_allowed_tools_field(
     };
 
     match value {
-        serde_yaml::Value::String(single) => split_allowed_tools_csv(single),
+        serde_yaml::Value::String(single) => split_allowed_tools_string(single),
         serde_yaml::Value::Sequence(values) => {
             let mut tools = Vec::new();
             for item in values {
@@ -394,9 +407,14 @@ fn parse_allowed_tools_field(
     }
 }
 
-fn split_allowed_tools_csv(value: &str) -> Vec<String> {
+fn split_allowed_tools_string(value: &str) -> Vec<String> {
+    let separator: &[_] = if value.contains(',') {
+        &[',']
+    } else {
+        &[' ', '\t', '\n', '\r']
+    };
     value
-        .split(',')
+        .split(separator)
         .map(|item| item.trim())
         .filter(|item| !item.is_empty())
         .map(ToString::to_string)
@@ -646,6 +664,61 @@ mod tests {
         assert_eq!(
             resolve_skill_source_kind(&AppType::Claude, VIDEO_GENERATE_SKILL_DIRECTORY),
             SkillSourceKind::Other
+        );
+    }
+
+    #[test]
+    fn parse_manifest_supports_agent_skills_standard_optional_fields() {
+        let manifest = parse_skill_manifest_from_content(
+            r#"---
+name: docx
+description: Use when working with Word .docx files.
+license: Proprietary. LICENSE.txt has complete terms
+compatibility: Requires Node.js and Python.
+metadata:
+  author: anthropic
+allowed-tools: Bash(git:*) Bash(jq:*) Read
+---
+
+# DOCX
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(manifest.metadata.name.as_deref(), Some("docx"));
+        assert_eq!(
+            manifest.metadata.compatibility.as_deref(),
+            Some("Requires Node.js and Python.")
+        );
+        assert_eq!(
+            manifest.metadata.allowed_tools,
+            vec![
+                "Bash(git:*)".to_string(),
+                "Bash(jq:*)".to_string(),
+                "Read".to_string()
+            ]
+        );
+        assert!(manifest.compliance.validation_errors.is_empty());
+    }
+
+    #[test]
+    fn parse_manifest_keeps_legacy_comma_allowed_tools_compatibility() {
+        let manifest = parse_skill_manifest_from_content(
+            r#"---
+name: image-generate
+description: Generate images.
+allowed-tools: search_query, lime_create_image_generation_task
+---
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            manifest.metadata.allowed_tools,
+            vec![
+                "search_query".to_string(),
+                "lime_create_image_generation_task".to_string()
+            ]
         );
     }
 }

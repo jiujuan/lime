@@ -1,46 +1,22 @@
 import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { AutomationJobFocusStrip } from "./AutomationJobFocusStrip";
-
-const { mockUseTranslation } = vi.hoisted(() => {
-  const mockTranslate = vi.fn((key: string, options?: unknown) => {
-    if (typeof options === "string") return options;
-
-    if (options && typeof options === "object") {
-      const values = options as Record<string, unknown>;
-      const template =
-        typeof values.defaultValue === "string" ? values.defaultValue : key;
-      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-        String(values[name] ?? ""),
-      );
-    }
-
-    return key;
-  });
-
-  return {
-    mockUseTranslation: vi.fn((_namespace?: string) => ({
-      t: mockTranslate,
-    })),
-  };
-});
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
-}));
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+
+  await changeLimeLocale("en-US");
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mountedRoots.length > 0) {
     const mounted = mountedRoots.pop();
     if (!mounted) {
@@ -52,6 +28,7 @@ afterEach(() => {
     mounted.container.remove();
   }
   vi.clearAllMocks();
+  await changeLimeLocale("zh-CN");
 });
 
 async function renderStrip(
@@ -68,20 +45,20 @@ async function renderStrip(
         jobId="job-sceneapp-1"
         summaryCard={
           {
-            title: "故事短视频套件",
-            businessLabel: "多模态组合",
-            statusLabel: "先补结果材料",
-            summary: "这条持续流程最近一轮已有可继续结果，适合继续回到生成。",
+            title: "Story video kit",
+            businessLabel: "Multimodal bundle",
+            statusLabel: "Collect result materials first",
+            summary: "This ongoing flow already has results worth continuing.",
             scorecardAggregate: {
-              summary: "这轮材料已经接近可复用。",
-              nextAction: "优先补齐结构化结果包。",
+              summary: "This run is close to reusable.",
+              nextAction: "Complete the structured result pack first.",
             },
           } as any
         }
         runDetailView={
           {
-            statusLabel: "成功",
-            deliveryCompletionLabel: "已生成完整结果包",
+            statusLabel: "Succeeded",
+            deliveryCompletionLabel: "Full result pack generated",
           } as any
         }
         {...props}
@@ -97,12 +74,18 @@ describe("AutomationJobFocusStrip", () => {
     await renderStrip();
 
     const text = document.body.textContent ?? "";
-    expect(text).toContain("现在先继续这条");
-    expect(text).toContain("故事短视频套件");
-    expect(text).not.toContain("多模态组合");
-    expect(text).toContain("这轮判断：这轮材料已经接近可复用。");
-    expect(text).toContain("最近结果：成功 · 已生成完整结果包");
-    expect(text).toContain("先做：优先补齐结构化结果包。");
+    expect(text).toContain("Continue this one first");
+    expect(text).toContain("Story video kit");
+    expect(text).not.toContain("Multimodal bundle");
+    expect(text).toContain("This run: This run is close to reusable.");
+    expect(text).toContain(
+      "Recent result: Succeeded · Full result pack generated",
+    );
+    expect(text).toContain(
+      "Do first: Complete the structured result pack first.",
+    );
+    expect(text).not.toContain("现在先继续这条");
+    expect(text).not.toContain("settings.automation.focus");
   });
 
   it("应支持继续看结果与打开最近结果动作", async () => {
@@ -120,6 +103,9 @@ describe("AutomationJobFocusStrip", () => {
     const governanceButton = document.body.querySelector(
       "[data-testid='automation-job-focus-governance-job-sceneapp-1']",
     ) as HTMLButtonElement | null;
+
+    expect(reviewButton?.textContent).toContain("Review result");
+    expect(governanceButton?.textContent).toContain("View recent results");
 
     await act(async () => {
       reviewButton?.click();
@@ -139,7 +125,7 @@ describe("AutomationJobFocusStrip", () => {
     });
 
     expect(document.body.textContent).toContain(
-      "正在整理这条做法最近一轮的结果和下一步",
+      "Organizing the latest result and next step for this practice",
     );
   });
 });

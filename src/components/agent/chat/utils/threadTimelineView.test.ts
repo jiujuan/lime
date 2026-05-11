@@ -272,6 +272,75 @@ describe("threadTimelineView", () => {
     expect(items).toEqual([planItem]);
   });
 
+  it("应按结构化 runtime status 标记隐藏运行态摘要与上下文整理项", () => {
+    const internalRuntimeSummary: AgentThreadItem = {
+      id: "summary-runtime-status",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      sequence: 1,
+      status: "in_progress",
+      started_at: "2026-05-11T10:00:00Z",
+      updated_at: "2026-05-11T10:00:01Z",
+      type: "turn_summary",
+      text: "runtime status should not be rendered as conversation prose",
+      metadata: {
+        sourceType: "runtime_status",
+        surface: "runtime_status",
+        visibility: "diagnostics",
+      },
+    };
+    const contextCompaction: AgentThreadItem = {
+      id: "context-compaction",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      sequence: 2,
+      status: "completed",
+      started_at: "2026-05-11T10:00:01Z",
+      completed_at: "2026-05-11T10:00:02Z",
+      updated_at: "2026-05-11T10:00:02Z",
+      type: "context_compaction",
+      stage: "completed",
+      trigger: "token_budget",
+      detail: "压缩历史上下文",
+    };
+    const toolItem: AgentThreadItem = {
+      id: "tool-1",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      sequence: 3,
+      status: "completed",
+      started_at: "2026-05-11T10:00:03Z",
+      completed_at: "2026-05-11T10:00:04Z",
+      updated_at: "2026-05-11T10:00:04Z",
+      type: "tool_call",
+      tool_name: "web_search",
+      arguments: { query: "Agent UI" },
+      output: "ok",
+      success: true,
+    };
+
+    expect(
+      mergeThreadItems([internalRuntimeSummary, contextCompaction, toolItem]),
+    ).toEqual([toolItem]);
+  });
+
+  it("不应再靠 turn_summary 文案内容猜测内部过程", () => {
+    const summary: AgentThreadItem = {
+      id: "summary-user-visible",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      sequence: 1,
+      status: "completed",
+      started_at: "2026-05-11T10:00:00Z",
+      completed_at: "2026-05-11T10:00:01Z",
+      updated_at: "2026-05-11T10:00:01Z",
+      type: "turn_summary",
+      text: "正在理解意图",
+    };
+
+    expect(mergeThreadItems([summary])).toEqual([summary]);
+  });
+
   it("应隐藏辅助运行时投影，避免挤占后续真实 reasoning", () => {
     const messages: Message[] = [
       {

@@ -1,6 +1,9 @@
 import { LIME_BRAND_LOGO_SRC, LIME_BRAND_NAME } from "@/lib/branding";
+import { useTranslation } from "react-i18next";
 
 export function StartupLoadingScreen() {
+  const { t } = useTranslation("common");
+
   return (
     <div
       style={{
@@ -41,7 +44,7 @@ export function StartupLoadingScreen() {
             color: "#0f172a",
           }}
         >
-          正在启动 {LIME_BRAND_NAME}
+          {t("common.startupLoading.title", { brand: LIME_BRAND_NAME })}
         </div>
         <div
           style={{
@@ -50,7 +53,7 @@ export function StartupLoadingScreen() {
             color: "#64748b",
           }}
         >
-          正在准备语言配置与工作台入口，请稍候。
+          {t("common.startupLoading.description")}
         </div>
       </div>
     </div>

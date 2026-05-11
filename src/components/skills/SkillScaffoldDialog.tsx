@@ -63,15 +63,6 @@ function pickStructuredScaffoldFields(
   };
 }
 
-function formatSkillScaffoldTemplate(
-  template: string,
-  values: Record<string, string>,
-): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (placeholder, name) =>
-    values[name] ?? placeholder,
-  );
-}
-
 export function SkillScaffoldDialog({
   open,
   onOpenChange,
@@ -121,17 +112,15 @@ export function SkillScaffoldDialog({
     const trimmedDescription = draft.description?.trim() || "";
 
     if (!trimmedDirectory) {
-      setError(t("skills.scaffoldDialog.validation.directory", "请输入目录名"));
+      setError(t("skills.scaffoldDialog.validation.directory"));
       return;
     }
     if (!trimmedName) {
-      setError(t("skills.scaffoldDialog.validation.name", "请输入 Skill 名称"));
+      setError(t("skills.scaffoldDialog.validation.name"));
       return;
     }
     if (!trimmedDescription) {
-      setError(
-        t("skills.scaffoldDialog.validation.description", "请输入 Skill 描述"),
-      );
+      setError(t("skills.scaffoldDialog.validation.description"));
       return;
     }
 
@@ -167,51 +156,31 @@ export function SkillScaffoldDialog({
 
   const targetDescription =
     target === "project"
-      ? t(
-          "skills.scaffoldDialog.target.projectDescription",
-          "将创建到当前工作区的 `./.agents/skills`。",
-        )
-      : t(
-          "skills.scaffoldDialog.target.userDescription",
-          "将创建到应用级 Skills 目录。",
-        );
+      ? t("skills.scaffoldDialog.target.projectDescription")
+      : t("skills.scaffoldDialog.target.userDescription");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent maxWidth="max-w-xl" className="space-y-4">
         <DialogHeader>
-          <DialogTitle>
-            {t("skills.scaffoldDialog.title", "新建 Skill")}
-          </DialogTitle>
+          <DialogTitle>{t("skills.scaffoldDialog.title")}</DialogTitle>
           <DialogDescription>
             {sourceHint
-              ? t(
-                  "skills.scaffoldDialog.description.prefilled",
-                  "已根据刚才的结果预填一版技能草稿，并补好适用场景、输入输出与执行步骤。",
-                )
-              : t(
-                  "skills.scaffoldDialog.description.default",
-                  "创建一个最小可用的标准 Agent Skills 包骨架。",
-                )}
+              ? t("skills.scaffoldDialog.description.prefilled")
+              : t("skills.scaffoldDialog.description.default")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           {sourceHint ? (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-              {formatSkillScaffoldTemplate(
-                t("skills.scaffoldDialog.sourceHint", {
-                  defaultValue: "来源结果：{{hint}}",
-                  hint: sourceHint,
-                }),
-                { hint: sourceHint },
-              )}
+              {t("skills.scaffoldDialog.sourceHint", { hint: sourceHint })}
             </div>
           ) : null}
 
           <div className="space-y-2">
             <div className="text-sm font-medium text-foreground">
-              {t("skills.scaffoldDialog.target.label", "创建位置")}
+              {t("skills.scaffoldDialog.target.label")}
             </div>
             <div className="flex gap-2">
               {allowProjectTarget && (
@@ -225,7 +194,7 @@ export function SkillScaffoldDialog({
                       : "hover:bg-muted"
                   }`}
                 >
-                  {t("skills.scaffoldDialog.target.project", "项目级")}
+                  {t("skills.scaffoldDialog.target.project")}
                 </button>
               )}
               <button
@@ -238,7 +207,7 @@ export function SkillScaffoldDialog({
                     : "hover:bg-muted"
                 }`}
               >
-                {t("skills.scaffoldDialog.target.user", "用户级")}
+                {t("skills.scaffoldDialog.target.user")}
               </button>
             </div>
             <p className="text-xs text-muted-foreground">{targetDescription}</p>
@@ -249,7 +218,7 @@ export function SkillScaffoldDialog({
               htmlFor="skill-scaffold-directory"
               className="block text-sm font-medium text-foreground"
             >
-              {t("skills.scaffoldDialog.directory.label", "目录名")}
+              {t("skills.scaffoldDialog.directory.label")}
             </label>
             <input
               id="skill-scaffold-directory"
@@ -260,10 +229,7 @@ export function SkillScaffoldDialog({
               className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
             />
             <p className="text-xs text-muted-foreground">
-              {t(
-                "skills.scaffoldDialog.directory.helper",
-                "只允许单层目录名，推荐小写字母、数字和连字符。",
-              )}
+              {t("skills.scaffoldDialog.directory.helper")}
             </p>
           </div>
 
@@ -272,17 +238,14 @@ export function SkillScaffoldDialog({
               htmlFor="skill-scaffold-name"
               className="block text-sm font-medium text-foreground"
             >
-              {t("skills.scaffoldDialog.name.label", "Skill 名称")}
+              {t("skills.scaffoldDialog.name.label")}
             </label>
             <input
               id="skill-scaffold-name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={t(
-                "skills.scaffoldDialog.name.placeholder",
-                "内容发布提纲",
-              )}
+              placeholder={t("skills.scaffoldDialog.name.placeholder")}
               className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
             />
           </div>
@@ -292,16 +255,13 @@ export function SkillScaffoldDialog({
               htmlFor="skill-scaffold-description"
               className="block text-sm font-medium text-foreground"
             >
-              {t("skills.scaffoldDialog.description.label", "描述")}
+              {t("skills.scaffoldDialog.description.label")}
             </label>
             <textarea
               id="skill-scaffold-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder={t(
-                "skills.scaffoldDialog.description.placeholder",
-                "帮助用户快速产出某类任务的结构化结果。",
-              )}
+              placeholder={t("skills.scaffoldDialog.description.placeholder")}
               rows={4}
               className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
             />
@@ -321,7 +281,7 @@ export function SkillScaffoldDialog({
             disabled={creating}
             className="rounded-lg border px-4 py-2 text-sm hover:bg-muted disabled:opacity-50"
           >
-            {t("skills.scaffoldDialog.action.cancel", "取消")}
+            {t("skills.scaffoldDialog.action.cancel")}
           </button>
           {canBringBackToCreation ? (
             <button
@@ -330,10 +290,7 @@ export function SkillScaffoldDialog({
               disabled={creating}
               className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
             >
-              {t(
-                "skills.scaffoldDialog.action.bringBack",
-                "带回创作输入",
-              )}
+              {t("skills.scaffoldDialog.action.bringBack")}
             </button>
           ) : null}
           <button
@@ -343,8 +300,8 @@ export function SkillScaffoldDialog({
             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             {creating
-              ? t("skills.scaffoldDialog.action.creating", "创建中...")
-              : t("skills.scaffoldDialog.action.create", "创建 Skill")}
+              ? t("skills.scaffoldDialog.action.creating")
+              : t("skills.scaffoldDialog.action.create")}
           </button>
         </DialogFooter>
       </DialogContent>

@@ -300,7 +300,7 @@ export function SmartInputPage() {
         if (!readiness.ready) {
           showError(
             readiness.message ||
-              t("common.smartInput.error.voiceModelRequired", "先下载语音模型"),
+              t("common.smartInput.error.voiceModelRequired"),
           );
           void broadcastOpenVoiceModelSettingsRequest({
             source: "smart-input",
@@ -353,16 +353,10 @@ export function SmartInputPage() {
         errMsg.toLowerCase().includes("permission") ||
         errMsg.toLowerCase().includes("device")
       ) {
-        showError(
-          t(
-            "common.smartInput.error.microphonePermission",
-            "无法访问麦克风，请检查系统隐私设置",
-          ),
-        );
+        showError(t("common.smartInput.error.microphonePermission"));
       } else {
         showError(
           t("common.smartInput.error.startRecordingFailed", {
-            defaultValue: "无法开始录音: {{message}}",
             message: errMsg,
           }),
         );
@@ -532,7 +526,6 @@ export function SmartInputPage() {
             : recordingErr?.message || "";
         showError(
           t("common.smartInput.error.stopRecordingFailed", {
-            defaultValue: "录音停止失败: {{message}}",
             message: errMsg,
           }),
         );
@@ -606,7 +599,7 @@ export function SmartInputPage() {
         typeof err === "string"
           ? err
           : err?.message ||
-            t("common.smartInput.error.speechRecognitionFailed", "语音识别失败");
+            t("common.smartInput.error.speechRecognitionFailed");
       showError(message);
       finishVoiceProcessing();
     } finally {
@@ -726,9 +719,7 @@ export function SmartInputPage() {
       await win.close();
     } catch (err) {
       console.error("[SmartInput] 发送失败:", err);
-      showError(
-        t("common.smartInput.error.sendFailed", "发送失败，请重试"),
-      );
+      showError(t("common.smartInput.error.sendFailed"));
       setIsLoading(false);
     }
   };
@@ -754,7 +745,7 @@ export function SmartInputPage() {
         <div
           className="screenshot-drag-handle"
           onMouseDown={handleStartDrag}
-          title={t("common.smartInput.action.dragWindow", "拖动移动窗口")}
+          title={t("common.smartInput.action.dragWindow")}
         >
           <GripVertical size={14} />
         </div>
@@ -768,8 +759,8 @@ export function SmartInputPage() {
             <Loader2 size={12} className="animate-spin" />
             <span>
               {voiceState === "transcribing"
-                ? t("common.smartInput.status.transcribing", "识别中")
-                : t("common.smartInput.status.polishing", "润色中")}
+                ? t("common.smartInput.status.transcribing")
+                : t("common.smartInput.status.polishing")}
             </span>
           </div>
         )}
@@ -778,15 +769,12 @@ export function SmartInputPage() {
         {imagePath && (
           <div className="screenshot-attachment">
             <ImageIcon size={12} />
-            <span>{t("common.smartInput.attachment.image", "Image")}</span>
+            <span>{t("common.smartInput.attachment.image")}</span>
             <button
               className="screenshot-attachment-remove"
               onClick={handleRemoveImage}
-              title={t("common.smartInput.action.removeImage", "移除图片")}
-              aria-label={t(
-                "common.smartInput.action.removeImage",
-                "移除图片",
-              )}
+              title={t("common.smartInput.action.removeImage")}
+              aria-label={t("common.smartInput.action.removeImage")}
             >
               <X size={10} />
             </button>
@@ -799,7 +787,7 @@ export function SmartInputPage() {
             <div className="recording-dot" />
             <div className="screenshot-recording-copy">
               <span className="screenshot-recording-text">
-                {t("common.smartInput.status.recording", "录音中")}
+                {t("common.smartInput.status.recording")}
               </span>
               <span className="screenshot-recording-hint">
                 {recordingDuration}
@@ -823,10 +811,7 @@ export function SmartInputPage() {
           <textarea
             ref={inputRef}
             className="screenshot-input"
-            placeholder={t(
-              "common.smartInput.input.placeholder",
-              "Ask anything...",
-            )}
+            placeholder={t("common.smartInput.input.placeholder")}
             value={inputValue}
             onChange={(e) => {
               setInputValue(e.target.value);
@@ -848,11 +833,8 @@ export function SmartInputPage() {
             <button
               className="screenshot-mic-btn"
               onClick={startVoiceMode}
-              title={t("common.smartInput.action.voiceInput", "语音输入")}
-              aria-label={t(
-                "common.smartInput.action.voiceInput",
-                "语音输入",
-              )}
+              title={t("common.smartInput.action.voiceInput")}
+              aria-label={t("common.smartInput.action.voiceInput")}
             >
               <Mic size={18} />
             </button>
@@ -873,11 +855,8 @@ export function SmartInputPage() {
                 position: "relative",
                 zIndex: 1000,
               }}
-              title={t("common.smartInput.action.stopRecording", "停止录音")}
-              aria-label={t(
-                "common.smartInput.action.stopRecording",
-                "停止录音",
-              )}
+              title={t("common.smartInput.action.stopRecording")}
+              aria-label={t("common.smartInput.action.stopRecording")}
             >
               <Square size={12} fill="#ffffff" color="#ffffff" />
             </button>
@@ -897,8 +876,8 @@ export function SmartInputPage() {
               position: "relative",
               zIndex: 1000,
             }}
-            title={t("common.smartInput.action.close", "关闭 (ESC)")}
-            aria-label={t("common.smartInput.action.close", "关闭 (ESC)")}
+            title={t("common.smartInput.action.close")}
+            aria-label={t("common.smartInput.action.close")}
           >
             <X size={14} />
           </button>
@@ -908,8 +887,8 @@ export function SmartInputPage() {
             className={`screenshot-send-btn ${inputValue.trim() ? "active" : ""}`}
             onClick={handleSend}
             disabled={!inputValue.trim() || isLoading}
-            title={t("common.smartInput.action.send", "发送 (Enter)")}
-            aria-label={t("common.smartInput.action.send", "发送 (Enter)")}
+            title={t("common.smartInput.action.send")}
+            aria-label={t("common.smartInput.action.send")}
           >
             <ArrowUp size={16} />
           </button>

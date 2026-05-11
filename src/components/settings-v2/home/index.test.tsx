@@ -2,36 +2,15 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Palette, Brain, ShieldCheck } from "lucide-react";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { SettingsGroupKey, SettingsTabs } from "@/types/settings";
 
-const { mockUseSettingsCategory, mockUseTranslation } = vi.hoisted(() => ({
+const { mockUseSettingsCategory } = vi.hoisted(() => ({
   mockUseSettingsCategory: vi.fn(),
-  mockUseTranslation: vi.fn((_namespace?: string) => ({
-    t: (key: string, options?: unknown) => {
-      if (typeof options === "string") {
-        return options;
-      }
-
-      if (options && typeof options === "object") {
-        const values = options as Record<string, unknown>;
-        const template =
-          typeof values.defaultValue === "string" ? values.defaultValue : key;
-        return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-          String(values[name] ?? ""),
-        );
-      }
-
-      return key;
-    },
-  })),
 }));
 
 vi.mock("../hooks/useSettingsCategory", () => ({
   useSettingsCategory: () => mockUseSettingsCategory(),
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
 }));
 
 import { SettingsHomePage } from "./index";
@@ -42,30 +21,6 @@ interface RenderResult {
 }
 
 const mounted: RenderResult[] = [];
-
-function createTestTranslator(overrides: Record<string, string>) {
-  return (key: string, options?: unknown) => {
-    const resolveTemplate = () => {
-      if (overrides[key]) {
-        return overrides[key];
-      }
-      if (typeof options === "string") {
-        return options;
-      }
-      if (options && typeof options === "object") {
-        const values = options as Record<string, unknown>;
-        if (typeof values.defaultValue === "string") {
-          return values.defaultValue;
-        }
-      }
-      return key;
-    };
-
-    return resolveTemplate().replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-      String((options as Record<string, unknown> | undefined)?.[name] ?? ""),
-    );
-  };
-}
 
 function renderPage(
   onTabChange = vi.fn(),
@@ -118,54 +73,55 @@ async function leaveTip(trigger: HTMLButtonElement | null) {
   });
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
 
+  await changeLimeLocale("en-US");
   mockUseSettingsCategory.mockReturnValue([
     {
       key: SettingsGroupKey.Overview,
-      title: "概览",
+      title: "Overview",
       items: [
         {
           key: SettingsTabs.Home,
-          label: "设置首页",
+          label: "Settings Home",
           icon: Palette,
         },
       ],
     },
     {
       key: SettingsGroupKey.General,
-      title: "通用",
+      title: "General",
       items: [
         {
           key: SettingsTabs.Appearance,
-          label: "外观",
+          label: "Appearance",
           icon: Palette,
         },
       ],
     },
     {
       key: SettingsGroupKey.Agent,
-      title: "智能体",
+      title: "Agent",
       items: [
         {
           key: SettingsTabs.Providers,
-          label: "AI 服务商",
+          label: "AI Providers",
           icon: Brain,
         },
       ],
     },
     {
       key: SettingsGroupKey.System,
-      title: "系统",
+      title: "System",
       items: [
         {
           key: SettingsTabs.ChromeRelay,
-          label: "连接器",
+          label: "Connector",
           icon: ShieldCheck,
         },
       ],
@@ -173,7 +129,7 @@ beforeEach(() => {
   ]);
 });
 
-afterEach(() => {
+afterEach(async () => {
   mockUseSettingsCategory.mockReset();
 
   while (mounted.length > 0) {
@@ -186,6 +142,8 @@ afterEach(() => {
     });
     target.container.remove();
   }
+
+  await changeLimeLocale("zh-CN");
 });
 
 describe("SettingsHomePage", () => {
@@ -193,33 +151,30 @@ describe("SettingsHomePage", () => {
     const { container } = renderPage();
     const text = container.textContent ?? "";
 
-    expect(text).toContain("设置首页");
-    expect(text).toContain("快速进入常用设置并查看各分组入口。");
-    expect(text).toContain("常用入口");
-    expect(text).toContain("通用");
-    expect(text).toContain("智能体");
-    expect(text).toContain("系统");
-    expect(text).toContain("外观");
-    expect(text).toContain("AI 服务商");
+    expect(text).toContain("Settings Home");
+    expect(text).toContain(
+      "Quickly open common settings and review each group.",
+    );
+    expect(text).toContain("Quick Access");
+    expect(text).toContain("General");
+    expect(text).toContain("Agent");
+    expect(text).toContain("System");
+    expect(text).toContain("Appearance");
+    expect(text).toContain("AI Providers");
     expect(text).not.toContain("SETTINGS OVERVIEW");
     expect(text).not.toContain("安全与性能");
     expect(text).not.toContain("权限、稳定性与运行开关");
+    expect(text).not.toContain("settings.home");
   });
 
   it("应使用 settings namespace 生成分组说明 aria", () => {
-    mockUseTranslation.mockImplementationOnce(() => ({
-      t: createTestTranslator({
-        "settings.home.group.tipAria": "{{title}} help",
-      }),
-    }));
-
     const { container } = renderPage();
 
     expect(
-      container.querySelector("button[aria-label='通用 help']"),
+      container.querySelector("button[aria-label='General help']"),
     ).toBeInstanceOf(HTMLButtonElement);
     expect(
-      container.querySelector("button[aria-label='通用说明']"),
+      container.querySelector("button[aria-label='General说明']"),
     ).toBeNull();
   });
 
@@ -227,7 +182,7 @@ describe("SettingsHomePage", () => {
     const onTabChange = vi.fn();
     const { container } = renderPage(onTabChange);
     const button = Array.from(container.querySelectorAll("button")).find(
-      (item) => item.textContent?.includes("外观"),
+      (item) => item.textContent?.includes("Appearance"),
     );
 
     act(() => {
@@ -241,7 +196,7 @@ describe("SettingsHomePage", () => {
     const onTabPrefetch = vi.fn();
     const { container } = renderPage(vi.fn(), onTabPrefetch);
     const button = Array.from(container.querySelectorAll("button")).find(
-      (item) => item.textContent?.includes("外观"),
+      (item) => item.textContent?.includes("Appearance"),
     );
 
     act(() => {
@@ -255,7 +210,7 @@ describe("SettingsHomePage", () => {
     const onOpenCompanion = vi.fn();
     const { container } = renderPage(vi.fn(), undefined, onOpenCompanion);
     const button = Array.from(container.querySelectorAll("button")).find(
-      (item) => item.textContent?.includes("桌宠"),
+      (item) => item.textContent?.includes("Companion"),
     );
 
     act(() => {
@@ -276,24 +231,24 @@ describe("SettingsHomePage", () => {
     );
     const text = container.textContent ?? "";
 
-    expect(text).toContain("当前入口");
-    expect(text).toContain("全部 Skills");
-    expect(text).toContain("持续流程");
-    expect(text).toContain("消息渠道");
-    expect(text).toContain("项目资料");
+    expect(text).toContain("Current Entrypoints");
+    expect(text).toContain("All Skills");
+    expect(text).toContain("Automation");
+    expect(text).toContain("Message Channels");
+    expect(text).toContain("Project Knowledge");
 
     const openAutomationButton = Array.from(
       container.querySelectorAll("button"),
-    ).find((item) => item.textContent?.includes("打开持续流程"));
+    ).find((item) => item.textContent?.includes("Open Automation"));
     const openChannelsButton = Array.from(
       container.querySelectorAll("button"),
-    ).find((item) => item.textContent?.includes("打开消息渠道"));
+    ).find((item) => item.textContent?.includes("Open Channels"));
     const openSkillsButton = Array.from(
       container.querySelectorAll("button"),
-    ).find((item) => item.textContent?.includes("去 Skills"));
+    ).find((item) => item.textContent?.includes("Go to Skills"));
     const openResourcesButton = Array.from(
       container.querySelectorAll("button"),
-    ).find((item) => item.textContent?.includes("打开项目资料"));
+    ).find((item) => item.textContent?.includes("Open Project Knowledge"));
 
     act(() => {
       openAutomationButton?.dispatchEvent(
@@ -321,17 +276,17 @@ describe("SettingsHomePage", () => {
     renderPage();
 
     expect(getBodyText()).not.toContain(
-      "快速进入常用设置并查看各分组入口，减少在多层菜单之间来回寻找。",
+      "Quickly open common settings and review each group without digging through nested menus.",
     );
 
-    const heroTip = await hoverTip("设置首页说明");
+    const heroTip = await hoverTip("Settings home help");
     expect(getBodyText()).toContain(
-      "快速进入常用设置并查看各分组入口，减少在多层菜单之间来回寻找。",
+      "Quickly open common settings and review each group without digging through nested menus.",
     );
     await leaveTip(heroTip);
 
-    const cardTip = await hoverTip("外观说明");
-    expect(getBodyText()).toContain("主题、语言与提示音效");
+    const cardTip = await hoverTip("Appearance help");
+    expect(getBodyText()).toContain("Theme, language, and sound cues");
     await leaveTip(cardTip);
   });
 });

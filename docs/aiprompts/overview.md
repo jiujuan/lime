@@ -55,7 +55,6 @@ lime/
 │       ├── converter/   # 协议转换
 │       ├── server/      # HTTP 服务器
 │       └── ...
-├── plugins/             # 插件目录
 └── docs/                # 文档
 ```
 
@@ -238,7 +237,6 @@ lime/
 - [skill-standard.md](skill-standard.md) - 统一技能标准、目录与运行边界
 - [../../src-tauri/src/skills/README.md](../../src-tauri/src/skills/README.md) - Skills 标准与集成
 - [mcp.md](mcp.md) - MCP 服务器
-- [plugins.md](plugins.md) - 插件系统
 - [aster-integration.md](aster-integration.md) - Agent Runtime 集成
 
 ### 基础设施

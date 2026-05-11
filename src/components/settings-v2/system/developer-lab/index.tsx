@@ -34,14 +34,11 @@ export function DeveloperLabSettings({
               <div className="flex flex-wrap items-center gap-2">
                 <Code2 className="h-5 w-5 text-sky-600" />
                 <h1 className="text-[24px] font-semibold tracking-tight text-slate-900">
-                  {t("settings.developerLab.title", "开发者与实验功能")}
+                  {t("settings.developerLab.title")}
                 </h1>
               </div>
               <p className="text-sm leading-6 text-slate-500">
-                {t(
-                  "settings.developerLab.description",
-                  "调试、诊断和不稳定能力集中在同一处；默认关闭，用完关回。",
-                )}
+                {t("settings.developerLab.description")}
               </p>
             </div>
 
@@ -52,7 +49,7 @@ export function DeveloperLabSettings({
                 className="gap-2 rounded-[14px] px-4 py-3"
               >
                 <Code2 className="h-4 w-4" />
-                {t("settings.developerLab.tabs.developer", "开发者工具")}
+                {t("settings.developerLab.tabs.developer")}
               </TabsTrigger>
               <TabsTrigger
                 value="experimental"
@@ -60,7 +57,7 @@ export function DeveloperLabSettings({
                 className="gap-2 rounded-[14px] px-4 py-3"
               >
                 <FlaskConical className="h-4 w-4" />
-                {t("settings.developerLab.tabs.experimental", "实验功能")}
+                {t("settings.developerLab.tabs.experimental")}
               </TabsTrigger>
             </TabsList>
           </div>

@@ -15,6 +15,18 @@ const USER_MEMORY_FILE_NAME: &str = "AGENTS.md";
 const LEGACY_USER_MEMORY_FILE_NAMES: &[&str] = &["AGENTS.md", "AGENT.md", "instructions.md"];
 const WORKSPACE_RUNTIME_DIR_NAME: &str = ".lime";
 const WORKSPACE_LOCAL_RUNTIME_AGENTS_FILE_NAME: &str = "AGENTS.local.md";
+const SKILL_PROVIDER_DIRS: &[&str] = &[
+    ".agents",
+    ".warp",
+    ".claude",
+    ".codex",
+    ".cursor",
+    ".gemini",
+    ".copilot",
+    ".factory",
+    ".github",
+    ".opencode",
+];
 const USER_SIGNAL_TABLES: &[&str] = &[
     "contents",
     "agent_sessions",
@@ -94,12 +106,32 @@ pub fn resolve_project_skills_dir() -> Option<PathBuf> {
         .map(|cwd| resolve_project_skills_dir_from_cwd(&cwd))
 }
 
+pub fn resolve_lime_project_skill_roots() -> Vec<PathBuf> {
+    std::env::current_dir()
+        .ok()
+        .map(|cwd| resolve_project_skill_roots_from_cwd(&cwd))
+        .unwrap_or_default()
+}
+
+pub fn resolve_user_agents_skills_dir() -> Option<PathBuf> {
+    dirs::home_dir().map(|home| resolve_user_agents_skills_dir_from_home(&home))
+}
+
+pub fn resolve_lime_user_skill_roots() -> Vec<PathBuf> {
+    dirs::home_dir()
+        .map(|home| resolve_user_skill_roots_from_home(&home))
+        .unwrap_or_default()
+}
+
 pub fn resolve_lime_skill_roots() -> Result<Vec<PathBuf>, String> {
     let mut roots = Vec::new();
-    if let Some(project_dir) = resolve_project_skills_dir() {
-        roots.push(project_dir);
+    for project_dir in resolve_lime_project_skill_roots() {
+        push_unique_root(&mut roots, project_dir);
     }
-    roots.push(resolve_skills_dir()?);
+    for user_dir in resolve_lime_user_skill_roots() {
+        push_unique_root(&mut roots, user_dir);
+    }
+    push_unique_root(&mut roots, resolve_skills_dir()?);
     Ok(roots)
 }
 
@@ -251,6 +283,25 @@ fn fallback_user_memory_path() -> PathBuf {
 
 fn resolve_project_skills_dir_from_cwd(cwd: &Path) -> PathBuf {
     cwd.join(".agents").join("skills")
+}
+
+fn resolve_project_skill_roots_from_cwd(cwd: &Path) -> Vec<PathBuf> {
+    resolve_provider_skill_roots_from_base(cwd)
+}
+
+fn resolve_user_agents_skills_dir_from_home(home: &Path) -> PathBuf {
+    home.join(".agents").join("skills")
+}
+
+fn resolve_user_skill_roots_from_home(home: &Path) -> Vec<PathBuf> {
+    resolve_provider_skill_roots_from_base(home)
+}
+
+fn resolve_provider_skill_roots_from_base(base: &Path) -> Vec<PathBuf> {
+    SKILL_PROVIDER_DIRS
+        .iter()
+        .map(|provider_dir| base.join(provider_dir).join("skills"))
+        .collect()
 }
 
 fn fallback_app_data_dir() -> PathBuf {
@@ -908,6 +959,35 @@ mod tests {
         let cwd = Path::new("/tmp/workspace");
         let resolved = resolve_project_skills_dir_from_cwd(cwd);
         assert_eq!(resolved, cwd.join(".agents").join("skills"));
+    }
+
+    #[test]
+    fn resolve_user_agents_skills_dir_from_home_builds_standard_user_path() {
+        let home = Path::new("/tmp/home");
+        let resolved = resolve_user_agents_skills_dir_from_home(home);
+        assert_eq!(resolved, home.join(".agents").join("skills"));
+    }
+
+    #[test]
+    fn resolve_project_skill_roots_from_cwd_builds_cross_provider_roots_in_precedence_order() {
+        let cwd = Path::new("/tmp/workspace");
+        let resolved = resolve_project_skill_roots_from_cwd(cwd);
+
+        assert_eq!(resolved.first(), Some(&cwd.join(".agents").join("skills")));
+        assert!(resolved.contains(&cwd.join(".claude").join("skills")));
+        assert!(resolved.contains(&cwd.join(".codex").join("skills")));
+        assert!(resolved.contains(&cwd.join(".gemini").join("skills")));
+    }
+
+    #[test]
+    fn resolve_user_skill_roots_from_home_builds_cross_provider_roots_in_precedence_order() {
+        let home = Path::new("/tmp/home");
+        let resolved = resolve_user_skill_roots_from_home(home);
+
+        assert_eq!(resolved.first(), Some(&home.join(".agents").join("skills")));
+        assert!(resolved.contains(&home.join(".claude").join("skills")));
+        assert!(resolved.contains(&home.join(".codex").join("skills")));
+        assert!(resolved.contains(&home.join(".gemini").join("skills")));
     }
 
     #[test]

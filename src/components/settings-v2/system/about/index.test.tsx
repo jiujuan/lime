@@ -1,38 +1,16 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
-const { mockCheckForUpdates, mockDownloadUpdate, mockUseTranslation } =
-  vi.hoisted(() => ({
-    mockCheckForUpdates: vi.fn(),
-    mockDownloadUpdate: vi.fn(),
-    mockUseTranslation: vi.fn((_namespace?: string) => ({
-      t: (key: string, options?: unknown) => {
-        if (typeof options === "string") {
-          return options;
-        }
-
-        if (options && typeof options === "object") {
-          const values = options as Record<string, unknown>;
-          const template =
-            typeof values.defaultValue === "string" ? values.defaultValue : key;
-          return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-            String(values[name] ?? ""),
-          );
-        }
-
-        return key;
-      },
-    })),
-  }));
+const { mockCheckForUpdates, mockDownloadUpdate } = vi.hoisted(() => ({
+  mockCheckForUpdates: vi.fn(),
+  mockDownloadUpdate: vi.fn(),
+}));
 
 vi.mock("@/lib/api/appUpdate", () => ({
   checkForUpdates: mockCheckForUpdates,
   downloadUpdate: mockDownloadUpdate,
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
 }));
 
 import { AboutSection } from ".";
@@ -81,7 +59,7 @@ function findButton(container: HTMLElement, text: string): HTMLButtonElement {
   return target as HTMLButtonElement;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -89,6 +67,7 @@ beforeEach(() => {
   ).IS_REACT_ACT_ENVIRONMENT = true;
 
   vi.clearAllMocks();
+  await changeLimeLocale("en-US");
   originalUserAgent = Object.getOwnPropertyDescriptor(
     window.navigator,
     "userAgent",
@@ -114,7 +93,7 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mounted.length > 0) {
     const target = mounted.pop();
     if (!target) {
@@ -134,6 +113,8 @@ afterEach(() => {
   } else {
     Reflect.deleteProperty(window.navigator, "userAgent");
   }
+
+  await changeLimeLocale("zh-CN");
 });
 
 describe("AboutSection", () => {
@@ -148,10 +129,11 @@ describe("AboutSection", () => {
     expect(text).toContain("Lime");
     expect(text).toContain("Version 1.10.0 (1.10.0)");
     expect(text).toContain("Copyright © 2026 Lime");
-    expect(text).toContain("可更新到 1.10.1");
-    expect(text).toContain("检查更新");
-    expect(text).toContain("下载更新");
-    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
+    expect(text).toContain("Update available: 1.10.1");
+    expect(text).toContain("Check for Updates");
+    expect(text).toContain("Download Update");
+    expect(text).not.toContain("可更新到 1.10.1");
+    expect(text).not.toContain("settings.about");
   });
 
   it("应移除关于页里的营销与能力说明噪音", async () => {
@@ -172,20 +154,20 @@ describe("AboutSection", () => {
     await waitForLoad();
 
     await act(async () => {
-      findButton(container, "检查更新").click();
+      findButton(container, "Check for Updates").click();
       await waitForLoad();
     });
 
     expect(mockCheckForUpdates).toHaveBeenCalledTimes(2);
 
     await act(async () => {
-      findButton(container, "下载更新").click();
+      findButton(container, "Download Update").click();
       await waitForLoad();
     });
 
     expect(mockDownloadUpdate).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain(
-      "暂时无法自动安装更新，请使用网页下载最新版。",
+      "Unable to install the update automatically. Please download the latest version from the web page.",
     );
     expect(container.textContent).not.toContain("signature mismatch");
   });
@@ -195,7 +177,7 @@ describe("AboutSection", () => {
     await waitForLoad();
 
     expect(container.textContent).toContain(
-      "Windows 仅提供单一 setup 安装包；需要手动升级或重装时，可直接使用网页下载页中的最新版。",
+      "Windows provides a single setup installer. To upgrade manually or reinstall, use the latest version from the web download page.",
     );
     expect(container.textContent).not.toContain("在线安装包");
     expect(container.textContent).not.toContain("offline 安装包");
@@ -216,7 +198,9 @@ describe("AboutSection", () => {
     await waitForLoad();
 
     const text = container.textContent ?? "";
-    expect(text).toContain("暂时无法检查更新，请稍后再试。");
+    expect(text).toContain(
+      "Unable to check for updates right now. Please try again later.",
+    );
     expect(text).not.toContain("HTTP 404");
     expect(text).not.toContain("已回退本地缓存");
   });

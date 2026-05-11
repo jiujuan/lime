@@ -1,4 +1,6 @@
 import React, { memo, useMemo } from "react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import { FileStack, Flag, Info, Link2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
@@ -23,47 +25,58 @@ interface ResolvedDocumentStat {
   detail: string;
 }
 
-function getDocumentKindLabel(kind: ArtifactDocumentV1["kind"]): string {
+type WorkspaceT = TFunction<"workspace", undefined>;
+
+function getDocumentKindLabel(
+  kind: ArtifactDocumentV1["kind"],
+  t: WorkspaceT,
+): string {
   switch (kind) {
     case "report":
-      return "报告";
+      return t("workspace.artifactDocument.kind.report");
     case "roadmap":
-      return "路线图";
+      return t("workspace.artifactDocument.kind.roadmap");
     case "prd":
-      return "PRD";
+      return t("workspace.artifactDocument.kind.prd");
     case "brief":
-      return "简报";
+      return t("workspace.artifactDocument.kind.brief");
     case "analysis":
-      return "分析";
+      return t("workspace.artifactDocument.kind.analysis");
     case "comparison":
-      return "对比";
+      return t("workspace.artifactDocument.kind.comparison");
     case "plan":
-      return "计划";
+      return t("workspace.artifactDocument.kind.plan");
     case "table_report":
-      return "表格报告";
+      return t("workspace.artifactDocument.kind.tableReport");
     default:
       return kind;
   }
 }
 
-function getDocumentStatusLabel(status: ArtifactDocumentV1["status"]): string {
+function getDocumentStatusLabel(
+  status: ArtifactDocumentV1["status"],
+  t: WorkspaceT,
+): string {
   switch (status) {
     case "draft":
-      return "草稿";
+      return t("workspace.artifactDocument.status.draft");
     case "streaming":
-      return "生成中";
+      return t("workspace.artifactDocument.status.streaming");
     case "ready":
-      return "可阅读";
+      return t("workspace.artifactDocument.status.ready");
     case "failed":
-      return "恢复稿";
+      return t("workspace.artifactDocument.status.failed");
     case "archived":
-      return "已归档";
+      return t("workspace.artifactDocument.status.archived");
     default:
       return status;
   }
 }
 
-function getDocumentThemeLabel(theme: unknown): string | undefined {
+function getDocumentThemeLabel(
+  theme: unknown,
+  t: WorkspaceT,
+): string | undefined {
   const normalizedTheme = normalizeText(theme);
   if (!normalizedTheme) {
     return undefined;
@@ -71,15 +84,15 @@ function getDocumentThemeLabel(theme: unknown): string | undefined {
 
   switch (normalizedTheme) {
     case "general":
-      return "通用";
+      return t("workspace.artifactDocument.theme.general");
     case "blog":
-      return "博客";
+      return t("workspace.artifactDocument.theme.blog");
     case "persistent":
-      return "持久化";
+      return t("workspace.artifactDocument.theme.persistent");
     case "temporary":
-      return "临时";
+      return t("workspace.artifactDocument.theme.temporary");
     default:
-      return "通用";
+      return t("workspace.artifactDocument.theme.general");
   }
 }
 
@@ -114,6 +127,7 @@ function resolveStatusBadgeClasses(
 function resolveDocumentStats(
   document: ArtifactDocumentV1,
   visibleBlocks: ArtifactDocumentBlock[],
+  t: WorkspaceT,
 ): ResolvedDocumentStat[] {
   const sectionCount = visibleBlocks.filter(
     (block) => block.type === "section_header",
@@ -130,28 +144,36 @@ function resolveDocumentStats(
 
   return [
     {
-      label: "结构块",
+      label: t("workspace.artifactDocument.stats.blocks.label"),
       value: String(visibleBlocks.length),
       detail:
-        visibleBlocks.length > 0 ? "当前阅读面的可见内容块" : "暂无可见内容块",
+        visibleBlocks.length > 0
+          ? t("workspace.artifactDocument.stats.blocks.detail.visible")
+          : t("workspace.artifactDocument.stats.blocks.detail.empty"),
     },
     {
-      label: "章节",
+      label: t("workspace.artifactDocument.stats.sections.label"),
       value: String(sectionCount),
-      detail: sectionCount > 0 ? "已拆分章节层级" : "当前未单独拆出章节",
+      detail:
+        sectionCount > 0
+          ? t("workspace.artifactDocument.stats.sections.detail.visible")
+          : t("workspace.artifactDocument.stats.sections.detail.empty"),
     },
     {
-      label: "来源",
+      label: t("workspace.artifactDocument.stats.sources.label"),
       value: String(document.sources.length),
       detail:
         document.sources.length > 0
-          ? "检索、文件与工具引用"
-          : "当前未附带来源卡",
+          ? t("workspace.artifactDocument.stats.sources.detail.visible")
+          : t("workspace.artifactDocument.stats.sources.detail.empty"),
     },
     {
-      label: "亮点",
+      label: t("workspace.artifactDocument.stats.highlights.label"),
       value: String(highlightCount),
-      detail: highlightCount > 0 ? "摘要亮点与关键点" : "当前未提炼亮点卡",
+      detail:
+        highlightCount > 0
+          ? t("workspace.artifactDocument.stats.highlights.detail.visible")
+          : t("workspace.artifactDocument.stats.highlights.detail.empty"),
     },
   ];
 }
@@ -163,6 +185,8 @@ const SourceAppendix = memo(function SourceAppendix({
   sources: ArtifactDocumentSource[];
   tone?: "dark" | "light";
 }) {
+  const { t } = useTranslation("workspace");
+
   if (sources.length === 0) {
     return null;
   }
@@ -184,7 +208,7 @@ const SourceAppendix = memo(function SourceAppendix({
             tone === "light" ? "text-slate-900" : "text-white",
           )}
         >
-          来源附录
+          {t("workspace.artifactDocument.sourceAppendix.title")}
         </h3>
       </div>
       <div className="space-y-3">
@@ -244,6 +268,7 @@ const SourceAppendix = memo(function SourceAppendix({
 
 export const ArtifactDocumentRenderer: React.FC<ArtifactDocumentRendererProps> =
   memo(({ document, tone = "light" }) => {
+    const { t } = useTranslation("workspace");
     const visibleBlocks = useMemo(
       () => document.blocks.filter((block) => block.hidden !== true),
       [document.blocks],
@@ -253,12 +278,12 @@ export const ArtifactDocumentRenderer: React.FC<ArtifactDocumentRendererProps> =
       [document.sources],
     );
     const documentStats = useMemo(
-      () => resolveDocumentStats(document, visibleBlocks),
-      [document, visibleBlocks],
+      () => resolveDocumentStats(document, visibleBlocks, t),
+      [document, t, visibleBlocks],
     );
     const themeLabel = useMemo(
-      () => getDocumentThemeLabel(document.metadata.theme),
-      [document.metadata.theme],
+      () => getDocumentThemeLabel(document.metadata.theme, t),
+      [document.metadata.theme, t],
     );
 
     return (
@@ -282,7 +307,7 @@ export const ArtifactDocumentRenderer: React.FC<ArtifactDocumentRendererProps> =
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
-                    {getDocumentKindLabel(document.kind)}
+                    {getDocumentKindLabel(document.kind, t)}
                   </span>
                   <span
                     className={cn(
@@ -290,11 +315,13 @@ export const ArtifactDocumentRenderer: React.FC<ArtifactDocumentRendererProps> =
                       resolveStatusBadgeClasses(tone, document.status),
                     )}
                   >
-                    {getDocumentStatusLabel(document.status)}
+                    {getDocumentStatusLabel(document.status, t)}
                   </span>
                   {themeLabel ? (
                     <span className="inline-flex rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500">
-                      主题 {themeLabel}
+                      {t("workspace.artifactDocument.meta.theme", {
+                        theme: themeLabel,
+                      })}
                     </span>
                   ) : null}
                 </div>
@@ -320,17 +347,23 @@ export const ArtifactDocumentRenderer: React.FC<ArtifactDocumentRendererProps> =
                   {document.metadata.audience ? (
                     <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
                       <Flag className="h-3.5 w-3.5" />
-                      面向 {String(document.metadata.audience)}
+                      {t("workspace.artifactDocument.meta.audience", {
+                        audience: String(document.metadata.audience),
+                      })}
                     </span>
                   ) : null}
                   {document.metadata.intent ? (
                     <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-                      目标 {String(document.metadata.intent)}
+                      {t("workspace.artifactDocument.meta.intent", {
+                        intent: String(document.metadata.intent),
+                      })}
                     </span>
                   ) : null}
                   {normalizeText(document.language) ? (
                     <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-                      语言 {normalizeText(document.language)}
+                      {t("workspace.artifactDocument.meta.language", {
+                        language: normalizeText(document.language),
+                      })}
                     </span>
                   ) : null}
                 </div>
@@ -383,7 +416,7 @@ export const ArtifactDocumentRenderer: React.FC<ArtifactDocumentRendererProps> =
               <div className="flex items-start gap-3">
                 <Info className="mt-0.5 h-4 w-4 shrink-0" />
                 <div className="text-sm leading-7">
-                  模型未能生成结构化文档，以下为原始内容。你可以基于此内容继续对话或重新生成。
+                  {t("workspace.artifactDocument.failedNotice")}
                 </div>
               </div>
             </section>

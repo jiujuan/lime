@@ -1004,7 +1004,7 @@
     {
       "id": "plugin-ui-frontend-runtime-surface",
       "classification": "dead-candidate",
-      "description": "已删除的前端 plugin-ui 渲染链，当前插件主链只保留 pluginUI 元数据 API 与插件管理页，不再保留独立渲染器运行时",
+      "description": "已删除的前端 plugin-ui 渲染链；插件中心已整体下线，不再保留独立渲染器、元数据 API 或管理页入口",
       "targets": [
         "src/lib/plugin-ui/ComponentRegistry.ts",
         "src/lib/plugin-ui/DataStore.ts",
@@ -2013,6 +2013,37 @@
         "src-tauri/crates/services/src/switch.rs"
       ],
       "allowedPaths": []
+    },
+    {
+      "id": "plugin-center-module-surface",
+      "classification": "dead",
+      "description": "已删除的插件中心页面、前端网关、桌面插件命令与文档入口；当前 GUI 不再暴露插件安装、管理或动态插件侧栏入口",
+      "targets": [
+        "src/components/plugins/PluginInstallDialog.tsx",
+        "src/components/plugins/PluginItemContextMenu.tsx",
+        "src/components/plugins/PluginManager.tsx",
+        "src/components/plugins/PluginManager.test.tsx",
+        "src/components/plugins/PluginUninstallDialog.tsx",
+        "src/components/plugins/PluginsPage.tsx",
+        "src/components/plugins/README.md",
+        "src/lib/api/plugins.ts",
+        "src/lib/api/plugins.test.ts",
+        "src/lib/api/pluginUI.ts",
+        "src/lib/api/pluginUI.test.ts",
+        "src-tauri/src/commands/plugin_cmd.rs",
+        "src-tauri/src/commands/plugin_install_cmd.rs",
+        "src-tauri/src/commands/plugin_rpc_cmd.rs",
+        "src-tauri/src/dev_bridge/dispatcher/plugins.rs",
+        "src-tauri/src/plugin/mod.rs",
+        "src-tauri/src/plugin/ui_events.rs",
+        "src-tauri/src/plugin/README.md",
+        "docs/aiprompts/plugins.md",
+        "docs/content/02.user-guide/13.plugins.md",
+        "docs/plugins/README.md",
+        "plugins/README.md",
+        "scripts/build-plugin.sh"
+      ],
+      "allowedPaths": []
     }
   ],
   "commands": [
@@ -2387,6 +2418,43 @@
         "openclaw_get_channels",
         "openclaw_sync_provider_config",
         "openclaw_install_event"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "plugin-center-command-surface",
+      "classification": "dead",
+      "description": "已删除的插件中心安装、管理、UI 与 RPC 命令族；不得重新接回前端网关、Rust 注册、DevBridge 或 mock",
+      "commands": [
+        "get_plugin_status",
+        "get_plugins",
+        "get_plugin_info",
+        "enable_plugin",
+        "disable_plugin",
+        "update_plugin_config",
+        "get_plugin_config",
+        "reload_plugins",
+        "unload_plugin",
+        "get_plugins_dir",
+        "list_plugin_tasks",
+        "get_plugin_task",
+        "cancel_plugin_task",
+        "get_plugin_queue_stats",
+        "install_plugin_from_file",
+        "install_plugin_from_url",
+        "uninstall_plugin",
+        "list_installed_plugins",
+        "get_installed_plugin",
+        "is_plugin_installed",
+        "get_plugins_with_ui",
+        "get_plugin_ui",
+        "handle_plugin_action",
+        "read_plugin_manifest_cmd",
+        "launch_plugin_ui",
+        "frontend_debug_log",
+        "plugin_rpc_connect",
+        "plugin_rpc_disconnect",
+        "plugin_rpc_call"
       ],
       "allowedPaths": []
     }

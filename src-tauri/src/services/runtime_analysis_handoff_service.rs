@@ -164,6 +164,7 @@ struct AnalysisEvidenceSection {
 #[serde(rename_all = "camelCase")]
 struct AnalysisObservabilitySection {
     summary: Value,
+    agent_runtime_profile: Value,
     correlation_keys: Vec<String>,
     gap_signals: Vec<String>,
     verification_failure_outcomes: Vec<String>,
@@ -242,6 +243,10 @@ pub fn export_runtime_analysis_handoff(
     );
     let observability_summary = runtime_payload
         .pointer("/observabilitySummary")
+        .cloned()
+        .unwrap_or(Value::Null);
+    let agent_runtime_profile = runtime_payload
+        .pointer("/agentRuntimeProfile")
         .cloned()
         .unwrap_or(Value::Null);
     let observability_correlation_keys =
@@ -568,6 +573,7 @@ pub fn export_runtime_analysis_handoff(
         },
         observability: AnalysisObservabilitySection {
             summary: sanitize_value(observability_summary, workspace_root.as_path()),
+            agent_runtime_profile: sanitize_value(agent_runtime_profile, workspace_root.as_path()),
             correlation_keys: observability_correlation_keys.clone(),
             gap_signals: observability_gap_signals.clone(),
             verification_failure_outcomes: observability_verification_failure_outcomes.clone(),
@@ -583,6 +589,7 @@ pub fn export_runtime_analysis_handoff(
         &exported_at,
         &summary,
         &analysis_context.observability.summary,
+        &analysis_context.observability.agent_runtime_profile,
         &replay_refs,
         &handoff_refs,
         &evidence_refs,
@@ -661,6 +668,7 @@ fn build_analysis_brief(
     exported_at: &str,
     summary: &AnalysisContextSummary,
     observability_summary: &Value,
+    agent_runtime_profile: &Value,
     replay_refs: &[AnalysisArtifactReference],
     handoff_refs: &[AnalysisArtifactReference],
     evidence_refs: &[AnalysisArtifactReference],
@@ -738,6 +746,10 @@ fn build_analysis_brief(
         format!(
             "- 关联键：{}",
             join_or_fallback(observability_correlation_keys, "无")
+        ),
+        format!(
+            "- AgentRuntime Profile：{}",
+            format_agent_runtime_profile_summary(agent_runtime_profile)
         ),
         format!(
             "- 当前缺口：{}",
@@ -827,6 +839,37 @@ fn build_analysis_brief(
     ]);
 
     format!("{}\n", lines.join("\n"))
+}
+
+fn format_agent_runtime_profile_summary(profile: &Value) -> String {
+    let schema_version =
+        value_string(profile.pointer("/schemaVersion").unwrap_or(&Value::Null)).unwrap_or_default();
+    let runtime_id =
+        value_string(profile.pointer("/runtimeId").unwrap_or(&Value::Null)).unwrap_or_default();
+    let profile_status =
+        value_string(profile.pointer("/profileStatus").unwrap_or(&Value::Null)).unwrap_or_default();
+    let active_turn_id =
+        value_string(profile.pointer("/activeTurnId").unwrap_or(&Value::Null)).unwrap_or_default();
+
+    let mut parts = Vec::new();
+    if !schema_version.is_empty() {
+        parts.push(format!("schema={schema_version}"));
+    }
+    if !runtime_id.is_empty() {
+        parts.push(format!("runtime={runtime_id}"));
+    }
+    if !profile_status.is_empty() {
+        parts.push(format!("status={profile_status}"));
+    }
+    if !active_turn_id.is_empty() {
+        parts.push(format!("activeTurn={active_turn_id}"));
+    }
+
+    if parts.is_empty() {
+        "未导出".to_string()
+    } else {
+        parts.join(" · ")
+    }
 }
 
 fn build_copy_prompt(
@@ -1498,6 +1541,7 @@ mod tests {
                     payload: AgentThreadItemPayload::TurnSummary {
                         text: "已完成 handoff / evidence / replay，下一步把问题交给外部 AI 诊断并修复。"
                             .to_string(),
+                        metadata: None,
                     },
                 },
             ],
@@ -1515,7 +1559,9 @@ mod tests {
         AgentRuntimeThreadReadModel {
             thread_id: "thread-1".to_string(),
             status: "waiting_request".to_string(),
+            profile_status: "blocked".to_string(),
             active_turn_id: Some("turn-1".to_string()),
+            turns: Vec::new(),
             pending_requests: vec![AgentRuntimeRequestView {
                 id: "req-1".to_string(),
                 thread_id: "thread-1".to_string(),
@@ -1540,6 +1586,11 @@ mod tests {
                 image_count: 0,
                 position: 1,
             }],
+            tool_calls: Vec::new(),
+            model_routing: None,
+            evidence_summary: Default::default(),
+            telemetry_summary: Default::default(),
+            context_summary: None,
             interrupt_state: None,
             updated_at: Some("2026-03-27T10:01:20Z".to_string()),
             latest_compaction_boundary: None,
@@ -1814,6 +1865,9 @@ mod tests {
         assert!(brief.contains("pending request：1"));
         assert!(brief.contains("证据关联与可观测覆盖"));
         assert!(brief.contains("requestTelemetry"));
+        assert!(brief.contains("AgentRuntime Profile"));
+        assert!(brief.contains("schema=lime-profile-0.4.0"));
+        assert!(brief.contains("runtime=lime_runtime_local"));
         assert!(brief.contains("结构化验证摘要"));
         assert!(brief.contains("当前没有结构化验证摘要"));
         assert!(brief.contains("验证失败焦点：无"));
@@ -1826,6 +1880,9 @@ mod tests {
         assert!(context.contains("\"contractShape\": \"lime_external_analysis_handoff\""));
         assert!(context.contains("\"pendingRequestCount\": 1"));
         assert!(context.contains("\"observability\""));
+        assert!(context.contains("\"agentRuntimeProfile\""));
+        assert!(context.contains("\"schemaVersion\": \"lime-profile-0.4.0\""));
+        assert!(context.contains("\"runtimeId\": \"lime_runtime_local\""));
         assert!(context.contains("\"correlationKeys\""));
         assert!(context.contains("\"gapSignals\""));
         assert!(context.contains("\"verificationFailureOutcomes\": []"));

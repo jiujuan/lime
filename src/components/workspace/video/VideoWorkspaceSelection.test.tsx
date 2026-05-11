@@ -38,10 +38,9 @@ vi.mock("sonner", () => ({
 }));
 
 vi.mock("@/lib/api/materials", async () => {
-  const actual =
-    await vi.importActual<typeof import("@/lib/api/materials")>(
-      "@/lib/api/materials",
-    );
+  const actual = await vi.importActual<typeof import("@/lib/api/materials")>(
+    "@/lib/api/materials",
+  );
 
   return {
     ...actual,
@@ -227,11 +226,7 @@ describe("VideoWorkspace 任务聚焦", () => {
   it("英文界面应使用 workspace namespace 渲染最近任务标题与预览操作", async () => {
     await changeLimeLocale("en-US");
 
-    const mounted = mountHarness(
-      ControlledVideoWorkspace,
-      {},
-      mountedRoots,
-    );
+    const mounted = mountHarness(ControlledVideoWorkspace, {}, mountedRoots);
 
     await flushEffects(8);
 
@@ -301,8 +296,7 @@ describe("VideoWorkspace 任务聚焦", () => {
 
     expect(mockImportMaterialFromUrl).toHaveBeenCalledWith(
       expect.objectContaining({
-        description:
-          "Video generation start-frame reference (auto uploaded)",
+        description: "Video generation start-frame reference (auto uploaded)",
         name: "Video start-frame reference",
         projectId: "project-video-1",
         tags: ["video-reference", "start"],

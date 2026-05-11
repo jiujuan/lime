@@ -1,6 +1,7 @@
 import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { ArtifactRenderer } from "./ArtifactRenderer";
 import { ArtifactDocumentRenderer } from "./renderers/ArtifactDocumentRenderer";
 import {
@@ -70,7 +71,7 @@ function renderArtifactDocument(artifactDocument: ArtifactDocumentV1) {
   return container;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -80,9 +81,11 @@ beforeEach(() => {
   if (!areLightweightRenderersRegistered()) {
     registerLightweightRenderers();
   }
+
+  await changeLimeLocale("zh-CN");
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mountedRenderers.length > 0) {
     const mounted = mountedRenderers.pop();
     if (!mounted) {
@@ -93,6 +96,8 @@ afterEach(() => {
     });
     mounted.container.remove();
   }
+
+  await changeLimeLocale("zh-CN");
 });
 
 describe("ArtifactRenderer 空内容态", () => {
@@ -118,6 +123,47 @@ describe("ArtifactRenderer 空内容态", () => {
     expect(surface?.getAttribute("data-empty-mode")).toBe("writing");
     expect(container.textContent).toContain("正在写入");
     expect(container.textContent).toContain("workspace/index.ts");
+  });
+
+  it("应通过 workspace namespace 渲染英文空内容态和未知类型回退", async () => {
+    await changeLimeLocale("en-US");
+
+    const writingContainer = renderArtifact(
+      createArtifact({
+        type: "code",
+        title: "index.ts",
+        status: "streaming",
+        meta: {
+          filePath: "workspace/index.ts",
+          writePhase: "streaming",
+          language: "typescript",
+        },
+      }),
+      { isStreaming: true },
+    );
+
+    expect(writingContainer.textContent).toContain("Writing");
+    expect(writingContainer.textContent).toContain(
+      "Content is still being written.",
+    );
+    expect(writingContainer.textContent).toContain("Generating...");
+    expect(writingContainer.textContent).not.toContain("正在写入");
+
+    const fallbackContainer = renderArtifact(
+      createArtifact({
+        type: "custom" as Artifact["type"],
+        title: "unknown.artifact",
+        status: "complete",
+        content: "raw payload",
+      }),
+    );
+
+    expect(fallbackContainer.textContent).toContain("Unknown type");
+    expect(fallbackContainer.textContent).toContain(
+      'Type "custom" does not have a renderer, so raw content is shown.',
+    );
+    expect(fallbackContainer.textContent).toContain("raw payload");
+    expect(fallbackContainer.textContent).not.toContain("未知类型");
   });
 
   it("canvas:design 应先展示紧凑预览，不在工作台卡片内嵌完整编辑器", async () => {

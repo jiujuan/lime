@@ -31,9 +31,9 @@ describe("Document SlashCommand i18n", () => {
     const items = createSlashCommandItems();
     expect(items.map((item) => item.title)).toContain("Heading 1");
     expect(items.map((item) => item.title)).toContain("Image");
-    expect(
-      items.find((item) => item.id === "image")?.description,
-    ).toBe("Insert an image link");
+    expect(items.find((item) => item.id === "image")?.description).toBe(
+      "Insert an image link",
+    );
 
     expect(filterSlashCommandItems("photo").map((item) => item.id)).toEqual([
       "image",

@@ -7,7 +7,7 @@ import {
 import type { AgentThreadItem, AgentThreadItemStatus } from "../types";
 import { resolveInternalImageTaskDisplayName } from "./internalImagePlaceholder";
 import { resolveUserFacingToolDisplayLabel } from "./toolDisplayInfo";
-import { isInternalRoutingTurnSummaryText } from "./turnSummaryPresentation";
+import { shouldHideTurnSummaryFromConversation } from "./turnSummaryPresentation";
 import { summarizeThreadProcessBatch } from "./toolBatchGrouping";
 import { resolveAgentThreadToolProcessPreview } from "./toolProcessSummary";
 import { normalizeProcessDisplayText } from "./processDisplayText";
@@ -736,7 +736,7 @@ function summarizeOtherItem(item: AgentThreadItem): string | null {
 
 function summarizeThinkingItem(item: AgentThreadItem): string | null {
   if (item.type === "turn_summary") {
-    if (isInternalRoutingTurnSummaryText(item.text)) {
+    if (shouldHideTurnSummaryFromConversation(item)) {
       return null;
     }
 

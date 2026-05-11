@@ -13,7 +13,6 @@
   - `types.ts` - Artifact 类型定义
 - `api/` - API 调用封装
   - `apiKeyProvider.ts` - API Key Provider API 封装（Requirements 9.1）
-  - `pluginUI.ts` - 插件 UI API（Requirements 3.1）
 - `config/` - 配置模块
   - `providers.ts` - System Provider 预设配置（Requirements 3.1-3.6）
 - `types/` - 类型定义模块

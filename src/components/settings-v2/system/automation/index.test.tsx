@@ -25,19 +25,134 @@ const {
   mockListProjects,
   mockAutomationJobDialog,
 } = vi.hoisted(() => {
+  const translations: Record<string, string> = {
+    "settings.automation.details.accessMode.fullAccess": "完全访问",
+    "settings.automation.details.badge.job": "这条：{{name}}",
+    "settings.automation.details.badge.payload": "方式：{{payload}}",
+    "settings.automation.details.badge.schedule": "调度：{{schedule}}",
+    "settings.automation.details.badge.status": "当前状态：{{status}}",
+    "settings.automation.details.badge.workspace": "归属：{{workspace}}",
+    "settings.automation.details.delivery.address": "目标地址: {{address}}",
+    "settings.automation.details.delivery.channel.googleSheets":
+      "Google Sheets",
+    "settings.automation.details.delivery.channel.localFile": "本地文件",
+    "settings.automation.details.delivery.channel.webhook": "Webhook",
+    "settings.automation.details.delivery.contractTitle": "输出契约",
+    "settings.automation.details.delivery.failurePolicy":
+      "失败策略: {{policy}}",
+    "settings.automation.details.delivery.format": "投递编码: {{format}}",
+    "settings.automation.details.delivery.format.json": "JSON 编码",
+    "settings.automation.details.delivery.format.text": "文本编码",
+    "settings.automation.details.delivery.last.attemptId": "投递键: {{id}}",
+    "settings.automation.details.delivery.last.attemptedAt": "时间: {{time}}",
+    "settings.automation.details.delivery.last.channel": "渠道: {{channel}}",
+    "settings.automation.details.delivery.last.contract":
+      "契约: {{schema}} / {{format}}",
+    "settings.automation.details.delivery.last.emptyDisabled":
+      "这条持续流程当前未启用输出投递。",
+    "settings.automation.details.delivery.last.result": "结果: {{message}}",
+    "settings.automation.details.delivery.last.retry":
+      "执行重试: {{executionRetry}} / 投递尝试: {{deliveryAttempts}}",
+    "settings.automation.details.delivery.last.target": "目标: {{target}}",
+    "settings.automation.details.delivery.lastTitle": "最近一次投递结果",
+    "settings.automation.details.delivery.mode.announce": "运行完成后投递",
+    "settings.automation.details.delivery.mode.none": "未启用",
+    "settings.automation.details.delivery.policy.bestEffort":
+      "投递失败不阻塞本轮",
+    "settings.automation.details.delivery.policy.disabled": "未启用",
+    "settings.automation.details.delivery.policy.strict":
+      "投递失败记为本轮失败",
+    "settings.automation.details.delivery.schema": "输出契约: {{schema}}",
+    "settings.automation.details.delivery.schema.json": "JSON 对象",
+    "settings.automation.details.delivery.schema.table": "表格",
+    "settings.automation.details.delivery.schema.text": "文本摘要",
+    "settings.automation.details.delivery.status.empty": "暂无记录",
+    "settings.automation.details.delivery.status.failed": "投递失败",
+    "settings.automation.details.delivery.status.success": "投递成功",
+    "settings.automation.details.delivery.target": "输出目标: {{target}}",
+    "settings.automation.details.description":
+      "查看这条持续流程的状态、输出去向和最近运行。",
+    "settings.automation.details.legacy.message":
+      "浏览器自动化已下线，系统不会再自动启动 Chrome。请删除旧流程，并改建为 Agent 对话持续流程。",
+    "settings.automation.details.legacy.payload.environment":
+      "环境预设: {{environment}}",
+    "settings.automation.details.legacy.payload.profile": "资料: {{profile}}",
+    "settings.automation.details.legacy.payload.streamMode":
+      "流模式: {{streamMode}}",
+    "settings.automation.details.legacy.payload.url": "启动地址: {{url}}",
+    "settings.automation.details.legacy.payload.window": "调试窗口: {{status}}",
+    "settings.automation.details.legacy.payload.windowClosed": "关闭",
+    "settings.automation.details.legacy.title": "浏览器自动化已下线",
+    "settings.automation.details.meta.accessMode": "权限模式: {{accessMode}}",
+    "settings.automation.details.meta.lastError": "最后错误: {{error}}",
+    "settings.automation.details.meta.lastRun": "最近执行: {{time}}",
+    "settings.automation.details.meta.nextRun": "下次执行: {{time}}",
+    "settings.automation.details.meta.schedule": "调度: {{schedule}}",
+    "settings.automation.details.meta.startMethod": "开始方式: {{payload}}",
+    "settings.automation.details.payload.agentTurn": "Agent 对话",
+    "settings.automation.details.payload.browserSession": "浏览器自动化",
+    "settings.automation.details.payload.currentTitle": "当前起手内容",
+    "settings.automation.details.sceneApp.action.openDetail": "回补这轮信息",
+    "settings.automation.details.sceneApp.action.openGovernance": "看这轮结果",
+    "settings.automation.details.sceneApp.currentJobHint":
+      "当前就在这条持续流程里，无需再跳转一次。",
+    "settings.automation.details.sceneApp.description":
+      "这条持续流程已经接回生成；除了调度状态，还会继续回流这轮结果、结果材料和下一步判断。",
+    "settings.automation.details.sceneApp.nextAction": "先做：{{action}}",
+    "settings.automation.details.sceneApp.overview": "持续流程概览",
+    "settings.automation.details.sceneApp.recentResult": "最近结果",
+    "settings.automation.details.sceneApp.scorecard": "这轮判断",
+    "settings.automation.details.sceneApp.title": "接回生成",
+    "settings.automation.details.schedule.cron": "Cron: {{expr}}",
+    "settings.automation.details.schedule.minutes": "每 {{count}} 分钟",
+    "settings.automation.details.serviceSkill.executionCompatNote":
+      "沿用旧目录兼容标记，实际仍在客户端执行。",
+    "settings.automation.details.serviceSkill.content": "主稿绑定: {{content}}",
+    "settings.automation.details.serviceSkill.moreItems": " 等 {{count}} 项",
+    "settings.automation.details.serviceSkill.skill": "技能: {{title}}",
+    "settings.automation.details.serviceSkill.slotSummary": "参数摘要",
+    "settings.automation.details.serviceSkill.source": "目录来源: {{source}}",
+    "settings.automation.details.serviceSkill.taskLine": "技能：{{title}}",
+    "settings.automation.details.serviceSkill.theme": "主题: {{theme}}",
+    "settings.automation.details.serviceSkill.title": "技能流程上下文",
+    "settings.automation.details.serviceSkill.userInput": "补充要求",
+    "settings.automation.details.status.error": "失败",
+    "settings.automation.details.status.offline": "已下线",
+    "settings.automation.details.status.running": "运行中",
+    "settings.automation.details.status.success": "成功",
+    "settings.automation.details.status.waitingForHuman": "等待人工处理",
+    "settings.automation.details.title": "持续流程详情",
+    "settings.automation.history.action.refresh": "刷新",
+    "settings.automation.history.delivery.failed": "失败",
+    "settings.automation.history.delivery.success": "成功",
+    "settings.automation.history.delivery.title": "输出投递 / {{channel}}",
+    "settings.automation.history.errorReason": "失败原因",
+    "settings.automation.history.meta.finished": "完成: {{time}}",
+    "settings.automation.history.meta.id": "ID: {{id}}",
+    "settings.automation.history.meta.session": "Session: {{session}}",
+    "settings.automation.history.serviceSkill.slotPreview":
+      "参数摘要: {{summary}}",
+    "settings.automation.history.serviceSkill.title": "技能流程运行上下文",
+    "settings.automation.history.serviceSkill.userInput": "补充要求: {{input}}",
+    "settings.automation.history.title": "最近运行",
+    "settings.automation.tasks.list.badge.serviceSkillLegacyCompat":
+      "旧目录兼容",
+  };
   const mockTranslate = vi.fn((key: string, options?: unknown) => {
     if (typeof options === "string") return options;
 
     if (options && typeof options === "object") {
       const values = options as Record<string, unknown>;
       const template =
-        typeof values.defaultValue === "string" ? values.defaultValue : key;
+        typeof values.defaultValue === "string"
+          ? values.defaultValue
+          : (translations[key] ?? key);
       return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
         String(values[name] ?? ""),
       );
     }
 
-    return key;
+    return translations[key] ?? key;
   });
 
   return {

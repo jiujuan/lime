@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import {
   persistVoiceModelSettingsFocusRequest,
   VOICE_MODEL_SETTINGS_FOCUS_STORAGE_KEY,
@@ -23,25 +24,7 @@ const {
   mockTestTranscribeVoiceModelFile,
   mockOpenDialog,
   mockValidateShortcut,
-  mockUseTranslation,
 } = vi.hoisted(() => {
-  const mockTranslate = vi.fn((key: string, options?: unknown) => {
-    if (typeof options === "string") {
-      return options;
-    }
-
-    if (options && typeof options === "object") {
-      const values = options as Record<string, unknown>;
-      const template =
-        typeof values.defaultValue === "string" ? values.defaultValue : key;
-      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-        String(values[name] ?? ""),
-      );
-    }
-
-    return key;
-  });
-
   return {
     mockGetConfig: vi.fn(),
     mockSaveConfig: vi.fn(),
@@ -58,9 +41,6 @@ const {
     mockTestTranscribeVoiceModelFile: vi.fn(),
     mockOpenDialog: vi.fn(),
     mockValidateShortcut: vi.fn(),
-    mockUseTranslation: vi.fn((_namespace?: string) => ({
-      t: mockTranslate,
-    })),
   };
 });
 
@@ -95,10 +75,6 @@ vi.mock("@/lib/api/experimentalFeatures", () => ({
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: mockOpenDialog,
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
 }));
 
 vi.mock("@/hooks/useConfiguredProviders", () => ({
@@ -349,7 +325,7 @@ function createVoiceInputConfig(overrides: Record<string, unknown> = {}) {
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -357,6 +333,7 @@ beforeEach(() => {
   ).IS_REACT_ACT_ENVIRONMENT = true;
 
   vi.clearAllMocks();
+  await changeLimeLocale("en-US");
   scrollIntoViewMock.mockClear();
   emitVoiceModelProgress = null;
   Object.defineProperty(Element.prototype, "scrollIntoView", {
@@ -418,7 +395,7 @@ beforeEach(() => {
       id: "sensevoice-small-int8-2024-07-17",
       name: "SenseVoice Small INT8",
       provider: "FunAudioLLM / sherpa-onnx",
-      description: "本地离线 ASR",
+      description: "",
       version: "2024-07-17",
       languages: ["zh", "en", "ja", "ko", "yue"],
       size_bytes: 262144000,
@@ -495,7 +472,7 @@ beforeEach(() => {
   mockSaveVoiceInputConfig.mockResolvedValue(undefined);
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mounted.length > 0) {
     const target = mounted.pop();
     if (!target) {
@@ -526,6 +503,7 @@ afterEach(() => {
     delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
   }
   vi.unstubAllGlobals();
+  await changeLimeLocale("zh-CN");
 });
 
 describe("VoiceSettings", () => {
@@ -534,25 +512,29 @@ describe("VoiceSettings", () => {
     await flushEffects(6);
 
     const text = container.textContent ?? "";
-    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
-    expect(text).toContain("语音输入");
-    expect(text).toContain("语音模型");
-    expect(text).toContain("语音输入快捷键");
-    expect(text).toContain("按住录音，松开识别");
+    expect(text).toContain("Voice Input");
+    expect(text).toContain("Voice Models");
+    expect(text).toContain("Voice input shortcut");
+    expect(text).toContain("Hold to record, release to transcribe");
     expect(text).toContain("🌐 Fn");
     expect(text).toContain("SenseVoice Small");
-    expect(text).toContain("本地");
-    expect(text).toContain("未安装（ONNX int8 量化");
-    expect(text).toContain("本地离线 ASR，按需下载。");
-    expect(text).toContain("下载模型");
-    expect(text).toContain("当前平台不支持 Fn，已使用快捷键回退");
-    expect(text).toContain("语音处理");
-    expect(text).toContain("语音服务模型");
+    expect(text).toContain("Local");
+    expect(text).toContain("Not installed (ONNX int8 quantized");
+    expect(text).toContain(
+      "Local offline ASR; the model is downloaded to user data on demand.",
+    );
+    expect(text).toContain("Download model");
+    expect(text).toContain(
+      "Fn is not supported on this platform; shortcut fallback is used",
+    );
+    expect(text).toContain("Voice Processing");
+    expect(text).toContain("Voice Service Model");
     expect(text).toContain("OpenAI Whisper 默认凭证");
     expect(text).toContain("openai / gpt-4.1-mini");
     expect(text).toContain("openai / gpt-4o-mini-tts");
-    expect(text).toContain("运行时已注册");
-    expect(text).toContain("翻译模式快捷键已注册");
+    expect(text).toContain("Registered in runtime");
+    expect(text).toContain("Translation mode shortcut registered");
+    expect(text).not.toContain("settings.voice");
   });
 
   it("关闭语音输入时应展示 Fn 快捷键未开启状态", async () => {
@@ -564,8 +546,10 @@ describe("VoiceSettings", () => {
     await flushEffects(6);
 
     const text = container.textContent ?? "";
-    expect(text).toContain("语音输入未开启，不会注册 Fn 或全局快捷键");
-    expect(text).toContain("未启用，不会注册全局快捷键");
+    expect(text).toContain(
+      "Voice input is disabled; Fn and global shortcuts will not be registered.",
+    );
+    expect(text).toContain("Disabled; no global shortcut will be registered");
   });
 
   it("点击下载模型时应调用本地模型下载命令", async () => {
@@ -574,7 +558,7 @@ describe("VoiceSettings", () => {
 
     const downloadButton = Array.from(
       container.querySelectorAll("button"),
-    ).find((element) => element.textContent?.includes("下载模型"));
+    ).find((element) => element.textContent?.includes("Download model"));
     expect(downloadButton).toBeInstanceOf(HTMLButtonElement);
 
     await act(async () => {
@@ -585,7 +569,7 @@ describe("VoiceSettings", () => {
     expect(mockDownloadVoiceModel).toHaveBeenCalledWith(
       "sensevoice-small-int8-2024-07-17",
     );
-    expect(container.textContent ?? "").toContain("已安装");
+    expect(container.textContent ?? "").toContain("Installed");
   });
 
   it("缺模型跳转进入设置页时应聚焦语音模型区块", async () => {
@@ -635,7 +619,7 @@ describe("VoiceSettings", () => {
 
     const downloadButton = Array.from(
       container.querySelectorAll("button"),
-    ).find((element) => element.textContent?.includes("下载模型"));
+    ).find((element) => element.textContent?.includes("Download model"));
     expect(downloadButton).toBeInstanceOf(HTMLButtonElement);
 
     await act(async () => {
@@ -644,12 +628,12 @@ describe("VoiceSettings", () => {
     });
 
     const progressbar = container.querySelector(
-      "[role='progressbar'][aria-label='语音模型下载进度']",
+      "[role='progressbar'][aria-label='Voice model download progress']",
     ) as HTMLDivElement | null;
     expect(progressbar).toBeInstanceOf(HTMLDivElement);
     expect(progressbar?.getAttribute("aria-valuenow")).toBe("0");
     expect(progressbar?.style.width).toBe("0%");
-    expect(container.textContent ?? "").toContain("准备下载模型");
+    expect(container.textContent ?? "").toContain("Preparing model download");
     expect(container.textContent ?? "").toContain("0%");
 
     await act(async () => {
@@ -705,7 +689,7 @@ describe("VoiceSettings", () => {
     await flushEffects(6);
 
     const defaultButton = Array.from(container.querySelectorAll("button")).find(
-      (element) => element.textContent?.includes("设为默认"),
+      (element) => element.textContent?.includes("Set as default"),
     );
     expect(defaultButton).toBeInstanceOf(HTMLButtonElement);
 
@@ -738,12 +722,12 @@ describe("VoiceSettings", () => {
     await flushEffects(6);
 
     const input = container.querySelector(
-      "input[aria-label='WAV 文件路径']",
+      "input[aria-label='WAV file path']",
     ) as HTMLInputElement | null;
     expect(input).toBeInstanceOf(HTMLInputElement);
 
     const selectButton = Array.from(container.querySelectorAll("button")).find(
-      (element) => element.textContent?.includes("选择 WAV"),
+      (element) => element.textContent?.includes("Choose WAV"),
     );
     expect(selectButton).toBeInstanceOf(HTMLButtonElement);
 
@@ -753,15 +737,15 @@ describe("VoiceSettings", () => {
     });
 
     expect(mockOpenDialog).toHaveBeenCalledWith({
-      title: "选择 WAV 测试音频",
+      title: "Choose WAV test audio",
       multiple: false,
       directory: false,
-      filters: [{ name: "WAV 音频", extensions: ["wav"] }],
+      filters: [{ name: "WAV audio", extensions: ["wav"] }],
     });
     expect(input?.value).toBe("/tmp/interview.wav");
 
     const testButton = Array.from(container.querySelectorAll("button")).find(
-      (element) => element.textContent?.includes("测试转写"),
+      (element) => element.textContent?.includes("Test transcription"),
     );
     expect(testButton).toBeInstanceOf(HTMLButtonElement);
     expect((testButton as HTMLButtonElement).disabled).toBe(false);
@@ -784,7 +768,9 @@ describe("VoiceSettings", () => {
     const container = renderComponent();
     await flushEffects(6);
 
-    const toggle = container.querySelector("button[aria-label='切换语音输入']");
+    const toggle = container.querySelector(
+      "button[aria-label='Toggle voice input']",
+    );
     expect(toggle).toBeInstanceOf(HTMLButtonElement);
 
     await act(async () => {
@@ -828,7 +814,7 @@ describe("VoiceSettings", () => {
     await flushEffects(6);
 
     const select = container.querySelector(
-      "select[aria-label='默认润色指令']",
+      "select[aria-label='Default polish instruction']",
     ) as HTMLSelectElement | null;
     expect(select).toBeInstanceOf(HTMLSelectElement);
 
@@ -855,7 +841,7 @@ describe("VoiceSettings", () => {
     await flushEffects(6);
 
     const resetButton = Array.from(container.querySelectorAll("button")).find(
-      (element) => element.textContent?.includes("恢复默认"),
+      (element) => element.textContent?.includes("Restore defaults"),
     );
     expect(resetButton).toBeInstanceOf(HTMLButtonElement);
 

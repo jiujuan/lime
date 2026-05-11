@@ -474,7 +474,7 @@ describe("MessageList", () => {
     expect(onLoadFullHistory).toHaveBeenCalledTimes(1);
   });
 
-  it("旧会话首帧应先渲染消息文本并延后历史 timeline", () => {
+  it("旧会话首帧应先渲染消息文本并延后历史 timeline", async () => {
     vi.useFakeTimers();
     const messages = createConversationMessages(60);
     const turns: AgentThreadTurn[] = Array.from({ length: 30 }, (_, index) => {
@@ -500,8 +500,9 @@ describe("MessageList", () => {
       started_at: turn.started_at,
       completed_at: turn.completed_at,
       updated_at: turn.updated_at,
-      type: "reasoning",
-      text: `历史执行轨迹 ${index + 1}`,
+      type: "tool_call",
+      tool_name: "Read",
+      arguments: { file_path: `/repo/history-${index + 1}.ts` },
     }));
 
     const container = render(messages, {
@@ -514,7 +515,10 @@ describe("MessageList", () => {
     expect(mockAgentThreadTimeline).not.toHaveBeenCalled();
 
     act(() => {
-      vi.advanceTimersByTime(920);
+      vi.advanceTimersByTime(1_000);
+    });
+    await act(async () => {
+      await Promise.resolve();
     });
 
     expect(mockAgentThreadTimeline).toHaveBeenCalled();
@@ -1805,7 +1809,7 @@ describe("MessageList", () => {
     ).toBeNull();
     expect(
       container.querySelector(
-        '[data-testid="assistant-first-token-placeholder"]',
+        '[data-testid="assistant-first-token-runtime-status"]',
       ),
     ).toBeNull();
   });
@@ -2028,9 +2032,10 @@ describe("MessageList", () => {
     ).toBeNull();
     expect(
       container.querySelector(
-        '[data-testid="assistant-first-token-placeholder"]',
+        '[data-testid="assistant-first-token-runtime-status"]',
       ),
     ).not.toBeNull();
+    expect(container.textContent).not.toContain("思考中");
     expect(container.textContent).toContain("正在启动处理流程");
     expect(container.textContent).toContain(
       "已开始处理，正在准备环境并等待第一条进展。",
@@ -3781,7 +3786,9 @@ describe("MessageList", () => {
     });
 
     expect(
-      container.querySelector('[data-testid="assistant-primary-timeline-shell"]'),
+      container.querySelector(
+        '[data-testid="assistant-primary-timeline-shell"]',
+      ),
     ).not.toBeNull();
     expect(
       container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
@@ -4579,7 +4586,7 @@ describe("MessageList", () => {
     ).toBeNull();
     expect(
       container.querySelector(
-        '[data-testid="assistant-first-token-placeholder"]',
+        '[data-testid="assistant-first-token-runtime-status"]',
       ),
     ).not.toBeNull();
     expect(container.textContent).toContain("正在打开 GitHub");
@@ -4634,7 +4641,7 @@ describe("MessageList", () => {
 
     expect(
       container.querySelector(
-        '[data-testid="assistant-first-token-placeholder"]',
+        '[data-testid="assistant-first-token-runtime-status"]',
       ),
     ).not.toBeNull();
     expect(

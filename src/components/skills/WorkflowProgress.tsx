@@ -21,6 +21,7 @@ import {
   Loader2,
   RotateCcw,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { WorkflowStepInfo, StepResult } from "@/lib/api/skill-execution";
 
 // ============================================================================
@@ -154,6 +155,7 @@ function StepStatusIcon({ status }: { status: StepStatus }) {
  * 单个步骤项组件
  */
 function StepItem({ step }: { step: StepDisplayInfo }) {
+  const { t } = useTranslation("agent");
   const isActive = step.status === "running" || step.status === "retrying";
   const isFailed = step.status === "failed";
 
@@ -185,7 +187,9 @@ function StepItem({ step }: { step: StepDisplayInfo }) {
           <p className="mt-1 text-xs text-red-600">{step.error}</p>
         )}
         {step.status === "retrying" && (
-          <p className="mt-1 text-xs text-yellow-600">正在重试...</p>
+          <p className="mt-1 text-xs text-yellow-600">
+            {t("skills.workflowProgress.status.retrying")}
+          </p>
         )}
       </div>
     </div>
@@ -233,11 +237,13 @@ export function WorkflowProgress({
   isRetrying = false,
   className,
 }: WorkflowProgressProps) {
+  const { t } = useTranslation("agent");
+
   // 如果没有步骤，显示空状态
   if (steps.length === 0) {
     return (
       <div className={cn("text-center text-muted-foreground py-4", className)}>
-        暂无工作流步骤
+        {t("skills.workflowProgress.empty")}
       </div>
     );
   }
@@ -273,19 +279,25 @@ export function WorkflowProgress({
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">
             {isExecuting ? (
-              <>
-                执行中: 步骤 {currentStepIndex}/{effectiveTotalSteps}
-              </>
+              t("skills.workflowProgress.summary.running", {
+                current: currentStepIndex,
+                total: effectiveTotalSteps,
+              })
             ) : failedCount > 0 ? (
               <span className="text-red-600">
-                执行失败: {failedCount} 个步骤出错
+                {t("skills.workflowProgress.summary.failed", {
+                  count: failedCount,
+                })}
               </span>
             ) : completedCount === effectiveTotalSteps ? (
-              <span className="text-green-600">执行完成</span>
+              <span className="text-green-600">
+                {t("skills.workflowProgress.summary.completed")}
+              </span>
             ) : (
-              <>
-                已完成: {completedCount}/{effectiveTotalSteps}
-              </>
+              t("skills.workflowProgress.summary.done", {
+                completed: completedCount,
+                total: effectiveTotalSteps,
+              })
             )}
           </span>
           <span className="font-medium">{Math.round(displayProgress)}%</span>

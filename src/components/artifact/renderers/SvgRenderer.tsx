@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useRef, useCallback, useMemo, memo } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Eye,
   Code2,
@@ -38,10 +39,10 @@ const ZOOM_LEVELS = {
 /**
  * 流式指示器组件
  */
-const StreamingIndicator: React.FC = memo(() => (
+const StreamingIndicator: React.FC<{ label: string }> = memo(({ label }) => (
   <div className="absolute bottom-2 right-2 flex items-center gap-1.5 px-2 py-1 rounded bg-blue-500/20 text-blue-400 text-xs">
     <Loader2 className="w-3 h-3 animate-spin" />
-    <span>生成中...</span>
+    <span>{label}</span>
   </div>
 ));
 StreamingIndicator.displayName = "StreamingIndicator";
@@ -52,10 +53,16 @@ StreamingIndicator.displayName = "StreamingIndicator";
 interface ViewModeToggleProps {
   value: ViewMode;
   onChange: (value: ViewMode) => void;
+  copy: {
+    previewLabel: string;
+    previewTitle: string;
+    sourceLabel: string;
+    sourceTitle: string;
+  };
 }
 
 const ViewModeToggle: React.FC<ViewModeToggleProps> = memo(
-  ({ value, onChange }) => (
+  ({ value, onChange, copy }) => (
     <div className="inline-flex items-center rounded-md bg-gray-100 p-1">
       <button
         type="button"
@@ -66,10 +73,10 @@ const ViewModeToggle: React.FC<ViewModeToggleProps> = memo(
             ? "bg-white text-gray-900 shadow-sm"
             : "text-gray-600 hover:text-gray-900",
         )}
-        title="预览模式"
+        title={copy.previewTitle}
       >
         <Eye className="w-3.5 h-3.5" />
-        <span>预览</span>
+        <span>{copy.previewLabel}</span>
       </button>
       <button
         type="button"
@@ -80,10 +87,10 @@ const ViewModeToggle: React.FC<ViewModeToggleProps> = memo(
             ? "bg-white text-gray-900 shadow-sm"
             : "text-gray-600 hover:text-gray-900",
         )}
-        title="源码模式"
+        title={copy.sourceTitle}
       >
         <Code2 className="w-3.5 h-3.5" />
-        <span>源码</span>
+        <span>{copy.sourceLabel}</span>
       </button>
     </div>
   ),
@@ -96,10 +103,15 @@ ViewModeToggle.displayName = "ViewModeToggle";
 interface ZoomControlsProps {
   zoom: number;
   onZoomChange: (zoom: number) => void;
+  copy: {
+    zoomOutTitle: string;
+    zoomInTitle: string;
+    fitToViewTitle: string;
+  };
 }
 
 const ZoomControls: React.FC<ZoomControlsProps> = memo(
-  ({ zoom, onZoomChange }) => {
+  ({ zoom, onZoomChange, copy }) => {
     const handleZoomIn = useCallback(() => {
       onZoomChange(Math.min(zoom + ZOOM_LEVELS.step, ZOOM_LEVELS.max));
     }, [zoom, onZoomChange]);
@@ -125,7 +137,7 @@ const ZoomControls: React.FC<ZoomControlsProps> = memo(
             "text-gray-500 hover:text-gray-700 hover:bg-gray-100",
             "disabled:opacity-50 disabled:cursor-not-allowed",
           )}
-          title="缩小"
+          title={copy.zoomOutTitle}
         >
           <ZoomOut className="w-4 h-4" />
         </button>
@@ -141,7 +153,7 @@ const ZoomControls: React.FC<ZoomControlsProps> = memo(
             "text-gray-500 hover:text-gray-700 hover:bg-gray-100",
             "disabled:opacity-50 disabled:cursor-not-allowed",
           )}
-          title="放大"
+          title={copy.zoomInTitle}
         >
           <ZoomIn className="w-4 h-4" />
         </button>
@@ -152,7 +164,7 @@ const ZoomControls: React.FC<ZoomControlsProps> = memo(
             "inline-flex items-center justify-center w-7 h-7 rounded transition-all",
             "text-gray-500 hover:text-gray-700 hover:bg-gray-100",
           )}
-          title="适应视图"
+          title={copy.fitToViewTitle}
         >
           <Maximize2 className="w-4 h-4" />
         </button>
@@ -167,21 +179,24 @@ ZoomControls.displayName = "ZoomControls";
  */
 interface DownloadButtonProps {
   onClick: () => void;
+  title: string;
 }
 
-const DownloadButton: React.FC<DownloadButtonProps> = memo(({ onClick }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className={cn(
-      "inline-flex items-center justify-center w-8 h-8 rounded transition-all",
-      "text-gray-500 hover:text-gray-700 hover:bg-gray-100",
-    )}
-    title="下载 SVG"
-  >
-    <Download className="w-4 h-4" />
-  </button>
-));
+const DownloadButton: React.FC<DownloadButtonProps> = memo(
+  ({ onClick, title }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center justify-center w-8 h-8 rounded transition-all",
+        "text-gray-500 hover:text-gray-700 hover:bg-gray-100",
+      )}
+      title={title}
+    >
+      <Download className="w-4 h-4" />
+    </button>
+  ),
+);
 DownloadButton.displayName = "DownloadButton";
 
 /**
@@ -189,12 +204,13 @@ DownloadButton.displayName = "DownloadButton";
  */
 interface ErrorDisplayProps {
   message: string;
+  title: string;
 }
 
-const ErrorDisplay: React.FC<ErrorDisplayProps> = memo(({ message }) => (
+const ErrorDisplay: React.FC<ErrorDisplayProps> = memo(({ message, title }) => (
   <div className="flex flex-col items-center justify-center h-full p-8 text-center">
     <AlertCircle className="w-12 h-12 text-red-400 mb-4" />
-    <h3 className="text-lg font-medium text-gray-900 mb-2">SVG 渲染失败</h3>
+    <h3 className="text-lg font-medium text-gray-900 mb-2">{title}</h3>
     <p className="text-sm text-gray-500 max-w-md">{message}</p>
   </div>
 ));
@@ -266,6 +282,7 @@ function sanitizeSvg(content: string): string {
  */
 export const SvgRenderer: React.FC<ArtifactRendererProps> = memo(
   ({ artifact, isStreaming = false }) => {
+    const { t } = useTranslation("errors");
     // 视图模式状态
     const [viewMode, setViewMode] = useState<ViewMode>("preview");
     // 缩放级别状态
@@ -305,7 +322,9 @@ export const SvgRenderer: React.FC<ArtifactRendererProps> = memo(
     const { isValid, sanitizedContent, errorMessage } = useMemo(() => {
       try {
         if (!isValidSvg(artifact.content)) {
-          const msg = "SVG 内容格式无效，请检查是否为有效的 SVG 代码";
+          const msg = t("errors.svgRenderer.error.invalidContent", {
+            defaultValue: "SVG 内容格式无效，请检查是否为有效的 SVG 代码",
+          });
           console.error("[SvgRenderer] Error:", msg);
           return {
             isValid: false,
@@ -319,7 +338,12 @@ export const SvgRenderer: React.FC<ArtifactRendererProps> = memo(
           errorMessage: null,
         };
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "SVG 处理失败";
+        const msg =
+          err instanceof Error
+            ? err.message
+            : t("errors.svgRenderer.error.processingFailed", {
+                defaultValue: "SVG 处理失败",
+              });
         console.error("[SvgRenderer] Error processing SVG:", msg, err);
         return {
           isValid: false,
@@ -327,7 +351,7 @@ export const SvgRenderer: React.FC<ArtifactRendererProps> = memo(
           errorMessage: msg,
         };
       }
-    }, [artifact.content]);
+    }, [artifact.content, t]);
 
     /**
      * 创建用于源码视图的 artifact 对象
@@ -346,19 +370,55 @@ export const SvgRenderer: React.FC<ArtifactRendererProps> = memo(
         {/* 工具栏 */}
         <div className="flex items-center gap-3 px-3 py-2 border-b border-gray-200 bg-gray-50">
           {/* 视图模式切换 */}
-          <ViewModeToggle value={viewMode} onChange={setViewMode} />
+          <ViewModeToggle
+            value={viewMode}
+            onChange={setViewMode}
+            copy={{
+              previewLabel: t("errors.svgRenderer.view.preview", {
+                defaultValue: "预览",
+              }),
+              previewTitle: t("errors.svgRenderer.view.previewTitle", {
+                defaultValue: "预览模式",
+              }),
+              sourceLabel: t("errors.svgRenderer.view.source", {
+                defaultValue: "源码",
+              }),
+              sourceTitle: t("errors.svgRenderer.view.sourceTitle", {
+                defaultValue: "源码模式",
+              }),
+            }}
+          />
 
           {/* 缩放控制（仅在预览模式显示） */}
           {viewMode === "preview" && (
             <>
               <div className="w-px h-5 bg-gray-300" />
-              <ZoomControls zoom={zoom} onZoomChange={setZoom} />
+              <ZoomControls
+                zoom={zoom}
+                onZoomChange={setZoom}
+                copy={{
+                  zoomOutTitle: t("errors.svgRenderer.zoom.out", {
+                    defaultValue: "缩小",
+                  }),
+                  zoomInTitle: t("errors.svgRenderer.zoom.in", {
+                    defaultValue: "放大",
+                  }),
+                  fitToViewTitle: t("errors.svgRenderer.zoom.fit", {
+                    defaultValue: "适应视图",
+                  }),
+                }}
+              />
             </>
           )}
 
           {/* 下载按钮 */}
           <div className="ml-auto">
-            <DownloadButton onClick={handleDownload} />
+            <DownloadButton
+              onClick={handleDownload}
+              title={t("errors.svgRenderer.action.download", {
+                defaultValue: "下载 SVG",
+              })}
+            />
           </div>
         </div>
 
@@ -387,7 +447,17 @@ export const SvgRenderer: React.FC<ArtifactRendererProps> = memo(
               </div>
             ) : (
               /* 错误显示 - Requirement 6.6 */
-              <ErrorDisplay message={errorMessage || "SVG 渲染失败"} />
+              <ErrorDisplay
+                message={
+                  errorMessage ||
+                  t("errors.svgRenderer.error.renderFailed", {
+                    defaultValue: "SVG 渲染失败",
+                  })
+                }
+                title={t("errors.svgRenderer.error.renderFailed", {
+                  defaultValue: "SVG 渲染失败",
+                })}
+              />
             )
           ) : (
             /* 源码视图 - 复用 CodeRenderer */
@@ -395,7 +465,13 @@ export const SvgRenderer: React.FC<ArtifactRendererProps> = memo(
           )}
 
           {/* 流式指示器 */}
-          {isStreaming && <StreamingIndicator />}
+          {isStreaming && (
+            <StreamingIndicator
+              label={t("errors.svgRenderer.status.streaming", {
+                defaultValue: "生成中...",
+              })}
+            />
+          )}
         </div>
       </div>
     );

@@ -71,7 +71,7 @@ pub struct AgentContextTraceStep {
     pub detail: String,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct AgentContextBudget {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub used_tokens: Option<u32>,
@@ -85,7 +85,7 @@ pub struct AgentContextBudget {
     pub source: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentMissingContextFact {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
@@ -98,7 +98,7 @@ pub struct AgentMissingContextFact {
     pub source: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentRetrievalRef {
     pub source_id: String,
     pub kind: String,
@@ -118,7 +118,7 @@ pub struct AgentRetrievalRef {
     pub source: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentTeamMemoryRef {
     pub key: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -131,7 +131,7 @@ pub struct AgentTeamMemoryRef {
     pub source: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct AgentTurnContextSummary {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub memory_budget: Option<AgentContextBudget>,

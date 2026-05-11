@@ -47,6 +47,18 @@ pub fn scan_installed_skills(skills_dir: &Path) -> Vec<String> {
     skills
 }
 
+fn scan_installed_skills_from_roots(skill_roots: &[PathBuf]) -> Vec<String> {
+    let mut skills = Vec::new();
+    for root in skill_roots {
+        for directory in scan_installed_skills(root) {
+            if !skills.contains(&directory) {
+                skills.push(directory);
+            }
+        }
+    }
+    skills
+}
+
 fn get_skills_dir(app_type: &AppType) -> Result<PathBuf, String> {
     match app_type {
         AppType::Lime => app_paths::resolve_skills_dir(),
@@ -90,6 +102,38 @@ fn validate_skill_directory(directory: &str) -> Result<(), String> {
     match first {
         Component::Normal(_) => Ok(()),
         _ => Err("Invalid skill directory".to_string()),
+    }
+}
+
+fn validate_remote_skill_directory(directory: &str) -> Result<(), String> {
+    let directory = directory.trim();
+    if directory.is_empty() {
+        return Err("Skill directory is required".to_string());
+    }
+
+    if directory.contains("..")
+        || directory.contains('\\')
+        || directory.starts_with('/')
+        || directory.starts_with("./")
+        || directory.ends_with("/.")
+        || directory.contains("/./")
+        || directory.split('/').any(str::is_empty)
+    {
+        return Err("Invalid skill directory".to_string());
+    }
+
+    let mut has_component = false;
+    for component in Path::new(directory).components() {
+        match component {
+            Component::Normal(_) => has_component = true,
+            _ => return Err("Invalid skill directory".to_string()),
+        }
+    }
+
+    if has_component {
+        Ok(())
+    } else {
+        Err("Skill directory is required".to_string())
     }
 }
 
@@ -493,7 +537,7 @@ pub struct ImportedSkillResult {
 
 /// 获取已安装的 Lime Skills 目录列表
 ///
-/// 扫描 Lime Skills 目录，返回包含 SKILL.md 的子目录名列表。
+/// 扫描 Lime 可发现的 provider Skills 根目录，返回包含 SKILL.md 的子目录名列表。
 /// 这些 Skills 将被传递给 aster 用于 AI Agent 功能。
 ///
 /// # Returns
@@ -501,8 +545,8 @@ pub struct ImportedSkillResult {
 /// - `Err(String)`: 错误信息
 #[tauri::command]
 pub async fn get_installed_lime_skills() -> Result<Vec<String>, String> {
-    let skills_dir = get_skills_dir(&AppType::Lime)?;
-    Ok(scan_installed_skills(&skills_dir))
+    let skill_roots = get_skill_lookup_roots(&AppType::Lime)?;
+    Ok(scan_installed_skills_from_roots(&skill_roots))
 }
 
 /// 获取本地已安装 Skill 的标准检查结果
@@ -579,7 +623,7 @@ pub async fn inspect_remote_skill(
     branch: String,
     directory: String,
 ) -> Result<SkillPackageInspection, String> {
-    validate_skill_directory(&directory)?;
+    validate_remote_skill_directory(&directory)?;
     skill_service
         .0
         .inspect_remote_skill(&owner, &name, &branch, &directory)
@@ -954,6 +998,30 @@ mod tests {
     }
 
     #[test]
+    fn test_scan_installed_skills_from_roots_deduplicates_provider_roots() {
+        let temp_dir = TempDir::new().unwrap();
+        let agents_root = temp_dir.path().join(".agents").join("skills");
+        let claude_root = temp_dir.path().join(".claude").join("skills");
+
+        for skill_dir in [
+            agents_root.join("shared-skill"),
+            claude_root.join("shared-skill"),
+            claude_root.join("claude-only"),
+        ] {
+            std::fs::create_dir_all(&skill_dir).unwrap();
+            std::fs::write(skill_dir.join("SKILL.md"), "# Test Skill").unwrap();
+        }
+
+        let discovered =
+            scan_installed_skills_from_roots(&[agents_root.clone(), claude_root.clone()]);
+        let discovered_set: HashSet<_> = discovered.into_iter().collect();
+
+        assert_eq!(discovered_set.len(), 2);
+        assert!(discovered_set.contains("shared-skill"));
+        assert!(discovered_set.contains("claude-only"));
+    }
+
+    #[test]
     fn test_inspect_local_skill_success() {
         let temp_dir = TempDir::new().unwrap();
         let skills_dir = temp_dir.path().join("skills");
@@ -993,6 +1061,22 @@ content"#,
 
         let err = inspect_local_skill(&[skills_dir.clone()], "../outside").unwrap_err();
         assert!(err.contains("Invalid skill directory"));
+    }
+
+    #[test]
+    fn test_validate_remote_skill_directory_accepts_anthropic_nested_path() {
+        assert!(validate_remote_skill_directory("skills/docx").is_ok());
+        assert!(validate_remote_skill_directory("docx").is_ok());
+    }
+
+    #[test]
+    fn test_validate_remote_skill_directory_rejects_traversal() {
+        assert!(validate_remote_skill_directory("../docx").is_err());
+        assert!(validate_remote_skill_directory("skills/../docx").is_err());
+        assert!(validate_remote_skill_directory("skills\\docx").is_err());
+        assert!(validate_remote_skill_directory("/skills/docx").is_err());
+        assert!(validate_remote_skill_directory("skills//docx").is_err());
+        assert!(validate_remote_skill_directory("skills/./docx").is_err());
     }
 
     #[test]

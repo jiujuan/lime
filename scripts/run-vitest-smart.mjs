@@ -23,7 +23,6 @@ const serialTestFiles = new Set([
   "src/components/agent/chat/index.test.tsx",
   "src/components/agent/chat/hooks/useAsterAgentChat.test.tsx",
   "src/components/workspace/WorkbenchPage.test.tsx",
-  "src/components/plugins/PluginManager.test.tsx",
   "src/components/agent/chat/components/HarnessStatusPanel.test.tsx",
   "src/components/agent/chat/components/ThemeWorkbenchSidebar.test.tsx",
   "src/components/agent/chat/components/TeamWorkspaceBoard.test.tsx",

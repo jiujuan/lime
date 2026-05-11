@@ -99,13 +99,13 @@ function SkillDetailHeader({ skill }: { skill: SkillDetailInfo }) {
   const { t } = useTranslation("agent");
   const ModeIcon = EXECUTION_MODE_ICONS[skill.execution_mode] || Zap;
   const executionModeLabels = {
-    agent: t("skills.executionDialog.mode.agent", "Agent 模式"),
-    prompt: t("skills.executionDialog.mode.prompt", "提示词模式"),
-    workflow: t("skills.executionDialog.mode.workflow", "工作流模式"),
+    agent: t("skills.executionDialog.mode.agent"),
+    prompt: t("skills.executionDialog.mode.prompt"),
+    workflow: t("skills.executionDialog.mode.workflow"),
   } satisfies Record<keyof typeof EXECUTION_MODE_ICONS, string>;
   const modeLabel =
     executionModeLabels[skill.execution_mode] ??
-    t("skills.executionDialog.mode.unknown", "未知模式");
+    t("skills.executionDialog.mode.unknown");
 
   return (
     <div className="space-y-2">
@@ -114,7 +114,7 @@ function SkillDetailHeader({ skill }: { skill: SkillDetailInfo }) {
         <span className="text-sm text-muted-foreground">{modeLabel}</span>
         {skill.has_workflow && (
           <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-            {t("skills.executionDialog.workflowBadge", "包含工作流")}
+            {t("skills.executionDialog.workflowBadge")}
           </span>
         )}
       </div>
@@ -124,7 +124,6 @@ function SkillDetailHeader({ skill }: { skill: SkillDetailInfo }) {
       {skill.argument_hint && (
         <p className="text-xs text-muted-foreground italic">
           {t("skills.executionDialog.argumentHint", {
-            defaultValue: "提示: {{hint}}",
             hint: skill.argument_hint,
           })}
         </p>
@@ -163,14 +162,14 @@ function ExecutionResultDisplay({
           <>
             <CheckCircle2 className="h-5 w-5 text-green-600" />
             <span className="font-medium text-green-700">
-              {t("skills.executionDialog.result.success", "执行成功")}
+              {t("skills.executionDialog.result.success")}
             </span>
           </>
         ) : (
           <>
             <XCircle className="h-5 w-5 text-red-600" />
             <span className="font-medium text-red-700">
-              {t("skills.executionDialog.result.failed", "执行失败")}
+              {t("skills.executionDialog.result.failed")}
             </span>
           </>
         )}
@@ -179,7 +178,7 @@ function ExecutionResultDisplay({
       {displayOutput && (
         <div className="mt-2">
           <p className="text-xs font-medium text-muted-foreground mb-1">
-            {t("skills.executionDialog.result.output", "输出:")}
+            {t("skills.executionDialog.result.output")}
           </p>
           <pre className="text-sm whitespace-pre-wrap bg-background/50 rounded p-2 max-h-48 overflow-auto">
             {displayOutput}
@@ -356,13 +355,13 @@ export function SkillExecutionDialog({
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>
-              {t("skills.executionDialog.loadFailed.title", "加载失败")}
+              {t("skills.executionDialog.loadFailed.title")}
             </DialogTitle>
             <DialogDescription>{loadError}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => onOpenChange(false)}>
-              {t("skills.executionDialog.action.close", "关闭")}
+              {t("skills.executionDialog.action.close")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -378,7 +377,7 @@ export function SkillExecutionDialog({
           <DialogTitle>{skillDetail?.display_name || skillName}</DialogTitle>
           <DialogDescription>
             {skillDetail?.description ||
-              t("skills.executionDialog.descriptionFallback", "执行此 Skill")}
+              t("skills.executionDialog.descriptionFallback")}
           </DialogDescription>
         </DialogHeader>
 
@@ -389,14 +388,11 @@ export function SkillExecutionDialog({
           {/* 用户输入 */}
           <div className="space-y-2">
             <Label htmlFor="user-input">
-              {t("skills.executionDialog.input.label", "输入内容")}
+              {t("skills.executionDialog.input.label")}
             </Label>
             <Textarea
               id="user-input"
-              placeholder={t(
-                "skills.executionDialog.input.placeholder",
-                "请输入要处理的内容...",
-              )}
+              placeholder={t("skills.executionDialog.input.placeholder")}
               value={userInput}
               onChange={(e) => setUserInput(e.target.value)}
               disabled={isExecuting}
@@ -406,9 +402,7 @@ export function SkillExecutionDialog({
 
           {/* Provider 选择 */}
           <div className="space-y-2">
-            <Label>
-              {t("skills.executionDialog.provider.label", "Provider 选择")}
-            </Label>
+            <Label>{t("skills.executionDialog.provider.label")}</Label>
             <Select
               value={selectedProvider}
               onValueChange={setSelectedProvider}
@@ -416,15 +410,12 @@ export function SkillExecutionDialog({
             >
               <SelectTrigger>
                 <SelectValue
-                  placeholder={t(
-                    "skills.executionDialog.provider.auto",
-                    "自动选择",
-                  )}
+                  placeholder={t("skills.executionDialog.provider.auto")}
                 />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="">
-                  {t("skills.executionDialog.provider.auto", "自动选择")}
+                  {t("skills.executionDialog.provider.auto")}
                 </SelectItem>
                 {PROVIDER_OPTIONS.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
@@ -434,19 +425,14 @@ export function SkillExecutionDialog({
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              {t(
-                "skills.executionDialog.provider.helper",
-                "留空将根据 Skill 配置和可用凭证自动选择",
-              )}
+              {t("skills.executionDialog.provider.helper")}
             </p>
           </div>
 
           {/* 工作流进度 */}
           {skillDetail?.has_workflow && skillDetail.workflow_steps && (
             <div className="space-y-2">
-              <Label>
-                {t("skills.executionDialog.progress.label", "执行进度")}
-              </Label>
+              <Label>{t("skills.executionDialog.progress.label")}</Label>
               <WorkflowProgress
                 steps={skillDetail.workflow_steps}
                 currentStepId={currentStep}
@@ -464,9 +450,7 @@ export function SkillExecutionDialog({
           {isExecuting && !skillDetail?.has_workflow && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span>
-                {t("skills.executionDialog.status.executing", "正在执行...")}
-              </span>
+              <span>{t("skills.executionDialog.status.executing")}</span>
             </div>
           )}
 
@@ -484,8 +468,8 @@ export function SkillExecutionDialog({
             disabled={isExecuting}
           >
             {executionResult
-              ? t("skills.executionDialog.action.close", "关闭")
-              : t("skills.executionDialog.action.cancel", "取消")}
+              ? t("skills.executionDialog.action.close")
+              : t("skills.executionDialog.action.cancel")}
           </Button>
           <Button
             onClick={handleExecute}
@@ -494,17 +478,17 @@ export function SkillExecutionDialog({
             {isExecuting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {t("skills.executionDialog.action.executing", "执行中...")}
+                {t("skills.executionDialog.action.executing")}
               </>
             ) : executionResult ? (
               <>
                 <Play className="mr-2 h-4 w-4" />
-                {t("skills.executionDialog.action.retry", "重新执行")}
+                {t("skills.executionDialog.action.retry")}
               </>
             ) : (
               <>
                 <Play className="mr-2 h-4 w-4" />
-                {t("skills.executionDialog.action.execute", "执行")}
+                {t("skills.executionDialog.action.execute")}
               </>
             )}
           </Button>

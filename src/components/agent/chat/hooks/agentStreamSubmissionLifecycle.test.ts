@@ -181,4 +181,86 @@ describe("agentStreamSubmissionLifecycle", () => {
     }
     expect(threadItems[0].text).toContain("失败");
   });
+
+  it("轻量瞬态运行状态不应创建思考/进展卡", () => {
+    const assistantMsg: Message = {
+      id: "assistant-fast",
+      role: "assistant",
+      content: "",
+      timestamp: new Date("2026-03-27T01:00:00.000Z"),
+      isThinking: true,
+      contentParts: [],
+      runtimeStatus: buildWaitingAgentRuntimeStatus({
+        executionStrategy: "react",
+        webSearch: false,
+        thinking: false,
+      }),
+    };
+
+    let activeStream: ActiveStreamState | null = null;
+    let messages: Message[] = [assistantMsg];
+    let queuedTurns: QueuedTurnSnapshot[] = [];
+    let threadItems: AgentThreadItem[] = [];
+    let threadTurns: AgentThreadTurn[] = [];
+    let currentTurnId: string | null = null;
+
+    const lifecycle = createAgentStreamSubmissionLifecycle({
+      assistantMsg,
+      assistantMsgId: assistantMsg.id,
+      userMsgId: "user-fast",
+      content: "只回答 OK",
+      expectingQueue: false,
+      runtimeStatusPresentation: "transient",
+      initialThreadId: "local-thread:assistant-fast",
+      listenerMapRef: { current: new Map() },
+      setActiveStream: (next) => {
+        activeStream = next;
+      },
+      setMessages: createStateSetter(
+        () => messages,
+        (value) => {
+          messages = value;
+        },
+      ),
+      setQueuedTurns: createStateSetter(
+        () => queuedTurns,
+        (value) => {
+          queuedTurns = value;
+        },
+      ),
+      setThreadItems: createStateSetter(
+        () => threadItems,
+        (value) => {
+          threadItems = value;
+        },
+      ),
+      setThreadTurns: createStateSetter(
+        () => threadTurns,
+        (value) => {
+          threadTurns = value;
+        },
+      ),
+      setCurrentTurnId: createStateSetter(
+        () => currentTurnId,
+        (value) => {
+          currentTurnId = value;
+        },
+      ),
+    });
+
+    expect(threadTurns).toHaveLength(1);
+    expect(threadItems).toHaveLength(0);
+
+    const runtimeStatus = buildWaitingAgentRuntimeStatus({
+      executionStrategy: "react",
+      webSearch: false,
+      thinking: false,
+    });
+    lifecycle.activateStream("session-fast", runtimeStatus);
+
+    expect(activeStream?.sessionId).toBe("session-fast");
+    expect(messages[0]?.runtimeStatus).toEqual(runtimeStatus);
+    expect(threadTurns[0]?.thread_id).toBe("session-fast");
+    expect(threadItems).toHaveLength(0);
+  });
 });

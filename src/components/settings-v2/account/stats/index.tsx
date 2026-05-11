@@ -70,12 +70,10 @@ function formatTime(
     return t("settings.stats.duration.hoursMinutes", {
       hours,
       minutes: mins,
-      defaultValue: "{{hours}}h {{minutes}}m",
     });
   }
   return t("settings.stats.duration.minutes", {
     minutes,
-    defaultValue: "{{minutes}}m",
   });
 }
 
@@ -142,7 +140,6 @@ function SegmentCard({
           <WorkbenchInfoTip
             ariaLabel={t("settings.stats.segment.tipAria", {
               title,
-              defaultValue: "{{title}}区段说明",
             })}
             content={description}
             tone="slate"
@@ -150,7 +147,6 @@ function SegmentCard({
           <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500">
             {t("settings.stats.segment.messages", {
               count: messages,
-              defaultValue: "{{count}} 条消息",
             })}
           </span>
         </div>
@@ -159,19 +155,16 @@ function SegmentCard({
           <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
             {t("settings.stats.segment.conversations", {
               count: conversations,
-              defaultValue: "对话：{{count}}",
             })}
           </span>
           <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
             {t("settings.stats.segment.tokens", {
               tokens: formatCompactNumber(tokens, i18n.language),
-              defaultValue: "Token：{{tokens}}",
             })}
           </span>
           <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
             {t("settings.stats.segment.duration", {
               duration: formatTime(minutes, t),
-              defaultValue: "时长：{{duration}}",
             })}
           </span>
         </div>
@@ -190,40 +183,11 @@ export function StatsSettings() {
   const [timeRange, setTimeRange] = useState<TimeRange>("month");
   const timeRangeOptions = TIME_RANGE_OPTIONS.map((option) => ({
     ...option,
-    label: t(`settings.stats.range.${option.key}.label`, {
-      defaultValue:
-        option.key === "week"
-          ? "本周"
-          : option.key === "month"
-            ? "本月"
-            : "全部",
-    }),
-    description: t(`settings.stats.range.${option.key}.description`, {
-      defaultValue:
-        option.key === "week"
-          ? "聚焦最近 7 天的使用波动。"
-          : option.key === "month"
-            ? "观察近 30 天的日常使用节奏。"
-            : "回看累计使用规模与长期趋势。",
-    }),
+    label: t(`settings.stats.range.${option.key}.label`),
+    description: t(`settings.stats.range.${option.key}.description`),
   }));
   const weekdayLabels = WEEKDAY_KEYS.map((key) =>
-    t(`settings.stats.weekday.${key}`, {
-      defaultValue:
-        key === "sun"
-          ? "日"
-          : key === "mon"
-            ? "一"
-            : key === "tue"
-              ? "二"
-              : key === "wed"
-                ? "三"
-                : key === "thu"
-                  ? "四"
-                  : key === "fri"
-                    ? "五"
-                    : "六",
-    }),
+    t(`settings.stats.weekday.${key}`),
   );
 
   const loadStats = useCallback(async () => {
@@ -242,11 +206,7 @@ export function StatsSettings() {
       setDailyUsage(trends);
     } catch (e) {
       console.error("加载统计数据失败:", e);
-      setError(
-        e instanceof Error
-          ? e.message
-          : t("settings.stats.error.load", "加载统计数据失败"),
-      );
+      setError(e instanceof Error ? e.message : t("settings.stats.error.load"));
       setStats(null);
       setModelUsage([]);
       setDailyUsage([]);
@@ -288,9 +248,8 @@ export function StatsSettings() {
     ? t("settings.stats.peakDay.value", {
         date: formatShortDate(peakDay.date, i18n.language),
         tokens: formatCompactNumber(peakDay.tokens, i18n.language),
-        defaultValue: "{{date}} · {{tokens}} Token",
       })
-    : t("settings.stats.empty.noData", "暂无数据");
+    : t("settings.stats.empty.noData");
   const chartGuideValues =
     maxDailyTokens > 0
       ? [1, 0.75, 0.5, 0.25, 0].map((ratio) =>
@@ -308,9 +267,8 @@ export function StatsSettings() {
             heatmapDays[heatmapDays.length - 1].date,
             i18n.language,
           ),
-          defaultValue: "{{start}} - {{end}}",
         })
-      : t("settings.stats.empty.noActivity", "暂无活跃记录");
+      : t("settings.stats.empty.noActivity");
   const heatmapCells: Array<DailyUsage | null> = [
     ...Array.from({ length: Math.max(35 - heatmapDays.length, 0) }, () => null),
     ...heatmapDays,
@@ -346,7 +304,7 @@ export function StatsSettings() {
             onClick={loadStats}
             className="rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 transition hover:border-rose-300 hover:bg-rose-50"
           >
-            {t("settings.stats.action.reload", "重新加载")}
+            {t("settings.stats.action.reload")}
           </button>
         </div>
       )}
@@ -356,22 +314,16 @@ export function StatsSettings() {
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-[24px] font-semibold tracking-tight text-slate-900">
-                {t("settings.stats.hero.title", "数据统计")}
+                {t("settings.stats.hero.title")}
               </h1>
               <WorkbenchInfoTip
-                ariaLabel={t("settings.stats.hero.tipAria", "使用统计总览说明")}
-                content={t(
-                  "settings.stats.hero.tip",
-                  "管理当前区间的 Token 消耗、活跃天数、模型分布和趋势观察。",
-                )}
+                ariaLabel={t("settings.stats.hero.tipAria")}
+                content={t("settings.stats.hero.tip")}
                 tone="mint"
               />
             </div>
             <p className="text-sm text-slate-500">
-              {t(
-                "settings.stats.hero.subtitle",
-                "查看当前区间的使用强度、模型分布和趋势。",
-              )}
+              {t("settings.stats.hero.subtitle")}
             </p>
           </div>
 
@@ -399,7 +351,7 @@ export function StatsSettings() {
               className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-70"
             >
               <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-              {t("settings.stats.action.refresh", "刷新数据")}
+              {t("settings.stats.action.refresh")}
             </button>
           </div>
         </div>
@@ -410,71 +362,52 @@ export function StatsSettings() {
               <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500">
                 {t("settings.stats.summary.range", {
                   range: selectedRange.label,
-                  defaultValue: "当前统计口径：{{range}}",
                 })}
               </span>
               <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500">
                 {t("settings.stats.summary.activeDays", {
                   count: activeDays,
-                  defaultValue: "活跃 {{count}} 天",
                 })}
               </span>
               <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500">
                 {t("settings.stats.summary.averageTokens", {
-                  tokens: formatCompactNumber(averageDailyTokens, i18n.language),
-                  defaultValue: "日均 {{tokens}} Token",
+                  tokens: formatCompactNumber(
+                    averageDailyTokens,
+                    i18n.language,
+                  ),
                 })}
               </span>
               <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500">
                 {t("settings.stats.summary.rangeTokens", {
                   tokens: formatCompactNumber(totalRangeTokens, i18n.language),
-                  defaultValue: "当前区间 {{tokens}} Token",
                 })}
               </span>
             </div>
 
             <div className="flex flex-wrap items-center gap-2 text-xs leading-5 text-slate-500">
-              <span>{t("settings.stats.observation.title", "当前观察")}</span>
+              <span>{t("settings.stats.observation.title")}</span>
               <WorkbenchInfoTip
-                ariaLabel={t(
-                  "settings.stats.observation.tipAria",
-                  "当前观察说明",
-                )}
-                content={t(
-                  "settings.stats.observation.tip",
-                  "用一个摘要面板快速查看这段时间的主要节奏。",
-                )}
+                ariaLabel={t("settings.stats.observation.tipAria")}
+                content={t("settings.stats.observation.tip")}
                 tone="slate"
               />
               <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500">
                 {t("settings.stats.observation.topModel", {
-                  model:
-                    topModel?.model ||
-                    t("settings.stats.empty.noData", "暂无数据"),
-                  defaultValue: "主力模型：{{model}}",
+                  model: topModel?.model || t("settings.stats.empty.noData"),
                 })}
               </span>
               <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500">
                 {t("settings.stats.observation.peak", {
                   peak: peakDayLabel,
-                  defaultValue: "峰值：{{peak}}",
                 })}
               </span>
             </div>
           </div>
 
           <div className="flex items-center gap-2 text-xs leading-5 text-slate-500">
-            <span>
-              {t(
-                "settings.stats.summary.rangeTipInline",
-                "当前统计口径说明已收纳",
-              )}
-            </span>
+            <span>{t("settings.stats.summary.rangeTipInline")}</span>
             <WorkbenchInfoTip
-              ariaLabel={t(
-                "settings.stats.summary.rangeTipAria",
-                "当前统计口径说明",
-              )}
+              ariaLabel={t("settings.stats.summary.rangeTipAria")}
               content={selectedRange.description}
               tone="slate"
             />
@@ -490,16 +423,10 @@ export function StatsSettings() {
                 <div>
                   <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                     <BarChart3 className="h-4 w-4 text-sky-600" />
-                    {t("settings.stats.overview.title", "阶段概览")}
+                    {t("settings.stats.overview.title")}
                     <WorkbenchInfoTip
-                      ariaLabel={t(
-                        "settings.stats.overview.tipAria",
-                        "阶段概览说明",
-                      )}
-                      content={t(
-                        "settings.stats.overview.tip",
-                        "按今日、本月与累计三个区段拆解对话量、Token 消耗和估算时长。",
-                      )}
+                      ariaLabel={t("settings.stats.overview.tipAria")}
+                      content={t("settings.stats.overview.tip")}
                       tone="slate"
                     />
                   </div>
@@ -507,18 +434,14 @@ export function StatsSettings() {
                 <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
                   {t("settings.stats.overview.segmentCount", {
                     count: 3,
-                    defaultValue: "{{count}} 个区段",
                   })}
                 </span>
               </div>
 
               <div className="mt-5 space-y-4">
                 <SegmentCard
-                  title={t("settings.stats.segment.today.title", "今日")}
-                  description={t(
-                    "settings.stats.segment.today.description",
-                    "快速判断当前是否处于高频使用状态。",
-                  )}
+                  title={t("settings.stats.segment.today.title")}
+                  description={t("settings.stats.segment.today.description")}
                   conversations={stats.today_conversations}
                   messages={stats.today_messages}
                   tokens={stats.today_tokens}
@@ -530,11 +453,8 @@ export function StatsSettings() {
                   accentClassName="border-sky-200 bg-sky-50 text-sky-700"
                 />
                 <SegmentCard
-                  title={t("settings.stats.segment.month.title", "本月")}
-                  description={t(
-                    "settings.stats.segment.month.description",
-                    "观察最近一个月的常态使用节奏。",
-                  )}
+                  title={t("settings.stats.segment.month.title")}
+                  description={t("settings.stats.segment.month.description")}
                   conversations={stats.monthly_conversations}
                   messages={stats.monthly_messages}
                   tokens={stats.monthly_tokens}
@@ -546,11 +466,8 @@ export function StatsSettings() {
                   accentClassName="border-emerald-200 bg-emerald-50 text-emerald-700"
                 />
                 <SegmentCard
-                  title={t("settings.stats.segment.total.title", "累计")}
-                  description={t(
-                    "settings.stats.segment.total.description",
-                    "回看整体使用规模与长期投入。",
-                  )}
+                  title={t("settings.stats.segment.total.title")}
+                  description={t("settings.stats.segment.total.description")}
                   conversations={stats.total_conversations}
                   messages={stats.total_messages}
                   tokens={stats.total_tokens}
@@ -566,16 +483,10 @@ export function StatsSettings() {
                   <div>
                     <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                       <Brain className="h-4 w-4 text-emerald-600" />
-                      {t("settings.stats.models.title", "模型使用排行")}
+                      {t("settings.stats.models.title")}
                       <WorkbenchInfoTip
-                        ariaLabel={t(
-                          "settings.stats.models.tipAria",
-                          "模型使用排行说明",
-                        )}
-                        content={t(
-                          "settings.stats.models.tip",
-                          "查看当前区间内最常使用的模型与使用占比。",
-                        )}
+                        ariaLabel={t("settings.stats.models.tipAria")}
+                        content={t("settings.stats.models.tip")}
                         tone="slate"
                       />
                     </div>
@@ -583,7 +494,6 @@ export function StatsSettings() {
                   <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
                     {t("settings.stats.models.count", {
                       count: modelUsage.length,
-                      defaultValue: "{{count}} 个模型",
                     })}
                   </span>
                 </div>
@@ -596,10 +506,7 @@ export function StatsSettings() {
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-medium text-emerald-700">
-                                {t(
-                                  "settings.stats.models.primaryBadge",
-                                  "#1 主力模型",
-                                )}
+                                {t("settings.stats.models.primaryBadge")}
                               </span>
                               <p className="truncate text-base font-semibold text-slate-900">
                                 {topModel?.model}
@@ -612,8 +519,6 @@ export function StatsSettings() {
                                   topModel?.tokens || 0,
                                   i18n.language,
                                 ),
-                                defaultValue:
-                                  "{{conversations}} 次对话 · {{tokens}} Token",
                               })}
                             </p>
                           </div>
@@ -622,13 +527,11 @@ export function StatsSettings() {
                             <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
                               {t("settings.stats.models.usageShare", {
                                 percent: topModel?.percentage || 0,
-                                defaultValue: "使用占比：{{percent}}%",
                               })}
                             </span>
                             <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
                               {t("settings.stats.models.rank", {
                                 rank: 1,
-                                defaultValue: "排名：#{{rank}}",
                               })}
                             </span>
                           </div>
@@ -671,8 +574,6 @@ export function StatsSettings() {
                                         model.tokens,
                                         i18n.language,
                                       ),
-                                      defaultValue:
-                                        "{{conversations}} 次对话 · {{tokens}} Token",
                                     })}
                                   </p>
                                 </div>
@@ -698,10 +599,7 @@ export function StatsSettings() {
                     </>
                   ) : (
                     <div className="rounded-[20px] border border-dashed border-slate-300 bg-slate-50/60 px-4 py-6 text-sm leading-6 text-slate-500">
-                      {t(
-                        "settings.stats.models.empty",
-                        "当前区间还没有模型使用数据。",
-                      )}
+                      {t("settings.stats.models.empty")}
                     </div>
                   )}
                 </div>
@@ -715,16 +613,11 @@ export function StatsSettings() {
                 <div>
                   <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                     <Coins className="h-4 w-4 text-emerald-600" />
-                    {t("settings.stats.trends.title", "每日使用趋势")}
+                    {t("settings.stats.trends.title")}
                     <WorkbenchInfoTip
-                      ariaLabel={t(
-                        "settings.stats.trends.tipAria",
-                        "每日使用趋势说明",
-                      )}
+                      ariaLabel={t("settings.stats.trends.tipAria")}
                       content={t("settings.stats.trends.tip", {
                         range: selectedRange.label,
-                        defaultValue:
-                          "观察 {{range}} 内每日 Token 波动，识别高峰与低谷。",
                       })}
                       tone="slate"
                     />
@@ -737,7 +630,6 @@ export function StatsSettings() {
                   <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
                     {t("settings.stats.trends.conversations", {
                       count: totalRangeConversations,
-                      defaultValue: "{{count}} 次对话",
                     })}
                   </span>
                 </div>
@@ -749,13 +641,11 @@ export function StatsSettings() {
                     <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
                       {t("settings.stats.trends.peakDay", {
                         peak: peakDayLabel,
-                        defaultValue: "峰值日：{{peak}}",
                       })}
                     </span>
                     <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
                       {t("settings.stats.trends.activeDays", {
                         count: activeDays,
-                        defaultValue: "活跃天数：{{count}}",
                       })}
                     </span>
                     <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
@@ -764,7 +654,6 @@ export function StatsSettings() {
                           averageDailyTokens,
                           i18n.language,
                         ),
-                        defaultValue: "区间均值：{{tokens}}",
                       })}
                     </span>
                   </div>
@@ -840,10 +729,7 @@ export function StatsSettings() {
                 </div>
               ) : (
                 <div className="mt-6 rounded-[22px] border border-dashed border-slate-300 bg-slate-50/60 px-4 py-10 text-center text-sm leading-6 text-slate-500">
-                  {t(
-                    "settings.stats.trends.empty",
-                    "当前区间还没有每日趋势数据。",
-                  )}
+                  {t("settings.stats.trends.empty")}
                 </div>
               )}
             </article>
@@ -853,22 +739,16 @@ export function StatsSettings() {
                 <div>
                   <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                     <CalendarDays className="h-4 w-4 text-sky-600" />
-                    {t("settings.stats.heatmap.title", "活跃度日历")}
+                    {t("settings.stats.heatmap.title")}
                     <WorkbenchInfoTip
-                      ariaLabel={t(
-                        "settings.stats.heatmap.tipAria",
-                        "活跃度日历说明",
-                      )}
-                      content={t(
-                        "settings.stats.heatmap.tip",
-                        "以最近 35 天的活跃热度查看调用分布，颜色越深表示 Token 越多。",
-                      )}
+                      ariaLabel={t("settings.stats.heatmap.tipAria")}
+                      content={t("settings.stats.heatmap.tip")}
                       tone="slate"
                     />
                   </div>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-slate-500">
-                  <span>{t("settings.stats.heatmap.less", "少")}</span>
+                  <span>{t("settings.stats.heatmap.less")}</span>
                   <div className="flex gap-1">
                     <div className="h-3 w-3 rounded-sm bg-emerald-100" />
                     <div className="h-3 w-3 rounded-sm bg-emerald-200" />
@@ -876,7 +756,7 @@ export function StatsSettings() {
                     <div className="h-3 w-3 rounded-sm bg-emerald-400" />
                     <div className="h-3 w-3 rounded-sm bg-emerald-500" />
                   </div>
-                  <span>{t("settings.stats.heatmap.more", "多")}</span>
+                  <span>{t("settings.stats.heatmap.more")}</span>
                 </div>
               </div>
 
@@ -885,13 +765,11 @@ export function StatsSettings() {
                   <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
                     {t("settings.stats.heatmap.range", {
                       range: heatmapRangeLabel,
-                      defaultValue: "覆盖范围：{{range}}",
                     })}
                   </span>
                   <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
                     {t("settings.stats.heatmap.activeCells", {
                       count: activeDays,
-                      defaultValue: "有效活跃格：{{count}}",
                     })}
                   </span>
                 </div>
@@ -938,7 +816,7 @@ export function StatsSettings() {
         </>
       ) : (
         <article className="rounded-[26px] border border-dashed border-slate-300 bg-white/80 px-6 py-12 text-center text-sm leading-6 text-slate-500 shadow-sm shadow-slate-950/5">
-          {t("settings.stats.empty.noStats", "还没有可展示的统计数据。")}
+          {t("settings.stats.empty.noStats")}
         </article>
       )}
     </div>

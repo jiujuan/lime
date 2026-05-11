@@ -1,39 +1,16 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
-const { mockGetConfig, mockSaveConfig, mockUseTranslation } = vi.hoisted(
-  () => ({
-    mockGetConfig: vi.fn(),
-    mockSaveConfig: vi.fn(),
-    mockUseTranslation: vi.fn((_namespace?: string) => ({
-      t: (key: string, options?: unknown) => {
-        if (typeof options === "string") {
-          return options;
-        }
-
-        if (options && typeof options === "object") {
-          const values = options as Record<string, unknown>;
-          const template =
-            typeof values.defaultValue === "string" ? values.defaultValue : key;
-          return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-            String(values[name] ?? ""),
-          );
-        }
-
-        return key;
-      },
-    })),
-  }),
-);
+const { mockGetConfig, mockSaveConfig } = vi.hoisted(() => ({
+  mockGetConfig: vi.fn(),
+  mockSaveConfig: vi.fn(),
+}));
 
 vi.mock("@/lib/api/appConfig", () => ({
   getConfig: mockGetConfig,
   saveConfig: mockSaveConfig,
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
 }));
 
 vi.mock("@/components/input-kit", () => ({
@@ -47,11 +24,11 @@ vi.mock("@/components/input-kit", () => ({
     placeholderLabel?: string;
   }) => {
     const providerLabel =
-      providerType === "doubao-video" ? "豆包视频" : providerType;
+      providerType === "doubao-video" ? "Doubao Video" : providerType;
     return (
       <div data-testid="video-model-selector">
-        {providerLabel || placeholderLabel || "自动选择"} /{" "}
-        {model || placeholderLabel || "自动选择"}
+        {providerLabel || placeholderLabel || "Auto select"} /{" "}
+        {model || placeholderLabel || "Auto select"}
       </div>
     );
   },
@@ -63,7 +40,7 @@ vi.mock("@/hooks/useApiKeyProvider", () => ({
       {
         id: "doubao-video",
         type: "openai",
-        name: "豆包视频",
+        name: "Doubao Video",
         enabled: true,
         api_key_count: 1,
         custom_models: ["seedance-1-5-pro-251215"],
@@ -136,7 +113,7 @@ function findButton(container: HTMLElement, text: string): HTMLButtonElement {
   return target as HTMLButtonElement;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -144,6 +121,7 @@ beforeEach(() => {
   ).IS_REACT_ACT_ENVIRONMENT = true;
 
   vi.clearAllMocks();
+  await changeLimeLocale("en-US");
 
   mockGetConfig.mockResolvedValue({
     workspace_preferences: {
@@ -159,7 +137,7 @@ beforeEach(() => {
   mockSaveConfig.mockResolvedValue(undefined);
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mounted.length > 0) {
     const target = mounted.pop();
     if (!target) break;
@@ -169,6 +147,7 @@ afterEach(() => {
     target.container.remove();
   }
   vi.clearAllMocks();
+  await changeLimeLocale("zh-CN");
 });
 
 describe("VideoGenSettings", () => {
@@ -176,9 +155,8 @@ describe("VideoGenSettings", () => {
     const container = renderComponent();
     await flushEffects(3);
 
-    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
-    expect(container.textContent).toContain("视频服务模型");
-    expect(container.textContent).toContain("豆包视频");
+    expect(container.textContent).toContain("Video Service Model");
+    expect(container.textContent).toContain("Doubao Video");
     expect(container.textContent).toContain("seedance-1-5-pro-251215");
     expect(container.textContent).not.toContain("全局默认视频服务");
   });
@@ -193,16 +171,19 @@ describe("VideoGenSettings", () => {
     expect(getBodyText()).not.toContain(
       "关闭后，若当前默认视频服务缺失、被禁用或无可用 Key，将直接提示错误。",
     );
+    expect(getBodyText()).not.toContain("settings.mediaGeneration");
 
-    const sectionTip = await hoverTip("视频服务模型说明");
+    const sectionTip = await hoverTip("Video Service Model info");
     expect(getBodyText()).toContain(
-      "这里配置视频任务的默认 Provider、模型与回退策略，保持和图片、语音一致的简洁设置结构。",
+      "Configure the default Provider, model, and fallback policy for video tasks while keeping the same simple structure as image and voice.",
     );
     await leaveTip(sectionTip);
 
-    const fallbackTip = await hoverTip("Provider 不可用时自动回退说明");
+    const fallbackTip = await hoverTip(
+      "Auto fallback when Provider is unavailable info",
+    );
     expect(getBodyText()).toContain(
-      "关闭后，若当前默认视频服务缺失、被禁用或无可用 Key，将直接提示错误。",
+      "When disabled, Lime shows an error if the default video service is missing, disabled, or has no usable key.",
     );
     await leaveTip(fallbackTip);
   });
@@ -212,7 +193,7 @@ describe("VideoGenSettings", () => {
     await flushEffects(3);
 
     await act(async () => {
-      findButton(container, "恢复默认").click();
+      findButton(container, "Restore defaults").click();
       await flushEffects(2);
     });
 
@@ -221,6 +202,6 @@ describe("VideoGenSettings", () => {
     expect(
       savedConfig.workspace_preferences.media_defaults.video,
     ).toBeUndefined();
-    expect(container.textContent).toContain("设置已保存");
+    expect(container.textContent).toContain("Settings saved");
   });
 });

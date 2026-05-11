@@ -441,33 +441,6 @@ describe("WebSearchSettings", () => {
     expect(mockOpen).toHaveBeenCalledWith("https://app.tavily.com/");
   });
 
-  it("插件打开失败时应回退到 window.open", async () => {
-    const consoleErrorSpy = vi
-      .spyOn(console, "error")
-      .mockImplementation(() => {});
-    mockOpen.mockRejectedValueOnce(new Error("plugin failed"));
-    const fallbackSpy = vi.spyOn(window, "open").mockImplementation(() => null);
-
-    try {
-      const container = renderComponent();
-      await flushEffects();
-      await flushEffects();
-
-      await switchTab(container, "图片搜索");
-      await act(async () => {
-        findButton(container, "申请 Pexels Key").click();
-        await flushEffects();
-      });
-
-      expect(fallbackSpy).toHaveBeenCalledWith(
-        "https://www.pexels.com/api/new/",
-        "_blank",
-      );
-    } finally {
-      consoleErrorSpy.mockRestore();
-    }
-  });
-
   it("点击 Pixabay 申请按钮应打开官方页面", async () => {
     const container = renderComponent();
     await flushEffects();

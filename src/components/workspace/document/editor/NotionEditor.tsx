@@ -12,9 +12,7 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import { useTranslation } from "react-i18next";
 import { createExtensions } from "./extensions";
 import { BubbleToolbar } from "./BubbleToolbar";
-import {
-  CommandList,
-} from "./SlashCommand";
+import { CommandList } from "./SlashCommand";
 import type { SlashMenuKeyHandler, SlashMenuState } from "./slashCommandTypes";
 import { markdownToHtml, htmlToMarkdown } from "./utils/markdown";
 import { isInputLatencyDebugEnabled, logRenderPerf } from "@/lib/perfDebug";

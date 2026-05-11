@@ -116,10 +116,9 @@ export function UpdateCheckSettings() {
   const locale = i18n.language;
   const intervalLabel = (hours: number) =>
     hours === 168
-      ? t("settings.experimental.updateCheck.interval.weekly", "每周")
+      ? t("settings.experimental.updateCheck.interval.weekly")
       : t("settings.experimental.updateCheck.interval.hours", {
           hours: formatNumber(hours, { locale }),
-          defaultValue: "{{hours}}小时",
         });
   const formatTimestamp = (timestamp: number) =>
     formatDate(timestamp * 1000, {
@@ -131,31 +130,22 @@ export function UpdateCheckSettings() {
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-medium">
-        {t("settings.experimental.updateCheck.title", "自动更新检查")}
+        {t("settings.experimental.updateCheck.title")}
       </h3>
 
       <div className="space-y-3">
         <div className="flex items-center justify-between p-3 rounded-lg border">
           <div>
             <div className="text-sm font-medium">
-              {t(
-                "settings.experimental.updateCheck.autoCheck.title",
-                "自动检查更新",
-              )}
+              {t("settings.experimental.updateCheck.autoCheck.title")}
             </div>
             <div className="text-xs text-muted-foreground">
-              {t(
-                "settings.experimental.updateCheck.autoCheck.description",
-                "定期检查是否有新版本可用",
-              )}
+              {t("settings.experimental.updateCheck.autoCheck.description")}
             </div>
           </div>
           <button
             type="button"
-            aria-label={t(
-              "settings.experimental.updateCheck.autoCheck.aria",
-              "切换自动检查更新",
-            )}
+            aria-label={t("settings.experimental.updateCheck.autoCheck.aria")}
             onClick={handleToggleEnabled}
             className={`relative w-11 h-6 rounded-full transition-colors ${
               settings.enabled ? switchEnabledClassName : "bg-muted"
@@ -172,23 +162,16 @@ export function UpdateCheckSettings() {
         <div className="flex items-center justify-between p-3 rounded-lg border">
           <div>
             <div className="text-sm font-medium">
-              {t(
-                "settings.experimental.updateCheck.notification.title",
-                "显示更新通知",
-              )}
+              {t("settings.experimental.updateCheck.notification.title")}
             </div>
             <div className="text-xs text-muted-foreground">
-              {t(
-                "settings.experimental.updateCheck.notification.description",
-                "发现新版本时显示弹窗提醒",
-              )}
+              {t("settings.experimental.updateCheck.notification.description")}
             </div>
           </div>
           <button
             type="button"
             aria-label={t(
               "settings.experimental.updateCheck.notification.aria",
-              "切换更新通知",
             )}
             onClick={handleToggleNotification}
             disabled={!settings.enabled}
@@ -206,10 +189,7 @@ export function UpdateCheckSettings() {
 
         <div className="p-3 rounded-lg border">
           <div className="text-sm font-medium mb-2">
-            {t(
-              "settings.experimental.updateCheck.interval.title",
-              "检查间隔",
-            )}
+            {t("settings.experimental.updateCheck.interval.title")}
           </div>
           <div className="flex gap-2">
             {[12, 24, 48, 168].map((hours) => (
@@ -234,10 +214,7 @@ export function UpdateCheckSettings() {
           <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
             <div>
               <div className="text-sm">
-                {t(
-                  "settings.experimental.updateCheck.skippedVersion.title",
-                  "已跳过版本",
-                )}
+                {t("settings.experimental.updateCheck.skippedVersion.title")}
               </div>
               <div className="text-xs text-muted-foreground font-mono">
                 {settings.skipped_version}
@@ -248,7 +225,7 @@ export function UpdateCheckSettings() {
               onClick={handleClearSkipped}
               className="px-3 py-1 rounded-md text-xs bg-muted hover:bg-muted/80 transition-colors"
             >
-              {t("settings.experimental.updateCheck.action.clear", "清除")}
+              {t("settings.experimental.updateCheck.action.clear")}
             </button>
           </div>
         )}
@@ -257,7 +234,6 @@ export function UpdateCheckSettings() {
           <div className="text-xs text-muted-foreground">
             {t("settings.experimental.updateCheck.lastCheck", {
               time: formatTimestamp(settings.last_check_timestamp),
-              defaultValue: "上次检查: {{time}}",
             })}
           </div>
         )}
@@ -267,21 +243,19 @@ export function UpdateCheckSettings() {
             <div className="text-xs text-muted-foreground">
               {t("settings.experimental.updateCheck.remindLaterUntil", {
                 time: formatTimestamp(settings.remind_later_until),
-                defaultValue: "已设置稍后提醒至: {{time}}",
               })}
             </div>
           )}
 
         <div className="p-3 rounded-lg border bg-muted/20 space-y-1">
           <div className="text-sm font-medium">
-            {t("settings.experimental.updateCheck.metrics.title", "提醒转化指标")}
+            {t("settings.experimental.updateCheck.metrics.title")}
           </div>
           <div className="text-xs text-muted-foreground">
             {t("settings.experimental.updateCheck.metrics.updateNow", {
               shown: formatNumber(metrics.shown_count, { locale }),
               updateNow: formatNumber(metrics.update_now_count, { locale }),
               rate: formatNumber(metrics.update_now_rate, { locale }),
-              defaultValue: "展示 {{shown}} 次，立即更新 {{updateNow}} 次（{{rate}}%）",
             })}
           </div>
           <div className="text-xs text-muted-foreground">
@@ -294,15 +268,12 @@ export function UpdateCheckSettings() {
               skipVersionRate: formatNumber(metrics.skip_version_rate, {
                 locale,
               }),
-              defaultValue:
-                "稍后 {{remindLater}} 次（{{remindLaterRate}}%），跳过 {{skipVersion}} 次（{{skipVersionRate}}%）",
             })}
           </div>
           <div className="text-xs text-muted-foreground">
             {t("settings.experimental.updateCheck.metrics.dismiss", {
               dismiss: formatNumber(metrics.dismiss_count, { locale }),
               rate: formatNumber(metrics.dismiss_rate, { locale }),
-              defaultValue: "关闭 {{dismiss}} 次（{{rate}}%）",
             })}
           </div>
         </div>
@@ -320,10 +291,7 @@ export function UpdateCheckSettings() {
             className="flex items-center justify-center gap-1.5 w-full px-3 py-1.5 rounded-lg border border-dashed border-orange-400 text-orange-600 text-xs hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors"
           >
             <Bug className="h-3.5 w-3.5" />
-            {t(
-              "settings.experimental.updateCheck.action.testWindow",
-              "测试更新弹窗",
-            )}
+            {t("settings.experimental.updateCheck.action.testWindow")}
           </button>
         )}
       </div>

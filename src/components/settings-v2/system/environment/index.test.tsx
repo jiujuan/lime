@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 const { mockGetConfig, mockGetEnvironmentPreview, mockSaveConfig } = vi.hoisted(
   () => ({
@@ -10,39 +11,10 @@ const { mockGetConfig, mockGetEnvironmentPreview, mockSaveConfig } = vi.hoisted(
   }),
 );
 
-const { mockUseTranslation } = vi.hoisted(() => {
-  const mockTranslate = vi.fn((key: string, options?: unknown) => {
-    if (typeof options === "string") {
-      return options;
-    }
-
-    if (options && typeof options === "object") {
-      const values = options as Record<string, unknown>;
-      const template =
-        typeof values.defaultValue === "string" ? values.defaultValue : key;
-      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-        String(values[name] ?? ""),
-      );
-    }
-
-    return key;
-  });
-
-  return {
-    mockUseTranslation: vi.fn((_namespace?: string) => ({
-      t: mockTranslate,
-    })),
-  };
-});
-
 vi.mock("@/lib/api/appConfig", () => ({
   getConfig: mockGetConfig,
   getEnvironmentPreview: mockGetEnvironmentPreview,
   saveConfig: mockSaveConfig,
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
 }));
 
 import { EnvironmentSettings } from ".";
@@ -144,7 +116,7 @@ async function setInputValue(input: HTMLInputElement, value: string) {
   });
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -152,6 +124,7 @@ beforeEach(() => {
   ).IS_REACT_ACT_ENVIRONMENT = true;
 
   vi.clearAllMocks();
+  await changeLimeLocale("en-US");
 
   mockGetConfig.mockResolvedValue({
     environment: {
@@ -202,7 +175,7 @@ beforeEach(() => {
   mockSaveConfig.mockResolvedValue(undefined);
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mounted.length > 0) {
     const target = mounted.pop();
     if (!target) {
@@ -216,6 +189,7 @@ afterEach(() => {
   }
 
   vi.clearAllMocks();
+  await changeLimeLocale("zh-CN");
 });
 
 describe("EnvironmentSettings", () => {
@@ -224,16 +198,19 @@ describe("EnvironmentSettings", () => {
     await waitForLoad();
 
     const text = container.textContent ?? "";
-    expect(text).toContain("环境变量");
-    expect(text).toContain("管理 Shell 导入、显式覆盖和最终环境预览。");
-    expect(text).toContain("Shell 导入：已导入");
-    expect(text).toContain("覆盖项：1/1");
-    expect(text).toContain("预览变量：2");
-    expect(text).toContain("Shell 环境导入");
-    expect(text).toContain("环境变量覆盖");
-    expect(text).toContain("合并规则");
-    expect(text).toContain("生效预览");
-    expect(text).toContain("已导入 Shell 环境，共 5 个变量。");
+    expect(text).toContain("Environment Variables");
+    expect(text).toContain(
+      "Manage Shell imports, explicit overrides, and the final environment preview.",
+    );
+    expect(text).toContain("Shell import: Imported");
+    expect(text).toContain("Overrides: 1/1");
+    expect(text).toContain("Preview variables: 2");
+    expect(text).toContain("Shell Environment Import");
+    expect(text).toContain("Environment Overrides");
+    expect(text).toContain("Merge Rules");
+    expect(text).toContain("Effective Preview");
+    expect(text).toContain("Imported 5 variables from the Shell environment.");
+    expect(text).not.toContain("settings.environment");
     expect(findInput(container, "environment-variable-key-0").value).toBe(
       "OPENAI_BASE_URL",
     );
@@ -248,7 +225,7 @@ describe("EnvironmentSettings", () => {
         .length,
     ).toBe(1);
 
-    await clickButton(findButton(container, "添加变量"));
+    await clickButton(findButton(container, "Add variable"));
 
     expect(
       container.querySelectorAll('input[id^="environment-variable-key-"]')
@@ -276,7 +253,7 @@ describe("EnvironmentSettings", () => {
       "2200",
     );
 
-    await clickButton(findButton(container, "保存并应用"));
+    await clickButton(findButton(container, "Save and apply"));
     await waitForLoad();
 
     expect(mockSaveConfig).toHaveBeenCalledTimes(1);
@@ -306,10 +283,12 @@ describe("EnvironmentSettings", () => {
     expect(container.textContent).toContain("sk-live-***");
     expect(container.textContent).not.toContain("sk-live-secret-value");
 
-    await clickButton(findButton(container, "显示值"));
+    await clickButton(findButton(container, "Show values"));
 
     expect(container.textContent).toContain("sk-live-secret-value");
-    expect(container.textContent).toContain("已覆盖来源：Shell 环境导入");
+    expect(container.textContent).toContain(
+      "Overridden sources: Shell environment import",
+    );
   });
 
   it("应把首屏说明和字段 hint 收进 tips", async () => {
@@ -317,18 +296,18 @@ describe("EnvironmentSettings", () => {
     await waitForLoad();
 
     expect(getBodyText()).not.toContain(
-      "管理 Shell 导入、显式覆盖和最终环境预览；敏感值默认保持掩码，减少在设置页误暴露的风险。",
+      "Manage Shell imports, explicit overrides, and the final environment preview. Sensitive values stay masked by default to reduce accidental exposure in Settings.",
     );
 
-    const heroTip = await hoverTip("环境变量设置总览说明");
+    const heroTip = await hoverTip("Environment settings overview");
     expect(getBodyText()).toContain(
-      "管理 Shell 导入、显式覆盖和最终环境预览；敏感值默认保持掩码，减少在设置页误暴露的风险。",
+      "Manage Shell imports, explicit overrides, and the final environment preview. Sensitive values stay masked by default to reduce accidental exposure in Settings.",
     );
     await leaveTip(heroTip);
 
-    const fieldTip = await hoverTip("导入超时（ms）说明");
+    const fieldTip = await hoverTip("Import timeout details");
     expect(getBodyText()).toContain(
-      "超时后会回退为仅使用显式覆盖，不阻塞整体运行。",
+      "If the import times out, Lime falls back to explicit overrides only and does not block the runtime.",
     );
     await leaveTip(fieldTip);
   });

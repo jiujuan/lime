@@ -1,3 +1,5 @@
+import type { AgentTurnContextSummary } from "./agentProtocol";
+
 export type AsterExecutionStrategy = "react" | "code_orchestrated" | "auto";
 export type AsterApprovalPolicy =
   | "never"
@@ -169,6 +171,7 @@ export interface AsterSessionExecutionRuntime {
     | "closed"
     | "not_found"
     | null;
+  context_summary?: AgentTurnContextSummary | null;
   recent_access_mode?: AsterSessionExecutionRuntimeAccessMode | null;
   recent_preferences?: AsterSessionExecutionRuntimePreferences | null;
   recent_team_selection?: AsterSessionExecutionRuntimeRecentTeamSelection | null;

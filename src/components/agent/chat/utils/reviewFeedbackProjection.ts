@@ -33,8 +33,9 @@ export function formatReviewFeedbackTemplate(
   template: string,
   values: Record<string, string>,
 ): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (placeholder, name) =>
-    values[name] ?? placeholder,
+  return template.replace(
+    /\{\{(\w+)\}\}/g,
+    (placeholder, name) => values[name] ?? placeholder,
   );
 }
 

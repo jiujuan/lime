@@ -1,36 +1,11 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import {
   clearWorkspaceRepairHistory,
   recordWorkspaceRepair,
 } from "@/lib/workspaceHealthTelemetry";
-
-const { mockUseTranslation } = vi.hoisted(() => ({
-  mockUseTranslation: vi.fn((_namespace?: string) => ({
-    i18n: { language: "zh-CN" },
-    t: (key: string, options?: unknown) => {
-      if (typeof options === "string") {
-        return options;
-      }
-
-      if (options && typeof options === "object") {
-        const values = options as Record<string, unknown>;
-        const template =
-          typeof values.defaultValue === "string" ? values.defaultValue : key;
-        return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-          String(values[name] ?? ""),
-        );
-      }
-
-      return key;
-    },
-  })),
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
-}));
 
 import { WorkspaceRepairHistoryCard } from "./WorkspaceRepairHistoryCard";
 
@@ -66,7 +41,7 @@ function findButton(container: HTMLElement, text: string): HTMLButtonElement {
   return button as HTMLButtonElement;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -75,9 +50,10 @@ beforeEach(() => {
 
   vi.clearAllMocks();
   clearWorkspaceRepairHistory();
+  await changeLimeLocale("en-US");
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mounted.length > 0) {
     const target = mounted.pop();
     if (!target) {
@@ -92,6 +68,7 @@ afterEach(() => {
 
   clearWorkspaceRepairHistory();
   vi.clearAllMocks();
+  await changeLimeLocale("zh-CN");
 });
 
 describe("WorkspaceRepairHistoryCard", () => {
@@ -99,11 +76,14 @@ describe("WorkspaceRepairHistoryCard", () => {
     const container = renderComponent();
     const text = container.textContent ?? "";
 
-    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
-    expect(text).toContain("Workspace 自动修复记录");
-    expect(text).toContain("记录最近自动修复/迁移（不打断用户操作）");
-    expect(text).toContain("最近记录：0 条");
-    expect(text).toContain("暂无自动修复记录");
+    expect(text).toContain("Workspace Auto-Repair History");
+    expect(text).toContain(
+      "Records recent auto-repair and migration actions without interrupting your work.",
+    );
+    expect(text).toContain("Recent records: 0");
+    expect(text).toContain("No auto-repair records yet");
+    expect(text).not.toContain("Workspace 自动修复记录");
+    expect(text).not.toContain("settings.system.workspaceRepair");
   });
 
   it("应渲染自愈记录来源并支持复制全部摘要", async () => {
@@ -120,11 +100,11 @@ describe("WorkspaceRepairHistoryCard", () => {
     });
 
     const container = renderComponent();
-    expect(container.textContent).toContain("最近记录：1 条");
-    expect(container.textContent).toContain("来源：创作会话页");
+    expect(container.textContent).toContain("Recent records: 1");
+    expect(container.textContent).toContain("Source: Creation session page");
 
     await act(async () => {
-      findButton(container, "复制全部").click();
+      findButton(container, "Copy All").click();
       await Promise.resolve();
     });
 
@@ -132,7 +112,9 @@ describe("WorkspaceRepairHistoryCard", () => {
     expect(String(writeText.mock.calls[0]?.[0] ?? "")).toContain(
       "Workspace ID: ws-1",
     );
-    expect(container.textContent).toContain("已复制最近 1 条自愈记录");
+    expect(container.textContent).toContain(
+      "Copied the latest 1 repair records",
+    );
   });
 
   it("应通过 settings namespace 渲染剪贴板权限失败提示", async () => {
@@ -154,12 +136,13 @@ describe("WorkspaceRepairHistoryCard", () => {
     const container = renderComponent();
 
     await act(async () => {
-      findButton(container, "复制全部").click();
+      findButton(container, "Copy All").click();
       await Promise.resolve();
     });
 
     expect(container.textContent).toContain(
-      "复制失败，请检查窗口焦点或系统剪贴板权限",
+      "Copy failed. Check the window focus or system clipboard permission.",
     );
+    expect(container.textContent).not.toContain("复制失败，请检查窗口焦点");
   });
 });

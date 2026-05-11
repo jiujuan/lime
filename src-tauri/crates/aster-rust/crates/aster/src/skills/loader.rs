@@ -90,6 +90,7 @@ pub fn parse_frontmatter(content: &str) -> (SkillFrontmatter, String) {
 /// Parse allowed-tools field into a list
 pub fn parse_allowed_tools(value: Option<&str>) -> Option<Vec<String>> {
     value.and_then(|v| {
+        let v = v.trim();
         if v.is_empty() {
             return None;
         }
@@ -101,7 +102,12 @@ pub fn parse_allowed_tools(value: Option<&str>) -> Option<Vec<String>> {
                     .collect(),
             )
         } else {
-            Some(vec![v.trim().to_string()])
+            Some(
+                v.split_whitespace()
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect(),
+            )
         }
     })
 }
@@ -541,6 +547,14 @@ Body
         assert_eq!(
             parse_allowed_tools(Some("tool1")),
             Some(vec!["tool1".to_string()])
+        );
+        assert_eq!(
+            parse_allowed_tools(Some("Bash(git:*) Bash(jq:*) Read")),
+            Some(vec![
+                "Bash(git:*)".to_string(),
+                "Bash(jq:*)".to_string(),
+                "Read".to_string()
+            ])
         );
         assert_eq!(
             parse_allowed_tools(Some("tool1, tool2, tool3")),

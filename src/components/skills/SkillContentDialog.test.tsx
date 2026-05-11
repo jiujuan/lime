@@ -1,6 +1,7 @@
 import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import type { LocalSkillInspection } from "@/lib/api/skills";
 
 vi.mock("@/components/preview/MarkdownPreview", () => ({
@@ -69,15 +70,16 @@ function renderDialog(
   return rendered;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("en-US");
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mountedRoots.length > 0) {
     const mounted = mountedRoots.pop();
     if (!mounted) {
@@ -88,12 +90,14 @@ afterEach(() => {
     });
     mounted.container.remove();
   }
+  await changeLimeLocale("zh-CN");
 });
 
 describe("SkillContentDialog", () => {
   it("加载中时应显示加载提示", () => {
     renderDialog({ loading: true });
-    expect(document.body.textContent).toContain("正在检查 Skill 包...");
+    expect(document.body.textContent).toContain("Checking Skill package...");
+    expect(document.body.textContent).not.toContain("正在检查 Skill 包");
   });
 
   it("出错时应显示错误信息", () => {
@@ -103,11 +107,18 @@ describe("SkillContentDialog", () => {
 
   it("有检查结果时应渲染标准状态、元数据和 markdown 文本", () => {
     renderDialog();
-    expect(document.body.textContent).toContain("标准");
+    expect(document.body.textContent).toContain("Standard");
+    expect(document.body.textContent).toContain("Validation errors");
+    expect(document.body.textContent).toContain("Compat fields");
+    expect(document.body.textContent).toContain("Allowed tools");
+    expect(document.body.textContent).toContain("Metadata");
+    expect(document.body.textContent).toContain("Original SKILL.md");
     expect(document.body.textContent).toContain("lime_category");
     expect(document.body.textContent).toContain("web.search");
     expect(document.body.textContent).toContain("标题");
     expect(document.body.textContent).toContain("正文内容");
+    expect(document.body.textContent).not.toContain("元数据");
+    expect(document.body.textContent).not.toContain("允许工具");
 
     const licenseTag = Array.from(document.body.querySelectorAll("span")).find(
       (element) => element.textContent?.includes("License:"),
@@ -128,8 +139,17 @@ describe("SkillContentDialog", () => {
       }),
     });
 
-    expect(document.body.textContent).toContain("待修复");
+    expect(document.body.textContent).toContain("Needs fix");
+    expect(document.body.textContent).toContain("Compat fields");
     expect(document.body.textContent).toContain("workflow 引用不存在");
     expect(document.body.textContent).toContain("steps-json");
+  });
+
+  it("空检查结果应通过 agent namespace 渲染空态", () => {
+    renderDialog({ inspection: null });
+    expect(document.body.textContent).toContain(
+      "No Skill inspection result yet",
+    );
+    expect(document.body.textContent).not.toContain("暂无 Skill 检查结果");
   });
 });

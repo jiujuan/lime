@@ -1,9 +1,9 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 const {
-  mockUseTranslation,
   mockGetConfig,
   mockSaveConfig,
   mockGetMemoryEffectiveSources,
@@ -17,44 +17,20 @@ const {
   mockToggleMemoryAuto,
   mockUpdateMemoryAutoNote,
   mockGetUnifiedMemoryStats,
-} = vi.hoisted(() => {
-  const mockTranslate = vi.fn((key: string, options?: unknown) => {
-    if (typeof options === "string") return options;
-
-    if (options && typeof options === "object") {
-      const values = options as Record<string, unknown>;
-      const template =
-        typeof values.defaultValue === "string" ? values.defaultValue : key;
-      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-        String(values[name] ?? ""),
-      );
-    }
-
-    return key;
-  });
-
-  return {
-    mockUseTranslation: vi.fn((_namespace?: string) => ({
-      t: mockTranslate,
-    })),
-    mockGetConfig: vi.fn(),
-    mockSaveConfig: vi.fn(),
-    mockGetMemoryEffectiveSources: vi.fn(),
-    mockGetMemoryExtractionStatus: vi.fn(),
-    mockGetMemoryAutoIndex: vi.fn(),
-    mockGetWorkingMemory: vi.fn(),
-    mockCleanupContextMemdir: vi.fn(),
-    mockEnsureWorkspaceLocalAgentsGitignore: vi.fn(),
-    mockScaffoldContextMemdir: vi.fn(),
-    mockScaffoldRuntimeAgentsTemplate: vi.fn(),
-    mockToggleMemoryAuto: vi.fn(),
-    mockUpdateMemoryAutoNote: vi.fn(),
-    mockGetUnifiedMemoryStats: vi.fn(),
-  };
-});
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
+} = vi.hoisted(() => ({
+  mockGetConfig: vi.fn(),
+  mockSaveConfig: vi.fn(),
+  mockGetMemoryEffectiveSources: vi.fn(),
+  mockGetMemoryExtractionStatus: vi.fn(),
+  mockGetMemoryAutoIndex: vi.fn(),
+  mockGetWorkingMemory: vi.fn(),
+  mockCleanupContextMemdir: vi.fn(),
+  mockEnsureWorkspaceLocalAgentsGitignore: vi.fn(),
+  mockScaffoldContextMemdir: vi.fn(),
+  mockScaffoldRuntimeAgentsTemplate: vi.fn(),
+  mockToggleMemoryAuto: vi.fn(),
+  mockUpdateMemoryAutoNote: vi.fn(),
+  mockGetUnifiedMemoryStats: vi.fn(),
 }));
 
 vi.mock("@/lib/api/appConfig", () => ({
@@ -188,7 +164,7 @@ async function leaveTip(trigger: HTMLButtonElement | null) {
   });
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -196,6 +172,7 @@ beforeEach(() => {
   ).IS_REACT_ACT_ENVIRONMENT = true;
 
   vi.clearAllMocks();
+  await changeLimeLocale("en-US");
 
   mockGetConfig.mockResolvedValue({
     memory: {
@@ -337,7 +314,7 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mounted.length > 0) {
     const target = mounted.pop();
     if (!target) break;
@@ -347,6 +324,7 @@ afterEach(() => {
     target.container.remove();
   }
   vi.clearAllTimers();
+  await changeLimeLocale("zh-CN");
 });
 
 describe("MemorySettings", () => {
@@ -356,21 +334,21 @@ describe("MemorySettings", () => {
     await flushEffects();
 
     expect(getBodyText()).not.toContain(
-      "管理用户画像、来源链策略与记忆目录入口，让代理在长期使用里更稳定地续接规则、会话与协作状态。",
+      "Manage your user profile, source-chain policy, and memory directory entry so agents can continue rules",
     );
     expect(getBodyText()).not.toContain(
-      "单选，用于帮助代理判断你的知识密度和上下文称呼。",
+      "Single choice. Helps the agent judge knowledge density",
     );
 
-    const heroTip = await hoverTip("记忆设置说明");
+    const heroTip = await hoverTip("Memory settings info");
     expect(getBodyText()).toContain(
-      "管理用户画像、来源链策略与记忆目录入口，让代理在长期使用里更稳定地续接规则、会话与协作状态。",
+      "Manage your user profile, source-chain policy, and memory directory entry so agents can continue rules",
     );
     await leaveTip(heroTip);
 
-    const questionTip = await hoverTip("当前状态说明");
+    const questionTip = await hoverTip("Current status info");
     expect(getBodyText()).toContain(
-      "单选，用于帮助代理判断你的知识密度和上下文称呼。",
+      "Single choice. Helps the agent judge knowledge density",
     );
     await leaveTip(questionTip);
   });
@@ -381,15 +359,18 @@ describe("MemorySettings", () => {
     await flushEffects();
 
     const text = container.textContent ?? "";
-    expect(text).toContain("记忆");
-    expect(text).toContain("管理用户画像、来源链策略与记忆目录入口。");
-    expect(text).toContain("记忆总开关");
-    expect(text).toContain("偏好画像");
-    expect(text).toContain("记忆命中层可用性");
-    expect(text).toContain("来源链状态总览");
-    expect(text).toContain("来源链策略");
-    expect(text).toContain("来源链命中详情");
-    expect(text).toContain("记忆目录（memdir）");
+    expect(text).toContain("Memory");
+    expect(text).toContain(
+      "Manage your user profile, source-chain policy, and memory directory entry.",
+    );
+    expect(text).toContain("Memory Master Switch");
+    expect(text).toContain("Preference Profile");
+    expect(text).toContain("Memory Hit Layer Availability");
+    expect(text).toContain("Source Chain Status Overview");
+    expect(text).toContain("Source Chain Policy");
+    expect(text).toContain("Source Chain Hit Details");
+    expect(text).toContain("Memory Directory (memdir)");
+    expect(text).not.toContain("settings.memory");
   });
 
   it("初始化时应加载来源与自动记忆索引", async () => {
@@ -407,7 +388,7 @@ describe("MemorySettings", () => {
     await flushEffects();
 
     await act(async () => {
-      findButton(container, "立即关闭").click();
+      findButton(container, "Disable now").click();
     });
 
     expect(mockToggleMemoryAuto).toHaveBeenCalledWith(false);
@@ -419,12 +400,14 @@ describe("MemorySettings", () => {
     await flushEffects();
 
     await act(async () => {
-      findButton(container, "写入 memdir").click();
+      findButton(container, "Write to memdir").click();
     });
     await flushEffects();
 
     expect(mockUpdateMemoryAutoNote).not.toHaveBeenCalled();
-    expect(container.textContent).toContain("请先输入要保存的 memdir 内容");
+    expect(container.textContent).toContain(
+      "Enter memdir content before saving",
+    );
   });
 
   it("点击初始化 memdir 应调用脚手架 API", async () => {
@@ -433,7 +416,7 @@ describe("MemorySettings", () => {
     await flushEffects();
 
     await act(async () => {
-      findButton(container, "初始化 memdir").click();
+      findButton(container, "Initialize memdir").click();
     });
 
     expect(mockScaffoldContextMemdir).toHaveBeenCalledWith("/tmp", false);
@@ -445,12 +428,12 @@ describe("MemorySettings", () => {
     await flushEffects();
 
     await act(async () => {
-      findButton(container, "整理 memdir").click();
+      findButton(container, "Organize memdir").click();
     });
     await flushEffects();
 
     expect(mockCleanupContextMemdir).toHaveBeenCalledWith("/tmp");
-    expect(container.textContent).toContain("已整理 memdir");
+    expect(container.textContent).toContain("memdir organized");
   });
 
   it("写入 memdir 时应携带默认记忆类型", async () => {
@@ -474,7 +457,7 @@ describe("MemorySettings", () => {
     });
 
     await act(async () => {
-      findButton(container, "写入 memdir").click();
+      findButton(container, "Write to memdir").click();
     });
 
     expect(mockUpdateMemoryAutoNote).toHaveBeenCalledWith(
@@ -491,7 +474,7 @@ describe("MemorySettings", () => {
     await flushEffects();
 
     await act(async () => {
-      findButton(container, "反馈记忆").click();
+      findButton(container, "Feedback memory").click();
     });
 
     const textarea = container.querySelector(
@@ -509,13 +492,13 @@ describe("MemorySettings", () => {
     });
 
     await act(async () => {
-      findButton(container, "写入 memdir").click();
+      findButton(container, "Write to memdir").click();
     });
     await flushEffects();
 
     expect(mockUpdateMemoryAutoNote).not.toHaveBeenCalled();
     expect(container.textContent).toContain(
-      "反馈/项目记忆必须包含 `Why:` 段落。",
+      "Feedback / project memory must include a `Why:` section.",
     );
   });
 
@@ -540,12 +523,14 @@ describe("MemorySettings", () => {
     });
 
     await act(async () => {
-      findButton(container, "写入 memdir").click();
+      findButton(container, "Write to memdir").click();
     });
     await flushEffects();
 
     expect(mockUpdateMemoryAutoNote).not.toHaveBeenCalled();
-    expect(container.textContent).toContain("项目记忆不能使用相对时间词");
+    expect(container.textContent).toContain(
+      "Project memory cannot use the relative date",
+    );
   });
 
   it("点击生成 Workspace 模板应调用模板生成 API", async () => {
@@ -554,7 +539,7 @@ describe("MemorySettings", () => {
     await flushEffects();
 
     await act(async () => {
-      findButton(container, "生成 Workspace 模板").click();
+      findButton(container, "Generate Workspace template").click();
     });
 
     expect(mockScaffoldRuntimeAgentsTemplate).toHaveBeenCalledWith(
@@ -570,7 +555,7 @@ describe("MemorySettings", () => {
     await flushEffects();
 
     await act(async () => {
-      findButton(container, "将本机模板加入 .gitignore").click();
+      findButton(container, "Add local template to .gitignore").click();
     });
 
     expect(mockEnsureWorkspaceLocalAgentsGitignore).toHaveBeenCalledWith(

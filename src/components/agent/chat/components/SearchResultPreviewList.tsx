@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ChevronDown,
   ChevronRight,
@@ -11,6 +12,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { formatNumber } from "@/i18n/format";
 import { cn } from "@/lib/utils";
 import type { SearchResultPreviewItem } from "../utils/searchResultPreview";
 
@@ -25,6 +27,7 @@ function SearchResultHoverCard({
   popoverSide?: "top" | "right" | "bottom" | "left";
   popoverAlign?: "start" | "center" | "end";
 }) {
+  const { t } = useTranslation("agent");
   const [open, setOpen] = useState(false);
   const closeTimerRef = useRef<number | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -111,7 +114,9 @@ function SearchResultHoverCard({
         <button
           ref={triggerRef}
           type="button"
-          aria-label={`预览搜索结果：${item.title}`}
+          aria-label={t("agentChat.searchResultPreview.previewAria", {
+            title: item.title,
+          })}
           className="w-full rounded-xl border border-border bg-background px-3 py-2 text-left transition-colors hover:bg-muted/60"
           onMouseEnter={handleOpenPreview}
           onMouseLeave={handleScheduleClose}
@@ -161,7 +166,7 @@ function SearchResultHoverCard({
             </div>
           </div>
           <div className="rounded-xl bg-muted/50 px-3 py-3 text-sm leading-6 text-muted-foreground">
-            {item.snippet || "暂无摘要，点击可直接打开来源。"}
+            {item.snippet || t("agentChat.searchResultPreview.emptySnippet")}
           </div>
           <button
             type="button"
@@ -192,6 +197,8 @@ export function SearchResultPreviewList({
   className?: string;
   collapsedCount?: number;
 }) {
+  const { i18n, t } = useTranslation("agent");
+  const locale = i18n.language;
   const [expanded, setExpanded] = useState(false);
   const identityKey = useMemo(
     () => items.map((item) => item.id).join("|"),
@@ -227,7 +234,11 @@ export function SearchResultPreviewList({
           type="button"
           className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
           onClick={() => setExpanded((prev) => !prev)}
-          aria-label={expanded ? "收起搜索结果" : "展开搜索结果"}
+          aria-label={
+            expanded
+              ? t("agentChat.searchResultPreview.collapseAria")
+              : t("agentChat.searchResultPreview.expandAria")
+          }
         >
           <ChevronDown
             className={cn(
@@ -236,7 +247,11 @@ export function SearchResultPreviewList({
             )}
           />
           <span>
-            {expanded ? "收起结果" : `展开其余 ${hiddenCount} 条结果`}
+            {expanded
+              ? t("agentChat.searchResultPreview.collapse")
+              : t("agentChat.searchResultPreview.expandMore", {
+                  countLabel: formatNumber(hiddenCount, { locale }),
+                })}
           </span>
         </button>
       ) : null}

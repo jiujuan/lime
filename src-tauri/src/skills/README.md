@@ -23,7 +23,7 @@ Lime 通过以下机制让 AI 能够自动发现和调用 Skills：
 1. **Agent 初始化时加载 Skills**
    - `AsterAgentState::init_agent_with_db()` 调用 `load_lime_skills()`
    - 技能包以 Agent Skills 标准 `SKILL.md` 为主格式
-   - 默认从应用级 Skills 目录加载，并支持项目级 `./.agents/skills`
+   - 默认从项目级 / 用户级 provider Skills 目录加载：`.agents/skills`、`.claude/skills`、`.codex/skills`、`.gemini/skills` 等，并保留应用级 Skills 目录兜底
    - 注册到 aster-rust 的 `global_registry`
 
 2. **SkillTool 自动注册**

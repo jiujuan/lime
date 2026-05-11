@@ -18,6 +18,7 @@ import {
   BookmarkPlus,
   Square,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import type { Artifact } from "@/lib/artifact/types";
@@ -56,7 +57,7 @@ import {
 import { isHiddenConversationArtifactPath } from "../utils/internalArtifactVisibility";
 import { buildInputbarRuntimeStatusLineModel } from "../utils/inputbarRuntimeStatusLine";
 import { resolvePromptCacheActivity } from "../utils/tokenUsageSummary";
-import { isInternalRoutingTurnSummaryText } from "../utils/turnSummaryPresentation";
+import { shouldHideTurnSummaryFromConversation } from "../utils/turnSummaryPresentation";
 import {
   Message,
   type ActionRequired,
@@ -561,32 +562,37 @@ function measureMessageListComputation<T>(
   };
 }
 
-const AssistantFirstTokenPlaceholder: React.FC<{
+const AssistantFirstTokenRuntimeStatus: React.FC<{
   status?: AgentRuntimeStatus | null;
 }> = ({ status }) => {
-  const rawTitle = truncateRuntimeStatusText(status?.title || "已提交请求", 48);
-  const title =
-    status?.phase === "failed" || status?.phase === "cancelled"
-      ? rawTitle
-      : "思考中";
+  const { t } = useTranslation("agent");
+  const fallbackTitle = t(
+    `agentChat.messageList.firstTokenStatus.${status?.phase || "submitted"}.title`,
+    t("agentChat.messageList.firstTokenStatus.submitted.title"),
+  );
+  const fallbackDetail = t(
+    `agentChat.messageList.firstTokenStatus.${status?.phase || "submitted"}.detail`,
+    t("agentChat.messageList.firstTokenStatus.submitted.detail"),
+  );
+  const title = truncateRuntimeStatusText(status?.title || fallbackTitle, 48);
   const detail =
-    [rawTitle !== title ? rawTitle : null, status?.detail]
+    [status?.detail]
       .map((part) => (part ? truncateRuntimeStatusText(part, 120) : null))
       .filter(Boolean)
-      .join(" · ") || "已提交请求，等待首个响应。";
+      .join(" · ") || fallbackDetail;
 
   return (
     <div
-      data-testid="assistant-first-token-placeholder"
-      className="inline-flex max-w-full items-start gap-2 rounded-2xl border border-sky-200/80 bg-sky-50 px-3 py-2 text-sm text-sky-900 shadow-sm shadow-sky-950/5"
+      data-testid="assistant-first-token-runtime-status"
+      className="inline-flex max-w-full items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600"
       aria-live="polite"
     >
-      <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-sky-700" />
+      <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-slate-500" />
       <span className="min-w-0">
-        <span className="block font-medium leading-5">{title}</span>
-        <span className="mt-0.5 block text-xs leading-5 text-sky-700/80">
-          {detail}
+        <span className="block font-medium leading-5 text-slate-700">
+          {title}
         </span>
+        <span className="mt-0.5 block leading-5 text-slate-500">{detail}</span>
       </span>
     </div>
   );
@@ -667,7 +673,7 @@ function shouldRenderConversationTimelineItem(
     return true;
   }
 
-  if (isInternalRoutingTurnSummaryText(item.text)) {
+  if (shouldHideTurnSummaryFromConversation(item)) {
     return false;
   }
 
@@ -706,14 +712,6 @@ function hasInlineThinkingContent(message: Message): boolean {
         (part) => part.type === "thinking" && part.text.trim().length > 0,
       ),
     )
-  );
-}
-
-function hasInternalRoutingSummary(items: AgentThreadItem[]): boolean {
-  return items.some(
-    (item) =>
-      item.type === "turn_summary" &&
-      isInternalRoutingTurnSummaryText(item.text),
   );
 }
 
@@ -772,10 +770,7 @@ function shouldSuppressAmbientPlainAnswerReasoning(params: {
     return false;
   }
 
-  return (
-    hasInternalRoutingSummary(params.timelineItems) &&
-    !hasSubstantiveProcessTimelineItem(params.timelineItems)
-  );
+  return !hasSubstantiveProcessTimelineItem(params.timelineItems);
 }
 
 interface InlineProcessCoverage {
@@ -2257,7 +2252,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
       !msg.imageWorkbenchPreview &&
       !msg.taskPreview &&
       !hasStructuredHistoricalContentHint(actionContent);
-    const shouldRenderFirstTokenPlaceholder =
+    const shouldRenderFirstTokenRuntimeStatus =
       msg.role === "assistant" &&
       msg.isThinking &&
       !shouldRenderRuntimeStatusPill(msg.runtimeStatus) &&
@@ -2274,7 +2269,6 @@ const MessageListInner: React.FC<MessageListProps> = ({
       !msg.taskPreview;
     const shouldCollapseAssistantShell =
       msg.role === "assistant" &&
-      !shouldRenderFirstTokenPlaceholder &&
       !hasVisibleAssistantText &&
       !conversationContentParts?.length &&
       !conversationThinkingContent?.trim() &&
@@ -2342,11 +2336,15 @@ const MessageListInner: React.FC<MessageListProps> = ({
           ) : null}
         </div>
       ) : null;
+    const firstTokenRuntimeStatusNode = shouldRenderFirstTokenRuntimeStatus ? (
+      <AssistantFirstTokenRuntimeStatus status={msg.runtimeStatus} />
+    ) : null;
 
     if (
       msg.role === "assistant" &&
       !hasAssistantBodyContent &&
-      !assistantMetaFooter
+      !assistantMetaFooter &&
+      !firstTokenRuntimeStatusNode
     ) {
       return null;
     }
@@ -2423,6 +2421,14 @@ const MessageListInner: React.FC<MessageListProps> = ({
               {primaryTimelineNode}
             </div>
           ) : null}
+          {firstTokenRuntimeStatusNode ? (
+            <div
+              className="mb-1.5 px-1"
+              data-testid="assistant-runtime-status-shell"
+            >
+              {firstTokenRuntimeStatusNode}
+            </div>
+          ) : null}
           {hasAssistantBodyContent ? (
             <MessageBubble
               $isUser={msg.role === "user"}
@@ -2434,11 +2440,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
                     ? null
                     : primaryTimelineNode}
 
-                  {shouldRenderFirstTokenPlaceholder ? (
-                    <AssistantFirstTokenPlaceholder
-                      status={msg.runtimeStatus}
-                    />
-                  ) : shouldPreviewHistoricalAssistantMessage ? (
+                  {shouldPreviewHistoricalAssistantMessage ? (
                     <HistoricalAssistantMessagePreview
                       content={historicalAssistantPreviewContent}
                       contentLength={actionContent.length}
@@ -2614,7 +2616,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
 
               {msg.role === "assistant" &&
               trailingTimeline &&
-              !shouldRenderFirstTokenPlaceholder ? (
+              !shouldRenderFirstTokenRuntimeStatus ? (
                 <AgentThreadTimeline
                   turn={trailingTimeline.turn}
                   items={trailingTimeline.items}

@@ -40,6 +40,7 @@ pub(crate) fn extract_runtime_subagent_result_text(detail: &SessionDetail) -> Op
                 match &item.payload {
                 lime_core::database::dao::agent_timeline::AgentThreadItemPayload::TurnSummary {
                     text,
+                    ..
                 }
                 | lime_core::database::dao::agent_timeline::AgentThreadItemPayload::Plan { text }
                 | lime_core::database::dao::agent_timeline::AgentThreadItemPayload::AgentMessage {

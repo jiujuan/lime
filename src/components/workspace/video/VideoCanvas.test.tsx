@@ -222,11 +222,11 @@ describe("VideoCanvas 全局默认模型", () => {
     expect(mockToastSuccess).toHaveBeenCalledWith(
       "Set as the video start reference image",
     );
-    expect(
-      observedStateChanges[observedStateChanges.length - 1],
-    ).toMatchObject({
-      startImage: "asset://start-frame.png",
-    });
+    expect(observedStateChanges[observedStateChanges.length - 1]).toMatchObject(
+      {
+        startImage: "asset://start-frame.png",
+      },
+    );
     expect(
       observedAcks.find((ack) => ack.requestId === request.requestId),
     ).toMatchObject({

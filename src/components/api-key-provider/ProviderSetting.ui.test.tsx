@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProviderWithKeysDisplay } from "@/lib/api/apiKeyProvider";
+import settingsZhCN from "@/i18n/resources/zh-CN/settings.json";
 
 const { mockFetchProviderModelsAuto } = vi.hoisted(() => ({
   mockFetchProviderModelsAuto: vi.fn(),
@@ -20,28 +21,49 @@ vi.mock("@/lib/api/modelRegistry", () => ({
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (
-      _key: string,
-      fallbackOrOptions?: string | { defaultValue?: string },
-    ) => {
-      const template =
-        typeof fallbackOrOptions === "string"
-          ? fallbackOrOptions
-          : (fallbackOrOptions?.defaultValue ?? _key);
-
-      if (!fallbackOrOptions || typeof fallbackOrOptions === "string") {
-        return template;
-      }
-
-      return template.replace(/{{\s*(\w+)\s*}}/g, (match, name) => {
-        const value = (fallbackOrOptions as Record<string, unknown>)[name];
-        return value == null ? match : String(value);
-      });
-    },
+    t: translate,
   }),
 }));
 
 import { ProviderSetting } from "./ProviderSetting";
+
+const settingsDictionary = settingsZhCN as Record<string, string>;
+
+function interpolateTemplate(
+  template: string,
+  values?: Record<string, unknown>,
+): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+    String(values?.[name] ?? ""),
+  );
+}
+
+function createTranslate(dictionary: Record<string, string>) {
+  return (
+    key: string,
+    fallbackOrOptions?: string | { defaultValue?: string },
+  ) => {
+    if (typeof fallbackOrOptions === "string") {
+      return fallbackOrOptions;
+    }
+
+    if (fallbackOrOptions && typeof fallbackOrOptions === "object") {
+      const template =
+        dictionary[key] ||
+        (typeof fallbackOrOptions.defaultValue === "string"
+          ? fallbackOrOptions.defaultValue
+          : key);
+      return interpolateTemplate(
+        template,
+        fallbackOrOptions as Record<string, unknown>,
+      );
+    }
+
+    return dictionary[key] || key;
+  };
+}
+
+const translate = createTranslate(settingsDictionary);
 
 interface MountedRoot {
   container: HTMLDivElement;

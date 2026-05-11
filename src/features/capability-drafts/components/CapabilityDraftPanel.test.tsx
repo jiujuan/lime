@@ -1,34 +1,9 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { capabilityDraftsApi } from "@/lib/api/capabilityDrafts";
 import { CapabilityDraftPanel } from "./CapabilityDraftPanel";
-
-const { mockUseTranslation } = vi.hoisted(() => {
-  const mockTranslate = vi.fn((key: string, options?: unknown) => {
-    if (typeof options === "string") {
-      return options;
-    }
-
-    if (options && typeof options === "object") {
-      const values = options as Record<string, unknown>;
-      const template =
-        typeof values.defaultValue === "string" ? values.defaultValue : key;
-      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-        String(values[name] ?? ""),
-      );
-    }
-
-    return key;
-  });
-
-  return {
-    mockUseTranslation: vi.fn((_namespace?: string) => ({
-      i18n: { language: "zh-CN" },
-      t: mockTranslate,
-    })),
-  };
-});
 
 vi.mock("@/lib/api/capabilityDrafts", () => ({
   capabilityDraftsApi: {
@@ -36,10 +11,6 @@ vi.mock("@/lib/api/capabilityDrafts", () => ({
     verify: vi.fn(),
     register: vi.fn(),
   },
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
 }));
 
 interface RenderResult {
@@ -61,18 +32,19 @@ function renderPanel(props?: Parameters<typeof CapabilityDraftPanel>[0]) {
 }
 
 describe("CapabilityDraftPanel", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     (
       globalThis as typeof globalThis & {
         IS_REACT_ACT_ENVIRONMENT?: boolean;
       }
     ).IS_REACT_ACT_ENVIRONMENT = true;
+    await changeLimeLocale("zh-CN");
     vi.mocked(capabilityDraftsApi.list).mockReset();
     vi.mocked(capabilityDraftsApi.verify).mockReset();
     vi.mocked(capabilityDraftsApi.register).mockReset();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     while (mountedRoots.length > 0) {
       const mounted = mountedRoots.pop();
       if (!mounted) {
@@ -83,6 +55,7 @@ describe("CapabilityDraftPanel", () => {
       });
       mounted.container.remove();
     }
+    await changeLimeLocale("zh-CN");
     vi.clearAllMocks();
   });
 

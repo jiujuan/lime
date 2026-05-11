@@ -85,10 +85,7 @@ export function ChannelLogTailPanel() {
       buildChannelLogRegex(
         preset,
         customPattern,
-        t(
-          "settings.channels.logTail.error.invalidRegex",
-          "正则表达式无效，已回退为不过滤",
-        ),
+        t("settings.channels.logTail.error.invalidRegex"),
       ),
     [preset, customPattern, t],
   );
@@ -119,10 +116,7 @@ export function ChannelLogTailPanel() {
             : inMemoryResult.reason instanceof Error
               ? inMemoryResult.reason
               : new Error(
-                  t(
-                    "settings.channels.logTail.error.sourcesUnavailable",
-                    "日志源均不可用",
-                  ),
+                  t("settings.channels.logTail.error.sourcesUnavailable"),
                 );
         }
 
@@ -175,37 +169,22 @@ export function ChannelLogTailPanel() {
   const handleCopy = async () => {
     const content = filteredLogs.map(formatExportLine).join("\n");
     if (!content) {
-      setCopyTip(
-        t(
-          "settings.channels.logTail.message.noCopyableLogs",
-          "当前无可复制日志",
-        ),
-      );
+      setCopyTip(t("settings.channels.logTail.message.noCopyableLogs"));
       return;
     }
 
     try {
       await navigator.clipboard.writeText(content);
-      setCopyTip(
-        t("settings.channels.logTail.message.copiedView", "已复制当前视图"),
-      );
+      setCopyTip(t("settings.channels.logTail.message.copiedView"));
       window.setTimeout(() => setCopyTip(null), 1500);
     } catch {
-      setCopyTip(
-        t(
-          "settings.channels.logTail.message.copyPermissionFailed",
-          "复制失败，请检查系统剪贴板权限",
-        ),
-      );
+      setCopyTip(t("settings.channels.logTail.message.copyPermissionFailed"));
     }
   };
 
   const handleClear = async () => {
     const confirmed = window.confirm(
-      t(
-        "settings.channels.logTail.confirm.clear",
-        "确认清空日志吗？\n这会清空当前内存日志、当前日志文件以及历史渠道诊断日志，且无法恢复。",
-      ),
+      t("settings.channels.logTail.confirm.clear"),
     );
     if (!confirmed) {
       return;
@@ -215,14 +194,13 @@ export function ChannelLogTailPanel() {
       await clearLogs();
       setLogs([]);
       setError(null);
-      setCopyTip(t("settings.channels.logTail.message.cleared", "日志已清空"));
+      setCopyTip(t("settings.channels.logTail.message.cleared"));
       window.setTimeout(() => setCopyTip(null), 1500);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(
         t("settings.channels.logTail.error.clearFailed", {
           error: msg,
-          defaultValue: "清空日志失败: {{error}}",
         }),
       );
     }
@@ -233,13 +211,10 @@ export function ChannelLogTailPanel() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-medium">
-            {t("settings.channels.logTail.title", "渠道日志 Tail")}
+            {t("settings.channels.logTail.title")}
           </h3>
           <p className="text-xs text-muted-foreground">
-            {t(
-              "settings.channels.logTail.description",
-              "数据源：运行时内存日志 + 应用日志目录中的 lime.log 与轮转日志（每秒刷新）",
-            )}
+            {t("settings.channels.logTail.description")}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -254,8 +229,8 @@ export function ChannelLogTailPanel() {
               <Pause className="h-3.5 w-3.5" />
             )}
             {paused
-              ? t("settings.channels.logTail.action.resume", "继续")
-              : t("settings.channels.logTail.action.pause", "暂停")}
+              ? t("settings.channels.logTail.action.resume")
+              : t("settings.channels.logTail.action.pause")}
           </button>
           <button
             type="button"
@@ -263,7 +238,7 @@ export function ChannelLogTailPanel() {
             className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs transition-colors hover:bg-muted"
           >
             <Copy className="h-3.5 w-3.5" />
-            {t("settings.channels.logTail.action.copyView", "复制视图")}
+            {t("settings.channels.logTail.action.copyView")}
           </button>
           <button
             type="button"
@@ -271,7 +246,7 @@ export function ChannelLogTailPanel() {
             className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs transition-colors hover:bg-muted"
           >
             <Trash2 className="h-3.5 w-3.5" />
-            {t("settings.channels.logTail.action.clearLogs", "清空日志")}
+            {t("settings.channels.logTail.action.clearLogs")}
           </button>
         </div>
       </div>
@@ -279,7 +254,7 @@ export function ChannelLogTailPanel() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <label className="space-y-1">
           <span className="text-xs text-muted-foreground">
-            {t("settings.channels.logTail.filter.mode", "过滤模式")}
+            {t("settings.channels.logTail.filter.mode")}
           </span>
           <select
             value={preset}
@@ -289,17 +264,14 @@ export function ChannelLogTailPanel() {
             className="h-9 w-full rounded-md border bg-background px-3 text-sm"
           >
             <option value="all">
-              {t("settings.channels.logTail.filter.option.all", "全部")}
+              {t("settings.channels.logTail.filter.option.all")}
             </option>
             <option value="telegram">TelegramGateway</option>
             <option value="wechat">WechatGateway</option>
             <option value="rpc">RPC</option>
             <option value="feishu">FeishuGateway</option>
             <option value="custom">
-              {t(
-                "settings.channels.logTail.filter.option.customRegex",
-                "自定义正则",
-              )}
+              {t("settings.channels.logTail.filter.option.customRegex")}
             </option>
           </select>
         </label>
@@ -307,7 +279,7 @@ export function ChannelLogTailPanel() {
         {preset === "custom" ? (
           <label className="space-y-1 md:col-span-2">
             <span className="text-xs text-muted-foreground">
-              {t("settings.channels.logTail.filter.regexLabel", "正则表达式")}
+              {t("settings.channels.logTail.filter.regexLabel")}
             </span>
             <input
               value={customPattern}
@@ -325,10 +297,7 @@ export function ChannelLogTailPanel() {
               className="h-4 w-4 rounded border"
             />
             <span className="text-xs text-muted-foreground">
-              {t(
-                "settings.channels.logTail.filter.autoScroll",
-                "自动滚动到底部",
-              )}
+              {t("settings.channels.logTail.filter.autoScroll")}
             </span>
           </label>
         )}
@@ -343,7 +312,7 @@ export function ChannelLogTailPanel() {
             className="h-4 w-4 rounded border"
           />
           <span className="text-xs text-muted-foreground">
-            {t("settings.channels.logTail.filter.autoScroll", "自动滚动到底部")}
+            {t("settings.channels.logTail.filter.autoScroll")}
           </span>
         </label>
       )}
@@ -354,7 +323,6 @@ export function ChannelLogTailPanel() {
             <p className="text-xs text-destructive">
               {t("settings.channels.logTail.error.loadFailed", {
                 error,
-                defaultValue: "拉取日志失败: {{error}}",
               })}
             </p>
           )}
@@ -371,19 +339,13 @@ export function ChannelLogTailPanel() {
       >
         {loading ? (
           <p className="text-muted-foreground">
-            {t("settings.channels.logTail.state.loading", "加载中...")}
+            {t("settings.channels.logTail.state.loading")}
           </p>
         ) : filteredLogs.length === 0 ? (
           <p className="text-muted-foreground">
             {paused
-              ? t(
-                  "settings.channels.logTail.empty.paused",
-                  "暂无匹配日志（已暂停刷新）",
-                )
-              : t(
-                  "settings.channels.logTail.empty.waiting",
-                  "暂无匹配日志，等待新日志写入",
-                )}
+              ? t("settings.channels.logTail.empty.paused")
+              : t("settings.channels.logTail.empty.waiting")}
           </p>
         ) : (
           filteredLogs.map((entry, index) => (

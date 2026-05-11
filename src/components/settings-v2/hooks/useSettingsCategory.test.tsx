@@ -1,14 +1,9 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { SettingsGroupKey, SettingsTabs } from "@/types/settings";
 import { useSettingsCategory, type CategoryGroup } from "./useSettingsCategory";
-
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: (_key: string, fallback: string) => fallback,
-  }),
-}));
 
 interface Mounted {
   container: HTMLDivElement;
@@ -34,7 +29,17 @@ function renderHookProbe(onGroups: (groups: CategoryGroup[]) => void) {
   mounted.push({ container, root });
 }
 
-afterEach(() => {
+beforeEach(async () => {
+  (
+    globalThis as typeof globalThis & {
+      IS_REACT_ACT_ENVIRONMENT?: boolean;
+    }
+  ).IS_REACT_ACT_ENVIRONMENT = true;
+
+  await changeLimeLocale("en-US");
+});
+
+afterEach(async () => {
   while (mounted.length > 0) {
     const current = mounted.pop();
     if (!current) {
@@ -46,6 +51,8 @@ afterEach(() => {
     });
     current.container.remove();
   }
+
+  await changeLimeLocale("zh-CN");
 });
 
 describe("useSettingsCategory", () => {
@@ -64,9 +71,12 @@ describe("useSettingsCategory", () => {
       (item) => item.key === SettingsTabs.Developer,
     );
 
+    expect(systemGroup?.title).toBe("System");
     expect(systemKeys).toContain(SettingsTabs.Developer);
     expect(systemKeys).not.toContain(SettingsTabs.Experimental);
-    expect(developerItem?.label).toBe("开发者与实验功能");
+    expect(developerItem?.label).toBe("Developer & Labs");
+    expect(developerItem?.label).not.toBe("开发者与实验功能");
+    expect(developerItem?.label).not.toContain("settings.tab.developerLab");
     expect(developerItem?.experimental).toBe(true);
   });
 });

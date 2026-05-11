@@ -1049,12 +1049,17 @@ describe("AgentThreadTimeline", () => {
     expect(container.textContent).not.toContain("```a2ui");
   });
 
-  it("内部路由型 turn_summary 完成态应降级为中性进展提示", () => {
+  it("runtime status turn_summary 完成态应降级为中性进展提示", () => {
     const items: AgentThreadItem[] = [
       {
         ...createBaseItem("summary-1", 1),
         type: "turn_summary",
-        text: "直接回答优先\n当前请求无需默认升级为搜索或任务，先直接给出结果，必要时再调用工具。",
+        text: "runtime status should not be shown as conversation prose",
+        metadata: {
+          sourceType: "runtime_status",
+          surface: "runtime_status",
+          visibility: "diagnostics",
+        },
       },
     ];
 
@@ -1065,7 +1070,7 @@ describe("AgentThreadTimeline", () => {
     });
 
     expect(container.textContent).toContain("当前进展");
-    expect(container.textContent).not.toContain("直接回答优先");
+    expect(container.textContent).not.toContain("runtime status should not");
     expect(container.textContent).not.toContain("已完成思考");
   });
 

@@ -11,8 +11,6 @@ use crate::commands::connect_cmd::ConnectStateWrapper;
 use crate::commands::context_memory::ContextMemoryServiceState;
 use crate::commands::machine_id_cmd::MachineIdState;
 use crate::commands::model_registry_cmd::ModelRegistryState;
-use crate::commands::plugin_cmd::PluginManagerState;
-use crate::commands::plugin_install_cmd::PluginInstallerState;
 use crate::commands::session_files_cmd::SessionFilesState;
 use crate::commands::skill_cmd::SkillServiceState;
 use crate::commands::webview_cmd::{
@@ -22,7 +20,6 @@ use crate::config::{GlobalConfigManager, GlobalConfigManagerState};
 use crate::database::{self, DbConnection};
 use crate::logger;
 use crate::mcp::McpManagerState;
-use crate::plugin;
 use crate::services::automation_service::{AutomationService, AutomationServiceState};
 use crate::skills::ensure_default_local_skills;
 use crate::telemetry;
@@ -47,9 +44,6 @@ pub struct AppStates {
     pub skill_service: SkillServiceState,
     pub api_key_provider_service: ApiKeyProviderServiceState,
     pub machine_id_service: MachineIdState,
-    pub plugin_manager: PluginManagerState,
-    pub plugin_installer: PluginInstallerState,
-    pub plugin_rpc_manager: crate::commands::plugin_rpc_cmd::PluginRpcManagerState,
     pub telemetry: crate::commands::telemetry_cmd::TelemetryState,
     pub aster_agent: AsterAgentState,
     pub connect_state: ConnectStateWrapper,
@@ -157,16 +151,6 @@ pub fn init_states(config: &Config) -> Result<AppStates, String> {
         .map_err(|e| format!("MachineIdService 初始化失败: {e}"))?;
     let machine_id_service_state: MachineIdState = Arc::new(RwLock::new(machine_id_service));
 
-    // 插件管理器
-    let plugin_manager = plugin::PluginManager::with_defaults();
-    let plugin_manager_state = PluginManagerState(Arc::new(RwLock::new(plugin_manager)));
-
-    // 插件安装器
-    let plugin_installer_state = init_plugin_installer()?;
-
-    // 插件 RPC 管理器
-    let plugin_rpc_manager_state = crate::commands::plugin_rpc_cmd::PluginRpcManagerState::new();
-
     // 遥测系统
     let (telemetry_state, shared_stats, shared_tokens, shared_logger) = init_telemetry(config)?;
 
@@ -255,9 +239,6 @@ pub fn init_states(config: &Config) -> Result<AppStates, String> {
         skill_service: skill_service_state,
         api_key_provider_service: api_key_provider_service_state,
         machine_id_service: machine_id_service_state,
-        plugin_manager: plugin_manager_state,
-        plugin_installer: plugin_installer_state,
-        plugin_rpc_manager: plugin_rpc_manager_state,
         telemetry: telemetry_state,
         aster_agent: aster_agent_state,
         connect_state,
@@ -294,42 +275,6 @@ fn build_context_memory_config(config: &Config) -> ContextMemoryConfig {
     }
 
     context_config
-}
-
-/// 初始化插件安装器
-fn init_plugin_installer() -> Result<PluginInstallerState, String> {
-    let db_path = database::get_db_path().map_err(|e| format!("获取数据库路径失败: {e}"))?;
-    let plugins_dir = lime_core::app_paths::best_effort_runtime_subdir("plugins");
-    let temp_dir = std::env::temp_dir().join("lime_plugin_install");
-
-    let _ = std::fs::create_dir_all(&plugins_dir);
-    let _ = std::fs::create_dir_all(&temp_dir);
-
-    match plugin::installer::PluginInstaller::from_paths(
-        plugins_dir.clone(),
-        temp_dir.clone(),
-        &db_path,
-    ) {
-        Ok(installer) => {
-            tracing::info!("[启动] 插件安装器初始化成功");
-            Ok(PluginInstallerState(Arc::new(RwLock::new(installer))))
-        }
-        Err(e) => {
-            tracing::error!("[启动] 插件安装器初始化失败: {}", e);
-            // 使用临时目录作为后备
-            let fallback_plugins_dir = std::env::temp_dir().join("lime_plugins_fallback");
-            let fallback_temp_dir = std::env::temp_dir().join("lime_plugin_install_fallback");
-            let _ = std::fs::create_dir_all(&fallback_plugins_dir);
-            let _ = std::fs::create_dir_all(&fallback_temp_dir);
-            let installer = plugin::installer::PluginInstaller::from_paths(
-                fallback_plugins_dir,
-                fallback_temp_dir,
-                &db_path,
-            )
-            .map_err(|e| format!("后备插件安装器初始化失败: {e}"))?;
-            Ok(PluginInstallerState(Arc::new(RwLock::new(installer))))
-        }
-    }
 }
 
 /// 初始化遥测系统

@@ -13,6 +13,7 @@ import React, {
   memo,
   Component,
 } from "react";
+import { useTranslation } from "react-i18next";
 import * as Babel from "@babel/standalone";
 import { Eye, Code2, Loader2, AlertCircle, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -23,6 +24,12 @@ import { CodeRenderer } from "./CodeRenderer";
  * 视图模式类型
  */
 type ViewMode = "preview" | "source";
+
+interface ReactRendererErrorCopy {
+  emptyCompileResult: string;
+  compileFailed: string;
+  componentCreateFailed: string;
+}
 
 /**
  * 错误边界 Props
@@ -77,24 +84,36 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 /**
  * 流式指示器组件
  */
-const StreamingIndicator: React.FC = memo(() => (
-  <div className="absolute bottom-2 right-2 flex items-center gap-1.5 px-2 py-1 rounded bg-blue-500/20 text-blue-400 text-xs">
-    <Loader2 className="w-3 h-3 animate-spin" />
-    <span>生成中...</span>
-  </div>
-));
+const StreamingIndicator: React.FC = memo(() => {
+  const { t } = useTranslation("errors");
+
+  return (
+    <div className="absolute bottom-2 right-2 flex items-center gap-1.5 px-2 py-1 rounded bg-blue-500/20 text-blue-400 text-xs">
+      <Loader2 className="w-3 h-3 animate-spin" />
+      <span>{t("errors.reactRenderer.status.generating")}</span>
+    </div>
+  );
+});
 StreamingIndicator.displayName = "StreamingIndicator";
 
 /**
  * 流式占位符组件
  */
-const StreamingPlaceholder: React.FC = memo(() => (
-  <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-    <Loader2 className="w-12 h-12 text-blue-400 mb-4 animate-spin" />
-    <h3 className="text-lg font-medium text-gray-900 mb-2">正在生成组件...</h3>
-    <p className="text-sm text-gray-500">请等待内容生成完成后查看预览</p>
-  </div>
-));
+const StreamingPlaceholder: React.FC = memo(() => {
+  const { t } = useTranslation("errors");
+
+  return (
+    <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+      <Loader2 className="w-12 h-12 text-blue-400 mb-4 animate-spin" />
+      <h3 className="text-lg font-medium text-gray-900 mb-2">
+        {t("errors.reactRenderer.placeholder.generatingTitle")}
+      </h3>
+      <p className="text-sm text-gray-500">
+        {t("errors.reactRenderer.placeholder.generatingDescription")}
+      </p>
+    </div>
+  );
+});
 StreamingPlaceholder.displayName = "StreamingPlaceholder";
 
 /**
@@ -106,38 +125,42 @@ interface ViewModeToggleProps {
 }
 
 const ViewModeToggle: React.FC<ViewModeToggleProps> = memo(
-  ({ value, onChange }) => (
-    <div className="inline-flex items-center rounded-md bg-gray-100 p-1">
-      <button
-        type="button"
-        onClick={() => onChange("preview")}
-        className={cn(
-          "inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-all",
-          value === "preview"
-            ? "bg-white text-gray-900 shadow-sm"
-            : "text-gray-600 hover:text-gray-900",
-        )}
-        title="预览模式"
-      >
-        <Eye className="w-3.5 h-3.5" />
-        <span>预览</span>
-      </button>
-      <button
-        type="button"
-        onClick={() => onChange("source")}
-        className={cn(
-          "inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-all",
-          value === "source"
-            ? "bg-white text-gray-900 shadow-sm"
-            : "text-gray-600 hover:text-gray-900",
-        )}
-        title="源码模式"
-      >
-        <Code2 className="w-3.5 h-3.5" />
-        <span>源码</span>
-      </button>
-    </div>
-  ),
+  ({ value, onChange }) => {
+    const { t } = useTranslation("errors");
+
+    return (
+      <div className="inline-flex items-center rounded-md bg-gray-100 p-1">
+        <button
+          type="button"
+          onClick={() => onChange("preview")}
+          className={cn(
+            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-all",
+            value === "preview"
+              ? "bg-white text-gray-900 shadow-sm"
+              : "text-gray-600 hover:text-gray-900",
+          )}
+          title={t("errors.reactRenderer.view.previewTitle")}
+        >
+          <Eye className="w-3.5 h-3.5" />
+          <span>{t("errors.reactRenderer.view.preview")}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange("source")}
+          className={cn(
+            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-all",
+            value === "source"
+              ? "bg-white text-gray-900 shadow-sm"
+              : "text-gray-600 hover:text-gray-900",
+          )}
+          title={t("errors.reactRenderer.view.sourceTitle")}
+        >
+          <Code2 className="w-3.5 h-3.5" />
+          <span>{t("errors.reactRenderer.view.source")}</span>
+        </button>
+      </div>
+    );
+  },
 );
 ViewModeToggle.displayName = "ViewModeToggle";
 
@@ -152,37 +175,45 @@ interface ErrorDisplayProps {
 }
 
 const ErrorDisplay: React.FC<ErrorDisplayProps> = memo(
-  ({ message, source, onRetry }) => (
-    <div className="flex flex-col h-full">
-      <div className="flex items-start gap-3 p-4 bg-red-50 border-b border-red-100">
-        <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-        <div className="flex-1">
-          <h3 className="text-sm font-medium text-red-800 mb-1">
-            编译/渲染错误
-          </h3>
-          <p className="text-xs text-red-600 whitespace-pre-wrap">{message}</p>
+  ({ message, source, onRetry }) => {
+    const { t } = useTranslation("errors");
+
+    return (
+      <div className="flex flex-col h-full">
+        <div className="flex items-start gap-3 p-4 bg-red-50 border-b border-red-100">
+          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <h3 className="text-sm font-medium text-red-800 mb-1">
+              {t("errors.reactRenderer.error.compileOrRender")}
+            </h3>
+            <p className="text-xs text-red-600 whitespace-pre-wrap">
+              {message}
+            </p>
+          </div>
+          {onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium text-red-700 hover:bg-red-100 transition-colors"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>{t("errors.reactRenderer.action.retry")}</span>
+            </button>
+          )}
         </div>
-        {onRetry && (
-          <button
-            type="button"
-            onClick={onRetry}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium text-red-700 hover:bg-red-100 transition-colors"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>重试</span>
-          </button>
+        {source && (
+          <div className="flex-1 overflow-auto p-4 bg-gray-50">
+            <h4 className="text-xs font-medium text-gray-500 mb-2">
+              {t("errors.reactRenderer.section.sourceContent")}
+            </h4>
+            <pre className="text-xs text-gray-700 font-mono whitespace-pre-wrap break-all bg-white p-3 rounded border border-gray-200">
+              {source}
+            </pre>
+          </div>
         )}
       </div>
-      {source && (
-        <div className="flex-1 overflow-auto p-4 bg-gray-50">
-          <h4 className="text-xs font-medium text-gray-500 mb-2">源码内容：</h4>
-          <pre className="text-xs text-gray-700 font-mono whitespace-pre-wrap break-all bg-white p-3 rounded border border-gray-200">
-            {source}
-          </pre>
-        </div>
-      )}
-    </div>
-  ),
+    );
+  },
 );
 ErrorDisplay.displayName = "ErrorDisplay";
 
@@ -194,7 +225,7 @@ ErrorDisplay.displayName = "ErrorDisplay";
  * @param code - JSX 源代码
  * @returns 编译后的代码字符串
  */
-function compileJSX(code: string): string {
+function compileJSX(code: string, copy: ReactRendererErrorCopy): string {
   try {
     const result = Babel.transform(code, {
       presets: ["react"],
@@ -202,12 +233,13 @@ function compileJSX(code: string): string {
     });
 
     if (!result.code) {
-      throw new Error("编译结果为空");
+      throw new Error(copy.emptyCompileResult);
     }
 
     return result.code;
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : "编译失败";
+    const errorMessage =
+      err instanceof Error ? err.message : copy.compileFailed;
     console.error("[ReactRenderer] Error compiling JSX:", errorMessage, err);
     throw err;
   }
@@ -221,7 +253,10 @@ function compileJSX(code: string): string {
  * @param compiledCode - 编译后的 JavaScript 代码
  * @returns React 组件
  */
-function createComponentFromCode(compiledCode: string): React.ComponentType {
+function createComponentFromCode(
+  compiledCode: string,
+  copy: ReactRendererErrorCopy,
+): React.ComponentType {
   try {
     // 创建一个安全的执行环境
     // 提供基本的 React hooks 支持 (Requirement 8.7)
@@ -253,7 +288,8 @@ function createComponentFromCode(compiledCode: string): React.ComponentType {
       React.useRef,
     );
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : "组件创建失败";
+    const errorMessage =
+      err instanceof Error ? err.message : copy.componentCreateFailed;
     console.error(
       "[ReactRenderer] Error creating component from code:",
       errorMessage,
@@ -280,6 +316,7 @@ function createComponentFromCode(compiledCode: string): React.ComponentType {
  */
 export const ReactRenderer: React.FC<ArtifactRendererProps> = memo(
   ({ artifact, isStreaming = false }) => {
+    const { t } = useTranslation("errors");
     // 视图模式状态
     const [viewMode, setViewMode] = useState<ViewMode>("preview");
     // 编译/渲染错误
@@ -292,6 +329,16 @@ export const ReactRenderer: React.FC<ArtifactRendererProps> = memo(
     const [isCompiling, setIsCompiling] = useState(false);
     // 用于强制重新编译的 key
     const [compileKey, setCompileKey] = useState(0);
+    const errorCopy = useMemo<ReactRendererErrorCopy>(
+      () => ({
+        emptyCompileResult: t("errors.reactRenderer.error.emptyCompileResult"),
+        compileFailed: t("errors.reactRenderer.error.compileFailed"),
+        componentCreateFailed: t(
+          "errors.reactRenderer.error.componentCreateFailed",
+        ),
+      }),
+      [t],
+    );
 
     /**
      * 编译并创建组件
@@ -318,16 +365,17 @@ export const ReactRenderer: React.FC<ArtifactRendererProps> = memo(
 
         try {
           // 编译 JSX (Requirement 8.1)
-          const compiledCode = compileJSX(artifact.content);
+          const compiledCode = compileJSX(artifact.content, errorCopy);
 
           // 创建组件 (Requirement 8.2)
-          const Comp = createComponentFromCode(compiledCode);
+          const Comp = createComponentFromCode(compiledCode, errorCopy);
 
           setComponent(() => Comp);
           setError(null);
         } catch (e) {
           // 编译失败时显示错误 (Requirement 8.5, 14.4)
-          const errorMessage = e instanceof Error ? e.message : "编译失败";
+          const errorMessage =
+            e instanceof Error ? e.message : errorCopy.compileFailed;
           console.error(
             "[ReactRenderer] Error compiling/creating component:",
             errorMessage,
@@ -345,7 +393,7 @@ export const ReactRenderer: React.FC<ArtifactRendererProps> = memo(
       };
 
       compile();
-    }, [artifact.content, isStreaming, compileKey]);
+    }, [artifact.content, isStreaming, compileKey, errorCopy]);
 
     /**
      * 重试编译
@@ -358,11 +406,20 @@ export const ReactRenderer: React.FC<ArtifactRendererProps> = memo(
      * 处理渲染错误
      * Requirement 14.4
      */
-    const handleRenderError = useCallback((err: Error) => {
-      const errorMessage = `渲染错误: ${err.message}`;
-      console.error("[ReactRenderer] Runtime render error:", errorMessage, err);
-      setError(errorMessage);
-    }, []);
+    const handleRenderError = useCallback(
+      (err: Error) => {
+        const errorMessage = t("errors.reactRenderer.error.renderFailed", {
+          message: err.message,
+        });
+        console.error(
+          "[ReactRenderer] Runtime render error:",
+          errorMessage,
+          err,
+        );
+        setError(errorMessage);
+      },
+      [t],
+    );
 
     /**
      * 创建用于源码视图的 artifact 对象
@@ -382,12 +439,12 @@ export const ReactRenderer: React.FC<ArtifactRendererProps> = memo(
     const errorFallback = useMemo(
       () => (
         <ErrorDisplay
-          message="组件渲染时发生错误"
+          message={t("errors.reactRenderer.error.componentRenderFailed")}
           source={artifact.content}
           onRetry={handleRetry}
         />
       ),
-      [artifact.content, handleRetry],
+      [artifact.content, handleRetry, t],
     );
 
     return (
@@ -401,7 +458,7 @@ export const ReactRenderer: React.FC<ArtifactRendererProps> = memo(
           {isCompiling && (
             <div className="flex items-center gap-1.5 text-xs text-gray-500">
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              <span>编译中...</span>
+              <span>{t("errors.reactRenderer.status.compiling")}</span>
             </div>
           )}
 
@@ -414,7 +471,7 @@ export const ReactRenderer: React.FC<ArtifactRendererProps> = memo(
                 "inline-flex items-center justify-center w-8 h-8 rounded transition-all ml-auto",
                 "text-gray-500 hover:text-gray-700 hover:bg-gray-100",
               )}
-              title="重新编译"
+              title={t("errors.reactRenderer.action.recompile")}
             >
               <RefreshCw className="w-4 h-4" />
             </button>
@@ -453,7 +510,9 @@ export const ReactRenderer: React.FC<ArtifactRendererProps> = memo(
               /* 空内容状态 */
               <div className="flex flex-col items-center justify-center h-full p-8 text-center">
                 <Code2 className="w-12 h-12 text-gray-300 mb-4" />
-                <p className="text-sm text-gray-500">暂无组件内容</p>
+                <p className="text-sm text-gray-500">
+                  {t("errors.reactRenderer.empty.noComponentContent")}
+                </p>
               </div>
             )
           ) : (

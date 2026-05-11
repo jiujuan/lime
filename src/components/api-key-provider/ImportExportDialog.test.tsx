@@ -2,30 +2,8 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { ImportExportDialog } from "./ImportExportDialog";
-
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: (
-      _key: string,
-      fallbackOrOptions?: string | { defaultValue?: string },
-    ) => {
-      const template =
-        typeof fallbackOrOptions === "string"
-          ? fallbackOrOptions
-          : (fallbackOrOptions?.defaultValue ?? _key);
-
-      if (!fallbackOrOptions || typeof fallbackOrOptions === "string") {
-        return template;
-      }
-
-      return template.replace(/{{\s*(\w+)\s*}}/g, (match, name) => {
-        const value = (fallbackOrOptions as Record<string, unknown>)[name];
-        return value == null ? match : String(value);
-      });
-    },
-  }),
-}));
 
 interface MountedRoot {
   container: HTMLDivElement;
@@ -104,15 +82,16 @@ async function flushEffects(times = 2) {
   }
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mountedRoots.length > 0) {
     const mounted = mountedRoots.pop();
     if (!mounted) {
@@ -124,6 +103,7 @@ afterEach(() => {
     mounted.container.remove();
   }
   document.body.style.overflow = "";
+  await changeLimeLocale("zh-CN");
   vi.clearAllMocks();
 });
 

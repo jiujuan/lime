@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use parking_lot::{Mutex, RwLock};
-use reqwest::Client;
+use reqwest::{header, Client};
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -20,6 +21,7 @@ const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(60);
 const REMOTE_SKILLS_LIST_TIMEOUT: Duration = Duration::from_secs(8);
 const REMOTE_SKILLS_CACHE_TTL: Duration = Duration::from_secs(300);
 const REMOTE_SKILLS_ERROR_CACHE_TTL: Duration = Duration::from_secs(120);
+const GITHUB_CONTENTS_USER_AGENT: &str = "lime-skill-service";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct RepoCacheKey {
@@ -96,6 +98,14 @@ struct RemoteSkillArchiveEntry {
     resource_summary: SkillResourceSummary,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+struct GithubContentItem {
+    path: String,
+    #[serde(rename = "type")]
+    kind: String,
+    download_url: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 struct CatalogSkillRoot {
     source: SkillCatalogSource,
@@ -146,10 +156,16 @@ impl SkillService {
         match app_type {
             AppType::Lime => {
                 let mut roots = Vec::new();
-                if let Some(project_dir) = app_paths::resolve_project_skills_dir() {
+                for project_dir in app_paths::resolve_lime_project_skill_roots() {
                     roots.push(CatalogSkillRoot {
                         source: SkillCatalogSource::Project,
                         path: project_dir,
+                    });
+                }
+                for user_dir in app_paths::resolve_lime_user_skill_roots() {
+                    roots.push(CatalogSkillRoot {
+                        source: SkillCatalogSource::User,
+                        path: user_dir,
                     });
                 }
                 roots.push(CatalogSkillRoot {
@@ -402,7 +418,20 @@ impl SkillService {
     }
 
     async fn fetch_skills_from_branch(&self, repo: &SkillRepo, branch: &str) -> Result<Vec<Skill>> {
-        let manifests = self.load_remote_skill_archive_entries(repo, branch).await?;
+        let manifests = match self.load_remote_skill_contents_entries(repo, branch).await {
+            Ok(entries) if !entries.is_empty() => entries,
+            Ok(_) => self.load_remote_skill_archive_entries(repo, branch).await?,
+            Err(error) => {
+                tracing::debug!(
+                    "[SkillService] GitHub contents API 读取技能仓库 {}/{}@{} 失败，回退 ZIP: {}",
+                    repo.owner,
+                    repo.name,
+                    branch,
+                    error
+                );
+                self.load_remote_skill_archive_entries(repo, branch).await?
+            }
+        };
         let mut skills = Vec::new();
         let repo_key_prefix = format!("{}/{}:", repo.owner, repo.name);
         for entry in manifests.into_values() {
@@ -426,6 +455,203 @@ impl SkillService {
         }
 
         Ok(skills)
+    }
+
+    async fn load_remote_skill_contents_entries(
+        &self,
+        repo: &SkillRepo,
+        branch: &str,
+    ) -> Result<HashMap<String, RemoteSkillArchiveEntry>> {
+        let mut manifests = HashMap::new();
+
+        if let Ok(skill_roots) = self.list_github_contents(repo, branch, "skills").await {
+            for item in skill_roots.into_iter().filter(|item| item.kind == "dir") {
+                if let Ok(entry) = self
+                    .load_remote_skill_contents_entry(repo, branch, &item.path)
+                    .await
+                {
+                    manifests.insert(entry.readme_parent.clone(), entry);
+                }
+            }
+            if !manifests.is_empty() {
+                return Ok(manifests);
+            }
+        }
+
+        let root_items = self.list_github_contents(repo, branch, "").await?;
+        for item in root_items.into_iter().filter(|item| item.kind == "dir") {
+            if let Ok(entry) = self
+                .load_remote_skill_contents_entry(repo, branch, &item.path)
+                .await
+            {
+                manifests.insert(entry.readme_parent.clone(), entry);
+            }
+        }
+
+        Ok(manifests)
+    }
+
+    async fn load_remote_skill_contents_entry(
+        &self,
+        repo: &SkillRepo,
+        branch: &str,
+        skill_path: &str,
+    ) -> Result<RemoteSkillArchiveEntry> {
+        let mut entry = RemoteSkillArchiveEntry {
+            directory: skill_path
+                .rsplit('/')
+                .next()
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| anyhow!("Skill directory not found in GitHub contents path"))?
+                .to_string(),
+            content: String::new(),
+            readme_parent: skill_path.trim_matches('/').to_string(),
+            files: HashMap::new(),
+            resource_summary: SkillResourceSummary::default(),
+        };
+        let mut pending_dirs = vec![entry.readme_parent.clone()];
+
+        while let Some(current_path) = pending_dirs.pop() {
+            let items = self
+                .list_github_contents(repo, branch, &current_path)
+                .await
+                .with_context(|| format!("Failed to list GitHub contents path {current_path}"))?;
+
+            for item in items {
+                match item.kind.as_str() {
+                    "dir" => pending_dirs.push(item.path),
+                    "file" => {
+                        let Some(relative_path) =
+                            Self::github_skill_relative_path(&entry.readme_parent, &item.path)
+                        else {
+                            continue;
+                        };
+                        let bytes = self.download_github_content_file(&item).await?;
+
+                        if relative_path == Path::new("SKILL.md") {
+                            entry.content =
+                                String::from_utf8(bytes).context("Failed to read SKILL.md")?;
+                            continue;
+                        }
+
+                        Self::mark_resource_summary(&mut entry.resource_summary, &relative_path);
+                        entry.files.insert(relative_path, bytes);
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        if entry.content.is_empty() {
+            return Err(anyhow!("Skill directory not found in GitHub contents"));
+        }
+
+        Ok(entry)
+    }
+
+    async fn list_github_contents(
+        &self,
+        repo: &SkillRepo,
+        branch: &str,
+        path: &str,
+    ) -> Result<Vec<GithubContentItem>> {
+        let encoded_ref = urlencoding::encode(branch);
+        let url = if path.trim().is_empty() {
+            format!(
+                "https://api.github.com/repos/{}/{}/contents?ref={}",
+                repo.owner, repo.name, encoded_ref
+            )
+        } else {
+            format!(
+                "https://api.github.com/repos/{}/{}/contents/{}?ref={}",
+                repo.owner,
+                repo.name,
+                path.trim_matches('/'),
+                encoded_ref
+            )
+        };
+
+        let response = self
+            .client
+            .get(&url)
+            .header(header::USER_AGENT, GITHUB_CONTENTS_USER_AGENT)
+            .header(header::ACCEPT, "application/vnd.github+json")
+            .send()
+            .await
+            .with_context(|| format!("Failed to request GitHub contents: {url}"))?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!("HTTP {}: {}", response.status(), url));
+        }
+
+        response
+            .json::<Vec<GithubContentItem>>()
+            .await
+            .with_context(|| format!("Failed to parse GitHub contents: {url}"))
+    }
+
+    async fn download_github_content_file(&self, item: &GithubContentItem) -> Result<Vec<u8>> {
+        let download_url = item
+            .download_url
+            .as_deref()
+            .ok_or_else(|| anyhow!("GitHub content file missing download_url: {}", item.path))?;
+        let response = self
+            .client
+            .get(download_url)
+            .header(header::USER_AGENT, GITHUB_CONTENTS_USER_AGENT)
+            .send()
+            .await
+            .with_context(|| format!("Failed to download GitHub content: {}", item.path))?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!("HTTP {}: {}", response.status(), item.path));
+        }
+
+        Ok(response
+            .bytes()
+            .await
+            .with_context(|| format!("Failed to read GitHub content: {}", item.path))?
+            .to_vec())
+    }
+
+    fn github_skill_relative_path(skill_root: &str, path: &str) -> Option<PathBuf> {
+        let relative = path
+            .strip_prefix(skill_root.trim_matches('/'))?
+            .trim_start_matches('/');
+        if relative.is_empty() {
+            return None;
+        }
+
+        let relative_path = PathBuf::from(relative);
+        if relative_path
+            .components()
+            .all(|component| matches!(component, Component::Normal(_)))
+        {
+            Some(relative_path)
+        } else {
+            None
+        }
+    }
+
+    fn mark_resource_summary(summary: &mut SkillResourceSummary, relative_path: &Path) {
+        let Some(resource_dir) =
+            relative_path
+                .components()
+                .next()
+                .and_then(|component| match component {
+                    Component::Normal(value) => Some(value.to_string_lossy().to_string()),
+                    _ => None,
+                })
+        else {
+            return;
+        };
+
+        match resource_dir.as_str() {
+            "scripts" => summary.has_scripts = true,
+            "references" => summary.has_references = true,
+            "assets" => summary.has_assets = true,
+            _ => {}
+        }
     }
 
     async fn load_remote_skill_archive_entries(
@@ -458,20 +684,18 @@ impl SkillService {
             let mut file = archive
                 .by_index(index)
                 .context("Failed to read ZIP entry")?;
-            let archive_path = Path::new(file.name());
+            let archive_path = PathBuf::from(file.name());
 
             let Some((directory, relative_path)) =
-                Self::skill_file_marker_from_archive_path(archive_path)
+                Self::skill_file_marker_from_archive_path(&archive_path)
             else {
                 continue;
             };
-            let readme_parent = archive_path
-                .parent()
-                .map(|parent| parent.to_string_lossy().to_string())
-                .unwrap_or_default();
+            let readme_parent =
+                Self::skill_readme_parent_from_archive_path(&archive_path).unwrap_or_default();
             let entry =
                 manifests
-                    .entry(directory.clone())
+                    .entry(readme_parent.clone())
                     .or_insert_with(|| RemoteSkillArchiveEntry {
                         directory: directory.clone(),
                         content: String::new(),
@@ -532,9 +756,13 @@ impl SkillService {
             return None;
         }
 
-        let directory = components.get(1)?.clone();
+        let is_nested_skills_repo =
+            components.get(1).is_some_and(|value| value == "skills") && components.len() >= 4;
+        let directory_index = if is_nested_skills_repo { 2 } else { 1 };
+        let relative_path_start = directory_index + 1;
+        let directory = components.get(directory_index)?.clone();
         let mut relative_path = PathBuf::new();
-        for component in components.iter().skip(2) {
+        for component in components.iter().skip(relative_path_start) {
             relative_path.push(component);
         }
         if relative_path.as_os_str().is_empty() {
@@ -542,6 +770,31 @@ impl SkillService {
         }
 
         Some((directory, relative_path))
+    }
+
+    fn skill_readme_parent_from_archive_path(path: &Path) -> Option<String> {
+        let components: Vec<String> = path
+            .components()
+            .filter_map(|component| match component {
+                Component::Normal(value) => Some(value.to_string_lossy().to_string()),
+                _ => None,
+            })
+            .collect();
+
+        if components.len() < 3 {
+            return None;
+        }
+
+        let is_nested_skills_repo =
+            components.get(1).is_some_and(|value| value == "skills") && components.len() >= 4;
+        let directory_index = if is_nested_skills_repo { 2 } else { 1 };
+        let relative_path_start = directory_index + 1;
+        let parent_components = components.get(1..relative_path_start)?;
+        if parent_components.is_empty() {
+            return None;
+        }
+
+        Some(parent_components.join("/"))
     }
 
     #[cfg(test)]
@@ -597,6 +850,35 @@ impl SkillService {
 
         let mut last_error = None;
         for branch in branches {
+            let repo = SkillRepo {
+                owner: repo_owner.to_string(),
+                name: repo_name.to_string(),
+                branch: branch.to_string(),
+                enabled: true,
+            };
+            match self
+                .download_github_skill_contents(&repo, branch, &target_dir, directory)
+                .await
+            {
+                Ok(()) => match self.validate_installed_skill_dir(&target_dir) {
+                    Ok(()) => return Ok(()),
+                    Err(error) => {
+                        let _ = fs::remove_dir_all(&target_dir);
+                        tracing::debug!(
+                            "[SkillService] GitHub contents 安装后校验失败，回退 ZIP: {}",
+                            error
+                        );
+                    }
+                },
+                Err(error) => {
+                    let _ = fs::remove_dir_all(&target_dir);
+                    tracing::debug!(
+                        "[SkillService] GitHub contents 安装失败，回退 ZIP: {}",
+                        error
+                    );
+                }
+            }
+
             let zip_url = format!(
                 "https://github.com/{repo_owner}/{repo_name}/archive/refs/heads/{branch}.zip"
             );
@@ -634,11 +916,32 @@ impl SkillService {
                 enabled: true,
             };
 
+            match self
+                .load_remote_skill_contents_entry_for_directory(&repo, &branch, directory)
+                .await
+            {
+                Ok(entry) => {
+                    return Ok(Self::inspect_remote_skill_package(
+                        &entry.content,
+                        entry.resource_summary,
+                        &entry.files,
+                    ));
+                }
+                Err(error) => {
+                    tracing::debug!(
+                        "[SkillService] inspect remote skill via GitHub contents failed: {}",
+                        error
+                    );
+                }
+            }
+
             match self.load_remote_skill_archive_entries(&repo, &branch).await {
                 Ok(entries) => {
                     let entry = entries
                         .into_values()
-                        .find(|entry| entry.directory == directory)
+                        .find(|entry| {
+                            entry.directory == directory || entry.readme_parent == directory
+                        })
                         .ok_or_else(|| anyhow!("Skill directory not found in archive"))?;
 
                     return Ok(Self::inspect_remote_skill_package(
@@ -670,6 +973,68 @@ impl SkillService {
         ))
     }
 
+    async fn load_remote_skill_contents_entry_for_directory(
+        &self,
+        repo: &SkillRepo,
+        branch: &str,
+        directory: &str,
+    ) -> Result<RemoteSkillArchiveEntry> {
+        let mut last_error = None;
+        for candidate in Self::remote_skill_path_candidates(directory) {
+            match self
+                .load_remote_skill_contents_entry(repo, branch, &candidate)
+                .await
+            {
+                Ok(entry) => return Ok(entry),
+                Err(error) => last_error = Some(error),
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| anyhow!("Skill directory not found in GitHub contents")))
+    }
+
+    async fn download_github_skill_contents(
+        &self,
+        repo: &SkillRepo,
+        branch: &str,
+        target_dir: &Path,
+        directory: &str,
+    ) -> Result<()> {
+        let entry = self
+            .load_remote_skill_contents_entry_for_directory(repo, branch, directory)
+            .await?;
+        Self::write_remote_skill_entry_to_dir(&entry, target_dir)
+    }
+
+    fn write_remote_skill_entry_to_dir(
+        entry: &RemoteSkillArchiveEntry,
+        target_dir: &Path,
+    ) -> Result<()> {
+        fs::create_dir_all(target_dir).context("Failed to create skill directory")?;
+        fs::write(target_dir.join("SKILL.md"), entry.content.as_bytes())
+            .context("Failed to write SKILL.md")?;
+
+        for (relative_path, bytes) in &entry.files {
+            let output_path = target_dir.join(relative_path);
+            if let Some(parent) = output_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::write(&output_path, bytes)
+                .with_context(|| format!("Failed to write {}", output_path.display()))?;
+        }
+
+        Ok(())
+    }
+
+    fn remote_skill_path_candidates(directory: &str) -> Vec<String> {
+        let directory = directory.trim_matches('/').to_string();
+        if directory.contains('/') {
+            return vec![directory];
+        }
+
+        vec![directory.clone(), format!("skills/{directory}")]
+    }
+
     async fn download_and_extract(
         &self,
         zip_url: &str,
@@ -691,28 +1056,27 @@ impl SkillService {
         let cursor = std::io::Cursor::new(bytes);
         let mut archive = zip::ZipArchive::new(cursor).context("Failed to open ZIP")?;
 
-        let skill_prefix = format!("/{directory}/");
+        let selected_root = Self::select_remote_skill_root(&mut archive, directory)?;
         let mut found = false;
 
         for index in 0..archive.len() {
             let mut file = archive.by_index(index)?;
-            let file_path = file.name().to_string();
+            let archive_path = PathBuf::from(file.name());
+            let Some((entry_directory, relative_path)) =
+                Self::skill_file_marker_from_archive_path(&archive_path)
+            else {
+                continue;
+            };
 
-            if !file_path.contains(&skill_prefix) {
+            let readme_parent =
+                Self::skill_readme_parent_from_archive_path(&archive_path).unwrap_or_default();
+            if readme_parent != selected_root
+                && !(selected_root.is_empty() && entry_directory == directory)
+            {
                 continue;
             }
 
             found = true;
-            let relative_path = file_path
-                .split(&skill_prefix)
-                .nth(1)
-                .unwrap_or("")
-                .to_string();
-
-            if relative_path.is_empty() {
-                continue;
-            }
-
             let output_path = target_dir.join(&relative_path);
             if file.is_dir() {
                 fs::create_dir_all(&output_path)?;
@@ -731,6 +1095,55 @@ impl SkillService {
         }
 
         Ok(())
+    }
+
+    fn select_remote_skill_root<R: std::io::Read + std::io::Seek>(
+        archive: &mut zip::ZipArchive<R>,
+        directory: &str,
+    ) -> Result<String> {
+        let mut candidates = Vec::new();
+        for index in 0..archive.len() {
+            let file = archive.by_index(index)?;
+            let archive_path = PathBuf::from(file.name());
+            let Some((entry_directory, relative_path)) =
+                Self::skill_file_marker_from_archive_path(&archive_path)
+            else {
+                continue;
+            };
+            if relative_path != Path::new("SKILL.md") {
+                continue;
+            }
+            let readme_parent =
+                Self::skill_readme_parent_from_archive_path(&archive_path).unwrap_or_default();
+            if readme_parent == directory || entry_directory == directory {
+                candidates.push(readme_parent);
+            }
+        }
+
+        if candidates.is_empty() {
+            return Err(anyhow!("Skill directory not found in archive"));
+        }
+
+        candidates.sort();
+        if let Some(exact) = candidates
+            .iter()
+            .find(|candidate| candidate.as_str() == directory)
+        {
+            return Ok(exact.clone());
+        }
+
+        let nested_root = format!("skills/{directory}");
+        if let Some(nested) = candidates
+            .iter()
+            .find(|candidate| candidate.as_str() == nested_root)
+        {
+            return Ok(nested.clone());
+        }
+
+        candidates
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow!("Skill directory not found in archive"))
     }
 
     pub fn uninstall_skill(app_type: &AppType, directory: &str) -> Result<()> {
@@ -793,15 +1206,17 @@ impl SkillService {
     where
         F: FnMut(&str) -> Result<String>,
     {
-        let (license, metadata, allowed_tools, mut standard_compliance) =
+        let (license, compatibility, metadata, allowed_tools, mut standard_compliance) =
             match parse_manifest_content(content) {
                 Ok(manifest) => (
                     manifest.metadata.license,
+                    manifest.metadata.compatibility,
                     manifest.metadata.metadata,
                     manifest.metadata.allowed_tools,
                     manifest.compliance,
                 ),
                 Err(error) => (
+                    None,
                     None,
                     HashMap::new(),
                     Vec::new(),
@@ -825,6 +1240,7 @@ impl SkillService {
         SkillPackageInspection {
             content: content.to_string(),
             license,
+            compatibility,
             metadata,
             allowed_tools,
             resource_summary,
@@ -1044,6 +1460,7 @@ impl SkillService {
             repo_name,
             repo_branch,
             license: inspection.license,
+            compatibility: inspection.compatibility,
             metadata: inspection.metadata,
             allowed_tools: inspection.allowed_tools,
             resource_summary: Some(inspection.resource_summary),
@@ -1061,8 +1478,24 @@ mod tests {
     use super::{CatalogSkillRoot, SkillService};
     use lime_core::models::{AppType, SkillCatalogSource};
     use std::collections::HashMap;
+    use std::io::{Cursor, Write};
     use std::path::{Path, PathBuf};
     use tempfile::TempDir;
+
+    fn build_test_zip_archive(entries: &[(&str, &str)]) -> zip::ZipArchive<Cursor<Vec<u8>>> {
+        let mut buffer = Cursor::new(Vec::new());
+        {
+            let mut writer = zip::ZipWriter::new(&mut buffer);
+            let options = zip::write::FileOptions::default();
+            for (path, content) in entries {
+                writer.start_file(*path, options).unwrap();
+                writer.write_all(content.as_bytes()).unwrap();
+            }
+            writer.finish().unwrap();
+        }
+        buffer.set_position(0);
+        zip::ZipArchive::new(buffer).unwrap()
+    }
 
     #[test]
     fn build_branch_candidates_should_include_main_master_fallback() {
@@ -1094,6 +1527,110 @@ mod tests {
     }
 
     #[test]
+    fn archive_marker_should_support_anthropic_skills_nested_root() {
+        let path = Path::new("skills-main/skills/docx/scripts/create_docx.py");
+
+        let marker = SkillService::skill_file_marker_from_archive_path(path);
+        assert_eq!(
+            marker,
+            Some((
+                "docx".to_string(),
+                PathBuf::from("scripts").join("create_docx.py")
+            ))
+        );
+
+        let readme_parent = SkillService::skill_readme_parent_from_archive_path(path);
+        assert_eq!(readme_parent.as_deref(), Some("skills/docx"));
+    }
+
+    #[test]
+    fn archive_marker_should_keep_root_level_skill_compatibility() {
+        let path = Path::new("repo-main/docx/scripts/create_docx.py");
+
+        let marker = SkillService::skill_file_marker_from_archive_path(path);
+        assert_eq!(
+            marker,
+            Some((
+                "docx".to_string(),
+                PathBuf::from("scripts").join("create_docx.py")
+            ))
+        );
+
+        let readme_parent = SkillService::skill_readme_parent_from_archive_path(path);
+        assert_eq!(readme_parent.as_deref(), Some("docx"));
+    }
+
+    #[test]
+    fn select_remote_skill_root_should_match_anthropic_nested_skill_by_local_directory() {
+        let mut archive = build_test_zip_archive(&[
+            ("skills-main/skills/docx/SKILL.md", "---\nname: docx\n---\n"),
+            (
+                "skills-main/skills/docx/scripts/create_docx.py",
+                "print('docx')",
+            ),
+        ]);
+
+        let selected = SkillService::select_remote_skill_root(&mut archive, "docx").unwrap();
+
+        assert_eq!(selected, "skills/docx");
+    }
+
+    #[test]
+    fn select_remote_skill_root_should_match_explicit_remote_path() {
+        let mut archive = build_test_zip_archive(&[
+            ("skills-main/skills/docx/SKILL.md", "---\nname: docx\n---\n"),
+            ("skills-main/skills/pptx/SKILL.md", "---\nname: pptx\n---\n"),
+        ]);
+
+        let selected = SkillService::select_remote_skill_root(&mut archive, "skills/docx").unwrap();
+
+        assert_eq!(selected, "skills/docx");
+    }
+
+    #[test]
+    fn remote_skill_path_candidates_should_prefer_root_then_standard_skills_path() {
+        assert_eq!(
+            SkillService::remote_skill_path_candidates("docx"),
+            vec!["docx".to_string(), "skills/docx".to_string()]
+        );
+        assert_eq!(
+            SkillService::remote_skill_path_candidates("skills/docx"),
+            vec!["skills/docx".to_string()]
+        );
+    }
+
+    #[test]
+    fn github_skill_relative_path_should_strip_selected_skill_root_safely() {
+        assert_eq!(
+            SkillService::github_skill_relative_path(
+                "skills/docx",
+                "skills/docx/scripts/create_docx.py"
+            ),
+            Some(PathBuf::from("scripts").join("create_docx.py"))
+        );
+        assert_eq!(
+            SkillService::github_skill_relative_path("skills/docx", "skills/docx"),
+            None
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "live GitHub smoke for the official anthropics/skills docx package"]
+    async fn inspect_remote_anthropic_docx_live_smoke() {
+        let service = SkillService::new().unwrap();
+
+        let inspection = service
+            .inspect_remote_skill("anthropics", "skills", "main", "skills/docx")
+            .await
+            .unwrap();
+
+        assert!(inspection.content.contains("name: docx"));
+        assert!(inspection.content.contains("Word documents"));
+        assert!(inspection.resource_summary.has_scripts);
+        assert!(inspection.standard_compliance.validation_errors.is_empty());
+    }
+
+    #[test]
     fn inspect_skill_dir_should_collect_standard_metadata_and_workflow_state() {
         let temp_dir = TempDir::new().unwrap();
         let skill_dir = temp_dir.path().join("content_post_with_cover");
@@ -1105,11 +1642,11 @@ mod tests {
 name: Social Post
 description: Generate social posts
 license: MIT
+compatibility: Requires network access for publishing.
 metadata:
   lime_workflow_ref: references/workflow.json
   lime_category: social
-allowed-tools:
-  - web.search
+allowed-tools: Bash(git:*) Bash(jq:*) Read
 ---
 
 # Social Post
@@ -1126,10 +1663,21 @@ allowed-tools:
 
         assert_eq!(inspection.license.as_deref(), Some("MIT"));
         assert_eq!(
+            inspection.compatibility.as_deref(),
+            Some("Requires network access for publishing.")
+        );
+        assert_eq!(
             inspection.metadata.get("lime_category").map(String::as_str),
             Some("social")
         );
-        assert_eq!(inspection.allowed_tools, vec!["web.search".to_string()]);
+        assert_eq!(
+            inspection.allowed_tools,
+            vec![
+                "Bash(git:*)".to_string(),
+                "Bash(jq:*)".to_string(),
+                "Read".to_string()
+            ]
+        );
         assert!(inspection.resource_summary.has_references);
         assert!(inspection.standard_compliance.is_standard);
         assert!(inspection.standard_compliance.validation_errors.is_empty());

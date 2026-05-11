@@ -1,4 +1,6 @@
 import React, { memo, useMemo, useState } from "react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
   BookMarked,
@@ -46,6 +48,8 @@ interface ArtifactDocumentBlockBoundaryProps {
 interface ArtifactDocumentBlockBoundaryState {
   hasError: boolean;
 }
+
+type WorkspaceT = TFunction<"workspace", undefined>;
 
 type ArtifactDocumentBlockFallbackMode =
   | "rich_text"
@@ -202,12 +206,13 @@ const ArtifactImagePlaceholder = memo(function ArtifactImagePlaceholder({
   block: ArtifactDocumentBlock;
   tone: ArtifactDocumentTone;
 }) {
+  const { t } = useTranslation("workspace");
   const record = resolveRecord(block);
   const title = normalizeText(record?.title);
   const caption =
     normalizeText(record?.caption) ||
     normalizeText(record?.alt) ||
-    "图片暂不可用，已回退为占位图。";
+    t("workspace.artifactDocumentBlock.image.captionFallback");
 
   return (
     <section className="space-y-3">
@@ -246,7 +251,7 @@ const ArtifactImagePlaceholder = memo(function ArtifactImagePlaceholder({
               tone === "light" ? "text-slate-700" : "text-white",
             )}
           >
-            图片占位图
+            {t("workspace.artifactDocumentBlock.image.placeholderTitle")}
           </div>
           <div className="text-sm leading-6">{caption}</div>
         </div>
@@ -259,6 +264,7 @@ const ArtifactSectionHeader = memo(function ArtifactSectionHeader({
   block,
   tone,
 }: ArtifactDocumentBlockComponentProps) {
+  const { t } = useTranslation("workspace");
   const title = normalizeText(block.title);
   const description = normalizeText(block.description);
   if (!title && !description) {
@@ -276,7 +282,7 @@ const ArtifactSectionHeader = memo(function ArtifactSectionHeader({
     >
       <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-500">
         <ChevronRight className="h-3.5 w-3.5" />
-        <span>章节</span>
+        <span>{t("workspace.artifactDocumentBlock.section.label")}</span>
       </div>
       <div className="mt-4 space-y-3">
         {title ? (
@@ -308,6 +314,7 @@ const ArtifactHeroSummaryCard = memo(function ArtifactHeroSummaryCard({
   block,
   tone,
 }: ArtifactDocumentBlockComponentProps) {
+  const { t } = useTranslation("workspace");
   const highlights = normalizeStringArray(block.highlights);
   const summary = normalizeText(block.summary);
   if (!summary) {
@@ -367,7 +374,9 @@ const ArtifactHeroSummaryCard = memo(function ArtifactHeroSummaryCard({
                 )}
               >
                 <div className="text-[11px] font-semibold text-slate-400">
-                  要点 {String(index + 1).padStart(2, "0")}
+                  {t("workspace.artifactDocumentBlock.hero.highlightLabel", {
+                    index: String(index + 1).padStart(2, "0"),
+                  })}
                 </div>
                 <div className="mt-2 text-sm leading-6">{highlight}</div>
               </div>
@@ -478,6 +487,7 @@ const ArtifactStructuredTable = memo(function ArtifactStructuredTable({
   block,
   tone,
 }: ArtifactDocumentBlockComponentProps) {
+  const { t } = useTranslation("workspace");
   const columns = resolveTableColumns(block);
   const rows = resolveTableRows(block, columns);
   if (columns.length === 0 && rows.length === 0) {
@@ -509,7 +519,8 @@ const ArtifactStructuredTable = memo(function ArtifactStructuredTable({
               tone === "light" ? "text-slate-900" : "text-white",
             )}
           >
-            {normalizeText(block.title) || "表格"}
+            {normalizeText(block.title) ||
+              t("workspace.artifactDocumentBlock.table.titleFallback")}
           </h3>
         </div>
         <div className="overflow-auto">
@@ -730,6 +741,7 @@ const ArtifactQuote = memo(function ArtifactQuote({
 function resolveCitationEntries(
   block: ArtifactDocumentBlock,
   sourceLookup: Map<string, ArtifactDocumentSource>,
+  t: WorkspaceT,
 ) {
   const items = Array.isArray(block.items) ? block.items : [];
   const resolvedItems: Array<{
@@ -749,7 +761,9 @@ function resolveCitationEntries(
       normalizeText(source?.locator?.url) ||
       normalizeText(source?.locator?.path) ||
       normalizeText(sourceId) ||
-      `来源 ${index + 1}`;
+      t("workspace.artifactDocumentBlock.citation.itemTitleFallback", {
+        index: index + 1,
+      });
     const note =
       normalizeText(record?.note) ||
       normalizeText(source?.snippet) ||
@@ -776,9 +790,10 @@ const ArtifactCitationList = memo(function ArtifactCitationList({
   tone,
   sourceLookup,
 }: ArtifactDocumentBlockComponentProps) {
+  const { t } = useTranslation("workspace");
   const resolvedItems = useMemo(
-    () => resolveCitationEntries(block, sourceLookup),
-    [block, sourceLookup],
+    () => resolveCitationEntries(block, sourceLookup, t),
+    [block, sourceLookup, t],
   );
 
   if (resolvedItems.length === 0) {
@@ -795,7 +810,8 @@ const ArtifactCitationList = memo(function ArtifactCitationList({
             tone === "light" ? "text-slate-900" : "text-white",
           )}
         >
-          {normalizeText(block.title) || "参考来源"}
+          {normalizeText(block.title) ||
+            t("workspace.artifactDocumentBlock.citation.titleFallback")}
         </h3>
       </div>
       <div className="space-y-3">
@@ -965,6 +981,7 @@ const ArtifactDivider = memo(function ArtifactDivider({
 
 function renderBlockContent(
   props: ArtifactDocumentBlockComponentProps,
+  t: WorkspaceT,
 ): React.ReactNode {
   switch (props.block.type) {
     case "section_header":
@@ -1030,7 +1047,7 @@ function renderBlockContent(
       return <ArtifactQuote {...props} />;
     case "citation_list":
       if (
-        resolveCitationEntries(props.block, props.sourceLookup).length === 0
+        resolveCitationEntries(props.block, props.sourceLookup, t).length === 0
       ) {
         return null;
       }
@@ -1084,7 +1101,8 @@ export const ArtifactDocumentBlockRenderer = memo(
   function ArtifactDocumentBlockRenderer(
     props: ArtifactDocumentBlockComponentProps,
   ) {
-    const content = renderBlockContent(props);
+    const { t } = useTranslation("workspace");
+    const content = renderBlockContent(props, t);
     const fallback = renderBlockFallback(props.block, props.tone);
 
     if (content === null) {

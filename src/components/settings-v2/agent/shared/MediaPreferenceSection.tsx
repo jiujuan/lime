@@ -65,12 +65,8 @@ export function MediaPreferenceSection({
   const tipAria = (label: string) =>
     t("settings.mediaGeneration.tipAria", {
       label,
-      defaultValue: "{{label}}说明",
     });
-  const autoSelectLabel = t(
-    "settings.mediaGeneration.selector.auto",
-    "自动选择",
-  );
+  const autoSelectLabel = t("settings.mediaGeneration.selector.auto");
 
   return (
     <section className="overflow-visible rounded-[24px] border border-slate-200/80 bg-white shadow-sm shadow-slate-950/5">
@@ -94,8 +90,7 @@ export function MediaPreferenceSection({
             disabled={disabled || resetDisabled}
             className="rounded-full border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
           >
-            {resetLabel ??
-              t("settings.mediaGeneration.action.reset", "恢复默认")}
+            {resetLabel ?? t("settings.mediaGeneration.action.reset")}
           </Button>
         ) : null}
       </div>

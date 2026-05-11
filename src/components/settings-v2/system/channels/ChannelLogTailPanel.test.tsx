@@ -1,28 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-const { mockUseTranslation } = vi.hoisted(() => ({
-  mockUseTranslation: vi.fn((_namespace?: string) => ({
-    i18n: { language: "zh-CN" },
-    t: (key: string, options?: unknown) => {
-      if (typeof options === "string") {
-        return options;
-      }
-
-      if (options && typeof options === "object") {
-        const values = options as Record<string, unknown>;
-        const template =
-          typeof values.defaultValue === "string" ? values.defaultValue : key;
-        return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-          String(values[name] ?? ""),
-        );
-      }
-
-      return key;
-    },
-  })),
-}));
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 const { mockClearLogs, mockGetLogs, mockGetPersistedLogsTail } = vi.hoisted(
   () => ({
@@ -31,10 +10,6 @@ const { mockClearLogs, mockGetLogs, mockGetPersistedLogsTail } = vi.hoisted(
     mockGetPersistedLogsTail: vi.fn(),
   }),
 );
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
-}));
 
 vi.mock("@/lib/api/logs", () => ({
   clearLogs: mockClearLogs,
@@ -110,7 +85,7 @@ function setInputValue(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -118,6 +93,7 @@ beforeEach(() => {
   ).IS_REACT_ACT_ENVIRONMENT = true;
 
   vi.clearAllMocks();
+  await changeLimeLocale("en-US");
   vi.spyOn(window, "setInterval").mockReturnValue(
     undefined as unknown as ReturnType<typeof window.setInterval>,
   );
@@ -127,7 +103,7 @@ beforeEach(() => {
   mockClearLogs.mockReturnValue(new Promise(() => undefined));
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mounted.length > 0) {
     const target = mounted.pop();
     if (!target) {
@@ -142,28 +118,32 @@ afterEach(() => {
 
   vi.clearAllMocks();
   vi.restoreAllMocks();
+  await changeLimeLocale("zh-CN");
 });
 
 describe("ChannelLogTailPanel", () => {
-  it("应通过 settings namespace 渲染日志 Tail 文案", () => {
+  it("应通过 settings namespace 渲染英文日志 Tail 文案", () => {
     const container = renderComponent();
     const text = container.textContent ?? "";
 
-    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
-    expect(text).toContain("渠道日志 Tail");
-    expect(text).toContain("过滤模式");
-    expect(text).toContain("复制视图");
-    expect(text).toContain("加载中...");
+    expect(text).toContain("Channel Log Tail");
+    expect(text).toContain("Filter Mode");
+    expect(text).toContain("Copy View");
+    expect(text).toContain("Loading...");
+    expect(text).not.toContain("渠道日志 Tail");
+    expect(text).not.toContain("settings.channels.logTail");
   });
 
   it("当前视图为空时应渲染可翻译的复制提示", () => {
     const container = renderComponent();
 
     act(() => {
-      findButton(container, "复制视图").click();
+      findButton(container, "Copy View").click();
     });
 
-    expect(container.textContent).toContain("当前无可复制日志");
+    expect(container.textContent).toContain(
+      "No logs to copy in the current view",
+    );
   });
 
   it("清空日志时应使用 settings namespace 的确认文案", () => {
@@ -171,11 +151,11 @@ describe("ChannelLogTailPanel", () => {
     const container = renderComponent();
 
     act(() => {
-      findButton(container, "清空日志").click();
+      findButton(container, "Clear Logs").click();
     });
 
     expect(confirmSpy).toHaveBeenCalledWith(
-      "确认清空日志吗？\n这会清空当前内存日志、当前日志文件以及历史渠道诊断日志，且无法恢复。",
+      "Clear logs?\nThis will clear current in-memory logs, the current log file, and historical channel diagnostic logs. This cannot be undone.",
     );
     expect(mockClearLogs).toHaveBeenCalledTimes(1);
   });
@@ -196,6 +176,8 @@ describe("ChannelLogTailPanel", () => {
       setInputValue(input as HTMLInputElement, "[invalid");
     });
 
-    expect(container.textContent).toContain("正则表达式无效，已回退为不过滤");
+    expect(container.textContent).toContain(
+      "Invalid regex. Falling back to no filter.",
+    );
   });
 });

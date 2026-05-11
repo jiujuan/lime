@@ -37,12 +37,7 @@ export function WorkspaceRepairHistoryCard({
   const clearRecords = useCallback(() => {
     clearWorkspaceRepairHistory();
     setRecords([]);
-    setActionMessage(
-      t(
-        "settings.system.workspaceRepair.message.cleared",
-        "已清空本地 Workspace 自愈记录",
-      ),
-    );
+    setActionMessage(t("settings.system.workspaceRepair.message.cleared"));
     setTimeout(() => setActionMessage(null), 1800);
   }, [t]);
 
@@ -50,10 +45,7 @@ export function WorkspaceRepairHistoryCard({
     const latest = records[0];
     if (!latest) {
       setActionMessage(
-        t(
-          "settings.system.workspaceRepair.message.noCopyableRecord",
-          "暂无可复制的修复记录",
-        ),
+        t("settings.system.workspaceRepair.message.noCopyableRecord"),
       );
       setTimeout(() => setActionMessage(null), 1800);
       return;
@@ -62,26 +54,17 @@ export function WorkspaceRepairHistoryCard({
     try {
       await copyTextToClipboard(
         buildWorkspaceRepairSummary(latest),
-        t(
-          "settings.system.workspaceRepair.message.copyPermissionFailed",
-          "复制失败，请检查窗口焦点或系统剪贴板权限",
-        ),
+        t("settings.system.workspaceRepair.message.copyPermissionFailed"),
       );
       setActionMessage(
-        t(
-          "settings.system.workspaceRepair.message.copiedLatest",
-          "已复制最近一条自愈记录摘要",
-        ),
+        t("settings.system.workspaceRepair.message.copiedLatest"),
       );
       setTimeout(() => setActionMessage(null), 1800);
     } catch (error) {
       setActionMessage(
         error instanceof Error
           ? error.message
-          : t(
-              "settings.system.workspaceRepair.message.copyFailed",
-              "复制失败，请重试",
-            ),
+          : t("settings.system.workspaceRepair.message.copyFailed"),
       );
       setTimeout(() => setActionMessage(null), 2200);
     }
@@ -90,10 +73,7 @@ export function WorkspaceRepairHistoryCard({
   const copyAllRecords = useCallback(async () => {
     if (records.length === 0) {
       setActionMessage(
-        t(
-          "settings.system.workspaceRepair.message.noCopyableRecord",
-          "暂无可复制的修复记录",
-        ),
+        t("settings.system.workspaceRepair.message.noCopyableRecord"),
       );
       setTimeout(() => setActionMessage(null), 1800);
       return;
@@ -102,15 +82,11 @@ export function WorkspaceRepairHistoryCard({
     try {
       await copyTextToClipboard(
         buildWorkspaceRepairBatchSummary(records),
-        t(
-          "settings.system.workspaceRepair.message.copyPermissionFailed",
-          "复制失败，请检查窗口焦点或系统剪贴板权限",
-        ),
+        t("settings.system.workspaceRepair.message.copyPermissionFailed"),
       );
       setActionMessage(
         t("settings.system.workspaceRepair.message.copiedAll", {
           count: records.length,
-          defaultValue: "已复制最近 {{count}} 条自愈记录",
         }),
       );
       setTimeout(() => setActionMessage(null), 1800);
@@ -118,45 +94,29 @@ export function WorkspaceRepairHistoryCard({
       setActionMessage(
         error instanceof Error
           ? error.message
-          : t(
-              "settings.system.workspaceRepair.message.copyFailed",
-              "复制失败，请重试",
-            ),
+          : t("settings.system.workspaceRepair.message.copyFailed"),
       );
       setTimeout(() => setActionMessage(null), 2200);
     }
   }, [records, t]);
 
-  const displayTitle =
-    title ??
-    t("settings.system.workspaceRepair.title", "Workspace 自动修复记录");
+  const displayTitle = title ?? t("settings.system.workspaceRepair.title");
   const displayDescription =
-    description ??
-    t(
-      "settings.system.workspaceRepair.description",
-      "记录最近自动修复/迁移（不打断用户操作）",
-    );
+    description ?? t("settings.system.workspaceRepair.description");
   const getSourceLabel = (source: WorkspaceRepairRecord["source"]): string => {
     const sourceLabelMap: Record<WorkspaceRepairRecord["source"], string> = {
-      app_startup: t(
-        "settings.system.workspaceRepair.source.appStartup",
-        "应用启动",
-      ),
+      app_startup: t("settings.system.workspaceRepair.source.appStartup"),
       workspace_refresh: t(
         "settings.system.workspaceRepair.source.workspaceRefresh",
-        "工作区刷新",
       ),
       workspace_set_default: t(
         "settings.system.workspaceRepair.source.workspaceSetDefault",
-        "设置默认工作区",
       ),
       projects_refresh: t(
         "settings.system.workspaceRepair.source.projectsRefresh",
-        "项目列表刷新",
       ),
       agent_chat_page: t(
         "settings.system.workspaceRepair.source.agentChatPage",
-        "创作会话页",
       ),
     };
 
@@ -181,7 +141,6 @@ export function WorkspaceRepairHistoryCard({
           <p className="text-[11px] text-muted-foreground">
             {t("settings.system.workspaceRepair.recentCount", {
               count: records.length,
-              defaultValue: "最近记录：{{count}} 条",
             })}
           </p>
         </div>
@@ -191,28 +150,28 @@ export function WorkspaceRepairHistoryCard({
             onClick={reloadRecords}
             className={actionButtonClass}
           >
-            {t("settings.system.workspaceRepair.action.refresh", "刷新")}
+            {t("settings.system.workspaceRepair.action.refresh")}
           </button>
           <button
             type="button"
             onClick={clearRecords}
             className={actionButtonClass}
           >
-            {t("settings.system.workspaceRepair.action.clear", "清空")}
+            {t("settings.system.workspaceRepair.action.clear")}
           </button>
           <button
             type="button"
             onClick={() => void copyLatestRecord()}
             className={actionButtonClass}
           >
-            {t("settings.system.workspaceRepair.action.copyLatest", "复制最新")}
+            {t("settings.system.workspaceRepair.action.copyLatest")}
           </button>
           <button
             type="button"
             onClick={() => void copyAllRecords()}
             className={actionButtonClass}
           >
-            {t("settings.system.workspaceRepair.action.copyAll", "复制全部")}
+            {t("settings.system.workspaceRepair.action.copyAll")}
           </button>
         </div>
       </div>
@@ -225,7 +184,7 @@ export function WorkspaceRepairHistoryCard({
 
       {records.length === 0 ? (
         <div className="rounded-lg border border-dashed bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
-          {t("settings.system.workspaceRepair.empty", "暂无自动修复记录")}
+          {t("settings.system.workspaceRepair.empty")}
         </div>
       ) : (
         <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
@@ -251,7 +210,6 @@ export function WorkspaceRepairHistoryCard({
                 <span className="inline-flex items-center rounded-full border border-border/70 bg-background px-2 py-0.5 text-[10px] text-muted-foreground">
                   {t("settings.system.workspaceRepair.sourceLabel", {
                     source: getSourceLabel(record.source),
-                    defaultValue: "来源：{{source}}",
                   })}
                 </span>
               </div>

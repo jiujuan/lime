@@ -611,8 +611,7 @@ export function AutomationSettings({
     [t],
   );
   const automationPresentationCopy = useMemo(
-    () =>
-      buildAutomationPresentationCopy(t, serviceSkillContextCopy),
+    () => buildAutomationPresentationCopy(t, serviceSkillContextCopy),
     [serviceSkillContextCopy, t],
   );
   const legacyBrowserAutomationNotice =
@@ -2524,9 +2523,7 @@ export function AutomationSettings({
                                         </Badge>
                                         {serviceSkillContext.executionLocationLegacyCompat ? (
                                           <Badge variant="outline">
-                                            {
-                                              serviceSkillExecutionCompatLabel
-                                            }
+                                            {serviceSkillExecutionCompatLabel}
                                           </Badge>
                                         ) : null}
                                         <Badge variant="outline">
@@ -2648,8 +2645,7 @@ export function AutomationSettings({
                                         job.last_status,
                                         automationPresentationCopy,
                                       )}
-                                      :{" "}
-                                      {jobDetailMessage}
+                                      : {jobDetailMessage}
                                     </div>
                                   ) : null}
                                 </div>

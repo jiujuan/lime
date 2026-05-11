@@ -1,50 +1,146 @@
-const LEGACY_DECISION_PREFIX_RE = /^已决定[:：]\s*/;
+import type { AgentThreadItem } from "../types";
 
-const INTERNAL_ROUTING_SUMMARY_PATTERNS = [
-  /^直接回答优先$/,
-  /^优先本地直接回答$/,
-  /^联网搜索能力待命$/,
-  /^联网搜索仅作为候选能力待命$/,
-  /^先理解意图再决定是否联网$/,
-  /^当前请求无需默认升级为搜索或任务/,
-  /^当前请求无需工具介入/,
-  /^默认保持直接回答$/,
-  /^只有证据不足或时效性要求出现时才升级$/,
-  /^等待首个模型事件$/,
-  /^推理增强已待命$/,
-  /^必要时启用深度思考$/,
-  /^先走轻量推理$/,
-  /^自动选择执行方式$/,
-  /^对话优先执行$/,
-  /^代码编排执行$/,
-  /^用户请求已入队$/,
-  /^系统引导请求$/,
-  /^正在启动处理流程$/,
-  /^正在准备处理$/,
-  /^已开始处理正在准备环境并等待第一条进展$/,
-  /^正在理解你的需求并准备当前阶段$/,
+type MetadataSource = unknown;
+
+const RUNTIME_STATUS_ITEM_ID_PREFIX = "turn_summary:";
+const RUNTIME_STATUS_MARKERS = new Set([
+  "runtime_status",
+  "run.status",
+  "agentui.runtime_status",
+]);
+const DIAGNOSTIC_VISIBILITIES = new Set([
+  "transient",
+  "diagnostics",
+  "diagnostic",
+  "runtime_status",
+  "hidden",
+]);
+const USER_VISIBLE_VISIBILITIES = new Set([
+  "conversation",
+  "timeline",
+  "process",
+  "task",
+]);
+const LOW_ATTENTION_RUNTIME_PHASES = new Set(["preparing", "routing"]);
+const INTERNAL_ROUTING_MARKERS = [
+  "直接回答优先",
+  "无需默认升级",
+  "无需工具介入",
+  "默认保持直接回答",
+];
+const INTERNAL_TURN_SUMMARY_MARKERS = [
+  "已完成一批本地分析",
+  "正在整理这一批结果",
 ];
 
-function normalizeLineForMatch(value: string): string {
-  return value
-    .replace(LEGACY_DECISION_PREFIX_RE, "")
-    .replace(/^[•*-]\s*/u, "")
-    .replace(/[。；，、,.!?！？:：]/g, "")
-    .replace(/\s+/g, "")
-    .trim();
+function isRecord(value: MetadataSource): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function isLocalWorkspaceBatchSummary(text: string): boolean {
-  const compact = normalizeTurnSummaryDisplayText(text).replace(/\s+/g, "");
-  if (!compact) {
-    return false;
+function normalizeMetadataToken(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim().toLowerCase();
+  return normalized || null;
+}
+
+function readMetadataToken(
+  metadata: MetadataSource,
+  keys: readonly string[],
+): string | null {
+  if (!isRecord(metadata)) {
+    return null;
   }
 
+  for (const key of keys) {
+    const value = normalizeMetadataToken(metadata[key]);
+    if (value) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function readNestedMetadataToken(
+  metadata: MetadataSource,
+  containers: readonly string[],
+  keys: readonly string[],
+): string | null {
+  if (!isRecord(metadata)) {
+    return null;
+  }
+
+  for (const containerKey of containers) {
+    const container = metadata[containerKey];
+    const value = readMetadataToken(container, keys);
+    if (value) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function readPresentationToken(
+  metadata: MetadataSource,
+  keys: readonly string[],
+): string | null {
   return (
-    compact.includes("已完成一批本地分析") ||
-    (compact.includes("已完成这一批本地仓库的") &&
-      compact.includes("正在整理这一批结果并判断是否还需要继续取证"))
+    readMetadataToken(metadata, keys) ||
+    readNestedMetadataToken(metadata, ["agentui", "agentUi"], keys)
   );
+}
+
+function metadataMarksRuntimeStatus(metadata: MetadataSource): boolean {
+  const source = readPresentationToken(metadata, [
+    "sourceType",
+    "source_type",
+    "source",
+    "kind",
+    "eventClass",
+    "event_class",
+  ]);
+  if (source && RUNTIME_STATUS_MARKERS.has(source)) {
+    return true;
+  }
+
+  const surface = readPresentationToken(metadata, ["surface"]);
+  return Boolean(surface && RUNTIME_STATUS_MARKERS.has(surface));
+}
+
+function metadataMarksDiagnosticsOnly(metadata: MetadataSource): boolean {
+  const visibility = readPresentationToken(metadata, [
+    "visibility",
+    "persistence",
+    "presentation",
+  ]);
+  if (visibility) {
+    if (USER_VISIBLE_VISIBILITIES.has(visibility)) {
+      return false;
+    }
+    if (DIAGNOSTIC_VISIBILITIES.has(visibility)) {
+      return true;
+    }
+  }
+
+  const surface = readPresentationToken(metadata, ["surface"]);
+  return Boolean(surface && RUNTIME_STATUS_MARKERS.has(surface));
+}
+
+function metadataMarksUserVisible(metadata: MetadataSource): boolean {
+  const visibility = readPresentationToken(metadata, [
+    "visibility",
+    "persistence",
+    "presentation",
+  ]);
+  if (visibility && USER_VISIBLE_VISIBILITIES.has(visibility)) {
+    return true;
+  }
+
+  const surface = readPresentationToken(metadata, ["surface"]);
+  return Boolean(surface && USER_VISIBLE_VISIBILITIES.has(surface));
 }
 
 export function normalizeTurnSummaryDisplayText(text?: string | null): string {
@@ -58,30 +154,51 @@ export function extractTurnSummaryLines(text?: string | null): string[] {
     .filter(Boolean);
 }
 
-export function isInternalRoutingTurnSummaryText(
-  text?: string | null,
-): boolean {
-  if (isLocalWorkspaceBatchSummary(text || "")) {
-    return true;
-  }
-
-  const lines = extractTurnSummaryLines(text);
-  if (lines.length === 0) {
+export function isRuntimeStatusTurnSummaryItem(item: AgentThreadItem): boolean {
+  if (item.type !== "turn_summary") {
     return false;
   }
 
-  return lines.every((line) => {
-    const normalized = normalizeLineForMatch(line);
-    return INTERNAL_ROUTING_SUMMARY_PATTERNS.some((pattern) =>
-      pattern.test(normalized),
-    );
-  });
+  if (item.id.trim().startsWith(RUNTIME_STATUS_ITEM_ID_PREFIX)) {
+    return true;
+  }
+
+  return metadataMarksRuntimeStatus(item.metadata);
+}
+
+export function shouldHideTurnSummaryFromConversation(
+  item: AgentThreadItem,
+): boolean {
+  if (item.type !== "turn_summary") {
+    return false;
+  }
+
+  if (metadataMarksDiagnosticsOnly(item.metadata)) {
+    return true;
+  }
+
+  if (metadataMarksUserVisible(item.metadata)) {
+    return false;
+  }
+
+  const displayText = normalizeTurnSummaryDisplayText(item.text);
+  if (
+    INTERNAL_TURN_SUMMARY_MARKERS.some((marker) =>
+      displayText.includes(marker),
+    )
+  ) {
+    return true;
+  }
+
+  return isRuntimeStatusTurnSummaryItem(item);
 }
 
 interface RuntimeStatusLike {
+  phase?: string | null;
   title?: string | null;
   detail?: string | null;
   checkpoints?: Array<string | null | undefined> | null;
+  metadata?: MetadataSource;
 }
 
 export function buildRuntimeStatusPresentationText(
@@ -97,22 +214,24 @@ export function buildRuntimeStatusPresentationText(
     .join("\n");
 }
 
-export function isInternalRoutingRuntimeStatus(
+export function isRuntimeStatusDiagnosticsOnly(
   status?: RuntimeStatusLike | null,
 ): boolean {
   if (!status) {
     return false;
   }
 
-  const primaryText = [status.title, status.detail]
-    .map((line) => normalizeTurnSummaryDisplayText(line))
-    .filter(Boolean)
-    .join("\n");
-  if (primaryText && isInternalRoutingTurnSummaryText(primaryText)) {
+  if (metadataMarksDiagnosticsOnly(status.metadata)) {
     return true;
   }
 
-  return isInternalRoutingTurnSummaryText(
-    buildRuntimeStatusPresentationText(status),
+  const phase = normalizeMetadataToken(status.phase);
+  if (!phase || !LOW_ATTENTION_RUNTIME_PHASES.has(phase)) {
+    return false;
+  }
+
+  const presentationText = buildRuntimeStatusPresentationText(status);
+  return INTERNAL_ROUTING_MARKERS.some((marker) =>
+    presentationText.includes(marker),
   );
 }

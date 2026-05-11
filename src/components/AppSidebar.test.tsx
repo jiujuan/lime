@@ -22,7 +22,6 @@ import {
 const {
   mockGetConfig,
   mockSaveConfig,
-  mockGetPluginsForSurface,
   mockSubscribeAppConfigChanged,
   mockListAgentRuntimeSessions,
   mockUpdateAgentRuntimeSession,
@@ -44,7 +43,6 @@ const {
 } = vi.hoisted(() => ({
   mockGetConfig: vi.fn(),
   mockSaveConfig: vi.fn(),
-  mockGetPluginsForSurface: vi.fn(),
   mockSubscribeAppConfigChanged: vi.fn(),
   mockListAgentRuntimeSessions: vi.fn(),
   mockUpdateAgentRuntimeSession: vi.fn(),
@@ -81,10 +79,6 @@ vi.mock("@/i18n/legacy-patch/I18nPatchProvider", () => ({
     language: "zh",
     setLanguage: mockSetI18nLanguage,
   }),
-}));
-
-vi.mock("@/lib/api/pluginUI", () => ({
-  getPluginsForSurface: mockGetPluginsForSurface,
 }));
 
 vi.mock("@/lib/api/agentRuntime", () => ({
@@ -318,7 +312,6 @@ describe("AppSidebar", () => {
     document.documentElement.removeAttribute("style");
     mockGetConfig.mockResolvedValue({});
     mockSaveConfig.mockResolvedValue(undefined);
-    mockGetPluginsForSurface.mockResolvedValue([]);
     mockListAgentRuntimeSessions.mockResolvedValue([]);
     mockUpdateAgentRuntimeSession.mockResolvedValue(undefined);
     mockDeleteAgentRuntimeSession.mockResolvedValue(undefined);
@@ -523,7 +516,6 @@ describe("AppSidebar", () => {
     expect(container.textContent).not.toContain("设置");
     expect(container.textContent).not.toContain("持续流程");
     expect(container.textContent).not.toContain("消息渠道");
-    expect(container.textContent).not.toContain("插件中心");
     expect(container.textContent).not.toContain("桌宠");
     expect(container.textContent).not.toContain("支撑");
     expect(container.textContent).not.toContain("技能");
@@ -2632,7 +2624,7 @@ describe("AppSidebar", () => {
   it("显式开启后应显示可选系统扩展入口", async () => {
     mockGetConfig.mockResolvedValue({
       navigation: {
-        enabled_items: ["plugins", "companion"],
+        enabled_items: ["companion"],
       },
     });
 
@@ -2643,7 +2635,6 @@ describe("AppSidebar", () => {
     });
     await flushEffects(2);
 
-    expect(container.textContent).not.toContain("插件中心");
     expect(container.textContent).not.toContain("桌宠");
 
     await act(async () => {
@@ -2661,7 +2652,6 @@ describe("AppSidebar", () => {
     expect(accountMenu?.textContent).toContain("设置");
     expect(accountMenu?.textContent).toContain("持续流程");
     expect(accountMenu?.textContent).toContain("消息渠道");
-    expect(accountMenu?.textContent).toContain("插件中心");
     expect(accountMenu?.textContent).toContain("桌宠");
   });
 
@@ -2674,7 +2664,7 @@ describe("AppSidebar", () => {
       })
       .mockResolvedValueOnce({
         navigation: {
-          enabled_items: ["plugins", "companion"],
+          enabled_items: ["companion"],
         },
       });
 
@@ -2685,7 +2675,6 @@ describe("AppSidebar", () => {
     });
     await flushEffects(2);
 
-    expect(container.textContent).not.toContain("插件中心");
     expect(container.textContent).not.toContain("桌宠");
 
     await act(async () => {
@@ -2703,7 +2692,6 @@ describe("AppSidebar", () => {
     expect(accountMenu?.textContent).toContain("设置");
     expect(accountMenu?.textContent).toContain("持续流程");
     expect(accountMenu?.textContent).toContain("消息渠道");
-    expect(accountMenu?.textContent).not.toContain("插件中心");
     expect(accountMenu?.textContent).not.toContain("桌宠");
 
     await act(async () => {
@@ -2719,7 +2707,6 @@ describe("AppSidebar", () => {
     accountMenu = container.querySelector(
       '[data-testid="app-sidebar-account-menu"]',
     );
-    expect(accountMenu?.textContent).toContain("插件中心");
     expect(accountMenu?.textContent).toContain("桌宠");
   });
 
@@ -2949,54 +2936,5 @@ describe("AppSidebar", () => {
     expect(
       container.querySelector('button[aria-label="设置"][aria-current="page"]'),
     ).toBeNull();
-  });
-
-  it("插件中心未开启时不应渲染插件扩展分组", async () => {
-    mockGetPluginsForSurface.mockResolvedValue([
-      {
-        pluginId: "demo-sidebar",
-        name: "Demo Sidebar",
-        description: "demo",
-        icon: "Bot",
-        surfaces: ["sidebar"],
-      },
-    ]);
-
-    const container = mountSidebarContainer({
-      currentPageParams: {
-        agentEntry: "new-task",
-      } as AgentPageParams,
-    });
-    await flushEffects(3);
-
-    expect(container.textContent).not.toContain("插件扩展");
-    expect(container.textContent).not.toContain("Demo Sidebar");
-  });
-
-  it("插件中心开启后才应显示插件扩展分组", async () => {
-    mockGetConfig.mockResolvedValue({
-      navigation: {
-        enabled_items: ["plugins"],
-      },
-    });
-    mockGetPluginsForSurface.mockResolvedValue([
-      {
-        pluginId: "demo-sidebar",
-        name: "Demo Sidebar",
-        description: "demo",
-        icon: "Bot",
-        surfaces: ["sidebar"],
-      },
-    ]);
-
-    const container = mountSidebarContainer({
-      currentPageParams: {
-        agentEntry: "new-task",
-      } as AgentPageParams,
-    });
-    await flushEffects(3);
-
-    expect(container.textContent).toContain("插件扩展");
-    expect(container.textContent).toContain("Demo Sidebar");
   });
 });

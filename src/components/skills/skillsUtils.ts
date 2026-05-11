@@ -2,8 +2,14 @@ import type { Skill } from "@/lib/api/skills";
 
 interface SkillSection {
   key: "builtin" | "local" | "remote";
-  title: string;
-  description: string;
+  titleKey:
+    | "skills.page.sections.builtin.title"
+    | "skills.page.sections.local.title"
+    | "skills.page.sections.remote.title";
+  descriptionKey:
+    | "skills.page.sections.builtin.description"
+    | "skills.page.sections.local.description"
+    | "skills.page.sections.remote.description";
   skills: Skill[];
 }
 
@@ -50,20 +56,20 @@ export function groupSkillsBySourceKind(skills: Skill[]): SkillSection[] {
   return [
     {
       key: "builtin",
-      title: "BUILT-IN SKILLS",
-      description: "应用内置技能，随 Lime 提供并默认可用。",
+      titleKey: "skills.page.sections.builtin.title",
+      descriptionKey: "skills.page.sections.builtin.description",
       skills: builtinSkills,
     },
     {
       key: "local",
-      title: "LOCAL SKILLS",
-      description: "当前项目或本地目录中可直接使用的技能。",
+      titleKey: "skills.page.sections.local.title",
+      descriptionKey: "skills.page.sections.local.description",
       skills: localSkills,
     },
     {
       key: "remote",
-      title: "REMOTE SKILLS",
-      description: "远程技能仓库，可按需安装。",
+      titleKey: "skills.page.sections.remote.title",
+      descriptionKey: "skills.page.sections.remote.description",
       skills: remoteSkills,
     },
   ];

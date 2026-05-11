@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import type { Artifact } from "@/lib/artifact/types";
 import { BrowserAssistRenderer } from "./BrowserAssistRenderer";
 
@@ -41,15 +42,17 @@ async function renderArtifact(artifact: Artifact) {
   return container;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+
+  await changeLimeLocale("zh-CN");
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mountedRoots.length > 0) {
     const mounted = mountedRoots.pop();
     if (!mounted) break;
@@ -59,6 +62,7 @@ afterEach(() => {
     mounted.container.remove();
   }
   vi.clearAllMocks();
+  await changeLimeLocale("zh-CN");
 });
 
 describe("BrowserAssistRenderer", () => {
@@ -75,8 +79,73 @@ describe("BrowserAssistRenderer", () => {
     );
 
     expect(container.textContent).toContain("正在启动浏览器协助");
-    expect(container.textContent).toContain("通常需要 3–8 秒");
+    expect(container.textContent).toContain("通常需要 3-8 秒");
     expect(container.textContent).toContain("https://example.com");
+  });
+
+  it("应通过 workspace namespace 渲染英文浏览器协助 chrome", async () => {
+    await changeLimeLocale("en-US");
+
+    const launching = await renderArtifact(
+      createArtifact({
+        status: "pending",
+        meta: {
+          profileKey: "general_browser_assist",
+          url: "https://example.com",
+          launchState: "launching",
+        },
+      }),
+    );
+
+    expect(launching.textContent).toContain("Starting browser assist");
+    expect(launching.textContent).toContain("usually takes 3-8 seconds");
+    expect(launching.textContent).not.toContain("正在启动浏览器协助");
+
+    const replay = await renderArtifact(
+      createArtifact({
+        meta: {
+          browserActionIndex: {
+            actionCount: 1,
+            sessionCount: 1,
+            observationCount: 1,
+            screenshotCount: 1,
+            items: [
+              {
+                action: "navigate",
+                status: "completed",
+                screenshotAvailable: true,
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    expect(replay.textContent).toContain("Browser Assist replay");
+    expect(replay.textContent).toContain("Browser actions");
+    expect(replay.textContent).toContain("Recent browser actions");
+    expect(replay.textContent).toContain("Screenshot");
+    expect(replay.textContent).not.toContain("Browser Assist 复盘");
+
+    const migrated = await renderArtifact(
+      createArtifact({
+        status: "complete",
+        meta: {
+          profileKey: "general_browser_assist",
+          sessionId: "session-1",
+        },
+      }),
+    );
+
+    expect(migrated.textContent).toContain(
+      "Browser assist has moved to Browser Workspace",
+    );
+    expect(migrated.textContent).toContain(
+      "Session session-1 is ready for Browser Workspace takeover.",
+    );
+    expect(migrated.textContent).not.toContain(
+      "浏览器协助已迁移到浏览器工作台",
+    );
   });
 
   it("完整会话 Artifact 也不应再在 Claw 画布内渲染浏览器工作区", async () => {
@@ -146,6 +215,6 @@ describe("BrowserAssistRenderer", () => {
     expect(container.textContent).toContain("get_page_info");
     expect(container.textContent).toContain("browser_snapshot");
     expect(container.textContent).toContain("https://example.com/");
-    expect(container.textContent).toContain("observation / screenshot");
+    expect(container.textContent).toContain("观察 / 截图");
   });
 });

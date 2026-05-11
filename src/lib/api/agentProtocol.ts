@@ -265,6 +265,7 @@ export interface AgentThreadErrorItem extends AgentThreadItemBase {
 export interface AgentThreadTurnSummaryItem extends AgentThreadItemBase {
   type: "turn_summary";
   text: string;
+  metadata?: Record<string, unknown>;
 }
 
 export type AgentThreadItem =

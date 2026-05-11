@@ -1,39 +1,16 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
-const { mockGetConfig, mockSaveConfig, mockUseTranslation } = vi.hoisted(
-  () => ({
-    mockGetConfig: vi.fn(),
-    mockSaveConfig: vi.fn(),
-    mockUseTranslation: vi.fn((_namespace?: string) => ({
-      t: (key: string, options?: unknown) => {
-        if (typeof options === "string") {
-          return options;
-        }
-
-        if (options && typeof options === "object") {
-          const values = options as Record<string, unknown>;
-          const template =
-            typeof values.defaultValue === "string" ? values.defaultValue : key;
-          return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-            String(values[name] ?? ""),
-          );
-        }
-
-        return key;
-      },
-    })),
-  }),
-);
+const { mockGetConfig, mockSaveConfig } = vi.hoisted(() => ({
+  mockGetConfig: vi.fn(),
+  mockSaveConfig: vi.fn(),
+}));
 
 vi.mock("@/lib/api/appConfig", () => ({
   getConfig: mockGetConfig,
   saveConfig: mockSaveConfig,
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
 }));
 
 vi.mock("@/components/input-kit", () => ({
@@ -78,8 +55,8 @@ vi.mock("@/components/input-kit", () => ({
         : [];
     return (
       <div data-testid="image-model-selector">
-        {providerLabel || placeholderLabel || "自动选择"} /{" "}
-        {model || placeholderLabel || "自动选择"}
+        {providerLabel || placeholderLabel || "Auto select"} /{" "}
+        {model || placeholderLabel || "Auto select"}
         {fallbackModelIds.length > 0 ? (
           <span> / {fallbackModelIds.join(",")}</span>
         ) : null}
@@ -198,7 +175,7 @@ function findSection(container: HTMLElement, title: string): HTMLElement {
   return section as HTMLElement;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -206,6 +183,7 @@ beforeEach(() => {
   ).IS_REACT_ACT_ENVIRONMENT = true;
 
   vi.clearAllMocks();
+  await changeLimeLocale("en-US");
 
   mockGetConfig.mockResolvedValue({
     workspace_preferences: {
@@ -225,7 +203,7 @@ beforeEach(() => {
   mockSaveConfig.mockResolvedValue(undefined);
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mounted.length > 0) {
     const target = mounted.pop();
     if (!target) break;
@@ -235,6 +213,7 @@ afterEach(() => {
     target.container.remove();
   }
   vi.clearAllMocks();
+  await changeLimeLocale("zh-CN");
 });
 
 describe("ImageGenSettings", () => {
@@ -242,15 +221,14 @@ describe("ImageGenSettings", () => {
     const container = renderComponent();
     await flushEffects(3);
 
-    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
-    expect(container.textContent).toContain("图片服务模型");
+    expect(container.textContent).toContain("Image Service Model");
     expect(container.textContent).toContain("Relay OpenAI");
     expect(container.textContent).toContain("gpt-images-2");
     expect(container.textContent).not.toContain("默认图像生成服务");
     expect(container.textContent).not.toContain("默认图像数量");
     expect(container.textContent).not.toContain("图像质量");
 
-    const section = findSection(container, "图片服务模型");
+    const section = findSection(container, "Image Service Model");
     expect(section.className).toContain("overflow-visible");
     expect(section.className).not.toContain("overflow-hidden");
   });
@@ -265,16 +243,19 @@ describe("ImageGenSettings", () => {
     expect(getBodyText()).not.toContain(
       "关闭后，若当前默认图片服务缺失、被禁用或无可用 Key，将直接提示错误。",
     );
+    expect(getBodyText()).not.toContain("settings.mediaGeneration");
 
-    const sectionTip = await hoverTip("图片服务模型说明");
+    const sectionTip = await hoverTip("Image Service Model info");
     expect(getBodyText()).toContain(
-      "这里只配置图片生成任务的默认 Provider、模型与回退策略；默认图片数量等全局参数统一收口到同页下方的 AI 图片设置。",
+      "Configure the default Provider, model, and fallback policy for image generation here; global parameters such as default image count stay in the AI Image settings below.",
     );
     await leaveTip(sectionTip);
 
-    const fallbackTip = await hoverTip("Provider 不可用时自动回退说明");
+    const fallbackTip = await hoverTip(
+      "Auto fallback when Provider is unavailable info",
+    );
     expect(getBodyText()).toContain(
-      "关闭后，若当前默认图片服务缺失、被禁用或无可用 Key，将直接提示错误。",
+      "When disabled, Lime shows an error if the default image service is missing, disabled, or has no usable key.",
     );
     await leaveTip(fallbackTip);
   });
@@ -284,7 +265,7 @@ describe("ImageGenSettings", () => {
     await flushEffects(3);
 
     await act(async () => {
-      findButton(container, "恢复默认").click();
+      findButton(container, "Restore defaults").click();
       await flushEffects(2);
     });
 
@@ -293,7 +274,7 @@ describe("ImageGenSettings", () => {
     expect(
       savedConfig.workspace_preferences.media_defaults.image,
     ).toBeUndefined();
-    expect(container.textContent).toContain("设置已保存");
+    expect(container.textContent).toContain("Settings saved");
   });
 
   it("Fal 只配置文本自定义模型时，图片模型选择器应回退到内置 Fal 图片模型", async () => {
@@ -315,7 +296,7 @@ describe("ImageGenSettings", () => {
     const container = renderComponent();
     await flushEffects(3);
 
-    expect(container.textContent).toContain("Fal / 自动选择");
+    expect(container.textContent).toContain("Fal / Auto select");
     expect(container.textContent).toContain("fal-ai/nano-banana-pro");
     expect(container.textContent).not.toContain("gpt-5.2-pro");
   });

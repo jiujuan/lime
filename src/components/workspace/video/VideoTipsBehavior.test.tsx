@@ -229,9 +229,7 @@ describe("视频工作台 tips 收口", () => {
     await leaveTip(introTip);
 
     const startFrameTip = await hoverTip("Opening frame guidance");
-    expect(getBodyText()).toContain(
-      "Use it to lock the opening composition",
-    );
+    expect(getBodyText()).toContain("Use it to lock the opening composition");
     await leaveTip(startFrameTip);
 
     const endFrameTip = await hoverTip("Ending frame guidance");

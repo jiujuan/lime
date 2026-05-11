@@ -56,16 +56,12 @@ const i18nMocks = vi.hoisted(() => {
       "Email identifier required from i18n",
     "common.oemCloudAccess.emailCode.sent":
       "Verification code sent to {{maskedEmail}} for {{minutes}} minutes from i18n",
-    "common.oemCloudAccess.apiKey.createSuccess":
-      "API key created from i18n",
+    "common.oemCloudAccess.apiKey.createSuccess": "API key created from i18n",
   } as Record<string, string>;
   return {
     translations,
     t: vi.fn(
-      (
-        key: string,
-        options?: Record<string, string | number | undefined>,
-      ) => {
+      (key: string, options?: Record<string, string | number | undefined>) => {
         const template = translations[key] ?? options?.defaultValue ?? key;
         return String(template).replace(
           /{{\s*(\w+)\s*}}/g,

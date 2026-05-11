@@ -1,46 +1,22 @@
 import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { AutomationOverviewFocusCard } from "./AutomationOverviewFocusCard";
-
-const { mockUseTranslation } = vi.hoisted(() => {
-  const mockTranslate = vi.fn((key: string, options?: unknown) => {
-    if (typeof options === "string") return options;
-
-    if (options && typeof options === "object") {
-      const values = options as Record<string, unknown>;
-      const template =
-        typeof values.defaultValue === "string" ? values.defaultValue : key;
-      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-        String(values[name] ?? ""),
-      );
-    }
-
-    return key;
-  });
-
-  return {
-    mockUseTranslation: vi.fn((_namespace?: string) => ({
-      t: mockTranslate,
-    })),
-  };
-});
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
-}));
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+
+  await changeLimeLocale("en-US");
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mountedRoots.length > 0) {
     const mounted = mountedRoots.pop();
     if (!mounted) {
@@ -52,6 +28,7 @@ afterEach(() => {
     mounted.container.remove();
   }
   vi.clearAllMocks();
+  await changeLimeLocale("zh-CN");
 });
 
 async function renderCard(
@@ -68,60 +45,60 @@ async function renderCard(
         job={
           {
             id: "job-sceneapp-overview-1",
-            name: "短视频持续投放",
+            name: "Short video always-on campaign",
             workspace_id: "workspace-default",
           } as any
         }
-        workspaceName="默认工作区"
+        workspaceName="Default workspace"
         summaryCard={
           {
             sceneappId: "story-video-suite",
-            title: "故事短视频套件",
-            businessLabel: "多模态组合",
-            typeLabel: "组合做法",
-            patternSummary: "步骤链",
+            title: "Story video kit",
+            businessLabel: "Multimodal bundle",
+            typeLabel: "Workflow pattern",
+            patternSummary: "Step chain",
             status: "watch",
-            statusLabel: "先补结果材料",
-            summary: "这条持续流程最近一轮已有可继续结果，适合继续回到生成。",
-            nextAction: "先把这轮结果材料沉淀好，再决定是否继续放大。",
+            statusLabel: "Collect result materials first",
+            summary: "This ongoing flow already has results worth continuing.",
+            nextAction: "Archive this run before scaling it.",
             destinations: [
               {
                 key: "task-center",
-                label: "生成",
-                description: "带着材料回到生成继续推进。",
+                label: "Generate",
+                description: "Return to generation with materials.",
               },
             ],
             scorecardAggregate: {
               status: "watch",
-              statusLabel: "先补结果材料",
-              summary: "这轮材料已经接近可复用。",
-              nextAction: "优先补齐结构化结果包。",
-              actionLabel: "建议继续优化",
-              topFailureSignalLabel: "结果材料不完整",
+              statusLabel: "Collect result materials first",
+              summary: "This run is close to reusable.",
+              nextAction: "Complete the structured result pack first.",
+              actionLabel: "Keep improving",
+              topFailureSignalLabel: "Incomplete result materials",
               metricKeys: [],
               failureSignals: [],
               observedFailureSignals: [],
               destinations: [
                 {
                   key: "task-center",
-                  label: "生成",
-                  description: "带着材料回到生成继续推进。",
+                  label: "Generate",
+                  description: "Return to generation with materials.",
                 },
               ],
             },
-            automationSummary: "1 条持续流程 · 1 条启用中 · 当前无风险提醒",
-            latestAutomationLabel: "最近运行：短视频持续投放 · 成功",
+            automationSummary: "1 always-on flow · 1 enabled · no active risks",
+            latestAutomationLabel: "Latest run: short video campaign · success",
           } as any
         }
         runDetailView={
           {
             runId: "run-sceneapp-overview-1",
             status: "success",
-            statusLabel: "成功",
-            stageLabel: "结果已回流",
-            summary: "最近一轮结果已回流，并带着结果材料。",
-            nextAction: "继续看这轮结果。",
-            deliveryCompletionLabel: "已生成完整结果包",
+            statusLabel: "Succeeded",
+            stageLabel: "Results synced",
+            summary: "The latest run synced back with result materials.",
+            nextAction: "Review this run.",
+            deliveryCompletionLabel: "Full result pack generated",
           } as any
         }
         {...props}
@@ -137,12 +114,16 @@ describe("AutomationOverviewFocusCard", () => {
     await renderCard();
 
     const text = document.body.textContent ?? "";
-    expect(text).toContain("现在先继续这条");
-    expect(text).toContain("短视频持续投放");
-    expect(text).toContain("故事短视频套件");
-    expect(text).toContain("这轮材料已经接近可复用。");
-    expect(text).toContain("先做：优先补齐结构化结果包。");
-    expect(text).toContain("最近结果");
+    expect(text).toContain("Continue this one first");
+    expect(text).toContain("Short video always-on campaign");
+    expect(text).toContain("Story video kit");
+    expect(text).toContain("This run is close to reusable.");
+    expect(text).toContain(
+      "Do first: Complete the structured result pack first.",
+    );
+    expect(text).toContain("Recent result");
+    expect(text).not.toContain("现在先继续这条");
+    expect(text).not.toContain("settings.automation.focus");
   });
 
   it("应支持继续复盘与打开详情动作", async () => {
@@ -171,6 +152,11 @@ describe("AutomationOverviewFocusCard", () => {
       "[data-testid='automation-overview-open-job-details']",
     ) as HTMLButtonElement | null;
 
+    expect(reviewButton?.textContent).toContain("Review this run");
+    expect(governanceButton?.textContent).toContain("View recent results");
+    expect(detailButton?.textContent).toContain("Fill in this run");
+    expect(jobDetailsButton?.textContent).toContain("View details");
+
     await act(async () => {
       reviewButton?.click();
       governanceButton?.click();
@@ -193,6 +179,8 @@ describe("AutomationOverviewFocusCard", () => {
       runDetailView: null,
     });
 
-    expect(document.body.textContent).toContain("还没有持续接上的做法");
+    expect(document.body.textContent).toContain(
+      "No ongoing practice is ready to continue yet",
+    );
   });
 });

@@ -8,7 +8,7 @@ use anyhow::{anyhow, Result};
 use rmcp::model::{object, CallToolRequestParam, ErrorCode, ErrorData, JsonObject, Role, Tool};
 use rmcp::object as json_object;
 use serde_json::{json, Value};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 // Constants for frequently used strings in Anthropic API format
@@ -525,6 +525,7 @@ where
 
     #[derive(Serialize, Deserialize, Debug)]
     struct StreamingEvent {
+        #[serde(default)]
         #[serde(rename = "type")]
         event_type: String,
         #[serde(flatten)]
@@ -537,11 +538,26 @@ where
         let mut current_tool_id: Option<String> = None;
         let mut final_usage: Option<crate::providers::base::ProviderUsage> = None;
         let mut message_id: Option<String> = None;
+        let mut pending_sse_event_type: Option<String> = None;
+        let mut observed_event_counts: HashMap<String, usize> = HashMap::new();
+        let mut yielded_content_or_tool = false;
         while let Some(line_result) = stream.next().await {
             let line = line_result?;
+            let trimmed_line = line.trim();
 
             // Skip empty lines and non-data lines
-            if line.trim().is_empty() || !line.starts_with("data: ") {
+            if trimmed_line.is_empty() {
+                pending_sse_event_type = None;
+                continue;
+            }
+            if let Some(event_type) = trimmed_line.strip_prefix("event:") {
+                let event_type = event_type.trim();
+                if !event_type.is_empty() {
+                    pending_sse_event_type = Some(event_type.to_string());
+                }
+                continue;
+            }
+            if !line.starts_with("data: ") {
                 continue;
             }
 
@@ -553,13 +569,26 @@ where
             }
 
             // Parse the JSON event
-            let event: StreamingEvent = match serde_json::from_str(data_part) {
+            let mut event: StreamingEvent = match serde_json::from_str(data_part) {
                 Ok(event) => event,
                 Err(e) => {
                     tracing::debug!("Failed to parse streaming event: {} - Line: {}", e, data_part);
                     continue;
                 }
             };
+            if event.event_type.is_empty() {
+                if let Some(event_type) = pending_sse_event_type.take() {
+                    event.event_type = event_type;
+                }
+            } else {
+                pending_sse_event_type = None;
+            }
+            if event.event_type.is_empty() {
+                event.event_type = "unknown".to_string();
+            }
+            *observed_event_counts
+                .entry(event.event_type.clone())
+                .or_insert(0) += 1;
 
             match event.event_type.as_str() {
                 "message_start" => {
@@ -584,6 +613,31 @@ where
                         }
                     }
                     continue;
+                }
+                "error" => {
+                    let error_message = event
+                        .data
+                        .get("error")
+                        .and_then(|error| error.get("message"))
+                        .and_then(|message| message.as_str())
+                        .or_else(|| event.data.get("message").and_then(|message| message.as_str()))
+                        .map(str::trim)
+                        .filter(|message| !message.is_empty())
+                        .map(ToString::to_string)
+                        .unwrap_or_else(|| event.data.to_string());
+                    let error_type = event
+                        .data
+                        .get("error")
+                        .and_then(|error| error.get("type"))
+                        .and_then(|error_type| error_type.as_str())
+                        .map(str::trim)
+                        .filter(|error_type| !error_type.is_empty());
+
+                    if let Some(error_type) = error_type {
+                        Err(anyhow!("Anthropic stream error ({error_type}): {error_message}"))?;
+                    } else {
+                        Err(anyhow!("Anthropic stream error: {error_message}"))?;
+                    }
                 }
                 "content_block_start" => {
                     // A new content block started
@@ -627,6 +681,7 @@ where
                                     vec![MessageContent::text(text)],
                                 );
                                 message.id = message_id.clone();
+                                yielded_content_or_tool = true;
                                 yield (Some(message), None);
                             }
                         } else if delta.get("type") == Some(&json!("thinking_delta")) {
@@ -704,6 +759,7 @@ where
                                 vec![MessageContent::tool_request(tool_id, Ok(tool_call))],
                             );
                             message.id = message_id.clone();
+                            yielded_content_or_tool = true;
                             yield (Some(message), None);
                         }
                     }
@@ -793,6 +849,22 @@ where
             yield (None, Some(usage));
         } else {
             tracing::debug!("🔍 Anthropic no final usage to yield");
+        }
+
+        if !yielded_content_or_tool {
+            let mut observed_events = observed_event_counts
+                .iter()
+                .map(|(event_type, count)| format!("{event_type}={count}"))
+                .collect::<Vec<_>>();
+            observed_events.sort();
+            let observed_events = if observed_events.is_empty() {
+                "none".to_string()
+            } else {
+                observed_events.join(", ")
+            };
+            Err(anyhow!(
+                "Anthropic stream ended without assistant content or tool call; observed_events={observed_events}"
+            ))?;
         }
     }
 }
@@ -1255,5 +1327,84 @@ mod tests {
             final_tool_arguments.and_then(|args| args.get("path").cloned()),
             Some(json!("README.md"))
         );
+    }
+
+    #[tokio::test]
+    async fn test_streaming_error_event_returns_error() {
+        let stream = futures::stream::iter([
+            Ok(String::from(
+                "data: {\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"invalid api key\"}}",
+            )),
+            Ok(String::from("data: [DONE]")),
+        ]);
+
+        let outputs = response_to_streaming_message(stream)
+            .collect::<Vec<_>>()
+            .await;
+
+        assert_eq!(outputs.len(), 1);
+        let error = outputs
+            .into_iter()
+            .next()
+            .expect("stream should yield the error")
+            .expect_err("error event should fail the stream");
+        assert!(error
+            .to_string()
+            .contains("Anthropic stream error (authentication_error): invalid api key"));
+    }
+
+    #[tokio::test]
+    async fn test_streaming_sse_event_line_supplies_missing_json_type() {
+        let stream = futures::stream::iter([
+            Ok(String::from("event: message_start")),
+            Ok(String::from(
+                "data: {\"message\":{\"id\":\"msg_123\",\"model\":\"kimi-for-coding\"}}",
+            )),
+            Ok(String::from("")),
+            Ok(String::from("event: content_block_delta")),
+            Ok(String::from(
+                "data: {\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"你好\"}}",
+            )),
+            Ok(String::from("")),
+            Ok(String::from("event: message_stop")),
+            Ok(String::from("data: {}")),
+        ]);
+
+        let outputs = response_to_streaming_message(stream)
+            .collect::<Vec<_>>()
+            .await;
+
+        assert!(outputs.iter().any(|item| {
+            item.as_ref()
+                .ok()
+                .and_then(|(message, _)| message.as_ref())
+                .map(|message| message.as_concat_text() == "你好")
+                .unwrap_or(false)
+        }));
+        assert!(outputs.iter().all(Result::is_ok));
+    }
+
+    #[tokio::test]
+    async fn test_empty_stream_returns_diagnostic_error() {
+        let stream = futures::stream::iter([
+            Ok(String::from(
+                "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_123\",\"model\":\"kimi-for-coding\"}}",
+            )),
+            Ok(String::from("data: {\"type\":\"message_stop\"}")),
+        ]);
+
+        let outputs = response_to_streaming_message(stream)
+            .collect::<Vec<_>>()
+            .await;
+
+        let error = outputs
+            .into_iter()
+            .find_map(Result::err)
+            .expect("empty stream should produce a diagnostic error");
+        assert!(error
+            .to_string()
+            .contains("Anthropic stream ended without assistant content or tool call"));
+        assert!(error.to_string().contains("message_start=1"));
+        assert!(error.to_string().contains("message_stop=1"));
     }
 }

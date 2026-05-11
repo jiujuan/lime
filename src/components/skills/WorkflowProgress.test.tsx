@@ -1,8 +1,11 @@
-import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { WorkflowProgress } from "./WorkflowProgress";
+import { changeLimeLocale } from "@/i18n/createI18n";
+import {
+  WorkflowProgress,
+  type WorkflowProgressProps,
+} from "./WorkflowProgress";
 
 interface MountedRoot {
   container: HTMLDivElement;
@@ -11,7 +14,7 @@ interface MountedRoot {
 
 const mountedRoots: MountedRoot[] = [];
 
-function renderWorkflow() {
+function renderWorkflow(overrides: Partial<WorkflowProgressProps> = {}) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -33,6 +36,7 @@ function renderWorkflow() {
           },
         ]}
         error="执行失败，请稍后重试"
+        {...overrides}
       />,
     );
   });
@@ -41,15 +45,16 @@ function renderWorkflow() {
   return container;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("en-US");
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mountedRoots.length > 0) {
     const mounted = mountedRoots.pop();
     if (!mounted) {
@@ -60,6 +65,7 @@ afterEach(() => {
     });
     mounted.container.remove();
   }
+  await changeLimeLocale("zh-CN");
 });
 
 describe("WorkflowProgress", () => {
@@ -78,9 +84,33 @@ describe("WorkflowProgress", () => {
 
     expect(runningStep).toBeTruthy();
     expect(errorBanner).toBeTruthy();
+    expect(container.textContent).toContain("Completed: 1/2");
+    expect(container.textContent).not.toContain("已完成");
     expect(runningStep?.className).toContain("bg-emerald-50");
     expect(runningStep?.className).not.toContain("dark:bg-emerald-950/30");
     expect(errorBanner?.className).toContain("bg-red-50");
     expect(errorBanner?.className).not.toContain("dark:bg-red-950/30");
+  });
+
+  it("空步骤应通过 agent namespace 渲染空态", () => {
+    const container = renderWorkflow({
+      steps: [],
+      completedSteps: [],
+      currentStepId: null,
+      error: null,
+    });
+
+    expect(container.textContent).toContain("No workflow steps yet");
+    expect(container.textContent).not.toContain("暂无工作流步骤");
+  });
+
+  it("重试状态应通过 agent namespace 渲染提示", () => {
+    const container = renderWorkflow({
+      isRetrying: true,
+      error: null,
+    });
+
+    expect(container.textContent).toContain("Retrying...");
+    expect(container.textContent).not.toContain("正在重试");
   });
 });

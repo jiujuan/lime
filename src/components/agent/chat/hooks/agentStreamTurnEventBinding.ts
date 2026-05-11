@@ -27,6 +27,7 @@ import {
   buildAgentStreamFirstEventContext,
   buildAgentStreamFirstEventDeferredContext,
   buildAgentStreamListenerBoundContext,
+  extractAgentStreamRuntimeEventSchemaVersion,
   extractAgentStreamRuntimeEventType,
   shouldDeferAgentStreamFirstEventTimeout,
   shouldIgnoreAgentStreamInactivityResult,
@@ -456,10 +457,14 @@ export async function registerAgentStreamTurnEventBinding(
       const eventReceivedAt = Date.now();
       const data = parseAgentEvent(event.payload);
       const eventType = extractAgentStreamRuntimeEventType(event.payload);
+      const schemaVersion = extractAgentStreamRuntimeEventSchemaVersion(
+        event.payload,
+      );
       if (!data) {
         const unknownEventPlan = resolveAgentStreamUnknownEventPlan({
           eventName,
           eventType,
+          schemaVersion,
           warnedEventTypes: warnedUnknownEventTypes,
         });
         if (!unknownEventPlan) {

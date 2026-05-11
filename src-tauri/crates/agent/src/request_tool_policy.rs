@@ -383,6 +383,7 @@ fn update_stream_event_diagnostics(
 struct TextDeltaBatcher {
     chunks: Vec<String>,
     text: String,
+    has_flushed_first_delta: bool,
 }
 
 impl TextDeltaBatcher {
@@ -402,6 +403,11 @@ impl TextDeltaBatcher {
         };
         self.text.push_str(&text);
         self.chunks.push(text);
+
+        if !self.has_flushed_first_delta {
+            self.has_flushed_first_delta = true;
+            return self.flush(TextDeltaBatchBoundary::Provider);
+        }
 
         let boundary = boundary.or_else(|| {
             (self.text.chars().count() >= TEXT_DELTA_BATCH_BACKLOG_CHARS)
@@ -3066,7 +3072,17 @@ mod tests {
     #[test]
     fn text_delta_batcher_should_flush_on_newline_backlog_and_final() {
         let mut newline_batcher = TextDeltaBatcher::default();
-        assert!(newline_batcher.push("第一段".to_string()).is_none());
+        let first_event = newline_batcher
+            .push("第一段".to_string())
+            .expect("first text delta should flush immediately");
+        assert!(matches!(
+            first_event,
+            RuntimeAgentEvent::TextDeltaBatch {
+                ref text,
+                ref chunks,
+                boundary: TextDeltaBatchBoundary::Provider,
+            } if text == "第一段" && chunks.len() == 1
+        ));
         let newline_event = newline_batcher
             .push("\n".to_string())
             .expect("newline should flush batch");
@@ -3076,10 +3092,21 @@ mod tests {
                 ref text,
                 ref chunks,
                 boundary: TextDeltaBatchBoundary::Newline,
-            } if text == "第一段\n" && chunks.len() == 2
+            } if text == "\n" && chunks.len() == 1
         ));
 
         let mut backlog_batcher = TextDeltaBatcher::default();
+        let first_event = backlog_batcher
+            .push("a".to_string())
+            .expect("first text delta should flush before backlog batching");
+        assert!(matches!(
+            first_event,
+            RuntimeAgentEvent::TextDeltaBatch {
+                ref text,
+                boundary: TextDeltaBatchBoundary::Provider,
+                ..
+            } if text == "a"
+        ));
         let backlog_event = backlog_batcher
             .push("a".repeat(TEXT_DELTA_BATCH_BACKLOG_CHARS))
             .expect("backlog should flush batch");
@@ -3093,6 +3120,17 @@ mod tests {
         ));
 
         let mut final_batcher = TextDeltaBatcher::default();
+        let first_event = final_batcher
+            .push("开头".to_string())
+            .expect("first text delta should flush immediately");
+        assert!(matches!(
+            first_event,
+            RuntimeAgentEvent::TextDeltaBatch {
+                ref text,
+                boundary: TextDeltaBatchBoundary::Provider,
+                ..
+            } if text == "开头"
+        ));
         assert!(final_batcher.push("尾巴".to_string()).is_none());
         let final_event = final_batcher
             .flush(TextDeltaBatchBoundary::Final)

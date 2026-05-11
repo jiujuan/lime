@@ -2,19 +2,21 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { AutomationJobDialog } from "./AutomationJobDialog";
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("en-US");
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mountedRoots.length > 0) {
     const mounted = mountedRoots.pop();
     if (!mounted) {
@@ -26,6 +28,7 @@ afterEach(() => {
     mounted.container.remove();
   }
   vi.clearAllMocks();
+  await changeLimeLocale("zh-CN");
 });
 
 async function renderDialog(props: {
@@ -139,16 +142,19 @@ describe("AutomationJobDialog", () => {
       mode: "create",
     });
 
-    expect(getBodyText()).toContain("新建持续流程");
-    expect(getBodyText()).toContain("配置流程名称、节奏、启动提示和输出去向。");
-    expect(getBodyText()).toContain("开始方式：Agent 对话");
+    expect(getBodyText()).toContain("New Ongoing Flow");
+    expect(getBodyText()).toContain(
+      "Configure the flow name, cadence, starting prompt, and output destination.",
+    );
+    expect(getBodyText()).toContain("Start Method: Agent Conversation");
+    expect(getBodyText()).not.toContain("settings.automation.jobDialog");
     expect(getBodyText()).not.toContain(
-      "用这条持续流程承接 Agent 对话里已经跑顺的做法，统一管理节奏、归属位置、输出去向和运行历史。",
+      "Use this ongoing flow to continue a proven Agent conversation workflow",
     );
 
-    const headerTip = await hoverTip("持续流程弹窗说明");
+    const headerTip = await hoverTip("Ongoing flow dialog help");
     expect(getBodyText()).toContain(
-      "用这条持续流程承接 Agent 对话里已经跑顺的做法，统一管理节奏、归属位置、输出去向和运行历史。",
+      "Use this ongoing flow to continue a proven Agent conversation workflow",
     );
     await leaveTip(headerTip);
   });
@@ -184,7 +190,7 @@ describe("AutomationJobDialog", () => {
     });
 
     const submitButton = Array.from(document.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("保存修改"),
+      (button) => button.textContent?.includes("Save Changes"),
     ) as HTMLButtonElement | undefined;
 
     await act(async () => {
@@ -241,14 +247,20 @@ describe("AutomationJobDialog", () => {
     });
 
     const submitButton = Array.from(document.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("该类型不可保存"),
+      (button) => button.textContent?.includes("This type cannot be saved"),
     ) as HTMLButtonElement | undefined;
 
     expect(submitButton).toBeDefined();
     expect(submitButton?.disabled).toBe(true);
-    expect(document.body.textContent).toContain("浏览器自动化已下线");
-    expect(document.body.textContent).toContain("系统不会再自动启动 Chrome");
-    expect(document.body.textContent).toContain("历史配置快照");
+    expect(document.body.textContent).toContain(
+      "Browser automation has been retired",
+    );
+    expect(document.body.textContent).toContain(
+      "the system will no longer start Chrome automatically",
+    );
+    expect(document.body.textContent).toContain(
+      "Historical Configuration Snapshot",
+    );
     expect(onSubmit).not.toHaveBeenCalled();
   }, 10_000);
 
@@ -278,7 +290,7 @@ describe("AutomationJobDialog", () => {
     });
 
     const submitButton = Array.from(document.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("保存修改"),
+      (button) => button.textContent?.includes("Save Changes"),
     ) as HTMLButtonElement | undefined;
 
     await act(async () => {
@@ -328,7 +340,7 @@ describe("AutomationJobDialog", () => {
     ).not.toBeNull();
 
     const submitButton = Array.from(document.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("创建持续流程"),
+      (button) => button.textContent?.includes("Create Ongoing Flow"),
     ) as HTMLButtonElement | undefined;
 
     await act(async () => {

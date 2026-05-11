@@ -9,7 +9,11 @@ import {
   ShieldAlert,
   Sparkles,
 } from "lucide-react";
+import type { TFunction } from "i18next";
+import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
+import { formatDate, formatNumber } from "@/i18n/format";
 import { cn } from "@/lib/utils";
 import type { QueuedTurnSnapshot } from "@/lib/api/agentRuntime";
 import type {
@@ -31,6 +35,7 @@ interface CanvasSessionOverviewPanelProps {
 }
 
 type SessionStatusTone = "default" | "accent" | "success";
+type AgentTranslate = TFunction<"agent", undefined>;
 
 interface SessionActivityView {
   id: string;
@@ -54,52 +59,82 @@ function shortenText(value?: string | null, maxLength = 120): string {
   return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
-function formatTimeLabel(value?: string | null): string | null {
+function formatTimeLabel(
+  value: string | null | undefined,
+  locale: string,
+): string | null {
   if (!value) {
     return null;
   }
 
-  const timestamp = new Date(value);
-  if (Number.isNaN(timestamp.getTime())) {
-    return null;
-  }
-
-  return timestamp.toLocaleTimeString("zh-CN", {
+  const label = formatDate(value, {
     hour: "2-digit",
+    locale,
     minute: "2-digit",
   });
+  return label || null;
 }
 
-function resolveTurnStatusLabel(status?: AgentThreadTurn["status"] | null): {
+function resolveTurnStatusLabel(
+  status: AgentThreadTurn["status"] | null | undefined,
+  t: AgentTranslate,
+): {
   label: string;
   tone: SessionStatusTone;
 } {
   if (status === "running") {
-    return { label: "执行中", tone: "accent" };
+    return {
+      label: t("agentChat.sessionOverview.status.turn.running"),
+      tone: "accent",
+    };
   }
   if (status === "completed") {
-    return { label: "已完成", tone: "success" };
+    return {
+      label: t("agentChat.sessionOverview.status.turn.completed"),
+      tone: "success",
+    };
   }
   if (status === "failed") {
-    return { label: "失败", tone: "default" };
+    return {
+      label: t("agentChat.sessionOverview.status.turn.failed"),
+      tone: "default",
+    };
   }
   if (status === "aborted") {
-    return { label: "已中断", tone: "default" };
+    return {
+      label: t("agentChat.sessionOverview.status.turn.aborted"),
+      tone: "default",
+    };
   }
-  return { label: "空闲", tone: "default" };
+  return {
+    label: t("agentChat.sessionOverview.status.turn.idle"),
+    tone: "default",
+  };
 }
 
-function resolveItemStatusLabel(item: AgentThreadItem): {
+function resolveItemStatusLabel(
+  item: AgentThreadItem,
+  t: AgentTranslate,
+): {
   label: string;
   tone: SessionStatusTone;
 } {
   if (item.status === "in_progress") {
-    return { label: "进行中", tone: "accent" };
+    return {
+      label: t("agentChat.sessionOverview.status.item.inProgress"),
+      tone: "accent",
+    };
   }
   if (item.status === "failed") {
-    return { label: "失败", tone: "default" };
+    return {
+      label: t("agentChat.sessionOverview.status.item.failed"),
+      tone: "default",
+    };
   }
-  return { label: "已完成", tone: "success" };
+  return {
+    label: t("agentChat.sessionOverview.status.item.completed"),
+    tone: "success",
+  };
 }
 
 function resolvePendingActionPreview(action: ActionRequired): string {
@@ -121,17 +156,24 @@ function resolvePendingActionPreview(action: ActionRequired): string {
   return action.requestId;
 }
 
-function buildActivityView(item: AgentThreadItem): SessionActivityView | null {
-  const { label: statusLabel, tone } = resolveItemStatusLabel(item);
+function buildActivityView(
+  item: AgentThreadItem,
+  t: AgentTranslate,
+  locale: string,
+): SessionActivityView | null {
+  const { label: statusLabel, tone } = resolveItemStatusLabel(item, t);
   const timeLabel = formatTimeLabel(
     item.updated_at || item.completed_at || item.started_at,
+    locale,
   );
 
   switch (item.type) {
     case "tool_call":
       return {
         id: item.id,
-        title: item.tool_name || "工具调用",
+        title:
+          item.tool_name ||
+          t("agentChat.sessionOverview.activity.toolCall.title"),
         summary:
           shortenText(item.error, 100) ||
           shortenText(
@@ -140,7 +182,7 @@ function buildActivityView(item: AgentThreadItem): SessionActivityView | null {
               : JSON.stringify(item.arguments ?? {}, null, 2),
             100,
           ) ||
-          "工具已接入当前运行轨迹。",
+          t("agentChat.sessionOverview.activity.toolCall.summaryFallback"),
         timeLabel,
         statusLabel,
         tone,
@@ -151,7 +193,9 @@ function buildActivityView(item: AgentThreadItem): SessionActivityView | null {
       return {
         id: item.id,
         title: "exec_command",
-        summary: shortenText(item.command, 100) || "命令执行中",
+        summary:
+          shortenText(item.command, 100) ||
+          t("agentChat.sessionOverview.activity.command.summaryFallback"),
         timeLabel,
         statusLabel,
         tone,
@@ -165,7 +209,7 @@ function buildActivityView(item: AgentThreadItem): SessionActivityView | null {
         summary:
           shortenText(item.query, 100) ||
           shortenText(item.output, 100) ||
-          "正在检索外部信息。",
+          t("agentChat.sessionOverview.activity.webSearch.summaryFallback"),
         timeLabel,
         statusLabel,
         tone,
@@ -175,11 +219,11 @@ function buildActivityView(item: AgentThreadItem): SessionActivityView | null {
     case "request_user_input":
       return {
         id: item.id,
-        title: "等待补充信息",
+        title: t("agentChat.sessionOverview.activity.requestInput.title"),
         summary:
           shortenText(item.prompt, 100) ||
           shortenText(item.questions?.[0]?.question, 100) ||
-          "A2UI / 问答采集中",
+          t("agentChat.sessionOverview.activity.requestInput.summaryFallback"),
         timeLabel,
         statusLabel,
         tone,
@@ -189,11 +233,11 @@ function buildActivityView(item: AgentThreadItem): SessionActivityView | null {
     case "approval_request":
       return {
         id: item.id,
-        title: "等待确认",
+        title: t("agentChat.sessionOverview.activity.approval.title"),
         summary:
           shortenText(item.prompt, 100) ||
           shortenText(item.tool_name, 100) ||
-          "需要用户确认后继续。",
+          t("agentChat.sessionOverview.activity.approval.summaryFallback"),
         timeLabel,
         statusLabel,
         tone,
@@ -203,10 +247,10 @@ function buildActivityView(item: AgentThreadItem): SessionActivityView | null {
     case "file_artifact":
       return {
         id: item.id,
-        title: "产物已写入",
+        title: t("agentChat.sessionOverview.activity.fileArtifact.title"),
         summary:
           shortenText(extractFileNameFromPath(item.path) || item.path, 100) ||
-          "已产生新的文件产物。",
+          t("agentChat.sessionOverview.activity.fileArtifact.summaryFallback"),
         timeLabel,
         statusLabel,
         tone,
@@ -216,12 +260,14 @@ function buildActivityView(item: AgentThreadItem): SessionActivityView | null {
     case "subagent_activity":
       return {
         id: item.id,
-        title: item.title?.trim() || "子任务活动",
+        title:
+          item.title?.trim() ||
+          t("agentChat.sessionOverview.activity.subagent.title"),
         summary:
           shortenText(item.summary, 100) ||
           shortenText(item.role, 100) ||
           shortenText(item.model, 100) ||
-          "子任务正在推进当前任务。",
+          t("agentChat.sessionOverview.activity.subagent.summaryFallback"),
         timeLabel,
         statusLabel,
         tone,
@@ -231,8 +277,10 @@ function buildActivityView(item: AgentThreadItem): SessionActivityView | null {
     case "warning":
       return {
         id: item.id,
-        title: "运行警告",
-        summary: shortenText(item.message, 100) || "运行过程中出现警告。",
+        title: t("agentChat.sessionOverview.activity.warning.title"),
+        summary:
+          shortenText(item.message, 100) ||
+          t("agentChat.sessionOverview.activity.warning.summaryFallback"),
         timeLabel,
         statusLabel,
         tone: "default",
@@ -242,8 +290,10 @@ function buildActivityView(item: AgentThreadItem): SessionActivityView | null {
     case "error":
       return {
         id: item.id,
-        title: "执行失败",
-        summary: shortenText(item.message, 100) || "当前回合执行失败。",
+        title: t("agentChat.sessionOverview.activity.error.title"),
+        summary:
+          shortenText(item.message, 100) ||
+          t("agentChat.sessionOverview.activity.error.summaryFallback"),
         timeLabel,
         statusLabel,
         tone: "default",
@@ -253,11 +303,14 @@ function buildActivityView(item: AgentThreadItem): SessionActivityView | null {
     case "context_compaction":
       return {
         id: item.id,
-        title: item.stage === "started" ? "上下文压缩中" : "上下文压缩完成",
+        title:
+          item.stage === "started"
+            ? t("agentChat.sessionOverview.activity.compaction.started")
+            : t("agentChat.sessionOverview.activity.compaction.completed"),
         summary:
           shortenText(item.detail, 100) ||
           shortenText(item.trigger, 100) ||
-          "会话上下文正在整理。",
+          t("agentChat.sessionOverview.activity.compaction.summaryFallback"),
         timeLabel,
         statusLabel,
         tone,
@@ -267,11 +320,11 @@ function buildActivityView(item: AgentThreadItem): SessionActivityView | null {
     case "reasoning":
       return {
         id: item.id,
-        title: "思考过程",
+        title: t("agentChat.sessionOverview.activity.reasoning.title"),
         summary:
           shortenText(item.summary?.join(" "), 100) ||
           shortenText(item.text, 100) ||
-          "模型正在整理思路。",
+          t("agentChat.sessionOverview.activity.reasoning.summaryFallback"),
         timeLabel,
         statusLabel,
         tone,
@@ -281,8 +334,10 @@ function buildActivityView(item: AgentThreadItem): SessionActivityView | null {
     case "plan":
       return {
         id: item.id,
-        title: "执行计划",
-        summary: shortenText(item.text, 100) || "已生成执行计划。",
+        title: t("agentChat.sessionOverview.activity.plan.title"),
+        summary:
+          shortenText(item.text, 100) ||
+          t("agentChat.sessionOverview.activity.plan.summaryFallback"),
         timeLabel,
         statusLabel,
         tone,
@@ -292,8 +347,10 @@ function buildActivityView(item: AgentThreadItem): SessionActivityView | null {
     case "turn_summary":
       return {
         id: item.id,
-        title: "回合总结",
-        summary: shortenText(item.text, 100) || "当前回合已生成总结。",
+        title: t("agentChat.sessionOverview.activity.turnSummary.title"),
+        summary:
+          shortenText(item.text, 100) ||
+          t("agentChat.sessionOverview.activity.turnSummary.summaryFallback"),
         timeLabel,
         statusLabel,
         tone,
@@ -314,6 +371,8 @@ export function CanvasSessionOverviewPanel({
   isSending = false,
   focusedItemId = null,
 }: CanvasSessionOverviewPanelProps) {
+  const { i18n, t } = useTranslation("agent");
+  const locale = i18n.language;
   const sortedItems = sortThreadItems(threadItems).filter(
     (item) => item.type !== "user_message" && item.type !== "agent_message",
   );
@@ -322,26 +381,65 @@ export function CanvasSessionOverviewPanel({
     turns.find((turn) => turn.id === currentTurnId) || turns.at(-1) || null;
   const turnStatus = resolveTurnStatusLabel(
     isSending ? "running" : currentTurn?.status,
+    t,
   );
   const inProgressCount = sortedItems.filter(
     (item) => item.status === "in_progress",
   ).length;
   const recentActivity = sortedItems
-    .map((item) => buildActivityView(item))
+    .map((item) => buildActivityView(item, t, locale))
     .filter((item): item is SessionActivityView => Boolean(item))
     .slice(-8)
     .reverse();
   const latestTurnPrompt =
-    shortenText(currentTurn?.prompt_text, 160) || "当前还没有新的运行输入。";
+    shortenText(currentTurn?.prompt_text, 160) ||
+    t("agentChat.sessionOverview.latestPromptFallback");
   const latestTurnUpdatedAt = formatTimeLabel(
     currentTurn?.updated_at ||
       currentTurn?.completed_at ||
       currentTurn?.started_at,
+    locale,
   );
   const focusedActivity =
     recentActivity.find((item) => item.id === focusedItemId) ||
     recentActivity[0] ||
     null;
+  const summaryMetrics = useMemo(() => {
+    const formattedInProgressCount = formatNumber(inProgressCount, { locale });
+    const formattedTraceCount = formatNumber(sortedItems.length, { locale });
+    const formattedPendingCount = formatNumber(pendingActions.length, {
+      locale,
+    });
+    const formattedQueuedCount = formatNumber(queuedTurns.length, { locale });
+
+    return {
+      followUp:
+        pendingActions.length > 0
+          ? t("agentChat.sessionOverview.metrics.pending", {
+              countLabel: formattedPendingCount,
+            })
+          : queuedTurns.length > 0
+            ? t("agentChat.sessionOverview.metrics.queued", {
+                countLabel: formattedQueuedCount,
+              })
+            : t("agentChat.sessionOverview.metrics.noFollowUp"),
+      trace:
+        inProgressCount > 0
+          ? t("agentChat.sessionOverview.metrics.inProgress", {
+              countLabel: formattedInProgressCount,
+            })
+          : t("agentChat.sessionOverview.metrics.traces", {
+              countLabel: formattedTraceCount,
+            }),
+    };
+  }, [
+    inProgressCount,
+    locale,
+    pendingActions.length,
+    queuedTurns.length,
+    sortedItems.length,
+    t,
+  ]);
 
   return (
     <section
@@ -353,7 +451,7 @@ export function CanvasSessionOverviewPanel({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <div className="text-sm font-semibold text-slate-950">
-                会话过程索引
+                {t("agentChat.sessionOverview.panel.title")}
               </div>
               <Badge
                 variant="outline"
@@ -373,29 +471,28 @@ export function CanvasSessionOverviewPanel({
                   variant="outline"
                   className="border-slate-200 bg-slate-50 text-slate-600"
                 >
-                  聚焦 {focusedActivity.title}
+                  {t("agentChat.sessionOverview.panel.focusedBadge", {
+                    title: focusedActivity.title,
+                  })}
                 </Badge>
               ) : null}
             </div>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              这里只补充当前回合的执行过程、待补信息和排队状态。主稿、Markdown
-              与图片请直接从对话里的“在画布中打开”入口进入。
+              {t("agentChat.sessionOverview.panel.description")}
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
               <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
-                当前 turn：{currentTurn?.id || "尚未创建"}
+                {t("agentChat.sessionOverview.metrics.currentTurn", {
+                  id:
+                    currentTurn?.id ||
+                    t("agentChat.sessionOverview.metrics.currentTurnMissing"),
+                })}
               </span>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
-                {inProgressCount > 0
-                  ? `进行中 ${inProgressCount}`
-                  : `轨迹 ${sortedItems.length}`}
+                {summaryMetrics.trace}
               </span>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
-                {pendingActions.length > 0
-                  ? `待补信息 ${pendingActions.length}`
-                  : queuedTurns.length > 0
-                    ? `排队 ${queuedTurns.length}`
-                    : "无需跟进"}
+                {summaryMetrics.followUp}
               </span>
             </div>
           </div>
@@ -403,18 +500,20 @@ export function CanvasSessionOverviewPanel({
           <div className="grid min-w-[240px] gap-2 rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3">
             <div>
               <div className="text-[11px] font-medium text-slate-500">
-                最近更新时间
+                {t("agentChat.sessionOverview.panel.updatedLabel")}
               </div>
               <div className="mt-1 text-sm font-semibold text-slate-900">
-                {latestTurnUpdatedAt || "--:--"}
+                {latestTurnUpdatedAt ||
+                  t("agentChat.sessionOverview.time.empty")}
               </div>
             </div>
             <div>
               <div className="text-[11px] font-medium text-slate-500">
-                当前焦点
+                {t("agentChat.sessionOverview.panel.focusLabel")}
               </div>
               <div className="mt-1 text-sm font-semibold text-slate-900">
-                {focusedActivity?.title || "等待新的执行事件"}
+                {focusedActivity?.title ||
+                  t("agentChat.sessionOverview.panel.focusFallback")}
               </div>
               <div className="mt-1 text-xs text-slate-500">
                 {focusedActivity?.summary || latestTurnPrompt}
@@ -428,10 +527,10 @@ export function CanvasSessionOverviewPanel({
         <section className="rounded-[24px] border border-slate-200 bg-white">
           <div className="border-b border-slate-200/80 px-5 py-4">
             <div className="text-sm font-semibold text-slate-900">
-              执行时间线
+              {t("agentChat.sessionOverview.timeline.title")}
             </div>
             <div className="mt-1 text-xs leading-5 text-slate-500">
-              这里展示当前会话的技能、工具、A2UI、文件产物与异常信号，方便直接判断下一步卡在哪里。
+              {t("agentChat.sessionOverview.timeline.description")}
             </div>
           </div>
 
@@ -482,15 +581,15 @@ export function CanvasSessionOverviewPanel({
                       </div>
                     </div>
                     <div className="shrink-0 text-[11px] text-slate-400">
-                      {item.timeLabel || "--:--"}
+                      {item.timeLabel ||
+                        t("agentChat.sessionOverview.time.empty")}
                     </div>
                   </div>
                 );
               })
             ) : (
               <div className="px-5 py-6 text-sm leading-6 text-slate-500">
-                当前还没有可展示的执行轨迹。新的工具调用、skills、A2UI
-                与排队变化会出现在这里。
+                {t("agentChat.sessionOverview.timeline.empty")}
               </div>
             )}
           </div>
@@ -500,11 +599,10 @@ export function CanvasSessionOverviewPanel({
           <section className="rounded-[24px] border border-slate-200 bg-white">
             <div className="border-b border-slate-200/80 px-5 py-4">
               <div className="text-sm font-semibold text-slate-900">
-                待处理交互
+                {t("agentChat.sessionOverview.pending.title")}
               </div>
               <div className="mt-1 text-xs leading-5 text-slate-500">
-                缺少信息时，这里会明确显示等待补充的信息入口，便于与 A2UI
-                收集流程对齐。
+                {t("agentChat.sessionOverview.pending.description")}
               </div>
             </div>
 
@@ -518,8 +616,8 @@ export function CanvasSessionOverviewPanel({
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-amber-700">
                         {action.actionType === "tool_confirmation"
-                          ? "等待确认"
-                          : "等待补充信息"}
+                          ? t("agentChat.sessionOverview.pending.confirm")
+                          : t("agentChat.sessionOverview.pending.input")}
                       </span>
                       <span className="text-[11px] text-amber-700/80">
                         {action.requestId}
@@ -532,7 +630,7 @@ export function CanvasSessionOverviewPanel({
                 ))
               ) : (
                 <div className="rounded-[20px] border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm leading-6 text-slate-500">
-                  当前没有等待中的确认或补充信息请求。
+                  {t("agentChat.sessionOverview.pending.empty")}
                 </div>
               )}
             </div>
@@ -541,10 +639,10 @@ export function CanvasSessionOverviewPanel({
           <section className="rounded-[24px] border border-slate-200 bg-white">
             <div className="border-b border-slate-200/80 px-5 py-4">
               <div className="text-sm font-semibold text-slate-900">
-                排队消息
+                {t("agentChat.sessionOverview.queue.title")}
               </div>
               <div className="mt-1 text-xs leading-5 text-slate-500">
-                多轮追问或连续提交时，这里保留稍后执行的输入快照。
+                {t("agentChat.sessionOverview.queue.description")}
               </div>
             </div>
 
@@ -557,12 +655,18 @@ export function CanvasSessionOverviewPanel({
                   >
                     <div className="flex items-center justify-between gap-3">
                       <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600">
-                        排队 {index + 1}
+                        {t("agentChat.sessionOverview.queue.itemLabel", {
+                          index: formatNumber(index + 1, { locale }),
+                        })}
                       </span>
                       <span className="text-[11px] text-slate-400">
                         {item.image_count > 0
-                          ? `${item.image_count} 张图`
-                          : "文本输入"}
+                          ? t("agentChat.sessionOverview.queue.imageCount", {
+                              countLabel: formatNumber(item.image_count, {
+                                locale,
+                              }),
+                            })
+                          : t("agentChat.sessionOverview.queue.textInput")}
                       </span>
                     </div>
                     <div className="mt-2 text-sm leading-6 text-slate-700">
@@ -575,7 +679,7 @@ export function CanvasSessionOverviewPanel({
                 ))
               ) : (
                 <div className="rounded-[20px] border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm leading-6 text-slate-500">
-                  当前没有排队中的消息。
+                  {t("agentChat.sessionOverview.queue.empty")}
                 </div>
               )}
             </div>

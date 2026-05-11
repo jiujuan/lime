@@ -87,9 +87,7 @@ function getProfileTransportOption(
   }>,
   transportKind: BrowserProfileTransportKind,
 ) {
-  return (
-    options.find((option) => option.value === transportKind) ?? options[0]
-  );
+  return options.find((option) => option.value === transportKind) ?? options[0];
 }
 
 const EXISTING_SESSION_RUNTIME_FALLBACK_PATTERNS = [
@@ -192,11 +190,14 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
             })
           : "";
         return url
-          ? t("workspace.browserExistingSession.feedback.attachSuccessWithUrl", {
-              name,
-              notice: noticeSuffix,
-              url,
-            })
+          ? t(
+              "workspace.browserExistingSession.feedback.attachSuccessWithUrl",
+              {
+                name,
+                notice: noticeSuffix,
+                url,
+              },
+            )
           : t("workspace.browserExistingSession.feedback.attachSuccess", {
               name,
               notice: noticeSuffix,
@@ -400,10 +401,13 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
             onMessage?.({
               type: "success",
               text: selectedLaunchEnvironmentPreset
-                ? t("workspace.browserProfile.feedback.attachedWithEnvironment", {
-                    environmentName: selectedLaunchEnvironmentPreset.name,
-                    name: profile.name,
-                  })
+                ? t(
+                    "workspace.browserProfile.feedback.attachedWithEnvironment",
+                    {
+                      environmentName: selectedLaunchEnvironmentPreset.name,
+                      name: profile.name,
+                    },
+                  )
                 : t("workspace.browserProfile.feedback.attached", {
                     name: profile.name,
                   }),
@@ -479,7 +483,9 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
               }
               className="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
             >
-              <option value="">{t("workspace.browserProfile.launch.none")}</option>
+              <option value="">
+                {t("workspace.browserProfile.launch.none")}
+              </option>
               {launchEnvironmentPresetOptions.map((preset) => (
                 <option key={preset.id} value={preset.id}>
                   {preset.name}
@@ -599,7 +605,9 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
                 }))
               }
               className="h-10 w-full rounded-md border bg-background px-3 disabled:cursor-not-allowed disabled:bg-muted"
-              placeholder={t("workspace.browserProfile.placeholders.profileKey")}
+              placeholder={t(
+                "workspace.browserProfile.placeholders.profileKey",
+              )}
             />
           </label>
           <label className="space-y-1 text-sm">
@@ -657,10 +665,8 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
             />
           </label>
           <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 md:col-span-2 dark:text-amber-200">
-            {getProfileTransportOption(
-              transportOptions,
-              form.transport_kind,
-            )?.description ?? ""}
+            {getProfileTransportOption(transportOptions, form.transport_kind)
+              ?.description ?? ""}
             {form.transport_kind === "existing_session" ? (
               <span>
                 {" "}
@@ -772,9 +778,7 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
                         }`}
                       >
                         {bridgeObserver
-                          ? t(
-                              "workspace.browserProfile.bridge.connectedBadge",
-                            )
+                          ? t("workspace.browserProfile.bridge.connectedBadge")
                           : t("workspace.browserProfile.bridge.waitingBadge")}
                       </span>
                     ) : null}
@@ -794,8 +798,7 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
                     </span>
                     <span>
                       {t("workspace.browserProfile.meta.defaultUrl", {
-                        value:
-                          profile.launch_url || "https://www.google.com/",
+                        value: profile.launch_url || "https://www.google.com/",
                       })}
                     </span>
                     <span>
@@ -872,11 +875,14 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
                                 <div className="min-w-0 flex-1">
                                   <div className="flex flex-wrap items-center gap-2">
                                     <span className="rounded-md border bg-muted/50 px-2 py-0.5 text-[11px] text-muted-foreground">
-                                      {t("workspace.browserProfile.tabs.index", {
-                                        index: formatNumber(tab.index + 1, {
-                                          locale: i18n.language,
-                                        }),
-                                      })}
+                                      {t(
+                                        "workspace.browserProfile.tabs.index",
+                                        {
+                                          index: formatNumber(tab.index + 1, {
+                                            locale: i18n.language,
+                                          }),
+                                        },
+                                      )}
                                     </span>
                                     {tab.active ? (
                                       <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-700 dark:text-emerald-200">

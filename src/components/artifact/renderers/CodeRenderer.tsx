@@ -15,6 +15,7 @@ import React, {
   useRef,
   useEffect,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { refractor } from "refractor";
 import { toHtml } from "hast-util-to-html";
@@ -138,29 +139,37 @@ interface CopyButtonProps {
   onClick: () => void;
 }
 
-const CopyButton: React.FC<CopyButtonProps> = memo(({ copied, onClick }) => (
-  <button
-    onClick={onClick}
-    className={cn(
-      "flex items-center gap-1 px-2 py-1 rounded text-xs transition-all",
-      "hover:bg-white/10",
-      copied ? "text-green-400" : "text-gray-400 hover:text-white",
-    )}
-    title={copied ? "已复制" : "复制代码"}
-  >
-    {copied ? (
-      <>
-        <Check className="w-3.5 h-3.5" />
-        <span>已复制</span>
-      </>
-    ) : (
-      <>
-        <Copy className="w-3.5 h-3.5" />
-        <span>复制</span>
-      </>
-    )}
-  </button>
-));
+const CopyButton: React.FC<CopyButtonProps> = memo(({ copied, onClick }) => {
+  const { t } = useTranslation("errors");
+
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-1 px-2 py-1 rounded text-xs transition-all",
+        "hover:bg-white/10",
+        copied ? "text-green-400" : "text-gray-400 hover:text-white",
+      )}
+      title={
+        copied
+          ? t("errors.codeRenderer.action.copied")
+          : t("errors.codeRenderer.action.copyCode")
+      }
+    >
+      {copied ? (
+        <>
+          <Check className="w-3.5 h-3.5" />
+          <span>{t("errors.codeRenderer.action.copied")}</span>
+        </>
+      ) : (
+        <>
+          <Copy className="w-3.5 h-3.5" />
+          <span>{t("errors.codeRenderer.action.copy")}</span>
+        </>
+      )}
+    </button>
+  );
+});
 CopyButton.displayName = "CopyButton";
 
 /**
@@ -172,25 +181,31 @@ interface ErrorDisplayProps {
 }
 
 const ErrorDisplay: React.FC<ErrorDisplayProps> = memo(
-  ({ message, content }) => (
-    <div className="flex flex-col h-full bg-[#282c34]">
-      <div className="flex items-start gap-3 p-4 bg-red-900/30 border-b border-red-500/30">
-        <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-        <div>
-          <h3 className="text-sm font-medium text-red-300 mb-1">
-            代码渲染失败
-          </h3>
-          <p className="text-xs text-red-400">{message}</p>
+  ({ message, content }) => {
+    const { t } = useTranslation("errors");
+
+    return (
+      <div className="flex flex-col h-full bg-[#282c34]">
+        <div className="flex items-start gap-3 p-4 bg-red-900/30 border-b border-red-500/30">
+          <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <h3 className="text-sm font-medium text-red-300 mb-1">
+              {t("errors.codeRenderer.error.renderFailed")}
+            </h3>
+            <p className="text-xs text-red-400">{message}</p>
+          </div>
+        </div>
+        <div className="flex-1 overflow-auto p-4">
+          <h4 className="text-xs font-medium text-gray-500 mb-2">
+            {t("errors.codeRenderer.section.originalContent")}
+          </h4>
+          <pre className="text-xs text-gray-300 font-mono whitespace-pre-wrap break-all">
+            {content}
+          </pre>
         </div>
       </div>
-      <div className="flex-1 overflow-auto p-4">
-        <h4 className="text-xs font-medium text-gray-500 mb-2">原始内容：</h4>
-        <pre className="text-xs text-gray-300 font-mono whitespace-pre-wrap break-all">
-          {content}
-        </pre>
-      </div>
-    </div>
-  ),
+    );
+  },
 );
 ErrorDisplay.displayName = "ErrorDisplay";
 
@@ -203,38 +218,42 @@ interface ViewModeToggleProps {
 }
 
 const ViewModeToggle: React.FC<ViewModeToggleProps> = memo(
-  ({ value, onChange }) => (
-    <div className="inline-flex items-center rounded bg-white/5 p-0.5">
-      <button
-        type="button"
-        onClick={() => onChange("source")}
-        className={cn(
-          "inline-flex items-center gap-1 px-2 py-1 rounded text-xs transition-all",
-          value === "source"
-            ? "bg-white/10 text-white"
-            : "text-gray-400 hover:text-white",
-        )}
-        title="源码"
-      >
-        <Code2 className="w-3 h-3" />
-        <span>源码</span>
-      </button>
-      <button
-        type="button"
-        onClick={() => onChange("preview")}
-        className={cn(
-          "inline-flex items-center gap-1 px-2 py-1 rounded text-xs transition-all",
-          value === "preview"
-            ? "bg-white/10 text-white"
-            : "text-gray-400 hover:text-white",
-        )}
-        title="预览"
-      >
-        <Eye className="w-3 h-3" />
-        <span>预览</span>
-      </button>
-    </div>
-  ),
+  ({ value, onChange }) => {
+    const { t } = useTranslation("errors");
+
+    return (
+      <div className="inline-flex items-center rounded bg-white/5 p-0.5">
+        <button
+          type="button"
+          onClick={() => onChange("source")}
+          className={cn(
+            "inline-flex items-center gap-1 px-2 py-1 rounded text-xs transition-all",
+            value === "source"
+              ? "bg-white/10 text-white"
+              : "text-gray-400 hover:text-white",
+          )}
+          title={t("errors.codeRenderer.view.source")}
+        >
+          <Code2 className="w-3 h-3" />
+          <span>{t("errors.codeRenderer.view.source")}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange("preview")}
+          className={cn(
+            "inline-flex items-center gap-1 px-2 py-1 rounded text-xs transition-all",
+            value === "preview"
+              ? "bg-white/10 text-white"
+              : "text-gray-400 hover:text-white",
+          )}
+          title={t("errors.codeRenderer.view.preview")}
+        >
+          <Eye className="w-3 h-3" />
+          <span>{t("errors.codeRenderer.view.preview")}</span>
+        </button>
+      </div>
+    );
+  },
 );
 ViewModeToggle.displayName = "ViewModeToggle";
 
@@ -247,49 +266,53 @@ interface SizeSelectorProps {
 }
 
 const SizeSelector: React.FC<SizeSelectorProps> = memo(
-  ({ value, onChange }) => (
-    <div className="inline-flex items-center rounded bg-white/5 p-0.5">
-      <button
-        type="button"
-        onClick={() => onChange("mobile")}
-        className={cn(
-          "p-1 rounded transition-all",
-          value === "mobile"
-            ? "bg-white/10 text-white"
-            : "text-gray-500 hover:text-white",
-        )}
-        title="手机"
-      >
-        <Smartphone className="w-3.5 h-3.5" />
-      </button>
-      <button
-        type="button"
-        onClick={() => onChange("tablet")}
-        className={cn(
-          "p-1 rounded transition-all",
-          value === "tablet"
-            ? "bg-white/10 text-white"
-            : "text-gray-500 hover:text-white",
-        )}
-        title="平板"
-      >
-        <Tablet className="w-3.5 h-3.5" />
-      </button>
-      <button
-        type="button"
-        onClick={() => onChange("desktop")}
-        className={cn(
-          "p-1 rounded transition-all",
-          value === "desktop"
-            ? "bg-white/10 text-white"
-            : "text-gray-500 hover:text-white",
-        )}
-        title="桌面"
-      >
-        <Monitor className="w-3.5 h-3.5" />
-      </button>
-    </div>
-  ),
+  ({ value, onChange }) => {
+    const { t } = useTranslation("errors");
+
+    return (
+      <div className="inline-flex items-center rounded bg-white/5 p-0.5">
+        <button
+          type="button"
+          onClick={() => onChange("mobile")}
+          className={cn(
+            "p-1 rounded transition-all",
+            value === "mobile"
+              ? "bg-white/10 text-white"
+              : "text-gray-500 hover:text-white",
+          )}
+          title={t("errors.codeRenderer.previewSize.mobile")}
+        >
+          <Smartphone className="w-3.5 h-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange("tablet")}
+          className={cn(
+            "p-1 rounded transition-all",
+            value === "tablet"
+              ? "bg-white/10 text-white"
+              : "text-gray-500 hover:text-white",
+          )}
+          title={t("errors.codeRenderer.previewSize.tablet")}
+        >
+          <Tablet className="w-3.5 h-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange("desktop")}
+          className={cn(
+            "p-1 rounded transition-all",
+            value === "desktop"
+              ? "bg-white/10 text-white"
+              : "text-gray-500 hover:text-white",
+          )}
+          title={t("errors.codeRenderer.previewSize.desktop")}
+        >
+          <Monitor className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    );
+  },
 );
 SizeSelector.displayName = "SizeSelector";
 
@@ -304,6 +327,7 @@ interface HtmlPreviewProps {
 
 const HtmlPreview: React.FC<HtmlPreviewProps> = memo(
   ({ content, size, onRefresh }) => {
+    const { t } = useTranslation("errors");
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const width = PREVIEW_WIDTHS[size];
 
@@ -321,7 +345,7 @@ const HtmlPreview: React.FC<HtmlPreviewProps> = memo(
               type="button"
               onClick={onRefresh}
               className="absolute -top-8 right-0 p-1 text-gray-500 hover:text-gray-700 rounded hover:bg-gray-200"
-              title="刷新预览"
+              title={t("errors.codeRenderer.action.refreshPreview")}
             >
               <RefreshCw className="w-4 h-4" />
             </button>
@@ -333,7 +357,7 @@ const HtmlPreview: React.FC<HtmlPreviewProps> = memo(
                 "w-full h-full min-h-[400px] bg-white border-0 shadow-sm",
                 size !== "desktop" && "rounded-lg border border-gray-300",
               )}
-              title="HTML 预览"
+              title={t("errors.codeRenderer.iframe.htmlPreview")}
             />
           </div>
         </div>
@@ -493,6 +517,7 @@ export const CodeRenderer: React.FC<ArtifactRendererProps> = memo(
     onViewModeChange,
     onPreviewSizeChange,
   }) => {
+    const { t } = useTranslation("errors");
     const [copied, setCopied] = useState(false);
     const [error, setError] = useState<string | null>(null);
     // 内部状态（当没有外部控制时使用）
@@ -579,11 +604,11 @@ export const CodeRenderer: React.FC<ArtifactRendererProps> = memo(
     // 验证内容
     useEffect(() => {
       if (artifact.content === null || artifact.content === undefined) {
-        setError("代码内容为空");
+        setError(t("errors.codeRenderer.error.emptyContent"));
       } else {
         setError(null);
       }
-    }, [artifact.content]);
+    }, [artifact.content, t]);
 
     if (error) {
       return <ErrorDisplay message={error} content={artifact.content || ""} />;
@@ -601,10 +626,14 @@ export const CodeRenderer: React.FC<ArtifactRendererProps> = memo(
               {isStreaming ? (
                 <span className="flex items-center gap-1.5 text-xs text-blue-400">
                   <Loader2 className="w-3 h-3 animate-spin" />
-                  <span>生成中...</span>
+                  <span>{t("errors.codeRenderer.status.streaming")}</span>
                 </span>
               ) : (
-                <span className="text-xs text-gray-500">{lines.length} 行</span>
+                <span className="text-xs text-gray-500">
+                  {t("errors.codeRenderer.status.lineCount", {
+                    count: lines.length,
+                  })}
+                </span>
               )}
             </div>
             <div className="flex items-center gap-2">

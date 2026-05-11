@@ -244,6 +244,54 @@ describe("buildUserInputSubmitOp", () => {
     expect(op.skipPreSubmitResume).toBe(true);
   });
 
+  it("快速响应应只提交后端路由槽位，不提交当前前端 provider/model", () => {
+    const op = buildUserInputSubmitOp({
+      content: "只回答一个字：好",
+      images: [],
+      sessionId: "session-fast-routing-1",
+      eventName: "aster_stream_fast_routing",
+      requestMetadata: {
+        harness: {
+          fast_response_routing: {
+            service_model_slot: "responsive_chat",
+            routing_slot: "responsive_chat_model",
+            resolver: "backend_service_model",
+          },
+          browser_assist: {
+            enabled: true,
+            profile_key: "general_browser_assist",
+          },
+        },
+      },
+      executionRuntime: null,
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: null,
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "react",
+      effectiveAccessMode: "current",
+      effectiveProviderType: "deepseek",
+      effectiveModel: "deepseek-v4-pro",
+      webSearch: false,
+      thinking: false,
+    });
+
+    expect(op.preferences?.providerPreference).toBeUndefined();
+    expect(op.preferences?.modelPreference).toBeUndefined();
+    expect(op.metadata).toEqual({
+      harness: {
+        fast_response_routing: {
+          service_model_slot: "responsive_chat",
+          routing_slot: "responsive_chat_model",
+          resolver: "backend_service_model",
+        },
+        browser_assist: {
+          enabled: true,
+          profile_key: "general_browser_assist",
+        },
+      },
+    });
+  });
+
   it("应透传显式搜索模式，不从用户文本推断", () => {
     const op = buildUserInputSubmitOp({
       content: "请搜索最新 AI 新闻",

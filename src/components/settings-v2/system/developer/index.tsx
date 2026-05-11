@@ -139,7 +139,6 @@ function DeferredPanelFallback({ label }: { label: string }) {
     <div className="rounded-[20px] border border-dashed border-slate-300 bg-slate-50 p-4 text-sm leading-6 text-slate-500">
       {t("settings.developer.deferred.loading", {
         label,
-        defaultValue: "正在准备{{label}}...",
       })}
     </div>
   );
@@ -206,7 +205,7 @@ function AdvancedDetails({
           </span>
         </span>
         <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500 transition group-open:bg-slate-950 group-open:text-white">
-          {t("settings.developer.details.expand", "展开")}
+          {t("settings.developer.details.expand")}
         </span>
       </summary>
       <div className="mt-4 space-y-4">{children}</div>
@@ -297,10 +296,7 @@ export function DeveloperSettings({
       await copyCrashDiagnosticToClipboard(payload);
       setMessage({
         type: "success",
-        text: t(
-          "settings.developer.message.diagnosticCopied",
-          "诊断信息已复制，可直接发给开发者",
-        ),
+        text: t("settings.developer.message.diagnosticCopied"),
       });
       setTimeout(() => setMessage(null), 2500);
     } catch (error) {
@@ -312,10 +308,7 @@ export function DeveloperSettings({
         text:
           error instanceof Error
             ? error.message
-            : t(
-                "settings.developer.message.copyDiagnosticFailed",
-                "复制诊断信息失败",
-              ),
+            : t("settings.developer.message.copyDiagnosticFailed"),
       });
     } finally {
       setDiagnosticBusy(false);
@@ -331,10 +324,7 @@ export function DeveloperSettings({
       await copyCrashDiagnosticJsonToClipboard(payload);
       setMessage({
         type: "success",
-        text: t(
-          "settings.developer.message.diagnosticJsonCopied",
-          "纯 JSON 诊断信息已复制",
-        ),
+        text: t("settings.developer.message.diagnosticJsonCopied"),
       });
       setTimeout(() => setMessage(null), 2500);
     } catch (error) {
@@ -346,10 +336,7 @@ export function DeveloperSettings({
         text:
           error instanceof Error
             ? error.message
-            : t(
-                "settings.developer.message.copyDiagnosticJsonFailed",
-                "复制纯 JSON 失败",
-              ),
+            : t("settings.developer.message.copyDiagnosticJsonFailed"),
       });
     } finally {
       setDiagnosticBusy(false);
@@ -378,14 +365,10 @@ export function DeveloperSettings({
           ? t("settings.developer.message.diagnosticExportedAndOpened", {
               fileName: result.fileName,
               path: openedPath,
-              defaultValue:
-                "诊断文件已导出：{{fileName}}，并已打开目录：{{path}}",
             })
           : t("settings.developer.message.diagnosticExported", {
               fileName: result.fileName,
               location: result.locationHint,
-              defaultValue:
-                "诊断文件已导出：{{fileName}}（位置：{{location}}）",
             }),
       });
       setTimeout(() => setMessage(null), 2500);
@@ -396,10 +379,7 @@ export function DeveloperSettings({
         text:
           error instanceof Error
             ? error.message
-            : t(
-                "settings.developer.message.exportDiagnosticFailed",
-                "导出诊断信息失败",
-              ),
+            : t("settings.developer.message.exportDiagnosticFailed"),
       });
     } finally {
       setDiagnosticBusy(false);
@@ -415,7 +395,6 @@ export function DeveloperSettings({
         type: "success",
         text: t("settings.developer.message.downloadDirectoryOpened", {
           path: result.openedPath,
-          defaultValue: "已打开下载目录：{{path}}",
         }),
       });
       setTimeout(() => setMessage(null), 2500);
@@ -426,10 +405,7 @@ export function DeveloperSettings({
         text:
           error instanceof Error
             ? error.message
-            : t(
-                "settings.developer.message.openDownloadDirectoryFailed",
-                "打开下载目录失败",
-              ),
+            : t("settings.developer.message.openDownloadDirectoryFailed"),
       });
     } finally {
       setDiagnosticBusy(false);
@@ -451,10 +427,7 @@ export function DeveloperSettings({
       await clearCrashDiagnosticHistory();
       setMessage({
         type: "success",
-        text: t(
-          "settings.developer.message.diagnosticHistoryCleared",
-          "已清空旧诊断信息，后续复制将只包含新的诊断数据",
-        ),
+        text: t("settings.developer.message.diagnosticHistoryCleared"),
       });
       setTimeout(() => setMessage(null), 2500);
     } catch (error) {
@@ -464,10 +437,7 @@ export function DeveloperSettings({
         text:
           error instanceof Error
             ? error.message
-            : t(
-                "settings.developer.message.clearDiagnosticHistoryFailed",
-                "清空旧诊断信息失败",
-              ),
+            : t("settings.developer.message.clearDiagnosticHistoryFailed"),
       });
     } finally {
       setDiagnosticBusy(false);
@@ -492,14 +462,8 @@ export function DeveloperSettings({
         setMessage({
           type: "success",
           text: nextEnabled
-            ? t(
-                "settings.developer.message.workspaceHarnessEnabled",
-                "已开启处理工作台调试信息收集，工具库存与环境摘要会随 Harness 打开加载",
-              )
-            : t(
-                "settings.developer.message.workspaceHarnessDisabled",
-                "已关闭处理工作台调试信息收集，Harness 入口仍会保留",
-              ),
+            ? t("settings.developer.message.workspaceHarnessEnabled")
+            : t("settings.developer.message.workspaceHarnessDisabled"),
         });
         setTimeout(() => setMessage(null), 2500);
       } catch (error) {
@@ -509,10 +473,7 @@ export function DeveloperSettings({
           text:
             error instanceof Error
               ? error.message
-              : t(
-                  "settings.developer.message.saveWorkspaceHarnessFailed",
-                  "保存处理工作台开关失败",
-                ),
+              : t("settings.developer.message.saveWorkspaceHarnessFailed"),
         });
       } finally {
         setWorkspaceHarnessSaving(false);
@@ -544,47 +505,34 @@ export function DeveloperSettings({
           <div className="space-y-1.5">
             {embedded ? (
               <h2 className="text-[20px] font-semibold tracking-tight text-slate-900">
-                {t("settings.developer.title.embedded", "开发者工具")}
+                {t("settings.developer.title.embedded")}
               </h2>
             ) : (
               <h1 className="text-[24px] font-semibold tracking-tight text-slate-900">
-                {t("settings.developer.title", "开发者")}
+                {t("settings.developer.title")}
               </h1>
             )}
             <p className="text-sm text-slate-500">
-              {t(
-                "settings.developer.description",
-                "排查问题时打开，用完关回去。",
-              )}
+              {t("settings.developer.description")}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 xl:justify-end">
             <StatusPill
               active={workspaceHarnessEnabled}
-              activeLabel={t(
-                "settings.developer.status.workspaceHarness.on",
-                "工作台调试已开",
-              )}
+              activeLabel={t("settings.developer.status.workspaceHarness.on")}
               inactiveLabel={t(
                 "settings.developer.status.workspaceHarness.off",
-                "工作台调试已关",
               )}
             />
             <StatusPill
               active={enabled}
-              activeLabel={t(
-                "settings.developer.status.componentDebug.on",
-                "组件调试已开",
-              )}
-              inactiveLabel={t(
-                "settings.developer.status.componentDebug.off",
-                "组件调试已关",
-              )}
+              activeLabel={t("settings.developer.status.componentDebug.on")}
+              inactiveLabel={t("settings.developer.status.componentDebug.off")}
             />
             {diagnosticBusy ? (
               <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700">
-                {t("settings.developer.status.diagnosticBusy", "诊断执行中")}
+                {t("settings.developer.status.diagnosticBusy")}
               </span>
             ) : null}
           </div>
@@ -595,50 +543,37 @@ export function DeveloperSettings({
         <div className="space-y-5">
           <SurfacePanel
             icon={Sparkles}
-            title={t("settings.developer.debugSwitch.title", "调试开关")}
-            description={t(
-              "settings.developer.debugSwitch.description",
-              "默认保持关闭，只在排查页面结构或运行态问题时开启。",
-            )}
+            title={t("settings.developer.debugSwitch.title")}
+            description={t("settings.developer.debugSwitch.description")}
           >
             <div className="space-y-3">
               <CompactSwitchRow
                 title={t(
                   "settings.developer.debugSwitch.workspaceHarness.title",
-                  "工作台调试信息",
                 )}
                 description={
                   workspaceHarnessSaving
-                    ? t("settings.developer.action.saving", "正在保存...")
+                    ? t("settings.developer.action.saving")
                     : t(
                         "settings.developer.debugSwitch.workspaceHarness.description",
-                        "收集运行态摘要、工具库存和环境摘要。",
                       )
                 }
                 checked={workspaceHarnessEnabled}
                 disabled={workspaceHarnessSaving}
                 ariaLabel={t(
                   "settings.developer.debugSwitch.workspaceHarness.aria",
-                  "切换处理工作台调试信息",
                 )}
                 onCheckedChange={(checked) => {
                   void handleWorkspaceHarnessEnabledChange(checked);
                 }}
               />
               <CompactSwitchRow
-                title={t(
-                  "settings.developer.debugSwitch.component.title",
-                  "组件视图调试",
-                )}
+                title={t("settings.developer.debugSwitch.component.title")}
                 description={t(
                   "settings.developer.debugSwitch.component.description",
-                  "Alt 悬浮看组件轮廓，Alt 点击看组件来源。",
                 )}
                 checked={enabled}
-                ariaLabel={t(
-                  "settings.developer.debugSwitch.component.aria",
-                  "切换组件视图调试",
-                )}
+                ariaLabel={t("settings.developer.debugSwitch.component.aria")}
                 onCheckedChange={setEnabled}
               />
             </div>
@@ -646,11 +581,8 @@ export function DeveloperSettings({
 
           <SurfacePanel
             icon={Bug}
-            title={t("settings.developer.diagnostic.title", "诊断日志")}
-            description={t(
-              "settings.developer.diagnostic.description",
-              "复制或导出当前诊断包；复现前可先清空旧记录。",
-            )}
+            title={t("settings.developer.diagnostic.title")}
+            description={t("settings.developer.diagnostic.description")}
           >
             <div className="flex flex-wrap gap-3">
               <button
@@ -660,10 +592,7 @@ export function DeveloperSettings({
                 className={DANGER_BUTTON_CLASS_NAME}
               >
                 <Trash2 className="h-4 w-4" />
-                {t(
-                  "settings.developer.diagnostic.action.clearHistory",
-                  "清空旧诊断信息",
-                )}
+                {t("settings.developer.diagnostic.action.clearHistory")}
               </button>
               <button
                 type="button"
@@ -672,7 +601,7 @@ export function DeveloperSettings({
                 className={SECONDARY_BUTTON_CLASS_NAME}
               >
                 <Bug className="h-4 w-4" />
-                {t("settings.developer.diagnostic.action.copy", "复制诊断信息")}
+                {t("settings.developer.diagnostic.action.copy")}
               </button>
               <button
                 type="button"
@@ -681,10 +610,7 @@ export function DeveloperSettings({
                 className={SECONDARY_BUTTON_CLASS_NAME}
               >
                 <Code2 className="h-4 w-4" />
-                {t(
-                  "settings.developer.diagnostic.action.copyJson",
-                  "复制纯 JSON",
-                )}
+                {t("settings.developer.diagnostic.action.copyJson")}
               </button>
               <button
                 type="button"
@@ -693,10 +619,7 @@ export function DeveloperSettings({
                 className={SECONDARY_BUTTON_CLASS_NAME}
               >
                 <ScrollText className="h-4 w-4" />
-                {t(
-                  "settings.developer.diagnostic.action.exportJson",
-                  "导出诊断 JSON",
-                )}
+                {t("settings.developer.diagnostic.action.exportJson")}
               </button>
               <button
                 type="button"
@@ -707,7 +630,6 @@ export function DeveloperSettings({
                 <Sparkles className="h-4 w-4" />
                 {t(
                   "settings.developer.diagnostic.action.openDownloadDirectory",
-                  "打开下载目录",
                 )}
               </button>
             </div>
@@ -717,10 +639,7 @@ export function DeveloperSettings({
                 <Suspense
                   fallback={
                     <DeferredPanelFallback
-                      label={t(
-                        "settings.developer.deferred.clipboardGuide",
-                        "剪贴板权限指引",
-                      )}
+                      label={t("settings.developer.deferred.clipboardGuide")}
                     />
                   }
                 >
@@ -734,22 +653,13 @@ export function DeveloperSettings({
         <div className="space-y-5">
           <AdvancedDetails
             icon={DatabaseZap}
-            title={t(
-              "settings.developer.serviceSkill.title",
-              "服务型技能目录联调",
-            )}
-            description={t(
-              "settings.developer.serviceSkill.description",
-              "查看、注入或清空 service skill 目录。",
-            )}
+            title={t("settings.developer.serviceSkill.title")}
+            description={t("settings.developer.serviceSkill.description")}
           >
             <Suspense
               fallback={
                 <DeferredPanelFallback
-                  label={t(
-                    "settings.developer.serviceSkill.title",
-                    "服务型技能目录联调",
-                  )}
+                  label={t("settings.developer.serviceSkill.title")}
                 />
               }
             >
@@ -759,22 +669,13 @@ export function DeveloperSettings({
 
           <AdvancedDetails
             icon={Globe}
-            title={t(
-              "settings.developer.siteAdapter.title",
-              "站点脚本目录联调",
-            )}
-            description={t(
-              "settings.developer.siteAdapter.description",
-              "验证站点适配器目录与外部 YAML 导入。",
-            )}
+            title={t("settings.developer.siteAdapter.title")}
+            description={t("settings.developer.siteAdapter.description")}
           >
             <Suspense
               fallback={
                 <DeferredPanelFallback
-                  label={t(
-                    "settings.developer.siteAdapter.title",
-                    "站点脚本目录联调",
-                  )}
+                  label={t("settings.developer.siteAdapter.title")}
                 />
               }
             >
@@ -784,22 +685,13 @@ export function DeveloperSettings({
 
           <AdvancedDetails
             icon={ShieldAlert}
-            title={t(
-              "settings.developer.workspaceRepair.title",
-              "Workspace 自愈记录",
-            )}
-            description={t(
-              "settings.developer.workspaceRepair.description",
-              "查看最近自动修复和迁移动作。",
-            )}
+            title={t("settings.developer.workspaceRepair.title")}
+            description={t("settings.developer.workspaceRepair.description")}
           >
             <Suspense
               fallback={
                 <DeferredPanelFallback
-                  label={t(
-                    "settings.developer.workspaceRepair.title",
-                    "Workspace 自愈记录",
-                  )}
+                  label={t("settings.developer.workspaceRepair.title")}
                 />
               }
             >
@@ -807,7 +699,6 @@ export function DeveloperSettings({
                 className="rounded-[22px] border-slate-200/80 bg-white p-4"
                 description={t(
                   "settings.developer.workspaceRepair.cardDescription",
-                  "最近自动修复/迁移记录",
                 )}
               />
             </Suspense>

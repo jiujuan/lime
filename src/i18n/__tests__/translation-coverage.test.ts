@@ -79,7 +79,6 @@ describe("Translation Coverage", () => {
         "项目资料",
         "持续流程",
         "消息渠道",
-        "插件中心",
         "桌宠",
       ];
 

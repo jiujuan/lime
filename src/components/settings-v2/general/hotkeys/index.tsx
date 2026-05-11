@@ -226,10 +226,7 @@ export function HotkeysSettings() {
     useState<HotkeyRuntimeStatus | null>(null);
   const [runtimeAvailability, setRuntimeAvailability] =
     useState<RuntimeAvailability>("ready");
-  const unknownLoadErrorMessage = t(
-    "settings.hotkeys.error.loadUnknown",
-    "加载失败",
-  );
+  const unknownLoadErrorMessage = t("settings.hotkeys.error.loadUnknown");
 
   const loadHotkeys = useCallback(async () => {
     setLoading(true);
@@ -280,7 +277,7 @@ export function HotkeysSettings() {
       case "windows":
         return "Windows";
       default:
-        return t("settings.hotkeys.platform.current", "当前平台");
+        return t("settings.hotkeys.platform.current");
     }
   }, [platform, t]);
 
@@ -299,35 +296,29 @@ export function HotkeysSettings() {
       itemTipAria: (label: string) =>
         t("settings.hotkeys.item.tipAria", {
           label,
-          defaultValue: "{{label}}说明",
         }),
       sectionTipAria: (title: string) =>
         t("settings.hotkeys.section.tipAria", {
           title,
-          defaultValue: "{{title}}说明",
         }),
-      scopeGlobal: t("settings.hotkeys.scope.global", "全局"),
-      scopeLocal: t("settings.hotkeys.scope.local", "页面内"),
+      scopeGlobal: t("settings.hotkeys.scope.global"),
+      scopeLocal: t("settings.hotkeys.scope.local"),
       sourceMeta: (source: string) =>
         t("settings.hotkeys.meta.source", {
           source,
-          defaultValue: "来源：{{source}}",
         }),
       conditionMeta: (condition: string) =>
         t("settings.hotkeys.meta.condition", {
           condition,
-          defaultValue: "条件：{{condition}}",
         }),
-      unsetKey: t("settings.hotkeys.key.unset", "未设置"),
+      unsetKey: t("settings.hotkeys.key.unset"),
       sectionTotal: (count: number) =>
         t("settings.hotkeys.section.total", {
           count,
-          defaultValue: "共 {{count}} 项",
         }),
       sectionReady: (count: number) =>
         t("settings.hotkeys.section.ready", {
           count,
-          defaultValue: "可用 {{count}} 项",
         }),
     }),
     [t],
@@ -361,7 +352,6 @@ export function HotkeysSettings() {
               <span>
                 {t("settings.hotkeys.error.load", {
                   error,
-                  defaultValue: "加载快捷键失败：{{error}}",
                 })}
               </span>
             </div>
@@ -370,16 +360,13 @@ export function HotkeysSettings() {
               onClick={() => void loadHotkeys()}
               className="rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 transition hover:border-rose-300 hover:bg-rose-50"
             >
-              {t("settings.hotkeys.action.retry", "重试")}
+              {t("settings.hotkeys.action.retry")}
             </button>
           </div>
         ) : null}
 
         <div className="rounded-[20px] border border-rose-200 bg-rose-50/90 px-4 py-3 text-sm text-rose-700">
-          {t(
-            "settings.hotkeys.error.unavailable",
-            "快捷键信息暂时不可用，请稍后重试。",
-          )}
+          {t("settings.hotkeys.error.unavailable")}
         </div>
       </div>
     );
@@ -394,7 +381,6 @@ export function HotkeysSettings() {
             <span>
               {t("settings.hotkeys.error.load", {
                 error,
-                defaultValue: "加载快捷键失败：{{error}}",
               })}
             </span>
           </div>
@@ -403,7 +389,7 @@ export function HotkeysSettings() {
             onClick={() => void loadHotkeys()}
             className="rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 transition hover:border-rose-300 hover:bg-rose-50"
           >
-            {t("settings.hotkeys.action.retry", "重试")}
+            {t("settings.hotkeys.action.retry")}
           </button>
         </div>
       ) : null}
@@ -414,26 +400,18 @@ export function HotkeysSettings() {
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-[24px] font-semibold tracking-tight text-slate-900">
-                  {t("settings.hotkeys.title", "快捷键")}
+                  {t("settings.hotkeys.title")}
                 </h1>
                 <WorkbenchInfoTip
-                  ariaLabel={t(
-                    "settings.hotkeys.hero.tipAria",
-                    "已审计快捷键说明",
-                  )}
+                  ariaLabel={t("settings.hotkeys.hero.tipAria")}
                   content={t("settings.hotkeys.hero.tip", {
                     platform: platformLabel,
-                    defaultValue:
-                      "当前按 {{platform}} 展示已接入实现的快捷键。全局项读取运行时注册状态，页面内项直接来自对应模块的真实事件匹配逻辑，不再展示手工拼装的占位清单。",
                   })}
                   tone="mint"
                 />
               </div>
               <p className="text-sm text-slate-500">
-                {t(
-                  "settings.hotkeys.description",
-                  "查看已接入实现并完成审计的快捷键。",
-                )}
+                {t("settings.hotkeys.description")}
               </p>
             </div>
 
@@ -443,32 +421,23 @@ export function HotkeysSettings() {
                 {t("settings.hotkeys.summary.globalReady", {
                   ready: catalog.summary.globalReady,
                   total: 3,
-                  defaultValue: "全局运行中 {{ready}} / {{total}}",
                 })}
               </SummaryChip>
               <SummaryChip
                 tone={runtimeAvailability === "ready" ? "success" : "warning"}
               >
                 {runtimeAvailability === "ready"
-                  ? t(
-                      "settings.hotkeys.summary.runtime.ready",
-                      "运行时状态已连接",
-                    )
-                  : t(
-                      "settings.hotkeys.summary.runtime.fallback",
-                      "运行时状态不可读，已回退到配置判断",
-                    )}
+                  ? t("settings.hotkeys.summary.runtime.ready")
+                  : t("settings.hotkeys.summary.runtime.fallback")}
               </SummaryChip>
               <SummaryChip>
                 {t("settings.hotkeys.summary.audited", {
                   count: catalog.summary.total,
-                  defaultValue: "已审计 {{count}} 项",
                 })}
               </SummaryChip>
               <SummaryChip tone="success">
                 {t("settings.hotkeys.summary.ready", {
                   count: catalog.summary.ready,
-                  defaultValue: "可直接使用 {{count}} 项",
                 })}
               </SummaryChip>
               <SummaryChip
@@ -476,15 +445,11 @@ export function HotkeysSettings() {
               >
                 {t("settings.hotkeys.summary.attention", {
                   count: catalog.summary.attention,
-                  defaultValue: "需要处理 {{count}} 项",
                 })}
               </SummaryChip>
               <WorkbenchInfoTip
-                ariaLabel={t("settings.hotkeys.audit.tipAria", "已审计说明")}
-                content={t(
-                  "settings.hotkeys.audit.tip",
-                  "当前页只列出已接入实现且已核对的快捷键。",
-                )}
+                ariaLabel={t("settings.hotkeys.audit.tipAria")}
+                content={t("settings.hotkeys.audit.tip")}
                 tone="slate"
               />
             </div>

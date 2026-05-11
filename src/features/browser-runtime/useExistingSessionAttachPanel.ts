@@ -130,14 +130,15 @@ export function useExistingSessionAttachPanel(
     (shouldShowAttachFallback || attachContextLoading);
   const attachPresentation = useMemo(
     () =>
-      buildExistingSessionAttachPresentation({
-        loading: attachContextLoading,
-        observerConnected: Boolean(attachObserver),
-        pageLoading: attachPageLoading,
-        tabsLoading: attachTabsLoading,
-      },
-      copy.presentation,
-    ),
+      buildExistingSessionAttachPresentation(
+        {
+          loading: attachContextLoading,
+          observerConnected: Boolean(attachObserver),
+          pageLoading: attachPageLoading,
+          tabsLoading: attachTabsLoading,
+        },
+        copy.presentation,
+      ),
     [
       attachContextLoading,
       attachObserver,

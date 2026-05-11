@@ -4,6 +4,8 @@ export interface AgentStreamUnknownEventPlan {
   warningMessage: string | null;
 }
 
+const LIME_AGENT_RUNTIME_PROFILE_SCHEMA_VERSION = "lime-profile-0.4.0";
+
 export function buildAgentStreamUnknownEventWarningMessage(params: {
   eventName: string;
   eventType: string;
@@ -14,13 +16,18 @@ export function buildAgentStreamUnknownEventWarningMessage(params: {
 export function resolveAgentStreamUnknownEventPlan(params: {
   eventName: string;
   eventType: string | null;
+  schemaVersion?: string | null;
   warnedEventTypes: ReadonlySet<string>;
 }): AgentStreamUnknownEventPlan | null {
   if (!params.eventType) {
     return null;
   }
 
-  const shouldWarn = !params.warnedEventTypes.has(params.eventType);
+  const isLimeAgentRuntimeProfileEvent =
+    params.schemaVersion === LIME_AGENT_RUNTIME_PROFILE_SCHEMA_VERSION;
+  const shouldWarn =
+    !isLimeAgentRuntimeProfileEvent &&
+    !params.warnedEventTypes.has(params.eventType);
   return {
     eventType: params.eventType,
     shouldWarn,

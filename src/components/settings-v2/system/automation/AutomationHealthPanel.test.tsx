@@ -1,51 +1,22 @@
-import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { AutomationHealthPanel } from "./AutomationHealthPanel";
-
-const { mockUseTranslation } = vi.hoisted(() => {
-  const mockTranslate = vi.fn((key: string, options?: unknown) => {
-    if (typeof options === "string") return options;
-
-    if (options && typeof options === "object") {
-      const values = options as Record<string, unknown>;
-      const template =
-        typeof values.defaultValue === "string" ? values.defaultValue : key;
-      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-        String(values[name] ?? ""),
-      );
-    }
-
-    return key;
-  });
-
-  return {
-    mockUseTranslation: vi.fn((_namespace?: string) => ({
-      t: mockTranslate,
-      i18n: {
-        language: "zh-CN",
-        resolvedLanguage: "zh-CN",
-      },
-    })),
-  };
-});
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
-}));
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+
+  await changeLimeLocale("en-US");
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mountedRoots.length > 0) {
     const mounted = mountedRoots.pop();
     if (!mounted) {
@@ -56,6 +27,8 @@ afterEach(() => {
     });
     mounted.container.remove();
   }
+
+  await changeLimeLocale("zh-CN");
 });
 
 async function renderPanel() {
@@ -89,11 +62,11 @@ async function renderPanel() {
           risky_jobs: [
             {
               job_id: "job-browser-1",
-              name: "浏览器巡检",
+              name: "Browser inspection",
               status: "waiting_for_human",
               consecutive_failures: 0,
               retry_count: 0,
-              detail_message: "等待你确认是否继续执行",
+              detail_message: "Waiting for your confirmation to continue",
               auto_disabled_until: null,
               updated_at: "2026-03-16T00:00:05Z",
             },
@@ -112,9 +85,16 @@ async function renderPanel() {
 describe("AutomationHealthPanel", () => {
   it("风险提醒应展示人工处理原因", async () => {
     const container = await renderPanel();
+    const text = container.textContent ?? "";
 
-    expect(container.textContent).toContain("风险提醒");
-    expect(container.textContent).toContain("等待人工处理");
-    expect(container.textContent).toContain("等待你确认是否继续执行");
+    expect(text).toContain("Risk Alerts");
+    expect(text).toContain("Polling running");
+    expect(text).toContain("Total runs 8");
+    expect(text).toContain("Enabled");
+    expect(text).toContain("Last poll hits: 1");
+    expect(text).toContain("Waiting for human");
+    expect(text).toContain("Waiting for your confirmation to continue");
+    expect(text).not.toContain("风险提醒");
+    expect(text).not.toContain("settings.automation.health");
   });
 });

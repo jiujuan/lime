@@ -9,7 +9,6 @@ import type {
   ServiceModelPreferenceConfig,
   ServiceModelsConfig,
 } from "@/lib/api/appConfigTypes";
-import type { ConfiguredProvider } from "@/hooks/useConfiguredProviders";
 import { logAgentDebug } from "@/lib/agentDebug";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
 import { useGlobalMediaGenerationDefaults } from "@/hooks/useGlobalMediaGenerationDefaults";
@@ -70,10 +69,10 @@ import {
   AGENT_FAST_RESPONSE_MODE_STORAGE_KEY,
   buildAgentFastResponseMetadata,
   buildAgentFastResponseSystemPrompt,
-  resolveAgentFastResponseModel,
-  type AgentFastResponseDecision,
+  resolveAgentFastResponseRouting,
+  type AgentFastResponseRoutingDecision,
   type AgentFastResponseMode,
-} from "../utils/fastResponseModel";
+} from "../utils/fastResponseRouting";
 import { detectBrowserTaskRequirement } from "../utils/browserTaskRequirement";
 import { isTeamRuntimeRecommendation } from "../utils/contextualRecommendations";
 import {
@@ -384,7 +383,7 @@ function readFastResponseMode(): AgentFastResponseMode {
 
 function withFastResponseMetadata(
   requestMetadata: Record<string, unknown> | undefined,
-  decision: AgentFastResponseDecision,
+  decision: AgentFastResponseRoutingDecision,
 ): Record<string, unknown> | undefined {
   const fastResponseMetadata = buildAgentFastResponseMetadata(decision);
   if (!fastResponseMetadata) {
@@ -393,13 +392,8 @@ function withFastResponseMetadata(
 
   const nextMetadata = { ...(requestMetadata || {}) };
   const harness = asRecord(nextMetadata.harness) || {};
-  const {
-    browser_assist: _browserAssist,
-    browserAssist: _browserAssistCamel,
-    ...leanHarness
-  } = harness;
   nextMetadata.harness = {
-    ...leanHarness,
+    ...harness,
     fast_response_routing: fastResponseMetadata,
   };
   return nextMetadata;
@@ -431,41 +425,29 @@ function shouldSkipBrowserAssistPrimeForPlainFirstTurn(params: {
 }
 
 function buildFastResponseAssistantDraft(
-  decision: AgentFastResponseDecision,
+  decision: AgentFastResponseRoutingDecision,
 ): HandleSendOptions["assistantDraft"] {
   if (!decision.enabled) {
     return undefined;
   }
 
-  const providerLabel = decision.providerOverride || "当前 Provider";
-  const modelLabel = decision.modelOverride || "当前模型";
-  const checkpoints = decision.routingChanged
-    ? [
-        `已切到 ${providerLabel} / ${modelLabel}`,
-        "仅当前轻量首轮请求生效",
-        "复杂任务仍保留原模型与工具策略",
-      ]
-    : [
-        "已启用短提示词快速响应",
-        "仅当前轻量首轮请求生效",
-        "复杂任务仍保留原模型与工具策略",
-      ];
+  const checkpoints = [
+    "已启用短提示词快速响应",
+    "仅当前轻量首轮请求生效",
+    "复杂任务仍保留原模型与工具策略",
+  ];
 
   return {
     initialRuntimeStatus: {
       phase: "routing",
       title: "快速响应已启用",
-      detail: decision.routingChanged
-        ? `这轮先用 ${modelLabel} 降低首字等待。`
-        : "这轮使用更短的系统提示降低首字等待。",
+      detail: "这轮使用更短的系统提示降低首字等待。",
       checkpoints,
     },
     waitingRuntimeStatus: {
       phase: "routing",
       title: "快速响应处理中",
-      detail: decision.routingChanged
-        ? `已提交给 ${modelLabel}，正在等待首个模型事件。`
-        : "已提交请求，正在等待首个模型事件。",
+      detail: "已提交请求，正在等待首个模型事件。",
       checkpoints,
     },
   };
@@ -2992,9 +2974,6 @@ interface UseWorkspaceSendActionsParams {
   browserAssistAutoLaunch?: boolean | null;
   workspaceRequestMetadataBase?: Record<string, unknown>;
   serviceModels?: ServiceModelsConfig;
-  currentProviderType?: string | null;
-  currentModel?: string | null;
-  configuredProviders?: ConfiguredProvider[];
   messages: Message[];
   bootstrapDispatchPreview?: InitialDispatchPreviewSnapshot | null;
   sendMessage: SendMessageFn;
@@ -3103,9 +3082,6 @@ export function useWorkspaceSendActions({
   browserAssistAutoLaunch,
   workspaceRequestMetadataBase,
   serviceModels,
-  currentProviderType,
-  currentModel,
-  configuredProviders,
   messages,
   bootstrapDispatchPreview,
   sendMessage,
@@ -5473,7 +5449,7 @@ export function useWorkspaceSendActions({
           purpose: sendOptions?.purpose,
           serviceModels,
         });
-        const fastResponseDecision = resolveAgentFastResponseModel({
+        const fastResponseDecision = resolveAgentFastResponseRouting({
           mode: readFastResponseMode(),
           mappedTheme,
           isThemeWorkbench,
@@ -5481,9 +5457,6 @@ export function useWorkspaceSendActions({
           messageCount: messagesCount,
           sourceText,
           imagesCount: images.length,
-          currentProviderType,
-          currentModel,
-          configuredProviders,
           toolPreferences: effectiveToolPreferences,
           searchMode: effectiveSearchMode,
           effectiveWebSearch,
@@ -5526,16 +5499,10 @@ export function useWorkspaceSendActions({
           ...(effectiveSearchMode ? { searchMode: effectiveSearchMode } : {}),
           providerOverride:
             sendOptions?.providerOverride ??
-            serviceModelSendOverrides.providerOverride ??
-            (fastResponseDecision.routingChanged
-              ? fastResponseDecision.providerOverride
-              : undefined),
+            serviceModelSendOverrides.providerOverride,
           modelOverride:
             sendOptions?.modelOverride ??
-            serviceModelSendOverrides.modelOverride ??
-            (fastResponseDecision.routingChanged
-              ? fastResponseDecision.modelOverride
-              : undefined),
+            serviceModelSendOverrides.modelOverride,
           systemPromptOverride:
             sendOptions?.systemPromptOverride ??
             (fastResponseDecision.enabled
@@ -5615,13 +5582,10 @@ export function useWorkspaceSendActions({
       browserAssistAutoLaunch,
       browserAssistPreferredBackend,
       browserAssistProfileKey,
-      configuredProviders,
       contentId,
       contextWorkspace.activeContextPrompt,
       contextWorkspace.enabled,
       currentGateKey,
-      currentModel,
-      currentProviderType,
       finalizeAfterSendSuccess,
       isThemeWorkbench,
       mappedTheme,

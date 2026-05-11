@@ -118,9 +118,7 @@ describe("BrowserEnvironmentPresetManager", () => {
     expect(container.textContent).toContain("Refresh presets");
     expect(container.textContent).toContain("New preset");
     expect(container.textContent).toContain("Active presets: 1");
-    expect(container.textContent).toContain(
-      "Proxy: http://127.0.0.1:7890",
-    );
+    expect(container.textContent).toContain("Proxy: http://127.0.0.1:7890");
     expect(container.textContent).toContain("Last used: Never");
 
     const newButton = Array.from(container.querySelectorAll("button")).find(

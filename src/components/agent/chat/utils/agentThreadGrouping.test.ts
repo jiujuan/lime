@@ -369,12 +369,17 @@ describe("agentThreadGrouping", () => {
     ]);
   });
 
-  it("内部路由型 turn_summary 不应抢占整轮摘要", () => {
+  it("runtime status turn_summary 不应抢占整轮摘要", () => {
     const items: AgentThreadItem[] = [
       {
         ...createBaseItem("summary-1", 1),
         type: "turn_summary",
-        text: "直接回答优先\n当前请求无需默认升级为搜索或任务。",
+        text: "runtime status should not become the turn summary",
+        metadata: {
+          sourceType: "runtime_status",
+          surface: "runtime_status",
+          visibility: "diagnostics",
+        },
       },
     ];
 

@@ -49,17 +49,10 @@ export function UpdateNotificationPage() {
   const [downloading, setDownloading] = useState(false);
   const [visible, setVisible] = useState(false);
   const [closing, setClosing] = useState(false);
-  const closeLabel = t(
-    "common.updateNotification.action.close",
-    "关闭提醒",
-  );
-  const skipLabel = t(
-    "common.updateNotification.action.skipVersion",
-    "跳过此版本",
-  );
+  const closeLabel = t("common.updateNotification.action.close");
+  const skipLabel = t("common.updateNotification.action.skipVersion");
   const openReleaseLabel = t(
     "common.updateNotification.action.openReleasePage",
-    "在浏览器中查看发布页",
   );
 
   useEffect(() => {
@@ -196,13 +189,11 @@ export function UpdateNotificationPage() {
         <div className="update-toast-main">
           <div className="update-toast-message">
             {t("common.updateNotification.version.new", {
-              defaultValue: "发现新版本 {{version}}",
               version: params.latestVersion || "",
             })}
             {params.currentVersion ? (
               <span className="update-toast-sub">
                 {t("common.updateNotification.version.current", {
-                  defaultValue: "（当前 {{version}}）",
                   version: params.currentVersion,
                 })}
               </span>
@@ -217,19 +208,19 @@ export function UpdateNotificationPage() {
               onClick={() => handleLater(24)}
               className="update-btn update-btn-ghost"
             >
-              {t("common.updateNotification.action.laterOneDay", "1天后")}
+              {t("common.updateNotification.action.laterOneDay")}
             </button>
             <button
               onClick={() => handleLater(72)}
               className="update-btn update-btn-ghost"
             >
-              {t("common.updateNotification.action.laterThreeDays", "3天后")}
+              {t("common.updateNotification.action.laterThreeDays")}
             </button>
             <button
               onClick={() => handleLater(168)}
               className="update-btn update-btn-ghost"
             >
-              {t("common.updateNotification.action.laterNextWeek", "下周")}
+              {t("common.updateNotification.action.laterNextWeek")}
             </button>
             <button
               onClick={handleDismiss}
@@ -257,8 +248,8 @@ export function UpdateNotificationPage() {
                 className={downloading ? "animate-spin" : ""}
               />
               {downloading
-                ? t("common.updateNotification.action.downloading", "下载中")
-                : t("common.updateNotification.action.updateNow", "立即更新")}
+                ? t("common.updateNotification.action.downloading")
+                : t("common.updateNotification.action.updateNow")}
             </button>
             {params.downloadUrl ? (
               <button

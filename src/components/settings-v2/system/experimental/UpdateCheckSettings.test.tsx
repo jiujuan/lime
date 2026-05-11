@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 const {
   mockGetUpdateCheckSettings,
@@ -14,62 +15,11 @@ const {
   mockTestUpdateWindow: vi.fn(),
 }));
 
-const { mockUseTranslation } = vi.hoisted(() => {
-  const translations = {
-    "settings.experimental.updateCheck.action.testWindow":
-      "Test update prompt from i18n",
-    "settings.experimental.updateCheck.autoCheck.aria":
-      "Toggle auto check from i18n",
-    "settings.experimental.updateCheck.autoCheck.title":
-      "Automatic check title from i18n",
-    "settings.experimental.updateCheck.interval.weekly": "Weekly from i18n",
-    "settings.experimental.updateCheck.metrics.title":
-      "Metrics title from i18n",
-    "settings.experimental.updateCheck.metrics.updateNow":
-      "Shown {{shown}} times and update now {{updateNow}} times from i18n",
-    "settings.experimental.updateCheck.skippedVersion.title":
-      "Skipped version from i18n",
-    "settings.experimental.updateCheck.title": "Auto update checks from i18n",
-  } as Record<string, string>;
-
-  const mockTranslate = vi.fn((key: string, options?: unknown) => {
-    if (typeof options === "string") {
-      return translations[key] ?? options;
-    }
-
-    const template =
-      translations[key] ??
-      (options && typeof options === "object"
-        ? (options as Record<string, unknown>).defaultValue
-        : undefined) ??
-      key;
-
-    return String(template).replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-      String(
-        options && typeof options === "object"
-          ? ((options as Record<string, unknown>)[name] ?? "")
-          : "",
-      ),
-    );
-  });
-
-  return {
-    mockUseTranslation: vi.fn((_namespace?: string) => ({
-      i18n: { language: "en-US" },
-      t: mockTranslate,
-    })),
-  };
-});
-
 vi.mock("@/lib/api/appUpdate", () => ({
   getUpdateCheckSettings: mockGetUpdateCheckSettings,
   getUpdateNotificationMetrics: mockGetUpdateNotificationMetrics,
   setUpdateCheckSettings: mockSetUpdateCheckSettings,
   testUpdateWindow: mockTestUpdateWindow,
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
 }));
 
 import { UpdateCheckSettings } from "./UpdateCheckSettings";
@@ -126,8 +76,8 @@ function findButtonByText(
   container: HTMLElement,
   text: string,
 ): HTMLButtonElement {
-  const button = Array.from(container.querySelectorAll("button")).find(
-    (item) => item.textContent?.includes(text),
+  const button = Array.from(container.querySelectorAll("button")).find((item) =>
+    item.textContent?.includes(text),
   );
   if (!button) {
     throw new Error(`未找到按钮文本: ${text}`);
@@ -142,7 +92,7 @@ async function clickButton(button: HTMLButtonElement) {
   });
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -150,6 +100,7 @@ beforeEach(() => {
   ).IS_REACT_ACT_ENVIRONMENT = true;
 
   vi.clearAllMocks();
+  await changeLimeLocale("en-US");
 
   mockGetUpdateCheckSettings.mockResolvedValue({
     check_interval_hours: 168,
@@ -174,7 +125,7 @@ beforeEach(() => {
   mockTestUpdateWindow.mockResolvedValue(undefined);
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mounted.length > 0) {
     const target = mounted.pop();
     if (!target) {
@@ -188,6 +139,7 @@ afterEach(() => {
   }
 
   vi.clearAllMocks();
+  await changeLimeLocale("zh-CN");
 });
 
 describe("UpdateCheckSettings", () => {
@@ -196,22 +148,25 @@ describe("UpdateCheckSettings", () => {
     await waitForLoad();
 
     const text = getText(container);
-    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
-    expect(text).toContain("Auto update checks from i18n");
-    expect(text).toContain("Automatic check title from i18n");
-    expect(text).toContain("Weekly from i18n");
-    expect(text).toContain("Skipped version from i18n");
-    expect(text).toContain("Metrics title from i18n");
-    expect(text).toContain(
-      "Shown 20 times and update now 3 times from i18n",
-    );
+    expect(text).toContain("Automatic Update Check");
+    expect(text).toContain("Automatic update checks");
+    expect(text).toContain("Weekly");
+    expect(text).toContain("Skipped version");
+    expect(text).toContain("Reminder conversion metrics");
+    expect(text).toContain("Shown 20 times; update now 3 times (15%)");
+    expect(text).toContain("Last check:");
+    expect(text).toContain("Remind later until:");
+    expect(text).not.toContain("settings.experimental.updateCheck");
+    expect(text).not.toContain("自动更新检查");
   });
 
   it("关闭自动检查时应保存完整更新配置", async () => {
     const container = renderComponent();
     await waitForLoad();
 
-    await clickButton(findButtonByLabel(container, "Toggle auto check from i18n"));
+    await clickButton(
+      findButtonByLabel(container, "Toggle automatic update checks"),
+    );
 
     expect(mockSetUpdateCheckSettings).toHaveBeenCalledWith({
       check_interval_hours: 168,
@@ -227,7 +182,7 @@ describe("UpdateCheckSettings", () => {
     const container = renderComponent();
     await waitForLoad();
 
-    await clickButton(findButtonByText(container, "Test update prompt from i18n"));
+    await clickButton(findButtonByText(container, "Test update prompt"));
 
     expect(mockTestUpdateWindow).toHaveBeenCalledTimes(1);
   });

@@ -22,6 +22,7 @@ import {
   AlertTriangle,
   CheckCircle2,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Skill } from "@/lib/api/skills";
 
 /**
@@ -108,9 +109,15 @@ export function canInspectSkill(skill: Skill): boolean {
   );
 }
 
+type InspectActionKey =
+  | "skills.skillCard.action.viewContent"
+  | "skills.skillCard.action.inspect";
+
 // eslint-disable-next-line react-refresh/only-export-components
-export function getInspectActionLabel(skill: Skill): string {
-  return canViewLocalSkillContent(skill) ? "查看内容" : "检查详情";
+export function getInspectActionKey(skill: Skill): InspectActionKey {
+  return canViewLocalSkillContent(skill)
+    ? "skills.skillCard.action.viewContent"
+    : "skills.skillCard.action.inspect";
 }
 
 /**
@@ -126,43 +133,61 @@ export function canManageSkillInstallation(skill: Skill): boolean {
   return skill.sourceKind !== "builtin" && skill.catalogSource !== "project";
 }
 
-const sourceConfig: Record<SkillSource, { label: string; className: string }> =
+const sourceConfig = {
+  builtin: {
+    labelKey: "skills.skillCard.source.builtin",
+    defaultLabel: "内置",
+    className: "bg-orange-100 text-orange-800",
+  },
+  project: {
+    labelKey: "skills.skillCard.source.project",
+    defaultLabel: "项目",
+    className: "bg-stone-100 text-stone-800",
+  },
+  official: {
+    labelKey: "skills.skillCard.source.official",
+    defaultLabel: "官方",
+    className: "bg-green-100 text-green-800",
+  },
+  community: {
+    labelKey: "skills.skillCard.source.community",
+    defaultLabel: "社区",
+    className: "bg-sky-100 text-sky-800",
+  },
+  local: {
+    labelKey: "skills.skillCard.source.local",
+    defaultLabel: "本地",
+    className: "bg-slate-100 text-slate-800",
+  },
+} as const satisfies Record<
+  SkillSource,
   {
-    builtin: {
-      label: "内置",
-      className: "bg-orange-100 text-orange-800",
-    },
-    project: {
-      label: "项目",
-      className: "bg-stone-100 text-stone-800",
-    },
-    official: {
-      label: "官方",
-      className: "bg-green-100 text-green-800",
-    },
-    community: {
-      label: "社区",
-      className: "bg-sky-100 text-sky-800",
-    },
-    local: {
-      label: "本地",
-      className: "bg-slate-100 text-slate-800",
-    },
-  };
+    labelKey:
+      | "skills.skillCard.source.builtin"
+      | "skills.skillCard.source.project"
+      | "skills.skillCard.source.official"
+      | "skills.skillCard.source.community"
+      | "skills.skillCard.source.local";
+    defaultLabel: string;
+    className: string;
+  }
+>;
 
 function SourceBadge({ source }: { source: SkillSource }) {
-  const { label, className } = sourceConfig[source];
+  const { t } = useTranslation("agent");
+  const { labelKey, defaultLabel, className } = sourceConfig[source];
 
   return (
     <span
       className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${className}`}
     >
-      {label}
+      {t(labelKey, { defaultValue: defaultLabel })}
     </span>
   );
 }
 
 function StandardBadge({ skill }: { skill: Skill }) {
+  const { t } = useTranslation("agent");
   const compliance = skill.standardCompliance;
   if (!compliance) {
     return null;
@@ -173,7 +198,7 @@ function StandardBadge({ skill }: { skill: Skill }) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
         <AlertTriangle className="h-3 w-3" />
-        待修复
+        {t("skills.skillCard.compliance.needsFix")}
       </span>
     );
   }
@@ -182,7 +207,7 @@ function StandardBadge({ skill }: { skill: Skill }) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
         <AlertTriangle className="h-3 w-3" />
-        含兼容字段
+        {t("skills.skillCard.compliance.compatFields")}
       </span>
     );
   }
@@ -190,7 +215,7 @@ function StandardBadge({ skill }: { skill: Skill }) {
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
       <CheckCircle2 className="h-3 w-3" />
-      标准
+      {t("skills.skillCard.compliance.standard")}
     </span>
   );
 }
@@ -226,6 +251,7 @@ export function SkillCard({
   onViewContent,
   installing,
 }: SkillCardProps) {
+  const { t } = useTranslation("agent");
   const canManageInstallation = canManageSkillInstallation(skill);
 
   const handleAction = () => {
@@ -255,7 +281,9 @@ export function SkillCard({
 
   const source = getSkillSource(skill);
   const showViewContent = Boolean(onViewContent && canInspectSkill(skill));
-  const inspectActionLabel = getInspectActionLabel(skill);
+  const inspectActionLabel = canViewLocalSkillContent(skill)
+    ? t("skills.skillCard.action.viewContent")
+    : t("skills.skillCard.action.inspect");
 
   return (
     <article className="group relative flex h-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 hover:shadow-md">
@@ -266,7 +294,7 @@ export function SkillCard({
               {skill.name}
             </h3>
             <p className="mt-1 text-xs text-slate-500 line-clamp-2">
-              {skill.description || "暂无描述"}
+              {skill.description || t("skills.skillCard.description.empty")}
             </p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               <SourceBadge source={source} />
@@ -276,7 +304,7 @@ export function SkillCard({
 
           {skill.installed && (
             <span className="inline-flex shrink-0 items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-              已安装
+              {t("skills.skillCard.status.installed")}
             </span>
           )}
         </div>
@@ -296,19 +324,21 @@ export function SkillCard({
                 {installing ? (
                   <>
                     <Loader2 className="h-3 w-3 animate-spin" />
-                    {skill.installed ? "卸载中" : "安装中"}
+                    {skill.installed
+                      ? t("skills.skillCard.action.uninstalling")
+                      : t("skills.skillCard.action.installing")}
                   </>
                 ) : (
                   <>
                     {skill.installed ? (
                       <>
                         <Trash2 className="h-3 w-3" />
-                        卸载
+                        {t("skills.skillCard.action.uninstall")}
                       </>
                     ) : (
                       <>
                         <Download className="h-3 w-3" />
-                        安装
+                        {t("skills.skillCard.action.install")}
                       </>
                     )}
                   </>
@@ -323,7 +353,7 @@ export function SkillCard({
                 className="flex-1 inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
               >
                 <Play className="h-3 w-3" />
-                执行
+                {t("skills.skillCard.action.execute")}
               </button>
             )}
 

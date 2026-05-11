@@ -1,32 +1,25 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
-const { mockDeveloperSettings, mockExperimentalSettings, mockUseTranslation } =
-  vi.hoisted(() => ({
-    mockDeveloperSettings: vi.fn(),
-    mockExperimentalSettings: vi.fn(),
-    mockUseTranslation: vi.fn((_namespace?: string) => ({
-      t: (_key: string, fallback: string) => fallback,
-    })),
-  }));
+const { mockDeveloperSettings, mockExperimentalSettings } = vi.hoisted(() => ({
+  mockDeveloperSettings: vi.fn(),
+  mockExperimentalSettings: vi.fn(),
+}));
 
 vi.mock("../developer", () => ({
   DeveloperSettings: (props: unknown) => {
     mockDeveloperSettings(props);
-    return <div>开发者工具占位</div>;
+    return <div>Developer panel placeholder</div>;
   },
 }));
 
 vi.mock("../experimental", () => ({
   ExperimentalSettings: (props: unknown) => {
     mockExperimentalSettings(props);
-    return <div>实验功能占位</div>;
+    return <div>Experimental panel placeholder</div>;
   },
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
 }));
 
 import { DeveloperLabSettings } from ".";
@@ -53,19 +46,19 @@ function renderComponent(
   return container;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
-});
 
-afterEach(() => {
   mockDeveloperSettings.mockReset();
   mockExperimentalSettings.mockReset();
-  mockUseTranslation.mockClear();
+  await changeLimeLocale("en-US");
+});
 
+afterEach(async () => {
   while (mounted.length > 0) {
     const current = mounted.pop();
     if (!current) {
@@ -77,6 +70,8 @@ afterEach(() => {
     });
     current.container.remove();
   }
+
+  await changeLimeLocale("zh-CN");
 });
 
 describe("DeveloperLabSettings", () => {
@@ -84,10 +79,13 @@ describe("DeveloperLabSettings", () => {
     const container = renderComponent();
     const text = container.textContent ?? "";
 
-    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
-    expect(text).toContain("开发者与实验功能");
-    expect(text).toContain("开发者工具占位");
-    expect(text).not.toContain("实验功能占位");
+    expect(text).toContain("Developer & Labs");
+    expect(text).toContain("Developer Tools");
+    expect(text).toContain("Experimental Features");
+    expect(text).toContain("Developer panel placeholder");
+    expect(text).not.toContain("Experimental panel placeholder");
+    expect(text).not.toContain("开发者与实验功能");
+    expect(text).not.toContain("settings.developerLab");
     expect(mockDeveloperSettings).toHaveBeenCalledWith({ embedded: true });
     expect(mockExperimentalSettings).not.toHaveBeenCalled();
   });
@@ -96,8 +94,8 @@ describe("DeveloperLabSettings", () => {
     const container = renderComponent("experimental");
     const text = container.textContent ?? "";
 
-    expect(text).toContain("实验功能占位");
-    expect(text).not.toContain("开发者工具占位");
+    expect(text).toContain("Experimental panel placeholder");
+    expect(text).not.toContain("Developer panel placeholder");
     expect(mockExperimentalSettings).toHaveBeenCalledWith({ embedded: true });
   });
 
@@ -114,8 +112,8 @@ describe("DeveloperLabSettings", () => {
     });
 
     const text = container.textContent ?? "";
-    expect(text).toContain("实验功能占位");
-    expect(text).not.toContain("开发者工具占位");
+    expect(text).toContain("Experimental panel placeholder");
+    expect(text).not.toContain("Developer panel placeholder");
     expect(mockExperimentalSettings).toHaveBeenCalledWith({ embedded: true });
   });
 });

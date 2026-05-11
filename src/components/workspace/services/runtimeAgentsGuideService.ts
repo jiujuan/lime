@@ -49,9 +49,12 @@ function buildRuntimeAgentsGuideCopy(): RuntimeAgentsGuideCopy {
     initializedTitle: t("workspace.runtimeAgentsGuide.initialized.title", {
       defaultValue: "已初始化运行时 AGENTS 模板",
     }),
-    initializedErrorTitle: t("workspace.runtimeAgentsGuide.initialized.errorTitle", {
-      defaultValue: "初始化运行时 AGENTS 模板失败",
-    }),
+    initializedErrorTitle: t(
+      "workspace.runtimeAgentsGuide.initialized.errorTitle",
+      {
+        defaultValue: "初始化运行时 AGENTS 模板失败",
+      },
+    ),
     initializedErrorDescription: t(
       "workspace.runtimeAgentsGuide.initialized.errorDescription",
       {
@@ -196,7 +199,11 @@ async function initializeRuntimeAgentsGuide(
           workspaceTemplate.status,
           copy,
         ),
-        describeTemplateStatus(copy.localTemplateLabel, localTemplate.status, copy),
+        describeTemplateStatus(
+          copy.localTemplateLabel,
+          localTemplate.status,
+          copy,
+        ),
         describeGitignoreStatus(gitignoreResult.status, copy),
       ].join("；"),
     });

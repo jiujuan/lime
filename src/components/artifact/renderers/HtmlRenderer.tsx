@@ -13,6 +13,7 @@ import React, {
   useMemo,
   useEffect,
 } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Eye,
   Code2,
@@ -45,15 +46,32 @@ const PREVIEW_WIDTHS: Record<PreviewSize, number | string> = {
 /**
  * 尺寸选项配置
  */
-const SIZE_OPTIONS: Array<{
+type HtmlRendererPreviewSizeLabelKey =
+  | "errors.htmlRenderer.previewSize.mobile"
+  | "errors.htmlRenderer.previewSize.tablet"
+  | "errors.htmlRenderer.previewSize.desktop";
+
+const SIZE_OPTIONS = [
+  {
+    value: "mobile",
+    labelKey: "errors.htmlRenderer.previewSize.mobile",
+    icon: Smartphone,
+  },
+  {
+    value: "tablet",
+    labelKey: "errors.htmlRenderer.previewSize.tablet",
+    icon: Tablet,
+  },
+  {
+    value: "desktop",
+    labelKey: "errors.htmlRenderer.previewSize.desktop",
+    icon: Monitor,
+  },
+] as const satisfies ReadonlyArray<{
   value: PreviewSize;
-  label: string;
+  labelKey: HtmlRendererPreviewSizeLabelKey;
   icon: React.ComponentType<{ className?: string }>;
-}> = [
-  { value: "mobile", label: "手机", icon: Smartphone },
-  { value: "tablet", label: "平板", icon: Tablet },
-  { value: "desktop", label: "桌面", icon: Monitor },
-];
+}>;
 
 /**
  * 视图模式类型
@@ -63,12 +81,16 @@ type ViewMode = "preview" | "source";
 /**
  * 流式指示器组件
  */
-const StreamingIndicator: React.FC = memo(() => (
-  <div className="absolute bottom-2 right-2 flex items-center gap-1.5 px-2 py-1 rounded bg-blue-500/20 text-blue-400 text-xs">
-    <Loader2 className="w-3 h-3 animate-spin" />
-    <span>生成中...</span>
-  </div>
-));
+const StreamingIndicator: React.FC = memo(() => {
+  const { t } = useTranslation("errors");
+
+  return (
+    <div className="absolute bottom-2 right-2 flex items-center gap-1.5 px-2 py-1 rounded bg-blue-500/20 text-blue-400 text-xs">
+      <Loader2 className="w-3 h-3 animate-spin" />
+      <span>{t("errors.htmlRenderer.status.streaming")}</span>
+    </div>
+  );
+});
 StreamingIndicator.displayName = "StreamingIndicator";
 
 /**
@@ -82,35 +104,41 @@ interface ErrorDisplayProps {
 }
 
 const ErrorDisplay: React.FC<ErrorDisplayProps> = memo(
-  ({ message, content, onRetry }) => (
-    <div className="flex flex-col h-full">
-      <div className="flex items-start gap-3 p-4 bg-red-50 border-b border-red-100">
-        <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-        <div className="flex-1">
-          <h3 className="text-sm font-medium text-red-800 mb-1">
-            HTML 渲染失败
-          </h3>
-          <p className="text-xs text-red-600">{message}</p>
+  ({ message, content, onRetry }) => {
+    const { t } = useTranslation("errors");
+
+    return (
+      <div className="flex flex-col h-full">
+        <div className="flex items-start gap-3 p-4 bg-red-50 border-b border-red-100">
+          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <h3 className="text-sm font-medium text-red-800 mb-1">
+              {t("errors.htmlRenderer.error.renderFailed")}
+            </h3>
+            <p className="text-xs text-red-600">{message}</p>
+          </div>
+          {onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium text-red-700 hover:bg-red-100 transition-colors"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>{t("errors.htmlRenderer.action.retry")}</span>
+            </button>
+          )}
         </div>
-        {onRetry && (
-          <button
-            type="button"
-            onClick={onRetry}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium text-red-700 hover:bg-red-100 transition-colors"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>重试</span>
-          </button>
-        )}
+        <div className="flex-1 overflow-auto p-4 bg-gray-50">
+          <h4 className="text-xs font-medium text-gray-500 mb-2">
+            {t("errors.htmlRenderer.section.sourceContent")}
+          </h4>
+          <pre className="text-xs text-gray-700 font-mono whitespace-pre-wrap break-all bg-white p-3 rounded border border-gray-200">
+            {content}
+          </pre>
+        </div>
       </div>
-      <div className="flex-1 overflow-auto p-4 bg-gray-50">
-        <h4 className="text-xs font-medium text-gray-500 mb-2">源码内容：</h4>
-        <pre className="text-xs text-gray-700 font-mono whitespace-pre-wrap break-all bg-white p-3 rounded border border-gray-200">
-          {content}
-        </pre>
-      </div>
-    </div>
-  ),
+    );
+  },
 );
 ErrorDisplay.displayName = "ErrorDisplay";
 
@@ -123,38 +151,42 @@ interface ViewModeToggleProps {
 }
 
 const ViewModeToggle: React.FC<ViewModeToggleProps> = memo(
-  ({ value, onChange }) => (
-    <div className="inline-flex items-center rounded-md bg-gray-100 p-1">
-      <button
-        type="button"
-        onClick={() => onChange("preview")}
-        className={cn(
-          "inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-all",
-          value === "preview"
-            ? "bg-white text-gray-900 shadow-sm"
-            : "text-gray-600 hover:text-gray-900",
-        )}
-        title="预览模式"
-      >
-        <Eye className="w-3.5 h-3.5" />
-        <span>预览</span>
-      </button>
-      <button
-        type="button"
-        onClick={() => onChange("source")}
-        className={cn(
-          "inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-all",
-          value === "source"
-            ? "bg-white text-gray-900 shadow-sm"
-            : "text-gray-600 hover:text-gray-900",
-        )}
-        title="源码模式"
-      >
-        <Code2 className="w-3.5 h-3.5" />
-        <span>源码</span>
-      </button>
-    </div>
-  ),
+  ({ value, onChange }) => {
+    const { t } = useTranslation("errors");
+
+    return (
+      <div className="inline-flex items-center rounded-md bg-gray-100 p-1">
+        <button
+          type="button"
+          onClick={() => onChange("preview")}
+          className={cn(
+            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-all",
+            value === "preview"
+              ? "bg-white text-gray-900 shadow-sm"
+              : "text-gray-600 hover:text-gray-900",
+          )}
+          title={t("errors.htmlRenderer.view.previewTitle")}
+        >
+          <Eye className="w-3.5 h-3.5" />
+          <span>{t("errors.htmlRenderer.view.preview")}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange("source")}
+          className={cn(
+            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-all",
+            value === "source"
+              ? "bg-white text-gray-900 shadow-sm"
+              : "text-gray-600 hover:text-gray-900",
+          )}
+          title={t("errors.htmlRenderer.view.sourceTitle")}
+        >
+          <Code2 className="w-3.5 h-3.5" />
+          <span>{t("errors.htmlRenderer.view.source")}</span>
+        </button>
+      </div>
+    );
+  },
 );
 ViewModeToggle.displayName = "ViewModeToggle";
 
@@ -167,29 +199,33 @@ interface SizeSelectorProps {
 }
 
 const SizeSelector: React.FC<SizeSelectorProps> = memo(
-  ({ value, onChange }) => (
-    <div className="inline-flex items-center rounded-md bg-gray-100 p-1">
-      {SIZE_OPTIONS.map((option) => {
-        const Icon = option.icon;
-        return (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => onChange(option.value)}
-            className={cn(
-              "inline-flex items-center justify-center w-8 h-7 rounded transition-all",
-              value === option.value
-                ? "bg-white text-gray-900 shadow-sm"
-                : "text-gray-500 hover:text-gray-700",
-            )}
-            title={option.label}
-          >
-            <Icon className="w-4 h-4" />
-          </button>
-        );
-      })}
-    </div>
-  ),
+  ({ value, onChange }) => {
+    const { t } = useTranslation("errors");
+
+    return (
+      <div className="inline-flex items-center rounded-md bg-gray-100 p-1">
+        {SIZE_OPTIONS.map((option) => {
+          const Icon = option.icon;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onChange(option.value)}
+              className={cn(
+                "inline-flex items-center justify-center w-8 h-7 rounded transition-all",
+                value === option.value
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700",
+              )}
+              title={t(option.labelKey)}
+            >
+              <Icon className="w-4 h-4" />
+            </button>
+          );
+        })}
+      </div>
+    );
+  },
 );
 SizeSelector.displayName = "SizeSelector";
 
@@ -202,21 +238,25 @@ interface RefreshButtonProps {
 }
 
 const RefreshButton: React.FC<RefreshButtonProps> = memo(
-  ({ onClick, isRefreshing }) => (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={isRefreshing}
-      className={cn(
-        "inline-flex items-center justify-center w-8 h-8 rounded transition-all",
-        "text-gray-500 hover:text-gray-700 hover:bg-gray-100",
-        "disabled:opacity-50 disabled:cursor-not-allowed",
-      )}
-      title="刷新预览"
-    >
-      <RefreshCw className={cn("w-4 h-4", isRefreshing && "animate-spin")} />
-    </button>
-  ),
+  ({ onClick, isRefreshing }) => {
+    const { t } = useTranslation("errors");
+
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={isRefreshing}
+        className={cn(
+          "inline-flex items-center justify-center w-8 h-8 rounded transition-all",
+          "text-gray-500 hover:text-gray-700 hover:bg-gray-100",
+          "disabled:opacity-50 disabled:cursor-not-allowed",
+        )}
+        title={t("errors.htmlRenderer.action.refreshPreview")}
+      >
+        <RefreshCw className={cn("w-4 h-4", isRefreshing && "animate-spin")} />
+      </button>
+    );
+  },
 );
 RefreshButton.displayName = "RefreshButton";
 
@@ -236,6 +276,7 @@ RefreshButton.displayName = "RefreshButton";
  */
 export const HtmlRenderer: React.FC<ArtifactRendererProps> = memo(
   ({ artifact, isStreaming = false }) => {
+    const { t } = useTranslation("errors");
     // 视图模式状态
     const [viewMode, setViewMode] = useState<ViewMode>("preview");
     // 预览尺寸状态
@@ -254,12 +295,14 @@ export const HtmlRenderer: React.FC<ArtifactRendererProps> = memo(
     useEffect(() => {
       try {
         if (!artifact.content || typeof artifact.content !== "string") {
-          throw new Error("HTML 内容为空或格式无效");
+          throw new Error(t("errors.htmlRenderer.error.emptyOrInvalidContent"));
         }
         setError(null);
       } catch (err) {
         const errorMessage =
-          err instanceof Error ? err.message : "HTML 验证失败";
+          err instanceof Error
+            ? err.message
+            : t("errors.htmlRenderer.error.validationFailed");
         console.error(
           "[HtmlRenderer] Error validating content:",
           errorMessage,
@@ -267,7 +310,7 @@ export const HtmlRenderer: React.FC<ArtifactRendererProps> = memo(
         );
         setError(errorMessage);
       }
-    }, [artifact.content]);
+    }, [artifact.content, t]);
 
     /**
      * 刷新预览
@@ -288,7 +331,9 @@ export const HtmlRenderer: React.FC<ArtifactRendererProps> = memo(
               }
             } catch (err) {
               const errorMessage =
-                err instanceof Error ? err.message : "刷新失败";
+                err instanceof Error
+                  ? err.message
+                  : t("errors.htmlRenderer.error.refreshFailed");
               console.error(
                 "[HtmlRenderer] Error refreshing preview:",
                 errorMessage,
@@ -301,7 +346,10 @@ export const HtmlRenderer: React.FC<ArtifactRendererProps> = memo(
           });
         }
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : "刷新失败";
+        const errorMessage =
+          err instanceof Error
+            ? err.message
+            : t("errors.htmlRenderer.error.refreshFailed");
         console.error(
           "[HtmlRenderer] Error in refreshPreview:",
           errorMessage,
@@ -310,17 +358,17 @@ export const HtmlRenderer: React.FC<ArtifactRendererProps> = memo(
         setError(errorMessage);
         setIsRefreshing(false);
       }
-    }, [artifact.content]);
+    }, [artifact.content, t]);
 
     /**
      * 处理 iframe 加载错误
      * Requirement 14.4
      */
     const handleIframeError = useCallback(() => {
-      const errorMessage = "iframe 加载失败";
+      const errorMessage = t("errors.htmlRenderer.error.iframeLoadFailed");
       console.error("[HtmlRenderer] Error loading iframe:", errorMessage);
       setError(errorMessage);
-    }, []);
+    }, [t]);
 
     /**
      * 计算 iframe 样式
@@ -404,7 +452,7 @@ export const HtmlRenderer: React.FC<ArtifactRendererProps> = memo(
                   previewSize !== "desktop" &&
                     "rounded-lg border border-gray-300",
                 )}
-                title={artifact.title || "HTML 预览"}
+                title={artifact.title || t("errors.htmlRenderer.iframe.title")}
                 onError={handleIframeError}
               />
             </div>

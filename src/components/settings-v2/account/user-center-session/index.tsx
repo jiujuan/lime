@@ -85,7 +85,7 @@ type UserCenterSessionTranslate = TFunction<"settings", undefined>;
 function formatProviderLabel(t: UserCenterSessionTranslate, provider?: string) {
   const normalized = provider?.trim();
   if (!normalized) {
-    return t("settings.userCenterSession.provider.system", "系统账号");
+    return t("settings.userCenterSession.provider.system");
   }
 
   if (normalized.toLowerCase() === "google") {
@@ -161,18 +161,18 @@ export function UserCenterSessionSettings() {
     session?.user.displayName?.trim() ||
     session?.user.username?.trim() ||
     session?.user.email?.trim() ||
-    t("settings.userCenterSession.account.fallbackName", "未登录");
+    t("settings.userCenterSession.account.fallbackName");
   const accountEmail =
     session?.user.email?.trim() ||
     session?.user.username?.trim() ||
-    t("settings.userCenterSession.account.loginRequired", "登录后显示");
+    t("settings.userCenterSession.account.loginRequired");
   const accountIdentity =
     session?.user.username?.trim() ||
     session?.user.id ||
-    t("settings.userCenterSession.account.loginRequired", "登录后显示");
+    t("settings.userCenterSession.account.loginRequired");
   const identityLabel = session?.user.username?.trim()
-    ? t("settings.userCenterSession.account.identity.username", "账号")
-    : t("settings.userCenterSession.account.identity.userId", "用户 ID");
+    ? t("settings.userCenterSession.account.identity.username")
+    : t("settings.userCenterSession.account.identity.userId");
   const providerLabel = formatProviderLabel(t, session?.session.provider);
   const accountInitials = buildAccountInitials(
     session?.user.displayName ||
@@ -189,15 +189,11 @@ export function UserCenterSessionSettings() {
         scenes: formatLocaleNumber(bootstrap?.sceneCatalog?.length || 0, {
           locale: i18n.language,
         }),
-        defaultValue: "{{skills}} 项技能 / {{scenes}} 个入口",
       })
-    : t("settings.userCenterSession.account.syncedPending", "登录后自动同步");
+    : t("settings.userCenterSession.account.syncedPending");
   const manageProfileLabel = bootstrap?.features?.profileEditable
-    ? t(
-        "settings.userCenterSession.action.manageProfile",
-        "前往账号中心修改资料",
-      )
-    : t("settings.userCenterSession.action.openUserCenter", "打开账号中心");
+    ? t("settings.userCenterSession.action.manageProfile")
+    : t("settings.userCenterSession.action.openUserCenter");
 
   return (
     <section className="space-y-4">
@@ -207,25 +203,16 @@ export function UserCenterSessionSettings() {
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center gap-3">
                 <h2 className="text-[24px] font-semibold tracking-tight text-slate-900">
-                  {t("settings.userCenterSession.title", "账户资料")}
+                  {t("settings.userCenterSession.title")}
                 </h2>
                 <WorkbenchInfoTip
-                  ariaLabel={t(
-                    "settings.userCenterSession.hero.tipAria",
-                    "账户资料说明",
-                  )}
-                  content={t(
-                    "settings.userCenterSession.hero.tip",
-                    "昵称、头像、邮箱和默认服务统一由账号中心维护；本地只展示当前会话状态与同步结果。",
-                  )}
+                  ariaLabel={t("settings.userCenterSession.hero.tipAria")}
+                  content={t("settings.userCenterSession.hero.tip")}
                   tone="mint"
                 />
               </div>
               <p className="text-sm text-slate-500">
-                {t(
-                  "settings.userCenterSession.description",
-                  "查看登录状态、默认服务和账号同步结果。",
-                )}
+                {t("settings.userCenterSession.description")}
               </p>
             </div>
 
@@ -240,37 +227,22 @@ export function UserCenterSessionSettings() {
               >
                 {t("settings.userCenterSession.status.login", {
                   status: session
-                    ? t("settings.userCenterSession.status.loggedIn", "已登录")
-                    : t(
-                        "settings.userCenterSession.status.loggedOut",
-                        "未登录",
-                      ),
-                  defaultValue: "状态：{{status}}",
+                    ? t("settings.userCenterSession.status.loggedIn")
+                    : t("settings.userCenterSession.status.loggedOut"),
                 })}
               </span>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
                 {t("settings.userCenterSession.status.current", {
                   status: session
-                    ? t(
-                        "settings.userCenterSession.status.connected",
-                        "账号已连接",
-                      )
-                    : t(
-                        "settings.userCenterSession.status.waitingLogin",
-                        "等待登录",
-                      ),
-                  defaultValue: "当前状态：{{status}}",
+                    ? t("settings.userCenterSession.status.connected")
+                    : t("settings.userCenterSession.status.waitingLogin"),
                 })}
               </span>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
                 {t("settings.userCenterSession.status.defaultService", {
                   service:
                     defaultProviderSummary ||
-                    t(
-                      "settings.userCenterSession.account.syncedPending",
-                      "登录后自动同步",
-                    ),
-                  defaultValue: "默认服务：{{service}}",
+                    t("settings.userCenterSession.account.syncedPending"),
                 })}
               </span>
             </div>
@@ -285,19 +257,13 @@ export function UserCenterSessionSettings() {
 
           {!runtime ? (
             <div className="rounded-[24px] border border-dashed border-slate-300 bg-white/80 px-5 py-6 text-sm leading-6 text-slate-600">
-              {t(
-                "settings.userCenterSession.empty.runtimeMissing",
-                "当前版本未配置云端服务。开源版可继续使用本地功能；品牌服务配置登录入口后会自动显示。",
-              )}
+              {t("settings.userCenterSession.empty.runtimeMissing")}
             </div>
           ) : initializing ? (
             <div className="rounded-[24px] border border-white/90 bg-white/84 p-5 shadow-sm">
               <div className="flex items-center gap-3 text-sm text-slate-600">
                 <LoaderCircle className="h-4 w-4 animate-spin" />
-                {t(
-                  "settings.userCenterSession.loading.restoreAccount",
-                  "正在恢复账户状态...",
-                )}
+                {t("settings.userCenterSession.loading.restoreAccount")}
               </div>
             </div>
           ) : session ? (
@@ -315,7 +281,6 @@ export function UserCenterSessionSettings() {
                             src={session.user.avatarUrl}
                             alt={t("settings.userCenterSession.avatar.alt", {
                               name: accountName,
-                              defaultValue: "{{name}} 头像",
                             })}
                             className="h-full w-full object-cover"
                           />
@@ -340,33 +305,26 @@ export function UserCenterSessionSettings() {
                               "settings.userCenterSession.account.loginMethod",
                               {
                                 provider: providerLabel,
-                                defaultValue: "登录方式：{{provider}}",
                               },
                             )}
                           </span>
                           <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
                             {t("settings.userCenterSession.account.synced", {
                               summary: syncedCapabilitiesSummary,
-                              defaultValue: "已同步：{{summary}}",
                             })}
                           </span>
                         </div>
 
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-sm text-slate-600">
-                            {t(
-                              "settings.userCenterSession.profile.unified",
-                              "资料维护已统一到账号中心",
-                            )}
+                            {t("settings.userCenterSession.profile.unified")}
                           </span>
                           <WorkbenchInfoTip
                             ariaLabel={t(
                               "settings.userCenterSession.profile.syncTipAria",
-                              "账号中心同步说明",
                             )}
                             content={t(
                               "settings.userCenterSession.profile.syncTip",
-                              "资料修改请前往账号中心完成。客户端会同步最新昵称、头像、邮箱与默认服务状态，不再在本地维护第二份个人资料。",
                             )}
                             tone="slate"
                           />
@@ -386,10 +344,7 @@ export function UserCenterSessionSettings() {
                       <RefreshCw
                         className={cn("h-4 w-4", refreshing && "animate-spin")}
                       />
-                      {t(
-                        "settings.userCenterSession.action.refresh",
-                        "同步最新状态",
-                      )}
+                      {t("settings.userCenterSession.action.refresh")}
                     </button>
                     <button
                       type="button"
@@ -408,87 +363,56 @@ export function UserCenterSessionSettings() {
                     >
                       <LogOut className="h-4 w-4" />
                       {loggingOut
-                        ? t(
-                            "settings.userCenterSession.action.loggingOut",
-                            "退出中...",
-                          )
-                        : t(
-                            "settings.userCenterSession.action.logout",
-                            "退出当前账号",
-                          )}
+                        ? t("settings.userCenterSession.action.loggingOut")
+                        : t("settings.userCenterSession.action.logout")}
                     </button>
                   </div>
                 </div>
 
                 <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <SessionValueCard
-                    label={t(
-                      "settings.userCenterSession.value.email.label",
-                      "邮箱",
-                    )}
+                    label={t("settings.userCenterSession.value.email.label")}
                     value={accountEmail}
-                    hint={t(
-                      "settings.userCenterSession.value.email.hint",
-                      "来自账号中心当前账户信息。",
-                    )}
+                    hint={t("settings.userCenterSession.value.email.hint")}
                     hintAriaLabel={t(
                       "settings.userCenterSession.value.email.tipAria",
-                      "邮箱说明",
                     )}
                   />
                   <SessionValueCard
                     label={identityLabel}
                     value={accountIdentity}
-                    hint={t(
-                      "settings.userCenterSession.value.identity.hint",
-                      "用于识别当前账户身份。",
-                    )}
+                    hint={t("settings.userCenterSession.value.identity.hint")}
                     hintAriaLabel={t(
                       "settings.userCenterSession.value.identity.tipAria",
-                      "账户身份说明",
                     )}
                   />
                   <SessionValueCard
                     label={t(
                       "settings.userCenterSession.value.expiresAt.label",
-                      "会话有效期",
                     )}
                     value={formatSessionDateTime(
                       session.session.expiresAt,
                       i18n.language,
-                      t(
-                        "settings.userCenterSession.value.expiresAt.unknown",
-                        "未知",
-                      ),
+                      t("settings.userCenterSession.value.expiresAt.unknown"),
                     )}
-                    hint={t(
-                      "settings.userCenterSession.value.expiresAt.hint",
-                      "到期后需要重新登录。",
-                    )}
+                    hint={t("settings.userCenterSession.value.expiresAt.hint")}
                     hintAriaLabel={t(
                       "settings.userCenterSession.value.expiresAt.tipAria",
-                      "会话有效期说明",
                     )}
                   />
                   <SessionValueCard
                     label={t(
                       "settings.userCenterSession.value.defaultService.label",
-                      "默认服务",
                     )}
                     value={
                       defaultProviderSummary ||
-                      t(
-                        "settings.userCenterSession.value.defaultService.unset",
-                        "尚未设定",
-                      )
+                      t("settings.userCenterSession.value.defaultService.unset")
                     }
                     hint={t(
                       "settings.userCenterSession.value.defaultService.hint",
-                      "当前 AI 服务页默认使用的来源。",
                     )}
                     hintAriaLabel={t(
                       "settings.userCenterSession.value.defaultService.tipAria",
-                      "默认服务说明",
                     )}
                   />
                 </div>
@@ -498,28 +422,22 @@ export function UserCenterSessionSettings() {
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <h3 className="text-base font-semibold text-slate-900">
-                      {t(
-                        "settings.userCenterSession.profile.method.title",
-                        "资料维护方式",
-                      )}
+                      {t("settings.userCenterSession.profile.method.title")}
                     </h3>
                     <WorkbenchInfoTip
                       ariaLabel={t(
                         "settings.userCenterSession.profile.method.tipAria",
-                        "资料维护方式说明",
                       )}
                       content={
                         <div className="space-y-1">
                           <p>
                             {t(
                               "settings.userCenterSession.profile.method.tipLine1",
-                              "昵称、头像、邮箱等资料由账号中心统一维护。这里专注展示当前账户状态，不再提供单独的本地资料编辑入口。",
                             )}
                           </p>
                           <p>
                             {t(
                               "settings.userCenterSession.profile.method.tipLine2",
-                              "如需调整资料，请前往账号中心完成修改，然后回到这里点击“同步最新状态”。",
                             )}
                           </p>
                         </div>
@@ -531,7 +449,6 @@ export function UserCenterSessionSettings() {
                     <p className="text-sm leading-6 text-slate-600">
                       {t("settings.userCenterSession.code.sentTo", {
                         email: codeDelivery.maskedEmail,
-                        defaultValue: "最近一次验证码已发送到 {{email}}。",
                       })}
                     </p>
                   ) : null}
@@ -548,19 +465,14 @@ export function UserCenterSessionSettings() {
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <h3 className="text-lg font-semibold text-slate-900">
-                        {t(
-                          "settings.userCenterSession.login.google.title",
-                          "使用 Google 一键登录",
-                        )}
+                        {t("settings.userCenterSession.login.google.title")}
                       </h3>
                       <WorkbenchInfoTip
                         ariaLabel={t(
                           "settings.userCenterSession.login.google.tipAria",
-                          "Google 一键登录说明",
                         )}
                         content={t(
                           "settings.userCenterSession.login.google.tip",
-                          "Google 是默认登录方式。浏览器完成授权后，客户端会自动同步账户资料、默认服务与已开通能力；如果浏览器出现确认页，请继续完成。",
                         )}
                         tone="slate"
                       />
@@ -580,19 +492,12 @@ export function UserCenterSessionSettings() {
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-semibold text-slate-900">
                         {openingGoogleLogin
-                          ? t(
-                              "settings.userCenterSession.login.google.opening",
-                              "正在打开 Google 登录...",
-                            )
-                          : t(
-                              "settings.userCenterSession.login.google.title",
-                              "使用 Google 一键登录",
-                            )}
+                          ? t("settings.userCenterSession.login.google.opening")
+                          : t("settings.userCenterSession.login.google.title")}
                       </span>
                       <span className="mt-1 block text-xs leading-5 text-slate-500">
                         {t(
                           "settings.userCenterSession.login.google.description",
-                          "在系统浏览器完成授权后会自动同步；如果浏览器出现确认页，请继续完成。",
                         )}
                       </span>
                     </span>
@@ -607,14 +512,8 @@ export function UserCenterSessionSettings() {
                     >
                       <ExternalLink className="h-4 w-4" />
                       {openingGoogleLogin
-                        ? t(
-                            "settings.userCenterSession.login.google.waiting",
-                            "等待授权中...",
-                          )
-                        : t(
-                            "settings.userCenterSession.login.google.reopen",
-                            "重新打开授权页",
-                          )}
+                        ? t("settings.userCenterSession.login.google.waiting")
+                        : t("settings.userCenterSession.login.google.reopen")}
                     </button>
                     <button
                       type="button"
@@ -632,11 +531,9 @@ export function UserCenterSessionSettings() {
                       {showAlternativeMethods
                         ? t(
                             "settings.userCenterSession.login.alternative.collapse",
-                            "收起其他登录方式",
                           )
                         : t(
                             "settings.userCenterSession.login.alternative.expand",
-                            "使用邮箱验证码 / 账号密码",
                           )}
                     </button>
                   </div>
@@ -648,44 +545,37 @@ export function UserCenterSessionSettings() {
                       <h4 className="text-sm font-semibold text-slate-900">
                         {t(
                           "settings.userCenterSession.login.afterBrowser.title",
-                          "浏览器完成后自动同步",
                         )}
                       </h4>
                       <WorkbenchInfoTip
                         ariaLabel={t(
                           "settings.userCenterSession.login.afterBrowser.tipAria",
-                          "登录后自动完成说明",
                         )}
                         content={
                           <div className="space-y-1">
                             <p>
                               {t(
                                 "settings.userCenterSession.login.afterBrowser.tipLine1",
-                                "Google 登录成功后，桌面端会自动同步当前账户会话。",
                               )}
                             </p>
                             <p>
                               {t(
                                 "settings.userCenterSession.login.afterBrowser.tipLine2",
-                                "如果浏览器出现确认页，需要再确认一次当前桌面请求。",
                               )}
                             </p>
                             <p>
                               {t(
                                 "settings.userCenterSession.login.afterBrowser.tipLine3",
-                                "同步当前账户资料与头像、昵称显示。",
                               )}
                             </p>
                             <p>
                               {t(
                                 "settings.userCenterSession.login.afterBrowser.tipLine4",
-                                "同步默认 AI 服务、模型目录与已开通能力。",
                               )}
                             </p>
                             <p>
                               {t(
                                 "settings.userCenterSession.login.afterBrowser.tipLine5",
-                                "个人资料统一在账号中心维护，避免多入口重复编辑。",
                               )}
                             </p>
                           </div>
@@ -705,17 +595,14 @@ export function UserCenterSessionSettings() {
                         <h4 className="text-base font-semibold text-slate-900">
                           {t(
                             "settings.userCenterSession.login.alternative.title",
-                            "备用登录方式",
                           )}
                         </h4>
                         <WorkbenchInfoTip
                           ariaLabel={t(
                             "settings.userCenterSession.login.alternative.tipAria",
-                            "备用登录方式说明",
                           )}
                           content={t(
                             "settings.userCenterSession.login.alternative.tip",
-                            "如果当前组织没有启用 Google，或需要兼容已有账号体系，可以改用邮箱验证码或账号密码登录。",
                           )}
                           tone="slate"
                         />
@@ -733,10 +620,7 @@ export function UserCenterSessionSettings() {
                             : "text-slate-600 hover:text-slate-900",
                         )}
                       >
-                        {t(
-                          "settings.userCenterSession.login.mode.password",
-                          "账号密码",
-                        )}
+                        {t("settings.userCenterSession.login.mode.password")}
                       </button>
                       <button
                         type="button"
@@ -748,10 +632,7 @@ export function UserCenterSessionSettings() {
                             : "text-slate-600 hover:text-slate-900",
                         )}
                       >
-                        {t(
-                          "settings.userCenterSession.login.mode.emailCode",
-                          "邮箱验证码",
-                        )}
+                        {t("settings.userCenterSession.login.mode.emailCode")}
                       </button>
                     </div>
                   </div>
@@ -762,7 +643,6 @@ export function UserCenterSessionSettings() {
                         <label className="text-sm font-medium text-slate-700">
                           {t(
                             "settings.userCenterSession.form.identifier.label",
-                            "邮箱 / 账号",
                           )}
                         </label>
                         <input
@@ -775,7 +655,6 @@ export function UserCenterSessionSettings() {
                           }
                           placeholder={t(
                             "settings.userCenterSession.form.identifier.placeholder",
-                            "例如：operator@example.com",
                           )}
                           className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-300"
                           data-testid="oem-cloud-password-identifier"
@@ -784,10 +663,7 @@ export function UserCenterSessionSettings() {
 
                       <div className="space-y-2">
                         <label className="text-sm font-medium text-slate-700">
-                          {t(
-                            "settings.userCenterSession.form.password.label",
-                            "密码",
-                          )}
+                          {t("settings.userCenterSession.form.password.label")}
                         </label>
                         <input
                           type="password"
@@ -800,7 +676,6 @@ export function UserCenterSessionSettings() {
                           }
                           placeholder={t(
                             "settings.userCenterSession.form.password.placeholder",
-                            "输入账号中心密码",
                           )}
                           className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-300"
                           data-testid="oem-cloud-password-secret"
@@ -816,13 +691,9 @@ export function UserCenterSessionSettings() {
                       >
                         <LogIn className="h-4 w-4" />
                         {loggingIn
-                          ? t(
-                              "settings.userCenterSession.action.loggingIn",
-                              "登录中...",
-                            )
+                          ? t("settings.userCenterSession.action.loggingIn")
                           : t(
                               "settings.userCenterSession.login.password.submit",
-                              "登录并同步账户",
                             )}
                       </button>
                     </div>
@@ -832,7 +703,6 @@ export function UserCenterSessionSettings() {
                         <label className="text-sm font-medium text-slate-700">
                           {t(
                             "settings.userCenterSession.form.identifier.label",
-                            "邮箱 / 账号",
                           )}
                         </label>
                         <input
@@ -845,7 +715,6 @@ export function UserCenterSessionSettings() {
                           }
                           placeholder={t(
                             "settings.userCenterSession.form.identifier.placeholder",
-                            "例如：operator@example.com",
                           )}
                           className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-300"
                           data-testid="oem-cloud-code-identifier"
@@ -855,10 +724,7 @@ export function UserCenterSessionSettings() {
                       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
                         <div className="space-y-2">
                           <label className="text-sm font-medium text-slate-700">
-                            {t(
-                              "settings.userCenterSession.form.code.label",
-                              "验证码",
-                            )}
+                            {t("settings.userCenterSession.form.code.label")}
                           </label>
                           <input
                             value={emailCodeForm.code}
@@ -870,7 +736,6 @@ export function UserCenterSessionSettings() {
                             }
                             placeholder={t(
                               "settings.userCenterSession.form.code.placeholder",
-                              "输入 6 位验证码",
                             )}
                             className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-300"
                             data-testid="oem-cloud-code-value"
@@ -884,14 +749,8 @@ export function UserCenterSessionSettings() {
                           data-testid="oem-cloud-code-send"
                         >
                           {sendingCode
-                            ? t(
-                                "settings.userCenterSession.action.sendingCode",
-                                "发送中...",
-                              )
-                            : t(
-                                "settings.userCenterSession.action.sendCode",
-                                "发送验证码",
-                              )}
+                            ? t("settings.userCenterSession.action.sendingCode")
+                            : t("settings.userCenterSession.action.sendCode")}
                         </button>
                       </div>
 
@@ -900,7 +759,6 @@ export function UserCenterSessionSettings() {
                           <label className="text-sm font-medium text-slate-700">
                             {t(
                               "settings.userCenterSession.form.displayName.label",
-                              "首次登录昵称",
                             )}
                           </label>
                           <input
@@ -913,7 +771,6 @@ export function UserCenterSessionSettings() {
                             }
                             placeholder={t(
                               "settings.userCenterSession.form.optional.placeholder",
-                              "选填",
                             )}
                             className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-300"
                           />
@@ -923,7 +780,6 @@ export function UserCenterSessionSettings() {
                           <label className="text-sm font-medium text-slate-700">
                             {t(
                               "settings.userCenterSession.form.username.label",
-                              "首次登录账号",
                             )}
                           </label>
                           <input
@@ -936,7 +792,6 @@ export function UserCenterSessionSettings() {
                             }
                             placeholder={t(
                               "settings.userCenterSession.form.optional.placeholder",
-                              "选填",
                             )}
                             className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-300"
                           />
@@ -952,13 +807,9 @@ export function UserCenterSessionSettings() {
                       >
                         <LogIn className="h-4 w-4" />
                         {loggingIn
-                          ? t(
-                              "settings.userCenterSession.action.loggingIn",
-                              "登录中...",
-                            )
+                          ? t("settings.userCenterSession.action.loggingIn")
                           : t(
                               "settings.userCenterSession.login.emailCode.submit",
-                              "验证并同步账户",
                             )}
                       </button>
                     </div>

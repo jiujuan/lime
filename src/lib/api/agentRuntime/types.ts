@@ -5,7 +5,11 @@
  */
 
 import type {
+  AgentContextBudget,
   AgentMessage,
+  AgentMissingContextFact,
+  AgentRetrievalRef,
+  AgentTeamMemoryRef,
   AgentThreadItem,
   AgentThreadTurn,
 } from "../agentProtocol";
@@ -308,11 +312,18 @@ export interface AgentRuntimeThreadDiagnostics {
 export interface AgentRuntimeThreadReadModel {
   thread_id: string;
   status?: string;
+  profile_status?: AgentRuntimeProfileStatus;
   active_turn_id?: string;
+  turns?: AgentRuntimeThreadTurnProfileView[];
   pending_requests?: AgentRuntimeRequestView[];
   last_outcome?: AgentRuntimeOutcomeView | null;
   incidents?: AgentRuntimeIncidentView[];
   queued_turns?: QueuedTurnSnapshot[];
+  tool_calls?: AgentRuntimeThreadToolCallView[];
+  model_routing?: Record<string, unknown> | null;
+  evidence_summary?: AgentRuntimeThreadEvidenceSummary | null;
+  telemetry_summary?: AgentRuntimeThreadTelemetrySummary | null;
+  context_summary?: AgentRuntimeThreadContextSummary | null;
   interrupt_state?: string;
   updated_at?: string | number;
   latest_compaction_boundary?: AgentRuntimeCompactionBoundarySnapshot | null;
@@ -335,6 +346,53 @@ export interface AgentRuntimeThreadReadModel {
   cost_state?: AsterSessionExecutionRuntimeCostState | null;
   permission_state?: AsterSessionExecutionRuntimePermissionState | null;
   limit_event?: AsterSessionExecutionRuntimeLimitEvent | null;
+}
+
+export type AgentRuntimeProfileStatus =
+  | "idle"
+  | "queued"
+  | "running"
+  | "blocked"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "stale"
+  | "unknown";
+
+export interface AgentRuntimeThreadTurnProfileView {
+  turn_id: string;
+  status: AgentRuntimeProfileStatus;
+  native_status?: string;
+}
+
+export interface AgentRuntimeThreadToolCallView {
+  tool_call_id: string;
+  turn_id: string;
+  tool_name: string;
+  status: "running" | "completed" | "failed" | string;
+  success?: boolean | null;
+  error?: string | null;
+}
+
+export interface AgentRuntimeThreadEvidenceSummary {
+  evidence_refs?: string[];
+  verification_outcomes?: Record<string, unknown>[];
+}
+
+export interface AgentRuntimeThreadTelemetrySummary {
+  trace_ids?: string[];
+  join_status?: string;
+}
+
+export interface AgentRuntimeThreadContextSummary {
+  owner?: "AgentContext" | string;
+  source?: string;
+  sources?: string[];
+  memory_budget?: AgentContextBudget | null;
+  missing_context?: AgentMissingContextFact[];
+  retrieval_refs?: AgentRetrievalRef[];
+  team_memory_refs?: AgentTeamMemoryRef[];
+  latestCompaction?: AgentRuntimeCompactionBoundarySnapshot | null;
 }
 
 export interface AgentRuntimeOemPolicySummary {

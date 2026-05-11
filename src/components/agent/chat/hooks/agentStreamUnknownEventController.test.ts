@@ -54,6 +54,21 @@ describe("agentStreamUnknownEventController", () => {
     });
   });
 
+  it("应把 Lime AgentRuntime Profile 事件作为已知旁路事实静默处理", () => {
+    expect(
+      resolveAgentStreamUnknownEventPlan({
+        eventName: "event-a",
+        eventType: "turn.submitted",
+        schemaVersion: "lime-profile-0.4.0",
+        warnedEventTypes: new Set(),
+      }),
+    ).toEqual({
+      eventType: "turn.submitted",
+      shouldWarn: false,
+      warningMessage: null,
+    });
+  });
+
   it("应记录已告警未知 event type 并返回是否首次记录", () => {
     const warnedEventTypes = new Set<string>();
 

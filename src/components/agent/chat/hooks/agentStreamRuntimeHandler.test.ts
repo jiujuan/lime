@@ -1030,8 +1030,7 @@ describe("agentStreamRuntimeHandler", () => {
 
     const updater = setThreadItems.mock.calls[0]?.[0];
     expect(typeof updater).toBe("function");
-    const nextItems =
-      typeof updater === "function" ? updater([]) : updater;
+    const nextItems = typeof updater === "function" ? updater([]) : updater;
     expect(nextItems).toEqual([
       expect.objectContaining({
         id: "reasoning-1",

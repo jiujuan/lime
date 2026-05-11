@@ -3,33 +3,11 @@ import type React from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SkillExecutionDialog } from "./SkillExecutionDialog";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import type { SkillDetailInfo } from "@/lib/api/skill-execution";
 
 const mockGetSkillDetail = vi.fn();
 const mockUseSkillExecution = vi.fn();
-
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: (
-      key: string,
-      fallbackOrOptions?: string | { defaultValue?: string },
-      options?: Record<string, unknown>,
-    ) => {
-      const values: Record<string, unknown> & { defaultValue?: string } =
-        typeof fallbackOrOptions === "object" && fallbackOrOptions !== null
-          ? fallbackOrOptions
-          : (options ?? {});
-      const template =
-        typeof fallbackOrOptions === "string"
-          ? fallbackOrOptions
-          : (values.defaultValue ?? key);
-
-      return template.replace(/\{\{(\w+)\}\}/g, (_match: string, name: string) =>
-        String(values[name] ?? ""),
-      );
-    },
-  }),
-}));
 
 vi.mock("@/lib/api/skill-execution", () => ({
   skillExecutionApi: {
@@ -88,7 +66,9 @@ vi.mock("@/components/ui/label", () => ({
 }));
 
 vi.mock("@/components/ui/select", () => ({
-  Select: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Select: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
   SelectContent: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -133,12 +113,13 @@ function renderDialog() {
 }
 
 describe("SkillExecutionDialog", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     (
       globalThis as typeof globalThis & {
         IS_REACT_ACT_ENVIRONMENT?: boolean;
       }
     ).IS_REACT_ACT_ENVIRONMENT = true;
+    await changeLimeLocale("en-US");
 
     mockGetSkillDetail.mockReset();
     mockUseSkillExecution.mockReset();
@@ -153,7 +134,7 @@ describe("SkillExecutionDialog", () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     while (mountedRoots.length > 0) {
       const mounted = mountedRoots.pop();
       if (!mounted) {
@@ -162,9 +143,10 @@ describe("SkillExecutionDialog", () => {
       act(() => mounted.root.unmount());
       mounted.container.remove();
     }
+    await changeLimeLocale("zh-CN");
   });
 
-  it("执行对话框 chrome 文案应走 agent namespace 兜底", async () => {
+  it("执行对话框 chrome 文案应走 agent namespace 英文资源", async () => {
     const detail: SkillDetailInfo = {
       argument_hint: "输入主题和目标",
       description: "",
@@ -186,17 +168,37 @@ describe("SkillExecutionDialog", () => {
     });
 
     expect(container.textContent).toContain("演示 Skill");
-    expect(container.textContent).toContain("工作流模式");
-    expect(container.textContent).toContain("包含工作流");
-    expect(container.textContent).toContain("提示: 输入主题和目标");
-    expect(container.textContent).toContain("输入内容");
+    expect(container.textContent).toContain("Workflow mode");
+    expect(container.textContent).toContain("Includes workflow");
+    expect(container.textContent).toContain("Hint: 输入主题和目标");
+    expect(container.textContent).toContain("Input");
     expect(container.querySelector("textarea")?.placeholder).toBe(
-      "请输入要处理的内容...",
+      "Enter the content to process...",
     );
-    expect(container.textContent).toContain("Provider 选择");
-    expect(container.textContent).toContain("留空将根据 Skill 配置和可用凭证自动选择");
-    expect(container.textContent).toContain("执行进度");
-    expect(container.textContent).toContain("取消");
-    expect(container.textContent).toContain("执行");
+    expect(container.textContent).toContain("Provider");
+    expect(container.textContent).toContain(
+      "Leave blank to auto select based on Skill config and available credentials.",
+    );
+    expect(container.textContent).toContain("Progress");
+    expect(container.textContent).toContain("Cancel");
+    expect(container.textContent).toContain("Run");
+    expect(container.textContent).not.toContain("工作流模式");
+    expect(container.textContent).not.toContain("Provider 选择");
+  });
+
+  it("加载失败时应展示真实英文资源与运行时错误", async () => {
+    mockGetSkillDetail.mockRejectedValue(new Error("network down"));
+
+    const container = renderDialog();
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("Failed to load");
+    expect(container.textContent).toContain("network down");
+    expect(container.textContent).toContain("Close");
+    expect(container.textContent).not.toContain("加载失败");
   });
 });

@@ -11,8 +11,6 @@ import { LIME_BRAND_LOGO_SRC, LIME_BRAND_NAME } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 
 const FALLBACK_RELEASES_URL = "https://github.com/limecloud/lime/releases";
-const FRIENDLY_UPDATE_ERROR = "暂时无法检查更新，请稍后再试。";
-const FRIENDLY_DOWNLOAD_ERROR = "暂时无法自动安装更新，请使用网页下载最新版。";
 const PRIMARY_ACTION_BUTTON_CLASS =
   "inline-flex items-center gap-2 rounded-full border border-slate-900 bg-slate-950 px-4 py-2 text-sm font-medium text-white shadow-sm shadow-slate-950/10 transition hover:bg-slate-800 disabled:opacity-50";
 const SECONDARY_ACTION_BUTTON_CLASS =
@@ -78,7 +76,7 @@ export function AboutSection() {
       console.error("Failed to check for updates:", error);
       setVersionInfo((prev) => ({
         ...prev,
-        error: FRIENDLY_UPDATE_ERROR,
+        error: t("settings.about.update.errorCheck"),
         downloadUrl: prev.downloadUrl || FALLBACK_RELEASES_URL,
       }));
     } finally {
@@ -97,30 +95,21 @@ export function AboutSection() {
         setTimeout(() => {
           setDownloadResult({
             ...result,
-            message: t(
-              "settings.about.update.installedRestart",
-              "更新已安装，应用将自动重启以完成升级",
-            ),
+            message: t("settings.about.update.installedRestart"),
           });
         }, 1000);
       } else {
         console.error("Download failed:", result.message);
         setDownloadResult({
           ...result,
-          message: t(
-            "settings.about.update.errorDownload",
-            FRIENDLY_DOWNLOAD_ERROR,
-          ),
+          message: t("settings.about.update.errorDownload"),
         });
       }
     } catch (error) {
       console.error("Failed to download update:", error);
       setDownloadResult({
         success: false,
-        message: t(
-          "settings.about.update.errorDownload",
-          FRIENDLY_DOWNLOAD_ERROR,
-        ),
+        message: t("settings.about.update.errorDownload"),
         filePath: undefined,
       });
     } finally {
@@ -129,10 +118,8 @@ export function AboutSection() {
   };
 
   const versionLabel = t("settings.about.version.label", {
-    version:
-      versionInfo.current || t("settings.about.version.loading", "读取中"),
-    build: versionInfo.current || t("settings.about.version.loading", "读取中"),
-    defaultValue: "Version {{version}} ({{build}})",
+    version: versionInfo.current || t("settings.about.version.loading"),
+    build: versionInfo.current || t("settings.about.version.loading"),
   });
 
   const updateStatus = useMemo(() => {
@@ -140,7 +127,6 @@ export function AboutSection() {
       return {
         label: t("settings.about.status.updateAvailable", {
           version: versionInfo.latest ?? "",
-          defaultValue: "可更新到 {{version}}",
         }),
         className: "border-emerald-200 bg-emerald-50 text-emerald-700",
       };
@@ -148,20 +134,20 @@ export function AboutSection() {
 
     if (versionInfo.error) {
       return {
-        label: t("settings.about.update.errorCheck", FRIENDLY_UPDATE_ERROR),
+        label: t("settings.about.update.errorCheck"),
         className: "border-amber-200 bg-amber-50 text-amber-700",
       };
     }
 
     if (versionInfo.latest) {
       return {
-        label: t("settings.about.status.latest", "当前已是最新版本"),
+        label: t("settings.about.status.latest"),
         className: "border-slate-200 bg-slate-100 text-slate-600",
       };
     }
 
     return {
-      label: t("settings.about.status.manualCheck", "可手动检查更新"),
+      label: t("settings.about.status.manualCheck"),
       className: "border-sky-200 bg-sky-50 text-sky-700",
     };
   }, [t, versionInfo.error, versionInfo.hasUpdate, versionInfo.latest]);
@@ -184,7 +170,6 @@ export function AboutSection() {
         <p className="mt-2 text-sm text-slate-500">
           {t("settings.about.copyright", {
             brand: LIME_BRAND_NAME,
-            defaultValue: "Copyright © 2026 {{brand}}",
           })}
         </p>
 
@@ -207,7 +192,7 @@ export function AboutSection() {
             className={SECONDARY_ACTION_BUTTON_CLASS}
           >
             <RefreshCw className={cn("h-4 w-4", checking && "animate-spin")} />
-            {t("settings.about.action.check", "检查更新")}
+            {t("settings.about.action.check")}
           </button>
 
           {versionInfo.hasUpdate ? (
@@ -222,8 +207,8 @@ export function AboutSection() {
                   className={cn("h-4 w-4", downloading && "animate-spin")}
                 />
                 {downloading
-                  ? t("settings.about.action.downloading", "下载中...")
-                  : t("settings.about.action.download", "下载更新")}
+                  ? t("settings.about.action.downloading")
+                  : t("settings.about.action.download")}
               </button>
               <a
                 href={manualDownloadUrl}
@@ -232,7 +217,7 @@ export function AboutSection() {
                 className={SECONDARY_ACTION_BUTTON_CLASS}
               >
                 <ExternalLink className="h-4 w-4" />
-                {t("settings.about.action.webDownload", "网页下载")}
+                {t("settings.about.action.webDownload")}
               </a>
             </>
           ) : null}
@@ -240,10 +225,7 @@ export function AboutSection() {
 
         {isWindows ? (
           <p className="mx-auto mt-4 max-w-[420px] text-xs leading-5 text-slate-500">
-            {t(
-              "settings.about.windowsSetupNotice",
-              "Windows 仅提供单一 setup 安装包；需要手动升级或重装时，可直接使用网页下载页中的最新版。",
-            )}
+            {t("settings.about.windowsSetupNotice")}
           </p>
         ) : null}
 
@@ -268,7 +250,7 @@ export function AboutSection() {
                     className="mt-2 inline-flex items-center gap-1 underline hover:no-underline"
                   >
                     <ExternalLink className="h-3 w-3" />
-                    {t("settings.about.action.openWebDownload", "前往网页下载")}
+                    {t("settings.about.action.openWebDownload")}
                   </a>
                 ) : null}
               </div>

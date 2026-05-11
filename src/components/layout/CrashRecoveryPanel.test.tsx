@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import {
   buildCrashRecoveryReloadUrl,
   finalizeModuleImportAutoReload,
@@ -8,33 +9,6 @@ import {
   prepareModuleImportAutoReload,
   stripCrashRecoveryReloadUrl,
 } from "./CrashRecoveryPanel.helpers";
-
-const { mockUseTranslation } = vi.hoisted(() => {
-  const mockTranslate = vi.fn((key: string, options?: unknown) => {
-    if (typeof options === "string") return options;
-
-    if (options && typeof options === "object") {
-      const values = options as Record<string, unknown>;
-      const template =
-        typeof values.defaultValue === "string" ? values.defaultValue : key;
-      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-        String(values[name] ?? ""),
-      );
-    }
-
-    return key;
-  });
-
-  return {
-    mockUseTranslation: vi.fn((_namespace?: string) => ({
-      t: mockTranslate,
-    })),
-  };
-});
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
-}));
 
 vi.mock("@/lib/api/appConfig", () => ({
   getConfig: vi.fn(async () => null),
@@ -111,11 +85,12 @@ function renderPanel(error: Error | null) {
 }
 
 describe("CrashRecoveryPanel", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    await changeLimeLocale("en-US");
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     while (mounted.length > 0) {
       const target = mounted.pop();
       if (!target) {
@@ -129,6 +104,7 @@ describe("CrashRecoveryPanel", () => {
 
     vi.clearAllMocks();
     vi.unstubAllGlobals();
+    await changeLimeLocale("zh-CN");
   });
 
   it("应识别模块脚本导入失败错误", () => {
@@ -226,15 +202,36 @@ describe("CrashRecoveryPanel", () => {
     ).toContain("__lime_resource_reload=");
   });
 
-  it("模块导入失败时应展示强制刷新资源入口", () => {
+  it("普通恢复模式应通过 errors namespace 渲染英文外壳", () => {
+    const { container } = renderPanel(new Error("Random render error"));
+    const text = container.textContent ?? "";
+
+    expect(text).toContain("The app hit an error and entered recovery mode");
+    expect(text).toContain("Copy or export diagnostics first, then click");
+    expect(text).toContain('"Retry recovery"');
+    expect(text).toContain("Latest error: Random render error");
+    expect(text).toContain("Clear Old Diagnostics");
+    expect(text).toContain("Copy Diagnostics");
+    expect(text).toContain("Copy Raw JSON");
+    expect(text).toContain("Export Diagnostic JSON");
+    expect(text).toContain("Open Downloads");
+    expect(text).toContain("Retry Recovery");
+    expect(text).not.toContain("应用发生错误");
+    expect(text).not.toContain("errors.crashRecovery");
+  });
+
+  it("模块导入失败时应通过 errors namespace 展示强制刷新资源入口", () => {
     const { container } = renderPanel(
       new Error("Importing a module script failed."),
     );
     const text = container.textContent ?? "";
 
-    expect(text).toContain("强制刷新资源");
-    expect(text).toContain("仅重试恢复");
+    expect(text).toContain("Force Resource Refresh");
+    expect(text).toContain("Retry Only");
+    expect(text).toContain("A frontend module resource failed to load.");
     expect(text).toContain("node_modules/.vite-tauri");
+    expect(text).not.toContain("强制刷新资源");
+    expect(text).not.toContain("errors.crashRecovery");
 
     const codeTags = Array.from(container.querySelectorAll("code"));
     expect(codeTags).toHaveLength(2);

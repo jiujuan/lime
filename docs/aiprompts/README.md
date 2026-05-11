@@ -53,7 +53,6 @@
 - `services.md` - Rust 服务层
 - `server.md` - HTTP Server 与接口边界
 - `mcp.md` - MCP 服务器与工具管理
-- `plugins.md` - 插件系统
 - `aster-integration.md` - Aster Agent 集成
 
 ### Provider 与数据

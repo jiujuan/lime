@@ -12,12 +12,13 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { test } from "@fast-check/vitest";
 import * as fc from "fast-check";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import {
   SkillCard,
   canInspectSkill,
   canManageSkillInstallation,
   canViewLocalSkillContent,
-  getInspectActionLabel,
+  getInspectActionKey,
   getSkillSource,
   type SkillSource,
 } from "./SkillCard";
@@ -56,6 +57,8 @@ function renderSkillCard(skill: Skill): RenderResult {
         skill,
         onInstall: () => {},
         onUninstall: () => {},
+        onExecute: () => {},
+        onViewContent: () => {},
         installing: false,
       }),
     );
@@ -66,15 +69,16 @@ function renderSkillCard(skill: Skill): RenderResult {
   return rendered;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("en-US");
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mountedRoots.length > 0) {
     const mounted = mountedRoots.pop();
     if (!mounted) {
@@ -85,6 +89,7 @@ afterEach(() => {
     });
     mounted.container.remove();
   }
+  await changeLimeLocale("zh-CN");
 });
 
 describe("getSkillSource", () => {
@@ -323,14 +328,16 @@ describe("canInspectSkill", () => {
   });
 });
 
-describe("getInspectActionLabel", () => {
+describe("getInspectActionKey", () => {
   it("本地可用 skill 应显示查看内容", () => {
     const skill = createSkill({
       installed: true,
       repoOwner: undefined,
       repoName: undefined,
     });
-    expect(getInspectActionLabel(skill)).toBe("查看内容");
+    expect(getInspectActionKey(skill)).toBe(
+      "skills.skillCard.action.viewContent",
+    );
   });
 
   it("远程 skill 应显示检查详情", () => {
@@ -341,7 +348,7 @@ describe("getInspectActionLabel", () => {
       repoName: "skills",
       repoBranch: "main",
     });
-    expect(getInspectActionLabel(skill)).toBe("检查详情");
+    expect(getInspectActionKey(skill)).toBe("skills.skillCard.action.inspect");
   });
 });
 
@@ -354,7 +361,7 @@ describe("SkillCard", () => {
     });
 
     expect(() => renderSkillCard(skill)).not.toThrow();
-    expect(document.body.textContent).toContain("标准");
+    expect(document.body.textContent).toContain("Standard");
   });
 
   it("来源与标准徽标应保持浅色主题样式", () => {
@@ -371,16 +378,42 @@ describe("SkillCard", () => {
     );
 
     const localBadge = Array.from(container.querySelectorAll("span")).find(
-      (element) => element.textContent?.trim() === "本地",
+      (element) => element.textContent?.trim() === "Local",
     );
     const standardBadge = Array.from(container.querySelectorAll("span")).find(
-      (element) => element.textContent?.includes("标准"),
+      (element) => element.textContent?.includes("Standard"),
     );
 
     expect(localBadge?.className).toContain("bg-slate-100");
     expect(localBadge?.className).not.toContain("dark:bg-slate-800/50");
     expect(standardBadge?.className).toContain("bg-emerald-100");
     expect(standardBadge?.className).not.toContain("dark:bg-emerald-900/30");
+  });
+
+  it("应通过 agent namespace 渲染英文 Skill 卡片操作文案", () => {
+    const { container } = renderSkillCard(
+      createSkill({
+        installed: true,
+        description: "",
+        sourceKind: "builtin",
+        standardCompliance: {
+          isStandard: true,
+          deprecatedFields: [],
+          validationErrors: [],
+        },
+      }),
+    );
+
+    const text = container.textContent ?? "";
+    expect(text).toContain("No description yet");
+    expect(text).toContain("Built-in");
+    expect(text).toContain("Installed");
+    expect(text).toContain("Run");
+    expect(text).toContain("View content");
+    expect(text).toContain("Standard");
+    expect(text).not.toContain("暂无描述");
+    expect(text).not.toContain("已安装");
+    expect(text).not.toContain("执行");
   });
 });
 

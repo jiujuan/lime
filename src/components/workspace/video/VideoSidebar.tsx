@@ -1297,7 +1297,8 @@ export const VideoSidebar: React.FC<VideoSidebarProps> = memo(
                 defaultValue: "模型说明",
               })}
               content={t("workspace.video.sidebar.model.tipContent", {
-                defaultValue: "模型能力决定可选分辨率、时长和图生视频支持范围。",
+                defaultValue:
+                  "模型能力决定可选分辨率、时长和图生视频支持范围。",
               })}
               tone="mint"
             />
@@ -1609,9 +1610,13 @@ export const VideoSidebar: React.FC<VideoSidebarProps> = memo(
                   defaultValue: "时长说明",
                 },
               )}
-              content={t("workspace.video.sidebar.controls.duration.tipContent", {
-                defaultValue: "建议先用 4 到 8 秒验证镜头是否成立，再逐步拉长。",
-              })}
+              content={t(
+                "workspace.video.sidebar.controls.duration.tipContent",
+                {
+                  defaultValue:
+                    "建议先用 4 到 8 秒验证镜头是否成立，再逐步拉长。",
+                },
+              )}
               tone="mint"
             />
           </SectionHeader>
@@ -1660,7 +1665,8 @@ export const VideoSidebar: React.FC<VideoSidebarProps> = memo(
                 defaultValue: "种子说明",
               })}
               content={t("workspace.video.sidebar.controls.seed.tipContent", {
-                defaultValue: "需要复现某次结果时再固定种子；探索阶段保持随机即可。",
+                defaultValue:
+                  "需要复现某次结果时再固定种子；探索阶段保持随机即可。",
               })}
               tone="mint"
             />

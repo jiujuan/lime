@@ -1,3 +1,6 @@
+use super::agentruntime_profile::{
+    profile_failure_category, AgentRuntimeProfileEvent, AgentRuntimeProfileStream,
+};
 use super::request_model_resolution::resolve_runtime_provider_auth_recovery_config;
 #[cfg(test)]
 use super::runtime_project_hooks::enforce_runtime_turn_user_prompt_submit_hooks;
@@ -7,6 +10,11 @@ use super::runtime_project_hooks::{
     enforce_runtime_turn_user_prompt_submit_hooks_with_runtime,
     run_runtime_session_start_project_hooks_for_session_with_runtime,
     run_runtime_stop_project_hooks_for_session_with_runtime,
+};
+use super::runtime_task_profile::{
+    build_runtime_task_completed_profile_event, build_runtime_task_failed_profile_events,
+    build_runtime_task_start_profile_events, build_runtime_turn_task_profile_refs,
+    RuntimeTurnTaskProfileRefs,
 };
 use super::service_skill_launch::build_service_skill_preload_tool_projection;
 use super::*;
@@ -47,6 +55,7 @@ const LIME_RUNTIME_TOOL_SURFACE_KEY: &str = "tool_surface";
 const LIME_RUNTIME_IMAGE_INPUT_POLICY_KEY: &str = "image_input_policy";
 const FAST_CHAT_TOOL_SURFACE_DIRECT_ANSWER: &str = "direct_answer";
 const FAST_CHAT_TOOL_SURFACE_LOCAL_WORKSPACE: &str = "local_workspace";
+const DEFAULT_NATIVE_TOOL_SURFACE_COMPACT: &str = "compact_tools";
 const RUNTIME_IMAGE_INPUT_UNSUPPORTED_WARNING_CODE: &str = "runtime_image_input_unsupported";
 const RUNTIME_TURN_CANCELLED_MESSAGE: &str = "用户已停止当前执行";
 const AUTO_RUNTIME_MEMORY_MIN_USER_CHARS: usize = 12;
@@ -68,6 +77,21 @@ fn emit_runtime_events(app: &AppHandle, event_name: &str, events: Vec<RuntimeAge
         if let Err(error) = app.emit(event_name, &event) {
             tracing::error!("[AsterAgent] 发送运行时事件失败: {}", error);
         }
+    }
+}
+
+pub(crate) fn emit_agent_runtime_profile_event(
+    app: &AppHandle,
+    event_name: &str,
+    event: AgentRuntimeProfileEvent,
+) {
+    if let Err(error) = app.emit(event_name, &event) {
+        tracing::warn!(
+            "[AsterAgent][AgentRuntimeProfile] 发送 profile 事件失败: type={}, event_name={}, error={}",
+            event.event_type,
+            event_name,
+            error
+        );
     }
 }
 
@@ -683,6 +707,21 @@ fn normalize_provider_identity(value: &str) -> String {
     value.trim().to_ascii_lowercase()
 }
 
+fn should_use_compact_native_tool_surface(provider_config: &ConfigureProviderRequest) -> bool {
+    if matches!(
+        provider_config.tool_call_strategy,
+        Some(RuntimeToolCallStrategy::ToolShim)
+    ) {
+        return false;
+    }
+
+    let Some(capabilities) = provider_config.model_capabilities.as_ref() else {
+        return true;
+    };
+
+    capabilities.tools || capabilities.function_calling
+}
+
 fn resolve_provider_config_apply_mode(
     provider_config: &ConfigureProviderRequest,
 ) -> ProviderConfigApplyMode {
@@ -1057,6 +1096,8 @@ struct RuntimeTurnExecutionContext {
     run_start_metadata: serde_json::Map<String, serde_json::Value>,
     run_observation: Arc<Mutex<ChatRunObservation>>,
     timeline_recorder: Arc<Mutex<AgentTimelineRecorder>>,
+    profile_stream: AgentRuntimeProfileStream,
+    task_profile_refs: RuntimeTurnTaskProfileRefs,
     runtime_status_session_config: aster::agents::types::SessionConfig,
     stream_session_config_state: RuntimeTurnStreamSessionConfigState,
 }
@@ -1090,6 +1131,8 @@ impl RuntimeTurnExecutionContext {
         let run_start_metadata = self.run_start_metadata.clone();
         let run_observation = self.run_observation.clone();
         let timeline_recorder = self.timeline_recorder.clone();
+        let profile_stream = self.profile_stream.clone();
+        let task_profile_refs = self.task_profile_refs.clone();
         let runtime_status_session_config = self.runtime_status_session_config.clone();
         let stream_session_config_state = self.stream_session_config_state.clone();
 
@@ -1117,6 +1160,7 @@ impl RuntimeTurnExecutionContext {
                         execution_profile,
                         request_metadata,
                         provider_continuation_capability,
+                        profile_stream.clone(),
                         cancel_token,
                         request_tool_policy,
                         effective_strategy,
@@ -1137,6 +1181,8 @@ impl RuntimeTurnExecutionContext {
             &self.timeline_recorder,
             workspace_root,
             &runtime_status_session_config,
+            &self.profile_stream,
+            &task_profile_refs,
             session_id,
             request_metadata,
             final_result,
@@ -1294,6 +1340,35 @@ impl RuntimeTurnPreparedExecution {
         self.runtime_turn_artifacts.turn_state.turn_id.as_str()
     }
 
+    fn emit_profile_turn_submitted(&self, app: &AppHandle, event_name: &str) {
+        emit_agent_runtime_profile_event(
+            app,
+            event_name,
+            self.runtime_turn_execution_context
+                .profile_stream
+                .turn_submitted("workspace"),
+        );
+    }
+
+    fn emit_profile_task_started(&self, app: &AppHandle, event_name: &str) {
+        for event in build_runtime_task_start_profile_events(
+            &self.runtime_turn_execution_context.profile_stream,
+            &self.runtime_turn_execution_context.task_profile_refs,
+        ) {
+            emit_agent_runtime_profile_event(app, event_name, event);
+        }
+    }
+
+    fn emit_profile_turn_started(&self, app: &AppHandle, event_name: &str) {
+        emit_agent_runtime_profile_event(
+            app,
+            event_name,
+            self.runtime_turn_execution_context
+                .profile_stream
+                .turn_started(),
+        );
+    }
+
     async fn emit_prelude(
         &self,
         agent: &Agent,
@@ -1305,6 +1380,7 @@ impl RuntimeTurnPreparedExecution {
         model_name: Option<&str>,
         session_recent_preferences: Option<&lime_agent::SessionExecutionRuntimePreferences>,
     ) -> Result<(), String> {
+        self.emit_profile_turn_started(app, &request.event_name);
         prepare_runtime_turn_prelude(
             agent,
             app,
@@ -1387,6 +1463,8 @@ impl RuntimeTurnPreparedExecution {
                     app,
                     &request.event_name,
                     &self.runtime_turn_execution_context.timeline_recorder,
+                    &self.runtime_turn_execution_context.profile_stream,
+                    &self.runtime_turn_execution_context.task_profile_refs,
                     &error,
                 );
                 return Err(error);
@@ -1434,6 +1512,8 @@ impl RuntimeTurnPreparedExecution {
                     app,
                     &request.event_name,
                     &self.runtime_turn_execution_context.timeline_recorder,
+                    &self.runtime_turn_execution_context.profile_stream,
+                    &self.runtime_turn_execution_context.task_profile_refs,
                     &error,
                 );
                 return Err(error);
@@ -2451,11 +2531,27 @@ fn build_runtime_turn_execution_context(
         None,
         turn_input_turn_context_override.clone(),
     );
+    let profile_stream = AgentRuntimeProfileStream::new(
+        session_id,
+        turn_state.thread_id.clone(),
+        turn_state.turn_id.clone(),
+    )?;
+    let task_profile = extract_runtime_resolution_payload::<
+        lime_agent::SessionExecutionRuntimeTaskProfile,
+    >(request.metadata.as_ref(), "task_profile");
+    let task_profile_refs = build_runtime_turn_task_profile_refs(
+        &turn_state.thread_id,
+        &turn_state.turn_id,
+        turn_state.execution_profile,
+        task_profile.as_ref(),
+    );
 
     Ok(RuntimeTurnExecutionContext {
         run_start_metadata,
         run_observation: Arc::new(Mutex::new(ChatRunObservation::default())),
         timeline_recorder,
+        profile_stream,
+        task_profile_refs,
         runtime_status_session_config,
         stream_session_config_state: RuntimeTurnStreamSessionConfigState {
             session_id: session_id.to_string(),
@@ -2651,9 +2747,28 @@ async fn execute_runtime_turn_submit(
         runtime_turn_prepared_execution.turn_id(),
         started_at.elapsed().as_millis()
     );
+    runtime_turn_prepared_execution.emit_profile_turn_submitted(app, &request.event_name);
+    runtime_turn_prepared_execution.emit_profile_task_started(app, &request.event_name);
 
     let guard = agent_arc.read().await;
-    let agent = guard.as_ref().ok_or("Agent not initialized")?;
+    let Some(agent) = guard.as_ref() else {
+        let error = "Agent not initialized".to_string();
+        fail_runtime_turn_before_model_execution(
+            app,
+            &request.event_name,
+            &runtime_turn_prepared_execution
+                .runtime_turn_execution_context
+                .timeline_recorder,
+            &runtime_turn_prepared_execution
+                .runtime_turn_execution_context
+                .profile_stream,
+            &runtime_turn_prepared_execution
+                .runtime_turn_execution_context
+                .task_profile_refs,
+            &error,
+        );
+        return Err(error);
+    };
     if let Err(error) = sync_runtime_skill_source_agent(session_id, agent).await {
         tracing::warn!(
             "[AsterAgent] 同步 runtime skill source agent 失败，已降级继续执行: {}",
@@ -2917,6 +3032,12 @@ async fn prepare_runtime_turn_ingress_context(
         ensure_provider_runtime_ready(provider_config).await?;
         let runtime_tool_call_decision =
             enrich_provider_config_with_runtime_tool_strategy(provider_config).await;
+        if should_use_compact_native_tool_surface(provider_config) {
+            request.metadata = merge_runtime_turn_default_tool_surface_metadata(
+                request.metadata.take(),
+                DEFAULT_NATIVE_TOOL_SURFACE_COMPACT,
+            );
+        }
         tracing::info!(
             "[AsterAgent] provider_config 运行时工具策略: provider_id={:?}, provider_name={}, model_name={}, strategy={:?}, toolshim_model={:?}, tools={}, function_calling={}, reasoning={}",
             provider_config.provider_id,
@@ -3838,6 +3959,41 @@ fn merge_runtime_turn_tool_surface_metadata(
         LIME_RUNTIME_TOOL_SURFACE_KEY.to_string(),
         serde_json::Value::String(tool_surface_mode.to_string()),
     );
+
+    Some(serde_json::Value::Object(root))
+}
+
+fn merge_runtime_turn_default_tool_surface_metadata(
+    request_metadata: Option<serde_json::Value>,
+    tool_surface_mode: &str,
+) -> Option<serde_json::Value> {
+    let tool_surface_mode = tool_surface_mode.trim();
+    if tool_surface_mode.is_empty() {
+        return request_metadata;
+    }
+
+    let mut root = match request_metadata {
+        Some(serde_json::Value::Object(object)) => object,
+        Some(_) | None => serde_json::Map::new(),
+    };
+    let runtime_entry = root
+        .entry(LIME_RUNTIME_METADATA_KEY.to_string())
+        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+    let runtime_object = runtime_entry
+        .as_object_mut()
+        .expect("lime_runtime metadata should be an object");
+
+    let existing_tool_surface = runtime_object
+        .get(LIME_RUNTIME_TOOL_SURFACE_KEY)
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if existing_tool_surface.is_none() {
+        runtime_object.insert(
+            LIME_RUNTIME_TOOL_SURFACE_KEY.to_string(),
+            serde_json::Value::String(tool_surface_mode.to_string()),
+        );
+    }
 
     Some(serde_json::Value::Object(root))
 }
@@ -4983,6 +5139,8 @@ fn fail_runtime_turn_before_model_execution(
     app: &AppHandle,
     event_name: &str,
     timeline_recorder: &Arc<Mutex<AgentTimelineRecorder>>,
+    profile_stream: &AgentRuntimeProfileStream,
+    task_profile_refs: &RuntimeTurnTaskProfileRefs,
     message: &str,
 ) {
     let terminal_events = {
@@ -5001,6 +5159,23 @@ fn fail_runtime_turn_before_model_execution(
     if let Ok(events) = terminal_events {
         emit_runtime_events(app, event_name, events);
     }
+
+    let failure_category = profile_failure_category(message);
+    for event in build_runtime_task_failed_profile_events(
+        profile_stream,
+        task_profile_refs,
+        failure_category,
+        message,
+        false,
+    ) {
+        emit_agent_runtime_profile_event(app, event_name, event);
+    }
+    emit_agent_runtime_profile_event(
+        app,
+        event_name,
+        profile_stream.turn_failed(failure_category, message),
+    );
+    emit_agent_runtime_profile_event(app, event_name, profile_stream.snapshot_updated("failed"));
 
     let error_event = RuntimeAgentEvent::Error {
         message: message.to_string(),
@@ -5482,6 +5657,7 @@ async fn execute_runtime_stream_attempt(
     execution_profile: TurnExecutionProfile,
     request_metadata: Option<&serde_json::Value>,
     provider_continuation_capability: ProviderContinuationCapability,
+    profile_stream: AgentRuntimeProfileStream,
     mut session_config: aster::agents::types::SessionConfig,
     cancel_token: CancellationToken,
     request_tool_policy: &RequestToolPolicy,
@@ -5501,8 +5677,14 @@ async fn execute_runtime_stream_attempt(
     );
     let images_for_provider = resolve_runtime_forwarded_images(request);
     let stream_timing = RuntimeStreamTiming::new();
+    let (provider_selector, provider_name, model_name) = describe_provider_request_attempt(request);
+    emit_agent_runtime_profile_event(
+        app,
+        &request.event_name,
+        profile_stream.model_requested(&provider_selector, &provider_name, &model_name),
+    );
 
-    let execution = stream_reply_once(
+    let execution = match stream_reply_once(
         agent,
         app,
         &request.event_name,
@@ -5532,9 +5714,39 @@ async fn execute_runtime_stream_attempt(
             }
         },
     )
-    .await?;
+    .await
+    {
+        Ok(execution) => execution,
+        Err(error) => {
+            emit_agent_runtime_profile_event(
+                app,
+                &request.event_name,
+                profile_stream.model_failed(
+                    &provider_selector,
+                    &provider_name,
+                    &model_name,
+                    profile_failure_category(&error.message),
+                    &error.message,
+                    true,
+                ),
+            );
+            return Err(error);
+        }
+    };
 
     if execution.cancelled {
+        emit_agent_runtime_profile_event(
+            app,
+            &request.event_name,
+            profile_stream.model_failed(
+                &provider_selector,
+                &provider_name,
+                &model_name,
+                "cancelled",
+                RUNTIME_TURN_CANCELLED_MESSAGE,
+                false,
+            ),
+        );
         tracing::info!(
             "[AsterAgent] runtime turn cancelled before success finalization: session_id={}, event_name={}, emitted_any={}",
             session_id,
@@ -5563,6 +5775,17 @@ async fn execute_runtime_stream_attempt(
         execution_profile,
         request_metadata,
         &execution,
+    );
+
+    emit_agent_runtime_profile_event(
+        app,
+        &request.event_name,
+        profile_stream.model_completed(
+            &provider_selector,
+            &provider_name,
+            &model_name,
+            execution.text_output.chars().count(),
+        ),
     );
 
     Ok(execution.text_output)
@@ -5697,6 +5920,7 @@ async fn execute_runtime_stream_with_strategy<F>(
     execution_profile: TurnExecutionProfile,
     request_metadata: Option<&serde_json::Value>,
     provider_continuation_capability: ProviderContinuationCapability,
+    profile_stream: AgentRuntimeProfileStream,
     cancel_token: CancellationToken,
     request_tool_policy: &RequestToolPolicy,
     effective_strategy: AsterExecutionStrategy,
@@ -5737,6 +5961,7 @@ where
         execution_profile,
         request_metadata,
         provider_continuation_capability,
+        profile_stream.clone(),
         build_session_config(),
         cancel_token.clone(),
         request_tool_policy,
@@ -5789,6 +6014,7 @@ where
                 execution_profile,
                 request_metadata,
                 provider_continuation_capability,
+                profile_stream.clone(),
                 build_session_config(),
                 cancel_token,
                 request_tool_policy,
@@ -5884,6 +6110,7 @@ where
                     execution_profile,
                     request_metadata,
                     provider_continuation_capability,
+                    profile_stream.clone(),
                     build_session_config(),
                     cancel_token.clone(),
                     request_tool_policy,
@@ -5993,6 +6220,8 @@ async fn prepare_runtime_turn_prelude(
         session_recent_preferences,
     )
     .await?;
+    let project_runtime_status_to_timeline =
+        should_project_runtime_status_to_timeline(request.metadata.as_ref());
     for status in [initial_runtime_status, decided_runtime_status] {
         emit_runtime_status_with_projection(
             agent,
@@ -6002,6 +6231,7 @@ async fn prepare_runtime_turn_prelude(
             workspace_root,
             runtime_status_session_config,
             status,
+            project_runtime_status_to_timeline,
         )
         .await;
     }
@@ -6146,6 +6376,8 @@ async fn finalize_runtime_turn_result(
     timeline_recorder: &Arc<Mutex<AgentTimelineRecorder>>,
     workspace_root: &str,
     runtime_status_session_config: &aster::agents::types::SessionConfig,
+    profile_stream: &AgentRuntimeProfileStream,
+    task_profile_refs: &RuntimeTurnTaskProfileRefs,
     session_id: &str,
     request_metadata: Option<&serde_json::Value>,
     result: Result<String, String>,
@@ -6180,6 +6412,43 @@ async fn finalize_runtime_turn_result(
     }
     if let Ok(events) = terminal_events {
         emit_runtime_events(app, event_name, events);
+    }
+    match result.as_ref() {
+        Ok(_) => {
+            emit_agent_runtime_profile_event(
+                app,
+                event_name,
+                build_runtime_task_completed_profile_event(profile_stream, task_profile_refs),
+            );
+            emit_agent_runtime_profile_event(app, event_name, profile_stream.turn_completed());
+            emit_agent_runtime_profile_event(
+                app,
+                event_name,
+                profile_stream.snapshot_updated("completed"),
+            );
+        }
+        Err(error) => {
+            let failure_category = profile_failure_category(error);
+            for event in build_runtime_task_failed_profile_events(
+                profile_stream,
+                task_profile_refs,
+                failure_category,
+                error,
+                false,
+            ) {
+                emit_agent_runtime_profile_event(app, event_name, event);
+            }
+            emit_agent_runtime_profile_event(
+                app,
+                event_name,
+                profile_stream.turn_failed(failure_category, error),
+            );
+            emit_agent_runtime_profile_event(
+                app,
+                event_name,
+                profile_stream.snapshot_updated("failed"),
+            );
+        }
     }
 
     match result {
@@ -7367,6 +7636,15 @@ async fn execute_queued_request_with_team_runtime_governor(
 pub(crate) fn build_queued_turn_task(
     mut request: AsterChatRequest,
 ) -> Result<QueuedTurnTask<serde_json::Value>, String> {
+    let resolved_turn_id = request
+        .turn_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+    request.turn_id = Some(resolved_turn_id);
+
     let queued_turn_id = request
         .queued_turn_id
         .clone()
@@ -7453,6 +7731,41 @@ mod tests {
         })
         .await;
     }
+
+    fn build_compact_tool_surface_turn_context() -> TurnContextOverride {
+        let mut runtime_metadata = serde_json::Map::new();
+        runtime_metadata.insert(
+            LIME_RUNTIME_TOOL_SURFACE_KEY.to_string(),
+            Value::String(DEFAULT_NATIVE_TOOL_SURFACE_COMPACT.to_string()),
+        );
+
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            LIME_RUNTIME_METADATA_KEY.to_string(),
+            Value::Object(runtime_metadata),
+        );
+
+        TurnContextOverride {
+            metadata,
+            ..TurnContextOverride::default()
+        }
+    }
+
+    const COMPACT_PROVIDER_BROKER_TOOL_NAMES: &[&str] = &[
+        TOOL_SEARCH_TOOL_NAME,
+        LIST_MCP_RESOURCES_TOOL_NAME,
+        READ_MCP_RESOURCE_TOOL_NAME,
+        "extensionmanager__search_available_extensions",
+        "extensionmanager__manage_extensions",
+        "Read",
+        "Glob",
+        "Grep",
+        "Bash",
+        "Edit",
+        "Write",
+        "Agent",
+        "StructuredOutput",
+    ];
 
     #[test]
     fn model_permission_detection_should_include_tenant_whitelist_400() {
@@ -7585,6 +7898,23 @@ mod tests {
         assert!(!should_record_runtime_stream_event_on_timeline(&event));
     }
 
+    #[test]
+    fn queued_turn_task_should_materialize_turn_id_before_runtime_execution() {
+        let request = build_runtime_turn_test_request("hello", None);
+
+        let queued_task = build_queued_turn_task(request).expect("build queued task");
+        let payload: AsterChatRequest =
+            serde_json::from_value(queued_task.payload).expect("deserialize queued payload");
+
+        assert!(
+            payload
+                .turn_id
+                .as_deref()
+                .is_some_and(|turn_id| !turn_id.trim().is_empty()),
+            "queued runtime payload must carry a stable turn id"
+        );
+    }
+
     #[derive(Clone)]
     struct AutoCompactThresholdTestProvider {
         context_limit: Option<usize>,
@@ -7637,6 +7967,64 @@ mod tests {
                 fast_model: None,
             }
         }
+    }
+
+    #[tokio::test]
+    async fn compact_tool_surface_should_bound_provider_tools_in_runtime_crate() {
+        ensure_runtime_turn_test_session_manager().await;
+
+        let agent = Agent::new();
+
+        let session = SessionManager::create_session(
+            PathBuf::from("."),
+            "compact tool surface 集成测试".to_string(),
+            SessionType::User,
+        )
+        .await
+        .expect("创建测试会话失败");
+
+        let model_config = ModelConfig::new("gpt-4.1").expect("测试模型应有效");
+        let provider = Arc::new(AutoCompactThresholdTestProvider::new(Some(200_000)));
+        agent
+            .update_provider(provider, &session.id)
+            .await
+            .expect("设置测试 provider 失败");
+
+        let working_dir = std::env::current_dir().expect("读取当前目录失败");
+        let (tools, _toolshim_tools, _system_prompt) = aster::session_context::with_turn_context(
+            Some(build_compact_tool_surface_turn_context()),
+            async {
+                agent
+                    .prepare_tools_and_prompt(&working_dir, None, false, &model_config)
+                    .await
+            },
+        )
+        .await
+        .expect("准备工具面失败");
+
+        let names: Vec<String> = tools.iter().map(|tool| tool.name.to_string()).collect();
+        assert!(!names.is_empty(), "compact 工具面不应为空");
+        assert!(
+            names.len() <= COMPACT_PROVIDER_BROKER_TOOL_NAMES.len(),
+            "compact broker 工具面最多应有 {} 个工具，实际为 {}: {:?}",
+            COMPACT_PROVIDER_BROKER_TOOL_NAMES.len(),
+            names.len(),
+            names
+        );
+        assert!(
+            names.iter().all(|name| COMPACT_PROVIDER_BROKER_TOOL_NAMES
+                .iter()
+                .any(|candidate| candidate.eq_ignore_ascii_case(name))),
+            "compact provider tools 只能包含 broker / deferred / 本地核心工具: {names:?}"
+        );
+        assert!(names.contains(&TOOL_SEARCH_TOOL_NAME.to_string()));
+        assert!(names.contains(&"Read".to_string()));
+        assert!(!names.contains(&"TeamCreate".to_string()));
+        assert!(!names.contains(&"TeamDelete".to_string()));
+
+        delete_managed_session(&session.id)
+            .await
+            .expect("清理测试会话失败");
     }
 
     fn build_auto_compaction_test_session(total_tokens: Option<i32>) -> aster::session::Session {
@@ -8280,6 +8668,96 @@ mod tests {
                 .and_then(serde_json::Value::as_str),
             Some("direct_answer")
         );
+    }
+
+    #[test]
+    fn merge_runtime_turn_default_tool_surface_metadata_should_preserve_explicit_surface() {
+        let metadata = merge_runtime_turn_default_tool_surface_metadata(
+            Some(json!({
+                LIME_RUNTIME_METADATA_KEY: {
+                    LIME_RUNTIME_TOOL_SURFACE_KEY: FAST_CHAT_TOOL_SURFACE_DIRECT_ANSWER
+                }
+            })),
+            DEFAULT_NATIVE_TOOL_SURFACE_COMPACT,
+        )
+        .expect("should preserve metadata");
+
+        assert_eq!(
+            metadata
+                .get(LIME_RUNTIME_METADATA_KEY)
+                .and_then(|value| value.get(LIME_RUNTIME_TOOL_SURFACE_KEY))
+                .and_then(serde_json::Value::as_str),
+            Some(FAST_CHAT_TOOL_SURFACE_DIRECT_ANSWER)
+        );
+    }
+
+    #[test]
+    fn compact_native_tool_surface_should_apply_to_native_tool_capable_providers() {
+        let provider_config = ConfigureProviderRequest {
+            provider_id: Some("openai".to_string()),
+            provider_name: "openai".to_string(),
+            model_name: "gpt-4.1".to_string(),
+            api_key: None,
+            base_url: None,
+            model_capabilities: Some(lime_core::models::model_registry::ModelCapabilities {
+                vision: false,
+                tools: true,
+                streaming: true,
+                json_mode: true,
+                function_calling: false,
+                reasoning: false,
+            }),
+            tool_call_strategy: Some(RuntimeToolCallStrategy::Native),
+            toolshim_model: None,
+        };
+
+        assert!(should_use_compact_native_tool_surface(&provider_config));
+    }
+
+    #[test]
+    fn compact_native_tool_surface_should_apply_to_function_calling_providers() {
+        let provider_config = ConfigureProviderRequest {
+            provider_id: Some("google".to_string()),
+            provider_name: "google".to_string(),
+            model_name: "gemini-2.5-pro".to_string(),
+            api_key: None,
+            base_url: None,
+            model_capabilities: Some(lime_core::models::model_registry::ModelCapabilities {
+                vision: true,
+                tools: false,
+                streaming: true,
+                json_mode: true,
+                function_calling: true,
+                reasoning: true,
+            }),
+            tool_call_strategy: Some(RuntimeToolCallStrategy::Native),
+            toolshim_model: None,
+        };
+
+        assert!(should_use_compact_native_tool_surface(&provider_config));
+    }
+
+    #[test]
+    fn compact_native_tool_surface_should_skip_toolshim_strategy() {
+        let provider_config = ConfigureProviderRequest {
+            provider_id: Some("ollama".to_string()),
+            provider_name: "ollama".to_string(),
+            model_name: "llama".to_string(),
+            api_key: None,
+            base_url: None,
+            model_capabilities: Some(lime_core::models::model_registry::ModelCapabilities {
+                vision: false,
+                tools: false,
+                streaming: true,
+                json_mode: false,
+                function_calling: false,
+                reasoning: false,
+            }),
+            tool_call_strategy: Some(RuntimeToolCallStrategy::ToolShim),
+            toolshim_model: Some("gpt-4o-mini".to_string()),
+        };
+
+        assert!(!should_use_compact_native_tool_surface(&provider_config));
     }
 
     fn runtime_test_model_capabilities(

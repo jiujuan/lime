@@ -1,9 +1,11 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import type { AgentUiProjectionEvent } from "../projection/agentUiEventProjection";
 import {
   buildAgentUiTeamWorkbenchViewModel,
   type AgentUiTeamWorkbenchViewItem,
 } from "../projection/agentUiTeamWorkbenchViewModel";
+import { formatNumber } from "@/i18n/format";
 import { cn } from "@/lib/utils";
 
 interface AgentUiTeamWorkbenchSurfaceViewProps {
@@ -15,6 +17,8 @@ interface AgentUiTeamWorkbenchSurfaceViewProps {
 
 function renderItemAction(
   item: AgentUiTeamWorkbenchViewItem,
+  label: string,
+  ariaLabel: string,
   onAction?: (item: AgentUiTeamWorkbenchViewItem) => void,
 ) {
   if (!item.action) {
@@ -23,7 +27,6 @@ function renderItemAction(
 
   const className =
     "rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-700";
-  const label = `${item.action.label} · 目标 ${item.action.targetId}`;
 
   if (!onAction) {
     return <span className={className}>{label}</span>;
@@ -36,7 +39,7 @@ function renderItemAction(
         className,
         "transition hover:border-sky-300 hover:bg-sky-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300",
       )}
-      aria-label={`定位工作台操作：${label}`}
+      aria-label={ariaLabel}
       data-agentui-action-target={item.action.targetId}
       onClick={() => onAction(item)}
     >
@@ -51,6 +54,8 @@ export function AgentUiTeamWorkbenchSurfaceView({
   className,
   onAction,
 }: AgentUiTeamWorkbenchSurfaceViewProps) {
+  const { i18n, t } = useTranslation("agent");
+  const locale = i18n.language;
   const model = useMemo(
     () => buildAgentUiTeamWorkbenchViewModel(events, { latestLimit }),
     [events, latestLimit],
@@ -70,19 +75,23 @@ export function AgentUiTeamWorkbenchSurfaceView({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <div className="text-xs font-semibold text-slate-900">
-            工作台操作视图
+            {t("agentChat.teamWorkbenchSurface.title")}
           </div>
           <div className="mt-1 text-[10px] leading-4 text-slate-500">
-            按 Agent UI v0.6 工作区展示可操作目标，避免在组件内重新推断队友状态。
+            {t("agentChat.teamWorkbenchSurface.description")}
           </div>
         </div>
         <div className="flex flex-wrap gap-1.5">
           <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-500">
-            {model.total} 项
+            {t("agentChat.teamWorkbenchSurface.totalBadge", {
+              countLabel: formatNumber(model.total, { locale }),
+            })}
           </span>
           {model.attentionCount > 0 ? (
             <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-              注意 {model.attentionCount}
+              {t("agentChat.teamWorkbenchSurface.attentionBadge", {
+                countLabel: formatNumber(model.attentionCount, { locale }),
+              })}
             </span>
           ) : null}
         </div>
@@ -105,11 +114,15 @@ export function AgentUiTeamWorkbenchSurfaceView({
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1">
                 <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
-                  {section.total}
+                  {formatNumber(section.total, { locale })}
                 </span>
                 {section.attentionCount > 0 ? (
                   <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700">
-                    注意 {section.attentionCount}
+                    {t("agentChat.teamWorkbenchSurface.attentionBadge", {
+                      countLabel: formatNumber(section.attentionCount, {
+                        locale,
+                      }),
+                    })}
                   </span>
                 ) : null}
               </div>
@@ -131,7 +144,25 @@ export function AgentUiTeamWorkbenchSurfaceView({
                       {item.title}
                     </span>
                     <span className="text-slate-500">{item.phaseLabel}</span>
-                    {renderItemAction(item, onAction)}
+                    {item.action
+                      ? renderItemAction(
+                          item,
+                          t("agentChat.teamWorkbenchSurface.actionTarget", {
+                            label: item.action.label,
+                            targetId: item.action.targetId,
+                          }),
+                          t("agentChat.teamWorkbenchSurface.actionAria", {
+                            label: t(
+                              "agentChat.teamWorkbenchSurface.actionTarget",
+                              {
+                                label: item.action.label,
+                                targetId: item.action.targetId,
+                              },
+                            ),
+                          }),
+                          onAction,
+                        )
+                      : null}
                   </div>
                   <div className="mt-0.5 truncate text-[10px] text-slate-500">
                     {item.subtitle}

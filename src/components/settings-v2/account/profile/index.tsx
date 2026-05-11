@@ -654,8 +654,8 @@ export function ProfileSettings() {
               </span>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
                 {t("settings.profile.hero.tags", {
-                  count: tags.length,
-                  defaultValue: "标签：{{count}}",
+                  countLabel: tagsCountLabel,
+                  defaultValue: "标签：{{countLabel}}",
                 })}
               </span>
             </div>
@@ -737,8 +737,8 @@ export function ProfileSettings() {
                 {extraTagCount > 0 && (
                   <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-500">
                     {t("settings.profile.avatar.extraTags", {
-                      count: extraTagCount,
-                      defaultValue: "+{{count}} 个标签",
+                      countLabel: extraTagCountLabel,
+                      defaultValue: "+{{countLabel}} 个标签",
                     })}
                   </span>
                 )}
@@ -792,8 +792,8 @@ export function ProfileSettings() {
               </div>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
                 {t("settings.profile.basic.itemCount", {
-                  count: profileFields.length,
-                  defaultValue: "{{count}} 项",
+                  countLabel: profileFieldCountLabel,
+                  defaultValue: "{{countLabel}} 项",
                 })}
               </span>
             </div>
@@ -859,8 +859,8 @@ export function ProfileSettings() {
               </div>
               <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
                 {t("settings.profile.tags.selectedCount", {
-                  count: tags.length,
-                  defaultValue: "{{count}} 个已选",
+                  countLabel: tagsCountLabel,
+                  defaultValue: "{{countLabel}} 个已选",
                 })}
               </span>
             </div>

@@ -10,7 +10,7 @@ use aster::tools::ToolRegistrationConfig;
 use lime_core::app_paths;
 use lime_core::database::{lock_db, DbConnection};
 use lime_services::project_context_builder::ProjectContextBuilder;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// 重新加载 Lime Skills
 pub fn reload_lime_skills() {
@@ -56,27 +56,56 @@ pub fn create_lime_tool_config() -> ToolRegistrationConfig {
 
 /// 加载 Lime Skills 到 aster-rust 的 global_registry
 fn load_lime_skills() {
-    let skills_dir = match app_paths::resolve_skills_dir() {
-        Ok(path) => path,
+    let roots = match resolve_lime_skill_root_sources() {
+        Ok(roots) => roots,
         Err(error) => {
             tracing::warn!(
-                "[AsterAgent] 解析 Lime Skills 目录失败，跳过加载: {}",
+                "[AsterAgent] 解析 Lime Skills 根目录失败，跳过加载: {}",
                 error
             );
             return;
         }
     };
 
-    let skill_count = register_lime_skills_from_dir(&skills_dir, SkillSource::User).len();
+    let skill_count = roots
+        .iter()
+        .flat_map(|(skills_dir, source)| register_lime_skills_from_dir(skills_dir, *source))
+        .count();
 
     if skill_count == 0 {
-        tracing::info!("[AsterAgent] Lime Skills 目录为空，无 Skills 可加载");
+        tracing::info!("[AsterAgent] Lime Skills 根目录为空，无 Skills 可加载");
     } else {
         tracing::info!(
             "[AsterAgent] 成功加载 {} 个 Lime Skills 到 global_registry",
             skill_count
         );
     }
+}
+
+fn resolve_lime_skill_root_sources() -> Result<Vec<(PathBuf, SkillSource)>, String> {
+    let project_roots = app_paths::resolve_lime_project_skill_roots();
+    app_paths::resolve_lime_skill_roots()
+        .map(|roots| assign_lime_skill_root_sources(roots, &project_roots))
+}
+
+fn assign_lime_skill_root_sources(
+    roots: Vec<PathBuf>,
+    project_roots: &[PathBuf],
+) -> Vec<(PathBuf, SkillSource)> {
+    roots
+        .into_iter()
+        .map(|root| {
+            let source = if project_roots
+                .iter()
+                .any(|project_root| project_root == &root)
+            {
+                SkillSource::Project
+            } else {
+                SkillSource::User
+            };
+            (root, source)
+        })
+        .collect()
 }
 
 fn register_lime_skills_from_dir(skills_dir: &Path, source: SkillSource) -> Vec<String> {
@@ -100,6 +129,71 @@ fn register_lime_skills_from_dir(skills_dir: &Path, source: SkillSource) -> Vec<
         tracing::error!("[AsterAgent] 无法获取 global_registry 写锁，Skills 加载失败");
     }
     registered_names
+}
+
+#[cfg(test)]
+mod tests {
+    use super::assign_lime_skill_root_sources;
+    use aster::skills::{parse_allowed_tools, SkillSource};
+    use std::path::Path;
+
+    #[test]
+    fn assign_lime_skill_root_sources_should_mark_project_root() {
+        let project_root = Path::new("/tmp/project/.agents/skills").to_path_buf();
+        let user_root = Path::new("/tmp/home/.agents/skills").to_path_buf();
+        let app_root = Path::new("/tmp/app/skills").to_path_buf();
+
+        let roots = assign_lime_skill_root_sources(
+            vec![project_root.clone(), user_root.clone(), app_root.clone()],
+            &[project_root.clone()],
+        );
+
+        assert_eq!(
+            roots,
+            vec![
+                (project_root, SkillSource::Project),
+                (user_root, SkillSource::User),
+                (app_root, SkillSource::User),
+            ]
+        );
+    }
+
+    #[test]
+    fn assign_lime_skill_root_sources_should_mark_cross_provider_project_roots() {
+        let project_agents_root = Path::new("/tmp/project/.agents/skills").to_path_buf();
+        let project_claude_root = Path::new("/tmp/project/.claude/skills").to_path_buf();
+        let user_claude_root = Path::new("/tmp/home/.claude/skills").to_path_buf();
+
+        let roots = assign_lime_skill_root_sources(
+            vec![
+                project_agents_root.clone(),
+                project_claude_root.clone(),
+                user_claude_root.clone(),
+            ],
+            &[project_agents_root.clone(), project_claude_root.clone()],
+        );
+
+        assert_eq!(
+            roots,
+            vec![
+                (project_agents_root, SkillSource::Project),
+                (project_claude_root, SkillSource::Project),
+                (user_claude_root, SkillSource::User),
+            ]
+        );
+    }
+
+    #[test]
+    fn aster_allowed_tools_parser_should_accept_agent_skills_standard_spacing() {
+        assert_eq!(
+            parse_allowed_tools(Some("Bash(git:*) Bash(jq:*) Read")),
+            Some(vec![
+                "Bash(git:*)".to_string(),
+                "Bash(jq:*)".to_string(),
+                "Read".to_string(),
+            ])
+        );
+    }
 }
 
 /// 构建带项目上下文的 System Prompt

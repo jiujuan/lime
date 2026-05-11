@@ -5,6 +5,8 @@
  */
 
 import React, { memo } from "react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import {
   AlertCircle,
   Camera,
@@ -240,28 +242,31 @@ function normalizeBrowserActionIndex(
   };
 }
 
-function formatReplayStatus(item: BrowserActionReplayItem): string {
+function formatReplayStatus(
+  item: BrowserActionReplayItem,
+  t: TFunction<"workspace">,
+): string {
   if (item.success === true && !item.status) {
-    return "成功";
+    return t("workspace.browserAssistRenderer.status.success");
   }
   if (item.success === false && !item.status) {
-    return "失败";
+    return t("workspace.browserAssistRenderer.status.failed");
   }
 
   switch (item.status) {
     case "completed":
     case "success":
     case "succeeded":
-      return "成功";
+      return t("workspace.browserAssistRenderer.status.success");
     case "failed":
     case "error":
-      return "失败";
+      return t("workspace.browserAssistRenderer.status.failed");
     case "running":
-      return "执行中";
+      return t("workspace.browserAssistRenderer.status.running");
     case "pending":
-      return "待处理";
+      return t("workspace.browserAssistRenderer.status.pending");
     default:
-      return item.status || "未知状态";
+      return item.status || t("workspace.browserAssistRenderer.status.unknown");
   }
 }
 
@@ -286,9 +291,11 @@ function BrowserReplayStat({
 }
 
 function BrowserReplayView({ index }: { index: BrowserActionReplayIndex }) {
+  const { t } = useTranslation("workspace");
   const recentItems = index.items.slice(-5).reverse();
   const latestItem = recentItems.find((item) => item.lastUrl) || recentItems[0];
-  const latestUrl = index.lastUrl || latestItem?.lastUrl || "暂无 URL";
+  const noUrlLabel = t("workspace.browserAssistRenderer.replay.noUrl");
+  const latestUrl = index.lastUrl || latestItem?.lastUrl || noUrlLabel;
 
   return (
     <div className="h-full overflow-auto bg-background p-5">
@@ -301,10 +308,10 @@ function BrowserReplayView({ index }: { index: BrowserActionReplayIndex }) {
                 <span>browser_replay_viewer</span>
               </div>
               <h3 className="mt-2 text-lg font-semibold text-foreground">
-                Browser Assist 复盘
+                {t("workspace.browserAssistRenderer.replay.title")}
               </h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                从 browserActionIndex 恢复浏览器动作、会话与观察证据。
+                {t("workspace.browserAssistRenderer.replay.description")}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -312,7 +319,9 @@ function BrowserReplayView({ index }: { index: BrowserActionReplayIndex }) {
                 browser_control
               </span>
               <span className="rounded-full border border-border bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                {index.actionCount} actions
+                {t("workspace.browserAssistRenderer.replay.actionsBadge", {
+                  count: index.actionCount,
+                })}
               </span>
             </div>
           </div>
@@ -320,23 +329,45 @@ function BrowserReplayView({ index }: { index: BrowserActionReplayIndex }) {
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <BrowserReplayStat
-            label="浏览器动作"
+            label={t(
+              "workspace.browserAssistRenderer.replay.stat.actions.label",
+            )}
             value={`${index.actionCount}`}
-            hint="typed browser action"
+            hint={t("workspace.browserAssistRenderer.replay.stat.actions.hint")}
           />
           <BrowserReplayStat
-            label="会话"
+            label={t(
+              "workspace.browserAssistRenderer.replay.stat.sessions.label",
+            )}
             value={`${index.sessionCount}`}
-            hint={index.sessionIds[0] || latestItem?.sessionId || "session"}
+            hint={
+              index.sessionIds[0] ||
+              latestItem?.sessionId ||
+              t(
+                "workspace.browserAssistRenderer.replay.stat.sessions.hintFallback",
+              )
+            }
           />
           <BrowserReplayStat
-            label="观察 / 截图"
+            label={t(
+              "workspace.browserAssistRenderer.replay.stat.evidence.label",
+            )}
             value={`${index.observationCount} / ${index.screenshotCount}`}
-            hint="observation / screenshot"
+            hint={t(
+              "workspace.browserAssistRenderer.replay.stat.evidence.hint",
+            )}
           />
           <BrowserReplayStat
-            label="最近 URL"
-            value={latestUrl === "暂无 URL" ? latestUrl : "已记录"}
+            label={t(
+              "workspace.browserAssistRenderer.replay.stat.recentUrl.label",
+            )}
+            value={
+              latestUrl === noUrlLabel
+                ? latestUrl
+                : t(
+                    "workspace.browserAssistRenderer.replay.stat.recentUrl.recorded",
+                  )
+            }
             hint={latestUrl}
           />
         </div>
@@ -345,7 +376,12 @@ function BrowserReplayView({ index }: { index: BrowserActionReplayIndex }) {
           <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
               <MousePointerClick className="h-4 w-4 text-muted-foreground" />
-              <span>最近浏览器动作</span>
+              <span>
+                {t(
+                  "workspace.browserAssistRenderer.replay.recentActions.title",
+                  "最近浏览器动作",
+                )}
+              </span>
             </div>
             <div className="space-y-2">
               {recentItems.map((item, itemIndex) => (
@@ -357,13 +393,20 @@ function BrowserReplayView({ index }: { index: BrowserActionReplayIndex }) {
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-sm font-medium text-foreground">
-                      {item.action || item.toolName || "browser action"}
+                      {item.action ||
+                        item.toolName ||
+                        t(
+                          "workspace.browserAssistRenderer.replay.item.actionFallback",
+                        )}
                     </span>
                     <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
-                      {item.artifactKind || "browser_session"}
+                      {item.artifactKind ||
+                        t(
+                          "workspace.browserAssistRenderer.replay.item.kindFallback",
+                        )}
                     </span>
                     <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
-                      {formatReplayStatus(item)}
+                      {formatReplayStatus(item, t)}
                     </span>
                     {item.backend ? (
                       <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
@@ -373,14 +416,18 @@ function BrowserReplayView({ index }: { index: BrowserActionReplayIndex }) {
                     {item.screenshotAvailable ? (
                       <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs text-sky-800">
                         <Camera className="h-3 w-3" />
-                        screenshot
+                        {t(
+                          "workspace.browserAssistRenderer.replay.item.screenshot",
+                        )}
                       </span>
                     ) : null}
                   </div>
                   <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                     {item.lastUrl ? (
                       <div className="break-all">
-                        URL：
+                        {t(
+                          "workspace.browserAssistRenderer.replay.item.urlLabel",
+                        )}
                         <span className="ml-1 font-mono text-foreground">
                           {item.lastUrl}
                         </span>
@@ -389,7 +436,9 @@ function BrowserReplayView({ index }: { index: BrowserActionReplayIndex }) {
                     <div className="flex flex-wrap gap-x-3 gap-y-1">
                       {item.sessionId ? (
                         <span>
-                          session：
+                          {t(
+                            "workspace.browserAssistRenderer.replay.item.sessionLabel",
+                          )}
                           <span className="ml-1 font-mono text-foreground">
                             {item.sessionId}
                           </span>
@@ -397,7 +446,9 @@ function BrowserReplayView({ index }: { index: BrowserActionReplayIndex }) {
                       ) : null}
                       {item.targetId ? (
                         <span>
-                          target：
+                          {t(
+                            "workspace.browserAssistRenderer.replay.item.targetLabel",
+                          )}
                           <span className="ml-1 font-mono text-foreground">
                             {item.targetId}
                           </span>
@@ -405,7 +456,9 @@ function BrowserReplayView({ index }: { index: BrowserActionReplayIndex }) {
                       ) : null}
                       {item.entrySource ? (
                         <span>
-                          entry：
+                          {t(
+                            "workspace.browserAssistRenderer.replay.item.entryLabel",
+                          )}
                           <span className="ml-1 font-mono text-foreground">
                             {item.entrySource}
                           </span>
@@ -425,6 +478,7 @@ function BrowserReplayView({ index }: { index: BrowserActionReplayIndex }) {
 
 export const BrowserAssistRenderer: React.FC<ArtifactRendererProps> = memo(
   ({ artifact }) => {
+    const { t } = useTranslation("workspace");
     const initialSessionId = readMetaString(
       artifact.meta,
       "sessionId",
@@ -467,11 +521,11 @@ export const BrowserAssistRenderer: React.FC<ArtifactRendererProps> = memo(
               <Loader2 className="h-5 w-5 animate-spin" />
             </div>
             <div className="text-base font-semibold text-foreground">
-              正在启动浏览器协助
+              {t("workspace.browserAssistRenderer.launching.title")}
             </div>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
               {launchHint ||
-                "正在启动 Chrome 并准备浏览器工作台会话，通常需要 3–8 秒。"}
+                t("workspace.browserAssistRenderer.launching.detail")}
             </p>
             {launchUrl ? (
               <div className="mt-3 rounded-xl border border-border/70 bg-background/80 px-3 py-2 text-xs text-muted-foreground">
@@ -491,10 +545,11 @@ export const BrowserAssistRenderer: React.FC<ArtifactRendererProps> = memo(
               <AlertCircle className="h-5 w-5" />
             </div>
             <div className="text-base font-semibold text-foreground">
-              浏览器协助启动失败
+              {t("workspace.browserAssistRenderer.failed.title")}
             </div>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              {launchError || "未能建立浏览器实时会话，请稍后重试。"}
+              {launchError ||
+                t("workspace.browserAssistRenderer.failed.detail")}
             </p>
             {launchUrl ? (
               <div className="mt-3 rounded-xl border border-border/70 bg-background/80 px-3 py-2 text-xs text-muted-foreground">
@@ -518,11 +573,10 @@ export const BrowserAssistRenderer: React.FC<ArtifactRendererProps> = memo(
               <AlertCircle className="h-5 w-5" />
             </div>
             <div className="text-base font-semibold text-foreground">
-              浏览器协助尚未就绪
+              {t("workspace.browserAssistRenderer.notReady.title")}
             </div>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              当前 Artifact
-              缺少可附着的浏览器会话信息，请重新从通用对话启动浏览器协助。
+              {t("workspace.browserAssistRenderer.notReady.detail")}
             </p>
           </div>
         </div>
@@ -536,11 +590,10 @@ export const BrowserAssistRenderer: React.FC<ArtifactRendererProps> = memo(
             <AlertCircle className="h-5 w-5" />
           </div>
           <div className="text-base font-semibold text-foreground">
-            浏览器协助已迁移到浏览器工作台
+            {t("workspace.browserAssistRenderer.migrated.title")}
           </div>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Claw
-            不再在当前工作区中渲染浏览器实时画面。请从首页、顶栏或技能入口打开浏览器工作台继续接管与调试。
+            {t("workspace.browserAssistRenderer.migrated.detail")}
           </p>
           {launchUrl ? (
             <div className="mt-3 rounded-xl border border-border/70 bg-background/80 px-3 py-2 text-xs text-muted-foreground">
@@ -550,8 +603,12 @@ export const BrowserAssistRenderer: React.FC<ArtifactRendererProps> = memo(
           {initialSessionId || initialProfileKey || initialTargetId ? (
             <p className="mt-3 text-xs text-muted-foreground">
               {initialSessionId
-                ? `当前会话 ${initialSessionId} 已可用于浏览器工作台接管。`
-                : `当前配置 ${initialProfileKey || initialTargetId} 已可用于浏览器工作台接管。`}
+                ? t("workspace.browserAssistRenderer.migrated.sessionReady", {
+                    sessionId: initialSessionId,
+                  })
+                : t("workspace.browserAssistRenderer.migrated.configReady", {
+                    config: initialProfileKey || initialTargetId,
+                  })}
             </p>
           ) : null}
         </div>

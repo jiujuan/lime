@@ -178,9 +178,7 @@ function AppContent() {
   );
   const handleResourceManagerNavigationUnsupported = useCallback(() => {
     toast.info(t("common.app.resourceNavigation.unsupported.title"), {
-      description: t(
-        "common.app.resourceNavigation.unsupported.description",
-      ),
+      description: t("common.app.resourceNavigation.unsupported.description"),
     });
   }, [t]);
   useResourceManagerNavigationIntents({
@@ -287,9 +285,7 @@ function AppContent() {
 
       if (!resolved) {
         toast.error(t("common.app.websiteDeepLink.unsupported.title"), {
-          description: t(
-            "common.app.websiteDeepLink.unsupported.description",
-          ),
+          description: t("common.app.websiteDeepLink.unsupported.description"),
         });
         return;
       }

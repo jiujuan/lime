@@ -11,7 +11,7 @@ import {
 import { extractFilesystemEventPathsFromValue } from "@/lib/filesystem-event-protocol";
 import type { ActionRequired, AgentRuntimeStatus, Message } from "../types";
 import { resolveUserFacingToolDisplayLabel } from "./toolDisplayInfo";
-import { isInternalRoutingTurnSummaryText } from "./turnSummaryPresentation";
+import { shouldHideTurnSummaryFromConversation } from "./turnSummaryPresentation";
 import {
   resolveArtifactPreviewText,
   resolveArtifactWritePhase,
@@ -1161,10 +1161,6 @@ function toActionRequired(item: AgentThreadItem): ActionRequired | null {
 }
 
 function summarizePlanDecisionText(text?: string): string | undefined {
-  if (isInternalRoutingTurnSummaryText(text)) {
-    return undefined;
-  }
-
   return buildTextPreview(text, {
     maxLines: 4,
     maxChars: 240,
@@ -1272,6 +1268,9 @@ function deriveHarnessSessionStateFromItems(
         });
         break;
       case "turn_summary":
+        if (shouldHideTurnSummaryFromConversation(item)) {
+          break;
+        }
         activity.planning += 1;
         latestTurnSummaryItem = item;
         outputSignals.push({

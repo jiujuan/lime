@@ -1,46 +1,16 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
-const {
-  mockUseOemCloudAccess,
-  mockFormatOemCloudDateTime,
-  mockUseTranslation,
-} = vi.hoisted(() => {
-  const mockTranslate = vi.fn((key: string, options?: unknown) => {
-    if (typeof options === "string") {
-      return options;
-    }
-
-    if (options && typeof options === "object") {
-      const values = options as Record<string, unknown>;
-      const template =
-        typeof values.defaultValue === "string" ? values.defaultValue : key;
-      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-        String(values[name] ?? ""),
-      );
-    }
-
-    return key;
-  });
-
-    return {
-      mockUseOemCloudAccess: vi.fn(),
-      mockFormatOemCloudDateTime: vi.fn((value?: string) => `fmt:${value ?? ""}`),
-      mockUseTranslation: vi.fn((_namespace?: string) => ({
-        i18n: { language: "zh-CN" },
-        t: mockTranslate,
-      })),
-    };
+const { mockUseOemCloudAccess } = vi.hoisted(() => {
+  return {
+    mockUseOemCloudAccess: vi.fn(),
+  };
 });
 
 vi.mock("@/hooks/useOemCloudAccess", () => ({
   useOemCloudAccess: () => mockUseOemCloudAccess(),
-  formatOemCloudDateTime: (value?: string) => mockFormatOemCloudDateTime(value),
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
 }));
 
 import { UserCenterSessionSettings } from ".";
@@ -159,17 +129,18 @@ function findButton(container: HTMLElement, text: string) {
   return button as HTMLButtonElement;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
 
+  await changeLimeLocale("en-US");
   mockUseOemCloudAccess.mockReturnValue(createAccessState());
 });
 
-afterEach(() => {
+afterEach(async () => {
   vi.clearAllMocks();
 
   while (mounted.length > 0) {
@@ -183,6 +154,8 @@ afterEach(() => {
     });
     current.container.remove();
   }
+
+  await changeLimeLocale("zh-CN");
 });
 
 describe("UserCenterSessionSettings", () => {
@@ -190,13 +163,16 @@ describe("UserCenterSessionSettings", () => {
     const { container } = renderPage();
     const text = container.textContent ?? "";
 
-    expect(text).toContain("账户资料");
-    expect(text).toContain("查看登录状态、默认服务和账号同步结果。");
-    expect(text).toContain("状态：未登录");
-    expect(text).toContain("默认服务：登录后自动同步");
-    expect(text).toContain("使用 Google 一键登录");
-    expect(text).toContain("浏览器完成后自动同步");
-    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
+    expect(text).toContain("Account Profile");
+    expect(text).toContain(
+      "Review sign-in status, default service, and account sync results.",
+    );
+    expect(text).toContain("Status: Signed out");
+    expect(text).toContain("Default service: Syncs after sign-in");
+    expect(text).toContain("Sign in with Google");
+    expect(text).toContain("Auto-sync after browser sign-in");
+    expect(text).not.toContain("账户资料");
+    expect(text).not.toContain("settings.userCenterSession");
   });
 
   it("点击 Google 一键登录时应调用 hook 的 handleGoogleLogin", async () => {
@@ -210,7 +186,7 @@ describe("UserCenterSessionSettings", () => {
     const { container } = renderPage();
 
     await act(async () => {
-      findButton(container, "使用 Google 一键登录").dispatchEvent(
+      findButton(container, "Sign in with Google").dispatchEvent(
         new MouseEvent("click", { bubbles: true }),
       );
     });
@@ -229,13 +205,13 @@ describe("UserCenterSessionSettings", () => {
     const { container } = renderPage();
 
     await act(async () => {
-      findButton(container, "使用邮箱验证码 / 账号密码").dispatchEvent(
+      findButton(container, "Use email code / account password").dispatchEvent(
         new MouseEvent("click", { bubbles: true }),
       );
     });
 
     await act(async () => {
-      findButton(container, "邮箱验证码").dispatchEvent(
+      findButton(container, "Email code").dispatchEvent(
         new MouseEvent("click", { bubbles: true }),
       );
     });
@@ -272,7 +248,7 @@ describe("UserCenterSessionSettings", () => {
             basePath: "/gateway-api",
           },
         },
-        defaultProviderSummary: "Lime Hub 主服务 · gpt-5.2-pro",
+        defaultProviderSummary: "Lime Hub primary service · gpt-5.2-pro",
         handleLogout,
         openUserCenter,
       }),
@@ -280,23 +256,26 @@ describe("UserCenterSessionSettings", () => {
 
     const { container } = renderPage();
     const text = container.textContent ?? "";
-    const expectedExpiry = new Intl.DateTimeFormat("zh-CN", {
+    const expectedExpiry = new Intl.DateTimeFormat("en-US", {
       dateStyle: "medium",
       timeStyle: "short",
     }).format(Date.parse("2026-03-25T08:00:00.000Z"));
 
     expect(text).toContain("Demo Operator");
     expect(text).toContain(expectedExpiry);
-    expect(text).toContain("2 项技能 / 1 个入口");
-    expect(text).toContain("状态：已登录");
-    expect(text).toContain("默认服务：Lime Hub 主服务 · gpt-5.2-pro");
-    expect(text).toContain("Lime Hub 主服务 · gpt-5.2-pro");
-    expect(text).toContain("资料维护已统一到账号中心");
-    expect(text).toContain("前往账号中心修改资料");
+    expect(text).toContain("2 skills / 1 entries");
+    expect(text).toContain("Status: Signed in");
+    expect(text).toContain(
+      "Default service: Lime Hub primary service · gpt-5.2-pro",
+    );
+    expect(text).toContain("Lime Hub primary service · gpt-5.2-pro");
+    expect(text).toContain("Profile editing is unified in Account Center");
+    expect(text).toContain("Edit profile in Account Center");
     expect(text).not.toContain("会话说明");
+    expect(text).not.toContain("settings.userCenterSession");
 
     await act(async () => {
-      findButton(container, "前往账号中心修改资料").dispatchEvent(
+      findButton(container, "Edit profile in Account Center").dispatchEvent(
         new MouseEvent("click", { bubbles: true }),
       );
     });
@@ -304,7 +283,7 @@ describe("UserCenterSessionSettings", () => {
     expect(openUserCenter).toHaveBeenCalledWith("");
 
     await act(async () => {
-      findButton(container, "退出当前账号").dispatchEvent(
+      findButton(container, "Sign out of this account").dispatchEvent(
         new MouseEvent("click", { bubbles: true }),
       );
     });
@@ -313,25 +292,6 @@ describe("UserCenterSessionSettings", () => {
   });
 
   it("应按当前 locale 格式化会话时间与能力数量", () => {
-    mockUseTranslation.mockImplementationOnce((_namespace?: string) => ({
-      i18n: { language: "en-US" },
-      t: vi.fn((key: string, options?: unknown) => {
-        if (typeof options === "string") {
-          return options;
-        }
-
-        if (options && typeof options === "object") {
-          const values = options as Record<string, unknown>;
-          const template =
-            typeof values.defaultValue === "string" ? values.defaultValue : key;
-          return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-            String(values[name] ?? ""),
-          );
-        }
-
-        return key;
-      }),
-    }));
     mockUseOemCloudAccess.mockReturnValue(
       createAccessState({
         session: {
@@ -370,25 +330,28 @@ describe("UserCenterSessionSettings", () => {
     const text = container.textContent ?? "";
 
     expect(text).toContain(expectedExpiry);
-    expect(text).toContain("1,000 项技能 / 1,234 个入口");
-    expect(text).not.toContain("1000 项技能 / 1234 个入口");
+    expect(text).toContain("1,000 skills / 1,234 entries");
+    expect(text).not.toContain("1000 skills / 1234 entries");
+    expect(text).not.toContain("1,000 项技能 / 1,234 个入口");
   });
 
   it("应把账户总览和登录结果说明收进 tips", async () => {
     renderPage();
 
     expect(getBodyText()).not.toContain(
-      "昵称、头像、邮箱和默认服务统一由账号中心维护；本地只展示当前会话状态与同步结果。",
+      "Nickname, avatar, email, and default service are maintained in Account Center",
     );
 
-    const accountTip = await hoverTip("账户资料说明");
+    const accountTip = await hoverTip("Account profile help");
     expect(getBodyText()).toContain(
-      "昵称、头像、邮箱和默认服务统一由账号中心维护；本地只展示当前会话状态与同步结果。",
+      "Nickname, avatar, email, and default service are maintained in Account Center",
     );
     await leaveTip(accountTip);
 
-    const loginTip = await hoverTip("登录后自动完成说明");
-    expect(getBodyText()).toContain("同步默认 AI 服务、模型目录与已开通能力。");
+    const loginTip = await hoverTip("Post sign-in auto-sync help");
+    expect(getBodyText()).toContain(
+      "Sync the default AI service, model catalog, and enabled capabilities.",
+    );
     await leaveTip(loginTip);
   });
 });

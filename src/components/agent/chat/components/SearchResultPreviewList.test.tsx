@@ -2,6 +2,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SearchResultPreviewList } from "./SearchResultPreviewList";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 interface RenderResult {
   container: HTMLDivElement;
@@ -17,10 +18,10 @@ function renderList() {
 
   const items = Array.from({ length: 6 }, (_, index) => ({
     id: `result-${index + 1}`,
-    title: `结果 ${index + 1}`,
+    title: `Result ${index + 1}`,
     url: `https://example.com/${index + 1}`,
     hostname: "example.com",
-    snippet: `摘要 ${index + 1}`,
+    snippet: `Summary ${index + 1}`,
   }));
 
   act(() => {
@@ -38,15 +39,17 @@ function renderList() {
   return rendered;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("en-US");
 });
 
-afterEach(() => {
+afterEach(async () => {
+  vi.useRealTimers();
   while (mountedRoots.length > 0) {
     const mounted = mountedRoots.pop();
     if (!mounted) break;
@@ -55,47 +58,51 @@ afterEach(() => {
     });
     mounted.container.remove();
   }
+  document.body.innerHTML = "";
+  await changeLimeLocale("zh-CN");
 });
 
 describe("SearchResultPreviewList", () => {
-  it("搜索结果应默认折叠，并支持展开与收起", () => {
+  it("uses agent namespace resources when collapsing and expanding results", () => {
     const { container } = renderList();
 
-    expect(container.textContent).toContain("结果 1");
-    expect(container.textContent).toContain("结果 4");
-    expect(container.textContent).not.toContain("结果 5");
-    expect(container.textContent).toContain("展开其余 2 条结果");
+    expect(container.textContent).toContain("Result 1");
+    expect(container.textContent).toContain("Result 4");
+    expect(container.textContent).not.toContain("Result 5");
+    expect(container.textContent).toContain("Show 2 more results");
 
     const toggleButton = container.querySelector(
-      'button[aria-label="展开搜索结果"]',
+      'button[aria-label="Expand search results"]',
     ) as HTMLButtonElement | null;
 
     act(() => {
       toggleButton?.click();
     });
 
-    expect(container.textContent).toContain("结果 5");
-    expect(container.textContent).toContain("结果 6");
-    expect(container.textContent).toContain("收起结果");
+    expect(container.textContent).toContain("Result 5");
+    expect(container.textContent).toContain("Result 6");
+    expect(container.textContent).toContain("Collapse results");
 
     const collapseButton = container.querySelector(
-      'button[aria-label="收起搜索结果"]',
+      'button[aria-label="Collapse search results"]',
     ) as HTMLButtonElement | null;
 
     act(() => {
       collapseButton?.click();
     });
 
-    expect(container.textContent).not.toContain("结果 5");
-    expect(container.textContent).not.toContain("结果 6");
-    expect(container.textContent).toContain("展开其余 2 条结果");
+    expect(container.textContent).not.toContain("Result 5");
+    expect(container.textContent).not.toContain("Result 6");
+    expect(container.textContent).toContain("Show 2 more results");
+    expect(container.textContent).not.toContain("展开其余");
+    expect(container.textContent).not.toContain("收起结果");
   });
 
-  it("悬浮预览在鼠标移出整体区域后应自动关闭", () => {
+  it("keeps the hover preview open only while the pointer stays in the region", () => {
     vi.useFakeTimers();
     const { container } = renderList();
     const trigger = container.querySelector(
-      'button[aria-label="预览搜索结果：结果 1"]',
+      'button[aria-label="Preview search result: Result 1"]',
     ) as HTMLButtonElement | null;
 
     act(() => {
@@ -106,7 +113,7 @@ describe("SearchResultPreviewList", () => {
       );
     });
 
-    expect(document.body.textContent).toContain("摘要 1");
+    expect(document.body.textContent).toContain("Summary 1");
 
     act(() => {
       document.body.dispatchEvent(
@@ -117,6 +124,6 @@ describe("SearchResultPreviewList", () => {
       vi.advanceTimersByTime(140);
     });
 
-    expect(document.body.textContent).not.toContain("摘要 1");
+    expect(document.body.textContent).not.toContain("Summary 1");
   });
 });

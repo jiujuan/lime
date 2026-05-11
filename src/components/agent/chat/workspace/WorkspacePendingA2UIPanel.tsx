@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { A2UIFormData, A2UIResponse } from "@/lib/workspace/a2ui";
 import { CHAT_A2UI_TASK_CARD_PRESET } from "@/lib/workspace/a2ui";
 import { A2UITaskCard } from "../components/A2UITaskCard";
@@ -15,14 +16,12 @@ interface WorkspacePendingA2UIPanelProps {
   a2uiSubmissionNotice?: A2UISubmissionNoticeData | null;
 }
 
-const STALE_STATUS_LABEL = "继续处理中";
-const STALE_FOOTER_TEXT = "刚刚补充的信息已收到，暂时不用重复提交。";
-
 export function WorkspacePendingA2UIPanel({
   pendingA2UIForm = null,
   onA2UISubmit,
   a2uiSubmissionNotice = null,
 }: WorkspacePendingA2UIPanelProps) {
+  const { t } = useTranslation("workspace");
   const { visibleForm, isStale } = useStickyA2UIForm({
     form: pendingA2UIForm,
     clearImmediately: Boolean(a2uiSubmissionNotice),
@@ -39,14 +38,24 @@ export function WorkspacePendingA2UIPanel({
     : "border-emerald-200/90 bg-emerald-50/70";
   const progressMeta = readProgressiveA2UIProgressMeta(visibleForm);
   const statusLabel = isStale
-    ? STALE_STATUS_LABEL
+    ? t("workspace.pendingA2UI.status.stale", "继续处理中")
     : progressMeta
-      ? `第 ${progressMeta.currentStep}/${progressMeta.totalSteps} 步`
+      ? t("workspace.pendingA2UI.status.progressStep", {
+          currentStep: progressMeta.currentStep,
+          totalSteps: progressMeta.totalSteps,
+          defaultValue: "第 {{currentStep}}/{{totalSteps}} 步",
+        })
       : undefined;
   const footerText = isStale
-    ? STALE_FOOTER_TEXT
+    ? t(
+        "workspace.pendingA2UI.footer.stale",
+        "刚刚补充的信息已收到，暂时不用重复提交。",
+      )
     : progressMeta && !progressMeta.isFinalStep
-      ? "先完成这一步，后面会继续补齐。"
+      ? t(
+          "workspace.pendingA2UI.footer.progressStep",
+          "先完成这一步，后面会继续补齐。",
+        )
       : undefined;
 
   if (!shouldRender) {

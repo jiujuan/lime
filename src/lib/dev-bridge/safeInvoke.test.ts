@@ -151,13 +151,13 @@ describe("safeInvoke", () => {
     vi.mocked(shouldPreferMockInBrowser).mockReturnValueOnce(true);
     mocks.baseInvoke.mockResolvedValueOnce(["mock-first"]);
 
-    await expect(safeInvoke("list_plugin_tasks")).resolves.toEqual([
+    await expect(safeInvoke("companion_get_pet_status")).resolves.toEqual([
       "mock-first",
     ]);
 
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
     expect(mocks.baseInvoke).toHaveBeenCalledWith(
-      "list_plugin_tasks",
+      "companion_get_pet_status",
       undefined,
     );
   });
@@ -362,11 +362,11 @@ describe("safeInvoke", () => {
     );
 
     try {
-      const unlisten = await safeListen("plugin-task-event", vi.fn());
+      const unlisten = await safeListen("companion-pet-status", vi.fn());
 
       expect(typeof unlisten).toBe("function");
       expect(mocks.baseListen).toHaveBeenCalledWith(
-        "plugin-task-event",
+        "companion-pet-status",
         expect.any(Function),
       );
     } finally {

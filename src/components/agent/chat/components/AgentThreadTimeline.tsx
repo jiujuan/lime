@@ -41,8 +41,8 @@ import { AgentThreadTimelineArtifactCard } from "./AgentThreadTimelineArtifactCa
 import type { ArtifactTimelineOpenTarget } from "../utils/artifactTimelineNavigation";
 import { normalizeProcessDisplayText } from "../utils/processDisplayText";
 import {
-  isInternalRoutingTurnSummaryText,
   normalizeTurnSummaryDisplayText,
+  shouldHideTurnSummaryFromConversation,
 } from "../utils/turnSummaryPresentation";
 import {
   isPendingRuntimeActionConfirmation,
@@ -430,7 +430,7 @@ function ThinkingItemCard({
   const shouldHideTurnSummaryContent =
     item.type === "turn_summary" &&
     !hasStructuredPreview &&
-    isInternalRoutingTurnSummaryText(displayText);
+    shouldHideTurnSummaryFromConversation(item);
 
   const content = hasStructuredPreview ? (
     <div className="space-y-3">
@@ -700,7 +700,7 @@ function extractCompactThinkingParts(
 
     return {
       title: item.status === "in_progress" ? "处理中" : "当前进展",
-      detail: isInternalRoutingTurnSummaryText(displayText) ? "" : displayText,
+      detail: shouldHideTurnSummaryFromConversation(item) ? "" : displayText,
     };
   }
 
@@ -1269,10 +1269,6 @@ function isInternalThinkingPreviewLine(line: string): boolean {
   const normalized = line.trim();
   if (!normalized) {
     return false;
-  }
-
-  if (isInternalRoutingTurnSummaryText(normalized)) {
-    return true;
   }
 
   return (

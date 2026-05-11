@@ -219,9 +219,7 @@ describe("SmartInputPage", () => {
     );
 
     expect(
-      container
-        .querySelector(".screenshot-drag-handle")
-        ?.getAttribute("title"),
+      container.querySelector(".screenshot-drag-handle")?.getAttribute("title"),
     ).toBe("Drag to move window");
     expect(
       (container.querySelector("textarea") as HTMLTextAreaElement | null)

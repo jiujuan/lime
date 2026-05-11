@@ -13,6 +13,7 @@ import React, {
   useEffect,
   useRef,
 } from "react";
+import { useTranslation } from "react-i18next";
 import {
   AlertCircle,
   AlertTriangle,
@@ -30,7 +31,6 @@ import {
   resolveArtifactProtocolFilePath,
 } from "@/lib/artifact-protocol";
 import {
-  formatArtifactWritePhaseLabel,
   resolveDefaultArtifactViewMode,
   resolveArtifactWritePhase,
 } from "@/components/agent/chat/utils/messageArtifacts";
@@ -98,28 +98,59 @@ class ArtifactErrorBoundary extends React.Component<
 // 辅助组件
 // ============================================================================
 
+type ArtifactRendererWritePhase = NonNullable<
+  ReturnType<typeof resolveArtifactWritePhase>
+>;
+
+const ARTIFACT_RENDERER_WRITE_PHASE_LABEL_KEYS = {
+  preparing: "workspace.artifactRenderer.writePhase.preparing",
+  streaming: "workspace.artifactRenderer.writePhase.streaming",
+  persisted: "workspace.artifactRenderer.writePhase.persisted",
+  completed: "workspace.artifactRenderer.writePhase.completed",
+  failed: "workspace.artifactRenderer.writePhase.failed",
+} as const satisfies Record<ArtifactRendererWritePhase, string>;
+
+const ARTIFACT_RENDERER_EMPTY_DETAIL_KEYS = {
+  failed: "workspace.artifactRenderer.empty.failed.detail",
+  finished: "workspace.artifactRenderer.empty.finished.detail",
+  preparing: "workspace.artifactRenderer.empty.writing.preparingDetail",
+  streaming: "workspace.artifactRenderer.empty.writing.streamingDetail",
+} as const;
+
+type ArtifactRendererTranslationKey =
+  | (typeof ARTIFACT_RENDERER_WRITE_PHASE_LABEL_KEYS)[ArtifactRendererWritePhase]
+  | (typeof ARTIFACT_RENDERER_EMPTY_DETAIL_KEYS)[keyof typeof ARTIFACT_RENDERER_EMPTY_DETAIL_KEYS]
+  | "workspace.artifactRenderer.empty.failed.title"
+  | "workspace.artifactRenderer.empty.finished.title";
+
 /**
  * 渲染器加载骨架屏
  */
 const RendererSkeleton: React.FC<{ tone?: "dark" | "light" }> = memo(
-  ({ tone = "dark" }) => (
-    <div
-      className={cn(
-        "flex items-center justify-center h-full min-h-[200px]",
-        tone === "light" ? "bg-background" : "bg-[#1e2227]",
-      )}
-    >
+  ({ tone = "dark" }) => {
+    const { t } = useTranslation("workspace");
+
+    return (
       <div
         className={cn(
-          "flex flex-col items-center gap-3",
-          tone === "light" ? "text-muted-foreground" : "text-gray-400",
+          "flex items-center justify-center h-full min-h-[200px]",
+          tone === "light" ? "bg-background" : "bg-[#1e2227]",
         )}
       >
-        <Loader2 className="w-8 h-8 animate-spin" />
-        <span className="text-sm">加载渲染器...</span>
+        <div
+          className={cn(
+            "flex flex-col items-center gap-3",
+            tone === "light" ? "text-muted-foreground" : "text-gray-400",
+          )}
+        >
+          <Loader2 className="w-8 h-8 animate-spin" />
+          <span className="text-sm">
+            {t("workspace.artifactRenderer.loadingRenderer")}
+          </span>
+        </div>
       </div>
-    </div>
-  ),
+    );
+  },
 );
 RendererSkeleton.displayName = "RendererSkeleton";
 
@@ -128,8 +159,9 @@ type EmptyArtifactSkeletonKind = "document" | "code" | "preview" | "generic";
 
 interface EmptyArtifactSurfaceState {
   mode: EmptyArtifactSurfaceMode;
-  title: string;
-  detail: string;
+  titleKey: ArtifactRendererTranslationKey;
+  detailKey: ArtifactRendererTranslationKey;
+  detail?: string;
   skeletonKind: EmptyArtifactSkeletonKind;
 }
 
@@ -179,10 +211,9 @@ function resolveEmptyArtifactSurfaceState(
   if (artifact.status === "error" || writePhase === "failed") {
     return {
       mode: "failed",
-      title: "写入未完成",
-      detail:
-        artifact.error?.trim() ||
-        "文件写入过程中出现异常，暂时没有可渲染的内容。",
+      titleKey: "workspace.artifactRenderer.empty.failed.title",
+      detailKey: ARTIFACT_RENDERER_EMPTY_DETAIL_KEYS.failed,
+      detail: artifact.error?.trim() || undefined,
       skeletonKind,
     };
   }
@@ -194,8 +225,8 @@ function resolveEmptyArtifactSurfaceState(
   ) {
     return {
       mode: "finished",
-      title: "写入已结束",
-      detail: "文件已经创建完成，但当前还没有可直接预览的内容。",
+      titleKey: "workspace.artifactRenderer.empty.finished.title",
+      detailKey: ARTIFACT_RENDERER_EMPTY_DETAIL_KEYS.finished,
       skeletonKind,
     };
   }
@@ -206,14 +237,17 @@ function resolveEmptyArtifactSurfaceState(
     writePhase === "preparing" ||
     writePhase === "streaming"
   ) {
-    const phaseLabel = formatArtifactWritePhaseLabel(writePhase);
+    const titleKey =
+      writePhase && ARTIFACT_RENDERER_WRITE_PHASE_LABEL_KEYS[writePhase]
+        ? ARTIFACT_RENDERER_WRITE_PHASE_LABEL_KEYS[writePhase]
+        : ARTIFACT_RENDERER_WRITE_PHASE_LABEL_KEYS.preparing;
     return {
       mode: "writing",
-      title: phaseLabel,
-      detail:
+      titleKey,
+      detailKey:
         writePhase === "preparing"
-          ? "文件已创建，正在生成首段内容。"
-          : "内容正在持续写入，首段到达后会立即替换这块骨架。",
+          ? ARTIFACT_RENDERER_EMPTY_DETAIL_KEYS.preparing
+          : ARTIFACT_RENDERER_EMPTY_DETAIL_KEYS.streaming,
       skeletonKind,
     };
   }
@@ -329,9 +363,12 @@ const EmptyArtifactSurface: React.FC<{
   state: EmptyArtifactSurfaceState;
   tone?: "dark" | "light";
 }> = memo(({ artifact, state, tone = "dark" }) => {
+  const { t } = useTranslation("workspace");
   const filePath = resolveArtifactProtocolFilePath(artifact);
   const isWriting = state.mode === "writing";
   const isFailed = state.mode === "failed";
+  const title = t(state.titleKey);
+  const detail = state.detail ?? t(state.detailKey);
   const Icon = isFailed
     ? AlertCircle
     : state.skeletonKind === "code"
@@ -374,7 +411,7 @@ const EmptyArtifactSurface: React.FC<{
                 tone === "light" ? "text-foreground" : "text-white",
               )}
             >
-              {state.title}
+              {title}
             </div>
             <div
               className={cn(
@@ -382,7 +419,7 @@ const EmptyArtifactSurface: React.FC<{
                 tone === "light" ? "text-muted-foreground" : "text-gray-400",
               )}
             >
-              {state.detail}
+              {detail}
             </div>
             <div
               className={cn(
@@ -447,39 +484,49 @@ interface StreamingIndicatorProps {
  * @requirements 11.1, 11.3
  */
 const StreamingIndicator: React.FC<StreamingIndicatorProps> = memo(
-  ({ isCompleting = false }) => (
-    <div
-      className={cn(
-        "absolute bottom-3 right-3 flex items-center gap-2 px-3 py-1.5 rounded-full transition-all duration-300",
-        isCompleting ? "bg-green-500/20 scale-95 opacity-80" : "bg-blue-500/20",
-      )}
-    >
-      {isCompleting ? (
-        <>
-          <div className="w-4 h-4 text-green-400">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-          </div>
-          <span className="text-xs text-green-400">完成</span>
-        </>
-      ) : (
-        <>
-          <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
-          <span className="text-xs text-blue-400">生成中...</span>
-          {/* 进度动画条 */}
-          <div className="w-12 h-1 bg-blue-500/30 rounded-full overflow-hidden">
-            <div className="h-full bg-blue-400 rounded-full animate-streaming-progress" />
-          </div>
-        </>
-      )}
-    </div>
-  ),
+  ({ isCompleting = false }) => {
+    const { t } = useTranslation("workspace");
+
+    return (
+      <div
+        className={cn(
+          "absolute bottom-3 right-3 flex items-center gap-2 px-3 py-1.5 rounded-full transition-all duration-300",
+          isCompleting
+            ? "bg-green-500/20 scale-95 opacity-80"
+            : "bg-blue-500/20",
+        )}
+      >
+        {isCompleting ? (
+          <>
+            <div className="w-4 h-4 text-green-400">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            </div>
+            <span className="text-xs text-green-400">
+              {t("workspace.artifactRenderer.streaming.completed")}
+            </span>
+          </>
+        ) : (
+          <>
+            <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+            <span className="text-xs text-blue-400">
+              {t("workspace.artifactRenderer.streaming.generating")}
+            </span>
+            {/* 进度动画条 */}
+            <div className="w-12 h-1 bg-blue-500/30 rounded-full overflow-hidden">
+              <div className="h-full bg-blue-400 rounded-full animate-streaming-progress" />
+            </div>
+          </>
+        )}
+      </div>
+    );
+  },
 );
 StreamingIndicator.displayName = "StreamingIndicator";
 
@@ -490,44 +537,50 @@ StreamingIndicator.displayName = "StreamingIndicator";
 const FallbackRenderer: React.FC<{
   artifact: Artifact;
   tone?: "dark" | "light";
-}> = memo(({ artifact, tone = "dark" }) => (
-  <div
-    className={cn(
-      "flex flex-col h-full",
-      tone === "light" ? "bg-background" : "bg-[#1e2227]",
-    )}
-  >
-    {/* 提示区域 */}
-    <div className="p-4 border-b border-yellow-500/20 bg-yellow-500/10">
-      <div className="flex items-center gap-2 text-yellow-400 font-medium mb-2">
-        <AlertTriangle className="w-5 h-5" />
-        <span>未知类型</span>
-      </div>
-      <div
-        className={cn(
-          "text-sm",
-          tone === "light" ? "text-muted-foreground" : "text-gray-400",
-        )}
-      >
-        类型 "{artifact.type}" 没有对应的渲染器，显示原始内容。
-      </div>
-    </div>
+}> = memo(({ artifact, tone = "dark" }) => {
+  const { t } = useTranslation("workspace");
 
-    {/* 内容区域 */}
-    <div className="flex-1 overflow-auto p-4">
-      <pre
-        className={cn(
-          "overflow-auto whitespace-pre-wrap rounded p-3 text-sm",
-          tone === "light"
-            ? "border border-border bg-muted/30 text-foreground"
-            : "bg-black/30 text-gray-300",
-        )}
-      >
-        {artifact.content}
-      </pre>
+  return (
+    <div
+      className={cn(
+        "flex flex-col h-full",
+        tone === "light" ? "bg-background" : "bg-[#1e2227]",
+      )}
+    >
+      {/* 提示区域 */}
+      <div className="p-4 border-b border-yellow-500/20 bg-yellow-500/10">
+        <div className="flex items-center gap-2 text-yellow-400 font-medium mb-2">
+          <AlertTriangle className="w-5 h-5" />
+          <span>{t("workspace.artifactRenderer.fallback.unknownType")}</span>
+        </div>
+        <div
+          className={cn(
+            "text-sm",
+            tone === "light" ? "text-muted-foreground" : "text-gray-400",
+          )}
+        >
+          {t("workspace.artifactRenderer.fallback.detail", {
+            type: artifact.type,
+          })}
+        </div>
+      </div>
+
+      {/* 内容区域 */}
+      <div className="flex-1 overflow-auto p-4">
+        <pre
+          className={cn(
+            "overflow-auto whitespace-pre-wrap rounded p-3 text-sm",
+            tone === "light"
+              ? "border border-border bg-muted/30 text-foreground"
+              : "bg-black/30 text-gray-300",
+          )}
+        >
+          {artifact.content}
+        </pre>
+      </div>
     </div>
-  </div>
-));
+  );
+});
 FallbackRenderer.displayName = "FallbackRenderer";
 
 // ============================================================================
@@ -585,6 +638,7 @@ export const ArtifactRenderer: React.FC<ArtifactRendererComponentProps> = memo(
     tone = "dark",
     canvasFactoryProps,
   }) => {
+    const { t } = useTranslation("workspace");
     // 错误状态管理
     const [renderError, setRenderError] = useState<Error | null>(null);
     const [showSourceOnError, setShowSourceOnError] = useState(false);
@@ -676,9 +730,10 @@ export const ArtifactRenderer: React.FC<ArtifactRendererComponentProps> = memo(
           >
             <div className="flex items-center justify-between border-b border-yellow-500/20 bg-yellow-500/10 p-2">
               <span className="text-sm text-yellow-400">
-                源码视图（渲染失败）
+                {t("workspace.artifactRenderer.sourceOnError.title")}
               </span>
               <button
+                type="button"
                 onClick={handleRetry}
                 className={cn(
                   "flex items-center gap-1 rounded px-2 py-1 text-xs",
@@ -688,7 +743,7 @@ export const ArtifactRenderer: React.FC<ArtifactRendererComponentProps> = memo(
                 )}
               >
                 <RefreshCw className="w-3 h-3" />
-                重试
+                {t("workspace.artifactRenderer.sourceOnError.retry")}
               </button>
             </div>
             <div className="flex-1 overflow-auto p-4">

@@ -11,6 +11,10 @@ import type {
 import type { Message, MessageImage } from "../types";
 import { prepareAgentStreamSubmitDraft } from "./agentStreamSubmitDraft";
 import type { AgentStreamPreparedSendEnv } from "./agentStreamPreparedSendEnv";
+import {
+  resolveAgentRuntimeStatusPresentation,
+  type AgentRuntimeStatusPresentation,
+} from "../utils/fastResponseRouting";
 
 export type AgentStreamUserInputSendPreparationEnv = Pick<
   AgentStreamPreparedSendEnv,
@@ -67,6 +71,7 @@ export interface PreparedAgentStreamUserInputSend {
   assistantMsgId: string;
   userMsgId: string | null;
   assistantMsg: Message;
+  runtimeStatusPresentation?: AgentRuntimeStatusPresentation;
 }
 
 export function prepareAgentStreamUserInputSend(
@@ -100,6 +105,8 @@ export function prepareAgentStreamUserInputSend(
     : null;
   const observer = sendOptions?.observer;
   const requestMetadata = sendOptions?.requestMetadata;
+  const runtimeStatusPresentation =
+    resolveAgentRuntimeStatusPresentation(requestMetadata);
   const messagePurpose = sendOptions?.purpose;
   const assistantDraft = sendOptions?.assistantDraft;
   const searchMode = sendOptions?.searchMode;
@@ -160,5 +167,6 @@ export function prepareAgentStreamUserInputSend(
     assistantMsgId,
     userMsgId,
     assistantMsg,
+    runtimeStatusPresentation,
   };
 }

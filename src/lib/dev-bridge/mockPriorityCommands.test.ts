@@ -148,9 +148,6 @@ describe("mockPriorityCommands", () => {
     expect(shouldDisallowMockFallbackInBrowser("voice_models_download")).toBe(
       true,
     );
-    expect(shouldDisallowMockFallbackInBrowser("list_plugin_tasks")).toBe(
-      false,
-    );
   });
 
   it("运行时真相事件在浏览器模式下禁止静默退回 mock", () => {
@@ -172,9 +169,6 @@ describe("mockPriorityCommands", () => {
     ).toBe(true);
     expect(
       shouldDisallowMockEventFallbackInBrowser("companion-pet-status"),
-    ).toBe(false);
-    expect(
-      shouldDisallowMockEventFallbackInBrowser(" plugin-task-event "),
     ).toBe(false);
   });
 });

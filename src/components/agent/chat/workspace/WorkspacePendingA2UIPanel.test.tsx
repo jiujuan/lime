@@ -21,6 +21,35 @@ vi.mock("../components/A2UITaskCard", () => ({
   A2UITaskCard: (props?: unknown) => mockA2UITaskCard(props),
 }));
 
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string, options?: unknown) => {
+      const translations: Record<string, string> = {
+        "workspace.pendingA2UI.footer.progressStep":
+          "Finish this step first; the remaining fields will follow.",
+        "workspace.pendingA2UI.footer.stale":
+          "Your latest details were received. No need to submit again for now.",
+        "workspace.pendingA2UI.status.progressStep":
+          "Step {{currentStep}}/{{totalSteps}}",
+        "workspace.pendingA2UI.status.stale": "Still processing",
+      };
+      let template: string | undefined = translations[key];
+      if (!template && typeof options === "string") {
+        template = options;
+      }
+      if (!template && options && typeof options === "object") {
+        const defaultValue = (options as { defaultValue?: unknown })
+          .defaultValue;
+        template = typeof defaultValue === "string" ? defaultValue : undefined;
+      }
+      template ??= key;
+      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+        String((options as Record<string, unknown> | undefined)?.[name] ?? ""),
+      );
+    },
+  }),
+}));
+
 vi.mock("./A2UISubmissionNotice", () => ({
   A2UISubmissionNotice: (props?: {
     notice?: { title?: string; summary?: string };
@@ -136,7 +165,54 @@ describe("WorkspacePendingA2UIPanel", () => {
         compact: true,
         surface: "embedded",
         submitDisabled: true,
-        statusLabel: "继续处理中",
+        statusLabel: "Still processing",
+        footerText:
+          "Your latest details were received. No need to submit again for now.",
+      }),
+    );
+  });
+
+  it("渐进式表单应使用 workspace namespace 生成步骤状态", () => {
+    mockUseStickyA2UIForm.mockReturnValue({
+      visibleForm: {
+        id: "form-progressive",
+        root: "root",
+        components: [],
+        data: {
+          progressiveA2UI: {
+            currentStep: 2,
+            totalSteps: 3,
+            questionsInStep: 1,
+            totalQuestions: 4,
+            isFinalStep: false,
+            fieldIds: ["topic"],
+          },
+        },
+        submitAction: {
+          label: "继续处理",
+          action: { name: "submit" },
+        },
+      },
+      isStale: false,
+    });
+
+    renderPanel({
+      pendingA2UIForm: {
+        id: "form-progressive",
+        root: "root",
+        components: [],
+        submitAction: {
+          label: "继续处理",
+          action: { name: "submit" },
+        },
+      },
+    });
+
+    expect(mockA2UITaskCard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        footerText: "Finish this step first; the remaining fields will follow.",
+        statusLabel: "Step 2/3",
+        submitDisabled: false,
       }),
     );
   });

@@ -8,14 +8,10 @@ use tokio::sync::RwLock;
 use crate::commands::api_key_provider_cmd::ApiKeyProviderServiceState;
 use crate::commands::context_memory::ContextMemoryServiceState;
 use crate::commands::machine_id_cmd::MachineIdState;
-use crate::commands::plugin_cmd::PluginManagerState;
-use crate::commands::plugin_install_cmd::PluginInstallerState;
 use crate::commands::skill_cmd::SkillServiceState;
 use crate::config::{GlobalConfigManager, GlobalConfigManagerState};
-use crate::database;
-use crate::plugin;
 use crate::telemetry;
-use lime_core::config::{Config, ConfigManager};
+use lime_core::config::{self, Config, ConfigManager};
 use lime_services::api_key_provider_service::ApiKeyProviderService;
 use lime_services::context_memory_service::{ContextMemoryConfig, ContextMemoryService};
 use lime_services::skill_service::SkillService;
@@ -45,8 +41,6 @@ pub struct ServiceStates {
     pub skill_service: SkillServiceState,
     pub api_key_provider_service: ApiKeyProviderServiceState,
     pub machine_id_service: MachineIdState,
-    pub plugin_manager: PluginManagerState,
-    pub plugin_installer: PluginInstallerState,
     pub context_memory_service: ContextMemoryServiceState,
 }
 
@@ -66,15 +60,8 @@ pub fn init_service_states() -> ServiceStates {
         .expect("Failed to initialize MachineIdService");
     let machine_id_service_state: MachineIdState = Arc::new(RwLock::new(machine_id_service));
 
-    // Initialize PluginManager
-    let plugin_manager = plugin::PluginManager::with_defaults();
-    let plugin_manager_state = PluginManagerState(Arc::new(RwLock::new(plugin_manager)));
-
-    // Initialize PluginInstaller
-    let plugin_installer_state = init_plugin_installer();
-
     // Initialize ContextMemoryService
-    let app_config = lime_core::config::load_config().unwrap_or_default();
+    let app_config = config::load_config().unwrap_or_default();
     let context_memory_config = build_context_memory_config(&app_config);
     let context_memory_service = ContextMemoryService::new(context_memory_config)
         .expect("Failed to initialize ContextMemoryService");
@@ -84,8 +71,6 @@ pub fn init_service_states() -> ServiceStates {
         skill_service: skill_service_state,
         api_key_provider_service: api_key_provider_service_state,
         machine_id_service: machine_id_service_state,
-        plugin_manager: plugin_manager_state,
-        plugin_installer: plugin_installer_state,
         context_memory_service: context_memory_service_state,
     }
 }
@@ -107,46 +92,6 @@ fn build_context_memory_config(config: &Config) -> ContextMemoryConfig {
     }
 
     context_config
-}
-
-/// 初始化插件安装器
-fn init_plugin_installer() -> PluginInstallerState {
-    let db_path = database::get_db_path().expect("Failed to get database path for PluginInstaller");
-    let plugins_dir = dirs::data_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("lime")
-        .join("plugins");
-    let temp_dir = std::env::temp_dir().join("lime_plugin_install");
-
-    // 创建目录（如果不存在）
-    if let Err(e) = std::fs::create_dir_all(&plugins_dir) {
-        tracing::warn!("无法创建插件目录: {}", e);
-    }
-    if let Err(e) = std::fs::create_dir_all(&temp_dir) {
-        tracing::warn!("无法创建插件临时目录: {}", e);
-    }
-
-    match plugin::installer::PluginInstaller::from_paths(plugins_dir, temp_dir, &db_path) {
-        Ok(installer) => {
-            tracing::info!("[启动] 插件安装器初始化成功");
-            PluginInstallerState(Arc::new(RwLock::new(installer)))
-        }
-        Err(e) => {
-            tracing::error!("[启动] 插件安装器初始化失败: {}", e);
-            // 创建一个默认的安装器（使用临时目录）
-            let fallback_plugins_dir = std::env::temp_dir().join("lime_plugins_fallback");
-            let fallback_temp_dir = std::env::temp_dir().join("lime_plugin_install_fallback");
-            let _ = std::fs::create_dir_all(&fallback_plugins_dir);
-            let _ = std::fs::create_dir_all(&fallback_temp_dir);
-            let installer = plugin::installer::PluginInstaller::from_paths(
-                fallback_plugins_dir,
-                fallback_temp_dir,
-                &db_path,
-            )
-            .expect("Failed to create fallback PluginInstaller");
-            PluginInstallerState(Arc::new(RwLock::new(installer)))
-        }
-    }
 }
 
 /// 遥测状态

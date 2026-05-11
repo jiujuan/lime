@@ -6,6 +6,7 @@ import {
   FileText,
   Loader2,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
@@ -68,6 +69,7 @@ export function SkillContentDialog({
   loading,
   error,
 }: SkillContentDialogProps) {
+  const { t } = useTranslation("agent");
   const content = inspection?.content ?? "";
   const compliance = inspection?.standardCompliance;
   const metadataEntries = Object.entries(inspection?.metadata ?? {});
@@ -85,7 +87,7 @@ export function SkillContentDialog({
       return (
         <InlineTag className="gap-1 bg-red-100 text-red-700">
           <AlertTriangle className="h-3 w-3" />
-          待修复
+          {t("skills.contentDialog.compliance.needsFix")}
         </InlineTag>
       );
     }
@@ -94,7 +96,7 @@ export function SkillContentDialog({
       return (
         <InlineTag className="gap-1 bg-amber-100 text-amber-700">
           <AlertTriangle className="h-3 w-3" />
-          含兼容字段
+          {t("skills.contentDialog.compliance.compatFields")}
         </InlineTag>
       );
     }
@@ -102,7 +104,7 @@ export function SkillContentDialog({
     return (
       <InlineTag className="gap-1 bg-emerald-100 text-emerald-700">
         <CheckCircle2 className="h-3 w-3" />
-        标准
+        {t("skills.contentDialog.compliance.standard")}
       </InlineTag>
     );
   })();
@@ -127,7 +129,7 @@ export function SkillContentDialog({
           <DialogDescription>
             {skillDescription?.trim()
               ? skillDescription
-              : "查看 Skill 的标准检查结果与原始 SKILL.md"}
+              : t("skills.contentDialog.description.default")}
           </DialogDescription>
         </DialogHeader>
 
@@ -135,7 +137,7 @@ export function SkillContentDialog({
           {loading && (
             <div className="flex h-full items-center justify-center gap-2 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
-              正在检查 Skill 包...
+              {t("skills.contentDialog.loading")}
             </div>
           )}
 
@@ -155,7 +157,9 @@ export function SkillContentDialog({
                       {complianceBadge}
                       {inspection.license && (
                         <InlineTag className="bg-slate-100 text-slate-700">
-                          License: {inspection.license}
+                          {t("skills.contentDialog.license", {
+                            license: inspection.license,
+                          })}
                         </InlineTag>
                       )}
                       {resourceTags.map((tag) => (
@@ -171,7 +175,7 @@ export function SkillContentDialog({
                     <div className="mt-4 grid gap-3 md:grid-cols-3">
                       <div className="rounded-lg border bg-muted/20 px-3 py-2">
                         <div className="text-xs text-muted-foreground">
-                          验证错误
+                          {t("skills.contentDialog.metric.validationErrors")}
                         </div>
                         <div className="mt-1 text-sm font-semibold">
                           {validationErrors.length}
@@ -179,7 +183,7 @@ export function SkillContentDialog({
                       </div>
                       <div className="rounded-lg border bg-muted/20 px-3 py-2">
                         <div className="text-xs text-muted-foreground">
-                          兼容字段
+                          {t("skills.contentDialog.metric.deprecatedFields")}
                         </div>
                         <div className="mt-1 text-sm font-semibold">
                           {deprecatedFields.length}
@@ -187,7 +191,7 @@ export function SkillContentDialog({
                       </div>
                       <div className="rounded-lg border bg-muted/20 px-3 py-2">
                         <div className="text-xs text-muted-foreground">
-                          允许工具
+                          {t("skills.contentDialog.metric.allowedTools")}
                         </div>
                         <div className="mt-1 text-sm font-semibold">
                           {allowedTools.length}
@@ -197,7 +201,9 @@ export function SkillContentDialog({
                   </section>
 
                   {validationErrors.length > 0 && (
-                    <Section title="验证错误">
+                    <Section
+                      title={t("skills.contentDialog.section.validationErrors")}
+                    >
                       <div className="space-y-2">
                         {validationErrors.map((message) => (
                           <div
@@ -212,7 +218,9 @@ export function SkillContentDialog({
                   )}
 
                   {deprecatedFields.length > 0 && (
-                    <Section title="兼容字段">
+                    <Section
+                      title={t("skills.contentDialog.section.deprecatedFields")}
+                    >
                       <div className="flex flex-wrap gap-2">
                         {deprecatedFields.map((field) => (
                           <InlineTag
@@ -227,7 +235,7 @@ export function SkillContentDialog({
                   )}
 
                   <div className="grid gap-4 md:grid-cols-2">
-                    <Section title="元数据">
+                    <Section title={t("skills.contentDialog.section.metadata")}>
                       {metadataEntries.length > 0 ? (
                         <dl className="space-y-3">
                           {metadataEntries.map(([key, value]) => (
@@ -246,12 +254,14 @@ export function SkillContentDialog({
                         </dl>
                       ) : (
                         <div className="text-sm text-muted-foreground">
-                          未声明 metadata。
+                          {t("skills.contentDialog.metadata.empty")}
                         </div>
                       )}
                     </Section>
 
-                    <Section title="允许工具">
+                    <Section
+                      title={t("skills.contentDialog.section.allowedTools")}
+                    >
                       {allowedTools.length > 0 ? (
                         <div className="flex flex-wrap gap-2">
                           {allowedTools.map((tool) => (
@@ -265,27 +275,29 @@ export function SkillContentDialog({
                         </div>
                       ) : (
                         <div className="text-sm text-muted-foreground">
-                          未声明 allowed-tools。
+                          {t("skills.contentDialog.allowedTools.empty")}
                         </div>
                       )}
                     </Section>
                   </div>
 
-                  <Section title="原始 SKILL.md">
+                  <Section
+                    title={t("skills.contentDialog.section.originalSkill")}
+                  >
                     {content.trim() ? (
                       <div className="[--terminal-bg:#ffffff] [--terminal-fg:#111827] [--terminal-border:#e5e7eb] [--terminal-muted:#6b7280] [--terminal-accent:#2563eb] [--terminal-tab-bg:#f8fafc]">
                         <MarkdownPreview content={content} />
                       </div>
                     ) : (
                       <div className="text-sm text-muted-foreground">
-                        SKILL.md 内容为空
+                        {t("skills.contentDialog.content.empty")}
                       </div>
                     )}
                   </Section>
                 </div>
               ) : (
                 <div className="flex h-full items-center justify-center px-6 text-sm text-muted-foreground">
-                  暂无 Skill 检查结果
+                  {t("skills.contentDialog.emptyInspection")}
                 </div>
               )}
             </>

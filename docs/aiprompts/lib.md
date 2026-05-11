@@ -9,8 +9,7 @@
 ```
 src/lib/
 ├── api/                # API 封装
-│   ├── apiKeyProvider.ts
-│   └── pluginUI.ts     # 插件元数据 API
+│   └── apiKeyProvider.ts
 ├── config/             # 配置
 │   └── providers.ts
 ├── types/              # 类型定义

@@ -17,7 +17,7 @@ import { resolveUserFacingToolDisplayLabel } from "../utils/toolDisplayInfo";
 import { resolveTeamWorkspaceDisplayRuntimeStatusLabel } from "../utils/teamWorkspaceCopy";
 import {
   buildRuntimeStatusPresentationText,
-  isInternalRoutingRuntimeStatus,
+  isRuntimeStatusDiagnosticsOnly,
 } from "../utils/turnSummaryPresentation";
 import { normalizeProcessDisplayText } from "../utils/processDisplayText";
 
@@ -181,7 +181,7 @@ function buildRuntimeStatusEntry(
   sessionId: string,
   status: AgentRuntimeStatusPayload,
 ) {
-  if (isInternalRoutingRuntimeStatus(status)) {
+  if (isRuntimeStatusDiagnosticsOnly(status)) {
     return null;
   }
 

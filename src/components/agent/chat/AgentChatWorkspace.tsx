@@ -31,7 +31,6 @@ import { useSessionFiles } from "./hooks/useSessionFiles";
 import { useContentSync } from "./hooks/useContentSync";
 import { useDeveloperFeatureFlags } from "@/hooks/useDeveloperFeatureFlags";
 import { useGlobalMediaGenerationDefaults } from "@/hooks/useGlobalMediaGenerationDefaults";
-import { useConfiguredProviders } from "@/hooks/useConfiguredProviders";
 import { useServiceModelsConfig } from "@/hooks/useServiceModelsConfig";
 import { useTrayModelShortcuts } from "./hooks/useTrayModelShortcuts";
 import { type CanvasWorkbenchLayoutMode } from "./components/CanvasWorkbenchLayout";
@@ -141,7 +140,6 @@ import {
   buildGeneralAgentSystemPrompt,
   resolveAgentChatMode,
 } from "./utils/generalAgentPrompt";
-import { shouldUseAgentFastResponseSelection } from "./utils/fastResponseModel";
 import { loadPersisted, savePersisted } from "./hooks/agentChatStorage";
 import { loadPersistedProjectId } from "./hooks/agentProjectStorage";
 import { loadPersistedSessionWorkspaceId } from "./hooks/agentProjectStorage";
@@ -4205,22 +4203,6 @@ export function AgentChatWorkspace({
   });
   const { handleImageWorkbenchCommand, resolveImageWorkbenchSkillRequest } =
     imageWorkbenchActionRuntime;
-  const shouldPrepareFastResponseProviders =
-    chatMode === "general" &&
-    mappedTheme === "general" &&
-    !isThemeWorkbench &&
-    !contentId &&
-    messages.length === 0 &&
-    shouldUseAgentFastResponseSelection({
-      providerType,
-      model,
-    });
-  const { providers: fastResponseConfiguredProviders } = useConfiguredProviders(
-    {
-      autoLoad: shouldPrepareFastResponseProviders,
-    },
-  );
-
   const {
     handleSend,
     handleRecommendationClick,
@@ -4262,9 +4244,6 @@ export function AgentChatWorkspace({
     browserAssistAutoLaunch: browserAssistRequestAutoLaunch,
     workspaceRequestMetadataBase: initialRequestMetadata,
     serviceModels,
-    currentProviderType: providerType,
-    currentModel: model,
-    configuredProviders: fastResponseConfiguredProviders,
     messages,
     bootstrapDispatchPreview,
     sendMessage,

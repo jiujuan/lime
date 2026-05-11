@@ -621,9 +621,9 @@ describe("项目管理 API", () => {
       expect(getCreateProjectErrorMessage("[object Object]", copy)).toBe(
         "Project creation failed. Check logs.",
       );
-      expect(getCreateProjectErrorMessage("路径已存在: /tmp/project", copy)).toBe(
-        "Project folder already exists.",
-      );
+      expect(
+        getCreateProjectErrorMessage("路径已存在: /tmp/project", copy),
+      ).toBe("Project folder already exists.");
       expect(getCreateProjectErrorMessage("no such column: icon", copy)).toBe(
         "Database schema is outdated. Restart Lime.",
       );

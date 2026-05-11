@@ -77,7 +77,6 @@ export function VideoGenSettings() {
     videoPreference.preferredProviderId && !selectedProvider
       ? t("settings.mediaGeneration.warning.unavailable", {
           id: videoPreference.preferredProviderId,
-          defaultValue: "当前配置不可用：{{id}}",
         })
       : undefined;
 
@@ -86,7 +85,6 @@ export function VideoGenSettings() {
     !availableModels.includes(videoPreference.preferredModelId)
       ? t("settings.mediaGeneration.warning.unavailable", {
           id: videoPreference.preferredModelId,
-          defaultValue: "当前配置不可用：{{id}}",
         })
       : undefined;
 
@@ -113,14 +111,14 @@ export function VideoGenSettings() {
       setVideoPreference(nextPreference);
       setMessage({
         type: "success",
-        text: t("settings.mediaGeneration.message.saved", "设置已保存"),
+        text: t("settings.mediaGeneration.message.saved"),
       });
       setTimeout(() => setMessage(null), 3000);
     } catch (error) {
       console.error("保存视频服务配置失败:", error);
       setMessage({
         type: "error",
-        text: t("settings.mediaGeneration.message.saveFailed", "保存失败"),
+        text: t("settings.mediaGeneration.message.saveFailed"),
       });
       setTimeout(() => setMessage(null), 3000);
     }
@@ -171,33 +169,18 @@ export function VideoGenSettings() {
   };
 
   const providerHint = providersLoading
-    ? t(
-        "settings.mediaGeneration.video.hint.loading",
-        "仅展示当前已识别为视频能力的 Provider。",
-      )
+    ? t("settings.mediaGeneration.video.hint.loading")
     : videoProviders.length === 0
-      ? t(
-          "settings.mediaGeneration.video.hint.empty",
-          "当前没有可用视频 Provider；请先在设置 -> AI 服务商中配置可生成视频的服务。",
-        )
-      : t(
-          "settings.mediaGeneration.video.hint.ready",
-          "视频设置和图片、语音共用同一套服务模型骨架，后续新增来源时无需再做第二套页面。",
-        );
+      ? t("settings.mediaGeneration.video.hint.empty")
+      : t("settings.mediaGeneration.video.hint.ready");
 
   return (
     <div className="max-w-[820px] space-y-4">
       <MediaPreferenceSection
-        title={t("settings.mediaGeneration.video.title", "视频服务模型")}
-        description={t(
-          "settings.mediaGeneration.video.description",
-          "这里配置视频任务的默认 Provider、模型与回退策略，保持和图片、语音一致的简洁设置结构。",
-        )}
-        selectorLabel={t("settings.mediaGeneration.selector.label", "默认模型")}
-        selectorDescription={t(
-          "settings.mediaGeneration.selector.description",
-          "统一使用聊天页同款模型选择器；未指定时沿用自动匹配策略。",
-        )}
+        title={t("settings.mediaGeneration.video.title")}
+        description={t("settings.mediaGeneration.video.description")}
+        selectorLabel={t("settings.mediaGeneration.selector.label")}
+        selectorDescription={t("settings.mediaGeneration.selector.description")}
         selectionWarningText={providerUnavailableLabel ?? modelUnavailableLabel}
         providerType={videoPreference.preferredProviderId ?? ""}
         setProviderType={handleProviderChange}
@@ -214,22 +197,15 @@ export function VideoGenSettings() {
         }
         allowFallback={videoPreference.allowFallback ?? true}
         onAllowFallbackChange={handleFallbackChange}
-        fallbackTitle={t(
-          "settings.mediaGeneration.fallback.title",
-          "Provider 不可用时自动回退",
-        )}
+        fallbackTitle={t("settings.mediaGeneration.fallback.title")}
         fallbackDescription={t(
           "settings.mediaGeneration.video.fallback.description",
-          "关闭后，若当前默认视频服务缺失、被禁用或无可用 Key，将直接提示错误。",
         )}
-        emptyStateTitle={t(
-          "settings.mediaGeneration.video.empty.title",
-          "暂无可用视频模型",
-        )}
+        emptyStateTitle={t("settings.mediaGeneration.video.empty.title")}
         emptyStateDescription={providerHint}
         disabled={!config}
         onReset={handleResetPreference}
-        resetLabel={t("settings.mediaGeneration.action.reset", "恢复默认")}
+        resetLabel={t("settings.mediaGeneration.action.reset")}
         resetDisabled={!hasMediaGenerationPreferenceOverride(videoPreference)}
       />
 

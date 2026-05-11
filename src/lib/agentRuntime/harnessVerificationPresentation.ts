@@ -5,6 +5,8 @@ import type {
   AgentRuntimeEvidenceVerificationSummary,
   AgentRuntimeGuiSmokeVerificationSummary,
 } from "@/lib/api/agentRuntime";
+import type { TFunction } from "i18next";
+import { formatNumber } from "@/i18n/format";
 
 export type HarnessVerificationBadgeVariant =
   | "secondary"
@@ -23,61 +25,123 @@ export interface HarnessEvidenceVerificationCardPresentation {
   description: string;
 }
 
+type AgentTranslate = TFunction<"agent", undefined>;
+
+export interface HarnessVerificationPresentationOptions {
+  locale: string;
+  t: AgentTranslate;
+}
+
 export function resolveHarnessVerificationOutcomeBadgePresentation(
-  outcome?: AgentRuntimeEvidenceVerificationOutcome,
+  outcome: AgentRuntimeEvidenceVerificationOutcome | undefined,
+  t: AgentTranslate,
 ): HarnessVerificationOutcomeBadgePresentation {
   switch (outcome) {
     case "success":
-      return { label: "通过", variant: "secondary" };
+      return {
+        label: t("agentChat.harnessVerification.badge.success"),
+        variant: "secondary",
+      };
     case "blocking_failure":
-      return { label: "阻塞失败", variant: "destructive" };
+      return {
+        label: t("agentChat.harnessVerification.badge.blockingFailure"),
+        variant: "destructive",
+      };
     case "advisory_failure":
-      return { label: "提示失败", variant: "outline" };
+      return {
+        label: t("agentChat.harnessVerification.badge.advisoryFailure"),
+        variant: "outline",
+      };
     case "recovered":
-      return { label: "已恢复", variant: "outline" };
+      return {
+        label: t("agentChat.harnessVerification.badge.recovered"),
+        variant: "outline",
+      };
     default:
-      return { label: "未定", variant: "outline" };
+      return {
+        label: t("agentChat.harnessVerification.badge.unknown"),
+        variant: "outline",
+      };
   }
 }
 
 export function describeHarnessArtifactValidatorVerification(
-  summary?: AgentRuntimeArtifactValidatorVerificationSummary,
+  summary: AgentRuntimeArtifactValidatorVerificationSummary | undefined,
+  options: HarnessVerificationPresentationOptions,
 ): string {
   if (!summary?.applicable) {
-    return "当前没有适用的 Artifact 校验。";
+    return options.t("agentChat.harnessVerification.artifact.empty");
   }
 
-  return `记录 ${summary.record_count} · issues ${summary.issue_count} · repaired ${summary.repaired_count} · fallback ${summary.fallback_used_count}`;
+  return options.t("agentChat.harnessVerification.artifact.description", {
+    fallbackCount: formatNumber(summary.fallback_used_count, {
+      locale: options.locale,
+    }),
+    issueCount: formatNumber(summary.issue_count, {
+      locale: options.locale,
+    }),
+    recordCount: formatNumber(summary.record_count, {
+      locale: options.locale,
+    }),
+    repairedCount: formatNumber(summary.repaired_count, {
+      locale: options.locale,
+    }),
+  });
 }
 
 export function describeHarnessBrowserVerification(
-  summary?: AgentRuntimeBrowserVerificationSummary,
+  summary: AgentRuntimeBrowserVerificationSummary | undefined,
+  options: HarnessVerificationPresentationOptions,
 ): string {
   if (!summary) {
-    return "当前线程没有浏览器验证线索。";
+    return options.t("agentChat.harnessVerification.browser.empty");
   }
 
-  return `记录 ${summary.record_count} · 成功 ${summary.success_count} · 失败 ${summary.failure_count} · 未判定 ${summary.unknown_count}`;
+  return options.t("agentChat.harnessVerification.browser.description", {
+    failureCount: formatNumber(summary.failure_count, {
+      locale: options.locale,
+    }),
+    recordCount: formatNumber(summary.record_count, {
+      locale: options.locale,
+    }),
+    successCount: formatNumber(summary.success_count, {
+      locale: options.locale,
+    }),
+    unknownCount: formatNumber(summary.unknown_count, {
+      locale: options.locale,
+    }),
+  });
 }
 
 export function describeHarnessGuiSmokeVerification(
-  summary?: AgentRuntimeGuiSmokeVerificationSummary,
+  summary: AgentRuntimeGuiSmokeVerificationSummary | undefined,
+  options: HarnessVerificationPresentationOptions,
 ): string {
   if (!summary) {
-    return "当前线程没有 GUI smoke 结果。";
+    return options.t("agentChat.harnessVerification.guiSmoke.empty");
   }
 
-  const status = summary.status?.trim() || "未知";
+  const status =
+    summary.status?.trim() ||
+    options.t("agentChat.harnessVerification.guiSmoke.unknown");
   const exitCode =
-    typeof summary.exit_code === "number" ? summary.exit_code : "未知";
+    typeof summary.exit_code === "number"
+      ? formatNumber(summary.exit_code, { locale: options.locale })
+      : options.t("agentChat.harnessVerification.guiSmoke.unknown");
+  const result = summary.passed
+    ? options.t("agentChat.harnessVerification.guiSmoke.passed")
+    : options.t("agentChat.harnessVerification.guiSmoke.failed");
 
-  return `状态 ${status} · exit ${exitCode} · ${
-    summary.passed ? "已通过" : "未通过"
-  }`;
+  return options.t("agentChat.harnessVerification.guiSmoke.description", {
+    exitCode,
+    result,
+    status,
+  });
 }
 
 export function buildHarnessEvidenceVerificationCardPresentations(
-  summary?: AgentRuntimeEvidenceVerificationSummary,
+  summary: AgentRuntimeEvidenceVerificationSummary | undefined,
+  options: HarnessVerificationPresentationOptions,
 ): HarnessEvidenceVerificationCardPresentation[] {
   if (!summary) {
     return [];
@@ -88,12 +152,14 @@ export function buildHarnessEvidenceVerificationCardPresentations(
   if (summary.artifact_validator) {
     cards.push({
       key: "artifact_validator",
-      title: "Artifact 校验",
+      title: options.t("agentChat.harnessVerification.artifact.title"),
       badge: resolveHarnessVerificationOutcomeBadgePresentation(
         summary.artifact_validator.outcome,
+        options.t,
       ),
       description: describeHarnessArtifactValidatorVerification(
         summary.artifact_validator,
+        options,
       ),
     });
   }
@@ -101,12 +167,14 @@ export function buildHarnessEvidenceVerificationCardPresentations(
   if (summary.browser_verification) {
     cards.push({
       key: "browser_verification",
-      title: "浏览器验证",
+      title: options.t("agentChat.harnessVerification.browser.title"),
       badge: resolveHarnessVerificationOutcomeBadgePresentation(
         summary.browser_verification.outcome,
+        options.t,
       ),
       description: describeHarnessBrowserVerification(
         summary.browser_verification,
+        options,
       ),
     });
   }
@@ -114,11 +182,15 @@ export function buildHarnessEvidenceVerificationCardPresentations(
   if (summary.gui_smoke) {
     cards.push({
       key: "gui_smoke",
-      title: "GUI Smoke",
+      title: options.t("agentChat.harnessVerification.guiSmoke.title"),
       badge: resolveHarnessVerificationOutcomeBadgePresentation(
         summary.gui_smoke.outcome,
+        options.t,
       ),
-      description: describeHarnessGuiSmokeVerification(summary.gui_smoke),
+      description: describeHarnessGuiSmokeVerification(
+        summary.gui_smoke,
+        options,
+      ),
     });
   }
 

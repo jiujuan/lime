@@ -170,6 +170,75 @@ describe("submitOpRuntimeCompaction", () => {
     });
   });
 
+  it("快速响应路由应让后端解析服务模型，不应把前端当前模型作为本轮 request preference", () => {
+    const result = buildSubmitOpRuntimeCompaction({
+      requestMetadata: {
+        harness: {
+          fast_response_routing: {
+            service_model_slot: "responsive_chat",
+            routing_slot: "responsive_chat_model",
+            resolver: "backend_service_model",
+          },
+          browser_assist: {
+            enabled: true,
+            profile_key: "general_browser_assist",
+          },
+        },
+      },
+      executionRuntime: null,
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: null,
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "react",
+      effectiveProviderType: "deepseek",
+      effectiveModel: "deepseek-v4-pro",
+      webSearch: false,
+      thinking: false,
+    });
+
+    expect(result.shouldSubmitProviderPreference).toBe(false);
+    expect(result.shouldSubmitModelPreference).toBe(false);
+    expect(result.metadata).toEqual({
+      harness: {
+        fast_response_routing: {
+          service_model_slot: "responsive_chat",
+          routing_slot: "responsive_chat_model",
+          resolver: "backend_service_model",
+        },
+        browser_assist: {
+          enabled: true,
+          profile_key: "general_browser_assist",
+        },
+      },
+    });
+  });
+
+  it("快速响应路由不应压过显式模型覆盖", () => {
+    const result = buildSubmitOpRuntimeCompaction({
+      requestMetadata: {
+        harness: {
+          fastResponseRouting: {
+            serviceModelSlot: "responsive_chat",
+            routingSlot: "responsive_chat_model",
+          },
+        },
+      },
+      executionRuntime: null,
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: null,
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "react",
+      effectiveProviderType: "openai",
+      effectiveModel: "gpt-5.4-mini",
+      modelOverride: "gpt-5.4-mini",
+      webSearch: false,
+      thinking: false,
+    });
+
+    expect(result.shouldSubmitProviderPreference).toBe(false);
+    expect(result.shouldSubmitModelPreference).toBe(true);
+  });
+
   it("应将 legacy general workbench alias runtime 视为 general_workbench 做裁剪", () => {
     const result = buildSubmitOpRuntimeCompaction({
       requestMetadata: {

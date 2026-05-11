@@ -876,10 +876,13 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
         "按本地配置填写地址",
       ),
       registryDescriptionWithApiHost: (apiHost) =>
-        t("settings.providers.modelAdd.catalog.registryDescriptionWithApiHost", {
-          apiHost,
-          defaultValue: "模型目录 · {{apiHost}}",
-        }),
+        t(
+          "settings.providers.modelAdd.catalog.registryDescriptionWithApiHost",
+          {
+            apiHost,
+            defaultValue: "模型目录 · {{apiHost}}",
+          },
+        ),
       registryDescriptionWithoutApiHost: t(
         "settings.providers.modelAdd.catalog.registryDescriptionWithoutApiHost",
         "模型目录供应商，按服务文档补充 API Base URL",
@@ -943,7 +946,9 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
         if (!cancelled) {
           setCatalog([]);
           setCatalogError(
-            error instanceof Error ? error.message : catalogCopy.loadErrorDefault,
+            error instanceof Error
+              ? error.message
+              : catalogCopy.loadErrorDefault,
           );
         }
       }
@@ -986,7 +991,10 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
     (template: ProviderTemplate) => {
       setSelectedTemplate(template);
       setFormState(
-        createInitialFormState(template, getTemplateName(template, catalogCopy)),
+        createInitialFormState(
+          template,
+          getTemplateName(template, catalogCopy),
+        ),
       );
       setModelDraft("");
       setSubmitError(null);
@@ -1134,11 +1142,14 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
         "该 Responses 图片入口不提供标准 /models 枚举；请手动添加 gpt-images-2 或 gpt-image-2，图片生成会走 Responses image_generation。",
       ),
       falConfirmedModel: (modelId) =>
-        t("settings.providers.modelAdd.feedback.modelFetch.fal.confirmedModel", {
-          modelId,
-          defaultValue:
-            "已确认 Fal 模型 {{modelId}}，Fal 不提供标准 /models 枚举，后续会使用手动声明的模型 ID。",
-        }),
+        t(
+          "settings.providers.modelAdd.feedback.modelFetch.fal.confirmedModel",
+          {
+            modelId,
+            defaultValue:
+              "已确认 Fal 模型 {{modelId}}，Fal 不提供标准 /models 枚举，后续会使用手动声明的模型 ID。",
+          },
+        ),
       falManualModel: t(
         "settings.providers.modelAdd.feedback.modelFetch.fal.manualModel",
         "Fal 不提供标准 /models 枚举；当前模型优先级没有可用 Fal 图片模型，请手动添加 fal-ai/nano-banana-pro、fal-ai/flux-pro 或其他 fal-ai/... 模型 ID。",
@@ -1370,8 +1381,7 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
             "settings.providers.modelAdd.feedback.modelFetch.autoFilled",
             {
               count: effectiveFetchedModelIds.length,
-              defaultValue:
-                "接口返回 {{count}} 个模型，已自动加入模型优先级。",
+              defaultValue: "接口返回 {{count}} 个模型，已自动加入模型优先级。",
             },
           ),
         });
@@ -1877,10 +1887,7 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
           <div className="space-y-1.5">
             <Label htmlFor="model-api-key" className="text-sm text-slate-600">
               {apiKeyRequired
-                ? t(
-                    "settings.providers.modelAdd.form.apiKey.label",
-                    "API 密钥",
-                  )
+                ? t("settings.providers.modelAdd.form.apiKey.label", "API 密钥")
                 : t(
                     "settings.providers.modelAdd.form.apiKey.optionalLabel",
                     "API 密钥（可选）",
@@ -1992,15 +1999,12 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
               >
                 <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="text-xs font-medium text-slate-500">
-                    {t(
-                      "settings.providers.modelAdd.models.apiSuggestions",
-                      {
-                        visible: suggestedApiModels.length,
-                        total: availableApiModels.length,
-                        defaultValue:
-                          "接口模型（显示 {{visible}} / {{total}} 个，点击添加）",
-                      },
-                    )}
+                    {t("settings.providers.modelAdd.models.apiSuggestions", {
+                      visible: suggestedApiModels.length,
+                      total: availableApiModels.length,
+                      defaultValue:
+                        "接口模型（显示 {{visible}} / {{total}} 个，点击添加）",
+                    })}
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                     <Input

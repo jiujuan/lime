@@ -230,18 +230,12 @@ export function useOemLimeHubProviderSync() {
   const { t } = useTranslation("common");
   const copy = useMemo<ManagedLimeHubProviderSyncCopy>(
     () => ({
-      managedKeyAlias: t(
-        "common.oemLimeHubProviderSync.managedKeyAlias",
-        {
-          defaultValue: MANAGED_LIME_HUB_KEY_ALIAS_FALLBACK,
-        },
-      ),
-      cloudTokenName: t(
-        "common.oemLimeHubProviderSync.cloudTokenName",
-        {
-          defaultValue: MANAGED_LIME_HUB_CLOUD_TOKEN_NAME_FALLBACK,
-        },
-      ),
+      managedKeyAlias: t("common.oemLimeHubProviderSync.managedKeyAlias", {
+        defaultValue: MANAGED_LIME_HUB_KEY_ALIAS_FALLBACK,
+      }),
+      cloudTokenName: t("common.oemLimeHubProviderSync.cloudTokenName", {
+        defaultValue: MANAGED_LIME_HUB_CLOUD_TOKEN_NAME_FALLBACK,
+      }),
     }),
     [t],
   );

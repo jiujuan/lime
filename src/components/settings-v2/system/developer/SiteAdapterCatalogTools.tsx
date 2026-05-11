@@ -22,7 +22,14 @@ import {
   SECONDARY_BUTTON_CLASS_NAME,
 } from "./shared";
 
-type BasicTranslate = (key: string, defaultValue: string) => string;
+type SiteAdapterExampleKey =
+  | "settings.developer.siteAdapterCatalog.example.github.description"
+  | "settings.developer.siteAdapterCatalog.example.github.queryDescription"
+  | "settings.developer.siteAdapterCatalog.example.reddit.description"
+  | "settings.developer.siteAdapterCatalog.example.reddit.limitDescription"
+  | "settings.developer.siteAdapterCatalog.example.reddit.subredditDescription";
+
+type BasicTranslate = (key: SiteAdapterExampleKey) => string;
 
 function getDefaultSiteAdapterCatalogEditorValue(t: BasicTranslate) {
   return JSON.stringify(
@@ -37,7 +44,6 @@ function getDefaultSiteAdapterCatalogEditorValue(t: BasicTranslate) {
             domain: "github.com",
             description: t(
               "settings.developer.siteAdapterCatalog.example.github.description",
-              "服务端下发的 GitHub 搜索脚本",
             ),
             read_only: true,
             capabilities: ["search", "research"],
@@ -46,7 +52,6 @@ function getDefaultSiteAdapterCatalogEditorValue(t: BasicTranslate) {
                 name: "query",
                 description: t(
                   "settings.developer.siteAdapterCatalog.example.github.queryDescription",
-                  "搜索关键词",
                 ),
                 required: true,
                 arg_type: "string",
@@ -75,7 +80,6 @@ function getDefaultSiteAdapterImportEditorValue(t: BasicTranslate) {
 name: hot
 description: ${t(
     "settings.developer.siteAdapterCatalog.example.reddit.description",
-    "Reddit 热门帖子",
   )}
 domain: www.reddit.com
 args:
@@ -84,14 +88,12 @@ args:
     default: ""
     description: ${t(
       "settings.developer.siteAdapterCatalog.example.reddit.subredditDescription",
-      "Subreddit 名称",
     )}
   limit:
     type: int
     default: 20
     description: ${t(
       "settings.developer.siteAdapterCatalog.example.reddit.limitDescription",
-      "返回条目数量",
     )}
 pipeline:
   - navigate: https://www.reddit.com
@@ -124,10 +126,10 @@ function toErrorText(error: unknown, fallback: string) {
 
 export function SiteAdapterCatalogTools() {
   const { t } = useTranslation("settings");
-  const translateText = useCallback<BasicTranslate>(
-    (key, defaultValue) => String(t(key, defaultValue)),
+  const translateText = useCallback(
+    (key: SiteAdapterExampleKey) => String(t(key)),
     [t],
-  );
+  ) satisfies BasicTranslate;
   const [busy, setBusy] = useState(false);
   const [siteCatalogEditorValue, setSiteCatalogEditorValue] = useState("");
   const [siteImportEditorValue, setSiteImportEditorValue] = useState("");
@@ -158,10 +160,7 @@ export function SiteAdapterCatalogTools() {
         type: "error",
         text: toErrorText(
           error,
-          t(
-            "settings.developer.siteAdapterCatalog.message.loadFailed",
-            "读取站点脚本目录失败",
-          ),
+          t("settings.developer.siteAdapterCatalog.message.loadFailed"),
         ),
       });
     });
@@ -175,10 +174,7 @@ export function SiteAdapterCatalogTools() {
           type: "error",
           text: toErrorText(
             error,
-            t(
-              "settings.developer.siteAdapterCatalog.message.refreshFailed",
-              "刷新站点脚本目录失败",
-            ),
+            t("settings.developer.siteAdapterCatalog.message.refreshFailed"),
           ),
         });
       });
@@ -193,7 +189,6 @@ export function SiteAdapterCatalogTools() {
       type: "success",
       text: t(
         "settings.developer.siteAdapterCatalog.message.catalogTemplateHydrated",
-        "已写入站点脚本目录示例 Payload",
       ),
     });
   }, [showMessage, t, translateText]);
@@ -206,7 +201,6 @@ export function SiteAdapterCatalogTools() {
       type: "success",
       text: t(
         "settings.developer.siteAdapterCatalog.message.importTemplateHydrated",
-        "已写入外部来源 YAML 示例",
       ),
     });
   }, [showMessage, t, translateText]);
@@ -220,7 +214,6 @@ export function SiteAdapterCatalogTools() {
         type: "success",
         text: t("settings.developer.siteAdapterCatalog.message.refreshed", {
           count: adapters.length,
-          defaultValue: "已刷新站点脚本目录状态：{{count}} 项生效适配器",
         }),
       });
     } catch (error) {
@@ -231,7 +224,6 @@ export function SiteAdapterCatalogTools() {
           error,
           t(
             "settings.developer.siteAdapterCatalog.message.refreshStatusFailed",
-            "刷新站点脚本目录状态失败",
           ),
         ),
       });
@@ -247,7 +239,6 @@ export function SiteAdapterCatalogTools() {
         type: "error",
         text: t(
           "settings.developer.siteAdapterCatalog.message.emptyCatalogPayload",
-          "请先输入 siteAdapterCatalog JSON",
         ),
       });
       return;
@@ -263,7 +254,6 @@ export function SiteAdapterCatalogTools() {
         throw new Error(
           t(
             "settings.developer.siteAdapterCatalog.message.invalidCatalogPayload",
-            "JSON 中未找到合法的 siteAdapterCatalog，可传目录本体或 { siteAdapterCatalog: ... }",
           ),
         );
       }
@@ -278,7 +268,6 @@ export function SiteAdapterCatalogTools() {
         type: "success",
         text: t("settings.developer.siteAdapterCatalog.message.injected", {
           count: adapterCount,
-          defaultValue: "已通过 bootstrap 事件注入站点脚本目录：{{count}} 项",
         }),
       });
     } catch (error) {
@@ -287,10 +276,7 @@ export function SiteAdapterCatalogTools() {
         type: "error",
         text: toErrorText(
           error,
-          t(
-            "settings.developer.siteAdapterCatalog.message.injectFailed",
-            "注入站点脚本目录失败",
-          ),
+          t("settings.developer.siteAdapterCatalog.message.injectFailed"),
         ),
       });
     } finally {
@@ -308,8 +294,6 @@ export function SiteAdapterCatalogTools() {
         type: "success",
         text: t("settings.developer.siteAdapterCatalog.message.cleared", {
           count: adapters.length,
-          defaultValue:
-            "已清空站点脚本目录缓存，当前回退到应用内置：{{count}} 项",
         }),
       });
     } catch (error) {
@@ -318,10 +302,7 @@ export function SiteAdapterCatalogTools() {
         type: "error",
         text: toErrorText(
           error,
-          t(
-            "settings.developer.siteAdapterCatalog.message.clearFailed",
-            "清空站点脚本目录缓存失败",
-          ),
+          t("settings.developer.siteAdapterCatalog.message.clearFailed"),
         ),
       });
     } finally {
@@ -336,7 +317,6 @@ export function SiteAdapterCatalogTools() {
         type: "error",
         text: t(
           "settings.developer.siteAdapterCatalog.message.emptyImportPayload",
-          "请先输入外部来源 YAML",
         ),
       });
       return;
@@ -354,8 +334,6 @@ export function SiteAdapterCatalogTools() {
         text: t("settings.developer.siteAdapterCatalog.message.imported", {
           importedCount: result.adapter_count,
           effectiveCount: adapters.length,
-          defaultValue:
-            "已按 Lime 标准导入 {{importedCount}} 项外部适配器，当前生效 {{effectiveCount}} 项",
         }),
       });
     } catch (error) {
@@ -364,10 +342,7 @@ export function SiteAdapterCatalogTools() {
         type: "error",
         text: toErrorText(
           error,
-          t(
-            "settings.developer.siteAdapterCatalog.message.importFailed",
-            "导入外部站点适配器来源失败",
-          ),
+          t("settings.developer.siteAdapterCatalog.message.importFailed"),
         ),
       });
     } finally {
@@ -377,30 +352,18 @@ export function SiteAdapterCatalogTools() {
 
   const siteCatalogSourceLabel = useMemo(() => {
     if (!siteCatalogStatus) {
-      return t(
-        "settings.developer.siteAdapterCatalog.source.loading",
-        "加载中",
-      );
+      return t("settings.developer.siteAdapterCatalog.source.loading");
     }
 
     if (siteCatalogStatus.source_kind === "server_synced") {
-      return t(
-        "settings.developer.siteAdapterCatalog.source.serverSynced",
-        "服务端同步",
-      );
+      return t("settings.developer.siteAdapterCatalog.source.serverSynced");
     }
 
     if (siteCatalogStatus.source_kind === "imported") {
-      return t(
-        "settings.developer.siteAdapterCatalog.source.imported",
-        "外部导入",
-      );
+      return t("settings.developer.siteAdapterCatalog.source.imported");
     }
 
-    return t(
-      "settings.developer.siteAdapterCatalog.source.bundled",
-      "应用内置",
-    );
+    return t("settings.developer.siteAdapterCatalog.source.bundled");
   }, [siteCatalogStatus, t]);
 
   return (
@@ -410,7 +373,7 @@ export function SiteAdapterCatalogTools() {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
           <p className="text-xs font-medium tracking-[0.12em] text-slate-500">
-            {t("settings.developer.siteAdapterCatalog.stat.source", "Source")}
+            {t("settings.developer.siteAdapterCatalog.stat.source")}
           </p>
           <p className="mt-3 text-lg font-semibold text-slate-900">
             {siteCatalogSourceLabel}
@@ -418,10 +381,7 @@ export function SiteAdapterCatalogTools() {
         </div>
         <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
           <p className="text-xs font-medium tracking-[0.12em] text-slate-500">
-            {t(
-              "settings.developer.siteAdapterCatalog.stat.effective",
-              "Effective",
-            )}
+            {t("settings.developer.siteAdapterCatalog.stat.effective")}
           </p>
           <p className="mt-3 text-lg font-semibold text-slate-900">
             {siteAdapters.length}
@@ -429,7 +389,7 @@ export function SiteAdapterCatalogTools() {
         </div>
         <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
           <p className="text-xs font-medium tracking-[0.12em] text-slate-500">
-            {t("settings.developer.siteAdapterCatalog.stat.catalog", "Catalog")}
+            {t("settings.developer.siteAdapterCatalog.stat.catalog")}
           </p>
           <p className="mt-3 text-lg font-semibold text-slate-900">
             {siteCatalogStatus?.exists ? siteCatalogStatus.adapter_count : 0}
@@ -437,17 +397,11 @@ export function SiteAdapterCatalogTools() {
         </div>
         <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/60 p-4">
           <p className="text-xs font-medium tracking-[0.12em] text-slate-500">
-            {t(
-              "settings.developer.siteAdapterCatalog.stat.syncedAt",
-              "Synced At",
-            )}
+            {t("settings.developer.siteAdapterCatalog.stat.syncedAt")}
           </p>
           <p className="mt-3 text-sm font-semibold text-slate-900">
             {siteCatalogStatus?.synced_at ??
-              t(
-                "settings.developer.siteAdapterCatalog.status.unsynced",
-                "未同步",
-              )}
+              t("settings.developer.siteAdapterCatalog.status.unsynced")}
           </p>
         </div>
       </div>
@@ -456,28 +410,16 @@ export function SiteAdapterCatalogTools() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
             <p className="text-sm font-semibold text-slate-900">
-              {t(
-                "settings.developer.siteAdapterCatalog.summary.title",
-                "当前生效目录摘要",
-              )}
+              {t("settings.developer.siteAdapterCatalog.summary.title")}
             </p>
             <p className="text-sm leading-6 text-slate-500">
-              {t(
-                "settings.developer.siteAdapterCatalog.summary.description",
-                "这里展示的是运行时当前可见的适配器。如果外部导入或服务端同步只覆盖了部分站点，其余能力仍会由应用内置目录补位。",
-              )}
+              {t("settings.developer.siteAdapterCatalog.summary.description")}
             </p>
           </div>
           <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500">
             {busy
-              ? t(
-                  "settings.developer.siteAdapterCatalog.status.busy",
-                  "目录操作执行中",
-                )
-              : t(
-                  "settings.developer.siteAdapterCatalog.status.idle",
-                  "目录状态空闲",
-                )}
+              ? t("settings.developer.siteAdapterCatalog.status.busy")
+              : t("settings.developer.siteAdapterCatalog.status.idle")}
           </span>
         </div>
 
@@ -494,7 +436,6 @@ export function SiteAdapterCatalogTools() {
             <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-500">
               {t("settings.developer.siteAdapterCatalog.summary.moreItems", {
                 count: siteAdapters.length - 4,
-                defaultValue: "还有 {{count}} 项",
               })}
             </span>
           ) : null}
@@ -505,11 +446,7 @@ export function SiteAdapterCatalogTools() {
             {t("settings.developer.siteAdapterCatalog.summary.catalogVersion", {
               version:
                 siteCatalogStatus?.catalog_version ??
-                t(
-                  "settings.developer.siteAdapterCatalog.source.bundled",
-                  "应用内置",
-                ),
-              defaultValue: "目录版本：{{version}}",
+                t("settings.developer.siteAdapterCatalog.source.bundled"),
             })}
           </div>
           <div>
@@ -518,9 +455,7 @@ export function SiteAdapterCatalogTools() {
                 siteCatalogStatus?.tenant_id ??
                 t(
                   "settings.developer.siteAdapterCatalog.summary.unboundTenant",
-                  "未绑定租户",
                 ),
-              defaultValue: "租户：{{tenant}}",
             })}
           </div>
         </div>
@@ -529,38 +464,29 @@ export function SiteAdapterCatalogTools() {
       <div className="space-y-3 rounded-[22px] border border-slate-200/80 bg-white p-4">
         <div className="space-y-1">
           <p className="text-sm font-semibold text-slate-900">
-            {t(
-              "settings.developer.siteAdapterCatalog.import.title",
-              "外部来源 YAML 导入",
-            )}
+            {t("settings.developer.siteAdapterCatalog.import.title")}
           </p>
           <p className="text-sm leading-6 text-slate-500">
             {t(
               "settings.developer.siteAdapterCatalog.import.descriptionPrefix",
-              "把外部来源 YAML 粘贴到这里，点击“导入到 Lime 标准”后会先走 Lime 白名单编译层，再写入",
             )}
             <code className="mx-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-700">
               imported
             </code>
             {t(
               "settings.developer.siteAdapterCatalog.import.descriptionMiddle",
-              "目录。这里只接受当前支持子集：",
             )}
             <code className="mx-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-700">
               navigate / evaluate / map / filter / limit / sort
             </code>
             {t(
               "settings.developer.siteAdapterCatalog.import.descriptionSuffix",
-              "。",
             )}
           </p>
         </div>
 
         <Textarea
-          aria-label={t(
-            "settings.developer.siteAdapterCatalog.import.aria",
-            "站点来源 YAML 导入输入",
-          )}
+          aria-label={t("settings.developer.siteAdapterCatalog.import.aria")}
           value={siteImportEditorValue}
           onChange={(event) => setSiteImportEditorValue(event.target.value)}
           placeholder={getDefaultSiteAdapterImportEditorValue(translateText)}
@@ -575,10 +501,7 @@ export function SiteAdapterCatalogTools() {
             className={SECONDARY_BUTTON_CLASS_NAME}
           >
             <ScrollText className="h-4 w-4" />
-            {t(
-              "settings.developer.siteAdapterCatalog.action.fillYamlExample",
-              "填入 YAML 示例",
-            )}
+            {t("settings.developer.siteAdapterCatalog.action.fillYamlExample")}
           </button>
           <button
             type="button"
@@ -587,10 +510,7 @@ export function SiteAdapterCatalogTools() {
             className={SECONDARY_BUTTON_CLASS_NAME}
           >
             <Sparkles className="h-4 w-4" />
-            {t(
-              "settings.developer.siteAdapterCatalog.action.importToLime",
-              "导入到 Lime 标准",
-            )}
+            {t("settings.developer.siteAdapterCatalog.action.importToLime")}
           </button>
         </div>
       </div>
@@ -598,31 +518,23 @@ export function SiteAdapterCatalogTools() {
       <div className="space-y-3 rounded-[22px] border border-slate-200/80 bg-white p-4">
         <div className="space-y-1">
           <p className="text-sm font-semibold text-slate-900">
-            {t(
-              "settings.developer.siteAdapterCatalog.bootstrap.title",
-              "Bootstrap Payload 调试输入",
-            )}
+            {t("settings.developer.siteAdapterCatalog.bootstrap.title")}
           </p>
           <p className="text-sm leading-6 text-slate-500">
             {t(
               "settings.developer.siteAdapterCatalog.bootstrap.descriptionPrefix",
-              "支持目录本体，或",
             )}
             <code className="mx-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-700">
               {"{ siteAdapterCatalog: ... }"}
             </code>
             {t(
               "settings.developer.siteAdapterCatalog.bootstrap.descriptionSuffix",
-              "包装对象。点击“通过事件注入”会走与服务端运行时推送一致的客户端链路。",
             )}
           </p>
         </div>
 
         <Textarea
-          aria-label={t(
-            "settings.developer.siteAdapterCatalog.bootstrap.aria",
-            "站点脚本目录调试输入",
-          )}
+          aria-label={t("settings.developer.siteAdapterCatalog.bootstrap.aria")}
           value={siteCatalogEditorValue}
           onChange={(event) => setSiteCatalogEditorValue(event.target.value)}
           placeholder={getDefaultSiteAdapterCatalogEditorValue(translateText)}
@@ -637,10 +549,7 @@ export function SiteAdapterCatalogTools() {
             className={SECONDARY_BUTTON_CLASS_NAME}
           >
             <ScrollText className="h-4 w-4" />
-            {t(
-              "settings.developer.siteAdapterCatalog.action.fillSiteExample",
-              "填入站点示例",
-            )}
+            {t("settings.developer.siteAdapterCatalog.action.fillSiteExample")}
           </button>
           <button
             type="button"
@@ -649,10 +558,7 @@ export function SiteAdapterCatalogTools() {
             className={SECONDARY_BUTTON_CLASS_NAME}
           >
             <RefreshCw className="h-4 w-4" />
-            {t(
-              "settings.developer.siteAdapterCatalog.action.refreshStatus",
-              "刷新站点状态",
-            )}
+            {t("settings.developer.siteAdapterCatalog.action.refreshStatus")}
           </button>
           <button
             type="button"
@@ -661,10 +567,7 @@ export function SiteAdapterCatalogTools() {
             className={SECONDARY_BUTTON_CLASS_NAME}
           >
             <Globe className="h-4 w-4" />
-            {t(
-              "settings.developer.siteAdapterCatalog.action.inject",
-              "注入站点目录",
-            )}
+            {t("settings.developer.siteAdapterCatalog.action.inject")}
           </button>
           <button
             type="button"
@@ -673,10 +576,7 @@ export function SiteAdapterCatalogTools() {
             className={DANGER_BUTTON_CLASS_NAME}
           >
             <Trash2 className="h-4 w-4" />
-            {t(
-              "settings.developer.siteAdapterCatalog.action.clearCache",
-              "清空站点目录缓存",
-            )}
+            {t("settings.developer.siteAdapterCatalog.action.clearCache")}
           </button>
         </div>
       </div>

@@ -557,10 +557,7 @@ export function WebSearchSettings() {
     "settings.webSearch.provider.googleCse",
     "Google CSE",
   );
-  const pexelsProviderLabel = t(
-    "settings.webSearch.provider.pexels",
-    "Pexels",
-  );
+  const pexelsProviderLabel = t("settings.webSearch.provider.pexels", "Pexels");
   const pixabayProviderLabel = t(
     "settings.webSearch.provider.pixabay",
     "Pixabay",
@@ -877,9 +874,7 @@ export function WebSearchSettings() {
                       }
                       className={`${INPUT_CLASS_NAME} h-11`}
                     >
-                      <option value="google">
-                        {googleEngineLabel}
-                      </option>
+                      <option value="google">{googleEngineLabel}</option>
                       <option value="xiaohongshu">
                         {t("settings.webSearch.engine.xiaohongshu", "小红书")}
                       </option>
@@ -901,9 +896,7 @@ export function WebSearchSettings() {
                       }
                       className={`${INPUT_CLASS_NAME} h-11`}
                     >
-                      <option value="tavily">
-                        {tavilyProviderLabel}
-                      </option>
+                      <option value="tavily">{tavilyProviderLabel}</option>
                       <option value="multi_search_engine">
                         {multiSearchEngineProviderLabel}
                       </option>
@@ -958,13 +951,13 @@ export function WebSearchSettings() {
                       )}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
-                        <StatusPill
-                          active={tavilyKeyConfigured}
-                          label={credentialStatusLabel(
-                            tavilyProviderLabel,
-                            tavilyKeyConfigured,
-                          )}
-                        />
+                      <StatusPill
+                        active={tavilyKeyConfigured}
+                        label={credentialStatusLabel(
+                          tavilyProviderLabel,
+                          tavilyKeyConfigured,
+                        )}
+                      />
                       <StatusPill
                         active={bingSearchKeyConfigured}
                         label={credentialStatusLabel(

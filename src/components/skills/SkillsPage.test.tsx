@@ -1,6 +1,7 @@
 import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { SkillsPage } from "./SkillsPage";
 import {
   filterSkillsByQueryAndStatus,
@@ -124,12 +125,13 @@ function fillField(
   element.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
 
   mockUseSkills.mockReturnValue({
     skills: [],
@@ -198,7 +200,7 @@ beforeEach(() => {
   mockOpenDialog.mockResolvedValue("/tmp/imported-skill");
 });
 
-afterEach(() => {
+afterEach(async () => {
   mockUseSkills.mockReset();
 
   while (mountedRoots.length > 0) {
@@ -211,6 +213,7 @@ afterEach(() => {
     });
     mounted.container.remove();
   }
+  await changeLimeLocale("zh-CN");
 });
 
 describe("filterSkillsByQueryAndStatus", () => {
@@ -265,6 +268,27 @@ describe("groupSkillsBySourceKind", () => {
 });
 
 describe("SkillsPage", () => {
+  it("高级入口 chrome 应通过 agent namespace 渲染英文资源", async () => {
+    await changeLimeLocale("en-US");
+    renderSkillsPage({ hideHeader: false });
+
+    expect(getBodyText()).toContain("Manage and use AI skill extensions");
+    expect(getBodyText()).toContain("Refresh");
+    expect(getBodyText()).toContain("New Skill");
+    expect(getBodyText()).toContain("Import Skill");
+    expect(getBodyText()).toContain("Repositories");
+    expect(
+      document.body.querySelector("input")?.getAttribute("placeholder"),
+    ).toBe("Search Skills...");
+    expect(getBodyText()).not.toContain("管理和使用 AI 技能扩展");
+
+    const workspaceTip = await hoverTip("Skills workspace info");
+    expect(getBodyText()).toContain(
+      "View installation status, repository sources, and readable content in one place",
+    );
+    await leaveTip(workspaceTip);
+  });
+
   it("应将首屏说明与使用规则收进 tips", async () => {
     renderSkillsPage({ hideHeader: false });
 
@@ -328,14 +352,14 @@ describe("SkillsPage", () => {
     const { container } = renderSkillsPage();
     const text = container.textContent ?? "";
 
-    expect(text).toContain("BUILT-IN SKILLS");
-    expect(text).toContain("LOCAL SKILLS");
-    expect(text).toContain("REMOTE SKILLS");
-    expect(text.indexOf("BUILT-IN SKILLS")).toBeLessThan(
-      text.indexOf("LOCAL SKILLS"),
+    expect(text).toContain("内置 Skills");
+    expect(text).toContain("本地 Skills");
+    expect(text).toContain("远程 Skills");
+    expect(text.indexOf("内置 Skills")).toBeLessThan(
+      text.indexOf("本地 Skills"),
     );
-    expect(text.indexOf("LOCAL SKILLS")).toBeLessThan(
-      text.indexOf("REMOTE SKILLS"),
+    expect(text.indexOf("本地 Skills")).toBeLessThan(
+      text.indexOf("远程 Skills"),
     );
 
     const buttonTexts = Array.from(container.querySelectorAll("button")).map(
@@ -378,7 +402,7 @@ describe("SkillsPage", () => {
     const { container } = renderSkillsPage();
     const text = container.textContent ?? "";
 
-    expect(text).toContain("REMOTE SKILLS");
+    expect(text).toContain("远程 Skills");
     expect(text).toContain("暂无远程缓存");
     expect(text).toContain('点击"刷新"同步已启用仓库');
   });

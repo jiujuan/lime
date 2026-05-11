@@ -1,6 +1,7 @@
 import React, { memo } from "react";
 import styled from "styled-components";
 import { ChevronRight, Home } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 interface CanvasBreadcrumbHeaderProps {
   label: string;
@@ -42,14 +43,18 @@ const CurrentLabel = styled.span`
 `;
 
 export const CanvasBreadcrumbHeader: React.FC<CanvasBreadcrumbHeaderProps> =
-  memo(({ label, onBackHome, backTitle = "返回新建任务" }) => {
+  memo(({ label, onBackHome, backTitle }) => {
+    const { t } = useTranslation("workspace");
+    const resolvedBackTitle =
+      backTitle ?? t("workspace.canvasBreadcrumb.backHome");
+
     return (
       <Header>
         <HomeButton
           type="button"
           onClick={onBackHome}
-          title={backTitle}
-          aria-label={backTitle}
+          title={resolvedBackTitle}
+          aria-label={resolvedBackTitle}
         >
           <Home size={12} />
         </HomeButton>

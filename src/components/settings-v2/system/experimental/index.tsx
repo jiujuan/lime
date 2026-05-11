@@ -192,7 +192,7 @@ function AdvancedDetails({
           </span>
         </span>
         <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500 transition group-open:bg-slate-950 group-open:text-white">
-          {t("settings.experimental.details.expand", "展开")}
+          {t("settings.experimental.details.expand")}
         </span>
       </summary>
       <div className="mt-4 space-y-4">{children}</div>
@@ -214,7 +214,6 @@ function DeferredPanelFallback({ label }: { label: string }) {
     <div className="rounded-[20px] border border-dashed border-slate-300 bg-slate-50 p-4 text-sm leading-6 text-slate-500">
       {t("settings.experimental.deferred.loading", {
         label,
-        defaultValue: "正在准备{{label}}...",
       })}
     </div>
   );
@@ -266,7 +265,7 @@ export function ExperimentalSettings({
       setError(
         err instanceof Error
           ? err.message
-          : t("settings.experimental.message.loadFailed", "加载配置失败"),
+          : t("settings.experimental.message.loadFailed"),
       );
       setConfig(DEFAULT_EXPERIMENTAL_FEATURES);
       setCrashConfig(DEFAULT_CRASH_REPORTING_CONFIG);
@@ -303,14 +302,8 @@ export function ExperimentalSettings({
       setMessage({
         type: "success",
         text: newEnabled
-          ? t(
-              "settings.experimental.message.screenshotChatEnabled",
-              "截图对话功能已启用",
-            )
-          : t(
-              "settings.experimental.message.screenshotChatDisabled",
-              "截图对话功能已禁用",
-            ),
+          ? t("settings.experimental.message.screenshotChatEnabled")
+          : t("settings.experimental.message.screenshotChatDisabled"),
       });
       setTimeout(() => setMessage(null), 2000);
     } catch (err) {
@@ -320,7 +313,7 @@ export function ExperimentalSettings({
         text:
           err instanceof Error
             ? err.message
-            : t("settings.experimental.message.saveFailed", "保存失败"),
+            : t("settings.experimental.message.saveFailed"),
       });
     } finally {
       setSaving(false);
@@ -347,14 +340,8 @@ export function ExperimentalSettings({
       setMessage({
         type: "success",
         text: newEnabled
-          ? t(
-              "settings.experimental.message.webMcpEnabled",
-              "WebMCP 预留入口已启用",
-            )
-          : t(
-              "settings.experimental.message.webMcpDisabled",
-              "WebMCP 预留入口已禁用",
-            ),
+          ? t("settings.experimental.message.webMcpEnabled")
+          : t("settings.experimental.message.webMcpDisabled"),
       });
       setTimeout(() => setMessage(null), 2000);
     } catch (err) {
@@ -364,7 +351,7 @@ export function ExperimentalSettings({
         text:
           err instanceof Error
             ? err.message
-            : t("settings.experimental.message.saveFailed", "保存失败"),
+            : t("settings.experimental.message.saveFailed"),
       });
     } finally {
       setSaving(false);
@@ -386,10 +373,7 @@ export function ExperimentalSettings({
       });
       setMessage({
         type: "success",
-        text: t(
-          "settings.experimental.message.shortcutUpdated",
-          "快捷键已更新",
-        ),
+        text: t("settings.experimental.message.shortcutUpdated"),
       });
       setTimeout(() => setMessage(null), 2000);
     },
@@ -426,10 +410,7 @@ export function ExperimentalSettings({
           text:
             err instanceof Error
               ? err.message
-              : t(
-                  "settings.experimental.message.toolCallingSaveFailed",
-                  "保存 Tool Calling 配置失败",
-                ),
+              : t("settings.experimental.message.toolCallingSaveFailed"),
         });
       } finally {
         setSaving(false);
@@ -446,14 +427,8 @@ export function ExperimentalSettings({
     void persistToolCallingConfig(
       next,
       next.enabled
-        ? t(
-            "settings.experimental.message.toolCallingEnabled",
-            "Tool Calling 2.0 已启用",
-          )
-        : t(
-            "settings.experimental.message.toolCallingDisabled",
-            "Tool Calling 2.0 已禁用",
-          ),
+        ? t("settings.experimental.message.toolCallingEnabled")
+        : t("settings.experimental.message.toolCallingDisabled"),
     );
   }, [persistToolCallingConfig, toolCallingConfig, t]);
 
@@ -465,14 +440,8 @@ export function ExperimentalSettings({
     void persistToolCallingConfig(
       next,
       next.dynamic_filtering
-        ? t(
-            "settings.experimental.message.dynamicFilteringEnabled",
-            "动态过滤已启用",
-          )
-        : t(
-            "settings.experimental.message.dynamicFilteringDisabled",
-            "动态过滤已禁用",
-          ),
+        ? t("settings.experimental.message.dynamicFilteringEnabled")
+        : t("settings.experimental.message.dynamicFilteringDisabled"),
     );
   }, [persistToolCallingConfig, toolCallingConfig, t]);
 
@@ -484,14 +453,8 @@ export function ExperimentalSettings({
     void persistToolCallingConfig(
       next,
       next.native_input_examples
-        ? t(
-            "settings.experimental.message.nativeInputExamplesEnabled",
-            "原生 input_examples 透传已启用",
-          )
-        : t(
-            "settings.experimental.message.nativeInputExamplesDisabled",
-            "原生 input_examples 透传已禁用",
-          ),
+        ? t("settings.experimental.message.nativeInputExamplesEnabled")
+        : t("settings.experimental.message.nativeInputExamplesDisabled"),
     );
   }, [persistToolCallingConfig, toolCallingConfig, t]);
 
@@ -511,10 +474,7 @@ export function ExperimentalSettings({
         setCrashConfig(normalized);
         setMessage({
           type: "success",
-          text: t(
-            "settings.experimental.message.crashReportingSaved",
-            "崩溃上报配置已更新",
-          ),
+          text: t("settings.experimental.message.crashReportingSaved"),
         });
         setTimeout(() => setMessage(null), 2000);
       } catch (err) {
@@ -524,10 +484,7 @@ export function ExperimentalSettings({
           text:
             err instanceof Error
               ? err.message
-              : t(
-                  "settings.experimental.message.crashReportingSaveFailed",
-                  "保存崩溃上报配置失败",
-                ),
+              : t("settings.experimental.message.crashReportingSaveFailed"),
         });
       } finally {
         setSaving(false);
@@ -604,10 +561,7 @@ export function ExperimentalSettings({
       await copyCrashDiagnosticToClipboard(payload);
       setMessage({
         type: "success",
-        text: t(
-          "settings.experimental.message.diagnosticCopied",
-          "诊断信息已复制，可直接发给开发者",
-        ),
+        text: t("settings.experimental.message.diagnosticCopied"),
       });
       setTimeout(() => setMessage(null), 2500);
     } catch (err) {
@@ -619,10 +573,7 @@ export function ExperimentalSettings({
         text:
           err instanceof Error
             ? err.message
-            : t(
-                "settings.experimental.message.diagnosticCopyFailed",
-                "复制诊断信息失败",
-              ),
+            : t("settings.experimental.message.diagnosticCopyFailed"),
       });
     } finally {
       setDiagnosticBusy(false);
@@ -638,10 +589,7 @@ export function ExperimentalSettings({
       await copyCrashDiagnosticJsonToClipboard(payload);
       setMessage({
         type: "success",
-        text: t(
-          "settings.experimental.message.diagnosticJsonCopied",
-          "纯 JSON 诊断信息已复制",
-        ),
+        text: t("settings.experimental.message.diagnosticJsonCopied"),
       });
       setTimeout(() => setMessage(null), 2500);
     } catch (err) {
@@ -653,10 +601,7 @@ export function ExperimentalSettings({
         text:
           err instanceof Error
             ? err.message
-            : t(
-                "settings.experimental.message.diagnosticJsonCopyFailed",
-                "复制纯 JSON 失败",
-              ),
+            : t("settings.experimental.message.diagnosticJsonCopyFailed"),
       });
     } finally {
       setDiagnosticBusy(false);
@@ -685,14 +630,10 @@ export function ExperimentalSettings({
           ? t("settings.experimental.message.diagnosticExportedAndOpened", {
               fileName: result.fileName,
               path: openedPath,
-              defaultValue:
-                "诊断文件已导出：{{fileName}}，并已打开目录：{{path}}",
             })
           : t("settings.experimental.message.diagnosticExported", {
               fileName: result.fileName,
               location: result.locationHint,
-              defaultValue:
-                "诊断文件已导出：{{fileName}}（位置：{{location}}）",
             }),
       });
       setTimeout(() => setMessage(null), 2500);
@@ -703,10 +644,7 @@ export function ExperimentalSettings({
         text:
           err instanceof Error
             ? err.message
-            : t(
-                "settings.experimental.message.diagnosticExportFailed",
-                "导出诊断信息失败",
-              ),
+            : t("settings.experimental.message.diagnosticExportFailed"),
       });
     } finally {
       setDiagnosticBusy(false);
@@ -723,7 +661,6 @@ export function ExperimentalSettings({
         type: "success",
         text: t("settings.experimental.message.downloadDirectoryOpened", {
           path: result.openedPath,
-          defaultValue: "已打开下载目录：{{path}}",
         }),
       });
       setTimeout(() => setMessage(null), 2500);
@@ -734,10 +671,7 @@ export function ExperimentalSettings({
         text:
           err instanceof Error
             ? err.message
-            : t(
-                "settings.experimental.message.downloadDirectoryOpenFailed",
-                "打开下载目录失败",
-              ),
+            : t("settings.experimental.message.downloadDirectoryOpenFailed"),
       });
     } finally {
       setDiagnosticBusy(false);
@@ -763,7 +697,7 @@ export function ExperimentalSettings({
           <AlertTriangle className="mt-0.5 h-5 w-5 text-rose-600" />
           <div>
             <p className="text-sm font-semibold text-rose-700">
-              {t("settings.experimental.error.loadTitle", "加载配置失败")}
+              {t("settings.experimental.error.loadTitle")}
             </p>
             <p className="mt-1 text-sm leading-6 text-rose-600">{error}</p>
             <button
@@ -772,7 +706,7 @@ export function ExperimentalSettings({
               className="mt-3 inline-flex items-center gap-2 rounded-full border border-rose-200 bg-white px-4 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-100/70"
             >
               <RefreshCw className="h-4 w-4" />
-              {t("settings.experimental.action.retry", "重试")}
+              {t("settings.experimental.action.retry")}
             </button>
           </div>
         </div>
@@ -781,9 +715,9 @@ export function ExperimentalSettings({
   }
 
   const busyLabel = saving
-    ? t("settings.experimental.status.saving", "保存中")
+    ? t("settings.experimental.status.saving")
     : diagnosticBusy
-      ? t("settings.experimental.status.diagnosticBusy", "诊断执行中")
+      ? t("settings.experimental.status.diagnosticBusy")
       : null;
 
   return (
@@ -807,18 +741,15 @@ export function ExperimentalSettings({
           <div className="space-y-1.5">
             {embedded ? (
               <h2 className="text-[20px] font-semibold tracking-tight text-slate-900">
-                {t("settings.experimental.title", "实验功能")}
+                {t("settings.experimental.title")}
               </h2>
             ) : (
               <h1 className="text-[24px] font-semibold tracking-tight text-slate-900">
-                {t("settings.experimental.title", "实验功能")}
+                {t("settings.experimental.title")}
               </h1>
             )}
             <p className="text-sm text-slate-500">
-              {t(
-                "settings.experimental.description",
-                "不稳定能力集中开关，用完及时关回。",
-              )}
+              {t("settings.experimental.description")}
             </p>
           </div>
 
@@ -836,68 +767,49 @@ export function ExperimentalSettings({
         <div className="space-y-5">
           <SurfacePanel
             icon={Wrench}
-            title={t(
-              "settings.experimental.toolCalling.title",
-              "Tool Calling 2.0",
-            )}
-            description={t(
-              "settings.experimental.toolCalling.description",
-              "控制工具调用、动态过滤和 input examples。",
-            )}
+            title={t("settings.experimental.toolCalling.title")}
+            description={t("settings.experimental.toolCalling.description")}
           >
             <div className="space-y-3">
               <CompactSwitchRow
-                title={t(
-                  "settings.experimental.toolCalling.enabled.title",
-                  "启用 Tool Calling 2.0",
-                )}
+                title={t("settings.experimental.toolCalling.enabled.title")}
                 description={t(
                   "settings.experimental.toolCalling.enabled.description",
-                  "使用新的工具调用策略。",
                 )}
                 checked={toolCallingConfig.enabled}
                 onCheckedChange={handleToggleToolCallingEnabled}
                 disabled={saving}
-                ariaLabel={t(
-                  "settings.experimental.toolCalling.enabled.aria",
-                  "切换 Tool Calling 2.0",
-                )}
+                ariaLabel={t("settings.experimental.toolCalling.enabled.aria")}
               />
 
               <div className="grid gap-3 md:grid-cols-2">
                 <CompactSwitchRow
                   title={t(
                     "settings.experimental.toolCalling.dynamicFiltering.title",
-                    "动态过滤",
                   )}
                   description={t(
                     "settings.experimental.toolCalling.dynamicFiltering.description",
-                    "过滤网页抓取噪音。",
                   )}
                   checked={toolCallingConfig.dynamic_filtering}
                   onCheckedChange={handleToggleDynamicFiltering}
                   disabled={saving || !toolCallingConfig.enabled}
                   ariaLabel={t(
                     "settings.experimental.toolCalling.dynamicFiltering.aria",
-                    "切换动态过滤",
                   )}
                 />
 
                 <CompactSwitchRow
                   title={t(
                     "settings.experimental.toolCalling.nativeInputExamples.title",
-                    "原生 input examples",
                   )}
                   description={t(
                     "settings.experimental.toolCalling.nativeInputExamples.description",
-                    "向支持的协议透传示例。",
                   )}
                   checked={toolCallingConfig.native_input_examples}
                   onCheckedChange={handleToggleNativeInputExamples}
                   disabled={saving || !toolCallingConfig.enabled}
                   ariaLabel={t(
                     "settings.experimental.toolCalling.nativeInputExamples.aria",
-                    "切换原生 input examples 透传",
                   )}
                 />
               </div>
@@ -906,29 +818,19 @@ export function ExperimentalSettings({
 
           <SurfacePanel
             icon={Camera}
-            title={t("settings.experimental.screenshot.title", "截图对话")}
-            description={t(
-              "settings.experimental.screenshot.description",
-              "用快捷键截图后进入对话。",
-            )}
+            title={t("settings.experimental.screenshot.title")}
+            description={t("settings.experimental.screenshot.description")}
           >
             <div className="space-y-3">
               <CompactSwitchRow
-                title={t(
-                  "settings.experimental.screenshot.enabled.title",
-                  "启用截图对话",
-                )}
+                title={t("settings.experimental.screenshot.enabled.title")}
                 description={t(
                   "settings.experimental.screenshot.enabled.description",
-                  "开启后可用全局快捷键唤起截图。",
                 )}
                 checked={config?.screenshot_chat.enabled ?? false}
                 onCheckedChange={handleToggleSmartInput}
                 disabled={saving}
-                ariaLabel={t(
-                  "settings.experimental.screenshot.enabled.aria",
-                  "切换截图对话",
-                )}
+                ariaLabel={t("settings.experimental.screenshot.enabled.aria")}
               />
 
               {config?.screenshot_chat.enabled ? (
@@ -938,7 +840,6 @@ export function ExperimentalSettings({
                       <DeferredPanelFallback
                         label={t(
                           "settings.experimental.screenshot.shortcut.fallbackLabel",
-                          "截图快捷键设置",
                         )}
                       />
                     }
@@ -959,15 +860,11 @@ export function ExperimentalSettings({
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                     <div>
                       <p className="text-sm font-semibold text-amber-800">
-                        {t(
-                          "settings.experimental.screenshot.permission.title",
-                          "需要屏幕录制权限",
-                        )}
+                        {t("settings.experimental.screenshot.permission.title")}
                       </p>
                       <p className="mt-1 text-sm leading-6 text-amber-700">
                         {t(
                           "settings.experimental.screenshot.permission.description",
-                          "如果截图只显示桌面背景而不是窗口内容，通常说明系统尚未授予屏幕录制权限。",
                         )}
                       </p>
                       <button
@@ -987,7 +884,6 @@ export function ExperimentalSettings({
                       >
                         {t(
                           "settings.experimental.screenshot.permission.action",
-                          "打开系统设置",
                         )}
                       </button>
                     </div>
@@ -1001,65 +897,44 @@ export function ExperimentalSettings({
         <div className="space-y-5">
           <AdvancedDetails
             icon={Globe}
-            title={t("settings.experimental.webMcp.title", "WebMCP（预留）")}
-            description={t(
-              "settings.experimental.webMcp.description",
-              "仅保留配置位，当前不切换执行链。",
-            )}
+            title={t("settings.experimental.webMcp.title")}
+            description={t("settings.experimental.webMcp.description")}
           >
             <CompactSwitchRow
-              title={t(
-                "settings.experimental.webMcp.enabled.title",
-                "允许未来接入 WebMCP",
-              )}
+              title={t("settings.experimental.webMcp.enabled.title")}
               description={t(
                 "settings.experimental.webMcp.enabled.description",
-                "开启后只写入配置，不改变浏览器执行路径。",
               )}
               checked={config?.webmcp?.enabled ?? false}
               onCheckedChange={handleToggleWebMcp}
               disabled={saving}
-              ariaLabel={t(
-                "settings.experimental.webMcp.enabled.aria",
-                "切换 WebMCP 预留入口",
-              )}
+              ariaLabel={t("settings.experimental.webMcp.enabled.aria")}
             />
           </AdvancedDetails>
 
           <AdvancedDetails
             icon={Bug}
-            title={t(
-              "settings.experimental.crashReporting.title",
-              "崩溃上报与诊断",
-            )}
-            description={t(
-              "settings.experimental.crashReporting.description",
-              "复制诊断包，或配置远端崩溃上报。",
-            )}
+            title={t("settings.experimental.crashReporting.title")}
+            description={t("settings.experimental.crashReporting.description")}
           >
             <div className="space-y-3">
               <CompactSwitchRow
-                title={t(
-                  "settings.experimental.crashReporting.enabled.title",
-                  "启用崩溃上报",
-                )}
+                title={t("settings.experimental.crashReporting.enabled.title")}
                 description={t(
                   "settings.experimental.crashReporting.enabled.description",
-                  "DSN 为空时仅保留本地诊断。",
                 )}
                 checked={Boolean(crashConfig.enabled)}
                 onCheckedChange={handleCrashEnabledToggle}
                 disabled={saving}
                 ariaLabel={t(
                   "settings.experimental.crashReporting.enabled.aria",
-                  "切换崩溃上报",
                 )}
               />
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2 md:col-span-2">
                   <label className="text-sm font-medium text-slate-700">
-                    DSN
+                    {t("settings.experimental.crashReporting.dsn.label")}
                   </label>
                   <input
                     value={crashConfig.dsn ?? ""}
@@ -1074,7 +949,9 @@ export function ExperimentalSettings({
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700">
-                    Environment
+                    {t(
+                      "settings.experimental.crashReporting.environment.label",
+                    )}
                   </label>
                   <input
                     value={crashConfig.environment ?? "production"}
@@ -1088,10 +965,7 @@ export function ExperimentalSettings({
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700">
-                    {t(
-                      "settings.experimental.crashReporting.sampleRate.label",
-                      "采样率 (0-1)",
-                    )}
+                    {t("settings.experimental.crashReporting.sampleRate.label")}
                   </label>
                   <input
                     type="number"
@@ -1112,13 +986,9 @@ export function ExperimentalSettings({
               </div>
 
               <CompactSwitchRow
-                title={t(
-                  "settings.experimental.crashReporting.sendPii.title",
-                  "发送默认 PII 字段",
-                )}
+                title={t("settings.experimental.crashReporting.sendPii.title")}
                 description={t(
                   "settings.experimental.crashReporting.sendPii.description",
-                  "默认关闭，仅排障需要时打开。",
                 )}
                 checked={Boolean(crashConfig.send_pii)}
                 onCheckedChange={(checked) =>
@@ -1127,7 +997,6 @@ export function ExperimentalSettings({
                 disabled={saving}
                 ariaLabel={t(
                   "settings.experimental.crashReporting.sendPii.aria",
-                  "切换发送默认 PII 字段",
                 )}
               />
 
@@ -1141,7 +1010,6 @@ export function ExperimentalSettings({
                   <Bug className="h-4 w-4" />
                   {t(
                     "settings.experimental.crashReporting.action.copyDiagnostic",
-                    "复制诊断信息",
                   )}
                 </button>
                 <button
@@ -1151,10 +1019,7 @@ export function ExperimentalSettings({
                   className={SECONDARY_BUTTON_CLASS_NAME}
                 >
                   <Sparkles className="h-4 w-4" />
-                  {t(
-                    "settings.experimental.crashReporting.action.copyJson",
-                    "复制纯 JSON",
-                  )}
+                  {t("settings.experimental.crashReporting.action.copyJson")}
                 </button>
                 <button
                   type="button"
@@ -1163,10 +1028,7 @@ export function ExperimentalSettings({
                   className={SECONDARY_BUTTON_CLASS_NAME}
                 >
                   <FolderOpen className="h-4 w-4" />
-                  {t(
-                    "settings.experimental.crashReporting.action.exportJson",
-                    "导出诊断 JSON",
-                  )}
+                  {t("settings.experimental.crashReporting.action.exportJson")}
                 </button>
                 <button
                   type="button"
@@ -1177,7 +1039,6 @@ export function ExperimentalSettings({
                   <FolderOpen className="h-4 w-4" />
                   {t(
                     "settings.experimental.crashReporting.action.openDownloadDirectory",
-                    "打开下载目录",
                   )}
                 </button>
                 <button
@@ -1186,10 +1047,7 @@ export function ExperimentalSettings({
                   disabled={saving || diagnosticBusy}
                   className={PRIMARY_BUTTON_CLASS_NAME}
                 >
-                  {t(
-                    "settings.experimental.crashReporting.action.save",
-                    "保存配置",
-                  )}
+                  {t("settings.experimental.crashReporting.action.save")}
                 </button>
               </div>
             </div>
@@ -1198,13 +1056,9 @@ export function ExperimentalSettings({
           {showClipboardGuide ? (
             <SurfacePanel
               icon={ShieldAlert}
-              title={t(
-                "settings.experimental.clipboardGuide.title",
-                "剪贴板权限指引",
-              )}
+              title={t("settings.experimental.clipboardGuide.title")}
               description={t(
                 "settings.experimental.clipboardGuide.description",
-                "复制诊断失败时按系统提示恢复。",
               )}
             >
               <Suspense
@@ -1212,7 +1066,6 @@ export function ExperimentalSettings({
                   <DeferredPanelFallback
                     label={t(
                       "settings.experimental.clipboardGuide.fallbackLabel",
-                      "剪贴板权限指引",
                     )}
                   />
                 }
@@ -1224,19 +1077,13 @@ export function ExperimentalSettings({
 
           <AdvancedDetails
             icon={RefreshCw}
-            title={t("settings.experimental.update.title", "更新提醒")}
-            description={t(
-              "settings.experimental.update.description",
-              "检查自动更新与提醒配置。",
-            )}
+            title={t("settings.experimental.update.title")}
+            description={t("settings.experimental.update.description")}
           >
             <Suspense
               fallback={
                 <DeferredPanelFallback
-                  label={t(
-                    "settings.experimental.update.fallbackLabel",
-                    "更新提醒设置",
-                  )}
+                  label={t("settings.experimental.update.fallbackLabel")}
                 />
               }
             >
@@ -1246,21 +1093,14 @@ export function ExperimentalSettings({
 
           <AdvancedDetails
             icon={ShieldAlert}
-            title={t(
-              "settings.experimental.workspaceRepair.title",
-              "Workspace 自愈记录",
-            )}
-            description={t(
-              "settings.experimental.workspaceRepair.description",
-              "查看最近自动修复和迁移动作。",
-            )}
+            title={t("settings.experimental.workspaceRepair.title")}
+            description={t("settings.experimental.workspaceRepair.description")}
           >
             <Suspense
               fallback={
                 <DeferredPanelFallback
                   label={t(
                     "settings.experimental.workspaceRepair.fallbackLabel",
-                    "Workspace 自愈记录",
                   )}
                 />
               }
@@ -1269,7 +1109,6 @@ export function ExperimentalSettings({
                 className="rounded-[22px] border-slate-200/80 bg-white p-4"
                 description={t(
                   "settings.experimental.workspaceRepair.cardDescription",
-                  "最近自动修复/迁移记录",
                 )}
               />
             </Suspense>

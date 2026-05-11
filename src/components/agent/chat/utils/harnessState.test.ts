@@ -200,7 +200,7 @@ describe("deriveHarnessSessionState", () => {
     });
   });
 
-  it("内部路由型 turn_summary 不应伪装成已就绪计划", () => {
+  it("runtime status turn_summary 不应伪装成已就绪计划", () => {
     const messages = [createMessage()];
     const items: AgentThreadItem[] = [
       {
@@ -213,7 +213,12 @@ describe("deriveHarnessSessionState", () => {
         completed_at: "2026-03-13T12:00:01.000Z",
         updated_at: "2026-03-13T12:00:01.000Z",
         type: "turn_summary",
-        text: "直接回答优先\n当前请求无需工具介入。",
+        text: "runtime status should not become a ready plan",
+        metadata: {
+          sourceType: "runtime_status",
+          surface: "runtime_status",
+          visibility: "diagnostics",
+        },
       },
     ];
 
@@ -222,7 +227,7 @@ describe("deriveHarnessSessionState", () => {
     expect(state.plan.phase).toBe("idle");
     expect(state.plan.items).toHaveLength(0);
     expect(state.plan.summaryText).toBeUndefined();
-    expect(state.outputSignals[0]?.toolName).toBe("turn_summary");
+    expect(state.outputSignals).toHaveLength(0);
   });
 
   it("有真实进展的 turn_summary 仍应作为计划摘要兜底", () => {

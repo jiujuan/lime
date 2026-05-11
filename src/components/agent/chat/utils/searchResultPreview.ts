@@ -304,6 +304,9 @@ function parseSearchResultText(rawText: string): SearchResultPreviewItem[] {
       if (!nextLine || findFirstUrl(nextLine)) {
         break;
       }
+      if (nextIndex + 1 < lines.length && findFirstUrl(lines[nextIndex + 1])) {
+        break;
+      }
       snippetLines.push(nextLine);
       if (snippetLines.length >= 2 || snippetLines.join(" ").length >= 180) {
         break;

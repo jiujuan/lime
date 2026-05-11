@@ -1,39 +1,16 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
-const { mockGetConfig, mockSaveConfig, mockUseTranslation } = vi.hoisted(
-  () => ({
-    mockGetConfig: vi.fn(),
-    mockSaveConfig: vi.fn(),
-    mockUseTranslation: vi.fn((_namespace?: string) => ({
-      t: (key: string, options?: unknown) => {
-        if (typeof options === "string") {
-          return options;
-        }
-
-        if (options && typeof options === "object") {
-          const values = options as Record<string, unknown>;
-          const template =
-            typeof values.defaultValue === "string" ? values.defaultValue : key;
-          return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-            String(values[name] ?? ""),
-          );
-        }
-
-        return key;
-      },
-    })),
-  }),
-);
+const { mockGetConfig, mockSaveConfig } = vi.hoisted(() => ({
+  mockGetConfig: vi.fn(),
+  mockSaveConfig: vi.fn(),
+}));
 
 vi.mock("@/lib/api/appConfig", () => ({
   getConfig: mockGetConfig,
   saveConfig: mockSaveConfig,
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
 }));
 
 vi.mock("@/components/input-kit", () => ({
@@ -47,22 +24,22 @@ vi.mock("@/components/input-kit", () => ({
     placeholderLabel?: string;
   }) => (
     <div data-testid="settings-model-selector">
-      {providerType || placeholderLabel || "自动选择"} /{" "}
-      {model || placeholderLabel || "自动选择"}
+      {providerType || placeholderLabel || "Auto"} /{" "}
+      {model || placeholderLabel || "Auto"}
     </div>
   ),
 }));
 
 vi.mock("../image-gen", () => ({
-  ImageGenSettings: () => <div>图片服务模型区块</div>,
+  ImageGenSettings: () => <div>Image service model section</div>,
 }));
 
 vi.mock("../video-gen", () => ({
-  VideoGenSettings: () => <div>视频服务模型区块</div>,
+  VideoGenSettings: () => <div>Video service model section</div>,
 }));
 
 vi.mock("../voice", () => ({
-  VoiceSettings: () => <div>语音服务模型区块</div>,
+  VoiceSettings: () => <div>Voice service model section</div>,
 }));
 
 import { MediaServicesSettings } from ".";
@@ -136,7 +113,7 @@ function findSection(container: HTMLElement, title: string): HTMLElement {
   return section as HTMLElement;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -153,11 +130,16 @@ beforeEach(() => {
   );
 
   vi.clearAllMocks();
+  await changeLimeLocale("en-US");
 
   mockGetConfig.mockResolvedValue({
     workspace_preferences: {
       schema_version: 2,
       service_models: {
+        responsive_chat: {
+          preferredProviderId: "openai",
+          preferredModelId: "gpt-4o-mini",
+        },
         topic: {
           preferredProviderId: "openai",
           preferredModelId: "gpt-5.4-mini",
@@ -176,7 +158,7 @@ beforeEach(() => {
   mockSaveConfig.mockResolvedValue(undefined);
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mounted.length > 0) {
     const target = mounted.pop();
     if (!target) {
@@ -188,6 +170,9 @@ afterEach(() => {
     });
     target.container.remove();
   }
+
+  vi.clearAllMocks();
+  await changeLimeLocale("zh-CN");
 });
 
 describe("MediaServicesSettings", () => {
@@ -196,27 +181,27 @@ describe("MediaServicesSettings", () => {
     await flushEffects();
 
     const text = container.textContent ?? "";
-    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
-    expect(text).toContain("服务模型");
-    expect(text).toContain("话题自动命名助理");
-    expect(text).toContain("AI 图片话题命名助理");
-    expect(text).toContain("消息内容翻译助理");
-    expect(text).toContain("会话历史压缩助理");
-    expect(text).toContain("助理信息生成助理");
-    expect(text).toContain("输入自动补全助理");
-    expect(text).toContain("提示词重写助理");
-    expect(text).toContain("项目资料提词重写助理");
+    expect(text).toContain("Service Models");
+    expect(text).toContain("Fast Response Chat Assistant");
+    expect(text).toContain("Topic Auto-Naming Assistant");
+    expect(text).toContain("AI Image Topic Naming Assistant");
+    expect(text).toContain("Message Translation Assistant");
+    expect(text).toContain("Conversation History Compression Assistant");
+    expect(text).toContain("Assistant Info Generation Assistant");
+    expect(text).toContain("Input Autocomplete Assistant");
+    expect(text).toContain("Prompt Rewrite Assistant");
+    expect(text).toContain("Project Resource Prompt Rewrite Assistant");
     expect(text).toContain(
-      "当前输入补全链只消费启停开关，避免继续暴露未接入执行面的模型选择。",
+      "The current input completion chain only uses the enable switch",
     );
-    expect(text).toContain("AI 图片设置");
-    expect(text).toContain("图片服务模型区块");
-    expect(text).toContain("视频服务模型区块");
-    expect(text).toContain("语音服务模型区块");
+    expect(text).toContain("AI Image Settings");
+    expect(text).toContain("Image service model section");
+    expect(text).toContain("Video service model section");
+    expect(text).toContain("Voice service model section");
+    expect(text).not.toContain("settings.mediaServices");
     expect(text).not.toContain("媒体服务");
-    expect(text).not.toContain("语音识别设置");
 
-    const section = findSection(container, "话题自动命名助理");
+    const section = findSection(container, "Topic Auto-Naming Assistant");
     expect(section.className).toContain("overflow-visible");
     expect(section.className).not.toContain("overflow-hidden");
   });
@@ -226,21 +211,29 @@ describe("MediaServicesSettings", () => {
     await flushEffects();
 
     expect(getBodyText()).not.toContain(
-      "统一管理当前已经接入主链的命名、翻译、提词重写与媒体生成默认模型，继续复用本地、自管云端和品牌云端同一套模型 taxonomy。",
+      "Manage the default models already wired into the main chain",
     );
 
-    const heroTip = await hoverTip("服务模型总览说明");
+    const heroTip = await hoverTip("Service models overview");
     expect(getBodyText()).toContain(
-      "统一管理当前已经接入主链的命名、翻译、提词重写与媒体生成默认模型，继续复用本地、自管云端和品牌云端同一套模型 taxonomy。",
+      "Manage the default models already wired into the main chain",
     );
     await leaveTip(heroTip);
+  });
+
+  it("应展示快速响应对话助理服务模型入口", async () => {
+    const container = renderComponent();
+    await flushEffects();
+
+    const section = findSection(container, "Fast Response Chat Assistant");
+    expect(section.textContent).toContain("streaming");
   });
 
   it("切换输入自动补全开关时应写入 service_models 配置", async () => {
     const container = renderComponent();
     await flushEffects();
 
-    const section = findSection(container, "输入自动补全助理");
+    const section = findSection(container, "Input Autocomplete Assistant");
     const switchButton = section.querySelector("button[role='switch']");
     expect(switchButton).toBeInstanceOf(HTMLButtonElement);
 
@@ -266,7 +259,7 @@ describe("MediaServicesSettings", () => {
     const container = renderComponent();
     await flushEffects();
 
-    const section = findSection(container, "AI 图片设置");
+    const section = findSection(container, "AI Image Settings");
     const numberInput = section.querySelector("input[type='number']");
     expect(numberInput).toBeInstanceOf(HTMLInputElement);
 
@@ -295,9 +288,12 @@ describe("MediaServicesSettings", () => {
     const container = renderComponent();
     await flushEffects();
 
-    const section = findSection(container, "项目资料提词重写助理");
+    const section = findSection(
+      container,
+      "Project Resource Prompt Rewrite Assistant",
+    );
     const addButton = Array.from(section.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("添加自定义提示词"),
+      (button) => button.textContent?.includes("Add custom prompt"),
     );
     expect(addButton).toBeInstanceOf(HTMLButtonElement);
 

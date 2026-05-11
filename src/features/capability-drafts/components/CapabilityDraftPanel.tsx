@@ -40,22 +40,6 @@ const STATUS_TONE_CLASSNAMES = {
   slate: "border-slate-200 bg-slate-50 text-slate-600",
 };
 
-const EVIDENCE_LABELS: Record<string, string> = {
-  actualSha256: "实际 Hash",
-  credentialReferenceId: "凭证引用",
-  durationMs: "耗时",
-  endpointSource: "Endpoint",
-  evidenceSchema: "证据 Schema",
-  expectedOutputPath: "期望输出",
-  expectedSha256: "期望 Hash",
-  exitStatus: "退出状态",
-  method: "方法",
-  policyPath: "Policy",
-  preflightMode: "Preflight",
-  scriptPath: "脚本",
-  stdoutPreview: "stdout",
-};
-
 function sortDraftsForDisplay(
   drafts: CapabilityDraftRecord[],
   highlightedDraftId?: string | null,
@@ -214,55 +198,40 @@ export function CapabilityDraftPanel({
     () => ({
       actualSha256: t(
         "capabilityDraft.panel.evidence.actualSha256",
-        EVIDENCE_LABELS.actualSha256,
+        "实际 Hash",
       ),
       credentialReferenceId: t(
         "capabilityDraft.panel.evidence.credentialReferenceId",
-        EVIDENCE_LABELS.credentialReferenceId,
+        "凭证引用",
       ),
-      durationMs: t(
-        "capabilityDraft.panel.evidence.durationMs",
-        EVIDENCE_LABELS.durationMs,
-      ),
+      durationMs: t("capabilityDraft.panel.evidence.durationMs", "耗时"),
       endpointSource: t(
         "capabilityDraft.panel.evidence.endpointSource",
-        EVIDENCE_LABELS.endpointSource,
+        "Endpoint",
       ),
       evidenceSchema: t(
         "capabilityDraft.panel.evidence.evidenceSchema",
-        EVIDENCE_LABELS.evidenceSchema,
+        "证据 Schema",
       ),
       expectedOutputPath: t(
         "capabilityDraft.panel.evidence.expectedOutputPath",
-        EVIDENCE_LABELS.expectedOutputPath,
+        "期望输出",
       ),
       expectedSha256: t(
         "capabilityDraft.panel.evidence.expectedSha256",
-        EVIDENCE_LABELS.expectedSha256,
+        "期望 Hash",
       ),
-      exitStatus: t(
-        "capabilityDraft.panel.evidence.exitStatus",
-        EVIDENCE_LABELS.exitStatus,
-      ),
-      method: t(
-        "capabilityDraft.panel.evidence.method",
-        EVIDENCE_LABELS.method,
-      ),
-      policyPath: t(
-        "capabilityDraft.panel.evidence.policyPath",
-        EVIDENCE_LABELS.policyPath,
-      ),
+      exitStatus: t("capabilityDraft.panel.evidence.exitStatus", "退出状态"),
+      method: t("capabilityDraft.panel.evidence.method", "方法"),
+      policyPath: t("capabilityDraft.panel.evidence.policyPath", "Policy"),
       preflightMode: t(
         "capabilityDraft.panel.evidence.preflightMode",
-        EVIDENCE_LABELS.preflightMode,
+        "Preflight",
       ),
-      scriptPath: t(
-        "capabilityDraft.panel.evidence.scriptPath",
-        EVIDENCE_LABELS.scriptPath,
-      ),
+      scriptPath: t("capabilityDraft.panel.evidence.scriptPath", "脚本"),
       stdoutPreview: t(
         "capabilityDraft.panel.evidence.stdoutPreview",
-        EVIDENCE_LABELS.stdoutPreview,
+        "stdout",
       ),
     }),
     [t],

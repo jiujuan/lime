@@ -133,9 +133,6 @@ pub fn run() {
         skill_service: skill_service_state,
         api_key_provider_service: api_key_provider_service_state,
         machine_id_service: machine_id_service_state,
-        plugin_manager: plugin_manager_state,
-        plugin_installer: plugin_installer_state,
-        plugin_rpc_manager: plugin_rpc_manager_state,
         telemetry: telemetry_state,
         aster_agent: aster_agent_state,
         connect_state,
@@ -242,9 +239,6 @@ pub fn run() {
         .manage(api_key_provider_service_state)
         .manage(machine_id_service_state)
         .manage(telemetry_state)
-        .manage(plugin_manager_state)
-        .manage(plugin_installer_state)
-        .manage(plugin_rpc_manager_state)
         .manage(aster_agent_state)
         .manage(connect_state)
         .manage(model_registry_state)
@@ -402,21 +396,6 @@ pub fn run() {
                     manager.set_emitter(emitter);
                 });
                 tracing::info!("[启动] MCP Manager 事件发射器已设置");
-            }
-
-            // 设置 PluginManager 的任务事件发射器（用于发送 plugin-task-event）
-            if let Some(plugin_manager) =
-                app.try_state::<crate::commands::plugin_cmd::PluginManagerState>()
-            {
-                let app_handle = app.handle().clone();
-                let emitter = lime_core::DynEmitter::new(
-                    crate::app::TauriEventEmitter(app_handle),
-                );
-                tauri::async_runtime::block_on(async {
-                    let manager = plugin_manager.0.read().await;
-                    manager.set_task_emitter(emitter).await;
-                });
-                tracing::info!("[启动] PluginManager 任务事件发射器已设置");
             }
 
             let startup_runtime_resume = {
@@ -1200,39 +1179,6 @@ pub fn run() {
             commands::security_perf_cmd::get_hint_routes,
             // Tray commands
             commands::tray_cmd::sync_tray_model_shortcuts,
-            // Plugin commands
-            commands::plugin_cmd::get_plugin_status,
-            commands::plugin_cmd::get_plugins,
-            commands::plugin_cmd::get_plugin_info,
-            commands::plugin_cmd::enable_plugin,
-            commands::plugin_cmd::disable_plugin,
-            commands::plugin_cmd::update_plugin_config,
-            commands::plugin_cmd::get_plugin_config,
-            commands::plugin_cmd::reload_plugins,
-            commands::plugin_cmd::unload_plugin,
-            commands::plugin_cmd::get_plugins_dir,
-            commands::plugin_cmd::list_plugin_tasks,
-            commands::plugin_cmd::get_plugin_task,
-            commands::plugin_cmd::cancel_plugin_task,
-            commands::plugin_cmd::get_plugin_queue_stats,
-            // Plugin Install commands
-            commands::plugin_install_cmd::install_plugin_from_file,
-            commands::plugin_install_cmd::install_plugin_from_url,
-            commands::plugin_install_cmd::uninstall_plugin,
-            commands::plugin_install_cmd::list_installed_plugins,
-            commands::plugin_install_cmd::get_installed_plugin,
-            commands::plugin_install_cmd::is_plugin_installed,
-            // Plugin UI commands
-            commands::plugin_cmd::get_plugins_with_ui,
-            commands::plugin_cmd::get_plugin_ui,
-            commands::plugin_cmd::handle_plugin_action,
-            commands::plugin_cmd::read_plugin_manifest_cmd,
-            commands::plugin_cmd::launch_plugin_ui,
-            commands::plugin_cmd::frontend_debug_log,
-            // Plugin RPC commands
-            commands::plugin_rpc_cmd::plugin_rpc_connect,
-            commands::plugin_rpc_cmd::plugin_rpc_disconnect,
-            commands::plugin_rpc_cmd::plugin_rpc_call,
             // Window control commands
             commands::window_cmd::get_window_size,
             commands::window_cmd::set_window_size,

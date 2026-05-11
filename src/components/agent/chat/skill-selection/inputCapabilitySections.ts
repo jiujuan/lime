@@ -276,7 +276,10 @@ export function buildInputCapabilitySectionsCopy(
         "inputCapabilities.heading.featuredServiceSkills",
         "场景 Skills",
       ),
-      installedSkills: translate("inputCapabilities.heading.installedSkills", "Skills"),
+      installedSkills: translate(
+        "inputCapabilities.heading.installedSkills",
+        "Skills",
+      ),
       installedSkillsEmpty: translate(
         "inputCapabilities.heading.installedSkillsEmpty",
         "已经沉淀的 Skills",
@@ -406,18 +409,25 @@ export function buildInputCapabilitySectionsCopy(
           title,
         }),
       formatFootnote: (titles) =>
-        translate("inputCapabilities.review.footnote", "更适合继续：{{titles}}", {
-          titles: titles.join(
-            translate("inputCapabilities.review.titleSeparator", " / "),
-          ),
-        }),
+        translate(
+          "inputCapabilities.review.footnote",
+          "更适合继续：{{titles}}",
+          {
+            titles: titles.join(
+              translate("inputCapabilities.review.titleSeparator", " / "),
+            ),
+          },
+        ),
       formatTitle: (title) =>
         translate(
           "inputCapabilities.review.title",
           "最近判断已更新：{{title}}",
           { title },
         ),
-      titleSeparator: translate("inputCapabilities.review.titleSeparator", " / "),
+      titleSeparator: translate(
+        "inputCapabilities.review.titleSeparator",
+        " / ",
+      ),
     },
     slashCommandGroups: {
       prompt_action: {
@@ -720,12 +730,14 @@ function resolveInputCommandSectionMeta(
   command: Pick<BuiltinInputCommand, "key">,
   copy: InputCapabilitySectionsCopy = {},
 ): InputCommandSectionMeta {
-  const meta = INPUT_COMMAND_SECTION_META[
-    INPUT_COMMAND_GROUP_BY_KEY[command.key] ?? "other"
-  ];
-  const metaCopy = copy.inputCommandGroups?.[
-    INPUT_COMMAND_GROUP_BY_KEY[command.key] ?? "other"
-  ];
+  const meta =
+    INPUT_COMMAND_SECTION_META[
+      INPUT_COMMAND_GROUP_BY_KEY[command.key] ?? "other"
+    ];
+  const metaCopy =
+    copy.inputCommandGroups?.[
+      INPUT_COMMAND_GROUP_BY_KEY[command.key] ?? "other"
+    ];
 
   return {
     ...meta,
@@ -889,9 +901,8 @@ function buildCuratedTaskSceneAppBaselineSummary(params: {
 
   const highlights = [
     snapshot.statusLabel
-      ? (params.copy?.baseline?.formatStatusHighlight?.(
-          snapshot.statusLabel,
-        ) ?? `当前判断：${snapshot.statusLabel}`)
+      ? (params.copy?.baseline?.formatStatusHighlight?.(snapshot.statusLabel) ??
+        `当前判断：${snapshot.statusLabel}`)
       : null,
     snapshot.destinationsLabel
       ? (params.copy?.baseline?.formatDestinationHighlight?.(
@@ -1146,7 +1157,8 @@ function buildMentionCapabilitySections(
     sections.push(
       attachMentionRegistryBanner({
         key: "recent-mention",
-        heading: params.inputCapabilityCopy?.headings?.recentMention ?? "最近调用",
+        heading:
+          params.inputCapabilityCopy?.headings?.recentMention ?? "最近调用",
         items: visibleRecentMentionEntries.flatMap<InputCapabilityDescriptor>(
           (entry) => {
             if (entry.kind === "builtin_command") {
@@ -1274,7 +1286,8 @@ function buildMentionCapabilitySections(
   if (params.installedSkills.length > 0) {
     sections.push({
       key: "installed-skills",
-      heading: params.inputCapabilityCopy?.headings?.installedSkills ?? "Skills",
+      heading:
+        params.inputCapabilityCopy?.headings?.installedSkills ?? "Skills",
       items: params.installedSkills.map((skill) => ({
         key: skill.directory,
         kind: "installed_skill" as const,

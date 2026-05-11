@@ -358,7 +358,8 @@ export function CreateProjectDialog({
                 </div>
                 <div className="mt-1 text-xs leading-5 text-slate-500">
                   {t("common.createProjectDialog.type.description", {
-                    defaultValue: "类型会影响后续默认内容、工作台结构和推荐视图。",
+                    defaultValue:
+                      "类型会影响后续默认内容、工作台结构和推荐视图。",
                   })}
                 </div>
               </div>

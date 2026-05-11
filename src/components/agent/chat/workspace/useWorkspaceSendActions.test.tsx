@@ -410,22 +410,6 @@ function createBootstrapDispatchSnapshot(
   };
 }
 
-function createConfiguredProvider(
-  overrides: Partial<
-    NonNullable<HookProps["configuredProviders"]>[number]
-  > = {},
-): NonNullable<HookProps["configuredProviders"]>[number] {
-  return {
-    key: "deepseek",
-    label: "DeepSeek",
-    registryId: "deepseek",
-    type: "deepseek",
-    providerId: "deepseek",
-    customModels: [],
-    ...overrides,
-  };
-}
-
 function mountHook(initialProps?: Partial<HookProps>): HookHarness {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -631,11 +615,8 @@ describe("useWorkspaceSendActions", () => {
     }
   });
 
-  it("首轮轻量对话有 DeepSeek 时应注入快速响应路由", async () => {
+  it("首轮轻量对话应只注入后端快速响应路由意图", async () => {
     const harness = mountHook({
-      currentProviderType: "lime-hub",
-      currentModel: "gpt-5.5",
-      configuredProviders: [createConfiguredProvider()],
       browserAssistProfileKey: "general_browser_assist",
       browserAssistAutoLaunch: true,
     });
@@ -651,8 +632,6 @@ describe("useWorkspaceSendActions", () => {
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
       const sendOptions = mockSendMessage.mock.calls[0]?.[8];
       expect(sendOptions).toMatchObject({
-        providerOverride: "deepseek",
-        modelOverride: "deepseek-chat",
         systemPromptOverride: expect.stringContaining("快速响应助手"),
         assistantDraft: {
           initialRuntimeStatus: {
@@ -667,17 +646,27 @@ describe("useWorkspaceSendActions", () => {
             fast_response_routing: {
               mode: "auto",
               label: "快速响应",
-              reason: "first-turn-low-latency",
-              provider: "deepseek",
-              model: "deepseek-chat",
+              reason: "first-turn-short-prompt",
+              service_model_slot: "responsive_chat",
+              routing_slot: "responsive_chat_model",
+              routing_changed: false,
+              resolver: "backend_service_model",
             },
           },
         },
       });
+      expect(sendOptions?.providerOverride).toBeUndefined();
+      expect(sendOptions?.modelOverride).toBeUndefined();
       expect(
         (sendOptions?.requestMetadata?.harness as Record<string, unknown>)
           .browser_assist,
-      ).toBeUndefined();
+      ).toEqual(
+        expect.objectContaining({
+          enabled: true,
+          profile_key: "general_browser_assist",
+          auto_launch: true,
+        }),
+      );
       expect(mockPreheatBrowserAssistInBackground).not.toHaveBeenCalled();
       expect(mockEnsureBrowserAssistCanvas).not.toHaveBeenCalled();
     } finally {
@@ -685,12 +674,8 @@ describe("useWorkspaceSendActions", () => {
     }
   });
 
-  it("首轮轻量对话不等待 Provider 列表也应命中内置快速响应路由", async () => {
-    const harness = mountHook({
-      currentProviderType: "lime-hub",
-      currentModel: "gpt-5.5",
-      configuredProviders: [],
-    });
+  it("首轮轻量对话不等待 Provider 列表也应命中后端快速响应路由", async () => {
+    const harness = mountHook();
 
     try {
       await act(async () => {
@@ -702,35 +687,29 @@ describe("useWorkspaceSendActions", () => {
 
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
       expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
-        providerOverride: "deepseek",
-        modelOverride: "deepseek-chat",
         systemPromptOverride: expect.stringContaining("快速响应助手"),
         requestMetadata: {
           harness: {
             fast_response_routing: {
-              reason: "first-turn-low-latency",
-              provider: "deepseek",
-              model: "deepseek-chat",
-              routing_changed: true,
+              reason: "first-turn-short-prompt",
+              service_model_slot: "responsive_chat",
+              routing_slot: "responsive_chat_model",
+              routing_changed: false,
             },
           },
         },
       });
+      expect(
+        mockSendMessage.mock.calls[0]?.[8]?.providerOverride,
+      ).toBeUndefined();
+      expect(mockSendMessage.mock.calls[0]?.[8]?.modelOverride).toBeUndefined();
     } finally {
       harness.unmount();
     }
   });
 
-  it("当前为 DeepSeek 推理模型时首轮轻量对话应降级到非推理 chat", async () => {
-    const harness = mountHook({
-      currentProviderType: "deepseek",
-      currentModel: "deepseek-v4-flash",
-      configuredProviders: [
-        createConfiguredProvider({
-          customModels: ["deepseek-v4-pro", "deepseek-v4-flash"],
-        }),
-      ],
-    });
+  it("首轮轻量对话不应在前端降级具体推理模型", async () => {
+    const harness = mountHook();
 
     try {
       await act(async () => {
@@ -743,28 +722,25 @@ describe("useWorkspaceSendActions", () => {
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
       const sendOptions = mockSendMessage.mock.calls[0]?.[8];
       expect(sendOptions).toMatchObject({
-        providerOverride: "deepseek",
-        modelOverride: "deepseek-chat",
         systemPromptOverride: expect.stringContaining("只输出一个字"),
         requestMetadata: {
           harness: {
             fast_response_routing: {
-              provider: "deepseek",
-              model: "deepseek-chat",
+              service_model_slot: "responsive_chat",
+              routing_slot: "responsive_chat_model",
             },
           },
         },
       });
+      expect(sendOptions?.providerOverride).toBeUndefined();
+      expect(sendOptions?.modelOverride).toBeUndefined();
     } finally {
       harness.unmount();
     }
   });
 
-  it("DeepSeek 推理模型首轮降级不应等待 Provider 列表预加载", async () => {
-    const harness = mountHook({
-      currentProviderType: "deepseek",
-      currentModel: "deepseek-reasoner",
-    });
+  it("后端快速响应路由不应等待 Provider 列表预加载", async () => {
+    const harness = mountHook();
 
     try {
       await act(async () => {
@@ -776,21 +752,26 @@ describe("useWorkspaceSendActions", () => {
 
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
       expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
-        providerOverride: "deepseek",
-        modelOverride: "deepseek-chat",
         systemPromptOverride: expect.stringContaining("快速响应助手"),
+        requestMetadata: {
+          harness: {
+            fast_response_routing: {
+              resolver: "backend_service_model",
+            },
+          },
+        },
       });
+      expect(
+        mockSendMessage.mock.calls[0]?.[8]?.providerOverride,
+      ).toBeUndefined();
+      expect(mockSendMessage.mock.calls[0]?.[8]?.modelOverride).toBeUndefined();
     } finally {
       harness.unmount();
     }
   });
 
   it("首页快路径首轮普通发送不应预热旧会话恢复", async () => {
-    const harness = mountHook({
-      currentProviderType: "lime-hub",
-      currentModel: "gpt-5.5",
-      configuredProviders: [],
-    });
+    const harness = mountHook();
 
     try {
       await act(async () => {
@@ -818,9 +799,19 @@ describe("useWorkspaceSendActions", () => {
         skipSessionRestore: true,
         skipSessionStartHooks: true,
         skipPreSubmitResume: true,
-        providerOverride: "deepseek",
-        modelOverride: "deepseek-chat",
+        requestMetadata: {
+          harness: {
+            fast_response_routing: {
+              service_model_slot: "responsive_chat",
+              routing_slot: "responsive_chat_model",
+            },
+          },
+        },
       });
+      expect(
+        mockSendMessage.mock.calls[0]?.[8]?.providerOverride,
+      ).toBeUndefined();
+      expect(mockSendMessage.mock.calls[0]?.[8]?.modelOverride).toBeUndefined();
     } finally {
       harness.unmount();
     }

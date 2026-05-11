@@ -20,7 +20,6 @@
 - `bussniss/`：商务合作与代理运营方案
 - `oem/`：品牌、slogan、Logo 替换与 OEM 物料
 - `develop/`：开发流程与协作规范
-- `plugins/`：插件与扩展相关文档
 - `tests/`：测试策略与用例文档
 - `iteration-notes/`：迭代备忘与下版本建议（暂不进入当前发布范围的问题）
 - `images/`：文档图片资源

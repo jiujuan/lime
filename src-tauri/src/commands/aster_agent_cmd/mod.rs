@@ -337,6 +337,7 @@ fn normalize_optional_text(value: Option<String>) -> Option<String> {
 }
 
 pub(crate) mod action_runtime;
+mod agentruntime_profile;
 mod analysis_skill_launch;
 mod broadcast_skill_launch;
 mod browser_assist;
@@ -360,6 +361,7 @@ mod resource_search_skill_launch;
 mod run_metadata;
 mod runtime_plugin_agents;
 mod runtime_project_hooks;
+mod runtime_task_profile;
 mod runtime_turn;
 mod service_skill_launch;
 mod session_runtime;
@@ -394,6 +396,10 @@ pub(crate) use crate::services::runtime_skill_binding_service::{
 pub(crate) use action_runtime::{
     build_action_resume_runtime_status, build_runtime_action_user_data,
     validate_elicitation_submission,
+};
+pub(crate) use agentruntime_profile::{
+    AgentRuntimeProfileEvent, AgentRuntimeProfileStream, LIME_AGENT_RUNTIME_ID,
+    LIME_AGENT_RUNTIME_PROFILE_SCHEMA_VERSION,
 };
 pub(crate) use analysis_skill_launch::{
     append_analysis_skill_launch_session_permissions,
@@ -464,10 +470,13 @@ pub(crate) use dto::{
     AgentRuntimeSaveReviewDecisionRequest, AgentRuntimeSendSubagentInputRequest,
     AgentRuntimeSendSubagentInputResponse, AgentRuntimeSessionDetail,
     AgentRuntimeSpawnSubagentRequest, AgentRuntimeSpawnSubagentResponse,
-    AgentRuntimeSubmitTurnRequest, AgentRuntimeThreadDiagnostics, AgentRuntimeThreadReadModel,
-    AgentRuntimeToolInventoryRequest, AgentRuntimeUpdateSessionRequest,
-    AgentRuntimeWaitSubagentsRequest, AgentRuntimeWaitSubagentsResponse, AsterAgentStatus,
-    AsterChatRequest, AutoContinuePayload, ConfigureProviderRequest,
+    AgentRuntimeSubmitTurnRequest, AgentRuntimeThreadDiagnostics,
+    AgentRuntimeThreadEvidenceSummary, AgentRuntimeThreadReadModel,
+    AgentRuntimeThreadTelemetrySummary, AgentRuntimeThreadToolCallView,
+    AgentRuntimeThreadTurnProfileView, AgentRuntimeToolInventoryRequest,
+    AgentRuntimeUpdateSessionRequest, AgentRuntimeWaitSubagentsRequest,
+    AgentRuntimeWaitSubagentsResponse, AsterAgentStatus, AsterChatRequest, AutoContinuePayload,
+    ConfigureProviderRequest,
 };
 pub(crate) use form_skill_launch::{
     append_form_skill_launch_session_permissions, merge_system_prompt_with_form_skill_launch,
@@ -505,7 +514,8 @@ pub(crate) use provider_runtime_strategy::{
 use reply_runtime::{
     build_runtime_user_message, build_turn_runtime_statuses, complete_runtime_status_projection,
     emit_runtime_status_with_projection, ensure_code_execution_extension_enabled,
-    should_fallback_to_react_from_code_orchestrated, stream_reply_once,
+    should_fallback_to_react_from_code_orchestrated, should_project_runtime_status_to_timeline,
+    stream_reply_once,
 };
 pub(crate) use report_skill_launch::{
     append_report_skill_launch_session_permissions, merge_system_prompt_with_report_skill_launch,
@@ -537,6 +547,9 @@ use run_metadata::{
 pub(crate) use runtime_plugin_agents::{
     merge_system_prompt_with_runtime_plugin_agents,
     resolve_requested_runtime_plugin_agent_definition, RuntimePluginAgentDefinition,
+};
+pub(crate) use runtime_task_profile::{
+    attempt_id_from_turn_id, run_id_from_turn_id, task_id_from_thread_id,
 };
 pub(crate) use runtime_turn::{build_queued_turn_task, build_runtime_queue_executor};
 #[cfg(test)]

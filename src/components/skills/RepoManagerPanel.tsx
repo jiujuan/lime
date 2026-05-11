@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { X, Plus, Trash2, ExternalLink, RefreshCw } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { SkillRepo } from "@/lib/api/skills";
 
 interface RepoManagerPanelProps {
@@ -17,6 +18,7 @@ export function RepoManagerPanel({
   onRemoveRepo,
   onRefresh,
 }: RepoManagerPanelProps) {
+  const { t } = useTranslation("agent");
   const [owner, setOwner] = useState("");
   const [name, setName] = useState("");
   const [branch, setBranch] = useState("main");
@@ -25,7 +27,7 @@ export function RepoManagerPanel({
 
   const handleAdd = async () => {
     if (!owner.trim() || !name.trim()) {
-      alert("请输入仓库所有者和名称");
+      window.alert(t("skills.repoManager.validation.ownerAndName"));
       return;
     }
 
@@ -41,7 +43,11 @@ export function RepoManagerPanel({
       setName("");
       setBranch("main");
     } catch (e) {
-      alert(`添加失败: ${e instanceof Error ? e.message : String(e)}`);
+      window.alert(
+        t("skills.repoManager.message.addFailed", {
+          message: e instanceof Error ? e.message : String(e),
+        }),
+      );
     } finally {
       setAdding(false);
     }
@@ -53,7 +59,11 @@ export function RepoManagerPanel({
     try {
       await onRemoveRepo(repoOwner, repoName);
     } catch (e) {
-      alert(`删除失败: ${e instanceof Error ? e.message : String(e)}`);
+      window.alert(
+        t("skills.repoManager.message.removeFailed", {
+          message: e instanceof Error ? e.message : String(e),
+        }),
+      );
     } finally {
       setRemoving(null);
     }
@@ -69,18 +79,27 @@ export function RepoManagerPanel({
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b">
           <div>
-            <h3 className="text-lg font-semibold">仓库管理</h3>
-            <p className="text-sm text-muted-foreground">管理 Skill 仓库源</p>
+            <h3 className="text-lg font-semibold">
+              {t("skills.repoManager.title")}
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              {t("skills.repoManager.description")}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={onRefresh}
               className="rounded-lg p-2 hover:bg-muted"
-              title="刷新"
+              title={t("skills.repoManager.action.refresh")}
             >
               <RefreshCw className="h-4 w-4" />
             </button>
-            <button onClick={onClose} className="rounded-lg p-2 hover:bg-muted">
+            <button
+              onClick={onClose}
+              className="rounded-lg p-2 hover:bg-muted"
+              title={t("skills.repoManager.action.close")}
+              aria-label={t("skills.repoManager.action.close")}
+            >
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -90,12 +109,14 @@ export function RepoManagerPanel({
         <div className="p-4 space-y-4 overflow-y-auto max-h-[calc(80vh-140px)]">
           {/* Add Repo Form */}
           <div className="rounded-lg border bg-card p-4">
-            <h4 className="font-medium mb-3">添加新仓库</h4>
+            <h4 className="font-medium mb-3">
+              {t("skills.repoManager.form.title")}
+            </h4>
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm text-muted-foreground mb-1">
-                    所有者
+                    {t("skills.repoManager.field.owner")}
                   </label>
                   <input
                     type="text"
@@ -107,7 +128,7 @@ export function RepoManagerPanel({
                 </div>
                 <div>
                   <label className="block text-sm text-muted-foreground mb-1">
-                    仓库名
+                    {t("skills.repoManager.field.repositoryName")}
                   </label>
                   <input
                     type="text"
@@ -120,7 +141,7 @@ export function RepoManagerPanel({
               </div>
               <div>
                 <label className="block text-sm text-muted-foreground mb-1">
-                  分支（可选）
+                  {t("skills.repoManager.field.branch")}
                 </label>
                 <input
                   type="text"
@@ -138,12 +159,12 @@ export function RepoManagerPanel({
                 {adding ? (
                   <>
                     <RefreshCw className="h-4 w-4 animate-spin" />
-                    添加中...
+                    {t("skills.repoManager.action.adding")}
                   </>
                 ) : (
                   <>
                     <Plus className="h-4 w-4" />
-                    添加仓库
+                    {t("skills.repoManager.action.add")}
                   </>
                 )}
               </button>
@@ -152,10 +173,12 @@ export function RepoManagerPanel({
 
           {/* Repo List */}
           <div className="space-y-2">
-            <h4 className="font-medium">已添加的仓库</h4>
+            <h4 className="font-medium">
+              {t("skills.repoManager.list.title")}
+            </h4>
             {repos.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">
-                暂无仓库
+                {t("skills.repoManager.list.empty")}
               </p>
             ) : (
               repos.map((repo) => {
@@ -170,14 +193,16 @@ export function RepoManagerPanel({
                     <div className="flex-1">
                       <p className="font-medium">{key}</p>
                       <p className="text-xs text-muted-foreground">
-                        分支: {repo.branch}
+                        {t("skills.repoManager.repo.branch", {
+                          branch: repo.branch,
+                        })}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => openRepo(repo)}
                         className="rounded-lg p-2 hover:bg-muted"
-                        title="在 GitHub 上查看"
+                        title={t("skills.repoManager.action.openGitHub")}
                       >
                         <ExternalLink className="h-4 w-4" />
                       </button>
@@ -185,7 +210,7 @@ export function RepoManagerPanel({
                         onClick={() => handleRemove(repo.owner, repo.name)}
                         disabled={isRemoving}
                         className="rounded-lg p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50"
-                        title="删除"
+                        title={t("skills.repoManager.action.remove")}
                       >
                         {isRemoving ? (
                           <RefreshCw className="h-4 w-4 animate-spin" />
