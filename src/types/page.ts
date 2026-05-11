@@ -20,7 +20,6 @@ export type { SceneAppsPageParams } from "@/lib/sceneapp/navigation";
 export type WorkspaceTheme = "general";
 
 export type Page =
-  | "openclaw"
   | "agent"
   | "skills"
   | "knowledge"
@@ -33,20 +32,6 @@ export type Page =
   | "settings"
   | "memory"
   | `plugin:${string}`;
-
-export type OpenClawSubpage =
-  | "install"
-  | "installing"
-  | "configure"
-  | "runtime"
-  | "updating"
-  | "restarting"
-  | "uninstalling"
-  | "dashboard";
-
-export interface OpenClawPageParams {
-  subpage?: OpenClawSubpage;
-}
 
 export interface AgentPendingServiceSkillLaunchParams {
   skillId: string;
@@ -249,7 +234,6 @@ export type PageParams =
   | BrowserRuntimePageParams
   | ResourcesPageParams
   | SettingsPageParams
-  | OpenClawPageParams
   | SkillsPageParams
   | KnowledgePageParams
   | SceneAppsPageParams

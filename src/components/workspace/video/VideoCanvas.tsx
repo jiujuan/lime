@@ -1,4 +1,5 @@
 import React, { memo, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import { toast } from "sonner";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
@@ -251,6 +252,7 @@ const WorkspaceFrame = styled.div`
 
 export const VideoCanvas: React.FC<VideoCanvasProps> = memo(
   ({ state, onStateChange, projectId, contentId, onClose: _onClose }) => {
+    const { t } = useTranslation("workspace");
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [providers, setProviders] = useState<VideoProviderOption[]>([]);
     const { mediaDefaults } = useGlobalMediaGenerationDefaults();
@@ -390,13 +392,19 @@ export const VideoCanvas: React.FC<VideoCanvasProps> = memo(
           ...state,
           startImage: imageUrl,
         });
-        toast.success("已设置为视频起始参考图");
+        toast.success(
+          t("workspace.video.canvas.imageInsert.success", {
+            defaultValue: "已设置为视频起始参考图",
+          }),
+        );
 
         emitCanvasImageInsertAck({
           requestId: request.requestId,
           success: true,
           canvasType: "video",
-          locationLabel: "起始画面参考图",
+          locationLabel: t("workspace.video.canvas.imageInsert.locationLabel", {
+            defaultValue: "起始画面参考图",
+          }),
         });
         ackCanvasImageInsertRequest(request.requestId);
       };
@@ -408,7 +416,7 @@ export const VideoCanvas: React.FC<VideoCanvasProps> = memo(
         processInsertRequest(request);
       });
       return unsubscribe;
-    }, [matchesRequestTarget, onStateChange, state]);
+    }, [matchesRequestTarget, onStateChange, state, t]);
 
     return (
       <Root>
@@ -425,7 +433,15 @@ export const VideoCanvas: React.FC<VideoCanvasProps> = memo(
           <Splitter>
             <SplitterButton
               onClick={() => setSidebarCollapsed((previous) => !previous)}
-              title={sidebarCollapsed ? "展开侧栏" : "收起侧栏"}
+              title={
+                sidebarCollapsed
+                  ? t("workspace.video.canvas.sidebar.expand", {
+                      defaultValue: "展开侧栏",
+                    })
+                  : t("workspace.video.canvas.sidebar.collapse", {
+                      defaultValue: "收起侧栏",
+                    })
+              }
             >
               {sidebarCollapsed ? (
                 <PanelLeftOpen size={12} />

@@ -1,5 +1,7 @@
 import { RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { formatDate, formatNumber } from "@/i18n/format";
 import { listProjects, type Project } from "@/lib/api/project";
 import {
   getStoredResourceProjectId,
@@ -70,7 +72,13 @@ function matchesAdapter(adapter: SiteAdapterDefinition, keyword: string) {
   ].some((value) => value.toLowerCase().includes(normalizedKeyword));
 }
 
-function summarizeResult(result: SiteAdapterRunResult | null) {
+type ResultSummary =
+  | { kind: "items"; count: number }
+  | { kind: "sections"; count: number };
+
+function getResultSummary(
+  result: SiteAdapterRunResult | null,
+): ResultSummary | null {
   if (
     !result?.data ||
     typeof result.data !== "object" ||
@@ -89,10 +97,10 @@ function summarizeResult(result: SiteAdapterRunResult | null) {
     : null;
 
   if (typeof items === "number") {
-    return `返回 ${items} 条结构化记录`;
+    return { kind: "items", count: items };
   }
   if (typeof sections === "number") {
-    return `返回 ${sections} 个分段结果`;
+    return { kind: "sections", count: sections };
   }
   return null;
 }
@@ -113,22 +121,23 @@ function normalizeSaveTitleSegment(value: unknown) {
 
 function buildSuggestedSaveTitle(input: {
   adapterName: string;
+  titlePrefix: string;
   args?: Record<string, unknown>;
 }) {
   const query = normalizeSaveTitleSegment(input.args?.query);
   if (query) {
-    return `站点采集 ${input.adapterName} · ${query}`;
+    return `${input.titlePrefix} ${input.adapterName} · ${query}`;
   }
 
   const repo = normalizeSaveTitleSegment(input.args?.repo);
   if (repo) {
-    return `站点采集 ${input.adapterName} · ${repo}`;
+    return `${input.titlePrefix} ${input.adapterName} · ${repo}`;
   }
 
-  return `站点采集 ${input.adapterName}`;
+  return `${input.titlePrefix} ${input.adapterName}`;
 }
 
-function formatCatalogSyncedAt(value?: string) {
+function formatCatalogSyncedAt(value: string | undefined, locale: string) {
   if (!value) {
     return null;
   }
@@ -138,17 +147,16 @@ function formatCatalogSyncedAt(value?: string) {
     return value;
   }
 
-  return date.toLocaleString("zh-CN", { hour12: false });
-}
-
-function getCatalogSourceLabel(status: SiteAdapterCatalogStatus | null) {
-  if (!status) {
-    return "加载中";
-  }
-
-  return status.exists || status.source_kind === "server_synced"
-    ? "服务端同步"
-    : "应用内置";
+  return formatDate(date, {
+    locale,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
 }
 
 function buildInitialLaunchSignature(input: {
@@ -185,6 +193,11 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
     initialRequireAttachedSession = false,
     initialSaveTitle,
   } = props;
+  const { t, i18n } = useTranslation("workspace");
+  const formatCount = useCallback(
+    (value: number) => formatNumber(value, { locale: i18n.language }),
+    [i18n.language],
+  );
   const [adapters, setAdapters] = useState<SiteAdapterDefinition[]>([]);
   const [recommendations, setRecommendations] = useState<
     SiteAdapterRecommendation[]
@@ -468,19 +481,22 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
 
   const executionProfileLabel = useMemo(() => {
     if (!initialRequireAttachedSession) {
-      return effectiveProfileKey || "default";
+      return (
+        effectiveProfileKey || t("workspace.browserSiteAdapter.value.default")
+      );
     }
 
     if (!hasAttachedSessionAvailable) {
-      return "需要先附着当前 Chrome";
+      return t("workspace.browserSiteAdapter.value.attachRequired");
     }
 
-    return runProfileKey || "自动选择已连接会话";
+    return runProfileKey || t("workspace.browserSiteAdapter.value.autoAttach");
   }, [
     effectiveProfileKey,
     hasAttachedSessionAvailable,
     initialRequireAttachedSession,
     runProfileKey,
+    t,
   ]);
 
   const executionProfile = useMemo(() => {
@@ -496,14 +512,17 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
     [projects, selectedProjectId],
   );
 
-  const resultSummary = useMemo(() => summarizeResult(result), [result]);
+  const resultSummary = useMemo(() => getResultSummary(result), [result]);
   const catalogSyncedAtText = useMemo(
-    () => formatCatalogSyncedAt(catalogStatus?.synced_at),
-    [catalogStatus?.synced_at],
+    () => formatCatalogSyncedAt(catalogStatus?.synced_at, i18n.language),
+    [catalogStatus?.synced_at, i18n.language],
   );
   const catalogSourceLabel = useMemo(
-    () => getCatalogSourceLabel(catalogStatus),
-    [catalogStatus],
+    () =>
+      catalogStatus?.exists || catalogStatus?.source_kind === "server_synced"
+        ? t("workspace.browserSiteAdapter.catalog.source.serverSynced")
+        : t("workspace.browserSiteAdapter.catalog.source.bundled"),
+    [catalogStatus?.exists, catalogStatus?.source_kind, t],
   );
   const effectiveAdapterCount = adapters.length;
   const syncedAdapterCount = catalogStatus?.exists
@@ -612,9 +631,13 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
       adapters.length > 0 &&
       !adapters.some((adapter) => adapter.name === initialAdapterName)
     ) {
-      setError(`当前目录未找到站点脚本：${initialAdapterName}`);
+      setError(
+        t("workspace.browserSiteAdapter.feedback.initialAdapterMissing", {
+          name: initialAdapterName,
+        }),
+      );
     }
-  }, [adapters, initialAdapterName, loading]);
+  }, [adapters, initialAdapterName, loading, t]);
 
   useEffect(() => {
     if (!selectedAdapter) {
@@ -679,6 +702,7 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
       >;
       const suggestedSaveTitle = buildSuggestedSaveTitle({
         adapterName: selectedAdapter.name,
+        titlePrefix: t("workspace.browserSiteAdapter.saveTitle.prefix"),
         args: parsedArgs,
       });
       const autoSaveEnabled =
@@ -689,8 +713,9 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
         !shouldWriteToCurrentContent &&
         (saveTitleInput.trim() || suggestedSaveTitle);
       if (initialRequireAttachedSession && !hasAttachedSessionAvailable) {
-        const message =
-          "当前技能要求复用已附着的 Chrome 会话，请先连接当前 Chrome 并保持目标站点登录态。";
+        const message = t(
+          "workspace.browserSiteAdapter.feedback.attachSessionRequired",
+        );
         setError(message);
         onMessage?.({
           type: "error",
@@ -725,7 +750,9 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
         }
         if (nextResult.save_error_message) {
           setError(
-            `执行成功，但自动保存失败：${nextResult.save_error_message}`,
+            t("workspace.browserSiteAdapter.feedback.autoSaveFailed", {
+              message: nextResult.save_error_message,
+            }),
           );
         }
       }
@@ -735,19 +762,38 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
         onMessage?.({
           type: nextResult.save_error_message ? "error" : "success",
           text: nextResult.save_error_message
-            ? `站点命令 ${nextResult.adapter} 执行完成，但自动保存失败: ${nextResult.save_error_message}`
+            ? t("workspace.browserSiteAdapter.feedback.runAutoSaveFailed", {
+                adapter: nextResult.adapter,
+                message: nextResult.save_error_message,
+              })
             : nextResult.saved_content
               ? shouldWriteToCurrentContent
-                ? `站点命令 ${nextResult.adapter} 执行完成，已写回当前主稿`
-                : `站点命令 ${nextResult.adapter} 执行完成，已保存到资源项目：${selectedProjectName}`
-              : `站点命令 ${nextResult.adapter} 执行完成`,
+                ? t(
+                    "workspace.browserSiteAdapter.feedback.runSavedToCurrentContent",
+                    {
+                      adapter: nextResult.adapter,
+                    },
+                  )
+                : t(
+                    "workspace.browserSiteAdapter.feedback.runSavedToProject",
+                    {
+                      adapter: nextResult.adapter,
+                      projectName: selectedProjectName,
+                    },
+                  )
+              : t("workspace.browserSiteAdapter.feedback.runCompleted", {
+                  adapter: nextResult.adapter,
+                }),
         });
       } else {
         onMessage?.({
           type: "error",
-          text: `站点命令失败: ${
-            nextResult.error_message || nextResult.error_code || "未知错误"
-          }`,
+          text: t("workspace.browserSiteAdapter.feedback.runFailed", {
+            message:
+              nextResult.error_message ||
+              nextResult.error_code ||
+              t("workspace.browserSiteAdapter.value.unknownError"),
+          }),
         });
       }
     } catch (nextError) {
@@ -756,7 +802,9 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
       setError(message);
       onMessage?.({
         type: "error",
-        text: `站点命令参数解析失败: ${message}`,
+        text: t("workspace.browserSiteAdapter.feedback.parseFailed", {
+          message,
+        }),
       });
     } finally {
       setRunning(false);
@@ -773,6 +821,7 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
     selectedProjectId,
     selectedProjectName,
     shouldWriteToCurrentContent,
+    t,
     updateSuggestedSaveTitle,
     variant,
   ]);
@@ -927,8 +976,10 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
       onMessage?.({
         type: "success",
         text: shouldWriteToCurrentContent
-          ? "已写回当前主稿"
-          : `已保存站点结果到资源项目：${selectedProject?.name || selectedProjectId}`,
+          ? t("workspace.browserSiteAdapter.feedback.savedToCurrentContent")
+          : t("workspace.browserSiteAdapter.feedback.savedToProject", {
+              projectName: selectedProject?.name || selectedProjectId,
+            }),
       });
     } catch (nextError) {
       const message =
@@ -936,7 +987,9 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
       setError(message);
       onMessage?.({
         type: "error",
-        text: `保存站点结果失败: ${message}`,
+        text: t("workspace.browserSiteAdapter.feedback.saveFailed", {
+          message,
+        }),
       });
     } finally {
       setSavingResult(false);
@@ -964,11 +1017,14 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
     });
   };
 
-  const title = variant === "workspace" ? "站点采集工作台" : "站点命令调试";
+  const title =
+    variant === "workspace"
+      ? t("workspace.browserSiteAdapter.title.workspace")
+      : t("workspace.browserSiteAdapter.title.debug");
   const description =
     variant === "workspace"
-      ? "直接复用你在 Lime 里维护的浏览器资料，执行内置只读站点适配器，把公开页面转成结构化结果。"
-      : "用真实浏览器登录态执行 Lime 内置只读站点适配器，验证结构化结果是否符合预期。";
+      ? t("workspace.browserSiteAdapter.description.workspace")
+      : t("workspace.browserSiteAdapter.description.debug");
   const rootClassName =
     variant === "workspace"
       ? "rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm shadow-slate-950/5"
@@ -983,10 +1039,14 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
         </div>
         <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
           <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
-            适配器 {adapters.length}
+            {t("workspace.browserSiteAdapter.summary.adapters", {
+              value: formatCount(adapters.length),
+            })}
           </span>
           <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
-            资料 {profiles.length}
+            {t("workspace.browserSiteAdapter.summary.profiles", {
+              value: formatCount(profiles.length),
+            })}
           </span>
           <button
             type="button"
@@ -997,16 +1057,20 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
             <RefreshCw
               className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`}
             />
-            {refreshing ? "刷新中" : "刷新"}
+            {refreshing
+              ? t("workspace.browserSiteAdapter.actions.refreshing")
+              : t("workspace.browserSiteAdapter.actions.refresh")}
           </button>
         </div>
       </div>
 
       {loading ? (
-        <div className="text-xs text-muted-foreground">正在加载站点适配器…</div>
+        <div className="text-xs text-muted-foreground">
+          {t("workspace.browserSiteAdapter.loading")}
+        </div>
       ) : adapters.length === 0 ? (
         <div className="text-xs text-muted-foreground">
-          暂无可用站点适配器。
+          {t("workspace.browserSiteAdapter.empty")}
         </div>
       ) : (
         <div className="space-y-3">
@@ -1014,10 +1078,12 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
             <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-3">
               <div className="mb-2">
                 <div className="text-sm font-medium text-foreground">
-                  推荐适配器
+                  {t("workspace.browserSiteAdapter.recommendations.title")}
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  基于当前浏览器资料、已连接标签页和站点范围排序，优先复用现有登录态。
+                  {t(
+                    "workspace.browserSiteAdapter.recommendations.description",
+                  )}
                 </p>
               </div>
               <div className="grid gap-2 xl:grid-cols-2">
@@ -1043,7 +1109,9 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
                           {recommendation.adapter.name}
                         </div>
                         <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-muted-foreground">
-                          评分 {recommendation.score}
+                          {t("workspace.browserSiteAdapter.recommendations.score", {
+                            score: formatCount(recommendation.score),
+                          })}
                         </span>
                       </div>
                       <div className="mt-1 text-[11px] text-muted-foreground">
@@ -1052,15 +1120,31 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
                       <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
                         <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5">
                           {recommendedProfile
-                            ? `资料 ${recommendedProfile.name}`
+                            ? t(
+                                "workspace.browserSiteAdapter.recommendations.profileName",
+                                {
+                                  name: recommendedProfile.name,
+                                },
+                              )
                             : recommendation.profile_key
-                              ? `资料 ${recommendation.profile_key}`
-                              : "自动选择资料"}
+                              ? t(
+                                  "workspace.browserSiteAdapter.recommendations.profileKey",
+                                  {
+                                    profileKey: recommendation.profile_key,
+                                  },
+                                )
+                              : t(
+                                  "workspace.browserSiteAdapter.recommendations.profileAuto",
+                                )}
                         </span>
                         <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5">
                           {recommendation.target_id
-                            ? "已匹配标签页"
-                            : "将打开入口页"}
+                            ? t(
+                                "workspace.browserSiteAdapter.recommendations.matchedTab",
+                              )
+                            : t(
+                                "workspace.browserSiteAdapter.recommendations.openEntry",
+                              )}
                         </span>
                         <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5">
                           {recommendation.adapter.domain}
@@ -1075,14 +1159,18 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
 
           <div className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)_260px]">
             <label className="space-y-1 text-xs">
-              <span className="text-muted-foreground">适配器</span>
+              <span className="text-muted-foreground">
+                {t("workspace.browserSiteAdapter.fields.adapter")}
+              </span>
               <select
                 className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                 value={selectedAdapterName}
                 onChange={(event) => setSelectedAdapterName(event.target.value)}
               >
                 {filteredAdapters.length === 0 ? (
-                  <option value="">没有匹配的适配器</option>
+                  <option value="">
+                    {t("workspace.browserSiteAdapter.adapter.noMatchesOption")}
+                  </option>
                 ) : (
                   filteredAdapters.map((adapter) => (
                     <option key={adapter.name} value={adapter.name}>
@@ -1093,7 +1181,7 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
               </select>
               {filteredAdapters.length === 0 ? (
                 <div className="text-[11px] text-muted-foreground">
-                  当前关键词没有命中站点适配器，请尝试域名、能力或名称。
+                  {t("workspace.browserSiteAdapter.adapter.noMatches")}
                 </div>
               ) : null}
             </label>
@@ -1103,33 +1191,49 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
                 {selectedAdapter?.description}
               </div>
               <div className="mt-1 text-muted-foreground">
-                域名：{selectedAdapter?.domain}
+                {t("workspace.browserSiteAdapter.adapter.domain", {
+                  value: selectedAdapter?.domain,
+                })}
               </div>
               <div className="mt-1 text-muted-foreground">
-                能力：{selectedAdapter?.capabilities.join(" / ") || "未标注"}
+                {t("workspace.browserSiteAdapter.adapter.capabilities", {
+                  value:
+                    selectedAdapter?.capabilities.join(" / ") ||
+                    t("workspace.browserSiteAdapter.value.unset"),
+                })}
               </div>
               <div className="mt-2 break-all text-muted-foreground">
-                示例：{selectedAdapter?.example}
+                {t("workspace.browserSiteAdapter.adapter.example", {
+                  value: selectedAdapter?.example,
+                })}
               </div>
               {selectedAdapter?.auth_hint ? (
                 <div className="mt-2 text-amber-700 dark:text-amber-300">
-                  登录提示：{selectedAdapter.auth_hint}
+                  {t("workspace.browserSiteAdapter.adapter.authHint", {
+                    value: selectedAdapter.auth_hint,
+                  })}
                 </div>
               ) : null}
             </div>
 
             <div className="rounded-md border bg-slate-50/80 px-3 py-2 text-xs">
               <label className="space-y-1">
-                <span className="text-muted-foreground">关键词筛选</span>
+                <span className="text-muted-foreground">
+                  {t("workspace.browserSiteAdapter.fields.keyword")}
+                </span>
                 <input
                   className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                   value={searchKeyword}
                   onChange={(event) => setSearchKeyword(event.target.value)}
-                  placeholder="搜索站点、能力或关键词"
+                  placeholder={t(
+                    "workspace.browserSiteAdapter.placeholders.keyword",
+                  )}
                 />
               </label>
               <label className="mt-3 block space-y-1">
-                <span className="text-muted-foreground">浏览器资料 Key</span>
+                <span className="text-muted-foreground">
+                  {t("workspace.browserSiteAdapter.fields.profileKey")}
+                </span>
                 <input
                   className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                   list="browser-site-adapter-profile-options"
@@ -1146,13 +1250,15 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
                 </datalist>
               </label>
               <div className="mt-2 text-[11px] text-muted-foreground">
-                当前将使用：{executionProfileLabel}
+                {t("workspace.browserSiteAdapter.profile.current", {
+                  value: executionProfileLabel,
+                })}
               </div>
               {!profileInput.trim() &&
               !selectedProfileKey &&
               recommendedProfile ? (
                 <div className="mt-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-muted-foreground">
-                  未手动指定资料，已优先选择：
+                  {t("workspace.browserSiteAdapter.profile.recommendedPrefix")}
                   <span className="ml-1 font-medium text-foreground">
                     {recommendedProfile.name}
                   </span>
@@ -1163,19 +1269,43 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
               ) : null}
               {catalogStatus ? (
                 <div className="mt-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] text-muted-foreground">
-                  <div>目录来源：{catalogSourceLabel}</div>
+                  <div>
+                    {t("workspace.browserSiteAdapter.catalog.source", {
+                      value: catalogSourceLabel,
+                    })}
+                  </div>
                   {catalogStatus.catalog_version ? (
-                    <div>目录版本：{catalogStatus.catalog_version}</div>
+                    <div>
+                      {t("workspace.browserSiteAdapter.catalog.version", {
+                        value: catalogStatus.catalog_version,
+                      })}
+                    </div>
                   ) : null}
                   {catalogStatus.tenant_id ? (
-                    <div>租户：{catalogStatus.tenant_id}</div>
+                    <div>
+                      {t("workspace.browserSiteAdapter.catalog.tenant", {
+                        value: catalogStatus.tenant_id,
+                      })}
+                    </div>
                   ) : null}
                   {catalogSyncedAtText ? (
-                    <div>同步时间：{catalogSyncedAtText}</div>
+                    <div>
+                      {t("workspace.browserSiteAdapter.catalog.syncedAt", {
+                        value: catalogSyncedAtText,
+                      })}
+                    </div>
                   ) : null}
-                  <div>生效适配器：{effectiveAdapterCount}</div>
+                  <div>
+                    {t("workspace.browserSiteAdapter.catalog.effectiveCount", {
+                      value: formatCount(effectiveAdapterCount),
+                    })}
+                  </div>
                   {catalogStatus.exists ? (
-                    <div>服务端目录项：{syncedAdapterCount}</div>
+                    <div>
+                      {t("workspace.browserSiteAdapter.catalog.serverCount", {
+                        value: formatCount(syncedAdapterCount),
+                      })}
+                    </div>
                   ) : null}
                 </div>
               ) : null}
@@ -1184,27 +1314,40 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
                   <div className="font-medium text-foreground">
                     {executionProfile.name}
                   </div>
-                  <div>模式：{executionProfile.transport_kind}</div>
+                  <div>
+                    {t("workspace.browserSiteAdapter.profile.mode", {
+                      value: executionProfile.transport_kind,
+                    })}
+                  </div>
                   {selectedAdapter?.source_kind ? (
                     <div>
-                      脚本来源：
-                      {selectedAdapter.source_kind === "server_synced"
-                        ? "服务端同步"
-                        : "应用内置"}
+                      {t("workspace.browserSiteAdapter.profile.scriptSource", {
+                        value:
+                          selectedAdapter.source_kind === "server_synced"
+                            ? t(
+                                "workspace.browserSiteAdapter.catalog.source.serverSynced",
+                              )
+                            : t(
+                                "workspace.browserSiteAdapter.catalog.source.bundled",
+                              ),
+                      })}
                       {selectedAdapter.source_version
                         ? ` · ${selectedAdapter.source_version}`
                         : ""}
                     </div>
                   ) : null}
                   {executionProfile.site_scope ? (
-                    <div>站点：{executionProfile.site_scope}</div>
+                    <div>
+                      {t("workspace.browserSiteAdapter.profile.site", {
+                        value: executionProfile.site_scope,
+                      })}
+                    </div>
                   ) : null}
                 </div>
               ) : null}
               {executionProfile?.transport_kind === "existing_session" ? (
                 <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
-                  当前站点适配器会通过 Lime Browser Bridge 在你正在使用的 Chrome
-                  中执行脚本，优先复用真实登录态。
+                  {t("workspace.browserSiteAdapter.profile.existingHint")}
                 </div>
               ) : null}
               {initialRequireAttachedSession ? (
@@ -1217,16 +1360,24 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
                 >
                   {hasAttachedSessionAvailable
                     ? runProfileKey
-                      ? "当前技能要求附着会话，执行时会优先复用已连接的 existing_session。"
-                      : "当前技能要求附着会话，执行时会忽略托管资料，自动选择已连接的 Chrome 会话。"
-                    : "当前技能要求附着会话；如果还没连接当前 Chrome，自动执行会被阻止。"}
+                      ? t(
+                          "workspace.browserSiteAdapter.attachRequirement.useProfile",
+                        )
+                      : t(
+                          "workspace.browserSiteAdapter.attachRequirement.autoSelect",
+                        )
+                    : t(
+                        "workspace.browserSiteAdapter.attachRequirement.blocked",
+                      )}
                 </div>
               ) : null}
             </div>
           </div>
 
           <label className="space-y-1 text-xs">
-            <span className="text-muted-foreground">参数 JSON</span>
+            <span className="text-muted-foreground">
+              {t("workspace.browserSiteAdapter.fields.argsJson")}
+            </span>
             <textarea
               className="h-40 w-full rounded-md border bg-background px-3 py-2 font-mono text-xs"
               value={argsInput}
@@ -1242,11 +1393,15 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
               onClick={() => void handleRun()}
               disabled={running || !selectedAdapter}
             >
-              {running ? "执行中..." : "执行站点命令"}
+              {running
+                ? t("workspace.browserSiteAdapter.actions.running")
+                : t("workspace.browserSiteAdapter.actions.run")}
             </button>
             {result?.source_url ? (
               <span className="text-[11px] text-muted-foreground">
-                来源页：{result.source_url}
+                {t("workspace.browserSiteAdapter.result.sourcePage", {
+                  value: result.source_url,
+                })}
               </span>
             ) : null}
           </div>
@@ -1267,12 +1422,16 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
             >
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 <span className="font-medium">
-                  {result.ok ? "执行成功" : "执行失败"}
+                  {result.ok
+                    ? t("workspace.browserSiteAdapter.result.success")
+                    : t("workspace.browserSiteAdapter.result.failure")}
                 </span>
                 <span className="text-muted-foreground">{result.adapter}</span>
                 {result.error_code ? (
                   <span className="text-muted-foreground">
-                    错误码：{result.error_code}
+                    {t("workspace.browserSiteAdapter.result.errorCode", {
+                      code: result.error_code,
+                    })}
                   </span>
                 ) : null}
               </div>
@@ -1283,7 +1442,9 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
               ) : null}
               {result.report_hint ? (
                 <div className="mb-2 text-muted-foreground">
-                  建议：{result.report_hint}
+                  {t("workspace.browserSiteAdapter.result.reportHint", {
+                    value: result.report_hint,
+                  })}
                 </div>
               ) : null}
               {result.auth_hint ? (
@@ -1293,7 +1454,13 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
               ) : null}
               {resultSummary ? (
                 <div className="mb-2 text-muted-foreground">
-                  {resultSummary}
+                  {resultSummary.kind === "items"
+                    ? t("workspace.browserSiteAdapter.result.itemsSummary", {
+                        value: formatCount(resultSummary.count),
+                      })
+                    : t("workspace.browserSiteAdapter.result.sectionsSummary", {
+                        value: formatCount(resultSummary.count),
+                      })}
                 </div>
               ) : null}
               <pre className="overflow-auto whitespace-pre-wrap break-all rounded bg-background/80 p-3 font-mono text-[11px]">
@@ -1306,31 +1473,40 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
             <div className="rounded-md border border-slate-200 bg-slate-50/80 px-3 py-3 text-xs">
               <div className="mb-2 text-sm font-medium text-foreground">
                 {shouldWriteToCurrentContent
-                  ? "写回当前主稿"
-                  : "保存到资源项目"}
+                  ? t("workspace.browserSiteAdapter.savePanel.currentTitle")
+                  : t("workspace.browserSiteAdapter.savePanel.projectTitle")}
               </div>
               <p className="mb-3 text-muted-foreground">
                 {shouldWriteToCurrentContent
-                  ? "工作台模式下，执行成功后会优先写回当前主稿；如果需要手动重写一次，也可以在这里再次写回。"
-                  : "工作台模式下，执行成功后会自动保存为文档资源；你也可以在这里补自定义标题或再次另存为。"}
+                  ? t(
+                      "workspace.browserSiteAdapter.savePanel.currentDescription",
+                    )
+                  : t(
+                      "workspace.browserSiteAdapter.savePanel.projectDescription",
+                    )}
               </p>
               {shouldWriteToCurrentContent ? (
                 <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
                   <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-[11px] text-muted-foreground">
                     <div>
-                      当前主稿：
+                      {t("workspace.browserSiteAdapter.savePanel.currentDraft")}
                       <span className="ml-1 font-medium text-foreground">
-                        {savedDocumentTitle || "未命名内容"}
+                        {savedDocumentTitle ||
+                          t("workspace.browserSiteAdapter.value.untitled")}
                       </span>
                     </div>
                     {normalizedCurrentProjectId ? (
                       <div>
-                        所属项目：
-                        {selectedProject?.name || normalizedCurrentProjectId}
+                        {t("workspace.browserSiteAdapter.savePanel.project", {
+                          value:
+                            selectedProject?.name || normalizedCurrentProjectId,
+                        })}
                       </div>
                     ) : null}
                     <div className="break-all">
-                      内容 ID：{normalizedCurrentContentId}
+                      {t("workspace.browserSiteAdapter.savePanel.contentId", {
+                        value: normalizedCurrentContentId,
+                      })}
                     </div>
                   </div>
                   <button
@@ -1340,16 +1516,22 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
                     disabled={savingResult || !result?.ok || !lastRunRequest}
                   >
                     {savingResult
-                      ? "写回中..."
+                      ? t("workspace.browserSiteAdapter.actions.writingBack")
                       : savedDocumentTitle
-                        ? "再次写回当前主稿"
-                        : "写回当前主稿"}
+                        ? t(
+                            "workspace.browserSiteAdapter.actions.rewriteCurrent",
+                          )
+                        : t(
+                            "workspace.browserSiteAdapter.actions.writeCurrent",
+                          )}
                   </button>
                 </div>
               ) : (
                 <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
                   <label className="space-y-1">
-                    <span className="text-muted-foreground">目标项目</span>
+                    <span className="text-muted-foreground">
+                      {t("workspace.browserSiteAdapter.fields.targetProject")}
+                    </span>
                     <select
                       className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                       value={selectedProjectId}
@@ -1360,7 +1542,11 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
                     >
                       {projects.length === 0 ? (
                         <option value="">
-                          {projectLoading ? "正在加载项目..." : "暂无可用项目"}
+                          {projectLoading
+                            ? t(
+                                "workspace.browserSiteAdapter.project.loading",
+                              )
+                            : t("workspace.browserSiteAdapter.project.empty")}
                         </option>
                       ) : (
                         projects.map((project) => (
@@ -1372,14 +1558,18 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
                     </select>
                   </label>
                   <label className="space-y-1">
-                    <span className="text-muted-foreground">保存标题</span>
+                    <span className="text-muted-foreground">
+                      {t("workspace.browserSiteAdapter.fields.saveTitle")}
+                    </span>
                     <input
                       className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                       value={saveTitleInput}
                       onChange={(event) =>
                         setSaveTitleInput(event.target.value)
                       }
-                      placeholder="留空则自动生成标题"
+                      placeholder={t(
+                        "workspace.browserSiteAdapter.placeholders.saveTitle",
+                      )}
                     />
                   </label>
                   <button
@@ -1395,33 +1585,35 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
                     }
                   >
                     {savingResult
-                      ? "保存中..."
+                      ? t("workspace.browserSiteAdapter.actions.saving")
                       : savedDocumentTitle
-                        ? "另存为结果文档"
-                        : "保存结果文档"}
+                        ? t("workspace.browserSiteAdapter.actions.saveAs")
+                        : t("workspace.browserSiteAdapter.actions.saveResult")}
                   </button>
                 </div>
               )}
               {!result ? (
                 <div className="mt-2 text-[11px] text-muted-foreground">
                   {shouldWriteToCurrentContent
-                    ? "先执行一次站点采集，成功后会自动沉淀到当前主稿。"
-                    : "先执行一次站点采集，成功后会自动沉淀到当前资源项目。"}
+                    ? t("workspace.browserSiteAdapter.savePanel.currentPending")
+                    : t("workspace.browserSiteAdapter.savePanel.projectPending")}
                 </div>
               ) : null}
               {result && !result.ok ? (
                 <div className="mt-2 text-[11px] text-muted-foreground">
                   {shouldWriteToCurrentContent
-                    ? "当前执行失败，暂不支持把失败结果直接写回当前主稿。"
-                    : "当前执行失败，暂不支持直接保存失败结果文档。"}
+                    ? t("workspace.browserSiteAdapter.savePanel.currentFailed")
+                    : t("workspace.browserSiteAdapter.savePanel.projectFailed")}
                 </div>
               ) : null}
               {savedDocumentTitle ? (
                 <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] text-emerald-800">
-                  {shouldWriteToCurrentContent ? "已写回：" : "已保存："}
+                  {shouldWriteToCurrentContent
+                    ? t("workspace.browserSiteAdapter.savePanel.savedCurrent")
+                    : t("workspace.browserSiteAdapter.savePanel.savedProject")}
                   {savedDocumentTitle}
                   {shouldWriteToCurrentContent
-                    ? " · 当前主稿"
+                    ? t("workspace.browserSiteAdapter.savePanel.currentSuffix")
                     : selectedProject
                       ? ` · ${selectedProject.name}`
                       : ""}
@@ -1435,10 +1627,10 @@ export function BrowserSiteAdapterPanel(props: BrowserSiteAdapterPanelProps) {
                     onClick={handleOpenSavedDocument}
                   >
                     {savedDocumentMarkdownRelativePath
-                      ? "打开导出结果"
+                      ? t("workspace.browserSiteAdapter.actions.openExport")
                       : shouldWriteToCurrentContent
-                        ? "打开当前主稿"
-                        : "打开已保存内容"}
+                        ? t("workspace.browserSiteAdapter.actions.openCurrent")
+                        : t("workspace.browserSiteAdapter.actions.openSaved")}
                   </button>
                 </div>
               ) : null}

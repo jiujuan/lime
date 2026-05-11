@@ -311,6 +311,8 @@ describe("HotkeysSettings", () => {
     expect(text).toContain("功能未启用");
     expect(text).toContain("未注册到系统");
     expect(text).toContain("未绑定翻译指令");
+    expect(text).toContain("未设置");
+    expect(text).not.toContain("__lime_unset_shortcut__");
   });
 
   it("应把首屏和统计说明收进 tips", async () => {

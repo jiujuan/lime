@@ -12,6 +12,21 @@ export interface CapabilityDraftStatusPresentation {
   tone: CapabilityDraftTone;
 }
 
+export interface CapabilityDraftPresentationCopy {
+  failedChecksPassed?: string;
+  filesEmpty?: string;
+  formatFilesWithMore?: (shown: string, totalCount: number) => string;
+  formatRegistrationDirectory?: (directory: string) => string;
+  permissionEmpty?: string;
+  registrationEmpty?: string;
+  registrationFallback?: string;
+  separator?: string;
+  status?: Partial<
+    Record<CapabilityDraftStatus, { label?: string; description?: string }>
+  >;
+  verificationEmpty?: string;
+}
+
 const STATUS_PRESENTATION: Record<
   CapabilityDraftStatus,
   CapabilityDraftStatusPresentation
@@ -48,8 +63,16 @@ const STATUS_PRESENTATION: Record<
 
 export function getCapabilityDraftStatusPresentation(
   status: CapabilityDraftStatus,
+  copy: CapabilityDraftPresentationCopy = {},
 ): CapabilityDraftStatusPresentation {
-  return STATUS_PRESENTATION[status] ?? STATUS_PRESENTATION.unverified;
+  const fallback =
+    STATUS_PRESENTATION[status] ?? STATUS_PRESENTATION.unverified;
+  const statusCopy = copy.status?.[status];
+  return {
+    ...fallback,
+    description: statusCopy?.description ?? fallback.description,
+    label: statusCopy?.label ?? fallback.label,
+  };
 }
 
 export function canExecuteCapabilityDraft(
@@ -73,58 +96,69 @@ export function canVerifyCapabilityDraft(
 
 export function summarizeCapabilityDraftPermissions(
   draft: Pick<CapabilityDraftRecord, "permissionSummary">,
+  copy: CapabilityDraftPresentationCopy = {},
 ): string {
   if (draft.permissionSummary.length === 0) {
-    return "未声明额外权限，默认停留在只读发现与草案内写入。";
+    return (
+      copy.permissionEmpty ?? "未声明额外权限，默认停留在只读发现与草案内写入。"
+    );
   }
-  return draft.permissionSummary.slice(0, 3).join(" / ");
+  return draft.permissionSummary.slice(0, 3).join(copy.separator ?? " / ");
 }
 
 export function summarizeCapabilityDraftFiles(
   draft: Pick<CapabilityDraftRecord, "generatedFiles">,
+  copy: CapabilityDraftPresentationCopy = {},
 ): string {
   if (draft.generatedFiles.length === 0) {
-    return "暂无文件清单";
+    return copy.filesEmpty ?? "暂无文件清单";
   }
   const shown = draft.generatedFiles
     .slice(0, 3)
     .map((file) => file.relativePath)
-    .join(" / ");
+    .join(copy.separator ?? " / ");
   return draft.generatedFiles.length > 3
-    ? `${shown} 等 ${draft.generatedFiles.length} 个文件`
+    ? (copy.formatFilesWithMore?.(shown, draft.generatedFiles.length) ??
+        `${shown} 等 ${draft.generatedFiles.length} 个文件`)
     : shown;
 }
 
 export function summarizeCapabilityDraftVerification(
   draft: Pick<CapabilityDraftRecord, "lastVerification">,
+  copy: CapabilityDraftPresentationCopy = {},
 ): string {
   if (!draft.lastVerification) {
-    return "还没有运行 verification gate。";
+    return copy.verificationEmpty ?? "还没有运行 verification gate。";
   }
   return draft.lastVerification.summary;
 }
 
 export function summarizeCapabilityDraftRegistration(
   draft: Pick<CapabilityDraftRecord, "lastRegistration">,
+  copy: CapabilityDraftPresentationCopy = {},
 ): string {
   if (!draft.lastRegistration) {
-    return "还没有注册到 Workspace。";
+    return copy.registrationEmpty ?? "还没有注册到 Workspace。";
   }
   const directory = draft.lastRegistration.skillDirectory.trim();
-  return directory ? `已注册目录：${directory}` : "已注册到当前 Workspace。";
+  return directory
+    ? (copy.formatRegistrationDirectory?.(directory) ??
+        `已注册目录：${directory}`)
+    : (copy.registrationFallback ?? "已注册到当前 Workspace。");
 }
 
 export function summarizeCapabilityDraftFailedChecks(
   report: Pick<CapabilityDraftVerificationReport, "checks">,
+  copy: CapabilityDraftPresentationCopy = {},
 ): string {
   const failedChecks = report.checks.filter(
     (check) => check.status === "failed",
   );
   if (failedChecks.length === 0) {
-    return "所有检查均已通过。";
+    return copy.failedChecksPassed ?? "所有检查均已通过。";
   }
   return failedChecks
     .slice(0, 3)
     .map((check) => check.label || check.id)
-    .join(" / ");
+    .join(copy.separator ?? " / ");
 }

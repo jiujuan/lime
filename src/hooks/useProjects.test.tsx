@@ -17,6 +17,13 @@ const projectApiMocks = vi.hoisted(() => ({
 const telemetryMocks = vi.hoisted(() => ({
   recordWorkspaceRepair: vi.fn(),
 }));
+const i18nMocks = vi.hoisted(() => ({
+  t: vi.fn((key: string, options?: { defaultValue?: string }) =>
+    key === "common.projects.rename.nameRequired"
+      ? "Project name required from i18n"
+      : (options?.defaultValue ?? key),
+  ),
+}));
 
 vi.mock("@/lib/api/project", () => ({
   createProject: projectApiMocks.createProject,
@@ -31,6 +38,12 @@ vi.mock("@/lib/api/project", () => ({
 
 vi.mock("@/lib/workspaceHealthTelemetry", () => ({
   recordWorkspaceRepair: telemetryMocks.recordWorkspaceRepair,
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: i18nMocks.t,
+  }),
 }));
 
 import { useProjects } from "./useProjects";
@@ -215,6 +228,32 @@ describe("useProjects", () => {
       expect(harness.getValue().projects).toHaveLength(1);
       expect(harness.getValue().defaultProject?.id).toBe(defaultProject.id);
       expect(projectApiMocks.listProjects).toHaveBeenCalledTimes(2);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("重命名项目空名称时应使用 i18n 错误", async () => {
+    const defaultProject = createProject();
+    projectApiMocks.listProjects.mockResolvedValueOnce([defaultProject]);
+    projectApiMocks.getDefaultProject.mockResolvedValueOnce(defaultProject);
+    projectApiMocks.ensureWorkspaceReady.mockResolvedValue({
+      workspaceId: defaultProject.id,
+      rootPath: defaultProject.rootPath,
+      existed: true,
+      created: false,
+      repaired: false,
+    });
+
+    const harness = mountHook();
+
+    try {
+      await flushMicrotasks();
+
+      await expect(
+        harness.getValue().rename(defaultProject.id, "   "),
+      ).rejects.toThrow("Project name required from i18n");
+      expect(projectApiMocks.updateProject).not.toHaveBeenCalled();
     } finally {
       harness.unmount();
     }

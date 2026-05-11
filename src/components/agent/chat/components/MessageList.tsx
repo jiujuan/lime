@@ -1429,11 +1429,13 @@ const MessageListInner: React.FC<MessageListProps> = ({
       lastAssistantMessageId,
       timelineByMessageId,
       renderedThreadItems,
+      renderedMessages,
     });
   }, [
     activeCurrentTurn,
     activeCurrentTurnId,
     lastAssistantMessageId,
+    renderedMessages,
     renderedThreadItems,
     timelineByMessageId,
   ]);
@@ -2404,8 +2406,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
     const shouldRenderPrimaryTimelineOutsideBubble =
       msg.role === "assistant" &&
       Boolean(primaryTimelineNode) &&
-      hasVisibleAssistantText &&
-      !msg.isThinking;
+      hasVisibleAssistantText;
 
     return (
       <MessageWrapper

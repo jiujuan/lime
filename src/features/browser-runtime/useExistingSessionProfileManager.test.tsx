@@ -15,7 +15,10 @@ import {
   type MountedRoot,
 } from "@/components/workspace/hooks/testUtils";
 import type { ExistingSessionTabRecord } from "./existingSessionBridge";
-import { useExistingSessionProfileManager } from "./useExistingSessionProfileManager";
+import {
+  useExistingSessionProfileManager,
+  type ExistingSessionProfileManagerCopy,
+} from "./useExistingSessionProfileManager";
 
 const {
   mockAttachExistingSessionProfile,
@@ -69,9 +72,22 @@ const COMPOSE_TAB: ExistingSessionTabRecord = {
   active: false,
 };
 
+const PROFILE_MANAGER_COPY: ExistingSessionProfileManagerCopy = {
+  tabsLoadFailed: (message) => `Failed to read tabs: ${message}`,
+  attachSuccess: ({ name, url, notice }) => {
+    const noticeSuffix = notice ? `. ${notice}` : "";
+    return url
+      ? `Attached current Chrome: ${name}, and navigated to ${url}${noticeSuffix}`
+      : `Attached current Chrome: ${name}${noticeSuffix}`;
+  },
+  tabSwitchSuccess: (tabLabel) => `Switched to tab: ${tabLabel}`,
+  tabSwitchFailed: (message) => `Failed to switch tab: ${message}`,
+};
+
 type HookHarnessProps = {
   profiles?: BrowserProfileRecord[];
   existingSessionEnvironmentNotice?: string | null;
+  copy?: ExistingSessionProfileManagerCopy;
   onMessage?: (message: { type: "success" | "error"; text: string }) => void;
   onProfileLaunched?: (profileKey: string) => void;
   onReady: (
@@ -83,6 +99,7 @@ function HookHarness(props: HookHarnessProps) {
   const manager = useExistingSessionProfileManager({
     profiles: props.profiles ?? [ATTACH_PROFILE],
     existingSessionEnvironmentNotice: props.existingSessionEnvironmentNotice,
+    copy: props.copy ?? PROFILE_MANAGER_COPY,
     onMessage: props.onMessage,
     onProfileLaunched: props.onProfileLaunched,
   });
@@ -194,7 +211,7 @@ describe("useExistingSessionProfileManager", () => {
     await renderHook({
       onMessage,
       onProfileLaunched,
-      existingSessionEnvironmentNotice: "附着模式不应用启动环境。",
+      existingSessionEnvironmentNotice: "Attached mode ignores launch presets.",
     });
 
     await act(async () => {
@@ -218,7 +235,7 @@ describe("useExistingSessionProfileManager", () => {
     expect(onMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "success",
-        text: expect.stringContaining("附着模式不应用启动环境。"),
+        text: expect.stringContaining("Attached mode ignores launch presets."),
       }),
     );
   });
@@ -360,7 +377,7 @@ describe("useExistingSessionProfileManager", () => {
     expect(manager.switchingTabKey).toBeNull();
     expect(onMessage).toHaveBeenCalledWith({
       type: "success",
-      text: "已切换到标签页：微博创作中心",
+      text: "Switched to tab: 微博创作中心",
     });
   });
 });

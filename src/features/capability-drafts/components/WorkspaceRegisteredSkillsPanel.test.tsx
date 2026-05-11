@@ -18,6 +18,34 @@ import {
 } from "@/components/agent/chat/projection/conversationProjectionStore";
 import { WorkspaceRegisteredSkillsPanel } from "./WorkspaceRegisteredSkillsPanel";
 
+const { mockUseTranslation } = vi.hoisted(() => {
+  const mockTranslate = vi.fn((key: string, options?: unknown) => {
+    if (typeof options === "string") {
+      return options;
+    }
+    if (options && typeof options === "object") {
+      const values = options as Record<string, unknown>;
+      const template =
+        typeof values.defaultValue === "string" ? values.defaultValue : key;
+      return template.replace(/\{\{(\w+)\}\}/g, (_match, name: string) =>
+        String(values[name] ?? ""),
+      );
+    }
+    return key;
+  });
+
+  return {
+    mockUseTranslation: vi.fn((_namespace?: string) => ({
+      i18n: { language: "zh-CN" },
+      t: mockTranslate,
+    })),
+  };
+});
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
+}));
+
 vi.mock("@/lib/api/capabilityDrafts", () => ({
   capabilityDraftsApi: {
     listRegisteredSkills: vi.fn(),

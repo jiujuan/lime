@@ -17,6 +17,21 @@ function message(id: string, role: "user" | "assistant"): Message {
   } as Message;
 }
 
+function messageAt(
+  id: string,
+  role: "user" | "assistant",
+  timestamp: string,
+  runtimeTurnId?: string,
+): Message {
+  return {
+    id,
+    role,
+    content: id,
+    timestamp: new Date(timestamp),
+    runtimeTurnId,
+  } as Message;
+}
+
 function turn(id: string): AgentThreadTurn {
   return {
     id,
@@ -71,6 +86,58 @@ describe("messageTimelineRenderProjection", () => {
 
     expect(projection).toMatchObject({
       messageId: "message-tail",
+      turn: { id: "turn-current" },
+      items: [{ id: "item-1" }],
+    });
+  });
+
+  it("当前 turn 已显式绑定其它消息时不应回退到最后一条 assistant", () => {
+    const projection = buildCurrentTurnTimelineProjection({
+      activeCurrentTurnId: "turn-current",
+      activeCurrentTurn: turn("turn-current"),
+      lastAssistantMessageId: "assistant-old",
+      timelineByMessageId: new Map(),
+      renderedMessages: [
+        messageAt("user-old", "user", "2026-05-05T00:00:00.000Z"),
+        messageAt(
+          "assistant-old",
+          "assistant",
+          "2026-05-05T00:00:01.000Z",
+          "turn-old",
+        ),
+        messageAt("user-current", "user", "2026-05-05T00:00:02.000Z"),
+      ],
+      renderedThreadItems: [item("item-1", "turn-current")],
+    });
+
+    expect(projection).toBeNull();
+  });
+
+  it("当前 turn 应优先使用 assistant message 的显式 runtimeTurnId 绑定", () => {
+    const projection = buildCurrentTurnTimelineProjection({
+      activeCurrentTurnId: "turn-current",
+      activeCurrentTurn: turn("turn-current"),
+      lastAssistantMessageId: "assistant-old",
+      timelineByMessageId: new Map(),
+      renderedMessages: [
+        messageAt("user-old", "user", "2026-05-05T00:00:00.000Z"),
+        messageAt("assistant-old", "assistant", "2026-05-05T00:00:01.000Z"),
+        messageAt("user-current", "user", "2026-05-05T00:00:02.000Z"),
+        messageAt(
+          "assistant-current",
+          "assistant",
+          "2026-05-05T00:00:03.000Z",
+          "turn-current",
+        ),
+      ],
+      renderedThreadItems: [
+        item("item-1", "turn-current"),
+        item("item-2", "turn-old"),
+      ],
+    });
+
+    expect(projection).toMatchObject({
+      messageId: "assistant-current",
       turn: { id: "turn-current" },
       items: [{ id: "item-1" }],
     });

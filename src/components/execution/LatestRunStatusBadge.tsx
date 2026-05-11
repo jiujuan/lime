@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
-import {
+import { formatDate } from "@/i18n/format";
+import { executionRunList } from "@/lib/api/executionRun";
+import type {
   AgentRun,
   AgentRunSource,
   AgentRunStatus,
-  executionRunList,
 } from "@/lib/api/executionRun";
 
 interface LatestRunStatusBadgeProps {
@@ -12,25 +14,6 @@ interface LatestRunStatusBadgeProps {
   label?: string;
   className?: string;
   pollMs?: number;
-}
-
-function statusLabel(status: AgentRunStatus): string {
-  switch (status) {
-    case "queued":
-      return "排队中";
-    case "running":
-      return "运行中";
-    case "success":
-      return "成功";
-    case "error":
-      return "失败";
-    case "canceled":
-      return "已取消";
-    case "timeout":
-      return "超时";
-    default:
-      return status;
-  }
 }
 
 function statusVariant(status: AgentRunStatus) {
@@ -42,18 +25,58 @@ function statusVariant(status: AgentRunStatus) {
 
 function formatTime(value: string | null | undefined): string {
   if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("zh-CN", { hour12: false });
+  return (
+    formatDate(value, {
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    }) || value
+  );
 }
 
 export function LatestRunStatusBadge({
   source,
-  label = "最近执行",
+  label,
   className,
   pollMs = 15_000,
 }: LatestRunStatusBadgeProps) {
+  const { t } = useTranslation("common");
   const [latestRun, setLatestRun] = useState<AgentRun | null>(null);
+  const resolvedLabel =
+    label ??
+    t("common.execution.latestRunStatus.defaultLabel", {
+      defaultValue: "最近执行",
+    });
+  const noRecordLabel = t("common.execution.latestRunStatus.noRecord", {
+    defaultValue: "暂无记录",
+  });
+  const statusLabels: Record<AgentRunStatus, string> = useMemo(
+    () => ({
+      queued: t("common.execution.latestRunStatus.status.queued", {
+        defaultValue: "排队中",
+      }),
+      running: t("common.execution.latestRunStatus.status.running", {
+        defaultValue: "运行中",
+      }),
+      success: t("common.execution.latestRunStatus.status.success", {
+        defaultValue: "成功",
+      }),
+      error: t("common.execution.latestRunStatus.status.error", {
+        defaultValue: "失败",
+      }),
+      canceled: t("common.execution.latestRunStatus.status.canceled", {
+        defaultValue: "已取消",
+      }),
+      timeout: t("common.execution.latestRunStatus.status.timeout", {
+        defaultValue: "超时",
+      }),
+    }),
+    [t],
+  );
 
   const refresh = useCallback(async () => {
     try {
@@ -76,14 +99,16 @@ export function LatestRunStatusBadge({
   }, [pollMs, refresh]);
 
   const statusText = useMemo(() => {
-    if (!latestRun) return "暂无记录";
-    return statusLabel(latestRun.status);
-  }, [latestRun]);
+    if (!latestRun) return noRecordLabel;
+    return statusLabels[latestRun.status] ?? latestRun.status;
+  }, [latestRun, noRecordLabel, statusLabels]);
 
   if (!latestRun) {
     return (
       <div className={className}>
-        <span className="text-xs text-muted-foreground">{label}: 暂无记录</span>
+        <span className="text-xs text-muted-foreground">
+          {resolvedLabel}: {noRecordLabel}
+        </span>
       </div>
     );
   }
@@ -91,10 +116,14 @@ export function LatestRunStatusBadge({
   return (
     <div className={className}>
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <span>{label}</span>
+        <span>{resolvedLabel}</span>
         <Badge variant={statusVariant(latestRun.status)}>{statusText}</Badge>
         <span className="truncate">
-          时间: {formatTime(latestRun.started_at)}
+          {t("common.execution.latestRunStatus.timeLabel", {
+            defaultValue: "时间",
+          })}
+          :{" "}
+          {formatTime(latestRun.started_at)}
         </span>
       </div>
     </div>

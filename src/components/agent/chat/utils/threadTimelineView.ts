@@ -266,6 +266,73 @@ interface TurnTimelineEntry {
   targetMs: number | null;
 }
 
+interface AssistantMessageWindow {
+  startMs: number | null;
+  endMs: number | null;
+}
+
+function normalizeRuntimeTurnId(message: Message): string | null {
+  const normalized = message.runtimeTurnId?.trim();
+  return normalized || null;
+}
+
+function buildAssistantMessageWindowById(
+  messages: Message[],
+): Map<string, AssistantMessageWindow> {
+  const windows = new Map<string, AssistantMessageWindow>();
+  let currentStartMs: number | null = null;
+  let currentAssistantIds: string[] = [];
+
+  const flushCurrentWindow = (endMs: number | null) => {
+    for (const assistantId of currentAssistantIds) {
+      windows.set(assistantId, {
+        startMs: currentStartMs,
+        endMs,
+      });
+    }
+    currentAssistantIds = [];
+  };
+
+  for (const message of messages) {
+    if (message.role === "user") {
+      const nextStartMs = resolveTimestampMs(message.timestamp);
+      flushCurrentWindow(nextStartMs);
+      currentStartMs = nextStartMs;
+      continue;
+    }
+
+    if (message.role === "assistant") {
+      currentAssistantIds.push(message.id);
+    }
+  }
+
+  flushCurrentWindow(null);
+  return windows;
+}
+
+function isAssistantInsideTurnMessageWindow(
+  assistant: AssistantTimelineEntry,
+  turn: TurnTimelineEntry,
+  windowByMessageId: Map<string, AssistantMessageWindow>,
+): boolean {
+  const window = windowByMessageId.get(assistant.message.id);
+  if (!window) {
+    return true;
+  }
+
+  const turnStartMs = turn.startMs ?? turn.targetMs;
+  if (turnStartMs === null) {
+    return true;
+  }
+  if (window.startMs !== null && turnStartMs < window.startMs) {
+    return false;
+  }
+  if (window.endMs !== null && turnStartMs >= window.endMs) {
+    return false;
+  }
+  return true;
+}
+
 function resolveAssistantDistance(
   assistant: AssistantTimelineEntry,
   targetMs: number | null,
@@ -362,16 +429,23 @@ export function buildMessageTurnTimeline(
   }
 
   const assistantEntries: AssistantTimelineEntry[] = [];
+  const explicitAssistantByTurnId = new Map<string, AssistantTimelineEntry>();
   for (const message of messages) {
     if (message.role !== "assistant") {
       continue;
     }
 
-    assistantEntries.push({
+    const assistantEntry = {
       message,
       index: assistantEntries.length,
       timestampMs: resolveTimestampMs(message.timestamp),
-    });
+    };
+    assistantEntries.push(assistantEntry);
+
+    const runtimeTurnId = normalizeRuntimeTurnId(message);
+    if (runtimeTurnId && !explicitAssistantByTurnId.has(runtimeTurnId)) {
+      explicitAssistantByTurnId.set(runtimeTurnId, assistantEntry);
+    }
   }
 
   if (assistantEntries.length === 0) {
@@ -401,6 +475,7 @@ export function buildMessageTurnTimeline(
 
   const timelineByMessageId = new Map<string, MessageTurnTimeline>();
   const assignedMessageIds = new Set<string>();
+  const windowByMessageId = buildAssistantMessageWindowById(messages);
 
   turnEntries.forEach((turnEntry, index) => {
     if (assignedMessageIds.size >= assistantEntries.length) {
@@ -409,13 +484,40 @@ export function buildMessageTurnTimeline(
 
     const nextTurnStartMs =
       index < turnEntries.length - 1 ? turnEntries[index + 1]?.startMs : null;
+    const singleAssistantWindow =
+      assistantEntries.length === 1
+        ? windowByMessageId.get(assistantEntries[0]!.message.id)
+        : null;
+    const canUseSingleAssistantFallback =
+      assistantEntries.length === 1 && singleAssistantWindow?.endMs === null;
 
     const assistantMessage =
+      (() => {
+        const explicitAssistant = explicitAssistantByTurnId.get(
+          turnEntry.turn.id,
+        );
+        if (
+          explicitAssistant &&
+          !assignedMessageIds.has(explicitAssistant.message.id)
+        ) {
+          return explicitAssistant;
+        }
+        return null;
+      })() ||
       pickClosestUnassignedAssistantMessage(
         assistantEntries,
         assignedMessageIds,
         turnEntry.targetMs,
         (assistant) => {
+          if (
+            !isAssistantInsideTurnMessageWindow(
+              assistant,
+              turnEntry,
+              windowByMessageId,
+            )
+          ) {
+            return false;
+          }
           if (assistant.timestampMs === null) {
             return true;
           }
@@ -439,13 +541,24 @@ export function buildMessageTurnTimeline(
         assignedMessageIds,
         turnEntry.targetMs,
         (assistant) => {
+          if (
+            !isAssistantInsideTurnMessageWindow(
+              assistant,
+              turnEntry,
+              windowByMessageId,
+            )
+          ) {
+            return false;
+          }
           if (assistant.timestampMs === null || turnEntry.startMs === null) {
             return true;
           }
           return assistant.timestampMs >= turnEntry.startMs;
         },
       ) ||
-      pickLastUnassignedAssistantMessage(assistantEntries, assignedMessageIds);
+      (turnEntry.startMs === null || canUseSingleAssistantFallback
+        ? pickLastUnassignedAssistantMessage(assistantEntries, assignedMessageIds)
+        : null);
 
     if (!assistantMessage) {
       return;

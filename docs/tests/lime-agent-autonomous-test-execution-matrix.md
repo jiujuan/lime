@@ -32,7 +32,8 @@ npm run agent-qc:gui-owner-check -- \
 npm run agent-qc:process-owner-check -- \
   --format json \
   --output "./.lime/qc/gui-process-owner-current.json" \
-  --markdown-output "./.lime/qc/gui-process-owner-current.md"
+  --markdown-output "./.lime/qc/gui-process-owner-current.md" \
+  --watch-history-output "./.lime/qc/raw-process-owner-watch-history.jsonl"
 
 npm run agent-qc:qcloop-db-lease -- \
   --db "./.lime/qc/qcloop-isolated-worker-preflight.db" \
@@ -40,20 +41,28 @@ npm run agent-qc:qcloop-db-lease -- \
   --format json \
   --output "./.lime/qc/qcloop-db-lease-current.json" \
   --markdown-output "./.lime/qc/qcloop-db-lease-current.md"
+
+npm run agent-qc:payload-coverage -- \
+  --payload "./.lime/qc/qcloop-p0-single-owner-ready-2026-05-11-0454.json" \
+  --format json \
+  --output "./.lime/qc/qcloop-p0-single-owner-ready-coverage-current.json" \
+  --check
 ```
 
 通过条件：
 
 - `gui-owner-current.json` 没有 active / stale GUI qcloop owner。
-- `gui-process-owner-current.json` 没有 raw GUI smoke、qcloop worker、Cargo / Rust 构建 owner。
+- `gui-process-owner-current.json` 没有 active raw GUI smoke、qcloop worker、Cargo / Rust 构建 owner；passive qcloop serve、passive Tauri runtime 和 observer shell 只作为上下文，不单独阻断。
 - `qcloop-db-lease-current.json` 没有 running item、续约 lock 或 no-output active attempt。
+- `qcloop-p0-single-owner-ready-coverage-current.json` 对 manifest P0 场景 `missing=[]`、`extra=[]`、`coverage.passed=true`。
 - DevBridge preflight 通过：`npm run agent-qc:qcloop-preflight -- --require-devbridge --check`。
 
 阻断条件：
 
 - 存在 stale qcloop worker 且仍在续约 DB lease。
 - 存在长时间 `smoke:*` 或 `verify:gui-smoke` 进程。
-- 存在 Cargo / Rust 编译或 Tauri dev owner，可能抢占 target、DevBridge 或窗口状态。
+- 存在 Cargo / Rust 编译 owner，可能抢占 target；`tauri dev` runtime 只有在被归类为 active owner 时才阻断。
+- ready payload 与 manifest P0 不一致，或 payload coverage 仍未生成。
 - 官方 `.lime/qc/agent-qc-evidence.json` 不是同一批次 8/8 P0 pass。
 
 ## 3. P0 执行矩阵
@@ -64,7 +73,7 @@ npm run agent-qc:qcloop-db-lease -- \
 | `workspace-ready-session-restore` | `npm run smoke:workspace-ready` + `npm run verify:gui-smoke -- --reuse-running` | workspace ready、session restore、DevBridge health、GUI trace | GUI ready 和恢复状态都可观察 |
 | `claw-chat-ready-streaming` | `npm run verify:gui-smoke -- --reuse-running` 或专项 Claw smoke | first delta、interrupt command、aborted turn、follow turn completed、GUI 可见恢复结果 | 不能只有“有回复”，必须证明中断后状态正确 |
 | `tool-approval-sandbox-boundary` | `npm run smoke:agent-runtime-tool-surface` + `npm run smoke:agent-runtime-approval-sandbox` | approval policy、sandbox policy、denied/resolved flow、tool timeline | approval / sandbox 进入 turn config 且无绕过 |
-| `skill-forge-register-bind-enable` | `npm run test:contracts` + `npm run smoke:agent-service-skill-entry` | draft / verify / register / binding readiness / enable allowlist | 注册不等于可执行，显式 enable 才可进入能力面 |
+| `skill-forge-register-bind-enable` | `npm run test:contracts` + `npm run smoke:agent-service-skill-entry` | draft / verify / register / binding readiness / enable allowlist / runtime transcript | 注册不等于可执行，显式 enable 且 SkillTool gate 有结构化 transcript 才可进入能力面 |
 | `browser-runtime-site-adapter` | `npm run smoke:browser-runtime` + `npm run smoke:site-adapters` | attach/status、adapter list、cleanup、console/network 摘要 | cleanup warning 必须归类；session 泄漏不可放行 |
 | `harness-replay-regression` | `npm run harness:eval` + `npm run harness:eval:trend` | eval summary、observability gap、trend 样本 | trend 样本不足只能作为 seed，不能替代长期趋势 |
 | `release-package-startup-smoke` | `npm run verify:app-version` + `npm run verify:gui-smoke -- --reuse-running` | version consistency、artifact scope、startup smoke | 必须标明 source-tree 还是 installer artifact |
@@ -136,3 +145,25 @@ npm run agent-qc:qcloop-db-lease -- \
 - Evidence 契约：`docs/tests/lime-agent-qc-evidence-contract.md`
 - 机器 manifest：`docs/test/agent-qc-scenarios.manifest.json`
 - Evidence schema：`docs/test/agent-qc-evidence.schema.json`
+
+## 10. 2026-05-11 04:44 样本状态
+
+当前执行矩阵的最新输入不是“缺少测试文档”，而是 owner gate 和官方 Evidence Pack 仍在阻断：
+
+| Gate | 当前状态 | 下一步含义 |
+| --- | --- | --- |
+| `agent-qc:audit -- --check` | `incomplete`，`16/17` | 只剩 `real-qcloop-evidence` 未满足 |
+| `agent-qc:objective-checklist -- --check` | `incomplete`，`5/7` | raw process owner busy + official Evidence Pack fail |
+| `agent-qc:gui-owner-check -- --check` | pass | qcloop GUI owner 已清空 |
+| `agent-qc:process-owner-check` | busy | PID `59011` stale `smoke:design-canvas` 是唯一 active blocker |
+| official Evidence Pack | fail | `.lime/qc/agent-qc-evidence.json` 不能发布 |
+| isolated P0 full v3 | failed，4 pass / 4 exhausted | 只能作为 sidecar，不可覆盖官方 evidence |
+| Skill Forge runtime transcript 单项补证 | completed，1 pass / 0 fail | 已证明单项 verifier 可采信 runtime transcript，但不能替代 8/8 full P0 |
+
+`skill-forge-register-bind-enable` 的最新前置证据是 `.lime/qc/skill-forge-runtime-transcript-current.json`：它覆盖 deterministic-smoke 与 runtime-transcript 两层、8 个事件，并证明 Rust exact tests 不再是 `running 0 tests`。随后 qcloop job `1778445676473687000` 已把该场景跑成 `success`，sidecar `.lime/qc/agent-qc-evidence.skill-forge-runtime-transcript.json` 为单场景 `pass`。但该 sidecar 缺少其余 7 个 P0 场景，release summary `--check` 仍正确失败；下一轮 full P0 必须在同一批次内重新覆盖 8/8，而不是拼接 partial pass。
+
+因此当前安全动作只有三类：
+
+1. 只读刷新 owner / qcloop status / audit sidecar。
+2. 继续完善文档和 runbook，不能降低 verifier 或 evidenceRequired。
+3. 等 PID `59011` 自然释放，或 owner 明确确认后按 stale raw GUI owner runbook 处理。

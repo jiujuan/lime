@@ -56,12 +56,56 @@ export interface AgentEnvelopeDraftPresentation {
   registeredSkillDirectory: string;
 }
 
+export interface AgentEnvelopeDraftCompletionAuditLabelParts {
+  decision: string;
+  successfulOwnerRunCount: number;
+  ownerRunCount: number;
+  workspaceSkillToolCallCount: number;
+  artifactCount: number;
+  controlledGetExecutedCount: number;
+  controlledGetArtifactCount: number;
+  controlledGetRequired: boolean;
+  blockingReasons: string[];
+  missingControlledGetRequirement: boolean;
+}
+
+export interface AgentEnvelopeDraftPresentationCopy {
+  actionBlocked?: string;
+  actionDraft?: string;
+  actionManualEnable?: string;
+  agentCardPending?: string;
+  blockedReasonFallback?: string;
+  description?: string;
+  discoveryPending?: string;
+  evidenceMissing?: string;
+  evidenceSourceMetadataOnly?: string;
+  formatAgentCardReady?: (directory: string) => string;
+  formatCompletionAuditEvidenceLabel?: (
+    parts: AgentEnvelopeDraftCompletionAuditLabelParts,
+  ) => string;
+  formatDiscoveryReady?: (registeredSkillDirectory: string) => string;
+  formatMemoryWithReport?: (reportId: string) => string;
+  formatPendingEvidencePack?: (packId: string) => string;
+  formatCompletedEvidencePack?: (packId?: string) => string;
+  formatPermissionWithSummary?: (summary: string) => string;
+  formatRunbook?: (name: string) => string;
+  memoryPending?: string;
+  permissionEmpty?: string;
+  schedule?: string;
+  sharingPending?: string;
+  sharingReady?: string;
+  statusLabels?: Partial<Record<AgentEnvelopeDraftStage, string>>;
+  widgetPending?: string;
+  widgetReady?: string;
+}
+
 export interface BuildAgentEnvelopeDraftPresentationParams {
   skill: WorkspaceRegisteredSkillRecord;
   binding?: AgentRuntimeWorkspaceSkillBinding;
   sourceMetadata?: WorkspaceSkillRuntimeSourceMetadata | null;
   evidencePackId?: string | null;
   completionAuditSummary?: AgentRuntimeCompletionAuditSummary | null;
+  copy?: AgentEnvelopeDraftPresentationCopy;
 }
 
 function firstNonEmpty(...values: Array<string | null | undefined>): string {
@@ -87,11 +131,15 @@ function sourcePermissionSummary(
   return skill.permissionSummary;
 }
 
-function buildPermissionLabel(permissionSummary: string[]): string {
+function buildPermissionLabel(
+  permissionSummary: string[],
+  copy?: AgentEnvelopeDraftPresentationCopy,
+): string {
   if (permissionSummary.length === 0) {
-    return "权限：默认手动确认，未声明额外外部写权限。";
+    return copy?.permissionEmpty ?? "权限：默认手动确认，未声明额外外部写权限。";
   }
-  return `权限：${permissionSummary.slice(0, 2).join(" / ")}。`;
+  const summary = permissionSummary.slice(0, 2).join(" / ");
+  return copy?.formatPermissionWithSummary?.(summary) ?? `权限：${summary}。`;
 }
 
 function resolveStage(
@@ -150,6 +198,7 @@ function evidenceStatusForStage(
 
 function buildCompletionAuditEvidenceLabel(
   summary: AgentRuntimeCompletionAuditSummary,
+  copy?: AgentEnvelopeDraftPresentationCopy,
 ): string {
   const blockingReasons = summary.blocking_reasons.filter(Boolean);
   const controlledGetExecuted =
@@ -170,6 +219,22 @@ function buildCompletionAuditEvidenceLabel(
       : "";
   const missingControlledGetRequirement =
     !isControlledGetEvidenceRequirementSatisfied(summary);
+  const parts: AgentEnvelopeDraftCompletionAuditLabelParts = {
+    decision: summary.decision,
+    successfulOwnerRunCount: summary.successful_owner_run_count,
+    ownerRunCount: summary.owner_run_count,
+    workspaceSkillToolCallCount: summary.workspace_skill_tool_call_count,
+    artifactCount: summary.artifact_count,
+    controlledGetExecutedCount: controlledGetExecuted,
+    controlledGetArtifactCount: controlledGetArtifacts,
+    controlledGetRequired,
+    blockingReasons,
+    missingControlledGetRequirement,
+  };
+  const copiedLabel = copy?.formatCompletionAuditEvidenceLabel?.(parts);
+  if (copiedLabel) {
+    return copiedLabel;
+  }
   const suffix = missingControlledGetRequirement
     ? "；缺受控 GET evidence，不能固化为 Agent"
     : summary.decision === "completed"
@@ -185,6 +250,7 @@ export function buildAgentEnvelopeDraftPresentation({
   sourceMetadata,
   evidencePackId,
   completionAuditSummary,
+  copy,
 }: BuildAgentEnvelopeDraftPresentationParams): AgentEnvelopeDraftPresentation {
   const completionAuditReady = isCompletionAuditReady(completionAuditSummary);
   const stage = resolveStage(
@@ -224,35 +290,44 @@ export function buildAgentEnvelopeDraftPresentation({
 
   const blockedReason =
     binding?.binding_status === "blocked"
-      ? binding.binding_status_reason || "runtime binding 当前被 gate 阻断"
+      ? binding.binding_status_reason ||
+        copy?.blockedReasonFallback ||
+        "runtime binding 当前被 gate 阻断"
       : "";
 
   const statusLabelByStage: Record<AgentEnvelopeDraftStage, string> = {
-    blocked: "Agent 草案阻塞",
-    manual_enable_required: "等待成功运行",
-    source_metadata_ready: "等待 Completion Audit",
-    evidence_ready: "Evidence 已就绪",
+    blocked: copy?.statusLabels?.blocked ?? "Agent 草案阻塞",
+    manual_enable_required:
+      copy?.statusLabels?.manual_enable_required ?? "等待成功运行",
+    source_metadata_ready:
+      copy?.statusLabels?.source_metadata_ready ?? "等待 Completion Audit",
+    evidence_ready: copy?.statusLabels?.evidence_ready ?? "Evidence 已就绪",
   };
 
   const pendingEvidencePackLabel =
     evidencePackId?.trim() && !completionAuditReady
-      ? `Evidence：已关联 evidence pack ${evidencePackId.trim()}，但还缺 completed completion audit，不能固化为 Agent。`
+      ? copy?.formatPendingEvidencePack?.(evidencePackId.trim()) ??
+        `Evidence：已关联 evidence pack ${evidencePackId.trim()}，但还缺 completed completion audit，不能固化为 Agent。`
       : null;
   const completionAuditEvidenceLabel = completionAuditSummary
-    ? buildCompletionAuditEvidenceLabel(completionAuditSummary)
+    ? buildCompletionAuditEvidenceLabel(completionAuditSummary, copy)
     : null;
   const completedEvidenceLabel =
     completionAuditEvidenceLabel ??
+    copy?.formatCompletedEvidencePack?.(evidencePackId?.trim() || undefined) ??
     `Evidence：已关联 evidence pack${evidencePackId ? ` ${evidencePackId}` : ""}。`;
 
   const evidenceLabelByStatus: Record<
     AgentEnvelopeDraftEvidenceStatus,
     string
   > = {
-    missing: "Evidence：还没有成功运行证据；先通过本回合启用拿到一次结果。",
+    missing:
+      copy?.evidenceMissing ??
+      "Evidence：还没有成功运行证据；先通过本回合启用拿到一次结果。",
     source_metadata_only:
       completionAuditEvidenceLabel ??
       pendingEvidencePackLabel ??
+      copy?.evidenceSourceMetadataOnly ??
       "Evidence：已有 P3E source metadata，可追踪本次 session 授权来源。",
     evidence_pack_ready: completedEvidenceLabel,
   };
@@ -264,40 +339,59 @@ export function buildAgentEnvelopeDraftPresentation({
     statusLabel: statusLabelByStage[stage],
     actionLabel:
       stage === "blocked"
-        ? "先解除阻塞"
+        ? copy?.actionBlocked ?? "先解除阻塞"
         : stage === "manual_enable_required"
-          ? "先本回合启用"
-          : "转成 Agent 草案",
+          ? copy?.actionManualEnable ?? "先本回合启用"
+          : copy?.actionDraft ?? "转成 Agent 草案",
     actionEnabled: completionAuditReady,
     description:
       stage === "blocked"
         ? blockedReason
-        : "成功运行后可把 Skill、权限、手动 rerun 和 evidence 组合成 Workspace Agent envelope。",
+        : copy?.description ??
+          "成功运行后可把 Skill、权限、手动 rerun 和 evidence 组合成 Workspace Agent envelope。",
     agentCardLabel:
       stage === "evidence_ready"
-        ? `Agent card：workspace-local/${skill.directory}，由已注册 Skill、Managed Job 和 completion audit 派生。`
-        : "Agent card：等待 evidence-ready 后派生，不创建平行持久化实体。",
+        ? copy?.formatAgentCardReady?.(skill.directory) ??
+          `Agent card：workspace-local/${skill.directory}，由已注册 Skill、Managed Job 和 completion audit 派生。`
+        : copy?.agentCardPending ??
+          "Agent card：等待 evidence-ready 后派生，不创建平行持久化实体。",
     sharingLabel:
       stage === "evidence_ready"
-        ? "Sharing：可在当前 workspace / team 内共享；不进入 public Marketplace。"
-        : "Sharing：未完成审计前仅对当前操作者展示草案。",
+        ? copy?.sharingReady ??
+          "Sharing：可在当前 workspace / team 内共享；不进入 public Marketplace。"
+        : copy?.sharingPending ?? "Sharing：未完成审计前仅对当前操作者展示草案。",
     sharingDiscoveryLabel: registeredSkillDirectory
-      ? `Discovery：同 workspace 成员通过 registered skill 发现 ${registeredSkillDirectory}，复用同一 Managed Job / evidence。`
-      : "Discovery：等待 workspace-local skill 注册路径后再进入团队发现。",
-    runbookLabel: `Runbook：${firstNonEmpty(
-      sourceMetadata?.skillName,
-      sourceMetadata?.skill,
-      `project:${skill.directory}`,
-    )}`,
+      ? copy?.formatDiscoveryReady?.(registeredSkillDirectory) ??
+        `Discovery：同 workspace 成员通过 registered skill 发现 ${registeredSkillDirectory}，复用同一 Managed Job / evidence。`
+      : copy?.discoveryPending ??
+        "Discovery：等待 workspace-local skill 注册路径后再进入团队发现。",
+    runbookLabel:
+      copy?.formatRunbook?.(
+        firstNonEmpty(
+          sourceMetadata?.skillName,
+          sourceMetadata?.skill,
+          `project:${skill.directory}`,
+        ),
+      ) ??
+      `Runbook：${firstNonEmpty(
+        sourceMetadata?.skillName,
+        sourceMetadata?.skill,
+        `project:${skill.directory}`,
+      )}`,
     memoryLabel: sourceVerificationReportId
-      ? `Memory：引用 verification report ${sourceVerificationReportId} 与后续运行修正。`
-      : "Memory：等待首轮运行后记录用户偏好、方法论和修正历史。",
+      ? copy?.formatMemoryWithReport?.(sourceVerificationReportId) ??
+        `Memory：引用 verification report ${sourceVerificationReportId} 与后续运行修正。`
+      : copy?.memoryPending ??
+        "Memory：等待首轮运行后记录用户偏好、方法论和修正历史。",
     widgetLabel:
       stage === "evidence_ready"
-        ? "Widget：展示 Managed Job 状态、最近产物、审计结论和下一步动作。"
-        : "Widget：等待运行后展示状态、产物、阻塞点和 evidence 入口。",
-    permissionLabel: buildPermissionLabel(permissionSummary),
-    scheduleLabel: "Schedule：第一刀仅支持 manual rerun 草案，不创建长期任务。",
+        ? copy?.widgetReady ??
+          "Widget：展示 Managed Job 状态、最近产物、审计结论和下一步动作。"
+        : copy?.widgetPending ??
+          "Widget：等待运行后展示状态、产物、阻塞点和 evidence 入口。",
+    permissionLabel: buildPermissionLabel(permissionSummary, copy),
+    scheduleLabel:
+      copy?.schedule ?? "Schedule：第一刀仅支持 manual rerun 草案，不创建长期任务。",
     evidenceStatus,
     evidenceLabel: evidenceLabelByStatus[evidenceStatus],
     sourceDraftId,

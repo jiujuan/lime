@@ -616,22 +616,42 @@ export function getContentStatusLabel(status: ContentStatus): string {
   return labels[status] || status;
 }
 
+export interface CreateProjectErrorMessageCopy {
+  invalidPath: string;
+  objectError: string;
+  pathExists: string;
+  staleSchema: string;
+  unknown: string;
+}
+
+const DEFAULT_CREATE_PROJECT_ERROR_MESSAGE_COPY: CreateProjectErrorMessageCopy =
+  {
+    invalidPath: "项目目录无效，请重新选择",
+    objectError: "创建项目失败，请查看日志",
+    pathExists: "项目目录已存在，请更换项目名称或清理同名目录",
+    staleSchema: "数据库结构过旧，请重启应用以执行迁移",
+    unknown: "未知错误",
+  };
+
 /** 解析创建项目的错误信息 */
-export function getCreateProjectErrorMessage(message: string): string {
+export function getCreateProjectErrorMessage(
+  message: string,
+  copy: CreateProjectErrorMessageCopy = DEFAULT_CREATE_PROJECT_ERROR_MESSAGE_COPY,
+): string {
   if (!message) {
-    return "未知错误";
+    return copy.unknown;
   }
   if (message === "[object Object]") {
-    return "创建项目失败，请查看日志";
+    return copy.objectError;
   }
   if (message.includes("路径已存在")) {
-    return "项目目录已存在，请更换项目名称或清理同名目录";
+    return copy.pathExists;
   }
   if (message.includes("no such column") || message.includes("has no column")) {
-    return "数据库结构过旧，请重启应用以执行迁移";
+    return copy.staleSchema;
   }
   if (message.includes("无效的路径")) {
-    return "项目目录无效，请重新选择";
+    return copy.invalidPath;
   }
   return message;
 }

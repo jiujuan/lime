@@ -296,6 +296,8 @@ export interface ActionRequired {
   scope?: ActionRequiredScope;
   /** 来源运行时事件名（用于提交确认后恢复当前执行流） */
   eventName?: string;
+  /** 来源 assistant 消息 ID（用于将全局待确认队列收敛到当前轮） */
+  sourceMessageId?: string;
   /** 前端交互状态（用于保留已提交的 ask/elicitation 面板） */
   status?: "pending" | "queued" | "submitted";
   /** 是否为前端根据 Ask 工具调用生成的临时请求（尚未拿到真实 requestId） */
@@ -448,6 +450,8 @@ export interface Message {
   taskPreview?: MessageTaskPreview;
   /** 首个流式事件到达前的本地运行态 */
   runtimeStatus?: AgentRuntimeStatus;
+  /** 当前消息显式绑定的运行时回合 ID，用于避免执行过程跨轮串线 */
+  runtimeTurnId?: string;
   /** 消息用途（用于跳过特定副作用） */
   purpose?: "content_review" | "text_stylize" | "style_rewrite" | "style_audit";
 }

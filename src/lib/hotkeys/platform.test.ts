@@ -5,6 +5,7 @@ import {
   isInputLikeTarget,
   normalizeHotkeyKey,
   resolveHotkeyPlatform,
+  UNSET_SHORTCUT_TOKEN,
 } from "./platform";
 
 describe("hotkey platform helpers", () => {
@@ -38,7 +39,7 @@ describe("hotkey platform helpers", () => {
     expect(
       formatShortcutTokens("CommandOrControl+Alt+Escape", "windows"),
     ).toEqual(["Ctrl", "Alt", "Esc"]);
-    expect(formatShortcutTokens("", "other")).toEqual(["未设置"]);
+    expect(formatShortcutTokens("", "other")).toEqual([UNSET_SHORTCUT_TOKEN]);
   });
 
   it("应识别输入类目标", () => {

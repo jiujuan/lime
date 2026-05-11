@@ -842,6 +842,16 @@ describe("SkillsWorkspacePage", () => {
       }),
     );
     const payload = getLatestNavigationPayload(onNavigate);
+    const initialUserPrompt = String(payload?.initialUserPrompt ?? "");
+    expect(initialUserPrompt).toContain(
+      "请在本回合使用 Workspace 本地 Skill「只读 CLI 报告」",
+    );
+    expect(initialUserPrompt).toContain(
+      "先读取这个 Skill 的说明与约束，再基于当前任务完成交付。",
+    );
+    expect(initialUserPrompt).toContain(
+      "不要创建自动化、定时任务或 marketplace 发布。",
+    );
     const harness = (
       payload?.initialAutoSendRequestMetadata as
         | { harness?: Record<string, unknown> }

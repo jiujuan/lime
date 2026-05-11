@@ -46,6 +46,7 @@ import {
   isFalProviderLike,
   isLikelyFalImageModel,
   isProviderApiKeyRequired,
+  type ProviderModelFetchStatusCopy,
 } from "./providerModelFetchHelpers";
 
 // ============================================================================
@@ -357,6 +358,58 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     !testingConnection &&
     modelList.length > 0 &&
     (!providerApiKeyRequired || hasApiKey || canUseDraftApiKey);
+  const modelFetchUnsupportedMessage = useMemo(() => {
+    switch (provider.type) {
+      case "azure-openai":
+        return t(
+          "settings.providers.setting.feedback.modelFetch.unsupported.azureOpenai",
+          "Azure OpenAI 的模型枚举仍需单独适配资源端点与 API Version，当前不展示自动获取入口。",
+        );
+      case "vertexai":
+        return t(
+          "settings.providers.setting.feedback.modelFetch.unsupported.vertexAi",
+          "Vertex AI 需要单独的云端认证与项目上下文，当前不展示自动获取入口。",
+        );
+      case "aws-bedrock":
+        return t(
+          "settings.providers.setting.feedback.modelFetch.unsupported.awsBedrock",
+          "AWS Bedrock 需要专门的云凭证签名流程，当前不展示自动获取入口。",
+        );
+      default:
+        return t(
+          "settings.providers.setting.feedback.modelFetch.unsupported.default",
+          "当前协议暂不支持自动获取最新模型，请手动添加模型 ID。",
+        );
+    }
+  }, [provider.type, t]);
+  const modelFetchStatusCopy = useMemo<ProviderModelFetchStatusCopy>(
+    () => ({
+      responsesConfirmedImage: (imageModel) =>
+        t(
+          "settings.providers.setting.feedback.modelFetch.responses.confirmedImage",
+          {
+            imageModel,
+            defaultValue:
+              "已确认 Responses 图片模型 {{imageModel}}，该入口无需标准 /models 枚举，图片生成会走 Responses image_generation。",
+          },
+        ),
+      responsesManualImage: t(
+        "settings.providers.setting.feedback.modelFetch.responses.manualImage",
+        "该 Responses 图片入口不提供标准 /models 枚举；请手动添加 gpt-images-2 或 gpt-image-2，图片生成会走 Responses image_generation。",
+      ),
+      falConfirmedModel: (modelId) =>
+        t("settings.providers.setting.feedback.modelFetch.fal.confirmedModel", {
+          modelId,
+          defaultValue:
+            "已确认 Fal 模型 {{modelId}}，Fal 不提供标准 /models 枚举，后续会使用手动声明的模型 ID。",
+        }),
+      falManualModel: t(
+        "settings.providers.setting.feedback.modelFetch.fal.manualModel",
+        "Fal 不提供标准 /models 枚举；当前模型优先级没有可用 Fal 图片模型，请手动添加 fal-ai/nano-banana-pro、fal-ai/flux-pro 或其他 fal-ai/... 模型 ID。",
+      ),
+    }),
+    [t],
+  );
 
   const persistDraftApiKey = useCallback(async () => {
     const nextApiKey = apiKeyDraft.trim();
@@ -365,13 +418,18 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     }
 
     if (!onAddApiKey) {
-      throw new Error("当前页面缺少添加 API Key 的能力。");
+      throw new Error(
+        t(
+          "settings.providers.setting.feedback.apiKey.addMissingCapability",
+          "当前页面缺少添加 API Key 的能力。",
+        ),
+      );
     }
 
     await onAddApiKey(provider.id, nextApiKey);
     setApiKeyDraft("");
     setApiKeyDirty(false);
-  }, [apiKeyDirty, apiKeyDraft, onAddApiKey, provider.id]);
+  }, [apiKeyDirty, apiKeyDraft, onAddApiKey, provider.id, t]);
 
   const applyModels = useCallback(
     async (nextModels: string[]) => {
@@ -433,9 +491,7 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     if (!modelAutoFetchCapability.supported) {
       setModelFetchStatus({
         tone: "info",
-        message:
-          modelAutoFetchCapability.unsupportedReason ??
-          "当前协议不支持接口获取模型，请手动添加模型 ID。",
+        message: modelFetchUnsupportedMessage,
       });
       return;
     }
@@ -443,7 +499,10 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     if (!canReadModelsFromApi) {
       setModelFetchStatus({
         tone: "error",
-        message: "请先填写并保存 API 密钥，再从接口获取模型。",
+        message: t(
+          "settings.providers.setting.feedback.modelFetch.needApiKey",
+          "请先填写并保存 API 密钥，再从接口获取模型。",
+        ),
       });
       return;
     }
@@ -462,8 +521,14 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
         const responsesStatus = buildResponsesModelFetchStatus(
           result,
           modelList,
+          modelFetchStatusCopy,
         );
-        const falStatus = buildFalModelFetchStatus(provider, result, modelList);
+        const falStatus = buildFalModelFetchStatus(
+          provider,
+          result,
+          modelList,
+          modelFetchStatusCopy,
+        );
         setModelFetchStatus({
           tone:
             responsesStatus?.tone ??
@@ -473,8 +538,15 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
             responsesStatus?.message ??
             falStatus?.message ??
             (source === "Error"
-              ? (result.error ?? "接口获取模型失败。请手动添加模型 ID。")
-              : "接口没有返回实时模型列表。请手动添加模型 ID。"),
+              ? (result.error ??
+                t(
+                  "settings.providers.setting.feedback.modelFetch.errorWithManualFallback",
+                  "接口获取模型失败。请手动添加模型 ID。",
+                ))
+              : t(
+                  "settings.providers.setting.feedback.modelFetch.emptyRealtime",
+                  "接口没有返回实时模型列表。请手动添加模型 ID。",
+                )),
         });
         return;
       }
@@ -488,8 +560,14 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
         setModelFetchStatus({
           tone: "info",
           message: isFalProviderLike(provider)
-            ? "Fal 不提供标准 /models 枚举；当前没有可用 Fal 图片模型，请手动添加 fal-ai/nano-banana-pro、fal-ai/flux-pro 或其他 fal-ai/... 模型 ID。"
-            : "接口已响应，但没有返回可添加的模型 ID。请手动添加模型。",
+            ? t(
+                "settings.providers.setting.feedback.modelFetch.emptyFal",
+                "Fal 不提供标准 /models 枚举；当前没有可用 Fal 图片模型，请手动添加 fal-ai/nano-banana-pro、fal-ai/flux-pro 或其他 fal-ai/... 模型 ID。",
+              )
+            : t(
+                "settings.providers.setting.feedback.modelFetch.empty",
+                "接口已响应，但没有返回可添加的模型 ID。请手动添加模型。",
+              ),
         });
         return;
       }
@@ -502,31 +580,50 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
       if (existingFetchedModelCount === effectiveFetchedModelIds.length) {
         setModelFetchStatus({
           tone: "success",
-          message: `已确认 ${effectiveFetchedModelIds.length} 个模型，当前模型优先级已包含全部结果。`,
+          message: t(
+            "settings.providers.setting.feedback.modelFetch.confirmedAll",
+            {
+              count: effectiveFetchedModelIds.length,
+              defaultValue:
+                "已确认 {{count}} 个模型，当前模型优先级已包含全部结果。",
+            },
+          ),
         });
         return;
       }
 
       setModelFetchStatus({
         tone: "success",
-        message: `接口返回 ${effectiveFetchedModelIds.length} 个模型，点击下方模型即可加入优先级。`,
+        message: t("settings.providers.setting.feedback.modelFetch.fetched", {
+          count: effectiveFetchedModelIds.length,
+          defaultValue:
+            "接口返回 {{count}} 个模型，点击下方模型即可加入优先级。",
+        }),
       });
     } catch (error) {
       setModelFetchStatus({
         tone: "error",
-        message: error instanceof Error ? error.message : "接口获取模型失败",
+        message:
+          error instanceof Error
+            ? error.message
+            : t(
+                "settings.providers.setting.feedback.modelFetch.errorDefault",
+                "接口获取模型失败",
+              ),
       });
     } finally {
       setFetchingModels(false);
     }
   }, [
     canReadModelsFromApi,
+    modelFetchStatusCopy,
+    modelFetchUnsupportedMessage,
     modelList,
     modelAutoFetchCapability.supported,
-    modelAutoFetchCapability.unsupportedReason,
     normalizedModelSet,
     persistDraftApiKey,
     provider,
+    t,
   ]);
 
   const handleDeleteProvider = useCallback(async () => {
@@ -534,11 +631,18 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
       return;
     }
 
-    const deleteDescription = provider.is_system
-      ? "此操作会移除该服务商的已启用模型和本地 API 密钥，系统服务商入口仍可重新添加。"
-      : "此操作会移除该服务商和关联密钥。";
     const confirmed = window.confirm(
-      `确认删除「${provider.name}」配置？${deleteDescription}`,
+      provider.is_system
+        ? t("settings.providers.setting.feedback.delete.confirm.system", {
+            providerName: provider.name,
+            defaultValue:
+              "确认删除「{{providerName}}」配置？此操作会移除该服务商的已启用模型和本地 API 密钥，系统服务商入口仍可重新添加。",
+          })
+        : t("settings.providers.setting.feedback.delete.confirm.custom", {
+            providerName: provider.name,
+            defaultValue:
+              "确认删除「{{providerName}}」配置？此操作会移除该服务商和关联密钥。",
+          }),
     );
     if (!confirmed) {
       return;
@@ -551,23 +655,35 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
       await onDeleteProvider(provider.id);
       setProviderActionStatus({
         tone: "success",
-        message: "配置已删除。",
+        message: t(
+          "settings.providers.setting.feedback.delete.success",
+          "配置已删除。",
+        ),
       });
     } catch (error) {
       setProviderActionStatus({
         tone: "error",
-        message: error instanceof Error ? error.message : "删除配置失败",
+        message:
+          error instanceof Error
+            ? error.message
+            : t(
+                "settings.providers.setting.feedback.delete.errorDefault",
+                "删除配置失败",
+              ),
       });
     } finally {
       setDeletingProvider(false);
     }
-  }, [onDeleteProvider, provider.id, provider.is_system, provider.name]);
+  }, [onDeleteProvider, provider.id, provider.is_system, provider.name, t]);
 
   const handleTestConnection = useCallback(async () => {
     if (modelList.length === 0) {
       setConnectionStatus({
         tone: "error",
-        message: "请先添加至少一个模型，再测试连接。",
+        message: t(
+          "settings.providers.setting.feedback.connection.needModel",
+          "请先添加至少一个模型，再测试连接。",
+        ),
       });
       return;
     }
@@ -575,7 +691,10 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     if (providerApiKeyRequired && !hasApiKey && !canUseDraftApiKey) {
       setConnectionStatus({
         tone: "error",
-        message: "请先填写 API 密钥，再测试连接。",
+        message: t(
+          "settings.providers.setting.feedback.connection.needApiKey",
+          "请先填写 API 密钥，再测试连接。",
+        ),
       });
       return;
     }
@@ -601,19 +720,39 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
           tone: "success",
           message:
             result.latencyMs !== undefined
-              ? `连接成功 · ${result.latencyMs}ms`
-              : "连接成功",
+              ? t(
+                  "settings.providers.setting.feedback.connection.successWithLatency",
+                  {
+                    latencyMs: result.latencyMs,
+                    defaultValue: "连接成功 · {{latencyMs}}ms",
+                  },
+                )
+              : t(
+                  "settings.providers.setting.feedback.connection.success",
+                  "连接成功",
+                ),
         });
       } else {
         setConnectionStatus({
           tone: "error",
-          message: result.error || "连接测试未通过，请检查密钥或模型 ID。",
+          message:
+            result.error ||
+            t(
+              "settings.providers.setting.feedback.connection.failureDefault",
+              "连接测试未通过，请检查密钥或模型 ID。",
+            ),
         });
       }
     } catch (error) {
       setConnectionStatus({
         tone: "error",
-        message: error instanceof Error ? error.message : "连接测试失败",
+        message:
+          error instanceof Error
+            ? error.message
+            : t(
+                "settings.providers.setting.feedback.connection.errorDefault",
+                "连接测试失败",
+              ),
       });
     } finally {
       setTestingConnection(false);
@@ -627,6 +766,7 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     primaryModel,
     providerApiKeyRequired,
     provider.id,
+    t,
   ]);
 
   return (

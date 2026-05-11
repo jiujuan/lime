@@ -17,6 +17,7 @@ const {
   mockGetProjectByRootPath,
   mockGetWorkspaceProjectsRoot,
   mockResolveProjectRootPath,
+  mockTranslate,
 } = vi.hoisted(() => ({
   mockExtractErrorMessage: vi.fn((error: unknown) =>
     error instanceof Error ? error.message : String(error),
@@ -25,6 +26,21 @@ const {
   mockGetProjectByRootPath: vi.fn(),
   mockGetWorkspaceProjectsRoot: vi.fn(),
   mockResolveProjectRootPath: vi.fn(),
+  mockTranslate: (
+    key: string,
+    options?: string | { defaultValue?: string; [key: string]: unknown },
+  ) => {
+    const template =
+      typeof options === "string" ? options : (options?.defaultValue ?? key);
+
+    if (typeof options === "string") {
+      return template;
+    }
+
+    return template.replace(/{{(\w+)}}/g, (_, name: string) =>
+      String(options?.[name] ?? ""),
+    );
+  },
 }));
 
 vi.mock("sonner", () => ({
@@ -32,6 +48,12 @@ vi.mock("sonner", () => ({
     success: vi.fn(),
     error: vi.fn(),
   },
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: mockTranslate,
+  }),
 }));
 
 vi.mock("@/lib/api/project", () => ({

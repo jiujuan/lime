@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanupMountedRoots,
@@ -5,6 +6,7 @@ import {
   setReactActEnvironment,
   type MountedRoot,
 } from "@/components/image-gen/test-utils";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 const { mockUseGalleryMaterial, mockConvertLocalFileSrc } = vi.hoisted(() => ({
   mockUseGalleryMaterial: vi.fn(),
@@ -23,14 +25,17 @@ import { ImageGallery } from "./ImageGallery";
 
 const mountedRoots: MountedRoot[] = [];
 
-function renderGallery() {
-  return renderIntoDom(<ImageGallery projectId="project-1" />, mountedRoots)
-    .container;
+function renderGallery(props: Partial<ComponentProps<typeof ImageGallery>> = {}) {
+  return renderIntoDom(
+    <ImageGallery projectId="project-1" {...props} />,
+    mountedRoots,
+  ).container;
 }
 
 describe("ImageGallery", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     setReactActEnvironment();
+    await changeLimeLocale("zh-CN");
     vi.clearAllMocks();
     mockConvertLocalFileSrc.mockReturnValue("asset://preview.png");
     mockUseGalleryMaterial.mockReturnValue({
@@ -62,5 +67,26 @@ describe("ImageGallery", () => {
     expect(image).toBeInstanceOf(HTMLImageElement);
     expect(mockConvertLocalFileSrc).toHaveBeenCalledWith("/tmp/preview.png");
     expect(image?.getAttribute("src")).toBe("asset://preview.png");
+  });
+
+  it("英文界面应使用 workspace namespace 文案", async () => {
+    await changeLimeLocale("en-US");
+    const container = renderGallery({ selectedIds: ["image-1"] });
+
+    expect(container.querySelector("input")?.getAttribute("placeholder")).toBe(
+      "Search images...",
+    );
+    expect(
+      container.querySelector('button[aria-label="Grid view"]'),
+    ).toBeInstanceOf(HTMLButtonElement);
+    expect(
+      container.querySelector('button[aria-label="List view"]'),
+    ).toBeInstanceOf(HTMLButtonElement);
+    expect(container.textContent).toContain("All");
+    expect(container.textContent).toContain("Product");
+    expect(container.textContent).toContain("1 image(s), 1 selected");
+    expect(container.textContent).toContain(
+      "Double-click an image to insert it into the current canvas",
+    );
   });
 });

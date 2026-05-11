@@ -277,6 +277,33 @@ function buildMockReferralDashboard() {
   };
 }
 
+function seedCloudSessionWithReferral(options?: {
+  referralEnabled?: boolean;
+  referral?: ReturnType<typeof buildMockReferralDashboard> | null;
+}) {
+  setStoredOemCloudSessionState({
+    token: "session-token",
+    tenant: { id: "tenant-0001", name: "Lime Cloud" },
+    user: {
+      id: "user-001",
+      displayName: "晚风",
+      email: "wanfeng@example.com",
+    },
+    session: { id: "session-001", provider: "google" },
+  });
+  setOemCloudBootstrapSnapshot({
+    session: {
+      tenant: { id: "tenant-0001", name: "Lime Cloud" },
+    },
+    features: {
+      referralEnabled: options?.referralEnabled ?? true,
+    },
+    ...(options?.referral !== null
+      ? { referral: options?.referral ?? buildMockReferralDashboard() }
+      : {}),
+  });
+}
+
 describe("AppSidebar", () => {
   beforeEach(async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -497,7 +524,6 @@ describe("AppSidebar", () => {
     expect(container.textContent).not.toContain("持续流程");
     expect(container.textContent).not.toContain("消息渠道");
     expect(container.textContent).not.toContain("插件中心");
-    expect(container.textContent).not.toContain("OpenClaw");
     expect(container.textContent).not.toContain("桌宠");
     expect(container.textContent).not.toContain("支撑");
     expect(container.textContent).not.toContain("技能");
@@ -730,25 +756,7 @@ describe("AppSidebar", () => {
       configurable: true,
       value: { writeText },
     });
-    setStoredOemCloudSessionState({
-      token: "session-token",
-      tenant: { id: "tenant-0001", name: "Lime Cloud" },
-      user: {
-        id: "user-001",
-        displayName: "晚风",
-        email: "wanfeng@example.com",
-      },
-      session: { id: "session-001", provider: "google" },
-    });
-    setOemCloudBootstrapSnapshot({
-      session: {
-        tenant: { id: "tenant-0001", name: "Lime Cloud" },
-      },
-      features: {
-        referralEnabled: true,
-      },
-      referral: buildMockReferralDashboard(),
-    });
+    seedCloudSessionWithReferral();
 
     const container = mountSidebarContainer({
       currentPage: "agent",
@@ -798,24 +806,61 @@ describe("AppSidebar", () => {
     expect(mockToastSuccess).toHaveBeenCalledWith("已复制邀请文案");
   });
 
-  it("缓存的云端邀请开关关闭时不应展示头部邀请入口", async () => {
-    setStoredOemCloudSessionState({
-      token: "session-token",
-      tenant: { id: "tenant-0001", name: "Lime Cloud" },
-      user: {
-        id: "user-001",
-        displayName: "晚风",
-        email: "wanfeng@example.com",
-      },
-      session: { id: "session-001", provider: "google" },
+  it("邀请入口应使用 navigation 命名空间资源", async () => {
+    await changeLimeLocale("en-US");
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
     });
-    setOemCloudBootstrapSnapshot({
-      session: {
-        tenant: { id: "tenant-0001", name: "Lime Cloud" },
-      },
-      features: {
-        referralEnabled: false,
-      },
+    seedCloudSessionWithReferral();
+
+    const container = mountSidebarContainer({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "new-task",
+      } as AgentPageParams,
+    });
+    await flushEffects(2);
+
+    const inviteButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="app-sidebar-invite-button"]',
+    );
+    expect(inviteButton?.textContent).toContain("Invite friends");
+
+    await act(async () => {
+      inviteButton?.click();
+      await Promise.resolve();
+    });
+    await flushEffects(4);
+
+    const dialog = document.body.querySelector(
+      '[data-testid="app-sidebar-invite-dialog"]',
+    );
+    expect(dialog?.textContent).toContain("Lime Invite");
+    expect(dialog?.textContent).toContain("Invite code");
+    expect(dialog?.textContent).toContain("480 credits");
+    expect(dialog?.textContent).toContain("120 credits");
+
+    const copyShareButton = Array.from(
+      document.body.querySelectorAll("button"),
+    ).find((button) => button.textContent?.includes("Copy invite message"));
+
+    await act(async () => {
+      copyShareButton?.click();
+      await Promise.resolve();
+    });
+
+    expect(writeText).toHaveBeenCalledWith(
+      "邀请你体验Lime，让AI做牛做马，我们来做牛人！前往 https://limeai.run 下载客户端，复制邀请码 LIME-2026 激活并注册账号参与内测",
+    );
+    expect(mockToastSuccess).toHaveBeenCalledWith("Invite message copied");
+  });
+
+  it("缓存的云端邀请开关关闭时不应展示头部邀请入口", async () => {
+    seedCloudSessionWithReferral({
+      referralEnabled: false,
+      referral: null,
     });
 
     const container = mountSidebarContainer({
@@ -2587,7 +2632,7 @@ describe("AppSidebar", () => {
   it("显式开启后应显示可选系统扩展入口", async () => {
     mockGetConfig.mockResolvedValue({
       navigation: {
-        enabled_items: ["plugins", "openclaw", "companion"],
+        enabled_items: ["plugins", "companion"],
       },
     });
 
@@ -2599,7 +2644,6 @@ describe("AppSidebar", () => {
     await flushEffects(2);
 
     expect(container.textContent).not.toContain("插件中心");
-    expect(container.textContent).not.toContain("OpenClaw");
     expect(container.textContent).not.toContain("桌宠");
 
     await act(async () => {
@@ -2618,7 +2662,6 @@ describe("AppSidebar", () => {
     expect(accountMenu?.textContent).toContain("持续流程");
     expect(accountMenu?.textContent).toContain("消息渠道");
     expect(accountMenu?.textContent).toContain("插件中心");
-    expect(accountMenu?.textContent).toContain("OpenClaw");
     expect(accountMenu?.textContent).toContain("桌宠");
   });
 
@@ -2718,7 +2761,7 @@ describe("AppSidebar", () => {
   it("旧的 enabled-items 本地缓存不应再复活历史导航", async () => {
     localStorage.setItem(
       APP_SIDEBAR_ENABLED_ITEMS_STORAGE_KEY,
-      JSON.stringify(["plugins", "openclaw", "companion", "video"]),
+      JSON.stringify(["plugins", "companion", "video"]),
     );
     mockGetConfig.mockImplementation(() => new Promise(() => undefined));
 
@@ -2730,7 +2773,6 @@ describe("AppSidebar", () => {
     await flushEffects();
 
     expect(container.textContent).not.toContain("插件中心");
-    expect(container.textContent).not.toContain("OpenClaw");
     expect(container.textContent).not.toContain("桌宠");
   });
 
@@ -2795,6 +2837,48 @@ describe("AppSidebar", () => {
     expect(localStorage.getItem(LIME_THEME_STORAGE_KEY)).toBe("dark");
     expect(document.documentElement.dataset.limeTheme).toBe("dark");
     expect(document.documentElement.classList.contains("dark")).toBe(true);
+  });
+
+  it("外观快捷面板应使用 navigation 命名空间资源", async () => {
+    await changeLimeLocale("en-US");
+    const container = mountSidebarContainer({
+      currentPageParams: {
+        agentEntry: "new-task",
+      } as AgentPageParams,
+    });
+    await flushEffects(2);
+
+    const trigger = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Quick appearance switch"]',
+    );
+
+    expect(trigger).not.toBeNull();
+
+    await act(async () => {
+      trigger?.click();
+      await Promise.resolve();
+    });
+
+    const popover = container.querySelector(
+      '[data-testid="app-sidebar-appearance-popover"]',
+    );
+    expect(popover?.textContent).toContain("Appearance");
+    expect(popover?.textContent).toContain("Follow system · Ink Green");
+    expect(popover?.textContent).toContain("Theme");
+    expect(popover?.textContent).toContain("Color");
+    expect(popover?.textContent).toContain("Light");
+    expect(popover?.textContent).toContain("Dark");
+    expect(popover?.textContent).toContain("Follow system");
+    expect(popover?.textContent).toContain("Random");
+    expect(popover?.textContent).toContain("Ocean");
+    expect(
+      container.querySelector('button[aria-label="Switch theme to Dark"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(
+        'button[aria-label="Switch color scheme to Ocean"]',
+      ),
+    ).not.toBeNull();
   });
 
   it("外观弹层的随机配色应持久化到一个真实预设", async () => {

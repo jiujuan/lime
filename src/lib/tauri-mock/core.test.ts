@@ -1944,29 +1944,6 @@ describe("tauri-mock/core invoke", () => {
     );
   });
 
-  it("OpenClaw 环境状态命令在 bridge 失败时回退默认 mock", async () => {
-    const consoleWarnSpy = vi
-      .spyOn(console, "warn")
-      .mockImplementation(() => {});
-    mocks.invokeViaHttp.mockRejectedValueOnce(new Error("Failed to fetch"));
-
-    try {
-      await expect(invoke("openclaw_get_environment_status")).resolves.toEqual(
-        expect.objectContaining({
-          recommendedAction: "install_openclaw",
-          summary: "运行环境已就绪，可以继续一键安装 OpenClaw。",
-          diagnostics: expect.objectContaining({
-            npmPath: "/opt/homebrew/bin/npm",
-            npmGlobalPrefix: "/opt/homebrew",
-          }),
-          node: expect.objectContaining({ status: "ok" }),
-          git: expect.objectContaining({ status: "ok" }),
-        }),
-      );
-    } finally {
-      consoleWarnSpy.mockRestore();
-    }
-  });
 
   it("旧 Agent 命令别名应直接报废弃错误，不再静默返回 mock 成功结果", async () => {
     mocks.isDevBridgeAvailable.mockReturnValue(false);

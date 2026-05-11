@@ -5,12 +5,14 @@
  */
 
 import { useState, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { useGalleryMaterial } from "@/hooks/useGalleryMaterial";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { convertLocalFileSrc } from "@/lib/api/fileSystem";
+import { formatNumber } from "@/i18n/format";
 import {
   SearchIcon,
   ImageIcon,
@@ -20,10 +22,7 @@ import {
   ListIcon,
 } from "lucide-react";
 import type { GalleryMaterial, ImageCategory } from "@/types/gallery-material";
-import {
-  IMAGE_CATEGORY_NAMES,
-  IMAGE_CATEGORY_ICONS,
-} from "@/types/gallery-material";
+import { IMAGE_CATEGORY_ICONS } from "@/types/gallery-material";
 import { cn } from "@/lib/utils";
 
 interface ImageGalleryProps {
@@ -105,6 +104,7 @@ export function ImageGallery({
   className,
   maxHeight = "400px",
 }: ImageGalleryProps) {
+  const { t, i18n } = useTranslation("workspace");
   const { materials, loading, filter, setFilter } = useGalleryMaterial(
     projectId,
     { type: "image" },
@@ -113,6 +113,17 @@ export function ImageGallery({
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [selectedCategory, setSelectedCategory] =
     useState<ImageCategory | null>(null);
+  const imageCategoryLabels = useMemo<Record<ImageCategory, string>>(
+    () => ({
+      background: t("workspace.imageGallery.category.background"),
+      product: t("workspace.imageGallery.category.product"),
+      person: t("workspace.imageGallery.category.person"),
+      decoration: t("workspace.imageGallery.category.decoration"),
+      texture: t("workspace.imageGallery.category.texture"),
+      other: t("workspace.imageGallery.category.other"),
+    }),
+    [t],
+  );
 
   // 本地筛选
   const filteredMaterials = useMemo(() => {
@@ -138,6 +149,21 @@ export function ImageGallery({
 
     return result;
   }, [materials, selectedCategory, searchQuery]);
+  const countSummaryLabel =
+    selectedIds.length > 0
+      ? t("workspace.imageGallery.count.withSelected", {
+          selected: formatNumber(selectedIds.length, {
+            locale: i18n.language,
+          }),
+          total: formatNumber(filteredMaterials.length, {
+            locale: i18n.language,
+          }),
+        })
+      : t("workspace.imageGallery.count.total", {
+          total: formatNumber(filteredMaterials.length, {
+            locale: i18n.language,
+          }),
+        });
 
   const handleCategoryFilter = (category: ImageCategory | null) => {
     setSelectedCategory(category);
@@ -178,7 +204,7 @@ export function ImageGallery({
       >
         <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-500 shadow-sm">
           <span className="h-2 w-2 rounded-full bg-slate-300" />
-          加载中...
+          {t("workspace.imageGallery.loading")}
         </div>
       </div>
     );
@@ -191,7 +217,7 @@ export function ImageGallery({
           <div className="relative min-w-[14rem] flex-1">
             <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <Input
-              placeholder="搜索图片..."
+              placeholder={t("workspace.imageGallery.search.placeholder")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="h-10 rounded-xl border-slate-200/80 bg-white pl-9 pr-9 text-sm shadow-sm shadow-slate-950/5 transition focus-visible:ring-sky-100"
@@ -202,6 +228,7 @@ export function ImageGallery({
                 size="icon"
                 className="absolute right-1.5 top-1/2 h-7 w-7 -translate-y-1/2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900"
                 onClick={() => setSearchQuery("")}
+                aria-label={t("workspace.imageGallery.search.clear")}
               >
                 <XIcon className="h-3.5 w-3.5" />
               </Button>
@@ -219,6 +246,7 @@ export function ImageGallery({
                   : "hover:bg-white/80 hover:text-slate-900",
               )}
               onClick={() => setViewMode("grid")}
+              aria-label={t("workspace.imageGallery.view.grid")}
             >
               <GridIcon className="h-4 w-4" />
             </Button>
@@ -232,14 +260,14 @@ export function ImageGallery({
                   : "hover:bg-white/80 hover:text-slate-900",
               )}
               onClick={() => setViewMode("list")}
+              aria-label={t("workspace.imageGallery.view.list")}
             >
               <ListIcon className="h-4 w-4" />
             </Button>
           </div>
 
           <div className="inline-flex min-h-10 items-center rounded-xl border border-slate-200/80 bg-slate-50/90 px-3 text-xs font-medium text-slate-500">
-            共 {filteredMaterials.length} 张图片
-            {selectedIds.length > 0 && `，已选 ${selectedIds.length} 张`}
+            {countSummaryLabel}
           </div>
         </div>
 
@@ -255,7 +283,7 @@ export function ImageGallery({
             )}
             onClick={() => handleCategoryFilter(null)}
           >
-            全部
+            {t("workspace.imageGallery.category.all")}
           </Button>
           {ALL_CATEGORIES.map((category) => (
             <Button
@@ -271,7 +299,7 @@ export function ImageGallery({
               onClick={() => handleCategoryFilter(category)}
             >
               <span className="mr-1">{IMAGE_CATEGORY_ICONS[category]}</span>
-              {IMAGE_CATEGORY_NAMES[category]}
+              {imageCategoryLabels[category]}
             </Button>
           ))}
         </div>
@@ -288,11 +316,10 @@ export function ImageGallery({
             </div>
             <div className="space-y-1">
               <p className="text-lg font-semibold text-slate-900">
-                暂无图片素材
+                {t("workspace.imageGallery.empty.title")}
               </p>
               <p className="text-sm">
-                可以先在 Claw 用 @素材
-                搜图，或到项目资料上传本地图片，再回到这里筛选和插入。
+                {t("workspace.imageGallery.empty.description")}
               </p>
             </div>
           </div>
@@ -343,7 +370,7 @@ export function ImageGallery({
                       {material.metadata?.imageCategory && (
                         <span>
                           {
-                            IMAGE_CATEGORY_NAMES[
+                            imageCategoryLabels[
                               material.metadata.imageCategory as ImageCategory
                             ]
                           }
@@ -363,7 +390,7 @@ export function ImageGallery({
                           }
                         </span>
                         {
-                          IMAGE_CATEGORY_NAMES[
+                          imageCategoryLabels[
                             material.metadata.imageCategory as ImageCategory
                           ]
                         }
@@ -423,7 +450,7 @@ export function ImageGallery({
                       {material.metadata?.imageCategory && (
                         <span>
                           {
-                            IMAGE_CATEGORY_NAMES[
+                            imageCategoryLabels[
                               material.metadata.imageCategory as ImageCategory
                             ]
                           }
@@ -461,11 +488,8 @@ export function ImageGallery({
       </ScrollArea>
 
       <div className="flex items-center justify-between gap-3 px-1 text-xs text-slate-500">
-        <span>双击图片可直接插入当前画布</span>
-        <span>
-          共 {filteredMaterials.length} 张图片
-          {selectedIds.length > 0 && `，已选 ${selectedIds.length} 张`}
-        </span>
+        <span>{t("workspace.imageGallery.footer.hint")}</span>
+        <span>{countSummaryLabel}</span>
       </div>
     </div>
   );

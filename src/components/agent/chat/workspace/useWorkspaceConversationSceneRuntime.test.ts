@@ -36,7 +36,6 @@ function createBaseParams(overrides: Record<string, unknown> = {}) {
       handleOpenAppearanceSettings: noop,
       handleOpenChannels: noop,
       handleOpenChromeRelay: noop,
-      handleOpenOpenClaw: noop,
       handleBackToResources: noop,
       handleCompactContext: noop,
       handleOpenRuntimeMemoryWorkbench: noop,

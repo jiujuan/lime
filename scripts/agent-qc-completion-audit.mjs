@@ -144,6 +144,11 @@ function readQcloopStatusSidecars(dirPath) {
         const status = readJson(relativePath);
         return {
           path: relativePath,
+          generatedAt: status?.generatedAt || "",
+          jobId: status?.job?.id || status?.jobId || "",
+          jobStatus: status?.job?.status || "",
+          jobTerminal: Boolean(status?.job?.terminal),
+          jobFinishedAt: status?.job?.finishedAt || "",
           verdictStatus: status?.verdict?.status || "",
           verdictSummary: status?.verdict?.summary || "",
           counts: status?.counts || null,
@@ -196,6 +201,7 @@ function loadFacts() {
       testsReadme: exists("docs/tests/README.md"),
       evidenceSchema: exists("docs/test/agent-qc-evidence.schema.json"),
       qcloopJobScript: exists("scripts/agent-qc-qcloop-job.mjs"),
+      payloadCoverageScript: exists("scripts/agent-qc-payload-coverage.mjs"),
       guiOwnerCheckScript: exists("scripts/agent-qc-gui-owner-check.mjs"),
       qcloopStatusScript: exists("scripts/agent-qc-qcloop-status.mjs"),
       qcloopPreflightScript: exists("scripts/agent-qc-qcloop-preflight.mjs"),
@@ -218,6 +224,12 @@ function loadFacts() {
       status: "",
       failedStage: "",
       error: "",
+    }),
+    payloadCoverage: readOptionalJson(".lime/qc/qcloop-p0-single-owner-ready-coverage-current.json", {
+      exists: false,
+      status: "",
+      coverage: null,
+      ownerGate: null,
     }),
     realEvidenceSidecars: readEvidenceSidecars(".lime/qc"),
     qcloopStatusSidecars: readQcloopStatusSidecars(".lime/qc"),

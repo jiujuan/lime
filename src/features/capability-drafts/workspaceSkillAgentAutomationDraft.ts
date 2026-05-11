@@ -16,6 +16,52 @@ export interface WorkspaceSkillManagedAutomationPresentation {
   enabled?: boolean;
 }
 
+export interface WorkspaceSkillManagedAutomationPresentationCopy {
+  auditBlocked?: string;
+  auditMissing?: string;
+  auditPaused?: string;
+  auditPlanned?: string;
+  auditRunning?: string;
+  auditVerifying?: string;
+  lastRunNone?: string;
+  lastRunValueNone?: string;
+  managedObjectivePlanned?: string;
+  notCreatedSchedule?: string;
+  notCreatedStatus?: string;
+  notRunStatus?: string;
+  stateEnabled?: string;
+  statePaused?: string;
+  unknownSchedule?: string;
+  formatAuditBlocked?: (error?: string | null) => string;
+  formatEverySchedule?: (seconds: number) => string;
+  formatAtSchedule?: (at: string) => string;
+  formatCronSchedule?: (expr: string, timezone?: string | null) => string;
+  formatLastRun?: (lastRun: string, error?: string | null) => string;
+  formatManagedObjective?: (state: string) => string;
+  formatSchedule?: (schedule: string, nextRun?: string | null) => string;
+  formatStatus?: (state: string, lastStatus: string) => string;
+}
+
+export interface WorkspaceSkillManagedAutomationInitialValuesCopy {
+  descriptionPausedByDefault?: string;
+  descriptionSource?: string;
+  formatDescriptionProvenance?: (
+    sourceDraftId: string,
+    sourceVerificationReportId: string,
+  ) => string;
+  formatDescriptionSkill?: (skillName: string) => string;
+  formatName?: (displayName: string) => string;
+  formatObjective?: (displayName: string) => string;
+  formatPromptIntro?: (displayName: string, skillName: string) => string;
+  promptNeedsInput?: string;
+  promptReadRunbook?: string;
+  promptResultEvidence?: string;
+  successCriteriaControlledGet?: string;
+  successCriteriaEvidence?: string;
+  successCriteriaRuntimeEnable?: string;
+  successCriteriaSubmitTurn?: string;
+}
+
 export interface WorkspaceSkillAgentAutomationDraftOptions {
   requiresControlledGetEvidence?: boolean;
 }
@@ -81,6 +127,7 @@ export function buildWorkspaceSkillAgentAutomationRequestMetadata(input: {
   binding: AgentRuntimeWorkspaceSkillBinding;
   workspaceRoot: string;
   options?: WorkspaceSkillAgentAutomationDraftOptions;
+  copy?: WorkspaceSkillManagedAutomationInitialValuesCopy;
 }): Record<string, unknown> | null {
   const { binding } = input;
   const workspaceRoot = normalizeText(input.workspaceRoot);
@@ -95,6 +142,7 @@ export function buildWorkspaceSkillAgentAutomationRequestMetadata(input: {
   const sourceVerificationReportId = resolveSourceVerificationReportId(binding);
   const requiresControlledGetEvidence =
     input.options?.requiresControlledGetEvidence === true;
+  const copy = input.copy;
 
   return {
     harness: {
@@ -115,13 +163,21 @@ export function buildWorkspaceSkillAgentAutomationRequestMetadata(input: {
         source: "skill_forge_p4_managed_execution",
         owner_type: "automation_job",
         state: "planned",
-        objective: `按计划运行 Workspace Skill「${displayName}」，交付可审计结果。`,
+        objective:
+          copy?.formatObjective?.(displayName) ??
+          `按计划运行 Workspace Skill「${displayName}」，交付可审计结果。`,
         success_criteria: [
-          "必须通过 agent_runtime_submit_turn 执行",
-          "必须由 workspace_skill_runtime_enable 在本次运行 session 内显式授权",
-          "完成状态必须依赖 artifact / timeline / evidence，而不是模型自报",
+          copy?.successCriteriaSubmitTurn ??
+            "必须通过 agent_runtime_submit_turn 执行",
+          copy?.successCriteriaRuntimeEnable ??
+            "必须由 workspace_skill_runtime_enable 在本次运行 session 内显式授权",
+          copy?.successCriteriaEvidence ??
+            "完成状态必须依赖 artifact / timeline / evidence，而不是模型自报",
           ...(requiresControlledGetEvidence
-            ? ["Read-Only HTTP API 任务必须包含 executed 受控 GET evidence"]
+            ? [
+                copy?.successCriteriaControlledGet ??
+                  "Read-Only HTTP API 任务必须包含 executed 受控 GET evidence",
+              ]
             : []),
         ],
         completion_audit: "artifact_or_evidence_required",
@@ -157,14 +213,19 @@ export function buildWorkspaceSkillAgentAutomationRequestMetadata(input: {
 
 function buildAutomationPrompt(
   binding: AgentRuntimeWorkspaceSkillBinding,
+  copy?: WorkspaceSkillManagedAutomationInitialValuesCopy,
 ): string {
   const displayName = buildDisplayName(binding);
   const skillName = buildSkillName(binding);
   return [
-    `请按当前 Workspace Agent envelope 草案运行 Skill「${displayName}」（${skillName}）。`,
-    "先读取 Skill 的 Runbook、权限说明和输入约束，再执行任务。",
-    "如果执行缺少必要输入或外部写权限，请返回 needs_input / blocked 的原因，不要绕过确认。",
-    "完成后输出结果摘要，并保留可进入 evidence pack 的产物与关键步骤。",
+    copy?.formatPromptIntro?.(displayName, skillName) ??
+      `请按当前 Workspace Agent envelope 草案运行 Skill「${displayName}」（${skillName}）。`,
+    copy?.promptReadRunbook ??
+      "先读取 Skill 的 Runbook、权限说明和输入约束，再执行任务。",
+    copy?.promptNeedsInput ??
+      "如果执行缺少必要输入或外部写权限，请返回 needs_input / blocked 的原因，不要绕过确认。",
+    copy?.promptResultEvidence ??
+      "完成后输出结果摘要，并保留可进入 evidence pack 的产物与关键步骤。",
   ].join("\n");
 }
 
@@ -173,12 +234,14 @@ export function buildWorkspaceSkillAgentAutomationInitialValues(input: {
   workspaceRoot: string;
   workspaceId: string;
   options?: WorkspaceSkillAgentAutomationDraftOptions;
+  copy?: WorkspaceSkillManagedAutomationInitialValuesCopy;
 }): AutomationJobDialogInitialValues | null {
   const workspaceId = normalizeText(input.workspaceId);
   const requestMetadata = buildWorkspaceSkillAgentAutomationRequestMetadata({
     binding: input.binding,
     workspaceRoot: input.workspaceRoot,
     options: input.options,
+    copy: input.copy,
   });
   if (!workspaceId || !requestMetadata) {
     return null;
@@ -189,14 +252,21 @@ export function buildWorkspaceSkillAgentAutomationInitialValues(input: {
   const sourceVerificationReportId = resolveSourceVerificationReportId(
     input.binding,
   );
+  const skillName = buildSkillName(input.binding);
+  const copy = input.copy;
 
   return {
-    name: `${displayName}｜Managed Agent 草案`,
+    name:
+      copy?.formatName?.(displayName) ?? `${displayName}｜Managed Agent 草案`,
     description: [
-      "来源：P4 Workspace Agent envelope 草案。",
-      `Skill：${buildSkillName(input.binding)}`,
-      `Provenance：${sourceDraftId} / ${sourceVerificationReportId}`,
-      "默认先暂停，确认调度与权限后再启用。",
+      copy?.descriptionSource ?? "来源：P4 Workspace Agent envelope 草案。",
+      copy?.formatDescriptionSkill?.(skillName) ?? `Skill：${skillName}`,
+      copy?.formatDescriptionProvenance?.(
+        sourceDraftId,
+        sourceVerificationReportId,
+      ) ?? `Provenance：${sourceDraftId} / ${sourceVerificationReportId}`,
+      copy?.descriptionPausedByDefault ??
+        "默认先暂停，确认调度与权限后再启用。",
     ].join("\n"),
     workspace_id: workspaceId,
     enabled: false,
@@ -205,7 +275,7 @@ export function buildWorkspaceSkillAgentAutomationInitialValues(input: {
     schedule_kind: "cron",
     cron_expr: DEFAULT_CRON_EXPR,
     cron_tz: DEFAULT_CRON_TIMEZONE,
-    prompt: buildAutomationPrompt(input.binding),
+    prompt: buildAutomationPrompt(input.binding, copy),
     system_prompt: "",
     web_search: false,
     agent_content_id: "",
@@ -232,16 +302,25 @@ function readNestedRecord(
   return asRecord(source?.[key]);
 }
 
-function describeSchedule(schedule: TaskSchedule): string {
+function describeSchedule(
+  schedule: TaskSchedule,
+  copy?: WorkspaceSkillManagedAutomationPresentationCopy,
+): string {
   switch (schedule.kind) {
     case "every":
-      return `每 ${schedule.every_secs} 秒`;
+      return (
+        copy?.formatEverySchedule?.(schedule.every_secs) ??
+        `每 ${schedule.every_secs} 秒`
+      );
     case "cron":
-      return `Cron ${schedule.expr}${schedule.tz ? ` · ${schedule.tz}` : ""}`;
+      return (
+        copy?.formatCronSchedule?.(schedule.expr, schedule.tz) ??
+        `Cron ${schedule.expr}${schedule.tz ? ` · ${schedule.tz}` : ""}`
+      );
     case "at":
-      return `一次性 ${schedule.at}`;
+      return copy?.formatAtSchedule?.(schedule.at) ?? `一次性 ${schedule.at}`;
     default:
-      return "未知调度";
+      return copy?.unknownSchedule ?? "未知调度";
   }
 }
 
@@ -277,33 +356,50 @@ export function isWorkspaceSkillAgentAutomationJobForDirectory(
 
 export function buildWorkspaceSkillManagedAutomationPresentation(
   jobs: readonly AutomationJobRecord[],
+  copy?: WorkspaceSkillManagedAutomationPresentationCopy,
 ): WorkspaceSkillManagedAutomationPresentation {
   const [job] = jobs;
   if (!job) {
     return {
-      statusLabel: "Managed Job：未创建",
-      scheduleLabel: "Schedule：等待创建 automation job 草案。",
-      lastRunLabel: "最近运行：暂无",
-      objectiveLabel: "Managed Objective：planned，等待绑定 automation job。",
-      auditLabel: "Completion Audit：缺少运行与 evidence，不能判定完成。",
+      statusLabel: copy?.notCreatedStatus ?? "Managed Job：未创建",
+      scheduleLabel:
+        copy?.notCreatedSchedule ?? "Schedule：等待创建 automation job 草案。",
+      lastRunLabel: copy?.lastRunNone ?? "最近运行：暂无",
+      objectiveLabel:
+        copy?.managedObjectivePlanned ??
+        "Managed Objective：planned，等待绑定 automation job。",
+      auditLabel:
+        copy?.auditMissing ??
+        "Completion Audit：缺少运行与 evidence，不能判定完成。",
     };
   }
 
-  const stateLabel = job.enabled ? "已启用" : "草案暂停";
+  const stateLabel = job.enabled
+    ? copy?.stateEnabled ?? "已启用"
+    : copy?.statePaused ?? "草案暂停";
   const objectiveState = resolveManagedObjectiveState(job);
+  const lastStatus = job.last_status ?? copy?.notRunStatus ?? "尚未运行";
+  const lastRun = job.last_run_at ?? copy?.lastRunValueNone ?? "暂无";
+  const schedule = describeSchedule(job.schedule, copy);
   return {
     jobId: job.id,
     jobName: job.name,
     enabled: job.enabled,
-    statusLabel: `Managed Job：${stateLabel} · ${job.last_status ?? "尚未运行"}`,
-    scheduleLabel: `Schedule：${describeSchedule(job.schedule)}${
-      job.next_run_at ? ` · 下次 ${job.next_run_at}` : ""
-    }`,
-    lastRunLabel: `最近运行：${job.last_run_at ?? "暂无"}${
-      job.last_error ? ` · ${job.last_error}` : ""
-    }`,
-    objectiveLabel: `Managed Objective：${objectiveState}`,
-    auditLabel: buildCompletionAuditLabel(job, objectiveState),
+    statusLabel:
+      copy?.formatStatus?.(stateLabel, lastStatus) ??
+      `Managed Job：${stateLabel} · ${lastStatus}`,
+    scheduleLabel:
+      copy?.formatSchedule?.(schedule, job.next_run_at) ??
+      `Schedule：${schedule}${job.next_run_at ? ` · 下次 ${job.next_run_at}` : ""}`,
+    lastRunLabel:
+      copy?.formatLastRun?.(lastRun, job.last_error) ??
+      `最近运行：${job.last_run_at ?? "暂无"}${
+        job.last_error ? ` · ${job.last_error}` : ""
+      }`,
+    objectiveLabel:
+      copy?.formatManagedObjective?.(objectiveState) ??
+      `Managed Objective：${objectiveState}`,
+    auditLabel: buildCompletionAuditLabel(job, objectiveState, copy),
   };
 }
 
@@ -326,18 +422,28 @@ function resolveManagedObjectiveState(job: AutomationJobRecord): string {
 function buildCompletionAuditLabel(
   job: AutomationJobRecord,
   objectiveState: string,
+  copy?: WorkspaceSkillManagedAutomationPresentationCopy,
 ): string {
   if (objectiveState === "verifying") {
-    return "Completion Audit：运行成功后仍需 artifact / timeline / evidence 审计，暂不直接标记 completed。";
+    return (
+      copy?.auditVerifying ??
+      "Completion Audit：运行成功后仍需 artifact / timeline / evidence 审计，暂不直接标记 completed。"
+    );
   }
   if (objectiveState === "blocked") {
-    return `Completion Audit：blocked，需处理失败原因${job.last_error ? `：${job.last_error}` : "。"}`;
+    return (
+      copy?.formatAuditBlocked?.(job.last_error) ??
+      `Completion Audit：blocked，需处理失败原因${job.last_error ? `：${job.last_error}` : "。"}`
+    );
   }
   if (objectiveState === "running") {
-    return "Completion Audit：运行中，等待 automation run 结束后再审计。";
+    return (
+      copy?.auditRunning ??
+      "Completion Audit：运行中，等待 automation run 结束后再审计。"
+    );
   }
   if (objectiveState === "paused") {
-    return "Completion Audit：paused，恢复并产生运行证据后再审计。";
+    return copy?.auditPaused ?? "Completion Audit：paused，恢复并产生运行证据后再审计。";
   }
-  return "Completion Audit：planned，等待首次运行证据。";
+  return copy?.auditPlanned ?? "Completion Audit：planned，等待首次运行证据。";
 }

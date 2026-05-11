@@ -8,6 +8,7 @@
 import styled from "styled-components";
 import { ChevronDown } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   useSettingsCategory,
   type CategoryGroup,
@@ -265,6 +266,7 @@ export function SettingsSidebar({
   onTabChange,
   onTabPrefetch,
 }: SettingsSidebarProps) {
+  const { t } = useTranslation("settings");
   const categoryGroups = useSettingsCategory();
   const floatingPanelId = useId();
   const floatingRootRef = useRef<HTMLDivElement | null>(null);
@@ -357,7 +359,9 @@ export function SettingsSidebar({
                   <item.icon />
                   <ItemLabel>{item.label}</ItemLabel>
                   {item.experimental && (
-                    <ExperimentalBadge>实验</ExperimentalBadge>
+                    <ExperimentalBadge>
+                      {t("settings.layout.sidebar.experimentalBadge", "实验")}
+                    </ExperimentalBadge>
                   )}
                 </NavItem>
               ))}
@@ -375,13 +379,20 @@ export function SettingsSidebar({
           type="button"
           aria-expanded={floatingOpen}
           aria-controls={floatingPanelId}
-          aria-label="打开设置导航"
+          aria-label={t(
+            "settings.layout.sidebar.floatingNav.openAria",
+            "打开设置导航",
+          )}
           data-testid="settings-floating-nav-button"
           onClick={() => setFloatingOpen((value) => !value)}
         >
           {ActiveIcon ? <ActiveIcon /> : null}
           <FloatingButtonLabel>
-            {activeItem?.label ?? "设置导航"}
+            {activeItem?.label ??
+              t(
+                "settings.layout.sidebar.floatingNav.fallbackLabel",
+                "设置导航",
+              )}
           </FloatingButtonLabel>
           <ChevronDown />
         </FloatingNavButton>
@@ -408,7 +419,12 @@ export function SettingsSidebar({
                       <item.icon />
                       <ItemLabel>{item.label}</ItemLabel>
                       {item.experimental && (
-                        <ExperimentalBadge>实验</ExperimentalBadge>
+                        <ExperimentalBadge>
+                          {t(
+                            "settings.layout.sidebar.experimentalBadge",
+                            "实验",
+                          )}
+                        </ExperimentalBadge>
                       )}
                     </NavItem>
                   ))}

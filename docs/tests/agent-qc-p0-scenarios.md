@@ -81,7 +81,7 @@ npm run agent-qc:release-summary -- \
 | `command-bridge-contract` | `npm run test:contracts` | 命令合同日志、四侧同步摘要 | 前端/Rust/mock/catalog 任一侧缺失 |
 | `claw-chat-ready-streaming` | `npm run verify:gui-smoke` + Playwright MCP | GUI trace、DevBridge、runtime transcript、console/network | workspace 未 ready、流式卡死、中断不可恢复 |
 | `tool-approval-sandbox-boundary` | `npm run smoke:agent-runtime-tool-surface` + `npm run smoke:agent-runtime-approval-sandbox` | tool timeline、approval decision、sandbox policy | 工具绕过授权、超时无恢复、危险工具暴露 |
-| `skill-forge-register-bind-enable` | `npm run test:contracts` + `npm run smoke:agent-service-skill-entry` | draft、verify/register、runtime binding、SkillTool gate | 把 registered 误判为 executable、metadata 自动启用 skill |
+| `skill-forge-register-bind-enable` | `npm run test:contracts` + `npm run smoke:agent-service-skill-entry` | draft、verify/register、runtime binding、`.lime/qc/skill-forge-runtime-transcript-current.json` 中的 SkillTool request/decision/result/source metadata | 把 registered 误判为 executable、metadata 自动启用 skill |
 | `browser-runtime-site-adapter` | `npm run smoke:browser-runtime` + `npm run smoke:site-adapters` | browser session、adapter catalog、console/network、cleanup | session 泄漏、adapter 漂移、cleanup 缺失 |
 | `workspace-ready-session-restore` | `npm run smoke:workspace-ready` + `npm run verify:gui-smoke` | workspace smoke、GUI smoke、DevBridge、design canvas 工程保存 / 打开结果 | ready 假阳性、会话恢复脏状态、设计画布导出无保存状态 |
 | `harness-replay-regression` | `npm run harness:eval` + `npm run harness:eval:trend` | summary、trend、invalid case、observability outcome | fixture invalid、grader 合同漂移、trend 断裂 |
@@ -96,7 +96,7 @@ P0 场景允许先用确定性 smoke 快速证明主路径可执行，但 releas
 | `deterministic-smoke` | 命令能运行、DevBridge 可达、workspace ready、基础 runtime surface 可读 | live long-turn transcript、真实中断恢复、approval/sandbox 完整轨迹 |
 | `gui-trace` | 用户路径截图 / trace、console/network 摘要、关键 UI 断言 | 后端 turn 持久化和 tool timeline |
 | `runtime-transcript` | submit / stream / interrupt / resume / tool request / decision / result 顺序 | GUI 可见性、桌面壳启动、发布包启动 |
-| `release-artifact` | 安装包或 source-tree 启动范围、版本一致性、waiver | 运行期 Agent 行为质量 |
+| `release-artifact` | 安装包或 source-tree 启动范围、版本一致性、waiver；若没有安装包，必须明确标记 `source-tree startup scope`，不能伪装 installer | 运行期 Agent 行为质量 |
 
 如果当前只跑到 `deterministic-smoke`，worker 可以输出 `QCLOOP_WORKER_RESULT=PASS` 表示命令通过；但 verifier 仍应在缺少 deep evidence 时判该 P0 场景不满足 release pass。正确做法是补证据或拆分场景，不是降低 verifier。
 

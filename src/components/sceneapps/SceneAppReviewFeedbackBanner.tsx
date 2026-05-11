@@ -1,5 +1,8 @@
+import { useTranslation } from "react-i18next";
 import {
+  buildReviewFeedbackProjectionCopy,
   buildReviewFeedbackProjection,
+  formatReviewFeedbackTemplate,
   type ReviewFeedbackProjection,
 } from "@/components/agent/chat/utils/reviewFeedbackProjection";
 import type { CuratedTaskRecommendationSignal } from "@/components/agent/chat/utils/curatedTaskRecommendationSignals";
@@ -19,6 +22,7 @@ function SceneAppReviewFeedbackProjectionBanner({
   dataTestId?: string;
   onContinueReviewFeedback?: (taskId: string) => void;
 }) {
+  const { t } = useTranslation("agent");
   const primarySuggestedTask = projection.suggestedTasks[0] ?? null;
 
   return (
@@ -28,7 +32,7 @@ function SceneAppReviewFeedbackProjectionBanner({
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className="rounded-full border border-emerald-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-          围绕最近判断
+          {t("reviewFeedback.badge", "围绕最近判断")}
         </span>
         {projection.suggestedTaskTitles.length > 0 ? (
           <span className="rounded-full border border-white bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600">
@@ -37,7 +41,13 @@ function SceneAppReviewFeedbackProjectionBanner({
         ) : null}
       </div>
       <div className="mt-2 text-sm font-medium leading-6 text-slate-900">
-        最近判断已更新：{projection.signal.title}
+        {formatReviewFeedbackTemplate(
+          t("reviewFeedback.title", {
+            defaultValue: "最近判断已更新：{{title}}",
+            title: projection.signal.title,
+          }),
+          { title: projection.signal.title },
+        )}
       </div>
       <div className="mt-1 text-sm leading-6 text-slate-600">
         {projection.signal.summary}
@@ -55,10 +65,19 @@ function SceneAppReviewFeedbackProjectionBanner({
               onContinueReviewFeedback(primarySuggestedTask.taskId)
             }
           >
-            继续去「{primarySuggestedTask.title}」
+            {formatReviewFeedbackTemplate(
+              t("reviewFeedback.action", {
+                defaultValue: "继续去「{{title}}」",
+                title: primarySuggestedTask.title,
+              }),
+              { title: primarySuggestedTask.title },
+            )}
           </button>
           <span className="text-xs leading-5 text-slate-500">
-            会继续带着当前结果基线，不用重新整理一遍。
+            {t(
+              "reviewFeedback.helper.sceneApp",
+              "会继续带着当前结果基线，不用重新整理一遍。",
+            )}
           </span>
         </div>
       ) : null}
@@ -71,7 +90,11 @@ export function SceneAppReviewFeedbackBanner({
   dataTestId,
   onContinueReviewFeedback,
 }: SceneAppReviewFeedbackBannerProps) {
-  const projection = buildReviewFeedbackProjection({ signal });
+  const { t } = useTranslation("agent");
+  const projection = buildReviewFeedbackProjection({
+    copy: buildReviewFeedbackProjectionCopy(t),
+    signal,
+  });
   if (!projection) {
     return null;
   }

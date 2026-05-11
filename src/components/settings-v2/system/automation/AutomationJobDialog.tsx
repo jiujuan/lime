@@ -41,7 +41,8 @@ import {
   type AgentAccessMode,
 } from "@/components/agent/chat/hooks/agentChatStorage";
 import {
-  AUTOMATION_ACCESS_MODE_OPTIONS,
+  buildAutomationAccessModeOptions,
+  type AutomationAccessModeCopy,
   omitLegacyAutomationAccessModeMetadata,
   resolveAgentTurnAutomationAccessMode,
 } from "./automationAccessMode";
@@ -84,6 +85,37 @@ export type AutomationJobDialogInitialValues = Partial<AutomationJobFormState>;
 
 const TEXT_ONLY_DELIVERY_CHANNEL = "telegram";
 type SettingsTranslate = TFunction<"settings">;
+
+function buildAutomationAccessModeCopy(
+  t: SettingsTranslate,
+): AutomationAccessModeCopy {
+  return {
+    readOnly: t(
+      "settings.automation.jobDialog.accessMode.readOnly",
+      "只读",
+    ),
+    current: t(
+      "settings.automation.jobDialog.accessMode.current",
+      "按需确认",
+    ),
+    fullAccess: t(
+      "settings.automation.jobDialog.accessMode.fullAccess",
+      "完全访问",
+    ),
+    policyReadOnly: t(
+      "settings.automation.jobDialog.accessMode.policy.readOnly",
+      "正式策略会写成 on-request + read-only。",
+    ),
+    policyCurrent: t(
+      "settings.automation.jobDialog.accessMode.policy.current",
+      "正式策略会写成 on-request + workspace-write。",
+    ),
+    policyFullAccess: t(
+      "settings.automation.jobDialog.accessMode.policy.fullAccess",
+      "正式策略会写成 never + danger-full-access。",
+    ),
+  };
+}
 
 function legacyBrowserAutomationMessage(t: SettingsTranslate): string {
   return t(
@@ -656,6 +688,11 @@ export function AutomationJobDialog({
       );
   const scheduleLabel = scheduleKindLabel(t, form.schedule_kind);
   const accessLabel = accessModeLabel(t, form.agent_access_mode);
+  const accessModeOptions = useMemo(
+    () =>
+      buildAutomationAccessModeOptions(buildAutomationAccessModeCopy(t)) ?? [],
+    [t],
+  );
 
   async function handleSubmit() {
     try {
@@ -1419,7 +1456,7 @@ export function AutomationJobDialog({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {AUTOMATION_ACCESS_MODE_OPTIONS.map((option) => (
+                          {accessModeOptions.map((option) => (
                             <SelectItem key={option.value} value={option.value}>
                               {accessModeLabel(t, option.value)}
                             </SelectItem>

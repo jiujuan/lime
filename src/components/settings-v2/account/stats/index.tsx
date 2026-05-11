@@ -10,7 +10,10 @@ import type { TFunction } from "i18next";
 import { BarChart3, Brain, CalendarDays, Coins, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
-import { formatDate as formatLocaleDate } from "@/i18n/format";
+import {
+  formatDate as formatLocaleDate,
+  formatNumber as formatLocaleNumber,
+} from "@/i18n/format";
 import { cn } from "@/lib/utils";
 import {
   getDailyUsageTrends,
@@ -49,10 +52,12 @@ const ACTIVE_TIME_RANGE_BUTTON_CLASS =
 const PROGRESS_BAR_FILL_CLASS =
   "bg-[linear-gradient(90deg,#14b8a6_0%,#10b981_100%)]";
 
-function formatCompactNumber(num: number): string {
-  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-  return num.toString();
+function formatCompactNumber(num: number, locale?: string): string {
+  return formatLocaleNumber(num, {
+    locale,
+    notation: "compact",
+    maximumFractionDigits: 1,
+  });
 }
 
 function formatTime(
@@ -120,7 +125,7 @@ function SegmentCard({
   minutes,
   accentClassName,
 }: SegmentCardProps) {
-  const { t } = useTranslation("settings");
+  const { t, i18n } = useTranslation("settings");
 
   return (
     <article className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-4">
@@ -159,7 +164,7 @@ function SegmentCard({
           </span>
           <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
             {t("settings.stats.segment.tokens", {
-              tokens: formatCompactNumber(tokens),
+              tokens: formatCompactNumber(tokens, i18n.language),
               defaultValue: "Token：{{tokens}}",
             })}
           </span>
@@ -282,7 +287,7 @@ export function StatsSettings() {
   const peakDayLabel = peakDay
     ? t("settings.stats.peakDay.value", {
         date: formatShortDate(peakDay.date, i18n.language),
-        tokens: formatCompactNumber(peakDay.tokens),
+        tokens: formatCompactNumber(peakDay.tokens, i18n.language),
         defaultValue: "{{date}} · {{tokens}} Token",
       })
     : t("settings.stats.empty.noData", "暂无数据");
@@ -297,13 +302,14 @@ export function StatsSettings() {
   const heatmapDays = dailyUsage.slice(-35);
   const heatmapRangeLabel =
     heatmapDays.length > 0
-      ? `${formatShortDate(
-          heatmapDays[0].date,
-          i18n.language,
-        )} - ${formatShortDate(
-          heatmapDays[heatmapDays.length - 1].date,
-          i18n.language,
-        )}`
+      ? t("settings.stats.heatmap.rangeValue", {
+          start: formatShortDate(heatmapDays[0].date, i18n.language),
+          end: formatShortDate(
+            heatmapDays[heatmapDays.length - 1].date,
+            i18n.language,
+          ),
+          defaultValue: "{{start}} - {{end}}",
+        })
       : t("settings.stats.empty.noActivity", "暂无活跃记录");
   const heatmapCells: Array<DailyUsage | null> = [
     ...Array.from({ length: Math.max(35 - heatmapDays.length, 0) }, () => null),
@@ -415,13 +421,13 @@ export function StatsSettings() {
               </span>
               <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500">
                 {t("settings.stats.summary.averageTokens", {
-                  tokens: formatCompactNumber(averageDailyTokens),
+                  tokens: formatCompactNumber(averageDailyTokens, i18n.language),
                   defaultValue: "日均 {{tokens}} Token",
                 })}
               </span>
               <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500">
                 {t("settings.stats.summary.rangeTokens", {
-                  tokens: formatCompactNumber(totalRangeTokens),
+                  tokens: formatCompactNumber(totalRangeTokens, i18n.language),
                   defaultValue: "当前区间 {{tokens}} Token",
                 })}
               </span>
@@ -604,6 +610,7 @@ export function StatsSettings() {
                                 conversations: topModel?.conversations || 0,
                                 tokens: formatCompactNumber(
                                   topModel?.tokens || 0,
+                                  i18n.language,
                                 ),
                                 defaultValue:
                                   "{{conversations}} 次对话 · {{tokens}} Token",
@@ -660,7 +667,10 @@ export function StatsSettings() {
                                   <p className="mt-2 text-xs leading-5 text-slate-500">
                                     {t("settings.stats.models.itemMeta", {
                                       conversations: model.conversations,
-                                      tokens: formatCompactNumber(model.tokens),
+                                      tokens: formatCompactNumber(
+                                        model.tokens,
+                                        i18n.language,
+                                      ),
                                       defaultValue:
                                         "{{conversations}} 次对话 · {{tokens}} Token",
                                     })}
@@ -722,7 +732,7 @@ export function StatsSettings() {
                 </div>
                 <div className="flex flex-wrap gap-2 text-xs text-slate-500">
                   <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-                    {formatCompactNumber(totalRangeTokens)} Token
+                    {formatCompactNumber(totalRangeTokens, i18n.language)} Token
                   </span>
                   <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
                     {t("settings.stats.trends.conversations", {
@@ -750,7 +760,10 @@ export function StatsSettings() {
                     </span>
                     <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
                       {t("settings.stats.trends.average", {
-                        tokens: formatCompactNumber(averageDailyTokens),
+                        tokens: formatCompactNumber(
+                          averageDailyTokens,
+                          i18n.language,
+                        ),
                         defaultValue: "区间均值：{{tokens}}",
                       })}
                     </span>
@@ -766,7 +779,7 @@ export function StatsSettings() {
                             bottom: `${(index / (chartGuideValues.length - 1)) * 100}%`,
                           }}
                         >
-                          {formatCompactNumber(value)}
+                          {formatCompactNumber(value, i18n.language)}
                         </div>
                       ))}
                     </div>
@@ -805,7 +818,11 @@ export function StatsSettings() {
                                   style={{ height: `${Math.max(height, 6)}%` }}
                                 >
                                   <div className="absolute -top-8 left-1/2 -translate-x-1/2 rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-600 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 whitespace-nowrap">
-                                    {formatCompactNumber(day.tokens)} Token
+                                    {formatCompactNumber(
+                                      day.tokens,
+                                      i18n.language,
+                                    )}{" "}
+                                    Token
                                   </div>
                                 </div>
                               </div>
@@ -899,14 +916,17 @@ export function StatsSettings() {
                       )}
                       title={
                         day
-                          ? `${day.date}: ${formatCompactNumber(day.tokens)} Token`
+                          ? `${day.date}: ${formatCompactNumber(
+                              day.tokens,
+                              i18n.language,
+                            )} Token`
                           : ""
                       }
                     >
                       {day ? (
                         <div className="pointer-events-none absolute left-1/2 top-0 z-10 -translate-x-1/2 -translate-y-[calc(100%+6px)] rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-600 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 whitespace-nowrap">
                           {formatShortDate(day.date, i18n.language)} ·{" "}
-                          {formatCompactNumber(day.tokens)}
+                          {formatCompactNumber(day.tokens, i18n.language)}
                         </div>
                       ) : null}
                     </div>

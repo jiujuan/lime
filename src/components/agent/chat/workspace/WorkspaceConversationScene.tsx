@@ -408,7 +408,6 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   >["onOpenMemoryWorkbench"];
   onOpenChannels?: ComponentProps<typeof EmptyState>["onOpenChannels"];
   onOpenChromeRelay?: ComponentProps<typeof EmptyState>["onOpenChromeRelay"];
-  onOpenOpenClaw?: ComponentProps<typeof EmptyState>["onOpenOpenClaw"];
   taskCenterTabsNode?: ReactNode;
   navbarVisible: boolean;
   isRunning: boolean;
@@ -554,7 +553,6 @@ export function WorkspaceConversationScene({
   onOpenMemoryWorkbench,
   onOpenChannels,
   onOpenChromeRelay,
-  onOpenOpenClaw,
   taskCenterTabsNode,
   navbarVisible,
   isRunning,
@@ -659,7 +657,6 @@ export function WorkspaceConversationScene({
     onOpenMemoryWorkbench,
     onOpenChannels,
     onOpenChromeRelay,
-    onOpenOpenClaw,
     creationReplaySurface,
     defaultCuratedTaskReferenceMemoryIds,
     defaultCuratedTaskReferenceEntries,

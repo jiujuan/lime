@@ -136,10 +136,6 @@ export function useWorkspaceNavigationActions({
     });
   }, [onNavigate]);
 
-  const handleOpenOpenClaw = useCallback(() => {
-    onNavigate?.("openclaw");
-  }, [onNavigate]);
-
   const handleCompactContext = useCallback(() => {
     void compactSession();
   }, [compactSession]);
@@ -166,7 +162,6 @@ export function useWorkspaceNavigationActions({
     handleOpenChannels,
     handleOpenChromeRelay,
     handleOpenKnowledgeManagement,
-    handleOpenOpenClaw,
     handleOpenRuntimeMemoryWorkbench,
     handleOpenAppearanceSettings,
     handleProjectChange,

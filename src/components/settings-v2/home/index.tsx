@@ -486,7 +486,10 @@ export function SettingsHomePage({
                       </h2>
                       <div className="mt-1">
                         <WorkbenchInfoTip
-                          ariaLabel={`${group.title}说明`}
+                          ariaLabel={t("settings.home.group.tipAria", {
+                            title: group.title,
+                            defaultValue: "{{title}}说明",
+                          })}
                           content={groupDescription}
                           tone="slate"
                         />

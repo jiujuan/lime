@@ -1221,7 +1221,6 @@ describe("EmptyState", () => {
     const onOpenMemoryWorkbench = vi.fn();
     const onOpenChannels = vi.fn();
     const onOpenChromeRelay = vi.fn();
-    const onOpenOpenClaw = vi.fn();
     const container = renderEmptyState({
       activeTheme: "general",
       runtimeToolAvailability: {
@@ -1256,7 +1255,6 @@ describe("EmptyState", () => {
       onOpenMemoryWorkbench,
       onOpenChannels,
       onOpenChromeRelay,
-      onOpenOpenClaw,
     });
 
     await act(async () => {
@@ -1276,12 +1274,10 @@ describe("EmptyState", () => {
     );
     expect(container.textContent).not.toContain("频道入口");
     expect(container.textContent).not.toContain("浏览器连接器");
-    expect(container.textContent).not.toContain("OpenClaw 兼容入口");
     expect(container.textContent).not.toContain("打开记忆工作台");
 
     expect(onOpenChannels).not.toHaveBeenCalled();
     expect(onOpenChromeRelay).not.toHaveBeenCalled();
-    expect(onOpenOpenClaw).not.toHaveBeenCalled();
     expect(onOpenMemoryWorkbench).not.toHaveBeenCalled();
   });
 

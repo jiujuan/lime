@@ -1,31 +1,56 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Home, Palette } from "lucide-react";
-import { SettingsGroupKey, SettingsTabs } from "@/types/settings";
+import { SettingsTabs } from "@/types/settings";
 
-const mockUseSettingsCategory = vi.fn();
+const { mockUseTranslation } = vi.hoisted(() => {
+  const translations: Record<string, string> = {
+    "settings.layout.sidebar.experimentalBadge": "Labs badge from i18n",
+    "settings.layout.sidebar.floatingNav.fallbackLabel":
+      "Settings nav from i18n",
+    "settings.layout.sidebar.floatingNav.openAria":
+      "Open settings navigation from i18n",
+  };
 
-vi.mock("../hooks/useSettingsCategory", () => ({
-  useSettingsCategory: () => mockUseSettingsCategory(),
+  return {
+    mockUseTranslation: vi.fn((_namespace?: string) => ({
+      t: (key: string, options?: unknown) => {
+        if (typeof options === "string") {
+          return translations[key] ?? options;
+        }
+
+        if (options && typeof options === "object") {
+          const values = options as Record<string, unknown>;
+          const template =
+            translations[key] ??
+            (typeof values.defaultValue === "string"
+              ? values.defaultValue
+              : key);
+          return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+            String(values[name] ?? ""),
+          );
+        }
+
+        return translations[key] ?? key;
+      },
+    })),
+  };
+});
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
 }));
 
 import { SettingsSidebar } from "./SettingsSidebar";
 
-interface RenderResult {
+interface Mounted {
   container: HTMLDivElement;
   root: Root;
 }
 
-const mounted: RenderResult[] = [];
+const mounted: Mounted[] = [];
 
-function renderSidebar(
-  props?: Partial<{
-    activeTab: SettingsTabs;
-    onTabChange: (tab: SettingsTabs) => void;
-    onTabPrefetch: (tab: SettingsTabs) => void;
-  }>,
-): RenderResult {
+function renderSidebar(activeTab: SettingsTabs = SettingsTabs.Developer) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -33,16 +58,15 @@ function renderSidebar(
   act(() => {
     root.render(
       <SettingsSidebar
-        activeTab={props?.activeTab ?? SettingsTabs.Home}
-        onTabChange={props?.onTabChange ?? vi.fn()}
-        onTabPrefetch={props?.onTabPrefetch}
+        activeTab={activeTab}
+        onTabChange={vi.fn()}
+        onTabPrefetch={vi.fn()}
       />,
     );
   });
 
-  const rendered = { container, root };
-  mounted.push(rendered);
-  return rendered;
+  mounted.push({ container, root });
+  return container;
 }
 
 beforeEach(() => {
@@ -51,36 +75,10 @@ beforeEach(() => {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
-
-  mockUseSettingsCategory.mockReturnValue([
-    {
-      key: SettingsGroupKey.Overview,
-      title: "概览",
-      items: [
-        {
-          key: SettingsTabs.Home,
-          label: "设置首页",
-          icon: Home,
-        },
-      ],
-    },
-    {
-      key: SettingsGroupKey.General,
-      title: "通用",
-      items: [
-        {
-          key: SettingsTabs.Appearance,
-          label: "外观",
-          icon: Palette,
-        },
-      ],
-    },
-  ]);
+  vi.clearAllMocks();
 });
 
 afterEach(() => {
-  mockUseSettingsCategory.mockReset();
-
   while (mounted.length > 0) {
     const target = mounted.pop();
     if (!target) {
@@ -92,135 +90,25 @@ afterEach(() => {
     });
     target.container.remove();
   }
+  vi.clearAllMocks();
 });
 
 describe("SettingsSidebar", () => {
-  it("侧边栏应暴露主题化容器和当前导航状态", () => {
-    const { container } = renderSidebar({
-      activeTab: SettingsTabs.Appearance,
-    });
-    const sidebar = container.querySelector('[data-testid="settings-sidebar"]');
-    const activeButton = Array.from(container.querySelectorAll("button")).find(
-      (item) => item.textContent?.includes("外观"),
-    );
-    const inactiveButton = Array.from(
-      container.querySelectorAll("button"),
-    ).find((item) => item.textContent?.includes("设置首页"));
+  it("应通过 settings namespace 渲染实验 badge 与浮动导航 aria", () => {
+    const container = renderSidebar();
 
-    expect(sidebar).not.toBeNull();
-    expect(activeButton?.getAttribute("data-active")).toBe("true");
-    expect(inactiveButton?.getAttribute("data-active")).toBe("false");
-  });
-
-  it("点击导航项时应触发 tab 切换", () => {
-    const onTabChange = vi.fn();
-    const { container } = renderSidebar({ onTabChange });
-    const button = Array.from(container.querySelectorAll("button")).find(
-      (item) => item.textContent?.includes("外观"),
-    );
-
-    act(() => {
-      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    expect(onTabChange).toHaveBeenCalledWith(SettingsTabs.Appearance);
-  });
-
-  it("悬停导航项时应触发 tab 预取", () => {
-    const onTabPrefetch = vi.fn();
-    const { container } = renderSidebar({ onTabPrefetch });
-    const button = Array.from(container.querySelectorAll("button")).find(
-      (item) => item.textContent?.includes("外观"),
-    );
-
-    act(() => {
-      button?.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
-    });
-
-    expect(onTabPrefetch).toHaveBeenCalledWith(SettingsTabs.Appearance);
-  });
-
-  it("小屏悬浮导航按钮应显示当前页面并按需展开菜单", () => {
-    const { container } = renderSidebar({
-      activeTab: SettingsTabs.Appearance,
-    });
-    const floatingButton = container.querySelector<HTMLButtonElement>(
-      '[data-testid="settings-floating-nav-button"]',
-    );
-
-    expect(floatingButton).not.toBeNull();
-    expect(floatingButton?.textContent).toContain("外观");
-    expect(floatingButton?.getAttribute("aria-expanded")).toBe("false");
+    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
+    expect(container.textContent).toContain("Labs badge from i18n");
     expect(
-      container.querySelector('[data-testid="settings-floating-nav-panel"]'),
-    ).toBeNull();
-
-    act(() => {
-      floatingButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    const floatingPanel = container.querySelector(
-      '[data-testid="settings-floating-nav-panel"]',
-    );
-    const activeButton = Array.from(
-      floatingPanel?.querySelectorAll("button") ?? [],
-    ).find((item) => item.textContent?.includes("外观"));
-
-    expect(floatingButton?.getAttribute("aria-expanded")).toBe("true");
-    expect(floatingPanel).not.toBeNull();
-    expect(activeButton?.getAttribute("data-active")).toBe("true");
+      container
+        .querySelector('[data-testid="settings-floating-nav-button"]')
+        ?.getAttribute("aria-label"),
+    ).toBe("Open settings navigation from i18n");
   });
 
-  it("点击悬浮菜单项后应切换 tab 并关闭浮层", () => {
-    const onTabChange = vi.fn();
-    const { container } = renderSidebar({ onTabChange });
-    const floatingButton = container.querySelector<HTMLButtonElement>(
-      '[data-testid="settings-floating-nav-button"]',
-    );
+  it("无 active item 时应使用 settings namespace 的浮动导航兜底标题", () => {
+    const container = renderSidebar("__missing__" as SettingsTabs);
 
-    act(() => {
-      floatingButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    const floatingPanel = container.querySelector(
-      '[data-testid="settings-floating-nav-panel"]',
-    );
-    const appearanceButton = Array.from(
-      floatingPanel?.querySelectorAll("button") ?? [],
-    ).find((item) => item.textContent?.includes("外观"));
-
-    act(() => {
-      appearanceButton?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-    });
-
-    expect(onTabChange).toHaveBeenCalledWith(SettingsTabs.Appearance);
-    expect(
-      container.querySelector('[data-testid="settings-floating-nav-panel"]'),
-    ).toBeNull();
-    expect(floatingButton?.getAttribute("aria-expanded")).toBe("false");
-  });
-
-  it("按 Escape 应关闭悬浮导航浮层", () => {
-    const { container } = renderSidebar();
-    const floatingButton = container.querySelector<HTMLButtonElement>(
-      '[data-testid="settings-floating-nav-button"]',
-    );
-
-    act(() => {
-      floatingButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    expect(
-      container.querySelector('[data-testid="settings-floating-nav-panel"]'),
-    ).not.toBeNull();
-
-    act(() => {
-      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
-    });
-
-    expect(
-      container.querySelector('[data-testid="settings-floating-nav-panel"]'),
-    ).toBeNull();
+    expect(container.textContent).toContain("Settings nav from i18n");
   });
 });

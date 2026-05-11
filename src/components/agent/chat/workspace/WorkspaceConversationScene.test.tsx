@@ -158,7 +158,6 @@ function renderScene(
       onOpenMemoryWorkbench: vi.fn(),
       onOpenChannels: vi.fn(),
       onOpenChromeRelay: vi.fn(),
-      onOpenOpenClaw: vi.fn(),
       navbarVisible: false,
       isRunning: false,
       navbarChrome: "default" as any,

@@ -5,6 +5,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Archive,
   PencilLine,
@@ -13,6 +14,7 @@ import {
   Save,
   SquarePen,
 } from "lucide-react";
+import { formatNumber } from "@/i18n/format";
 import { browserRuntimeApi } from "./api";
 import { getExistingSessionTabLabel } from "./existingSessionBridge";
 import { getExistingSessionBridgeStatus } from "./existingSessionBridgeClient";
@@ -21,7 +23,10 @@ import type {
   BrowserProfileRecord,
   BrowserProfileTransportKind,
 } from "./api";
-import { useExistingSessionProfileManager } from "./useExistingSessionProfileManager";
+import {
+  useExistingSessionProfileManager,
+  type ExistingSessionProfileManagerCopy,
+} from "./useExistingSessionProfileManager";
 
 type RuntimeMessage = {
   type: "success" | "error";
@@ -59,39 +64,32 @@ const EMPTY_FORM: ProfileFormState = {
 
 const PROFILE_TRANSPORT_OPTIONS: Array<{
   value: BrowserProfileTransportKind;
-  label: string;
-  description: string;
+  key: "managed" | "existing";
 }> = [
   {
     value: "managed_cdp",
-    label: "托管浏览器",
-    description: "由 Lime 启动并管理独立 Chrome 资料，兼容当前实时会话链路。",
+    key: "managed",
   },
   {
     value: "existing_session",
-    label: "附着当前 Chrome",
-    description:
-      "复用你已登录的 Chrome，优先附着当前会话，不会静默拉起第二个托管浏览器。",
+    key: "existing",
   },
 ];
 
 const BROWSER_RUNTIME_PRIMARY_ACTION_BUTTON_CLASSNAME =
   "inline-flex h-9 items-center gap-2 rounded-md border border-emerald-200 bg-[linear-gradient(135deg,#0ea5e9_0%,#14b8a6_52%,#10b981_100%)] px-3 text-sm text-white shadow-sm shadow-emerald-950/15 transition hover:opacity-95";
 
-function getProfileTransportLabel(transportKind: BrowserProfileTransportKind) {
+function getProfileTransportOption(
+  options: Array<{
+    value: BrowserProfileTransportKind;
+    label: string;
+    description: string;
+  }>,
+  transportKind: BrowserProfileTransportKind,
+) {
   return (
-    PROFILE_TRANSPORT_OPTIONS.find((option) => option.value === transportKind)
-      ?.label ?? "托管浏览器"
+    options.find((option) => option.value === transportKind) ?? options[0]
   );
-}
-
-function getExistingSessionEnvironmentNotice(
-  presetName?: string | null,
-): string | null {
-  if (!presetName) {
-    return null;
-  }
-  return `已选择启动环境 "${presetName}"，但附着当前 Chrome 模式暂不应用代理、时区、语言、UA 或视口等启动级配置；如需这些能力，请改用托管浏览器模式。`;
 }
 
 const EXISTING_SESSION_RUNTIME_FALLBACK_PATTERNS = [
@@ -110,6 +108,10 @@ function shouldFallbackToExistingSessionBridge(error: unknown): boolean {
   return EXISTING_SESSION_RUNTIME_FALLBACK_PATTERNS.some((pattern) =>
     normalized.includes(pattern),
   );
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function toFormState(profile: BrowserProfileRecord): ProfileFormState {
@@ -132,12 +134,30 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
     launchEnvironmentPresetOptions = [],
     onLaunchEnvironmentPresetChange,
   } = props;
+  const { t, i18n } = useTranslation("workspace");
   const [profiles, setProfiles] = useState<BrowserProfileRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState<ProfileFormState>(EMPTY_FORM);
+  const transportOptions = useMemo(
+    () =>
+      PROFILE_TRANSPORT_OPTIONS.map((option) => ({
+        value: option.value,
+        label: t(
+          option.key === "managed"
+            ? "workspace.browserProfile.transport.managed.label"
+            : "workspace.browserProfile.transport.existing.label",
+        ),
+        description: t(
+          option.key === "managed"
+            ? "workspace.browserProfile.transport.managed.description"
+            : "workspace.browserProfile.transport.existing.description",
+        ),
+      })),
+    [t],
+  );
 
   const activeProfiles = useMemo(
     () => profiles.filter((profile) => profile.archived_at === null),
@@ -152,10 +172,46 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
   );
   const existingSessionEnvironmentNotice = useMemo(
     () =>
-      getExistingSessionEnvironmentNotice(
-        selectedLaunchEnvironmentPreset?.name ?? null,
-      ),
-    [selectedLaunchEnvironmentPreset],
+      selectedLaunchEnvironmentPreset
+        ? t("workspace.browserProfile.notice.existingSessionEnvironment", {
+            presetName: selectedLaunchEnvironmentPreset.name,
+          })
+        : null,
+    [selectedLaunchEnvironmentPreset, t],
+  );
+  const existingSessionCopy = useMemo<ExistingSessionProfileManagerCopy>(
+    () => ({
+      tabsLoadFailed: (message) =>
+        t("workspace.browserExistingSession.feedback.tabsLoadFailed", {
+          message,
+        }),
+      attachSuccess: ({ name, url, notice }) => {
+        const noticeSuffix = notice
+          ? t("workspace.browserExistingSession.feedback.noticeSuffix", {
+              notice,
+            })
+          : "";
+        return url
+          ? t("workspace.browserExistingSession.feedback.attachSuccessWithUrl", {
+              name,
+              notice: noticeSuffix,
+              url,
+            })
+          : t("workspace.browserExistingSession.feedback.attachSuccess", {
+              name,
+              notice: noticeSuffix,
+            });
+      },
+      tabSwitchSuccess: (tabLabel) =>
+        t("workspace.browserExistingSession.feedback.tabSwitchSuccess", {
+          tabLabel,
+        }),
+      tabSwitchFailed: (message) =>
+        t("workspace.browserExistingSession.feedback.tabSwitchFailed", {
+          message,
+        }),
+    }),
+    [t],
   );
   const {
     attachProfiles,
@@ -175,6 +231,7 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
   } = useExistingSessionProfileManager({
     profiles,
     existingSessionEnvironmentNotice,
+    copy: existingSessionCopy,
     onMessage,
     onProfileLaunched,
   });
@@ -196,15 +253,15 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
       } catch (error) {
         onMessage?.({
           type: "error",
-          text: `读取已保存资料失败: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          text: t("workspace.browserProfile.feedback.loadFailed", {
+            message: getErrorMessage(error),
+          }),
         });
       } finally {
         setLoading(false);
       }
     },
-    [onMessage, showArchived, syncBridgeStatus],
+    [onMessage, showArchived, syncBridgeStatus, t],
   );
 
   useEffect(() => {
@@ -228,11 +285,17 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
 
   const handleSave = useCallback(async () => {
     if (!form.name.trim()) {
-      onMessage?.({ type: "error", text: "资料名称不能为空" });
+      onMessage?.({
+        type: "error",
+        text: t("workspace.browserProfile.feedback.nameRequired"),
+      });
       return;
     }
     if (!form.id && !form.profile_key.trim()) {
-      onMessage?.({ type: "error", text: "新建资料时必须填写资料 Key" });
+      onMessage?.({
+        type: "error",
+        text: t("workspace.browserProfile.feedback.keyRequired"),
+      });
       return;
     }
 
@@ -252,21 +315,25 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
       onMessage?.({
         type: "success",
         text: form.id
-          ? `已更新资料：${saved.name}`
-          : `已创建资料：${saved.name}`,
+          ? t("workspace.browserProfile.feedback.updated", {
+              name: saved.name,
+            })
+          : t("workspace.browserProfile.feedback.created", {
+              name: saved.name,
+            }),
       });
       setFormOpen(false);
     } catch (error) {
       onMessage?.({
         type: "error",
-        text: `保存资料失败: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        text: t("workspace.browserProfile.feedback.saveFailed", {
+          message: getErrorMessage(error),
+        }),
       });
     } finally {
       setSubmitting(false);
     }
-  }, [form, onMessage, refreshProfiles, showArchived]);
+  }, [form, onMessage, refreshProfiles, showArchived, t]);
 
   const handleArchive = useCallback(
     async (profile: BrowserProfileRecord) => {
@@ -278,18 +345,20 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
         }
         onMessage?.({
           type: "success",
-          text: `已归档资料：${profile.name}`,
+          text: t("workspace.browserProfile.feedback.archived", {
+            name: profile.name,
+          }),
         });
       } catch (error) {
         onMessage?.({
           type: "error",
-          text: `归档资料失败: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          text: t("workspace.browserProfile.feedback.archiveFailed", {
+            message: getErrorMessage(error),
+          }),
         });
       }
     },
-    [form.id, onMessage, refreshProfiles, resetForm, showArchived],
+    [form.id, onMessage, refreshProfiles, resetForm, showArchived, t],
   );
 
   const handleRestore = useCallback(
@@ -299,18 +368,20 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
         await refreshProfiles(showArchived);
         onMessage?.({
           type: "success",
-          text: `已恢复资料：${profile.name}`,
+          text: t("workspace.browserProfile.feedback.restored", {
+            name: profile.name,
+          }),
         });
       } catch (error) {
         onMessage?.({
           type: "error",
-          text: `恢复资料失败: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          text: t("workspace.browserProfile.feedback.restoreFailed", {
+            message: getErrorMessage(error),
+          }),
         });
       }
     },
-    [onMessage, refreshProfiles, showArchived],
+    [onMessage, refreshProfiles, showArchived, t],
   );
 
   const handleLaunch = useCallback(
@@ -329,8 +400,13 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
             onMessage?.({
               type: "success",
               text: selectedLaunchEnvironmentPreset
-                ? `已附着当前 Chrome：${profile.name}，并启动实时调试会话（环境：${selectedLaunchEnvironmentPreset.name}）`
-                : `已附着当前 Chrome：${profile.name}，并启动实时调试会话`,
+                ? t("workspace.browserProfile.feedback.attachedWithEnvironment", {
+                    environmentName: selectedLaunchEnvironmentPreset.name,
+                    name: profile.name,
+                  })
+                : t("workspace.browserProfile.feedback.attached", {
+                    name: profile.name,
+                  }),
             });
             return;
           } catch (error) {
@@ -353,15 +429,20 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
         onMessage?.({
           type: "success",
           text: selectedLaunchEnvironmentPreset
-            ? `已启动资料：${profile.name}（环境：${selectedLaunchEnvironmentPreset.name}）`
-            : `已启动资料：${profile.name}`,
+            ? t("workspace.browserProfile.feedback.launchedWithEnvironment", {
+                environmentName: selectedLaunchEnvironmentPreset.name,
+                name: profile.name,
+              })
+            : t("workspace.browserProfile.feedback.launched", {
+                name: profile.name,
+              }),
         });
       } catch (error) {
         onMessage?.({
           type: "error",
-          text: `启动资料失败: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          text: t("workspace.browserProfile.feedback.launchFailed", {
+            message: getErrorMessage(error),
+          }),
         });
       }
     },
@@ -373,6 +454,7 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
       refreshProfiles,
       selectedLaunchEnvironmentPreset,
       showArchived,
+      t,
     ],
   );
 
@@ -380,15 +462,16 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
     <section className="rounded-lg border p-5 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
-          <h2 className="text-base font-semibold">已保存资料</h2>
+          <h2 className="text-base font-semibold">
+            {t("workspace.browserProfile.title")}
+          </h2>
           <p className="text-sm text-muted-foreground">
-            把浏览器登录态从临时 `profile_key`
-            升级为可管理资料，后续任务与环境预设都围绕这里收口。
+            {t("workspace.browserProfile.description")}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>启动环境</span>
+            <span>{t("workspace.browserProfile.launch.label")}</span>
             <select
               value={launchEnvironmentPresetId}
               onChange={(event) =>
@@ -396,7 +479,7 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
               }
               className="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
             >
-              <option value="">无预设</option>
+              <option value="">{t("workspace.browserProfile.launch.none")}</option>
               {launchEnvironmentPresetOptions.map((preset) => (
                 <option key={preset.id} value={preset.id}>
                   {preset.name}
@@ -410,7 +493,9 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
             disabled={loading}
             className="inline-flex h-9 items-center rounded-md border px-3 text-sm hover:bg-muted disabled:opacity-60"
           >
-            {loading ? "刷新中..." : "刷新资料"}
+            {loading
+              ? t("workspace.browserProfile.actions.refreshing")
+              : t("workspace.browserProfile.actions.refresh")}
           </button>
           <button
             type="button"
@@ -418,37 +503,44 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
             className={BROWSER_RUNTIME_PRIMARY_ACTION_BUTTON_CLASSNAME}
           >
             <SquarePen className="h-4 w-4" />
-            新建资料
+            {t("workspace.browserProfile.actions.new")}
           </button>
         </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
         <span>
-          活跃资料:
-          <span className="ml-1 font-medium text-foreground">
-            {activeProfiles.length}
-          </span>
+          {t("workspace.browserProfile.summary.activeProfiles", {
+            activeCount: formatNumber(activeProfiles.length, {
+              locale: i18n.language,
+            }),
+          })}
         </span>
         <span>
-          当前 Chrome 附着:
-          <span className="ml-1 font-medium text-foreground">
-            {connectedAttachCount}
-          </span>
-          /{attachProfiles.length}
+          {t("workspace.browserProfile.summary.attachedChrome", {
+            attachCount: formatNumber(attachProfiles.length, {
+              locale: i18n.language,
+            }),
+            connectedCount: formatNumber(connectedAttachCount, {
+              locale: i18n.language,
+            }),
+          })}
         </span>
         <button
           type="button"
           onClick={() => setShowArchived((value) => !value)}
           className="rounded-md border px-2 py-1 transition hover:bg-muted"
         >
-          {showArchived ? "隐藏已归档" : "显示已归档"}
+          {showArchived
+            ? t("workspace.browserProfile.actions.hideArchived")
+            : t("workspace.browserProfile.actions.showArchived")}
         </button>
         <span>
-          当前启动环境:
-          <span className="ml-1 font-medium text-foreground">
-            {selectedLaunchEnvironmentPreset?.name || "无预设"}
-          </span>
+          {t("workspace.browserProfile.summary.currentLaunchEnvironment", {
+            value:
+              selectedLaunchEnvironmentPreset?.name ||
+              t("workspace.browserProfile.launch.none"),
+          })}
         </span>
       </div>
 
@@ -461,20 +553,26 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
       >
         <span className="font-medium">
           {bridgeConnectionCount > 0
-            ? "附着模式当前设备可用。"
-            : "附着模式当前设备未就绪。"}
+            ? t("workspace.browserProfile.bridge.availableTitle")
+            : t("workspace.browserProfile.bridge.unavailableTitle")}
         </span>
         <span className="ml-1">
           {bridgeConnectionCount > 0
-            ? `已检测到 ${bridgeConnectionCount} 个当前 Chrome 连接，可直接用于发文、填表和已登录页面操作。`
-            : "请先在当前 Chrome 安装并连接 Lime Browser Bridge；如需立即使用代理、时区、语言、UA 或视口配置，请改用托管浏览器模式。"}
+            ? t("workspace.browserProfile.bridge.availableDescription", {
+                connectionCount: formatNumber(bridgeConnectionCount, {
+                  locale: i18n.language,
+                }),
+              })
+            : t("workspace.browserProfile.bridge.unavailableDescription")}
         </span>
       </div>
 
       {formOpen ? (
         <div className="grid gap-3 rounded-xl border bg-muted/20 p-4 md:grid-cols-2">
           <label className="space-y-1 text-sm">
-            <span className="text-muted-foreground">资料名称</span>
+            <span className="text-muted-foreground">
+              {t("workspace.browserProfile.fields.name")}
+            </span>
             <input
               value={form.name}
               onChange={(event) =>
@@ -484,11 +582,13 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
                 }))
               }
               className="h-10 w-full rounded-md border bg-background px-3"
-              placeholder="例如：美区电商账号"
+              placeholder={t("workspace.browserProfile.placeholders.name")}
             />
           </label>
           <label className="space-y-1 text-sm">
-            <span className="text-muted-foreground">资料 Key</span>
+            <span className="text-muted-foreground">
+              {t("workspace.browserProfile.fields.profileKey")}
+            </span>
             <input
               value={form.profile_key}
               disabled={Boolean(form.id)}
@@ -499,11 +599,13 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
                 }))
               }
               className="h-10 w-full rounded-md border bg-background px-3 disabled:cursor-not-allowed disabled:bg-muted"
-              placeholder="例如：shop_us"
+              placeholder={t("workspace.browserProfile.placeholders.profileKey")}
             />
           </label>
           <label className="space-y-1 text-sm">
-            <span className="text-muted-foreground">运行模式</span>
+            <span className="text-muted-foreground">
+              {t("workspace.browserProfile.fields.transport")}
+            </span>
             <select
               value={form.transport_kind}
               onChange={(event) =>
@@ -515,7 +617,7 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
               }
               className="h-10 w-full rounded-md border bg-background px-3 text-sm"
             >
-              {PROFILE_TRANSPORT_OPTIONS.map((option) => (
+              {transportOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -523,7 +625,9 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
             </select>
           </label>
           <label className="space-y-1 text-sm">
-            <span className="text-muted-foreground">站点范围</span>
+            <span className="text-muted-foreground">
+              {t("workspace.browserProfile.fields.siteScope")}
+            </span>
             <input
               value={form.site_scope}
               onChange={(event) =>
@@ -533,11 +637,13 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
                 }))
               }
               className="h-10 w-full rounded-md border bg-background px-3"
-              placeholder="例如：seller.amazon.com"
+              placeholder={t("workspace.browserProfile.placeholders.siteScope")}
             />
           </label>
           <label className="space-y-1 text-sm">
-            <span className="text-muted-foreground">默认启动地址</span>
+            <span className="text-muted-foreground">
+              {t("workspace.browserProfile.fields.launchUrl")}
+            </span>
             <input
               value={form.launch_url}
               onChange={(event) =>
@@ -551,12 +657,16 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
             />
           </label>
           <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 md:col-span-2 dark:text-amber-200">
-            {PROFILE_TRANSPORT_OPTIONS.find(
-              (option) => option.value === form.transport_kind,
+            {getProfileTransportOption(
+              transportOptions,
+              form.transport_kind,
             )?.description ?? ""}
-            {form.transport_kind === "existing_session"
-              ? " 当前版本先通过 Lime Browser Bridge 扩展接入可见页面，适合发文、填表和切换标签页。"
-              : ""}
+            {form.transport_kind === "existing_session" ? (
+              <span>
+                {" "}
+                {t("workspace.browserProfile.transport.existing.extensionHint")}
+              </span>
+            ) : null}
           </div>
           {form.transport_kind === "existing_session" &&
           existingSessionEnvironmentNotice ? (
@@ -565,7 +675,9 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
             </div>
           ) : null}
           <label className="space-y-1 text-sm md:col-span-2">
-            <span className="text-muted-foreground">说明</span>
+            <span className="text-muted-foreground">
+              {t("workspace.browserProfile.fields.description")}
+            </span>
             <textarea
               value={form.description}
               onChange={(event) =>
@@ -575,7 +687,9 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
                 }))
               }
               className="min-h-24 w-full rounded-md border bg-background px-3 py-2"
-              placeholder="记录账号用途、地区、登录约束等信息"
+              placeholder={t(
+                "workspace.browserProfile.placeholders.description",
+              )}
             />
           </label>
           <div className="md:col-span-2 flex flex-wrap items-center justify-end gap-2">
@@ -584,7 +698,7 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
               onClick={resetForm}
               className="inline-flex h-9 items-center rounded-md border px-3 text-sm hover:bg-muted"
             >
-              取消
+              {t("workspace.browserProfile.actions.cancel")}
             </button>
             <button
               type="button"
@@ -593,7 +707,11 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
               className="inline-flex h-9 items-center gap-2 rounded-md border border-emerald-700 bg-emerald-700 px-3 text-sm text-white transition hover:bg-emerald-600 disabled:opacity-60"
             >
               <Save className="h-4 w-4" />
-              {submitting ? "保存中..." : form.id ? "更新资料" : "创建资料"}
+              {submitting
+                ? t("workspace.browserProfile.actions.saving")
+                : form.id
+                  ? t("workspace.browserProfile.actions.update")
+                  : t("workspace.browserProfile.actions.create")}
             </button>
           </div>
         </div>
@@ -602,7 +720,7 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
       <div className="space-y-3">
         {profiles.length === 0 ? (
           <div className="rounded-xl border border-dashed px-4 py-6 text-sm text-muted-foreground">
-            还没有已保存资料。先创建一个资料，再用它启动浏览器并完成登录。
+            {t("workspace.browserProfile.empty")}
           </div>
         ) : null}
 
@@ -638,7 +756,12 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
                       {profile.profile_key}
                     </span>
                     <span className="rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[11px] text-sky-700 dark:text-sky-200">
-                      {getProfileTransportLabel(transportKind)}
+                      {
+                        getProfileTransportOption(
+                          transportOptions,
+                          transportKind,
+                        )?.label
+                      }
                     </span>
                     {transportKind === "existing_session" ? (
                       <span
@@ -649,26 +772,47 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
                         }`}
                       >
                         {bridgeObserver
-                          ? "当前 Chrome 已连接"
-                          : "等待当前 Chrome 连接"}
+                          ? t(
+                              "workspace.browserProfile.bridge.connectedBadge",
+                            )
+                          : t("workspace.browserProfile.bridge.waitingBadge")}
                       </span>
                     ) : null}
                     {isArchived ? (
                       <span className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-700 dark:text-amber-300">
-                        已归档
+                        {t("workspace.browserProfile.badge.archived")}
                       </span>
                     ) : null}
                   </div>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                    <span>站点: {profile.site_scope || "未设置"}</span>
                     <span>
-                      默认地址:{" "}
-                      {profile.launch_url || "https://www.google.com/"}
+                      {t("workspace.browserProfile.meta.site", {
+                        value:
+                          profile.site_scope ||
+                          t("workspace.browserProfile.value.unset"),
+                      })}
                     </span>
-                    <span>最近使用: {profile.last_used_at || "从未"}</span>
+                    <span>
+                      {t("workspace.browserProfile.meta.defaultUrl", {
+                        value:
+                          profile.launch_url || "https://www.google.com/",
+                      })}
+                    </span>
+                    <span>
+                      {t("workspace.browserProfile.meta.lastUsed", {
+                        value:
+                          profile.last_used_at ||
+                          t("workspace.browserProfile.value.never"),
+                      })}
+                    </span>
                     {bridgeObserver ? (
                       <span>
-                        当前页面: {pageInfo?.title || pageInfo?.url || "已连接"}
+                        {t("workspace.browserProfile.meta.currentPage", {
+                          value:
+                            pageInfo?.title ||
+                            pageInfo?.url ||
+                            t("workspace.browserProfile.value.connected"),
+                        })}
                       </span>
                     ) : null}
                   </div>
@@ -688,10 +832,10 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div className="space-y-1">
                           <div className="text-xs font-medium text-foreground">
-                            当前窗口标签页
+                            {t("workspace.browserProfile.tabs.title")}
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            切换后会同步更新当前页面摘要，适合在发文或填表前选中目标页。
+                            {t("workspace.browserProfile.tabs.description")}
                           </p>
                         </div>
                         <button
@@ -705,14 +849,15 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
                           disabled={isTabsLoading}
                           className="inline-flex h-7 items-center rounded-md border px-2.5 text-xs hover:bg-muted disabled:opacity-60"
                         >
-                          {isTabsLoading ? "刷新中..." : "刷新标签页"}
+                          {isTabsLoading
+                            ? t("workspace.browserProfile.actions.refreshing")
+                            : t("workspace.browserProfile.tabs.refresh")}
                         </button>
                       </div>
                       <div className="mt-3 space-y-2">
                         {currentTabs.length === 0 ? (
                           <div className="rounded-md border border-dashed px-3 py-3 text-xs text-muted-foreground">
-                            还没有读取到当前窗口标签页。可先在 Chrome
-                            中打开目标页面，再刷新标签页。
+                            {t("workspace.browserProfile.tabs.empty")}
                           </div>
                         ) : (
                           currentTabs.map((tab) => {
@@ -727,11 +872,17 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
                                 <div className="min-w-0 flex-1">
                                   <div className="flex flex-wrap items-center gap-2">
                                     <span className="rounded-md border bg-muted/50 px-2 py-0.5 text-[11px] text-muted-foreground">
-                                      #{tab.index + 1}
+                                      {t("workspace.browserProfile.tabs.index", {
+                                        index: formatNumber(tab.index + 1, {
+                                          locale: i18n.language,
+                                        }),
+                                      })}
                                     </span>
                                     {tab.active ? (
                                       <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-700 dark:text-emerald-200">
-                                        当前页
+                                        {t(
+                                          "workspace.browserProfile.tabs.current",
+                                        )}
                                       </span>
                                     ) : null}
                                     <span className="truncate text-sm font-medium text-foreground">
@@ -756,10 +907,16 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
                                   className="inline-flex h-8 items-center rounded-md border px-2.5 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                   {tab.active
-                                    ? "当前标签页"
+                                    ? t(
+                                        "workspace.browserProfile.tabs.currentTab",
+                                      )
                                     : isSwitching
-                                      ? "切换中..."
-                                      : "切换到此页"}
+                                      ? t(
+                                          "workspace.browserProfile.tabs.switching",
+                                        )
+                                      : t(
+                                          "workspace.browserProfile.tabs.switchTo",
+                                        )}
                                 </button>
                               </div>
                             );
@@ -777,7 +934,7 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
                       className="inline-flex h-8 items-center gap-1 rounded-md border px-2.5 text-xs hover:bg-muted"
                     >
                       <RotateCcw className="h-3.5 w-3.5" />
-                      恢复
+                      {t("workspace.browserProfile.actions.restore")}
                     </button>
                   ) : (
                     <>
@@ -791,10 +948,10 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
                           className="inline-flex h-8 items-center gap-1 rounded-md border px-2.5 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {isTabsLoading
-                            ? "读取中..."
+                            ? t("workspace.browserProfile.tabs.loading")
                             : isTabPanelOpen
-                              ? "收起标签页"
-                              : "查看标签页"}
+                              ? t("workspace.browserProfile.tabs.collapse")
+                              : t("workspace.browserProfile.tabs.view")}
                         </button>
                       ) : null}
                       <button
@@ -804,8 +961,8 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
                       >
                         <Play className="h-3.5 w-3.5" />
                         {transportKind === "existing_session"
-                          ? "附着当前 Chrome"
-                          : "启动实时会话"}
+                          ? t("workspace.browserProfile.actions.attachChrome")
+                          : t("workspace.browserProfile.actions.launch")}
                       </button>
                       <button
                         type="button"
@@ -813,7 +970,7 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
                         className="inline-flex h-8 items-center gap-1 rounded-md border px-2.5 text-xs hover:bg-muted"
                       >
                         <PencilLine className="h-3.5 w-3.5" />
-                        编辑
+                        {t("workspace.browserProfile.actions.edit")}
                       </button>
                       <button
                         type="button"
@@ -821,7 +978,7 @@ export function BrowserProfileManager(props: BrowserProfileManagerProps) {
                         className="inline-flex h-8 items-center gap-1 rounded-md border px-2.5 text-xs hover:bg-muted"
                       >
                         <Archive className="h-3.5 w-3.5" />
-                        归档
+                        {t("workspace.browserProfile.actions.archive")}
                       </button>
                     </>
                   )}

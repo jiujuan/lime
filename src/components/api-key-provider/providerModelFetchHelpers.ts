@@ -8,6 +8,13 @@ export interface ProviderModelFetchStatus {
   message: string;
 }
 
+export interface ProviderModelFetchStatusCopy {
+  responsesConfirmedImage?: (imageModel: string) => string;
+  responsesManualImage?: string;
+  falConfirmedModel?: (modelId: string) => string;
+  falManualModel?: string;
+}
+
 export interface ProviderModelFetchProfile {
   id: string;
   type: string;
@@ -96,6 +103,7 @@ export function buildResponsesModelFetchStatus(
     diagnostic_hint?: string | null;
   },
   models: string[],
+  copy?: ProviderModelFetchStatusCopy,
 ): ProviderModelFetchStatus | null {
   if (!isResponsesModelFetchUnsupported(result)) {
     return null;
@@ -105,13 +113,16 @@ export function buildResponsesModelFetchStatus(
   if (imageModel) {
     return {
       tone: "success",
-      message: `已确认 Responses 图片模型 ${imageModel}，该入口无需标准 /models 枚举，图片生成会走 Responses image_generation。`,
+      message:
+        copy?.responsesConfirmedImage?.(imageModel) ??
+        `已确认 Responses 图片模型 ${imageModel}，该入口无需标准 /models 枚举，图片生成会走 Responses image_generation。`,
     };
   }
 
   return {
     tone: "info",
     message:
+      copy?.responsesManualImage ??
       "该 Responses 图片入口不提供标准 /models 枚举；请手动添加 gpt-images-2 或 gpt-image-2，图片生成会走 Responses image_generation。",
   };
 }
@@ -123,6 +134,7 @@ export function buildFalModelFetchStatus(
     diagnostic_hint?: string | null;
   },
   models: string[],
+  copy?: ProviderModelFetchStatusCopy,
 ): ProviderModelFetchStatus | null {
   if (!isFalProviderLike(provider) || !isFalModelFetchUnsupported(result)) {
     return null;
@@ -132,13 +144,16 @@ export function buildFalModelFetchStatus(
   if (firstModel) {
     return {
       tone: "success",
-      message: `已确认 Fal 模型 ${firstModel}，Fal 不提供标准 /models 枚举，后续会使用手动声明的模型 ID。`,
+      message:
+        copy?.falConfirmedModel?.(firstModel) ??
+        `已确认 Fal 模型 ${firstModel}，Fal 不提供标准 /models 枚举，后续会使用手动声明的模型 ID。`,
     };
   }
 
   return {
     tone: "info",
     message:
+      copy?.falManualModel ??
       "Fal 不提供标准 /models 枚举；当前模型优先级没有可用 Fal 图片模型，请手动添加 fal-ai/nano-banana-pro、fal-ai/flux-pro 或其他 fal-ai/... 模型 ID。",
   };
 }

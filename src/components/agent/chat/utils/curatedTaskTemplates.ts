@@ -81,6 +81,60 @@ interface CuratedTaskTemplateDefinition {
   followUpActionTargets?: Record<string, CuratedTaskFollowUpActionTarget>;
 }
 
+export interface CuratedTaskFollowUpActionCopy {
+  label?: string;
+  promptHint?: string;
+}
+
+export interface CuratedTaskTemplateDefinitionCopy {
+  title?: string;
+  summary?: string;
+  outputHint?: string;
+  resultDestination?: string;
+  categoryLabel?: string;
+  requiredInputFields?: Record<
+    string,
+    Partial<Pick<CuratedTaskInputField, "label" | "placeholder" | "helperText">>
+  >;
+  optionalReferences?: string[];
+  outputContract?: string[];
+  followUpActions?: CuratedTaskFollowUpActionCopy[];
+}
+
+export type CuratedTaskRecommendationCategory =
+  | "activity"
+  | "context"
+  | "experience"
+  | "identity"
+  | "preference";
+
+export interface CuratedTaskRecommendationCopy {
+  activeReferenceReasonLabel?: string;
+  categoryLabels?: Partial<Record<CuratedTaskRecommendationCategory, string>>;
+  currentResultReasonLabel?: string;
+  fallbackLabel?: string;
+  recentActivityReasonLabel?: string;
+  recentContextReasonLabel?: string;
+  recentExperienceReasonLabel?: string;
+  recentIdentityReasonLabel?: string;
+  recentPreferenceReasonLabel?: string;
+  recentReviewReasonLabel?: string;
+  resultContinuationReasonLabel?: string;
+  formatAccountProjectReviewSummary?: (title: string) => string;
+  formatDailyTrendBriefingSummary?: (title: string) => string;
+  formatSocialPostStarterSummary?: (title: string) => string;
+  formatReviewReasonSummary?: (title: string) => string;
+  formatSignalReasonSummary?: (categoryLabel: string, title: string) => string;
+}
+
+export interface CuratedTaskTemplateCopy {
+  actionLabel?: string;
+  recentBadgeLabel?: string;
+  statusLabel?: string;
+  templates?: Record<string, CuratedTaskTemplateDefinitionCopy>;
+  recommendation?: CuratedTaskRecommendationCopy;
+}
+
 interface CuratedTaskTemplateUsageRecord {
   templateId: string;
   usedAt: number;
@@ -448,6 +502,254 @@ const CURATED_TASK_RECOMMENDATION_CATEGORY_WEIGHTS: Record<
   },
 };
 
+export type CuratedTaskTemplateCopyTranslator = (
+  key: string,
+  defaultValue: string,
+  values?: Record<string, number | string>,
+) => string;
+
+export function buildCuratedTaskTemplateCopy(
+  translate: CuratedTaskTemplateCopyTranslator,
+): CuratedTaskTemplateCopy {
+  return {
+    actionLabel: translate(
+      "curatedTask.templates.common.actionLabel",
+      "进入生成",
+    ),
+    recentBadgeLabel: translate(
+      "curatedTask.templates.common.recentBadge",
+      "最近使用",
+    ),
+    statusLabel: translate(
+      "curatedTask.templates.common.statusLabel",
+      "可直接开始",
+    ),
+    recommendation: {
+      activeReferenceReasonLabel: translate(
+        "curatedTask.templates.recommendation.activeReferenceReasonLabel",
+        "围绕当前{{categoryLabel}}",
+        { categoryLabel: "{{categoryLabel}}" },
+      ),
+      categoryLabels: {
+        activity: translate(
+          "curatedTask.templates.recommendation.category.activity",
+          "收藏",
+        ),
+        context: translate(
+          "curatedTask.templates.recommendation.category.context",
+          "参考",
+        ),
+        experience: translate(
+          "curatedTask.templates.recommendation.category.experience",
+          "成果",
+        ),
+        identity: translate(
+          "curatedTask.templates.recommendation.category.identity",
+          "风格",
+        ),
+        preference: translate(
+          "curatedTask.templates.recommendation.category.preference",
+          "偏好",
+        ),
+      },
+      currentResultReasonLabel: translate(
+        "curatedTask.templates.recommendation.currentResultReasonLabel",
+        "围绕当前成果",
+      ),
+      fallbackLabel: translate(
+        "curatedTask.templates.recommendation.fallbackLabel",
+        "灵感",
+      ),
+      recentActivityReasonLabel: translate(
+        "curatedTask.templates.recommendation.recentActivityReasonLabel",
+        "围绕最近收藏",
+      ),
+      recentContextReasonLabel: translate(
+        "curatedTask.templates.recommendation.recentContextReasonLabel",
+        "围绕最近参考",
+      ),
+      recentExperienceReasonLabel: translate(
+        "curatedTask.templates.recommendation.recentExperienceReasonLabel",
+        "围绕最近成果",
+      ),
+      recentIdentityReasonLabel: translate(
+        "curatedTask.templates.recommendation.recentIdentityReasonLabel",
+        "围绕最近风格",
+      ),
+      recentPreferenceReasonLabel: translate(
+        "curatedTask.templates.recommendation.recentPreferenceReasonLabel",
+        "围绕最近偏好",
+      ),
+      recentReviewReasonLabel: translate(
+        "curatedTask.templates.recommendation.recentReviewReasonLabel",
+        "围绕最近判断",
+      ),
+      resultContinuationReasonLabel: translate(
+        "curatedTask.templates.recommendation.resultContinuationReasonLabel",
+        "承接当前结果",
+      ),
+      formatAccountProjectReviewSummary: (title) =>
+        translate(
+          "curatedTask.templates.recommendation.accountProjectReviewSummary",
+          "先对齐「{{title}}」这轮结果基线，再决定下一轮动作",
+          { title },
+        ),
+      formatDailyTrendBriefingSummary: (title) =>
+        translate(
+          "curatedTask.templates.recommendation.dailyTrendBriefingSummary",
+          "围绕「{{title}}」这轮结果继续找趋势窗口",
+          { title },
+        ),
+      formatReviewReasonSummary: (title) =>
+        translate(
+          "curatedTask.templates.recommendation.reviewReasonSummary",
+          "判断：{{title}}",
+          { title },
+        ),
+      formatSignalReasonSummary: (categoryLabel, title) =>
+        translate(
+          "curatedTask.templates.recommendation.signalReasonSummary",
+          "{{categoryLabel}}：{{title}}",
+          { categoryLabel, title },
+        ),
+      formatSocialPostStarterSummary: (title) =>
+        translate(
+          "curatedTask.templates.recommendation.socialPostStarterSummary",
+          "把「{{title}}」这轮结果直接带成下一版主稿",
+          { title },
+        ),
+    },
+    templates: Object.fromEntries(
+      CURATED_TASK_TEMPLATES.map((template) => [
+        template.id,
+        buildCuratedTaskTemplateDefinitionCopy(template, translate),
+      ]),
+    ),
+  };
+}
+
+function buildCuratedTaskTemplateDefinitionCopy(
+  template: CuratedTaskTemplateDefinition,
+  translate: CuratedTaskTemplateCopyTranslator,
+): CuratedTaskTemplateDefinitionCopy {
+  const keyPrefix = `curatedTask.templates.${template.id}`;
+
+  return {
+    categoryLabel: translate(
+      `${keyPrefix}.categoryLabel`,
+      template.categoryLabel,
+    ),
+    followUpActions: template.followUpActions.map((action, index) => {
+      const target = template.followUpActionTargets?.[action];
+      return {
+        label: translate(`${keyPrefix}.followUpActions.${index}`, action),
+        ...(target?.promptHint
+          ? {
+              promptHint: translate(
+                `${keyPrefix}.followUpActions.${index}.promptHint`,
+                target.promptHint,
+              ),
+            }
+          : {}),
+      };
+    }),
+    optionalReferences: template.optionalReferences.map((item, index) =>
+      translate(`${keyPrefix}.optionalReferences.${index}`, item),
+    ),
+    outputContract: template.outputContract.map((item, index) =>
+      translate(`${keyPrefix}.outputContract.${index}`, item),
+    ),
+    outputHint: translate(`${keyPrefix}.outputHint`, template.outputHint),
+    requiredInputFields: Object.fromEntries(
+      template.requiredInputFields.map((field) => [
+        field.key,
+        {
+          ...(field.helperText
+            ? {
+                helperText: translate(
+                  `${keyPrefix}.fields.${field.key}.helperText`,
+                  field.helperText,
+                ),
+              }
+            : {}),
+          label: translate(
+            `${keyPrefix}.fields.${field.key}.label`,
+            field.label,
+          ),
+          placeholder: translate(
+            `${keyPrefix}.fields.${field.key}.placeholder`,
+            field.placeholder,
+          ),
+        },
+      ]),
+    ),
+    resultDestination: translate(
+      `${keyPrefix}.resultDestination`,
+      template.resultDestination,
+    ),
+    summary: translate(`${keyPrefix}.summary`, template.summary),
+    title: translate(`${keyPrefix}.title`, template.title),
+  };
+}
+
+function applyCuratedTaskTemplateCopy(
+  template: CuratedTaskTemplateDefinition,
+  copy: CuratedTaskTemplateCopy = {},
+): CuratedTaskTemplateDefinition {
+  const templateCopy = copy.templates?.[template.id];
+  if (!templateCopy) {
+    return template;
+  }
+
+  const followUpActionCopies = templateCopy.followUpActions ?? [];
+  const followUpActions = template.followUpActions.map(
+    (action, index) => followUpActionCopies[index]?.label?.trim() || action,
+  );
+  const followUpActionTargets = Object.fromEntries(
+    Object.entries(template.followUpActionTargets ?? {}).map(
+      ([sourceAction, target]) => {
+        const actionIndex = template.followUpActions.findIndex(
+          (action) => action === sourceAction,
+        );
+        const localizedAction =
+          actionIndex >= 0 ? followUpActions[actionIndex] : sourceAction;
+        const localizedPromptHint =
+          actionIndex >= 0
+            ? followUpActionCopies[actionIndex]?.promptHint?.trim()
+            : undefined;
+
+        return [
+          localizedAction,
+          {
+            ...target,
+            ...(localizedPromptHint ? { promptHint: localizedPromptHint } : {}),
+          },
+        ];
+      },
+    ),
+  );
+
+  return {
+    ...template,
+    ...(templateCopy.categoryLabel ? { categoryLabel: templateCopy.categoryLabel } : {}),
+    ...(templateCopy.outputHint ? { outputHint: templateCopy.outputHint } : {}),
+    ...(templateCopy.resultDestination
+      ? { resultDestination: templateCopy.resultDestination }
+      : {}),
+    ...(templateCopy.summary ? { summary: templateCopy.summary } : {}),
+    ...(templateCopy.title ? { title: templateCopy.title } : {}),
+    followUpActions,
+    followUpActionTargets,
+    optionalReferences:
+      templateCopy.optionalReferences ?? template.optionalReferences,
+    outputContract: templateCopy.outputContract ?? template.outputContract,
+    requiredInputFields: template.requiredInputFields.map((field) => ({
+      ...field,
+      ...templateCopy.requiredInputFields?.[field.key],
+    })),
+  };
+}
+
 function isValidUsageRecord(
   value: unknown,
 ): value is CuratedTaskTemplateUsageRecord {
@@ -644,9 +946,10 @@ export function resolveCuratedTaskTemplateLaunchPrefill(
 function resolveCuratedTaskTemplateBadge(
   template: CuratedTaskTemplateDefinition,
   isRecent: boolean,
+  copy: CuratedTaskTemplateCopy = {},
 ): string {
   if (isRecent) {
-    return "最近使用";
+    return copy.recentBadgeLabel ?? "最近使用";
   }
 
   return template.categoryLabel;
@@ -1036,22 +1339,28 @@ export function replaceCuratedTaskLaunchPromptInInput(params: {
   return nextPrompt;
 }
 
-export function listCuratedTaskTemplates(): CuratedTaskTemplateItem[] {
+export function listCuratedTaskTemplates(
+  copy: CuratedTaskTemplateCopy = {},
+): CuratedTaskTemplateItem[] {
   const usageMap = getCuratedTaskTemplateUsageMap();
 
   return CURATED_TASK_TEMPLATES.map((template, index) => {
+    const localizedTemplate = applyCuratedTaskTemplateCopy(template, copy);
     const recentRecord = usageMap.get(template.id);
     const recentUsedAt = recentRecord?.usedAt ?? null;
 
     return {
-      ...template,
-      requiredInputs: template.requiredInputFields.map((field) => field.label),
-      badge: resolveCuratedTaskTemplateBadge(
-        template,
-        typeof recentUsedAt === "number",
+      ...localizedTemplate,
+      requiredInputs: localizedTemplate.requiredInputFields.map(
+        (field) => field.label,
       ),
-      actionLabel: "进入生成",
-      statusLabel: "可直接开始",
+      badge: resolveCuratedTaskTemplateBadge(
+        localizedTemplate,
+        typeof recentUsedAt === "number",
+        copy,
+      ),
+      actionLabel: copy.actionLabel ?? "进入生成",
+      statusLabel: copy.statusLabel ?? "可直接开始",
       statusTone: "emerald" as const,
       recentUsedAt,
       isRecent: typeof recentUsedAt === "number",
@@ -1130,12 +1439,13 @@ function summarizeRecommendationReferenceTitle(
 function resolveReferenceContinuationMatch(params: {
   template: CuratedTaskTemplateItem;
   referenceEntry: CuratedTaskReferenceEntry;
+  copy?: CuratedTaskRecommendationCopy;
 }): {
   score: number;
   reasonLabel: string;
   reasonSummary: string;
 } | null {
-  const { template, referenceEntry } = params;
+  const { copy = {}, template, referenceEntry } = params;
   if (referenceEntry.category !== "experience") {
     return null;
   }
@@ -1152,20 +1462,26 @@ function resolveReferenceContinuationMatch(params: {
     case "account-project-review":
       return {
         score: 40,
-        reasonLabel: "围绕当前成果",
-        reasonSummary: `先对齐「${summarizedTitle}」这轮结果基线，再决定下一轮动作`,
+        reasonLabel: copy.currentResultReasonLabel ?? "围绕当前成果",
+        reasonSummary:
+          copy.formatAccountProjectReviewSummary?.(summarizedTitle) ??
+          `先对齐「${summarizedTitle}」这轮结果基线，再决定下一轮动作`,
       };
     case "daily-trend-briefing":
       return {
         score: 15,
-        reasonLabel: "承接当前结果",
-        reasonSummary: `围绕「${summarizedTitle}」这轮结果继续找趋势窗口`,
+        reasonLabel: copy.resultContinuationReasonLabel ?? "承接当前结果",
+        reasonSummary:
+          copy.formatDailyTrendBriefingSummary?.(summarizedTitle) ??
+          `围绕「${summarizedTitle}」这轮结果继续找趋势窗口`,
       };
     case "social-post-starter":
       return {
         score: 14,
-        reasonLabel: "承接当前结果",
-        reasonSummary: `把「${summarizedTitle}」这轮结果直接带成下一版主稿`,
+        reasonLabel: copy.resultContinuationReasonLabel ?? "承接当前结果",
+        reasonSummary:
+          copy.formatSocialPostStarterSummary?.(summarizedTitle) ??
+          `把「${summarizedTitle}」这轮结果直接带成下一版主稿`,
       };
     default:
       return null;
@@ -1174,47 +1490,77 @@ function resolveReferenceContinuationMatch(params: {
 
 function resolveRecommendationReasonLabel(
   signal: CuratedTaskRecommendationSignal,
+  copy: CuratedTaskRecommendationCopy = {},
 ): string {
   if (signal.source === "review_feedback") {
-    return "围绕最近判断";
+    return copy.recentReviewReasonLabel ?? "围绕最近判断";
   }
 
   const categoryLabel =
-    CURATED_TASK_RECOMMENDATION_LABELS[signal.category] || "灵感";
+    copy.categoryLabels?.[signal.category] ||
+    CURATED_TASK_RECOMMENDATION_LABELS[signal.category] ||
+    copy.fallbackLabel ||
+    "灵感";
 
   if (signal.source === "active_reference") {
-    return `围绕当前${categoryLabel}`;
+    return (
+      copy.activeReferenceReasonLabel?.replace(
+        "{{categoryLabel}}",
+        categoryLabel,
+      ) ?? `围绕当前${categoryLabel}`
+    );
   }
 
-  return `围绕最近${categoryLabel}`;
+  const recentLabelByCategory: Partial<
+    Record<keyof typeof CURATED_TASK_RECOMMENDATION_LABELS, string | undefined>
+  > = {
+    activity: copy.recentActivityReasonLabel,
+    context: copy.recentContextReasonLabel,
+    experience: copy.recentExperienceReasonLabel,
+    identity: copy.recentIdentityReasonLabel,
+    preference: copy.recentPreferenceReasonLabel,
+  };
+
+  return recentLabelByCategory[signal.category] ?? `围绕最近${categoryLabel}`;
 }
 
 function resolveRecommendationReasonSummary(
   signal: CuratedTaskRecommendationSignal,
+  copy: CuratedTaskRecommendationCopy = {},
 ): string {
   if (signal.source === "review_feedback") {
-    return signal.title.length > 20
-      ? `判断：${signal.title.slice(0, 20).trimEnd()}…`
-      : `判断：${signal.title}`;
+    const title =
+      signal.title.length > 20
+        ? `${signal.title.slice(0, 20).trimEnd()}…`
+        : signal.title;
+    return copy.formatReviewReasonSummary?.(title) ?? `判断：${title}`;
   }
 
-  const categoryLabel = getCuratedTaskReferenceCategoryLabel(signal.category);
+  const categoryLabel =
+    copy.categoryLabels?.[signal.category] ??
+    getCuratedTaskReferenceCategoryLabel(signal.category);
 
-  return signal.title.length > 18
-    ? `${categoryLabel}：${signal.title.slice(0, 18).trimEnd()}…`
-    : `${categoryLabel}：${signal.title}`;
+  const title =
+    signal.title.length > 18
+      ? `${signal.title.slice(0, 18).trimEnd()}…`
+      : signal.title;
+  return (
+    copy.formatSignalReasonSummary?.(categoryLabel, title) ??
+    `${categoryLabel}：${title}`
+  );
 }
 
 function scoreTemplateForRecommendationSignal(params: {
   template: CuratedTaskTemplateItem;
   signal: CuratedTaskRecommendationSignal;
   projectId?: string | null;
+  copy?: CuratedTaskRecommendationCopy;
 }): {
   score: number;
   reasonLabel: string;
   reasonSummary: string;
 } {
-  const { template, signal, projectId } = params;
+  const { copy, template, signal, projectId } = params;
   const categoryWeight =
     CURATED_TASK_RECOMMENDATION_CATEGORY_WEIGHTS[template.id]?.[
       signal.category
@@ -1249,14 +1595,15 @@ function scoreTemplateForRecommendationSignal(params: {
       preferredTaskBonus +
       projectMatchBonus +
       recentSignalBonus,
-    reasonLabel: resolveRecommendationReasonLabel(signal),
-    reasonSummary: resolveRecommendationReasonSummary(signal),
+    reasonLabel: resolveRecommendationReasonLabel(signal, copy),
+    reasonSummary: resolveRecommendationReasonSummary(signal, copy),
   };
 }
 
 export function listFeaturedHomeCuratedTaskTemplates(
   templates: CuratedTaskTemplateItem[] = listCuratedTaskTemplates(),
   options: {
+    copy?: CuratedTaskTemplateCopy;
     projectId?: string | null;
     referenceEntries?: CuratedTaskReferenceEntry[] | null;
     sessionId?: string | null;
@@ -1293,6 +1640,7 @@ export function listFeaturedHomeCuratedTaskTemplates(
             template,
             signal,
             projectId: options.projectId,
+            copy: options.copy?.recommendation,
           });
           if (current.score <= best.score) {
             return best;
@@ -1310,6 +1658,7 @@ export function listFeaturedHomeCuratedTaskTemplates(
           const current = resolveReferenceContinuationMatch({
             template,
             referenceEntry,
+            copy: options.copy?.recommendation,
           });
           if (!current || current.score <= best.score) {
             return best;
@@ -1357,16 +1706,19 @@ export function listFeaturedHomeCuratedTaskTemplates(
 
 export function findCuratedTaskTemplateById(
   templateId: string,
+  copy: CuratedTaskTemplateCopy = {},
 ): CuratedTaskTemplateItem | null {
   return (
-    listCuratedTaskTemplates().find((template) => template.id === templateId) ??
-    null
+    listCuratedTaskTemplates(copy).find(
+      (template) => template.id === templateId,
+    ) ?? null
   );
 }
 
 export function resolveCuratedTaskFollowUpActionTarget(params: {
   taskId?: string | null;
   action: string;
+  copy?: CuratedTaskTemplateCopy;
 }): {
   task: CuratedTaskTemplateItem;
   promptHint?: string;
@@ -1377,13 +1729,13 @@ export function resolveCuratedTaskFollowUpActionTarget(params: {
     return null;
   }
 
-  const sourceTask = findCuratedTaskTemplateById(taskId);
+  const sourceTask = findCuratedTaskTemplateById(taskId, params.copy);
   const target = sourceTask?.followUpActionTargets?.[action];
   if (!target?.taskId) {
     return null;
   }
 
-  const task = findCuratedTaskTemplateById(target.taskId);
+  const task = findCuratedTaskTemplateById(target.taskId, params.copy);
   if (!task) {
     return null;
   }

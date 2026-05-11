@@ -18,4 +18,3 @@
 
 ## 当前条目
 
-- `openclaw-windows-detection-followup.md`：OpenClaw 在 Windows 下“已安装但未检测到”的后续迭代记录

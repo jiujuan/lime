@@ -196,7 +196,6 @@ const SIDEBAR_NAV_LABEL_KEYS: Record<string, string> = {
   "home-general": "navigation.sidebar.items.homeGeneral",
   knowledge: "navigation.sidebar.items.knowledge",
   memory: "navigation.sidebar.items.memory",
-  openclaw: "navigation.sidebar.items.openclaw",
   plugins: "navigation.sidebar.items.plugins",
   settings: "navigation.sidebar.items.settings",
   skills: "navigation.sidebar.items.skills",
@@ -2316,14 +2315,6 @@ function resolveCloudBrandLabel(
     : `${appName} ${cloudSuffixLabel}`;
 }
 
-function formatReferralCredits(value: number | undefined): string {
-  if (typeof value !== "number" || value <= 0) {
-    return "按当前策略发放";
-  }
-
-  return `${value.toLocaleString("zh-CN")} 积分`;
-}
-
 export function AppSidebar({
   currentPage,
   currentPageParams,
@@ -2401,6 +2392,10 @@ export function AppSidebar({
   const accountCloudSuffixLabel = t(
     "navigation.sidebar.account.cloudSuffix",
     "云端",
+  );
+  const inviteLoadErrorLabel = t(
+    "navigation.sidebar.invite.feedback.loadFailed",
+    "加载邀请信息失败",
   );
   const activePage = requestedPage ?? currentPage;
   const activePageParams = requestedPageParams ?? currentPageParams;
@@ -2846,7 +2841,7 @@ export function AppSidebar({
         const message =
           error instanceof Error && error.message.trim()
             ? error.message.trim()
-            : "加载邀请信息失败";
+            : inviteLoadErrorLabel;
         setInviteError(message);
       })
       .finally(() => {
@@ -2864,6 +2859,7 @@ export function AppSidebar({
     inviteTenantId,
     canLoadReferralDashboard,
     cachedInviteDashboard,
+    inviteLoadErrorLabel,
   ]);
 
   useEffect(() => {
@@ -4062,9 +4058,191 @@ export function AppSidebar({
   );
 
   const currentColorScheme = getLimeColorScheme(colorSchemeId);
+  const appearanceEntryLabel = t(
+    "navigation.sidebar.appearance.entry.label",
+    "快速切换外观",
+  );
+  const appearanceTitleLabel = t(
+    "navigation.sidebar.appearance.dialog.title",
+    "外观",
+  );
+  const appearanceThemeGroupLabel = t(
+    "navigation.sidebar.appearance.theme.group",
+    "主题",
+  );
+  const appearanceColorSchemeGroupLabel = t(
+    "navigation.sidebar.appearance.colorScheme.group",
+    "配色",
+  );
+  const appearanceRandomColorSchemeLabel = t(
+    "navigation.sidebar.appearance.colorScheme.random.label",
+    "随机",
+  );
+  const appearanceRandomColorSchemeAriaLabel = t(
+    "navigation.sidebar.appearance.colorScheme.random.ariaLabel",
+    "随机切换配色",
+  );
+  const appearanceRandomColorSchemeTitle = t(
+    "navigation.sidebar.appearance.colorScheme.random.title",
+    "随机切换一个颜色主题",
+  );
+  const appearanceThemeCopy = {
+    light: {
+      label: t("navigation.sidebar.appearance.theme.light.label", "浅色"),
+      description: t(
+        "navigation.sidebar.appearance.theme.light.description",
+        "适合白天和高亮环境。",
+      ),
+    },
+    dark: {
+      label: t("navigation.sidebar.appearance.theme.dark.label", "深色"),
+      description: t(
+        "navigation.sidebar.appearance.theme.dark.description",
+        "降低夜间使用时的眩光。",
+      ),
+    },
+    system: {
+      label: t("navigation.sidebar.appearance.theme.system.label", "跟随系统"),
+      description: t(
+        "navigation.sidebar.appearance.theme.system.description",
+        "自动同步系统外观。",
+      ),
+    },
+  } satisfies Record<LimeThemeMode, { label: string; description: string }>;
+  const appearanceColorSchemeCopy = {
+    "lime-classic": {
+      label: t(
+        "navigation.sidebar.appearance.colorScheme.limeClassic.label",
+        "墨绿",
+      ),
+      description: t(
+        "navigation.sidebar.appearance.colorScheme.limeClassic.description",
+        "经典深绿，温暖米色背景。",
+      ),
+    },
+    "lime-forest": {
+      label: t(
+        "navigation.sidebar.appearance.colorScheme.limeForest.label",
+        "自然",
+      ),
+      description: t(
+        "navigation.sidebar.appearance.colorScheme.limeForest.description",
+        "舒适放松的清新自然风。",
+      ),
+    },
+    "lime-ocean": {
+      label: t(
+        "navigation.sidebar.appearance.colorScheme.limeOcean.label",
+        "海洋",
+      ),
+      description: t(
+        "navigation.sidebar.appearance.colorScheme.limeOcean.description",
+        "沉静专业的蓝色调。",
+      ),
+    },
+    "lime-sand": {
+      label: t(
+        "navigation.sidebar.appearance.colorScheme.limeSand.label",
+        "复古",
+      ),
+      description: t(
+        "navigation.sidebar.appearance.colorScheme.limeSand.description",
+        "温暖怀旧的琥珀色调。",
+      ),
+    },
+    "lime-neon": {
+      label: t(
+        "navigation.sidebar.appearance.colorScheme.limeNeon.label",
+        "霓虹",
+      ),
+      description: t(
+        "navigation.sidebar.appearance.colorScheme.limeNeon.description",
+        "赛博明亮的粉紫色调。",
+      ),
+    },
+    "lime-citron": {
+      label: t(
+        "navigation.sidebar.appearance.colorScheme.limeCitron.label",
+        "青柠",
+      ),
+      description: t(
+        "navigation.sidebar.appearance.colorScheme.limeCitron.description",
+        "活力清新的黄绿配紫。",
+      ),
+    },
+    "lime-dusk": {
+      label: t(
+        "navigation.sidebar.appearance.colorScheme.limeDusk.label",
+        "黄昏",
+      ),
+      description: t(
+        "navigation.sidebar.appearance.colorScheme.limeDusk.description",
+        "柔和温暖的暮色调。",
+      ),
+    },
+    "lime-minimal": {
+      label: t(
+        "navigation.sidebar.appearance.colorScheme.limeMinimal.label",
+        "极简",
+      ),
+      description: t(
+        "navigation.sidebar.appearance.colorScheme.limeMinimal.description",
+        "清晰专业的深蓝商务风。",
+      ),
+    },
+    "lime-vivid": {
+      label: t(
+        "navigation.sidebar.appearance.colorScheme.limeVivid.label",
+        "活力",
+      ),
+      description: t(
+        "navigation.sidebar.appearance.colorScheme.limeVivid.description",
+        "时尚有冲击力的现代科技风。",
+      ),
+    },
+    "lime-literary": {
+      label: t(
+        "navigation.sidebar.appearance.colorScheme.limeLiterary.label",
+        "文艺",
+      ),
+      description: t(
+        "navigation.sidebar.appearance.colorScheme.limeLiterary.description",
+        "宁静高雅的灰蓝文艺风。",
+      ),
+    },
+    "lime-luxury": {
+      label: t(
+        "navigation.sidebar.appearance.colorScheme.limeLuxury.label",
+        "奢华",
+      ),
+      description: t(
+        "navigation.sidebar.appearance.colorScheme.limeLuxury.description",
+        "尊贵权威的黑金商务风。",
+      ),
+    },
+  } satisfies Record<LimeColorSchemeId, { label: string; description: string }>;
+  const appearanceThemeOptions = LIME_THEME_MODE_OPTIONS.map((option) => ({
+    ...option,
+    ...appearanceThemeCopy[option.id],
+  }));
+  const appearanceColorSchemes = LIME_COLOR_SCHEMES.map((scheme) => ({
+    ...scheme,
+    ...appearanceColorSchemeCopy[scheme.id],
+  }));
   const currentThemeLabel =
-    LIME_THEME_MODE_OPTIONS.find((option) => option.id === themeState.themeMode)
-      ?.label ?? "跟随系统";
+    appearanceThemeCopy[themeState.themeMode]?.label ??
+    appearanceThemeCopy.system.label;
+  const currentColorSchemeLabel =
+    appearanceColorSchemeCopy[currentColorScheme.id]?.label ??
+    currentColorScheme.label;
+  const appearanceSummaryLabel = t(
+    "navigation.sidebar.appearance.dialog.summary",
+    {
+      theme: currentThemeLabel,
+      colorScheme: currentColorSchemeLabel,
+      defaultValue: "{{theme}} · {{colorScheme}}",
+    },
+  );
   const currentLanguageLabel = resolveLocaleOptionLabel(language);
   const accountDisplayName = resolveAccountDisplayName(
     cloudSessionState,
@@ -4263,10 +4441,123 @@ export function AppSidebar({
     : accountLocalTooltipLabel;
   const inviteShare = inviteDashboard?.share;
   const invitePolicy = inviteDashboard?.policy;
-  const inviteHeadline = inviteShare?.headline?.trim() || "邀请好友加入内测";
+  const inviteEntryLabel = t(
+    "navigation.sidebar.invite.entry.label",
+    "邀请好友",
+  );
+  const inviteCloseDialogLabel = t(
+    "navigation.sidebar.invite.dialog.close",
+    "关闭邀请弹窗",
+  );
+  const inviteBrandName = inviteShare?.brandName ?? accountTenantLabel ?? "Lime";
+  const inviteEyebrowLabel = t("navigation.sidebar.invite.dialog.eyebrow", {
+    brand: inviteBrandName,
+    defaultValue: "{{brand}} 邀请",
+  });
+  const inviteDialogTitleLabel = t(
+    "navigation.sidebar.invite.dialog.title",
+    "邀请好友",
+  );
+  const inviteHeadline =
+    inviteShare?.headline?.trim() ||
+    t("navigation.sidebar.invite.dialog.headlineFallback", "邀请好友加入内测");
   const inviteRules =
     inviteShare?.rules?.trim() ||
-    "通过云端邀请策略自动发放奖励，具体到账以当前品牌云端配置为准。";
+    t(
+      "navigation.sidebar.invite.dialog.rulesFallback",
+      "通过云端邀请策略自动发放奖励，具体到账以当前品牌云端配置为准。",
+    );
+  const inviteDescriptionLabel =
+    !inviteLoading && !inviteError
+      ? t("navigation.sidebar.invite.dialog.descriptionWithRules", {
+          headline: inviteHeadline,
+          rules: inviteRules,
+          defaultValue: "{{headline}}。{{rules}}",
+        })
+      : inviteHeadline;
+  const inviteDisconnectedLabel = t(
+    "navigation.sidebar.invite.status.disconnected",
+    {
+      brand: cloudBrandLabel,
+      defaultValue:
+        "连接 {{brand}} 后会生成专属邀请码，并自动读取当前品牌云端的域名和奖励策略。",
+    },
+  );
+  const inviteConnectAccountLabel = t(
+    "navigation.sidebar.invite.actions.connectCloudAccount",
+    "连接云端账号",
+  );
+  const inviteLoadingLabel = t(
+    "navigation.sidebar.invite.status.loading",
+    "正在从云端同步邀请信息...",
+  );
+  const inviteRetryLabel = t(
+    "navigation.sidebar.invite.actions.retry",
+    "重试",
+  );
+  const inviteCodeLabel = t("navigation.sidebar.invite.fields.code", "邀请码");
+  const inviteCopyLabel = t("navigation.sidebar.invite.actions.copy", "复制");
+  const inviteDownloadUrlLabel = t(
+    "navigation.sidebar.invite.fields.downloadUrl",
+    "下载地址",
+  );
+  const inviteLandingUrlLabel = t(
+    "navigation.sidebar.invite.fields.landingUrl",
+    "邀请链接",
+  );
+  const inviteReferrerRewardLabel = t(
+    "navigation.sidebar.invite.fields.referrerReward",
+    "邀请人奖励",
+  );
+  const inviteInviteeRewardLabel = t(
+    "navigation.sidebar.invite.fields.inviteeReward",
+    "被邀请人奖励",
+  );
+  const inviteCopyShareTextLabel = t(
+    "navigation.sidebar.invite.actions.copyShareText",
+    "复制邀请文案",
+  );
+  const inviteCopyLandingUrlLabel = t(
+    "navigation.sidebar.invite.actions.copyLandingUrl",
+    "复制邀请链接",
+  );
+  const inviteCopyCodeSuccessLabel = t(
+    "navigation.sidebar.invite.feedback.codeCopied",
+    "已复制邀请码",
+  );
+  const inviteCopyShareTextSuccessLabel = t(
+    "navigation.sidebar.invite.feedback.shareTextCopied",
+    "已复制邀请文案",
+  );
+  const inviteCopyLandingUrlSuccessLabel = t(
+    "navigation.sidebar.invite.feedback.landingUrlCopied",
+    "已复制邀请链接",
+  );
+  const inviteCopyEmptyLabel = t(
+    "navigation.sidebar.invite.feedback.emptyCopy",
+    "暂无可复制内容",
+  );
+  const inviteCopyFailedLabel = t(
+    "navigation.sidebar.invite.feedback.copyFailed",
+    "复制失败，请检查剪贴板权限",
+  );
+  const inviteRewardCurrentPolicyLabel = t(
+    "navigation.sidebar.invite.reward.currentPolicy",
+    "按当前策略发放",
+  );
+  const formatInviteReferralCredits = useCallback(
+    (value: number | undefined): string => {
+      if (typeof value !== "number" || value <= 0) {
+        return inviteRewardCurrentPolicyLabel;
+      }
+
+      return t("navigation.sidebar.invite.reward.credits", {
+        amount: value.toLocaleString(i18n.language),
+        defaultValue: "{{amount}} 积分",
+      });
+    },
+    [i18n.language, inviteRewardCurrentPolicyLabel, t],
+  );
 
   const handleThemeModeChange = useCallback((nextThemeMode: LimeThemeMode) => {
     const themeMode = persistLimeThemeMode(nextThemeMode);
@@ -4378,7 +4669,7 @@ export function AppSidebar({
     async (value: string | undefined, successMessage: string) => {
       const text = value?.trim();
       if (!text) {
-        toast.info("暂无可复制内容");
+        toast.info(inviteCopyEmptyLabel);
         return;
       }
 
@@ -4389,10 +4680,10 @@ export function AppSidebar({
         await navigator.clipboard.writeText(text);
         toast.success(successMessage);
       } catch {
-        toast.error("复制失败，请检查剪贴板权限");
+        toast.error(inviteCopyFailedLabel);
       }
     },
-    [],
+    [inviteCopyEmptyLabel, inviteCopyFailedLabel],
   );
 
   const handleLanguageChange = useCallback(
@@ -4480,14 +4771,14 @@ export function AppSidebar({
                       setInviteDashboard(cachedInviteDashboard);
                       setInviteDialogOpen(true);
                     }}
-                    title="邀请好友"
-                    aria-label="邀请好友"
+                    title={inviteEntryLabel}
+                    aria-label={inviteEntryLabel}
                     data-testid="app-sidebar-invite-button"
                   >
                     <Gift />
-                    <span>邀请好友</span>
+                    <span>{inviteEntryLabel}</span>
                   </HeaderInviteButton>,
-                  "邀请好友",
+                  inviteEntryLabel,
                 )
               : null}
 
@@ -4590,8 +4881,8 @@ export function AppSidebar({
                         setLanguageMenuOpen(false);
                         setAppearancePopoverOpen((current) => !current);
                       }}
-                      title="快速切换外观"
-                      aria-label="快速切换外观"
+                      title={appearanceEntryLabel}
+                      aria-label={appearanceEntryLabel}
                       aria-expanded={appearancePopoverOpen}
                       aria-haspopup="dialog"
                     >
@@ -4602,7 +4893,9 @@ export function AppSidebar({
                       )}
                     </IconActionButton>
                   </TooltipTrigger>
-                  <TooltipContent side="right">快速切换外观</TooltipContent>
+                  <TooltipContent side="right">
+                    {appearanceEntryLabel}
+                  </TooltipContent>
                 </Tooltip>
               ) : (
                 <IconActionButton
@@ -4612,8 +4905,8 @@ export function AppSidebar({
                     setLanguageMenuOpen(false);
                     setAppearancePopoverOpen((current) => !current);
                   }}
-                  title="快速切换外观"
-                  aria-label="快速切换外观"
+                  title={appearanceEntryLabel}
+                  aria-label={appearanceEntryLabel}
                   aria-expanded={appearancePopoverOpen}
                   aria-haspopup="dialog"
                 >
@@ -4629,22 +4922,24 @@ export function AppSidebar({
                 <AppearancePopover
                   data-testid="app-sidebar-appearance-popover"
                   role="dialog"
-                  aria-label="快速切换外观"
+                  aria-label={appearanceEntryLabel}
                 >
                   <AppearancePopoverHeader>
                     <AppearancePopoverTitle>
                       <Palette />
-                      外观
+                      {appearanceTitleLabel}
                     </AppearancePopoverTitle>
                     <AppearancePopoverSummary>
-                      {currentThemeLabel} · {currentColorScheme.label}
+                      {appearanceSummaryLabel}
                     </AppearancePopoverSummary>
                   </AppearancePopoverHeader>
 
                   <AppearanceGroup>
-                    <AppearanceGroupLabel>主题</AppearanceGroupLabel>
+                    <AppearanceGroupLabel>
+                      {appearanceThemeGroupLabel}
+                    </AppearanceGroupLabel>
                     <ThemeModeGrid>
-                      {LIME_THEME_MODE_OPTIONS.map((option) => {
+                      {appearanceThemeOptions.map((option) => {
                         const active = option.id === themeState.themeMode;
                         return (
                           <ThemeModeButton
@@ -4652,7 +4947,13 @@ export function AppSidebar({
                             $active={active}
                             type="button"
                             aria-pressed={active}
-                            aria-label={`切换主题为${option.label}`}
+                            aria-label={t(
+                              "navigation.sidebar.appearance.theme.switchAria",
+                              {
+                                theme: option.label,
+                                defaultValue: "切换主题为{{theme}}",
+                              },
+                            )}
                             title={option.description}
                             onClick={() => handleThemeModeChange(option.id)}
                           >
@@ -4665,18 +4966,20 @@ export function AppSidebar({
                   </AppearanceGroup>
 
                   <AppearanceGroup>
-                    <AppearanceGroupLabel>配色</AppearanceGroupLabel>
+                    <AppearanceGroupLabel>
+                      {appearanceColorSchemeGroupLabel}
+                    </AppearanceGroupLabel>
                     <ColorSchemeList>
                       <RandomColorSchemeButton
                         type="button"
-                        aria-label="随机切换配色"
-                        title="随机切换一个颜色主题"
+                        aria-label={appearanceRandomColorSchemeAriaLabel}
+                        title={appearanceRandomColorSchemeTitle}
                         onClick={handleRandomColorScheme}
                       >
                         <Shuffle />
-                        <span>随机</span>
+                        <span>{appearanceRandomColorSchemeLabel}</span>
                       </RandomColorSchemeButton>
-                      {LIME_COLOR_SCHEMES.map((scheme) => {
+                      {appearanceColorSchemes.map((scheme) => {
                         const active = scheme.id === colorSchemeId;
                         return (
                           <ColorSchemeButton
@@ -4684,7 +4987,13 @@ export function AppSidebar({
                             $active={active}
                             type="button"
                             aria-pressed={active}
-                            aria-label={`切换配色为${scheme.label}`}
+                            aria-label={t(
+                              "navigation.sidebar.appearance.colorScheme.switchAria",
+                              {
+                                colorScheme: scheme.label,
+                                defaultValue: "切换配色为{{colorScheme}}",
+                              },
+                            )}
                             title={scheme.description}
                             onClick={() => handleColorSchemeChange(scheme.id)}
                           >
@@ -5168,26 +5477,23 @@ export function AppSidebar({
         <InviteDialogSurface data-testid="app-sidebar-invite-dialog">
           <InviteDialogCloseButton
             type="button"
-            aria-label="关闭邀请弹窗"
+            aria-label={inviteCloseDialogLabel}
             onClick={() => setInviteDialogOpen(false)}
           >
             <X />
           </InviteDialogCloseButton>
           <InviteDialogHeader>
-            <InviteDialogEyebrow>
-              {inviteShare?.brandName ?? accountTenantLabel ?? "Lime"} 邀请
-            </InviteDialogEyebrow>
-            <InviteDialogTitle>邀请好友</InviteDialogTitle>
+            <InviteDialogEyebrow>{inviteEyebrowLabel}</InviteDialogEyebrow>
+            <InviteDialogTitle>{inviteDialogTitleLabel}</InviteDialogTitle>
             <InviteDialogDescription>
-              {inviteHeadline}
-              {!inviteLoading && !inviteError ? `。${inviteRules}` : ""}
+              {inviteDescriptionLabel}
             </InviteDialogDescription>
           </InviteDialogHeader>
 
           <InviteDialogBody>
             {!hasCloudAccount ? (
               <InviteStatusCard>
-                {`连接 ${cloudBrandLabel} 后会生成专属邀请码，并自动读取当前品牌云端的域名和奖励策略。`}
+                {inviteDisconnectedLabel}
                 <InviteActionBar style={{ marginTop: 10 }}>
                   <InviteDialogActionButton
                     type="button"
@@ -5198,14 +5504,14 @@ export function AppSidebar({
                     }}
                   >
                     <Cloud />
-                    连接云端账号
+                    {inviteConnectAccountLabel}
                   </InviteDialogActionButton>
                 </InviteActionBar>
               </InviteStatusCard>
             ) : null}
 
             {hasCloudAccount && inviteLoading ? (
-              <InviteStatusCard>正在从云端同步邀请信息...</InviteStatusCard>
+              <InviteStatusCard>{inviteLoadingLabel}</InviteStatusCard>
             ) : null}
 
             {hasCloudAccount && inviteError ? (
@@ -5217,7 +5523,7 @@ export function AppSidebar({
                     onClick={() => setInviteReloadKey((value) => value + 1)}
                   >
                     <RefreshCw />
-                    重试
+                    {inviteRetryLabel}
                   </InviteDialogActionButton>
                 </InviteActionBar>
               </InviteStatusCard>
@@ -5230,7 +5536,7 @@ export function AppSidebar({
               <InviteShareCard>
                 <InviteCodeBlock>
                   <InviteCodeMeta>
-                    <InviteCodeLabel>邀请码</InviteCodeLabel>
+                    <InviteCodeLabel>{inviteCodeLabel}</InviteCodeLabel>
                     <InviteCodeValue>{inviteShare?.code}</InviteCodeValue>
                   </InviteCodeMeta>
                   <InviteDialogActionButton
@@ -5238,36 +5544,36 @@ export function AppSidebar({
                     onClick={() =>
                       void handleCopyInviteText(
                         inviteShare?.code,
-                        "已复制邀请码",
+                        inviteCopyCodeSuccessLabel,
                       )
                     }
                   >
                     <Copy />
-                    复制
+                    {inviteCopyLabel}
                   </InviteDialogActionButton>
                 </InviteCodeBlock>
 
                 <InviteMetaGrid>
                   <InviteMetaItem>
-                    <span>下载地址</span>
+                    <span>{inviteDownloadUrlLabel}</span>
                     <strong>{inviteShare?.downloadUrl}</strong>
                   </InviteMetaItem>
                   <InviteMetaItem>
-                    <span>邀请链接</span>
+                    <span>{inviteLandingUrlLabel}</span>
                     <strong>{inviteShare?.landingUrl}</strong>
                   </InviteMetaItem>
                   <InviteMetaItem>
-                    <span>邀请人奖励</span>
+                    <span>{inviteReferrerRewardLabel}</span>
                     <strong>
-                      {formatReferralCredits(
+                      {formatInviteReferralCredits(
                         invitePolicy?.referrerRewardCredits,
                       )}
                     </strong>
                   </InviteMetaItem>
                   <InviteMetaItem>
-                    <span>被邀请人奖励</span>
+                    <span>{inviteInviteeRewardLabel}</span>
                     <strong>
-                      {formatReferralCredits(
+                      {formatInviteReferralCredits(
                         invitePolicy?.inviteeRewardCredits,
                       )}
                     </strong>
@@ -5281,24 +5587,24 @@ export function AppSidebar({
                     onClick={() =>
                       void handleCopyInviteText(
                         inviteShare?.shareText,
-                        "已复制邀请文案",
+                        inviteCopyShareTextSuccessLabel,
                       )
                     }
                   >
                     <Copy />
-                    复制邀请文案
+                    {inviteCopyShareTextLabel}
                   </InviteDialogActionButton>
                   <InviteDialogActionButton
                     type="button"
                     onClick={() =>
                       void handleCopyInviteText(
                         inviteShare?.landingUrl,
-                        "已复制邀请链接",
+                        inviteCopyLandingUrlSuccessLabel,
                       )
                     }
                   >
                     <ExternalLink />
-                    复制邀请链接
+                    {inviteCopyLandingUrlLabel}
                   </InviteDialogActionButton>
                 </InviteActionBar>
               </InviteShareCard>

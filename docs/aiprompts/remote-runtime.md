@@ -5,11 +5,11 @@
 本文件定义 Lime 当前 `Remote / SDK / Server Mode` 的唯一 remote runtime 事实源，主要回答：
 
 - 哪些远程入口才算当前产品主链
-- `消息渠道`、`浏览器连接器 / ChromeBridge`、`OpenClaw`、`DevBridge`、`telegram_remote` 分别属于哪一层
+- `消息渠道`、`浏览器连接器 / ChromeBridge`、`DevBridge`、`telegram_remote` 分别属于哪一层
 - 哪些路径负责真实 ingress / control plane，哪些只是安装壳、调试桥或兼容入口
 - 后续新增 remote 能力应该往哪里收敛，而不是继续长平级旁路
 
-它是 **远程入口与控制面的 current 文档**，不是 OpenClaw 页面说明，也不是单条渠道命令的局部注释。
+它是 **远程入口与控制面的 current 文档**，不是单条渠道命令的局部注释。
 
 ## 什么时候先读
 
@@ -18,7 +18,6 @@
 - 调整 `gateway_channel_*`、`gateway_tunnel_*`、渠道 probe 或多账号渠道运行时
 - 调整浏览器连接器、ChromeBridge、远程调试入口或 browser backend policy
 - 调整 `DevBridge` HTTP 桥、浏览器 dev shell 的后端接通逻辑
-- 调整 `OpenClaw` Gateway、Dashboard、安装与运行态管理
 - 调整单通道 Telegram 远程触发入口，或评估是否应该继续保留它
 
 如果一个需求同时碰到“远程触发 + 浏览器接入”“渠道入口 + 本地 Gateway”“调试桥 + 产品运行时”中的两项以上，默认属于本主链。
@@ -33,9 +32,8 @@
 
 1. `消息渠道 runtime` 是当前 IM 远程入口主链
 2. `浏览器连接器 / ChromeBridge` 是当前浏览器侧远程 transport 主链
-3. `OpenClaw` 只作为本地 Gateway / 安装 / Dashboard 兼容壳，不再定义新的 remote 真相
-4. `DevBridge` 只作为 debug-only 开发桥，不再冒充产品 remote runtime
-5. `telegram_remote_cmd` 是旧单通道入口，不再继续扩成长期主链
+3. `DevBridge` 只作为 debug-only 开发桥，不再冒充产品 remote runtime
+4. `telegram_remote_cmd` 是旧单通道入口，不再继续扩成长期主链
 
 固定规则只有一句：
 
@@ -83,30 +81,15 @@
 - `browser_connector_cmd.rs` 只负责设置与安装入口
 - 真正的 session / backend / remote debugging 状态继续由 `webview_cmd.rs`、`browser_runtime_cmd.rs` 暴露
 
-### 3. `OpenClaw` 本地 Gateway 壳
+### 3. 已删除的本地 Gateway 兼容壳
 
-- `src/lib/api/openclaw.ts`
-- `src-tauri/src/commands/openclaw_cmd.rs`
-- `src-tauri/src/services/openclaw_service/*`
-- `src/components/openclaw/*`
-
-当前这里负责：
-
-1. 本地安装、升级、环境检查
-2. 本地 Gateway 进程拉起、停止、重启
-3. Dashboard URL、健康检查、运行环境选择
-4. 兼容页面与过渡操作壳
+OpenClaw 安装、Gateway、Dashboard 与运行态管理模块已经判定为 `dead` 并从前端入口、Tauri 命令、DevBridge dispatcher、mock 与 core helper 中移除。
 
 固定规则：
 
-- `OpenClaw` 当前不是 remote runtime 的唯一事实源
-- 它管理的是“本地 Gateway 壳与安装体验”，不是远程 session/control plane 真相
-- 后续如果保留，只允许继续做 compat 支撑，不再扩成第二套产品 remote coordinator
-
-这一步里“`OpenClaw` 属于 compat”是基于现有仓库实现和产品规划推断：
-
-- 代码上它主要暴露安装、环境、Gateway、Dashboard 与 runtime candidate 管理
-- 产品规划里它已被明确定位为“过渡安装入口”，不是长期一级产品导航
+- 不再恢复 `src/components/openclaw/*`、`src/lib/api/openclaw.ts`、`src-tauri/src/commands/openclaw_cmd.rs` 或 `src-tauri/src/services/openclaw_service/*`
+- 不再把本地 Gateway / Dashboard 壳当成 remote runtime 或一级系统入口
+- 如需新增远程入口，只能回到 `消息渠道 runtime` 或 `浏览器连接器 / ChromeBridge` current 主链
 
 ### 4. `DevBridge`
 
@@ -167,30 +150,30 @@
 - `src-tauri/src/dev_bridge.rs`
 - `src-tauri/src/dev_bridge/*`
 - `src/lib/dev-bridge/*`
-- `src/lib/api/openclaw.ts`
-- `src-tauri/src/commands/openclaw_cmd.rs`
-- `src-tauri/src/services/openclaw_service/*`
-- `src/components/openclaw/*`
 
 保留原因：
 
 - `DevBridge` 仍是浏览器开发模式的必要桥接层
-- `OpenClaw` 仍承接本地 Gateway、安装、升级与 Dashboard 过渡体验
 
 退出条件：
 
 - `DevBridge` 继续只做开发态桥接，不再承担产品 remote 叙事
-- `OpenClaw` 若继续保留，也只能作为本地壳与兼容入口，不再扩成第二套 remote control plane
 
 ### `deprecated`
 
 - `src-tauri/src/commands/telegram_remote_cmd.rs`
 - 任何继续把单渠道 bot runtime 直接定义为 remote 总入口的新实现
-- 任何继续把 `OpenClaw` 页面或 `DevBridge` HTTP 桥当成产品 remote runtime 真相的新实现
+- 任何继续把 `DevBridge` HTTP 桥当成产品 remote runtime 真相的新实现
 
 ### `dead`
 
-- 当前 `M3` 不新增远程面的强制删除项；本轮先完成 current 事实源收口，不做额外硬删
+- `src/components/openclaw/*`
+- `src/lib/api/openclaw.ts`
+- `src/lib/api/openclawDashboardWindow.ts`
+- `src-tauri/src/commands/openclaw_cmd.rs`
+- `src-tauri/src/services/openclaw_service/*`
+- `src-tauri/src/dev_bridge/dispatcher/openclaw.rs`
+- `src-tauri/crates/core/src/openclaw_install.rs`
 
 ## 最低验证要求
 
@@ -200,7 +183,7 @@
 - 改渠道命令 / tunnel / webhook：`npm run test:contracts` 与相关渠道定向测试
 - 改浏览器连接器 / ChromeBridge：浏览器相关定向测试或 `verify:gui-smoke`
 - 改 `DevBridge`：至少补桥接定向测试
-- 改 `OpenClaw`：至少补相关页面或命令定向测试
+- 触碰已删除 OpenClaw surface：至少运行 `npm run governance:legacy-report` 与 `npm run test:contracts`，确认没有命令或入口回流
 
 ## 这一步如何服务主线
 
@@ -211,7 +194,7 @@
 - 解释 IM 远程入口时，回到 `gateway_channel_*`
 - 解释远程浏览器 transport 时，回到 `browser connector / ChromeBridge`
 - 解释开发态浏览器接通时，回到 `DevBridge` compat
-- 解释本地 Gateway / Dashboard 壳时，回到 `OpenClaw` compat
+- 解释已删除本地 Gateway / Dashboard 壳时，回到 OpenClaw `dead` 分类与治理目录册
 - 解释旧 Telegram 单通道触发时，视为 `deprecated`
 
 这样后续 `M4 Memory / Compaction` 和 `M5 State / History / Telemetry` 就不必继续被 remote 入口语言打断。

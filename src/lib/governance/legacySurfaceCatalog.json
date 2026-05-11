@@ -159,7 +159,7 @@
     {
       "id": "agent-chat-wechat-runtime-model-sync-hook",
       "classification": "dead-candidate",
-      "description": "已删除的 Agent Chat 侧微信运行时模型同步 Hook；模型绑定状态当前由 OpenClaw 运行时与命令网关统一提供",
+      "description": "已删除的 Agent Chat 侧微信运行时模型同步 Hook；模型绑定状态当前由 Provider / 渠道命令网关统一提供",
       "targets": [
         "src/components/agent/chat/hooks/useWechatRuntimeModelSync.ts"
       ],
@@ -1245,6 +1245,22 @@
       "description": "已删除的旧 OpenClaw Dashboard 内嵌 frame 壳，当前主链已收口到独立 Dashboard 页面与外部打开模式",
       "targets": [
         "src/components/openclaw/OpenClawDashboardFrame.tsx"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "openclaw-module-surface",
+      "classification": "dead",
+      "description": "已删除的 OpenClaw 兼容运行模块；当前桌面主链不再暴露 OpenClaw 安装、Gateway、Dashboard 或运行态管理入口",
+      "targets": [
+        "src/components/openclaw/index.ts",
+        "src/components/openclaw/OpenClawPage.tsx",
+        "src/lib/api/openclaw.ts",
+        "src/lib/api/openclawDashboardWindow.ts",
+        "src-tauri/src/commands/openclaw_cmd.rs",
+        "src-tauri/src/services/openclaw_service/mod.rs",
+        "src-tauri/src/dev_bridge/dispatcher/openclaw.rs",
+        "src-tauri/crates/core/src/openclaw_install.rs"
       ],
       "allowedPaths": []
     },
@@ -2338,6 +2354,39 @@
         "update_notification_channel",
         "delete_notification_channel",
         "test_notification_channel"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "openclaw-command-surface",
+      "classification": "dead",
+      "description": "已删除的 OpenClaw 兼容运行命令族；不得重新接回前端网关、Rust 注册、DevBridge 或 mock",
+      "commands": [
+        "openclaw_check_installed",
+        "openclaw_get_environment_status",
+        "openclaw_check_node_version",
+        "openclaw_check_git_available",
+        "openclaw_get_node_download_url",
+        "openclaw_get_git_download_url",
+        "openclaw_get_command_preview",
+        "openclaw_get_progress_logs",
+        "openclaw_list_runtime_candidates",
+        "openclaw_install",
+        "openclaw_install_dependency",
+        "openclaw_check_update",
+        "openclaw_uninstall",
+        "openclaw_perform_update",
+        "openclaw_set_preferred_runtime",
+        "openclaw_cleanup_temp_artifacts",
+        "openclaw_start_gateway",
+        "openclaw_stop_gateway",
+        "openclaw_restart_gateway",
+        "openclaw_get_status",
+        "openclaw_check_health",
+        "openclaw_get_dashboard_url",
+        "openclaw_get_channels",
+        "openclaw_sync_provider_config",
+        "openclaw_install_event"
       ],
       "allowedPaths": []
     }
@@ -3446,7 +3495,7 @@
     {
       "id": "agent-chat-wechat-runtime-model-sync-hook-usage",
       "classification": "dead-candidate",
-      "description": "Agent Chat 主链不允许恢复零引用的 useWechatRuntimeModelSync Hook；微信模型绑定应继续由 OpenClaw 运行时和命令网关持有",
+      "description": "Agent Chat 主链不允许恢复零引用的 useWechatRuntimeModelSync Hook；微信模型绑定应继续由 Provider / 渠道命令网关持有",
       "patterns": [
         "useWechatRuntimeModelSync"
       ],

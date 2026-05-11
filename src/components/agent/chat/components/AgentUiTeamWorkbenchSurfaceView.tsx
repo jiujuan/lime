@@ -73,13 +73,12 @@ export function AgentUiTeamWorkbenchSurfaceView({
             工作台操作视图
           </div>
           <div className="mt-1 text-[10px] leading-4 text-slate-500">
-            按 Agent UI v0.6 surface
-            展示可操作目标，避免在组件内重新推断队友状态。
+            按 Agent UI v0.6 工作区展示可操作目标，避免在组件内重新推断队友状态。
           </div>
         </div>
         <div className="flex flex-wrap gap-1.5">
           <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-500">
-            {model.total} items
+            {model.total} 项
           </span>
           {model.attentionCount > 0 ? (
             <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">

@@ -411,6 +411,60 @@ describe("AgentThreadReliabilityPanel", () => {
     );
   });
 
+  it("后端 pending 为 0 且存在 runtime_error 时应显示故障而不是本地旧待补", () => {
+    const container = renderPanel({
+      threadRead: {
+        thread_id: "thread-1",
+        status: "running",
+        active_turn_id: "turn-2",
+        pending_requests: [],
+        incidents: [
+          {
+            id: "incident-runtime-error",
+            thread_id: "thread-1",
+            turn_id: "turn-1",
+            incident_type: "runtime_error",
+            severity: "high",
+            status: "active",
+            title: "时间线记录到异常项",
+            details:
+              "Agent provider execution failed: Request failed with status 402 Payment Required",
+          },
+        ],
+      },
+      turns: [
+        {
+          id: "turn-2",
+          thread_id: "thread-1",
+          prompt_text: "继续",
+          status: "running",
+          started_at: "2026-05-11T00:26:18Z",
+          created_at: "2026-05-11T00:26:18Z",
+          updated_at: "2026-05-11T00:26:24Z",
+        },
+      ],
+      currentTurnId: "turn-2",
+      pendingActions: [
+        {
+          requestId: "ask-turn-1",
+          actionType: "ask_user",
+          prompt: "请提供继续执行所需信息",
+          status: "pending",
+          scope: {
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-1",
+          },
+        },
+      ],
+    });
+
+    expect(container.textContent).toContain("时间线记录到异常项");
+    expect(container.textContent).toContain("402 Payment Required");
+    expect(container.textContent).not.toContain("当前线程正在等待人工处理");
+    expect(container.textContent).not.toContain("优先响应当前待处理请求");
+  });
+
   it("缺少 thread_read 时，应从当前 turn 与 pendingActions 推导并支持中断", async () => {
     const onInterruptCurrentTurn = vi.fn().mockResolvedValue(undefined);
     const container = renderPanel({

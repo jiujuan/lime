@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type {
   SceneAppContextReferenceItemViewModel,
   SceneAppDeliveryPartViewModel,
@@ -17,7 +18,9 @@ import {
 } from "@/lib/sceneapp";
 import type { SceneAppExecutionContentPostEntry } from "./sceneAppExecutionContentPosts";
 import {
+  buildReviewFeedbackProjectionCopy,
   buildReviewFeedbackProjection,
+  formatReviewFeedbackTemplate,
   type ReviewFeedbackProjection,
 } from "../utils/reviewFeedbackProjection";
 import type { CuratedTaskRecommendationSignal } from "../utils/curatedTaskRecommendationSignals";
@@ -67,6 +70,7 @@ function ReviewFeedbackProjectionBanner({
   projection: ReviewFeedbackProjection;
   onContinueReviewFeedback?: (taskId: string) => void;
 }) {
+  const { t } = useTranslation("agent");
   const primarySuggestedTask = projection.suggestedTasks[0] ?? null;
 
   return (
@@ -76,7 +80,7 @@ function ReviewFeedbackProjectionBanner({
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-          围绕最近判断
+          {t("reviewFeedback.badge", "围绕最近判断")}
         </span>
         {projection.suggestedTaskTitles.length > 0 ? (
           <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600">
@@ -85,7 +89,13 @@ function ReviewFeedbackProjectionBanner({
         ) : null}
       </div>
       <div className="mt-2 text-sm font-medium leading-6 text-slate-900">
-        最近判断已更新：{projection.signal.title}
+        {formatReviewFeedbackTemplate(
+          t("reviewFeedback.title", {
+            defaultValue: "最近判断已更新：{{title}}",
+            title: projection.signal.title,
+          }),
+          { title: projection.signal.title },
+        )}
       </div>
       <div className="mt-1 text-sm leading-6 text-slate-600">
         {projection.signal.summary}
@@ -105,10 +115,19 @@ function ReviewFeedbackProjectionBanner({
               onContinueReviewFeedback(primarySuggestedTask.taskId)
             }
           >
-            继续去「{primarySuggestedTask.title}」
+            {formatReviewFeedbackTemplate(
+              t("reviewFeedback.action", {
+                defaultValue: "继续去「{{title}}」",
+                title: primarySuggestedTask.title,
+              }),
+              { title: primarySuggestedTask.title },
+            )}
           </Button>
           <span className="text-xs leading-5 text-slate-500">
-            会继续带着当前结果基线，不用重新整理一遍。
+            {t(
+              "reviewFeedback.helper.sceneApp",
+              "会继续带着当前结果基线，不用重新整理一遍。",
+            )}
           </span>
         </div>
       ) : null}
@@ -247,11 +266,14 @@ export function SceneAppExecutionSummaryCard({
   promptActionPending = false,
   onPromptAction,
 }: SceneAppExecutionSummaryCardProps) {
+  const { t } = useTranslation("agent");
+
   if (!summary) {
     return null;
   }
 
   const reviewFeedbackProjection = buildReviewFeedbackProjection({
+    copy: buildReviewFeedbackProjectionCopy(t),
     signal: latestReviewFeedbackSignal,
   });
 

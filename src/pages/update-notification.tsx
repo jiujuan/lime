@@ -21,6 +21,7 @@ import {
   skipUpdateVersion,
 } from "@/lib/api/appUpdate";
 import { Bell, Download, ExternalLink, SkipForward, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import "./update-notification.css";
 
 interface UpdateParams {
@@ -39,6 +40,7 @@ function getUpdateParamsFromUrl(): UpdateParams {
 }
 
 export function UpdateNotificationPage() {
+  const { t } = useTranslation("common");
   const [params, setParams] = useState<UpdateParams>({
     currentVersion: "",
     latestVersion: "",
@@ -47,6 +49,18 @@ export function UpdateNotificationPage() {
   const [downloading, setDownloading] = useState(false);
   const [visible, setVisible] = useState(false);
   const [closing, setClosing] = useState(false);
+  const closeLabel = t(
+    "common.updateNotification.action.close",
+    "关闭提醒",
+  );
+  const skipLabel = t(
+    "common.updateNotification.action.skipVersion",
+    "跳过此版本",
+  );
+  const openReleaseLabel = t(
+    "common.updateNotification.action.openReleasePage",
+    "在浏览器中查看发布页",
+  );
 
   useEffect(() => {
     setParams(getUpdateParamsFromUrl());
@@ -181,10 +195,16 @@ export function UpdateNotificationPage() {
 
         <div className="update-toast-main">
           <div className="update-toast-message">
-            发现新版本 {params.latestVersion || ""}
+            {t("common.updateNotification.version.new", {
+              defaultValue: "发现新版本 {{version}}",
+              version: params.latestVersion || "",
+            })}
             {params.currentVersion ? (
               <span className="update-toast-sub">
-                （当前 {params.currentVersion}）
+                {t("common.updateNotification.version.current", {
+                  defaultValue: "（当前 {{version}}）",
+                  version: params.currentVersion,
+                })}
               </span>
             ) : null}
           </div>
@@ -197,31 +217,33 @@ export function UpdateNotificationPage() {
               onClick={() => handleLater(24)}
               className="update-btn update-btn-ghost"
             >
-              1天后
+              {t("common.updateNotification.action.laterOneDay", "1天后")}
             </button>
             <button
               onClick={() => handleLater(72)}
               className="update-btn update-btn-ghost"
             >
-              3天后
+              {t("common.updateNotification.action.laterThreeDays", "3天后")}
             </button>
             <button
               onClick={() => handleLater(168)}
               className="update-btn update-btn-ghost"
             >
-              下周
+              {t("common.updateNotification.action.laterNextWeek", "下周")}
             </button>
             <button
               onClick={handleDismiss}
               className="update-btn update-btn-icon"
-              title="关闭提醒"
+              title={closeLabel}
+              aria-label={closeLabel}
             >
               <X size={13} />
             </button>
             <button
               onClick={handleSkipVersion}
               className="update-btn update-btn-ghost"
-              title="跳过此版本"
+              title={skipLabel}
+              aria-label={skipLabel}
             >
               <SkipForward size={13} />
             </button>
@@ -234,13 +256,16 @@ export function UpdateNotificationPage() {
                 size={14}
                 className={downloading ? "animate-spin" : ""}
               />
-              {downloading ? "下载中" : "立即更新"}
+              {downloading
+                ? t("common.updateNotification.action.downloading", "下载中")
+                : t("common.updateNotification.action.updateNow", "立即更新")}
             </button>
             {params.downloadUrl ? (
               <button
                 onClick={handleOpenInBrowser}
                 className="update-btn update-btn-icon"
-                title="在浏览器中查看发布页"
+                title={openReleaseLabel}
+                aria-label={openReleaseLabel}
               >
                 <ExternalLink size={13} />
               </button>

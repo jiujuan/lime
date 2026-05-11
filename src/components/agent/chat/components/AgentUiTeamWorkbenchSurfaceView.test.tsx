@@ -121,7 +121,7 @@ describe("AgentUiTeamWorkbenchSurfaceView", () => {
     const container = renderSurfaceView({ events: buildEvents() });
 
     expect(container.textContent).toContain("工作台操作视图");
-    expect(container.textContent).toContain("3 items");
+    expect(container.textContent).toContain("3 项");
     expect(container.textContent).toContain("注意 2");
     expect(container.textContent).toContain("Board");
     expect(container.textContent).toContain("Review");

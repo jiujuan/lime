@@ -10,6 +10,7 @@
 
 import React, { Suspense, lazy, useState, useCallback, useEffect } from "react";
 import styled from "styled-components";
+import { useTranslation } from "react-i18next";
 import { withI18nPatch } from "./i18n/withI18nPatch";
 import { AppPageContent } from "./components/AppPageContent";
 import { SplashScreen } from "./components/SplashScreen";
@@ -132,25 +133,10 @@ const ConnectConfirmDialog = lazy(() =>
     default: module.ConnectConfirmDialog,
   })),
 );
-const pageLoadingFallback = (
-  <div
-    style={{
-      flex: 1,
-      minHeight: 0,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      color: "hsl(var(--muted-foreground))",
-      fontSize: "14px",
-    }}
-  >
-    页面加载中...
-  </div>
-);
-
 function AppContent() {
   startupTracker.mark("AppContent: render start");
 
+  const { t } = useTranslation("common");
   const hasTauriDesktopRuntime = hasTauriInvokeCapability();
   const reserveMacWindowControls = shouldReserveMacWindowControls();
   const [showSplash, setShowSplash] = useState(true);
@@ -191,10 +177,12 @@ function AppContent() {
     [],
   );
   const handleResourceManagerNavigationUnsupported = useCallback(() => {
-    toast.info("当前资源暂时不能自动回跳", {
-      description: "已记录来源信息，但主窗口还没有对应的业务入口。",
+    toast.info(t("common.app.resourceNavigation.unsupported.title"), {
+      description: t(
+        "common.app.resourceNavigation.unsupported.description",
+      ),
     });
-  }, []);
+  }, [t]);
   useResourceManagerNavigationIntents({
     onNavigate: handleNavigate,
     onHandled: handleResourceManagerNavigationHandled,
@@ -219,11 +207,15 @@ function AppContent() {
   const _handleRequestRecommendation = useCallback(
     (shortLabel: string, fullPrompt: string, currentTheme: string) => {
       const themeLabels: Record<string, string> = {
-        general: "对话",
+        general: t("common.app.project.type.general"),
       };
 
-      const prefix = themeLabels[currentTheme] || "项目";
-      const projectName = `${prefix}：${shortLabel}`;
+      const prefix =
+        themeLabels[currentTheme] || t("common.app.project.type.fallback");
+      const projectName = t("common.app.project.recommendedName", {
+        prefix,
+        shortLabel,
+      });
 
       setPendingRecommendation({
         shortLabel,
@@ -233,7 +225,7 @@ function AppContent() {
       });
       setProjectDialogOpen(true);
     },
-    [],
+    [t],
   );
 
   const handleCreateProjectFromRecommendation = async (
@@ -271,7 +263,7 @@ function AppContent() {
       });
     }
 
-    toast.success("项目创建成功");
+    toast.success(t("common.app.project.created"));
   };
 
   const handleOpenBrowserConnectorSettings = useCallback(
@@ -281,12 +273,12 @@ function AppContent() {
       });
 
       if (enable) {
-        toast.info("已打开连接器设置", {
-          description: "在“连接器”页中开启浏览器连接器或重新同步扩展。",
+        toast.info(t("common.app.browserConnector.opened.title"), {
+          description: t("common.app.browserConnector.opened.description"),
         });
       }
     },
-    [handleNavigate],
+    [handleNavigate, t],
   );
 
   const handleOpenWebsiteDeepLink = useCallback(
@@ -294,16 +286,17 @@ function AppContent() {
       const resolved = resolveWebsiteOpenNavigation(payload);
 
       if (!resolved) {
-        toast.error("无法打开这个官网入口", {
-          description:
-            "当前 slug 没有对应到桌面端可用能力，请同步官网与客户端目录。",
+        toast.error(t("common.app.websiteDeepLink.unsupported.title"), {
+          description: t(
+            "common.app.websiteDeepLink.unsupported.description",
+          ),
         });
         return;
       }
 
       handleNavigate(resolved.page, resolved.params);
     },
-    [handleNavigate],
+    [handleNavigate, t],
   );
 
   const {
@@ -332,6 +325,21 @@ function AppContent() {
     pageParams,
     agentHasMessages,
   });
+  const pageLoadingFallback = (
+    <div
+      style={{
+        flex: 1,
+        minHeight: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: "hsl(var(--muted-foreground))",
+        fontSize: "14px",
+      }}
+    >
+      {t("common.app.loadingPage")}
+    </div>
+  );
 
   const handleSplashComplete = useCallback(() => {
     startupTracker.mark("SplashScreen: complete");

@@ -53,9 +53,8 @@ jobs:
           fi
           node scripts/quality-task-selector.mjs "${args[@]}" >> "$GITHUB_OUTPUT"
 
-  # 当前仓库的 Rust 回归验证仍以既有 `.github/workflows/ci.yml`
-  # 中的 Windows OpenClaw regression 为主。这里先收口前端/契约/一致性
-  # 质量信号，后续再逐步补齐可稳定运行的 Rust 质量矩阵。
+  # 这里先收口前端/契约/一致性质量信号，后续再逐步补齐可稳定运行的
+  # Rust 质量矩阵。
 
   integrity:
     name: Integrity

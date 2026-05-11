@@ -14,10 +14,11 @@ import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
 import { ProviderIcon } from "@/icons/providers";
+import { useOemCloudAccess } from "@/hooks/useOemCloudAccess";
 import {
-  formatOemCloudDateTime,
-  useOemCloudAccess,
-} from "@/hooks/useOemCloudAccess";
+  formatDate as formatLocaleDate,
+  formatNumber as formatLocaleNumber,
+} from "@/i18n/format";
 import { cn } from "@/lib/utils";
 
 const SURFACE_CLASS_NAME =
@@ -103,8 +104,29 @@ function buildAccountInitials(value?: string) {
   return normalized.slice(0, 2).toUpperCase();
 }
 
+function formatSessionDateTime(
+  value: string | undefined,
+  locale: string,
+  unknownLabel: string,
+) {
+  if (!value) {
+    return unknownLabel;
+  }
+
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) {
+    return value;
+  }
+
+  return formatLocaleDate(timestamp, {
+    locale,
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
 export function UserCenterSessionSettings() {
-  const { t } = useTranslation("settings");
+  const { t, i18n } = useTranslation("settings");
   const [showAlternativeMethods, setShowAlternativeMethods] = useState(false);
   const {
     runtime,
@@ -160,8 +182,13 @@ export function UserCenterSessionSettings() {
   );
   const syncedCapabilitiesSummary = session
     ? t("settings.userCenterSession.account.syncedCapabilities", {
-        skills: resolveServiceSkillCount(bootstrap?.serviceSkillCatalog),
-        scenes: bootstrap?.sceneCatalog?.length || 0,
+        skills: formatLocaleNumber(
+          resolveServiceSkillCount(bootstrap?.serviceSkillCatalog),
+          { locale: i18n.language },
+        ),
+        scenes: formatLocaleNumber(bootstrap?.sceneCatalog?.length || 0, {
+          locale: i18n.language,
+        }),
         defaultValue: "{{skills}} 项技能 / {{scenes}} 个入口",
       })
     : t("settings.userCenterSession.account.syncedPending", "登录后自动同步");
@@ -426,7 +453,14 @@ export function UserCenterSessionSettings() {
                       "settings.userCenterSession.value.expiresAt.label",
                       "会话有效期",
                     )}
-                    value={formatOemCloudDateTime(session.session.expiresAt)}
+                    value={formatSessionDateTime(
+                      session.session.expiresAt,
+                      i18n.language,
+                      t(
+                        "settings.userCenterSession.value.expiresAt.unknown",
+                        "未知",
+                      ),
+                    )}
                     hint={t(
                       "settings.userCenterSession.value.expiresAt.hint",
                       "到期后需要重新登录。",

@@ -265,7 +265,6 @@ pub fn run() {
         .manage(lime_gateway::wechat::WechatGatewayState::default())
         .manage(lime_gateway::wechat::WechatLoginState::default())
         .manage(gateway_tunnel_state)
-        .manage(crate::services::openclaw_service::OpenClawServiceState::default())
         .manage(commands::telegram_remote_cmd::TelegramRemoteState::default())
         .on_window_event(move |window, event| {
             // 处理窗口关闭事件
@@ -1051,32 +1050,6 @@ pub fn run() {
             commands::companion_cmd::companion_get_pet_status,
             commands::companion_cmd::companion_launch_pet,
             commands::companion_cmd::companion_send_pet_command,
-            // OpenClaw commands
-            commands::openclaw_cmd::openclaw_check_installed,
-            commands::openclaw_cmd::openclaw_get_environment_status,
-            commands::openclaw_cmd::openclaw_check_node_version,
-            commands::openclaw_cmd::openclaw_check_git_available,
-            commands::openclaw_cmd::openclaw_get_node_download_url,
-            commands::openclaw_cmd::openclaw_get_git_download_url,
-            commands::openclaw_cmd::openclaw_get_command_preview,
-            commands::openclaw_cmd::openclaw_get_progress_logs,
-            commands::openclaw_cmd::openclaw_list_runtime_candidates,
-            commands::openclaw_cmd::openclaw_install,
-            commands::openclaw_cmd::openclaw_install_dependency,
-            commands::openclaw_cmd::openclaw_check_update,
-            commands::openclaw_cmd::openclaw_uninstall,
-            commands::openclaw_cmd::openclaw_perform_update,
-            commands::openclaw_cmd::openclaw_set_preferred_runtime,
-            commands::openclaw_cmd::openclaw_cleanup_temp_artifacts,
-            commands::openclaw_cmd::openclaw_start_gateway,
-            commands::openclaw_cmd::openclaw_stop_gateway,
-            commands::openclaw_cmd::openclaw_restart_gateway,
-            commands::openclaw_cmd::openclaw_get_status,
-            commands::openclaw_cmd::openclaw_check_health,
-            commands::openclaw_cmd::openclaw_get_dashboard_url,
-            commands::openclaw_cmd::openclaw_get_channels,
-            commands::openclaw_cmd::openclaw_sync_provider_config,
-            commands::openclaw_cmd::openclaw_install_event,
             // MCP commands
             commands::mcp_cmd::get_mcp_servers,
             commands::mcp_cmd::add_mcp_server,
@@ -1710,7 +1683,7 @@ mod tests {
     #[test]
     fn should_only_minimize_main_window_to_tray() {
         assert!(should_minimize_to_tray("main", true));
-        assert!(!should_minimize_to_tray("openclaw-dashboard", true));
+        assert!(!should_minimize_to_tray("secondary-window", true));
         assert!(!should_minimize_to_tray("main", false));
     }
 

@@ -23,6 +23,51 @@ function summarizeQcloopStatusSidecar(entry) {
   ].join(" ");
 }
 
+function parseSidecarTime(entry) {
+  const value = entry?.generatedAt || entry?.jobFinishedAt || "";
+  const time = Date.parse(String(value || ""));
+  return Number.isFinite(time) ? time : 0;
+}
+
+function selectLatestQcloopStatusSidecars(sidecars) {
+  const latestByJobId = new Map();
+  const withoutJobId = [];
+  for (const entry of asArray(sidecars)) {
+    const jobId = String(entry?.jobId || "").trim();
+    if (!jobId) {
+      withoutJobId.push(entry);
+      continue;
+    }
+    const previous = latestByJobId.get(jobId);
+    if (!previous || parseSidecarTime(entry) >= parseSidecarTime(previous)) {
+      latestByJobId.set(jobId, entry);
+    }
+  }
+  return [...withoutJobId, ...latestByJobId.values()].sort((left, right) =>
+    String(left?.path || "").localeCompare(String(right?.path || "")),
+  );
+}
+
+function isUnstartedPendingQcloopStatusSidecar(entry) {
+  const counts = entry?.counts || {};
+  const pending = Number(counts.pending || 0);
+  const running = Number(counts.running || 0);
+  const stale = Number(counts.stale || 0);
+  const success = Number(counts.success || 0);
+  const failed = Number(counts.failed || 0);
+  const exhausted = Number(counts.exhausted || 0);
+  const jobStatus = String(entry?.jobStatus || "").toLowerCase();
+  return (
+    jobStatus === "pending" &&
+    pending > 0 &&
+    running === 0 &&
+    stale === 0 &&
+    success === 0 &&
+    failed === 0 &&
+    exhausted === 0
+  );
+}
+
 function buildAgentQcCompletionAudit(facts) {
   const requiredQcloopScenarioIds = normalizeIdList(facts.scenarioReport?.p0ScenarioIds);
   const requiredQcloopScenarioCount =
@@ -38,7 +83,8 @@ function buildAgentQcCompletionAudit(facts) {
   const sidecarEvidenceSummary = asArray(facts.realEvidenceSidecars)
     .map((entry) => `${entry.path} status=${entry.status || "unknown"} scenarios=${entry.scenarioCount || 0}`)
     .join("; ");
-  const qcloopStatusSidecarSummary = asArray(facts.qcloopStatusSidecars)
+  const qcloopStatusSidecars = selectLatestQcloopStatusSidecars(facts.qcloopStatusSidecars);
+  const qcloopStatusSidecarSummary = qcloopStatusSidecars
     .map((entry) => {
       const counts = entry.counts
         ? ` success=${entry.counts.success ?? 0} running=${entry.counts.running ?? 0} pending=${entry.counts.pending ?? 0} stale=${entry.counts.stale ?? 0}`
@@ -46,15 +92,16 @@ function buildAgentQcCompletionAudit(facts) {
       return `${entry.path} verdict=${entry.verdictStatus || "unknown"}${counts}`;
     })
     .join("; ");
-  const staleQcloopStatusSidecars = asArray(facts.qcloopStatusSidecars).filter(
+  const staleQcloopStatusSidecars = qcloopStatusSidecars.filter(
     (entry) => entry.verdictStatus === "stale" || Number(entry.counts?.stale || 0) > 0,
   );
-  const activeQcloopStatusSidecars = asArray(facts.qcloopStatusSidecars).filter(
+  const activeQcloopStatusSidecars = qcloopStatusSidecars.filter(
     (entry) =>
-      entry.verdictStatus === "running" ||
-      entry.verdictStatus === "stale" ||
-      Number(entry.counts?.running || 0) > 0 ||
-      Number(entry.counts?.pending || 0) > 0,
+      !isUnstartedPendingQcloopStatusSidecar(entry) &&
+      (entry.verdictStatus === "running" ||
+        entry.verdictStatus === "stale" ||
+        Number(entry.counts?.running || 0) > 0 ||
+        Number(entry.counts?.pending || 0) > 0),
   );
   const qcloopEvidenceText = facts.realEvidencePack?.exists
     ? `.lime/qc/agent-qc-evidence.json status=${facts.realEvidencePack.status || "unknown"} scenarios=${facts.realEvidencePack.scenarioCount || 0}/${requiredQcloopScenarioCount}${missingQcloopScenarioIds.length > 0 ? ` missing=${missingQcloopScenarioIds.join(",")}` : ""}`
@@ -111,6 +158,20 @@ function buildAgentQcCompletionAudit(facts) {
       `最近一次 verify:gui-smoke status=${facts.guiSmoke.status}${facts.guiSmoke.error ? `；${facts.guiSmoke.error}` : ""}`,
     );
   }
+  const payloadCoverageEvidenceText = facts.payloadCoverage?.coverage
+    ? [
+        `status=${facts.payloadCoverage.status || "unknown"}`,
+        `coverage=${facts.payloadCoverage.coverage.passed ? "pass" : "fail"}`,
+        `repairGuard=${facts.payloadCoverage.repairGuard?.passed ? "pass" : "fail"}`,
+        `maxQcRounds=${facts.payloadCoverage.repairGuard?.maxQcRounds ?? "unknown"}`,
+        `maxExecutorRetries=${facts.payloadCoverage.repairGuard?.maxExecutorRetries ?? "unknown"}`,
+        `manifestP0=${facts.payloadCoverage.coverage.manifestP0Count ?? 0}`,
+        `payloadItems=${facts.payloadCoverage.coverage.payloadItemCount ?? 0}`,
+        `missing=${facts.payloadCoverage.coverage.missingScenarioIds?.length ?? 0}`,
+        `extra=${facts.payloadCoverage.coverage.extraScenarioIds?.length ?? 0}`,
+        `owner=${facts.payloadCoverage.ownerGate?.status || "unknown"}`,
+      ].join(" ")
+    : "未发现 .lime/qc/qcloop-p0-single-owner-ready-coverage-current.json";
   const items = [
     createItem(
       "docs-tests-standard",
@@ -149,6 +210,15 @@ function buildAgentQcCompletionAudit(facts) {
       facts.files?.qcloopJobScript && facts.qcloopPayload?.valid === true && facts.qcloopPayload?.itemCount > 0,
       `itemCount=${facts.qcloopPayload?.itemCount ?? 0}`,
       "qcloop payload 生成器不可用或没有 item。",
+    ),
+    createItem(
+      "qcloop-payload-coverage",
+      "可校验 ready qcloop payload 覆盖 P0 manifest",
+      facts.files?.payloadCoverageScript &&
+        facts.payloadCoverage?.coverage?.passed === true &&
+        facts.payloadCoverage?.repairGuard?.passed === true,
+      payloadCoverageEvidenceText,
+      "payload coverage 脚本缺失，ready payload 未完整覆盖 P0 manifest，或发布证据 payload 未禁用 qcloop repair / executor retry。",
     ),
     createItem(
       "qcloop-verifier-evidence-placeholders",

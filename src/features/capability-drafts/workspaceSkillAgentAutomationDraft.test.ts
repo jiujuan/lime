@@ -146,6 +146,59 @@ describe("workspaceSkillAgentAutomationDraft", () => {
     ).toContain("Read-Only HTTP API 任务必须包含 executed 受控 GET evidence");
   });
 
+  it("应支持注入 Managed Job 初始值与 prompt 文案 copy", () => {
+    const initialValues = buildWorkspaceSkillAgentAutomationInitialValues({
+      binding: createBinding(),
+      workspaceRoot: "/tmp/work",
+      workspaceId: "project-1",
+      options: {
+        requiresControlledGetEvidence: true,
+      },
+      copy: {
+        descriptionPausedByDefault: "Review before enabling.",
+        descriptionSource: "Source: envelope draft.",
+        formatDescriptionProvenance: (draftId, reportId) =>
+          `Provenance: ${draftId}/${reportId}`,
+        formatDescriptionSkill: (skillName) => `Skill: ${skillName}`,
+        formatName: (displayName) => `Managed draft for ${displayName}`,
+        formatObjective: (displayName) => `Run ${displayName} on schedule.`,
+        formatPromptIntro: (displayName, skillName) =>
+          `Run ${displayName} with ${skillName}.`,
+        promptNeedsInput: "Return needs_input when required data is missing.",
+        promptReadRunbook: "Read the runbook before running.",
+        promptResultEvidence: "Return summary and evidence.",
+        successCriteriaControlledGet: "Controlled GET evidence is required.",
+        successCriteriaEvidence: "Completion depends on evidence.",
+        successCriteriaRuntimeEnable: "Runtime enable must be explicit.",
+        successCriteriaSubmitTurn: "Use agent_runtime_submit_turn.",
+      },
+    });
+
+    expect(initialValues?.name).toBe("Managed draft for 只读 CLI 报告");
+    expect(initialValues?.description).toContain(
+      "Skill: project:capability-report",
+    );
+    expect(initialValues?.description).toContain(
+      "Provenance: capdraft-1/capver-1",
+    );
+    expect(initialValues?.prompt).toContain(
+      "Run 只读 CLI 报告 with project:capability-report.",
+    );
+    expect(initialValues?.agent_request_metadata).toMatchObject({
+      harness: {
+        managed_objective: {
+          objective: "Run 只读 CLI 报告 on schedule.",
+          success_criteria: [
+            "Use agent_runtime_submit_turn.",
+            "Runtime enable must be explicit.",
+            "Completion depends on evidence.",
+            "Controlled GET evidence is required.",
+          ],
+        },
+      },
+    });
+  });
+
   it("应识别 workspace skill 对应的 Managed Job 并生成状态摘要", () => {
     const job = {
       id: "job-1",

@@ -34,6 +34,7 @@ import {
   mergeLiveTranscript,
 } from "@/lib/voiceLivePreview";
 import type { RecordingStatus } from "@/lib/api/asrProvider";
+import { useTranslation } from "react-i18next";
 import "./smart-input.css";
 
 // Lime Logo组件
@@ -121,6 +122,7 @@ function formatRecordingDuration(duration = 0): string {
 }
 
 export function SmartInputPage() {
+  const { t } = useTranslation("common");
   const [imagePath, setImagePath] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -296,7 +298,10 @@ export function SmartInputPage() {
       try {
         const readiness = await getDefaultLocalVoiceModelReadiness();
         if (!readiness.ready) {
-          showError(readiness.message || "先下载语音模型");
+          showError(
+            readiness.message ||
+              t("common.smartInput.error.voiceModelRequired", "先下载语音模型"),
+          );
           void broadcastOpenVoiceModelSettingsRequest({
             source: "smart-input",
             reason: "missing-model",
@@ -348,16 +353,26 @@ export function SmartInputPage() {
         errMsg.toLowerCase().includes("permission") ||
         errMsg.toLowerCase().includes("device")
       ) {
-        showError("无法访问麦克风，请检查系统隐私设置");
+        showError(
+          t(
+            "common.smartInput.error.microphonePermission",
+            "无法访问麦克风，请检查系统隐私设置",
+          ),
+        );
       } else {
-        showError(`无法开始录音: ${errMsg}`);
+        showError(
+          t("common.smartInput.error.startRecordingFailed", {
+            defaultValue: "无法开始录音: {{message}}",
+            message: errMsg,
+          }),
+        );
       }
 
       setVoiceState("idle");
       setRecordingStatus(null);
       setVoiceMode(false);
     }
-  }, [voiceState, showError, playStartSound]);
+  }, [voiceState, showError, playStartSound, t]);
 
   // 从 URL 获取图片路径、预填文本和语音模式
   useEffect(() => {
@@ -515,7 +530,12 @@ export function SmartInputPage() {
           typeof recordingErr === "string"
             ? recordingErr
             : recordingErr?.message || "";
-        showError(`录音停止失败: ${errMsg}`);
+        showError(
+          t("common.smartInput.error.stopRecordingFailed", {
+            defaultValue: "录音停止失败: {{message}}",
+            message: errMsg,
+          }),
+        );
         finishVoiceProcessing();
         return;
       }
@@ -583,13 +603,16 @@ export function SmartInputPage() {
     } catch (err: any) {
       console.error("[语音识别] 失败:", err);
       const message =
-        typeof err === "string" ? err : err?.message || "语音识别失败";
+        typeof err === "string"
+          ? err
+          : err?.message ||
+            t("common.smartInput.error.speechRecognitionFailed", "语音识别失败");
       showError(message);
       finishVoiceProcessing();
     } finally {
       processingVoiceRef.current = false;
     }
-  }, [applyResolvedVoiceText, finishVoiceProcessing, showError]);
+  }, [applyResolvedVoiceText, finishVoiceProcessing, showError, t]);
 
   // 手动停止语音录音（点击按钮）
   const stopVoiceRecording = useCallback(
@@ -703,7 +726,9 @@ export function SmartInputPage() {
       await win.close();
     } catch (err) {
       console.error("[SmartInput] 发送失败:", err);
-      showError("发送失败，请重试");
+      showError(
+        t("common.smartInput.error.sendFailed", "发送失败，请重试"),
+      );
       setIsLoading(false);
     }
   };
@@ -729,7 +754,7 @@ export function SmartInputPage() {
         <div
           className="screenshot-drag-handle"
           onMouseDown={handleStartDrag}
-          title="拖动移动窗口"
+          title={t("common.smartInput.action.dragWindow", "拖动移动窗口")}
         >
           <GripVertical size={14} />
         </div>
@@ -741,7 +766,11 @@ export function SmartInputPage() {
         {(voiceState === "transcribing" || voiceState === "polishing") && (
           <div className="screenshot-attachment processing">
             <Loader2 size={12} className="animate-spin" />
-            <span>{voiceState === "transcribing" ? "识别中" : "润色中"}</span>
+            <span>
+              {voiceState === "transcribing"
+                ? t("common.smartInput.status.transcribing", "识别中")
+                : t("common.smartInput.status.polishing", "润色中")}
+            </span>
           </div>
         )}
 
@@ -749,11 +778,15 @@ export function SmartInputPage() {
         {imagePath && (
           <div className="screenshot-attachment">
             <ImageIcon size={12} />
-            <span>Image</span>
+            <span>{t("common.smartInput.attachment.image", "Image")}</span>
             <button
               className="screenshot-attachment-remove"
               onClick={handleRemoveImage}
-              title="移除图片"
+              title={t("common.smartInput.action.removeImage", "移除图片")}
+              aria-label={t(
+                "common.smartInput.action.removeImage",
+                "移除图片",
+              )}
             >
               <X size={10} />
             </button>
@@ -765,7 +798,9 @@ export function SmartInputPage() {
           <div className="screenshot-recording-container">
             <div className="recording-dot" />
             <div className="screenshot-recording-copy">
-              <span className="screenshot-recording-text">录音中</span>
+              <span className="screenshot-recording-text">
+                {t("common.smartInput.status.recording", "录音中")}
+              </span>
               <span className="screenshot-recording-hint">
                 {recordingDuration}
               </span>
@@ -788,7 +823,10 @@ export function SmartInputPage() {
           <textarea
             ref={inputRef}
             className="screenshot-input"
-            placeholder="Ask anything..."
+            placeholder={t(
+              "common.smartInput.input.placeholder",
+              "Ask anything...",
+            )}
             value={inputValue}
             onChange={(e) => {
               setInputValue(e.target.value);
@@ -810,7 +848,11 @@ export function SmartInputPage() {
             <button
               className="screenshot-mic-btn"
               onClick={startVoiceMode}
-              title="语音输入"
+              title={t("common.smartInput.action.voiceInput", "语音输入")}
+              aria-label={t(
+                "common.smartInput.action.voiceInput",
+                "语音输入",
+              )}
             >
               <Mic size={18} />
             </button>
@@ -831,8 +873,11 @@ export function SmartInputPage() {
                 position: "relative",
                 zIndex: 1000,
               }}
-              title="停止录音"
-              aria-label="停止录音"
+              title={t("common.smartInput.action.stopRecording", "停止录音")}
+              aria-label={t(
+                "common.smartInput.action.stopRecording",
+                "停止录音",
+              )}
             >
               <Square size={12} fill="#ffffff" color="#ffffff" />
             </button>
@@ -852,7 +897,8 @@ export function SmartInputPage() {
               position: "relative",
               zIndex: 1000,
             }}
-            title="关闭 (ESC)"
+            title={t("common.smartInput.action.close", "关闭 (ESC)")}
+            aria-label={t("common.smartInput.action.close", "关闭 (ESC)")}
           >
             <X size={14} />
           </button>
@@ -862,7 +908,8 @@ export function SmartInputPage() {
             className={`screenshot-send-btn ${inputValue.trim() ? "active" : ""}`}
             onClick={handleSend}
             disabled={!inputValue.trim() || isLoading}
-            title="发送 (Enter)"
+            title={t("common.smartInput.action.send", "发送 (Enter)")}
+            aria-label={t("common.smartInput.action.send", "发送 (Enter)")}
           >
             <ArrowUp size={16} />
           </button>

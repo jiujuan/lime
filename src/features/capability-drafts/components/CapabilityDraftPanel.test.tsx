@@ -4,12 +4,42 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { capabilityDraftsApi } from "@/lib/api/capabilityDrafts";
 import { CapabilityDraftPanel } from "./CapabilityDraftPanel";
 
+const { mockUseTranslation } = vi.hoisted(() => {
+  const mockTranslate = vi.fn((key: string, options?: unknown) => {
+    if (typeof options === "string") {
+      return options;
+    }
+
+    if (options && typeof options === "object") {
+      const values = options as Record<string, unknown>;
+      const template =
+        typeof values.defaultValue === "string" ? values.defaultValue : key;
+      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+        String(values[name] ?? ""),
+      );
+    }
+
+    return key;
+  });
+
+  return {
+    mockUseTranslation: vi.fn((_namespace?: string) => ({
+      i18n: { language: "zh-CN" },
+      t: mockTranslate,
+    })),
+  };
+});
+
 vi.mock("@/lib/api/capabilityDrafts", () => ({
   capabilityDraftsApi: {
     list: vi.fn(),
     verify: vi.fn(),
     register: vi.fn(),
   },
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
 }));
 
 interface RenderResult {

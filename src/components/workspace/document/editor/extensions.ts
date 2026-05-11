@@ -9,13 +9,14 @@ import TableRow from "@tiptap/extension-table-row";
 import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
 import { SlashCommand } from "./SlashCommand";
-import type { SlashMenuState, SlashMenuKeyHandler } from "./SlashCommand";
 import type { Extensions } from "@tiptap/react";
 import type { MutableRefObject } from "react";
+import type { SlashMenuKeyHandler, SlashMenuState } from "./slashCommandTypes";
 
 interface ExtensionConfig {
   onStateChange: (state: SlashMenuState) => void;
   onKeyDownRef: MutableRefObject<SlashMenuKeyHandler | null>;
+  placeholder: string;
 }
 
 export function createExtensions(config: ExtensionConfig): Extensions {
@@ -27,7 +28,7 @@ export function createExtensions(config: ExtensionConfig): Extensions {
       },
     }),
     Placeholder.configure({
-      placeholder: "输入内容，按 / 打开命令菜单…",
+      placeholder: config.placeholder,
       emptyEditorClass: "is-editor-empty",
     }),
     TaskList,

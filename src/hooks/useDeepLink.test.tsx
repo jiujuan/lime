@@ -18,11 +18,27 @@ const {
   mockToastError,
   mockToastInfo,
   mockToastSuccess,
+  mockTranslate,
 } = vi.hoisted(() => ({
   mockClaimClientReferral: vi.fn(),
   mockToastError: vi.fn(),
   mockToastInfo: vi.fn(),
   mockToastSuccess: vi.fn(),
+  mockTranslate: (
+    key: string,
+    options?: string | { defaultValue?: string; [key: string]: unknown },
+  ) => {
+    const template =
+      typeof options === "string" ? options : (options?.defaultValue ?? key);
+
+    if (typeof options === "string") {
+      return template;
+    }
+
+    return template.replace(/{{(\w+)}}/g, (_, name: string) =>
+      String(options?.[name] ?? ""),
+    );
+  },
 }));
 
 vi.mock("@/lib/dev-bridge", () => ({
@@ -66,6 +82,12 @@ vi.mock("@/lib/api/oemCloudControlPlane", () => ({
 
 vi.mock("@/lib/oemLimeHubProvider", () => ({
   resolveOemLimeHubProviderName: vi.fn(() => "Lime Hub"),
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: mockTranslate,
+  }),
 }));
 
 vi.mock("sonner", () => ({

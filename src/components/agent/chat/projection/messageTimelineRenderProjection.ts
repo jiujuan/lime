@@ -55,6 +55,7 @@ export function buildCurrentTurnTimelineProjection(params: {
   lastAssistantMessageId: string | null;
   timelineByMessageId: Map<string, MessageTurnTimeline>;
   renderedThreadItems: AgentThreadItem[];
+  renderedMessages?: Message[];
 }): CurrentTurnTimelineProjection | null {
   if (
     !params.activeCurrentTurnId ||
@@ -69,6 +70,25 @@ export function buildCurrentTurnTimelineProjection(params: {
     if (entry.turn.id === params.activeCurrentTurnId) {
       mappedMessageId = entry.messageId;
       break;
+    }
+  }
+
+  if (!mappedMessageId && params.renderedMessages) {
+    const explicitAssistant = params.renderedMessages.find(
+      (message) =>
+        message.role === "assistant" &&
+        message.runtimeTurnId?.trim() === params.activeCurrentTurnId,
+    );
+    mappedMessageId = explicitAssistant?.id ?? null;
+  }
+
+  if (!mappedMessageId && params.renderedMessages) {
+    const lastAssistant = params.renderedMessages.find(
+      (message) => message.id === params.lastAssistantMessageId,
+    );
+    const lastAssistantTurnId = lastAssistant?.runtimeTurnId?.trim();
+    if (lastAssistantTurnId && lastAssistantTurnId !== params.activeCurrentTurnId) {
+      return null;
     }
   }
 

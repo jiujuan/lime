@@ -6,8 +6,13 @@ import type {
   BuiltinInputCommand,
   RuntimeSceneSlashCommand,
 } from "./builtinCommands";
-import { buildInputCapabilitySections } from "./inputCapabilitySections";
+import {
+  buildInputCapabilitySections,
+  buildInputCapabilitySectionsCopy,
+} from "./inputCapabilitySections";
+import { recordMentionEntryUsage } from "./mentionEntryUsage";
 import { recordSlashEntryUsage } from "./slashEntryUsage";
+import { buildCuratedTaskTemplateCopy } from "../utils/curatedTaskTemplates";
 
 function createBuiltinCommand(
   overrides: Partial<BuiltinInputCommand> & Pick<BuiltinInputCommand, "key">,
@@ -210,6 +215,110 @@ describe("buildInputCapabilitySections", () => {
       "/clear",
       "/compact",
     ]);
+  });
+
+  it("slash 结果模板应支持注入本地化模板 copy", () => {
+    const curatedTaskTemplateCopy = buildCuratedTaskTemplateCopy(
+      (key, defaultValue) =>
+        key === "curatedTask.templates.daily-trend-briefing.title"
+          ? "Trend Briefing"
+          : defaultValue,
+    );
+    const inputCapabilityCopy = buildInputCapabilitySectionsCopy(
+      (key, defaultValue, values) => {
+        const overrides: Record<string, string> = {
+          "inputCapabilities.heading.resultTemplatesEmpty":
+            "Get Results First",
+          "inputCapabilities.review.action": "Continue with {{title}}",
+        };
+        const template = overrides[key] ?? defaultValue;
+        return template.replace(/\{\{(\w+)\}\}/g, (_match, name) =>
+          String(values?.[name] ?? ""),
+        );
+      },
+    );
+
+    const sections = buildInputCapabilitySections({
+      ...buildEmptyParams(),
+      mode: "slash",
+      curatedTaskTemplateCopy,
+      inputCapabilityCopy,
+    });
+
+    const resultTemplatesSection = sections.find(
+      (section) => section.key === "result-templates",
+    );
+    expect(resultTemplatesSection?.heading).toBe("Get Results First");
+    expect(resultTemplatesSection?.items[0]).toEqual(
+      expect.objectContaining({
+        kind: "curated_task",
+        title: "Trend Briefing",
+      }),
+    );
+  });
+
+  it("@ 面板 chrome 文案应支持注入本地化 copy", () => {
+    recordMentionEntryUsage({
+      kind: "builtin_command",
+      entryId: "research",
+      usedAt: 1_712_345_678_900,
+      replayText: "查找新品趋势",
+    });
+    const inputCapabilityCopy = buildInputCapabilitySectionsCopy(
+      (key, defaultValue, values) => {
+        const overrides: Record<string, string> = {
+          "inputCapabilities.heading.recentMention": "Recently Used",
+          "inputCapabilities.inputGroup.generateExpression":
+            "Create / Express",
+          "inputCapabilities.mentionRegistry.badge":
+            "Unified invocation registry",
+          "inputCapabilities.mentionRegistry.titleWithRecent":
+            "Resume recent or switch executor",
+          "inputCapabilities.recentInput": "Previous input: {{preview}}",
+        };
+        const template = overrides[key] ?? defaultValue;
+        return template.replace(/\{\{(\w+)\}\}/g, (_match, name) =>
+          String(values?.[name] ?? ""),
+        );
+      },
+    );
+
+    const sections = buildInputCapabilitySections({
+      ...buildEmptyParams(),
+      mode: "mention",
+      builtinCommands: [
+        createBuiltinCommand({
+          key: "research",
+          label: "搜索",
+          commandPrefix: "@搜索",
+        }),
+        createBuiltinCommand({
+          key: "image_generate",
+          label: "配图",
+          commandPrefix: "@配图",
+        }),
+      ],
+      inputCapabilityCopy,
+    });
+
+    const recentSection = sections.find(
+      (section) => section.key === "recent-mention",
+    );
+    const generateSection = sections.find(
+      (section) => section.key === "builtin-commands:generate-expression",
+    );
+
+    expect(recentSection?.heading).toBe("Recently Used");
+    expect(recentSection?.banner?.badge).toBe(
+      "Unified invocation registry",
+    );
+    expect(recentSection?.banner?.title).toBe(
+      "Resume recent or switch executor",
+    );
+    expect(recentSection?.items[0]?.description).toBe(
+      "Previous input: 查找新品趋势",
+    );
+    expect(generateSection?.heading).toBe("Create / Express");
   });
 
   it("slash 搜索时仍应按工作台命令类型展开匹配结果", () => {

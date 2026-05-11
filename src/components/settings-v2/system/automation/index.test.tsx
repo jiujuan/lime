@@ -42,6 +42,7 @@ const {
 
   return {
     mockUseTranslation: vi.fn((_namespace?: string) => ({
+      i18n: { language: "zh-CN" },
       t: mockTranslate,
     })),
     mockGetAutomationSchedulerConfig: vi.fn(),
@@ -63,6 +64,10 @@ const {
 
 vi.mock("react-i18next", () => ({
   useTranslation: mockUseTranslation,
+  initReactI18next: {
+    type: "3rdParty" as const,
+    init: vi.fn(),
+  },
 }));
 
 vi.mock("@/lib/api/automation", () => ({

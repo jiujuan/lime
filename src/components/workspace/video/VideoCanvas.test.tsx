@@ -1,17 +1,31 @@
-import React, { useState } from "react";
+import React, { act, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { VideoCanvas } from "./VideoCanvas";
 import { createInitialVideoState, type VideoCanvasState } from "./types";
 import {
+  clickButtonByTitle,
   cleanupMountedRoots,
   flushEffects,
   mountHarness,
   setupReactActEnvironment,
   type MountedRoot,
 } from "@/components/workspace/hooks/testUtils";
+import { changeLimeLocale } from "@/i18n/createI18n";
+import {
+  emitCanvasImageInsertRequest,
+  onCanvasImageInsertAck,
+  type CanvasImageInsertAck,
+} from "@/lib/canvasImageInsertBus";
 
-const { mockGetProviders } = vi.hoisted(() => ({
+const { mockGetProviders, mockToastSuccess } = vi.hoisted(() => ({
   mockGetProviders: vi.fn(),
+  mockToastSuccess: vi.fn(),
+}));
+
+vi.mock("sonner", () => ({
+  toast: {
+    success: mockToastSuccess,
+  },
 }));
 
 vi.mock("@/hooks/useGlobalMediaGenerationDefaults", () => ({
@@ -85,8 +99,10 @@ function ControlledVideoCanvas({
 }
 
 describe("VideoCanvas 全局默认模型", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     setupReactActEnvironment();
+    await changeLimeLocale("zh-CN");
+    localStorage.clear();
     vi.clearAllMocks();
     mockGetProviders.mockResolvedValue([
       {
@@ -108,6 +124,7 @@ describe("VideoCanvas 全局默认模型", () => {
 
   afterEach(() => {
     cleanupMountedRoots(mountedRoots);
+    localStorage.clear();
   });
 
   it("provider/model 为空时应优先采用 workspace_preferences.media_defaults.video", async () => {
@@ -140,5 +157,82 @@ describe("VideoCanvas 全局默认模型", () => {
       mounted.container.querySelector("[data-testid='video-workspace-state']")
         ?.textContent,
     ).toContain("openai/sora-2-pro");
+  });
+
+  it("英文界面应使用 workspace namespace 渲染侧栏折叠按钮 title", async () => {
+    await changeLimeLocale("en-US");
+
+    const mounted = mountHarness(
+      ControlledVideoCanvas,
+      {
+        onObservedStateChange: vi.fn(),
+      },
+      mountedRoots,
+    );
+
+    await flushEffects(8);
+
+    const collapseButton = clickButtonByTitle(
+      mounted.container,
+      "Collapse sidebar",
+    );
+    expect(collapseButton).toBeInstanceOf(HTMLButtonElement);
+    await flushEffects();
+    expect(
+      mounted.container.querySelector('button[title="Expand sidebar"]'),
+    ).toBeInstanceOf(HTMLButtonElement);
+  });
+
+  it("英文界面画布图片插入反馈应使用 workspace namespace", async () => {
+    await changeLimeLocale("en-US");
+    const observedStateChanges: VideoCanvasState[] = [];
+    const observedAcks: CanvasImageInsertAck[] = [];
+    const unsubscribeAck = onCanvasImageInsertAck((ack) => {
+      observedAcks.push(ack);
+    });
+
+    mountHarness(
+      ControlledVideoCanvas,
+      {
+        onObservedStateChange: (state) => {
+          observedStateChanges.push(state);
+        },
+      },
+      mountedRoots,
+    );
+    await flushEffects(8);
+
+    const request = await act(async () => {
+      const emittedRequest = emitCanvasImageInsertRequest({
+        projectId: "project-video-1",
+        canvasType: "video",
+        source: "gallery",
+        image: {
+          id: "image-start-frame",
+          previewUrl: "asset://preview.png",
+          contentUrl: "asset://start-frame.png",
+        },
+      });
+      await Promise.resolve();
+      return emittedRequest;
+    });
+    await flushEffects(4);
+    unsubscribeAck();
+
+    expect(mockToastSuccess).toHaveBeenCalledWith(
+      "Set as the video start reference image",
+    );
+    expect(
+      observedStateChanges[observedStateChanges.length - 1],
+    ).toMatchObject({
+      startImage: "asset://start-frame.png",
+    });
+    expect(
+      observedAcks.find((ack) => ack.requestId === request.requestId),
+    ).toMatchObject({
+      success: true,
+      canvasType: "video",
+      locationLabel: "Start-frame reference image",
+    });
   });
 });

@@ -234,6 +234,56 @@ describe("useWorkspaceA2UIRuntime", () => {
     expect(getValue().a2uiSubmissionNotice).toBeNull();
   });
 
+  it("新一轮用户消息后不应继续提升上一轮未完成 action_required", async () => {
+    const stalePendingMessage: Message = {
+      id: "assistant-stale-action",
+      role: "assistant",
+      content: "请先补充 PPT 信息。",
+      timestamp: new Date("2026-03-27T10:01:00.000Z"),
+      actionRequests: [
+        {
+          requestId: "req-stale-a2ui",
+          actionType: "ask_user",
+          prompt: "请选择 PPT 主题",
+          questions: [
+            {
+              question: "这次 PPT 的主题是什么？",
+              header: "主题",
+              options: [{ label: "工作汇报" }, { label: "项目提案" }],
+            },
+          ],
+          status: "pending",
+        },
+      ],
+    };
+    const followUpUserMessage = createUserMessage("user-continue", "继续");
+    const followUpAssistantMessage = createAssistantMessage(
+      "assistant-continue",
+      "好的，正在继续处理。",
+    );
+    const { render, getValue } = renderHook({
+      messages: [stalePendingMessage],
+    });
+
+    await render({ messages: [stalePendingMessage] });
+    expect(getValue().pendingA2UIForm?.id).toBe(
+      "action-request-req-stale-a2ui",
+    );
+
+    await render({
+      messages: [
+        stalePendingMessage,
+        followUpUserMessage,
+        followUpAssistantMessage,
+      ],
+    });
+
+    expect(getValue().pendingA2UIForm).toBeNull();
+    expect(getValue().pendingA2UISource).toBeNull();
+    expect(getValue().pendingActionRequest).toBeNull();
+    expect(getValue().pendingPromotedA2UIActionRequest).toBeNull();
+  });
+
   it("action_required 提交后应清理旧输入区表单且不再显示确认提示", async () => {
     const pendingMessage: Message = {
       id: "assistant-action-submitted",

@@ -71,8 +71,7 @@ const PIXABAY_APPLY_URL = "https://pixabay.com/accounts/register/";
 const PIXABAY_DOC_URL = "https://pixabay.com/api/docs/";
 const TAVILY_APPLY_URL = "https://app.tavily.com/";
 const TAVILY_DOC_URL = "https://docs.tavily.com/";
-const MSE_DOC_URL =
-  "https://openclaw.ai/blog/openclaw-multi-search-engine-enhanced";
+const MSE_DOC_URL = "https://docs.tavily.com/";
 const BING_SEARCH_APPLY_URL =
   "https://portal.azure.com/#create/Microsoft.CognitiveServicesBingSearch-v7";
 const BING_SEARCH_DOC_URL =
@@ -529,6 +528,43 @@ export function WebSearchSettings() {
     "settings.webSearch.status.notConfigured",
     "未配置",
   );
+  const googleEngineLabel = t("settings.webSearch.engine.google", "Google");
+  const xiaohongshuEngineLabel = t(
+    "settings.webSearch.engine.xiaohongshu",
+    "小红书",
+  );
+  const tavilyProviderLabel = t(
+    "settings.webSearch.provider.tavily",
+    "Tavily Search API",
+  );
+  const multiSearchEngineProviderLabel = t(
+    "settings.webSearch.provider.multiSearchEngine",
+    "Multi Search Engine v2.0.1",
+  );
+  const duckduckgoInstantProviderLabel = t(
+    "settings.webSearch.provider.duckduckgoInstant",
+    "DuckDuckGo Instant Answer (免费)",
+  );
+  const bingSearchApiProviderLabel = t(
+    "settings.webSearch.provider.bingSearchApi",
+    "Bing Search API",
+  );
+  const googleCustomSearchProviderLabel = t(
+    "settings.webSearch.provider.googleCustomSearch",
+    "Google Custom Search API",
+  );
+  const googleCseProviderLabel = t(
+    "settings.webSearch.provider.googleCse",
+    "Google CSE",
+  );
+  const pexelsProviderLabel = t(
+    "settings.webSearch.provider.pexels",
+    "Pexels",
+  );
+  const pixabayProviderLabel = t(
+    "settings.webSearch.provider.pixabay",
+    "Pixabay",
+  );
   const credentialStatusLabel = (name: string, configured: boolean) =>
     t("settings.webSearch.status.credential", {
       name,
@@ -706,7 +742,10 @@ export function WebSearchSettings() {
               <div className="flex flex-wrap items-center gap-2 xl:justify-end">
                 <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
                   {t("settings.webSearch.summary.engine", {
-                    engine: draftEngine === "google" ? "Google" : "小红书",
+                    engine:
+                      draftEngine === "google"
+                        ? googleEngineLabel
+                        : xiaohongshuEngineLabel,
                     defaultValue: "搜索引擎：{{engine}}",
                   })}
                 </span>
@@ -838,7 +877,9 @@ export function WebSearchSettings() {
                       }
                       className={`${INPUT_CLASS_NAME} h-11`}
                     >
-                      <option value="google">Google</option>
+                      <option value="google">
+                        {googleEngineLabel}
+                      </option>
                       <option value="xiaohongshu">
                         {t("settings.webSearch.engine.xiaohongshu", "小红书")}
                       </option>
@@ -860,19 +901,20 @@ export function WebSearchSettings() {
                       }
                       className={`${INPUT_CLASS_NAME} h-11`}
                     >
-                      <option value="tavily">Tavily Search API</option>
+                      <option value="tavily">
+                        {tavilyProviderLabel}
+                      </option>
                       <option value="multi_search_engine">
-                        Multi Search Engine v2.0.1
+                        {multiSearchEngineProviderLabel}
                       </option>
                       <option value="duckduckgo_instant">
-                        {t(
-                          "settings.webSearch.provider.duckduckgoInstant",
-                          "DuckDuckGo Instant Answer (免费)",
-                        )}
+                        {duckduckgoInstantProviderLabel}
                       </option>
-                      <option value="bing_search_api">Bing Search API</option>
+                      <option value="bing_search_api">
+                        {bingSearchApiProviderLabel}
+                      </option>
                       <option value="google_custom_search">
-                        Google Custom Search API
+                        {googleCustomSearchProviderLabel}
                       </option>
                     </select>
                   </FieldBlock>
@@ -896,7 +938,10 @@ export function WebSearchSettings() {
                       id="web-search-provider-priority"
                       value={draftProviderPriority}
                       onChange={(e) => setDraftProviderPriority(e.target.value)}
-                      placeholder="tavily, multi_search_engine, bing_search_api, google_custom_search, duckduckgo_instant"
+                      placeholder={t(
+                        "settings.webSearch.searchChain.providerPriority.placeholder",
+                        "tavily, multi_search_engine, bing_search_api, google_custom_search, duckduckgo_instant",
+                      )}
                       className={INPUT_CLASS_NAME}
                     />
                   </FieldBlock>
@@ -913,31 +958,31 @@ export function WebSearchSettings() {
                       )}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <StatusPill
-                        active={tavilyKeyConfigured}
-                        label={credentialStatusLabel(
-                          "Tavily",
-                          tavilyKeyConfigured,
-                        )}
-                      />
+                        <StatusPill
+                          active={tavilyKeyConfigured}
+                          label={credentialStatusLabel(
+                            tavilyProviderLabel,
+                            tavilyKeyConfigured,
+                          )}
+                        />
                       <StatusPill
                         active={bingSearchKeyConfigured}
                         label={credentialStatusLabel(
-                          "Bing",
+                          bingSearchApiProviderLabel,
                           bingSearchKeyConfigured,
                         )}
                       />
                       <StatusPill
                         active={googleSearchKeyConfigured}
                         label={credentialStatusLabel(
-                          "Google",
+                          googleCustomSearchProviderLabel,
                           googleSearchKeyConfigured,
                         )}
                       />
                       <StatusPill
                         active={googleSearchEngineConfigured}
                         label={credentialStatusLabel(
-                          "CSE",
+                          googleCseProviderLabel,
                           googleSearchEngineConfigured,
                         )}
                       />
@@ -1012,7 +1057,10 @@ export function WebSearchSettings() {
             <div className="grid gap-4 xl:grid-cols-2">
               <article className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-4">
                 <FieldBlock
-                  label="Tavily API Key"
+                  label={t(
+                    "settings.webSearch.providers.tavily.label",
+                    "Tavily API Key",
+                  )}
                   htmlFor="web-search-tavily-key"
                   hint={t(
                     "settings.webSearch.providers.tavily.hint",
@@ -1062,7 +1110,10 @@ export function WebSearchSettings() {
 
               <article className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-4">
                 <FieldBlock
-                  label="Bing Search API Key"
+                  label={t(
+                    "settings.webSearch.providers.bing.label",
+                    "Bing Search API Key",
+                  )}
                   htmlFor="web-search-bing-key"
                   hint={t(
                     "settings.webSearch.providers.bing.hint",
@@ -1117,7 +1168,10 @@ export function WebSearchSettings() {
               <article className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-4 xl:col-span-2">
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,0.74fr)]">
                   <FieldBlock
-                    label="Google Search API Key"
+                    label={t(
+                      "settings.webSearch.providers.googleApi.label",
+                      "Google Search API Key",
+                    )}
                     htmlFor="web-search-google-key"
                     hint={t(
                       "settings.webSearch.providers.googleApi.hint",
@@ -1169,7 +1223,10 @@ export function WebSearchSettings() {
                   </FieldBlock>
 
                   <FieldBlock
-                    label="Google Search Engine ID (CSE CX)"
+                    label={t(
+                      "settings.webSearch.providers.googleEngine.label",
+                      "Google Search Engine ID (CSE CX)",
+                    )}
                     htmlFor="web-search-google-engine-id"
                     hint={t(
                       "settings.webSearch.providers.googleEngine.hint",
@@ -1218,7 +1275,7 @@ export function WebSearchSettings() {
         <TabsContent value="mse" className="mt-0">
           <SurfacePanel
             icon={Layers3}
-            title="Multi Search Engine"
+            title={t("settings.webSearch.mse.title", "Multi Search Engine")}
             description={t(
               "settings.webSearch.mse.description",
               "集中维护 MSE 聚合顺序、上限、超时和自定义引擎模板。",
@@ -1266,7 +1323,10 @@ export function WebSearchSettings() {
                         id="web-search-mse-priority"
                         value={draftMsePriority}
                         onChange={(e) => setDraftMsePriority(e.target.value)}
-                        placeholder="google, bing, duckduckgo, brave"
+                        placeholder={t(
+                          "settings.webSearch.mse.priority.placeholder",
+                          "google, bing, duckduckgo, brave",
+                        )}
                         className={INPUT_CLASS_NAME}
                       />
                     </>
@@ -1355,7 +1415,10 @@ export function WebSearchSettings() {
                       onChange={(e) =>
                         setDraftMseCustomEngineTemplate(e.target.value)
                       }
-                      placeholder="https://example.com/search?q={query}"
+                      placeholder={t(
+                        "settings.webSearch.mse.customTemplate.placeholder",
+                        "https://example.com/search?q={query}",
+                      )}
                       className={INPUT_CLASS_NAME}
                     />
                   </FieldBlock>
@@ -1426,11 +1489,17 @@ export function WebSearchSettings() {
               <>
                 <StatusPill
                   active={pexelsKeyConfigured}
-                  label={credentialStatusLabel("Pexels", pexelsKeyConfigured)}
+                  label={credentialStatusLabel(
+                    pexelsProviderLabel,
+                    pexelsKeyConfigured,
+                  )}
                 />
                 <StatusPill
                   active={pixabayKeyConfigured}
-                  label={credentialStatusLabel("Pixabay", pixabayKeyConfigured)}
+                  label={credentialStatusLabel(
+                    pixabayProviderLabel,
+                    pixabayKeyConfigured,
+                  )}
                 />
               </>
             }
@@ -1438,7 +1507,10 @@ export function WebSearchSettings() {
             <div className="space-y-5">
               <article className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-4">
                 <FieldBlock
-                  label="Pexels API Key"
+                  label={t(
+                    "settings.webSearch.images.pexels.label",
+                    "Pexels API Key",
+                  )}
                   htmlFor="web-search-pexels-key"
                   hint={t(
                     "settings.webSearch.images.pexels.hint",
@@ -1509,7 +1581,10 @@ export function WebSearchSettings() {
 
               <article className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-4">
                 <FieldBlock
-                  label="Pixabay API Key"
+                  label={t(
+                    "settings.webSearch.images.pixabay.label",
+                    "Pixabay API Key",
+                  )}
                   htmlFor="web-search-pixabay-key"
                   hint={t(
                     "settings.webSearch.images.pixabay.hint",
@@ -1596,23 +1671,29 @@ export function WebSearchSettings() {
               <div className="flex flex-wrap gap-2">
                 <StatusPill
                   active={tavilyKeyConfigured}
-                  label={credentialStatusLabel("Tavily", tavilyKeyConfigured)}
+                  label={credentialStatusLabel(
+                    tavilyProviderLabel,
+                    tavilyKeyConfigured,
+                  )}
                 />
                 <StatusPill
                   active={bingSearchKeyConfigured}
-                  label={credentialStatusLabel("Bing", bingSearchKeyConfigured)}
+                  label={credentialStatusLabel(
+                    bingSearchApiProviderLabel,
+                    bingSearchKeyConfigured,
+                  )}
                 />
                 <StatusPill
                   active={googleSearchKeyConfigured}
                   label={credentialStatusLabel(
-                    "Google",
+                    googleCustomSearchProviderLabel,
                     googleSearchKeyConfigured,
                   )}
                 />
                 <StatusPill
                   active={googleSearchEngineConfigured}
                   label={credentialStatusLabel(
-                    "CSE",
+                    googleCseProviderLabel,
                     googleSearchEngineConfigured,
                   )}
                 />

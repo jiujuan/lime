@@ -1,8 +1,10 @@
 import { toast } from "sonner";
+import i18n from "i18next";
 import {
   ensureWorkspaceLocalAgentsGitignore,
   scaffoldRuntimeAgentsTemplate,
 } from "@/lib/api/memoryRuntime";
+import { initLimeI18n } from "@/i18n/createI18n";
 import type { Project } from "@/lib/api/project";
 
 const RUNTIME_AGENTS_GUIDE_STORAGE_KEY =
@@ -16,6 +18,69 @@ type RuntimeAgentsGuideProject = Pick<Project, "id" | "rootPath"> &
 interface NotifyRuntimeAgentsGuideOptions {
   successMessage: string;
   showSuccessWhenGuideAlreadySeen?: boolean;
+}
+
+interface RuntimeAgentsGuideCopy {
+  actionLabel: string;
+  guideDescription: string;
+  initializedTitle: string;
+  initializedErrorTitle: string;
+  initializedErrorDescription: string;
+  sharedTemplateLabel: string;
+  localTemplateLabel: string;
+  templateExists: (label: string) => string;
+  templateCreated: (label: string) => string;
+  gitignoreExists: string;
+  gitignoreCreated: string;
+}
+
+function buildRuntimeAgentsGuideCopy(): RuntimeAgentsGuideCopy {
+  const currentI18n = i18n.isInitialized ? i18n : initLimeI18n();
+  const t = currentI18n.getFixedT(currentI18n.language, "workspace");
+
+  return {
+    actionLabel: t("workspace.runtimeAgentsGuide.action.initialize", {
+      defaultValue: "一键初始化",
+    }),
+    guideDescription: t("workspace.runtimeAgentsGuide.description", {
+      defaultValue:
+        "建议初始化共享规则 `.lime/AGENTS.md` 与本机私有规则 `.lime/AGENTS.local.md`，后者会自动加入 `.gitignore`。",
+    }),
+    initializedTitle: t("workspace.runtimeAgentsGuide.initialized.title", {
+      defaultValue: "已初始化运行时 AGENTS 模板",
+    }),
+    initializedErrorTitle: t("workspace.runtimeAgentsGuide.initialized.errorTitle", {
+      defaultValue: "初始化运行时 AGENTS 模板失败",
+    }),
+    initializedErrorDescription: t(
+      "workspace.runtimeAgentsGuide.initialized.errorDescription",
+      {
+        defaultValue: "可以稍后在 设置 → 记忆 中手动生成或补齐。",
+      },
+    ),
+    sharedTemplateLabel: t("workspace.runtimeAgentsGuide.template.shared", {
+      defaultValue: "共享",
+    }),
+    localTemplateLabel: t("workspace.runtimeAgentsGuide.template.local", {
+      defaultValue: "本机",
+    }),
+    templateExists: (label: string) =>
+      t("workspace.runtimeAgentsGuide.template.exists", {
+        defaultValue: "{{label}}模板已存在",
+        label,
+      }),
+    templateCreated: (label: string) =>
+      t("workspace.runtimeAgentsGuide.template.created", {
+        defaultValue: "{{label}}模板已生成",
+        label,
+      }),
+    gitignoreExists: t("workspace.runtimeAgentsGuide.gitignore.exists", {
+      defaultValue: ".gitignore 已包含本机模板规则",
+    }),
+    gitignoreCreated: t("workspace.runtimeAgentsGuide.gitignore.created", {
+      defaultValue: ".gitignore 已写入本机模板规则",
+    }),
+  };
 }
 
 function buildGuideStorageKey(project: RuntimeAgentsGuideProject): string {
@@ -79,18 +144,25 @@ function markGuideAsShown(project: RuntimeAgentsGuideProject): boolean {
   return true;
 }
 
-function describeTemplateStatus(label: string, status: string): string {
+function describeTemplateStatus(
+  label: string,
+  status: string,
+  copy: RuntimeAgentsGuideCopy,
+): string {
   if (status === "exists") {
-    return `${label}模板已存在`;
+    return copy.templateExists(label);
   }
-  return `${label}模板已生成`;
+  return copy.templateCreated(label);
 }
 
-function describeGitignoreStatus(status: string): string {
+function describeGitignoreStatus(
+  status: string,
+  copy: RuntimeAgentsGuideCopy,
+): string {
   if (status === "exists") {
-    return ".gitignore 已包含本机模板规则";
+    return copy.gitignoreExists;
   }
-  return ".gitignore 已写入本机模板规则";
+  return copy.gitignoreCreated;
 }
 
 async function initializeRuntimeAgentsGuide(
@@ -104,6 +176,7 @@ async function initializeRuntimeAgentsGuide(
   runtimeAgentsInitializationRoots.add(rootPath);
 
   try {
+    const copy = buildRuntimeAgentsGuideCopy();
     const workspaceTemplate = await scaffoldRuntimeAgentsTemplate(
       "workspace",
       rootPath,
@@ -116,17 +189,22 @@ async function initializeRuntimeAgentsGuide(
     );
     const gitignoreResult = await ensureWorkspaceLocalAgentsGitignore(rootPath);
 
-    toast.success("已初始化运行时 AGENTS 模板", {
+    toast.success(copy.initializedTitle, {
       description: [
-        describeTemplateStatus("共享", workspaceTemplate.status),
-        describeTemplateStatus("本机", localTemplate.status),
-        describeGitignoreStatus(gitignoreResult.status),
+        describeTemplateStatus(
+          copy.sharedTemplateLabel,
+          workspaceTemplate.status,
+          copy,
+        ),
+        describeTemplateStatus(copy.localTemplateLabel, localTemplate.status, copy),
+        describeGitignoreStatus(gitignoreResult.status, copy),
       ].join("；"),
     });
   } catch (error) {
     console.error("初始化运行时 AGENTS 模板失败:", error);
-    toast.error("初始化运行时 AGENTS 模板失败", {
-      description: "可以稍后在 设置 → 记忆 中手动生成或补齐。",
+    const copy = buildRuntimeAgentsGuideCopy();
+    toast.error(copy.initializedErrorTitle, {
+      description: copy.initializedErrorDescription,
     });
   } finally {
     runtimeAgentsInitializationRoots.delete(rootPath);
@@ -146,11 +224,11 @@ export function notifyProjectRuntimeAgentsGuide(
     return;
   }
 
+  const copy = buildRuntimeAgentsGuideCopy();
   toast.success(successMessage, {
-    description:
-      "建议初始化共享规则 `.lime/AGENTS.md` 与本机私有规则 `.lime/AGENTS.local.md`，后者会自动加入 `.gitignore`。",
+    description: copy.guideDescription,
     action: {
-      label: "一键初始化",
+      label: copy.actionLabel,
       onClick: async () => {
         await initializeRuntimeAgentsGuide(project);
       },

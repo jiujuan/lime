@@ -2,6 +2,7 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { BrowserEnvironmentPresetManager } from "./BrowserEnvironmentPresetManager";
 
 const {
@@ -27,12 +28,13 @@ vi.mock("./api", () => ({
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
   mockListBrowserEnvironmentPresets.mockResolvedValue([
     {
       id: "env-1",
@@ -71,6 +73,7 @@ afterEach(() => {
 });
 
 async function renderManager(props?: {
+  onMessage?: (message: { type: "success" | "error"; text: string }) => void;
   onPresetsChanged?: (presets: Array<{ id: string; name: string }>) => void;
   onSelectedPresetChange?: (presetId: string) => void;
   selectedPresetId?: string;
@@ -102,6 +105,53 @@ describe("BrowserEnvironmentPresetManager", () => {
         name: "美区桌面",
       }),
     ]);
+  });
+
+  it("英文界面应使用 workspace namespace 文案", async () => {
+    await changeLimeLocale("en-US");
+    const onMessage = vi.fn();
+    const container = await renderManager({ onMessage });
+
+    expect(container.textContent).toContain("Environment Presets");
+    expect(container.textContent).toContain("Profile launch environment");
+    expect(container.textContent).toContain("No preset");
+    expect(container.textContent).toContain("Refresh presets");
+    expect(container.textContent).toContain("New preset");
+    expect(container.textContent).toContain("Active presets: 1");
+    expect(container.textContent).toContain(
+      "Proxy: http://127.0.0.1:7890",
+    );
+    expect(container.textContent).toContain("Last used: Never");
+
+    const newButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("New preset"),
+    );
+    expect(newButton).toBeInstanceOf(HTMLButtonElement);
+
+    await act(async () => {
+      newButton?.click();
+    });
+
+    expect(container.textContent).toContain("Preset name");
+    expect(container.textContent).toContain("Proxy server");
+    expect(container.textContent).toContain("Create preset");
+    expect(
+      container.querySelector(
+        'input[placeholder="e.g. US desktop residential network"]',
+      ),
+    ).toBeInstanceOf(HTMLInputElement);
+
+    const createButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Create preset"),
+    );
+    await act(async () => {
+      createButton?.click();
+    });
+
+    expect(onMessage).toHaveBeenCalledWith({
+      type: "error",
+      text: "Environment preset name is required",
+    });
   });
 
   it("切换资料启动环境时应回调工作台", async () => {

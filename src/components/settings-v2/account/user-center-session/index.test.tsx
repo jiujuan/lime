@@ -24,13 +24,14 @@ const {
     return key;
   });
 
-  return {
-    mockUseOemCloudAccess: vi.fn(),
-    mockFormatOemCloudDateTime: vi.fn((value?: string) => `fmt:${value ?? ""}`),
-    mockUseTranslation: vi.fn((_namespace?: string) => ({
-      t: mockTranslate,
-    })),
-  };
+    return {
+      mockUseOemCloudAccess: vi.fn(),
+      mockFormatOemCloudDateTime: vi.fn((value?: string) => `fmt:${value ?? ""}`),
+      mockUseTranslation: vi.fn((_namespace?: string) => ({
+        i18n: { language: "zh-CN" },
+        t: mockTranslate,
+      })),
+    };
 });
 
 vi.mock("@/hooks/useOemCloudAccess", () => ({
@@ -279,9 +280,13 @@ describe("UserCenterSessionSettings", () => {
 
     const { container } = renderPage();
     const text = container.textContent ?? "";
+    const expectedExpiry = new Intl.DateTimeFormat("zh-CN", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(Date.parse("2026-03-25T08:00:00.000Z"));
 
     expect(text).toContain("Demo Operator");
-    expect(text).toContain("fmt:2026-03-25T08:00:00.000Z");
+    expect(text).toContain(expectedExpiry);
     expect(text).toContain("2 项技能 / 1 个入口");
     expect(text).toContain("状态：已登录");
     expect(text).toContain("默认服务：Lime Hub 主服务 · gpt-5.2-pro");
@@ -305,6 +310,68 @@ describe("UserCenterSessionSettings", () => {
     });
 
     expect(handleLogout).toHaveBeenCalledTimes(1);
+  });
+
+  it("应按当前 locale 格式化会话时间与能力数量", () => {
+    mockUseTranslation.mockImplementationOnce((_namespace?: string) => ({
+      i18n: { language: "en-US" },
+      t: (key: string, options?: unknown) => {
+        if (typeof options === "string") {
+          return options;
+        }
+
+        if (options && typeof options === "object") {
+          const values = options as Record<string, unknown>;
+          const template =
+            typeof values.defaultValue === "string" ? values.defaultValue : key;
+          return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+            String(values[name] ?? ""),
+          );
+        }
+
+        return key;
+      },
+    }));
+    mockUseOemCloudAccess.mockReturnValue(
+      createAccessState({
+        session: {
+          tenant: { id: "tenant-0001" },
+          user: {
+            id: "user-001",
+            email: "operator@example.com",
+            displayName: "Demo Operator",
+          },
+          session: {
+            id: "session-001",
+            expiresAt: "2026-03-25T08:00:00.000Z",
+          },
+        },
+        bootstrap: {
+          serviceSkillCatalog: {
+            items: Array.from({ length: 1000 }, (_, index) => ({
+              id: `skill-${index}`,
+            })),
+          },
+          sceneCatalog: Array.from({ length: 1234 }, (_, index) => ({
+            id: `scene-${index}`,
+          })),
+          features: {
+            profileEditable: true,
+          },
+        },
+      }),
+    );
+
+    const { container } = renderPage();
+    const expectedExpiry = new Intl.DateTimeFormat("en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(Date.parse("2026-03-25T08:00:00.000Z"));
+    const text = container.textContent ?? "";
+
+    expect(text).toContain(expectedExpiry);
+    expect(text).toContain("1,000 项技能 / 1,234 个入口");
+    expect(text).not.toContain("1000 项技能 / 1234 个入口");
   });
 
   it("应把账户总览和登录结果说明收进 tips", async () => {

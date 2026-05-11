@@ -653,7 +653,9 @@ describe("ArtifactWorkbenchShell", () => {
     });
 
     expect(container.textContent).toContain("OpenAI Blog");
-    expect(container.textContent).toContain("block hero-1");
+    expect(container.textContent).toContain("网页");
+    expect(container.textContent).toContain("段落 hero-1");
+    expect(container.textContent).not.toContain("block hero-1");
   });
 
   it("恢复为草稿时应展示低压状态说明", async () => {

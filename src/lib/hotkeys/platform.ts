@@ -4,6 +4,7 @@
  */
 
 export type HotkeyPlatform = "mac" | "windows" | "other";
+export const UNSET_SHORTCUT_TOKEN = "__lime_unset_shortcut__";
 
 export interface HotkeyEventLike {
   key: string;
@@ -80,7 +81,7 @@ export function formatShortcutTokens(
   platform: HotkeyPlatform,
 ): string[] {
   if (!shortcut?.trim()) {
-    return ["未设置"];
+    return [UNSET_SHORTCUT_TOKEN];
   }
 
   const modifierMap = MODIFIER_LABEL_MAP[platform];
@@ -90,7 +91,7 @@ export function formatShortcutTokens(
     .filter(Boolean)
     .map((part) => modifierMap[part] ?? part.toUpperCase());
 
-  return tokens.length > 0 ? tokens : ["未设置"];
+  return tokens.length > 0 ? tokens : [UNSET_SHORTCUT_TOKEN];
 }
 
 export function isInputLikeTarget(

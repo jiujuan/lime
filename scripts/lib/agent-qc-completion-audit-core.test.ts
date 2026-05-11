@@ -14,6 +14,7 @@ function completeFacts() {
       testsReadme: true,
       evidenceSchema: true,
       qcloopJobScript: true,
+      payloadCoverageScript: true,
       guiOwnerCheckScript: true,
       qcloopStatusScript: true,
       qcloopPreflightScript: true,
@@ -54,6 +55,22 @@ function completeFacts() {
       workerPromptHasStructuredEvidence: true,
       verifierRequiresStructuredEvidence: true,
       verifierRequiresStrictJson: true,
+    },
+    payloadCoverage: {
+      status: "ready",
+      coverage: {
+        passed: true,
+        manifestP0Count: 1,
+        payloadItemCount: 1,
+        missingScenarioIds: [],
+        extraScenarioIds: [],
+      },
+      repairGuard: {
+        passed: true,
+        maxQcRounds: 1,
+        maxExecutorRetries: 0,
+      },
+      ownerGate: { status: "pass" },
     },
     structuredEvidence: {
       exporterParsesSummary: true,
@@ -163,6 +180,62 @@ describe("agent-qc-completion-audit-core", () => {
     expect(item?.gap).toContain("qcloop-status.fastmini-readonly-p0-v1-current.json");
   });
 
+  it("未启动 pending-only qcloop sidecar 不应阻断已通过的官方 evidence", () => {
+    const facts = completeFacts();
+    facts.qcloopStatusSidecars = [
+      {
+        path: ".lime/qc/qcloop-status.old-pending.json",
+        generatedAt: "2026-05-10T18:28:17.000Z",
+        jobId: "job-pending",
+        jobStatus: "pending",
+        verdictStatus: "running",
+        counts: { success: 0, failed: 0, exhausted: 0, running: 0, pending: 8, stale: 0 },
+      },
+    ];
+
+    const audit = buildAgentQcCompletionAudit(facts);
+    const item = audit.items.find((entry) => entry.id === "real-qcloop-evidence");
+
+    expect(audit.status).toBe("complete");
+    expect(item?.evidence).toContain("qcloop-status.old-pending.json");
+    expect(item?.gap).not.toContain("未终态");
+  });
+
+  it("同一 qcloop job 有更新终态 sidecar 时不应被旧 stale snapshot 阻断", () => {
+    const facts = completeFacts();
+    facts.realEvidencePack = {
+      exists: true,
+      status: "fail",
+      scenarioCount: 8,
+      scenarioIds: ["command-bridge-contract"],
+    };
+    facts.qcloopStatusSidecars = [
+      {
+        path: ".lime/qc/qcloop-status.pre-intervention-20260511-022817.json",
+        generatedAt: "2026-05-10T18:28:17.000Z",
+        jobId: "job-1",
+        verdictStatus: "stale",
+        counts: { success: 4, running: 1, pending: 3, stale: 1 },
+      },
+      {
+        path: ".lime/qc/qcloop-status.isolated-p0-full-v1-current.json",
+        generatedAt: "2026-05-10T18:38:51.000Z",
+        jobId: "job-1",
+        verdictStatus: "fail",
+        counts: { success: 5, running: 0, pending: 0, stale: 0 },
+      },
+    ];
+
+    const audit = buildAgentQcCompletionAudit(facts);
+    const item = audit.items.find((entry) => entry.id === "real-qcloop-evidence");
+
+    expect(audit.status).toBe("incomplete");
+    expect(item?.evidence).toContain("qcloop-status.isolated-p0-full-v1-current.json");
+    expect(item?.evidence).not.toContain("qcloop-status.pre-intervention-20260511-022817.json");
+    expect(item?.gap).not.toContain("仍有 qcloop status sidecar 未终态");
+    expect(item?.gap).not.toContain("其中 stale sidecar");
+  });
+
   it("qcloop verifier prompt 缺少 worker evidence 占位符时应保持 incomplete", () => {
     const facts = completeFacts();
     facts.qcloopPayload.verifierHasWorkerOutput = false;
@@ -172,6 +245,34 @@ describe("agent-qc-completion-audit-core", () => {
     expect(audit.status).toBe("incomplete");
     expect(audit.gaps.map((gap) => gap.id)).toContain(
       "qcloop-verifier-evidence-placeholders",
+    );
+  });
+
+  it("ready payload coverage 不完整时应保持 incomplete", () => {
+    const facts = completeFacts();
+    facts.payloadCoverage.coverage.passed = false;
+    facts.payloadCoverage.coverage.missingScenarioIds = ["workspace-ready-session-restore"];
+
+    const audit = buildAgentQcCompletionAudit(facts);
+
+    expect(audit.status).toBe("incomplete");
+    expect(audit.gaps.map((gap) => gap.id)).toContain("qcloop-payload-coverage");
+  });
+
+  it("ready payload 未禁用 qcloop repair 时应保持 incomplete", () => {
+    const facts = completeFacts();
+    facts.payloadCoverage.repairGuard = {
+      passed: false,
+      maxQcRounds: 3,
+      maxExecutorRetries: 0,
+    };
+
+    const audit = buildAgentQcCompletionAudit(facts);
+
+    expect(audit.status).toBe("incomplete");
+    expect(audit.gaps.map((gap) => gap.id)).toContain("qcloop-payload-coverage");
+    expect(audit.items.find((item) => item.id === "qcloop-payload-coverage")?.evidence).toContain(
+      "repairGuard=fail",
     );
   });
 

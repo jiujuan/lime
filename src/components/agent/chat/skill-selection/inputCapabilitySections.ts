@@ -34,6 +34,7 @@ import {
   listCuratedTaskTemplates,
   resolveCuratedTaskTemplateLaunchPrefill,
   type CuratedTaskInputValues,
+  type CuratedTaskTemplateCopy,
   type CuratedTaskTemplateItem,
 } from "../utils/curatedTaskTemplates";
 import { listCuratedTaskRecommendationSignals } from "../utils/curatedTaskRecommendationSignals";
@@ -174,6 +175,283 @@ interface InputCommandSectionMeta {
   icon: InputCapabilityIcon;
   iconClassName: string;
   order: number;
+}
+
+interface InputCapabilitySectionMetaCopy {
+  heading?: string;
+  kindLabel?: string;
+}
+
+export interface InputCapabilitySectionsCopy {
+  baseline?: {
+    formatBaseline?: (title: string) => string;
+    formatDestinationHighlight?: (value: string) => string;
+    formatOperatingActionHighlight?: (value: string) => string;
+    formatStatusHighlight?: (value: string) => string;
+  };
+  headings?: {
+    availableSkills?: string;
+    characters?: string;
+    featuredServiceSkills?: string;
+    installedSkills?: string;
+    installedSkillsEmpty?: string;
+    recentContinuations?: string;
+    recentContinuationsEmpty?: string;
+    recentMention?: string;
+    recentOperations?: string;
+    resultTemplates?: string;
+    resultTemplatesEmpty?: string;
+    unsupported?: string;
+  };
+  inputCommandGroups?: Partial<
+    Record<InputCommandCapabilityGroupKey, InputCapabilitySectionMetaCopy>
+  >;
+  mentionRegistry?: {
+    badge?: string;
+    charactersFootnote?: string;
+    installedSkillsFootnote?: string;
+    serviceSkillsFootnote?: string;
+    summaryDefault?: string;
+    summaryWithRecent?: string;
+    titleDefault?: string;
+    titleWithRecent?: string;
+  };
+  reviewBanner?: {
+    formatActionLabel?: (title: string) => string;
+    formatFootnote?: (titles: string[]) => string;
+    formatTitle?: (title: string) => string;
+    titleSeparator?: string;
+  };
+  slashCommandGroups?: Partial<
+    Record<SlashCommandSectionGroupKey, InputCapabilitySectionMetaCopy>
+  >;
+  formatRecentInputDescription?: (preview: string) => string;
+}
+
+export type InputCapabilitySectionsCopyTranslator = (
+  key: string,
+  defaultValue: string,
+  values?: Record<string, number | string>,
+) => string;
+
+export function buildInputCapabilitySectionsCopy(
+  translate: InputCapabilitySectionsCopyTranslator,
+): InputCapabilitySectionsCopy {
+  return {
+    baseline: {
+      formatBaseline: (title) =>
+        translate(
+          "inputCapabilities.baseline.title",
+          "当前结果基线：{{title}}",
+          { title },
+        ),
+      formatDestinationHighlight: (value) =>
+        translate(
+          "inputCapabilities.baseline.destination",
+          "更适合去向：{{value}}",
+          { value },
+        ),
+      formatOperatingActionHighlight: (value) =>
+        translate(
+          "inputCapabilities.baseline.operatingAction",
+          "经营动作：{{value}}",
+          { value },
+        ),
+      formatStatusHighlight: (value) =>
+        translate("inputCapabilities.baseline.status", "当前判断：{{value}}", {
+          value,
+        }),
+    },
+    formatRecentInputDescription: (preview) =>
+      translate("inputCapabilities.recentInput", "上次输入：{{preview}}", {
+        preview,
+      }),
+    headings: {
+      availableSkills: translate(
+        "inputCapabilities.heading.availableSkills",
+        "更多 Skills",
+      ),
+      characters: translate("inputCapabilities.heading.characters", "协作角色"),
+      featuredServiceSkills: translate(
+        "inputCapabilities.heading.featuredServiceSkills",
+        "场景 Skills",
+      ),
+      installedSkills: translate("inputCapabilities.heading.installedSkills", "Skills"),
+      installedSkillsEmpty: translate(
+        "inputCapabilities.heading.installedSkillsEmpty",
+        "已经沉淀的 Skills",
+      ),
+      recentContinuations: translate(
+        "inputCapabilities.heading.recentContinuations",
+        "最近使用",
+      ),
+      recentContinuationsEmpty: translate(
+        "inputCapabilities.heading.recentContinuationsEmpty",
+        "继续上次 Skill",
+      ),
+      recentMention: translate(
+        "inputCapabilities.heading.recentMention",
+        "最近调用",
+      ),
+      recentOperations: translate(
+        "inputCapabilities.heading.recentOperations",
+        "最近操作",
+      ),
+      resultTemplates: translate(
+        "inputCapabilities.heading.resultTemplates",
+        "结果模板",
+      ),
+      resultTemplatesEmpty: translate(
+        "inputCapabilities.heading.resultTemplatesEmpty",
+        "先拿结果",
+      ),
+      unsupported: translate(
+        "inputCapabilities.heading.unsupported",
+        "暂未接入",
+      ),
+    },
+    inputCommandGroups: {
+      browser_execution: {
+        heading: translate(
+          "inputCapabilities.inputGroup.browserExecution",
+          "浏览器 / 编排",
+        ),
+        kindLabel: translate(
+          "inputCapabilities.inputGroup.browserExecution",
+          "浏览器 / 编排",
+        ),
+      },
+      generate_expression: {
+        heading: translate(
+          "inputCapabilities.inputGroup.generateExpression",
+          "生成 / 表达",
+        ),
+        kindLabel: translate(
+          "inputCapabilities.inputGroup.generateExpression",
+          "生成 / 表达",
+        ),
+      },
+      media_transform: {
+        heading: translate(
+          "inputCapabilities.inputGroup.mediaTransform",
+          "媒体转换",
+        ),
+        kindLabel: translate(
+          "inputCapabilities.inputGroup.mediaTransform",
+          "媒体转换",
+        ),
+      },
+      other: {
+        heading: translate("inputCapabilities.inputGroup.other", "其他能力"),
+        kindLabel: translate("inputCapabilities.inputGroup.other", "其他能力"),
+      },
+      preview_publish: {
+        heading: translate(
+          "inputCapabilities.inputGroup.previewPublish",
+          "预览 / 发布",
+        ),
+        kindLabel: translate(
+          "inputCapabilities.inputGroup.previewPublish",
+          "预览 / 发布",
+        ),
+      },
+      search_read: {
+        heading: translate(
+          "inputCapabilities.inputGroup.searchRead",
+          "搜索 / 读取",
+        ),
+        kindLabel: translate(
+          "inputCapabilities.inputGroup.searchRead",
+          "搜索 / 读取",
+        ),
+      },
+    },
+    mentionRegistry: {
+      badge: translate(
+        "inputCapabilities.mentionRegistry.badge",
+        "统一调用注册表",
+      ),
+      charactersFootnote: translate(
+        "inputCapabilities.mentionRegistry.charactersFootnote",
+        "需要点名协作对象时再进入协作角色。",
+      ),
+      installedSkillsFootnote: translate(
+        "inputCapabilities.mentionRegistry.installedSkillsFootnote",
+        "已经沉淀的方法继续归在命令之后。",
+      ),
+      serviceSkillsFootnote: translate(
+        "inputCapabilities.mentionRegistry.serviceSkillsFootnote",
+        "场景 Skills 留在后面补位。",
+      ),
+      summaryDefault: translate(
+        "inputCapabilities.mentionRegistry.summaryDefault",
+        "这里先按搜索、生成、发布和浏览器编排收口 @命令，所有动作都会继续写回当前生成线程。",
+      ),
+      summaryWithRecent: translate(
+        "inputCapabilities.mentionRegistry.summaryWithRecent",
+        "上面保留刚调过的命令或 Skill，下面按搜索、生成、发布和浏览器编排收口当前可调用能力，都会继续写回当前生成线程。",
+      ),
+      titleDefault: translate(
+        "inputCapabilities.mentionRegistry.titleDefault",
+        "先调命令，再补 Skill",
+      ),
+      titleWithRecent: translate(
+        "inputCapabilities.mentionRegistry.titleWithRecent",
+        "继续最近调用，或切到其他执行器",
+      ),
+    },
+    reviewBanner: {
+      formatActionLabel: (title) =>
+        translate("inputCapabilities.review.action", "继续去「{{title}}」", {
+          title,
+        }),
+      formatFootnote: (titles) =>
+        translate("inputCapabilities.review.footnote", "更适合继续：{{titles}}", {
+          titles: titles.join(
+            translate("inputCapabilities.review.titleSeparator", " / "),
+          ),
+        }),
+      formatTitle: (title) =>
+        translate(
+          "inputCapabilities.review.title",
+          "最近判断已更新：{{title}}",
+          { title },
+        ),
+      titleSeparator: translate("inputCapabilities.review.titleSeparator", " / "),
+    },
+    slashCommandGroups: {
+      prompt_action: {
+        heading: translate(
+          "inputCapabilities.slashGroup.promptAction",
+          "提示命令",
+        ),
+        kindLabel: translate(
+          "inputCapabilities.slashGroup.promptAction",
+          "提示命令",
+        ),
+      },
+      status_help: {
+        heading: translate(
+          "inputCapabilities.slashGroup.statusHelp",
+          "状态 / 帮助",
+        ),
+        kindLabel: translate(
+          "inputCapabilities.slashGroup.statusHelp",
+          "状态 / 帮助",
+        ),
+      },
+      workspace_action: {
+        heading: translate(
+          "inputCapabilities.slashGroup.workspaceAction",
+          "工作台操作",
+        ),
+        kindLabel: translate(
+          "inputCapabilities.slashGroup.workspaceAction",
+          "工作台操作",
+        ),
+      },
+    },
+  };
 }
 
 const INPUT_COMMAND_SECTION_META: Record<
@@ -319,6 +597,8 @@ interface BuildInputCapabilitySectionsParams {
   projectId?: string | null;
   sessionId?: string | null;
   referenceEntries?: CuratedTaskReferenceEntry[];
+  curatedTaskTemplateCopy?: CuratedTaskTemplateCopy;
+  inputCapabilityCopy?: InputCapabilitySectionsCopy;
 }
 
 function compareRecentSlashEntries(
@@ -382,6 +662,7 @@ function resolveBuiltinCommandPrefillReplayText(params: {
 function resolveRecentBuiltinCommandDescription(
   command: BuiltinInputCommand,
   replayText?: string,
+  copy: InputCapabilitySectionsCopy = {},
 ): string {
   const normalizedReplayText = replayText?.replace(/\s+/g, " ").trim();
   if (normalizedReplayText) {
@@ -391,7 +672,9 @@ function resolveRecentBuiltinCommandDescription(
         : `${normalizedReplayText
             .slice(0, RECENT_REPLAY_TEXT_PREVIEW_LIMIT)
             .trimEnd()}...`;
-    return `上次输入：${preview}`;
+    return (
+      copy.formatRecentInputDescription?.(preview) ?? `上次输入：${preview}`
+    );
   }
 
   if (command.description?.trim()) {
@@ -404,11 +687,14 @@ function resolveRecentSlashSkillDescription(skill: Skill): string {
   return `${skill.name} · ${buildInstalledSkillCapabilityDescription(skill)}`;
 }
 
-function resolveRecentSlashEntryDescription(params: {
-  replayText?: string;
-  fallbackDescription?: string;
-  fallbackTitle: string;
-}): string {
+function resolveRecentSlashEntryDescription(
+  params: {
+    replayText?: string;
+    fallbackDescription?: string;
+    fallbackTitle: string;
+  },
+  copy: InputCapabilitySectionsCopy = {},
+): string {
   const normalizedReplayText = params.replayText?.replace(/\s+/g, " ").trim();
   if (normalizedReplayText) {
     const preview =
@@ -417,7 +703,9 @@ function resolveRecentSlashEntryDescription(params: {
         : `${normalizedReplayText
             .slice(0, RECENT_REPLAY_TEXT_PREVIEW_LIMIT)
             .trimEnd()}...`;
-    return `上次输入：${preview}`;
+    return (
+      copy.formatRecentInputDescription?.(preview) ?? `上次输入：${preview}`
+    );
   }
 
   const fallbackDescription = params.fallbackDescription?.trim();
@@ -430,23 +718,47 @@ function resolveRecentSlashEntryDescription(params: {
 
 function resolveInputCommandSectionMeta(
   command: Pick<BuiltinInputCommand, "key">,
+  copy: InputCapabilitySectionsCopy = {},
 ): InputCommandSectionMeta {
-  return INPUT_COMMAND_SECTION_META[
+  const meta = INPUT_COMMAND_SECTION_META[
     INPUT_COMMAND_GROUP_BY_KEY[command.key] ?? "other"
   ];
+  const metaCopy = copy.inputCommandGroups?.[
+    INPUT_COMMAND_GROUP_BY_KEY[command.key] ?? "other"
+  ];
+
+  return {
+    ...meta,
+    heading: metaCopy?.heading ?? meta.heading,
+    kindLabel: metaCopy?.kindLabel ?? meta.kindLabel,
+  };
 }
 
 function resolveSlashCommandSectionMeta(
   command: Pick<CodexSlashCommandDefinition, "kind">,
+  copy: InputCapabilitySectionsCopy = {},
 ): InputCommandSectionMeta {
+  const groupKey =
+    command.kind === "local_action"
+      ? "workspace_action"
+      : command.kind === "prompt_action"
+        ? "prompt_action"
+        : "status_help";
+  const metaCopy = copy.slashCommandGroups?.[groupKey];
+  const resolve = (meta: InputCommandSectionMeta): InputCommandSectionMeta => ({
+    ...meta,
+    heading: metaCopy?.heading ?? meta.heading,
+    kindLabel: metaCopy?.kindLabel ?? meta.kindLabel,
+  });
+
   switch (command.kind) {
     case "local_action":
-      return SLASH_COMMAND_SECTION_META.workspace_action;
+      return resolve(SLASH_COMMAND_SECTION_META.workspace_action);
     case "prompt_action":
-      return SLASH_COMMAND_SECTION_META.prompt_action;
+      return resolve(SLASH_COMMAND_SECTION_META.prompt_action);
     case "info":
     default:
-      return SLASH_COMMAND_SECTION_META.status_help;
+      return resolve(SLASH_COMMAND_SECTION_META.status_help);
   }
 }
 
@@ -496,30 +808,38 @@ function buildMentionRegistryBanner(params: {
   hasInstalledSkills: boolean;
   hasAvailableSkills: boolean;
   hasCharacters: boolean;
+  copy?: InputCapabilitySectionsCopy;
 }): InputCapabilitySection["banner"] {
   const footnotes: string[] = [];
+  const copy = params.copy?.mentionRegistry;
 
   if (params.hasServiceSkills) {
-    footnotes.push("场景 Skills 留在后面补位。");
+    footnotes.push(copy?.serviceSkillsFootnote ?? "场景 Skills 留在后面补位。");
   }
 
   if (params.hasInstalledSkills || params.hasAvailableSkills) {
-    footnotes.push("已经沉淀的方法继续归在命令之后。");
+    footnotes.push(
+      copy?.installedSkillsFootnote ?? "已经沉淀的方法继续归在命令之后。",
+    );
   }
 
   if (params.hasCharacters) {
-    footnotes.push("需要点名协作对象时再进入协作角色。");
+    footnotes.push(
+      copy?.charactersFootnote ?? "需要点名协作对象时再进入协作角色。",
+    );
   }
 
   return {
-    badge: "统一调用注册表",
+    badge: copy?.badge ?? "统一调用注册表",
     title: params.hasRecent
-      ? "继续最近调用，或切到其他执行器"
-      : "先调命令，再补 Skill",
+      ? (copy?.titleWithRecent ?? "继续最近调用，或切到其他执行器")
+      : (copy?.titleDefault ?? "先调命令，再补 Skill"),
     summary: truncateSectionBannerText(
       params.hasRecent
-        ? "上面保留刚调过的命令或 Skill，下面按搜索、生成、发布和浏览器编排收口当前可调用能力，都会继续写回当前生成线程。"
-        : "这里先按搜索、生成、发布和浏览器编排收口 @命令，所有动作都会继续写回当前生成线程。",
+        ? (copy?.summaryWithRecent ??
+            "上面保留刚调过的命令或 Skill，下面按搜索、生成、发布和浏览器编排收口当前可调用能力，都会继续写回当前生成线程。")
+        : (copy?.summaryDefault ??
+            "这里先按搜索、生成、发布和浏览器编排收口 @命令，所有动作都会继续写回当前生成线程。"),
     ),
     ...(footnotes.length > 0
       ? {
@@ -557,6 +877,7 @@ function resolveCuratedTaskLaunchContext(params: {
 function buildCuratedTaskSceneAppBaselineSummary(params: {
   task: CuratedTaskTemplateItem;
   referenceEntries?: CuratedTaskReferenceEntry[];
+  copy?: InputCapabilitySectionsCopy;
 }): string | null {
   const snapshot = buildSceneAppExecutionReviewPrefillSnapshot({
     referenceEntries: params.referenceEntries,
@@ -567,15 +888,27 @@ function buildCuratedTaskSceneAppBaselineSummary(params: {
   }
 
   const highlights = [
-    snapshot.statusLabel ? `当前判断：${snapshot.statusLabel}` : null,
+    snapshot.statusLabel
+      ? (params.copy?.baseline?.formatStatusHighlight?.(
+          snapshot.statusLabel,
+        ) ?? `当前判断：${snapshot.statusLabel}`)
+      : null,
     snapshot.destinationsLabel
-      ? `更适合去向：${snapshot.destinationsLabel}`
+      ? (params.copy?.baseline?.formatDestinationHighlight?.(
+          snapshot.destinationsLabel,
+        ) ?? `更适合去向：${snapshot.destinationsLabel}`)
       : snapshot.operatingAction
-        ? `经营动作：${snapshot.operatingAction}`
+        ? (params.copy?.baseline?.formatOperatingActionHighlight?.(
+            snapshot.operatingAction,
+          ) ?? `经营动作：${snapshot.operatingAction}`)
         : null,
   ].filter((item): item is string => Boolean(item));
 
-  return [`当前结果基线：${snapshot.sourceTitle}`, ...highlights]
+  return [
+    params.copy?.baseline?.formatBaseline?.(snapshot.sourceTitle) ??
+      `当前结果基线：${snapshot.sourceTitle}`,
+    ...highlights,
+  ]
     .filter((item) => item.trim().length > 0)
     .join(" · ");
 }
@@ -585,10 +918,12 @@ function buildCuratedTaskSlashDescription(params: {
   reasonSummary?: string;
   referenceEntries?: CuratedTaskReferenceEntry[];
   fallbackDescription?: string;
+  copy?: InputCapabilitySectionsCopy;
 }): string {
   const sceneAppBaselineSummary = buildCuratedTaskSceneAppBaselineSummary({
     task: params.task,
     referenceEntries: params.referenceEntries,
+    copy: params.copy,
   });
 
   return [
@@ -716,6 +1051,7 @@ function buildMentionCapabilitySections(
         description: resolveRecentBuiltinCommandDescription(
           command,
           resolvedReplayText,
+          params.inputCapabilityCopy,
         ),
         usedAt: recentRecord.usedAt,
         replayText: resolvedReplayText,
@@ -786,6 +1122,7 @@ function buildMentionCapabilitySections(
           hasInstalledSkills: params.installedSkills.length > 0,
           hasAvailableSkills: params.availableSkills.length > 0,
           hasCharacters: params.filteredCharacters.length > 0,
+          copy: params.inputCapabilityCopy,
         })
       : undefined;
   let didAttachMentionRegistryBanner = false;
@@ -809,7 +1146,7 @@ function buildMentionCapabilitySections(
     sections.push(
       attachMentionRegistryBanner({
         key: "recent-mention",
-        heading: "最近调用",
+        heading: params.inputCapabilityCopy?.headings?.recentMention ?? "最近调用",
         items: visibleRecentMentionEntries.flatMap<InputCapabilityDescriptor>(
           (entry) => {
             if (entry.kind === "builtin_command") {
@@ -817,7 +1154,10 @@ function buildMentionCapabilitySections(
                 (item) => item.key === entry.commandKey,
               );
               const meta = command
-                ? resolveInputCommandSectionMeta(command)
+                ? resolveInputCommandSectionMeta(
+                    command,
+                    params.inputCapabilityCopy,
+                  )
                 : null;
               return command
                 ? [
@@ -861,7 +1201,8 @@ function buildMentionCapabilitySections(
 
   for (const group of groupItemsBySectionMeta(
     visibleBuiltinCommands,
-    resolveInputCommandSectionMeta,
+    (command) =>
+      resolveInputCommandSectionMeta(command, params.inputCapabilityCopy),
   )) {
     sections.push(
       attachMentionRegistryBanner({
@@ -884,6 +1225,7 @@ function buildMentionCapabilitySections(
             description: resolveRecentBuiltinCommandDescription(
               command,
               resolvedReplayText,
+              params.inputCapabilityCopy,
             ),
             icon: group.meta.icon,
             iconClassName: group.meta.iconClassName,
@@ -898,7 +1240,9 @@ function buildMentionCapabilitySections(
   if (visibleFeaturedServiceSkills.length > 0) {
     sections.push({
       key: "featured-service-skills",
-      heading: "场景 Skills",
+      heading:
+        params.inputCapabilityCopy?.headings?.featuredServiceSkills ??
+        "场景 Skills",
       items: visibleFeaturedServiceSkills.map((skill) => ({
         key: `featured-${skill.id}`,
         kind: "service_skill" as const,
@@ -930,7 +1274,7 @@ function buildMentionCapabilitySections(
   if (params.installedSkills.length > 0) {
     sections.push({
       key: "installed-skills",
-      heading: "Skills",
+      heading: params.inputCapabilityCopy?.headings?.installedSkills ?? "Skills",
       items: params.installedSkills.map((skill) => ({
         key: skill.directory,
         kind: "installed_skill" as const,
@@ -946,7 +1290,8 @@ function buildMentionCapabilitySections(
   if (params.availableSkills.length > 0) {
     sections.push({
       key: "available-skills",
-      heading: "更多 Skills",
+      heading:
+        params.inputCapabilityCopy?.headings?.availableSkills ?? "更多 Skills",
       items: params.availableSkills.map((skill) => ({
         key: skill.directory,
         kind: "available_skill" as const,
@@ -962,7 +1307,7 @@ function buildMentionCapabilitySections(
   if (params.filteredCharacters.length > 0) {
     sections.push({
       key: "characters",
-      heading: "协作角色",
+      heading: params.inputCapabilityCopy?.headings?.characters ?? "协作角色",
       items: params.filteredCharacters.map((character) => ({
         key: character.id,
         kind: "character" as const,
@@ -984,11 +1329,12 @@ function buildSlashCapabilitySections(
 ): InputCapabilitySection[] {
   const filteredCuratedTaskTemplates = filterCuratedTaskTemplates(
     params.mentionQuery,
-    listCuratedTaskTemplates(),
+    listCuratedTaskTemplates(params.curatedTaskTemplateCopy),
   );
   const featuredCuratedTaskTemplates = listFeaturedHomeCuratedTaskTemplates(
     filteredCuratedTaskTemplates,
     {
+      copy: params.curatedTaskTemplateCopy,
       projectId: params.projectId,
       sessionId: params.sessionId,
       referenceEntries: params.referenceEntries,
@@ -1030,11 +1376,14 @@ function buildSlashCapabilitySections(
         kindLabel: command.commandPrefix,
         commandPrefix: command.commandPrefix,
         title: command.label,
-        description: resolveRecentSlashEntryDescription({
-          replayText: recentRecord.replayText,
-          fallbackDescription: command.description,
-          fallbackTitle: command.label,
-        }),
+        description: resolveRecentSlashEntryDescription(
+          {
+            replayText: recentRecord.replayText,
+            fallbackDescription: command.description,
+            fallbackTitle: command.label,
+          },
+          params.inputCapabilityCopy,
+        ),
         usedAt: recentRecord.usedAt,
         replayText: recentRecord.replayText,
       });
@@ -1053,11 +1402,14 @@ function buildSlashCapabilitySections(
         kind: "scene",
         commandPrefix: command.commandPrefix,
         title: command.label,
-        description: resolveRecentSlashEntryDescription({
-          replayText: recentRecord.replayText,
-          fallbackDescription: command.description,
-          fallbackTitle: command.label,
-        }),
+        description: resolveRecentSlashEntryDescription(
+          {
+            replayText: recentRecord.replayText,
+            fallbackDescription: command.description,
+            fallbackTitle: command.label,
+          },
+          params.inputCapabilityCopy,
+        ),
         usedAt: recentRecord.usedAt,
         replayText: recentRecord.replayText,
       });
@@ -1076,11 +1428,14 @@ function buildSlashCapabilitySections(
         kind: "skill",
         commandPrefix: `/${skill.key}`,
         title: skill.name,
-        description: resolveRecentSlashEntryDescription({
-          replayText: recentRecord.replayText,
-          fallbackDescription: resolveRecentSlashSkillDescription(skill),
-          fallbackTitle: skill.name,
-        }),
+        description: resolveRecentSlashEntryDescription(
+          {
+            replayText: recentRecord.replayText,
+            fallbackDescription: resolveRecentSlashSkillDescription(skill),
+            fallbackTitle: skill.name,
+          },
+          params.inputCapabilityCopy,
+        ),
         usedAt: recentRecord.usedAt,
         replayText: recentRecord.replayText,
       });
@@ -1101,18 +1456,21 @@ function buildSlashCapabilitySections(
             task: template,
             prefill: launchPrefill,
           }),
-          resolveRecentSlashEntryDescription({
-            fallbackDescription: buildCuratedTaskCapabilityDescription(
-              template,
-              {
-                includeSummary: false,
-                includeResultDestination: true,
-                includeFollowUpActions: true,
-                followUpLimit: 1,
-              },
-            ),
-            fallbackTitle: template.title,
-          }),
+          resolveRecentSlashEntryDescription(
+            {
+              fallbackDescription: buildCuratedTaskCapabilityDescription(
+                template,
+                {
+                  includeSummary: false,
+                  includeResultDestination: true,
+                  includeFollowUpActions: true,
+                  followUpLimit: 1,
+                },
+              ),
+              fallbackTitle: template.title,
+            },
+            params.inputCapabilityCopy,
+          ),
         ]
           .filter((segment) => segment.length > 0)
           .join(" · "),
@@ -1175,11 +1533,14 @@ function buildSlashCapabilitySections(
         (template) => !recentCuratedTaskIds.has(template.id),
       )
     : curatedTaskTemplates;
+  const reviewReasonLabel =
+    params.curatedTaskTemplateCopy?.recommendation?.recentReviewReasonLabel ??
+    "围绕最近判断";
   const highlightedReviewTemplates = visibleCuratedTaskTemplates
     .filter(
       (task) =>
         featuredCuratedTaskTemplateMap.get(task.id)?.reasonLabel ===
-        "围绕最近判断",
+        reviewReasonLabel,
     )
     .slice(0, 2);
 
@@ -1193,7 +1554,9 @@ function buildSlashCapabilitySections(
         const command = allSupportedSlashCommands.find(
           (item) => item.commandPrefix === entry.commandPrefix,
         );
-        const meta = command ? resolveSlashCommandSectionMeta(command) : null;
+        const meta = command
+          ? resolveSlashCommandSectionMeta(command, params.inputCapabilityCopy)
+          : null;
         return command
           ? [
               {
@@ -1255,6 +1618,7 @@ function buildSlashCapabilitySections(
               task,
               referenceEntries: launchContext.mergedReferenceEntries,
               fallbackDescription: entry.description,
+              copy: params.inputCapabilityCopy,
             }),
             icon: "sparkles" as const,
             iconClassName: "mr-2 h-4 w-4 text-amber-600",
@@ -1296,7 +1660,7 @@ function buildSlashCapabilitySections(
   if (visibleUnsupportedSlashCommands.length > 0) {
     sections.push({
       key: "unsupported-slash-commands",
-      heading: "暂未接入",
+      heading: params.inputCapabilityCopy?.headings?.unsupported ?? "暂未接入",
       items: visibleUnsupportedSlashCommands.map((command) => ({
         key: command.key,
         kind: "slash_command" as const,
@@ -1336,6 +1700,7 @@ function buildSlashCapabilitySections(
           fallbackDescription: buildCuratedTaskCapabilityDescription(task, {
             includeResultDestination: true,
           }),
+          copy: params.inputCapabilityCopy,
         }),
         icon: "sparkles" as const,
         iconClassName: "mr-2 h-4 w-4 text-amber-600",
@@ -1352,7 +1717,11 @@ function buildSlashCapabilitySections(
     visibleResultTemplateItems.length > 0
       ? {
           key: "result-templates",
-          heading: isEmptyQuery ? "先拿结果" : "结果模板",
+          heading: isEmptyQuery
+            ? (params.inputCapabilityCopy?.headings?.resultTemplatesEmpty ??
+              "先拿结果")
+            : (params.inputCapabilityCopy?.headings?.resultTemplates ??
+              "结果模板"),
           items: visibleResultTemplateItems,
           ...(latestReviewSignal && highlightedReviewTemplates.length > 0
             ? {
@@ -1373,7 +1742,10 @@ function buildSlashCapabilitySections(
                     null;
 
                   return {
-                    title: `最近判断已更新：${latestReviewSignal.title}`,
+                    title:
+                      params.inputCapabilityCopy?.reviewBanner?.formatTitle?.(
+                        latestReviewSignal.title,
+                      ) ?? `最近判断已更新：${latestReviewSignal.title}`,
                     summary: truncateSectionBannerText(
                       [
                         latestReviewSignal.summary,
@@ -1382,11 +1754,20 @@ function buildSlashCapabilitySections(
                         .filter((segment) => segment.trim().length > 0)
                         .join(" "),
                     ),
-                    footnote: `更适合继续：${highlightedReviewTemplates
-                      .map((task) => task.title)
-                      .join(" / ")}`,
+                    footnote:
+                      params.inputCapabilityCopy?.reviewBanner?.formatFootnote?.(
+                        highlightedReviewTemplates.map((task) => task.title),
+                      ) ??
+                      `更适合继续：${highlightedReviewTemplates
+                        .map((task) => task.title)
+                        .join(
+                          params.inputCapabilityCopy?.reviewBanner
+                            ?.titleSeparator ?? " / ",
+                        )}`,
                     actionLabel: primarySuggestedItem
-                      ? `继续去「${primarySuggestedItem.title}」`
+                      ? (params.inputCapabilityCopy?.reviewBanner?.formatActionLabel?.(
+                          primarySuggestedItem.title,
+                        ) ?? `继续去「${primarySuggestedItem.title}」`)
                       : undefined,
                     actionItemKey: primarySuggestedItem?.key,
                   };
@@ -1400,7 +1781,11 @@ function buildSlashCapabilitySections(
     visibleInstalledSkills.length > 0
       ? {
           key: "installed-skills",
-          heading: isEmptyQuery ? "已经沉淀的 Skills" : "Skills",
+          heading: isEmptyQuery
+            ? (params.inputCapabilityCopy?.headings?.installedSkillsEmpty ??
+              "已经沉淀的 Skills")
+            : (params.inputCapabilityCopy?.headings?.installedSkills ??
+              "Skills"),
           items: visibleInstalledSkills.map((skill) => ({
             key: skill.directory,
             kind: "installed_skill" as const,
@@ -1420,7 +1805,11 @@ function buildSlashCapabilitySections(
   if (visibleRecentContinuationEntries.length > 0) {
     sections.push({
       key: "recent-slash-continuations",
-      heading: isEmptyQuery ? "继续上次 Skill" : "最近使用",
+      heading: isEmptyQuery
+        ? (params.inputCapabilityCopy?.headings?.recentContinuationsEmpty ??
+          "继续上次 Skill")
+        : (params.inputCapabilityCopy?.headings?.recentContinuations ??
+          "最近使用"),
       items: buildRecentSlashCapabilityItems(visibleRecentContinuationEntries),
     });
   }
@@ -1431,7 +1820,8 @@ function buildSlashCapabilitySections(
 
   for (const group of groupItemsBySectionMeta(
     visibleSupportedSlashCommands,
-    resolveSlashCommandSectionMeta,
+    (command) =>
+      resolveSlashCommandSectionMeta(command, params.inputCapabilityCopy),
   )) {
     sections.push({
       key: `supported-slash-commands:${group.meta.key}`,
@@ -1444,11 +1834,14 @@ function buildSlashCapabilitySections(
           key: command.key,
           kind: "slash_command" as const,
           title: resolveDisplayTitleFromCommandLike(command),
-          description: resolveRecentSlashEntryDescription({
-            replayText: recentRecord?.replayText,
-            fallbackDescription: command.description,
-            fallbackTitle: command.label,
-          }),
+          description: resolveRecentSlashEntryDescription(
+            {
+              replayText: recentRecord?.replayText,
+              fallbackDescription: command.description,
+              fallbackTitle: command.label,
+            },
+            params.inputCapabilityCopy,
+          ),
           icon: group.meta.icon,
           iconClassName: group.meta.iconClassName,
           kindLabel: command.commandPrefix,
@@ -1462,7 +1855,8 @@ function buildSlashCapabilitySections(
   if (visibleRecentCommandEntries.length > 0) {
     sections.push({
       key: "recent-slash-operations",
-      heading: "最近操作",
+      heading:
+        params.inputCapabilityCopy?.headings?.recentOperations ?? "最近操作",
       items: buildRecentSlashCapabilityItems(visibleRecentCommandEntries),
     });
   }
@@ -1478,7 +1872,8 @@ function buildSlashCapabilitySections(
   if (params.availableSkills.length > 0) {
     sections.push({
       key: "available-skills",
-      heading: "更多 Skills",
+      heading:
+        params.inputCapabilityCopy?.headings?.availableSkills ?? "更多 Skills",
       items: params.availableSkills.map((skill) => ({
         key: skill.directory,
         kind: "available_skill" as const,

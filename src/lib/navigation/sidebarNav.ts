@@ -7,7 +7,6 @@ import {
   Puzzle,
   Settings,
   Sparkles,
-  Waypoints,
   Workflow,
   type LucideIcon,
 } from "lucide-react";
@@ -122,14 +121,6 @@ export const FOOTER_SIDEBAR_NAV_ITEMS: SidebarNavItemDefinition[] = [
     icon: Puzzle,
     page: "plugins",
     isActive: (currentPage) => currentPage === "plugins",
-    configurable: true,
-  },
-  {
-    id: "openclaw",
-    label: "OpenClaw",
-    icon: Waypoints,
-    page: "openclaw",
-    isActive: (currentPage) => currentPage === "openclaw",
     configurable: true,
   },
   {

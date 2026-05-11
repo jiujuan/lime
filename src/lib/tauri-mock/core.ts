@@ -6542,110 +6542,6 @@ const defaultMocks: Record<string, any> = {
     summary_message: null,
   }),
 
-  // OpenClaw 相关
-  openclaw_check_installed: () => ({
-    installed: false,
-    path: null,
-  }),
-  openclaw_get_environment_status: () => ({
-    node: {
-      status: "ok",
-      version: "22.12.0",
-      path: "/opt/homebrew/bin/node",
-      message: "Node.js 已就绪：22.12.0",
-      autoInstallSupported: true,
-    },
-    git: {
-      status: "ok",
-      version: "2.44.0",
-      path: "/usr/bin/git",
-      message: "Git 已就绪：2.44.0",
-      autoInstallSupported: true,
-    },
-    openclaw: {
-      status: "missing",
-      version: null,
-      path: null,
-      message: "未检测到 OpenClaw，可在环境就绪后一键安装。",
-      autoInstallSupported: false,
-    },
-    recommendedAction: "install_openclaw",
-    summary: "运行环境已就绪，可以继续一键安装 OpenClaw。",
-    diagnostics: {
-      npmPath: "/opt/homebrew/bin/npm",
-      npmGlobalPrefix: "/opt/homebrew",
-      openclawPackagePath: null,
-      whereCandidates: [],
-      supplementalSearchDirs: ["/opt/homebrew/bin", "/usr/local/bin"],
-      supplementalCommandCandidates: [],
-      gitWhereCandidates: [],
-      gitSupplementalSearchDirs: [],
-      gitSupplementalCommandCandidates: [],
-    },
-    tempArtifacts: [],
-  }),
-  openclaw_check_node_version: () => ({
-    status: "ok",
-    version: "22.12.0",
-    path: "/opt/homebrew/bin/node",
-  }),
-  openclaw_check_git_available: () => ({
-    available: true,
-    path: "/usr/bin/git",
-  }),
-  openclaw_get_node_download_url: () => "https://nodejs.org/en/download",
-  openclaw_get_git_download_url: () => "https://git-scm.com/downloads",
-  openclaw_install: () => ({
-    success: true,
-    message: "OpenClaw 安装请求已在浏览器 mock 模式下完成。",
-  }),
-  openclaw_install_dependency: (args: any) => ({
-    success: true,
-    message: `${args?.kind === "git" ? "Git" : "Node.js"} 安装请求已在浏览器 mock 模式下完成。`,
-  }),
-  openclaw_get_command_preview: (args: any) => ({
-    title: "Mock OpenClaw 命令预览",
-    command: `mock ${args?.operation ?? "install"}`,
-  }),
-  openclaw_uninstall: () => ({
-    success: true,
-    message: "OpenClaw 卸载请求已在浏览器 mock 模式下完成。",
-  }),
-  openclaw_cleanup_temp_artifacts: () => ({
-    success: true,
-    message: "未发现需要清理的 OpenClaw 临时文件。",
-  }),
-  openclaw_start_gateway: () => ({
-    success: true,
-    message: "Gateway 已在浏览器 mock 模式下启动。",
-  }),
-  openclaw_stop_gateway: () => ({
-    success: true,
-    message: "Gateway 已在浏览器 mock 模式下停止。",
-  }),
-  openclaw_restart_gateway: () => ({
-    success: true,
-    message: "Gateway 已在浏览器 mock 模式下重启。",
-  }),
-  openclaw_get_status: () => ({
-    status: "stopped",
-    port: 18790,
-  }),
-  openclaw_check_health: () => ({
-    status: "unhealthy",
-    gatewayPort: 18790,
-    uptime: null,
-    version: null,
-  }),
-  openclaw_get_dashboard_url: () =>
-    "http://127.0.0.1:18790/#token=mock-openclaw",
-  openclaw_get_channels: () => [],
-  openclaw_get_progress_logs: () => [],
-  openclaw_sync_provider_config: () => ({
-    success: true,
-    message: "Provider 配置已同步到浏览器 mock 环境。",
-  }),
-
   get_server_diagnostics: () => ({
     generated_at: new Date().toISOString(),
     running: false,
@@ -9601,9 +9497,14 @@ const defaultMocks: Record<string, any> = {
   reveal_in_finder: () => ({}),
   open_with_default_app: () => ({}),
   open_external_url: (args: any) => {
-    const url = typeof args?.url === "string" ? args.url : "";
-    if (typeof window !== "undefined" && /^https?:\/\//i.test(url.trim())) {
-      window.open(url.trim(), "_blank", "noopener,noreferrer");
+    const url = typeof args?.url === "string" ? args.url.trim() : "";
+    const normalizedUrl = url.toLowerCase();
+    if (
+      typeof window !== "undefined" &&
+      (normalizedUrl.startsWith("http://") ||
+        normalizedUrl.startsWith("https://"))
+    ) {
+      window.open(url, "_blank", "noopener,noreferrer");
     }
     return {};
   },

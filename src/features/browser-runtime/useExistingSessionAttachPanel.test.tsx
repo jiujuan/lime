@@ -15,7 +15,10 @@ import {
   type MountedRoot,
 } from "@/components/workspace/hooks/testUtils";
 import type { ExistingSessionTabRecord } from "./existingSessionBridge";
-import { useExistingSessionAttachPanel } from "./useExistingSessionAttachPanel";
+import {
+  useExistingSessionAttachPanel,
+  type ExistingSessionAttachPanelCopy,
+} from "./useExistingSessionAttachPanel";
 
 const {
   mockLoadExistingSessionAttachContext,
@@ -88,10 +91,68 @@ const COMPOSE_TAB: ExistingSessionTabRecord = {
   active: false,
 };
 
+const ATTACH_PANEL_COPY: ExistingSessionAttachPanelCopy = {
+  presentation: {
+    status: {
+      checking: {
+        label: "Checking bridge",
+        description: "Confirming the current Chrome bridge connection.",
+      },
+      waiting: {
+        label: "Waiting for bridge",
+        description: "Connect the Lime Browser Bridge extension first.",
+      },
+      reading: {
+        label: "Reading page",
+        description: "Syncing the current Chrome page summary.",
+      },
+      attached: {
+        label: "Attached current Chrome",
+        description: "Reusing your current Chrome page.",
+      },
+    },
+    placeholder: {
+      default:
+        "Attach current Chrome can take over a live session when available.",
+      checking: "Checking the current Chrome bridge connection...",
+      waiting: "Install and connect Lime Browser Bridge in the current browser.",
+      reading: "Reading the current Chrome page summary...",
+    },
+    actions: {
+      reading: "Reading",
+      checking: "Checking",
+      readPage: "Read page",
+      refreshBridge: "Refresh bridge",
+      refreshing: "Refreshing...",
+      refreshBridgeStatus: "Refresh bridge status",
+      readCurrentPage: "Read current page",
+      readTabs: "Read tabs",
+    },
+    hint: {
+      embedded: {
+        connected: "Attach mode is connected.",
+        waiting: "Connect Lime Browser Bridge first.",
+      },
+      live: {
+        connected: "Attach mode can take over the live view when available.",
+        waiting: "Connect Lime Browser Bridge first.",
+      },
+    },
+  },
+  attachStatusLoadFailed: (message) =>
+    `Failed to read attached Chrome status: ${message}`,
+  pageReadSuccess: "Read current page summary",
+  pageReadFailed: (message) => `Failed to read current page: ${message}`,
+  tabsLoadFailed: (message) => `Failed to read tabs: ${message}`,
+  tabSwitchSuccess: (tabLabel) => `Switched to tab: ${tabLabel}`,
+  tabSwitchFailed: (message) => `Failed to switch tab: ${message}`,
+};
+
 type HookHarnessProps = {
   selectedProfileKey?: string | null;
   initialProfileKey?: string;
   sessionState?: unknown | null;
+  copy?: ExistingSessionAttachPanelCopy;
   onMessage?: (message: { type: "success" | "error"; text: string }) => void;
   onReady: (panel: ReturnType<typeof useExistingSessionAttachPanel>) => void;
 };
@@ -101,6 +162,7 @@ function HookHarness(props: HookHarnessProps) {
     selectedProfileKey: props.selectedProfileKey,
     initialProfileKey: props.initialProfileKey,
     sessionState: props.sessionState ?? null,
+    copy: props.copy ?? ATTACH_PANEL_COPY,
     onMessage: props.onMessage,
   });
 
@@ -251,7 +313,7 @@ describe("useExistingSessionAttachPanel", () => {
     expect(getPanel().attachPageInfo).toEqual(COMPOSE_PAGE_INFO);
     expect(onMessage).toHaveBeenCalledWith({
       type: "success",
-      text: "已读取当前页面摘要",
+      text: "Read current page summary",
     });
   });
 
@@ -317,7 +379,7 @@ describe("useExistingSessionAttachPanel", () => {
     expect(panel.switchingAttachTabId).toBeNull();
     expect(onMessage).toHaveBeenCalledWith({
       type: "success",
-      text: "已切换到标签页：微博创作中心",
+      text: "Switched to tab: 微博创作中心",
     });
   });
 

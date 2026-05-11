@@ -26,9 +26,21 @@ type RuntimeMessage = {
   text: string;
 };
 
+export type ExistingSessionProfileManagerCopy = {
+  tabsLoadFailed: (message: string) => string;
+  attachSuccess: (args: {
+    name: string;
+    url?: string | null;
+    notice?: string | null;
+  }) => string;
+  tabSwitchSuccess: (tabLabel: string) => string;
+  tabSwitchFailed: (message: string) => string;
+};
+
 type UseExistingSessionProfileManagerOptions = {
   profiles: BrowserProfileRecord[];
   existingSessionEnvironmentNotice?: string | null;
+  copy: ExistingSessionProfileManagerCopy;
   onMessage?: (message: RuntimeMessage) => void;
   onProfileLaunched?: (profileKey: string) => void;
 };
@@ -65,12 +77,17 @@ type UseExistingSessionProfileManagerResult = {
   ) => Promise<void>;
 };
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export function useExistingSessionProfileManager(
   options: UseExistingSessionProfileManagerOptions,
 ): UseExistingSessionProfileManagerResult {
   const {
     profiles,
     existingSessionEnvironmentNotice,
+    copy,
     onMessage,
     onProfileLaunched,
   } = options;
@@ -176,9 +193,7 @@ export function useExistingSessionProfileManager(
         if (!loadOptions?.quiet) {
           onMessage?.({
             type: "error",
-            text: `读取标签页失败: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
+            text: copy.tabsLoadFailed(getErrorMessage(error)),
           });
         }
         throw error;
@@ -189,7 +204,7 @@ export function useExistingSessionProfileManager(
         }));
       }
     },
-    [onMessage],
+    [copy, onMessage],
   );
 
   const handleAttachExistingSession = useCallback(
@@ -210,12 +225,15 @@ export function useExistingSessionProfileManager(
       onProfileLaunched?.(profile.profile_key);
       onMessage?.({
         type: "success",
-        text: profile.launch_url
-          ? `已附着当前 Chrome：${profile.name}，并导航到 ${profile.launch_url}${existingSessionEnvironmentNotice ? `。${existingSessionEnvironmentNotice}` : ""}`
-          : `已附着当前 Chrome：${profile.name}${existingSessionEnvironmentNotice ? `。${existingSessionEnvironmentNotice}` : ""}`,
+        text: copy.attachSuccess({
+          name: profile.name,
+          url: profile.launch_url,
+          notice: existingSessionEnvironmentNotice,
+        }),
       });
     },
     [
+      copy,
       existingSessionEnvironmentNotice,
       onMessage,
       onProfileLaunched,
@@ -267,20 +285,19 @@ export function useExistingSessionProfileManager(
 
         onMessage?.({
           type: "success",
-          text: `已切换到标签页：${getExistingSessionTabLabel(tab)}`,
+          text: copy.tabSwitchSuccess(getExistingSessionTabLabel(tab)),
         });
       } catch (error) {
         onMessage?.({
           type: "error",
-          text: `切换标签页失败: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          text: copy.tabSwitchFailed(getErrorMessage(error)),
         });
       } finally {
         setSwitchingTabKey(null);
       }
     },
     [
+      copy,
       loadExistingSessionTabs,
       onMessage,
       refreshBridgeStatusSnapshot,

@@ -204,13 +204,38 @@ describe("AppearanceSettings", () => {
     expect(text).not.toContain("持续流程");
     expect(text).not.toContain("消息渠道");
     expect(text).toContain("插件中心");
-    expect(text).toContain("OpenClaw");
     expect(text).toContain("桌宠");
     expect(text).toContain("推荐行为");
     expect(text).toContain("推荐自动附带选中内容");
     expect(text).toContain("重新运行引导");
     expect(text).not.toContain("已合并旧入口");
     expect(buttonTexts).not.toContain("设置");
+  });
+
+  it("应通过 settings namespace 渲染英文外观 chrome", async () => {
+    await changeLimeLocale("en-US");
+    mockGetConfig.mockResolvedValue({
+      ...createMockConfig(),
+      language: "en-US",
+    });
+
+    const { container } = await renderPage();
+    const text = container.textContent ?? "";
+
+    expect(text).toContain("Appearance");
+    expect(text).toContain("Theme: System");
+    expect(text).toContain("Palette: Graphite Green");
+    expect(text).toContain("Language: English");
+    expect(text).toContain("Sound cues: On");
+    expect(text).toContain("Base Appearance");
+    expect(text).toContain("Theme Mode");
+    expect(text).toContain("Color Palette");
+    expect(text).toContain("Random");
+    expect(text).toContain("Setup & Recovery");
+    expect(text).toContain("Optional System Entries");
+    expect(text).toContain("Plugin Center");
+    expect(text).toContain("Recommendation Behavior");
+    expect(text).not.toContain("管理主题、语言");
   });
 
   it("切换界面语言时应写入 BCP 47 locale 并同步兼容 Patch 语言", async () => {

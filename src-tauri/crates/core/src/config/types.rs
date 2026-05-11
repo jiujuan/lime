@@ -869,7 +869,7 @@ impl Default for NavigationConfig {
     }
 }
 
-const CURRENT_CONFIGURABLE_NAV_ITEM_IDS: &[&str] = &["plugins", "openclaw", "companion"];
+const CURRENT_CONFIGURABLE_NAV_ITEM_IDS: &[&str] = &["plugins", "companion"];
 
 fn normalize_navigation_enabled_items(items: &[String]) -> Vec<String> {
     let mut normalized = Vec::new();
@@ -2898,7 +2898,6 @@ mod unit_tests {
             "video".to_string(),
             "image-gen".to_string(),
             "automation".to_string(),
-            "openclaw".to_string(),
             "resources".to_string(),
             "memory".to_string(),
         ];
@@ -2906,10 +2905,7 @@ mod unit_tests {
         let changed = config.normalize_workspace_preferences();
 
         assert!(changed);
-        assert_eq!(
-            config.navigation.enabled_items,
-            vec!["openclaw".to_string()]
-        );
+        assert_eq!(config.navigation.enabled_items, Vec::<String>::new());
     }
 
     #[test]

@@ -8,14 +8,23 @@ import type {
   AutomationRequestMetadata,
 } from "@/lib/api/automation";
 
-export const AUTOMATION_ACCESS_MODE_OPTIONS: Array<{
-  value: AgentAccessMode;
-  label: string;
-}> = [
-  { value: "read-only", label: "只读" },
-  { value: "current", label: "按需确认" },
-  { value: "full-access", label: "完全访问" },
-];
+export interface AutomationAccessModeCopy {
+  readOnly: string;
+  current: string;
+  fullAccess: string;
+  policyReadOnly: string;
+  policyCurrent: string;
+  policyFullAccess: string;
+}
+
+export const defaultAutomationAccessModeCopy: AutomationAccessModeCopy = {
+  readOnly: "只读",
+  current: "按需确认",
+  fullAccess: "完全访问",
+  policyReadOnly: "正式策略会写成 on-request + read-only。",
+  policyCurrent: "正式策略会写成 on-request + workspace-write。",
+  policyFullAccess: "正式策略会写成 never + danger-full-access。",
+};
 
 const LEGACY_ACCESS_MODE_KEYS = ["access_mode", "accessMode"] as const;
 
@@ -134,27 +143,60 @@ export function omitLegacyAutomationAccessModeMetadata(
 }
 
 export function automationAccessModeLabel(accessMode: AgentAccessMode): string {
+  return automationAccessModeLabelWithCopy(
+    accessMode,
+    defaultAutomationAccessModeCopy,
+  );
+}
+
+export function automationAccessModeLabelWithCopy(
+  accessMode: AgentAccessMode,
+  copy: AutomationAccessModeCopy,
+): string {
   switch (accessMode) {
     case "read-only":
-      return "只读";
+      return copy.readOnly;
     case "current":
-      return "按需确认";
+      return copy.current;
     case "full-access":
     default:
-      return "完全访问";
+      return copy.fullAccess;
   }
 }
 
 export function automationAccessModePolicySummary(
   accessMode: AgentAccessMode,
 ): string {
+  return automationAccessModePolicySummaryWithCopy(
+    accessMode,
+    defaultAutomationAccessModeCopy,
+  );
+}
+
+export function automationAccessModePolicySummaryWithCopy(
+  accessMode: AgentAccessMode,
+  copy: AutomationAccessModeCopy,
+): string {
   switch (accessMode) {
     case "read-only":
-      return "正式策略会写成 on-request + read-only。";
+      return copy.policyReadOnly;
     case "current":
-      return "正式策略会写成 on-request + workspace-write。";
+      return copy.policyCurrent;
     case "full-access":
     default:
-      return "正式策略会写成 never + danger-full-access。";
+      return copy.policyFullAccess;
   }
+}
+
+export function buildAutomationAccessModeOptions(
+  copy: AutomationAccessModeCopy = defaultAutomationAccessModeCopy,
+): Array<{
+  value: AgentAccessMode;
+  label: string;
+}> {
+  return [
+    { value: "read-only", label: copy.readOnly },
+    { value: "current", label: copy.current },
+    { value: "full-access", label: copy.fullAccess },
+  ];
 }

@@ -1,13 +1,13 @@
-## Lime v1.33.0
+## Lime v1.34.0
 
 发布日期：`2026-05-11`
 递交范围：完整 dirty worktree，包含 tracked、deleted 与新增文件；`.lime/` 等本地运行态忽略目录不纳入发布提交。
 
-> 发布说明：上一版 release tag 为 `v1.32.0`。本版按用户要求升级到 `v1.33.0`，并把本轮待递交的全部源码、文档、脚本、测试与发布证据索引纳入 release notes。
+> 发布说明：上一版 release tag 为 `v1.33.0`。本版按用户要求升级到 `v1.34.0`，并把当前完整 dirty worktree 的源码、文档、脚本、测试与发布说明索引纳入 release notes。
 
 ### 发布概览
 
-- 应用版本从 `1.32.0` 升级到 `1.33.0`，同步 `package.json`、`package-lock.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`、`src-tauri/tauri.conf.json`、`src-tauri/tauri.conf.headless.json`、`packages/lime-cli-npm/package.json` 与 `@limecloud/lime-cli` 发布示例。
+- 应用版本从 `1.33.0` 升级到 `1.34.0`，同步 `package.json`、`package-lock.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`、`src-tauri/tauri.conf.json`、`src-tauri/tauri.conf.headless.json`、`packages/lime-cli-npm/package.json` 与 `@limecloud/lime-cli` wrapper 版本。
 - Agent QC 保留 scenario / GUI flow / Evidence Pack schema、qcloop job / status / preflight / export / release-summary / audit 脚本作为本地与人工证据工具；按本版要求从 GitHub Actions 发布/夜间/合同验证链路移除。
 - Agent Runtime 与 Team / Workspace 主链补齐 approval sandbox、Claw chat ready streaming、tool surface、service skill entry、browser runtime、knowledge GUI 与 GUI owner 检查脚本，降低只靠浅层 smoke 误判的风险。
 - i18n 主链从 legacy DOM Patch 迁到 key-based resources：新增 `createI18n`、namespace loader、locale resources、格式化工具与覆盖测试，旧 patch 文件移入 `src/i18n/legacy-patch/` 并从 current 入口退场。
@@ -52,7 +52,7 @@
 
 ### 校验状态
 
-- `npm run verify:app-version`：通过，版本一致性为 `1.33.0`。
+- `npm run verify:app-version`：待本轮版本更新后复跑确认版本一致性为 `1.34.0`。
 - `cargo fmt --manifest-path "src-tauri/Cargo.toml" --all`：通过。
 - `cargo test --manifest-path "src-tauri/Cargo.toml" --workspace --locked`：通过；使用 `CARGO_HOME=/tmp/lime-cargo-home-v133` 与 `CARGO_TARGET_DIR=src-tauri/target-release-v133-temp-home` 避开本机全局 Cargo 缓存损坏。
 - `npm run lint:rust`：通过；已修复 `lime-media-runtime` 大 Err variant clippy warning，并在后续 MCP / server / agent 测试稳定性修复后复跑通过。
@@ -64,7 +64,7 @@
 
 ---
 
-**完整变更**: `v1.32.0` -> `v1.33.0`
+**完整变更**: `v1.33.0` -> `v1.34.0`
 
 ## Lime v1.32.0
 

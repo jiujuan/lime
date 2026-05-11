@@ -2,6 +2,7 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { BrowserProfileManager } from "./BrowserProfileManager";
 
 const {
@@ -36,12 +37,13 @@ vi.mock("./api", () => ({
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
   mockListBrowserProfiles.mockResolvedValue([
     {
       id: "profile-1",
@@ -142,6 +144,54 @@ describe("BrowserProfileManager", () => {
     expect(container.textContent).toContain("shop_us");
     expect(mockListBrowserProfiles).toHaveBeenCalled();
   }, 10000);
+
+  it("英文界面应使用 workspace namespace 资料管理文案", async () => {
+    await changeLimeLocale("en-US");
+    const onMessage = vi.fn();
+    const container = await renderManager({ onMessage });
+
+    expect(container.textContent).toContain("Saved Profiles");
+    expect(container.textContent).toContain("Launch environment");
+    expect(container.textContent).toContain("No preset");
+    expect(container.textContent).toContain("Refresh profiles");
+    expect(container.textContent).toContain("New profile");
+    expect(container.textContent).toContain("Active profiles: 1");
+    expect(container.textContent).toContain("Current Chrome attached: 0/0");
+    expect(container.textContent).toContain("Managed Browser");
+    expect(container.textContent).toContain("Site: seller.example.com");
+    expect(container.textContent).toContain("Last used: Never");
+    expect(container.textContent).toContain(
+      "Attached mode is not ready on this device.",
+    );
+
+    const newButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("New profile"),
+    );
+    expect(newButton).toBeInstanceOf(HTMLButtonElement);
+
+    await act(async () => {
+      newButton?.click();
+    });
+
+    expect(container.textContent).toContain("Profile name");
+    expect(container.textContent).toContain("Run mode");
+    expect(container.textContent).toContain("Create profile");
+    expect(
+      container.querySelector('input[placeholder="e.g. US ecommerce account"]'),
+    ).toBeInstanceOf(HTMLInputElement);
+
+    const createButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Create profile"),
+    );
+    await act(async () => {
+      createButton?.click();
+    });
+
+    expect(onMessage).toHaveBeenCalledWith({
+      type: "error",
+      text: "Profile name is required",
+    });
+  });
 
   it("未检测到当前 Chrome 连接时应显示附着模式未就绪提示", async () => {
     const container = await renderManager();

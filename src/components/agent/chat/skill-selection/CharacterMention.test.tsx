@@ -36,6 +36,39 @@ const mockListServiceSkills = vi.hoisted(() => vi.fn());
 const mockListUnifiedMemories = vi.hoisted(() =>
   vi.fn<() => Promise<UnifiedMemory[]>>(async () => []),
 );
+const mockUseTranslation = vi.hoisted(() => {
+  const mockTranslate = vi.fn(
+    (
+      key: string,
+      fallbackOrOptions?: string | { defaultValue?: string },
+      options?: Record<string, unknown>,
+    ) => {
+      const values: Record<string, unknown> =
+        typeof fallbackOrOptions === "object" && fallbackOrOptions !== null
+          ? (fallbackOrOptions as Record<string, unknown>)
+          : (options ?? {});
+      const template =
+        typeof fallbackOrOptions === "string"
+          ? fallbackOrOptions
+          : typeof values.defaultValue === "string"
+            ? values.defaultValue
+            : key;
+
+      return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, name) => {
+        const value = values[name];
+        return value == null ? match : String(value);
+      });
+    },
+  );
+
+  return vi.fn((_namespace?: string) => ({
+    i18n: {
+      language: "zh-CN",
+      resolvedLanguage: "zh-CN",
+    },
+    t: mockTranslate,
+  }));
+});
 
 vi.mock("sonner", () => ({
   toast: {
@@ -55,6 +88,10 @@ vi.mock("@/lib/api/serviceSkills", async (importOriginal) => {
 
 vi.mock("@/lib/api/unifiedMemory", () => ({
   listUnifiedMemories: mockListUnifiedMemories,
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
 }));
 
 vi.mock("@/components/ui/popover", () => {

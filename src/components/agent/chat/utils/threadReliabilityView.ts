@@ -246,6 +246,8 @@ function mergePendingRequests(
   threadRead: AgentRuntimeThreadReadModel | null | undefined,
   pendingActions: ActionRequired[],
   submittedActionsInFlight: ActionRequired[],
+  activeTurnIds: Set<string>,
+  allowLocalPendingActions: boolean,
 ): ThreadReliabilityRequestDisplay[] {
   const merged = new Map<string, ThreadReliabilityRequestDisplay>();
   const submittedRequestIds = new Set(
@@ -272,6 +274,19 @@ function mergePendingRequests(
   }
 
   for (const action of pendingActions) {
+    if (!allowLocalPendingActions) {
+      continue;
+    }
+    if (threadRead) {
+      const actionTurnId = action.scope?.turnId?.trim();
+      const shouldTrustLocalAction =
+        actionTurnId !== undefined &&
+        actionTurnId.length > 0 &&
+        activeTurnIds.has(actionTurnId);
+      if (!shouldTrustLocalAction) {
+        continue;
+      }
+    }
     if (merged.has(action.requestId)) {
       continue;
     }
@@ -286,6 +301,33 @@ function mergePendingRequests(
   }
 
   return [...merged.values()];
+}
+
+function hasActiveFailedIncident(
+  threadRead: AgentRuntimeThreadReadModel | null | undefined,
+): boolean {
+  return (threadRead?.incidents ?? []).some((incident) => {
+    const normalizedStatus = (incident.status || "").toLowerCase();
+    if (normalizedStatus.includes("clear") || incident.cleared_at) {
+      return false;
+    }
+
+    const incidentText = [
+      incident.incident_type,
+      incident.severity,
+      incident.title,
+      typeof incident.details === "string" ? incident.details : undefined,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return (
+      incidentText.includes("error") ||
+      incidentText.includes("fail") ||
+      incidentText.includes("failed") ||
+      incidentText.includes("runtime_error")
+    );
+  });
 }
 
 function mergeSubmittedRequests(
@@ -909,10 +951,24 @@ export function buildThreadReliabilityView(
   const pendingActions = params.pendingActions ?? [];
   const submittedActionsInFlight = params.submittedActionsInFlight ?? [];
   const latestTurn = resolveLatestTurn(turns, params.currentTurnId);
+  const activeTurnCandidates = params.threadRead?.active_turn_id
+    ? [params.threadRead.active_turn_id]
+    : [params.currentTurnId, latestTurn?.id];
+  const activeTurnIds = new Set(
+    activeTurnCandidates.filter((item): item is string =>
+      Boolean(item?.trim()),
+    ),
+  );
+  const allowLocalPendingActions =
+    !params.threadRead ||
+    (params.threadRead.pending_requests?.length ?? 0) > 0 ||
+    !hasActiveFailedIncident(params.threadRead);
   const pendingRequests = mergePendingRequests(
     params.threadRead,
     pendingActions,
     submittedActionsInFlight,
+    activeTurnIds,
+    allowLocalPendingActions,
   );
   const submittedRequests = mergeSubmittedRequests(submittedActionsInFlight);
   const queuedTurnCount =

@@ -1,6 +1,6 @@
 //! Tool Policy 系统模块
 //!
-//! 本模块实现了 OpenClaw 风格的 Tool Policy 系统，提供：
+//! 本模块实现 Agent 工具策略系统，提供：
 //! - Profile 预设配置（minimal, coding, messaging, full, custom）
 //! - Tool Groups 工具分组（group:fs, group:runtime, group:memory, group:web, group:session）
 //! - 多层策略合并（Profile → Global → Agent → Session）

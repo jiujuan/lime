@@ -18,7 +18,6 @@ mod media_tasks;
 mod memory;
 mod memory_runtime;
 mod models;
-mod openclaw;
 mod plugins;
 mod project_resources;
 mod providers;
@@ -156,10 +155,6 @@ pub async fn handle_command(
     }
 
     if let Some(result) = memory_runtime::try_handle(state, cmd, args.as_ref()).await? {
-        return Ok(result);
-    }
-
-    if let Some(result) = openclaw::try_handle(state, cmd, args.as_ref()).await? {
         return Ok(result);
     }
 

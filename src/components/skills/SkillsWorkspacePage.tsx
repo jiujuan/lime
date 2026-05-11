@@ -58,6 +58,7 @@ import {
 } from "./skillScaffoldCreationSeed";
 import {
   FEATURED_HOME_CURATED_TASK_TEMPLATE_IDS,
+  buildCuratedTaskTemplateCopy,
   buildCuratedTaskRecentUsageDescription,
   buildCuratedTaskLaunchPrompt,
   filterCuratedTaskTemplates,
@@ -115,6 +116,7 @@ import {
 import {
   buildWorkspaceSkillAgentAutomationInitialValues,
   type WorkspaceSkillAgentAutomationDraftOptions,
+  type WorkspaceSkillManagedAutomationInitialValuesCopy,
 } from "@/features/capability-drafts/workspaceSkillAgentAutomationDraft";
 import { formatList, formatNumber } from "@/i18n/format";
 
@@ -159,14 +161,24 @@ function summarizeRecentReplayText(value: string, maxLength = 56): string {
   return `${normalized.slice(0, maxLength).trimEnd()}...`;
 }
 
+interface WorkspaceRuntimeEnablePromptCopy {
+  formatIntro?: (skillName: string, directory: string) => string;
+  needsInput?: string;
+  readSkill?: string;
+}
+
 function buildWorkspaceRuntimeEnablePrompt(
   binding: AgentRuntimeWorkspaceSkillBinding,
+  copy: WorkspaceRuntimeEnablePromptCopy = {},
 ): string {
   const skillName = binding.name?.trim() || binding.directory;
   return [
-    `请在本回合使用 Workspace 本地 Skill「${skillName}」（skill: project:${binding.directory}）。`,
-    "先读取这个 Skill 的说明与约束，再基于当前任务完成交付。",
-    "如果输入信息不足，请先提出最少必要问题；不要创建自动化、定时任务或 marketplace 发布。",
+    copy.formatIntro?.(skillName, binding.directory) ??
+      `请在本回合使用 Workspace 本地 Skill「${skillName}」（skill: project:${binding.directory}）。`,
+    copy.readSkill ??
+      "先读取这个 Skill 的说明与约束，再基于当前任务完成交付。",
+    copy.needsInput ??
+      "如果输入信息不足，请先提出最少必要问题；不要创建自动化、定时任务或 marketplace 发布。",
   ].join("\n");
 }
 
@@ -227,6 +239,27 @@ export function SkillsWorkspacePage({
   pageParams,
 }: SkillsWorkspacePageProps) {
   const { t, i18n } = useTranslation("agent");
+  const workspaceRuntimeEnablePromptCopy =
+    useMemo<WorkspaceRuntimeEnablePromptCopy>(
+      () => ({
+        formatIntro: (skillName, directory) =>
+          t("skills.workspace.runtimeEnable.prompt.intro", {
+            defaultValue:
+              "请在本回合使用 Workspace 本地 Skill「{{name}}」（skill: project:{{directory}}）。",
+            directory,
+            name: skillName,
+          }),
+        needsInput: t(
+          "skills.workspace.runtimeEnable.prompt.needsInput",
+          "如果输入信息不足，请先提出最少必要问题；不要创建自动化、定时任务或 marketplace 发布。",
+        ),
+        readSkill: t(
+          "skills.workspace.runtimeEnable.prompt.readSkill",
+          "先读取这个 Skill 的说明与约束，再基于当前任务完成交付。",
+        ),
+      }),
+      [t],
+    );
   const formatInstalledSkillRecentUsageDescription = useCallback(
     (replayText: string | undefined): string => {
       const normalizedReplayText = replayText?.trim();
@@ -626,6 +659,91 @@ export function SkillsWorkspacePage({
           ),
       };
     }, [i18n.language, t]);
+  const curatedTaskTemplateCopy = useMemo(
+    () =>
+      buildCuratedTaskTemplateCopy((key, defaultValue, values) =>
+        t(key, { defaultValue, ...values }),
+      ),
+    [t],
+  );
+  const workspaceSkillManagedAutomationInitialValuesCopy =
+    useMemo<WorkspaceSkillManagedAutomationInitialValuesCopy>(
+      () => ({
+        descriptionPausedByDefault: t(
+          "skills.workspace.managedJob.initialValues.description.pausedByDefault",
+          "默认先暂停，确认调度与权限后再启用。",
+        ),
+        descriptionSource: t(
+          "skills.workspace.managedJob.initialValues.description.source",
+          "来源：P4 Workspace Agent envelope 草案。",
+        ),
+        formatDescriptionProvenance: (
+          sourceDraftId,
+          sourceVerificationReportId,
+        ) =>
+          t(
+            "skills.workspace.managedJob.initialValues.description.provenance",
+            {
+              defaultValue:
+                "Provenance：{{sourceDraftId}} / {{sourceVerificationReportId}}",
+              sourceDraftId,
+              sourceVerificationReportId,
+            },
+          ),
+        formatDescriptionSkill: (skillName) =>
+          t("skills.workspace.managedJob.initialValues.description.skill", {
+            defaultValue: "Skill：{{skill}}",
+            skill: skillName,
+          }),
+        formatName: (displayName) =>
+          t("skills.workspace.managedJob.initialValues.name", {
+            defaultValue: "{{name}}｜Managed Agent 草案",
+            name: displayName,
+          }),
+        formatObjective: (displayName) =>
+          t("skills.workspace.managedJob.initialValues.objective", {
+            defaultValue:
+              "按计划运行 Workspace Skill「{{name}}」，交付可审计结果。",
+            name: displayName,
+          }),
+        formatPromptIntro: (displayName, skillName) =>
+          t("skills.workspace.managedJob.initialValues.prompt.intro", {
+            defaultValue:
+              "请按当前 Workspace Agent envelope 草案运行 Skill「{{name}}」（{{skill}}）。",
+            name: displayName,
+            skill: skillName,
+          }),
+        promptNeedsInput: t(
+          "skills.workspace.managedJob.initialValues.prompt.needsInput",
+          "如果执行缺少必要输入或外部写权限，请返回 needs_input / blocked 的原因，不要绕过确认。",
+        ),
+        promptReadRunbook: t(
+          "skills.workspace.managedJob.initialValues.prompt.readRunbook",
+          "先读取 Skill 的 Runbook、权限说明和输入约束，再执行任务。",
+        ),
+        promptResultEvidence: t(
+          "skills.workspace.managedJob.initialValues.prompt.resultEvidence",
+          "完成后输出结果摘要，并保留可进入 evidence pack 的产物与关键步骤。",
+        ),
+        successCriteriaControlledGet: t(
+          "skills.workspace.managedJob.initialValues.successCriteria.controlledGet",
+          "Read-Only HTTP API 任务必须包含已执行的受控 GET 证据",
+        ),
+        successCriteriaEvidence: t(
+          "skills.workspace.managedJob.initialValues.successCriteria.evidence",
+          "完成状态必须依赖产物、时间线与证据，而不是模型自报",
+        ),
+        successCriteriaRuntimeEnable: t(
+          "skills.workspace.managedJob.initialValues.successCriteria.runtimeEnable",
+          "必须在本次运行会话中获得明确授权",
+        ),
+        successCriteriaSubmitTurn: t(
+          "skills.workspace.managedJob.initialValues.successCriteria.submitTurn",
+          "必须通过统一的 Agent 运行入口执行",
+        ),
+      }),
+      [t],
+    );
   const {
     skills: serviceSkills = [],
     groups: skillGroups = [],
@@ -969,19 +1087,28 @@ export function SkillsWorkspacePage({
   const visibleCuratedTaskTemplates = useMemo(() => {
     void curatedTaskTemplatesVersion;
     void curatedTaskRecommendationSignalsVersion;
-    return filterCuratedTaskTemplates(searchQuery, listCuratedTaskTemplates());
+    return filterCuratedTaskTemplates(
+      searchQuery,
+      listCuratedTaskTemplates(curatedTaskTemplateCopy),
+    );
   }, [
     curatedTaskRecommendationSignalsVersion,
+    curatedTaskTemplateCopy,
     curatedTaskTemplatesVersion,
     searchQuery,
   ]);
   const visibleFeaturedCuratedTaskTemplates = useMemo(
     () =>
       listFeaturedHomeCuratedTaskTemplates(visibleCuratedTaskTemplates, {
+        copy: curatedTaskTemplateCopy,
         projectId: pageParams?.creationProjectId,
         limit: FEATURED_HOME_CURATED_TASK_TEMPLATE_IDS.length,
       }),
-    [pageParams?.creationProjectId, visibleCuratedTaskTemplates],
+    [
+      curatedTaskTemplateCopy,
+      pageParams?.creationProjectId,
+      visibleCuratedTaskTemplates,
+    ],
   );
   const latestReviewRecommendationSignal = useMemo(() => {
     void curatedTaskRecommendationSignalsVersion;
@@ -1192,7 +1319,10 @@ export function SkillsWorkspacePage({
         "agent",
         buildHomeAgentParams({
           projectId: creationProjectId,
-          initialUserPrompt: buildWorkspaceRuntimeEnablePrompt(binding),
+          initialUserPrompt: buildWorkspaceRuntimeEnablePrompt(
+            binding,
+            workspaceRuntimeEnablePromptCopy,
+          ),
           autoRunInitialPromptOnMount: true,
           initialAutoSendRequestMetadata: {
             harness: runtimeEnableMetadata,
@@ -1205,7 +1335,13 @@ export function SkillsWorkspacePage({
         }),
       );
     },
-    [capabilityDraftWorkspaceRoot, creationProjectId, onNavigate, t],
+    [
+      capabilityDraftWorkspaceRoot,
+      creationProjectId,
+      onNavigate,
+      t,
+      workspaceRuntimeEnablePromptCopy,
+    ],
   );
 
   const handleWorkspaceManagedAutomationDraft = useCallback(
@@ -1237,6 +1373,7 @@ export function SkillsWorkspacePage({
         workspaceRoot: capabilityDraftWorkspaceRoot,
         workspaceId: creationProjectId,
         options,
+        copy: workspaceSkillManagedAutomationInitialValuesCopy,
       });
       if (!initialValues) {
         toast.error(
@@ -1256,6 +1393,7 @@ export function SkillsWorkspacePage({
       capabilityDraftWorkspaceRoot,
       creationProjectId,
       t,
+      workspaceSkillManagedAutomationInitialValuesCopy,
     ],
   );
 

@@ -1,11 +1,6 @@
 import type { AutomationPayload } from "@/lib/api/automation";
 import { resolveServiceSkillExecutionLocationPresentation } from "@/lib/api/serviceSkills";
 
-export {
-  LEGACY_SERVICE_SKILL_EXECUTION_COMPAT_LABEL,
-  LEGACY_SERVICE_SKILL_EXECUTION_COMPAT_NOTE,
-} from "@/lib/api/serviceSkills";
-
 export interface AutomationServiceSkillSummaryItem {
   key: string;
   label: string;
@@ -25,8 +20,30 @@ export interface AutomationServiceSkillContext {
   userInput: string | null;
 }
 
-const DEFAULT_SERVICE_SKILL_TITLE = "技能流程";
-const UNKNOWN_SERVICE_SKILL_LABEL = "未标记";
+export interface AutomationServiceSkillContextCopy {
+  defaultTitle: string;
+  unknownLabel: string;
+  runnerInstant: string;
+  runnerScheduled: string;
+  runnerManaged: string;
+  executionLocationClient: string;
+  sourceCloudCatalog: string;
+  sourceLocalCustom: string;
+  slotFallbackLabel: (index: number) => string;
+}
+
+export const defaultAutomationServiceSkillContextCopy: AutomationServiceSkillContextCopy =
+  {
+    defaultTitle: "技能流程",
+    unknownLabel: "未标记",
+    runnerInstant: "一次性交付",
+    runnerScheduled: "定时运行",
+    runnerManaged: "持续跟踪",
+    executionLocationClient: "客户端执行",
+    sourceCloudCatalog: "云目录",
+    sourceLocalCustom: "本地自定义",
+    slotFallbackLabel: (index) => `参数 ${index + 1}`,
+  };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -41,24 +58,29 @@ function normalizeOptionalText(value: unknown): string | null {
   return normalized ? normalized : null;
 }
 
-function resolveRunnerLabel(value: unknown): string {
+function resolveRunnerLabel(
+  value: unknown,
+  copy: AutomationServiceSkillContextCopy,
+): string {
   switch (value) {
     case "instant":
-      return "一次性交付";
+      return copy.runnerInstant;
     case "scheduled":
-      return "定时运行";
+      return copy.runnerScheduled;
     case "managed":
-      return "持续跟踪";
+      return copy.runnerManaged;
     default:
-      return UNKNOWN_SERVICE_SKILL_LABEL;
+      return copy.unknownLabel;
   }
 }
 
-function resolveExecutionLocationLabel(value: unknown): string {
-  return (
-    resolveServiceSkillExecutionLocationPresentation(value)?.label ??
-    UNKNOWN_SERVICE_SKILL_LABEL
-  );
+function resolveExecutionLocationLabel(
+  value: unknown,
+  copy: AutomationServiceSkillContextCopy,
+): string {
+  return resolveServiceSkillExecutionLocationPresentation(value)
+    ? copy.executionLocationClient
+    : copy.unknownLabel;
 }
 
 function resolveExecutionLocationLegacyCompat(value: unknown): boolean {
@@ -68,19 +90,23 @@ function resolveExecutionLocationLegacyCompat(value: unknown): boolean {
   );
 }
 
-function resolveSourceLabel(value: unknown): string {
+function resolveSourceLabel(
+  value: unknown,
+  copy: AutomationServiceSkillContextCopy,
+): string {
   switch (value) {
     case "cloud_catalog":
-      return "云目录";
+      return copy.sourceCloudCatalog;
     case "local_custom":
-      return "本地自定义";
+      return copy.sourceLocalCustom;
     default:
-      return UNKNOWN_SERVICE_SKILL_LABEL;
+      return copy.unknownLabel;
   }
 }
 
 function parseSlotSummaryEntries(
   value: unknown,
+  copy: AutomationServiceSkillContextCopy,
 ): AutomationServiceSkillSummaryItem[] {
   if (Array.isArray(value)) {
     const structured = value
@@ -126,7 +152,7 @@ function parseSlotSummaryEntries(
       if (separatorIndex <= 0) {
         return {
           key: `slot-${index + 1}`,
-          label: `参数 ${index + 1}`,
+          label: copy.slotFallbackLabel(index),
           value: summaryLine,
         };
       }
@@ -142,6 +168,7 @@ function parseSlotSummaryEntries(
 
 function resolveServiceSkillContextFromRecord(
   record: Record<string, unknown>,
+  copy: AutomationServiceSkillContextCopy,
   explicitContentId?: string | null,
 ): AutomationServiceSkillContext | null {
   const serviceSkillValue = record.service_skill ?? record.serviceSkill;
@@ -152,21 +179,20 @@ function resolveServiceSkillContextFromRecord(
   const harnessValue = isRecord(record.harness) ? record.harness : null;
   const id = normalizeOptionalText(serviceSkillValue.id);
   const title =
-    normalizeOptionalText(serviceSkillValue.title) ||
-    id ||
-    DEFAULT_SERVICE_SKILL_TITLE;
+    normalizeOptionalText(serviceSkillValue.title) || id || copy.defaultTitle;
 
   return {
     id,
     title,
-    runnerLabel: resolveRunnerLabel(serviceSkillValue.runner_type),
+    runnerLabel: resolveRunnerLabel(serviceSkillValue.runner_type, copy),
     executionLocationLabel: resolveExecutionLocationLabel(
       serviceSkillValue.execution_location,
+      copy,
     ),
     executionLocationLegacyCompat: resolveExecutionLocationLegacyCompat(
       serviceSkillValue.execution_location,
     ),
-    sourceLabel: resolveSourceLabel(serviceSkillValue.source),
+    sourceLabel: resolveSourceLabel(serviceSkillValue.source, copy),
     theme: normalizeOptionalText(harnessValue?.theme),
     contentId:
       normalizeOptionalText(explicitContentId) ||
@@ -174,6 +200,7 @@ function resolveServiceSkillContextFromRecord(
       normalizeOptionalText(harnessValue?.content_id),
     slotSummary: parseSlotSummaryEntries(
       serviceSkillValue.slot_values ?? serviceSkillValue.slot_summary,
+      copy,
     ),
     userInput:
       normalizeOptionalText(serviceSkillValue.user_input) ||
@@ -181,17 +208,24 @@ function resolveServiceSkillContextFromRecord(
   };
 }
 
-function shouldUseFallbackLabel(value: string): boolean {
-  return value === UNKNOWN_SERVICE_SKILL_LABEL;
+function shouldUseFallbackLabel(
+  value: string,
+  copy: AutomationServiceSkillContextCopy,
+): boolean {
+  return value === copy.unknownLabel;
 }
 
-function shouldUseFallbackTitle(value: string): boolean {
-  return value === DEFAULT_SERVICE_SKILL_TITLE;
+function shouldUseFallbackTitle(
+  value: string,
+  copy: AutomationServiceSkillContextCopy,
+): boolean {
+  return value === copy.defaultTitle;
 }
 
 export function mergeAutomationServiceSkillContexts(
   primary: AutomationServiceSkillContext | null,
   fallback: AutomationServiceSkillContext | null,
+  copy: AutomationServiceSkillContextCopy = defaultAutomationServiceSkillContextCopy,
 ): AutomationServiceSkillContext | null {
   if (!primary) {
     return fallback;
@@ -202,21 +236,22 @@ export function mergeAutomationServiceSkillContexts(
 
   return {
     id: primary.id || fallback.id,
-    title: shouldUseFallbackTitle(primary.title)
+    title: shouldUseFallbackTitle(primary.title, copy)
       ? fallback.title
       : primary.title,
-    runnerLabel: shouldUseFallbackLabel(primary.runnerLabel)
+    runnerLabel: shouldUseFallbackLabel(primary.runnerLabel, copy)
       ? fallback.runnerLabel
       : primary.runnerLabel,
     executionLocationLabel: shouldUseFallbackLabel(
       primary.executionLocationLabel,
+      copy,
     )
       ? fallback.executionLocationLabel
       : primary.executionLocationLabel,
     executionLocationLegacyCompat:
       primary.executionLocationLegacyCompat ||
       fallback.executionLocationLegacyCompat,
-    sourceLabel: shouldUseFallbackLabel(primary.sourceLabel)
+    sourceLabel: shouldUseFallbackLabel(primary.sourceLabel, copy)
       ? fallback.sourceLabel
       : primary.sourceLabel,
     theme: primary.theme || fallback.theme,
@@ -232,18 +267,21 @@ export function resolveServiceSkillContextFromMetadataRecord(
   metadata: Record<string, unknown>,
   options?: {
     contentId?: string | null;
+    copy?: AutomationServiceSkillContextCopy;
   },
 ): AutomationServiceSkillContext | null {
   const nestedRequestMetadata = isRecord(metadata.request_metadata)
     ? metadata.request_metadata
     : null;
   const explicitContentId = normalizeOptionalText(options?.contentId);
+  const copy = options?.copy ?? defaultAutomationServiceSkillContextCopy;
 
   return (
-    resolveServiceSkillContextFromRecord(metadata, explicitContentId) ||
+    resolveServiceSkillContextFromRecord(metadata, copy, explicitContentId) ||
     (nestedRequestMetadata
       ? resolveServiceSkillContextFromRecord(
           nestedRequestMetadata,
+          copy,
           explicitContentId,
         )
       : null)
@@ -252,12 +290,14 @@ export function resolveServiceSkillContextFromMetadataRecord(
 
 export function resolveServiceSkillAutomationContext(
   payload: AutomationPayload,
+  copy: AutomationServiceSkillContextCopy = defaultAutomationServiceSkillContextCopy,
 ): AutomationServiceSkillContext | null {
   if (payload.kind !== "agent_turn" || !isRecord(payload.request_metadata)) {
     return null;
   }
   return resolveServiceSkillContextFromRecord(
     payload.request_metadata,
+    copy,
     payload.content_id,
   );
 }

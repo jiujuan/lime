@@ -39,7 +39,6 @@ pub mod memory_search_cmd;
 pub(crate) mod modality_runtime_contracts;
 pub mod model_registry_cmd;
 pub mod models_cmd;
-pub mod openclaw_cmd;
 pub mod persona_cmd;
 pub mod plugin_cmd;
 pub mod plugin_install_cmd;

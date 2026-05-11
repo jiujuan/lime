@@ -92,6 +92,7 @@ import {
   formatAgentUiProjectionEventDetail,
   formatAgentUiProjectionEventType,
   formatAgentUiProjectionPhase,
+  formatAgentUiProjectionSourceType,
   summarizeAgentUiProjectionEvents,
 } from "../projection/agentUiProjectionSummary";
 import {
@@ -5855,8 +5856,10 @@ export function HarnessStatusPanel({
                                 ) : null}
                               </div>
                               <div className="mt-2 text-xs text-muted-foreground">
-                                <span className="font-mono text-foreground">
-                                  {event.sourceType}
+                                <span className="text-foreground">
+                                  {formatAgentUiProjectionSourceType(
+                                    event.sourceType,
+                                  )}
                                 </span>
                                 <span className="mx-1">·</span>
                                 {formatAgentUiProjectionEventDetail(event)}

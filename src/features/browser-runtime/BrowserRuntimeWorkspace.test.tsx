@@ -2,6 +2,7 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { BrowserRuntimeWorkspace } from "./BrowserRuntimeWorkspace";
 
 const { mockGetChromeProfileSessions, mockGetExistingSessionBridgeStatus } =
@@ -120,12 +121,13 @@ vi.mock("./BrowserSiteAdapterPanel", () => ({
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
   mockGetChromeProfileSessions.mockResolvedValue([]);
   mockGetExistingSessionBridgeStatus.mockResolvedValue({
     observer_count: 0,
@@ -224,6 +226,43 @@ describe("BrowserRuntimeWorkspace", () => {
       container.querySelector("[data-testid='browser-runtime-debug-panel']")
         ?.textContent,
     ).toContain("1");
+  });
+
+  it("英文界面应使用 workspace namespace 外壳文案", async () => {
+    await changeLimeLocale("en-US");
+    mockGetChromeProfileSessions.mockResolvedValueOnce([
+      {
+        profile_key: "search_google",
+        browser_source: "system",
+        browser_path: "/Applications/Google Chrome",
+        profile_dir: "/tmp/profile",
+        remote_debugging_port: 13001,
+        pid: 12345,
+        started_at: "2026-03-14T00:00:00Z",
+        last_url: "https://example.com",
+      },
+    ]);
+    mockGetExistingSessionBridgeStatus.mockResolvedValueOnce({
+      observer_count: 2,
+      control_count: 0,
+      pending_command_count: 0,
+      observers: [],
+      controls: [],
+      pending_commands: [],
+    });
+
+    const container = await renderWorkspace();
+
+    expect(container.textContent).toContain("Browser Live Sessions");
+    expect(container.textContent).toContain(
+      "Manage live view, manual takeover, session status, and advanced debugging in one place.",
+    );
+    expect(container.textContent).toContain("Refresh sessions");
+    expect(container.textContent).toContain("Running profiles: 1");
+    expect(container.textContent).toContain("Attached Chrome: 2");
+    expect(container.textContent).toContain(
+      "Attached Chrome reuses the browser page you are currently using first",
+    );
   });
 
   it("未激活时不应启动会话刷新或渲染调试面板", async () => {

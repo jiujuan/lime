@@ -24,6 +24,7 @@ function summarizeActiveGuiItems(status, guiScenarioIds) {
   return asArray(status?.items)
     .filter((item) => guiScenarioIdSet.has(normalizeScenarioId(item?.scenarioId)))
     .filter((item) => item?.terminal !== true)
+    .filter((item) => !isUnstartedPendingItem(item))
     .map((item) => ({
       scenarioId: normalizeScenarioId(item?.scenarioId),
       qcloopStatus: item?.qcloopStatus || "unknown",
@@ -33,6 +34,19 @@ function summarizeActiveGuiItems(status, guiScenarioIds) {
       workerStatus: item?.worker?.status || "unknown",
       workerDurationSeconds: item?.worker?.durationSeconds ?? null,
     }));
+}
+
+function isUnstartedPendingItem(item) {
+  const qcloopStatus = String(item?.qcloopStatus || "").toLowerCase();
+  const workerStatus = String(item?.worker?.status || "unknown").toLowerCase();
+  const attemptNo = Number(item?.currentAttemptNo || 0);
+  const qcNo = Number(item?.currentQcNo || 0);
+  return (
+    qcloopStatus === "pending" &&
+    attemptNo === 0 &&
+    qcNo === 0 &&
+    (workerStatus === "unknown" || workerStatus === "")
+  );
 }
 
 function createAgentQcGuiOwnerReport({
@@ -56,6 +70,10 @@ function createAgentQcGuiOwnerReport({
   for (const sidecars of sidecarsByJobId.values()) {
     const sidecar = selectRepresentativeSidecar(sidecars);
     const status = sidecar?.status || sidecar;
+    if (isUnstartedPendingJob(status)) {
+      continue;
+    }
+
     const activeItems = summarizeActiveGuiItems(status, guiScenarioIds);
     if (activeItems.length === 0) {
       continue;
@@ -127,6 +145,24 @@ function createAgentQcGuiOwnerReport({
           : "不要启动新的 GUI P0 批次；等待现有 running 批次自然结束或由 owner 明确处理。",
     },
   };
+}
+
+function isUnstartedPendingJob(status) {
+  const jobStatus = String(status?.job?.status || "").toLowerCase();
+  if (jobStatus !== "pending") {
+    return false;
+  }
+
+  const items = asArray(status?.items);
+  return (
+    items.length === 0 ||
+    items.every(
+      (item) =>
+        String(item?.qcloopStatus || "").toLowerCase() === "pending" &&
+        Number(item?.currentAttemptNo || 0) === 0 &&
+        (item?.worker?.status || "unknown") === "unknown",
+    )
+  );
 }
 
 function createOwnerIntervention(activeOwners) {
@@ -264,5 +300,6 @@ export {
   createAgentQcGuiOwnerWatchEntry,
   createAgentQcGuiOwnerReport,
   createOwnerIntervention,
+  isUnstartedPendingItem,
   renderAgentQcGuiOwnerSummary,
 };

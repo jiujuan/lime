@@ -13,6 +13,32 @@ import {
   type MountedRoot,
 } from "@/components/workspace/hooks/testUtils";
 
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (
+      _key: string,
+      fallbackOrOptions?: string | ({ defaultValue?: string } & Record<
+        string,
+        unknown
+      >),
+      options?: Record<string, unknown>,
+    ) => {
+      const values: Record<string, unknown> & { defaultValue?: string } =
+        typeof fallbackOrOptions === "object" && fallbackOrOptions !== null
+          ? fallbackOrOptions
+          : (options ?? {});
+      const template =
+        typeof fallbackOrOptions === "string"
+          ? fallbackOrOptions
+          : (values.defaultValue ?? _key);
+
+      return template.replace(/\{\{(\w+)\}\}/g, (_match, name: string) =>
+        String(values[name] ?? ""),
+      );
+    },
+  }),
+}));
+
 const mountedRoots: MountedRoot[] = [];
 
 type SkillScaffoldDialogProps = ComponentProps<typeof SkillScaffoldDialog>;

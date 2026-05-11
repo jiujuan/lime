@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type Dispatch,
@@ -24,6 +25,10 @@ import { markThreadActionItemSubmitted } from "./agentThreadState";
 import { buildActionRequestSubmissionContext } from "../utils/actionRequestA2UI";
 import { buildActionResumeRuntimeStatus } from "../utils/agentRuntimeStatus";
 import { governActionRequest } from "../utils/actionRequestGovernance";
+import {
+  filterActionsForCurrentAssistantTail,
+  findActionRequestSourceMessageId,
+} from "../utils/currentTurnActionRequests";
 
 interface UseAgentToolsOptions {
   runtime: AgentRuntimeAdapter;
@@ -45,6 +50,45 @@ function upsertSubmittedAction(
   );
   next.push(nextAction);
   return next;
+}
+
+function findActionRequestInMessages(
+  messages: Message[],
+  requestId: string,
+): ActionRequired | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role !== "assistant" || !message.actionRequests?.length) {
+      continue;
+    }
+
+    const action = message.actionRequests.find(
+      (item) => item.requestId === requestId,
+    );
+    if (action) {
+      return {
+        ...action,
+        sourceMessageId: action.sourceMessageId || message.id,
+      };
+    }
+  }
+
+  return undefined;
+}
+
+function attachActionSourceFromMessages(
+  action: ActionRequired,
+  messages: Message[],
+): ActionRequired {
+  if (action.sourceMessageId) {
+    return action;
+  }
+
+  const sourceMessageId = findActionRequestSourceMessageId(
+    messages,
+    action.requestId,
+  );
+  return sourceMessageId ? { ...action, sourceMessageId } : action;
 }
 
 export function useAgentTools(options: UseAgentToolsOptions) {
@@ -69,6 +113,7 @@ export function useAgentTools(options: UseAgentToolsOptions) {
       string,
       Omit<ConfirmResponse, "requestId"> & {
         requestId: string;
+        sourceMessageId?: string;
       }
     >
   >(new Map());
@@ -80,11 +125,9 @@ export function useAgentTools(options: UseAgentToolsOptions) {
         const pendingAction = pendingActions.find(
           (item) => item.requestId === response.requestId,
         );
-        const persistedActionRaw =
-          pendingAction ||
-          messages
-            .flatMap((message) => message.actionRequests || [])
-            .find((item) => item.requestId === response.requestId);
+        const persistedActionRaw = pendingAction
+          ? attachActionSourceFromMessages(pendingAction, messages)
+          : findActionRequestInMessages(messages, response.requestId);
         const persistedAction = persistedActionRaw
           ? governActionRequest(persistedActionRaw)
           : undefined;
@@ -133,11 +176,18 @@ export function useAgentTools(options: UseAgentToolsOptions) {
           if (persistedAction?.isFallback) {
             const fallbackPromptKey = resolveActionPromptKey(persistedAction);
             if (fallbackPromptKey) {
+              const fallbackSourceMessageId = persistedAction.sourceMessageId;
               const resolvedAction = pendingActions.find((item) => {
                 if (item.requestId === persistedAction.requestId) return false;
                 if (item.isFallback) return false;
                 if (item.actionType !== persistedAction.actionType)
                   return false;
+                if (
+                  fallbackSourceMessageId &&
+                  item.sourceMessageId !== fallbackSourceMessageId
+                ) {
+                  return false;
+                }
                 return resolveActionPromptKey(item) === fallbackPromptKey;
               });
 
@@ -147,6 +197,7 @@ export function useAgentTools(options: UseAgentToolsOptions) {
                   actionType,
                   requestId: persistedAction.requestId,
                   userData,
+                  sourceMessageId: fallbackSourceMessageId,
                 });
                 setPendingActions((prev) =>
                   prev.map((item) =>
@@ -353,8 +404,20 @@ export function useAgentTools(options: UseAgentToolsOptions) {
     ],
   );
 
+  const visiblePendingActions = useMemo(
+    () => filterActionsForCurrentAssistantTail(pendingActions, messages),
+    [messages, pendingActions],
+  );
+  const visibleSubmittedActionsInFlight = useMemo(
+    () =>
+      filterActionsForCurrentAssistantTail(submittedActionsInFlight, messages, {
+        keepUnscoped: true,
+      }),
+    [messages, submittedActionsInFlight],
+  );
+
   useEffect(() => {
-    for (const pendingAction of pendingActions) {
+    for (const pendingAction of visiblePendingActions) {
       if (
         pendingAction.isFallback ||
         pendingAction.status === "submitted" ||
@@ -373,6 +436,12 @@ export function useAgentTools(options: UseAgentToolsOptions) {
       if (!queuedResponse) {
         continue;
       }
+      if (
+        queuedResponse.sourceMessageId &&
+        pendingAction.sourceMessageId !== queuedResponse.sourceMessageId
+      ) {
+        continue;
+      }
 
       queuedFallbackResponsesRef.current.delete(promptKey);
       void confirmAction({
@@ -382,7 +451,7 @@ export function useAgentTools(options: UseAgentToolsOptions) {
       });
       break;
     }
-  }, [confirmAction, pendingActions]);
+  }, [confirmAction, visiblePendingActions]);
 
   const handlePermissionResponse = useCallback(
     async (response: ConfirmResponse) => {
@@ -470,8 +539,8 @@ export function useAgentTools(options: UseAgentToolsOptions) {
   );
 
   return {
-    pendingActions,
-    submittedActionsInFlight,
+    pendingActions: visiblePendingActions,
+    submittedActionsInFlight: visibleSubmittedActionsInFlight,
     setPendingActions,
     warnedKeysRef,
     confirmAction,

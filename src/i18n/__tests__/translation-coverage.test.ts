@@ -80,7 +80,6 @@ describe("Translation Coverage", () => {
         "持续流程",
         "消息渠道",
         "插件中心",
-        "OpenClaw",
         "桌宠",
       ];
 

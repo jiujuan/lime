@@ -63,7 +63,7 @@ import {
   type AutomationJobDialogInitialValues,
 } from "./AutomationJobDialog";
 import {
-  LEGACY_SERVICE_SKILL_EXECUTION_COMPAT_LABEL,
+  type AutomationServiceSkillContextCopy,
   resolveServiceSkillAutomationContext,
   type AutomationServiceSkillContext,
 } from "./serviceSkillContext";
@@ -74,8 +74,7 @@ import {
   recordAutomationStatusRefreshAgentUiProjection,
 } from "./automationAgentUiProjection";
 import {
-  LEGACY_BROWSER_AUTOMATION_NOTICE,
-  LEGACY_BROWSER_AUTOMATION_STATUS,
+  type AutomationPresentationCopy,
   describeSchedule,
   describeServiceSkillSlotPreview,
   describeServiceSkillTaskLine,
@@ -87,6 +86,7 @@ import {
   statusLabel,
   statusVariant,
 } from "./automationPresentation";
+import type { AutomationAccessModeCopy } from "./automationAccessMode";
 import { useAutomationSceneAppRuntime } from "./useAutomationSceneAppRuntime";
 import {
   backfillSceneAppExecutionSummaryViewModel,
@@ -119,6 +119,253 @@ import type {
 
 const AUTOMATION_CORE_LOAD_TIMEOUT_MS = 8000;
 const AUTOMATION_AUXILIARY_LOAD_TIMEOUT_MS = 5000;
+
+function buildAutomationServiceSkillContextCopy(
+  t: TFunction<"settings">,
+): AutomationServiceSkillContextCopy {
+  return {
+    defaultTitle: t(
+      "settings.automation.tasks.list.badge.serviceSkill",
+      "技能流程",
+    ),
+    unknownLabel: t("settings.automation.serviceSkill.unknown", "未标记"),
+    runnerInstant: t(
+      "settings.automation.serviceSkill.runner.instant",
+      "一次性交付",
+    ),
+    runnerScheduled: t(
+      "settings.automation.serviceSkill.runner.scheduled",
+      "定时运行",
+    ),
+    runnerManaged: t(
+      "settings.automation.serviceSkill.runner.managed",
+      "持续跟踪",
+    ),
+    executionLocationClient: t(
+      "settings.automation.serviceSkill.executionLocation.client",
+      "客户端执行",
+    ),
+    sourceCloudCatalog: t(
+      "settings.automation.serviceSkill.source.cloudCatalog",
+      "云目录",
+    ),
+    sourceLocalCustom: t(
+      "settings.automation.serviceSkill.source.localCustom",
+      "本地自定义",
+    ),
+    slotFallbackLabel: (index) =>
+      t("settings.automation.serviceSkill.slotFallback", {
+        index: index + 1,
+        defaultValue: "参数 {{index}}",
+      }),
+  };
+}
+
+function buildAutomationPresentationCopy(
+  t: TFunction<"settings">,
+  serviceSkillContextCopy: AutomationServiceSkillContextCopy,
+): AutomationPresentationCopy {
+  const accessModeCopy: AutomationAccessModeCopy = {
+    readOnly: t("settings.automation.jobDialog.accessMode.readOnly", "只读"),
+    current: t("settings.automation.jobDialog.accessMode.current", "按需确认"),
+    fullAccess: t(
+      "settings.automation.jobDialog.accessMode.fullAccess",
+      "完全访问",
+    ),
+    policyReadOnly: t(
+      "settings.automation.jobDialog.accessMode.policy.readOnly",
+      "正式策略会写成 on-request + read-only。",
+    ),
+    policyCurrent: t(
+      "settings.automation.jobDialog.accessMode.policy.current",
+      "正式策略会写成 on-request + workspace-write。",
+    ),
+    policyFullAccess: t(
+      "settings.automation.jobDialog.accessMode.policy.fullAccess",
+      "正式策略会写成 never + danger-full-access。",
+    ),
+  };
+
+  return {
+    legacyBrowserAutomationNotice: t(
+      "settings.automation.details.legacy.message",
+      "浏览器自动化已下线，系统不会再自动启动 Chrome。请删除旧流程，并改建为 Agent 对话持续流程。",
+    ),
+    legacyBrowserAutomationStatus: t(
+      "settings.automation.details.status.offline",
+      "已下线",
+    ),
+    scheduleHours: (count) =>
+      t("settings.automation.details.schedule.hours", {
+        count,
+        defaultValue: "每 {{count}} 小时",
+      }),
+    scheduleMinutes: (count) =>
+      t("settings.automation.details.schedule.minutes", {
+        count,
+        defaultValue: "每 {{count}} 分钟",
+      }),
+    scheduleSeconds: (count) =>
+      t("settings.automation.details.schedule.seconds", {
+        count,
+        defaultValue: "每 {{count}} 秒",
+      }),
+    scheduleCron: (expr) =>
+      t("settings.automation.details.schedule.cron", {
+        expr,
+        defaultValue: "Cron: {{expr}}",
+      }),
+    scheduleAt: (time) =>
+      t("settings.automation.details.schedule.at", {
+        time,
+        defaultValue: "一次性: {{time}}",
+      }),
+    executionModeIntelligent: t(
+      "settings.automation.jobDialog.executionMode.intelligent",
+      "智能执行",
+    ),
+    executionModeSkill: t(
+      "settings.automation.jobDialog.executionMode.skill",
+      "技能执行",
+    ),
+    executionModeLogOnly: t(
+      "settings.automation.jobDialog.executionMode.logOnly",
+      "只记录",
+    ),
+    payloadBrowserSession: t(
+      "settings.automation.details.payload.browserSession",
+      "浏览器自动化",
+    ),
+    payloadAgentTurn: t(
+      "settings.automation.details.payload.agentTurn",
+      "Agent 对话",
+    ),
+    legacyPayloadProfile: (profile) =>
+      t("settings.automation.details.legacy.payload.profile", {
+        profile,
+        defaultValue: "资料: {{profile}}",
+      }),
+    legacyPayloadEnvironment: (environment) =>
+      t("settings.automation.details.legacy.payload.environment", {
+        environment,
+        defaultValue: "环境预设: {{environment}}",
+      }),
+    legacyPayloadUrl: (url) =>
+      t("settings.automation.details.legacy.payload.url", {
+        url,
+        defaultValue: "启动地址: {{url}}",
+      }),
+    legacyPayloadTargetId: (targetId) =>
+      t("settings.automation.details.legacy.payload.targetId", {
+        targetId,
+        defaultValue: "Target ID: {{targetId}}",
+      }),
+    legacyPayloadWindow: (status) =>
+      t("settings.automation.details.legacy.payload.window", {
+        status,
+        defaultValue: "调试窗口: {{status}}",
+      }),
+    legacyPayloadWindowOpen: t(
+      "settings.automation.details.legacy.payload.windowOpen",
+      "打开",
+    ),
+    legacyPayloadWindowClosed: t(
+      "settings.automation.details.legacy.payload.windowClosed",
+      "关闭",
+    ),
+    legacyPayloadStreamMode: (streamMode) =>
+      t("settings.automation.details.legacy.payload.streamMode", {
+        streamMode,
+        defaultValue: "流模式: {{streamMode}}",
+      }),
+    statusQueued: t("settings.automation.details.status.queued", "排队中"),
+    statusSuccess: t("settings.automation.details.status.success", "成功"),
+    statusRunning: t("settings.automation.details.status.running", "运行中"),
+    statusWaitingForHuman: t(
+      "settings.automation.details.status.waitingForHuman",
+      "等待人工处理",
+    ),
+    statusHumanControlling: t(
+      "settings.automation.details.status.humanControlling",
+      "人工接管中",
+    ),
+    statusAgentResuming: t(
+      "settings.automation.details.status.agentResuming",
+      "恢复给 Agent",
+    ),
+    statusError: t("settings.automation.details.status.error", "失败"),
+    statusTimeout: t("settings.automation.details.status.timeout", "超时"),
+    statusPending: t("settings.automation.details.status.pending", "待执行"),
+    statusDetailBlocking: t(
+      "settings.automation.details.statusDetail.blocking",
+      "当前阻塞",
+    ),
+    statusDetailResume: t(
+      "settings.automation.details.statusDetail.resume",
+      "恢复说明",
+    ),
+    statusDetailLastError: t(
+      "settings.automation.details.statusDetail.lastError",
+      "最近异常",
+    ),
+    statusDetailRunning: t(
+      "settings.automation.details.statusDetail.running",
+      "运行说明",
+    ),
+    deliveryModeAnnounce: t(
+      "settings.automation.details.delivery.mode.announce",
+      "运行完成后投递",
+    ),
+    deliveryModeNone: t(
+      "settings.automation.jobDialog.delivery.mode.none",
+      "关闭",
+    ),
+    deliveryChannelLocalFile: t(
+      "settings.automation.details.delivery.channel.localFile",
+      "本地文件",
+    ),
+    outputSchemaJson: t(
+      "settings.automation.details.delivery.schema.json",
+      "JSON 对象",
+    ),
+    outputSchemaTable: t(
+      "settings.automation.details.delivery.schema.table",
+      "表格",
+    ),
+    outputSchemaCsv: t(
+      "settings.automation.details.delivery.schema.csv",
+      "CSV",
+    ),
+    outputSchemaLinks: t(
+      "settings.automation.details.delivery.schema.links",
+      "链接列表",
+    ),
+    outputSchemaText: t(
+      "settings.automation.details.delivery.schema.text",
+      "文本摘要",
+    ),
+    outputFormatJson: t(
+      "settings.automation.details.delivery.format.json",
+      "JSON 编码",
+    ),
+    outputFormatText: t(
+      "settings.automation.details.delivery.format.text",
+      "文本编码",
+    ),
+    serviceSkillTaskLine: (title) =>
+      t("settings.automation.details.serviceSkill.taskLine", {
+        title,
+        defaultValue: "技能：{{title}}",
+      }),
+    serviceSkillMoreItems: (count) =>
+      t("settings.automation.details.serviceSkill.moreItems", {
+        count,
+        defaultValue: " 等 {{count}} 项",
+      }),
+    serviceSkillContextCopy,
+    accessModeCopy,
+  };
+}
 
 function isAutomationJobAtRisk(
   job: AutomationJobRecord,
@@ -358,7 +605,24 @@ export function AutomationSettings({
   onOpenWorkspace,
   onNavigate,
 }: AutomationSettingsProps) {
-  const { t } = useTranslation("settings");
+  const { i18n, t } = useTranslation("settings");
+  const serviceSkillContextCopy = useMemo(
+    () => buildAutomationServiceSkillContextCopy(t),
+    [t],
+  );
+  const automationPresentationCopy = useMemo(
+    () =>
+      buildAutomationPresentationCopy(t, serviceSkillContextCopy),
+    [serviceSkillContextCopy, t],
+  );
+  const legacyBrowserAutomationNotice =
+    automationPresentationCopy.legacyBrowserAutomationNotice;
+  const legacyBrowserAutomationStatus =
+    automationPresentationCopy.legacyBrowserAutomationStatus;
+  const serviceSkillExecutionCompatLabel = t(
+    "settings.automation.tasks.list.badge.serviceSkillLegacyCompat",
+    "旧目录兼容",
+  );
   const workspaceTemplates = useMemo(() => createWorkspaceTemplates(t), [t]);
   const workspaceOnly = mode === "workspace";
   const settingsOnly = mode === "settings";
@@ -424,7 +688,7 @@ export function AutomationSettings({
 
   useEffect(() => {
     jobsRef.current = jobs;
-  }, [jobs]);
+  }, [jobs, serviceSkillContextCopy]);
 
   const selectedJob = useMemo(
     () => jobs.find((job) => job.id === selectedJobId) ?? null,
@@ -433,13 +697,16 @@ export function AutomationSettings({
   const serviceSkillContextByJobId = useMemo(() => {
     const mapping = new Map<string, AutomationServiceSkillContext>();
     jobs.forEach((job) => {
-      const context = resolveServiceSkillAutomationContext(job.payload);
+      const context = resolveServiceSkillAutomationContext(
+        job.payload,
+        serviceSkillContextCopy,
+      );
       if (context) {
         mapping.set(job.id, context);
       }
     });
     return mapping;
-  }, [jobs]);
+  }, [jobs, serviceSkillContextCopy]);
   const selectedServiceSkillContext = useMemo(
     () =>
       selectedJobId
@@ -554,9 +821,13 @@ export function AutomationSettings({
       enabledJobCount: selectedJob.enabled ? 1 : 0,
       riskyJobCount: selectedJobRiskyCount,
       latestJobName: selectedJob.name,
-      latestJobStatusLabel: statusLabel(selectedJob.last_status),
+      latestJobStatusLabel: statusLabel(
+        selectedJob.last_status,
+        automationPresentationCopy,
+      ),
     });
   }, [
+    automationPresentationCopy,
     selectedJob,
     selectedJobRiskyCount,
     selectedSceneAppRuntime.descriptor,
@@ -660,9 +931,13 @@ export function AutomationSettings({
         ? 1
         : 0,
       latestJobName: overviewFocusJob.name,
-      latestJobStatusLabel: statusLabel(overviewFocusJob.last_status),
+      latestJobStatusLabel: statusLabel(
+        overviewFocusJob.last_status,
+        automationPresentationCopy,
+      ),
     });
   }, [
+    automationPresentationCopy,
     effectiveOverviewSceneAppRuntime.descriptor,
     effectiveOverviewSceneAppRuntime.linkedRun,
     effectiveOverviewSceneAppRuntime.scorecard,
@@ -1187,7 +1462,7 @@ export function AutomationSettings({
 
   async function handleRunNow(job: AutomationJobRecord) {
     if (isLegacyBrowserAutomation(job)) {
-      toast.error(LEGACY_BROWSER_AUTOMATION_NOTICE);
+      toast.error(legacyBrowserAutomationNotice);
       return;
     }
 
@@ -1975,8 +2250,8 @@ export function AutomationSettings({
               </Button>
               <div className="text-sm text-slate-500">
                 {t("settings.automation.scheduler.pollWindow", {
-                  last: formatTime(status?.last_polled_at),
-                  next: formatTime(status?.next_poll_at),
+                  last: formatTime(status?.last_polled_at, i18n.language),
+                  next: formatTime(status?.next_poll_at, i18n.language),
                   defaultValue: "最近轮询 {{last}}，下次轮询 {{next}}",
                 })}
               </div>
@@ -2183,11 +2458,16 @@ export function AutomationSettings({
                           const serviceSkillContext =
                             serviceSkillContextByJobId.get(job.id) ?? null;
                           const serviceSkillTaskLine = serviceSkillContext
-                            ? describeServiceSkillTaskLine(serviceSkillContext)
+                            ? describeServiceSkillTaskLine(
+                                serviceSkillContext,
+                                automationPresentationCopy,
+                              )
                             : null;
                           const serviceSkillSlotPreview = serviceSkillContext
                             ? describeServiceSkillSlotPreview(
                                 serviceSkillContext,
+                                2,
+                                automationPresentationCopy,
                               )
                             : null;
                           const legacyBrowserJob =
@@ -2245,7 +2525,7 @@ export function AutomationSettings({
                                         {serviceSkillContext.executionLocationLegacyCompat ? (
                                           <Badge variant="outline">
                                             {
-                                              LEGACY_SERVICE_SKILL_EXECUTION_COMPAT_LABEL
+                                              serviceSkillExecutionCompatLabel
                                             }
                                           </Badge>
                                         ) : null}
@@ -2302,10 +2582,17 @@ export function AutomationSettings({
                                   job.workspace_id}
                               </TableCell>
                               <TableCell className="align-top text-sm text-slate-500">
-                                {describeSchedule(job)}
+                                {describeSchedule(
+                                  job,
+                                  automationPresentationCopy,
+                                  i18n.language,
+                                )}
                               </TableCell>
                               <TableCell className="align-top text-sm text-slate-500">
-                                {executionModeLabel(job.execution_mode)}
+                                {executionModeLabel(
+                                  job.execution_mode,
+                                  automationPresentationCopy,
+                                )}
                               </TableCell>
                               <TableCell className="align-top">
                                 <div className="space-y-2">
@@ -2313,11 +2600,14 @@ export function AutomationSettings({
                                     <Badge
                                       variant={statusVariant(job.last_status)}
                                     >
-                                      {statusLabel(job.last_status)}
+                                      {statusLabel(
+                                        job.last_status,
+                                        automationPresentationCopy,
+                                      )}
                                     </Badge>
                                     {legacyBrowserJob ? (
                                       <Badge variant="outline">
-                                        {LEGACY_BROWSER_AUTOMATION_STATUS}
+                                        {legacyBrowserAutomationStatus}
                                       </Badge>
                                     ) : null}
                                     {!job.enabled ? (
@@ -2354,7 +2644,11 @@ export function AutomationSettings({
                                         job.last_status,
                                       )}`}
                                     >
-                                      {statusDetailPrefix(job.last_status)}:{" "}
+                                      {statusDetailPrefix(
+                                        job.last_status,
+                                        automationPresentationCopy,
+                                      )}
+                                      :{" "}
                                       {jobDetailMessage}
                                     </div>
                                   ) : null}
@@ -2369,7 +2663,10 @@ export function AutomationSettings({
                                     {t(
                                       "settings.automation.tasks.list.nextRun",
                                       {
-                                        time: formatTime(job.next_run_at),
+                                        time: formatTime(
+                                          job.next_run_at,
+                                          i18n.language,
+                                        ),
                                         defaultValue: "下次: {{time}}",
                                       },
                                     )}
@@ -2378,7 +2675,10 @@ export function AutomationSettings({
                                     {t(
                                       "settings.automation.tasks.list.recentRun",
                                       {
-                                        time: formatTime(job.last_run_at),
+                                        time: formatTime(
+                                          job.last_run_at,
+                                          i18n.language,
+                                        ),
                                         defaultValue: "最近: {{time}}",
                                       },
                                     )}
@@ -2401,7 +2701,7 @@ export function AutomationSettings({
                                   >
                                     <Play className="mr-1 h-4 w-4" />
                                     {legacyBrowserJob
-                                      ? LEGACY_BROWSER_AUTOMATION_STATUS
+                                      ? legacyBrowserAutomationStatus
                                       : runningJobId === job.id
                                         ? t(
                                             "settings.automation.tasks.list.action.running",
@@ -2523,7 +2823,7 @@ export function AutomationSettings({
                       最近轮询
                     </div>
                     <div className="mt-3 text-base font-semibold text-slate-900">
-                      {formatTime(status?.last_polled_at)}
+                      {formatTime(status?.last_polled_at, i18n.language)}
                     </div>
                   </div>
                   <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/70 p-4">
@@ -2531,7 +2831,7 @@ export function AutomationSettings({
                       下次轮询
                     </div>
                     <div className="mt-3 text-base font-semibold text-slate-900">
-                      {formatTime(status?.next_poll_at)}
+                      {formatTime(status?.next_poll_at, i18n.language)}
                     </div>
                   </div>
                   <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/70 p-4">

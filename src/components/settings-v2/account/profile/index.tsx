@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
+import { formatNumber as formatLocaleNumber } from "@/i18n/format";
 import { cn } from "@/lib/utils";
 import {
   getConfig,
@@ -262,7 +263,7 @@ function ProfileFieldCard({
 }
 
 export function ProfileSettings() {
-  const { t } = useTranslation("settings");
+  const { t, i18n } = useTranslation("settings");
   const [config, setConfig] = useState<Config | null>(null);
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_USER_PROFILE);
   const [loading, setLoading] = useState(true);
@@ -477,8 +478,11 @@ export function ProfileSettings() {
           showMessage(
             "error",
             t("settings.profile.message.fileTooLarge", {
-              size: (file.size / 1024 / 1024).toFixed(2),
-              max: 5,
+              size: formatLocaleNumber(file.size / 1024 / 1024, {
+                locale: i18n.language,
+                maximumFractionDigits: 2,
+              }),
+              max: formatLocaleNumber(5, { locale: i18n.language }),
               defaultValue: "文件过大 ({{size}}MB)，最大支持 {{max}}MB",
             }),
           );
@@ -551,6 +555,18 @@ export function ProfileSettings() {
     .slice(0, 6);
   const quickTags = tags.slice(0, 3);
   const extraTagCount = Math.max(tags.length - quickTags.length, 0);
+  const completionPercentLabel = formatLocaleNumber(completionPercent, {
+    locale: i18n.language,
+  });
+  const tagsCountLabel = formatLocaleNumber(tags.length, {
+    locale: i18n.language,
+  });
+  const extraTagCountLabel = formatLocaleNumber(extraTagCount, {
+    locale: i18n.language,
+  });
+  const profileFieldCountLabel = formatLocaleNumber(profileFields.length, {
+    locale: i18n.language,
+  });
   const isInitialLoading = loading && !config;
 
   if (isInitialLoading) {
@@ -632,13 +648,13 @@ export function ProfileSettings() {
               </span>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
                 {t("settings.profile.hero.completion", {
-                  percent: completionPercent,
+                  percent: completionPercentLabel,
                   defaultValue: "完成度：{{percent}}%",
                 })}
               </span>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
                 {t("settings.profile.hero.tags", {
-                  count: tags.length,
+                  count: tagsCountLabel,
                   defaultValue: "标签：{{count}}",
                 })}
               </span>
@@ -721,7 +737,7 @@ export function ProfileSettings() {
                 {extraTagCount > 0 && (
                   <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-500">
                     {t("settings.profile.avatar.extraTags", {
-                      count: extraTagCount,
+                      count: extraTagCountLabel,
                       defaultValue: "+{{count}} 个标签",
                     })}
                   </span>
@@ -776,7 +792,7 @@ export function ProfileSettings() {
               </div>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
                 {t("settings.profile.basic.itemCount", {
-                  count: profileFields.length,
+                  count: profileFieldCountLabel,
                   defaultValue: "{{count}} 项",
                 })}
               </span>
@@ -843,7 +859,7 @@ export function ProfileSettings() {
               </div>
               <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
                 {t("settings.profile.tags.selectedCount", {
-                  count: tags.length,
+                  count: tagsCountLabel,
                   defaultValue: "{{count}} 个已选",
                 })}
               </span>

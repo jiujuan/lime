@@ -31,8 +31,11 @@ const turn: AgentThreadTurn = {
 };
 
 describe("agentStreamThreadItemController", () => {
-  it("应延后 in-progress reasoning 与 agent_message 高频更新", () => {
-    expect(shouldDeferAgentStreamThreadItemUpdate(threadItem())).toBe(true);
+  it("应保留运行中 reasoning 更新，避免思考区只停在首个片段", () => {
+    expect(shouldDeferAgentStreamThreadItemUpdate(threadItem())).toBe(false);
+  });
+
+  it("仍应延后 in-progress agent_message 高频正文快照", () => {
     expect(
       shouldDeferAgentStreamThreadItemUpdate(
         threadItem({ type: "agent_message", text: "hello" }),

@@ -3,9 +3,9 @@
   "title": "Lime Agent QC Operating Scenarios",
   "evidenceSchema": "docs/test/agent-qc-evidence.schema.json",
   "qcloop": {
-    "purpose": "把 Agent 测试拆成可批量执行、独立质检、可返修的场景项。",
-    "recommendedMaxQcRounds": 3,
-    "workerPromptTemplate": "在 Lime 仓库中执行 Agent QC 场景 {{item}}。只做该场景要求的最小验证，收集命令、GUI、runtime 和证据路径，不要顺手修复无关问题。\n\n执行场景命令前先运行 qcloop worker preflight：`npm run agent-qc:qcloop-preflight -- --expected-cwd \"$(pwd)\" --check`。如果该场景命令需要 DevBridge / GUI / browser runtime，再运行：`npm run agent-qc:qcloop-preflight -- --expected-cwd \"$(pwd)\" --require-devbridge --timeout-ms 15000 --check`。\n\n如果 preflight 失败，停止后续高成本命令，输出 `QCLOOP_WORKER_RESULT=BLOCKED`，并在 stdout 中列出失败 check、health URL、cwd、stdout/stderr 证据路径；不要把环境阻断误判为产品 pass。\n\n最终 stdout 必须逐项列出 `evidence_required` 的证据是否满足，并逐项说明 `failure_modes` 如何被覆盖、排除或命中；不能只写“命令通过”或只给日志路径。\n\n如果 item 中包含 evidence_layers，最终 stdout 必须声明本次覆盖到哪些层级；只跑到 deterministic-smoke 时不得伪装成 gui-trace、runtime-transcript 或 release-artifact。\n\n只读约束：Agent QC worker 只允许执行场景命令、收集证据和输出 PASS/FAIL/BLOCKED；不得修改源码、配置、文档、锁文件或 git 状态。若 verifier 证据不足，输出缺口并让外层生成新 payload，不要在 qcloop repair 轮里修代码。\n\n结构化证据输出硬约束：最终 stdout 必须包含单行 `QCLOOP_WORKER_RESULT=PASS|FAIL|BLOCKED`；还必须包含单行 `QCLOOP_EVIDENCE_SUMMARY_JSON=<json>`，其中 `<json>` 是单个 JSON object，不要 Markdown / code fence。该 JSON 至少包含 scenario_id、result、commands[]、evidence_required[]、evidence_layers_covered[]、failure_modes[]、artifacts[]、blockers[]、gui_session_owner、release_scope。evidence_required[] 每项包含 name、status(pass|fail|blocked|missing)、evidence、artifact_path；failure_modes[] 每项包含 name、status(covered|excluded|hit|unknown)、evidence。不得输出密钥、token、用户私密内容或未经脱敏的请求 / 响应正文。",
+    "purpose": "把 Agent 测试拆成可批量执行、独立质检、只读取证的场景项；发布证据批次不得在 qcloop repair 轮中修改工作区。",
+    "recommendedMaxQcRounds": 1,
+    "workerPromptTemplate": "在 Lime 仓库中执行 Agent QC 场景 {{item}}。只做该场景要求的最小验证，收集命令、GUI、runtime 和证据路径，不要顺手修复无关问题。\n\n执行场景命令前先运行 qcloop worker preflight：`npm run agent-qc:qcloop-preflight -- --expected-cwd \"$(pwd)\" --check`。如果该场景命令需要 DevBridge / GUI / browser runtime，再运行：`npm run agent-qc:qcloop-preflight -- --expected-cwd \"$(pwd)\" --require-devbridge --timeout-ms 15000 --check`。\n\n如果 preflight 失败，停止后续高成本命令，输出 `QCLOOP_WORKER_RESULT=BLOCKED`，并在 stdout 中列出失败 check、health URL、cwd、stdout/stderr 证据路径；不要把环境阻断误判为产品 pass。\n\n最终 stdout 必须逐项列出 `evidence_required` 的证据是否满足，并逐项说明 `failure_modes` 如何被覆盖、排除或命中；不能只写“命令通过”或只给日志路径。\n\n如果 item 中包含 evidence_layers，最终 stdout 必须声明本次覆盖到哪些层级；只跑到 deterministic-smoke 时不得伪装成 gui-trace、runtime-transcript 或 release-artifact。\n\n只读约束：Agent QC worker 只允许执行场景命令、收集证据和输出 PASS/FAIL/BLOCKED；不得修改源码、配置、文档、锁文件或 git 状态。若 verifier 证据不足，输出缺口并让外层生成新 payload，不要在 qcloop repair 轮里修代码。\n\n结构化证据输出硬约束：最终 stdout 必须包含单行 `QCLOOP_WORKER_RESULT=PASS|FAIL|BLOCKED`；还必须包含单行 `QCLOOP_EVIDENCE_SUMMARY_JSON=<json>`，其中 `<json>` 是单个 JSON object，不要 Markdown / code fence。该 JSON 至少包含 scenario_id、result、commands[]、evidence_required[]、evidence_layers_covered[]、failure_modes[]、artifacts[]、blockers[]、gui_session_owner、release_scope。evidence_required[] 每项包含 name、status(pass|fail|blocked|missing)、evidence、artifact_path；failure_modes[] 每项包含 name、status(covered|excluded|hit|unknown)、evidence。不得输出密钥、token、用户私密内容或未经脱敏的请求 / 响应正文。\n\nGUI session owner / isolation 口径：`npm run agent-qc:gui-owner-check -- --check` 只用于外层启动新 GUI P0 批次前，不要在 qcloop worker 内用它判定当前正在执行的同批次 GUI item；worker 需要在 `gui_session_owner` 字段声明当前隔离方式，例如 `single-worker isolated qcloop job on dedicated port/db`、是否复用已有 DevBridge，以及是否观察到其他非本 job 的 GUI owner。只有发现非本 job 的 active/stale GUI owner 时，才把 `parallel GUI smoke interference` 记为 hit/blocker。",
     "verifierPromptTemplate": "审查 worker 输出是否满足场景 {{item}} 的 verifier、evidenceRequired 和 failureModes。只输出一个合法 JSON object，不要 Markdown、不要代码块、不要前后缀文本。JSON 必须至少包含 {\"pass\": true|false, \"feedback\": \"...\"}；可选字段 missingEvidence、nextAction、evidenceStatus、scenarioId 必须仍在同一个 JSON object 内。\n\nqcloop worker 执行证据：\n- attempt_status: {{attempt_status}}\n- attempt_type: {{attempt_type}}\n- exit_code: {{exit_code}}\n\nworker stdout:\n{{stdout}}\n\nqcloop issue ledger:\n{{issue_ledger}}\n\n判定要求：stdout 必须包含 `QCLOOP_WORKER_RESULT=PASS|FAIL|BLOCKED` 和 `QCLOOP_EVIDENCE_SUMMARY_JSON=<json>`。如果 stdout 缺少 `QCLOOP_EVIDENCE_SUMMARY_JSON`，或该 JSON 无法逐项证明 scenario verifier / evidenceRequired / failureModes，必须输出 {\"pass\": false, \"feedback\": \"...\"}；不能因为命令名、退出码或 worker 自评 PASS 就通过。",
     "recommendedMaxExecutorRetries": 0
   },
@@ -181,12 +181,12 @@
         "npm run smoke:agent-service-skill-entry"
       ],
       "goal": "从 capability draft 到 verify/register，再到 runtime binding readiness 与 session scope 显式 enable。",
-      "verifier": "不能把已注册误判为已自动进入 tool surface；必须看到 readiness、metadata、enable 和 SkillTool gate 证据。",
+      "verifier": "不能把已注册误判为已自动进入 tool surface；必须看到 readiness、metadata、enable 和 SkillTool gate 证据。runtime-transcript 以 smoke 脚本生成的 .lime/qc/skill-forge-runtime-transcript-current.json 为准，必须包含 SkillTool request/decision/result 与 source metadata；本场景不要求 live model provider stream。",
       "evidenceRequired": [
         "capability draft evidence",
         "registration result",
         "runtime binding projection",
-        "SkillTool gate transcript"
+        "SkillTool gate transcript request/decision/result/source metadata"
       ],
       "evidenceLayers": [
         "deterministic-smoke",
@@ -445,7 +445,7 @@
         "npm run verify:gui-smoke"
       ],
       "goal": "发布前验证版本一致、启动冒烟、首屏 ready、Bridge health 和发布阻断条件可被 release gate 复核。",
-      "verifier": "verify:app-version 与 GUI startup smoke 成功；如无真实安装包 artifact，应明确记录为 source-tree startup smoke，不能把它伪装成 installer 验证；release Evidence Pack 覆盖由 release-summary gate 单独强制。",
+      "verifier": "verify:app-version 与 GUI startup smoke 成功；如无真实安装包 artifact，应明确记录为 source-tree startup smoke，不能把它伪装成 installer 验证；在明确声明 source-tree startup scope 且未伪装 installer 时，artifact missing 应判 excluded；release Evidence Pack 覆盖由 release-summary gate 单独强制。",
       "evidenceRequired": [
         "version check",
         "startup smoke",

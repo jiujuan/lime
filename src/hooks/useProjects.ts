@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import type {
   Project,
   CreateProjectRequest,
@@ -86,6 +87,10 @@ export function useProjects(
   options: UseProjectsOptions = {},
 ): UseProjectsReturn {
   const { autoLoad = true, skipDefaultWorkspaceReadyCheck = false } = options;
+  const { t } = useTranslation("common");
+  const renameNameRequiredMessage = t("common.projects.rename.nameRequired", {
+    defaultValue: "项目名称不能为空",
+  });
   const [projects, setProjects] = useState<Project[]>([]);
   const [defaultProject, setDefaultProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(autoLoad);
@@ -215,14 +220,14 @@ export function useProjects(
     async (id: string, name: string): Promise<Project> => {
       const trimmedName = name.trim();
       if (!trimmedName) {
-        throw new Error("项目名称不能为空");
+        throw new Error(renameNameRequiredMessage);
       }
 
       const project = await updateProject(id, { name: trimmedName });
       await refresh();
       return toProjectView(project);
     },
-    [refresh],
+    [refresh, renameNameRequiredMessage],
   );
 
   /** 删除项目 */

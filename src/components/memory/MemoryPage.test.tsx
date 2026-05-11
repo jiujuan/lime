@@ -30,23 +30,57 @@ const {
   mockGetStoredResourceProjectId,
   mockOnResourceProjectChange,
   mockBuildHomeAgentParams,
-} = vi.hoisted(() => ({
-  mockGetConfig: vi.fn(),
-  mockSaveConfig: vi.fn(),
-  mockCleanupContextMemdir: vi.fn(),
-  mockGetContextMemoryEffectiveSources: vi.fn(),
-  mockGetContextMemoryAutoIndex: vi.fn(),
-  mockGetContextWorkingMemory: vi.fn(),
-  mockGetContextMemoryExtractionStatus: vi.fn(),
-  mockPrefetchContextMemoryForTurn: vi.fn(),
-  mockScaffoldContextMemdir: vi.fn(),
-  mockGetUnifiedMemoryStats: vi.fn(),
-  mockListUnifiedMemories: vi.fn(),
-  mockGetProjectMemory: vi.fn(),
-  mockGetStoredResourceProjectId: vi.fn(),
-  mockOnResourceProjectChange: vi.fn(),
-  mockBuildHomeAgentParams: vi.fn(),
-}));
+  mockUseTranslation,
+} = vi.hoisted(() => {
+  const mockTranslate = vi.fn(
+    (
+      key: string,
+      fallbackOrOptions?: string | { defaultValue?: string },
+      options?: Record<string, unknown>,
+    ) => {
+      const values: Record<string, unknown> =
+        typeof fallbackOrOptions === "object" && fallbackOrOptions !== null
+          ? (fallbackOrOptions as Record<string, unknown>)
+          : (options ?? {});
+      const template =
+        typeof fallbackOrOptions === "string"
+          ? fallbackOrOptions
+          : typeof values.defaultValue === "string"
+            ? values.defaultValue
+            : key;
+
+      return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, name) => {
+        const value = values[name];
+        return value == null ? match : String(value);
+      });
+    },
+  );
+
+  return {
+    mockGetConfig: vi.fn(),
+    mockSaveConfig: vi.fn(),
+    mockCleanupContextMemdir: vi.fn(),
+    mockGetContextMemoryEffectiveSources: vi.fn(),
+    mockGetContextMemoryAutoIndex: vi.fn(),
+    mockGetContextWorkingMemory: vi.fn(),
+    mockGetContextMemoryExtractionStatus: vi.fn(),
+    mockPrefetchContextMemoryForTurn: vi.fn(),
+    mockScaffoldContextMemdir: vi.fn(),
+    mockGetUnifiedMemoryStats: vi.fn(),
+    mockListUnifiedMemories: vi.fn(),
+    mockGetProjectMemory: vi.fn(),
+    mockGetStoredResourceProjectId: vi.fn(),
+    mockOnResourceProjectChange: vi.fn(),
+    mockBuildHomeAgentParams: vi.fn(),
+    mockUseTranslation: vi.fn((_namespace?: string) => ({
+      i18n: {
+        language: "zh-CN",
+        resolvedLanguage: "zh-CN",
+      },
+      t: mockTranslate,
+    })),
+  };
+});
 
 vi.mock("@/lib/api/appConfig", () => ({
   getConfig: mockGetConfig,
@@ -79,6 +113,10 @@ vi.mock("@/lib/resourceProjectSelection", () => ({
 
 vi.mock("@/lib/workspace/navigation", () => ({
   buildHomeAgentParams: mockBuildHomeAgentParams,
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: mockUseTranslation,
 }));
 
 const mountedRoots: MountedRoot[] = [];

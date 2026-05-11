@@ -181,6 +181,23 @@ function getStatusLabel(status: ArtifactDocumentV1["status"]): string {
   }
 }
 
+function formatArtifactDocumentSourceTypeLabel(sourceType?: string | null) {
+  switch (sourceType) {
+    case "web":
+      return "网页";
+    case "file":
+      return "文件";
+    case "tool":
+      return "工具结果";
+    case "message":
+      return "对话消息";
+    case "search_result":
+      return "搜索结果";
+    default:
+      return "来源";
+  }
+}
+
 function getKindLabel(kind: ArtifactDocumentV1["kind"]): string {
   switch (kind) {
     case "report":
@@ -1076,9 +1093,11 @@ const SourcesPanel: React.FC<{
                     {resolveSourceDisplayLabel(link, source)}
                   </button>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                    <span>{link.sourceType}</span>
+                    <span>
+                      {formatArtifactDocumentSourceTypeLabel(link.sourceType)}
+                    </span>
                     <span>·</span>
-                    <span>block {link.blockId}</span>
+                    <span>段落 {link.blockId}</span>
                   </div>
                 </div>
                 <Badge variant="outline" className="shrink-0">

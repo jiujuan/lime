@@ -22,6 +22,7 @@ import {
 import {
   buildExistingSessionAttachPresentation,
   type ExistingSessionAttachPresentation,
+  type ExistingSessionAttachPresentationCopy,
 } from "./existingSessionAttachPresentation";
 
 type RuntimeMessage = {
@@ -29,10 +30,21 @@ type RuntimeMessage = {
   text: string;
 };
 
+export type ExistingSessionAttachPanelCopy = {
+  presentation: ExistingSessionAttachPresentationCopy;
+  attachStatusLoadFailed: (message: string) => string;
+  pageReadSuccess: string;
+  pageReadFailed: (message: string) => string;
+  tabsLoadFailed: (message: string) => string;
+  tabSwitchSuccess: (tabLabel: string) => string;
+  tabSwitchFailed: (message: string) => string;
+};
+
 type UseExistingSessionAttachPanelOptions = {
   selectedProfileKey?: string | null;
   initialProfileKey?: string;
   sessionState: unknown | null;
+  copy: ExistingSessionAttachPanelCopy;
   onMessage?: (message: RuntimeMessage) => void;
 };
 
@@ -60,11 +72,20 @@ type UseExistingSessionAttachPanelResult = {
   handleSwitchAttachTab: (tab: ExistingSessionTabRecord) => Promise<void>;
 };
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export function useExistingSessionAttachPanel(
   options: UseExistingSessionAttachPanelOptions,
 ): UseExistingSessionAttachPanelResult {
-  const { selectedProfileKey, initialProfileKey, sessionState, onMessage } =
-    options;
+  const {
+    selectedProfileKey,
+    initialProfileKey,
+    sessionState,
+    copy,
+    onMessage,
+  } = options;
   const [attachProfile, setAttachProfile] =
     useState<BrowserProfileRecord | null>(null);
   const [attachBridgeStatus, setAttachBridgeStatus] =
@@ -114,12 +135,15 @@ export function useExistingSessionAttachPanel(
         observerConnected: Boolean(attachObserver),
         pageLoading: attachPageLoading,
         tabsLoading: attachTabsLoading,
-      }),
+      },
+      copy.presentation,
+    ),
     [
       attachContextLoading,
       attachObserver,
       attachPageLoading,
       attachTabsLoading,
+      copy.presentation,
     ],
   );
   const attachPageInfo = useMemo(
@@ -170,9 +194,7 @@ export function useExistingSessionAttachPanel(
         if (!contextOptions?.quiet) {
           onMessage?.({
             type: "error",
-            text: `读取附着 Chrome 状态失败: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
+            text: copy.attachStatusLoadFailed(getErrorMessage(error)),
           });
         }
         return null;
@@ -180,7 +202,7 @@ export function useExistingSessionAttachPanel(
         setAttachContextLoading(false);
       }
     },
-    [activeAttachProfileKey, onMessage],
+    [activeAttachProfileKey, copy, onMessage],
   );
 
   const loadAttachPage = useCallback(
@@ -200,7 +222,7 @@ export function useExistingSessionAttachPanel(
         if (!pageOptions?.quiet) {
           onMessage?.({
             type: "success",
-            text: "已读取当前页面摘要",
+            text: copy.pageReadSuccess,
           });
         }
         return nextPageInfo;
@@ -208,9 +230,7 @@ export function useExistingSessionAttachPanel(
         if (!pageOptions?.quiet) {
           onMessage?.({
             type: "error",
-            text: `读取当前页面失败: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
+            text: copy.pageReadFailed(getErrorMessage(error)),
           });
         }
         return null;
@@ -222,6 +242,7 @@ export function useExistingSessionAttachPanel(
       activeAttachProfileKey,
       attachObserver,
       commitAttachPageInfo,
+      copy,
       loadAttachContext,
       onMessage,
     ],
@@ -242,9 +263,7 @@ export function useExistingSessionAttachPanel(
         if (!tabsOptions?.quiet) {
           onMessage?.({
             type: "error",
-            text: `读取标签页失败: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
+            text: copy.tabsLoadFailed(getErrorMessage(error)),
           });
         }
         return [];
@@ -252,7 +271,7 @@ export function useExistingSessionAttachPanel(
         setAttachTabsLoading(false);
       }
     },
-    [activeAttachProfileKey, attachObserver, onMessage],
+    [activeAttachProfileKey, attachObserver, copy, onMessage],
   );
 
   const handleSwitchAttachTab = useCallback(
@@ -279,14 +298,12 @@ export function useExistingSessionAttachPanel(
 
         onMessage?.({
           type: "success",
-          text: `已切换到标签页：${getExistingSessionTabLabel(tab)}`,
+          text: copy.tabSwitchSuccess(getExistingSessionTabLabel(tab)),
         });
       } catch (error) {
         onMessage?.({
           type: "error",
-          text: `切换标签页失败: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          text: copy.tabSwitchFailed(getErrorMessage(error)),
         });
       } finally {
         setSwitchingAttachTabId(null);
@@ -296,6 +313,7 @@ export function useExistingSessionAttachPanel(
       activeAttachProfileKey,
       attachObserver,
       commitAttachPageInfo,
+      copy,
       loadAttachContext,
       loadAttachPage,
       loadAttachTabs,

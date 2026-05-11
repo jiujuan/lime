@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { buildThreadReliabilityView } from "./threadReliabilityView";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime";
+import type { ActionRequired } from "../types";
 
 describe("buildThreadReliabilityView", () => {
   beforeEach(() => {
@@ -131,6 +132,61 @@ describe("buildThreadReliabilityView", () => {
     expect(view.recommendations).toContain(
       "最近结果支持重试，可恢复或重新发起新回合",
     );
+  });
+
+  it("后端 pending 为空且存在 runtime_error 时不应被本地旧 pendingAction 覆盖", () => {
+    const threadRead: AgentRuntimeThreadReadModel = {
+      thread_id: "thread-1",
+      status: "running",
+      active_turn_id: "turn-2",
+      pending_requests: [],
+      incidents: [
+        {
+          id: "incident-runtime-error",
+          thread_id: "thread-1",
+          turn_id: "turn-1",
+          incident_type: "runtime_error",
+          severity: "high",
+          status: "active",
+          title: "时间线记录到异常项",
+          details:
+            "Agent provider execution failed: Request failed with status 402 Payment Required",
+        },
+      ],
+    };
+    const stalePendingAction: ActionRequired = {
+      requestId: "ask-turn-1",
+      actionType: "ask_user",
+      prompt: "请提供继续执行所需信息",
+      scope: {
+        sessionId: "session-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+      },
+      status: "pending",
+    };
+
+    const view = buildThreadReliabilityView({
+      threadRead,
+      turns: [
+        {
+          id: "turn-2",
+          thread_id: "thread-1",
+          prompt_text: "继续",
+          status: "running",
+          created_at: "2026-03-23T09:59:00Z",
+          started_at: "2026-03-23T09:59:00Z",
+          updated_at: "2026-03-23T09:59:24Z",
+        },
+      ],
+      currentTurnId: "turn-2",
+      pendingActions: [stalePendingAction],
+    });
+
+    expect(view.pendingRequestCount).toBe(0);
+    expect(view.summary).toContain("时间线记录到异常项");
+    expect(view.summary).not.toContain("等待人工处理");
+    expect(view.recommendations).not.toContain("优先响应当前待处理请求");
   });
 
   it("应识别审批超时并给出优先处理建议", () => {

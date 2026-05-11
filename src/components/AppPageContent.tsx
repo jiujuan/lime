@@ -16,7 +16,6 @@ import type {
   BrowserRuntimePageParams,
   KnowledgePageParams,
   MemoryPageParams,
-  OpenClawPageParams,
   Page,
   PageParams,
   ResourcesPageParams,
@@ -60,10 +59,6 @@ const loadMemoryPage = () =>
 const loadPluginsPage = () =>
   import("./plugins/PluginsPage").then((module) => ({
     default: module.PluginsPage,
-  }));
-const loadOpenClawPage = () =>
-  import("./openclaw").then((module) => ({
-    default: module.OpenClawPage,
   }));
 const loadSkillsWorkspacePage = () =>
   import("./skills").then((module) => ({
@@ -130,7 +125,6 @@ function scheduleAgentChatPagePreload(): void {
 const ResourcesPage = lazy(loadResourcesPage);
 const MemoryPage = lazy(loadMemoryPage);
 const PluginsPage = lazy(loadPluginsPage);
-const OpenClawPage = lazy(loadOpenClawPage);
 const SkillsWorkspacePage = lazy(loadSkillsWorkspacePage);
 const KnowledgePage = lazy(loadKnowledgePage);
 const BrowserRuntimeWorkspace = lazy(loadBrowserRuntimeWorkspace);
@@ -397,25 +391,6 @@ export function AppPageContent({
             pageParams={activePageParams as MemoryPageParams}
           />
         </div>
-      </div>
-    );
-
-    return wrapWithSceneApps(content);
-  }
-
-  if (activePage === "openclaw") {
-    const content = (
-      <div
-        style={{
-          ...columnPageStyle,
-          overflowY: "auto",
-        }}
-      >
-        <OpenClawPage
-          onNavigate={onNavigate}
-          pageParams={activePageParams as OpenClawPageParams}
-          isActive={true}
-        />
       </div>
     );
 

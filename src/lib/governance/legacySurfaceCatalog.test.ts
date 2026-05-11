@@ -900,6 +900,34 @@ describe("legacySurfaceCatalog", () => {
     ]);
   });
 
+  it("应记录已删除的 OpenClaw 兼容运行模块", () => {
+    const monitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "openclaw-module-surface",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.targets).toContain(
+      "src/components/openclaw/OpenClawPage.tsx",
+    );
+    expect(monitor?.targets).toContain(
+      "src-tauri/src/commands/openclaw_cmd.rs",
+    );
+  });
+
+  it("应记录已删除的 OpenClaw 命令族", () => {
+    const commandEntry = legacySurfaceCatalogJson.commands.find(
+      (entry) => entry.id === "openclaw-command-surface",
+    );
+
+    expect(commandEntry).toBeTruthy();
+    expect(commandEntry?.classification).toBe("dead");
+    expect(commandEntry?.allowedPaths).toEqual([]);
+    expect(commandEntry?.commands).toContain("openclaw_get_environment_status");
+    expect(commandEntry?.commands).toContain("openclaw_install_event");
+  });
+
   it("应记录已删除的电商差评回复旧前端页面与 API 网关", () => {
     const monitor = legacySurfaceCatalogJson.imports.find(
       (entry) => entry.id === "ecommerce-review-reply-frontend-surface",

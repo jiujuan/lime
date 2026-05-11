@@ -5,7 +5,9 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { Archive, PencilLine, RotateCcw, Save, SquarePen } from "lucide-react";
+import { formatNumber } from "@/i18n/format";
 import { browserRuntimeApi } from "./api";
 import type { BrowserEnvironmentPresetRecord } from "./api";
 
@@ -98,6 +100,10 @@ function parseOptionalNumber(value: string): number | undefined {
   return Number.isFinite(parsed) ? parsed : Number.NaN;
 }
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export function BrowserEnvironmentPresetManager(
   props: BrowserEnvironmentPresetManagerProps,
 ) {
@@ -107,6 +113,7 @@ export function BrowserEnvironmentPresetManager(
     onSelectedPresetChange,
     onPresetsChanged,
   } = props;
+  const { t, i18n } = useTranslation("workspace");
   const [presets, setPresets] = useState<BrowserEnvironmentPresetRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -143,9 +150,9 @@ export function BrowserEnvironmentPresetManager(
       } catch (error) {
         onMessage?.({
           type: "error",
-          text: `读取环境预设失败: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          text: t("workspace.browserEnvironment.feedback.loadFailed", {
+            message: getErrorMessage(error),
+          }),
         });
       } finally {
         setLoading(false);
@@ -157,6 +164,7 @@ export function BrowserEnvironmentPresetManager(
       onSelectedPresetChange,
       selectedPresetId,
       showArchived,
+      t,
     ],
   );
 
@@ -181,7 +189,10 @@ export function BrowserEnvironmentPresetManager(
 
   const handleSave = useCallback(async () => {
     if (!form.name.trim()) {
-      onMessage?.({ type: "error", text: "环境预设名称不能为空" });
+      onMessage?.({
+        type: "error",
+        text: t("workspace.browserEnvironment.feedback.nameRequired"),
+      });
       return;
     }
 
@@ -212,7 +223,10 @@ export function BrowserEnvironmentPresetManager(
       request.device_scale_factor,
     ].some((value) => Number.isNaN(value));
     if (hasInvalidNumber) {
-      onMessage?.({ type: "error", text: "数字字段格式不正确" });
+      onMessage?.({
+        type: "error",
+        text: t("workspace.browserEnvironment.feedback.invalidNumber"),
+      });
       return;
     }
 
@@ -225,21 +239,25 @@ export function BrowserEnvironmentPresetManager(
       onMessage?.({
         type: "success",
         text: form.id
-          ? `已更新环境预设：${saved.name}`
-          : `已创建环境预设：${saved.name}`,
+          ? t("workspace.browserEnvironment.feedback.updated", {
+              name: saved.name,
+            })
+          : t("workspace.browserEnvironment.feedback.created", {
+              name: saved.name,
+            }),
       });
       setFormOpen(false);
     } catch (error) {
       onMessage?.({
         type: "error",
-        text: `保存环境预设失败: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        text: t("workspace.browserEnvironment.feedback.saveFailed", {
+          message: getErrorMessage(error),
+        }),
       });
     } finally {
       setSubmitting(false);
     }
-  }, [form, onMessage, refreshPresets, showArchived]);
+  }, [form, onMessage, refreshPresets, showArchived, t]);
 
   const handleArchive = useCallback(
     async (preset: BrowserEnvironmentPresetRecord) => {
@@ -251,18 +269,20 @@ export function BrowserEnvironmentPresetManager(
         }
         onMessage?.({
           type: "success",
-          text: `已归档环境预设：${preset.name}`,
+          text: t("workspace.browserEnvironment.feedback.archived", {
+            name: preset.name,
+          }),
         });
       } catch (error) {
         onMessage?.({
           type: "error",
-          text: `归档环境预设失败: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          text: t("workspace.browserEnvironment.feedback.archiveFailed", {
+            message: getErrorMessage(error),
+          }),
         });
       }
     },
-    [form.id, onMessage, refreshPresets, resetForm, showArchived],
+    [form.id, onMessage, refreshPresets, resetForm, showArchived, t],
   );
 
   const handleRestore = useCallback(
@@ -272,38 +292,44 @@ export function BrowserEnvironmentPresetManager(
         await refreshPresets(showArchived);
         onMessage?.({
           type: "success",
-          text: `已恢复环境预设：${preset.name}`,
+          text: t("workspace.browserEnvironment.feedback.restored", {
+            name: preset.name,
+          }),
         });
       } catch (error) {
         onMessage?.({
           type: "error",
-          text: `恢复环境预设失败: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          text: t("workspace.browserEnvironment.feedback.restoreFailed", {
+            message: getErrorMessage(error),
+          }),
         });
       }
     },
-    [onMessage, refreshPresets, showArchived],
+    [onMessage, refreshPresets, showArchived, t],
   );
 
   return (
     <section className="rounded-lg border p-5 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
-          <h2 className="text-base font-semibold">环境预设</h2>
+          <h2 className="text-base font-semibold">
+            {t("workspace.browserEnvironment.title")}
+          </h2>
           <p className="text-sm text-muted-foreground">
-            统一管理代理、时区、语言、地理位置与设备视口。代理属于启动参数，切换前需要先关闭当前资料会话。
+            {t("workspace.browserEnvironment.description")}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>资料启动环境</span>
+            <span>{t("workspace.browserEnvironment.launch.label")}</span>
             <select
               value={selectedPresetId}
               onChange={(event) => onSelectedPresetChange?.(event.target.value)}
               className="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
             >
-              <option value="">无预设</option>
+              <option value="">
+                {t("workspace.browserEnvironment.launch.none")}
+              </option>
               {activePresets.map((preset) => (
                 <option key={preset.id} value={preset.id}>
                   {preset.name}
@@ -317,7 +343,9 @@ export function BrowserEnvironmentPresetManager(
             disabled={loading}
             className="inline-flex h-9 items-center rounded-md border px-3 text-sm hover:bg-muted disabled:opacity-60"
           >
-            {loading ? "刷新中..." : "刷新预设"}
+            {loading
+              ? t("workspace.browserEnvironment.actions.refreshing")
+              : t("workspace.browserEnvironment.actions.refresh")}
           </button>
           <button
             type="button"
@@ -325,31 +353,36 @@ export function BrowserEnvironmentPresetManager(
             className={BROWSER_RUNTIME_PRIMARY_ACTION_BUTTON_CLASSNAME}
           >
             <SquarePen className="h-4 w-4" />
-            新建预设
+            {t("workspace.browserEnvironment.actions.new")}
           </button>
         </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
         <span>
-          活跃预设:
-          <span className="ml-1 font-medium text-foreground">
-            {activePresets.length}
-          </span>
+          {t("workspace.browserEnvironment.summary.activePresets", {
+            activeCount: formatNumber(activePresets.length, {
+              locale: i18n.language,
+            }),
+          })}
         </span>
         <button
           type="button"
           onClick={() => setShowArchived((value) => !value)}
           className="rounded-md border px-2 py-1 transition hover:bg-muted"
         >
-          {showArchived ? "隐藏已归档" : "显示已归档"}
+          {showArchived
+            ? t("workspace.browserEnvironment.actions.hideArchived")
+            : t("workspace.browserEnvironment.actions.showArchived")}
         </button>
       </div>
 
       {formOpen ? (
         <div className="grid gap-3 rounded-xl border bg-muted/20 p-4 md:grid-cols-2 xl:grid-cols-3">
           <label className="space-y-1 text-sm">
-            <span className="text-muted-foreground">预设名称</span>
+            <span className="text-muted-foreground">
+              {t("workspace.browserEnvironment.fields.name")}
+            </span>
             <input
               value={form.name}
               onChange={(event) =>
@@ -359,11 +392,13 @@ export function BrowserEnvironmentPresetManager(
                 }))
               }
               className="h-10 w-full rounded-md border bg-background px-3"
-              placeholder="例如：美区桌面住宅网络"
+              placeholder={t("workspace.browserEnvironment.placeholders.name")}
             />
           </label>
           <label className="space-y-1 text-sm">
-            <span className="text-muted-foreground">代理服务器</span>
+            <span className="text-muted-foreground">
+              {t("workspace.browserEnvironment.fields.proxyServer")}
+            </span>
             <input
               value={form.proxy_server}
               onChange={(event) =>
@@ -377,7 +412,9 @@ export function BrowserEnvironmentPresetManager(
             />
           </label>
           <label className="space-y-1 text-sm">
-            <span className="text-muted-foreground">时区</span>
+            <span className="text-muted-foreground">
+              {t("workspace.browserEnvironment.fields.timezone")}
+            </span>
             <input
               value={form.timezone_id}
               onChange={(event) =>
@@ -391,7 +428,9 @@ export function BrowserEnvironmentPresetManager(
             />
           </label>
           <label className="space-y-1 text-sm">
-            <span className="text-muted-foreground">Locale</span>
+            <span className="text-muted-foreground">
+              {t("workspace.browserEnvironment.fields.locale")}
+            </span>
             <input
               value={form.locale}
               onChange={(event) =>
@@ -405,7 +444,9 @@ export function BrowserEnvironmentPresetManager(
             />
           </label>
           <label className="space-y-1 text-sm">
-            <span className="text-muted-foreground">Accept-Language</span>
+            <span className="text-muted-foreground">
+              {t("workspace.browserEnvironment.fields.acceptLanguage")}
+            </span>
             <input
               value={form.accept_language}
               onChange={(event) =>
@@ -419,7 +460,9 @@ export function BrowserEnvironmentPresetManager(
             />
           </label>
           <label className="space-y-1 text-sm">
-            <span className="text-muted-foreground">Platform</span>
+            <span className="text-muted-foreground">
+              {t("workspace.browserEnvironment.fields.platform")}
+            </span>
             <input
               value={form.platform}
               onChange={(event) =>
@@ -433,7 +476,9 @@ export function BrowserEnvironmentPresetManager(
             />
           </label>
           <label className="space-y-1 text-sm">
-            <span className="text-muted-foreground">纬度</span>
+            <span className="text-muted-foreground">
+              {t("workspace.browserEnvironment.fields.latitude")}
+            </span>
             <input
               value={form.geolocation_lat}
               onChange={(event) =>
@@ -447,7 +492,9 @@ export function BrowserEnvironmentPresetManager(
             />
           </label>
           <label className="space-y-1 text-sm">
-            <span className="text-muted-foreground">经度</span>
+            <span className="text-muted-foreground">
+              {t("workspace.browserEnvironment.fields.longitude")}
+            </span>
             <input
               value={form.geolocation_lng}
               onChange={(event) =>
@@ -461,7 +508,9 @@ export function BrowserEnvironmentPresetManager(
             />
           </label>
           <label className="space-y-1 text-sm">
-            <span className="text-muted-foreground">精度(米)</span>
+            <span className="text-muted-foreground">
+              {t("workspace.browserEnvironment.fields.accuracy")}
+            </span>
             <input
               value={form.geolocation_accuracy_m}
               onChange={(event) =>
@@ -475,7 +524,9 @@ export function BrowserEnvironmentPresetManager(
             />
           </label>
           <label className="space-y-1 text-sm">
-            <span className="text-muted-foreground">视口宽度</span>
+            <span className="text-muted-foreground">
+              {t("workspace.browserEnvironment.fields.viewportWidth")}
+            </span>
             <input
               value={form.viewport_width}
               onChange={(event) =>
@@ -489,7 +540,9 @@ export function BrowserEnvironmentPresetManager(
             />
           </label>
           <label className="space-y-1 text-sm">
-            <span className="text-muted-foreground">视口高度</span>
+            <span className="text-muted-foreground">
+              {t("workspace.browserEnvironment.fields.viewportHeight")}
+            </span>
             <input
               value={form.viewport_height}
               onChange={(event) =>
@@ -503,7 +556,9 @@ export function BrowserEnvironmentPresetManager(
             />
           </label>
           <label className="space-y-1 text-sm">
-            <span className="text-muted-foreground">设备像素比</span>
+            <span className="text-muted-foreground">
+              {t("workspace.browserEnvironment.fields.deviceScaleFactor")}
+            </span>
             <input
               value={form.device_scale_factor}
               onChange={(event) =>
@@ -517,7 +572,9 @@ export function BrowserEnvironmentPresetManager(
             />
           </label>
           <label className="space-y-1 text-sm xl:col-span-3">
-            <span className="text-muted-foreground">User-Agent</span>
+            <span className="text-muted-foreground">
+              {t("workspace.browserEnvironment.fields.userAgent")}
+            </span>
             <input
               value={form.user_agent}
               onChange={(event) =>
@@ -531,7 +588,9 @@ export function BrowserEnvironmentPresetManager(
             />
           </label>
           <label className="space-y-1 text-sm md:col-span-2 xl:col-span-3">
-            <span className="text-muted-foreground">说明</span>
+            <span className="text-muted-foreground">
+              {t("workspace.browserEnvironment.fields.description")}
+            </span>
             <textarea
               value={form.description}
               onChange={(event) =>
@@ -541,7 +600,9 @@ export function BrowserEnvironmentPresetManager(
                 }))
               }
               className="min-h-24 w-full rounded-md border bg-background px-3 py-2"
-              placeholder="记录网络来源、地区语境、适用站点等"
+              placeholder={t(
+                "workspace.browserEnvironment.placeholders.description",
+              )}
             />
           </label>
           <div className="md:col-span-2 xl:col-span-3 flex flex-wrap items-center justify-end gap-2">
@@ -550,7 +611,7 @@ export function BrowserEnvironmentPresetManager(
               onClick={resetForm}
               className="inline-flex h-9 items-center rounded-md border px-3 text-sm hover:bg-muted"
             >
-              取消
+              {t("workspace.browserEnvironment.actions.cancel")}
             </button>
             <button
               type="button"
@@ -559,7 +620,11 @@ export function BrowserEnvironmentPresetManager(
               className="inline-flex h-9 items-center gap-2 rounded-md border border-emerald-700 bg-emerald-700 px-3 text-sm text-white transition hover:bg-emerald-600 disabled:opacity-60"
             >
               <Save className="h-4 w-4" />
-              {submitting ? "保存中..." : form.id ? "更新预设" : "创建预设"}
+              {submitting
+                ? t("workspace.browserEnvironment.actions.saving")
+                : form.id
+                  ? t("workspace.browserEnvironment.actions.update")
+                  : t("workspace.browserEnvironment.actions.create")}
             </button>
           </div>
         </div>
@@ -568,7 +633,7 @@ export function BrowserEnvironmentPresetManager(
       <div className="space-y-3">
         {presets.length === 0 ? (
           <div className="rounded-xl border border-dashed px-4 py-6 text-sm text-muted-foreground">
-            还没有环境预设。先创建一个环境，再从资料卡片选择它进行启动。
+            {t("workspace.browserEnvironment.empty")}
           </div>
         ) : null}
 
@@ -587,20 +652,44 @@ export function BrowserEnvironmentPresetManager(
                     <h3 className="text-sm font-semibold">{preset.name}</h3>
                     {selectedPresetId === preset.id && !isArchived ? (
                       <span className="rounded-md border border-sky-500/40 bg-sky-500/10 px-2 py-0.5 text-[11px] text-sky-700 dark:text-sky-300">
-                        当前启动环境
+                        {t("workspace.browserEnvironment.badge.current")}
                       </span>
                     ) : null}
                     {isArchived ? (
                       <span className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-700 dark:text-amber-300">
-                        已归档
+                        {t("workspace.browserEnvironment.badge.archived")}
                       </span>
                     ) : null}
                   </div>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                    <span>代理: {preset.proxy_server || "未设置"}</span>
-                    <span>时区: {preset.timezone_id || "未设置"}</span>
-                    <span>Locale: {preset.locale || "未设置"}</span>
-                    <span>最近使用: {preset.last_used_at || "从未"}</span>
+                    <span>
+                      {t("workspace.browserEnvironment.meta.proxy", {
+                        value:
+                          preset.proxy_server ||
+                          t("workspace.browserEnvironment.value.unset"),
+                      })}
+                    </span>
+                    <span>
+                      {t("workspace.browserEnvironment.meta.timezone", {
+                        value:
+                          preset.timezone_id ||
+                          t("workspace.browserEnvironment.value.unset"),
+                      })}
+                    </span>
+                    <span>
+                      {t("workspace.browserEnvironment.meta.locale", {
+                        value:
+                          preset.locale ||
+                          t("workspace.browserEnvironment.value.unset"),
+                      })}
+                    </span>
+                    <span>
+                      {t("workspace.browserEnvironment.meta.lastUsed", {
+                        value:
+                          preset.last_used_at ||
+                          t("workspace.browserEnvironment.value.never"),
+                      })}
+                    </span>
                   </div>
                   {preset.description ? (
                     <p className="max-w-3xl text-sm text-muted-foreground">
@@ -616,7 +705,7 @@ export function BrowserEnvironmentPresetManager(
                       className="inline-flex h-8 items-center gap-1 rounded-md border px-2.5 text-xs hover:bg-muted"
                     >
                       <RotateCcw className="h-3.5 w-3.5" />
-                      恢复
+                      {t("workspace.browserEnvironment.actions.restore")}
                     </button>
                   ) : (
                     <>
@@ -626,7 +715,7 @@ export function BrowserEnvironmentPresetManager(
                         className="inline-flex h-8 items-center gap-1 rounded-md border px-2.5 text-xs hover:bg-muted"
                       >
                         <PencilLine className="h-3.5 w-3.5" />
-                        编辑
+                        {t("workspace.browserEnvironment.actions.edit")}
                       </button>
                       <button
                         type="button"
@@ -634,7 +723,7 @@ export function BrowserEnvironmentPresetManager(
                         className="inline-flex h-8 items-center gap-1 rounded-md border px-2.5 text-xs hover:bg-muted"
                       >
                         <Archive className="h-3.5 w-3.5" />
-                        归档
+                        {t("workspace.browserEnvironment.actions.archive")}
                       </button>
                     </>
                   )}

@@ -35,7 +35,10 @@ import {
   getHotkeyRuntimeStatus,
   type HotkeyRuntimeStatus,
 } from "@/lib/api/hotkeys";
-import { resolveHotkeyPlatform } from "@/lib/hotkeys/platform";
+import {
+  resolveHotkeyPlatform,
+  UNSET_SHORTCUT_TOKEN,
+} from "@/lib/hotkeys/platform";
 import {
   buildAuditedHotkeyCatalog,
   createHotkeyCatalogCopy,
@@ -140,12 +143,12 @@ function HotkeyRow({
               key={`${item.id}-${key}`}
               className={cn(
                 "inline-flex min-h-9 min-w-9 items-center justify-center rounded-[14px] border px-3 text-sm font-medium shadow-sm",
-                key === "未设置"
+                key === UNSET_SHORTCUT_TOKEN
                   ? "border-amber-200 bg-amber-50 text-amber-700"
                   : "border-slate-200 bg-white text-slate-700",
               )}
             >
-              {key === "未设置" ? copy.unsetKey : key}
+              {key === UNSET_SHORTCUT_TOKEN ? copy.unsetKey : key}
             </span>
           ))}
         </div>

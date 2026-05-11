@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import {
   apiKeyProviderApi,
   type UpdateProviderRequest,
@@ -21,9 +22,16 @@ import {
 } from "@/lib/oemLimeHubProvider";
 import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
 
-const MANAGED_LIME_HUB_KEY_ALIAS = "Lime 云端模型";
+const MANAGED_LIME_HUB_KEY_ALIAS_FALLBACK = "Lime 云端模型";
+const MANAGED_LIME_HUB_CLOUD_TOKEN_NAME_FALLBACK =
+  "Lime Desktop Cloud Model Key";
 const MANAGED_LIME_HUB_KEY_MODELS_STATE =
   "oem_lime_hub_provider_sync:managed_key_models";
+
+interface ManagedLimeHubProviderSyncCopy {
+  managedKeyAlias: string;
+  cloudTokenName: string;
+}
 
 function buildSyncSignature(
   runtime: ReturnType<typeof resolveOemCloudRuntimeContext>,
@@ -133,13 +141,18 @@ function hasUsableLocalApiKey(provider: {
   );
 }
 
-function isManagedLimeHubKey(key: {
-  alias?: string | null;
-  enabled?: boolean;
-}): boolean {
+function isManagedLimeHubKey(
+  key: {
+    alias?: string | null;
+    enabled?: boolean;
+  },
+  managedKeyAlias: string,
+): boolean {
+  const normalizedAlias = (key.alias ?? "").trim();
   return (
     key.enabled !== false &&
-    (key.alias ?? "").trim() === MANAGED_LIME_HUB_KEY_ALIAS
+    (normalizedAlias === managedKeyAlias ||
+      normalizedAlias === MANAGED_LIME_HUB_KEY_ALIAS_FALLBACK)
   );
 }
 
@@ -148,8 +161,9 @@ async function ensureLocalLimeHubApiKey(input: {
   customModels: string[];
   localApiKeyReady: boolean;
   apiKeys: Array<{ id?: string; alias?: string | null; enabled?: boolean }>;
+  copy: ManagedLimeHubProviderSyncCopy;
 }): Promise<boolean> {
-  const { runtime, customModels, localApiKeyReady, apiKeys } = input;
+  const { runtime, customModels, localApiKeyReady, apiKeys, copy } = input;
   if (!runtime.sessionToken || customModels.length === 0) {
     return localApiKeyReady;
   }
@@ -172,7 +186,7 @@ async function ensureLocalLimeHubApiKey(input: {
   }
 
   const response = await createClientAccessToken(runtime.tenantId, {
-    name: "Lime Desktop Cloud Model Key",
+    name: copy.cloudTokenName,
     scopes: ["llm:invoke"],
     allowedModels: customModels,
   });
@@ -184,12 +198,12 @@ async function ensureLocalLimeHubApiKey(input: {
   const addedKey = await apiKeyProviderApi.addApiKey({
     provider_id: OEM_LIME_HUB_PROVIDER_ID,
     api_key: apiKey,
-    alias: MANAGED_LIME_HUB_KEY_ALIAS,
+    alias: copy.managedKeyAlias,
   });
 
   await Promise.all(
     apiKeys
-      .filter(isManagedLimeHubKey)
+      .filter((key) => isManagedLimeHubKey(key, copy.managedKeyAlias))
       .filter((key) => key.id && key.id !== addedKey.id)
       .map((key) =>
         apiKeyProviderApi.toggleApiKey(key.id as string, false).catch(() => {
@@ -213,6 +227,24 @@ async function ensureLocalLimeHubApiKey(input: {
 }
 
 export function useOemLimeHubProviderSync() {
+  const { t } = useTranslation("common");
+  const copy = useMemo<ManagedLimeHubProviderSyncCopy>(
+    () => ({
+      managedKeyAlias: t(
+        "common.oemLimeHubProviderSync.managedKeyAlias",
+        {
+          defaultValue: MANAGED_LIME_HUB_KEY_ALIAS_FALLBACK,
+        },
+      ),
+      cloudTokenName: t(
+        "common.oemLimeHubProviderSync.cloudTokenName",
+        {
+          defaultValue: MANAGED_LIME_HUB_CLOUD_TOKEN_NAME_FALLBACK,
+        },
+      ),
+    }),
+    [t],
+  );
   const syncEnabled = hasTauriInvokeCapability();
   const lastAppliedSignatureRef = useRef<string>("");
 
@@ -317,6 +349,7 @@ export function useOemLimeHubProviderSync() {
           customModels: nextCustomModels,
           localApiKeyReady,
           apiKeys: limeHubProvider.api_keys ?? [],
+          copy,
         });
 
         lastAppliedSignatureRef.current = buildSyncSignature(
@@ -343,5 +376,5 @@ export function useOemLimeHubProviderSync() {
       unsubscribeSession();
       unsubscribeBootstrap();
     };
-  }, [syncEnabled]);
+  }, [copy, syncEnabled]);
 }

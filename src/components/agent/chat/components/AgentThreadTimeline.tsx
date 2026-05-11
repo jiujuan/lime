@@ -1552,10 +1552,13 @@ function TimelineBlockCard({
     block.items.length === 1 && isThinkingTimelineItem(block.items[0]!)
       ? block.items[0]!
       : null;
+  const shouldRenderActiveSingleThinkingInline =
+    Boolean(singleThinkingItem) && block.status === "in_progress";
   const shouldSummarizeSingleThinkingInline =
     Boolean(singleThinkingItem) &&
     (singleThinkingItem?.type === "reasoning" ||
       singleThinkingItem?.type === "turn_summary") &&
+    !shouldRenderActiveSingleThinkingInline &&
     !hasStructuredThinkingInlinePreview(singleThinkingItem);
   const shouldRenderSingleItemInline =
     block.items.length === 1 &&

@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { getWindowsStartupDiagnostics } from "@/lib/api/serverRuntime";
 import { ensureDefaultWorkspaceReady } from "@/lib/api/project";
@@ -30,6 +31,8 @@ export function useAppStartupEffects({
   currentPage,
   registryError,
 }: UseAppStartupEffectsOptions): void {
+  const { t } = useTranslation("common");
+
   useEffect(() => {
     if (registryError) {
       console.warn("[App] Registry 加载失败:", registryError);
@@ -49,24 +52,34 @@ export function useAppStartupEffects({
         }
 
         if (diagnostics.has_blocking_issues) {
-          toast.error("Windows 启动自检发现阻塞问题", {
-            description: diagnostics.summary_message,
-            duration: 12000,
-          });
+          toast.error(
+            t("common.app.startup.windows.blockingTitle", {
+              defaultValue: "Windows 启动自检发现阻塞问题",
+            }),
+            {
+              description: diagnostics.summary_message,
+              duration: 12000,
+            },
+          );
           return;
         }
 
         if (diagnostics.has_warnings) {
-          toast.warning("Windows 环境检测提示", {
-            description: diagnostics.summary_message,
-            duration: 8000,
-          });
+          toast.warning(
+            t("common.app.startup.windows.warningTitle", {
+              defaultValue: "Windows 环境检测提示",
+            }),
+            {
+              description: diagnostics.summary_message,
+              duration: 8000,
+            },
+          );
         }
       })
       .catch((error) => {
         console.warn("[App] 获取 Windows 启动诊断失败:", error);
       });
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!isTauriDesktopEnvironment()) {

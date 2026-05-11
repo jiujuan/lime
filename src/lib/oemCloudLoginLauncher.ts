@@ -36,25 +36,47 @@ export interface ExternalBrowserOpenTarget {
   close: () => void;
 }
 
+export interface ExternalBrowserOpenTargetCopy {
+  openingTitle?: string;
+  openingBody?: string;
+}
+
 export interface OpenExternalUrlOptions {
   browserTarget?: ExternalBrowserOpenTarget | null;
+  copy?: OpenExternalUrlCopy;
+}
+
+export interface OpenExternalUrlCopy {
+  systemBrowserOpenFailed?: string;
+  systemBrowserOpenFailedWithMessage?: (message: string) => string;
+  unsupportedExternalBrowser?: string;
+  popupBlocked?: string;
 }
 
 export interface OemCloudLoginLaunchOptions {
   browserTarget?: ExternalBrowserOpenTarget | null;
   waitForCompletion?: boolean;
+  copy?: OpenExternalUrlCopy;
 }
 
-function buildOpenExternalUrlError(error: unknown) {
+function buildOpenExternalUrlError(
+  error: unknown,
+  copy: OpenExternalUrlCopy = {},
+) {
   if (error instanceof Error && error.message.trim()) {
-    return new Error(`系统浏览器打开失败：${error.message.trim()}`);
+    const message = error.message.trim();
+    return new Error(
+      copy.systemBrowserOpenFailedWithMessage?.(message) ??
+        `系统浏览器打开失败：${message}`,
+    );
   }
-  return new Error("系统浏览器打开失败。");
+  return new Error(copy.systemBrowserOpenFailed ?? "系统浏览器打开失败。");
 }
 
-function buildPopupBlockedError() {
+function buildPopupBlockedError(copy: OpenExternalUrlCopy = {}) {
   return new Error(
-    "登录页没有被浏览器打开，可能被弹窗拦截。请点击“重新打开登录页”，或复制登录链接到浏览器打开。",
+    copy.popupBlocked ??
+      "登录页没有被浏览器打开，可能被弹窗拦截。请点击“重新打开登录页”，或复制登录链接到浏览器打开。",
   );
 }
 
@@ -77,7 +99,9 @@ function tryOpenBrowserWindow(url: string): boolean {
   return !opened.closed;
 }
 
-export function createExternalBrowserOpenTarget(): ExternalBrowserOpenTarget | null {
+export function createExternalBrowserOpenTarget(
+  copy: ExternalBrowserOpenTargetCopy = {},
+): ExternalBrowserOpenTarget | null {
   if (
     hasTauriInvokeCapability() ||
     hasTauriRuntimeMarkers() ||
@@ -93,8 +117,9 @@ export function createExternalBrowserOpenTarget(): ExternalBrowserOpenTarget | n
 
   try {
     opened.opener = null;
-    opened.document.title = "正在打开登录页...";
-    opened.document.body.innerHTML = "正在打开登录页，请稍候...";
+    opened.document.title = copy.openingTitle ?? "正在打开登录页...";
+    opened.document.body.innerHTML =
+      copy.openingBody ?? "正在打开登录页，请稍候...";
   } catch {
     // 某些浏览器不允许写入预打开窗口，后续仍可尝试导航。
   }
@@ -146,12 +171,15 @@ export async function openExternalUrl(
       return;
     } catch (error) {
       options.browserTarget?.close();
-      throw buildOpenExternalUrlError(nativeOpenError ?? error);
+      throw buildOpenExternalUrlError(nativeOpenError ?? error, options.copy);
     }
   }
 
   if (typeof window === "undefined") {
-    throw new Error("当前环境不支持打开外部浏览器");
+    throw new Error(
+      options.copy?.unsupportedExternalBrowser ??
+        "当前环境不支持打开外部浏览器",
+    );
   }
 
   if (options.browserTarget) {
@@ -162,7 +190,7 @@ export async function openExternalUrl(
   }
 
   if (!tryOpenBrowserWindow(url)) {
-    throw buildPopupBlockedError();
+    throw buildPopupBlockedError(options.copy);
   }
 }
 
@@ -483,6 +511,7 @@ export async function openConfiguredOemCloudLoginUrl(
   const loginUrl = buildOemCloudLoginUrl(runtime);
   await openExternalUrl(loginUrl, {
     browserTarget: options.browserTarget,
+    copy: options.copy,
   });
   return {
     mode: "login_url",
@@ -528,6 +557,7 @@ export async function startOemCloudLogin(
 
   await openExternalUrl(authSession.authorizeUrl, {
     browserTarget: options.browserTarget,
+    copy: options.copy,
   });
 
   const completionPromise = monitorGoogleDesktopAuthCompletion(

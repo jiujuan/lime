@@ -5,38 +5,11 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
-const GUI_OWNER_PATTERNS = [
-  "verify:gui-smoke",
-  "smoke:workspace-ready",
-  "smoke:browser-runtime",
-  "smoke:site-adapters",
-  "smoke:agent-service-skill-entry",
-  "smoke:agent-runtime-tool-surface",
-  "smoke:knowledge-gui",
-  "smoke:design-canvas",
-  "claw-chat-ready-streaming",
-  "browser-runtime-site-adapter",
-  "workspace-ready-session-restore",
-  "release-package-startup-smoke",
-];
-
-const CARGO_OWNER_PATTERNS = [
-  "cargo ",
-  "cargo-fmt",
-  "rustc ",
-  "clippy-driver",
-  "tauri dev",
-];
-
-const QCLOOP_OWNER_PATTERNS = [
-  "qcloop --db",
-  "./qcloop --db",
-  "qcloop serve",
-  "qcloop-worker",
-  "qcloop_worker_result",
-  "agent qc p0",
-  "只读执行 lime agent qc p0",
-];
+import {
+  createAgentQcProcessOwnerReport,
+  parseEtimeSeconds,
+  sanitizeProcessCommand,
+} from "./lib/agent-qc-process-owner-core.mjs";
 
 function parseArgs(argv) {
   const result = {
@@ -48,6 +21,8 @@ function parseArgs(argv) {
     maxCargoOrRust: 0,
     maxQcloopRelated: 0,
     outputPath: "",
+    staleMinutes: 30,
+    watchHistoryOutputPath: "",
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -67,6 +42,11 @@ function parseArgs(argv) {
       index += 1;
       continue;
     }
+    if (arg === "--watch-history-output" && argv[index + 1]) {
+      result.watchHistoryOutputPath = String(argv[index + 1]).trim();
+      index += 1;
+      continue;
+    }
     if (arg === "--max-active-gui-smoke" && argv[index + 1]) {
       result.maxActiveGuiSmoke = Number(argv[index + 1]);
       index += 1;
@@ -79,6 +59,11 @@ function parseArgs(argv) {
     }
     if (arg === "--max-qcloop-related" && argv[index + 1]) {
       result.maxQcloopRelated = Number(argv[index + 1]);
+      index += 1;
+      continue;
+    }
+    if (arg === "--stale-minutes" && argv[index + 1]) {
+      result.staleMinutes = Number(argv[index + 1]);
       index += 1;
       continue;
     }
@@ -105,9 +90,11 @@ Lime Agent QC Process Owner Check
   --format FMT                summary | json，默认 summary
   --output PATH               写入 JSON 或 summary；默认 stdout
   --markdown-output PATH      额外写入 Markdown 摘要
+  --watch-history-output PATH 追加写入 JSONL 观察历史
   --max-active-gui-smoke N    允许的 GUI smoke / deep flow owner 数，默认 0
   --max-cargo-or-rust N       允许的 Cargo / Rust 构建进程数，默认 0
   --max-qcloop-related N      允许的 qcloop 相关进程数，默认 0
+  --stale-minutes N           标记 active GUI owner stale 的分钟数，默认 30
   --check                     owner 超过上限时非 0 退出
   -h, --help                  显示帮助
 `);
@@ -118,12 +105,14 @@ function parseUnixPsLine(line) {
   if (!match) {
     return null;
   }
+  const etime = match[5];
   return {
     pid: Number(match[1]),
     ppid: Number(match[2]),
     pgid: Number(match[3]),
     stat: match[4],
-    etime: match[5],
+    etime,
+    durationSeconds: parseEtimeSeconds(etime),
     command: sanitizeProcessCommand(match[6].trim()),
   };
 }
@@ -158,97 +147,28 @@ function collectWindowsProcesses() {
       pgid: null,
       stat: "unknown",
       etime: "unknown",
+      durationSeconds: null,
       command: sanitizeProcessCommand(String(entry?.CommandLine || "").trim()),
     }))
     .filter((entry) => entry.pid > 0 && entry.pid !== process.pid && entry.command.length > 0);
-}
-
-function sanitizeProcessCommand(command) {
-  return String(command || "")
-    .replace(/(--api-key(?:=|\s+))(?:"[^"]+"|'[^']+'|\S+)/gi, "$1<redacted>")
-    .replace(/(api[_-]?key(?:=|:|\s+))(?:"[^"]+"|'[^']+'|\S+)/gi, "$1<redacted>")
-    .replace(/ctx7sk-[A-Za-z0-9-]+/g, "ctx7sk-***")
-    .replace(/sk-[A-Za-z0-9_-]{12,}/g, "sk-***");
 }
 
 function collectProcesses() {
   return process.platform === "win32" ? collectWindowsProcesses() : collectUnixProcesses();
 }
 
-function commandHasAny(command, patterns) {
-  const normalized = String(command || "").toLowerCase();
-  return patterns.some((pattern) => normalized.includes(pattern.toLowerCase()));
-}
-
-function uniqueByPid(entries) {
-  const seen = new Set();
-  const result = [];
-  for (const entry of entries) {
-    if (seen.has(entry.pid)) {
-      continue;
-    }
-    seen.add(entry.pid);
-    result.push(entry);
-  }
-  return result.sort((left, right) => left.pid - right.pid);
-}
-
-function createReport({
-  generatedAt = new Date().toISOString(),
-  maxActiveGuiSmoke = 0,
-  maxCargoOrRust = 0,
-  maxQcloopRelated = 0,
-} = {}) {
-  const processes = collectProcesses();
-  const activeGuiSmokeProcesses = uniqueByPid(
-    processes.filter((entry) => commandHasAny(entry.command, GUI_OWNER_PATTERNS)),
-  );
-  const qcloopProcesses = uniqueByPid(
-    processes.filter((entry) => commandHasAny(entry.command, QCLOOP_OWNER_PATTERNS)),
-  );
-  const cargoProcesses = uniqueByPid(
-    processes.filter((entry) => commandHasAny(entry.command, CARGO_OWNER_PATTERNS)),
-  );
-
-  const counts = {
-    activeGuiSmoke: activeGuiSmokeProcesses.length,
-    cargoOrRust: cargoProcesses.length,
-    qcloopRelated: qcloopProcesses.length,
-  };
-  const busy =
-    counts.activeGuiSmoke > maxActiveGuiSmoke ||
-    counts.cargoOrRust > maxCargoOrRust ||
-    counts.qcloopRelated > maxQcloopRelated;
-
-  return {
-    schemaVersion: "v1",
-    generatedAt,
+function createReport(options = {}) {
+  return createAgentQcProcessOwnerReport(collectProcesses(), {
+    ...options,
     platform: process.platform,
-    maxActiveGuiSmoke,
-    maxCargoOrRust,
-    maxQcloopRelated,
-    verdict: {
-      status: busy ? "busy" : "pass",
-      summary: `activeGuiSmoke=${counts.activeGuiSmoke}, cargoOrRust=${counts.cargoOrRust}, qcloopRelated=${counts.qcloopRelated}`,
-      nextAction: busy
-        ? "Do not start full verify:local or another GUI P0 batch while these owners are active; continue read-only observation or wait for natural completion."
-        : "No active raw GUI smoke, Cargo/Rust, or qcloop owner was observed; heavy gates may run if qcloop GUI owner and release evidence gates are also clear.",
-    },
-    activeGuiSmokeProcesses,
-    qcloopProcesses,
-    cargoProcesses,
-    guardrails: [
-      "best-effort process snapshot only",
-      "do not kill or restart listed processes from this sidecar",
-      "use this sidecar to decide whether heavy GUI or verify gates should wait",
-    ],
-  };
+  });
 }
 
 function renderSummary(report) {
   const lines = [
     `status=${report.verdict.status}`,
     `summary=${report.verdict.summary}`,
+    `ownerIntervention=${report.ownerIntervention.status}`,
     `generatedAt=${report.generatedAt}`,
     `platform=${report.platform}`,
   ];
@@ -263,15 +183,37 @@ function renderMarkdown(report) {
     `- Status: ${report.verdict.status}`,
     `- Summary: ${report.verdict.summary}`,
     `- Next action: ${report.verdict.nextAction}`,
+    `- Owner intervention: ${report.ownerIntervention.status}`,
     "",
     "## Active GUI smoke / deep flow processes",
     "",
   ];
   appendProcessList(lines, report.activeGuiSmokeProcesses);
+  lines.push("", "## Stale active GUI smoke candidates", "");
+  appendProcessList(lines, report.staleActiveGuiSmokeProcesses);
   lines.push("", "## qcloop related processes", "");
   appendProcessList(lines, report.qcloopProcesses);
   lines.push("", "## Cargo / Rust processes", "");
   appendProcessList(lines, report.cargoProcesses);
+  lines.push("", "## Passive qcloop serve processes", "");
+  appendProcessList(lines, report.passiveQcloopServerProcesses);
+  lines.push("", "## Passive Tauri dev runtime processes", "");
+  appendProcessList(lines, report.passiveTauriRuntimeProcesses);
+  lines.push("", "## Observer processes", "");
+  appendProcessList(lines, report.observerProcesses);
+  if (report.ownerIntervention.status === "requires_owner_confirmation") {
+    lines.push(
+      "",
+      "## Owner intervention",
+      "",
+      `- Required confirmation: ${report.ownerIntervention.requiredConfirmationText}`,
+      `- Next action: ${report.ownerIntervention.nextAction}`,
+      "- Prohibited until confirmed:",
+    );
+    for (const item of report.ownerIntervention.prohibitedUntilConfirmed) {
+      lines.push(`  - ${item}`);
+    }
+  }
   lines.push("", "## Guardrails", "");
   for (const guardrail of report.guardrails) {
     lines.push(`- ${guardrail}`);
@@ -301,6 +243,46 @@ function writeOutput(outputPath, content) {
   fs.writeFileSync(resolvedOutputPath, content, "utf8");
 }
 
+function createWatchHistoryEntry(report) {
+  return {
+    schemaVersion: "v1",
+    generatedAt: report.generatedAt,
+    verdictStatus: report.verdict.status,
+    summary: report.verdict.summary,
+    ownerInterventionStatus: report.ownerIntervention.status,
+    ownerInterventionProcessIds: report.ownerIntervention.processIds,
+    activeGuiSmokeCount: report.activeGuiSmokeProcesses.length,
+    staleActiveGuiSmokeCount: report.staleActiveGuiSmokeProcesses.length,
+    qcloopRelatedCount: report.qcloopProcesses.length,
+    cargoOrRustCount: report.cargoProcesses.length,
+    passiveQcloopServerCount: report.passiveQcloopServerProcesses.length,
+    passiveTauriRuntimeCount: report.passiveTauriRuntimeProcesses.length,
+    observerCount: report.observerProcesses.length,
+    activeGuiSmokeProcesses: report.activeGuiSmokeProcesses.map((entry) => ({
+      pid: entry.pid,
+      ppid: entry.ppid,
+      pgid: entry.pgid,
+      stat: entry.stat,
+      etime: entry.etime,
+      durationSeconds: entry.durationSeconds,
+      command: entry.command,
+    })),
+  };
+}
+
+function appendWatchHistory(outputPath, report) {
+  if (!outputPath) {
+    return;
+  }
+  const resolvedOutputPath = path.resolve(process.cwd(), outputPath);
+  fs.mkdirSync(path.dirname(resolvedOutputPath), { recursive: true });
+  fs.appendFileSync(
+    resolvedOutputPath,
+    `${JSON.stringify(createWatchHistoryEntry(report))}\n`,
+    "utf8",
+  );
+}
+
 function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) {
@@ -317,6 +299,7 @@ function main() {
   if (options.markdownOutputPath) {
     writeOutput(options.markdownOutputPath, renderMarkdown(report));
   }
+  appendWatchHistory(options.watchHistoryOutputPath, report);
 
   if (options.check && report.verdict.status !== "pass") {
     process.exit(1);

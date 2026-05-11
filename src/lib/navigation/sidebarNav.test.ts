@@ -19,7 +19,6 @@ describe("sidebarNav", () => {
       "持续流程",
       "消息渠道",
       "插件中心",
-      "OpenClaw",
       "桌宠",
     ]);
   });
@@ -35,10 +34,9 @@ describe("sidebarNav", () => {
         "automation",
         "channels",
         "plugins",
-        "openclaw",
         "companion",
       ]),
-    ).toEqual(["plugins", "openclaw", "companion"]);
+    ).toEqual(["plugins", "companion"]);
   });
 
   it("没有显式设置时不应默认恢复任何可选入口", () => {

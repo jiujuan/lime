@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { clearSkillCatalogCache } from "@/lib/api/skillCatalog";
 import { clearServiceSkillCatalogCache } from "@/lib/api/serviceSkills";
 import {
@@ -117,46 +118,75 @@ export function formatOemCloudDateTime(value?: string) {
   }).format(parsed);
 }
 
-function formatOemCloudAccessModeLabel(value?: OemCloudPartnerHubAccessMode) {
+interface OemCloudAccessFormatCopy {
+  unknown: string;
+  accessMode: {
+    session: string;
+    hubToken: string;
+    apiKey: string;
+  };
+  configMode: {
+    managed: string;
+    hybrid: string;
+    developer: string;
+  };
+  modelsSource: {
+    hubCatalog: string;
+    manual: string;
+  };
+}
+
+interface OemCloudPaymentTitleCopy {
+  planOrderTitle: string;
+  creditTopupOrderTitle: string;
+}
+
+function formatOemCloudAccessModeLabel(
+  value: OemCloudPartnerHubAccessMode | undefined,
+  copy: OemCloudAccessFormatCopy,
+) {
   switch (value) {
     case "session":
-      return "登录会话";
+      return copy.accessMode.session;
     case "hub_token":
-      return "平台令牌";
+      return copy.accessMode.hubToken;
     case "api_key":
-      return "API Key";
+      return copy.accessMode.apiKey;
     default:
-      return "未知";
+      return copy.unknown;
   }
 }
 
-function formatOemCloudConfigModeLabel(value?: OemCloudPartnerHubConfigMode) {
+function formatOemCloudConfigModeLabel(
+  value: OemCloudPartnerHubConfigMode | undefined,
+  copy: OemCloudAccessFormatCopy,
+) {
   switch (value) {
     case "managed":
-      return "托管模式";
+      return copy.configMode.managed;
     case "hybrid":
-      return "混合模式";
+      return copy.configMode.hybrid;
     case "developer":
-      return "开发者模式";
+      return copy.configMode.developer;
     default:
-      return "未知";
+      return copy.unknown;
   }
 }
 
 function formatOemCloudModelsSourceLabel(
-  value?: OemCloudPartnerHubModelsSource,
+  value: OemCloudPartnerHubModelsSource | undefined,
+  copy: OemCloudAccessFormatCopy,
 ) {
   switch (value) {
     case "hub_catalog":
-      return "云端目录";
+      return copy.modelsSource.hubCatalog;
     case "manual":
-      return "手动目录";
+      return copy.modelsSource.manual;
     default:
-      return "未知";
+      return copy.unknown;
   }
 }
 
-const LOCAL_PROVIDER_SUMMARY = "本地开发者 Provider";
 const PAYMENT_STATUS_WATCH_INTERVAL_MS = 2500;
 const PAYMENT_STATUS_WATCH_MAX_ATTEMPTS = 72;
 
@@ -203,11 +233,15 @@ function isTerminalUnpaidPaymentStatus(value?: string) {
 function resolveOrderTitle(
   kind: OemCloudPaymentWatchKind,
   order: OemCloudOrder | OemCloudCreditTopupOrder,
+  copy: OemCloudPaymentTitleCopy,
 ) {
   if (kind === "plan_order") {
-    return (order as OemCloudOrder).planName || "套餐订单";
+    return (order as OemCloudOrder).planName || copy.planOrderTitle;
   }
-  return (order as OemCloudCreditTopupOrder).packageName || "充值订单";
+  return (
+    (order as OemCloudCreditTopupOrder).packageName ||
+    copy.creditTopupOrderTitle
+  );
 }
 
 function normalizePaymentWatchKind(
@@ -219,8 +253,13 @@ function normalizePaymentWatchKind(
   return null;
 }
 
-function resolvePaymentReturnTitle(kind: OemCloudPaymentWatchKind) {
-  return kind === "plan_order" ? "套餐订单" : "充值订单";
+function resolvePaymentReturnTitle(
+  kind: OemCloudPaymentWatchKind,
+  copy: OemCloudPaymentTitleCopy,
+) {
+  return kind === "plan_order"
+    ? copy.planOrderTitle
+    : copy.creditTopupOrderTitle;
 }
 
 interface OemCloudCommerceSnapshot {
@@ -262,7 +301,378 @@ function buildEmptyCommerceSnapshot(): OemCloudCommerceSnapshot {
 }
 
 export function useOemCloudAccess() {
+  const { t } = useTranslation("common");
   const runtime = resolveOemCloudRuntimeContext();
+  const authCopy = useMemo(
+    () => ({
+      unavailable: t("common.oemCloudAccess.auth.unavailable", {
+        defaultValue: "当前版本未配置云端登录入口。",
+      }),
+      googleSynced: t("common.oemCloudAccess.auth.googleSynced", {
+        defaultValue: "Google 登录成功，已同步云端目录。",
+      }),
+      cloudSynced: t("common.oemCloudAccess.auth.cloudSynced", {
+        defaultValue: "云端登录成功，已同步目录。",
+      }),
+      googleDesktopOpened: t(
+        "common.oemCloudAccess.auth.googleDesktopOpened",
+        {
+          defaultValue:
+            "已打开系统浏览器，请完成 Google 授权；如果浏览器出现确认页，请继续完成，桌面端会自动同步登录结果。",
+        },
+      ),
+      userCenterOpened: t("common.oemCloudAccess.auth.userCenterOpened", {
+        defaultValue:
+          "已打开 Lime 云端登录页，请在浏览器完成授权，桌面端会自动同步登录结果。",
+      }),
+      openFailedFallback: t(
+        "common.oemCloudAccess.auth.openFailedFallback",
+        {
+          defaultValue: "打开 Lime 云端登录页失败",
+        },
+      ),
+      syncFailedFallback: t(
+        "common.oemCloudAccess.auth.syncFailedFallback",
+        {
+          defaultValue: "同步云端登录结果失败",
+        },
+      ),
+      browserPreopenTitle: t(
+        "common.oemCloudAccess.auth.browserPreopenTitle",
+        {
+          defaultValue: "正在打开登录页...",
+        },
+      ),
+      browserPreopenBody: t(
+        "common.oemCloudAccess.auth.browserPreopenBody",
+        {
+          defaultValue: "正在打开登录页，请稍候...",
+        },
+      ),
+      systemBrowserOpenFailed: t(
+        "common.oemCloudAccess.auth.systemBrowserOpenFailed",
+        {
+          defaultValue: "系统浏览器打开失败。",
+        },
+      ),
+      systemBrowserOpenFailedWithMessage: (message: string) =>
+        t("common.oemCloudAccess.auth.systemBrowserOpenFailedWithMessage", {
+          message,
+          defaultValue: "系统浏览器打开失败：{{message}}",
+        }),
+      unsupportedExternalBrowser: t(
+        "common.oemCloudAccess.auth.unsupportedExternalBrowser",
+        {
+          defaultValue: "当前环境不支持打开外部浏览器",
+        },
+      ),
+      popupBlocked: t("common.oemCloudAccess.auth.popupBlocked", {
+        defaultValue:
+          "登录页没有被浏览器打开，可能被弹窗拦截。请点击“重新打开登录页”，或复制登录链接到浏览器打开。",
+      }),
+    }),
+    [t],
+  );
+  const paymentCopy = useMemo(
+    () => ({
+      waitingForCallback: t(
+        "common.oemCloudAccess.payment.waitingForCallback",
+        {
+          defaultValue: "已打开支付页，正在等待支付渠道回调。",
+        },
+      ),
+      confirmedPlanWatcher: t(
+        "common.oemCloudAccess.payment.confirmedPlanWatcher",
+        {
+          defaultValue: "支付已确认，套餐权益已同步到客户端。",
+        },
+      ),
+      confirmedCreditWatcher: t(
+        "common.oemCloudAccess.payment.confirmedCreditWatcher",
+        {
+          defaultValue: "支付已确认，Token 积分余额已同步到客户端。",
+        },
+      ),
+      confirmedPlanInfo: t(
+        "common.oemCloudAccess.payment.confirmedPlanInfo",
+        {
+          defaultValue: "支付已确认，套餐权益已同步，可以继续使用云端模型。",
+        },
+      ),
+      confirmedCreditInfo: t(
+        "common.oemCloudAccess.payment.confirmedCreditInfo",
+        {
+          defaultValue: "支付已确认，Token 积分余额已同步。",
+        },
+      ),
+      terminalUnpaidWatcher: t(
+        "common.oemCloudAccess.payment.terminalUnpaidWatcher",
+        {
+          defaultValue: "支付渠道返回未完成终态，请重新发起支付或刷新状态。",
+        },
+      ),
+      terminalUnpaidError: t(
+        "common.oemCloudAccess.payment.terminalUnpaidError",
+        {
+          defaultValue: "支付未完成，请重新发起支付或刷新云端状态。",
+        },
+      ),
+      timeoutWatcher: t("common.oemCloudAccess.payment.timeoutWatcher", {
+        defaultValue: "仍未收到支付回调，请稍后手动刷新云端状态。",
+      }),
+      timeoutInfo: t("common.oemCloudAccess.payment.timeoutInfo", {
+        defaultValue: "仍在等待支付渠道回调，请稍后点击“刷新云端状态”。",
+      }),
+      confirmFailedFallback: t(
+        "common.oemCloudAccess.payment.confirmFailedFallback",
+        {
+          defaultValue: "确认支付结果失败",
+        },
+      ),
+      returnSyncing: t("common.oemCloudAccess.payment.returnSyncing", {
+        defaultValue: "已回到 Lime，正在同步支付状态、权益与账本。",
+      }),
+      returnSynced: t("common.oemCloudAccess.payment.returnSynced", {
+        defaultValue: "已同步最新云端权益、积分余额与账本状态。",
+      }),
+      returnUnpaidWatcher: t(
+        "common.oemCloudAccess.payment.returnUnpaidWatcher",
+        {
+          defaultValue: "支付页已返回未完成状态，请重新发起支付或刷新云端状态。",
+        },
+      ),
+      returnUnpaidInfo: t(
+        "common.oemCloudAccess.payment.returnUnpaidInfo",
+        {
+          defaultValue: "支付页已返回未完成状态，云端状态已同步。",
+        },
+      ),
+      returnSyncFailedFallback: t(
+        "common.oemCloudAccess.payment.returnSyncFailedFallback",
+        {
+          defaultValue: "同步支付回跳结果失败",
+        },
+      ),
+      planOrderTitle: t("common.oemCloudAccess.payment.planOrderTitle", {
+        defaultValue: "套餐订单",
+      }),
+      creditTopupOrderTitle: t(
+        "common.oemCloudAccess.payment.creditTopupOrderTitle",
+        {
+          defaultValue: "充值订单",
+        },
+      ),
+    }),
+    [t],
+  );
+  const cloudCopy = useMemo(
+    () => ({
+      session: {
+        syncActivationFailedFallback: t(
+          "common.oemCloudAccess.session.syncActivationFailedFallback",
+          {
+            defaultValue: "同步云端激活状态失败",
+          },
+        ),
+        expiredRelogin: t("common.oemCloudAccess.session.expiredRelogin", {
+          defaultValue: "云端会话已过期，请重新登录。",
+        }),
+        invalidRelogin: t("common.oemCloudAccess.session.invalidRelogin", {
+          defaultValue: "云端会话已失效，请重新登录。",
+        }),
+        restoreFailedFallback: t(
+          "common.oemCloudAccess.session.restoreFailedFallback",
+          {
+            defaultValue: "恢复云端会话失败",
+          },
+        ),
+        refreshSuccess: t("common.oemCloudAccess.session.refreshSuccess", {
+          defaultValue: "已同步最新云端会话、服务目录与服务技能快照。",
+        }),
+        refreshFailedFallback: t(
+          "common.oemCloudAccess.session.refreshFailedFallback",
+          {
+            defaultValue: "刷新云端状态失败",
+          },
+        ),
+        localCleared: t("common.oemCloudAccess.session.localCleared", {
+          defaultValue: "已清理本地云端会话。",
+        }),
+        logoutSuccess: t("common.oemCloudAccess.session.logoutSuccess", {
+          defaultValue: "已退出云端会话。",
+        }),
+        logoutFallback: t("common.oemCloudAccess.session.logoutFallback", {
+          defaultValue: "本地会话已清理，但服务端注销未确认。",
+        }),
+        logoutFailedFallback: t(
+          "common.oemCloudAccess.session.logoutFailedFallback",
+          {
+            defaultValue: "服务端注销失败",
+          },
+        ),
+      },
+      emailCode: {
+        identifierRequired: t(
+          "common.oemCloudAccess.emailCode.identifierRequired",
+          {
+            defaultValue: "请输入邮箱或账号后再发送验证码。",
+          },
+        ),
+        sent: (maskedEmail: string, minutes: number) =>
+          t("common.oemCloudAccess.emailCode.sent", {
+            maskedEmail,
+            minutes,
+            defaultValue:
+              "验证码已发送至 {{maskedEmail}}，有效期约 {{minutes}} 分钟。",
+          }),
+        sendFailedFallback: t(
+          "common.oemCloudAccess.emailCode.sendFailedFallback",
+          {
+            defaultValue: "发送验证码失败",
+          },
+        ),
+        loginFieldsRequired: t(
+          "common.oemCloudAccess.emailCode.loginFieldsRequired",
+          {
+            defaultValue: "请先填写邮箱/账号和验证码。",
+          },
+        ),
+        loginSuccess: t("common.oemCloudAccess.emailCode.loginSuccess", {
+          defaultValue: "验证码登录成功，已同步云端目录。",
+        }),
+        loginFailedFallback: t(
+          "common.oemCloudAccess.emailCode.loginFailedFallback",
+          {
+            defaultValue: "验证码登录失败",
+          },
+        ),
+      },
+      password: {
+        fieldsRequired: t("common.oemCloudAccess.password.fieldsRequired", {
+          defaultValue: "请输入账号和密码。",
+        }),
+        loginSuccess: t("common.oemCloudAccess.password.loginSuccess", {
+          defaultValue: "账号登录成功，已同步云端目录。",
+        }),
+        loginFailedFallback: t(
+          "common.oemCloudAccess.password.loginFailedFallback",
+          {
+            defaultValue: "账号登录失败",
+          },
+        ),
+      },
+      provider: {
+        loadDetailFailedFallback: t(
+          "common.oemCloudAccess.provider.loadDetailFailedFallback",
+          {
+            defaultValue: "加载云服务详情失败",
+          },
+        ),
+        setDefaultSuccess: (offerName: string) =>
+          t("common.oemCloudAccess.provider.setDefaultSuccess", {
+            offerName,
+            defaultValue: "已将 {{offerName}} 设为默认云端服务来源。",
+          }),
+        setDefaultFailedFallback: t(
+          "common.oemCloudAccess.provider.setDefaultFailedFallback",
+          {
+            defaultValue: "设置默认服务商失败",
+          },
+        ),
+      },
+      apiKey: {
+        defaultName: t("common.oemCloudAccess.apiKey.defaultName", {
+          defaultValue: "Lime Desktop API Key",
+        }),
+        createSuccess: t("common.oemCloudAccess.apiKey.createSuccess", {
+          defaultValue: "已创建 Lime API Key，明文只会在当前页面显示一次。",
+        }),
+        createFailedFallback: t(
+          "common.oemCloudAccess.apiKey.createFailedFallback",
+          {
+            defaultValue: "创建 API Key 失败",
+          },
+        ),
+        rotateSuccess: t("common.oemCloudAccess.apiKey.rotateSuccess", {
+          defaultValue: "已轮换 Lime API Key，旧 Key 已撤销。",
+        }),
+        rotateFailedFallback: t(
+          "common.oemCloudAccess.apiKey.rotateFailedFallback",
+          {
+            defaultValue: "轮换 API Key 失败",
+          },
+        ),
+        revokeSuccess: t("common.oemCloudAccess.apiKey.revokeSuccess", {
+          defaultValue: "已撤销 Lime API Key。",
+        }),
+        revokeFailedFallback: t(
+          "common.oemCloudAccess.apiKey.revokeFailedFallback",
+          {
+            defaultValue: "撤销 API Key 失败",
+          },
+        ),
+      },
+      labels: {
+        unknown: t("common.oemCloudAccess.label.unknown", {
+          defaultValue: "未知",
+        }),
+        notSet: t("common.oemCloudAccess.label.notSet", {
+          defaultValue: "未设定",
+        }),
+        localProviderSummary: t(
+          "common.oemCloudAccess.label.localProviderSummary",
+          {
+            defaultValue: "本地开发者 Provider",
+          },
+        ),
+        cloudService: t("common.oemCloudAccess.label.cloudService", {
+          defaultValue: "云端服务",
+        }),
+        accessMode: {
+          session: t("common.oemCloudAccess.label.accessMode.session", {
+            defaultValue: "登录会话",
+          }),
+          hubToken: t("common.oemCloudAccess.label.accessMode.hubToken", {
+            defaultValue: "平台令牌",
+          }),
+          apiKey: t("common.oemCloudAccess.label.accessMode.apiKey", {
+            defaultValue: "API Key",
+          }),
+        },
+        configMode: {
+          managed: t("common.oemCloudAccess.label.configMode.managed", {
+            defaultValue: "托管模式",
+          }),
+          hybrid: t("common.oemCloudAccess.label.configMode.hybrid", {
+            defaultValue: "混合模式",
+          }),
+          developer: t("common.oemCloudAccess.label.configMode.developer", {
+            defaultValue: "开发者模式",
+          }),
+        },
+        modelsSource: {
+          hubCatalog: t("common.oemCloudAccess.label.modelsSource.hubCatalog", {
+            defaultValue: "云端目录",
+          }),
+          manual: t("common.oemCloudAccess.label.modelsSource.manual", {
+            defaultValue: "手动目录",
+          }),
+        },
+        developerAccess: {
+          disabled: t("common.oemCloudAccess.label.developerAccess.disabled", {
+            defaultValue: "已关闭",
+          }),
+          visible: t("common.oemCloudAccess.label.developerAccess.visible", {
+            defaultValue: "可见",
+          }),
+          hidden: t("common.oemCloudAccess.label.developerAccess.hidden", {
+            defaultValue: "已隐藏",
+          }),
+        },
+      },
+    }),
+    [t],
+  );
   const restoreTargetKey = runtime
     ? `${runtime.baseUrl}::${runtime.tenantId}`
     : "__runtime_unavailable__";
@@ -503,7 +913,10 @@ export function useOemCloudAccess() {
         setCommerceErrorMessage(null);
         return snapshot;
       } catch (error) {
-        const message = buildErrorMessage(error, "同步云端激活状态失败");
+        const message = buildErrorMessage(
+          error,
+          cloudCopy.session.syncActivationFailedFallback,
+        );
         setCommerceErrorMessage(message);
         applyCommerceSnapshot(currentSnapshot);
         return currentSnapshot;
@@ -518,6 +931,7 @@ export function useOemCloudAccess() {
       billingDashboard,
       cloudActivation,
       cloudReadiness,
+      cloudCopy,
       creditAccount,
       creditTopupOrders,
       creditsDashboard,
@@ -551,6 +965,7 @@ export function useOemCloudAccess() {
   const sessionRef = useRef(session);
   const clearCloudStateRef = useRef(clearCloudState);
   const refreshAuthenticatedStateRef = useRef(refreshAuthenticatedState);
+  const cloudCopyRef = useRef(cloudCopy);
   const paymentWatchRef = useRef<{
     runId: number;
     timer: number | null;
@@ -574,6 +989,10 @@ export function useOemCloudAccess() {
   useEffect(() => {
     refreshAuthenticatedStateRef.current = refreshAuthenticatedState;
   }, [refreshAuthenticatedState]);
+
+  useEffect(() => {
+    cloudCopyRef.current = cloudCopy;
+  }, [cloudCopy]);
 
   const cancelPaymentWatcher = useCallback((clearState = true) => {
     paymentWatchRef.current.runId += 1;
@@ -620,9 +1039,14 @@ export function useOemCloudAccess() {
         }
 
         if (isAuthExpired(error)) {
-          clearCloudStateRef.current("云端会话已过期，请重新登录。");
+          clearCloudStateRef.current(cloudCopyRef.current.session.expiredRelogin);
         } else {
-          setErrorMessage(buildErrorMessage(error, "恢复云端会话失败"));
+          setErrorMessage(
+            buildErrorMessage(
+              error,
+              cloudCopyRef.current.session.restoreFailedFallback,
+            ),
+          );
         }
       } finally {
         if (!cancelled) {
@@ -674,8 +1098,8 @@ export function useOemCloudAccess() {
         void loadCommerceState(storedState.session.tenant.id);
         setInfoMessage(
           detail?.provider === "google"
-            ? "Google 登录成功，已同步云端目录。"
-            : "云端登录成功，已同步目录。",
+            ? authCopy.googleSynced
+            : authCopy.cloudSynced,
         );
         return;
       }
@@ -688,8 +1112,8 @@ export function useOemCloudAccess() {
           if (!cancelled) {
             setInfoMessage(
               detail?.provider === "google"
-                ? "Google 登录成功，已同步云端目录。"
-                : "云端登录成功，已同步目录。",
+                ? authCopy.googleSynced
+                : authCopy.cloudSynced,
             );
           }
         })
@@ -699,10 +1123,10 @@ export function useOemCloudAccess() {
           }
 
           if (isAuthExpired(error)) {
-            clearCloudState("云端会话已失效，请重新登录。");
+            clearCloudState(cloudCopy.session.invalidRelogin);
             return;
           }
-          setErrorMessage(buildErrorMessage(error, "同步云端登录结果失败"));
+          setErrorMessage(buildErrorMessage(error, authCopy.syncFailedFallback));
         });
     };
 
@@ -720,7 +1144,9 @@ export function useOemCloudAccess() {
     };
   }, [
     applyBootstrap,
+    authCopy,
     clearCloudState,
+    cloudCopy,
     loadCommerceState,
     refreshAuthenticatedState,
   ]);
@@ -733,20 +1159,22 @@ export function useOemCloudAccess() {
     setRefreshing(true);
     try {
       await refreshAuthenticatedState(session.tenant.id, session.token);
-      setInfoMessage("已同步最新云端会话、服务目录与服务技能快照。");
+      setInfoMessage(cloudCopy.session.refreshSuccess);
       setSelectedOffer(null);
       setSelectedModels([]);
       setLastIssuedRawToken(null);
     } catch (error) {
       if (isAuthExpired(error)) {
-        clearCloudState("云端会话已失效，请重新登录。");
+        clearCloudState(cloudCopy.session.invalidRelogin);
         return;
       }
-      setErrorMessage(buildErrorMessage(error, "刷新云端状态失败"));
+      setErrorMessage(
+        buildErrorMessage(error, cloudCopy.session.refreshFailedFallback),
+      );
     } finally {
       setRefreshing(false);
     }
-  }, [clearCloudState, refreshAuthenticatedState, runtime, session]);
+  }, [clearCloudState, cloudCopy, refreshAuthenticatedState, runtime, session]);
 
   const startPaymentStatusWatcher = useCallback(
     (target: {
@@ -776,7 +1204,7 @@ export function useOemCloudAccess() {
         title: target.title,
         status: "waiting",
         attempts: 0,
-        message: "已打开支付页，正在等待支付渠道回调。",
+        message: paymentCopy.waitingForCallback,
       };
       setPaymentWatcher(baseWatcher);
 
@@ -806,7 +1234,8 @@ export function useOemCloudAccess() {
               ? await getClientOrder(tenantId, target.orderId)
               : await getClientCreditTopupOrder(tenantId, target.orderId);
           const status = normalizePaymentStatus(order.status);
-          const title = resolveOrderTitle(target.kind, order) || target.title;
+          const title =
+            resolveOrderTitle(target.kind, order, paymentCopy) || target.title;
 
           if (isPaidPaymentStatus(status)) {
             await refreshAuthenticatedState(tenantId, fallbackToken);
@@ -820,13 +1249,13 @@ export function useOemCloudAccess() {
               attempts: attempt,
               message:
                 target.kind === "plan_order"
-                  ? "支付已确认，套餐权益已同步到客户端。"
-                  : "支付已确认，Token 积分余额已同步到客户端。",
+                  ? paymentCopy.confirmedPlanWatcher
+                  : paymentCopy.confirmedCreditWatcher,
             });
             setInfoMessage(
               target.kind === "plan_order"
-                ? "支付已确认，套餐权益已同步，可以继续使用云端模型。"
-                : "支付已确认，Token 积分余额已同步。",
+                ? paymentCopy.confirmedPlanInfo
+                : paymentCopy.confirmedCreditInfo,
             );
             return;
           }
@@ -841,9 +1270,9 @@ export function useOemCloudAccess() {
               title,
               status: "stopped",
               attempts: attempt,
-              message: "支付渠道返回未完成终态，请重新发起支付或刷新状态。",
+              message: paymentCopy.terminalUnpaidWatcher,
             });
-            setErrorMessage("支付未完成，请重新发起支付或刷新云端状态。");
+            setErrorMessage(paymentCopy.terminalUnpaidError);
             return;
           }
 
@@ -857,9 +1286,9 @@ export function useOemCloudAccess() {
               title,
               status: "stopped",
               attempts: attempt,
-              message: "仍未收到支付回调，请稍后手动刷新云端状态。",
+              message: paymentCopy.timeoutWatcher,
             });
-            setInfoMessage("仍在等待支付渠道回调，请稍后点击“刷新云端状态”。");
+            setInfoMessage(paymentCopy.timeoutInfo);
             return;
           }
 
@@ -870,7 +1299,7 @@ export function useOemCloudAccess() {
           }
 
           if (isAuthExpired(error)) {
-            clearCloudState("云端会话已失效，请重新登录。");
+            clearCloudState(cloudCopy.session.invalidRelogin);
             return;
           }
 
@@ -879,7 +1308,10 @@ export function useOemCloudAccess() {
               ...baseWatcher,
               status: "stopped",
               attempts: attempt,
-              message: buildErrorMessage(error, "确认支付结果失败"),
+              message: buildErrorMessage(
+                error,
+                paymentCopy.confirmFailedFallback,
+              ),
             });
             return;
           }
@@ -893,6 +1325,8 @@ export function useOemCloudAccess() {
     [
       cancelPaymentWatcher,
       clearCloudState,
+      cloudCopy,
+      paymentCopy,
       refreshAuthenticatedState,
       session?.tenant.id,
       session?.token,
@@ -922,7 +1356,7 @@ export function useOemCloudAccess() {
       }
 
       clearStoredOemCloudPaymentReturn(detail.sourceUrl);
-      setInfoMessage("已回到 Lime，正在同步支付状态、权益与账本。");
+      setInfoMessage(paymentCopy.returnSyncing);
       setErrorMessage(null);
 
       try {
@@ -936,7 +1370,7 @@ export function useOemCloudAccess() {
 
         const kind = normalizePaymentWatchKind(detail.kind);
         if (!kind || !detail.orderId) {
-          setInfoMessage("已同步最新云端权益、积分余额与账本状态。");
+          setInfoMessage(paymentCopy.returnSynced);
           return;
         }
 
@@ -945,19 +1379,19 @@ export function useOemCloudAccess() {
           setPaymentWatcher({
             kind,
             orderId: detail.orderId,
-            title: resolvePaymentReturnTitle(kind),
+            title: resolvePaymentReturnTitle(kind, paymentCopy),
             status: "stopped",
             attempts: 0,
-            message: "支付页已返回未完成状态，请重新发起支付或刷新云端状态。",
+            message: paymentCopy.returnUnpaidWatcher,
           });
-          setInfoMessage("支付页已返回未完成状态，云端状态已同步。");
+          setInfoMessage(paymentCopy.returnUnpaidInfo);
           return;
         }
 
         startPaymentStatusWatcherRef.current({
           kind,
           orderId: detail.orderId,
-          title: resolvePaymentReturnTitle(kind),
+          title: resolvePaymentReturnTitle(kind, paymentCopy),
         });
       } catch (error) {
         if (cancelled) {
@@ -965,10 +1399,14 @@ export function useOemCloudAccess() {
         }
 
         if (isAuthExpired(error)) {
-          clearCloudStateRef.current("云端会话已失效，请重新登录。");
+          clearCloudStateRef.current(
+            cloudCopyRef.current.session.invalidRelogin,
+          );
           return;
         }
-        setErrorMessage(buildErrorMessage(error, "同步支付回跳结果失败"));
+        setErrorMessage(
+          buildErrorMessage(error, paymentCopy.returnSyncFailedFallback),
+        );
       }
     };
 
@@ -1002,16 +1440,16 @@ export function useOemCloudAccess() {
         handlePaymentReturnEvent,
       );
     };
-  }, [cancelPaymentWatcher, session?.tenant.id]);
+  }, [cancelPaymentWatcher, paymentCopy, session?.tenant.id]);
 
   const handleSendEmailCode = useCallback(async () => {
     if (!runtime) {
-      setErrorMessage("当前版本未配置云端登录入口。");
+      setErrorMessage(authCopy.unavailable);
       return;
     }
 
     if (!emailCodeForm.identifier.trim()) {
-      setErrorMessage("请输入邮箱或账号后再发送验证码。");
+      setErrorMessage(cloudCopy.emailCode.identifierRequired);
       return;
     }
 
@@ -1024,26 +1462,31 @@ export function useOemCloudAccess() {
       });
       setCodeDelivery(response);
       setInfoMessage(
-        `验证码已发送至 ${response.maskedEmail}，有效期约 ${Math.max(
-          1,
-          Math.round(response.expiresInSeconds / 60),
-        )} 分钟。`,
+        cloudCopy.emailCode.sent(
+          response.maskedEmail,
+          Math.max(
+            1,
+            Math.round(response.expiresInSeconds / 60),
+          ),
+        ),
       );
     } catch (error) {
-      setErrorMessage(buildErrorMessage(error, "发送验证码失败"));
+      setErrorMessage(
+        buildErrorMessage(error, cloudCopy.emailCode.sendFailedFallback),
+      );
     } finally {
       setSendingCode(false);
     }
-  }, [emailCodeForm.identifier, runtime]);
+  }, [authCopy.unavailable, cloudCopy, emailCodeForm.identifier, runtime]);
 
   const handleEmailCodeLogin = useCallback(async () => {
     if (!runtime) {
-      setErrorMessage("当前版本未配置云端登录入口。");
+      setErrorMessage(authCopy.unavailable);
       return;
     }
 
     if (!emailCodeForm.identifier.trim() || !emailCodeForm.code.trim()) {
-      setErrorMessage("请先填写邮箱/账号和验证码。");
+      setErrorMessage(cloudCopy.emailCode.loginFieldsRequired);
       return;
     }
 
@@ -1060,7 +1503,7 @@ export function useOemCloudAccess() {
       setStoredOemCloudSessionState(nextSession);
       setSession(nextSession);
       await refreshAuthenticatedState(nextSession.tenant.id, nextSession.token);
-      setInfoMessage("验证码登录成功，已同步云端目录。");
+      setInfoMessage(cloudCopy.emailCode.loginSuccess);
       setCodeDelivery(null);
       setEmailCodeForm({
         identifier: nextSession.user.email || emailCodeForm.identifier,
@@ -1069,20 +1512,28 @@ export function useOemCloudAccess() {
         username: "",
       });
     } catch (error) {
-      setErrorMessage(buildErrorMessage(error, "验证码登录失败"));
+      setErrorMessage(
+        buildErrorMessage(error, cloudCopy.emailCode.loginFailedFallback),
+      );
     } finally {
       setLoggingIn(false);
     }
-  }, [emailCodeForm, refreshAuthenticatedState, runtime]);
+  }, [
+    authCopy.unavailable,
+    cloudCopy,
+    emailCodeForm,
+    refreshAuthenticatedState,
+    runtime,
+  ]);
 
   const handlePasswordLogin = useCallback(async () => {
     if (!runtime) {
-      setErrorMessage("当前版本未配置云端登录入口。");
+      setErrorMessage(authCopy.unavailable);
       return;
     }
 
     if (!passwordForm.identifier.trim() || !passwordForm.password.trim()) {
-      setErrorMessage("请输入账号和密码。");
+      setErrorMessage(cloudCopy.password.fieldsRequired);
       return;
     }
 
@@ -1097,21 +1548,29 @@ export function useOemCloudAccess() {
       setStoredOemCloudSessionState(nextSession);
       setSession(nextSession);
       await refreshAuthenticatedState(nextSession.tenant.id, nextSession.token);
-      setInfoMessage("账号登录成功，已同步云端目录。");
+      setInfoMessage(cloudCopy.password.loginSuccess);
       setPasswordForm((current) => ({
         ...current,
         password: "",
       }));
     } catch (error) {
-      setErrorMessage(buildErrorMessage(error, "账号登录失败"));
+      setErrorMessage(
+        buildErrorMessage(error, cloudCopy.password.loginFailedFallback),
+      );
     } finally {
       setLoggingIn(false);
     }
-  }, [passwordForm, refreshAuthenticatedState, runtime]);
+  }, [
+    authCopy.unavailable,
+    cloudCopy,
+    passwordForm,
+    refreshAuthenticatedState,
+    runtime,
+  ]);
 
   const handleLogout = useCallback(async () => {
     if (!session?.tenant.id) {
-      clearCloudState("已清理本地云端会话。");
+      clearCloudState(cloudCopy.session.localCleared);
       return;
     }
 
@@ -1119,30 +1578,36 @@ export function useOemCloudAccess() {
     setErrorMessage(null);
     try {
       await logoutClient(session.tenant.id);
-      clearCloudState("已退出云端会话。");
+      clearCloudState(cloudCopy.session.logoutSuccess);
     } catch (error) {
-      clearCloudState("本地会话已清理，但服务端注销未确认。");
-      setErrorMessage(buildErrorMessage(error, "服务端注销失败"));
+      clearCloudState(cloudCopy.session.logoutFallback);
+      setErrorMessage(
+        buildErrorMessage(error, cloudCopy.session.logoutFailedFallback),
+      );
     } finally {
       setLoggingOut(false);
     }
-  }, [clearCloudState, session?.tenant.id]);
+  }, [clearCloudState, cloudCopy, session?.tenant.id]);
 
   const handleGoogleLogin = useCallback(async () => {
     if (!runtime) {
-      setErrorMessage("当前版本未配置云端登录入口。");
+      setErrorMessage(authCopy.unavailable);
       return;
     }
 
     setOpeningGoogleLogin(true);
     setErrorMessage(null);
-    setInfoMessage(
-      "已打开系统浏览器，请完成 Google 授权；如果浏览器出现确认页，请继续完成，桌面端会自动同步登录结果。",
-    );
+    setInfoMessage(authCopy.googleDesktopOpened);
 
-    const browserTarget = createExternalBrowserOpenTarget();
+    const browserTarget = createExternalBrowserOpenTarget({
+      openingTitle: authCopy.browserPreopenTitle,
+      openingBody: authCopy.browserPreopenBody,
+    });
     try {
-      const result = await startOemCloudLogin(runtime, { browserTarget });
+      const result = await startOemCloudLogin(runtime, {
+        browserTarget,
+        copy: authCopy,
+      });
       const storedSession = getStoredOemCloudSessionState();
       const storedTenantId = storedSession?.session.tenant.id?.trim();
       const storedTenantSlug = storedSession?.session.tenant.slug?.trim();
@@ -1152,22 +1617,22 @@ export function useOemCloudAccess() {
         (storedTenantId === runtimeTenantId ||
           storedTenantSlug === runtimeTenantId)
       ) {
-        setInfoMessage("Google 登录成功，已同步云端目录。");
+        setInfoMessage(authCopy.googleSynced);
         return;
       }
 
       setInfoMessage(
         result.mode === "desktop_auth"
-          ? "已打开系统浏览器，请完成 Google 授权；如果浏览器出现确认页，请继续完成，桌面端会自动同步登录结果。"
-          : "已打开 Lime 云端登录页，请在浏览器完成授权，桌面端会自动同步登录结果。",
+          ? authCopy.googleDesktopOpened
+          : authCopy.userCenterOpened,
       );
     } catch (error) {
       setInfoMessage(null);
-      setErrorMessage(buildErrorMessage(error, "打开 Lime 云端登录页失败"));
+      setErrorMessage(buildErrorMessage(error, authCopy.openFailedFallback));
     } finally {
       setOpeningGoogleLogin(false);
     }
-  }, [runtime]);
+  }, [authCopy, runtime]);
 
   const openOfferDetail = useCallback(
     async (providerKey: string) => {
@@ -1186,15 +1651,20 @@ export function useOemCloudAccess() {
         setSelectedModels(models);
       } catch (error) {
         if (isAuthExpired(error)) {
-          clearCloudState("云端会话已失效，请重新登录。");
+          clearCloudState(cloudCopy.session.invalidRelogin);
           return;
         }
-        setErrorMessage(buildErrorMessage(error, "加载云服务详情失败"));
+        setErrorMessage(
+          buildErrorMessage(
+            error,
+            cloudCopy.provider.loadDetailFailedFallback,
+          ),
+        );
       } finally {
         setLoadingDetail(false);
       }
     },
-    [clearCloudState, session?.tenant.id],
+    [clearCloudState, cloudCopy, session?.tenant.id],
   );
 
   const handleSetDefault = useCallback(
@@ -1220,18 +1690,20 @@ export function useOemCloudAccess() {
         );
         setPreference(nextPreference);
         await refreshAuthenticatedState(session.tenant.id, session.token);
-        setInfoMessage(`已将 ${offer.displayName} 设为默认云端服务来源。`);
+        setInfoMessage(cloudCopy.provider.setDefaultSuccess(offer.displayName));
       } catch (error) {
         if (isAuthExpired(error)) {
-          clearCloudState("云端会话已失效，请重新登录。");
+          clearCloudState(cloudCopy.session.invalidRelogin);
           return;
         }
-        setErrorMessage(buildErrorMessage(error, "设置默认服务商失败"));
+        setErrorMessage(
+          buildErrorMessage(error, cloudCopy.provider.setDefaultFailedFallback),
+        );
       } finally {
         setSavingDefault("");
       }
     },
-    [clearCloudState, refreshAuthenticatedState, session],
+    [clearCloudState, cloudCopy, refreshAuthenticatedState, session],
   );
 
   const handleCreateAccessToken = useCallback(
@@ -1245,7 +1717,7 @@ export function useOemCloudAccess() {
       setInfoMessage(null);
       try {
         const response = await createClientAccessToken(session.tenant.id, {
-          name: payload?.name?.trim() || "Lime Desktop API Key",
+          name: payload?.name?.trim() || cloudCopy.apiKey.defaultName,
           scopes: payload?.scopes ?? ["llm:invoke"],
           allowedModels: payload?.allowedModels,
           maxTokensPerRequest: payload?.maxTokensPerRequest,
@@ -1255,18 +1727,20 @@ export function useOemCloudAccess() {
         });
         setLastIssuedRawToken(response.apiKey || response.rawToken || null);
         await loadCommerceState(session.tenant.id);
-        setInfoMessage("已创建 Lime API Key，明文只会在当前页面显示一次。");
+        setInfoMessage(cloudCopy.apiKey.createSuccess);
       } catch (error) {
         if (isAuthExpired(error)) {
-          clearCloudState("云端会话已失效，请重新登录。");
+          clearCloudState(cloudCopy.session.invalidRelogin);
           return;
         }
-        setErrorMessage(buildErrorMessage(error, "创建 API Key 失败"));
+        setErrorMessage(
+          buildErrorMessage(error, cloudCopy.apiKey.createFailedFallback),
+        );
       } finally {
         setManagingToken("");
       }
     },
-    [clearCloudState, loadCommerceState, session?.tenant.id],
+    [clearCloudState, cloudCopy, loadCommerceState, session?.tenant.id],
   );
 
   const handleRotateAccessToken = useCallback(
@@ -1285,18 +1759,20 @@ export function useOemCloudAccess() {
         );
         setLastIssuedRawToken(response.apiKey || response.rawToken || null);
         await loadCommerceState(session.tenant.id);
-        setInfoMessage("已轮换 Lime API Key，旧 Key 已撤销。");
+        setInfoMessage(cloudCopy.apiKey.rotateSuccess);
       } catch (error) {
         if (isAuthExpired(error)) {
-          clearCloudState("云端会话已失效，请重新登录。");
+          clearCloudState(cloudCopy.session.invalidRelogin);
           return;
         }
-        setErrorMessage(buildErrorMessage(error, "轮换 API Key 失败"));
+        setErrorMessage(
+          buildErrorMessage(error, cloudCopy.apiKey.rotateFailedFallback),
+        );
       } finally {
         setManagingToken("");
       }
     },
-    [clearCloudState, loadCommerceState, session?.tenant.id],
+    [clearCloudState, cloudCopy, loadCommerceState, session?.tenant.id],
   );
 
   const handleRevokeAccessToken = useCallback(
@@ -1312,18 +1788,20 @@ export function useOemCloudAccess() {
         await revokeClientAccessToken(session.tenant.id, tokenId);
         setLastIssuedRawToken(null);
         await loadCommerceState(session.tenant.id);
-        setInfoMessage("已撤销 Lime API Key。");
+        setInfoMessage(cloudCopy.apiKey.revokeSuccess);
       } catch (error) {
         if (isAuthExpired(error)) {
-          clearCloudState("云端会话已失效，请重新登录。");
+          clearCloudState(cloudCopy.session.invalidRelogin);
           return;
         }
-        setErrorMessage(buildErrorMessage(error, "撤销 API Key 失败"));
+        setErrorMessage(
+          buildErrorMessage(error, cloudCopy.apiKey.revokeFailedFallback),
+        );
       } finally {
         setManagingToken("");
       }
     },
-    [clearCloudState, loadCommerceState, session?.tenant.id],
+    [clearCloudState, cloudCopy, loadCommerceState, session?.tenant.id],
   );
 
   const openUserCenter = useCallback(
@@ -1332,13 +1810,19 @@ export function useOemCloudAccess() {
         return;
       }
 
-      const browserTarget = createExternalBrowserOpenTarget();
+      const browserTarget = createExternalBrowserOpenTarget({
+        openingTitle: authCopy.browserPreopenTitle,
+        openingBody: authCopy.browserPreopenBody,
+      });
       await openExternalUrl(
         buildOemCloudUserCenterUrl(configuredTarget.baseUrl, path),
-        { browserTarget },
+        {
+          browserTarget,
+          copy: authCopy,
+        },
       );
     },
-    [configuredTarget],
+    [authCopy, configuredTarget],
   );
 
   const hubProviderName = useMemo(
@@ -1371,7 +1855,7 @@ export function useOemCloudAccess() {
     }
 
     if (preference.providerSource === "local") {
-      return `${LOCAL_PROVIDER_SUMMARY}${
+      return `${cloudCopy.labels.localProviderSummary}${
         preference.defaultModel ? ` · ${preference.defaultModel}` : ""
       }`;
     }
@@ -1388,31 +1872,43 @@ export function useOemCloudAccess() {
     return `${matchedOffer.displayName}${
       preference.defaultModel ? ` · ${preference.defaultModel}` : ""
     }`;
-  }, [offers, preference, hubProviderName]);
+  }, [cloudCopy.labels.localProviderSummary, offers, preference, hubProviderName]);
 
   const defaultProviderSourceLabel = useMemo(() => {
     if (!preference) {
-      return "未设定";
+      return cloudCopy.labels.notSet;
     }
 
     return preference.providerSource === "local"
-      ? LOCAL_PROVIDER_SUMMARY
-      : "云端服务";
-  }, [preference]);
+      ? cloudCopy.labels.localProviderSummary
+      : cloudCopy.labels.cloudService;
+  }, [cloudCopy.labels, preference]);
 
   const activeAccessModeLabel = useMemo(
-    () => formatOemCloudAccessModeLabel(activeCloudOffer?.effectiveAccessMode),
-    [activeCloudOffer?.effectiveAccessMode],
+    () =>
+      formatOemCloudAccessModeLabel(
+        activeCloudOffer?.effectiveAccessMode,
+        cloudCopy.labels,
+      ),
+    [activeCloudOffer?.effectiveAccessMode, cloudCopy.labels],
   );
 
   const activeConfigModeLabel = useMemo(
-    () => formatOemCloudConfigModeLabel(activeCloudOffer?.configMode),
-    [activeCloudOffer?.configMode],
+    () =>
+      formatOemCloudConfigModeLabel(
+        activeCloudOffer?.configMode,
+        cloudCopy.labels,
+      ),
+    [activeCloudOffer?.configMode, cloudCopy.labels],
   );
 
   const activeModelsSourceLabel = useMemo(
-    () => formatOemCloudModelsSourceLabel(activeCloudOffer?.modelsSource),
-    [activeCloudOffer?.modelsSource],
+    () =>
+      formatOemCloudModelsSourceLabel(
+        activeCloudOffer?.modelsSource,
+        cloudCopy.labels,
+      ),
+    [activeCloudOffer?.modelsSource, cloudCopy.labels],
   );
 
   const activeDeveloperAccessEnabled = Boolean(
@@ -1422,15 +1918,17 @@ export function useOemCloudAccess() {
 
   const activeDeveloperAccessLabel = useMemo(() => {
     if (!activeCloudOffer) {
-      return "未设定";
+      return cloudCopy.labels.notSet;
     }
 
     if (!activeCloudOffer.apiKeyModeEnabled) {
-      return "已关闭";
+      return cloudCopy.labels.developerAccess.disabled;
     }
 
-    return activeCloudOffer.developerAccessVisible ? "可见" : "已隐藏";
-  }, [activeCloudOffer]);
+    return activeCloudOffer.developerAccessVisible
+      ? cloudCopy.labels.developerAccess.visible
+      : cloudCopy.labels.developerAccess.hidden;
+  }, [activeCloudOffer, cloudCopy.labels]);
 
   return {
     runtime,

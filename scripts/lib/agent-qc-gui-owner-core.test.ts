@@ -116,6 +116,35 @@ describe("agent-qc-gui-owner-core", () => {
     expect(report.ownerCount).toBe(1);
   });
 
+  it("未启动的 pending job 不应占用 GUI owner", () => {
+    const report = createAgentQcGuiOwnerReport({
+      manifest,
+      statusSidecars: [
+        {
+          path: ".lime/qc/qcloop-status.gui-pending.json",
+          status: {
+            job: { id: "job-pending", status: "pending", terminal: false },
+            verdict: { status: "running" },
+            counts: { pending: 1, running: 0, stale: 0 },
+            items: [
+              {
+                scenarioId: "claw-chat-ready-streaming",
+                qcloopStatus: "pending",
+                evidenceStatus: "blocked",
+                terminal: false,
+                currentAttemptNo: 0,
+                worker: { status: "unknown" },
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    expect(report.verdict.status).toBe("pass");
+    expect(report.ownerCount).toBe(0);
+  });
+
   it("同一 running job 应选择 stale 秒数更新的 sidecar", () => {
     const createSidecar = (staleSeconds: number, generatedAt: string) => ({
       generatedAt,

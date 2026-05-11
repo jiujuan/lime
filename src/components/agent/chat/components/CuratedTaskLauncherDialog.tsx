@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   summarizeCuratedTaskFollowUpActions,
+  buildCuratedTaskTemplateCopy,
   summarizeCuratedTaskOutputContract,
   summarizeCuratedTaskRequiredInputs,
   findCuratedTaskTemplateById,
@@ -88,6 +89,13 @@ export function CuratedTaskLauncherDialog({
 }: CuratedTaskLauncherDialogProps) {
   const { i18n, t } = useTranslation("agent");
   const locale = i18n.language;
+  const curatedTaskTemplateCopy = useMemo(
+    () =>
+      buildCuratedTaskTemplateCopy((key, defaultValue, values) =>
+        t(key, { defaultValue, ...values }),
+      ),
+    [t],
+  );
   const [inputValues, setInputValues] = useState<CuratedTaskInputValues>({});
   const [referenceEntries, setReferenceEntries] = useState<
     CuratedTaskReferenceEntry[]
@@ -375,8 +383,8 @@ export function CuratedTaskLauncherDialog({
       return null;
     }
 
-    return findCuratedTaskTemplateById(suggestedTaskId);
-  }, [reviewFeedbackProjection]);
+    return findCuratedTaskTemplateById(suggestedTaskId, curatedTaskTemplateCopy);
+  }, [curatedTaskTemplateCopy, reviewFeedbackProjection]);
 
   const activeReviewBaselineSnapshot = useMemo(() => {
     if (!task) {

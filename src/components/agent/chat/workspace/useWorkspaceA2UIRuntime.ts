@@ -11,6 +11,7 @@ import {
   type ProgressiveA2UIStepView,
 } from "../utils/progressivePendingA2UI";
 import { governActionRequest } from "../utils/actionRequestGovernance";
+import { collectCurrentAssistantTail } from "../utils/currentTurnActionRequests";
 import type { ActionRequired, Message, PendingA2UISource } from "../types";
 
 interface A2UISubmissionNotice {
@@ -102,8 +103,13 @@ export function useWorkspaceA2UIRuntime({
     formData: A2UIFormData,
   ) => PendingA2UISubmitResolution;
 } {
+  const currentAssistantTail = useMemo(
+    () => collectCurrentAssistantTail(messages),
+    [messages],
+  );
+
   const pendingActionRequest = useMemo<ActionRequired | null>(() => {
-    const latestPendingMessage = [...messages]
+    const latestPendingMessage = [...currentAssistantTail]
       .reverse()
       .find((message) =>
         message.actionRequests?.some((request) => request.status === "pending"),
@@ -119,17 +125,13 @@ export function useWorkspaceA2UIRuntime({
         .find((request) => request.status === "pending") || null;
 
     return pendingRequest ? governActionRequest(pendingRequest) : null;
-  }, [messages]);
+  }, [currentAssistantTail]);
 
   const pendingMessageA2UI = useMemo<PendingA2UIResolution | null>(() => {
-    for (let i = messages.length - 1; i >= 0; i -= 1) {
-      const message = messages[i];
+    for (let i = currentAssistantTail.length - 1; i >= 0; i -= 1) {
+      const message = currentAssistantTail[i];
 
-      if (message.role === "user") {
-        return null;
-      }
-
-      if (message.role !== "assistant" || !message.content) {
+      if (!message.content) {
         continue;
       }
 
@@ -157,7 +159,7 @@ export function useWorkspaceA2UIRuntime({
     }
 
     return null;
-  }, [messages]);
+  }, [currentAssistantTail]);
   const pendingMessageA2UIForm = pendingMessageA2UI?.form ?? null;
 
   const pendingPromotedA2UIActionRequest =
@@ -166,8 +168,8 @@ export function useWorkspaceA2UIRuntime({
         return null;
       }
 
-      for (let i = messages.length - 1; i >= 0; i -= 1) {
-        const message = messages[i];
+      for (let i = currentAssistantTail.length - 1; i >= 0; i -= 1) {
+        const message = currentAssistantTail[i];
         const pendingRequest = [...(message.actionRequests || [])]
           .reverse()
           .find(
@@ -182,7 +184,7 @@ export function useWorkspaceA2UIRuntime({
       }
 
       return null;
-    }, [messages, pendingMessageA2UIForm]);
+    }, [currentAssistantTail, pendingMessageA2UIForm]);
 
   const resolvedPendingA2UI = useMemo<PendingA2UIResolution | null>(() => {
     if (pendingMessageA2UI) {
@@ -212,30 +214,14 @@ export function useWorkspaceA2UIRuntime({
       return false;
     }
 
-    for (let i = messages.length - 1; i >= 0; i -= 1) {
-      const message = messages[i];
-      if (message.role === "assistant") {
-        const hasSubmittedActionRequest = (message.actionRequests || []).some(
-          (request) =>
-            request.status === "submitted" &&
-            isActionRequestA2UICompatible(request),
-        );
-
-        if (hasSubmittedActionRequest) {
-          return true;
-        }
-
-        continue;
-      }
-
-      if (message.role !== "user") {
-        continue;
-      }
-      return false;
-    }
-
-    return false;
-  }, [messages, resolvedPendingA2UI]);
+    return currentAssistantTail.some((message) =>
+      (message.actionRequests || []).some(
+        (request) =>
+          request.status === "submitted" &&
+          isActionRequestA2UICompatible(request),
+      ),
+    );
+  }, [currentAssistantTail, resolvedPendingA2UI]);
 
   const a2uiSubmissionNotice: A2UISubmissionNotice | null = null;
 
@@ -264,7 +250,7 @@ export function useWorkspaceA2UIRuntime({
 
       const source = previous.source;
       if (source.kind === "action_request") {
-        const requestStillExists = messages.some((message) =>
+        const requestStillExists = currentAssistantTail.some((message) =>
           (message.actionRequests || []).some(
             (request) => request.requestId === source.requestId,
           ),
@@ -272,12 +258,12 @@ export function useWorkspaceA2UIRuntime({
         return requestStillExists ? previous : null;
       }
 
-      const sourceMessageStillExists = messages.some(
+      const sourceMessageStillExists = currentAssistantTail.some(
         (message) => message.id === source.messageId,
       );
       return sourceMessageStillExists ? previous : null;
     });
-  }, [hasRecentA2UISubmission, messages, resolvedPendingA2UI]);
+  }, [currentAssistantTail, hasRecentA2UISubmission, resolvedPendingA2UI]);
 
   const visiblePendingA2UI = resolvedPendingA2UI ?? retainedPendingA2UI ?? null;
   const [pendingA2UIProgressState, setPendingA2UIProgressState] =

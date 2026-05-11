@@ -147,7 +147,7 @@ function buildWorkbenchActionRouteStatus(
       return {
         label: "只定位",
         detail:
-          "该目标已在 Agent UI 标准 surface 中定位，当前没有可执行的本地 child session handler。",
+          "该目标已在 Agent UI 标准工作区中定位，当前没有可执行的本地子任务处理器。",
         className: "border-sky-200 bg-sky-50 text-sky-700",
       };
     case "seeded_work_item":
@@ -168,62 +168,62 @@ function buildWorkbenchActionRouteStatus(
       return {
         label: "重指派已回填",
         detail:
-          "TaskUpdate owner 更新指令已回填；发送后由真实 owner_change source 确认负责人变化。",
+          "负责人更新指令已回填；发送并执行后，以运行时返回的负责人变化为准。",
         className: "border-emerald-200 bg-emerald-50 text-emerald-700",
       };
     case "work_item_source_located":
       return {
         label: "工作项已定位",
         detail:
-          "已定位结构化 work_board source；可通过负责人选择器回填 TaskUpdate 指令，等待 owner_change source 确认。",
+          "已定位结构化任务板记录；可通过负责人选择器回填负责人更新指令，等待运行时确认负责人变化。",
         className: "border-sky-200 bg-sky-50 text-sky-700",
       };
     case "remote_task_source_located":
       return {
         label: "远端任务已定位",
         detail:
-          "已定位结构化 remote_task source；当前只展示来源、状态与结果引用，不伪造远端运行时控制。",
+          "已定位结构化远端任务记录；当前只展示来源、状态与结果引用，不伪造远端运行时控制。",
         className: "border-sky-200 bg-sky-50 text-sky-700",
       };
     case "handoff_source_located":
       return {
         label: "交接已定位",
         detail:
-          "已定位结构化 handoff_lane source；当前只展示 handoff 生命周期，不从文本伪造跨 Agent 控制。",
+          "已定位结构化交接记录；当前只展示交接生命周期，不从文本伪造跨 Agent 控制。",
         className: "border-sky-200 bg-sky-50 text-sky-700",
       };
     case "unsupported_remote":
       return {
         label: "远端未接入",
         detail:
-          "remote teammate 需要真实 remote ingress / A2A task source 后才能运行时控制。",
+          "远端队友需要接入真实远端入口或 A2A 任务记录后才能运行时控制。",
         className: "border-amber-200 bg-amber-50 text-amber-700",
       };
     case "unsupported_review":
       return {
         label: "审核未接入",
         detail:
-          "review lane 已定位；真实审核 callback / reassignment 写回仍需后续接入。",
+          "评审记录已定位；真实审核回调与重指派写回仍需后续接入。",
         className: "border-amber-200 bg-amber-50 text-amber-700",
       };
     case "unsupported_handoff":
       return {
         label: "交接未接入",
         detail:
-          "handoff lane 已定位；accepted / returned / resumed 真实 source 接入前不伪造状态。",
+          "交接记录已定位；真实接收、退回、恢复记录接入前不伪造状态。",
         className: "border-amber-200 bg-amber-50 text-amber-700",
       };
     case "unsupported_work_item":
       return {
         label: "工作项未接入",
         detail:
-          "work_board 目标已定位；真实 board/team API 写回或执行发起接入前不伪造工作项状态。",
+          "任务板目标已定位；真实任务板或团队 API 写回接入前不伪造工作项状态。",
         className: "border-amber-200 bg-amber-50 text-amber-700",
       };
     case "unsupported":
       return {
         label: "暂不支持",
-        detail: "该 Agent UI target 暂无可执行的本地运行时 handler。",
+        detail: "该 Agent UI 目标暂无可执行的本地运行时处理器。",
         className: "border-slate-200 bg-slate-50 text-slate-600",
       };
     default:
@@ -702,6 +702,59 @@ const RECENT_MESSAGE_SOURCE_TYPES = new Set([
   "user_message",
 ]);
 
+const TRANSCRIPT_ENTRY_SOURCE_LABELS: Record<string, string> = {
+  agent_message: "Agent 回复",
+  approval_request: "等待确认",
+  command_execution: "命令执行",
+  message_fallback: "消息",
+  plan: "计划",
+  reasoning: "推理",
+  request_user_input: "等待补充",
+  tool_call: "工具调用",
+  turn_summary: "回合摘要",
+  user_message: "用户消息",
+  web_search: "联网搜索",
+};
+
+const AGENT_UI_SURFACE_LABELS: Record<string, string> = {
+  artifact_workspace: "产物工作区",
+  background_teammate: "后台队友",
+  conversation: "对话",
+  delegation_graph: "分派关系",
+  diagnostics: "诊断",
+  handoff_lane: "交接",
+  hitl: "人工确认",
+  inline_process: "过程",
+  remote_teammate: "远程队友",
+  review_lane: "评审",
+  runtime_status: "运行状态",
+  session_tabs: "会话",
+  task_capsule: "任务",
+  team_policy: "团队策略",
+  team_roster: "成员",
+  teammate_transcript: "队友记录",
+  timeline_evidence: "证据",
+  tool_ui: "工具界面",
+  work_board: "任务板",
+  worker_notifications: "执行通知",
+};
+
+function formatTranscriptEntrySourceLabel(sourceType?: string | null): string {
+  const normalized = sourceType?.trim();
+  if (!normalized) {
+    return "活动";
+  }
+  return TRANSCRIPT_ENTRY_SOURCE_LABELS[normalized] ?? "活动";
+}
+
+function formatAgentUiSurfaceLabel(surface?: string | null): string {
+  const normalized = surface?.trim();
+  if (!normalized) {
+    return "工作区";
+  }
+  return AGENT_UI_SURFACE_LABELS[normalized] ?? "工作区";
+}
+
 function matchesTranscriptEntrySource(
   entry: TeamWorkspaceActivityEntry,
   sourceTypes: Set<string>,
@@ -716,7 +769,7 @@ function buildTranscriptEntryGroups(
     {
       kind: "pending_input",
       label: "待处理输入",
-      description: "来自 request_user_input / approval_request 结构化 item。",
+      description: "等待你确认或补充的结构化请求。",
       entries: entries.filter((entry) =>
         matchesTranscriptEntrySource(entry, PENDING_INPUT_SOURCE_TYPES),
       ),
@@ -724,7 +777,7 @@ function buildTranscriptEntryGroups(
     {
       kind: "tool_activity",
       label: "工具活动",
-      description: "来自 tool_call / command_execution / web_search。",
+      description: "工具、命令和联网搜索的最新动作。",
       entries: entries.filter((entry) =>
         matchesTranscriptEntrySource(entry, TOOL_ACTIVITY_SOURCE_TYPES),
       ),
@@ -732,7 +785,7 @@ function buildTranscriptEntryGroups(
     {
       kind: "recent_messages",
       label: "近期消息",
-      description: "来自 user / agent / reasoning / plan 的有界预览。",
+      description: "用户消息、Agent 回复、推理和计划的有界预览。",
       entries: entries.filter((entry) =>
         matchesTranscriptEntrySource(entry, RECENT_MESSAGE_SOURCE_TYPES),
       ),
@@ -1273,7 +1326,7 @@ export function TeamWorkbenchSummaryPanel({
             <Workflow className="h-3.5 w-3.5" />
             <span>Agent UI v0.6</span>
             <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium tracking-normal text-emerald-700 normal-case">
-              {teamWorkbenchProjectionSummary.total} events
+              {teamWorkbenchProjectionSummary.total} 条事件
             </span>
           </div>
           <div className="mt-3 grid gap-2 sm:grid-cols-3">
@@ -1288,7 +1341,9 @@ export function TeamWorkbenchSummaryPanel({
                 <div className="mt-1 text-lg font-semibold text-slate-900">
                   {card.value}
                 </div>
-                <div className="text-[10px] text-slate-500">{card.hint}</div>
+                <div className="text-[10px] text-slate-500">
+                  {formatAgentUiSurfaceLabel(card.hint)}
+                </div>
               </div>
             ))}
           </div>
@@ -1322,7 +1377,11 @@ export function TeamWorkbenchSummaryPanel({
                           <span className="font-semibold text-slate-700">
                             {formatAgentUiProjectionEventType(event.type)}
                           </span>
-                          {event.surface ? <span>{event.surface}</span> : null}
+                          {event.surface ? (
+                            <span>
+                              {formatAgentUiSurfaceLabel(event.surface)}
+                            </span>
+                          ) : null}
                         </div>
                         <div className="mt-0.5 truncate text-[10px] text-slate-500">
                           {formatAgentUiProjectionEventDetail(event)}
@@ -1356,14 +1415,14 @@ export function TeamWorkbenchSummaryPanel({
                 </span>
                 {selectedWorkbenchItem.event.surface ? (
                   <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-500">
-                    {selectedWorkbenchItem.event.surface}
+                    {formatAgentUiSurfaceLabel(
+                      selectedWorkbenchItem.event.surface,
+                    )}
                   </span>
                 ) : null}
               </div>
               <p className="mt-1 text-[10px] leading-4 text-slate-600">
-                这里只定位 Agent UI 标准 surface
-                中的目标，不从文本推断状态，也不伪造 remote / review / handoff
-                运行时调用。
+                这里只定位 Agent UI 标准工作区中的目标，不从文本推断状态，也不伪造远端、评审或交接运行时调用。
               </p>
               {selectedWorkbenchActionRouteStatus ? (
                 <div
@@ -1409,13 +1468,12 @@ export function TeamWorkbenchSummaryPanel({
                       负责人重指派
                     </span>
                     <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">
-                      TaskUpdate owner_change
+                      负责人更新
                     </span>
                   </div>
                   <p className="mt-1 text-[10px] leading-4 text-slate-600">
-                    选择目标负责人后只回填 TaskUpdate 指令；发送并执行后，Agent
-                    UI 仍以 TaskUpdate 返回的 owner_change / ownerChange
-                    metadata 作为唯一负责人变化 source。
+                    选择目标负责人后只回填负责人更新指令；发送并执行后，Agent
+                    UI 仍以运行时返回的负责人变化作为唯一事实。
                   </p>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <select
@@ -1465,13 +1523,11 @@ export function TeamWorkbenchSummaryPanel({
                       相关队友链路
                     </span>
                     <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
-                      {selectedWorkbenchRelatedEvents.length} events
+                      {selectedWorkbenchRelatedEvents.length} 条事件
                     </span>
                   </div>
                   <p className="mt-1 text-[10px] leading-4 text-slate-600">
-                    按 agent / task / work item / transcript / artifact ref
-                    精确匹配同一目标的 projection
-                    事件；这里只串联队友状态，不合成新运行时事实。
+                    按成员、任务、工作项、队友记录与产物引用精确匹配同一目标的事件；这里只串联队友状态，不合成新运行时事实。
                   </p>
                   <div className="mt-2 space-y-1.5">
                     {selectedWorkbenchRelatedEvents.map((event) => {
@@ -1490,7 +1546,9 @@ export function TeamWorkbenchSummaryPanel({
                               {formatAgentUiProjectionPhase(event.phase)}
                             </span>
                             {event.surface ? (
-                              <span>{event.surface}</span>
+                              <span>
+                                {formatAgentUiSurfaceLabel(event.surface)}
+                              </span>
                             ) : null}
                           </div>
                           <div className="mt-0.5 truncate text-[10px] text-slate-500">
@@ -1511,20 +1569,18 @@ export function TeamWorkbenchSummaryPanel({
                 <div className="mt-3 rounded-2xl border border-slate-200 bg-white px-3 py-3">
                   <div className="flex flex-wrap items-center gap-2 text-xs">
                     <span className="font-semibold text-slate-900">
-                      Transcript Zoom
+                      队友记录详情
                     </span>
                     <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
-                      teammate_transcript
+                      队友记录
                     </span>
                   </div>
                   <p className="mt-1 text-[10px] leading-4 text-slate-600">
-                    正文由子会话 / Team board 选中成员 activity preview
-                    读取；这里仅展示标准 ref 与焦点，不把队友输出混进主 final
-                    answer。
+                    正文由子会话 / 团队任务板选中成员活动预览读取；这里仅展示标准引用与焦点，不把队友输出混进主回复。
                   </p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">
-                      Transcript Ref：
+                      记录引用：
                       {selectedWorkbenchTranscriptZoom.transcriptRef}
                     </span>
                     {selectedWorkbenchTranscriptZoom.parentSessionId ? (
@@ -1598,9 +1654,7 @@ export function TeamWorkbenchSummaryPanel({
                         ))}
                       </div>
                       <p className="mt-1 text-[10px] leading-4 text-slate-600">
-                        这里只消费子会话详情里的 queued_turns 与 thread item
-                        类型；没有结构化 source 时不合成 pending / tool /
-                        message 状态。
+                        这里只消费子会话详情里的输入队列与历史正文类型；没有结构化记录时不合成等待、工具或消息状态。
                       </p>
                       {selectedTranscriptQueuedTurns.length > 0 ? (
                         <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-2 py-2">
@@ -1654,7 +1708,9 @@ export function TeamWorkbenchSummaryPanel({
                                       </span>
                                       {entry.sourceType ? (
                                         <span className="rounded-full border border-slate-200 bg-white px-1.5 py-0.5 text-slate-500">
-                                          {entry.sourceType}
+                                          {formatTranscriptEntrySourceLabel(
+                                            entry.sourceType,
+                                          )}
                                         </span>
                                       ) : null}
                                     </div>
@@ -1726,7 +1782,7 @@ export function TeamWorkbenchSummaryPanel({
                   ) : selectedTranscriptHistoryStatus === "loading" ? (
                     <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] leading-4 text-amber-700">
                       正在从子会话读取历史正文；读取结果仍只作为
-                      teammate_transcript preview，不进入主 final answer。
+                      队友记录预览，不进入主回复。
                     </p>
                   ) : selectedTranscriptHistoryStatus === "error" ? (
                     <p className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[10px] leading-4 text-rose-700">
@@ -1748,7 +1804,7 @@ export function TeamWorkbenchSummaryPanel({
           {agentUiSurfaceSummaries.length > 0 ? (
             <div className="mt-3 space-y-2">
               <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                Surface 专门视图
+                工作区专门视图
               </div>
               {agentUiSurfaceSummaries.map((surface, index) => (
                 <details
@@ -1762,7 +1818,7 @@ export function TeamWorkbenchSummaryPanel({
                         {surface.label}
                       </span>
                       <span className="ml-2 text-[10px] text-slate-500">
-                        {surface.surface}
+                        {formatAgentUiSurfaceLabel(surface.surface)}
                       </span>
                     </span>
                     <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
@@ -1821,7 +1877,7 @@ export function TeamWorkbenchSummaryPanel({
                     </span>
                     {event.surface ? (
                       <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
-                        {event.surface}
+                        {formatAgentUiSurfaceLabel(event.surface)}
                       </span>
                     ) : null}
                   </div>

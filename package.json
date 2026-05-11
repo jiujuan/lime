@@ -1,7 +1,7 @@
 {
   "name": "lime",
   "private": true,
-  "version": "1.33.0",
+  "version": "1.34.0",
   "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
   "keywords": [
     "ai",
@@ -84,6 +84,7 @@
     "agent-qc:gui-flow:check": "node scripts/agent-qc-gui-flow-report.mjs --check --format json",
     "agent-qc:check": "node scripts/agent-qc-report.mjs --check --format json && node scripts/agent-qc-gui-flow-report.mjs --check --format json",
     "agent-qc:qcloop-job": "node scripts/agent-qc-qcloop-job.mjs",
+    "agent-qc:payload-coverage": "node scripts/agent-qc-payload-coverage.mjs",
     "agent-qc:qcloop-status": "node scripts/agent-qc-qcloop-status.mjs",
     "agent-qc:qcloop-db-lease": "node scripts/agent-qc-qcloop-db-lease.mjs",
     "agent-qc:qcloop-preflight": "node scripts/agent-qc-qcloop-preflight.mjs",
@@ -127,7 +128,8 @@
     "smoke:agent-runtime-approval-sandbox": "node scripts/agent-runtime-approval-sandbox-smoke.mjs",
     "agent-qc:gui-owner-check": "node scripts/agent-qc-gui-owner-check.mjs",
     "agent-qc:process-owner-check": "node scripts/agent-qc-process-owner-check.mjs",
-    "agent-qc:secret-scan": "node scripts/agent-qc-secret-scan.mjs"
+    "agent-qc:secret-scan": "node scripts/agent-qc-secret-scan.mjs",
+    "agent-qc:objective-checklist": "node scripts/agent-qc-objective-checklist.mjs"
   },
   "dependencies": {
     "@babel/standalone": "^7.29.0",
@@ -149,9 +151,9 @@
     "@radix-ui/react-tooltip": "^1.1.3",
     "@sentry/browser": "^8.55.0",
     "@tanstack/react-virtual": "^3.13.18",
-    "@tauri-apps/api": "2.10.1",
-    "@tauri-apps/plugin-deep-link": "2.4.7",
-    "@tauri-apps/plugin-dialog": "2.6.0",
+    "@tauri-apps/api": "2.11.0",
+    "@tauri-apps/plugin-deep-link": "2.4.9",
+    "@tauri-apps/plugin-dialog": "2.7.1",
     "@tauri-apps/plugin-global-shortcut": "2.3.1",
     "@tauri-apps/plugin-shell": "2.3.5",
     "@tiptap/core": "^3.19.0",
@@ -216,7 +218,7 @@
     "@babel/plugin-transform-react-jsx-source": "^7.27.1",
     "@eslint/js": "^9.15.0",
     "@fast-check/vitest": "^0.2.4",
-    "@tauri-apps/cli": "^2.10.1",
+    "@tauri-apps/cli": "^2.11.1",
     "@types/babel__standalone": "^7.1.9",
     "@types/fabric": "^5.3.11",
     "@types/node": "^22.9.0",

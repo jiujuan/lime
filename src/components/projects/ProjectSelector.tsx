@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Check,
   ChevronDown,
@@ -42,7 +43,6 @@ import {
 } from "@/lib/api/project";
 import { toProjectView } from "@/lib/projectView";
 import type { Project } from "@/types/project";
-import { WorkspaceTypeLabels } from "@/types/workspace";
 import { cn } from "@/lib/utils";
 import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayIdleTask";
 import { CreateProjectDialog } from "./CreateProjectDialog";
@@ -121,9 +121,19 @@ function resolveDefaultProjectType(workspaceType?: string): ProjectType {
   return "general";
 }
 
-function formatProjectPathPreview(rootPath?: string): string {
+interface ProjectSelectorTextCopy {
+  defaultProjectBadge: string;
+  noDirectory: string;
+  pendingProject: string;
+  workspaceTypeLabels: Record<string, string>;
+}
+
+function formatProjectPathPreview(
+  rootPath: string | undefined,
+  noDirectoryLabel: string,
+): string {
   if (!rootPath) {
-    return "未设置目录";
+    return noDirectoryLabel;
   }
 
   const segments = rootPath.split(/[\\/]+/).filter(Boolean);
@@ -138,14 +148,26 @@ function formatProjectPathPreview(rootPath?: string): string {
   return `…/${segments.slice(-2).join("/")}`;
 }
 
-function getProjectMetaText(project: Project | null | undefined): string {
+function getWorkspaceTypeLabel(
+  workspaceTypeLabels: Record<string, string>,
+  workspaceType: string,
+): string {
+  return workspaceTypeLabels[workspaceType] ?? workspaceType;
+}
+
+function getProjectMetaText(
+  project: Project | null | undefined,
+  copy: ProjectSelectorTextCopy,
+): string {
   if (!project) {
-    return "待选择项目";
+    return copy.pendingProject;
   }
 
-  const meta = [WorkspaceTypeLabels[project.workspaceType]];
+  const meta = [
+    getWorkspaceTypeLabel(copy.workspaceTypeLabels, project.workspaceType),
+  ];
   if (project.isDefault) {
-    meta.unshift("默认项目");
+    meta.unshift(copy.defaultProjectBadge);
   }
 
   return meta.join(" · ");
@@ -153,12 +175,13 @@ function getProjectMetaText(project: Project | null | undefined): string {
 
 function getProjectSummaryText(
   project: Project | null | undefined,
+  copy: ProjectSelectorTextCopy,
 ): string | null {
   if (!project) {
     return null;
   }
 
-  return `${project.name} · ${getProjectMetaText(project)} · ${formatProjectPathPreview(project.rootPath)}`;
+  return `${project.name} · ${getProjectMetaText(project, copy)} · ${formatProjectPathPreview(project.rootPath, copy.noDirectory)}`;
 }
 
 /**
@@ -173,7 +196,7 @@ export function ProjectSelector({
   onOpenChange,
   passiveTrigger = false,
   workspaceType,
-  placeholder = "选择项目",
+  placeholder,
   disabled = false,
   className,
   dropdownSide = "top",
@@ -185,6 +208,7 @@ export function ProjectSelector({
   deferProjectListLoad = false,
   autoSelectFallback = true,
 }: ProjectSelectorProps) {
+  const { t } = useTranslation("common");
   const {
     projects,
     generalProjects,
@@ -223,12 +247,71 @@ export function ProjectSelector({
   const compactLikeTrigger = compact || embedded || workspaceTab;
   const compactPanel = compact || workspaceTab;
   const open = openProp ?? internalOpen;
-  const entityLabel = workspaceTab ? "工作区" : "项目";
-  const createEntityLabel = workspaceTab ? "新建工作区" : "新建项目";
-  const managementTitle = workspaceTab ? "工作区管理" : "项目管理";
+  const entityLabel = workspaceTab
+    ? t("common.projectSelector.entity.workspace", {
+        defaultValue: "工作区",
+      })
+    : t("common.projectSelector.entity.project", {
+        defaultValue: "项目",
+      });
+  const createEntityLabel = workspaceTab
+    ? t("common.projectSelector.action.createWorkspace", {
+        defaultValue: "新建工作区",
+      })
+    : t("common.projectSelector.action.createProject", {
+        defaultValue: "新建项目",
+      });
+  const managementTitle = workspaceTab
+    ? t("common.projectSelector.management.title.workspace", {
+        defaultValue: "工作区管理",
+      })
+    : t("common.projectSelector.management.title.project", {
+        defaultValue: "项目管理",
+      });
   const managementDescription = workspaceTab
-    ? "当前只管理可见工作区，不影响本地目录与已有文件。"
-    : "当前只管理可见项目，不影响本地目录与已有文件。";
+    ? t("common.projectSelector.management.description.workspace", {
+        defaultValue: "当前只管理可见工作区，不影响本地目录与已有文件。",
+      })
+    : t("common.projectSelector.management.description.project", {
+        defaultValue: "当前只管理可见项目，不影响本地目录与已有文件。",
+      });
+  const resolvedPlaceholder =
+    placeholder ??
+    (workspaceTab
+      ? t("common.projectSelector.placeholder.workspace", {
+          defaultValue: "选择工作区",
+        })
+      : t("common.projectSelector.placeholder.project", {
+          defaultValue: "选择项目",
+        }));
+  const projectSelectorCopy = useMemo<ProjectSelectorTextCopy>(
+    () => ({
+      defaultProjectBadge: t("common.projectSelector.meta.default", {
+        defaultValue: "默认项目",
+      }),
+      noDirectory: t("common.projectSelector.path.notSet", {
+        defaultValue: "未设置目录",
+      }),
+      pendingProject: t("common.projectSelector.meta.pending", {
+        defaultValue: "待选择项目",
+      }),
+      workspaceTypeLabels: {
+        persistent: t("common.projectSelector.workspaceType.persistent", {
+          defaultValue: "持久化",
+        }),
+        temporary: t("common.projectSelector.workspaceType.temporary", {
+          defaultValue: "临时",
+        }),
+        blog: t("common.projectSelector.workspaceType.blog", {
+          defaultValue: "博客",
+        }),
+        general: t("common.projectSelector.workspaceType.general", {
+          defaultValue: "通用",
+        }),
+      },
+    }),
+    [t],
+  );
 
   const projectSource =
     workspaceType === "general" ? generalProjects : projects;
@@ -482,7 +565,12 @@ export function ProjectSelector({
     });
     onChange(project.id);
     handleOpenChange(false);
-    toast.success(`${entityLabel}已创建`);
+    toast.success(
+      t("common.projectSelector.toast.created", {
+        defaultValue: "{{entity}}已创建",
+        entity: entityLabel,
+      }),
+    );
   };
 
   const handleOpenRename = () => {
@@ -504,7 +592,12 @@ export function ProjectSelector({
 
     const nextName = renameName.trim();
     if (!nextName) {
-      toast.error(`${entityLabel}名称不能为空`);
+      toast.error(
+        t("common.projectSelector.toast.nameRequired", {
+          defaultValue: "{{entity}}名称不能为空",
+          entity: entityLabel,
+        }),
+      );
       return;
     }
 
@@ -513,10 +606,18 @@ export function ProjectSelector({
       await rename(renameTarget.id, nextName);
       setRenameDialogOpen(false);
       setRenameTargetId(null);
-      toast.success(`${entityLabel}名称已更新`);
+      toast.success(
+        t("common.projectSelector.toast.renamed", {
+          defaultValue: "{{entity}}名称已更新",
+          entity: entityLabel,
+        }),
+      );
     } catch (error) {
       toast.error(
-        `重命名失败: ${error instanceof Error ? error.message : String(error)}`,
+        t("common.projectSelector.toast.renameFailed", {
+          defaultValue: "重命名失败：{{message}}",
+          message: error instanceof Error ? error.message : String(error),
+        }),
       );
     } finally {
       setIsRenaming(false);
@@ -559,10 +660,18 @@ export function ProjectSelector({
 
       setDeleteDialogOpen(false);
       setDeleteTargetId(null);
-      toast.success(`${entityLabel}已删除，本地目录未删除`);
+      toast.success(
+        t("common.projectSelector.toast.deleted", {
+          defaultValue: "{{entity}}已删除，本地目录未删除",
+          entity: entityLabel,
+        }),
+      );
     } catch (error) {
       toast.error(
-        `删除失败: ${error instanceof Error ? error.message : String(error)}`,
+        t("common.projectSelector.toast.deleteFailed", {
+          defaultValue: "删除失败：{{message}}",
+          message: error instanceof Error ? error.message : String(error),
+        }),
       );
     } finally {
       setIsDeleting(false);
@@ -571,9 +680,15 @@ export function ProjectSelector({
 
   const managementHint =
     selectedProject && !canRenameProject(selectedProject)
-      ? `默认${entityLabel}不可重命名或删除`
+      ? t("common.projectSelector.management.defaultLocked", {
+          defaultValue: "默认{{entity}}不可重命名或删除",
+          entity: entityLabel,
+        })
       : null;
-  const projectSummaryText = getProjectSummaryText(selectedProject);
+  const projectSummaryText = getProjectSummaryText(
+    selectedProject,
+    projectSelectorCopy,
+  );
   const popoverWidthClass = compactPanel ? "w-[392px]" : "w-[420px]";
   const headerPaddingClass = compactPanel ? "px-4 py-3" : "px-4 py-4";
   const bodyPaddingClass = compactPanel ? "px-4 py-3" : "px-4 py-4";
@@ -604,7 +719,7 @@ export function ProjectSelector({
             title={
               selectedProject
                 ? `${selectedProject.name}\n${selectedProject.rootPath}`
-                : placeholder
+                : resolvedPlaceholder
             }
           >
             <span
@@ -620,7 +735,7 @@ export function ProjectSelector({
                   </span>
                   <span className="min-w-0 flex flex-1 items-center gap-1.5">
                     <span className="truncate text-[12px] font-semibold leading-none text-[color:var(--lime-chrome-text)] dark:text-slate-100">
-                      {selectedProject?.name || placeholder}
+                      {selectedProject?.name || resolvedPlaceholder}
                     </span>
                   </span>
                 </>
@@ -645,11 +760,13 @@ export function ProjectSelector({
                   {compactLikeTrigger ? (
                     <span className="min-w-0 flex flex-1 items-center gap-2">
                       <span className="truncate text-sm font-semibold text-slate-900">
-                        {selectedProject?.name || placeholder}
+                        {selectedProject?.name || resolvedPlaceholder}
                       </span>
                       {selectedProject?.isDefault ? (
                         <span className="shrink-0 rounded-full border border-amber-200/80 bg-amber-50 px-2 py-0.5 text-[10px] font-medium leading-none text-amber-700">
-                          默认
+                          {t("common.projectSelector.badge.default", {
+                            defaultValue: "默认",
+                          })}
                         </span>
                       ) : null}
                     </span>
@@ -657,11 +774,13 @@ export function ProjectSelector({
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-2">
                         <span className="truncate text-sm font-semibold text-slate-900">
-                          {selectedProject?.name || placeholder}
+                          {selectedProject?.name || resolvedPlaceholder}
                         </span>
                         {selectedProject?.isDefault ? (
                           <span className="shrink-0 rounded-full border border-amber-200/80 bg-amber-50 px-2 py-0.5 text-[10px] font-medium leading-none text-amber-700">
-                            默认
+                            {t("common.projectSelector.badge.default", {
+                              defaultValue: "默认",
+                            })}
                           </span>
                         ) : null}
                       </span>
@@ -708,25 +827,38 @@ export function ProjectSelector({
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="text-sm font-semibold text-slate-900">
-                      选择{entityLabel}
+                      {t("common.projectSelector.header.title", {
+                        defaultValue: "选择{{entity}}",
+                        entity: entityLabel,
+                      })}
                     </div>
                     <div className="mt-1 text-xs leading-5 text-slate-500">
-                      在这里切换{entityLabel}、搜索{entityLabel}，并管理当前可见
-                      {entityLabel}列表。
+                      {t("common.projectSelector.header.description", {
+                        defaultValue:
+                          "在这里切换{{entity}}、搜索{{entity}}，并管理当前可见{{entity}}列表。",
+                        entity: entityLabel,
+                      })}
                     </div>
                   </div>
                   <Badge
                     variant="outline"
                     className="border-slate-200/80 bg-white/85 text-slate-600"
                   >
-                    {filteredProjects.length} 个{entityLabel}
+                    {t("common.projectSelector.header.count", {
+                      count: filteredProjects.length,
+                      defaultValue: "{{count}} 个{{entity}}",
+                      entity: entityLabel,
+                    })}
                   </Badge>
                 </div>
 
                 {!compactPanel && projectSummaryText ? (
                   <div className="rounded-[18px] border border-white/90 bg-white/85 px-3 py-2 text-[11px] leading-5 text-slate-600 shadow-sm">
                     <span className="font-medium text-slate-800">
-                      当前{entityLabel}：
+                      {t("common.projectSelector.current.label", {
+                        defaultValue: "当前{{entity}}：",
+                        entity: entityLabel,
+                      })}
                     </span>
                     <span>{projectSummaryText}</span>
                   </div>
@@ -737,7 +869,10 @@ export function ProjectSelector({
                   <Input
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder={`搜索${entityLabel}`}
+                    placeholder={t("common.projectSelector.search.placeholder", {
+                      defaultValue: "搜索{{entity}}",
+                      entity: entityLabel,
+                    })}
                     className={cn(
                       compactPanel ? "h-9" : "h-10",
                       "border-slate-200/80 bg-white/85 pl-9 focus-visible:border-slate-300 focus-visible:ring-1 focus-visible:ring-slate-300 focus-visible:ring-offset-0",
@@ -759,11 +894,13 @@ export function ProjectSelector({
                 >
                   {displayLoading ? (
                     <div className="rounded-[22px] border border-dashed border-slate-300/80 bg-white/80 px-4 py-8 text-center text-sm text-slate-500">
-                      加载中...
+                      {t("common.loading", { defaultValue: "加载中..." })}
                     </div>
                   ) : filteredProjects.length === 0 ? (
                     <div className="rounded-[22px] border border-dashed border-slate-300/80 bg-white/80 px-4 py-8 text-center text-sm text-slate-500">
-                      未找到匹配项目
+                      {t("common.projectSelector.empty", {
+                        defaultValue: "未找到匹配项目",
+                      })}
                     </div>
                   ) : (
                     filteredProjects.map((project) => {
@@ -817,14 +954,19 @@ export function ProjectSelector({
                                   variant="outline"
                                   className="border-amber-200/80 bg-amber-50 text-[10px] font-medium text-amber-700"
                                 >
-                                  默认
+                                  {t("common.projectSelector.badge.default", {
+                                    defaultValue: "默认",
+                                  })}
                                 </Badge>
                               ) : null}
                               <Badge
                                 variant="outline"
                                 className="border-slate-200/80 bg-white/80 text-[10px] text-slate-600"
                               >
-                                {WorkspaceTypeLabels[project.workspaceType]}
+                                {getWorkspaceTypeLabel(
+                                  projectSelectorCopy.workspaceTypeLabels,
+                                  project.workspaceType,
+                                )}
                               </Badge>
                             </div>
                             <div
@@ -832,7 +974,10 @@ export function ProjectSelector({
                               title={project.rootPath}
                             >
                               {compact
-                                ? formatProjectPathPreview(project.rootPath)
+                                ? formatProjectPathPreview(
+                                    project.rootPath,
+                                    projectSelectorCopy.noDirectory,
+                                  )
                                 : project.rootPath}
                             </div>
                             {project.tags.length > 0 ? (
@@ -909,7 +1054,9 @@ export function ProjectSelector({
                     disabled={!canRenameProject(selectedProject)}
                   >
                     <Pencil className="h-3.5 w-3.5" />
-                    重命名
+                    {t("common.projectSelector.action.rename", {
+                      defaultValue: "重命名",
+                    })}
                   </Button>
                   <Button
                     type="button"
@@ -923,7 +1070,7 @@ export function ProjectSelector({
                     disabled={!canDeleteProject(selectedProject)}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
-                    删除
+                    {t("common.delete", { defaultValue: "删除" })}
                   </Button>
                 </div>
                 {managementHint ? (
@@ -958,16 +1105,26 @@ export function ProjectSelector({
       >
         <DialogContent className="sm:max-w-[460px] overflow-hidden border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.96)_0%,rgba(255,255,255,0.98)_100%)] p-0">
           <DialogHeader className="border-b border-white/80 px-6 py-5">
-            <DialogTitle>重命名{entityLabel}</DialogTitle>
+            <DialogTitle>
+              {t("common.projectSelector.rename.title", {
+                defaultValue: "重命名{{entity}}",
+                entity: entityLabel,
+              })}
+            </DialogTitle>
             <DialogDescription>
-              更新{entityLabel}名称，不会修改本地目录路径。
+              {t("common.projectSelector.rename.description", {
+                defaultValue: "更新{{entity}}名称，不会修改本地目录路径。",
+                entity: entityLabel,
+              })}
             </DialogDescription>
           </DialogHeader>
           <div className="px-6 py-5">
             <Input
               value={renameName}
               onChange={(event) => setRenameName(event.target.value)}
-              placeholder="输入新的项目名称"
+              placeholder={t("common.projectSelector.rename.placeholder", {
+                defaultValue: "输入新的项目名称",
+              })}
               autoFocus
             />
           </div>
@@ -984,14 +1141,18 @@ export function ProjectSelector({
               }}
               disabled={isRenaming}
             >
-              取消
+              {t("common.cancel", { defaultValue: "取消" })}
             </Button>
             <Button
               type="button"
               onClick={() => void handleConfirmRename()}
               disabled={isRenaming}
             >
-              {isRenaming ? "保存中..." : "保存"}
+              {isRenaming
+                ? t("common.projectSelector.action.saving", {
+                    defaultValue: "保存中...",
+                  })
+                : t("common.save", { defaultValue: "保存" })}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1011,19 +1172,30 @@ export function ProjectSelector({
         <DialogContent className="sm:max-w-[480px] overflow-hidden border-rose-200/80 bg-[linear-gradient(180deg,rgba(255,241,242,0.96)_0%,rgba(255,255,255,0.98)_100%)] p-0">
           <DialogHeader className="border-b border-white/80 px-6 py-5">
             <DialogTitle className="text-destructive">
-              删除{entityLabel}
+              {t("common.projectSelector.delete.title", {
+                defaultValue: "删除{{entity}}",
+                entity: entityLabel,
+              })}
             </DialogTitle>
             <DialogDescription>
-              确定要删除{entityLabel}
-              {deleteTarget ? `「${deleteTarget.name}」` : ""}
-              吗？
+              {t("common.projectSelector.delete.description", {
+                defaultValue: "确定要删除{{entity}}{{name}}吗？",
+                entity: entityLabel,
+                name: deleteTarget ? `「${deleteTarget.name}」` : "",
+              })}
             </DialogDescription>
           </DialogHeader>
           <div className="px-6 py-5">
             <div className="rounded-[22px] border border-destructive/20 bg-destructive/5 px-4 py-4 text-sm">
-              <p className="font-medium text-destructive">此操作不可恢复</p>
+              <p className="font-medium text-destructive">
+                {t("common.projectSelector.delete.dangerTitle", {
+                  defaultValue: "此操作不可恢复",
+                })}
+              </p>
               <p className="mt-1 text-muted-foreground">
-                仅删除项目记录，不删除本地目录和已有文件。
+                {t("common.projectSelector.delete.dangerDescription", {
+                  defaultValue: "仅删除项目记录，不删除本地目录和已有文件。",
+                })}
               </p>
             </div>
           </div>
@@ -1040,7 +1212,7 @@ export function ProjectSelector({
               }}
               disabled={isDeleting}
             >
-              取消
+              {t("common.cancel", { defaultValue: "取消" })}
             </Button>
             <Button
               type="button"
@@ -1048,7 +1220,14 @@ export function ProjectSelector({
               onClick={() => void handleConfirmDelete()}
               disabled={isDeleting}
             >
-              {isDeleting ? "删除中..." : `删除${entityLabel}`}
+              {isDeleting
+                ? t("common.projectSelector.action.deleting", {
+                    defaultValue: "删除中...",
+                  })
+                : t("common.projectSelector.action.deleteEntity", {
+                    defaultValue: "删除{{entity}}",
+                    entity: entityLabel,
+                  })}
             </Button>
           </DialogFooter>
         </DialogContent>

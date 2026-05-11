@@ -1149,6 +1149,34 @@ describe("AgentThreadTimeline", () => {
     );
   });
 
+  it("运行中的单条 reasoning 应直接显示为一个思考块，避免摘要壳嵌套详情壳", () => {
+    const reasoningText = "正在梳理 PPT 大纲所需的关键输入。";
+    const items: AgentThreadItem[] = [
+      {
+        ...createBaseItem("reasoning-active-1", 1),
+        type: "reasoning",
+        status: "in_progress",
+        completed_at: undefined,
+        text: reasoningText,
+      },
+    ];
+
+    const container = renderTimeline(items, {
+      isCurrentTurn: true,
+      turn: {
+        status: "running",
+      },
+    });
+
+    expect(
+      container.querySelector(
+        '[data-testid="agent-thread-block:1:process:details"]',
+      ),
+    ).toBeNull();
+    expect((container.textContent?.split("思考中").length ?? 1) - 1).toBe(1);
+    expect(container.textContent).toContain(reasoningText);
+  });
+
   it("已完成的单条思考应默认只保留摘要，展开后再显示完整正文", () => {
     const reasoningText =
       "先核对执行链路，再立即恢复当前运行。\n随后补齐自动续提。";

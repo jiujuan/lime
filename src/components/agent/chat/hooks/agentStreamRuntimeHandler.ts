@@ -260,6 +260,29 @@ interface HandleTurnStreamEventOptions {
   setIsSending: Dispatch<SetStateAction<boolean>>;
 }
 
+function bindAssistantMessageToRuntimeTurn(
+  setMessages: Dispatch<SetStateAction<Message[]>>,
+  assistantMsgId: string,
+  turnId?: string | null,
+) {
+  const normalizedTurnId = turnId?.trim();
+  if (!normalizedTurnId) {
+    return;
+  }
+
+  setMessages((prev) =>
+    prev.map((message) =>
+      message.id === assistantMsgId &&
+      message.runtimeTurnId !== normalizedTurnId
+        ? {
+            ...message,
+            runtimeTurnId: normalizedTurnId,
+          }
+        : message,
+    ),
+  );
+}
+
 function finishRequestLog(
   requestState: StreamRequestState,
   payload: AgentStreamRequestLogFinishPayload,
@@ -721,6 +744,11 @@ export function handleTurnStreamEvent({
     case "turn_started":
       clearQueuedDraftCleanupTimer();
       activateStream();
+      bindAssistantMessageToRuntimeTurn(
+        setMessages,
+        assistantMsgId,
+        data.turn.id,
+      );
       setCurrentTurnId(data.turn.id);
       setThreadTurns((prev) =>
         upsertThreadTurnState(
@@ -750,6 +778,11 @@ export function handleTurnStreamEvent({
     case "item_started":
     case "item_completed":
       activateStream();
+      bindAssistantMessageToRuntimeTurn(
+        setMessages,
+        assistantMsgId,
+        data.item.turn_id,
+      );
       setThreadItems((prev) =>
         upsertThreadItemState(
           removeThreadItemState(prev, pendingItemKey),
@@ -760,6 +793,11 @@ export function handleTurnStreamEvent({
 
     case "item_updated":
       activateStream();
+      bindAssistantMessageToRuntimeTurn(
+        setMessages,
+        assistantMsgId,
+        data.item.turn_id,
+      );
       if (shouldDeferAgentStreamThreadItemUpdate(data.item)) {
         break;
       }
@@ -775,6 +813,11 @@ export function handleTurnStreamEvent({
     case "turn_failed":
       clearQueuedDraftCleanupTimer();
       activateStream();
+      bindAssistantMessageToRuntimeTurn(
+        setMessages,
+        assistantMsgId,
+        data.turn.id,
+      );
       clearOptimisticItem();
       setThreadTurns((prev) =>
         upsertThreadTurnState(
@@ -1132,6 +1175,11 @@ export function handleTurnStreamEvent({
           clearOptimisticItem();
         }
       }
+      bindAssistantMessageToRuntimeTurn(
+        setMessages,
+        assistantMsgId,
+        data.scope?.turn_id,
+      );
       handleActionRequiredEvent({
         data,
         eventName,

@@ -9,7 +9,7 @@
 //!
 //! ## 设计参考
 //!
-//! 类型设计参考 OpenClaw 的 Cron/Scheduler 系统
+//! 类型设计参考通用 Cron/Scheduler 系统
 
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { RefreshCw, X } from "lucide-react";
 import {
   getChromeProfileSessions,
   type ChromeProfileSessionInfo,
 } from "@/lib/webview-api";
+import { formatNumber } from "@/i18n/format";
 import { BrowserEnvironmentPresetManager } from "./BrowserEnvironmentPresetManager";
 import { BrowserProfileManager } from "./BrowserProfileManager";
 import { BrowserRuntimeDebugPanel } from "./BrowserRuntimeDebugPanel";
@@ -58,6 +60,7 @@ export function BrowserRuntimeWorkspace(props: BrowserRuntimeWorkspaceProps) {
     active = true,
     onNavigate,
   } = props;
+  const { t, i18n } = useTranslation("workspace");
   const shouldActivate = standalone || embedded || active;
   const [sessions, setSessions] = useState<ChromeProfileSessionInfo[]>([]);
   const [attachObserverCount, setAttachObserverCount] = useState(0);
@@ -125,11 +128,13 @@ export function BrowserRuntimeWorkspace(props: BrowserRuntimeWorkspaceProps) {
         setSessions(nextSessions);
         setAttachObserverCount(nextBridgeStatus?.observer_count ?? 0);
       } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
         showMessage({
           type: "error",
-          text: `刷新浏览器会话失败: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          text: t("workspace.browserRuntime.refreshFailed", {
+            message: errorMessage,
+          }),
         });
       } finally {
         if (!silent) {
@@ -137,7 +142,7 @@ export function BrowserRuntimeWorkspace(props: BrowserRuntimeWorkspaceProps) {
         }
       }
     },
-    [showMessage],
+    [showMessage, t],
   );
 
   useEffect(() => {
@@ -207,9 +212,11 @@ export function BrowserRuntimeWorkspace(props: BrowserRuntimeWorkspaceProps) {
         <div className="rounded-lg border p-5 space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-base font-semibold">浏览器实时会话</h2>
+              <h2 className="text-base font-semibold">
+                {t("workspace.browserRuntime.title")}
+              </h2>
               <p className="text-sm text-muted-foreground">
-                统一管理实时画面、人工接管、会话状态与高级调试信息。
+                {t("workspace.browserRuntime.description")}
               </p>
             </div>
             <button
@@ -221,28 +228,27 @@ export function BrowserRuntimeWorkspace(props: BrowserRuntimeWorkspaceProps) {
               <RefreshCw
                 className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`}
               />
-              刷新会话
+              {t("workspace.browserRuntime.actions.refreshSessions")}
             </button>
           </div>
 
           <div className="text-xs text-muted-foreground">
-            当前运行 Profile：
-            <span className="ml-1 font-medium text-foreground">
-              {sessions.length}
-            </span>
-            个
+            {t("workspace.browserRuntime.summary.runningProfiles", {
+              profileCount: formatNumber(sessions.length, {
+                locale: i18n.language,
+              }),
+            })}
             <span className="ml-4">
-              当前附着 Chrome：
-              <span className="ml-1 font-medium text-foreground">
-                {attachObserverCount}
-              </span>
-              个
+              {t("workspace.browserRuntime.summary.attachedChrome", {
+                chromeCount: formatNumber(attachObserverCount, {
+                  locale: i18n.language,
+                }),
+              })}
             </span>
           </div>
           {attachObserverCount > 0 ? (
             <p className="text-xs text-muted-foreground">
-              附着当前 Chrome
-              会优先复用你正在使用的浏览器页面，并在可用时直接接管到实时调试会话。
+              {t("workspace.browserRuntime.attachedChromeHint")}
             </p>
           ) : null}
         </div>
@@ -256,8 +262,8 @@ export function BrowserRuntimeWorkspace(props: BrowserRuntimeWorkspaceProps) {
               type="button"
               onClick={handleDismissMessage}
               className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-current/80 transition hover:bg-black/10 hover:text-current"
-              aria-label="关闭消息"
-              title="关闭"
+              aria-label={t("workspace.browserRuntime.message.close")}
+              title={t("workspace.browserRuntime.message.closeTitle")}
             >
               <X className="h-3.5 w-3.5" />
             </button>

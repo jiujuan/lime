@@ -1,4 +1,5 @@
 import React, { memo, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   AlertCircle,
   ChevronDown,
@@ -38,7 +39,9 @@ import {
 } from "../utils/curatedTaskRecommendationSignals";
 import { buildCuratedTaskLaunchInputPrefillFromReferenceEntries } from "../utils/curatedTaskReferenceSelection";
 import {
+  buildReviewFeedbackProjectionCopy,
   buildReviewFeedbackProjection,
+  formatReviewFeedbackTemplate,
   type ReviewFeedbackProjection,
 } from "../utils/reviewFeedbackProjection";
 import {
@@ -591,6 +594,7 @@ function ReviewFeedbackProjectionCard({
   className?: string;
   onApplyAction?: () => void;
 }) {
+  const { t } = useTranslation("agent");
   const primarySuggestedTask = projection.suggestedTasks[0] ?? null;
 
   return (
@@ -603,7 +607,7 @@ function ReviewFeedbackProjectionCard({
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className="inline-flex items-center rounded-full border border-emerald-200 bg-white px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-          围绕最近判断
+          {t("reviewFeedback.badge", "围绕最近判断")}
         </span>
         {!projection.matchedCurrentTask &&
         projection.suggestedTaskTitles.length > 0 ? (
@@ -613,7 +617,13 @@ function ReviewFeedbackProjectionCard({
         ) : null}
       </div>
       <div className="mt-1 text-[11px] font-medium leading-5 text-slate-900">
-        最近判断已更新：{projection.signal.title}
+        {formatReviewFeedbackTemplate(
+          t("reviewFeedback.title", {
+            defaultValue: "最近判断已更新：{{title}}",
+            title: projection.signal.title,
+          }),
+          { title: projection.signal.title },
+        )}
       </div>
       <div className="mt-1 text-[11px] leading-5 text-slate-500">
         {projection.signal.summary}
@@ -629,10 +639,19 @@ function ReviewFeedbackProjectionCard({
             data-testid={dataTestId ? `${dataTestId}-action` : undefined}
             onClick={onApplyAction}
           >
-            继续去「{primarySuggestedTask.title}」
+            {formatReviewFeedbackTemplate(
+              t("reviewFeedback.action", {
+                defaultValue: "继续去「{{title}}」",
+                title: primarySuggestedTask.title,
+              }),
+              { title: primarySuggestedTask.title },
+            )}
           </button>
           <span className="text-[10px] leading-5 text-slate-500">
-            会继续带着这轮结果与参考对象，不用重新整理一遍。
+            {t(
+              "reviewFeedback.helper.generalWorkbench",
+              "会继续带着这轮结果与参考对象，不用重新整理一遍。",
+            )}
           </span>
         </div>
       ) : null}
@@ -1283,6 +1302,7 @@ function GeneralWorkbenchWorkflowPanelComponent({
   onRevealArtifactInFinder,
   onOpenArtifactWithDefaultApp,
 }: GeneralWorkbenchWorkflowPanelProps) {
+  const { t } = useTranslation("agent");
   const [recommendationSignalsVersion, setRecommendationSignalsVersion] =
     useState(0);
 
@@ -1377,11 +1397,12 @@ function GeneralWorkbenchWorkflowPanelComponent({
   const reviewFeedbackProjection = useMemo(
     () =>
       buildReviewFeedbackProjection({
+        copy: buildReviewFeedbackProjectionCopy(t),
         signal: latestReviewSignal,
         currentTaskId: runMetadataSummary.curatedTask?.taskId,
         currentTaskTitle: runMetadataSummary.curatedTask?.taskTitle,
       }),
-    [latestReviewSignal, runMetadataSummary.curatedTask],
+    [latestReviewSignal, runMetadataSummary.curatedTask, t],
   );
   const reviewFeedbackFollowUpActionPayload = useMemo(() => {
     if (!reviewFeedbackProjection) {

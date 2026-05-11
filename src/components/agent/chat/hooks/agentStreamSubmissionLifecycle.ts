@@ -257,6 +257,7 @@ export function createAgentStreamSubmissionLifecycle(
           ? {
               ...msg,
               runtimeStatus: effectiveWaitingRuntimeStatus,
+              runtimeTurnId: msg.runtimeTurnId || pendingTurnKey,
             }
           : msg,
       ),
@@ -299,6 +300,16 @@ export function createAgentStreamSubmissionLifecycle(
   };
 
   if (!expectingQueue) {
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === assistantMsgId
+          ? {
+              ...msg,
+              runtimeTurnId: msg.runtimeTurnId || pendingTurnKey,
+            }
+          : msg,
+      ),
+    );
     setThreadTurns((prev) =>
       upsertThreadTurnState(prev, {
         id: pendingTurnKey,

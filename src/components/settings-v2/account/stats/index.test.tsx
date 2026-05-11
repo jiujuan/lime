@@ -55,6 +55,30 @@ interface Mounted {
 
 const mounted: Mounted[] = [];
 
+function createStatsTranslator(overrides: Record<string, string>) {
+  return (key: string, options?: unknown) => {
+    const resolveTemplate = () => {
+      if (overrides[key]) {
+        return overrides[key];
+      }
+      if (typeof options === "string") {
+        return options;
+      }
+      if (options && typeof options === "object") {
+        const values = options as Record<string, unknown>;
+        if (typeof values.defaultValue === "string") {
+          return values.defaultValue;
+        }
+      }
+      return key;
+    };
+
+    return resolveTemplate().replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+      String((options as Record<string, unknown> | undefined)?.[name] ?? ""),
+    );
+  };
+}
+
 function renderComponent(): HTMLDivElement {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -119,6 +143,11 @@ beforeEach(() => {
   ).IS_REACT_ACT_ENVIRONMENT = true;
 
   vi.clearAllMocks();
+  const defaultT = createStatsTranslator({});
+  mockUseTranslation.mockImplementation(() => ({
+    i18n: { language: "zh-CN" },
+    t: defaultT,
+  }));
 
   mockGetUsageStats.mockResolvedValue({
     total_conversations: 240,
@@ -200,6 +229,24 @@ describe("StatsSettings", () => {
     expect(text).toContain("活跃度日历");
     expect(text).toContain("gpt-4.1");
     expect(mockUseTranslation).toHaveBeenCalledWith("settings");
+  });
+
+  it("应使用 settings namespace 生成热力图日期范围", async () => {
+    const englishT = createStatsTranslator({
+      "settings.stats.heatmap.rangeValue": "{{start}} to {{end}}",
+    });
+    mockUseTranslation.mockImplementation(() => ({
+      i18n: { language: "en-US" },
+      t: englishT,
+    }));
+
+    const container = renderComponent();
+    await waitForLoad();
+
+    expect(container.textContent ?? "").toContain("3/1 to 3/3");
+    expect(container.textContent ?? "").not.toContain("3/1 - 3/3");
+    expect(container.textContent ?? "").toContain("18K Token");
+    expect(container.textContent ?? "").not.toContain("18.0K Token");
   });
 
   it("切换时间范围后应重新拉取对应统计", async () => {

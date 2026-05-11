@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildCuratedTaskCapabilityDescription,
   buildCuratedTaskRecentUsageDescription,
+  buildCuratedTaskTemplateCopy,
   findCuratedTaskTemplateById,
   listFeaturedHomeCuratedTaskTemplates,
   recordCuratedTaskTemplateUsage,
@@ -150,6 +151,62 @@ describe("curatedTaskTemplates", () => {
         "Next: 继续展开其中一个选题 + 1 more",
       ].join(" | "),
     );
+  });
+
+  it("Agent Chat 输入能力区可注入 CuratedTask 模板 copy", () => {
+    const copy = buildCuratedTaskTemplateCopy((key, defaultValue) => {
+      const values: Record<string, string> = {
+        "curatedTask.templates.common.actionLabel": "Launch",
+        "curatedTask.templates.common.recentBadge": "Recent",
+        "curatedTask.templates.common.statusLabel": "Ready",
+        "curatedTask.templates.account-project-review.followUpActions.0":
+          "Keep tracking trends",
+        "curatedTask.templates.account-project-review.followUpActions.0.promptHint":
+          "Carry the review into trend discovery.",
+        "curatedTask.templates.account-project-review.title": "Review Account",
+        "curatedTask.templates.daily-trend-briefing.fields.theme_target.label":
+          "Topic",
+        "curatedTask.templates.daily-trend-briefing.title": "Trend Briefing",
+        "curatedTask.templates.recommendation.currentResultReasonLabel":
+          "Current Result",
+        "curatedTask.templates.recommendation.accountProjectReviewSummary":
+          "Align with {{title}} first",
+      };
+
+      return values[key] ?? defaultValue;
+    });
+
+    const trendTemplate = findCuratedTaskTemplateById(
+      "daily-trend-briefing",
+      copy,
+    );
+    const reviewTemplate = findCuratedTaskTemplateById(
+      "account-project-review",
+      copy,
+    );
+
+    expect(trendTemplate).toEqual(
+      expect.objectContaining({
+        actionLabel: "Launch",
+        statusLabel: "Ready",
+        title: "Trend Briefing",
+      }),
+    );
+    expect(trendTemplate?.requiredInputFields[0]?.label).toBe("Topic");
+    expect(reviewTemplate?.followUpActions[0]).toBe("Keep tracking trends");
+    expect(
+      resolveCuratedTaskFollowUpActionTarget({
+        taskId: "account-project-review",
+        action: "Keep tracking trends",
+        copy,
+      })?.promptHint,
+    ).toBe("Carry the review into trend discovery.");
+    expect(
+      resolveCuratedTaskFollowUpActionTarget({
+        taskId: "account-project-review",
+        action: "继续做趋势摘要",
+      })?.promptHint,
+    ).toBe("请承接这轮判断结论，先补一轮值得继续跟进的趋势与机会窗口。");
   });
 
   it("成果参考对象应为下游模板生成更明确的续接理由", () => {

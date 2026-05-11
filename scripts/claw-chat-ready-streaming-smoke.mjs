@@ -43,6 +43,8 @@ const LONG_PROMPT = [
 const RECOVERY_EXPECTED_TEXT = "复原完成";
 const RECOVERY_PROMPT =
   "停止后恢复测试：这是一个新的独立回合，请忽略上一条输出 160 行的要求。只输出“复原完成”这四个字，不要输出行号、解释或其他内容。";
+const MODEL_AVAILABILITY_PROMPT = "请只回复 QC_OK。";
+const MAX_MODEL_AVAILABILITY_CANDIDATES = 12;
 const FAST_RESPONSE_MODE_STORAGE_KEY = "lime:agent-fast-response-mode";
 const TASK_CENTER_OPEN_TASK_EVENT = "lime:task-center:open-task";
 
@@ -268,8 +270,48 @@ function normalizeProviderId(provider) {
   return String(provider?.id || provider?.provider_id || provider?.providerId || "").trim();
 }
 
+function providerMatchesId(provider, providerId) {
+  const normalizedProviderId = normalizeProviderId(provider);
+  return (
+    normalizedProviderId === providerId ||
+    provider?.provider_name === providerId ||
+    provider?.providerName === providerId ||
+    provider?.name === providerId
+  );
+}
+
 function providerEnabled(provider) {
   return provider?.enabled !== false;
+}
+
+function providerHasCredential(provider) {
+  const count = Number(provider?.api_key_count ?? provider?.apiKeyCount);
+  if (Number.isFinite(count)) {
+    return count > 0;
+  }
+  if (typeof provider?.has_api_key === "boolean") {
+    return provider.has_api_key;
+  }
+  if (typeof provider?.hasApiKey === "boolean") {
+    return provider.hasApiKey;
+  }
+
+  return true;
+}
+
+function providerReadyForLiveRuntime(provider) {
+  return providerEnabled(provider) && providerHasCredential(provider);
+}
+
+function modelLooksChatCapable(modelName) {
+  const normalized = String(modelName || "").trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return !/(image|images|banana|embed|embedding|tts|transcrib|audio|video|bfl|flux|stable|kling|wan)/i.test(
+    normalized,
+  );
 }
 
 function pickModelPreference(provider) {
@@ -288,32 +330,126 @@ function pickModelPreference(provider) {
     .filter(Boolean);
 
   return (
-    candidates.find((value) => /flash|mini|lite/i.test(value)) ||
-    candidates[0] ||
+    candidates.find((value) => /flash|mini|lite/i.test(value) && modelLooksChatCapable(value)) ||
+    candidates.find((value) => modelLooksChatCapable(value)) ||
     ""
   );
 }
 
+function findProviderById(providers, providerId) {
+  const normalizedProviderId = String(providerId || "").trim();
+  if (!normalizedProviderId) {
+    return null;
+  }
+
+  return (
+    providers.find((provider) => providerMatchesId(provider, normalizedProviderId)) ||
+    null
+  );
+}
+
 function pickProvider(providers, preferredProviderId) {
+  const ready = providers.filter((provider) => providerReadyForLiveRuntime(provider));
   const enabled = providers.filter((provider) => providerEnabled(provider));
   if (preferredProviderId) {
     return (
-      enabled.find((provider) => normalizeProviderId(provider) === preferredProviderId) ||
-      enabled.find((provider) => provider?.provider_name === preferredProviderId) ||
-      providers.find((provider) => normalizeProviderId(provider) === preferredProviderId) ||
-      providers.find((provider) => provider?.provider_name === preferredProviderId) ||
+      ready.find((provider) => providerMatchesId(provider, preferredProviderId)) ||
+      enabled.find((provider) => providerMatchesId(provider, preferredProviderId)) ||
+      providers.find((provider) => providerMatchesId(provider, preferredProviderId)) ||
       null
     );
   }
 
   for (const providerId of ["deepseek", "doubao", "lime-hub"]) {
-    const match = enabled.find((provider) => normalizeProviderId(provider) === providerId);
+    const match = ready.find((provider) => normalizeProviderId(provider) === providerId);
     if (match) {
       return match;
     }
   }
 
-  return enabled[0] || null;
+  return ready[0] || enabled[0] || null;
+}
+
+function candidateRank(candidate) {
+  const providerId = candidate.providerPreference.toLowerCase();
+  const model = candidate.modelPreference.toLowerCase();
+
+  if (candidate.source === "agent-status") {
+    return 0;
+  }
+  if (/flash|lite/.test(model) && !/deepseek/.test(model)) {
+    return 1;
+  }
+  if (/mini/.test(model) && !/deepseek/.test(model)) {
+    return 2;
+  }
+  if (/deepseek/.test(model)) {
+    return 4;
+  }
+  if (["deepseek", "siliconflow-cn", "lime-hub"].includes(providerId)) {
+    return 5;
+  }
+  return 3;
+}
+
+function uniqueProviderCandidates(candidates) {
+  const seen = new Set();
+  return candidates.filter((candidate) => {
+    const key = `${candidate.providerPreference}::${candidate.modelPreference}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+async function buildProviderCandidate(options, provider, modelPreference, source) {
+  const providerId = normalizeProviderId(provider) || String(provider?.provider_name || "").trim();
+  if (!providerId) {
+    return null;
+  }
+
+  let providerDetail = provider;
+  try {
+    providerDetail =
+      (await invoke(options, "get_api_key_provider", { id: providerId }, 30_000)) ||
+      provider;
+  } catch (error) {
+    console.warn(
+      `[smoke:claw-chat-ready-streaming] 读取 provider 详情失败，使用列表摘要继续: ${error.message}`,
+    );
+  }
+
+  const model = modelPreference || pickModelPreference(providerDetail);
+  if (!model || !modelLooksChatCapable(model)) {
+    return null;
+  }
+
+  return {
+    providerPreference: providerId,
+    modelPreference: model,
+    source,
+  };
+}
+
+async function verifyProviderCandidate(options, candidate) {
+  const result = await invoke(
+    options,
+    "test_api_key_provider_chat",
+    {
+      providerId: candidate.providerPreference,
+      modelName: candidate.modelPreference,
+      prompt: MODEL_AVAILABILITY_PROMPT,
+    },
+    60_000,
+  );
+  return Boolean(result?.success);
+}
+
+function sanitizeProbeError(error) {
+  const message = error instanceof Error ? error.message : String(error || "unknown");
+  return message.replace(/\s+/g, " ").slice(0, 160);
 }
 
 async function resolveProviderPreference(options, agentStatus, providers) {
@@ -331,48 +467,105 @@ async function resolveProviderPreference(options, agentStatus, providers) {
     agentStatus?.provider_selector || agentStatus?.provider_name || "",
   ).trim();
   const statusModel = String(agentStatus?.model_name || "").trim();
-  if (!explicitProvider && !explicitModel && statusProvider && statusModel) {
-    return {
-      providerPreference: statusProvider,
-      modelPreference: statusModel,
-      source: "agent-status",
-    };
+  const providerListAvailable = Array.isArray(providers) && providers.length > 0;
+  const statusProviderRecord = providerListAvailable
+    ? findProviderById(providers, statusProvider)
+    : null;
+  const statusProviderReady =
+    statusProvider &&
+    statusModel &&
+    (!providerListAvailable ||
+      (statusProviderRecord && providerReadyForLiveRuntime(statusProviderRecord)));
+  const providerList = Array.isArray(providers) ? providers : [];
+  const selected = pickProvider(providerList, explicitProvider || "");
+
+  if (explicitProvider || explicitModel) {
+    if (!selected) {
+      throw new Error(
+        "[smoke:claw-chat-ready-streaming] 未找到可用 provider；请传 --provider-preference / --model-preference 或先配置本地 provider",
+      );
+    }
+    const selectedMatchesStatusProvider =
+      statusProvider && providerMatchesId(selected, statusProvider);
+    const candidate = await buildProviderCandidate(
+      options,
+      selected,
+      explicitModel || (selectedMatchesStatusProvider ? statusModel : ""),
+      explicitProvider || explicitModel ? "partial-explicit" : "auto-enabled-provider",
+    );
+    if (!candidate) {
+      const providerId =
+        normalizeProviderId(selected) || String(selected?.provider_name || "").trim();
+      throw new Error(
+        `[smoke:claw-chat-ready-streaming] provider ${providerId} 缺少可用聊天模型；请传 --model-preference`,
+      );
+    }
+    return candidate;
   }
 
-  const selected = pickProvider(
-    Array.isArray(providers) ? providers : [],
-    explicitProvider || statusProvider,
+  const autoCandidates = [];
+  if (!explicitProvider && !explicitModel && statusProviderReady) {
+    const statusCandidate = await buildProviderCandidate(
+      options,
+      statusProviderRecord || {
+        id: statusProvider,
+        custom_models: [statusModel],
+      },
+      statusModel,
+      "agent-status",
+    );
+    if (statusCandidate) {
+      autoCandidates.push(statusCandidate);
+    }
+  }
+  for (const provider of providerList.filter((item) => providerReadyForLiveRuntime(item))) {
+    const candidate = await buildProviderCandidate(
+      options,
+      provider,
+      "",
+      "auto-enabled-provider",
+    );
+    if (candidate) {
+      autoCandidates.push(candidate);
+    }
+  }
+
+  const candidates = uniqueProviderCandidates(autoCandidates)
+    .sort((left, right) => candidateRank(left) - candidateRank(right))
+    .slice(0, MAX_MODEL_AVAILABILITY_CANDIDATES);
+  if (candidates.length === 0) {
+    const providerId =
+      normalizeProviderId(selected) ||
+      String(selected?.provider_name || statusProvider || "").trim();
+    throw new Error(
+      `[smoke:claw-chat-ready-streaming] provider ${providerId} 缺少可用聊天模型；请传 --model-preference`,
+    );
+  }
+
+  const probeFailures = [];
+  for (const candidate of candidates) {
+    try {
+      if (await verifyProviderCandidate(options, candidate)) {
+        return {
+          ...candidate,
+          source: "auto-probed-provider",
+        };
+      }
+      probeFailures.push(`${candidate.providerPreference}/${candidate.modelPreference}: failed`);
+    } catch (error) {
+      probeFailures.push(
+        `${candidate.providerPreference}/${candidate.modelPreference}: ${sanitizeProbeError(
+          error,
+        )}`,
+      );
+    }
+  }
+
+  throw new Error(
+    `[smoke:claw-chat-ready-streaming] 未找到可通过短聊天探测的 provider/model；候选失败: ${probeFailures.join(
+      " | ",
+    )}`,
   );
-  const providerId = normalizeProviderId(selected) || String(selected?.provider_name || "").trim();
-  if (!providerId) {
-    throw new Error(
-      "[smoke:claw-chat-ready-streaming] 未找到可用 provider；请传 --provider-preference / --model-preference 或先配置本地 provider",
-    );
-  }
-
-  let providerDetail = selected;
-  try {
-    providerDetail =
-      (await invoke(options, "get_api_key_provider", { id: providerId }, 30_000)) ||
-      selected;
-  } catch (error) {
-    console.warn(
-      `[smoke:claw-chat-ready-streaming] 读取 provider 详情失败，使用列表摘要继续: ${error.message}`,
-    );
-  }
-
-  const modelPreference = explicitModel || statusModel || pickModelPreference(providerDetail);
-  if (!modelPreference) {
-    throw new Error(
-      `[smoke:claw-chat-ready-streaming] provider ${providerId} 缺少可用模型；请传 --model-preference`,
-    );
-  }
-
-  return {
-    providerPreference: providerId,
-    modelPreference,
-    source: explicitProvider || explicitModel ? "partial-explicit" : "auto-enabled-provider",
-  };
 }
 
 function textOfMessage(message) {
@@ -461,6 +654,7 @@ function buildPageSnapshotScript(recoveryExpectedText) {
       textareaValue: textarea ? textarea.value : "",
       sendDisabled: Boolean(sendButton?.disabled),
       stopVisible: Boolean(stopButton),
+      longPromptVisible: bodyText.includes("E2E 中断测试"),
       stoppedMarker: bodyText.includes("用户已停止当前执行"),
       recoveryVisible: bodyText.includes(recoveryExpected),
       streamLineCount: streamText ? streamText.split("\\n").filter(Boolean).length : 0,
@@ -734,6 +928,7 @@ async function main() {
     modelName: agentStatus?.model_name || "",
   };
   let submittedSessionId = "";
+  let submittedLongTurnId = "";
 
   try {
     const scopedProviderKey = `agent_pref_provider_${workspaceId}`;
@@ -864,16 +1059,47 @@ async function main() {
     assert(sessionId, "长 turn 缺少 session_id");
     assert(longTurnId, "长 turn 缺少 turn_id");
     submittedSessionId = sessionId;
+    submittedLongTurnId = longTurnId;
     summary.sessionId = sessionId;
     summary.longTurnId = longTurnId;
     summary.longSubmitTurnConfig = longRequest.turn_config || null;
+    summary.longTurnOpenDispatches = [
+      await dispatchTaskCenterOpenTask(page, sessionId, workspaceId),
+    ];
+    summary.longTurnVisibleSnapshot = await waitForCondition(
+      "等待长 turn 会话挂载",
+      async () => {
+        const snapshot = await readPageSnapshot(page);
+        return snapshot?.stopVisible || snapshot?.streamTextLength > 0
+          ? snapshot
+          : null;
+      },
+      10_000,
+      250,
+    ).catch((error) => {
+      summary.longTurnVisibleWait = {
+        passed: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+      return null;
+    });
 
+    let lastOpenDispatchAt = Date.now();
     const firstDelta = await waitForCondition(
       "等待首个流式增量与停止按钮",
       async () => {
         const snapshot = await readPageSnapshot(page);
         if (!snapshot) {
           return null;
+        }
+        if (
+          isLikelyDetachedBlankTaskSnapshot(snapshot) &&
+          Date.now() - lastOpenDispatchAt >= 2_000
+        ) {
+          lastOpenDispatchAt = Date.now();
+          summary.longTurnOpenDispatches.push(
+            await dispatchTaskCenterOpenTask(page, sessionId, workspaceId),
+          );
         }
         const session = await invoke(
           options,
@@ -1311,6 +1537,26 @@ async function main() {
     summary.devBridgeCommands = [...new Set(invokes.map((item) => item.cmd))];
 
     if (submittedSessionId) {
+      summary.failureCleanupInterrupt = await invoke(
+        options,
+        "agent_runtime_interrupt_turn",
+        {
+          request: {
+            session_id: submittedSessionId,
+            ...(submittedLongTurnId ? { turn_id: submittedLongTurnId } : {}),
+          },
+        },
+        20_000,
+      )
+        .then(() => ({ attempted: true, status: "sent" }))
+        .catch((interruptError) => ({
+          attempted: true,
+          status: "failed",
+          error:
+            interruptError instanceof Error
+              ? interruptError.message
+              : String(interruptError),
+        }));
       const failureSession = await invoke(
         options,
         "agent_runtime_get_session",

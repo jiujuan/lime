@@ -83,7 +83,7 @@ lime/
 | `src-tauri/src/services/mcp_service.rs` | MCP 服务器与工具管理 |
 | `src-tauri/src/commands/gateway_channel_cmd.rs` | 多渠道远程入口、Webhook/Tunnel 与渠道运行时 |
 | `src-tauri/src/commands/browser_connector_cmd.rs` + `src-tauri/src/commands/webview_cmd.rs` | 浏览器连接器、ChromeBridge 与远程浏览器接入 |
-| `src-tauri/src/commands/telegram_remote_cmd.rs` + `src-tauri/src/dev_bridge.rs` + `src-tauri/src/services/openclaw_service/*` | 单通道旧入口、开发桥与本地 Gateway 兼容支撑 |
+| `src-tauri/src/commands/telegram_remote_cmd.rs` + `src-tauri/src/dev_bridge.rs` | 单通道旧入口与开发桥兼容支撑 |
 
 ### 基础设施层
 
@@ -107,7 +107,7 @@ lime/
 | `agent/` | Aster Agent 运行时桥接、会话管理与状态读模型装配 |
 | `skills/` | Skills 标准集成、动态加载与执行回调 |
 | `providers/` | 多 Provider 认证与请求发送 |
-| `services/` | 心跳、OpenClaw、浏览器窗口、MCP 等业务服务 |
+| `services/` | 心跳、浏览器窗口、MCP 等业务服务 |
 | `converter/` | 协议兼容与转换 |
 | `server/` | HTTP Server 与 REST 能力 |
 | `terminal/` | 已移除；不要恢复旧终端/PTTY 模块 |

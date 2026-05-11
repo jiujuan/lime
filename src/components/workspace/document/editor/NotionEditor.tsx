@@ -9,13 +9,13 @@ import React, {
   useState,
 } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
+import { useTranslation } from "react-i18next";
 import { createExtensions } from "./extensions";
 import { BubbleToolbar } from "./BubbleToolbar";
 import {
   CommandList,
-  type SlashMenuState,
-  type SlashMenuKeyHandler,
 } from "./SlashCommand";
+import type { SlashMenuKeyHandler, SlashMenuState } from "./slashCommandTypes";
 import { markdownToHtml, htmlToMarkdown } from "./utils/markdown";
 import { isInputLatencyDebugEnabled, logRenderPerf } from "@/lib/perfDebug";
 import { emitDocumentEditorFocus } from "@/lib/documentEditorFocusEvents";
@@ -94,6 +94,7 @@ const NotionEditorCore = forwardRef<NotionEditorHandle, NotionEditorProps>(
     ref,
   ) => {
     const [slashState, setSlashState] = useState<SlashMenuState>(EMPTY_SLASH);
+    const { t } = useTranslation("workspace");
     const keyDownRef = useRef<SlashMenuKeyHandler | null>(null);
     const handledExternalInsertRef = useRef<string | null>(null);
     const idleCommitTimerRef = useRef<number | null>(null);
@@ -111,6 +112,7 @@ const NotionEditorCore = forwardRef<NotionEditorHandle, NotionEditorProps>(
       sampleCount: 0,
     });
     const lastInputLatencyWarnLogAtRef = useRef(0);
+    const editorPlaceholder = t("workspace.document.editor.placeholder");
     renderCountRef.current += 1;
     const currentRenderCount = renderCountRef.current;
 
@@ -133,8 +135,9 @@ const NotionEditorCore = forwardRef<NotionEditorHandle, NotionEditorProps>(
         createExtensions({
           onStateChange: setSlashState,
           onKeyDownRef: keyDownRef,
+          placeholder: editorPlaceholder,
         }),
-      [],
+      [editorPlaceholder],
     );
 
     // eslint-disable-next-line react-hooks/exhaustive-deps

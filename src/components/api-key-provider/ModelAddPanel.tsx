@@ -5,6 +5,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,6 +62,7 @@ import {
   isProviderApiKeyRequired,
   type ProviderModelFetchProfile,
   type ProviderModelFetchStatus,
+  type ProviderModelFetchStatusCopy,
 } from "./providerModelFetchHelpers";
 
 export type ModelAddView = "catalog" | "configure";
@@ -100,6 +102,34 @@ interface FormState {
   models: string[];
 }
 
+interface ModelAddValidationCopy {
+  providerNameRequired: string;
+  apiHostRequired: string;
+  apiHostNormalizedActivate: string;
+  apiHostNormalizedFetch: string;
+  apiHostInvalid: string;
+  apiKeyRequired: string;
+  modelRequired: string;
+  fetchProviderNameRequired: string;
+  fetchApiHostRequired: string;
+}
+
+interface ModelAddCatalogCopy {
+  apiHostPlaceholder: string;
+  registryDescriptionWithApiHost: (apiHost: string) => string;
+  registryDescriptionWithoutApiHost: string;
+  loadErrorDefault: string;
+  templateName: (templateId: string, fallback: string) => string;
+  templateDescription: (templateId: string, fallback: string) => string;
+  providerTypeLabel: (providerType: string) => string;
+  badgeRecommended: string;
+  badgeRegionCn: string;
+  badgeRegionGlobal: string;
+  badgeBillingPayg: string;
+  badgeBillingCodingPlan: string;
+  badgeBillingSubscription: string;
+}
+
 interface ModelAddPanelProps {
   providers: ProviderWithKeysDisplay[];
   onAddProvider: (
@@ -119,21 +149,44 @@ interface ModelAddPanelProps {
   className?: string;
 }
 
-const CATEGORY_OPTIONS: Array<{ value: ModelCatalogCategory; label: string }> =
-  [
-    { value: "recommended", label: "推荐服务" },
-    { value: "cn", label: "国内服务" },
-    { value: "aggregator", label: "聚合平台" },
-    { value: "overseas", label: "海外平台" },
-    { value: "local", label: "本地模型" },
-  ];
+const CATEGORY_OPTIONS: Array<{
+  value: ModelCatalogCategory;
+  labelKey: string;
+  labelFallback: string;
+}> = [
+  {
+    value: "recommended",
+    labelKey: "settings.providers.modelAdd.catalog.category.recommended",
+    labelFallback: "推荐服务",
+  },
+  {
+    value: "cn",
+    labelKey: "settings.providers.modelAdd.catalog.category.cn",
+    labelFallback: "国内服务",
+  },
+  {
+    value: "aggregator",
+    labelKey: "settings.providers.modelAdd.catalog.category.aggregator",
+    labelFallback: "聚合平台",
+  },
+  {
+    value: "overseas",
+    labelKey: "settings.providers.modelAdd.catalog.category.overseas",
+    labelFallback: "海外平台",
+  },
+  {
+    value: "local",
+    labelKey: "settings.providers.modelAdd.catalog.category.local",
+    labelFallback: "本地模型",
+  },
+];
 
 const FEATURED_TEMPLATES: ProviderTemplate[] = [
   {
     id: "kimi-code-subscription",
     name: "Kimi Code 会员（订阅）",
     description:
-      "Kimi Code 官方订阅入口，Anthropic 协议，适合 Claude Code / OpenClaw",
+      "Kimi Code 官方订阅入口，Anthropic 协议，适合 Claude Code 等编码客户端",
     category: "overseas",
     type: "anthropic-compatible",
     apiHost: "https://api.kimi.com/coding/",
@@ -310,6 +363,10 @@ const FEATURED_TEMPLATES: ProviderTemplate[] = [
   },
 ];
 
+const FEATURED_TEMPLATE_IDS = new Set(
+  FEATURED_TEMPLATES.map((template) => template.id),
+);
+
 const CUSTOM_TEMPLATE: ProviderTemplate = {
   id: "custom-provider",
   name: "自定义供应商",
@@ -461,13 +518,16 @@ function resolveProviderCategory(
 
 function buildCatalogTemplates(
   catalog: SystemProviderCatalogItem[],
+  copy: ModelAddCatalogCopy,
 ): ProviderTemplate[] {
   return catalog.map((item) => {
     const providerType = normalizeCatalogProviderType(item.type);
     return {
       id: `catalog-${item.id}`,
       name: item.name,
-      description: `${getProviderTypeLabel(providerType)} · ${item.api_host || "按本地配置填写地址"}`,
+      description: `${copy.providerTypeLabel(providerType)} · ${
+        item.api_host || copy.apiHostPlaceholder
+      }`,
       category: resolveProviderCategory(item.id, item.group),
       type: providerType,
       apiHost: item.api_host,
@@ -481,6 +541,7 @@ function buildCatalogTemplates(
 function buildRegistryTemplates(
   groupedByProvider: Map<string, Array<{ id: string; provider_name: string }>>,
   catalogTemplates: ProviderTemplate[],
+  copy: ModelAddCatalogCopy,
 ): ProviderTemplate[] {
   const catalogIds = new Set(
     catalogTemplates
@@ -504,8 +565,8 @@ function buildRegistryTemplates(
       id: `registry-${providerId}`,
       name: firstModel.provider_name || providerId,
       description: apiHost
-        ? `模型目录 · ${apiHost}`
-        : "模型目录供应商，按服务文档补充 API Base URL",
+        ? copy.registryDescriptionWithApiHost(apiHost)
+        : copy.registryDescriptionWithoutApiHost,
       category: resolveProviderCategory(providerId),
       type: ANTHROPIC_COMPATIBLE_REGISTRY_PROVIDER_IDS.has(providerId)
         ? "anthropic-compatible"
@@ -538,9 +599,12 @@ function dedupeTemplates(templates: ProviderTemplate[]): ProviderTemplate[] {
   return result;
 }
 
-function createInitialFormState(template: ProviderTemplate): FormState {
+function createInitialFormState(
+  template: ProviderTemplate,
+  templateName = template.name,
+): FormState {
   return {
-    name: template.isCustom ? "" : template.name,
+    name: template.isCustom ? "" : templateName,
     type: template.type,
     promptCacheMode: "explicit_only",
     apiHost: template.apiHost,
@@ -553,49 +617,78 @@ function isApiKeyRequired(type: ProviderType): boolean {
   return type !== "ollama";
 }
 
-function validateForm(state: FormState): string | null {
+function validateForm(
+  state: FormState,
+  copy: ModelAddValidationCopy,
+): string | null {
   if (!state.name.trim()) {
-    return "请填写供应商名称。";
+    return copy.providerNameRequired;
   }
   if (!state.apiHost.trim()) {
-    return "请填写 API Base URL。";
+    return copy.apiHostRequired;
   }
   if (state.apiHost.trim() !== normalizeKnownProviderApiHost(state.apiHost)) {
-    return "检测到你填写的是文档页或旧接口地址，已自动修正 API Base URL，请确认后再激活。";
+    return copy.apiHostNormalizedActivate;
   }
   try {
     new URL(state.apiHost.trim());
   } catch {
-    return "请输入有效的 API Base URL。";
+    return copy.apiHostInvalid;
   }
   if (isApiKeyRequired(state.type) && !state.apiKey.trim()) {
-    return "请填写 API 密钥。";
+    return copy.apiKeyRequired;
   }
   if (state.models.length === 0) {
-    return "请手动添加至少一个模型；保存后也可以在配置页从接口获取模型。";
+    return copy.modelRequired;
   }
   return null;
 }
 
-function validateModelFetchForm(state: FormState): string | null {
+function validateModelFetchForm(
+  state: FormState,
+  copy: ModelAddValidationCopy,
+): string | null {
   if (!state.name.trim()) {
-    return "请先填写供应商名称。";
+    return copy.fetchProviderNameRequired;
   }
   if (!state.apiHost.trim()) {
-    return "请先填写 API Base URL。";
+    return copy.fetchApiHostRequired;
   }
   if (state.apiHost.trim() !== normalizeKnownProviderApiHost(state.apiHost)) {
-    return "检测到你填写的是文档页或旧接口地址，已自动修正 API Base URL，请确认后再获取模型。";
+    return copy.apiHostNormalizedFetch;
   }
   try {
     new URL(state.apiHost.trim());
   } catch {
-    return "请输入有效的 API Base URL。";
+    return copy.apiHostInvalid;
   }
   return null;
 }
 
-function renderTemplateIcon(template: ProviderTemplate) {
+function getTemplateName(
+  template: ProviderTemplate,
+  copy: ModelAddCatalogCopy,
+): string {
+  if (!FEATURED_TEMPLATE_IDS.has(template.id)) {
+    return template.name;
+  }
+  return copy.templateName(template.id, template.name);
+}
+
+function getTemplateDescription(
+  template: ProviderTemplate,
+  copy: ModelAddCatalogCopy,
+): string {
+  if (!FEATURED_TEMPLATE_IDS.has(template.id)) {
+    return template.description;
+  }
+  return copy.templateDescription(template.id, template.description);
+}
+
+function renderTemplateIcon(
+  template: ProviderTemplate,
+  copy: ModelAddCatalogCopy,
+) {
   if (template.isCustom) {
     return <SlidersHorizontal className="h-5 w-5 text-slate-500" />;
   }
@@ -605,41 +698,50 @@ function renderTemplateIcon(template: ProviderTemplate) {
       providerType={
         template.iconProviderId ?? template.systemProviderId ?? template.id
       }
-      fallbackText={template.name}
+      fallbackText={getTemplateName(template, copy)}
       size={24}
     />
   );
 }
 
-function getRegionLabel(region?: ProviderRegion): string | null {
+function getRegionLabel(
+  region: ProviderRegion | undefined,
+  copy: ModelAddCatalogCopy,
+): string | null {
   switch (region) {
     case "cn":
-      return "国内";
+      return copy.badgeRegionCn;
     case "global":
-      return "海外";
+      return copy.badgeRegionGlobal;
     default:
       return null;
   }
 }
 
-function getBillingModeLabel(mode?: ProviderBillingMode): string | null {
+function getBillingModeLabel(
+  mode: ProviderBillingMode | undefined,
+  copy: ModelAddCatalogCopy,
+): string | null {
   switch (mode) {
     case "payg":
-      return "按量 API";
+      return copy.badgeBillingPayg;
     case "coding_plan":
-      return "Coding Plan";
+      return copy.badgeBillingCodingPlan;
     case "subscription":
-      return "订阅套餐";
+      return copy.badgeBillingSubscription;
     default:
       return null;
   }
 }
 
-function renderTemplateBadges(template: ProviderTemplate) {
+function renderTemplateBadges(
+  template: ProviderTemplate,
+  copy: ModelAddCatalogCopy,
+) {
   const badges = [
-    template.recommended ? "推荐" : null,
-    getRegionLabel(template.region),
-    getBillingModeLabel(template.billingMode),
+    template.recommended ? copy.badgeRecommended : null,
+    getRegionLabel(template.region, copy),
+    getBillingModeLabel(template.billingMode, copy),
   ].filter((item): item is string => Boolean(item));
 
   if (badges.length === 0) {
@@ -701,6 +803,7 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
   onCancel,
   className,
 }) => {
+  const { t } = useTranslation("settings");
   const [catalog, setCatalog] = useState<SystemProviderCatalogItem[]>([]);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [category, setCategory] = useState<ModelCatalogCategory>("recommended");
@@ -725,6 +828,106 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
     value: string;
   } | null>(null);
   const { groupedByProvider } = useModelRegistry({ autoLoad: true });
+  const validationCopy = useMemo<ModelAddValidationCopy>(
+    () => ({
+      providerNameRequired: t(
+        "settings.providers.modelAdd.feedback.validation.providerNameRequired",
+        "请填写供应商名称。",
+      ),
+      apiHostRequired: t(
+        "settings.providers.modelAdd.feedback.validation.apiHostRequired",
+        "请填写 API Base URL。",
+      ),
+      apiHostNormalizedActivate: t(
+        "settings.providers.modelAdd.feedback.validation.apiHostNormalizedActivate",
+        "检测到你填写的是文档页或旧接口地址，已自动修正 API Base URL，请确认后再激活。",
+      ),
+      apiHostNormalizedFetch: t(
+        "settings.providers.modelAdd.feedback.validation.apiHostNormalizedFetch",
+        "检测到你填写的是文档页或旧接口地址，已自动修正 API Base URL，请确认后再获取模型。",
+      ),
+      apiHostInvalid: t(
+        "settings.providers.modelAdd.feedback.validation.apiHostInvalid",
+        "请输入有效的 API Base URL。",
+      ),
+      apiKeyRequired: t(
+        "settings.providers.modelAdd.feedback.validation.apiKeyRequired",
+        "请填写 API 密钥。",
+      ),
+      modelRequired: t(
+        "settings.providers.modelAdd.feedback.validation.modelRequired",
+        "请手动添加至少一个模型；保存后也可以在配置页从接口获取模型。",
+      ),
+      fetchProviderNameRequired: t(
+        "settings.providers.modelAdd.feedback.validation.fetchProviderNameRequired",
+        "请先填写供应商名称。",
+      ),
+      fetchApiHostRequired: t(
+        "settings.providers.modelAdd.feedback.validation.fetchApiHostRequired",
+        "请先填写 API Base URL。",
+      ),
+    }),
+    [t],
+  );
+  const catalogCopy = useMemo<ModelAddCatalogCopy>(
+    () => ({
+      apiHostPlaceholder: t(
+        "settings.providers.modelAdd.catalog.apiHostPlaceholder",
+        "按本地配置填写地址",
+      ),
+      registryDescriptionWithApiHost: (apiHost) =>
+        t("settings.providers.modelAdd.catalog.registryDescriptionWithApiHost", {
+          apiHost,
+          defaultValue: "模型目录 · {{apiHost}}",
+        }),
+      registryDescriptionWithoutApiHost: t(
+        "settings.providers.modelAdd.catalog.registryDescriptionWithoutApiHost",
+        "模型目录供应商，按服务文档补充 API Base URL",
+      ),
+      loadErrorDefault: t(
+        "settings.providers.modelAdd.catalog.loadErrorDefault",
+        "读取服务商目录失败",
+      ),
+      templateName: (templateId, fallback) =>
+        t(`settings.providers.modelAdd.catalog.template.${templateId}.name`, {
+          defaultValue: fallback,
+        }),
+      templateDescription: (templateId, fallback) =>
+        t(
+          `settings.providers.modelAdd.catalog.template.${templateId}.description`,
+          { defaultValue: fallback },
+        ),
+      providerTypeLabel: (providerType) =>
+        t(`settings.providers.modelAdd.catalog.providerType.${providerType}`, {
+          defaultValue: getProviderTypeLabel(providerType),
+        }),
+      badgeRecommended: t(
+        "settings.providers.modelAdd.catalog.badge.recommended",
+        "推荐",
+      ),
+      badgeRegionCn: t(
+        "settings.providers.modelAdd.catalog.badge.region.cn",
+        "国内",
+      ),
+      badgeRegionGlobal: t(
+        "settings.providers.modelAdd.catalog.badge.region.global",
+        "海外",
+      ),
+      badgeBillingPayg: t(
+        "settings.providers.modelAdd.catalog.badge.billing.payg",
+        "按量 API",
+      ),
+      badgeBillingCodingPlan: t(
+        "settings.providers.modelAdd.catalog.badge.billing.codingPlan",
+        "Coding Plan",
+      ),
+      badgeBillingSubscription: t(
+        "settings.providers.modelAdd.catalog.badge.billing.subscription",
+        "订阅套餐",
+      ),
+    }),
+    [t],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -740,7 +943,7 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
         if (!cancelled) {
           setCatalog([]);
           setCatalogError(
-            error instanceof Error ? error.message : "读取服务商目录失败",
+            error instanceof Error ? error.message : catalogCopy.loadErrorDefault,
           );
         }
       }
@@ -749,13 +952,14 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [catalogCopy.loadErrorDefault]);
 
   const templates = useMemo(() => {
-    const catalogTemplates = buildCatalogTemplates(catalog);
+    const catalogTemplates = buildCatalogTemplates(catalog, catalogCopy);
     const registryTemplates = buildRegistryTemplates(
       groupedByProvider,
       catalogTemplates,
+      catalogCopy,
     );
 
     return dedupeTemplates([
@@ -763,7 +967,7 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
       ...catalogTemplates,
       ...registryTemplates,
     ]);
-  }, [catalog, groupedByProvider]);
+  }, [catalog, catalogCopy, groupedByProvider]);
 
   const visibleTemplates = useMemo(() => {
     if (category === "recommended") {
@@ -778,18 +982,23 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
     return map;
   }, [providers]);
 
-  const selectTemplate = useCallback((template: ProviderTemplate) => {
-    setSelectedTemplate(template);
-    setFormState(createInitialFormState(template));
-    setModelDraft("");
-    setSubmitError(null);
-    setModelFetchStatus(null);
-    setApiModelIds([]);
-    setApiModelQuery("");
-    setDraftProviderId(null);
-    setPersistedApiKey(null);
-    setView("configure");
-  }, []);
+  const selectTemplate = useCallback(
+    (template: ProviderTemplate) => {
+      setSelectedTemplate(template);
+      setFormState(
+        createInitialFormState(template, getTemplateName(template, catalogCopy)),
+      );
+      setModelDraft("");
+      setSubmitError(null);
+      setModelFetchStatus(null);
+      setApiModelIds([]);
+      setApiModelQuery("");
+      setDraftProviderId(null);
+      setPersistedApiKey(null);
+      setView("configure");
+    },
+    [catalogCopy],
+  );
 
   const addModelDraft = useCallback(() => {
     const nextModels = dedupeModelIds(
@@ -885,6 +1094,58 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
     (!modelFetchApiKeyRequired ||
       hasConfiguredApiKey(configuredProvider) ||
       formState.apiKey.trim().length > 0);
+  const modelFetchUnsupportedMessage = useMemo(() => {
+    switch (formState.type) {
+      case "azure-openai":
+        return t(
+          "settings.providers.modelAdd.feedback.modelFetch.unsupported.azureOpenai",
+          "Azure OpenAI 的模型枚举仍需单独适配资源端点与 API Version，当前不展示自动获取入口。",
+        );
+      case "vertexai":
+        return t(
+          "settings.providers.modelAdd.feedback.modelFetch.unsupported.vertexAi",
+          "Vertex AI 需要单独的云端认证与项目上下文，当前不展示自动获取入口。",
+        );
+      case "aws-bedrock":
+        return t(
+          "settings.providers.modelAdd.feedback.modelFetch.unsupported.awsBedrock",
+          "AWS Bedrock 需要专门的云凭证签名流程，当前不展示自动获取入口。",
+        );
+      default:
+        return t(
+          "settings.providers.modelAdd.feedback.modelFetch.unsupported.default",
+          "当前协议暂不支持自动获取最新模型，请手动添加模型 ID。",
+        );
+    }
+  }, [formState.type, t]);
+  const modelFetchStatusCopy = useMemo<ProviderModelFetchStatusCopy>(
+    () => ({
+      responsesConfirmedImage: (imageModel) =>
+        t(
+          "settings.providers.modelAdd.feedback.modelFetch.responses.confirmedImage",
+          {
+            imageModel,
+            defaultValue:
+              "已确认 Responses 图片模型 {{imageModel}}，该入口无需标准 /models 枚举，图片生成会走 Responses image_generation。",
+          },
+        ),
+      responsesManualImage: t(
+        "settings.providers.modelAdd.feedback.modelFetch.responses.manualImage",
+        "该 Responses 图片入口不提供标准 /models 枚举；请手动添加 gpt-images-2 或 gpt-image-2，图片生成会走 Responses image_generation。",
+      ),
+      falConfirmedModel: (modelId) =>
+        t("settings.providers.modelAdd.feedback.modelFetch.fal.confirmedModel", {
+          modelId,
+          defaultValue:
+            "已确认 Fal 模型 {{modelId}}，Fal 不提供标准 /models 枚举，后续会使用手动声明的模型 ID。",
+        }),
+      falManualModel: t(
+        "settings.providers.modelAdd.feedback.modelFetch.fal.manualModel",
+        "Fal 不提供标准 /models 枚举；当前模型优先级没有可用 Fal 图片模型，请手动添加 fal-ai/nano-banana-pro、fal-ai/flux-pro 或其他 fal-ai/... 模型 ID。",
+      ),
+    }),
+    [t],
+  );
   const normalizedModelSet = useMemo(
     () => new Set(formState.models.map((model) => model.toLowerCase())),
     [formState.models],
@@ -994,7 +1255,10 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
       }));
     }
 
-    const validationError = validateModelFetchForm(normalizedFormState);
+    const validationError = validateModelFetchForm(
+      normalizedFormState,
+      validationCopy,
+    );
     if (validationError) {
       setModelFetchStatus({ tone: "error", message: validationError });
       return;
@@ -1003,9 +1267,7 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
     if (!modelAutoFetchCapability.supported) {
       setModelFetchStatus({
         tone: "info",
-        message:
-          modelAutoFetchCapability.unsupportedReason ??
-          "当前协议不支持接口获取模型，请手动添加模型 ID。",
+        message: modelFetchUnsupportedMessage,
       });
       return;
     }
@@ -1014,8 +1276,14 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
       setModelFetchStatus({
         tone: "error",
         message: modelFetchApiKeyRequired
-          ? "请先填写 API 密钥，再从接口获取模型。"
-          : "请先补全 API Base URL，再从接口获取模型。",
+          ? t(
+              "settings.providers.modelAdd.feedback.modelFetch.needApiKey",
+              "请先填写 API 密钥，再从接口获取模型。",
+            )
+          : t(
+              "settings.providers.modelAdd.feedback.modelFetch.needApiHost",
+              "请先补全 API Base URL，再从接口获取模型。",
+            ),
       });
       return;
     }
@@ -1035,11 +1303,13 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
         const responsesStatus = buildResponsesModelFetchStatus(
           result,
           normalizedFormState.models,
+          modelFetchStatusCopy,
         );
         const falStatus = buildFalModelFetchStatus(
           modelFetchProfile,
           result,
           normalizedFormState.models,
+          modelFetchStatusCopy,
         );
         setModelFetchStatus({
           tone:
@@ -1050,8 +1320,15 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
             responsesStatus?.message ??
             falStatus?.message ??
             (source === "Error"
-              ? (result.error ?? "接口获取模型失败。请手动添加模型 ID。")
-              : "接口没有返回实时模型列表。请手动添加模型 ID。"),
+              ? (result.error ??
+                t(
+                  "settings.providers.modelAdd.feedback.modelFetch.errorWithManualFallback",
+                  "接口获取模型失败。请手动添加模型 ID。",
+                ))
+              : t(
+                  "settings.providers.modelAdd.feedback.modelFetch.emptyRealtime",
+                  "接口没有返回实时模型列表。请手动添加模型 ID。",
+                )),
         });
         return;
       }
@@ -1065,8 +1342,14 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
         setModelFetchStatus({
           tone: "info",
           message: isFalProviderLike(modelFetchProfile)
-            ? "Fal 不提供标准 /models 枚举；当前没有可用 Fal 图片模型，请手动添加 fal-ai/nano-banana-pro、fal-ai/flux-pro 或其他 fal-ai/... 模型 ID。"
-            : "接口已响应，但没有返回可添加的模型 ID。请手动添加模型。",
+            ? t(
+                "settings.providers.modelAdd.feedback.modelFetch.emptyFal",
+                "Fal 不提供标准 /models 枚举；当前没有可用 Fal 图片模型，请手动添加 fal-ai/nano-banana-pro、fal-ai/flux-pro 或其他 fal-ai/... 模型 ID。",
+              )
+            : t(
+                "settings.providers.modelAdd.feedback.modelFetch.empty",
+                "接口已响应，但没有返回可添加的模型 ID。请手动添加模型。",
+              ),
         });
         return;
       }
@@ -1083,7 +1366,14 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
         addFetchedModels(effectiveFetchedModelIds);
         setModelFetchStatus({
           tone: "success",
-          message: `接口返回 ${effectiveFetchedModelIds.length} 个模型，已自动加入模型优先级。`,
+          message: t(
+            "settings.providers.modelAdd.feedback.modelFetch.autoFilled",
+            {
+              count: effectiveFetchedModelIds.length,
+              defaultValue:
+                "接口返回 {{count}} 个模型，已自动加入模型优先级。",
+            },
+          ),
         });
         return;
       }
@@ -1091,19 +1381,36 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
       if (existingFetchedModelCount === effectiveFetchedModelIds.length) {
         setModelFetchStatus({
           tone: "success",
-          message: `已确认 ${effectiveFetchedModelIds.length} 个模型，当前模型优先级已包含全部结果。`,
+          message: t(
+            "settings.providers.modelAdd.feedback.modelFetch.confirmedAll",
+            {
+              count: effectiveFetchedModelIds.length,
+              defaultValue:
+                "已确认 {{count}} 个模型，当前模型优先级已包含全部结果。",
+            },
+          ),
         });
         return;
       }
 
       setModelFetchStatus({
         tone: "success",
-        message: `接口返回 ${effectiveFetchedModelIds.length} 个模型，点击下方模型即可加入优先级。`,
+        message: t("settings.providers.modelAdd.feedback.modelFetch.fetched", {
+          count: effectiveFetchedModelIds.length,
+          defaultValue:
+            "接口返回 {{count}} 个模型，点击下方模型即可加入优先级。",
+        }),
       });
     } catch (error) {
       setModelFetchStatus({
         tone: "error",
-        message: error instanceof Error ? error.message : "接口获取模型失败",
+        message:
+          error instanceof Error
+            ? error.message
+            : t(
+                "settings.providers.modelAdd.feedback.modelFetch.errorDefault",
+                "接口获取模型失败",
+              ),
       });
     } finally {
       setFetchingModels(false);
@@ -1112,12 +1419,15 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
     addFetchedModels,
     canReadModelsFromApi,
     formState,
+    modelFetchStatusCopy,
+    modelFetchUnsupportedMessage,
     modelAutoFetchCapability.supported,
-    modelAutoFetchCapability.unsupportedReason,
     modelFetchApiKeyRequired,
     modelFetchProfile,
     normalizedModelSet,
     persistProviderForModelFetch,
+    t,
+    validationCopy,
   ]);
 
   const activateProvider = useCallback(async () => {
@@ -1132,7 +1442,7 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
       }));
     }
 
-    const validationError = validateForm(normalizedFormState);
+    const validationError = validateForm(normalizedFormState, validationCopy);
     if (validationError) {
       setSubmitError(validationError);
       return;
@@ -1203,7 +1513,12 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
       onActivated(providerId);
     } catch (error) {
       setSubmitError(
-        error instanceof Error ? error.message : "测试连接并激活失败",
+        error instanceof Error
+          ? error.message
+          : t(
+              "settings.providers.modelAdd.feedback.submit.errorDefault",
+              "测试连接并激活失败",
+            ),
       );
     } finally {
       setSubmitting(false);
@@ -1217,7 +1532,9 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
     onAddProvider,
     onUpdateProvider,
     persistedApiKey,
+    t,
     template.systemProviderId,
+    validationCopy,
   ]);
 
   if (view === "catalog") {
@@ -1243,14 +1560,17 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
               )}
               data-testid={`model-catalog-category-${option.value}`}
             >
-              {option.label}
+              {t(option.labelKey, option.labelFallback)}
             </button>
           ))}
         </div>
 
         {catalogError ? (
           <div className="mb-4 rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            {catalogError}，已先展示内置推荐服务。
+            {t("settings.providers.modelAdd.catalog.errorFallback", {
+              error: catalogError,
+              defaultValue: "{{error}}，已先展示内置推荐服务。",
+            })}
           </div>
         ) : null}
 
@@ -1269,17 +1589,17 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
             >
               <div className="flex items-start gap-3">
                 <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-slate-50">
-                  {renderTemplateIcon(template)}
+                  {renderTemplateIcon(template, catalogCopy)}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
                     <span className="min-w-0 truncate text-sm font-semibold text-slate-900">
-                      {template.name}
+                      {getTemplateName(template, catalogCopy)}
                     </span>
-                    {renderTemplateBadges(template)}
+                    {renderTemplateBadges(template, catalogCopy)}
                   </span>
                   <span className="mt-1 block text-sm leading-5 text-slate-500">
-                    {template.description}
+                    {getTemplateDescription(template, catalogCopy)}
                   </span>
                 </span>
               </div>
@@ -1298,10 +1618,16 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
               </span>
               <span>
                 <span className="block text-sm font-semibold text-slate-900">
-                  自定义供应商
+                  {t(
+                    "settings.providers.modelAdd.catalog.custom.title",
+                    "自定义供应商",
+                  )}
                 </span>
                 <span className="mt-1 block text-sm leading-5 text-slate-500">
-                  配置自定义 API 兼容的供应商
+                  {t(
+                    "settings.providers.modelAdd.catalog.custom.description",
+                    "配置自定义 API 兼容的供应商",
+                  )}
                 </span>
               </span>
             </div>
@@ -1333,7 +1659,7 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
           data-testid="model-add-back-button"
         >
           <ArrowLeft className="h-4 w-4" />
-          返回列表
+          {t("settings.providers.modelAdd.action.backToCatalog", "返回列表")}
         </button>
       </div>
 
@@ -1341,17 +1667,25 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <span className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-slate-50">
-              {renderTemplateIcon(template)}
+              {renderTemplateIcon(template, catalogCopy)}
             </span>
             <div className="min-w-0">
               <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
                 <h3 className="min-w-0 truncate text-lg font-semibold text-slate-900">
-                  {template.isCustom ? "自定义供应商" : `配置 ${template.name}`}
+                  {template.isCustom
+                    ? t(
+                        "settings.providers.modelAdd.catalog.custom.title",
+                        "自定义供应商",
+                      )
+                    : t("settings.providers.modelAdd.configure.title", {
+                        providerName: getTemplateName(template, catalogCopy),
+                        defaultValue: "配置 {{providerName}}",
+                      })}
                 </h3>
-                {renderTemplateBadges(template)}
+                {renderTemplateBadges(template, catalogCopy)}
               </div>
               <p className="mt-1 text-sm text-slate-500">
-                {template.description}
+                {getTemplateDescription(template, catalogCopy)}
               </p>
             </div>
           </div>
@@ -1363,7 +1697,10 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
               className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700 hover:text-emerald-800"
               data-testid="provider-api-key-link"
             >
-              去获取 API 密钥
+              {t(
+                "settings.providers.modelAdd.action.getApiKey",
+                "去获取 API 密钥",
+              )}
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
           ) : null}
@@ -1377,7 +1714,10 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
                   htmlFor="model-provider-name"
                   className="text-sm text-slate-600"
                 >
-                  供应商名称
+                  {t(
+                    "settings.providers.modelAdd.form.providerName.label",
+                    "供应商名称",
+                  )}
                 </Label>
                 <Input
                   id="model-provider-name"
@@ -1388,7 +1728,10 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
                       name: event.target.value,
                     }))
                   }
-                  placeholder="例如：My API Provider"
+                  placeholder={t(
+                    "settings.providers.modelAdd.form.providerName.placeholder",
+                    "例如：My API Provider",
+                  )}
                   className="h-12 rounded-[18px] border-slate-200 bg-white px-4"
                   disabled={submitting}
                   data-testid="model-provider-name-input"
@@ -1425,13 +1768,27 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-sm text-slate-600">API 格式</Label>
+                <Label className="text-sm text-slate-600">
+                  {t(
+                    "settings.providers.modelAdd.form.apiFormat.label",
+                    "API 格式",
+                  )}
+                </Label>
                 <div className="grid rounded-full bg-slate-100 p-1 sm:grid-cols-2">
                   {[
-                    { type: "openai" as ProviderType, label: "OpenAI 格式" },
+                    {
+                      type: "openai" as ProviderType,
+                      label: t(
+                        "settings.providers.modelAdd.form.apiFormat.openai",
+                        "OpenAI 格式",
+                      ),
+                    },
                     {
                       type: "anthropic-compatible" as ProviderType,
-                      label: "Anthropic 格式",
+                      label: t(
+                        "settings.providers.modelAdd.form.apiFormat.anthropic",
+                        "Anthropic 格式",
+                      ),
                     },
                   ].map((option) => (
                     <button
@@ -1505,10 +1862,13 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
               <div className="rounded-[18px] border border-slate-200/80 bg-slate-50 px-4 py-3">
                 <div className="flex items-center gap-2 text-xs text-slate-500">
                   <ServerCog className="h-3.5 w-3.5" />
-                  API 格式
+                  {t(
+                    "settings.providers.modelAdd.form.apiFormat.label",
+                    "API 格式",
+                  )}
                 </div>
                 <p className="mt-2 text-sm font-medium text-slate-900">
-                  {getProviderTypeLabel(formState.type)}
+                  {catalogCopy.providerTypeLabel(formState.type)}
                 </p>
               </div>
             </div>
@@ -1516,7 +1876,15 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
 
           <div className="space-y-1.5">
             <Label htmlFor="model-api-key" className="text-sm text-slate-600">
-              API 密钥{apiKeyRequired ? "" : "（可选）"}
+              {apiKeyRequired
+                ? t(
+                    "settings.providers.modelAdd.form.apiKey.label",
+                    "API 密钥",
+                  )
+                : t(
+                    "settings.providers.modelAdd.form.apiKey.optionalLabel",
+                    "API 密钥（可选）",
+                  )}
             </Label>
             <div className="relative">
               <Input
@@ -1530,7 +1898,15 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
                   }))
                 }
                 placeholder={
-                  apiKeyRequired ? "输入 API 密钥" : "本地模型可留空"
+                  apiKeyRequired
+                    ? t(
+                        "settings.providers.modelAdd.form.apiKey.placeholder",
+                        "输入 API 密钥",
+                      )
+                    : t(
+                        "settings.providers.modelAdd.form.apiKey.optionalPlaceholder",
+                        "本地模型可留空",
+                      )
                 }
                 className="h-12 rounded-[18px] border-slate-200 bg-white px-4 pr-11"
                 disabled={submitting}
@@ -1540,7 +1916,10 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
                 type="button"
                 onClick={() => setShowApiKey((previous) => !previous)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-700"
-                aria-label="显示或隐藏 API 密钥"
+                aria-label={t(
+                  "settings.providers.modelAdd.form.apiKey.toggleVisibility",
+                  "显示或隐藏 API 密钥",
+                )}
               >
                 <Eye className="h-4 w-4" />
               </button>
@@ -1551,10 +1930,16 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <Label className="text-sm text-slate-600">
-                  模型优先级（至少添加一个）
+                  {t(
+                    "settings.providers.modelAdd.models.title",
+                    "模型优先级（至少添加一个）",
+                  )}
                 </Label>
                 <p className="mt-1 text-xs leading-5 text-slate-500">
-                  只使用接口返回或你手动添加的模型，不再显示本地兜底模型。
+                  {t(
+                    "settings.providers.modelAdd.models.description",
+                    "只使用接口返回或你手动添加的模型，不再显示本地兜底模型。",
+                  )}
                 </p>
               </div>
               <Button
@@ -1573,7 +1958,10 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
                 ) : (
                   <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
                 )}
-                从接口获取
+                {t(
+                  "settings.providers.modelAdd.models.action.fetch",
+                  "从接口获取",
+                )}
               </Button>
             </div>
 
@@ -1604,14 +1992,24 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
               >
                 <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="text-xs font-medium text-slate-500">
-                    接口模型（显示 {suggestedApiModels.length} /{" "}
-                    {availableApiModels.length} 个，点击添加）
+                    {t(
+                      "settings.providers.modelAdd.models.apiSuggestions",
+                      {
+                        visible: suggestedApiModels.length,
+                        total: availableApiModels.length,
+                        defaultValue:
+                          "接口模型（显示 {{visible}} / {{total}} 个，点击添加）",
+                      },
+                    )}
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                     <Input
                       value={apiModelQuery}
                       onChange={(event) => setApiModelQuery(event.target.value)}
-                      placeholder="筛选接口模型"
+                      placeholder={t(
+                        "settings.providers.modelAdd.models.filterPlaceholder",
+                        "筛选接口模型",
+                      )}
                       className="h-8 rounded-full border-slate-200 bg-white px-3 text-xs normal-case sm:w-[220px]"
                       autoCapitalize="none"
                       autoCorrect="off"
@@ -1627,7 +2025,10 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
                       disabled={suggestedApiModels.length === 0}
                       data-testid="api-model-add-all-button"
                     >
-                      添加全部
+                      {t(
+                        "settings.providers.modelAdd.models.action.addAll",
+                        "添加全部",
+                      )}
                     </Button>
                   </div>
                 </div>
@@ -1653,7 +2054,10 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
                     </div>
                   ) : (
                     <div className="rounded-[14px] border border-dashed border-slate-200 bg-white px-3 py-4 text-center text-xs text-slate-500">
-                      没有匹配的接口模型。
+                      {t(
+                        "settings.providers.modelAdd.models.noApiMatches",
+                        "没有匹配的接口模型。",
+                      )}
                     </div>
                   )}
                 </div>
@@ -1674,7 +2078,10 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
                       <span className="text-slate-400">::</span>
                       {index === 0 ? (
                         <Badge className="border border-amber-200 bg-amber-50 px-2 py-0 text-[11px] text-amber-700 hover:bg-amber-50">
-                          主模型
+                          {t(
+                            "settings.providers.modelAdd.models.primaryBadge",
+                            "主模型",
+                          )}
                         </Badge>
                       ) : null}
                       <span className="min-w-0 flex-1 truncate normal-case">
@@ -1686,7 +2093,10 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
                           onClick={() => setMainModel(model)}
                           className="text-xs font-medium text-slate-500 hover:text-slate-900"
                         >
-                          设为主模型
+                          {t(
+                            "settings.providers.modelAdd.models.action.setPrimary",
+                            "设为主模型",
+                          )}
                         </button>
                       ) : null}
                       <button
@@ -1694,7 +2104,10 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
                         onClick={() => removeModel(model)}
                         className="text-xs font-medium text-slate-400 hover:text-rose-600"
                       >
-                        移除
+                        {t(
+                          "settings.providers.modelAdd.models.action.remove",
+                          "移除",
+                        )}
                       </button>
                     </div>
                   ))}
@@ -1711,7 +2124,10 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
                       addModelDraft();
                     }
                   }}
-                  placeholder="输入模型 ID，按 Enter 添加"
+                  placeholder={t(
+                    "settings.providers.modelAdd.models.draftPlaceholder",
+                    "输入模型 ID，按 Enter 添加",
+                  )}
                   className="h-11 rounded-[16px] border-slate-200 bg-white px-4 normal-case"
                   disabled={submitting}
                   data-testid="model-draft-input"
@@ -1725,7 +2141,10 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
                   data-testid="model-draft-add-button"
                 >
                   <Plus className="mr-1 h-4 w-4" />
-                  添加模型
+                  {t(
+                    "settings.providers.modelAdd.models.action.add",
+                    "添加模型",
+                  )}
                 </Button>
               </div>
             </div>
@@ -1750,11 +2169,17 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
             data-testid="model-activate-button"
           >
             {submitting ? (
-              "正在测试连接..."
+              t(
+                "settings.providers.modelAdd.action.testingConnection",
+                "正在测试连接...",
+              )
             ) : (
               <>
                 <Zap className="mr-2 h-4 w-4" />
-                保存并测试
+                {t(
+                  "settings.providers.modelAdd.action.saveAndTest",
+                  "保存并测试",
+                )}
               </>
             )}
           </Button>
@@ -1768,7 +2193,7 @@ export const ModelAddPanel: React.FC<ModelAddPanelProps> = ({
         data-testid="model-add-cancel-button"
       >
         <Check className="h-4 w-4" />
-        完成添加
+        {t("settings.providers.modelAdd.action.finish", "完成添加")}
       </button>
     </div>
   );

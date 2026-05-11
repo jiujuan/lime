@@ -44,6 +44,31 @@ vi.mock("sonner", () => ({
   },
 }));
 
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    i18n: { language: "zh-CN" },
+    t: (
+      key: string,
+      defaultValueOrOptions?:
+        | string
+        | ({ defaultValue?: string } & Record<string, unknown>),
+    ) => {
+      if (typeof defaultValueOrOptions === "string") {
+        return defaultValueOrOptions;
+      }
+
+      if (
+        defaultValueOrOptions &&
+        typeof defaultValueOrOptions.defaultValue === "string"
+      ) {
+        return defaultValueOrOptions.defaultValue;
+      }
+
+      return key;
+    },
+  }),
+}));
+
 beforeEach(() => {
   (
     globalThis as typeof globalThis & {

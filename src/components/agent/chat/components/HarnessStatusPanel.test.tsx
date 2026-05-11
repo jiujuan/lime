@@ -847,8 +847,14 @@ describe("HarnessStatusPanel", () => {
     expect(document.body.textContent).toContain("Artifact");
     expect(document.body.textContent).toContain("Evidence");
     expect(document.body.textContent).toContain("Diagnostics");
+    expect(document.body.textContent).toContain("队列更新");
+    expect(document.body.textContent).toContain("产物快照");
+    expect(document.body.textContent).toContain("运行状态");
     expect(document.body.textContent).toContain("steer_intent");
     expect(document.body.textContent).toContain("gaps_present");
+    expect(document.body.textContent).not.toContain("queue_added");
+    expect(document.body.textContent).not.toContain("artifact_snapshot");
+    expect(document.body.textContent).not.toContain("runtime_status");
     expect(document.body.textContent).not.toContain("other session marker");
   });
 

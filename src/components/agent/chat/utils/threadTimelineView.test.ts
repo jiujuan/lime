@@ -8,6 +8,144 @@ import {
 } from "./threadTimelineView";
 
 describe("threadTimelineView", () => {
+  it("应优先使用 assistant 消息上的 runtimeTurnId 精确绑定执行过程", () => {
+    const messages: Message[] = [
+      {
+        id: "user-1",
+        role: "user",
+        content: "第一次",
+        timestamp: new Date("2026-03-13T10:00:00Z"),
+      },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        content: "余额不足",
+        timestamp: new Date("2026-03-13T10:00:01Z"),
+        runtimeTurnId: "turn-1",
+      },
+      {
+        id: "user-2",
+        role: "user",
+        content: "继续",
+        timestamp: new Date("2026-03-13T10:01:00Z"),
+      },
+      {
+        id: "assistant-2",
+        role: "assistant",
+        content: "继续执行",
+        timestamp: new Date("2026-03-13T10:01:01Z"),
+        runtimeTurnId: "turn-2",
+      },
+    ];
+    const turns: AgentThreadTurn[] = [
+      {
+        id: "turn-1",
+        thread_id: "thread-1",
+        prompt_text: "第一次",
+        status: "failed",
+        started_at: "2026-03-13T10:00:00Z",
+        completed_at: "2026-03-13T10:00:02Z",
+        created_at: "2026-03-13T10:00:00Z",
+        updated_at: "2026-03-13T10:00:02Z",
+      },
+      {
+        id: "turn-2",
+        thread_id: "thread-1",
+        prompt_text: "继续",
+        status: "running",
+        started_at: "2026-03-13T10:01:00Z",
+        created_at: "2026-03-13T10:01:00Z",
+        updated_at: "2026-03-13T10:01:02Z",
+      },
+    ];
+    const items: AgentThreadItem[] = [
+      {
+        id: "error-1",
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        sequence: 1,
+        status: "failed",
+        started_at: "2026-03-13T10:00:01Z",
+        updated_at: "2026-03-13T10:00:02Z",
+        type: "error",
+        message: "402 Payment Required",
+      },
+      {
+        id: "process-2",
+        thread_id: "thread-1",
+        turn_id: "turn-2",
+        sequence: 1,
+        status: "in_progress",
+        started_at: "2026-03-13T10:01:01Z",
+        updated_at: "2026-03-13T10:01:02Z",
+        type: "reasoning",
+        text: "继续处理",
+      },
+    ];
+
+    const timeline = buildMessageTurnTimeline(messages, turns, items);
+
+    expect(timeline.get("assistant-1")?.turn.id).toBe("turn-1");
+    expect(timeline.get("assistant-1")?.items).toEqual([
+      expect.objectContaining({ id: "error-1" }),
+    ]);
+    expect(timeline.get("assistant-2")?.turn.id).toBe("turn-2");
+    expect(timeline.get("assistant-2")?.items).toEqual([
+      expect.objectContaining({ id: "process-2" }),
+    ]);
+  });
+
+  it("按时间兜底时不应把新回合执行过程跨到上一轮 assistant", () => {
+    const messages: Message[] = [
+      {
+        id: "user-1",
+        role: "user",
+        content: "第一次",
+        timestamp: new Date("2026-03-13T10:00:00Z"),
+      },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        content: "余额不足",
+        timestamp: new Date("2026-03-13T10:00:01Z"),
+      },
+      {
+        id: "user-2",
+        role: "user",
+        content: "继续",
+        timestamp: new Date("2026-03-13T10:01:00Z"),
+      },
+    ];
+    const turns: AgentThreadTurn[] = [
+      {
+        id: "turn-2",
+        thread_id: "thread-1",
+        prompt_text: "继续",
+        status: "running",
+        started_at: "2026-03-13T10:01:00Z",
+        created_at: "2026-03-13T10:01:00Z",
+        updated_at: "2026-03-13T10:01:02Z",
+      },
+    ];
+    const items: AgentThreadItem[] = [
+      {
+        id: "process-2",
+        thread_id: "thread-1",
+        turn_id: "turn-2",
+        sequence: 1,
+        status: "in_progress",
+        started_at: "2026-03-13T10:01:01Z",
+        updated_at: "2026-03-13T10:01:02Z",
+        type: "reasoning",
+        text: "继续处理",
+      },
+    ];
+
+    const timeline = buildMessageTurnTimeline(messages, turns, items);
+
+    expect(timeline.has("assistant-1")).toBe(false);
+  });
+
   it("应将 turn 对齐到最近的 assistant 消息", () => {
     const messages: Message[] = [
       {

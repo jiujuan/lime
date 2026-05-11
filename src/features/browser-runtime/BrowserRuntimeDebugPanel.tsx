@@ -7,6 +7,7 @@ import {
   type MouseEvent,
   type WheelEvent,
 } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Bug,
   ExternalLink,
@@ -17,6 +18,7 @@ import {
   RefreshCw,
   Send,
 } from "lucide-react";
+import { formatNumber } from "@/i18n/format";
 import type {
   BrowserRuntimeAuditRecord,
   ChromeProfileSessionInfo,
@@ -24,7 +26,10 @@ import type {
 import { browserRuntimeApi } from "./api";
 import { BrowserSiteAdapterPanel } from "./BrowserSiteAdapterPanel";
 import { getExistingSessionTabLabel } from "./existingSessionBridge";
-import { useExistingSessionAttachPanel } from "./useExistingSessionAttachPanel";
+import {
+  useExistingSessionAttachPanel,
+  type ExistingSessionAttachPanelCopy,
+} from "./useExistingSessionAttachPanel";
 import { useBrowserRuntimeDebug } from "./useBrowserRuntimeDebug";
 
 interface BrowserRuntimeDebugPanelProps {
@@ -37,6 +42,32 @@ interface BrowserRuntimeDebugPanelProps {
   initialTargetId?: string;
   embedded?: boolean;
 }
+
+type BrowserRuntimeStatusCopy = {
+  agentResumingDescription: string;
+  agentResumingLabel: string;
+  closedDescription: string;
+  closedLabel: string;
+  connectingDescription: string;
+  connectingLabel: string;
+  disconnectedDescription: string;
+  disconnectedLabel: string;
+  failedDescription: string;
+  failedLabel: string;
+  humanControllingDescription: string;
+  humanControllingLabel: string;
+  runningDescription: string;
+  runningLabel: string;
+  waitingForHumanDescription: string;
+  waitingForHumanLabel: string;
+};
+
+type LiveViewPlaceholderCopy = {
+  connecting: string;
+  launching: string;
+  noSession: string;
+  waitingFrame: string;
+};
 
 function formatEventSubtitle(event: {
   type: string;
@@ -64,66 +95,67 @@ function resolveSessionStatus(
     human_reason?: string;
     last_error?: string;
   } | null,
+  copy: BrowserRuntimeStatusCopy,
 ) {
   if (!sessionState) {
     return {
-      label: "未连接",
+      label: copy.disconnectedLabel,
       toneClass: "border-border/70 bg-muted/40 text-muted-foreground",
-      description: "还没有附着到浏览器实时会话。",
+      description: copy.disconnectedDescription,
     };
   }
 
   switch (sessionState.lifecycle_state) {
     case "human_controlling":
       return {
-        label: "你正在接管",
+        label: copy.humanControllingLabel,
         toneClass:
           "border-amber-300/70 bg-amber-50 text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-200",
         description:
-          sessionState.human_reason || "当前画布已切换为人工处理模式。",
+          sessionState.human_reason || copy.humanControllingDescription,
       };
     case "waiting_for_human":
       return {
-        label: "等待你处理",
+        label: copy.waitingForHumanLabel,
         toneClass:
           "border-orange-300/70 bg-orange-50 text-orange-800 dark:border-orange-800/70 dark:bg-orange-950/30 dark:text-orange-200",
         description:
-          sessionState.human_reason || "Agent 已停在当前页面，等待你介入处理。",
+          sessionState.human_reason || copy.waitingForHumanDescription,
       };
     case "agent_resuming":
       return {
-        label: "恢复中",
+        label: copy.agentResumingLabel,
         toneClass:
           "border-sky-300/70 bg-sky-50 text-sky-800 dark:border-sky-800/70 dark:bg-sky-950/30 dark:text-sky-200",
-        description:
-          sessionState.human_reason || "浏览器会话正在交回给 Agent。",
+        description: sessionState.human_reason || copy.agentResumingDescription,
       };
     case "failed":
       return {
-        label: "会话失败",
+        label: copy.failedLabel,
         toneClass: "border-destructive/60 bg-destructive/10 text-destructive",
-        description:
-          sessionState.last_error || "浏览器连接已异常中断，请刷新或重新连接。",
+        description: sessionState.last_error || copy.failedDescription,
       };
     case "closed":
       return {
-        label: "已关闭",
+        label: copy.closedLabel,
         toneClass: "border-border/70 bg-muted/40 text-muted-foreground",
-        description: "实时会话已经关闭。",
+        description: copy.closedDescription,
       };
     case "launching":
       return {
-        label: "连接中",
+        label: copy.connectingLabel,
         toneClass:
           "border-sky-300/70 bg-sky-50 text-sky-800 dark:border-sky-800/70 dark:bg-sky-950/30 dark:text-sky-200",
-        description: "浏览器实时会话正在建立连接。",
+        description: copy.connectingDescription,
       };
     default:
       return {
-        label: sessionState.connected ? "执行中" : "未连接",
+        label: sessionState.connected
+          ? copy.runningLabel
+          : copy.disconnectedLabel,
         toneClass:
           "border-emerald-300/70 bg-emerald-50 text-emerald-800 dark:border-emerald-800/70 dark:bg-emerald-950/30 dark:text-emerald-200",
-        description: "Agent 正在当前浏览器会话中执行任务。",
+        description: copy.runningDescription,
       };
   }
 }
@@ -181,7 +213,8 @@ function resolveLiveViewPlaceholder(params: {
     connected: boolean;
     lifecycle_state: string;
   } | null;
-}) {
+},
+copy: LiveViewPlaceholderCopy) {
   const {
     sessionCount,
     hasAttachIntent,
@@ -191,18 +224,22 @@ function resolveLiveViewPlaceholder(params: {
   } = params;
 
   if (sessionCount === 0 && !hasAttachIntent) {
-    return "还没有运行中的浏览器会话。请先在通用对话里启动浏览器协助。";
+    return copy.noSession;
   }
 
   if (openingSession || refreshingState) {
-    return "正在启动 Chrome、连接调试通道，通常需要 3–8 秒。";
+    return copy.launching;
   }
 
   if (sessionState) {
-    return "已连接浏览器，正在等待首帧画面。若超过 10 秒仍无画面，可点击“恢复画面”或刷新会话。";
+    return copy.waitingFrame;
   }
 
-  return "正在连接浏览器会话...";
+  return copy.connecting;
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function summarizePageMarkdown(markdown: string, maxLines = 6) {
@@ -226,19 +263,34 @@ function formatAuditTime(value: string) {
   return time.replace("Z", "").slice(0, 8);
 }
 
-function describeAuditRecord(record: BrowserRuntimeAuditRecord) {
+type AuditRecordCopy = {
+  actionAudit: string;
+  actionTitle: (action: string) => string;
+  attempts: (value: string) => string;
+  launchFailure: string;
+  launchSuccess: string;
+  newSession: string;
+  profileMissing: string;
+  reusedSession: string;
+  targetMissing: string;
+};
+
+function describeAuditRecord(
+  record: BrowserRuntimeAuditRecord,
+  copy: AuditRecordCopy,
+) {
   if (record.kind === "launch") {
     return {
-      title: record.success ? "启动成功" : "启动失败",
+      title: record.success ? copy.launchSuccess : copy.launchFailure,
       subject:
-        record.url || record.session_id || record.target_id || "未记录目标",
+        record.url || record.session_id || record.target_id || copy.targetMissing,
       meta: [
         record.environment_preset_name,
         record.reused === undefined
           ? undefined
           : record.reused
-            ? "复用会话"
-            : "新建会话",
+            ? copy.reusedSession
+            : copy.newSession,
         record.browser_source,
         record.remote_debugging_port
           ? `CDP ${record.remote_debugging_port}`
@@ -250,11 +302,13 @@ function describeAuditRecord(record: BrowserRuntimeAuditRecord) {
   }
 
   return {
-    title: record.action ? `动作 · ${record.action}` : "动作审计",
-    subject: record.profile_key || record.session_id || "未记录资料",
+    title: record.action ? copy.actionTitle(record.action) : copy.actionAudit,
+    subject: record.profile_key || record.session_id || copy.profileMissing,
     meta: [
       record.selected_backend || record.requested_backend,
-      record.attempts?.length ? `${record.attempts.length} 次尝试` : undefined,
+      record.attempts?.length
+        ? copy.attempts(String(record.attempts.length))
+        : undefined,
     ]
       .filter(Boolean)
       .join(" · "),
@@ -272,6 +326,11 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
     initialTargetId,
     embedded = false,
   } = props;
+  const { t, i18n } = useTranslation("workspace");
+  const formatCount = useCallback(
+    (value: number) => formatNumber(value, { locale: i18n.language }),
+    [i18n.language],
+  );
   const runtime = useBrowserRuntimeDebug(sessions, onMessage, {
     initialProfileKey,
     initialSessionId,
@@ -282,6 +341,148 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
   const [auditLogs, setAuditLogs] = useState<BrowserRuntimeAuditRecord[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
   const liveViewRef = useRef<HTMLDivElement | null>(null);
+  const existingSessionAttachCopy = useMemo<ExistingSessionAttachPanelCopy>(
+    () => ({
+      presentation: {
+        status: {
+          checking: {
+            label: t(
+              "workspace.browserExistingSession.presentation.status.checking.label",
+            ),
+            description: t(
+              "workspace.browserExistingSession.presentation.status.checking.description",
+            ),
+          },
+          waiting: {
+            label: t(
+              "workspace.browserExistingSession.presentation.status.waiting.label",
+            ),
+            description: t(
+              "workspace.browserExistingSession.presentation.status.waiting.description",
+            ),
+          },
+          reading: {
+            label: t(
+              "workspace.browserExistingSession.presentation.status.reading.label",
+            ),
+            description: t(
+              "workspace.browserExistingSession.presentation.status.reading.description",
+            ),
+          },
+          attached: {
+            label: t(
+              "workspace.browserExistingSession.presentation.status.attached.label",
+            ),
+            description: t(
+              "workspace.browserExistingSession.presentation.status.attached.description",
+            ),
+          },
+        },
+        placeholder: {
+          default: t(
+            "workspace.browserExistingSession.presentation.placeholder.default",
+          ),
+          checking: t(
+            "workspace.browserExistingSession.presentation.placeholder.checking",
+          ),
+          waiting: t(
+            "workspace.browserExistingSession.presentation.placeholder.waiting",
+          ),
+          reading: t(
+            "workspace.browserExistingSession.presentation.placeholder.reading",
+          ),
+        },
+        actions: {
+          reading: t(
+            "workspace.browserExistingSession.presentation.actions.reading",
+          ),
+          checking: t(
+            "workspace.browserExistingSession.presentation.actions.checking",
+          ),
+          readPage: t(
+            "workspace.browserExistingSession.presentation.actions.readPage",
+          ),
+          refreshBridge: t(
+            "workspace.browserExistingSession.presentation.actions.refreshBridge",
+          ),
+          refreshing: t(
+            "workspace.browserExistingSession.presentation.actions.refreshing",
+          ),
+          refreshBridgeStatus: t(
+            "workspace.browserExistingSession.presentation.actions.refreshBridgeStatus",
+          ),
+          readCurrentPage: t(
+            "workspace.browserExistingSession.presentation.actions.readCurrentPage",
+          ),
+          readTabs: t(
+            "workspace.browserExistingSession.presentation.actions.readTabs",
+          ),
+        },
+        hint: {
+          embedded: {
+            connected: t(
+              "workspace.browserExistingSession.presentation.hint.embedded.connected",
+            ),
+            waiting: t(
+              "workspace.browserExistingSession.presentation.hint.embedded.waiting",
+            ),
+          },
+          live: {
+            connected: t(
+              "workspace.browserExistingSession.presentation.hint.live.connected",
+            ),
+            waiting: t(
+              "workspace.browserExistingSession.presentation.hint.live.waiting",
+            ),
+          },
+        },
+      },
+      attachStatusLoadFailed: (message) =>
+        t("workspace.browserExistingSession.feedback.attachStatusLoadFailed", {
+          message,
+        }),
+      pageReadSuccess: t(
+        "workspace.browserExistingSession.feedback.pageReadSuccess",
+      ),
+      pageReadFailed: (message) =>
+        t("workspace.browserExistingSession.feedback.pageReadFailed", {
+          message,
+        }),
+      tabsLoadFailed: (message) =>
+        t("workspace.browserExistingSession.feedback.tabsLoadFailed", {
+          message,
+        }),
+      tabSwitchSuccess: (tabLabel) =>
+        t("workspace.browserExistingSession.feedback.tabSwitchSuccess", {
+          tabLabel,
+        }),
+      tabSwitchFailed: (message) =>
+        t("workspace.browserExistingSession.feedback.tabSwitchFailed", {
+          message,
+        }),
+    }),
+    [t],
+  );
+  const auditRecordCopy = useMemo<AuditRecordCopy>(
+    () => ({
+      actionAudit: t("workspace.browserRuntimeDebug.audit.actionAudit"),
+      actionTitle: (action) =>
+        t("workspace.browserRuntimeDebug.audit.actionTitle", {
+          action,
+        }),
+      attempts: (value) =>
+        t("workspace.browserRuntimeDebug.audit.attempts", {
+          value,
+        }),
+      launchFailure: t("workspace.browserRuntimeDebug.audit.launchFailure"),
+      launchSuccess: t("workspace.browserRuntimeDebug.audit.launchSuccess"),
+      newSession: t("workspace.browserRuntimeDebug.audit.newSession"),
+      profileMissing: t("workspace.browserRuntimeDebug.audit.profileMissing"),
+      reusedSession: t("workspace.browserRuntimeDebug.audit.reusedSession"),
+      targetMissing: t("workspace.browserRuntimeDebug.audit.targetMissing"),
+    }),
+    [t],
+  );
   const {
     activeAttachProfileKey,
     attachProfile,
@@ -302,6 +503,7 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
     selectedProfileKey: runtime.selectedProfileKey,
     initialProfileKey,
     sessionState: runtime.sessionState,
+    copy: existingSessionAttachCopy,
     onMessage,
   });
   const preferRuntimeLivePresentation =
@@ -315,13 +517,71 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
     );
   const showAttachPresentation =
     shouldUseAttachPresentation && !preferRuntimeLivePresentation;
+  const statusCopy = useMemo<BrowserRuntimeStatusCopy>(
+    () => ({
+      agentResumingDescription: t(
+        "workspace.browserRuntimeDebug.status.agentResumingDescription",
+      ),
+      agentResumingLabel: t(
+        "workspace.browserRuntimeDebug.status.agentResumingLabel",
+      ),
+      closedDescription: t(
+        "workspace.browserRuntimeDebug.status.closedDescription",
+      ),
+      closedLabel: t("workspace.browserRuntimeDebug.status.closedLabel"),
+      connectingDescription: t(
+        "workspace.browserRuntimeDebug.status.connectingDescription",
+      ),
+      connectingLabel: t(
+        "workspace.browserRuntimeDebug.status.connectingLabel",
+      ),
+      disconnectedDescription: t(
+        "workspace.browserRuntimeDebug.status.disconnectedDescription",
+      ),
+      disconnectedLabel: t(
+        "workspace.browserRuntimeDebug.status.disconnectedLabel",
+      ),
+      failedDescription: t(
+        "workspace.browserRuntimeDebug.status.failedDescription",
+      ),
+      failedLabel: t("workspace.browserRuntimeDebug.status.failedLabel"),
+      humanControllingDescription: t(
+        "workspace.browserRuntimeDebug.status.humanControllingDescription",
+      ),
+      humanControllingLabel: t(
+        "workspace.browserRuntimeDebug.status.humanControllingLabel",
+      ),
+      runningDescription: t(
+        "workspace.browserRuntimeDebug.status.runningDescription",
+      ),
+      runningLabel: t("workspace.browserRuntimeDebug.status.runningLabel"),
+      waitingForHumanDescription: t(
+        "workspace.browserRuntimeDebug.status.waitingForHumanDescription",
+      ),
+      waitingForHumanLabel: t(
+        "workspace.browserRuntimeDebug.status.waitingForHumanLabel",
+      ),
+    }),
+    [t],
+  );
+  const liveViewPlaceholderCopy = useMemo<LiveViewPlaceholderCopy>(
+    () => ({
+      connecting: t("workspace.browserRuntimeDebug.liveView.connecting"),
+      launching: t("workspace.browserRuntimeDebug.liveView.launching"),
+      noSession: t("workspace.browserRuntimeDebug.liveView.noSession"),
+      waitingFrame: t("workspace.browserRuntimeDebug.liveView.waitingFrame"),
+    }),
+    [t],
+  );
 
   const currentTitle =
     runtime.sessionState?.last_page_info?.title ||
     runtime.sessionState?.target_title ||
     attachPageInfo?.title ||
     attachProfile?.name ||
-    (showAttachPresentation ? "附着当前 Chrome" : "未打开会话");
+    (showAttachPresentation
+      ? t("workspace.browserRuntimeDebug.fallback.attachedChromeTitle")
+      : t("workspace.browserRuntimeDebug.fallback.noSessionTitle"));
   const currentUrl =
     runtime.sessionState?.last_page_info?.url ||
     runtime.sessionState?.target_url ||
@@ -332,11 +592,12 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
     () =>
       showAttachPresentation
         ? attachPresentation.statusInfo
-        : resolveSessionStatus(runtime.sessionState),
+        : resolveSessionStatus(runtime.sessionState, statusCopy),
     [
       attachPresentation.statusInfo,
       runtime.sessionState,
       showAttachPresentation,
+      statusCopy,
     ],
   );
   const hasAttachIntent = Boolean(
@@ -368,7 +629,7 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
     openingSession: runtime.openingSession,
     refreshingState: runtime.refreshingState,
     sessionState: runtime.sessionState,
-  });
+  }, liveViewPlaceholderCopy);
   const effectiveLiveViewPlaceholder = showAttachPresentation
     ? attachPresentation.placeholder
     : liveViewPlaceholder;
@@ -393,14 +654,14 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
     } catch (error) {
       onMessage?.({
         type: "error",
-        text: `读取浏览器审计失败: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        text: t("workspace.browserRuntimeDebug.feedback.auditLoadFailed", {
+          message: getErrorMessage(error),
+        }),
       });
     } finally {
       setAuditLoading(false);
     }
-  }, [onMessage]);
+  }, [onMessage, t]);
 
   useEffect(() => {
     if (!showAdvanced) {
@@ -413,9 +674,11 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
     <div className="rounded-md border p-3">
       <div className="mb-2 flex items-center justify-between gap-3">
         <div>
-          <div className="text-sm font-medium">最近启动与动作审计</div>
+          <div className="text-sm font-medium">
+            {t("workspace.browserRuntimeDebug.audit.title")}
+          </div>
           <div className="text-[11px] text-muted-foreground">
-            当前收口到统一浏览器运行时审计，便于排查启动链与动作链。
+            {t("workspace.browserRuntimeDebug.audit.description")}
           </div>
         </div>
         <button
@@ -427,17 +690,21 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
           <RefreshCw
             className={`h-3 w-3 ${auditLoading ? "animate-spin" : ""}`}
           />
-          刷新
+          {t("workspace.browserRuntimeDebug.actions.refresh")}
         </button>
       </div>
       <div className={`space-y-2 overflow-auto text-xs ${maxHeightClass}`}>
         {auditLoading && visibleAuditLogs.length === 0 ? (
-          <div className="text-muted-foreground">正在读取最近审计...</div>
+          <div className="text-muted-foreground">
+            {t("workspace.browserRuntimeDebug.audit.loading")}
+          </div>
         ) : visibleAuditLogs.length === 0 ? (
-          <div className="text-muted-foreground">暂无最近启动或动作审计</div>
+          <div className="text-muted-foreground">
+            {t("workspace.browserRuntimeDebug.audit.empty")}
+          </div>
         ) : (
           visibleAuditLogs.map((record) => {
-            const description = describeAuditRecord(record);
+            const description = describeAuditRecord(record, auditRecordCopy);
             return (
               <div
                 key={record.id}
@@ -480,9 +747,11 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
     <div className="rounded-md border p-3">
       <div className="mb-2 flex items-center justify-between gap-3">
         <div>
-          <div className="text-sm font-medium">当前窗口标签页</div>
+          <div className="text-sm font-medium">
+            {t("workspace.browserRuntimeDebug.attachTabs.title")}
+          </div>
           <div className="text-[11px] text-muted-foreground">
-            直接读取你当前 Chrome 窗口里的标签页，并切换到目标页面。
+            {t("workspace.browserRuntimeDebug.attachTabs.description")}
           </div>
         </div>
         <button
@@ -494,18 +763,20 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
           <RefreshCw
             className={`h-3 w-3 ${attachTabsLoading ? "animate-spin" : ""}`}
           />
-          {attachTabsLoading ? "读取中..." : "读取标签页"}
+          {attachTabsLoading
+            ? t("workspace.browserRuntimeDebug.attachTabs.loading")
+            : t("workspace.browserRuntimeDebug.attachTabs.refresh")}
         </button>
       </div>
 
       <div className={`space-y-2 overflow-auto text-xs ${maxHeightClass}`}>
         {!attachObserver ? (
           <div className="text-muted-foreground">
-            未检测到当前 Chrome 的桥接 observer，请先连接 Lime Browser Bridge。
+            {t("workspace.browserRuntimeDebug.attachTabs.observerMissing")}
           </div>
         ) : attachTabs.length === 0 ? (
           <div className="text-muted-foreground">
-            点击“读取标签页”同步当前窗口的标签页列表。
+            {t("workspace.browserRuntimeDebug.attachTabs.empty")}
           </div>
         ) : (
           attachTabs.map((tab) => {
@@ -525,12 +796,13 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                       {getExistingSessionTabLabel(tab)}
                     </div>
                     <div className="truncate text-[11px] text-muted-foreground">
-                      {tab.url || "未记录 URL"}
+                      {tab.url ||
+                        t("workspace.browserRuntimeDebug.value.urlMissing")}
                     </div>
                   </div>
                   {tab.active ? (
                     <span className="rounded-full border border-emerald-300/70 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/30 dark:text-emerald-200">
-                      当前标签页
+                      {t("workspace.browserRuntimeDebug.attachTabs.current")}
                     </span>
                   ) : (
                     <button
@@ -540,8 +812,10 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                       disabled={switchingAttachTabId === tab.id}
                     >
                       {switchingAttachTabId === tab.id
-                        ? "切换中..."
-                        : "切换到此页"}
+                        ? t("workspace.browserRuntimeDebug.attachTabs.switching")
+                        : t(
+                            "workspace.browserRuntimeDebug.attachTabs.switchTo",
+                          )}
                     </button>
                   )}
                 </div>
@@ -558,9 +832,11 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
       <div className="rounded-md border p-3">
         <div className="mb-3 flex items-start justify-between gap-3">
           <div>
-            <div className="text-sm font-medium">附着当前 Chrome</div>
+            <div className="text-sm font-medium">
+              {t("workspace.browserRuntimeDebug.attachFallback.title")}
+            </div>
             <div className="text-[11px] text-muted-foreground">
-              当前资料不创建独立 CDP 会话，直接复用你正在使用的浏览器与登录态。
+              {t("workspace.browserRuntimeDebug.attachFallback.description")}
             </div>
           </div>
           <div
@@ -572,19 +848,30 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
 
         <div className="grid gap-2 text-xs md:grid-cols-2">
           <div>
-            <span className="text-muted-foreground">资料：</span>
+            <span className="text-muted-foreground">
+              {t("workspace.browserRuntimeDebug.attachFallback.profile")}
+            </span>
             <span>{attachProfile?.name || activeAttachProfileKey || "-"}</span>
           </div>
           <div>
-            <span className="text-muted-foreground">Profile Key：</span>
+            <span className="text-muted-foreground">
+              {t("workspace.browserRuntimeDebug.attachFallback.profileKey")}
+            </span>
             <span className="break-all">{activeAttachProfileKey || "-"}</span>
           </div>
           <div>
-            <span className="text-muted-foreground">Observer：</span>
-            <span>{attachObserver?.client_id || "未连接"}</span>
+            <span className="text-muted-foreground">
+              {t("workspace.browserRuntimeDebug.attachFallback.observer")}
+            </span>
+            <span>
+              {attachObserver?.client_id ||
+                t("workspace.browserRuntimeDebug.value.disconnected")}
+            </span>
           </div>
           <div>
-            <span className="text-muted-foreground">最后心跳：</span>
+            <span className="text-muted-foreground">
+              {t("workspace.browserRuntimeDebug.attachFallback.lastHeartbeat")}
+            </span>
             <span>{attachObserver?.last_heartbeat_at || "-"}</span>
           </div>
         </div>
@@ -601,7 +888,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                 attachContextLoading ? "animate-spin" : ""
               }`}
             />
-            {attachContextLoading ? "刷新中..." : "刷新桥接状态"}
+            {attachContextLoading
+              ? t("workspace.browserRuntimeDebug.actions.refreshing")
+              : t("workspace.browserRuntimeDebug.actions.refreshBridge")}
           </button>
           <button
             type="button"
@@ -609,7 +898,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
             onClick={() => void loadAttachPage()}
             disabled={attachPageLoading || !attachObserver}
           >
-            {attachPageLoading ? "读取中..." : "读取当前页面"}
+            {attachPageLoading
+              ? t("workspace.browserRuntimeDebug.attachPage.loading")
+              : t("workspace.browserRuntimeDebug.attachPage.refresh")}
           </button>
         </div>
       </div>
@@ -617,34 +908,42 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
       <div className="rounded-md border p-3">
         <div className="mb-2 flex items-center justify-between gap-3">
           <div>
-            <div className="text-sm font-medium">当前页面摘要</div>
+            <div className="text-sm font-medium">
+              {t("workspace.browserRuntimeDebug.attachPage.title")}
+            </div>
             <div className="text-[11px] text-muted-foreground">
-              标题、URL 与 Markdown 摘要来自当前 Chrome 扩展桥接。
+              {t("workspace.browserRuntimeDebug.attachPage.description")}
             </div>
           </div>
           <div className="text-[11px] text-muted-foreground">
             {attachPageInfo?.updated_at
               ? formatAuditTime(attachPageInfo.updated_at)
-              : "未同步"}
+              : t("workspace.browserRuntimeDebug.attachPage.notSynced")}
           </div>
         </div>
 
         {!attachObserver ? (
           <div className="text-xs text-muted-foreground">
-            连接扩展桥接后，这里会显示当前标签页的页面摘要。
+            {t("workspace.browserRuntimeDebug.attachPage.observerMissing")}
           </div>
         ) : attachPageInfo ? (
           <div className="space-y-2 text-xs">
             <div>
-              <div className="text-[11px] text-muted-foreground">标题</div>
+              <div className="text-[11px] text-muted-foreground">
+                {t("workspace.browserRuntimeDebug.attachPage.fields.title")}
+              </div>
               <div className="break-all text-foreground/90">
-                {attachPageInfo.title || "未记录标题"}
+                {attachPageInfo.title ||
+                  t("workspace.browserRuntimeDebug.value.titleMissing")}
               </div>
             </div>
             <div>
-              <div className="text-[11px] text-muted-foreground">URL</div>
+              <div className="text-[11px] text-muted-foreground">
+                {t("workspace.browserRuntimeDebug.attachPage.fields.url")}
+              </div>
               <div className="break-all text-muted-foreground">
-                {attachPageInfo.url || "未记录 URL"}
+                {attachPageInfo.url ||
+                  t("workspace.browserRuntimeDebug.value.urlMissing")}
               </div>
             </div>
             {attachPageInfo.markdown ? (
@@ -655,7 +954,7 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
           </div>
         ) : (
           <div className="text-xs text-muted-foreground">
-            点击“读取当前页面”同步当前标签页的标题、URL 和页面摘要。
+            {t("workspace.browserRuntimeDebug.attachPage.empty")}
           </div>
         )}
       </div>
@@ -675,14 +974,14 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
       });
       onMessage?.({
         type: "success",
-        text: "已打开独立浏览器实时会话窗口",
+        text: t("workspace.browserRuntimeDebug.feedback.standaloneOpened"),
       });
     } catch (error) {
       onMessage?.({
         type: "error",
-        text: `打开独立实时会话窗口失败: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        text: t("workspace.browserRuntimeDebug.feedback.standaloneOpenFailed", {
+          message: getErrorMessage(error),
+        }),
       });
     }
   };
@@ -695,7 +994,7 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
     if (!profileKey || !currentUrl) {
       onMessage?.({
         type: "error",
-        text: "当前没有可打开的浏览器页面",
+        text: t("workspace.browserRuntimeDebug.feedback.noBrowserPage"),
       });
       return;
     }
@@ -707,14 +1006,14 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
       });
       onMessage?.({
         type: "success",
-        text: "已在独立 Chrome 会话中打开当前页面",
+        text: t("workspace.browserRuntimeDebug.feedback.systemBrowserOpened"),
       });
     } catch (error) {
       onMessage?.({
         type: "error",
-        text: `打开系统浏览器失败: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        text: t("workspace.browserRuntimeDebug.feedback.systemBrowserFailed", {
+          message: getErrorMessage(error),
+        }),
       });
     }
   };
@@ -778,7 +1077,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
         onClick={() => void runtime.openSession()}
         disabled={runtime.openingSession || !runtime.selectedProfileKey}
       >
-        {runtime.openingSession ? "连接中" : "连接"}
+        {runtime.openingSession
+          ? t("workspace.browserRuntimeDebug.actions.connectingShort")
+          : t("workspace.browserRuntimeDebug.actions.connectShort")}
       </button>
     ) : runtime.isHumanControlling ? (
       <button
@@ -788,7 +1089,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
         disabled={runtime.controlBusy}
       >
         <Play className="h-3.5 w-3.5" />
-        {runtime.controlBusy ? "处理中" : "继续"}
+        {runtime.controlBusy
+          ? t("workspace.browserRuntimeDebug.actions.processingShort")
+          : t("workspace.browserRuntimeDebug.actions.continueShort")}
       </button>
     ) : runtime.isWaitingForHuman ? (
       <button
@@ -798,7 +1101,7 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
         disabled={runtime.controlBusy}
       >
         <Hand className="h-3.5 w-3.5" />
-        处理
+        {t("workspace.browserRuntimeDebug.actions.handleShort")}
       </button>
     ) : (
       <button
@@ -808,7 +1111,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
         disabled={runtime.controlBusy || runtime.isAgentResuming}
       >
         <Hand className="h-3.5 w-3.5" />
-        {runtime.isAgentResuming ? "恢复中" : "接管"}
+        {runtime.isAgentResuming
+          ? t("workspace.browserRuntimeDebug.actions.resumingShort")
+          : t("workspace.browserRuntimeDebug.actions.takeOverShort")}
       </button>
     );
 
@@ -833,7 +1138,8 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
               />
               <Globe className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               <span className="truncate text-[12px] text-foreground/90">
-                {currentUrl || "正在准备浏览器会话..."}
+                {currentUrl ||
+                  t("workspace.browserRuntimeDebug.fallback.preparingSession")}
               </span>
             </div>
           </div>
@@ -856,8 +1162,16 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                 ? attachContextLoading
                 : runtime.refreshingState || !runtime.sessionState
             }
-            aria-label={showAttachPresentation ? "刷新桥接" : "刷新会话"}
-            title={showAttachPresentation ? "刷新桥接" : "刷新会话"}
+            aria-label={
+              showAttachPresentation
+                ? t("workspace.browserRuntimeDebug.actions.refreshBridge")
+                : t("workspace.browserRuntimeDebug.actions.refreshSession")
+            }
+            title={
+              showAttachPresentation
+                ? t("workspace.browserRuntimeDebug.actions.refreshBridge")
+                : t("workspace.browserRuntimeDebug.actions.refreshSession")
+            }
           >
             <RefreshCw
               className={`h-3.5 w-3.5 ${
@@ -876,8 +1190,8 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
               type="button"
               className={embeddedIconButtonClass}
               onClick={() => void handleOpenStandaloneWindow()}
-              aria-label="独立窗口"
-              title="独立窗口"
+              aria-label={t("workspace.browserRuntimeDebug.actions.standalone")}
+              title={t("workspace.browserRuntimeDebug.actions.standalone")}
             >
               <ExternalLink className="h-3.5 w-3.5" />
             </button>
@@ -886,8 +1200,16 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
             type="button"
             className={embeddedIconButtonClass}
             onClick={() => setShowAdvanced((value) => !value)}
-            aria-label={showAdvanced ? "收起调试" : "展开调试"}
-            title={showAdvanced ? "收起调试" : "展开调试"}
+            aria-label={
+              showAdvanced
+                ? t("workspace.browserRuntimeDebug.actions.collapseDebug")
+                : t("workspace.browserRuntimeDebug.actions.expandDebug")
+            }
+            title={
+              showAdvanced
+                ? t("workspace.browserRuntimeDebug.actions.collapseDebug")
+                : t("workspace.browserRuntimeDebug.actions.expandDebug")
+            }
           >
             <Bug className="h-3.5 w-3.5" />
           </button>
@@ -927,12 +1249,20 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
               {showAttachPresentation
                 ? attachPresentation.embeddedControlHint
                 : runtime.canDirectControl
-                  ? "已接管：可以直接点击画面、滚轮滚动，并向当前焦点输入文本。"
+                  ? t(
+                      "workspace.browserRuntimeDebug.liveView.controlHintDirect",
+                    )
                   : runtime.isWaitingForHuman
-                    ? "Agent 正在等待你接管当前页面。"
+                    ? t(
+                        "workspace.browserRuntimeDebug.liveView.controlHintWaiting",
+                      )
                     : runtime.isHumanControlling
-                      ? "人工处理中，可随时继续交回给 Agent。"
-                      : "实时会话已附着。"}
+                      ? t(
+                          "workspace.browserRuntimeDebug.liveView.controlHintHuman",
+                        )
+                      : t(
+                          "workspace.browserRuntimeDebug.liveView.controlHintAttached",
+                        )}
             </div>
           ) : null}
         </div>
@@ -948,7 +1278,7 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                   disabled={runtime.controlBusy}
                 >
                   <Pause className="h-3.5 w-3.5" />
-                  结束接管
+                  {t("workspace.browserRuntimeDebug.actions.endTakeOver")}
                 </button>
               ) : null}
               {runtime.isWaitingForHuman ? (
@@ -956,12 +1286,14 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                   type="button"
                   className={compactActionButtonClass}
                   onClick={() =>
-                    void runtime.resumeSession("无需人工处理，继续执行")
+                    void runtime.resumeSession(
+                      t("workspace.browserRuntimeDebug.resume.noManualNeeded"),
+                    )
                   }
                   disabled={runtime.controlBusy}
                 >
                   <Play className="h-3.5 w-3.5" />
-                  继续执行
+                  {t("workspace.browserRuntimeDebug.actions.continue")}
                 </button>
               ) : null}
               {runtime.sessionState ? (
@@ -974,7 +1306,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                       : runtime.startStream("both"))
                   }
                 >
-                  {runtime.streaming ? "停止画面" : "恢复画面"}
+                  {runtime.streaming
+                    ? t("workspace.browserRuntimeDebug.actions.stopView")
+                    : t("workspace.browserRuntimeDebug.actions.restoreView")}
                 </button>
               ) : null}
               {showAttachPresentation ? (
@@ -1013,7 +1347,7 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                   <Globe className="h-3.5 w-3.5" />
                   {showAttachPresentation
                     ? attachPresentation.pageActionLabel
-                    : "在 Chrome 中继续"}
+                    : t("workspace.browserRuntimeDebug.actions.openInChrome")}
                 </button>
               ) : null}
             </div>
@@ -1022,7 +1356,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <input
                   className="h-8 w-full min-w-0 flex-1 rounded-md border bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60 sm:min-w-[220px]"
-                  placeholder="向当前焦点输入文本"
+                  placeholder={t(
+                    "workspace.browserRuntimeDebug.manualControl.embeddedPlaceholder",
+                  )}
                   value={manualInput}
                   disabled={runtime.controlBusy}
                   onChange={(event) => setManualInput(event.target.value)}
@@ -1040,7 +1376,7 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                   onClick={() => void handleSendManualInput()}
                 >
                   <Send className="h-3.5 w-3.5" />
-                  发送
+                  {t("workspace.browserRuntimeDebug.actions.send")}
                 </button>
                 <button
                   type="button"
@@ -1048,7 +1384,7 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                   disabled={runtime.controlBusy}
                   onClick={() => void runtime.scrollPage("up")}
                 >
-                  上滚
+                  {t("workspace.browserRuntimeDebug.actions.scrollUp")}
                 </button>
                 <button
                   type="button"
@@ -1056,7 +1392,7 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                   disabled={runtime.controlBusy}
                   onClick={() => void runtime.scrollPage("down")}
                 >
-                  下滚
+                  {t("workspace.browserRuntimeDebug.actions.scrollDown")}
                 </button>
               </div>
             ) : null}
@@ -1073,7 +1409,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                     <div className="grid gap-3 md:grid-cols-2">
                       <label className="space-y-1 text-xs">
                         <span className="text-muted-foreground">
-                          Profile 会话
+                          {t(
+                            "workspace.browserRuntimeDebug.cdp.profileSession",
+                          )}
                         </span>
                         <select
                           className="w-full rounded-md border bg-background px-3 py-2 text-sm"
@@ -1094,7 +1432,7 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                       </label>
                       <label className="space-y-1 text-xs">
                         <span className="text-muted-foreground">
-                          CDP 标签页
+                          {t("workspace.browserRuntimeDebug.cdp.targetTab")}
                         </span>
                         <select
                           className="w-full rounded-md border bg-background px-3 py-2 text-sm"
@@ -1104,7 +1442,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                           }
                         >
                           {runtime.targets.length === 0 ? (
-                            <option value="">未发现标签页</option>
+                            <option value="">
+                              {t("workspace.browserRuntimeDebug.cdp.noTargets")}
+                            </option>
                           ) : (
                             runtime.targets.map((target) => (
                               <option key={target.id} value={target.id}>
@@ -1126,7 +1466,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                         }
                       >
                         <RefreshCw className="h-3.5 w-3.5" />
-                        刷新标签页
+                        {t(
+                          "workspace.browserRuntimeDebug.actions.refreshTargets",
+                        )}
                       </button>
                       <button
                         type="button"
@@ -1136,7 +1478,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                           runtime.openingSession || !runtime.selectedProfileKey
                         }
                       >
-                        {runtime.openingSession ? "打开中..." : "重新附着"}
+                        {runtime.openingSession
+                          ? t("workspace.browserRuntimeDebug.actions.opening")
+                          : t("workspace.browserRuntimeDebug.actions.reattach")}
                       </button>
                       <button
                         type="button"
@@ -1144,7 +1488,10 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                         onClick={() => void handleOpenSystemBrowser()}
                         disabled={!currentUrl}
                       >
-                        <Globe className="h-3.5 w-3.5" />在 Chrome 中继续
+                        <Globe className="h-3.5 w-3.5" />
+                        {t(
+                          "workspace.browserRuntimeDebug.actions.continueInChrome",
+                        )}
                       </button>
                     </div>
 
@@ -1158,11 +1505,15 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
 
                     <div className="grid gap-3 xl:grid-cols-[1.2fr_0.8fr]">
                       <div className="rounded-md border p-3 text-xs">
-                        <div className="mb-2 text-sm font-medium">会话信息</div>
+                        <div className="mb-2 text-sm font-medium">
+                          {t("workspace.browserRuntimeDebug.sessionInfo.title")}
+                        </div>
                         <div className="grid gap-2 md:grid-cols-2">
                           <div>
                             <span className="text-muted-foreground">
-                              Session：
+                              {t(
+                                "workspace.browserRuntimeDebug.sessionInfo.session",
+                              )}
                             </span>
                             <span className="break-all">
                               {runtime.sessionState?.session_id || "-"}
@@ -1170,7 +1521,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                           </div>
                           <div>
                             <span className="text-muted-foreground">
-                              Target：
+                              {t(
+                                "workspace.browserRuntimeDebug.sessionInfo.target",
+                              )}
                             </span>
                             <span className="break-all">
                               {runtime.sessionState?.target_id || "-"}
@@ -1178,7 +1531,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                           </div>
                           <div>
                             <span className="text-muted-foreground">
-                              状态：
+                              {t(
+                                "workspace.browserRuntimeDebug.sessionInfo.status",
+                              )}
                             </span>
                             <span>
                               {runtime.sessionState?.lifecycle_state || "-"}
@@ -1186,21 +1541,29 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                           </div>
                           <div>
                             <span className="text-muted-foreground">
-                              控制模式：
+                              {t(
+                                "workspace.browserRuntimeDebug.sessionInfo.controlMode",
+                              )}
                             </span>
                             <span>
                               {runtime.sessionState?.control_mode || "-"}
                             </span>
                           </div>
                           <div>
-                            <span className="text-muted-foreground">WS：</span>
+                            <span className="text-muted-foreground">
+                              {t(
+                                "workspace.browserRuntimeDebug.sessionInfo.webSocket",
+                              )}
+                            </span>
                             <span className="break-all">
                               {runtime.sessionState?.ws_debugger_url || "-"}
                             </span>
                           </div>
                           <div>
                             <span className="text-muted-foreground">
-                              最后帧：
+                              {t(
+                                "workspace.browserRuntimeDebug.sessionInfo.lastFrame",
+                              )}
                             </span>
                             <span>
                               {runtime.sessionState?.last_frame_at || "-"}
@@ -1214,15 +1577,23 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
 
                         <div className="rounded-md border p-3">
                           <div className="mb-2 flex items-center justify-between">
-                            <div className="text-sm font-medium">Console</div>
+                            <div className="text-sm font-medium">
+                              {t(
+                                "workspace.browserRuntimeDebug.events.consoleTitle",
+                              )}
+                            </div>
                             <div className="text-[11px] text-muted-foreground">
-                              {runtime.consoleEvents.length} 条
+                              {t("workspace.browserRuntimeDebug.events.count", {
+                                value: formatCount(runtime.consoleEvents.length),
+                              })}
                             </div>
                           </div>
                           <div className="max-h-[180px] space-y-2 overflow-auto text-xs">
                             {runtime.consoleEvents.length === 0 ? (
                               <div className="text-muted-foreground">
-                                暂无 Console 事件
+                                {t(
+                                  "workspace.browserRuntimeDebug.events.consoleEmpty",
+                                )}
                               </div>
                             ) : (
                               runtime.consoleEvents.map((event) => (
@@ -1248,15 +1619,23 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
 
                         <div className="rounded-md border p-3">
                           <div className="mb-2 flex items-center justify-between">
-                            <div className="text-sm font-medium">Network</div>
+                            <div className="text-sm font-medium">
+                              {t(
+                                "workspace.browserRuntimeDebug.events.networkTitle",
+                              )}
+                            </div>
                             <div className="text-[11px] text-muted-foreground">
-                              {runtime.networkEvents.length} 条
+                              {t("workspace.browserRuntimeDebug.events.count", {
+                                value: formatCount(runtime.networkEvents.length),
+                              })}
                             </div>
                           </div>
                           <div className="max-h-[180px] space-y-2 overflow-auto text-xs">
                             {runtime.networkEvents.length === 0 ? (
                               <div className="text-muted-foreground">
-                                暂无 Network 事件
+                                {t(
+                                  "workspace.browserRuntimeDebug.events.networkEmpty",
+                                )}
                               </div>
                             ) : (
                               runtime.networkEvents.map((event) => (
@@ -1291,10 +1670,11 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
     <div className="space-y-4 rounded-lg border p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-sm font-medium">浏览器实时会话</h3>
+          <h3 className="text-sm font-medium">
+            {t("workspace.browserRuntimeDebug.title")}
+          </h3>
           <p className="text-xs text-muted-foreground">
-            在通用对话里直接查看浏览器现场。需要时可人工接管，并在完成后交回给
-            Agent。
+            {t("workspace.browserRuntimeDebug.description")}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -1305,7 +1685,7 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
               onClick={() => void handleOpenStandaloneWindow()}
             >
               <ExternalLink className="h-3.5 w-3.5" />
-              独立窗口
+              {t("workspace.browserRuntimeDebug.actions.standalone")}
             </button>
           ) : null}
           <button
@@ -1314,26 +1694,31 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
             onClick={() => setShowAdvanced((value) => !value)}
           >
             <Bug className="h-3.5 w-3.5" />
-            {showAdvanced ? "收起高级调试" : "高级调试"}
+            {showAdvanced
+              ? t("workspace.browserRuntimeDebug.actions.collapseAdvanced")
+              : t("workspace.browserRuntimeDebug.actions.advanced")}
           </button>
         </div>
       </div>
 
       {sessions.length === 0 && !hasAttachIntent ? (
         <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-          还没有运行中的独立 Chrome Profile。请先从通用对话启动浏览器协助。
+          {t("workspace.browserRuntimeDebug.empty")}
         </div>
       ) : (
         <>
           <div className="rounded-xl border bg-muted/15 p-4">
             <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-xs text-muted-foreground">当前页面</div>
+                <div className="text-xs text-muted-foreground">
+                  {t("workspace.browserRuntimeDebug.currentPage.label")}
+                </div>
                 <div className="truncate text-sm font-medium">
                   {currentTitle}
                 </div>
                 <div className="truncate text-xs text-muted-foreground">
-                  {currentUrl || "尚未获取页面 URL"}
+                  {currentUrl ||
+                    t("workspace.browserRuntimeDebug.currentPage.noUrl")}
                 </div>
               </div>
               <div
@@ -1349,7 +1734,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
               </div>
               {runtime.sessionState?.last_error ? (
                 <div className="mt-1 text-[11px] text-destructive">
-                  最近错误: {runtime.sessionState.last_error}
+                  {t("workspace.browserRuntimeDebug.currentPage.recentError", {
+                    message: runtime.sessionState.last_error,
+                  })}
                 </div>
               ) : null}
             </div>
@@ -1384,8 +1771,12 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                 {showAttachPresentation
                   ? attachPresentation.liveViewHint
                   : runtime.canDirectControl
-                    ? "当前支持点击画面、滚轮滚动，并把文本发送到当前焦点元素。"
-                    : "点击“接管浏览器”后，可直接在这里进行最小人工操作。"}
+                    ? t(
+                        "workspace.browserRuntimeDebug.liveView.directControlHint",
+                      )
+                    : t(
+                        "workspace.browserRuntimeDebug.liveView.takeOverHint",
+                      )}
               </div>
             </div>
           </div>
@@ -1434,7 +1825,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                 onClick={() => void runtime.openSession()}
                 disabled={runtime.openingSession || !runtime.selectedProfileKey}
               >
-                {runtime.openingSession ? "连接中..." : "连接浏览器"}
+                {runtime.openingSession
+                  ? t("workspace.browserRuntimeDebug.actions.connecting")
+                  : t("workspace.browserRuntimeDebug.actions.connect")}
               </button>
             ) : null}
 
@@ -1449,7 +1842,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                       disabled={runtime.controlBusy}
                     >
                       <Play className="h-3.5 w-3.5" />
-                      {runtime.controlBusy ? "处理中..." : "我已完成，继续执行"}
+                      {runtime.controlBusy
+                        ? t("workspace.browserRuntimeDebug.actions.processing")
+                        : t("workspace.browserRuntimeDebug.actions.doneContinue")}
                     </button>
                     <button
                       type="button"
@@ -1458,7 +1853,7 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                       disabled={runtime.controlBusy}
                     >
                       <Pause className="h-3.5 w-3.5" />
-                      结束接管
+                      {t("workspace.browserRuntimeDebug.actions.endTakeOver")}
                     </button>
                   </>
                 ) : runtime.isWaitingForHuman ? (
@@ -1470,18 +1865,22 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                       disabled={runtime.controlBusy}
                     >
                       <Hand className="h-3.5 w-3.5" />
-                      开始人工处理
+                      {t("workspace.browserRuntimeDebug.actions.startManual")}
                     </button>
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-60"
                       onClick={() =>
-                        void runtime.resumeSession("无需人工处理，继续执行")
+                        void runtime.resumeSession(
+                          t(
+                            "workspace.browserRuntimeDebug.resume.noManualNeeded",
+                          ),
+                        )
                       }
                       disabled={runtime.controlBusy}
                     >
                       <Play className="h-3.5 w-3.5" />
-                      直接继续执行
+                      {t("workspace.browserRuntimeDebug.actions.continueDirect")}
                     </button>
                   </>
                 ) : (
@@ -1492,7 +1891,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                     disabled={runtime.controlBusy || runtime.isAgentResuming}
                   >
                     <Hand className="h-3.5 w-3.5" />
-                    {runtime.isAgentResuming ? "恢复中..." : "接管浏览器"}
+                    {runtime.isAgentResuming
+                      ? t("workspace.browserRuntimeDebug.actions.resuming")
+                      : t("workspace.browserRuntimeDebug.actions.takeOver")}
                   </button>
                 )}
 
@@ -1506,7 +1907,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                   }
                   disabled={!runtime.sessionState}
                 >
-                  {runtime.streaming ? "停止实时画面" : "恢复实时画面"}
+                  {runtime.streaming
+                    ? t("workspace.browserRuntimeDebug.actions.stopLiveView")
+                    : t("workspace.browserRuntimeDebug.actions.restoreLiveView")}
                 </button>
 
                 <button
@@ -1520,7 +1923,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                       runtime.refreshingState ? "animate-spin" : ""
                     }`}
                   />
-                  {runtime.refreshingState ? "刷新中..." : "刷新状态"}
+                  {runtime.refreshingState
+                    ? t("workspace.browserRuntimeDebug.actions.refreshing")
+                    : t("workspace.browserRuntimeDebug.actions.refreshStatus")}
                 </button>
 
                 <button
@@ -1528,7 +1933,7 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                   className="rounded-md border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-60"
                   onClick={() => void runtime.closeSession()}
                 >
-                  关闭会话
+                  {t("workspace.browserRuntimeDebug.actions.closeSession")}
                 </button>
               </>
             ) : null}
@@ -1537,20 +1942,26 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
           <div className="rounded-lg border bg-background/60 p-3">
             <div className="mb-2 flex items-center justify-between gap-3">
               <div>
-                <div className="text-xs font-medium">最小人工控制</div>
+                <div className="text-xs font-medium">
+                  {t("workspace.browserRuntimeDebug.manualControl.title")}
+                </div>
                 <div className="text-[11px] text-muted-foreground">
-                  适合验证码、短信码、多因素认证和临时异常流程。
+                  {t("workspace.browserRuntimeDebug.manualControl.description")}
                 </div>
               </div>
               <div className="text-[11px] text-muted-foreground">
-                {runtime.canDirectControl ? "已启用" : "未启用"}
+                {runtime.canDirectControl
+                  ? t("workspace.browserRuntimeDebug.manualControl.enabled")
+                  : t("workspace.browserRuntimeDebug.manualControl.disabled")}
               </div>
             </div>
 
             <div className="flex flex-wrap gap-2">
               <input
                 className="w-full min-w-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60 sm:min-w-[220px]"
-                placeholder="把文本发送到当前焦点元素"
+                placeholder={t(
+                  "workspace.browserRuntimeDebug.manualControl.placeholder",
+                )}
                 value={manualInput}
                 disabled={!runtime.canDirectControl || runtime.controlBusy}
                 onChange={(event) => setManualInput(event.target.value)}
@@ -1568,7 +1979,7 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                 onClick={() => void handleSendManualInput()}
               >
                 <Send className="h-3.5 w-3.5" />
-                发送文本
+                {t("workspace.browserRuntimeDebug.actions.sendText")}
               </button>
               <button
                 type="button"
@@ -1576,7 +1987,7 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                 disabled={!runtime.canDirectControl || runtime.controlBusy}
                 onClick={() => void runtime.scrollPage("up")}
               >
-                上滚
+                {t("workspace.browserRuntimeDebug.actions.scrollUp")}
               </button>
               <button
                 type="button"
@@ -1584,7 +1995,7 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                 disabled={!runtime.canDirectControl || runtime.controlBusy}
                 onClick={() => void runtime.scrollPage("down")}
               >
-                下滚
+                {t("workspace.browserRuntimeDebug.actions.scrollDown")}
               </button>
             </div>
           </div>
@@ -1599,7 +2010,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
               <>
                 <div className="grid gap-3 md:grid-cols-2">
                   <label className="space-y-1 text-xs">
-                    <span className="text-muted-foreground">Profile 会话</span>
+                    <span className="text-muted-foreground">
+                      {t("workspace.browserRuntimeDebug.cdp.profileSession")}
+                    </span>
                     <select
                       className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                       value={runtime.selectedProfileKey}
@@ -1618,7 +2031,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                     </select>
                   </label>
                   <label className="space-y-1 text-xs">
-                    <span className="text-muted-foreground">CDP 标签页</span>
+                    <span className="text-muted-foreground">
+                      {t("workspace.browserRuntimeDebug.cdp.targetTab")}
+                    </span>
                     <select
                       className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                       value={runtime.selectedTargetId}
@@ -1627,7 +2042,9 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                       }
                     >
                       {runtime.targets.length === 0 ? (
-                        <option value="">未发现标签页</option>
+                        <option value="">
+                          {t("workspace.browserRuntimeDebug.cdp.noTargets")}
+                        </option>
                       ) : (
                         runtime.targets.map((target) => (
                           <option key={target.id} value={target.id}>
@@ -1649,7 +2066,7 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                     }
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
-                    刷新标签页
+                    {t("workspace.browserRuntimeDebug.actions.refreshTargets")}
                   </button>
                   <button
                     type="button"
@@ -1659,7 +2076,11 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                       runtime.openingSession || !runtime.selectedProfileKey
                     }
                   >
-                    {runtime.openingSession ? "打开中..." : "重新附着会话"}
+                    {runtime.openingSession
+                      ? t("workspace.browserRuntimeDebug.actions.opening")
+                      : t(
+                          "workspace.browserRuntimeDebug.actions.reattachSession",
+                        )}
                   </button>
                   <button
                     type="button"
@@ -1667,7 +2088,8 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                     onClick={() => void handleOpenSystemBrowser()}
                     disabled={!currentUrl}
                   >
-                    <Globe className="h-3.5 w-3.5" />在 Chrome 中继续
+                    <Globe className="h-3.5 w-3.5" />
+                    {t("workspace.browserRuntimeDebug.actions.continueInChrome")}
                   </button>
                 </div>
 
@@ -1682,11 +2104,15 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                 <div className="grid gap-3 xl:grid-cols-[1.2fr_0.8fr]">
                   <div className="space-y-3">
                     <div className="rounded-md border p-3 text-xs">
-                      <div className="mb-2 text-sm font-medium">会话信息</div>
+                      <div className="mb-2 text-sm font-medium">
+                        {t("workspace.browserRuntimeDebug.sessionInfo.title")}
+                      </div>
                       <div className="grid gap-2 md:grid-cols-2">
                         <div>
                           <span className="text-muted-foreground">
-                            Session：
+                            {t(
+                              "workspace.browserRuntimeDebug.sessionInfo.session",
+                            )}
                           </span>
                           <span className="break-all">
                             {runtime.sessionState?.session_id || "-"}
@@ -1694,35 +2120,49 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
                         </div>
                         <div>
                           <span className="text-muted-foreground">
-                            Target：
+                            {t(
+                              "workspace.browserRuntimeDebug.sessionInfo.target",
+                            )}
                           </span>
                           <span className="break-all">
                             {runtime.sessionState?.target_id || "-"}
                           </span>
                         </div>
                         <div>
-                          <span className="text-muted-foreground">状态：</span>
+                          <span className="text-muted-foreground">
+                            {t(
+                              "workspace.browserRuntimeDebug.sessionInfo.status",
+                            )}
+                          </span>
                           <span>
                             {runtime.sessionState?.lifecycle_state || "-"}
                           </span>
                         </div>
                         <div>
                           <span className="text-muted-foreground">
-                            控制模式：
+                            {t(
+                              "workspace.browserRuntimeDebug.sessionInfo.controlMode",
+                            )}
                           </span>
                           <span>
                             {runtime.sessionState?.control_mode || "-"}
                           </span>
                         </div>
                         <div>
-                          <span className="text-muted-foreground">WS：</span>
+                          <span className="text-muted-foreground">
+                            {t(
+                              "workspace.browserRuntimeDebug.sessionInfo.webSocket",
+                            )}
+                          </span>
                           <span className="break-all">
                             {runtime.sessionState?.ws_debugger_url || "-"}
                           </span>
                         </div>
                         <div>
                           <span className="text-muted-foreground">
-                            最后帧：
+                            {t(
+                              "workspace.browserRuntimeDebug.sessionInfo.lastFrame",
+                            )}
                           </span>
                           <span>
                             {runtime.sessionState?.last_frame_at || "-"}
@@ -1737,15 +2177,23 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
 
                     <div className="rounded-md border p-3">
                       <div className="mb-2 flex items-center justify-between">
-                        <div className="text-sm font-medium">Console</div>
+                        <div className="text-sm font-medium">
+                          {t(
+                            "workspace.browserRuntimeDebug.events.consoleTitle",
+                          )}
+                        </div>
                         <div className="text-[11px] text-muted-foreground">
-                          {runtime.consoleEvents.length} 条
+                          {t("workspace.browserRuntimeDebug.events.count", {
+                            value: formatCount(runtime.consoleEvents.length),
+                          })}
                         </div>
                       </div>
                       <div className="max-h-[220px] space-y-2 overflow-auto text-xs">
                         {runtime.consoleEvents.length === 0 ? (
                           <div className="text-muted-foreground">
-                            暂无 Console 事件
+                            {t(
+                              "workspace.browserRuntimeDebug.events.consoleEmpty",
+                            )}
                           </div>
                         ) : (
                           runtime.consoleEvents.map((event) => (
@@ -1771,15 +2219,23 @@ export function BrowserRuntimeDebugPanel(props: BrowserRuntimeDebugPanelProps) {
 
                     <div className="rounded-md border p-3">
                       <div className="mb-2 flex items-center justify-between">
-                        <div className="text-sm font-medium">Network</div>
+                        <div className="text-sm font-medium">
+                          {t(
+                            "workspace.browserRuntimeDebug.events.networkTitle",
+                          )}
+                        </div>
                         <div className="text-[11px] text-muted-foreground">
-                          {runtime.networkEvents.length} 条
+                          {t("workspace.browserRuntimeDebug.events.count", {
+                            value: formatCount(runtime.networkEvents.length),
+                          })}
                         </div>
                       </div>
                       <div className="max-h-[220px] space-y-2 overflow-auto text-xs">
                         {runtime.networkEvents.length === 0 ? (
                           <div className="text-muted-foreground">
-                            暂无 Network 事件
+                            {t(
+                              "workspace.browserRuntimeDebug.events.networkEmpty",
+                            )}
                           </div>
                         ) : (
                           runtime.networkEvents.map((event) => (

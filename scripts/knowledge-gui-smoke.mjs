@@ -459,6 +459,25 @@ async function clickPageControl(page, { text, ariaLabel, index = 0 }) {
   }
 }
 
+async function closeFileManagerIfOpen(page) {
+  const closeButton = page
+    .getByRole("button", { name: "关闭文件管理器" })
+    .first();
+  if (await closeButton.isVisible({ timeout: 1_000 }).catch(() => false)) {
+    await closeButton.click({ timeout: DEFAULT_ACTION_TIMEOUT_MS });
+    return;
+  }
+
+  const openButton = page
+    .getByRole("button", { name: "打开左侧文件管理器" })
+    .first();
+  if (await openButton.isVisible({ timeout: 1_000 }).catch(() => false)) {
+    return;
+  }
+
+  await clickPageControl(page, { ariaLabel: "关闭文件管理器" });
+}
+
 async function waitForExactButton(page, label, name, timeoutMs) {
   try {
     await page
@@ -670,10 +689,18 @@ async function verifyBuilderImportAndReview(page, options) {
   await page
     .getByRole("button", { name: "内容运营", exact: true })
     .click({ timeout: DEFAULT_ACTION_TIMEOUT_MS });
-  await page.getByLabel("资料名称").fill(BUILDER_ACCEPTANCE_PACK.title);
-  await page
-    .getByLabel("原始资料正文")
-    .fill(BUILDER_ACCEPTANCE_PACK.sourceText);
+  const nameInput = page.getByRole("textbox", { name: "资料名称" });
+  const sourceTextarea = page.getByRole("textbox", { name: "原始资料正文" });
+  await nameInput.waitFor({
+    state: "visible",
+    timeout: DEFAULT_ACTION_TIMEOUT_MS,
+  });
+  await sourceTextarea.waitFor({
+    state: "visible",
+    timeout: DEFAULT_ACTION_TIMEOUT_MS,
+  });
+  await nameInput.fill(BUILDER_ACCEPTANCE_PACK.title);
+  await sourceTextarea.fill(BUILDER_ACCEPTANCE_PACK.sourceText);
   await waitForPageText(
     page,
     "Builder 表单填充",
@@ -970,7 +997,7 @@ async function runPlaywrightGuiFlow(options) {
         pack.name === FILE_MANAGER_SOURCE_TITLE,
     );
 
-    await clickPageControl(page, { ariaLabel: "关闭文件管理器" });
+    await closeFileManagerIfOpen(page);
 
     logStage("open-knowledge-page");
     await openKnowledgePageFromMainNav(page, options);

@@ -126,8 +126,13 @@ describe("oemCloudLoginLauncher", () => {
     const windowOpenSpy = vi.spyOn(window, "open").mockReturnValue(null);
 
     await expect(
-      openExternalUrl("https://user.limeai.run/login"),
-    ).rejects.toThrow("系统浏览器打开失败：native denied");
+      openExternalUrl("https://user.limeai.run/login", {
+        copy: {
+          systemBrowserOpenFailedWithMessage: (message) =>
+            `System browser failed from copy: ${message}`,
+        },
+      }),
+    ).rejects.toThrow("System browser failed from copy: native denied");
 
     expect(windowOpenSpy).not.toHaveBeenCalled();
   });
@@ -138,10 +143,15 @@ describe("oemCloudLoginLauncher", () => {
       .spyOn(window, "open")
       .mockReturnValueOnce(openedWindow);
 
-    const browserTarget = createExternalBrowserOpenTarget();
+    const browserTarget = createExternalBrowserOpenTarget({
+      openingTitle: "Opening login",
+      openingBody: "Opening login body",
+    });
 
     expect(browserTarget).not.toBeNull();
     expect(windowOpenSpy).toHaveBeenCalledWith("about:blank", "_blank");
+    expect(openedWindow.document.title).toBe("Opening login");
+    expect(openedWindow.document.body.innerHTML).toBe("Opening login body");
 
     await openExternalUrl("https://user.limeai.run/login", { browserTarget });
 
@@ -159,8 +169,12 @@ describe("oemCloudLoginLauncher", () => {
     vi.spyOn(window, "open").mockReturnValue(null);
 
     await expect(
-      openExternalUrl("https://user.limeai.run/login"),
-    ).rejects.toThrow("可能被弹窗拦截");
+      openExternalUrl("https://user.limeai.run/login", {
+        copy: {
+          popupBlocked: "Popup blocked from copy",
+        },
+      }),
+    ).rejects.toThrow("Popup blocked from copy");
   });
 
   it("构建云端登录页时应携带租户、桌面回跳和返回路径", () => {

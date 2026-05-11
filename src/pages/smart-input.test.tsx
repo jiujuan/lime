@@ -148,6 +148,7 @@ vi.mock("@/lib/api/voiceModels", () => ({
   getDefaultLocalVoiceModelReadiness: mockGetDefaultLocalVoiceModelReadiness,
 }));
 
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { SmartInputPage } from "./smart-input";
 import { OPEN_VOICE_MODEL_SETTINGS_EVENT } from "@/lib/voiceModelSettingsNavigation";
 
@@ -184,16 +185,17 @@ async function renderSmartInput(path = "/smart-input") {
   return container;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
   vi.clearAllMocks();
+  await changeLimeLocale("zh-CN");
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mountedRoots.length > 0) {
     const mounted = mountedRoots.pop();
     if (!mounted) {
@@ -205,10 +207,41 @@ afterEach(() => {
     mounted.container.remove();
   }
   window.history.pushState({}, "", "/");
+  await changeLimeLocale("zh-CN");
   vi.useRealTimers();
 });
 
 describe("SmartInputPage", () => {
+  it("应通过 common namespace 渲染英文悬浮窗 chrome", async () => {
+    await changeLimeLocale("en-US");
+    const container = await renderSmartInput(
+      "/smart-input?text=hello&image=%2Ftmp%2Fscreenshot.png",
+    );
+
+    expect(
+      container
+        .querySelector(".screenshot-drag-handle")
+        ?.getAttribute("title"),
+    ).toBe("Drag to move window");
+    expect(
+      (container.querySelector("textarea") as HTMLTextAreaElement | null)
+        ?.placeholder,
+    ).toBe("Ask anything...");
+    expect(container.textContent).toContain("Image");
+    expect(
+      container.querySelector('button[aria-label="Remove image"]'),
+    ).toBeInstanceOf(HTMLButtonElement);
+    expect(
+      container.querySelector('button[aria-label="Voice input"]'),
+    ).toBeInstanceOf(HTMLButtonElement);
+    expect(
+      container.querySelector('button[aria-label="Close (Esc)"]'),
+    ).toBeInstanceOf(HTMLButtonElement);
+    expect(
+      container.querySelector('button[aria-label="Send (Enter)"]'),
+    ).toBeInstanceOf(HTMLButtonElement);
+  });
+
   it("语音模式应自动录音、显示实时状态，并支持停止识别回填文本", async () => {
     const container = await renderSmartInput("/smart-input?voice=true");
 

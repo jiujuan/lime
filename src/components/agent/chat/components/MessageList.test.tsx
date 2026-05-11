@@ -151,6 +151,7 @@ const mockAgentThreadTimeline = vi.fn(
     actionRequests,
     onOpenSavedSiteContent,
     placement,
+    turn,
   }: {
     actionRequests?: Array<Record<string, unknown>>;
     onOpenSavedSiteContent?: (target: {
@@ -160,10 +161,12 @@ const mockAgentThreadTimeline = vi.fn(
     }) => void;
     deferCompletedSingleDetails?: boolean;
     placement?: "leading" | "trailing" | "default";
+    turn?: { id?: string } | null;
   }) => (
     <div
       data-testid={`agent-thread-timeline:${placement || "default"}`}
       data-has-open-saved-site-content={onOpenSavedSiteContent ? "yes" : "no"}
+      data-turn-id={turn?.id || ""}
     >
       执行轨迹{actionRequests?.length ? `:${actionRequests.length}` : ""}
     </div>
@@ -3731,6 +3734,66 @@ describe("MessageList", () => {
     );
   });
 
+  it("流式正文已出现但过程由 timeline 承载时，应把思考区放在正文气泡外", () => {
+    const now = new Date("2026-05-11T09:40:00.000Z");
+    const messages: Message[] = [
+      {
+        id: "msg-user-streaming-timeline-process",
+        role: "user",
+        content: "帮我做 PPT 大纲，先确认关键信息",
+        timestamp: now,
+      },
+      {
+        id: "msg-assistant-streaming-timeline-process",
+        role: "assistant",
+        content: "好的，要帮您做 PPT 大纲，我先确认几个关键点。",
+        timestamp: now,
+        isThinking: true,
+      },
+    ];
+
+    const container = render(messages, {
+      currentTurnId: "turn-streaming-timeline-process",
+      turns: [
+        {
+          id: "turn-streaming-timeline-process",
+          thread_id: "thread-streaming-timeline-process",
+          prompt_text: "帮我做 PPT 大纲，先确认关键信息",
+          status: "running",
+          started_at: "2026-05-11T09:40:00.000Z",
+          created_at: "2026-05-11T09:40:00.000Z",
+          updated_at: "2026-05-11T09:40:02.000Z",
+        },
+      ],
+      threadItems: [
+        {
+          id: "reasoning-streaming-timeline-process",
+          thread_id: "thread-streaming-timeline-process",
+          turn_id: "turn-streaming-timeline-process",
+          sequence: 1,
+          status: "in_progress",
+          started_at: "2026-05-11T09:40:01.000Z",
+          updated_at: "2026-05-11T09:40:02.000Z",
+          type: "reasoning",
+          text: "正在判断需要补充哪些 PPT 输入。",
+        },
+      ],
+    });
+
+    expect(
+      container.querySelector('[data-testid="assistant-primary-timeline-shell"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
+    ).not.toBeNull();
+    expect(mockStreamingRenderer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: "好的，要帮您做 PPT 大纲，我先确认几个关键点。",
+        thinkingContent: undefined,
+      }),
+    );
+  });
+
   it("已完成旧消息残留 runtimeStatus 时不应把思考过程重复塞回正文", () => {
     const now = new Date();
     const messages: Message[] = [
@@ -5548,5 +5611,111 @@ describe("MessageList", () => {
       container.querySelector('[data-testid="agent-thread-reliability-panel"]'),
     ).toBeNull();
     expect(timelineNodes).toHaveLength(1);
+  });
+
+  it("继续回合的执行过程应挂在第二次对话组而不是第一次失败组", () => {
+    const messages: Message[] = [
+      {
+        id: "msg-user-first",
+        role: "user",
+        content: "帮我做一份 PPT 大纲",
+        timestamp: new Date("2026-05-11T00:20:46Z"),
+      },
+      {
+        id: "msg-assistant-first",
+        role: "assistant",
+        content: "执行失败：402 Payment Required",
+        timestamp: new Date("2026-05-11T00:20:47Z"),
+        runtimeTurnId: "turn-first",
+      },
+      {
+        id: "msg-user-continue",
+        role: "user",
+        content: "继续",
+        timestamp: new Date("2026-05-11T00:26:18Z"),
+      },
+      {
+        id: "msg-assistant-continue",
+        role: "assistant",
+        content: "好的",
+        timestamp: new Date("2026-05-11T00:26:19Z"),
+        runtimeTurnId: "turn-continue",
+      },
+    ];
+
+    const container = render(messages, {
+      currentTurnId: "turn-continue",
+      turns: [
+        {
+          id: "turn-first",
+          thread_id: "thread-1",
+          prompt_text: "帮我做一份 PPT 大纲",
+          status: "failed",
+          started_at: "2026-05-11T00:20:46Z",
+          completed_at: "2026-05-11T00:20:47Z",
+          created_at: "2026-05-11T00:20:46Z",
+          updated_at: "2026-05-11T00:20:47Z",
+        },
+        {
+          id: "turn-continue",
+          thread_id: "thread-1",
+          prompt_text: "继续",
+          status: "completed",
+          started_at: "2026-05-11T00:26:18Z",
+          completed_at: "2026-05-11T00:26:24Z",
+          created_at: "2026-05-11T00:26:18Z",
+          updated_at: "2026-05-11T00:26:24Z",
+        },
+      ],
+      threadItems: [
+        {
+          id: "error-first",
+          thread_id: "thread-1",
+          turn_id: "turn-first",
+          sequence: 1,
+          status: "failed",
+          started_at: "2026-05-11T00:20:47Z",
+          updated_at: "2026-05-11T00:20:47Z",
+          type: "error",
+          message: "Agent provider execution failed: 402 Payment Required",
+        },
+        {
+          id: "process-continue",
+          thread_id: "thread-1",
+          turn_id: "turn-continue",
+          sequence: 1,
+          status: "completed",
+          started_at: "2026-05-11T00:26:19Z",
+          completed_at: "2026-05-11T00:26:24Z",
+          updated_at: "2026-05-11T00:26:24Z",
+          type: "plan",
+          text: "等待用户补充 PPT 信息",
+        },
+      ],
+    });
+
+    const firstAssistant = Array.from(
+      container.querySelectorAll('[data-testid="streaming-renderer"]'),
+    ).find((node) => node.textContent?.includes("402 Payment Required"));
+    const continueAssistant = Array.from(
+      container.querySelectorAll('[data-testid="streaming-renderer"]'),
+    ).find((node) => node.textContent?.includes("好的"));
+    const continueTimeline = container.querySelector(
+      '[data-testid^="agent-thread-timeline:"][data-turn-id="turn-continue"]',
+    );
+
+    expect(firstAssistant).toBeTruthy();
+    expect(continueAssistant).toBeTruthy();
+    expect(continueTimeline).toBeTruthy();
+    expect(
+      (continueTimeline as Node).compareDocumentPosition(
+        continueAssistant as Node,
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      (continueTimeline as Node).compareDocumentPosition(
+        firstAssistant as Node,
+      ) & Node.DOCUMENT_POSITION_PRECEDING,
+    ).toBeTruthy();
   });
 });

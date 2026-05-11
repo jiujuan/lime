@@ -107,7 +107,7 @@ vi.mock("@/lib/providerDataEvents", () => ({
     mockSubscribeProviderDataChanged(...args),
 }));
 
-vi.mock("@/components/openclaw/openUrl", () => ({
+vi.mock("@/lib/openUrl", () => ({
   openUrl: (...args: unknown[]) => mockOpenUrl(...args),
 }));
 

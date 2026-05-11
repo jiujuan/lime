@@ -271,7 +271,7 @@ npm run agent-qc:audit -- --format json
 
 ## 6. 当前 Lime 样本状态
 
-截至 2026-05-11 01:13，本地测试体系已经具备标准、manifest、schema、qcloop exporter、release summary 和 audit，但不能宣称 P0 完成。
+截至 2026-05-11 04:44，本地测试体系已经具备标准、manifest、schema、qcloop exporter、release summary、completion audit、objective checklist 和 raw process owner gate，但不能宣称 P0 完成。
 
 当前关键事实：
 
@@ -298,6 +298,11 @@ npm run agent-qc:audit -- --format json
 - 最新完整 `verify:local` 已刷新为 `status=fail`，失败阶段是 `verify:gui-smoke / smoke:claw-chat-ready-streaming`。后续 direct Claw post-refresh fallback 已 pass，但另一轮 session-restore direct smoke 在 DevBridge 中途不可达时 fail；两者都只能作为 Claw deep flow 的 sidecar 证据，不能替代完整 `verify:local` pass。
 - 2026-05-11 01:13 观察到外部 `verify:gui-smoke -- --reuse-running --timeout-ms 240000` 自然通过，且 Claw streaming / interrupt / resume 在 latest summary 中为 `verdict=pass`、`recoveryVisibleSource=live-stream`。这证明 GUI smoke 主链已经恢复到可通过状态，但 `.lime/qc/gui-process-owner-current.json` 仍显示 raw process owner `busy`，且完整 `verify:local` 尚未重跑通过。
 - 2026-05-11 01:32 已把 raw process owner 检查脚本化为 `npm run agent-qc:process-owner-check`，把 qcloop SQLite lease 取证脚本化为 `npm run agent-qc:qcloop-db-lease`，并新增 `docs/tests/lime-agent-autonomous-test-execution-matrix.md` 作为 Lime 样本的执行矩阵。最新 sidecar 仍显示 `qcloop stale` 与 `raw process owner busy`，因此本轮仍不能启动完整 `verify:local` 或新的 full GUI P0。
+- 2026-05-11 03:11 后，`.lime/qc/verify-local-current.json` 与 `.lime/qc/verify-gui-smoke-current.json` 已恢复为 `status=pass`，completion audit 提升到 `16/17`；剩余目标级缺口收敛为真实 qcloop P0 Evidence Pack。
+- 2026-05-11 04:24 的隔离 P0 full v3 已终态 `failed`，无 running / pending / stale：`command-bridge-contract`、`claw-chat-ready-streaming`、`tool-approval-sandbox-boundary`、`harness-replay-regression` 通过；`skill-forge-register-bind-enable`、`browser-runtime-site-adapter`、`workspace-ready-session-restore`、`release-package-startup-smoke` 仍 fail / blocked。v3 只能作为 sidecar，不能升格为官方 Evidence Pack。
+- 2026-05-11 04:44 的 raw process owner 已收敛到单一 active blocker：PID `59011` 的 stale `smoke:design-canvas`，`cargoOrRust=0`、`qcloopRelated=0`、`staleActiveGuiSmoke=1`。确认前仍不得终止该进程，也不得启动新的 full GUI P0。
+- `skill-forge-register-bind-enable` 的 Rust exact filter 缺口已修正：`smoke:agent-service-skill-entry` 现在拒绝 `running 0 tests`，并产出 `.lime/qc/skill-forge-runtime-transcript-current.json`。随后单项 qcloop `1778445676473687000` 已采信该 runtime transcript 并导出 `.lime/qc/agent-qc-evidence.skill-forge-runtime-transcript.json`，该场景为 `pass`；但它只覆盖 1 个场景，不能覆盖官方 8/8 P0 Evidence Pack。
+- 官方 `.lime/qc/agent-qc-evidence.json` 仍为 `status=fail`。当前测试体系已经能把“本地 smoke 通过”“sidecar 通过/失败”“官方发布证据通过”分开处理，这正是运营级测试要保留的硬边界。
 
 这正是自主测试体系的价值：它没有把“本机某次手动看起来可用”误判为发布通过，而是把缺证据和真实产品 blocker 留在门禁中。
 
@@ -309,11 +314,12 @@ npm run agent-qc:audit -- --format json
 2. 继续只读观察所有 running / stale qcloop 批次；若当前 worker 自然结束，再导出 sidecar 并根据终态决定是否复用待用 payload。没有 owner 明确授权前，不 kill、不 pause、不重启这些进程。
 3. 把 P0 分成两层验收：确定性 smoke 层用于证明主路径可执行，deep evidence 层用于证明 live transcript / trace / console-network / cleanup / approval-sandbox 证据齐全；官方 release gate 仍必须看 deep evidence pass。
 4. 先等当前 running/stale GUI qcloop 批次自然结束，或在 owner 明确授权下收口；下一轮只允许一个 GUI owner 跑 full P0，worker 必须输出 GUI session owner / isolation statement。
-5. 在单一 GUI owner 前提下，定位 `workspace-ready-session-restore` 中 `smoke:design-canvas` 的保存成功状态断言失败，因为它已经是 qcloop worker 内可复现的 GUI P0 signal，不应被旧 isolated pass 覆盖；下一步重点是确认导出按钮点击后是否有保存中 / 保存成功状态，还是导出流程在首个可观察状态前卡住。
-6. 把 `tool-approval-sandbox-boundary` 拆成更窄的 runtime transcript 或 harness replay 场景，让 approval / sandbox 证据以结构化 JSON 进入 verifier，而不是只引用组件级 smoke。
-7. 在 `.lime/qc/gui-process-owner-current.json` 不再显示长时间 raw GUI smoke / Cargo owner 后，重新跑完整 `npm run verify:local`；只有该统一门禁通过，`local-verify-gate` 才能关闭。
-8. 环境阻断解除后，定位 `claw-chat-ready-streaming` 的 stop / interrupt 后持久化、会话恢复和 DevBridge 中途不可达问题，补 Rust 或 harness replay 回归。
-9. 只有 8/8 P0 全部 pass 后，才把结果导出为官方 `.lime/qc/agent-qc-evidence.json`，再运行 `npm run agent-qc:release-summary -- --check` 和 `npm run agent-qc:audit -- --format json`。
+5. 保留 `skill-forge-register-bind-enable` 单项 qcloop pass sidecar，下一轮 full P0 仍要重新在同一批次内覆盖它，不能把单项 sidecar 拼接成官方 Evidence Pack。
+6. 在单一 GUI owner 前提下，优先定位 `workspace-ready-session-restore` / `browser-runtime-site-adapter` / `release-package-startup-smoke` 的 GUI trace、session isolation、release artifact 层证据缺口；不能用旧 isolated pass 覆盖最新 P0 sidecar failure。
+7. 把 `tool-approval-sandbox-boundary` 保持为已通过的 runtime transcript / harness replay 场景，避免后续退回只引用组件级 smoke。
+8. 在 `.lime/qc/gui-process-owner-current.json` 不再显示长时间 raw GUI smoke / Cargo owner 后，重新跑完整 `npm run verify:local`；只有该统一门禁继续通过，`local-verify-gate` 才能保持关闭。
+9. 环境阻断解除后，定位 `claw-chat-ready-streaming` 的 stop / interrupt 后持久化、会话恢复和 DevBridge 中途不可达问题，补 Rust 或 harness replay 回归，防止 v3 pass 变成一次性偶然通过。
+10. 只有 8/8 P0 全部 pass 后，才把结果导出为官方 `.lime/qc/agent-qc-evidence.json`，再运行 `npm run agent-qc:release-summary -- --check` 和 `npm run agent-qc:audit -- --format json`。
 
 ## 8. 与其他文档的关系
 

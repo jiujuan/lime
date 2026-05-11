@@ -3,6 +3,7 @@ import {
   notifyProjectCreatedWithRuntimeAgentsGuide,
   notifyProjectRuntimeAgentsGuide,
 } from "./runtimeAgentsGuideService";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 const {
   mockEnsureWorkspaceLocalAgentsGitignore,
@@ -29,7 +30,8 @@ vi.mock("@/lib/api/memoryRuntime", () => ({
 }));
 
 describe("runtimeAgentsGuideService", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await changeLimeLocale("zh-CN");
     window.localStorage.clear();
     vi.clearAllMocks();
     mockScaffoldRuntimeAgentsTemplate.mockResolvedValue({
@@ -119,6 +121,41 @@ describe("runtimeAgentsGuideService", () => {
       "已初始化运行时 AGENTS 模板",
       expect.objectContaining({
         description: expect.stringContaining(".gitignore"),
+      }),
+    );
+  });
+
+  it("英文界面应使用 workspace namespace 的运行时 AGENTS 引导文案", async () => {
+    await changeLimeLocale("en-US");
+
+    notifyProjectCreatedWithRuntimeAgentsGuide(
+      {
+        id: "project-1",
+        name: "Project A",
+        rootPath: "/tmp/workspace/project-a",
+      },
+      "Project created",
+    );
+
+    expect(mockToastSuccess).toHaveBeenCalledWith(
+      "Project created",
+      expect.objectContaining({
+        description: expect.stringContaining("Initialize the shared rule"),
+        action: expect.objectContaining({
+          label: "Initialize now",
+          onClick: expect.any(Function),
+        }),
+      }),
+    );
+
+    const action = mockToastSuccess.mock.calls[0]?.[1]?.action;
+    await action?.onClick();
+    await Promise.resolve();
+
+    expect(mockToastSuccess).toHaveBeenLastCalledWith(
+      "Runtime AGENTS templates initialized",
+      expect.objectContaining({
+        description: expect.stringContaining("Shared template created"),
       }),
     );
   });

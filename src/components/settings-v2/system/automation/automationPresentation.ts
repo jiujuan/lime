@@ -6,19 +6,19 @@ import type {
   AutomationPayload,
 } from "@/lib/api/automation";
 import type { AgentRun } from "@/lib/api/executionRun";
+import { formatDate } from "@/i18n/format";
 import {
+  defaultAutomationServiceSkillContextCopy,
   mergeAutomationServiceSkillContexts,
   resolveServiceSkillContextFromMetadataRecord,
+  type AutomationServiceSkillContextCopy,
   type AutomationServiceSkillContext,
 } from "./serviceSkillContext";
 import {
-  automationAccessModeLabel,
+  automationAccessModeLabelWithCopy,
+  type AutomationAccessModeCopy,
   resolveAgentTurnAutomationAccessMode,
 } from "./automationAccessMode";
-
-export const LEGACY_BROWSER_AUTOMATION_NOTICE =
-  "浏览器自动化已下线，系统不会再自动启动 Chrome。请删除旧流程，并改建为 Agent 对话持续流程。";
-export const LEGACY_BROWSER_AUTOMATION_STATUS = "已下线";
 
 type AutomationBadgeVariant =
   | "default"
@@ -26,84 +26,227 @@ type AutomationBadgeVariant =
   | "destructive"
   | "outline";
 
-export function formatTime(value?: string | null): string {
+export interface AutomationPresentationCopy {
+  legacyBrowserAutomationNotice: string;
+  legacyBrowserAutomationStatus: string;
+  scheduleHours: (count: number) => string;
+  scheduleMinutes: (count: number) => string;
+  scheduleSeconds: (count: number) => string;
+  scheduleCron: (expr: string) => string;
+  scheduleAt: (time: string) => string;
+  executionModeIntelligent: string;
+  executionModeSkill: string;
+  executionModeLogOnly: string;
+  payloadBrowserSession: string;
+  payloadAgentTurn: string;
+  legacyPayloadProfile: (profile: string) => string;
+  legacyPayloadEnvironment: (environment: string) => string;
+  legacyPayloadUrl: (url: string) => string;
+  legacyPayloadTargetId: (targetId: string) => string;
+  legacyPayloadWindow: (status: string) => string;
+  legacyPayloadWindowOpen: string;
+  legacyPayloadWindowClosed: string;
+  legacyPayloadStreamMode: (streamMode: string) => string;
+  statusQueued: string;
+  statusSuccess: string;
+  statusRunning: string;
+  statusWaitingForHuman: string;
+  statusHumanControlling: string;
+  statusAgentResuming: string;
+  statusError: string;
+  statusTimeout: string;
+  statusPending: string;
+  statusDetailBlocking: string;
+  statusDetailResume: string;
+  statusDetailLastError: string;
+  statusDetailRunning: string;
+  deliveryModeAnnounce: string;
+  deliveryModeNone: string;
+  deliveryChannelLocalFile: string;
+  outputSchemaJson: string;
+  outputSchemaTable: string;
+  outputSchemaCsv: string;
+  outputSchemaLinks: string;
+  outputSchemaText: string;
+  outputFormatJson: string;
+  outputFormatText: string;
+  serviceSkillTaskLine: (title: string) => string;
+  serviceSkillMoreItems: (count: number) => string;
+  serviceSkillContextCopy: AutomationServiceSkillContextCopy;
+  accessModeCopy?: AutomationAccessModeCopy;
+}
+
+export const defaultAutomationPresentationCopy: AutomationPresentationCopy = {
+  legacyBrowserAutomationNotice:
+    "浏览器自动化已下线，系统不会再自动启动 Chrome。请删除旧流程，并改建为 Agent 对话持续流程。",
+  legacyBrowserAutomationStatus: "已下线",
+  scheduleHours: (count) => `每 ${count} 小时`,
+  scheduleMinutes: (count) => `每 ${count} 分钟`,
+  scheduleSeconds: (count) => `每 ${count} 秒`,
+  scheduleCron: (expr) => `Cron: ${expr}`,
+  scheduleAt: (time) => `一次性: ${time}`,
+  executionModeIntelligent: "智能执行",
+  executionModeSkill: "技能执行",
+  executionModeLogOnly: "只记录",
+  payloadBrowserSession: "浏览器自动化",
+  payloadAgentTurn: "Agent 对话",
+  legacyPayloadProfile: (profile) => `资料: ${profile}`,
+  legacyPayloadEnvironment: (environment) => `环境预设: ${environment}`,
+  legacyPayloadUrl: (url) => `启动地址: ${url}`,
+  legacyPayloadTargetId: (targetId) => `Target ID: ${targetId}`,
+  legacyPayloadWindow: (status) => `调试窗口: ${status}`,
+  legacyPayloadWindowOpen: "打开",
+  legacyPayloadWindowClosed: "关闭",
+  legacyPayloadStreamMode: (streamMode) => `流模式: ${streamMode}`,
+  statusQueued: "排队中",
+  statusSuccess: "成功",
+  statusRunning: "运行中",
+  statusWaitingForHuman: "等待人工处理",
+  statusHumanControlling: "人工接管中",
+  statusAgentResuming: "恢复给 Agent",
+  statusError: "失败",
+  statusTimeout: "超时",
+  statusPending: "待执行",
+  statusDetailBlocking: "当前阻塞",
+  statusDetailResume: "恢复说明",
+  statusDetailLastError: "最近异常",
+  statusDetailRunning: "运行说明",
+  deliveryModeAnnounce: "运行完成后投递",
+  deliveryModeNone: "关闭",
+  deliveryChannelLocalFile: "本地文件",
+  outputSchemaJson: "JSON 对象",
+  outputSchemaTable: "表格",
+  outputSchemaCsv: "CSV",
+  outputSchemaLinks: "链接列表",
+  outputSchemaText: "文本摘要",
+  outputFormatJson: "JSON 编码",
+  outputFormatText: "文本编码",
+  serviceSkillTaskLine: (title) => `技能：${title}`,
+  serviceSkillMoreItems: (count) => ` 等 ${count} 项`,
+  serviceSkillContextCopy: defaultAutomationServiceSkillContextCopy,
+};
+
+export function formatTime(
+  value?: string | null,
+  locale?: string,
+): string {
   if (!value) {
     return "-";
   }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return date.toLocaleString("zh-CN", { hour12: false });
+  return (
+    formatDate(value, {
+      locale,
+      hour12: false,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }) || value
+  );
 }
 
-export function describeSchedule(job: AutomationJobRecord): string {
+export function describeSchedule(
+  job: AutomationJobRecord,
+  copy: AutomationPresentationCopy = defaultAutomationPresentationCopy,
+  locale?: string,
+): string {
   if (job.schedule.kind === "every") {
     const secs = job.schedule.every_secs;
     if (secs % 3600 === 0) {
-      return `每 ${secs / 3600} 小时`;
+      return copy.scheduleHours(secs / 3600);
     }
     if (secs % 60 === 0) {
-      return `每 ${secs / 60} 分钟`;
+      return copy.scheduleMinutes(secs / 60);
     }
-    return `每 ${secs} 秒`;
+    return copy.scheduleSeconds(secs);
   }
   if (job.schedule.kind === "cron") {
-    return `Cron: ${job.schedule.expr}`;
+    return copy.scheduleCron(job.schedule.expr);
   }
-  return `一次性: ${formatTime(job.schedule.at)}`;
+  return copy.scheduleAt(formatTime(job.schedule.at, locale));
 }
 
 export function executionModeLabel(
   mode: AutomationJobRecord["execution_mode"],
+  copy: AutomationPresentationCopy = defaultAutomationPresentationCopy,
 ): string {
   switch (mode) {
     case "intelligent":
-      return "智能执行";
+      return copy.executionModeIntelligent;
     case "skill":
-      return "技能执行";
+      return copy.executionModeSkill;
     case "log_only":
-      return "只记录";
+      return copy.executionModeLogOnly;
     default:
       return mode;
   }
 }
 
-export function payloadKindLabel(kind: AutomationPayload["kind"]): string {
-  return kind === "browser_session" ? "浏览器自动化" : "Agent 对话";
+export function payloadKindLabel(
+  kind: AutomationPayload["kind"],
+  copy: AutomationPresentationCopy = defaultAutomationPresentationCopy,
+): string {
+  return kind === "browser_session"
+    ? copy.payloadBrowserSession
+    : copy.payloadAgentTurn;
 }
 
-export function describePayload(payload: AutomationPayload): string {
+export function describePayload(
+  payload: AutomationPayload,
+  copy: AutomationPresentationCopy = defaultAutomationPresentationCopy,
+): string {
   if (payload.kind === "agent_turn") {
     return payload.prompt;
   }
 
-  const lines = [LEGACY_BROWSER_AUTOMATION_NOTICE];
-  lines.push(`资料: ${payload.profile_key ?? payload.profile_id}`);
+  const lines = [copy.legacyBrowserAutomationNotice];
+  lines.push(copy.legacyPayloadProfile(payload.profile_key ?? payload.profile_id));
   if (payload.environment_preset_id) {
-    lines.push(`环境预设: ${payload.environment_preset_id}`);
+    lines.push(copy.legacyPayloadEnvironment(payload.environment_preset_id));
   }
   if (payload.url) {
-    lines.push(`启动地址: ${payload.url}`);
+    lines.push(copy.legacyPayloadUrl(payload.url));
   }
   if (payload.target_id) {
-    lines.push(`Target ID: ${payload.target_id}`);
+    lines.push(copy.legacyPayloadTargetId(payload.target_id));
   }
-  lines.push(`调试窗口: ${payload.open_window ? "打开" : "关闭"}`);
-  lines.push(`流模式: ${payload.stream_mode}`);
+  lines.push(
+    copy.legacyPayloadWindow(
+      payload.open_window
+        ? copy.legacyPayloadWindowOpen
+        : copy.legacyPayloadWindowClosed,
+    ),
+  );
+  lines.push(copy.legacyPayloadStreamMode(payload.stream_mode));
   return lines.join("\n");
 }
 
 export function describeAgentTurnAccessMode(
   payload: AutomationPayload,
+  copy: AutomationPresentationCopy = defaultAutomationPresentationCopy,
 ): string {
   if (payload.kind !== "agent_turn") {
     return "-";
   }
 
-  return automationAccessModeLabel(
-    resolveAgentTurnAutomationAccessMode(payload),
-  );
+  return copy.accessModeCopy
+    ? automationAccessModeLabelWithCopy(
+        resolveAgentTurnAutomationAccessMode(payload),
+        copy.accessModeCopy,
+      )
+    : automationAccessModeLabelWithCopy(
+        resolveAgentTurnAutomationAccessMode(payload),
+        {
+          readOnly: "只读",
+          current: "按需确认",
+          fullAccess: "完全访问",
+          policyReadOnly: "正式策略会写成 on-request + read-only。",
+          policyCurrent: "正式策略会写成 on-request + workspace-write。",
+          policyFullAccess: "正式策略会写成 never + danger-full-access。",
+        },
+      );
 }
 
 export function isLegacyBrowserAutomation(
@@ -227,26 +370,29 @@ export function resolveRunDelivery(
   };
 }
 
-export function statusLabel(status?: string | null): string {
+export function statusLabel(
+  status?: string | null,
+  copy: AutomationPresentationCopy = defaultAutomationPresentationCopy,
+): string {
   switch (status) {
     case "queued":
-      return "排队中";
+      return copy.statusQueued;
     case "success":
-      return "成功";
+      return copy.statusSuccess;
     case "running":
-      return "运行中";
+      return copy.statusRunning;
     case "waiting_for_human":
-      return "等待人工处理";
+      return copy.statusWaitingForHuman;
     case "human_controlling":
-      return "人工接管中";
+      return copy.statusHumanControlling;
     case "agent_resuming":
-      return "恢复给 Agent";
+      return copy.statusAgentResuming;
     case "error":
-      return "失败";
+      return copy.statusError;
     case "timeout":
-      return "超时";
+      return copy.statusTimeout;
     default:
-      return "待执行";
+      return copy.statusPending;
   }
 }
 
@@ -313,18 +459,21 @@ export function statusDetailToneClass(status?: string | null): string {
   }
 }
 
-export function statusDetailPrefix(status?: string | null): string {
+export function statusDetailPrefix(
+  status?: string | null,
+  copy: AutomationPresentationCopy = defaultAutomationPresentationCopy,
+): string {
   switch (status) {
     case "waiting_for_human":
     case "human_controlling":
-      return "当前阻塞";
+      return copy.statusDetailBlocking;
     case "agent_resuming":
-      return "恢复说明";
+      return copy.statusDetailResume;
     case "error":
     case "timeout":
-      return "最近异常";
+      return copy.statusDetailLastError;
     default:
-      return "运行说明";
+      return copy.statusDetailRunning;
   }
 }
 
@@ -351,18 +500,26 @@ export function resolveDeliveryOutputSchema(
   }
 }
 
-export function deliveryModeLabel(job: AutomationJobRecord): string {
-  return job.delivery.mode === "announce" ? "运行完成后投递" : "关闭";
+export function deliveryModeLabel(
+  job: AutomationJobRecord,
+  copy: AutomationPresentationCopy = defaultAutomationPresentationCopy,
+): string {
+  return job.delivery.mode === "announce"
+    ? copy.deliveryModeAnnounce
+    : copy.deliveryModeNone;
 }
 
-export function deliveryChannelLabel(channel?: string | null): string {
+export function deliveryChannelLabel(
+  channel?: string | null,
+  copy: AutomationPresentationCopy = defaultAutomationPresentationCopy,
+): string {
   switch (channel) {
     case "webhook":
       return "Webhook";
     case "google_sheets":
       return "Google Sheets";
     case "local_file":
-      return "本地文件";
+      return copy.deliveryChannelLocalFile;
     case "telegram":
       return "Telegram";
     default:
@@ -370,23 +527,29 @@ export function deliveryChannelLabel(channel?: string | null): string {
   }
 }
 
-export function outputSchemaLabel(schema: AutomationOutputSchema): string {
+export function outputSchemaLabel(
+  schema: AutomationOutputSchema,
+  copy: AutomationPresentationCopy = defaultAutomationPresentationCopy,
+): string {
   switch (schema) {
     case "json":
-      return "JSON 对象";
+      return copy.outputSchemaJson;
     case "table":
-      return "表格";
+      return copy.outputSchemaTable;
     case "csv":
-      return "CSV";
+      return copy.outputSchemaCsv;
     case "links":
-      return "链接列表";
+      return copy.outputSchemaLinks;
     default:
-      return "文本摘要";
+      return copy.outputSchemaText;
   }
 }
 
-export function outputFormatLabel(format: AutomationOutputFormat): string {
-  return format === "json" ? "JSON 编码" : "文本编码";
+export function outputFormatLabel(
+  format: AutomationOutputFormat,
+  copy: AutomationPresentationCopy = defaultAutomationPresentationCopy,
+): string {
+  return format === "json" ? copy.outputFormatJson : copy.outputFormatText;
 }
 
 export function deliveryStatusVariant(
@@ -408,13 +571,15 @@ export function deliveryToneClass(
 
 export function describeServiceSkillTaskLine(
   serviceSkillContext: AutomationServiceSkillContext,
+  copy: AutomationPresentationCopy = defaultAutomationPresentationCopy,
 ): string {
-  return `技能：${serviceSkillContext.title}`;
+  return copy.serviceSkillTaskLine(serviceSkillContext.title);
 }
 
 export function describeServiceSkillSlotPreview(
   serviceSkillContext: AutomationServiceSkillContext,
   limit: number = 2,
+  copy: AutomationPresentationCopy = defaultAutomationPresentationCopy,
 ): string | null {
   const preview = serviceSkillContext.slotSummary
     .slice(0, limit)
@@ -422,7 +587,7 @@ export function describeServiceSkillSlotPreview(
   if (preview.length > 0) {
     const suffix =
       serviceSkillContext.slotSummary.length > limit
-        ? ` 等 ${serviceSkillContext.slotSummary.length} 项`
+        ? copy.serviceSkillMoreItems(serviceSkillContext.slotSummary.length)
         : "";
     return `${preview.join(" · ")}${suffix}`;
   }
@@ -437,10 +602,11 @@ export function describeServiceSkillSlotPreview(
 export function resolveRunServiceSkillContext(
   run: AgentRun,
   fallbackContext: AutomationServiceSkillContext | null,
+  copy: AutomationServiceSkillContextCopy = defaultAutomationServiceSkillContextCopy,
 ): AutomationServiceSkillContext | null {
   const metadata = parseRunMetadata(run);
   const runContext = metadata
-    ? resolveServiceSkillContextFromMetadataRecord(metadata)
+    ? resolveServiceSkillContextFromMetadataRecord(metadata, { copy })
     : null;
-  return mergeAutomationServiceSkillContexts(runContext, fallbackContext);
+  return mergeAutomationServiceSkillContexts(runContext, fallbackContext, copy);
 }

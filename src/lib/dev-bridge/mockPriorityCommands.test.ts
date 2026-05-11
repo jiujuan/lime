@@ -22,13 +22,6 @@ describe("mockPriorityCommands", () => {
     expect(shouldPreferMockInBrowser("content_workflow_get_by_content")).toBe(
       false,
     );
-  });
-
-  it("OpenClaw 浏览器模式命令优先走 mock", () => {
-    expect(shouldPreferMockInBrowser("openclaw_get_environment_status")).toBe(
-      true,
-    );
-    expect(shouldPreferMockInBrowser("openclaw_get_status")).toBe(true);
     expect(shouldPreferMockInBrowser("close_webview_panel")).toBe(true);
   });
 

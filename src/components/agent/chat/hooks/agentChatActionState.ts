@@ -20,7 +20,14 @@ export const upsertAssistantActionRequest = ({
   setPendingActions,
   setMessages,
 }: UpsertAssistantActionRequestOptions) => {
-  const promptKey = replaceByPrompt ? resolveActionPromptKey(actionData) : null;
+  const scopedActionData: ActionRequired = {
+    ...actionData,
+    sourceMessageId: actionData.sourceMessageId || assistantMsgId,
+    status: actionData.status || "pending",
+  };
+  const promptKey = replaceByPrompt
+    ? resolveActionPromptKey(scopedActionData)
+    : null;
 
   setPendingActions((prev) => {
     let next = [...prev];
@@ -29,15 +36,15 @@ export const upsertAssistantActionRequest = ({
       next = next.filter((item) => {
         const itemKey = resolveActionPromptKey(item);
         return !(
-          item.requestId !== actionData.requestId &&
+          item.requestId !== scopedActionData.requestId &&
           itemKey &&
           itemKey === promptKey
         );
       });
     }
 
-    next = next.filter((item) => item.requestId !== actionData.requestId);
-    next.push(actionData);
+    next = next.filter((item) => item.requestId !== scopedActionData.requestId);
+    next.push(scopedActionData);
     return next;
   });
 
@@ -52,7 +59,7 @@ export const upsertAssistantActionRequest = ({
         nextRequests = nextRequests.filter((item) => {
           const itemKey = resolveActionPromptKey(item);
           return !(
-            item.requestId !== actionData.requestId &&
+            item.requestId !== scopedActionData.requestId &&
             itemKey &&
             itemKey === promptKey
           );
@@ -61,24 +68,24 @@ export const upsertAssistantActionRequest = ({
           (part) =>
             !(
               part.type === "action_required" &&
-              part.actionRequired.requestId !== actionData.requestId &&
+              part.actionRequired.requestId !== scopedActionData.requestId &&
               resolveActionPromptKey(part.actionRequired) === promptKey
             ),
         );
       }
 
       nextRequests = nextRequests.filter(
-        (item) => item.requestId !== actionData.requestId,
+        (item) => item.requestId !== scopedActionData.requestId,
       );
       nextParts = nextParts.filter(
         (part) =>
           !(
             part.type === "action_required" &&
-            part.actionRequired.requestId === actionData.requestId
+            part.actionRequired.requestId === scopedActionData.requestId
           ),
       );
-      nextRequests.push(actionData);
-      nextParts = appendActionRequiredToParts(nextParts, actionData);
+      nextRequests.push(scopedActionData);
+      nextParts = appendActionRequiredToParts(nextParts, scopedActionData);
 
       return {
         ...msg,

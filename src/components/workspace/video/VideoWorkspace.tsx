@@ -6,6 +6,8 @@ import React, {
   useRef,
   useState,
 } from "react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import { ArrowUpRight, Sparkles, Video } from "lucide-react";
 import { toast } from "sonner";
@@ -20,12 +22,15 @@ import {
   videoGenerationApi,
   type VideoGenerationTask,
 } from "@/lib/api/videoGeneration";
+import { formatDate, formatNumber } from "@/i18n/format";
 
 interface VideoWorkspaceProps {
   state: VideoCanvasState;
   projectId?: string | null;
   onStateChange: (state: VideoCanvasState) => void;
 }
+
+type WorkspaceTranslate = TFunction<"workspace", undefined>;
 
 const WorkspaceWrapper = styled.div`
   position: relative;
@@ -701,8 +706,11 @@ function isMaterialReferenceUrl(url: string): boolean {
   return url.startsWith("material://");
 }
 
-function buildVideoMaterialName(task: WorkspaceTask): string {
-  const promptHead = task.prompt.trim().slice(0, 24) || "生成视频";
+function buildVideoMaterialName(
+  task: WorkspaceTask,
+  fallbackPrompt: string,
+): string {
+  const promptHead = task.prompt.trim().slice(0, 24) || fallbackPrompt;
   const date = new Date(task.createdAt);
   const stamp = [
     date.getFullYear(),
@@ -716,13 +724,14 @@ function buildVideoMaterialName(task: WorkspaceTask): string {
   return `${promptHead}-${stamp}.mp4`;
 }
 
-function formatTaskTime(timestamp: number): string {
-  return new Intl.DateTimeFormat("zh-CN", {
+function formatTaskTime(timestamp: number, locale?: string): string {
+  return formatDate(timestamp, {
+    locale,
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(timestamp);
+  });
 }
 
 function mergeTaskList(
@@ -792,20 +801,30 @@ function getStatusTone(
   return "neutral";
 }
 
-function getTaskStatusLabel(status: string): string {
+function getTaskStatusLabel(t: WorkspaceTranslate, status: string): string {
   if (status === "success") {
-    return "已完成";
+    return t("workspace.video.workspace.taskStatus.success", {
+      defaultValue: "已完成",
+    });
   }
   if (status === "error") {
-    return "失败";
+    return t("workspace.video.workspace.taskStatus.error", {
+      defaultValue: "失败",
+    });
   }
   if (status === "cancelled") {
-    return "已取消";
+    return t("workspace.video.workspace.taskStatus.cancelled", {
+      defaultValue: "已取消",
+    });
   }
   if (status === "pending") {
-    return "排队中";
+    return t("workspace.video.workspace.taskStatus.pending", {
+      defaultValue: "排队中",
+    });
   }
-  return "生成中";
+  return t("workspace.video.workspace.taskStatus.generating", {
+    defaultValue: "生成中",
+  });
 }
 
 function clampProgress(value?: number | null): number | null {
@@ -876,7 +895,11 @@ function readTaskPayloadPositiveNumber(
   return null;
 }
 
-function resolveTaskSyncCopy(task: WorkspaceTask): {
+function resolveTaskSyncCopy(
+  task: WorkspaceTask,
+  t: WorkspaceTranslate,
+  locale?: string,
+): {
   label: string;
   hint: string;
 } {
@@ -885,58 +908,147 @@ function resolveTaskSyncCopy(task: WorkspaceTask): {
   if (task.status === "success") {
     if (task.resourceMaterialId) {
       return {
-        label: "已同步到项目资料",
-        hint: "当前结果已经沉淀到项目资料，可继续复用或组合后续命令。",
+        label: t("workspace.video.workspace.taskSync.saved.label", {
+          defaultValue: "已同步到项目资料",
+        }),
+        hint: t("workspace.video.workspace.taskSync.saved.hint", {
+          defaultValue: "当前结果已经沉淀到项目资料，可继续复用或组合后续命令。",
+        }),
       };
     }
     if (task.resourceSaveError) {
       return {
-        label: "同步失败",
-        hint: task.resourceSaveError,
+        label: t("workspace.video.workspace.taskSync.saveFailed.label", {
+          defaultValue: "同步失败",
+        }),
+        hint:
+          task.resourceSaveError.trim() ||
+          t("workspace.video.workspace.taskSync.saveFailed.fallbackHint", {
+            defaultValue: "请稍后重试或检查项目资料权限。",
+          }),
       };
     }
     return {
-      label: "结果已生成",
-      hint: "视频已经可预览，同步到项目资料会继续在后台自动完成。",
+      label: t("workspace.video.workspace.taskSync.generated.label", {
+        defaultValue: "结果已生成",
+      }),
+      hint: t("workspace.video.workspace.taskSync.generated.hint", {
+        defaultValue: "视频已经可预览，同步到项目资料会继续在后台自动完成。",
+      }),
     };
   }
 
   if (task.status === "error") {
     return {
-      label: "生成失败",
-      hint: task.errorMessage?.trim() || "请检查提示词、模型配置或参考图。",
+      label: t("workspace.video.workspace.taskSync.error.label", {
+        defaultValue: "生成失败",
+      }),
+      hint:
+        task.errorMessage?.trim() ||
+        t("workspace.video.workspace.taskSync.error.fallbackHint", {
+          defaultValue: "请检查提示词、模型配置或参考图。",
+        }),
     };
   }
 
   if (task.status === "cancelled") {
     return {
-      label: "任务已取消",
-      hint: "当前任务不会继续生成新的结果，可直接重新发起下一轮。",
+      label: t("workspace.video.workspace.taskSync.cancelled.label", {
+        defaultValue: "任务已取消",
+      }),
+      hint: t("workspace.video.workspace.taskSync.cancelled.hint", {
+        defaultValue: "当前任务不会继续生成新的结果，可直接重新发起下一轮。",
+      }),
     };
   }
 
   if (typeof progress === "number") {
     return {
-      label: `当前进度 ${progress}%`,
-      hint: "工作台会继续刷新状态，完成后自动切换为可预览结果。",
+      label: t("workspace.video.workspace.taskSync.progress.label", {
+        defaultValue: "当前进度 {{value}}%",
+        value: formatNumber(progress, { locale }),
+      }),
+      hint: t("workspace.video.workspace.taskSync.progress.hint", {
+        defaultValue: "工作台会继续刷新状态，完成后自动切换为可预览结果。",
+      }),
     };
   }
 
   if (task.status === "pending") {
     return {
-      label: "排队中",
-      hint: "任务已提交到生成队列，等待服务端返回正式进度。",
+      label: t("workspace.video.workspace.taskSync.pending.label", {
+        defaultValue: "排队中",
+      }),
+      hint: t("workspace.video.workspace.taskSync.pending.hint", {
+        defaultValue: "任务已提交到生成队列，等待服务端返回正式进度。",
+      }),
     };
   }
 
   return {
-    label: "生成中",
-    hint: "视频任务正在执行，当前会优先展示你选中的任务状态。",
+    label: t("workspace.video.workspace.taskSync.generating.label", {
+      defaultValue: "生成中",
+    }),
+    hint: t("workspace.video.workspace.taskSync.generating.hint", {
+      defaultValue: "视频任务正在执行，当前会优先展示你选中的任务状态。",
+    }),
   };
+}
+
+function resolveTaskSyncMessage(
+  task: WorkspaceTask,
+  t: WorkspaceTranslate,
+  locale?: string,
+): string {
+  const progress = clampProgress(task.progress);
+
+  if (task.status === "success") {
+    if (task.resourceMaterialId) {
+      return t("workspace.video.workspace.taskSync.saved.label", {
+        defaultValue: "已同步到项目资料",
+      });
+    }
+    if (task.resourceSaveError) {
+      return t("workspace.video.workspace.taskSync.saveFailed.message", {
+        defaultValue: "同步到项目资料失败：{{message}}",
+        message: task.resourceSaveError,
+      });
+    }
+    return t("workspace.video.workspace.taskSync.generated.syncingMessage", {
+      defaultValue: "结果已生成，正在同步到项目资料",
+    });
+  }
+
+  if (task.status === "error") {
+    return (
+      task.errorMessage?.trim() ||
+      t("workspace.video.workspace.taskSync.error.fallbackMessage", {
+        defaultValue: "任务执行失败",
+      })
+    );
+  }
+
+  if (task.status === "cancelled") {
+    return t("workspace.video.workspace.taskSync.cancelled.label", {
+      defaultValue: "任务已取消",
+    });
+  }
+
+  if (typeof progress === "number") {
+    return t("workspace.video.workspace.taskSync.progress.label", {
+      defaultValue: "当前进度 {{value}}%",
+      value: formatNumber(progress, { locale }),
+    });
+  }
+
+  return t("workspace.video.workspace.taskSync.waitingProgress", {
+    defaultValue: "正在等待服务端返回进度",
+  });
 }
 
 export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
   ({ state, projectId, onStateChange }) => {
+    const { t, i18n } = useTranslation("workspace");
     const [tasks, setTasks] = useState<WorkspaceTask[]>([]);
     const pollingGuard = useRef(false);
     const savingTaskIdsRef = useRef<Set<string>>(new Set());
@@ -1001,8 +1113,12 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
           const message =
             focusedTask.errorMessage ??
             (focusedTask.status === "cancelled"
-              ? "视频任务已取消"
-              : "视频生成失败");
+              ? t("workspace.video.workspace.state.cancelledFallback", {
+                  defaultValue: "视频任务已取消",
+                })
+              : t("workspace.video.workspace.state.errorFallback", {
+                  defaultValue: "视频生成失败",
+                }));
           if (
             baseState.status !== "error" ||
             baseState.errorMessage !== message
@@ -1035,7 +1151,7 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
           }
         }
       },
-      [pushState],
+      [pushState, t],
     );
 
     const saveVideoToResource = useCallback(
@@ -1051,11 +1167,24 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
         try {
           const request: ImportMaterialFromUrlRequest = {
             projectId,
-            name: buildVideoMaterialName(task),
+            name: buildVideoMaterialName(
+              task,
+              t("workspace.video.workspace.resource.videoNameFallback", {
+                defaultValue: "生成视频",
+              }),
+            ),
             type: "video",
             url: task.resultUrl,
             tags: [VIDEO_TASK_TAG],
-            description: `视频生成自动入库（服务：${task.providerId}，模型：${task.model}）`,
+            description: t(
+              "workspace.video.workspace.resource.videoDescription",
+              {
+                defaultValue:
+                  "视频生成自动入库（服务：{{provider}}，模型：{{model}}）",
+                model: task.model,
+                provider: task.providerId,
+              },
+            ),
           };
           const savedMaterial = await importMaterialFromUrl(request);
 
@@ -1085,7 +1214,7 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
           savingTaskIdsRef.current.delete(task.id);
         }
       },
-      [projectId],
+      [projectId, t],
     );
 
     useEffect(() => {
@@ -1202,7 +1331,11 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
           return normalizedUrl;
         }
         if (!normalizedUrl.startsWith("data:")) {
-          throw new Error("参考图格式不支持，请重新上传图片");
+          throw new Error(
+            t("workspace.video.workspace.reference.unsupportedFormat", {
+              defaultValue: "参考图格式不支持，请重新上传图片",
+            }),
+          );
         }
 
         const cached = materialRefCache.current.get(normalizedUrl);
@@ -1211,19 +1344,34 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
         }
 
         if (!projectId) {
-          throw new Error("未选择项目，无法处理参考图");
+          throw new Error(
+            t("workspace.video.workspace.reference.projectRequired", {
+              defaultValue: "未选择项目，无法处理参考图",
+            }),
+          );
         }
 
         const request: ImportMaterialFromUrlRequest = {
           projectId,
-          name: frameType === "start" ? "视频首帧参考图" : "视频尾帧参考图",
+          name:
+            frameType === "start"
+              ? t("workspace.video.workspace.reference.startName", {
+                  defaultValue: "视频首帧参考图",
+                })
+              : t("workspace.video.workspace.reference.endName", {
+                  defaultValue: "视频尾帧参考图",
+                }),
           type: "image",
           url: normalizedUrl,
           tags: [VIDEO_REFERENCE_TAG, frameType],
           description:
             frameType === "start"
-              ? "视频生成首帧参考图（自动上传）"
-              : "视频生成尾帧参考图（自动上传）",
+              ? t("workspace.video.workspace.reference.startDescription", {
+                  defaultValue: "视频生成首帧参考图（自动上传）",
+                })
+              : t("workspace.video.workspace.reference.endDescription", {
+                  defaultValue: "视频生成尾帧参考图（自动上传）",
+                }),
         };
         const material = await importMaterialFromUrl(request);
 
@@ -1231,26 +1379,42 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
         materialRefCache.current.set(normalizedUrl, materialUrl);
         return materialUrl;
       },
-      [projectId],
+      [projectId, t],
     );
 
     const handleGenerate = useCallback(
       async (textOverride?: string) => {
         if (!projectId) {
-          toast.error("请先选择项目后再生成视频");
+          toast.error(
+            t("workspace.video.workspace.generate.projectRequired", {
+              defaultValue: "请先选择项目后再生成视频",
+            }),
+          );
           return;
         }
         if (!state.providerId) {
-          toast.error("请选择视频服务");
+          toast.error(
+            t("workspace.video.workspace.generate.providerRequired", {
+              defaultValue: "请选择视频服务",
+            }),
+          );
           return;
         }
         if (!state.model) {
-          toast.error("请选择视频模型");
+          toast.error(
+            t("workspace.video.workspace.generate.modelRequired", {
+              defaultValue: "请选择视频模型",
+            }),
+          );
           return;
         }
         const promptText = textOverride || state.prompt.trim();
         if (!promptText) {
-          toast.error("请输入视频描述");
+          toast.error(
+            t("workspace.video.workspace.generate.promptRequired", {
+              defaultValue: "请输入视频描述",
+            }),
+          );
           return;
         }
         const providerNormalized = state.providerId.trim().toLowerCase();
@@ -1261,7 +1425,11 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
           providerNormalized.includes("alibaba") ||
           providerNormalized.includes("qwen");
         if (!supportedProvider) {
-          toast.error("当前仅支持火山或阿里兼容视频服务");
+          toast.error(
+            t("workspace.video.workspace.generate.unsupportedProvider", {
+              defaultValue: "当前仅支持火山或阿里兼容视频服务",
+            }),
+          );
           return;
         }
 
@@ -1303,7 +1471,11 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
             syncPrimaryState(merged);
             return merged;
           });
-          toast.success("视频任务已提交，正在生成");
+          toast.success(
+            t("workspace.video.workspace.generate.submitted", {
+              defaultValue: "视频任务已提交，正在生成",
+            }),
+          );
         } catch (error) {
           const message =
             error instanceof Error ? error.message : String(error);
@@ -1315,7 +1487,14 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
           toast.error(message);
         }
       },
-      [ensureReferenceImageUrl, projectId, pushState, state, syncPrimaryState],
+      [
+        ensureReferenceImageUrl,
+        projectId,
+        pushState,
+        state,
+        syncPrimaryState,
+        t,
+      ],
     );
 
     const handlePreviewTask = useCallback(
@@ -1346,33 +1525,116 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
     ).length;
 
     const summaryCards = useMemo(
-      () => [
-        {
-          label: "当前模型",
-          value: state.model || "待选择",
-          hint: state.providerId || "请先在左侧选择视频服务",
-        },
-        {
-          label: "输出规格",
-          value: `${state.aspectRatio} · ${state.resolution}`,
-          hint: `时长 ${state.duration} 秒`,
-        },
-        {
-          label: "参考图",
-          value:
-            referenceCount > 0 ? `${referenceCount} 张参考图` : "纯文生视频",
-          hint:
-            referenceCount > 0
-              ? "可用于锁定开场、结尾或主体一致性"
-              : "先验证镜头，再逐步加入约束",
-        },
-        {
-          label: "任务同步",
-          value: projectId ? "结果自动同步" : "需先选择项目",
-          hint: projectId ? "成功后会沉淀到项目资料" : "当前无法提交视频任务",
-        },
-      ],
+      () => {
+        const locale = i18n.language;
+        return [
+          {
+            label: t("workspace.video.workspace.summary.currentModel.label", {
+              defaultValue: "当前模型",
+            }),
+            value:
+              state.model ||
+              t("workspace.video.workspace.summary.currentModel.pending", {
+                defaultValue: "待选择",
+              }),
+            hint:
+              state.providerId ||
+              t("workspace.video.workspace.summary.currentModel.providerHint", {
+                defaultValue: "请先在左侧选择视频服务",
+              }),
+            tipAria: t(
+              "workspace.video.workspace.summary.currentModel.tipAria",
+              {
+                defaultValue: "当前模型说明",
+              },
+            ),
+          },
+          {
+            label: t("workspace.video.workspace.summary.outputSpec.label", {
+              defaultValue: "输出规格",
+            }),
+            value: `${state.aspectRatio} · ${state.resolution}`,
+            hint: t(
+              "workspace.video.workspace.summary.outputSpec.durationSeconds",
+              {
+                defaultValue: "时长 {{value}} 秒",
+                value: formatNumber(state.duration, { locale }),
+              },
+            ),
+            tipAria: t("workspace.video.workspace.summary.outputSpec.tipAria", {
+              defaultValue: "输出规格说明",
+            }),
+          },
+          {
+            label: t("workspace.video.workspace.summary.referenceImages.label", {
+              defaultValue: "参考图",
+            }),
+            value:
+              referenceCount > 0
+                ? t(
+                    "workspace.video.workspace.summary.referenceImages.value",
+                    {
+                      count: referenceCount,
+                      defaultValue: "{{value}} 张参考图",
+                      value: formatNumber(referenceCount, { locale }),
+                    },
+                  )
+                : t(
+                    "workspace.video.workspace.summary.referenceImages.textOnly",
+                    {
+                      defaultValue: "纯文生视频",
+                    },
+                  ),
+            hint:
+              referenceCount > 0
+                ? t(
+                    "workspace.video.workspace.summary.referenceImages.hintWithReference",
+                    {
+                      defaultValue: "可用于锁定开场、结尾或主体一致性",
+                    },
+                  )
+                : t(
+                    "workspace.video.workspace.summary.referenceImages.hintTextOnly",
+                    {
+                      defaultValue: "先验证镜头，再逐步加入约束",
+                    },
+                  ),
+            tipAria: t(
+              "workspace.video.workspace.summary.referenceImages.tipAria",
+              {
+                defaultValue: "参考图说明",
+              },
+            ),
+          },
+          {
+            label: t("workspace.video.workspace.summary.taskSync.label", {
+              defaultValue: "任务同步",
+            }),
+            value: projectId
+              ? t("workspace.video.workspace.summary.taskSync.auto", {
+                  defaultValue: "结果自动同步",
+                })
+              : t("workspace.video.workspace.summary.taskSync.projectRequired", {
+                  defaultValue: "需先选择项目",
+                }),
+            hint: projectId
+              ? t("workspace.video.workspace.summary.taskSync.autoHint", {
+                  defaultValue: "成功后会沉淀到项目资料",
+                })
+              : t(
+                  "workspace.video.workspace.summary.taskSync.projectRequiredHint",
+                  {
+                    defaultValue: "当前无法提交视频任务",
+                  },
+                ),
+            tipAria: t("workspace.video.workspace.summary.taskSync.tipAria", {
+              defaultValue: "任务同步说明",
+            }),
+          },
+        ];
+      },
       [
+        i18n.language,
         projectId,
         referenceCount,
         state.aspectRatio,
@@ -1380,48 +1642,94 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
         state.model,
         state.providerId,
         state.resolution,
+        t,
       ],
     );
 
     const workspaceStatus = useMemo(() => {
+      const locale = i18n.language;
       if (state.status === "generating") {
         return {
-          label: "生成中",
+          label: t("workspace.video.workspace.session.status.generating.label", {
+            defaultValue: "生成中",
+          }),
           tone: "processing" as const,
           detail:
             focusedTask?.progress != null
-              ? `当前进度 ${Math.round(focusedTask.progress)}%`
-              : "任务已提交，正在持续刷新当前进度。",
+              ? t(
+                  "workspace.video.workspace.session.status.generating.progressDetail",
+                  {
+                    defaultValue: "当前进度 {{value}}%",
+                    value: formatNumber(Math.round(focusedTask.progress), {
+                      locale,
+                    }),
+                  },
+                )
+              : t(
+                  "workspace.video.workspace.session.status.generating.detail",
+                  {
+                    defaultValue: "任务已提交，正在持续刷新当前进度。",
+                  },
+                ),
         };
       }
       if (state.status === "success" && state.videoUrl) {
         return {
-          label: "已生成",
+          label: t("workspace.video.workspace.session.status.success.label", {
+            defaultValue: "已生成",
+          }),
           tone: "success" as const,
           detail:
             focusedTask && latestTask && focusedTask.id !== latestTask.id
-              ? "当前正在查看一条历史结果，可在右侧继续切换不同任务做比较。"
-              : "当前结果已就绪，可继续调整提示词并发起下一轮生成。",
+              ? t(
+                  "workspace.video.workspace.session.status.success.historyDetail",
+                  {
+                    defaultValue:
+                      "当前正在查看一条历史结果，可在右侧继续切换不同任务做比较。",
+                  },
+                )
+              : t(
+                  "workspace.video.workspace.session.status.success.latestDetail",
+                  {
+                    defaultValue:
+                      "当前结果已就绪，可继续调整提示词并发起下一轮生成。",
+                  },
+                ),
         };
       }
       if (state.status === "error") {
         return {
-          label: "生成失败",
+          label: t("workspace.video.workspace.session.status.error.label", {
+            defaultValue: "生成失败",
+          }),
           tone: "error" as const,
-          detail: state.errorMessage ?? "请检查提示词、模型配置或参考图。",
+          detail:
+            state.errorMessage ??
+            t(
+              "workspace.video.workspace.session.status.error.fallbackDetail",
+              {
+                defaultValue: "请检查提示词、模型配置或参考图。",
+              },
+            ),
         };
       }
       return {
-        label: "待开始",
+        label: t("workspace.video.workspace.session.status.idle.label", {
+          defaultValue: "待开始",
+        }),
         tone: "neutral" as const,
-        detail: "先在提示框描述画面，再发起一次生成。",
+        detail: t("workspace.video.workspace.session.status.idle.detail", {
+          defaultValue: "先在提示框描述画面，再发起一次生成。",
+        }),
       };
     }, [
       focusedTask,
+      i18n.language,
       latestTask,
       state.errorMessage,
       state.status,
       state.videoUrl,
+      t,
     ]);
 
     const focusedTaskSummary = useMemo(() => {
@@ -1430,16 +1738,21 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
       }
 
       const payload = parseTaskRequestPayload(focusedTask);
+      const locale = i18n.language;
       const providerLabel =
         focusedTask.providerId?.trim() ||
         readTaskPayloadString(payload, ["providerId", "provider_id"]) ||
         state.providerId ||
-        "待选择服务";
+        t("workspace.video.workspace.focusedTask.providerFallback", {
+          defaultValue: "待选择服务",
+        });
       const modelLabel =
         focusedTask.model?.trim() ||
         readTaskPayloadString(payload, ["model"]) ||
         state.model ||
-        "待选择模型";
+        t("workspace.video.workspace.focusedTask.modelFallback", {
+          defaultValue: "待选择模型",
+        });
       const aspectRatioLabel =
         readTaskPayloadString(payload, ["aspectRatio", "aspect_ratio"]) ||
         state.aspectRatio;
@@ -1448,27 +1761,69 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
       const durationLabel =
         readTaskPayloadPositiveNumber(payload, ["duration"]) || state.duration;
       const promptLabel = focusedTask.prompt?.trim() || state.prompt.trim();
-      const syncCopy = resolveTaskSyncCopy(focusedTask);
+      const syncCopy = resolveTaskSyncCopy(focusedTask, t, i18n.language);
       const isLatestFocused = latestTask?.id === focusedTask.id;
 
       return {
-        prompt: promptLabel || "当前任务没有返回明确提示词。",
+        prompt:
+          promptLabel ||
+          t("workspace.video.workspace.focusedTask.promptFallback", {
+            defaultValue: "当前任务没有返回明确提示词。",
+          }),
         sourceValue: `${providerLabel} · ${modelLabel}`,
         sourceHint: isLatestFocused
-          ? "当前查看的是最近一次任务。"
-          : "当前查看的是一条历史任务结果。",
-        specValue: `${aspectRatioLabel} · ${resolutionLabel} · ${durationLabel} 秒`,
-        specHint: "规格优先从任务请求恢复，缺失时回退到当前工作台状态。",
+          ? t("workspace.video.workspace.focusedTask.source.latestHint", {
+              defaultValue: "当前查看的是最近一次任务。",
+            })
+          : t("workspace.video.workspace.focusedTask.source.historyHint", {
+              defaultValue: "当前查看的是一条历史任务结果。",
+            }),
+        specValue: `${aspectRatioLabel} · ${resolutionLabel} · ${t(
+          "workspace.video.workspace.focusedTask.spec.durationSeconds",
+          {
+            defaultValue: "{{value}} 秒",
+            value: formatNumber(durationLabel, { locale }),
+          },
+        )}`,
+        specHint: t("workspace.video.workspace.focusedTask.spec.hint", {
+          defaultValue: "规格优先从任务请求恢复，缺失时回退到当前工作台状态。",
+        }),
         syncValue: syncCopy.label,
         syncHint: syncCopy.hint,
-        timelineValue: `创建 ${formatTaskTime(focusedTask.createdAt)}`,
-        timelineHint: `最近更新 ${formatTaskTime(
-          focusedTask.updatedAt ?? focusedTask.createdAt,
-        )} · 任务 ID ${focusedTask.id}`,
-        badgeLabel: isLatestFocused ? "最新结果" : "历史结果",
+        timelineValue: t(
+          "workspace.video.workspace.focusedTask.timeline.created",
+          {
+            defaultValue: "创建 {{time}}",
+            time: formatTaskTime(focusedTask.createdAt, locale),
+          },
+        ),
+        timelineHint: t(
+          "workspace.video.workspace.focusedTask.timeline.updatedTaskId",
+          {
+            defaultValue: "最近更新 {{time}} · 任务 ID {{id}}",
+            id: focusedTask.id,
+            time: formatTaskTime(
+              focusedTask.updatedAt ?? focusedTask.createdAt,
+              locale,
+            ),
+          },
+        ),
+        badgeLabel: isLatestFocused
+          ? t("workspace.video.workspace.focusedTask.badge.latest", {
+              defaultValue: "最新结果",
+            })
+          : t("workspace.video.workspace.focusedTask.badge.history", {
+              defaultValue: "历史结果",
+            }),
         description: isLatestFocused
-          ? "这里固定展示当前聚焦任务的上下文，切换任务后会一起更新。"
-          : "你正在查看一条历史任务，下面的信息与主预览都跟随该任务同步。",
+          ? t("workspace.video.workspace.focusedTask.description.latest", {
+              defaultValue:
+                "这里固定展示当前聚焦任务的上下文，切换任务后会一起更新。",
+            })
+          : t("workspace.video.workspace.focusedTask.description.history", {
+              defaultValue:
+                "你正在查看一条历史任务，下面的信息与主预览都跟随该任务同步。",
+            }),
       };
     }, [
       focusedTask,
@@ -1479,6 +1834,8 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
       state.prompt,
       state.providerId,
       state.resolution,
+      i18n.language,
+      t,
     ]);
 
     return (
@@ -1488,15 +1845,31 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
             <HeroPanel>
               <HeroHeader>
                 <HeroCopy>
-                  <Eyebrow>VIDEO WORKBENCH</Eyebrow>
+                  <Eyebrow>
+                    {t("workspace.video.workspace.hero.eyebrow", {
+                      defaultValue: "VIDEO WORKBENCH",
+                    })}
+                  </Eyebrow>
                   <HeroTitleRow>
                     <IconBox>
                       <Video size={28} />
                     </IconBox>
-                    <HeroTitle>视频创作</HeroTitle>
+                    <HeroTitle>
+                      {t("workspace.video.workspace.hero.title", {
+                        defaultValue: "视频创作",
+                      })}
+                    </HeroTitle>
                     <WorkbenchInfoTip
-                      ariaLabel="视频创作说明"
-                      content="用一句清晰的场景描述启动视频生成，再逐步补充镜头运动、情绪和画面锚点。先让结构成立，再慢慢叠加参考图与参数约束。"
+                      ariaLabel={t(
+                        "workspace.video.workspace.hero.tipAria",
+                        {
+                          defaultValue: "视频创作说明",
+                        },
+                      )}
+                      content={t("workspace.video.workspace.hero.tipContent", {
+                        defaultValue:
+                          "用一句清晰的场景描述启动视频生成，再逐步补充镜头运动、情绪和画面锚点。先让结构成立，再慢慢叠加参考图与参数约束。",
+                      })}
                       tone="sky"
                     />
                   </HeroTitleRow>
@@ -1508,7 +1881,7 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
                       <StatHeader>
                         <StatLabel>{item.label}</StatLabel>
                         <WorkbenchInfoTip
-                          ariaLabel={`${item.label}说明`}
+                          ariaLabel={item.tipAria}
                           content={item.hint}
                           tone="sky"
                         />
@@ -1532,14 +1905,31 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
               <WorkspaceHeaderCard>
                 <WorkspaceHeaderTop>
                   <WorkspaceHeaderCopy>
-                    <Eyebrow>VIDEO SESSION</Eyebrow>
+                    <Eyebrow>
+                      {t("workspace.video.workspace.session.eyebrow", {
+                        defaultValue: "VIDEO SESSION",
+                      })}
+                    </Eyebrow>
                     <WorkspaceTitleRow>
                       <WorkspaceTitle>
-                        继续调整提示词并追踪最新结果
+                        {t("workspace.video.workspace.session.title", {
+                          defaultValue: "继续调整提示词并追踪最新结果",
+                        })}
                       </WorkspaceTitle>
                       <WorkbenchInfoTip
-                        ariaLabel="视频会话说明"
-                        content="这里集中展示主预览、历史任务和当前输入入口，避免在多个视图之间来回切换。"
+                        ariaLabel={t(
+                          "workspace.video.workspace.session.tipAria",
+                          {
+                            defaultValue: "视频会话说明",
+                          },
+                        )}
+                        content={t(
+                          "workspace.video.workspace.session.tipContent",
+                          {
+                            defaultValue:
+                              "这里集中展示主预览、历史任务和当前输入入口，避免在多个视图之间来回切换。",
+                          },
+                        )}
                         tone="sky"
                       />
                     </WorkspaceTitleRow>
@@ -1549,11 +1939,23 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
                       </StatusBadge>
                       <HeaderChip>
                         {tasks.length > 0
-                          ? `累计 ${tasks.length} 个任务`
-                          : "暂无历史任务"}
+                          ? t("workspace.video.workspace.session.taskCount", {
+                              count: tasks.length,
+                              defaultValue: "累计 {{value}} 个任务",
+                              value: formatNumber(tasks.length, {
+                                locale: i18n.language,
+                              }),
+                            })
+                          : t("workspace.video.workspace.session.noTasks", {
+                              defaultValue: "暂无历史任务",
+                            })}
                       </HeaderChip>
                       <HeaderChip>
-                        {state.model || "待选择模型"} · {state.resolution}
+                        {state.model ||
+                          t("workspace.video.workspace.session.modelFallback", {
+                            defaultValue: "待选择模型",
+                          })}{" "}
+                        · {state.resolution}
                       </HeaderChip>
                     </HeaderBadgeRow>
                   </WorkspaceHeaderCopy>
@@ -1564,7 +1966,7 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
                         <StatHeader>
                           <StatLabel>{item.label}</StatLabel>
                           <WorkbenchInfoTip
-                            ariaLabel={`${item.label}说明`}
+                            ariaLabel={item.tipAria}
                             content={item.hint}
                             tone="sky"
                           />
@@ -1586,7 +1988,11 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
                 <ResultPanel>
                   <ResultPanelHeader>
                     <ResultPanelCopy>
-                      <ResultPanelTitle>主预览</ResultPanelTitle>
+                      <ResultPanelTitle>
+                        {t("workspace.video.workspace.session.preview.title", {
+                          defaultValue: "主预览",
+                        })}
+                      </ResultPanelTitle>
                       <ResultPanelDescription>
                         {workspaceStatus.detail}
                       </ResultPanelDescription>
@@ -1605,11 +2011,22 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
                           <Video size={30} />
                         </StagePlaceholderIcon>
                         <StagePlaceholderTitle>
-                          这次生成没有成功
+                          {t(
+                            "workspace.video.workspace.session.preview.error.title",
+                            {
+                              defaultValue: "这次生成没有成功",
+                            },
+                          )}
                         </StagePlaceholderTitle>
                         <StagePlaceholderDescription>
                           {state.errorMessage ??
-                            "请检查模型配置、提示词或参考图后再试。"}
+                            t(
+                              "workspace.video.workspace.session.preview.error.fallbackDescription",
+                              {
+                                defaultValue:
+                                  "请检查模型配置、提示词或参考图后再试。",
+                              },
+                            )}
                         </StagePlaceholderDescription>
                       </StagePlaceholder>
                     ) : (
@@ -1619,13 +2036,35 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
                         </StagePlaceholderIcon>
                         <StagePlaceholderTitle>
                           {state.status === "generating"
-                            ? "正在生成视频"
-                            : "等待第一条生成结果"}
+                            ? t(
+                                "workspace.video.workspace.session.preview.generating.title",
+                                {
+                                  defaultValue: "正在生成视频",
+                                },
+                              )
+                            : t(
+                                "workspace.video.workspace.session.preview.waiting.title",
+                                {
+                                  defaultValue: "等待第一条生成结果",
+                                },
+                              )}
                         </StagePlaceholderTitle>
                         <StagePlaceholderDescription>
                           {state.status === "generating"
-                            ? "任务已提交，右侧卡片会持续刷新进度。你可以继续优化提示词，准备下一轮迭代。"
-                            : "任务完成后，结果会自动显示在这里。"}
+                            ? t(
+                                "workspace.video.workspace.session.preview.generating.description",
+                                {
+                                  defaultValue:
+                                    "任务已提交，右侧卡片会持续刷新进度。你可以继续优化提示词，准备下一轮迭代。",
+                                },
+                              )
+                            : t(
+                                "workspace.video.workspace.session.preview.waiting.description",
+                                {
+                                  defaultValue:
+                                    "任务完成后，结果会自动显示在这里。",
+                                },
+                              )}
                         </StagePlaceholderDescription>
                       </StagePlaceholder>
                     )}
@@ -1634,19 +2073,41 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
                   <StageFooter>
                     <StageFooterTips>
                       <WorkbenchInfoTip
-                        ariaLabel="主预览说明"
-                        label="同步规则"
+                        ariaLabel={t(
+                          "workspace.video.workspace.session.preview.tipAria",
+                          {
+                            defaultValue: "主预览说明",
+                          },
+                        )}
+                        label={t(
+                          "workspace.video.workspace.session.preview.tipLabel",
+                          {
+                            defaultValue: "同步规则",
+                          },
+                        )}
                         variant="pill"
                         tone="sky"
                         align="start"
-                        content="成功结果会自动同步到项目资料；切换历史任务预览不会覆盖你当前输入的提示词。"
+                        content={t(
+                          "workspace.video.workspace.session.preview.tipContent",
+                          {
+                            defaultValue:
+                              "成功结果会自动同步到项目资料；切换历史任务预览不会覆盖你当前输入的提示词。",
+                          },
+                        )}
                       />
                     </StageFooterTips>
                     {focusedTask ? (
                       <TaskCounter>
-                        当前任务更新于{" "}
-                        {formatTaskTime(
-                          focusedTask.updatedAt ?? focusedTask.createdAt,
+                        {t(
+                          "workspace.video.workspace.session.preview.updatedAt",
+                          {
+                            defaultValue: "当前任务更新于 {{time}}",
+                            time: formatTaskTime(
+                              focusedTask.updatedAt ?? focusedTask.createdAt,
+                              i18n.language,
+                            ),
+                          },
                         )}
                       </TaskCounter>
                     ) : null}
@@ -1656,7 +2117,11 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
                     <FocusedTaskPanel data-testid="video-focused-task-panel">
                       <FocusedTaskHeader>
                         <FocusedTaskCopy>
-                          <FocusedTaskTitle>当前查看任务</FocusedTaskTitle>
+                          <FocusedTaskTitle>
+                            {t("workspace.video.workspace.focusedTask.title", {
+                              defaultValue: "当前查看任务",
+                            })}
+                          </FocusedTaskTitle>
                           <FocusedTaskDescription>
                             {focusedTaskSummary.description}
                           </FocusedTaskDescription>
@@ -1672,7 +2137,14 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
 
                       <FocusedTaskMetaGrid>
                         <FocusedTaskMetaCard data-testid="video-focused-task-source">
-                          <FocusedTaskMetaLabel>模型链路</FocusedTaskMetaLabel>
+                          <FocusedTaskMetaLabel>
+                            {t(
+                              "workspace.video.workspace.focusedTask.source.label",
+                              {
+                                defaultValue: "模型链路",
+                              },
+                            )}
+                          </FocusedTaskMetaLabel>
                           <FocusedTaskMetaValue>
                             {focusedTaskSummary.sourceValue}
                           </FocusedTaskMetaValue>
@@ -1682,7 +2154,14 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
                         </FocusedTaskMetaCard>
 
                         <FocusedTaskMetaCard data-testid="video-focused-task-spec">
-                          <FocusedTaskMetaLabel>生成规格</FocusedTaskMetaLabel>
+                          <FocusedTaskMetaLabel>
+                            {t(
+                              "workspace.video.workspace.focusedTask.spec.label",
+                              {
+                                defaultValue: "生成规格",
+                              },
+                            )}
+                          </FocusedTaskMetaLabel>
                           <FocusedTaskMetaValue>
                             {focusedTaskSummary.specValue}
                           </FocusedTaskMetaValue>
@@ -1692,7 +2171,14 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
                         </FocusedTaskMetaCard>
 
                         <FocusedTaskMetaCard data-testid="video-focused-task-sync">
-                          <FocusedTaskMetaLabel>结果同步</FocusedTaskMetaLabel>
+                          <FocusedTaskMetaLabel>
+                            {t(
+                              "workspace.video.workspace.focusedTask.sync.label",
+                              {
+                                defaultValue: "结果同步",
+                              },
+                            )}
+                          </FocusedTaskMetaLabel>
                           <FocusedTaskMetaValue>
                             {focusedTaskSummary.syncValue}
                           </FocusedTaskMetaValue>
@@ -1702,7 +2188,14 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
                         </FocusedTaskMetaCard>
 
                         <FocusedTaskMetaCard data-testid="video-focused-task-timeline">
-                          <FocusedTaskMetaLabel>任务时间</FocusedTaskMetaLabel>
+                          <FocusedTaskMetaLabel>
+                            {t(
+                              "workspace.video.workspace.focusedTask.timeline.label",
+                              {
+                                defaultValue: "任务时间",
+                              },
+                            )}
+                          </FocusedTaskMetaLabel>
                           <FocusedTaskMetaValue>
                             {focusedTaskSummary.timelineValue}
                           </FocusedTaskMetaValue>
@@ -1719,40 +2212,57 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
                   <ResultPanelHeader>
                     <ResultPanelCopy>
                       <ResultPanelTitleRow>
-                        <ResultPanelTitle>最近任务</ResultPanelTitle>
+                        <ResultPanelTitle>
+                          {t("workspace.video.workspace.recentTasks.title", {
+                            defaultValue: "最近任务",
+                          })}
+                        </ResultPanelTitle>
                         <WorkbenchInfoTip
-                          ariaLabel="最近任务说明"
-                          content="按时间倒序展示最新视频任务，便于切换预览与排查失败原因。"
+                          ariaLabel={t(
+                            "workspace.video.workspace.recentTasks.tipAria",
+                            {
+                              defaultValue: "最近任务说明",
+                            },
+                          )}
+                          content={t(
+                            "workspace.video.workspace.recentTasks.tipContent",
+                            {
+                              defaultValue:
+                                "按时间倒序展示最新视频任务，便于切换预览与排查失败原因。",
+                            },
+                          )}
                           tone="sky"
                         />
                       </ResultPanelTitleRow>
                     </ResultPanelCopy>
-                    <TaskCounter>{tasks.length} 条</TaskCounter>
+                    <TaskCounter>
+                      {t("workspace.video.workspace.recentTasks.count", {
+                        count: tasks.length,
+                        defaultValue: "{{value}} 条",
+                        value: formatNumber(tasks.length, {
+                          locale: i18n.language,
+                        }),
+                      })}
+                    </TaskCounter>
                   </ResultPanelHeader>
 
                   {tasks.length === 0 ? (
                     <EmptyTasks>
-                      当前还没有可展示的任务记录。先提交一次视频生成，结果会自动沉淀到这里。
+                      {t("workspace.video.workspace.recentTasks.empty", {
+                        defaultValue:
+                          "当前还没有可展示的任务记录。先提交一次视频生成，结果会自动沉淀到这里。",
+                      })}
                     </EmptyTasks>
                   ) : (
                     <TaskList>
                       {tasks.map((task) => {
                         const progress = clampProgress(task.progress);
                         const tone = getStatusTone(task.status);
-                        const syncMessage =
-                          task.status === "success"
-                            ? task.resourceMaterialId
-                              ? "已同步到项目资料"
-                              : task.resourceSaveError
-                                ? `同步到项目资料失败：${task.resourceSaveError}`
-                                : "结果已生成，正在同步到项目资料"
-                            : task.status === "error"
-                              ? (task.errorMessage ?? "任务执行失败")
-                              : task.status === "cancelled"
-                                ? "任务已取消"
-                                : progress != null
-                                  ? `当前进度 ${progress}%`
-                                  : "正在等待服务端返回进度";
+                        const syncMessage = resolveTaskSyncMessage(
+                          task,
+                          t,
+                          i18n.language,
+                        );
 
                         return (
                           <TaskCard
@@ -1763,9 +2273,14 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
                             <TaskTopRow>
                               <TaskMetaRow>
                                 <StatusBadge $tone={tone}>
-                                  {getTaskStatusLabel(task.status)}
+                                  {getTaskStatusLabel(t, task.status)}
                                 </StatusBadge>
-                                <span>{formatTaskTime(task.createdAt)}</span>
+                                <span>
+                                  {formatTaskTime(
+                                    task.createdAt,
+                                    i18n.language,
+                                  )}
+                                </span>
                               </TaskMetaRow>
                               <TaskMetaRow>
                                 <span>{task.providerId}</span>
@@ -1806,8 +2321,18 @@ export const VideoWorkspace: React.FC<VideoWorkspaceProps> = memo(
                                   onClick={() => handlePreviewTask(task)}
                                 >
                                   {task.id === activeTaskId
-                                    ? "当前预览"
-                                    : "切换预览"}
+                                    ? t(
+                                        "workspace.video.workspace.recentTasks.action.currentPreview",
+                                        {
+                                          defaultValue: "当前预览",
+                                        },
+                                      )
+                                    : t(
+                                        "workspace.video.workspace.recentTasks.action.switchPreview",
+                                        {
+                                          defaultValue: "切换预览",
+                                        },
+                                      )}
                                   <ArrowUpRight size={14} />
                                 </TaskActionButton>
                               ) : null}

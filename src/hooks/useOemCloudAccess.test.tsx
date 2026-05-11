@@ -38,6 +38,43 @@ const tauriRuntimeMocks = vi.hoisted(() => ({
 const desktopAuthMocks = vi.hoisted(() => ({
   completeOemCloudDesktopOAuthLogin: vi.fn(),
 }));
+const i18nMocks = vi.hoisted(() => {
+  const translations = {
+    "common.oemCloudAccess.auth.googleSynced":
+      "Google cloud catalog synced from i18n",
+    "common.oemCloudAccess.auth.userCenterOpened":
+      "Lime cloud sign-in page opened from i18n",
+    "common.oemCloudAccess.payment.returnSyncing":
+      "Payment return syncing from i18n",
+    "common.oemCloudAccess.auth.browserPreopenTitle":
+      "Opening sign-in page from i18n",
+    "common.oemCloudAccess.auth.browserPreopenBody":
+      "Opening sign-in page body from i18n",
+    "common.oemCloudAccess.auth.systemBrowserOpenFailedWithMessage":
+      "System browser failed from i18n: {{message}}",
+    "common.oemCloudAccess.emailCode.identifierRequired":
+      "Email identifier required from i18n",
+    "common.oemCloudAccess.emailCode.sent":
+      "Verification code sent to {{maskedEmail}} for {{minutes}} minutes from i18n",
+    "common.oemCloudAccess.apiKey.createSuccess":
+      "API key created from i18n",
+  } as Record<string, string>;
+  return {
+    translations,
+    t: vi.fn(
+      (
+        key: string,
+        options?: Record<string, string | number | undefined>,
+      ) => {
+        const template = translations[key] ?? options?.defaultValue ?? key;
+        return String(template).replace(
+          /{{\s*(\w+)\s*}}/g,
+          (_, token: string) => String(options?.[token] ?? `{{${token}}}`),
+        );
+      },
+    ),
+  };
+});
 
 vi.mock("@/lib/api/oemCloudControlPlane", () => {
   class MockOemCloudControlPlaneError extends Error {
@@ -98,6 +135,12 @@ vi.mock("@/lib/oemCloudDesktopAuth", () => ({
   OEM_CLOUD_OAUTH_COMPLETED_EVENT: "lime:oem-cloud-oauth-completed",
   completeOemCloudDesktopOAuthLogin:
     desktopAuthMocks.completeOemCloudDesktopOAuthLogin,
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: i18nMocks.t,
+  }),
 }));
 
 vi.mock("@/lib/serviceSkillCatalogBootstrap", () => ({
@@ -445,11 +488,52 @@ describe("useOemCloudAccess", () => {
       },
     );
     expect(latestState?.lastIssuedRawToken).toBe("sk-lime-once");
+    expect(latestState?.infoMessage).toContain("API key created from i18n");
 
     act(() => {
       latestState?.handleDismissIssuedToken();
     });
     expect(latestState?.lastIssuedRawToken).toBeNull();
+  });
+
+  it("发送邮箱验证码提示应来自 i18n 并保留服务端脱敏邮箱", async () => {
+    controlPlaneMocks.sendClientAuthEmailCode.mockResolvedValue({
+      maskedEmail: "op***@example.com",
+      expiresInSeconds: 600,
+    });
+
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    mountedHarness = { container, root };
+
+    act(() => {
+      root.render(<HookHarness />);
+    });
+    await flushEffects();
+
+    act(() => {
+      latestState?.setEmailCodeForm({
+        identifier: "operator@example.com",
+        code: "",
+        displayName: "",
+        username: "",
+      });
+    });
+
+    await act(async () => {
+      await latestState?.handleSendEmailCode();
+    });
+
+    expect(controlPlaneMocks.sendClientAuthEmailCode).toHaveBeenCalledWith(
+      "tenant-0001",
+      {
+        identifier: "operator@example.com",
+      },
+    );
+    expect(latestState?.infoMessage).toContain(
+      "Verification code sent to op***@example.com for 10 minutes from i18n",
+    );
   });
 
   it("支付回跳事件应刷新云端权益并接回订单 watcher", async () => {
@@ -537,7 +621,9 @@ describe("useOemCloudAccess", () => {
       orderId: "order-001",
       status: "waiting",
     });
-    expect(latestState?.infoMessage).toContain("同步支付状态");
+    expect(latestState?.infoMessage).toContain(
+      "Payment return syncing from i18n",
+    );
   });
 
   it("Google 桌面登录应创建 desktop auth session、打开服务端授权页并轮询落地会话", async () => {
@@ -627,7 +713,9 @@ describe("useOemCloudAccess", () => {
       nextPath: "/welcome",
       error: null,
     });
-    expect(latestState?.infoMessage).toContain("Google 登录成功");
+    expect(latestState?.infoMessage).toContain(
+      "Google cloud catalog synced from i18n",
+    );
   });
 
   it("Google 桌面登录打开系统浏览器失败时不应提示已打开", async () => {
@@ -669,8 +757,9 @@ describe("useOemCloudAccess", () => {
     ).toHaveBeenCalledWith(
       "https://user.limeai.run/oauth/desktop/device-code-001/signin",
     );
-    expect(latestState?.errorMessage).toContain("系统浏览器打开失败");
-    expect(latestState?.errorMessage).toContain("permission denied");
+    expect(latestState?.errorMessage).toContain(
+      "System browser failed from i18n: permission denied",
+    );
     expect(latestState?.infoMessage).toBeNull();
     expect(
       controlPlaneMocks.pollClientDesktopAuthSession,
@@ -712,7 +801,9 @@ describe("useOemCloudAccess", () => {
     );
     expect(parsedUrl.searchParams.get("redirect")).toBe("/welcome");
     expect(latestState?.errorMessage).toBeNull();
-    expect(latestState?.infoMessage).toContain("已打开 Lime 云端登录页");
+    expect(latestState?.infoMessage).toContain(
+      "Lime cloud sign-in page opened from i18n",
+    );
   });
 
   it("浏览器场景桌面登录不可用时应复用预打开空白页导航到用户中心登录页", async () => {
@@ -743,6 +834,12 @@ describe("useOemCloudAccess", () => {
       });
 
       expect(windowOpenSpy).toHaveBeenCalledWith("about:blank", "_blank");
+      expect(openedWindow.document.title).toBe(
+        "Opening sign-in page from i18n",
+      );
+      expect(openedWindow.document.body.innerHTML).toBe(
+        "Opening sign-in page body from i18n",
+      );
       expect(openedWindow.location.assign).toHaveBeenCalledTimes(1);
       const openedUrl = (
         openedWindow.location.assign as ReturnType<typeof vi.fn>

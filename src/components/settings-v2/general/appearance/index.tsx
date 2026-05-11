@@ -21,7 +21,6 @@ import {
   Sparkles,
   Sun,
   Volume2,
-  Waypoints,
   Bot,
   Shuffle,
   type LucideIcon,
@@ -87,6 +86,7 @@ interface SurfacePanelProps {
   iconClassName?: string;
   title: string;
   description: string;
+  tipAriaLabel?: string;
   aside?: ReactNode;
   children: ReactNode;
 }
@@ -98,30 +98,22 @@ interface HiddenSystemEntryOption {
   icon: LucideIcon;
 }
 
-const THEME_OPTIONS: ThemeOption[] = [
-  ...LIME_THEME_MODE_OPTIONS.map((option) => ({
-    ...option,
-    icon: option.id === "light" ? Sun : option.id === "dark" ? Moon : Monitor,
-  })),
-];
+const THEME_OPTION_ICONS: Record<LimeThemeMode, LucideIcon> = {
+  dark: Moon,
+  light: Sun,
+  system: Monitor,
+};
 
-const HIDDEN_SYSTEM_ENTRY_OPTIONS: HiddenSystemEntryOption[] = [
+const HIDDEN_SYSTEM_ENTRY_BASE_OPTIONS: Pick<
+  HiddenSystemEntryOption,
+  "id" | "icon"
+>[] = [
   {
     id: "plugins",
-    label: "插件中心",
-    description: "在系统区显示插件安装、管理与扩展入口。",
     icon: Puzzle,
   },
   {
-    id: "openclaw",
-    label: "OpenClaw",
-    description: "在系统区显示 OpenClaw 兼容运行入口。",
-    icon: Waypoints,
-  },
-  {
     id: "companion",
-    label: "桌宠",
-    description: "在系统区显示桌宠管理与连接诊断入口。",
     icon: Bot,
   },
 ];
@@ -164,6 +156,7 @@ function SurfacePanel({
   iconClassName,
   title,
   description,
+  tipAriaLabel,
   aside,
   children,
 }: SurfacePanelProps) {
@@ -175,7 +168,7 @@ function SurfacePanel({
             <Icon className={cn("h-4 w-4 text-sky-600", iconClassName)} />
             {title}
             <WorkbenchInfoTip
-              ariaLabel={`${title}说明`}
+              ariaLabel={tipAriaLabel ?? `${title}说明`}
               content={description}
               tone="slate"
             />
@@ -200,14 +193,6 @@ function LoadingSkeleton() {
       <div className="h-[420px] animate-pulse rounded-[26px] border border-slate-200/80 bg-white" />
     </div>
   );
-}
-
-function resolveThemeLabel(theme: LimeThemeMode) {
-  return THEME_OPTIONS.find((option) => option.id === theme)?.label || "系统";
-}
-
-function resolveColorSchemeLabel(colorSchemeId: LimeColorSchemeId) {
-  return getLimeColorScheme(colorSchemeId).label;
 }
 
 export function AppearanceSettings() {
@@ -243,12 +228,17 @@ export function AppearanceSettings() {
       );
     } catch (err) {
       console.error("加载外观设置失败:", err);
-      setError("加载外观设置失败，请稍后重试。");
+      setError(
+        t(
+          "settings.appearance.error.load",
+          "加载外观设置失败，请稍后重试。",
+        ),
+      );
       setConfig(null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     const refreshAppearance = () => {
@@ -300,14 +290,72 @@ export function AppearanceSettings() {
     };
   }, [loadConfig]);
 
+  const themeOptions = useMemo<ThemeOption[]>(
+    () =>
+      LIME_THEME_MODE_OPTIONS.map((option) => ({
+        id: option.id,
+        icon: THEME_OPTION_ICONS[option.id],
+        label: t(
+          `settings.appearance.theme.options.${option.id}.label`,
+          option.label,
+        ),
+        description: t(
+          `settings.appearance.theme.options.${option.id}.description`,
+          option.description,
+        ),
+      })),
+    [t],
+  );
+
+  const colorSchemeOptions = useMemo(
+    () =>
+      LIME_COLOR_SCHEMES.map((option) => ({
+        ...option,
+        label: t(
+          `settings.appearance.colorScheme.options.${option.id}.label`,
+          option.label,
+        ),
+        description: t(
+          `settings.appearance.colorScheme.options.${option.id}.description`,
+          option.description,
+        ),
+      })),
+    [t],
+  );
+
+  const hiddenSystemEntryOptions = useMemo<HiddenSystemEntryOption[]>(
+    () =>
+      HIDDEN_SYSTEM_ENTRY_BASE_OPTIONS.map((option) => ({
+        ...option,
+        label: t(
+          `settings.appearance.systemEntries.options.${option.id}.label`,
+          option.id,
+        ),
+        description: t(
+          `settings.appearance.systemEntries.options.${option.id}.description`,
+          "",
+        ),
+      })),
+    [t],
+  );
+
+  const currentThemeLabel =
+    themeOptions.find((option) => option.id === theme)?.label ??
+    t("settings.appearance.theme.options.system.label", "跟随系统");
+  const currentColorSchemeLabel =
+    colorSchemeOptions.find((option) => option.id === colorSchemeId)?.label ??
+    getLimeColorScheme(colorSchemeId).label;
+
   const workspaceSummary = useMemo(
     () => ({
-      themeLabel: resolveThemeLabel(theme),
-      colorSchemeLabel: resolveColorSchemeLabel(colorSchemeId),
+      themeLabel: currentThemeLabel,
+      colorSchemeLabel: currentColorSchemeLabel,
       languageLabel: resolveLocaleOptionLabel(language),
-      soundsLabel: soundEnabled ? "已开启" : "已关闭",
+      soundsLabel: soundEnabled
+        ? t("settings.appearance.status.enabled", "已开启")
+        : t("settings.appearance.status.disabled", "已关闭"),
     }),
-    [colorSchemeId, language, soundEnabled, theme],
+    [currentColorSchemeLabel, currentThemeLabel, language, soundEnabled, t],
   );
 
   const enabledNavigationItems = useMemo(
@@ -377,10 +425,15 @@ export function AppearanceSettings() {
         setLanguageState(previousLanguage);
         setI18nLanguage(toLegacyPatchLanguage(previousLanguage));
         await changeLimeLocale(previousLanguage);
-        setError("保存语言设置失败，请重试。");
+        setError(
+          t(
+            "settings.appearance.error.saveLanguage",
+            "保存语言设置失败，请重试。",
+          ),
+        );
       }
     },
-    [config, language, setI18nLanguage],
+    [config, language, setI18nLanguage, t],
   );
 
   const handleSoundToggle = useCallback(
@@ -420,10 +473,15 @@ export function AppearanceSettings() {
         console.error("保存推荐上下文设置失败:", err);
         setAppendSelectedTextToRecommendation(previousValue);
         setConfig(previousConfig);
-        setError("保存聊天外观设置失败，请重试。");
+        setError(
+          t(
+            "settings.appearance.error.saveChatAppearance",
+            "保存聊天外观设置失败，请重试。",
+          ),
+        );
       }
     },
-    [appendSelectedTextToRecommendation, config],
+    [appendSelectedTextToRecommendation, config, t],
   );
 
   const handleHiddenSystemEntryToggle = useCallback(
@@ -457,10 +515,15 @@ export function AppearanceSettings() {
       } catch (err) {
         console.error("保存系统入口设置失败:", err);
         setConfig(previousConfig);
-        setError("保存系统入口设置失败，请重试。");
+        setError(
+          t(
+            "settings.appearance.error.saveSystemEntries",
+            "保存系统入口设置失败，请重试。",
+          ),
+        );
       }
     },
-    [config, enabledNavigationItems],
+    [config, enabledNavigationItems, t],
   );
 
   const handleResetOnboarding = useCallback(() => {
@@ -482,7 +545,7 @@ export function AppearanceSettings() {
             onClick={() => void loadConfig()}
             className="rounded-full border border-rose-200 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 transition hover:border-rose-300 hover:bg-rose-50"
           >
-            重新加载
+            {t("settings.appearance.action.reload", "重新加载")}
           </button>
         </div>
       ) : null}
@@ -492,28 +555,46 @@ export function AppearanceSettings() {
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-[22px] font-semibold tracking-tight text-slate-900">
-                外观
+                {t("settings.appearance.hero.title", "外观")}
               </h1>
               <WorkbenchInfoTip
-                ariaLabel="外观设置总览说明"
-                content="管理主题、语言、提示音效、推荐问题的上下文带入方式，以及底部系统入口的显示状态。"
+                ariaLabel={t(
+                  "settings.appearance.hero.tipAria",
+                  "外观设置总览说明",
+                )}
+                content={t(
+                  "settings.appearance.hero.tip",
+                  "管理主题、语言、提示音效、推荐问题的上下文带入方式，以及底部系统入口的显示状态。",
+                )}
                 tone="mint"
               />
             </div>
             <p className="text-[13px] text-slate-500">
-              管理主题、语言、提示音效、推荐行为和底部入口。
+              {t(
+                "settings.appearance.hero.description",
+                "管理主题、语言、提示音效、推荐行为和底部入口。",
+              )}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5 xl:justify-end">
             <span className={HEADER_INFO_PILL_CLASS}>
-              主题：{workspaceSummary.themeLabel}
+              {t("settings.appearance.summary.theme", {
+                theme: workspaceSummary.themeLabel,
+                defaultValue: "主题：{{theme}}",
+              })}
             </span>
             <span className={HEADER_SUCCESS_PILL_CLASS}>
-              配色：{workspaceSummary.colorSchemeLabel}
+              {t("settings.appearance.summary.colorScheme", {
+                colorScheme: workspaceSummary.colorSchemeLabel,
+                defaultValue: "配色：{{colorScheme}}",
+              })}
             </span>
             <span className={HEADER_SUCCESS_PILL_CLASS}>
-              语言：{workspaceSummary.languageLabel}
+              {t("settings.appearance.summary.language", {
+                language: workspaceSummary.languageLabel,
+                defaultValue: "语言：{{language}}",
+              })}
             </span>
             <span
               className={
@@ -522,7 +603,10 @@ export function AppearanceSettings() {
                   : HEADER_NEUTRAL_PILL_CLASS
               }
             >
-              提示音效：{workspaceSummary.soundsLabel}
+              {t("settings.appearance.summary.sounds", {
+                status: workspaceSummary.soundsLabel,
+                defaultValue: "提示音效：{{status}}",
+              })}
             </span>
           </div>
         </div>
@@ -532,8 +616,15 @@ export function AppearanceSettings() {
         <SurfacePanel
           icon={Palette}
           iconClassName="text-sky-600"
-          title="基础外观"
-          description="先确定全局主题、语言和声音反馈，再统一工作区里的视觉节奏。"
+          title={t("settings.appearance.base.title", "基础外观")}
+          description={t(
+            "settings.appearance.base.description",
+            "先确定全局主题、语言和声音反馈，再统一工作区里的视觉节奏。",
+          )}
+          tipAriaLabel={t(
+            "settings.appearance.base.tipAria",
+            "基础外观说明",
+          )}
         >
           <div className="space-y-5">
             <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-4">
@@ -541,22 +632,31 @@ export function AppearanceSettings() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="text-sm font-semibold text-slate-900">
-                      主题模式
+                      {t("settings.appearance.theme.title", "主题模式")}
                     </h3>
                     <WorkbenchInfoTip
-                      ariaLabel="主题模式说明"
-                      content="优先控制整个应用的明暗观感，适配不同设备环境。"
+                      ariaLabel={t(
+                        "settings.appearance.theme.tipAria",
+                        "主题模式说明",
+                      )}
+                      content={t(
+                        "settings.appearance.theme.tip",
+                        "优先控制整个应用的明暗观感，适配不同设备环境。",
+                      )}
                       tone="slate"
                     />
                   </div>
                 </div>
                 <span className={CURRENT_INFO_PILL_CLASS}>
-                  当前：{resolveThemeLabel(theme)}
+                  {t("settings.appearance.current.theme", {
+                    theme: currentThemeLabel,
+                    defaultValue: "当前：{{theme}}",
+                  })}
                 </span>
               </div>
 
               <div className="mt-4 grid gap-3 lg:grid-cols-3">
-                {THEME_OPTIONS.map((option) => {
+                {themeOptions.map((option) => {
                   const active = theme === option.id;
                   return (
                     <button
@@ -598,17 +698,26 @@ export function AppearanceSettings() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="text-sm font-semibold text-[color:var(--lime-text-strong)]">
-                      色彩方案
+                      {t("settings.appearance.colorScheme.title", "色彩方案")}
                     </h3>
                     <WorkbenchInfoTip
-                      ariaLabel="色彩方案说明"
-                      content="只切换品牌色、页面底色和卡片层级；明暗主题仍由主题模式控制。"
+                      ariaLabel={t(
+                        "settings.appearance.colorScheme.tipAria",
+                        "色彩方案说明",
+                      )}
+                      content={t(
+                        "settings.appearance.colorScheme.tip",
+                        "只切换品牌色、页面底色和卡片层级；明暗主题仍由主题模式控制。",
+                      )}
                       tone="slate"
                     />
                   </div>
                 </div>
                 <span className={CURRENT_SUCCESS_PILL_CLASS}>
-                  当前：{resolveColorSchemeLabel(colorSchemeId)}
+                  {t("settings.appearance.current.colorScheme", {
+                    colorScheme: currentColorSchemeLabel,
+                    defaultValue: "当前：{{colorScheme}}",
+                  })}
                 </span>
               </div>
 
@@ -626,12 +735,17 @@ export function AppearanceSettings() {
                       <Shuffle className="h-4 w-4" />
                     </div>
                   </div>
-                  <p className="mt-4 text-sm font-semibold">随机</p>
+                  <p className="mt-4 text-sm font-semibold">
+                    {t("settings.appearance.colorScheme.random.title", "随机")}
+                  </p>
                   <p className="mt-1 text-xs leading-5 text-[color:var(--lime-text-muted)]">
-                    每次点击随机切换一个配色。
+                    {t(
+                      "settings.appearance.colorScheme.random.description",
+                      "每次点击随机切换一个配色。",
+                    )}
                   </p>
                 </button>
-                {LIME_COLOR_SCHEMES.map((option) => {
+                {colorSchemeOptions.map((option) => {
                   const active = colorSchemeId === option.id;
                   return (
                     <button
@@ -689,10 +803,16 @@ export function AppearanceSettings() {
                         {t("settings.appearance.language.title", "界面语言")}
                       </h3>
                       <WorkbenchInfoTip
-                        ariaLabel={`${t(
-                          "settings.appearance.language.title",
-                          "界面语言",
-                        )}说明`}
+                        ariaLabel={t(
+                          "settings.appearance.language.tipAria",
+                          {
+                            title: t(
+                              "settings.appearance.language.title",
+                              "界面语言",
+                            ),
+                            defaultValue: "{{title}}说明",
+                          },
+                        )}
                         content={t(
                           "settings.appearance.language.tip",
                           "切换设置、工作区与提示文案的主要显示语言。",
@@ -753,11 +873,17 @@ export function AppearanceSettings() {
                 <div>
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-semibold text-slate-900">
-                      提示音效
+                      {t("settings.appearance.sounds.title", "提示音效")}
                     </p>
                     <WorkbenchInfoTip
-                      ariaLabel="提示音效说明"
-                      content="在工具调用和消息生成时播放提示音，提升状态感知。"
+                      ariaLabel={t(
+                        "settings.appearance.sounds.tipAria",
+                        "提示音效说明",
+                      )}
+                      content={t(
+                        "settings.appearance.sounds.tip",
+                        "在工具调用和消息生成时播放提示音，提升状态感知。",
+                      )}
                       tone="slate"
                     />
                   </div>
@@ -766,7 +892,10 @@ export function AppearanceSettings() {
               <Switch
                 checked={soundEnabled}
                 onCheckedChange={handleSoundToggle}
-                aria-label="切换提示音效"
+                aria-label={t(
+                  "settings.appearance.sounds.toggleAria",
+                  "切换提示音效",
+                )}
               />
             </div>
           </div>
@@ -775,9 +904,20 @@ export function AppearanceSettings() {
         <SurfacePanel
           icon={RotateCcw}
           iconClassName="text-cyan-600"
-          title="初始化与恢复"
-          description="当你想重新走一遍首次启动流程，或者排查引导配置异常时，从这里恢复。"
-          aside={<span className={CURRENT_INFO_PILL_CLASS}>适合排障</span>}
+          title={t("settings.appearance.recovery.title", "初始化与恢复")}
+          description={t(
+            "settings.appearance.recovery.description",
+            "当你想重新走一遍首次启动流程，或者排查引导配置异常时，从这里恢复。",
+          )}
+          tipAriaLabel={t(
+            "settings.appearance.recovery.tipAria",
+            "初始化与恢复说明",
+          )}
+          aside={
+            <span className={CURRENT_INFO_PILL_CLASS}>
+              {t("settings.appearance.recovery.badge", "适合排障")}
+            </span>
+          }
         >
           <div className="flex flex-col gap-4 rounded-[24px] border border-slate-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.94)_0%,rgba(248,250,252,0.92)_100%)] p-4">
             <div className="space-y-3">
@@ -787,11 +927,20 @@ export function AppearanceSettings() {
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <h3 className="text-base font-semibold text-slate-900">
-                    重新运行初始化向导
+                    {t(
+                      "settings.appearance.recovery.rerun.title",
+                      "重新运行初始化向导",
+                    )}
                   </h3>
                   <WorkbenchInfoTip
-                    ariaLabel="重新运行初始化向导说明"
-                    content="会重新展示首次启动时的关键配置步骤，适合在更换工作方式或排查环境问题时使用。"
+                    ariaLabel={t(
+                      "settings.appearance.recovery.rerun.tipAria",
+                      "重新运行初始化向导说明",
+                    )}
+                    content={t(
+                      "settings.appearance.recovery.rerun.tip",
+                      "会重新展示首次启动时的关键配置步骤，适合在更换工作方式或排查环境问题时使用。",
+                    )}
                     tone="slate"
                   />
                 </div>
@@ -800,10 +949,21 @@ export function AppearanceSettings() {
 
             <div className="space-y-2.5">
               <div className={RECOVERY_NOTICE_CLASS}>
-                <span>重新运行不会删除现有数据</span>
+                <span>
+                  {t(
+                    "settings.appearance.recovery.notice.title",
+                    "重新运行不会删除现有数据",
+                  )}
+                </span>
                 <WorkbenchInfoTip
-                  ariaLabel="重新运行引导注意事项"
-                  content="重新运行后会刷新当前界面，但不会删除已有的账号、聊天和工作区数据。"
+                  ariaLabel={t(
+                    "settings.appearance.recovery.notice.tipAria",
+                    "重新运行引导注意事项",
+                  )}
+                  content={t(
+                    "settings.appearance.recovery.notice.tip",
+                    "重新运行后会刷新当前界面，但不会删除已有的账号、聊天和工作区数据。",
+                  )}
                   tone="slate"
                 />
               </div>
@@ -813,7 +973,10 @@ export function AppearanceSettings() {
                 className={PRIMARY_ACTION_BUTTON_CLASS}
               >
                 <RotateCcw className="h-4 w-4" />
-                重新运行引导
+                {t(
+                  "settings.appearance.recovery.action.rerun",
+                  "重新运行引导",
+                )}
               </button>
             </div>
           </div>
@@ -823,18 +986,28 @@ export function AppearanceSettings() {
       <SurfacePanel
         icon={Puzzle}
         iconClassName="text-cyan-600"
-        title="可选系统入口"
-        description="把扩展或低频入口按需挂到底部系统区，不影响当前主导航。"
+        title={t("settings.appearance.systemEntries.title", "可选系统入口")}
+        description={t(
+          "settings.appearance.systemEntries.description",
+          "把扩展或低频入口按需挂到底部系统区，不影响当前主导航。",
+        )}
+        tipAriaLabel={t(
+          "settings.appearance.systemEntries.tipAria",
+          "可选系统入口说明",
+        )}
         aside={
           <span className={CURRENT_INFO_PILL_CLASS}>
-            已开启 {hiddenSystemEntryCount} /{" "}
-            {CONFIGURABLE_FOOTER_SIDEBAR_NAV_ITEMS.length}
+            {t("settings.appearance.systemEntries.summary", {
+              count: hiddenSystemEntryCount,
+              total: CONFIGURABLE_FOOTER_SIDEBAR_NAV_ITEMS.length,
+              defaultValue: "已开启 {{count}} / {{total}}",
+            })}
           </span>
         }
       >
         <article className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-4">
           <div className="space-y-3">
-            {HIDDEN_SYSTEM_ENTRY_OPTIONS.map((option) => {
+            {hiddenSystemEntryOptions.map((option) => {
               const checked = enabledNavigationItems.includes(option.id);
               return (
                 <div
@@ -851,7 +1024,13 @@ export function AppearanceSettings() {
                           {option.label}
                         </h3>
                         <WorkbenchInfoTip
-                          ariaLabel={`${option.label}入口说明`}
+                          ariaLabel={t(
+                            "settings.appearance.systemEntries.optionTipAria",
+                            {
+                              label: option.label,
+                              defaultValue: "{{label}}入口说明",
+                            },
+                          )}
                           content={option.description}
                           tone="slate"
                         />
@@ -869,7 +1048,15 @@ export function AppearanceSettings() {
                           : CONTEXT_STATUS_PILL_CLASS
                       }
                     >
-                      {checked ? "已显示" : "已隐藏"}
+                      {checked
+                        ? t(
+                            "settings.appearance.systemEntries.status.visible",
+                            "已显示",
+                          )
+                        : t(
+                            "settings.appearance.systemEntries.status.hidden",
+                            "已隐藏",
+                          )}
                     </span>
                     <Switch
                       checked={checked}
@@ -879,7 +1066,13 @@ export function AppearanceSettings() {
                           nextChecked,
                         );
                       }}
-                      aria-label={`切换显示${option.label}入口`}
+                      aria-label={t(
+                        "settings.appearance.systemEntries.toggleAria",
+                        {
+                          label: option.label,
+                          defaultValue: "切换显示{{label}}入口",
+                        },
+                      )}
                       disabled={!config}
                     />
                   </div>
@@ -893,8 +1086,15 @@ export function AppearanceSettings() {
       <SurfacePanel
         icon={Sparkles}
         iconClassName="text-emerald-600"
-        title="推荐行为"
-        description="控制推荐问题是否自动带上当前选中内容，减少重复粘贴上下文。"
+        title={t("settings.appearance.recommendation.title", "推荐行为")}
+        description={t(
+          "settings.appearance.recommendation.description",
+          "控制推荐问题是否自动带上当前选中内容，减少重复粘贴上下文。",
+        )}
+        tipAriaLabel={t(
+          "settings.appearance.recommendation.tipAria",
+          "推荐行为说明",
+        )}
       >
         <article className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-4">
           <div className="flex flex-col gap-3">
@@ -905,11 +1105,20 @@ export function AppearanceSettings() {
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-semibold text-slate-900">
-                    推荐行为
+                    {t(
+                      "settings.appearance.recommendation.innerTitle",
+                      "推荐行为",
+                    )}
                   </h3>
                   <WorkbenchInfoTip
-                    ariaLabel="推荐行为说明"
-                    content="控制首页推荐问题是否自动带上当前选中内容，减少重复粘贴上下文。"
+                    ariaLabel={t(
+                      "settings.appearance.recommendation.innerTipAria",
+                      "推荐行为说明",
+                    )}
+                    content={t(
+                      "settings.appearance.recommendation.innerTip",
+                      "控制首页推荐问题是否自动带上当前选中内容，减少重复粘贴上下文。",
+                    )}
                     tone="slate"
                   />
                 </div>
@@ -921,11 +1130,20 @@ export function AppearanceSettings() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h4 className="text-sm font-semibold text-slate-900">
-                      推荐自动附带选中内容
+                      {t(
+                        "settings.appearance.recommendation.appendSelected.title",
+                        "推荐自动附带选中内容",
+                      )}
                     </h4>
                     <WorkbenchInfoTip
-                      ariaLabel="推荐自动附带选中内容说明"
-                      content="在文档或画布中有选区时，推荐问题会自动把该段内容作为上下文带入，减少手工复制粘贴。"
+                      ariaLabel={t(
+                        "settings.appearance.recommendation.appendSelected.tipAria",
+                        "推荐自动附带选中内容说明",
+                      )}
+                      content={t(
+                        "settings.appearance.recommendation.appendSelected.tip",
+                        "在文档或画布中有选区时，推荐问题会自动把该段内容作为上下文带入，减少手工复制粘贴。",
+                      )}
                       tone="slate"
                     />
                   </div>
@@ -938,14 +1156,19 @@ export function AppearanceSettings() {
                         : CONTEXT_STATUS_PILL_CLASS
                     }
                   >
-                    {appendSelectedTextToRecommendation ? "已开启" : "已关闭"}
+                    {appendSelectedTextToRecommendation
+                      ? t("settings.appearance.status.enabled", "已开启")
+                      : t("settings.appearance.status.disabled", "已关闭")}
                   </span>
                   <Switch
                     checked={appendSelectedTextToRecommendation}
                     onCheckedChange={(checked) => {
-                      void handleRecommendationSelectionToggle(checked);
-                    }}
-                    aria-label="切换推荐自动附带选中内容"
+                        void handleRecommendationSelectionToggle(checked);
+                      }}
+                    aria-label={t(
+                      "settings.appearance.recommendation.appendSelected.toggleAria",
+                      "切换推荐自动附带选中内容",
+                    )}
                     disabled={!config}
                   />
                 </div>

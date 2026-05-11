@@ -27,11 +27,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  LEGACY_SERVICE_SKILL_EXECUTION_COMPAT_LABEL,
-  LEGACY_SERVICE_SKILL_EXECUTION_COMPAT_NOTE,
   type AutomationServiceSkillContext,
 } from "./serviceSkillContext";
 import {
+  defaultAutomationPresentationCopy,
   deliveryStatusVariant,
   deliveryToneClass,
   isLegacyBrowserAutomation,
@@ -45,8 +44,12 @@ import {
   runInfoToneClass,
   runStatusVariant,
   statusVariant,
+  type AutomationPresentationCopy,
 } from "./automationPresentation";
-import { resolveAgentTurnAutomationAccessMode } from "./automationAccessMode";
+import {
+  automationAccessModeLabelWithCopy,
+  resolveAgentTurnAutomationAccessMode,
+} from "./automationAccessMode";
 
 type SettingsTranslate = TFunction<"settings">;
 
@@ -67,6 +70,230 @@ function detailsText(
       .split(`{{ ${name} }}`)
       .join(replacement);
   }, translated);
+}
+
+function buildDetailsPresentationCopy(
+  t: SettingsTranslate,
+): AutomationPresentationCopy {
+  return {
+    ...defaultAutomationPresentationCopy,
+    legacyBrowserAutomationNotice: detailsText(
+      t,
+      "settings.automation.details.legacy.message",
+      "浏览器自动化已下线，系统不会再自动启动 Chrome。请删除旧流程，并改建为 Agent 对话持续流程。",
+    ),
+    legacyBrowserAutomationStatus: detailsText(
+      t,
+      "settings.automation.details.status.offline",
+      "已下线",
+    ),
+    scheduleHours: (count) =>
+      detailsText(
+        t,
+        "settings.automation.details.schedule.hours",
+        "每 {{count}} 小时",
+        { count },
+      ),
+    scheduleMinutes: (count) =>
+      detailsText(
+        t,
+        "settings.automation.details.schedule.minutes",
+        "每 {{count}} 分钟",
+        { count },
+      ),
+    scheduleSeconds: (count) =>
+      detailsText(
+        t,
+        "settings.automation.details.schedule.seconds",
+        "每 {{count}} 秒",
+        { count },
+      ),
+    scheduleCron: (expr) =>
+      detailsText(
+        t,
+        "settings.automation.details.schedule.cron",
+        "Cron: {{expr}}",
+        { expr },
+      ),
+    scheduleAt: (time) =>
+      detailsText(
+        t,
+        "settings.automation.details.schedule.at",
+        "一次性: {{time}}",
+        { time },
+      ),
+    payloadBrowserSession: detailsText(
+      t,
+      "settings.automation.details.payload.browserSession",
+      "浏览器自动化",
+    ),
+    payloadAgentTurn: detailsText(
+      t,
+      "settings.automation.details.payload.agentTurn",
+      "Agent 对话",
+    ),
+    legacyPayloadProfile: (profile) =>
+      detailsText(
+        t,
+        "settings.automation.details.legacy.payload.profile",
+        "资料: {{profile}}",
+        { profile },
+      ),
+    legacyPayloadEnvironment: (environment) =>
+      detailsText(
+        t,
+        "settings.automation.details.legacy.payload.environment",
+        "环境预设: {{environment}}",
+        { environment },
+      ),
+    legacyPayloadUrl: (url) =>
+      detailsText(
+        t,
+        "settings.automation.details.legacy.payload.url",
+        "启动地址: {{url}}",
+        { url },
+      ),
+    legacyPayloadTargetId: (targetId) =>
+      detailsText(
+        t,
+        "settings.automation.details.legacy.payload.targetId",
+        "Target ID: {{targetId}}",
+        { targetId },
+      ),
+    legacyPayloadWindow: (status) =>
+      detailsText(
+        t,
+        "settings.automation.details.legacy.payload.window",
+        "调试窗口: {{status}}",
+        { status },
+      ),
+    legacyPayloadWindowOpen: detailsText(
+      t,
+      "settings.automation.details.legacy.payload.windowOpen",
+      "打开",
+    ),
+    legacyPayloadWindowClosed: detailsText(
+      t,
+      "settings.automation.details.legacy.payload.windowClosed",
+      "关闭",
+    ),
+    legacyPayloadStreamMode: (streamMode) =>
+      detailsText(
+        t,
+        "settings.automation.details.legacy.payload.streamMode",
+        "流模式: {{streamMode}}",
+        { streamMode },
+      ),
+    statusQueued: detailsText(
+      t,
+      "settings.automation.details.status.queued",
+      "排队中",
+    ),
+    statusSuccess: detailsText(
+      t,
+      "settings.automation.details.status.success",
+      "成功",
+    ),
+    statusRunning: detailsText(
+      t,
+      "settings.automation.details.status.running",
+      "运行中",
+    ),
+    statusWaitingForHuman: detailsText(
+      t,
+      "settings.automation.details.status.waitingForHuman",
+      "等待人工处理",
+    ),
+    statusHumanControlling: detailsText(
+      t,
+      "settings.automation.details.status.humanControlling",
+      "人工接管中",
+    ),
+    statusAgentResuming: detailsText(
+      t,
+      "settings.automation.details.status.agentResuming",
+      "恢复给 Agent",
+    ),
+    statusError: detailsText(
+      t,
+      "settings.automation.details.status.error",
+      "失败",
+    ),
+    statusTimeout: detailsText(
+      t,
+      "settings.automation.details.status.timeout",
+      "超时",
+    ),
+    statusPending: detailsText(
+      t,
+      "settings.automation.details.status.pending",
+      "待执行",
+    ),
+    deliveryModeAnnounce: detailsText(
+      t,
+      "settings.automation.details.delivery.mode.announce",
+      "运行完成后投递",
+    ),
+    deliveryModeNone: detailsText(
+      t,
+      "settings.automation.details.delivery.mode.none",
+      "未启用",
+    ),
+    deliveryChannelLocalFile: detailsText(
+      t,
+      "settings.automation.details.delivery.channel.localFile",
+      "本地文件",
+    ),
+    outputSchemaJson: detailsText(
+      t,
+      "settings.automation.details.delivery.schema.json",
+      "JSON 对象",
+    ),
+    outputSchemaTable: detailsText(
+      t,
+      "settings.automation.details.delivery.schema.table",
+      "表格",
+    ),
+    outputSchemaCsv: detailsText(
+      t,
+      "settings.automation.details.delivery.schema.csv",
+      "CSV",
+    ),
+    outputSchemaLinks: detailsText(
+      t,
+      "settings.automation.details.delivery.schema.links",
+      "链接列表",
+    ),
+    outputSchemaText: detailsText(
+      t,
+      "settings.automation.details.delivery.schema.text",
+      "文本摘要",
+    ),
+    outputFormatJson: detailsText(
+      t,
+      "settings.automation.details.delivery.format.json",
+      "JSON 编码",
+    ),
+    outputFormatText: detailsText(
+      t,
+      "settings.automation.details.delivery.format.text",
+      "文本编码",
+    ),
+    serviceSkillTaskLine: (title) =>
+      detailsText(
+        t,
+        "settings.automation.details.serviceSkill.taskLine",
+        "技能：{{title}}",
+        { title },
+      ),
+    serviceSkillMoreItems: (count) =>
+      detailsText(
+        t,
+        "settings.automation.details.serviceSkill.moreItems",
+        " 等 {{count}} 项",
+        { count },
+      ),
+  };
 }
 
 function formatDetailsTime(value?: string | null, locale?: string): string {
@@ -169,27 +396,29 @@ function detailsAccessModeLabel(
     return "-";
   }
 
-  switch (resolveAgentTurnAutomationAccessMode(payload)) {
-    case "read-only":
-      return detailsText(
+  return automationAccessModeLabelWithCopy(
+    resolveAgentTurnAutomationAccessMode(payload),
+    {
+      readOnly: detailsText(
         t,
         "settings.automation.details.accessMode.readOnly",
         "只读",
-      );
-    case "current":
-      return detailsText(
+      ),
+      current: detailsText(
         t,
         "settings.automation.details.accessMode.current",
         "按需确认",
-      );
-    case "full-access":
-    default:
-      return detailsText(
+      ),
+      fullAccess: detailsText(
         t,
         "settings.automation.details.accessMode.fullAccess",
         "完全访问",
-      );
-  }
+      ),
+      policyReadOnly: "",
+      policyCurrent: "",
+      policyFullAccess: "",
+    },
+  );
 }
 
 function detailsScheduleLabel(
@@ -431,11 +660,8 @@ function detailsServiceSkillTaskLine(
   t: SettingsTranslate,
   serviceSkillContext: AutomationServiceSkillContext,
 ): string {
-  return detailsText(
-    t,
-    "settings.automation.details.serviceSkill.taskLine",
-    "技能：{{title}}",
-    { title: serviceSkillContext.title },
+  return buildDetailsPresentationCopy(t).serviceSkillTaskLine(
+    serviceSkillContext.title,
   );
 }
 
@@ -448,14 +674,10 @@ function detailsServiceSkillSlotPreview(
     .slice(0, limit)
     .map((item) => `${item.label}: ${item.value}`);
   if (preview.length > 0) {
+    const copy = buildDetailsPresentationCopy(t);
     const suffix =
       serviceSkillContext.slotSummary.length > limit
-        ? detailsText(
-            t,
-            "settings.automation.details.serviceSkill.moreItems",
-            " 等 {{count}} 项",
-            { count: serviceSkillContext.slotSummary.length },
-          )
+        ? copy.serviceSkillMoreItems(serviceSkillContext.slotSummary.length)
         : "";
     return `${preview.join(" · ")}${suffix}`;
   }
@@ -525,6 +747,17 @@ export function AutomationJobDetailsDialog({
   onRefreshHistory,
 }: AutomationJobDetailsDialogProps) {
   const { i18n, t } = useTranslation("settings");
+  const presentationCopy = buildDetailsPresentationCopy(t);
+  const serviceSkillExecutionCompatLabel = detailsText(
+    t,
+    "settings.automation.tasks.list.badge.serviceSkillLegacyCompat",
+    "旧目录兼容",
+  );
+  const serviceSkillExecutionCompatNote = detailsText(
+    t,
+    "settings.automation.details.serviceSkill.executionCompatNote",
+    "沿用旧目录兼容标记，实际仍在客户端执行。",
+  );
   const followupDestinations = sceneAppRunDetailView
     ? buildSceneAppExecutionFollowupDestinations(sceneAppRunDetailView)
     : [];
@@ -808,7 +1041,7 @@ export function AutomationJobDetailsDialog({
                         </Badge>
                         {serviceSkillContext.executionLocationLegacyCompat ? (
                           <Badge variant="outline">
-                            {LEGACY_SERVICE_SKILL_EXECUTION_COMPAT_LABEL}
+                            {serviceSkillExecutionCompatLabel}
                           </Badge>
                         ) : null}
                       </div>
@@ -849,7 +1082,7 @@ export function AutomationJobDetailsDialog({
                     </div>
                     {serviceSkillContext.executionLocationLegacyCompat ? (
                       <div className="mt-3 text-xs leading-5 text-sky-700">
-                        {LEGACY_SERVICE_SKILL_EXECUTION_COMPAT_NOTE}
+                        {serviceSkillExecutionCompatNote}
                       </div>
                     ) : null}
                     {serviceSkillContext.slotSummary.length ? (
@@ -1441,7 +1674,11 @@ export function AutomationJobDetailsDialog({
                       const infoMessage = resolveRunInfoMessage(run);
                       const delivery = resolveRunDelivery(run);
                       const runServiceSkillContext =
-                        resolveRunServiceSkillContext(run, serviceSkillContext);
+                        resolveRunServiceSkillContext(
+                          run,
+                          serviceSkillContext,
+                          presentationCopy.serviceSkillContextCopy,
+                        );
                       const runServiceSkillTaskLine = runServiceSkillContext
                         ? detailsServiceSkillTaskLine(t, runServiceSkillContext)
                         : null;
@@ -1520,7 +1757,7 @@ export function AutomationJobDetailsDialog({
                                 {runServiceSkillContext.executionLocationLegacyCompat ? (
                                   <Badge variant="outline">
                                     {
-                                      LEGACY_SERVICE_SKILL_EXECUTION_COMPAT_LABEL
+                                      serviceSkillExecutionCompatLabel
                                     }
                                   </Badge>
                                 ) : null}
@@ -1532,7 +1769,7 @@ export function AutomationJobDetailsDialog({
                               ) : null}
                               {runServiceSkillContext.executionLocationLegacyCompat ? (
                                 <div className="mt-1 text-xs leading-5 text-sky-700">
-                                  {LEGACY_SERVICE_SKILL_EXECUTION_COMPAT_NOTE}
+                                  {serviceSkillExecutionCompatNote}
                                 </div>
                               ) : null}
                               {runServiceSkillSlotPreview ? (

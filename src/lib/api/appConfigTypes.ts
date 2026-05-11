@@ -104,7 +104,6 @@ export type NavigationEnabledItemId =
   | "automation"
   | "channels"
   | "plugins"
-  | "openclaw"
   | "companion";
 
 export interface NavigationConfig {

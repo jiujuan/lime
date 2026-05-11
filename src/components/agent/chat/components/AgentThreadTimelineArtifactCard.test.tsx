@@ -233,8 +233,10 @@ describe("AgentThreadTimelineArtifactCard", () => {
     expect(badge).not.toBeNull();
     expect(badge?.textContent).toContain("AgentUI Artifact 预览");
     expect(badge?.getAttribute("title")).toContain(
-      "conversationProjectionStore.agentUi",
+      "Agent UI 标准投影",
     );
+    expect(badge?.getAttribute("title")).toContain("产物快照");
+    expect(badge?.getAttribute("title")).not.toContain("artifact_snapshot");
   });
 
   it("Markdown 文件产物应明确标识为可沉淀的 Document 产物", () => {

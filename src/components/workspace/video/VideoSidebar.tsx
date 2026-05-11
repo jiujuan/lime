@@ -1,4 +1,5 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import {
   Check,
@@ -10,6 +11,7 @@ import {
 } from "lucide-react";
 import { VideoAspectRatio, VideoCanvasState, VideoResolution } from "./types";
 import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
+import { formatNumber } from "@/i18n/format";
 
 export interface VideoProviderOption {
   id: string;
@@ -752,6 +754,25 @@ interface VideoModelOption {
   description: string;
 }
 
+type VideoModelMetaId =
+  | "veo31"
+  | "sora2Pro"
+  | "sora2"
+  | "seedance15Pro"
+  | "kling26"
+  | "minimaxHailuo23"
+  | "minimaxHailuo02"
+  | "runwayGen4Turbo"
+  | "seedance15Lite"
+  | "wanx21T2vTurbo"
+  | "wanx21Kf2vPlus"
+  | "fallback";
+
+type VideoModelMetaCopy = Record<
+  VideoModelMetaId,
+  { cost: string; description: string }
+>;
+
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -823,78 +844,42 @@ function normalizeModelKey(model: string): string {
   return model.toLowerCase().replace(/\s+/g, "");
 }
 
-function getModelMeta(model: string): { cost: string; description: string } {
+function getModelMetaId(model: string): VideoModelMetaId {
   const normalized = normalizeModelKey(model);
   if (normalized.includes("veo-3.1")) {
-    return {
-      cost: "30 credits / sec · est. 240 for 8s",
-      description: "Google Veo 3.1 支持1080p/4K、多图参考与首尾帧。",
-    };
+    return "veo31";
   }
   if (normalized.includes("sora-2-pro") || normalized.includes("sora2-pro")) {
-    return {
-      cost: "20 credits / sec · est. 80 for 4s",
-      description: "Sora-2 Pro 生成时间约 2 分钟，稳定性高。",
-    };
+    return "sora2Pro";
   }
   if (normalized.includes("sora-2")) {
-    return {
-      cost: "2.7 credits / sec · est. 40.5 for 15s",
-      description: "Sora 2 最长 15 秒，不支持上传人物图。",
-    };
+    return "sora2";
   }
   if (normalized.includes("seedance-1-5-pro")) {
-    return {
-      cost: "20 credits / sec · est. 100 for 5s",
-      description: "支持文生视频与首帧 / 首尾帧图生视频。",
-    };
+    return "seedance15Pro";
   }
   if (normalized.includes("kling-2.6")) {
-    return {
-      cost: "27 credits / sec · est. 135 for 5s",
-      description: "支持 1080p 文生视频和图生视频。",
-    };
+    return "kling26";
   }
   if (normalized.includes("minimax-hailuo-2.3")) {
-    return {
-      cost: "25 credits / sec · est. 150 for 6s",
-      description: "支持文生视频和图生视频，适合泛场景生成。",
-    };
+    return "minimaxHailuo23";
   }
   if (normalized.includes("minimax-hailuo-02")) {
-    return {
-      cost: "25 credits / sec · est. 150 for 6s",
-      description: "支持首尾帧与 1080p 输出。",
-    };
+    return "minimaxHailuo02";
   }
   if (normalized.includes("runway-gen-4-turbo")) {
-    return {
-      cost: "30 credits / sec · est. 150 for 5s",
-      description: "仅支持图生视频，适合已有视觉锚点的场景。",
-    };
+    return "runwayGen4Turbo";
   }
   if (normalized.includes("seedance-1-5-lite")) {
-    return {
-      cost: "8 credits / sec · est. 40 for 5s",
-      description: "轻量版 Seedance，速度更快、成本更低。",
-    };
+    return "seedance15Lite";
   }
   if (normalized.includes("wanx2.1-t2v-turbo")) {
-    return {
-      cost: "18 credits / sec · est. 90 for 5s",
-      description: "阿里万相文生视频 Turbo 模型。",
-    };
+    return "wanx21T2vTurbo";
   }
   if (normalized.includes("wanx2.1-kf2v-plus")) {
-    return {
-      cost: "22 credits / sec · est. 110 for 5s",
-      description: "阿里万相关键帧图生视频 Plus 模型。",
-    };
+    return "wanx21Kf2vPlus";
   }
-  return {
-    cost: "按服务商计费",
-    description: "具体能力与计费以服务商后台为准。",
-  };
+  return "fallback";
 }
 
 function nextRandomSeed(): number {
@@ -903,6 +888,7 @@ function nextRandomSeed(): number {
 
 export const VideoSidebar: React.FC<VideoSidebarProps> = memo(
   ({ state, providers, availableModels, onStateChange }) => {
+    const { t, i18n } = useTranslation("workspace");
     const startFileInputRef = useRef<HTMLInputElement>(null);
     const endFileInputRef = useRef<HTMLInputElement>(null);
     const modelPanelRef = useRef<HTMLDivElement>(null);
@@ -926,6 +912,144 @@ export const VideoSidebar: React.FC<VideoSidebarProps> = memo(
       };
     }, [modelPanelOpen]);
 
+    const modelMetaCopy = useMemo<VideoModelMetaCopy>(
+      () => ({
+        veo31: {
+          cost: t("workspace.video.sidebar.model.meta.veo31.cost", {
+            defaultValue: "30 credits/秒 · 8 秒约 240",
+          }),
+          description: t(
+            "workspace.video.sidebar.model.meta.veo31.description",
+            {
+              defaultValue: "Google Veo 3.1 支持 1080p/4K、多图参考与首尾帧。",
+            },
+          ),
+        },
+        sora2Pro: {
+          cost: t("workspace.video.sidebar.model.meta.sora2Pro.cost", {
+            defaultValue: "20 credits/秒 · 4 秒约 80",
+          }),
+          description: t(
+            "workspace.video.sidebar.model.meta.sora2Pro.description",
+            {
+              defaultValue: "Sora-2 Pro 生成时间约 2 分钟，稳定性高。",
+            },
+          ),
+        },
+        sora2: {
+          cost: t("workspace.video.sidebar.model.meta.sora2.cost", {
+            defaultValue: "2.7 credits/秒 · 15 秒约 40.5",
+          }),
+          description: t(
+            "workspace.video.sidebar.model.meta.sora2.description",
+            {
+              defaultValue: "Sora 2 最长 15 秒，不支持上传人物图。",
+            },
+          ),
+        },
+        seedance15Pro: {
+          cost: t("workspace.video.sidebar.model.meta.seedance15Pro.cost", {
+            defaultValue: "20 credits/秒 · 5 秒约 100",
+          }),
+          description: t(
+            "workspace.video.sidebar.model.meta.seedance15Pro.description",
+            {
+              defaultValue: "支持文生视频与首帧 / 首尾帧图生视频。",
+            },
+          ),
+        },
+        kling26: {
+          cost: t("workspace.video.sidebar.model.meta.kling26.cost", {
+            defaultValue: "27 credits/秒 · 5 秒约 135",
+          }),
+          description: t(
+            "workspace.video.sidebar.model.meta.kling26.description",
+            {
+              defaultValue: "支持 1080p 文生视频和图生视频。",
+            },
+          ),
+        },
+        minimaxHailuo23: {
+          cost: t("workspace.video.sidebar.model.meta.minimaxHailuo23.cost", {
+            defaultValue: "25 credits/秒 · 6 秒约 150",
+          }),
+          description: t(
+            "workspace.video.sidebar.model.meta.minimaxHailuo23.description",
+            {
+              defaultValue: "支持文生视频和图生视频，适合泛场景生成。",
+            },
+          ),
+        },
+        minimaxHailuo02: {
+          cost: t("workspace.video.sidebar.model.meta.minimaxHailuo02.cost", {
+            defaultValue: "25 credits/秒 · 6 秒约 150",
+          }),
+          description: t(
+            "workspace.video.sidebar.model.meta.minimaxHailuo02.description",
+            {
+              defaultValue: "支持首尾帧与 1080p 输出。",
+            },
+          ),
+        },
+        runwayGen4Turbo: {
+          cost: t("workspace.video.sidebar.model.meta.runwayGen4Turbo.cost", {
+            defaultValue: "30 credits/秒 · 5 秒约 150",
+          }),
+          description: t(
+            "workspace.video.sidebar.model.meta.runwayGen4Turbo.description",
+            {
+              defaultValue: "仅支持图生视频，适合已有视觉锚点的场景。",
+            },
+          ),
+        },
+        seedance15Lite: {
+          cost: t("workspace.video.sidebar.model.meta.seedance15Lite.cost", {
+            defaultValue: "8 credits/秒 · 5 秒约 40",
+          }),
+          description: t(
+            "workspace.video.sidebar.model.meta.seedance15Lite.description",
+            {
+              defaultValue: "轻量版 Seedance，速度更快、成本更低。",
+            },
+          ),
+        },
+        wanx21T2vTurbo: {
+          cost: t("workspace.video.sidebar.model.meta.wanx21T2vTurbo.cost", {
+            defaultValue: "18 credits/秒 · 5 秒约 90",
+          }),
+          description: t(
+            "workspace.video.sidebar.model.meta.wanx21T2vTurbo.description",
+            {
+              defaultValue: "阿里万相文生视频 Turbo 模型。",
+            },
+          ),
+        },
+        wanx21Kf2vPlus: {
+          cost: t("workspace.video.sidebar.model.meta.wanx21Kf2vPlus.cost", {
+            defaultValue: "22 credits/秒 · 5 秒约 110",
+          }),
+          description: t(
+            "workspace.video.sidebar.model.meta.wanx21Kf2vPlus.description",
+            {
+              defaultValue: "阿里万相关键帧图生视频 Plus 模型。",
+            },
+          ),
+        },
+        fallback: {
+          cost: t("workspace.video.sidebar.model.meta.fallback.cost", {
+            defaultValue: "按服务商计费",
+          }),
+          description: t(
+            "workspace.video.sidebar.model.meta.fallback.description",
+            {
+              defaultValue: "具体能力与计费以服务商后台为准。",
+            },
+          ),
+        },
+      }),
+      [t],
+    );
+
     const modelOptions = useMemo(() => {
       const options: VideoModelOption[] = [];
       const seenKeys = new Set<string>();
@@ -942,7 +1066,7 @@ export const VideoSidebar: React.FC<VideoSidebarProps> = memo(
             continue;
           }
           seenKeys.add(key);
-          const meta = getModelMeta(model);
+          const meta = modelMetaCopy[getModelMetaId(model)];
           options.push({
             key,
             providerId: provider.id,
@@ -955,7 +1079,7 @@ export const VideoSidebar: React.FC<VideoSidebarProps> = memo(
         }
       }
       if (options.length === 0 && state.providerId && state.model) {
-        const meta = getModelMeta(state.model);
+        const meta = modelMetaCopy[getModelMetaId(state.model)];
         const fallbackProviderName =
           providers.find((provider) => provider.id === state.providerId)
             ?.name ?? state.providerId;
@@ -970,7 +1094,13 @@ export const VideoSidebar: React.FC<VideoSidebarProps> = memo(
         });
       }
       return options;
-    }, [availableModels, providers, state.model, state.providerId]);
+    }, [
+      availableModels,
+      modelMetaCopy,
+      providers,
+      state.model,
+      state.providerId,
+    ]);
 
     const selectedModelKey = useMemo(() => {
       const currentKey = `${state.providerId}::${state.model}`;
@@ -989,15 +1119,66 @@ export const VideoSidebar: React.FC<VideoSidebarProps> = memo(
       () => [state.startImage, state.endImage].filter(Boolean).length,
       [state.endImage, state.startImage],
     );
+    const locale = i18n.language;
+    const formattedDuration = formatNumber(state.duration, { locale });
+    const formattedReferenceCount = formatNumber(referenceCount, { locale });
+    const referenceSummary =
+      referenceCount > 0
+        ? t("workspace.video.sidebar.summary.referenceImages.ready", {
+            count: referenceCount,
+            defaultValue: "{{value}} 张已就绪",
+            value: formattedReferenceCount,
+          })
+        : t("workspace.video.sidebar.summary.referenceImages.empty", {
+            defaultValue: "暂未上传",
+          });
 
-    const frameConfigs: {
-      title: string;
-      field: FrameImageField;
-      area: FrameDropArea;
-    }[] = [
-      { title: "起始画面", field: "startImage", area: "start" },
-      { title: "结束画面", field: "endImage", area: "end" },
-    ];
+    const frameConfigs = useMemo<
+      {
+        title: string;
+        tipAria: string;
+        tipContent: string;
+        previewAlt: string;
+        field: FrameImageField;
+        area: FrameDropArea;
+      }[]
+    >(
+      () => [
+        {
+          title: t("workspace.video.sidebar.reference.start.title", {
+            defaultValue: "起始画面",
+          }),
+          tipAria: t("workspace.video.sidebar.reference.start.tipAria", {
+            defaultValue: "起始画面说明",
+          }),
+          tipContent: t("workspace.video.sidebar.reference.start.tipContent", {
+            defaultValue: "用于锁定开场构图、人物与场景氛围。",
+          }),
+          previewAlt: t("workspace.video.sidebar.reference.start.previewAlt", {
+            defaultValue: "起始画面预览",
+          }),
+          field: "startImage",
+          area: "start",
+        },
+        {
+          title: t("workspace.video.sidebar.reference.end.title", {
+            defaultValue: "结束画面",
+          }),
+          tipAria: t("workspace.video.sidebar.reference.end.tipAria", {
+            defaultValue: "结束画面说明",
+          }),
+          tipContent: t("workspace.video.sidebar.reference.end.tipContent", {
+            defaultValue: "用于约束收尾镜头，让前后画面更连贯。",
+          }),
+          previewAlt: t("workspace.video.sidebar.reference.end.previewAlt", {
+            defaultValue: "结束画面预览",
+          }),
+          field: "endImage",
+          area: "end",
+        },
+      ],
+      [t],
+    );
 
     const setFrameImage = (field: FrameImageField, value?: string) => {
       if (field === "startImage") {
@@ -1034,62 +1215,112 @@ export const VideoSidebar: React.FC<VideoSidebarProps> = memo(
     return (
       <SidebarWrapper>
         <PanelIntro>
-          <PanelEyebrow>VIDEO CONTROL</PanelEyebrow>
+          <PanelEyebrow>
+            {t("workspace.video.sidebar.intro.eyebrow", {
+              defaultValue: "VIDEO CONTROL",
+            })}
+          </PanelEyebrow>
           <PanelTitleRow>
-            <PanelTitle>生成参数</PanelTitle>
+            <PanelTitle>
+              {t("workspace.video.sidebar.intro.title", {
+                defaultValue: "生成参数",
+              })}
+            </PanelTitle>
             <WorkbenchInfoTip
-              ariaLabel="生成参数说明"
-              content="先确定模型，再补参考图和输出规格。这里保持轻量控制，主创作仍留在右侧画布。"
+              ariaLabel={t("workspace.video.sidebar.intro.tipAria", {
+                defaultValue: "生成参数说明",
+              })}
+              content={t("workspace.video.sidebar.intro.tipContent", {
+                defaultValue:
+                  "先确定模型，再补参考图和输出规格。这里保持轻量控制，主创作仍留在右侧画布。",
+              })}
               tone="mint"
             />
           </PanelTitleRow>
           <PanelMetaGrid>
             <PanelMetaCard>
-              <PanelMetaLabel>当前模型</PanelMetaLabel>
+              <PanelMetaLabel>
+                {t("workspace.video.sidebar.summary.currentModel.label", {
+                  defaultValue: "当前模型",
+                })}
+              </PanelMetaLabel>
               <PanelMetaValue>
-                {selectedModelOption?.label ?? "待配置视频模型"}
+                {selectedModelOption?.label ??
+                  t("workspace.video.sidebar.summary.currentModel.pending", {
+                    defaultValue: "待配置视频模型",
+                  })}
               </PanelMetaValue>
             </PanelMetaCard>
             <PanelMetaCard>
-              <PanelMetaLabel>输出规格</PanelMetaLabel>
+              <PanelMetaLabel>
+                {t("workspace.video.sidebar.summary.outputSpec.label", {
+                  defaultValue: "输出规格",
+                })}
+              </PanelMetaLabel>
               <PanelMetaValue>
                 {state.aspectRatio} · {state.resolution}
               </PanelMetaValue>
             </PanelMetaCard>
             <PanelMetaCard>
-              <PanelMetaLabel>时长</PanelMetaLabel>
-              <PanelMetaValue>{state.duration} 秒</PanelMetaValue>
+              <PanelMetaLabel>
+                {t("workspace.video.sidebar.summary.duration.label", {
+                  defaultValue: "时长",
+                })}
+              </PanelMetaLabel>
+              <PanelMetaValue>
+                {t("workspace.video.sidebar.summary.duration.value", {
+                  defaultValue: "{{value}} 秒",
+                  value: formattedDuration,
+                })}
+              </PanelMetaValue>
             </PanelMetaCard>
             <PanelMetaCard>
-              <PanelMetaLabel>参考图</PanelMetaLabel>
-              <PanelMetaValue>
-                {referenceCount > 0 ? `${referenceCount} 张已就绪` : "暂未上传"}
-              </PanelMetaValue>
+              <PanelMetaLabel>
+                {t("workspace.video.sidebar.summary.referenceImages.label", {
+                  defaultValue: "参考图",
+                })}
+              </PanelMetaLabel>
+              <PanelMetaValue>{referenceSummary}</PanelMetaValue>
             </PanelMetaCard>
           </PanelMetaGrid>
         </PanelIntro>
 
         <Section>
           <SectionHeader>
-            <SectionTitle>模型</SectionTitle>
+            <SectionTitle>
+              {t("workspace.video.sidebar.model.sectionTitle", {
+                defaultValue: "模型",
+              })}
+            </SectionTitle>
             <WorkbenchInfoTip
-              ariaLabel="模型说明"
-              content="模型能力决定可选分辨率、时长和图生视频支持范围。"
+              ariaLabel={t("workspace.video.sidebar.model.tipAria", {
+                defaultValue: "模型说明",
+              })}
+              content={t("workspace.video.sidebar.model.tipContent", {
+                defaultValue: "模型能力决定可选分辨率、时长和图生视频支持范围。",
+              })}
               tone="mint"
             />
           </SectionHeader>
           <ModelTrigger
             type="button"
             onClick={() => setModelPanelOpen(true)}
-            title="选择视频模型"
+            title={t("workspace.video.sidebar.model.triggerTitle", {
+              defaultValue: "选择视频模型",
+            })}
           >
             <ModelTriggerBody>
               <ModelTriggerLabel>
-                {selectedModelOption?.label ?? "暂无可用视频模型"}
+                {selectedModelOption?.label ??
+                  t("workspace.video.sidebar.model.emptyLabel", {
+                    defaultValue: "暂无可用视频模型",
+                  })}
               </ModelTriggerLabel>
               <ModelTriggerMeta>
                 {selectedModelOption?.providerName ??
-                  "请先配置支持视频的 Provider"}
+                  t("workspace.video.sidebar.model.providerMissing", {
+                    defaultValue: "请先配置支持视频的 Provider",
+                  })}
               </ModelTriggerMeta>
             </ModelTriggerBody>
             <ChevronDown size={16} />
@@ -1106,11 +1337,21 @@ export const VideoSidebar: React.FC<VideoSidebarProps> = memo(
           >
             <ModelPanel ref={modelPanelRef}>
               <ModelPanelHeader>
-                <ModelPanelEyebrow>MODEL LIBRARY</ModelPanelEyebrow>
-                <ModelPanelTitle>选择视频模型</ModelPanelTitle>
+                <ModelPanelEyebrow>
+                  {t("workspace.video.sidebar.model.panel.eyebrow", {
+                    defaultValue: "MODEL LIBRARY",
+                  })}
+                </ModelPanelEyebrow>
+                <ModelPanelTitle>
+                  {t("workspace.video.sidebar.model.panel.title", {
+                    defaultValue: "选择视频模型",
+                  })}
+                </ModelPanelTitle>
                 <ModelPanelDescription>
-                  统一在一个面板里查看模型能力、成本与 Provider
-                  来源，避免在侧栏里堆叠过多信息。
+                  {t("workspace.video.sidebar.model.panel.description", {
+                    defaultValue:
+                      "统一在一个面板里查看模型能力、成本与 Provider 来源，避免在侧栏里堆叠过多信息。",
+                  })}
                 </ModelPanelDescription>
               </ModelPanelHeader>
               <ModelPanelDivider />
@@ -1122,9 +1363,15 @@ export const VideoSidebar: React.FC<VideoSidebarProps> = memo(
                     onClick={() => setModelPanelOpen(false)}
                   >
                     <ModelPanelBody>
-                      <ModelPanelName>暂无可用视频模型</ModelPanelName>
+                      <ModelPanelName>
+                        {t("workspace.video.sidebar.model.empty.title", {
+                          defaultValue: "暂无可用视频模型",
+                        })}
+                      </ModelPanelName>
                       <ModelPanelDesc>
-                        请先配置支持视频生成的 Provider。
+                        {t("workspace.video.sidebar.model.empty.description", {
+                          defaultValue: "请先配置支持视频生成的 Provider。",
+                        })}
                       </ModelPanelDesc>
                     </ModelPanelBody>
                     <ModelPanelSelected $active={false}>
@@ -1182,12 +1429,8 @@ export const VideoSidebar: React.FC<VideoSidebarProps> = memo(
               <SectionHeader>
                 <SectionTitle>{frame.title}</SectionTitle>
                 <WorkbenchInfoTip
-                  ariaLabel={`${frame.title}说明`}
-                  content={
-                    frame.field === "startImage"
-                      ? "用于锁定开场构图、人物与场景氛围。"
-                      : "用于约束收尾镜头，让前后画面更连贯。"
-                  }
+                  ariaLabel={frame.tipAria}
+                  content={frame.tipContent}
                   tone="mint"
                 />
               </SectionHeader>
@@ -1218,7 +1461,7 @@ export const VideoSidebar: React.FC<VideoSidebarProps> = memo(
               >
                 {previewImage ? (
                   <PreviewBox>
-                    <img src={previewImage} alt={`${frame.title}预览`} />
+                    <img src={previewImage} alt={frame.previewAlt} />
                     <ReplacePreviewButton
                       type="button"
                       onClick={(event) => {
@@ -1226,7 +1469,9 @@ export const VideoSidebar: React.FC<VideoSidebarProps> = memo(
                         openFramePicker(frame.field);
                       }}
                     >
-                      更换
+                      {t("workspace.video.sidebar.reference.replaceAction", {
+                        defaultValue: "更换",
+                      })}
                     </ReplacePreviewButton>
                     <RemovePreviewButton
                       type="button"
@@ -1237,13 +1482,28 @@ export const VideoSidebar: React.FC<VideoSidebarProps> = memo(
                     >
                       <X size={14} />
                     </RemovePreviewButton>
-                    <ReplaceHint>拖拽上传即可替换当前图片</ReplaceHint>
+                    <ReplaceHint>
+                      {t("workspace.video.sidebar.reference.replaceHint", {
+                        defaultValue: "拖拽上传即可替换当前图片",
+                      })}
+                    </ReplaceHint>
                   </PreviewBox>
                 ) : (
                   <UploadPrompt>
                     <ImagePlus size={18} />
-                    <div>添加图片</div>
-                    <div>拖拽或点击上传参考图</div>
+                    <div>
+                      {t("workspace.video.sidebar.reference.empty.title", {
+                        defaultValue: "添加图片",
+                      })}
+                    </div>
+                    <div>
+                      {t(
+                        "workspace.video.sidebar.reference.empty.description",
+                        {
+                          defaultValue: "拖拽或点击上传参考图",
+                        },
+                      )}
+                    </div>
                     <UploadActionButton
                       type="button"
                       onClick={(event) => {
@@ -1251,7 +1511,9 @@ export const VideoSidebar: React.FC<VideoSidebarProps> = memo(
                         openFramePicker(frame.field);
                       }}
                     >
-                      选择图片
+                      {t("workspace.video.sidebar.reference.empty.action", {
+                        defaultValue: "选择图片",
+                      })}
                     </UploadActionButton>
                   </UploadPrompt>
                 )}
@@ -1271,36 +1533,52 @@ export const VideoSidebar: React.FC<VideoSidebarProps> = memo(
         })}
 
         <Section>
-          <SectionTitle>宽高比</SectionTitle>
+          <SectionTitle>
+            {t("workspace.video.sidebar.controls.aspectRatio.title", {
+              defaultValue: "宽高比",
+            })}
+          </SectionTitle>
           <RatioGrid>
-            {RATIOS.map((ratio) => (
-              <RatioItem
-                key={ratio.value}
-                type="button"
-                $active={state.aspectRatio === ratio.value}
-                onClick={() =>
-                  onStateChange({ ...state, aspectRatio: ratio.value })
-                }
-              >
-                <RatioShape
+            {RATIOS.map((ratio) => {
+              const ratioLabel =
+                ratio.value === "adaptive"
+                  ? t("workspace.video.sidebar.controls.aspectRatio.adaptive", {
+                      defaultValue: "自适应",
+                    })
+                  : ratio.label;
+              return (
+                <RatioItem
+                  key={ratio.value}
+                  type="button"
                   $active={state.aspectRatio === ratio.value}
-                  style={{
-                    aspectRatio:
-                      ratio.value === "adaptive"
-                        ? "1 / 1"
-                        : ratio.value.replace(":", "/"),
-                    borderStyle:
-                      ratio.value === "adaptive" ? "dashed" : "solid",
-                  }}
-                />
-                {ratio.label}
-              </RatioItem>
-            ))}
+                  onClick={() =>
+                    onStateChange({ ...state, aspectRatio: ratio.value })
+                  }
+                >
+                  <RatioShape
+                    $active={state.aspectRatio === ratio.value}
+                    style={{
+                      aspectRatio:
+                        ratio.value === "adaptive"
+                          ? "1 / 1"
+                          : ratio.value.replace(":", "/"),
+                      borderStyle:
+                        ratio.value === "adaptive" ? "dashed" : "solid",
+                    }}
+                  />
+                  {ratioLabel}
+                </RatioItem>
+              );
+            })}
           </RatioGrid>
         </Section>
 
         <Section>
-          <SectionTitle>分辨率</SectionTitle>
+          <SectionTitle>
+            {t("workspace.video.sidebar.controls.resolution.title", {
+              defaultValue: "分辨率",
+            })}
+          </SectionTitle>
           <ResolutionGroup>
             {(["480p", "720p", "1080p"] as VideoResolution[]).map(
               (resolution) => (
@@ -1319,10 +1597,21 @@ export const VideoSidebar: React.FC<VideoSidebarProps> = memo(
 
         <Section>
           <SectionHeader>
-            <SectionTitle>时长</SectionTitle>
+            <SectionTitle>
+              {t("workspace.video.sidebar.controls.duration.title", {
+                defaultValue: "时长",
+              })}
+            </SectionTitle>
             <WorkbenchInfoTip
-              ariaLabel="时长说明"
-              content="建议先用 4 到 8 秒验证镜头是否成立，再逐步拉长。"
+              ariaLabel={t(
+                "workspace.video.sidebar.controls.duration.tipAria",
+                {
+                  defaultValue: "时长说明",
+                },
+              )}
+              content={t("workspace.video.sidebar.controls.duration.tipContent", {
+                defaultValue: "建议先用 4 到 8 秒验证镜头是否成立，再逐步拉长。",
+              })}
               tone="mint"
             />
           </SectionHeader>
@@ -1361,17 +1650,30 @@ export const VideoSidebar: React.FC<VideoSidebarProps> = memo(
 
         <Section>
           <SectionHeader>
-            <SectionTitle>种子</SectionTitle>
+            <SectionTitle>
+              {t("workspace.video.sidebar.controls.seed.title", {
+                defaultValue: "种子",
+              })}
+            </SectionTitle>
             <WorkbenchInfoTip
-              ariaLabel="种子说明"
-              content="需要复现某次结果时再固定种子；探索阶段保持随机即可。"
+              ariaLabel={t("workspace.video.sidebar.controls.seed.tipAria", {
+                defaultValue: "种子说明",
+              })}
+              content={t("workspace.video.sidebar.controls.seed.tipContent", {
+                defaultValue: "需要复现某次结果时再固定种子；探索阶段保持随机即可。",
+              })}
               tone="mint"
             />
           </SectionHeader>
           <SeedRow>
             <SeedInput
               type="number"
-              placeholder="随机"
+              placeholder={t(
+                "workspace.video.sidebar.controls.seed.placeholder",
+                {
+                  defaultValue: "随机",
+                },
+              )}
               value={state.seed ?? ""}
               onChange={(event) => {
                 const raw = event.target.value.trim();
@@ -1391,7 +1693,9 @@ export const VideoSidebar: React.FC<VideoSidebarProps> = memo(
             />
             <SeedRandomButton
               type="button"
-              title="随机种子"
+              title={t("workspace.video.sidebar.controls.seed.randomTitle", {
+                defaultValue: "随机种子",
+              })}
               onClick={() =>
                 onStateChange({
                   ...state,
@@ -1408,10 +1712,24 @@ export const VideoSidebar: React.FC<VideoSidebarProps> = memo(
           <ToggleRow>
             <ToggleCopy>
               <ToggleTitleRow>
-                <ToggleTitle>生成音频</ToggleTitle>
+                <ToggleTitle>
+                  {t("workspace.video.sidebar.controls.generateAudio.title", {
+                    defaultValue: "生成音频",
+                  })}
+                </ToggleTitle>
                 <WorkbenchInfoTip
-                  ariaLabel="生成音频说明"
-                  content="需要环境声或基础配乐时再开启。"
+                  ariaLabel={t(
+                    "workspace.video.sidebar.controls.generateAudio.tipAria",
+                    {
+                      defaultValue: "生成音频说明",
+                    },
+                  )}
+                  content={t(
+                    "workspace.video.sidebar.controls.generateAudio.tipContent",
+                    {
+                      defaultValue: "需要环境声或基础配乐时再开启。",
+                    },
+                  )}
                   tone="mint"
                 />
               </ToggleTitleRow>
@@ -1429,10 +1747,24 @@ export const VideoSidebar: React.FC<VideoSidebarProps> = memo(
           <ToggleRow>
             <ToggleCopy>
               <ToggleTitleRow>
-                <ToggleTitle>固定镜头</ToggleTitle>
+                <ToggleTitle>
+                  {t("workspace.video.sidebar.controls.cameraFixed.title", {
+                    defaultValue: "固定镜头",
+                  })}
+                </ToggleTitle>
                 <WorkbenchInfoTip
-                  ariaLabel="固定镜头说明"
-                  content="减少镜头摇移，适合产品或静态场景。"
+                  ariaLabel={t(
+                    "workspace.video.sidebar.controls.cameraFixed.tipAria",
+                    {
+                      defaultValue: "固定镜头说明",
+                    },
+                  )}
+                  content={t(
+                    "workspace.video.sidebar.controls.cameraFixed.tipContent",
+                    {
+                      defaultValue: "减少镜头摇移，适合产品或静态场景。",
+                    },
+                  )}
                   tone="mint"
                 />
               </ToggleTitleRow>
@@ -1452,22 +1784,44 @@ export const VideoSidebar: React.FC<VideoSidebarProps> = memo(
         <HelperCard>
           <HelperTitle>
             <Sparkles size={14} />
-            创作 Tips
+            {t("workspace.video.sidebar.helper.title", {
+              defaultValue: "创作 Tips",
+            })}
           </HelperTitle>
           <HelperTipsRow>
             <WorkbenchInfoTip
-              ariaLabel="提示词建议"
-              label="提示词"
+              ariaLabel={t("workspace.video.sidebar.helper.prompt.aria", {
+                defaultValue: "提示词建议",
+              })}
+              label={t("workspace.video.sidebar.helper.prompt.label", {
+                defaultValue: "提示词",
+              })}
               variant="pill"
               tone="mint"
-              content="提示词优先写清主体、场景、镜头运动和光线。生成成功后，视频会自动同步到项目资料，便于后续复用。"
+              content={t("workspace.video.sidebar.helper.prompt.content", {
+                defaultValue:
+                  "提示词优先写清主体、场景、镜头运动和光线。生成成功后，视频会自动同步到项目资料，便于后续复用。",
+              })}
             />
             <WorkbenchInfoTip
-              ariaLabel="参数节奏建议"
-              label="参数节奏"
+              ariaLabel={t(
+                "workspace.video.sidebar.helper.parameterPace.aria",
+                {
+                  defaultValue: "参数节奏建议",
+                },
+              )}
+              label={t("workspace.video.sidebar.helper.parameterPace.label", {
+                defaultValue: "参数节奏",
+              })}
               variant="pill"
               tone="mint"
-              content="推荐先锁模型与比例，再逐步增加参考图和固定镜头等约束，避免一次加入太多变量导致结果难以判断。"
+              content={t(
+                "workspace.video.sidebar.helper.parameterPace.content",
+                {
+                  defaultValue:
+                    "推荐先锁模型与比例，再逐步增加参考图和固定镜头等约束，避免一次加入太多变量导致结果难以判断。",
+                },
+              )}
             />
           </HelperTipsRow>
         </HelperCard>

@@ -43,6 +43,30 @@ interface RenderResult {
 
 const mounted: RenderResult[] = [];
 
+function createTestTranslator(overrides: Record<string, string>) {
+  return (key: string, options?: unknown) => {
+    const resolveTemplate = () => {
+      if (overrides[key]) {
+        return overrides[key];
+      }
+      if (typeof options === "string") {
+        return options;
+      }
+      if (options && typeof options === "object") {
+        const values = options as Record<string, unknown>;
+        if (typeof values.defaultValue === "string") {
+          return values.defaultValue;
+        }
+      }
+      return key;
+    };
+
+    return resolveTemplate().replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+      String((options as Record<string, unknown> | undefined)?.[name] ?? ""),
+    );
+  };
+}
+
 function renderPage(
   onTabChange = vi.fn(),
   onTabPrefetch?: (tab: SettingsTabs) => void,
@@ -180,6 +204,23 @@ describe("SettingsHomePage", () => {
     expect(text).not.toContain("SETTINGS OVERVIEW");
     expect(text).not.toContain("安全与性能");
     expect(text).not.toContain("权限、稳定性与运行开关");
+  });
+
+  it("应使用 settings namespace 生成分组说明 aria", () => {
+    mockUseTranslation.mockImplementationOnce(() => ({
+      t: createTestTranslator({
+        "settings.home.group.tipAria": "{{title}} help",
+      }),
+    }));
+
+    const { container } = renderPage();
+
+    expect(
+      container.querySelector("button[aria-label='通用 help']"),
+    ).toBeInstanceOf(HTMLButtonElement);
+    expect(
+      container.querySelector("button[aria-label='通用说明']"),
+    ).toBeNull();
   });
 
   it("点击常用入口时应触发 tab 切换", () => {

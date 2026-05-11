@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { safeInvoke, safeListen } from "@/lib/dev-bridge";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrent } from "@tauri-apps/plugin-deep-link";
@@ -275,6 +276,7 @@ function parseBrowserConnectorDeepLink(
  * @returns Hook 返回值
  */
 export function useDeepLink(options?: UseDeepLinkOptions): UseDeepLinkReturn {
+  const { t } = useTranslation("common");
   const onOpenBrowserConnectorSettings =
     options?.onOpenBrowserConnectorSettings;
   const onOpenWebsiteDeepLink = options?.onOpenWebsiteDeepLink;
@@ -332,26 +334,50 @@ export function useDeepLink(options?: UseDeepLinkOptions): UseDeepLinkReturn {
   const showReferralClaimResult = useCallback(
     (result: OemCloudReferralClaimResult) => {
       if (result.status === "claimed") {
-        toast.success("邀请码已领取", {
-          description: "云端邀请奖励已提交，积分到账以当前品牌策略为准。",
-        });
+        toast.success(
+          t("common.deepLink.referral.claimed.title", {
+            defaultValue: "邀请码已领取",
+          }),
+          {
+            description: t("common.deepLink.referral.claimed.description", {
+              defaultValue: "云端邀请奖励已提交，积分到账以当前品牌策略为准。",
+            }),
+          },
+        );
         return;
       }
 
       if (result.status === "pending_login") {
-        toast.info("邀请码已保存", {
-          description: "登录 Lime 云端账号后会自动完成邀请绑定。",
-        });
+        toast.info(
+          t("common.deepLink.referral.saved.title", {
+            defaultValue: "邀请码已保存",
+          }),
+          {
+            description: t("common.deepLink.referral.saved.description", {
+              defaultValue: "登录 Lime 云端账号后会自动完成邀请绑定。",
+            }),
+          },
+        );
         return;
       }
 
       if (result.status === "tenant_mismatch") {
-        toast.error("邀请码租户不匹配", {
-          description: "请切换到对应品牌账号后再领取。",
-        });
+        toast.error(
+          t("common.deepLink.referral.tenantMismatch.title", {
+            defaultValue: "邀请码租户不匹配",
+          }),
+          {
+            description: t(
+              "common.deepLink.referral.tenantMismatch.description",
+              {
+                defaultValue: "请切换到对应品牌账号后再领取。",
+              },
+            ),
+          },
+        );
       }
     },
-    [],
+    [t],
   );
 
   const tryClaimStoredReferralInvite = useCallback(async () => {
@@ -362,12 +388,19 @@ export function useDeepLink(options?: UseDeepLinkOptions): UseDeepLinkReturn {
       const message =
         error instanceof Error && error.message.trim()
           ? error.message.trim()
-          : "自动领取邀请码失败";
-      toast.error("邀请码领取失败", {
-        description: message,
-      });
+          : t("common.deepLink.referral.claimFailed.fallback", {
+              defaultValue: "自动领取邀请码失败",
+            });
+      toast.error(
+        t("common.deepLink.referral.claimFailed.title", {
+          defaultValue: "邀请码领取失败",
+        }),
+        {
+          description: message,
+        },
+      );
     }
-  }, [showReferralClaimResult]);
+  }, [showReferralClaimResult, t]);
 
   const handleOauthCallbackUrl = useCallback(
     async (url: string) => {
@@ -377,9 +410,14 @@ export function useDeepLink(options?: UseDeepLinkOptions): UseDeepLinkReturn {
       }
 
       if (payload.error) {
-        toast.error("Google 登录未完成", {
-          description: payload.error,
-        });
+        toast.error(
+          t("common.deepLink.oauth.incomplete.title", {
+            defaultValue: "Google 登录未完成",
+          }),
+          {
+            description: payload.error,
+          },
+        );
         return true;
       }
 
@@ -388,23 +426,39 @@ export function useDeepLink(options?: UseDeepLinkOptions): UseDeepLinkReturn {
         const providerName = resolveOemLimeHubProviderName(
           resolveOemCloudRuntimeContext(),
         );
-        toast.success("Google 登录成功", {
-          description: `个人中心会话、${providerName} 云端目录与服务技能目录已同步。`,
-        });
+        toast.success(
+          t("common.deepLink.oauth.success.title", {
+            defaultValue: "Google 登录成功",
+          }),
+          {
+            description: t("common.deepLink.oauth.success.description", {
+              providerName,
+              defaultValue:
+                "个人中心会话、{{providerName}} 云端目录与服务技能目录已同步。",
+            }),
+          },
+        );
         await tryClaimStoredReferralInvite();
       } catch (error) {
         const message =
           error instanceof Error && error.message.trim()
             ? error.message.trim()
-            : "同步桌面端登录结果失败";
-        toast.error("Google 登录失败", {
-          description: message,
-        });
+            : t("common.deepLink.oauth.syncFailed.fallback", {
+                defaultValue: "同步桌面端登录结果失败",
+              });
+        toast.error(
+          t("common.deepLink.oauth.failed.title", {
+            defaultValue: "Google 登录失败",
+          }),
+          {
+            description: message,
+          },
+        );
       }
 
       return true;
     },
-    [tryClaimStoredReferralInvite],
+    [tryClaimStoredReferralInvite, t],
   );
 
   const handleOpenDeepLinkEvent = useCallback(
@@ -455,19 +509,33 @@ export function useDeepLink(options?: UseDeepLinkOptions): UseDeepLinkReturn {
         const message =
           error instanceof Error && error.message.trim()
             ? error.message.trim()
-            : "自动领取邀请码失败";
-        toast.error("邀请码领取失败", {
-          description: message,
-        });
+            : t("common.deepLink.referral.claimFailed.fallback", {
+                defaultValue: "自动领取邀请码失败",
+              });
+        toast.error(
+          t("common.deepLink.referral.claimFailed.title", {
+            defaultValue: "邀请码领取失败",
+          }),
+          {
+            description: message,
+          },
+        );
         return;
       }
 
       const paymentReturn = parseOemCloudPaymentReturnUrl(normalizedUrl);
       if (paymentReturn) {
         dispatchOemCloudPaymentReturn(paymentReturn);
-        toast.success("支付结果已返回", {
-          description: "正在同步云端权益、积分余额与账本状态。",
-        });
+        toast.success(
+          t("common.deepLink.payment.returned.title", {
+            defaultValue: "支付结果已返回",
+          }),
+          {
+            description: t("common.deepLink.payment.returned.description", {
+              defaultValue: "正在同步云端权益、积分余额与账本状态。",
+            }),
+          },
+        );
         return;
       }
 
@@ -509,6 +577,7 @@ export function useDeepLink(options?: UseDeepLinkOptions): UseDeepLinkReturn {
       handleOauthCallbackUrl,
       onOpenBrowserConnectorSettings,
       showReferralClaimResult,
+      t,
     ],
   );
 

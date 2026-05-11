@@ -6,6 +6,7 @@ import React, {
   useState,
 } from "react";
 import styled, { keyframes } from "styled-components";
+import { useTranslation } from "react-i18next";
 import { getConfig } from "@/lib/api/appConfig";
 import {
   getSkillCatalog,
@@ -24,6 +25,7 @@ import {
 } from "../utils/contextualRecommendations";
 import {
   buildCuratedTaskLaunchPrompt,
+  buildCuratedTaskTemplateCopy,
   findCuratedTaskTemplateById,
   listCuratedTaskTemplates,
   recordCuratedTaskTemplateUsage,
@@ -394,8 +396,6 @@ interface EmptyStateProps extends SkillSelectionSourceProps {
   onOpenChannels?: () => void;
   /** 打开浏览器连接器 */
   onOpenChromeRelay?: () => void;
-  /** 打开 OpenClaw 兼容入口 */
-  onOpenOpenClaw?: () => void;
   /** 当前带入的 creation replay 前台投影 */
   creationReplaySurface?: CreationReplaySurfaceModel | null;
   /** 当前结果模板默认带入的 memory 引用 id */
@@ -529,6 +529,14 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   fileManagerOpen = false,
   onToggleFileManager,
 }) => {
+  const { t } = useTranslation("agent");
+  const curatedTaskTemplateCopy = useMemo(
+    () =>
+      buildCuratedTaskTemplateCopy((key, defaultValue, values) =>
+        t(key, { defaultValue, ...values }),
+      ),
+    [t],
+  );
   const pageContainerRef = useRef<HTMLDivElement | null>(null);
   const [activeCapability, setActiveCapability] =
     useState<InputCapabilitySelection | null>(null);
@@ -759,8 +767,12 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   const curatedTaskTemplates = useMemo(() => {
     void curatedTaskTemplatesVersion;
     void curatedTaskRecommendationSignalsVersion;
-    return listCuratedTaskTemplates();
-  }, [curatedTaskRecommendationSignalsVersion, curatedTaskTemplatesVersion]);
+    return listCuratedTaskTemplates(curatedTaskTemplateCopy);
+  }, [
+    curatedTaskRecommendationSignalsVersion,
+    curatedTaskTemplateCopy,
+    curatedTaskTemplatesVersion,
+  ]);
 
   const selectedTextPreview = useMemo(() => {
     const normalized = (recommendationSelectedText || "")
@@ -1073,7 +1085,8 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       }
 
       const resolvedTemplate =
-        findCuratedTaskTemplateById(template.id) ?? template;
+        findCuratedTaskTemplateById(template.id, curatedTaskTemplateCopy) ??
+        template;
       const launchPrompt = buildCuratedTaskLaunchPrompt({
         task: resolvedTemplate,
         inputValues,
@@ -1107,6 +1120,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     [
       activeCuratedTask,
       appendSelectedTextToRecommendation,
+      curatedTaskTemplateCopy,
       handleThemeChange,
       input,
       onLaunchBrowserAssist,
@@ -1294,7 +1308,10 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   const handleSelectHomeSkillItem = useCallback(
     (item: HomeSkillSurfaceItem) => {
       if (item.launchKind === "curated_task_launcher") {
-        const template = findCuratedTaskTemplateById(item.id);
+        const template = findCuratedTaskTemplateById(
+          item.id,
+          curatedTaskTemplateCopy,
+        );
         if (!template) {
           return;
         }
@@ -1358,6 +1375,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       }
     },
     [
+      curatedTaskTemplateCopy,
       effectiveDefaultCuratedTaskReferenceEntries,
       effectiveDefaultCuratedTaskReferenceMemoryIds,
       handleCuratedTaskLauncherRequest,
@@ -1399,7 +1417,10 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         : null;
       if (targetItem) {
         if (targetItem.launchKind === "curated_task_launcher") {
-          const template = findCuratedTaskTemplateById(targetItem.id);
+          const template = findCuratedTaskTemplateById(
+            targetItem.id,
+            curatedTaskTemplateCopy,
+          );
           if (!template) {
             return;
           }
@@ -1426,6 +1447,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       }
     },
     [
+      curatedTaskTemplateCopy,
       effectiveDefaultCuratedTaskReferenceEntries,
       effectiveDefaultCuratedTaskReferenceMemoryIds,
       handleSelectHomeSkillItem,

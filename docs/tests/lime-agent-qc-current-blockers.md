@@ -4,7 +4,7 @@
 
 ## 1. 当前结论
 
-截至 2026-05-11 01:13，本地已经具备 Agent QC 标准、manifest、Evidence Pack schema、qcloop exporter、release summary gate、completion audit、qcloop status sidecar 和 GUI smoke 能力。隔离 qcloop 已经证明部分 P0 smoke 能在 worker 内跑通；最新显式 Sensenova provider 的 `verify:gui-smoke -- --reuse-running` 已通过，并覆盖 Claw streaming / interrupt / resume，但官方 Evidence Pack 仍为失败，完整 `verify:local` 与 stale qcloop P0 owner 仍未闭环：
+截至 2026-05-11 05:02，本地已经具备 Agent QC 标准、manifest、Evidence Pack schema、qcloop exporter、release summary gate、completion audit、qcloop status sidecar、payload coverage gate 和 GUI smoke 能力。隔离 qcloop 已经证明部分 P0 smoke 能在 worker 内跑通；最新完整 `verify:local` 已通过，隔离 P0 full v3 已把 `command-bridge-contract`、`claw-chat-ready-streaming`、`tool-approval-sandbox-boundary`、`harness-replay-regression` 推进到 qcloop pass，后续单项 qcloop 又把 `skill-forge-register-bind-enable` 推进到 runtime-transcript pass；但官方 Evidence Pack 仍为失败，且 PID `59011` 的 raw `smoke:design-canvas` stale owner 仍未释放。2026-05-11 05:02 的最新门禁刷新见 [5.38](#538-completion-audit-纳入-payload-coverage2026-05-11-0502)：
 
 ```text
 .lime/qc/agent-qc-evidence.json status=fail scenarios=8/8
@@ -246,7 +246,7 @@ evidence=.lime/qc/verify-gui-smoke-reuse-sensenova-session-restore-2026-05-11-01
 | active scenario | `browser-runtime-site-adapter` | 仍卡在 browser runtime / site adapter 类 P0 |
 | stale age | 约 `28020s` | 已远超 stale 阈值 |
 | GUI owner gate | `ownerCount=1`、`staleOwnerCount=1`、`oldestStaleSeconds≈27026` | 不允许启动新的 full GUI P0 |
-| raw process owner | `busy`，`activeGuiSmoke=2`、`cargoOrRust=4`、`qcloopRelated=7` | 不允许启动完整 `verify:local` |
+| raw process owner | `busy`，`activeGuiSmoke=3`、`cargoOrRust=4`、`qcloopRelated=7` | 不允许启动完整 `verify:local` |
 | DB lease | `lock_owner=qcloop-worker-1`，`lock_expires_at=2026-05-11T01:47:06+08:00` | lease 仍被续约 |
 | active attempt | `dc625f8e-b3b9-46b7-9758-4b0273438d50` / `running` | stdout/stderr 仍为空 |
 
@@ -545,3 +545,422 @@ evidence=.lime/qc/verify-gui-smoke-reuse-sensenova-session-restore-2026-05-11-01
 | objective completion audit | `achieved=false` | `.lime/qc/objective-completion-audit-current.json` schema `v3` 失败项仍为 `real-p0-qcloop-evidence` 与 `local-verify-gate` |
 
 该口径不改变核心发布事实：没有真实 8/8 P0 qcloop pass 和完整 `verify:local` pass 时，仍不能把当前状态标记为整体完成，也不能覆盖官方 `.lime/qc/agent-qc-evidence.json`。
+
+### 5.16 当前门禁刷新与 stale owner 收口（2026-05-11 02:42）
+
+本轮只执行只读 / sidecar 取证与低冲突脚本修正；未执行 git commit / push / tag / release，未修改 qcloop SQLite DB，未覆盖官方 `.lime/qc/agent-qc-evidence.json`，也未启动新的 full GUI P0 或完整 `verify:local`。
+
+| 门禁 | 当前值 | 结论 |
+| --- | --- | --- |
+| isolated full P0 v1 `1778405842243079000` | `failed`，5 success / 3 exhausted | 旧 stale owner 已自然进入终态；该批次不能作为发布 pass |
+| GUI owner gate | `pass`，ownerCount=`0` | qcloop GUI owner 已释放，可以作为后续新批次的必要条件之一 |
+| raw process owner | `busy`，activeGuiSmoke=`3`、cargoOrRust=`5`、qcloopRelated=`6` | 仍不应启动完整 `verify:local` 或新的 full GUI P0 |
+| sidecar Evidence Pack | `.lime/qc/agent-qc-evidence.isolated-p0-full-v1-after-intervention.json` status=`fail` | 只作为失败证据；不覆盖官方 Evidence Pack |
+| sidecar release summary | `exit 1` / status=`fail` | `agent-qc:release-summary --check` 正确拒绝该 sidecar 作为绿色发布证据 |
+| completion audit | `15/17`，`status=incomplete` | 当前只剩 `real-qcloop-evidence` 与 `local-verify-gate` 两个目标级缺口 |
+
+本轮还修正了 completion audit 的 sidecar 归并口径：同一个 qcloop job 存在更新的终态 status sidecar 时，旧的 `pre-intervention` / stale snapshot 不再被误判为“仍有未终态 owner”。该修正只消除历史 sidecar 噪声，不会放宽真正的发布门禁；官方 Evidence Pack 仍必须是真实 `8/8` P0 pass，完整 `verify:local` 仍必须 pass。
+
+本轮验证：
+
+```bash
+node --check scripts/agent-qc-completion-audit.mjs
+npx vitest run scripts/lib/agent-qc-completion-audit-core.test.ts
+npm run agent-qc:audit -- --format json --output ./.lime/qc/objective-completion-audit-current.json
+npm run agent-qc:release-summary -- --evidence ./.lime/qc/agent-qc-evidence.isolated-p0-full-v1-after-intervention.json --require-scenario-manifest docs/test/agent-qc-scenarios.manifest.json --require-risk P0 --tag sidecar-isolated-p0-full-v1-after-intervention --check
+```
+
+下一刀仍不应直接重跑重型门禁；应先等 raw process owner 释放，再按顺序执行 `agent-qc:process-owner-check -- --check`、`agent-qc:gui-owner-check -- --check`、完整 `npm run verify:local`，最后再启动单 owner full P0 qcloop 并导出真实官方 Evidence Pack。
+
+### 5.17 raw process owner 精确化（2026-05-11 02:47）
+
+`agent-qc:process-owner-check` 已从粗粒度进程计数改为区分 active owner、passive runtime 和 observer：
+
+| 分类 | 当前值 | 含义 |
+| --- | --- | --- |
+| active GUI smoke | `1` | 只有 PID `59011` 的 `npm run smoke:design-canvas ...` 仍是重型 GUI owner |
+| stale active GUI smoke | `1` | PID `59011` 已运行约 `7h`，超过默认 `30min` stale 阈值 |
+| active qcloop worker | `0` | 旧 qcloop serve 进程被归为 passive server，不再误判为 active worker |
+| active Cargo / Rust build | `0` | `tauri dev` runtime 被归为 passive runtime，不再误判为 Cargo build owner |
+| passive qcloop server | `6` | 仅说明历史隔离 server 仍在，不代表 active P0 worker |
+| passive Tauri runtime | `4` | 仅说明当前 GUI runtime 仍在，不代表正在编译 |
+| observer process | `2` | 只读 `ps` / `rg` watcher，不再计入阻断 owner |
+
+最新 sidecar：`.lime/qc/gui-process-owner-current.json` / `.md`。当前 `ownerIntervention.status=requires_owner_confirmation`，确认文本为：
+
+```text
+确认处理 stale raw GUI owner PID 59011，可以终止这些进程并记录 sidecar。
+```
+
+确认前仍不执行 kill / pause / interrupt，也不启动完整 `verify:local` 或新的 full GUI P0。该修正只消除 idle qcloop serve、Tauri runtime 和观察脚本的误报；真实阻断仍是 stale `smoke:design-canvas` owner。
+
+### 5.18 stale raw GUI owner 处置请求（2026-05-11 02:51）
+
+再次只读刷新确认 PID `59011` 仍存活，`etime=07:04:53`，仍是唯一 active raw GUI smoke owner。已生成处置请求 sidecar：
+
+- `.lime/qc/stale-raw-gui-owner-intervention-request.json`
+- `.lime/qc/stale-raw-gui-owner-intervention-request.md`
+
+该请求只用于 owner 决策，不代表授权。确认文本仍为：
+
+```text
+确认处理 stale raw GUI owner PID 59011，可以终止这些进程并记录 sidecar。
+```
+
+确认前继续保持：不 kill / pause / interrupt PID `59011`，不启动完整 `verify:local`，不启动新的 full GUI P0，不覆盖官方 Evidence Pack，不执行 git commit / push / tag / release。
+
+### 5.19 process owner 分类核心回归（2026-05-11 02:55）
+
+为避免 raw process owner gate 后续再次把 passive runtime / observer 误判成 active blocker，本轮把分类逻辑抽到 `scripts/lib/agent-qc-process-owner-core.mjs`，并新增 `scripts/lib/agent-qc-process-owner-core.test.ts`。当前验证：
+
+```bash
+node --check scripts/lib/agent-qc-process-owner-core.mjs
+node --check scripts/agent-qc-process-owner-check.mjs
+npx vitest run scripts/lib/agent-qc-process-owner-core.test.ts scripts/lib/agent-qc-completion-audit-core.test.ts
+```
+
+结果：`21 tests` 全部通过。最新 `agent-qc:process-owner-check --check` 仍按预期失败：`activeGuiSmoke=1`、`cargoOrRust=0`、`qcloopRelated=0`、`staleActiveGuiSmoke=1`、`passiveQcloopServer=6`、`passiveTauriRuntime=4`、`observer=2`。因此门禁没有被放宽，仍卡在 PID `59011` 的 stale `smoke:design-canvas`。
+
+### 5.20 objective checklist sidecar（2026-05-11 02:59）
+
+新增目标级 checklist sidecar：
+
+- `.lime/qc/objective-completion-checklist-current.json`
+- `.lime/qc/objective-completion-checklist-current.md`
+
+该 checklist 把显式目标映射到文档、manifest、schema、qcloop 工具、owner gate、官方 Evidence Pack、`verify:local` 和 git guardrail。当前状态仍为 `incomplete`，`4/7` pass；阻断项为 raw process owner busy、官方 Evidence Pack 非 pass、`verify:local` 非 pass。短暂观察到的外部 `verify:gui-smoke` transient owner 已自然结束，最新 raw process owner 又收敛为唯一 active blocker：PID `59011` 的 stale `smoke:design-canvas`。
+
+### 5.21 raw process owner watch history（2026-05-11 03:01）
+
+`agent-qc:process-owner-check` 新增 `--watch-history-output`，已追加 `.lime/qc/raw-process-owner-watch-history.jsonl`。最新记录：`status=busy`，`activeGuiSmoke=1`，`staleActiveGuiSmoke=1`，`ownerIntervention=requires_owner_confirmation`，PID `59011` 运行约 `7h16m`。该 JSONL 只记录观察，不授权处理进程。
+
+### 5.22 objective checklist 脚本化（2026-05-11 03:04）
+
+新增 `scripts/agent-qc-objective-checklist.mjs` 与 npm 入口 `agent-qc:objective-checklist`，把目标级 checklist 从一次性 sidecar 生成逻辑固化为可重复门禁。当前命令：
+
+```bash
+npm run agent-qc:objective-checklist -- --format json --output ./.lime/qc/objective-completion-checklist-current.json
+npm run agent-qc:objective-checklist -- --format markdown --output ./.lime/qc/objective-completion-checklist-current.md
+npm run agent-qc:objective-checklist -- --check
+```
+
+前两条已生成当前 sidecar；`--check` 按预期 exit `1`，因为 checklist 仍为 `incomplete`（`4/7`）。这不会放宽门禁，只把“目标是否完成”的判断变成可重复脚本。
+
+### 5.23 objective checklist core 回归（2026-05-11 03:07）
+
+`agent-qc:objective-checklist` 已抽出 `scripts/lib/agent-qc-objective-checklist-core.mjs`，并新增 `scripts/lib/agent-qc-objective-checklist-core.test.ts`。回归覆盖：owner clear 时 checklist 可 complete、raw process owner busy 时保持 `pass_with_blocking_owner`、官方 Evidence Pack / `verify:local` fail 时列为 blocker、Markdown 渲染。该轮同时修正了 owner gate 已 pass 时 checklist 可能误判的边界。最新定向测试：
+
+```bash
+npx vitest run scripts/lib/agent-qc-objective-checklist-core.test.ts scripts/lib/agent-qc-process-owner-core.test.ts scripts/lib/agent-qc-completion-audit-core.test.ts
+```
+
+结果：`25 tests` 全部通过。当前实际 checklist 仍为 `incomplete`，`4/7`。
+
+### 5.24 raw GUI owner post-confirmation runbook（2026-05-11 03:09）
+
+`docs/tests/lime-agent-qc-stale-owner-intervention.md` 新增第 8 节，专门覆盖 `gui-owner-check` 已通过但 `process-owner-check` 仍因 raw GUI smoke stale 的场景。该 runbook 明确：确认前不处理进程；确认后只处理 owner 明确确认的 PID / PGID；不得顺手清理 passive qcloop serve、passive Tauri runtime 或 observer shell；处理后必须先通过 `agent-qc:process-owner-check -- --check` 与 `agent-qc:gui-owner-check -- --check`，再跑完整 `verify:local`。
+
+### 5.25 local verify gate 已关闭（2026-05-11 03:11）
+
+外部完整门禁已把 `.lime/qc/verify-local-current.json` 与 `.lime/qc/verify-gui-smoke-current.json` 刷新为 `status=pass`。重新运行 `agent-qc:audit` 后，completion audit 从 `15/17` 提升为 `16/17`，剩余目标级缺口只剩 `real-qcloop-evidence`。Objective checklist 从 `4/7` 提升为 `5/7`，其中 `verify:local` 已 PASS。
+
+当前仍不能启动新的 full P0 qcloop，因为 raw process owner 仍为 `busy`：PID `59011` 的 stale `smoke:design-canvas` 仍存活，`ownerIntervention=requires_owner_confirmation`。因此下一刀不是重跑 `verify:local`，而是等待或获得明确确认后处理 PID `59011`，再启动 single-owner full P0 qcloop 并导出真实 8/8 P0 official Evidence Pack。
+
+### 5.26 隔离 P0 full v2 终态失败（2026-05-11 03:50）
+
+观察到本地已有隔离 P0 full v2 批次 `1778440541478632000`（`lime-agent-qc-isolated-p0-full-v2-2026-05-11-0315`）运行在 `127.0.0.1:18086`。本轮只做只读监控、sidecar 导出和 release gate 校验；未覆盖官方 `.lime/qc/agent-qc-evidence.json`，未执行 git commit / push / tag / release。
+
+| 门禁 | 当前值 | 结论 |
+| --- | --- | --- |
+| qcloop status | `failed`，3 success / 5 exhausted | 批次无 stale，但仍不能发布 |
+| sidecar Evidence Pack | `.lime/qc/agent-qc-evidence.isolated-p0-full-v2-2026-05-11-0315.json` status=`fail` | 2 pass / 4 fail / 2 blocked |
+| sidecar release summary | `.lime/qc/release-agent-qc.sidecar-isolated-p0-full-v2-2026-05-11-0315.md`，`--check` exit `1` | release gate 正确拒绝 |
+| direct contracts sanity | `npm run test:contracts` pass | 当前工作树的命令契约已恢复；v2 中 `command-bridge-contract` 失败是历史运行时证据，不可改写为 pass |
+| raw process owner | `busy` | PID `59011` 的 stale `smoke:design-canvas` 仍阻断新 full P0 |
+
+v2 的主要失败分类：
+
+| 场景 | sidecar 状态 | 主要原因 |
+| --- | --- | --- |
+| `command-bridge-contract` | `fail` | worker 运行当时 `test:contracts` 命中 `execution_run_get_general_workbench_state` mock drift；后续 direct sanity 已通过，但不回写历史 item |
+| `claw-chat-ready-streaming` | `fail` | 长 turn 在首个流式增量前 completed，未完整证明中断与恢复 |
+| `skill-forge-register-bind-enable` | `fail` | `test:contracts` 在该 worker 中失败，Skill P0 不能判通过 |
+| `browser-runtime-site-adapter` | `blocked` | 缺 `gui-trace` 与干净 GUI session isolation |
+| `workspace-ready-session-restore` | `blocked` | active GUI owner 阻断核心命令执行 / isolation statement |
+| `release-package-startup-smoke` | `fail` | `verify:gui-smoke` exit `1`，release startup smoke 未闭环 |
+
+### 5.27 隔离 P0 full v3 终态失败但无 stale（2026-05-11 04:24）
+
+随后观察到隔离 P0 full v3 批次 `1778442773271496000`（`lime-agent-qc-isolated-p0-full-v3-2026-05-11-0354`）运行在 `127.0.0.1:18087`。该批次修正了 worker 内 GUI session owner / isolation 口径，避免 worker 把同批次 GUI owner 误判为外部抢占；本轮仍只做只读监控和 sidecar 导出。
+
+| 门禁 | 当前值 | 结论 |
+| --- | --- | --- |
+| qcloop status | `failed`，4 success / 4 exhausted | 批次已终态，无 running / pending / stale；仍不能发布 |
+| sidecar Evidence Pack | `.lime/qc/agent-qc-evidence.isolated-p0-full-v3-2026-05-11-0354.json` status=`fail` | 4 pass / 1 fail / 3 blocked |
+| sidecar release summary | `.lime/qc/release-agent-qc.sidecar-isolated-p0-full-v3-2026-05-11-0354.md`，`--check` exit `1` | release gate 正确拒绝 |
+| completion audit | `16/17`，`status=incomplete` | 只剩 `real-qcloop-evidence` |
+| objective checklist | `5/7`，`status=incomplete` | raw process owner busy + official Evidence Pack fail |
+| raw process owner | `busy`，activeGuiSmoke=`1`、cargoOrRust 波动中、qcloopRelated=`0` | PID `59011` 仍是 stale GUI owner；同时有外部 Rust 定向测试 / rustc 编译在跑 |
+
+v3 的通过项和剩余缺口：
+
+| 场景 | sidecar 状态 | 说明 |
+| --- | --- | --- |
+| `command-bridge-contract` | `pass` | 当前 qcloop worker 与 verifier 均通过 |
+| `claw-chat-ready-streaming` | `pass` | qcloop worker / verifier 接受 GUI、DevBridge、runtime transcript 证据 |
+| `tool-approval-sandbox-boundary` | `pass` | qcloop worker / verifier 通过 |
+| `harness-replay-regression` | `pass` | qcloop worker / verifier 通过 |
+| `skill-forge-register-bind-enable` | `fail` | verifier 认为只覆盖 deterministic smoke，未证明 runtime-transcript / readiness / metadata / explicit enable / SkillTool gate |
+| `browser-runtime-site-adapter` | `blocked` | deterministic smoke 有证据，但缺 `gui-trace`，并命中 parallel GUI smoke interference |
+| `workspace-ready-session-restore` | `blocked` | workspace 与 GUI smoke 命令成功，但 `GUI session owner / isolation statement` 因非本 job stale owner PID `59011` 被标为 blocked |
+| `release-package-startup-smoke` | `blocked` | `verify:app-version` 与 `verify:gui-smoke` 成功，但缺 release-artifact 层，且 GUI isolation 被 PID `59011` 阻断 |
+
+当前不能把 v3 sidecar 升格为官方发布证据。关闭条件仍是：PID `59011` 自然释放，或 owner 明确确认处理 stale raw GUI owner 后，重新执行 single-owner full P0，并得到官方 `.lime/qc/agent-qc-evidence.json` 的真实 8/8 P0 pass。
+
+### 5.28 Skill Forge P0 定向 smoke 补证（2026-05-11 04:31）
+
+v3 中 `skill-forge-register-bind-enable` 的失败不是 GUI owner 阻断，而是 `smoke:agent-service-skill-entry` 当时的 Rust exact filter 没有实际运行关键后端测试：日志显示多个 `running 0 tests`，导致 verifier 正确拒绝把 deterministic smoke 升格为 runtime / SkillTool gate 证据。
+
+随后观察到当前工作树中的 `scripts/agent-service-skill-entry-smoke.mjs` 已改为：
+
+- 为 root Tauri 测试显式使用 `-p lime`
+- 为 `lime-agent` SkillTool gate 测试显式使用 `-p lime-agent`
+- 使用完整 Rust test path 与 `--exact`
+- 捕获 stdout/stderr 并拒绝没有 `N passed` 的 Rust 定向测试，避免 `running 0 tests` 被误判为通过
+
+定向证据：
+
+| 证据 | 状态 | 说明 |
+| --- | --- | --- |
+| `.lime/qc/smoke-agent-service-skill-entry-after-rust-exact-fix-2026-05-11-0430.log` | `pass` | 当前 `smoke:agent-service-skill-entry` 已通过 |
+| Rust exact tests | `pass` | 日志中关键 root / `lime-agent` 测试均出现 `running 1 test` 与 `1 passed` |
+| 服务技能入口路由回归 | `pass` | 4 个 Vitest 文件、66 tests pass |
+| Agent A2UI 挂起主链 | `pass` | 1 个 Vitest 文件，6 tests pass / 102 skipped |
+
+该补证只说明 v3 的 Skill Forge 失败已有可复核的修复方向，不能回写 v3 sidecar，也不能替代新的 full P0。后续仍必须在 raw process owner 清空后重新运行 single-owner full P0，让 `skill-forge-register-bind-enable` 在 qcloop worker / verifier 内重新通过。
+
+
+### 5.29 raw process owner 回到单一 PID 阻断（2026-05-11 04:32）
+
+最新 `agent-qc:process-owner-check` sidecar 显示外部 Rust/Cargo owner 已自然清空：`activeGuiSmoke=1`、`cargoOrRust=0`、`qcloopRelated=0`、`staleActiveGuiSmoke=1`。唯一 active blocker 仍是 PID `59011` 的 stale `smoke:design-canvas`，`etime≈8h46m`。
+
+该状态说明下一轮 full P0 的唯一环境前置阻断已经收敛为 raw GUI owner；确认前仍不得处理 PID `59011`，也不得启动新的 full GUI P0 或覆盖官方 Evidence Pack。
+
+### 5.30 Skill Forge 单项 qcloop 补证终态（2026-05-11 04:39）
+
+观察到单项 qcloop job `1778445171616868000`（`lime-agent-qc-skill-forge-rust-exact-fix-2026-05-11-0432`）运行在 `127.0.0.1:18087` 并进入终态 `failed`，`0 success / 1 exhausted / 0 stale`。该批次只覆盖 `skill-forge-register-bind-enable`，不是 full P0，也不能覆盖官方 Evidence Pack。
+
+| 证据 | 状态 | 说明 |
+| --- | --- | --- |
+| `.lime/qc/qcloop-status.skill-forge-rust-exact-fix-current.json` | `failed` | 单项 job 已终态，无 stale |
+| `.lime/qc/agent-qc-evidence.skill-forge-rust-exact-fix.json` | `fail` | deterministic smoke 证据充分，但 runtime-transcript 层仍缺 |
+| `.lime/qc/release-agent-qc.sidecar-skill-forge-rust-exact-fix.md` | `fail` | release summary 正确拒绝单项 sidecar 作为 full P0 发布证据 |
+
+这次补证把 `skill-forge-register-bind-enable` 的缺口从“Rust exact tests 没实际运行”推进为更准确的 P0 缺口：
+
+- `npm run test:contracts` 与 `npm run smoke:agent-service-skill-entry` 在 qcloop worker 内已能产出可审查 deterministic-smoke 证据
+- capability draft、registration、runtime binding readiness、metadata、显式 enable、SkillTool gate 的 deterministic evidence 已被 verifier 接受
+- 仍缺 live runtime transcript：未产出 submit / stream / tool-request / decision / result 级 artifact
+
+因此下一刀不是再修 Rust exact filter，而是补 `skill-forge-register-bind-enable` 的 runtime transcript 采集路径；在该 artifact 存在前，P0 verifier 不应把 Skill Forge 场景判为 pass。
+
+### 5.31 Skill Forge runtime transcript sidecar 已出现，但不能回写历史 job（2026-05-11 04:44）
+
+继续只读复核后，`agent-qc:process-owner-check` 已回到单一 active blocker：
+
+| 检查 | 当前值 | 结论 |
+| --- | --- | --- |
+| raw process owner | `busy` | 仍不能启动完整 `verify:local` 或新的 full GUI P0 |
+| active GUI smoke | `1` | PID `59011` 的 stale `smoke:design-canvas`，`etime≈8h58m` |
+| qcloop worker | `0` | 单项 Skill Forge qcloop worker 已自然结束 |
+| Cargo / Rust owner | `0` | 外部编译 owner 已自然清空 |
+| official Evidence Pack | `fail` | `.lime/qc/agent-qc-evidence.json` 仍不能发布 |
+
+同时观察到 `.lime/qc/skill-forge-runtime-transcript-current.json` 已生成：
+
+```text
+schemaVersion=v1
+scenarioId=skill-forge-register-bind-enable
+result=pass
+evidenceLayersCovered=deterministic-smoke,runtime-transcript
+runtimeTranscript.events=8
+```
+
+这把 Skill Forge 的剩余缺口进一步收窄：runtime transcript sidecar 已存在，但它是在单项 qcloop job `1778445171616868000` 失败后生成的，不能回写历史 qcloop verdict，也不能覆盖官方 full P0 Evidence Pack。下一轮 owner 清空后，应先重跑 `skill-forge-register-bind-enable` 单项 qcloop，确认 worker / verifier 会采信该 artifact 或重新生成同等 artifact；然后再进入 8/8 single-owner full P0。
+
+当前仍禁止：
+
+- 终止 / pause / interrupt PID `59011`，除非 owner 明确确认 `确认处理 stale raw GUI owner PID 59011，可以终止这些进程并记录 sidecar。`
+- 启动新的 full GUI P0。
+- 覆盖 `.lime/qc/agent-qc-evidence.json`。
+- git commit / push / tag / release。
+
+### 5.32 Skill Forge runtime transcript 单项 qcloop 通过（2026-05-11 04:48）
+
+继续只读观察后，发现第二个单项 qcloop job `1778445676473687000`（`lime-agent-qc-skill-forge-runtime-transcript-2026-05-11-0441`）已在 `127.0.0.1:18087` 终态 `completed`，`1 success / 0 fail / 0 stale`。本轮只导出 sidecar，并运行 release summary 检查；未覆盖官方 Evidence Pack。
+
+| 证据 | 状态 | 说明 |
+| --- | --- | --- |
+| `.lime/qc/qcloop-status.skill-forge-runtime-transcript-current.json` | `complete` | `skill-forge-register-bind-enable` 单项 success |
+| `.lime/qc/agent-qc-evidence.skill-forge-runtime-transcript.json` | `pass` | 只覆盖 `skill-forge-register-bind-enable` 1 个场景 |
+| `.lime/qc/release-agent-qc.sidecar-skill-forge-runtime-transcript.md` | `fail` | 缺少其余 7 个 P0 场景，release gate 正确拒绝 |
+
+这说明 `skill-forge-register-bind-enable` 的 runtime-transcript 层已能被 qcloop worker / verifier 采信；该缺口从“需要补 transcript artifact”推进为“需要在下一轮 full P0 同批次重新覆盖”。它仍不能关闭官方发布门禁，因为官方 `.lime/qc/agent-qc-evidence.json` 仍是旧的 8/8 `fail`，且当前 raw process owner 仍被 PID `59011` 阻断。
+
+### 5.33 stale raw GUI owner 处置请求已刷新（2026-05-11 04:52）
+
+最新只读刷新显示，`agent-qc:gui-owner-check -- --check` 仍为 pass，但 raw process owner 仍为 busy：
+
+| 检查 | 当前值 | 结论 |
+| --- | --- | --- |
+| active GUI smoke | `1` | PID `59011` |
+| runtime | `09:06:20` / `32780s` | 远超 `--timeout-ms 600000` 对应的 10 分钟 |
+| qcloop worker | `0` | 没有新的 active qcloop worker |
+| Cargo / Rust owner | `0` | 没有 active 编译 owner |
+| owner intervention | `requires_owner_confirmation` | 仍需要 owner 明确确认才能处理 PID |
+
+已刷新：
+
+- `.lime/qc/gui-process-owner-current.json`
+- `.lime/qc/gui-process-owner-current.md`
+- `.lime/qc/raw-process-owner-watch-history.jsonl`
+- `.lime/qc/stale-raw-gui-owner-intervention-request.json`
+- `.lime/qc/stale-raw-gui-owner-intervention-request.md`
+
+确认文本仍是：
+
+```text
+确认处理 stale raw GUI owner PID 59011，可以终止这些进程并记录 sidecar。
+```
+
+在该确认出现前，当前 Agent 只能继续只读观察或维护文档 / sidecar；不得处理进程、不得启动 full GUI P0、不得覆盖官方 Evidence Pack。
+
+### 5.34 single-owner full P0 待执行 payload 已生成但未启动（2026-05-11 04:54）
+
+在不启动新 qcloop job 的前提下，已生成下一轮 full P0 待执行 payload：
+
+| 产物 | 状态 | 说明 |
+| --- | --- | --- |
+| `.lime/qc/qcloop-p0-single-owner-ready-2026-05-11-0454.json` | `valid=true` | 覆盖 8 个 P0 scenario |
+| `.lime/qc/qcloop-p0-single-owner-ready-2026-05-11-0454.md` | ready note | 记录 scenario IDs、启动前置门禁和当前 blocker |
+| qcloop job | not started | 没有提交到 qcloop server，没有抢占 GUI |
+
+payload 覆盖：
+
+```text
+command-bridge-contract
+claw-chat-ready-streaming
+tool-approval-sandbox-boundary
+skill-forge-register-bind-enable
+browser-runtime-site-adapter
+workspace-ready-session-restore
+harness-replay-regression
+release-package-startup-smoke
+```
+
+启动前置仍是：
+
+```bash
+npm run agent-qc:process-owner-check -- --check
+npm run agent-qc:gui-owner-check -- --check
+npm run agent-qc:qcloop-preflight -- --require-devbridge --check
+```
+
+当前 PID `59011` 未释放，所以该 payload 只能作为 ready-to-run artifact，不能启动，也不能用于覆盖官方 Evidence Pack。
+
+### 5.35 full P0 payload coverage 已校验（2026-05-11 04:55）
+
+已新增 coverage sidecar：
+
+- `.lime/qc/qcloop-p0-single-owner-ready-coverage-2026-05-11-0455.json`
+- `.lime/qc/qcloop-p0-single-owner-ready-coverage-2026-05-11-0455.md`
+
+校验结果：
+
+| 检查 | 当前值 |
+| --- | --- |
+| status | `blocked` |
+| manifest P0 count | `8` |
+| payload item count | `8` |
+| missing scenarios | `none` |
+| extra scenarios | `none` |
+| order matches manifest | `true` |
+| payload validation | `true` |
+
+这证明待执行 payload 与 `docs/test/agent-qc-scenarios.manifest.json` 的 P0 场景完全一致。`status=blocked` 只来自 owner gate：PID `59011` 仍未释放。该 coverage 不是执行证据，不改变官方 Evidence Pack 状态。
+
+### 5.36 owner 清空后的 full P0 runbook 已准备（2026-05-11 04:57）
+
+已新增 post-owner-clear runbook：
+
+- `.lime/qc/post-owner-clear-full-p0-runbook-2026-05-11-0457.md`
+- `.lime/qc/qcloop-p0-single-owner-ready-submit-curl-2026-05-11-0457.txt`
+
+该 runbook 只记录 owner 清空后的执行顺序，不提交 job。核心顺序：
+
+1. `agent-qc:process-owner-check -- --check`
+2. `agent-qc:gui-owner-check -- --check`
+3. `agent-qc:qcloop-preflight -- --require-devbridge --check`
+4. 使用 ready payload 提交单一 qcloop server / DB / port 的 full P0 job。
+5. 只在 qcloop 8/8 P0 success 后覆盖官方 `.lime/qc/agent-qc-evidence.json`。
+6. 再执行 release summary、completion audit 和 objective checklist。
+
+生成时 guardrails 仍为：未启动 job、未覆盖官方 Evidence、未改 DB、未处理 PID、未执行 git mutation。
+
+### 5.37 full P0 payload coverage 已脚本化（2026-05-11 04:59）
+
+为避免后续继续依赖一次性 Python 片段校验 payload 覆盖，本轮新增可重复门禁：
+
+- `scripts/agent-qc-payload-coverage.mjs`
+- `scripts/lib/agent-qc-payload-coverage-core.mjs`
+- `scripts/lib/agent-qc-payload-coverage-core.test.ts`
+- `package.json` script：`agent-qc:payload-coverage`
+
+当前命令已生成最新 coverage sidecar：
+
+```bash
+npm run agent-qc:payload-coverage -- \
+  --payload "./.lime/qc/qcloop-p0-single-owner-ready-2026-05-11-0454.json" \
+  --format json \
+  --output "./.lime/qc/qcloop-p0-single-owner-ready-coverage-current.json" \
+  --check
+```
+
+结果：coverage `passed=true`，missing / extra 均为空，owner status 仍为 `busy`，因此 overall status 是 `blocked`。这把“payload 是否覆盖 manifest P0”的检查从手工 sidecar 提升为可重复工具，但不改变当前发布阻断：PID `59011` 仍未释放，full P0 未启动。
+
+### 5.38 completion audit 纳入 payload coverage（2026-05-11 05:02）
+
+`agent-qc:audit` 已新增 `qcloop-payload-coverage` 检查项，要求 ready payload coverage sidecar 显示 P0 manifest 覆盖完整。最新刷新：
+
+| 门禁 | 当前值 | 说明 |
+| --- | --- | --- |
+| completion audit | `17/18`，`status=incomplete` | 新增 payload coverage 项为 PASS |
+| payload coverage item | `pass` | `status=blocked coverage=pass manifestP0=8 payloadItems=8 missing=0 extra=0 owner=busy` |
+| objective checklist | `5/7`，`status=incomplete` | 仍被 raw process owner 与 official Evidence Pack 阻断 |
+
+该项只证明 ready payload 覆盖正确，不代表 full P0 已执行。最终发布门禁仍只接受官方 `.lime/qc/agent-qc-evidence.json` 的真实 8/8 P0 pass。
+
+### 5.39 执行矩阵纳入 payload coverage gate（2026-05-11 05:04）
+
+`docs/tests/lime-agent-autonomous-test-execution-matrix.md` 的执行前 Owner Gate 已补充 `npm run agent-qc:payload-coverage`。后续 Agent 在启动 full P0 前，不仅要确认 GUI / raw process / DB lease 清空，还必须确认 ready payload 与 P0 manifest 一致。
+
+新增通过条件：
+
+```text
+qcloop-p0-single-owner-ready-coverage-current.json:
+coverage.passed=true
+missing=[]
+extra=[]
+```
+
+新增阻断条件：ready payload 与 manifest P0 不一致，或 payload coverage sidecar 未生成。该更新把刚新增的脚本纳入人读执行矩阵，避免后续 Agent 只看 owner clear 就直接启动过期 payload。
+
+### 5.40 stale owner runbook 纳入精确进程树计划（2026-05-11 05:10）
+
+`docs/tests/lime-agent-qc-stale-owner-intervention.md` 已新增 8.6，明确确认前可以做只读进程树取证，但不能发送 signal。该节把以下 sidecar 纳入标准处置链：
+
+- `.lime/qc/stale-raw-gui-owner-process-tree-current.json`
+- `.lime/qc/stale-raw-gui-owner-recursive-tree-current.json`
+- `.lime/qc/stale-raw-gui-owner-intervention-plan-current.json`
+
+当前计划显示 recommended scope 为 `process_group`，但仍只是确认后的计划。没有 owner 确认文本前，仍不得处理 PID `59011` 或其 process group。

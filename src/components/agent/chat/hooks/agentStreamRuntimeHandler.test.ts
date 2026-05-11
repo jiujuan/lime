@@ -962,7 +962,7 @@ describe("agentStreamRuntimeHandler", () => {
     expect(messages[0]?.thinkingContent).toBe("先想第一段。再想第二段。");
   });
 
-  it("高频 reasoning item_updated 事件不应持续刷新时间线状态", () => {
+  it("reasoning item_updated 应持续刷新时间线思考内容", () => {
     const setThreadItems = vi.fn();
     const activateStream = vi.fn();
 
@@ -1026,7 +1026,20 @@ describe("agentStreamRuntimeHandler", () => {
     });
 
     expect(activateStream).toHaveBeenCalledTimes(1);
-    expect(setThreadItems).not.toHaveBeenCalled();
+    expect(setThreadItems).toHaveBeenCalledTimes(1);
+
+    const updater = setThreadItems.mock.calls[0]?.[0];
+    expect(typeof updater).toBe("function");
+    const nextItems =
+      typeof updater === "function" ? updater([]) : updater;
+    expect(nextItems).toEqual([
+      expect.objectContaining({
+        id: "reasoning-1",
+        type: "reasoning",
+        text: "正在持续追加推理文本",
+        status: "in_progress",
+      }),
+    ]);
   });
 
   it("收到 final_done 时应剥离 assistant 正文中的工具协议残留", () => {

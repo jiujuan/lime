@@ -224,7 +224,7 @@ describe("appConfig API", () => {
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce({
         default_provider: "openai",
-        navigation: { enabled_items: ["plugins", "openclaw"] },
+        navigation: { enabled_items: ["plugins", "companion"] },
       });
 
     await getConfig();
@@ -232,7 +232,7 @@ describe("appConfig API", () => {
     await expect(getConfig()).resolves.toEqual(
       expect.objectContaining({
         default_provider: "openai",
-        navigation: { enabled_items: ["plugins", "openclaw"] },
+        navigation: { enabled_items: ["plugins", "companion"] },
       }),
     );
 

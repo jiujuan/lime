@@ -607,6 +607,30 @@ describe("项目管理 API", () => {
         "创建项目失败，请查看日志",
       );
     });
+
+    it("应该允许 UI 注入本地化友好错误文案", () => {
+      const copy = {
+        invalidPath: "Invalid project directory.",
+        objectError: "Project creation failed. Check logs.",
+        pathExists: "Project folder already exists.",
+        staleSchema: "Database schema is outdated. Restart Lime.",
+        unknown: "Unknown error.",
+      };
+
+      expect(getCreateProjectErrorMessage("", copy)).toBe("Unknown error.");
+      expect(getCreateProjectErrorMessage("[object Object]", copy)).toBe(
+        "Project creation failed. Check logs.",
+      );
+      expect(getCreateProjectErrorMessage("路径已存在: /tmp/project", copy)).toBe(
+        "Project folder already exists.",
+      );
+      expect(getCreateProjectErrorMessage("no such column: icon", copy)).toBe(
+        "Database schema is outdated. Restart Lime.",
+      );
+      expect(getCreateProjectErrorMessage("无效的路径", copy)).toBe(
+        "Invalid project directory.",
+      );
+    });
   });
 
   describe("extractErrorMessage", () => {

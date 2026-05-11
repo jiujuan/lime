@@ -127,7 +127,6 @@ type NavigationActions = Pick<
   | "handleOpenRuntimeMemoryWorkbench"
   | "handleOpenChannels"
   | "handleOpenChromeRelay"
-  | "handleOpenOpenClaw"
   | "handleBackToResources"
   | "handleCompactContext"
 >;
@@ -1142,7 +1141,6 @@ export function useWorkspaceConversationSceneRuntime({
         }),
       onOpenChannels: navigationActions.handleOpenChannels,
       onOpenChromeRelay: navigationActions.handleOpenChromeRelay,
-      onOpenOpenClaw: navigationActions.handleOpenOpenClaw,
       navbarVisible: shellChromeRuntime.shouldRenderTopBar,
       isRunning: Boolean(isSending),
       navbarChrome: topBarChrome,

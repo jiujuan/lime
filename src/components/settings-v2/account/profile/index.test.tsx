@@ -7,6 +7,7 @@ const { mockGetConfig, mockSaveConfig, mockUseTranslation } = vi.hoisted(
     mockGetConfig: vi.fn(),
     mockSaveConfig: vi.fn(),
     mockUseTranslation: vi.fn((_namespace?: string) => ({
+      i18n: { language: "zh-CN" },
       t: (key: string, options?: unknown) => {
         if (typeof options === "string") {
           return options;
@@ -44,6 +45,25 @@ interface Mounted {
 }
 
 const mounted: Mounted[] = [];
+
+function createProfileTranslator() {
+  return (key: string, options?: unknown) => {
+    if (typeof options === "string") {
+      return options;
+    }
+
+    if (options && typeof options === "object") {
+      const values = options as Record<string, unknown>;
+      const template =
+        typeof values.defaultValue === "string" ? values.defaultValue : key;
+      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
+        String(values[name] ?? ""),
+      );
+    }
+
+    return key;
+  };
+}
 
 function renderComponent(): HTMLDivElement {
   const container = document.createElement("div");
@@ -203,6 +223,30 @@ describe("ProfileSettings", () => {
     expect(text).toContain("编程");
     expect(text).toContain("设计");
     expect(mockUseTranslation).toHaveBeenCalledWith("settings");
+  });
+
+  it("应按当前 locale 格式化资料统计数量", async () => {
+    const englishT = createProfileTranslator();
+    mockUseTranslation.mockImplementation(() => ({
+      i18n: { language: "en-US" },
+      t: englishT,
+    }));
+    mockGetConfig.mockResolvedValueOnce({
+      default_provider: "openai",
+      user_profile: {
+        nickname: "Ada",
+        bio: "Builds useful tools.",
+        email: "ada@example.com",
+        tags: Array.from({ length: 1000 }, (_, index) => `tag-${index}`),
+      },
+    });
+
+    const container = renderComponent();
+    await waitForLoad();
+
+    const text = container.textContent ?? "";
+    expect(text).toContain("标签：1,000");
+    expect(text).not.toContain("标签：1000");
   });
 
   it("编辑昵称后应保存完整资料", async () => {

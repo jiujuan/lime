@@ -1,4 +1,5 @@
 import { AlertTriangle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Modal } from "./Modal";
 
 interface ConfirmDialogProps {
@@ -14,14 +15,15 @@ interface ConfirmDialogProps {
 
 export function ConfirmDialog({
   isOpen,
-  title = "确认操作",
+  title,
   message,
-  confirmText = "确定",
-  cancelText = "取消",
+  confirmText,
+  cancelText,
   variant = "danger",
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const { t } = useTranslation("common");
   const variantStyles = {
     danger: {
       icon: "text-red-500",
@@ -38,6 +40,21 @@ export function ConfirmDialog({
   };
 
   const styles = variantStyles[variant];
+  const resolvedTitle =
+    title ??
+    t("common.confirmDialog.title", {
+      defaultValue: "确认操作",
+    });
+  const resolvedConfirmText =
+    confirmText ??
+    t("common.confirm", {
+      defaultValue: "确定",
+    });
+  const resolvedCancelText =
+    cancelText ??
+    t("common.cancel", {
+      defaultValue: "取消",
+    });
 
   return (
     <Modal
@@ -52,7 +69,7 @@ export function ConfirmDialog({
             <AlertTriangle className="h-6 w-6" />
           </div>
           <div className="flex-1">
-            <h3 className="text-lg font-semibold">{title}</h3>
+            <h3 className="text-lg font-semibold">{resolvedTitle}</h3>
             <p className="mt-2 text-sm text-muted-foreground">{message}</p>
           </div>
         </div>
@@ -61,13 +78,13 @@ export function ConfirmDialog({
             onClick={onCancel}
             className="rounded-lg border px-4 py-2 text-sm hover:bg-muted"
           >
-            {cancelText}
+            {resolvedCancelText}
           </button>
           <button
             onClick={onConfirm}
             className={`rounded-lg px-4 py-2 text-sm ${styles.button}`}
           >
-            {confirmText}
+            {resolvedConfirmText}
           </button>
         </div>
       </div>

@@ -20,6 +20,7 @@ import { useLatestAgentUiProjectionEventForArtifact } from "../projection/useCon
 import {
   formatAgentUiProjectionEventType,
   formatAgentUiProjectionPhase,
+  formatAgentUiProjectionSourceType,
 } from "../projection/agentUiProjectionSummary";
 
 interface AgentThreadTimelineArtifactCardProps {
@@ -451,8 +452,10 @@ export function AgentThreadTimelineArtifactCard({
                   className="border-sky-200 bg-white text-sky-700"
                   data-testid="timeline-file-artifact-agentui"
                   title={[
-                    "conversationProjectionStore.agentUi",
-                    latestArtifactProjection.sourceType,
+                    "Agent UI 标准投影",
+                    formatAgentUiProjectionSourceType(
+                      latestArtifactProjection.sourceType,
+                    ),
                     formatAgentUiProjectionPhase(
                       latestArtifactProjection.phase,
                     ),

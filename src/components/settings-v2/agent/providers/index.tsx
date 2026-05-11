@@ -13,7 +13,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
 import { ApiKeyProviderSection } from "@/components/api-key-provider";
-import { openUrl } from "@/components/openclaw/openUrl";
+import { openUrl } from "@/lib/openUrl";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useOemCloudAccess } from "@/hooks/useOemCloudAccess";
 import { formatDate } from "@/i18n/format";

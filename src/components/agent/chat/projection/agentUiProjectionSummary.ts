@@ -114,6 +114,23 @@ export const AGENT_UI_EVENT_LABELS: Partial<Record<AgentUiEventClass, string>> =
     "review.completed": "Review 完成",
   };
 
+const AGENT_UI_SOURCE_TYPE_LABELS: Record<string, string> = {
+  action_required: "等待操作",
+  artifact_snapshot: "产物快照",
+  automation_job_projection: "自动任务",
+  evidence_projection: "证据记录",
+  item_completed: "历史正文",
+  performance_metric: "性能指标",
+  queue_added: "队列更新",
+  remote_task_projection: "远端任务",
+  runtime_status: "运行状态",
+  subagent_status_changed: "子任务状态",
+  team_control_projection: "团队控制",
+  team_formation_projection: "团队编队",
+  tool_call: "工具调用",
+  tool_start: "工具开始",
+};
+
 export const AGENT_UI_ACTION_EVENT_TYPES = new Set<AgentUiEventClass>([
   "action.required",
   "action.resolved",
@@ -294,6 +311,16 @@ export function formatAgentUiProjectionEventType(
   type: AgentUiEventClass,
 ): string {
   return AGENT_UI_EVENT_LABELS[type] || type;
+}
+
+export function formatAgentUiProjectionSourceType(
+  sourceType?: string | null,
+): string {
+  const normalized = sourceType?.trim();
+  if (!normalized) {
+    return "事件来源";
+  }
+  return AGENT_UI_SOURCE_TYPE_LABELS[normalized] ?? "事件来源";
 }
 
 export function formatAgentUiProjectionPhase(phase: string): string {

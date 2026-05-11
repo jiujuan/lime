@@ -26,6 +26,24 @@ vi.mock("sonner", () => ({
   },
 }));
 
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (
+      key: string,
+      options?: {
+        count?: number;
+        defaultValue?: string;
+        [key: string]: unknown;
+      },
+    ) => {
+      const template = options?.defaultValue ?? key;
+      return template.replace(/{{(\w+)}}/g, (_, name: string) =>
+        String(options?.[name] ?? ""),
+      );
+    },
+  }),
+}));
+
 vi.mock("@/hooks/useProjects", () => ({
   useProjects: mockUseProjects,
 }));

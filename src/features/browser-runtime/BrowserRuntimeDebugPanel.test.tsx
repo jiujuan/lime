@@ -2,6 +2,7 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { BrowserRuntimeDebugPanel } from "./BrowserRuntimeDebugPanel";
 
 const { mockUseBrowserRuntimeDebug } = vi.hoisted(() => ({
@@ -88,12 +89,13 @@ vi.mock("./api", () => ({
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
   mockUseBrowserRuntimeDebug.mockReturnValue({
     ...defaultRuntimeState,
   });
@@ -267,6 +269,53 @@ describe("BrowserRuntimeDebugPanel", () => {
     );
   });
 
+  it("英文界面应使用 workspace namespace 调试面板外壳文案", async () => {
+    await changeLimeLocale("en-US");
+
+    const container = await renderPanel();
+
+    expect(container.textContent).toContain("Browser Live Session");
+    expect(container.textContent).toContain(
+      "View the live browser from the general chat",
+    );
+    expect(container.textContent).toContain("Standalone window");
+    expect(container.textContent).toContain("Advanced debug");
+    expect(container.textContent).toContain("No session open");
+    expect(container.textContent).toContain("Disconnected");
+    expect(container.textContent).toContain("Not attached to a browser");
+    expect(container.textContent).toContain("Connecting browser session...");
+    expect(container.textContent).toContain("Connect browser");
+    expect(container.textContent).toContain("Minimal Manual Control");
+    expect(container.textContent).toContain("Disabled");
+    expect(
+      container.querySelector(
+        'input[placeholder="Send text to the current focused element"]',
+      ),
+    ).toBeInstanceOf(HTMLInputElement);
+
+    const toggleButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Advanced debug"),
+    );
+
+    await act(async () => {
+      toggleButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("Profile session");
+    expect(container.textContent).toContain("CDP tab");
+    expect(container.textContent).toContain("No tabs found");
+    expect(container.textContent).toContain("Refresh tabs");
+    expect(container.textContent).toContain("Reattach");
+    expect(container.textContent).toContain("Continue in Chrome");
+    expect(container.textContent).toContain("Session info");
+    expect(container.textContent).toContain("Status:");
+    expect(container.textContent).toContain("Control mode:");
+    expect(container.textContent).toContain("Last frame:");
+    expect(container.textContent).toContain("No Console events");
+    expect(container.textContent).toContain("No Network events");
+  });
+
   it("启动浏览器时应展示明确的加载提示", async () => {
     mockUseBrowserRuntimeDebug.mockReturnValue({
       ...defaultRuntimeState,
@@ -433,6 +482,71 @@ describe("BrowserRuntimeDebugPanel", () => {
     expect(container.textContent).toContain("微博附着");
     expect(container.textContent).toContain("微博首页");
     expect(container.textContent).toContain("当前窗口标签页");
+  });
+
+  it("英文界面应使用 workspace namespace 附着 Chrome presentation 文案", async () => {
+    await changeLimeLocale("en-US");
+    mockUseBrowserRuntimeDebug.mockReturnValue({
+      ...defaultRuntimeState,
+      selectedProfileKey: "weibo_attach",
+    });
+    mockListBrowserProfiles.mockResolvedValue([
+      {
+        id: "profile-attach",
+        profile_key: "weibo_attach",
+        name: "微博附着",
+        description: "复用当前 Chrome",
+        site_scope: "weibo.com",
+        launch_url: "https://weibo.com/home",
+        transport_kind: "existing_session",
+        profile_dir: "",
+        managed_profile_dir: null,
+        created_at: "2026-03-15T00:00:00Z",
+        updated_at: "2026-03-15T00:00:00Z",
+        last_used_at: null,
+        archived_at: null,
+      },
+    ]);
+    mockGetChromeBridgeStatus.mockResolvedValue({
+      observer_count: 1,
+      control_count: 0,
+      pending_command_count: 0,
+      observers: [
+        {
+          client_id: "observer-1",
+          profile_key: "weibo_attach",
+          connected_at: "2026-03-15T00:00:00Z",
+          user_agent: "Chrome",
+          last_heartbeat_at: "2026-03-15T00:00:08Z",
+          last_page_info: {
+            title: "微博首页",
+            url: "https://weibo.com/home",
+            markdown: "# 微博首页",
+            updated_at: "2026-03-15T00:00:08Z",
+          },
+        },
+      ],
+      controls: [],
+      pending_commands: [],
+    });
+
+    const container = await renderPanel({
+      initialProfileKey: "weibo_attach",
+      initialSessionId: undefined,
+    });
+    const toggleButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Advanced debug"),
+    );
+
+    await act(async () => {
+      toggleButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("Attached current Chrome");
+    expect(container.textContent).toContain("Read current page");
+    expect(container.textContent).toContain("Read tabs");
+    expect(container.textContent).toContain("Current window tabs");
   });
 
   it("existing_session 正在切到 runtime 会话时不应回退附着面板", async () => {
