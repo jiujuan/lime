@@ -10784,6 +10784,10 @@ mod tests {
             Some(&serde_json::Value::String("runtime_status".to_string()))
         );
         assert_eq!(
+            metadata.get("source"),
+            Some(&serde_json::Value::String("runtime_status".to_string()))
+        );
+        assert_eq!(
             metadata.get("surface"),
             Some(&serde_json::Value::String("runtime_status".to_string()))
         );
@@ -10801,6 +10805,13 @@ mod tests {
                 .and_then(|value| value.get("eventClass"))
                 .and_then(serde_json::Value::as_str),
             Some("run.status")
+        );
+        assert_eq!(
+            metadata
+                .get("agentui")
+                .and_then(|value| value.get("visibility"))
+                .and_then(serde_json::Value::as_str),
+            Some("diagnostics")
         );
     }
 }

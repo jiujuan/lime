@@ -2,9 +2,7 @@ use super::agentruntime_profile::AgentRuntimeProfileStream;
 use super::runtime_turn::emit_agent_runtime_profile_event;
 use super::session_runtime::delete_runtime_session_internal_with_runtime;
 use super::*;
-use lime_agent::{
-    build_diagnostics_runtime_status_metadata, AgentEvent as RuntimeAgentEvent,
-};
+use lime_agent::{build_diagnostics_runtime_status_metadata, AgentEvent as RuntimeAgentEvent};
 use lime_core::workspace::WorkspaceSettings;
 use tauri::Manager;
 
