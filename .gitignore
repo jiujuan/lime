@@ -65,8 +65,8 @@ docs/roadmap/*
 !docs/roadmap/skill-forge/*.md
 !docs/roadmap/managed-objective/
 !docs/roadmap/managed-objective/*.md
-docs/roadmap/agentruntime/
-docs/roadmap/agentruntime/*.md
+!docs/roadmap/agentruntime/
+!docs/roadmap/agentruntime/*.md
 !docs/roadmap/ai-layered-design/
 !docs/roadmap/ai-layered-design/*.md
 !docs/roadmap/i18n/

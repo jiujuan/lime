@@ -258,7 +258,9 @@ describe("agentStreamSubmissionLifecycle", () => {
     });
     lifecycle.activateStream("session-fast", runtimeStatus);
 
-    expect(activeStream?.sessionId).toBe("session-fast");
+    expect(activeStream).toEqual(
+      expect.objectContaining({ sessionId: "session-fast" }),
+    );
     expect(messages[0]?.runtimeStatus).toEqual(runtimeStatus);
     expect(threadTurns[0]?.thread_id).toBe("session-fast");
     expect(threadItems).toHaveLength(0);

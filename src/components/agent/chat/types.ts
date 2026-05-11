@@ -1,5 +1,6 @@
 import type {
   AgentContextTraceStep as ContextTraceStep,
+  AgentRuntimeStatusMetadata,
   AgentToolCallState as ToolCallState,
   AgentTokenUsage as TokenUsage,
 } from "@/lib/api/agentProtocol";
@@ -381,28 +382,7 @@ export interface AgentRuntimeStatus {
   title: string;
   detail: string;
   checkpoints?: string[];
-  metadata?: {
-    team_phase?: string;
-    team_parallel_budget?: number;
-    team_active_count?: number;
-    team_queued_count?: number;
-    concurrency_phase?: string;
-    concurrency_scope?: string;
-    concurrency_active_count?: number;
-    concurrency_queued_count?: number;
-    concurrency_budget?: number;
-    provider_concurrency_group?: string;
-    provider_parallel_budget?: number;
-    queue_reason?: string;
-    retryable_overload?: boolean;
-    permission_status?: string;
-    required_profile_keys?: string[];
-    ask_profile_keys?: string[];
-    blocking_profile_keys?: string[];
-    decision_source?: string;
-    decision_scope?: string;
-    declared_only?: boolean;
-  };
+  metadata?: AgentRuntimeStatusMetadata;
 }
 
 export interface BrowserAssistSessionState {

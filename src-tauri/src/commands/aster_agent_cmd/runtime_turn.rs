@@ -27,7 +27,7 @@ use aster::agents::extension::PlatformExtensionContext;
 use aster::hooks::{CompactTrigger, SessionSource};
 use aster::session::TurnContextOverride;
 use aster::tools::{ConfigTool, SkillTool};
-use lime_agent::AgentEvent as RuntimeAgentEvent;
+use lime_agent::{build_diagnostics_runtime_status_metadata, AgentEvent as RuntimeAgentEvent};
 use lime_core::workspace::WorkspaceSettings;
 use regex::Regex;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -119,7 +119,7 @@ fn build_submit_accepted_runtime_status() -> AgentRuntimeStatus {
             "正在准备工作区与会话上下文".to_string(),
             "等待后续详细执行事件".to_string(),
         ],
-        metadata: None,
+        metadata: Some(build_diagnostics_runtime_status_metadata()),
     }
 }
 
@@ -179,7 +179,7 @@ fn build_runtime_model_permission_fallback_failure_message(
 
 fn build_runtime_turn_keepalive_status(sequence: u64, elapsed: Duration) -> AgentRuntimeStatus {
     let elapsed_secs = elapsed.as_secs();
-    let mut metadata = std::collections::HashMap::new();
+    let mut metadata = build_diagnostics_runtime_status_metadata();
     metadata.insert(
         "keepalive_kind".to_string(),
         serde_json::Value::String("runtime_turn_active".to_string()),
@@ -4797,7 +4797,7 @@ fn build_runtime_user_lock_capability_status_from_state(
         .capability_gap
         .as_deref()
         .unwrap_or("unknown_capability_gap");
-    let mut metadata = std::collections::HashMap::new();
+    let mut metadata = build_diagnostics_runtime_status_metadata();
     metadata.insert(
         "limit_status".to_string(),
         serde_json::Value::String(limit_state.status.clone()),
@@ -5192,7 +5192,7 @@ fn build_runtime_permission_review_status_from_state(
         return None;
     }
 
-    let mut metadata = std::collections::HashMap::new();
+    let mut metadata = build_diagnostics_runtime_status_metadata();
     metadata.insert(
         "permission_status".to_string(),
         serde_json::Value::String(permission_state.status.clone()),
@@ -7315,7 +7315,7 @@ fn build_provider_runtime_guard_lease_id(request: &AsterChatRequest) -> String {
 fn build_provider_runtime_status_metadata(
     snapshot: &ProviderRuntimeGovernorSnapshot,
 ) -> std::collections::HashMap<String, serde_json::Value> {
-    let mut metadata = std::collections::HashMap::new();
+    let mut metadata = build_diagnostics_runtime_status_metadata();
     metadata.insert(
         "concurrency_phase".to_string(),
         serde_json::Value::String(snapshot.provider_phase.clone()),
@@ -7424,7 +7424,7 @@ fn build_provider_running_runtime_status(
 fn build_team_runtime_status_metadata(
     snapshot: &TeamRuntimeGovernorSnapshot,
 ) -> std::collections::HashMap<String, serde_json::Value> {
-    let mut metadata = std::collections::HashMap::new();
+    let mut metadata = build_diagnostics_runtime_status_metadata();
     metadata.insert(
         "team_phase".to_string(),
         serde_json::Value::String(snapshot.team_phase.clone()),
@@ -10738,7 +10738,9 @@ mod tests {
                 "等待后续详细执行事件".to_string(),
             ]
         );
-        assert!(status.metadata.is_none());
+        assert_diagnostics_runtime_status_metadata(
+            status.metadata.as_ref().expect("submit metadata"),
+        );
     }
 
     #[test]
@@ -10757,6 +10759,7 @@ mod tests {
             ]
         );
         let metadata = status.metadata.expect("keepalive metadata");
+        assert_diagnostics_runtime_status_metadata(&metadata);
         assert_eq!(
             metadata.get("keepalive_kind"),
             Some(&serde_json::Value::String(
@@ -10770,6 +10773,34 @@ mod tests {
         assert_eq!(
             metadata.get("keepalive_elapsed_ms"),
             Some(&serde_json::Value::Number(91_000_u64.into()))
+        );
+    }
+
+    fn assert_diagnostics_runtime_status_metadata(
+        metadata: &std::collections::HashMap<String, serde_json::Value>,
+    ) {
+        assert_eq!(
+            metadata.get("sourceType"),
+            Some(&serde_json::Value::String("runtime_status".to_string()))
+        );
+        assert_eq!(
+            metadata.get("surface"),
+            Some(&serde_json::Value::String("runtime_status".to_string()))
+        );
+        assert_eq!(
+            metadata.get("visibility"),
+            Some(&serde_json::Value::String("diagnostics".to_string()))
+        );
+        assert_eq!(
+            metadata.get("persistence"),
+            Some(&serde_json::Value::String("transient".to_string()))
+        );
+        assert_eq!(
+            metadata
+                .get("agentui")
+                .and_then(|value| value.get("eventClass"))
+                .and_then(serde_json::Value::as_str),
+            Some("run.status")
         );
     }
 }

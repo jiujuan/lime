@@ -517,6 +517,18 @@ export interface AgentEventModelChange {
 }
 
 export interface AgentRuntimeStatusMetadata {
+  [key: string]: unknown;
+  sourceType?: string;
+  source?: string;
+  kind?: string;
+  eventClass?: string;
+  event_class?: string;
+  surface?: string;
+  visibility?: string;
+  persistence?: string;
+  presentation?: string;
+  agentui?: Record<string, unknown>;
+  agentUi?: Record<string, unknown>;
   team_phase?: string;
   team_parallel_budget?: number;
   team_active_count?: number;
@@ -1172,6 +1184,7 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
             : undefined,
           metadata: metadata
             ? {
+                ...metadata,
                 team_phase:
                   typeof metadata.team_phase === "string"
                     ? metadata.team_phase

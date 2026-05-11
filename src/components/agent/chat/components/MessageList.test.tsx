@@ -2,6 +2,7 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import "@/i18n/config";
 import { MessageList } from "./MessageList";
 import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";
 import {
@@ -2036,10 +2037,11 @@ describe("MessageList", () => {
       ),
     ).not.toBeNull();
     expect(container.textContent).not.toContain("思考中");
-    expect(container.textContent).toContain("正在启动处理流程");
+    expect(container.textContent).toContain("Generating reply");
     expect(container.textContent).toContain(
-      "已开始处理，正在准备环境并等待第一条进展。",
+      "The runtime has started processing and is waiting for the first output.",
     );
+    expect(container.textContent).not.toContain("直接回答优先");
   });
 
   it("assistant 消息结算区应以内联模式承载 token usage", () => {
@@ -3544,6 +3546,12 @@ describe("MessageList", () => {
           updated_at: "2026-05-09T06:02:56.365Z",
           type: "turn_summary",
           text: "直接回答优先\n当前请求无需默认升级为搜索或任务，先直接给出结果，必要时再调用工具。",
+          metadata: {
+            sourceType: "runtime_status",
+            surface: "runtime_status",
+            visibility: "diagnostics",
+            persistence: "transient",
+          },
         },
         {
           id: "user-fast-plain-answer",
@@ -3645,6 +3653,12 @@ describe("MessageList", () => {
           updated_at: "2026-05-09T07:12:00.000Z",
           type: "turn_summary",
           text: "直接回答优先\n当前请求无需默认升级为搜索或任务。",
+          metadata: {
+            sourceType: "runtime_status",
+            surface: "runtime_status",
+            visibility: "diagnostics",
+            persistence: "transient",
+          },
         },
         {
           id: "reasoning-long-answer-thinking-status",
@@ -3693,6 +3707,51 @@ describe("MessageList", () => {
         thinkingContent: undefined,
       }),
     );
+  });
+
+  it("简单流式回答的 diagnostics reasoning 不应在首字前暴露为思考卡", () => {
+    const now = new Date();
+    const messages: Message[] = [
+      {
+        id: "msg-assistant-fast-streaming-reasoning",
+        role: "assistant",
+        content: "",
+        timestamp: now,
+        isThinking: true,
+        thinkingContent:
+          "The user only asked for a marker, so answer directly.",
+        contentParts: [
+          {
+            type: "thinking",
+            text: "The user only asked for a marker, so answer directly.",
+          },
+        ],
+        runtimeStatus: {
+          phase: "routing",
+          title: "正在生成回复",
+          detail: "等待首个输出。",
+          metadata: {
+            sourceType: "runtime_status",
+            surface: "runtime_status",
+            visibility: "diagnostics",
+            persistence: "transient",
+          },
+        },
+      },
+    ];
+
+    const container = render(messages, {
+      isSending: true,
+    });
+
+    expect(
+      container.querySelector(
+        '[data-testid="assistant-first-token-runtime-status"]',
+      ),
+    ).not.toBeNull();
+    expect(container.textContent).not.toContain("思考中");
+    expect(container.textContent).not.toContain("The user only asked");
+    expect(mockStreamingRenderer).not.toHaveBeenCalled();
   });
 
   it("流式 assistant 消息仍应向正文传递当前过程状态", () => {
@@ -4589,7 +4648,8 @@ describe("MessageList", () => {
         '[data-testid="assistant-first-token-runtime-status"]',
       ),
     ).not.toBeNull();
-    expect(container.textContent).toContain("正在打开 GitHub");
+    expect(container.textContent).toContain("Generating reply");
+    expect(container.textContent).not.toContain("正在打开 GitHub");
   });
 
   it("首字前已有运行中 turn_summary 时仍应优先展示轻量等待占位", () => {
@@ -4647,7 +4707,8 @@ describe("MessageList", () => {
     expect(
       container.querySelector('[data-testid="agent-thread-timeline:trailing"]'),
     ).toBeNull();
-    expect(container.textContent).toContain("已接收请求，正在准备执行");
+    expect(container.textContent).toContain("Preparing reply");
+    expect(container.textContent).not.toContain("已接收请求，正在准备执行");
   });
 
   it("本地工具批次的阶段结论不应再进入主消息流时间线", () => {
@@ -4685,6 +4746,12 @@ describe("MessageList", () => {
           updated_at: "2026-04-14T10:00:10Z",
           type: "turn_summary",
           text: "已完成一批本地分析\n已完成这一批本地仓库的文件读取，正在整理这一批结果并判断是否还需要继续取证。",
+          metadata: {
+            sourceType: "runtime_status",
+            surface: "runtime_status",
+            visibility: "diagnostics",
+            persistence: "transient",
+          },
         },
       ],
     });

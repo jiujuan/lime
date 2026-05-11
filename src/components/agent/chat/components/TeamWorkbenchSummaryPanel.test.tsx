@@ -6,6 +6,7 @@ import {
   recordAgentUiProjectionEvents,
 } from "../projection/conversationProjectionStore";
 import { TeamWorkbenchSummaryPanel } from "./TeamWorkbenchSummaryPanel";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 const { mockExecutionRunList, mockGetAgentRuntimeSession } = vi.hoisted(() => ({
   mockExecutionRunList: vi.fn(),
@@ -39,12 +40,13 @@ interface MountedHarness {
 
 const mountedRoots: MountedHarness[] = [];
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
   mockExecutionRunList.mockResolvedValue([]);
 });
 

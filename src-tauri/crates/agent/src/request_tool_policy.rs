@@ -4,7 +4,8 @@
 //! 供 aster_agent_cmd、scheduler、gateway 等入口复用同一条执行主链。
 
 use crate::protocol::{
-    AgentEvent as RuntimeAgentEvent, AgentRuntimeStatus, AgentToolResult, TextDeltaBatchBoundary,
+    build_diagnostics_runtime_status_metadata, AgentEvent as RuntimeAgentEvent, AgentRuntimeStatus,
+    AgentToolResult, TextDeltaBatchBoundary,
 };
 use crate::protocol_projection::project_runtime_event;
 use crate::write_artifact_events::WriteArtifactEventEmitter;
@@ -1085,7 +1086,7 @@ fn build_empty_reply_retry_runtime_status() -> AgentRuntimeStatus {
             "当前轮次未检测到真实工具产物".to_string(),
             "正在直接补发最终答复".to_string(),
         ],
-        metadata: None,
+        metadata: Some(build_diagnostics_runtime_status_metadata()),
     }
 }
 
@@ -1100,7 +1101,7 @@ fn build_incomplete_tool_batch_continue_runtime_status() -> AgentRuntimeStatus {
             "当前答复仍停留在中间过程结论".to_string(),
             "继续推进直到形成完整答复".to_string(),
         ],
-        metadata: None,
+        metadata: Some(build_diagnostics_runtime_status_metadata()),
     }
 }
 
@@ -1123,7 +1124,7 @@ fn build_web_search_synthesis_runtime_status(coverage_summary: Option<&str>) -> 
         detail: "已完成前置扩搜，正在基于已有 WebSearch 结果输出最终总结，不再重复检索。"
             .to_string(),
         checkpoints,
-        metadata: None,
+        metadata: Some(build_diagnostics_runtime_status_metadata()),
     }
 }
 

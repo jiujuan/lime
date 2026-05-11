@@ -1,5 +1,8 @@
 use super::*;
-use lime_agent::{project_runtime_event, AgentEvent as RuntimeAgentEvent};
+use lime_agent::{
+    build_diagnostics_runtime_status_metadata, project_runtime_event,
+    AgentEvent as RuntimeAgentEvent,
+};
 
 fn execution_strategy_label(strategy: AsterExecutionStrategy) -> &'static str {
     match strategy {
@@ -277,14 +280,14 @@ pub(super) async fn build_turn_runtime_statuses(
             detail: "正在判断当前任务应该直接回答、深度思考、规划、联网核实，还是升级为任务协作。"
                 .to_string(),
             checkpoints: initial_checkpoints,
-            metadata: None,
+            metadata: Some(build_diagnostics_runtime_status_metadata()),
         },
         AgentRuntimeStatus {
             phase: "routing".to_string(),
             title: decided.0,
             detail: decided.1,
             checkpoints: decided.2,
-            metadata: None,
+            metadata: Some(build_diagnostics_runtime_status_metadata()),
         },
     ))
 }

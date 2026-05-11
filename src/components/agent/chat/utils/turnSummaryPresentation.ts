@@ -21,17 +21,6 @@ const USER_VISIBLE_VISIBILITIES = new Set([
   "process",
   "task",
 ]);
-const LOW_ATTENTION_RUNTIME_PHASES = new Set(["preparing", "routing"]);
-const INTERNAL_ROUTING_MARKERS = [
-  "直接回答优先",
-  "无需默认升级",
-  "无需工具介入",
-  "默认保持直接回答",
-];
-const INTERNAL_TURN_SUMMARY_MARKERS = [
-  "已完成一批本地分析",
-  "正在整理这一批结果",
-];
 
 function isRecord(value: MetadataSource): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -181,15 +170,6 @@ export function shouldHideTurnSummaryFromConversation(
     return false;
   }
 
-  const displayText = normalizeTurnSummaryDisplayText(item.text);
-  if (
-    INTERNAL_TURN_SUMMARY_MARKERS.some((marker) =>
-      displayText.includes(marker),
-    )
-  ) {
-    return true;
-  }
-
   return isRuntimeStatusTurnSummaryItem(item);
 }
 
@@ -221,17 +201,5 @@ export function isRuntimeStatusDiagnosticsOnly(
     return false;
   }
 
-  if (metadataMarksDiagnosticsOnly(status.metadata)) {
-    return true;
-  }
-
-  const phase = normalizeMetadataToken(status.phase);
-  if (!phase || !LOW_ATTENTION_RUNTIME_PHASES.has(phase)) {
-    return false;
-  }
-
-  const presentationText = buildRuntimeStatusPresentationText(status);
-  return INTERNAL_ROUTING_MARKERS.some((marker) =>
-    presentationText.includes(marker),
-  );
+  return metadataMarksDiagnosticsOnly(status.metadata);
 }

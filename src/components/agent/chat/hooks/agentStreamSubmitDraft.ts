@@ -2,7 +2,10 @@ import type { Dispatch, SetStateAction } from "react";
 import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
 import type { Message, MessageImage } from "../types";
 import type { AssistantDraftState } from "./agentChatShared";
-import { buildInitialAgentRuntimeStatus } from "../utils/agentRuntimeStatus";
+import {
+  buildDiagnosticsRuntimeStatusMetadata,
+  buildInitialAgentRuntimeStatus,
+} from "../utils/agentRuntimeStatus";
 import {
   extractAgentUiPerformanceTraceMetadata,
   recordAgentStreamPerformanceMetric,
@@ -36,6 +39,7 @@ export function buildQueuedRuntimeStatus(
           ? "对话执行待命"
           : "自动路由待命",
     ],
+    metadata: buildDiagnosticsRuntimeStatusMetadata(),
   };
 }
 

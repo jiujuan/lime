@@ -38,17 +38,9 @@ export const AGENT_RUNTIME_COMMANDS = {
 export type AgentRuntimeCommandKey = keyof typeof AGENT_RUNTIME_COMMANDS;
 export type AgentRuntimeCommandName =
   (typeof AGENT_RUNTIME_COMMANDS)[AgentRuntimeCommandKey];
-export type AgentRuntimeCommandDomain =
-  | "thread"
-  | "session"
-  | "export"
-  | "inventory"
-  | "subagent";
+export type AgentRuntimeCommandDomain = "thread" | "session" | "export" | "inventory" | "subagent";
 export type AgentRuntimeCommandLifecycle = "current" | "compat" | "deprecated";
-export type AgentRuntimeCommandMockStrategy =
-  | "default-mock"
-  | "mock-priority"
-  | "bridge-only";
+export type AgentRuntimeCommandMockStrategy = "default-mock" | "mock-priority" | "bridge-only";
 
 export interface AgentRuntimeCommandDescriptor {
   readonly key: AgentRuntimeCommandKey;
@@ -186,8 +178,7 @@ export const AGENT_RUNTIME_COMMAND_DESCRIPTORS = [
     key: "createSession",
     command: AGENT_RUNTIME_COMMANDS.createSession,
     domain: "session",
-    requestType:
-      "{ workspaceId: string; name?: string; executionStrategy?: AsterExecutionStrategy }",
+    requestType: "{ workspaceId: string; name?: string; executionStrategy?: AsterExecutionStrategy }",
     responseType: "string",
     lifecycle: "current",
     mockStrategy: "bridge-only",
@@ -197,8 +188,7 @@ export const AGENT_RUNTIME_COMMAND_DESCRIPTORS = [
     key: "listSessions",
     command: AGENT_RUNTIME_COMMANDS.listSessions,
     domain: "session",
-    requestType:
-      "{ includeArchived?: boolean; archivedOnly?: boolean; workspaceId?: string; limit?: number } | void",
+    requestType: "{ includeArchived?: boolean; archivedOnly?: boolean; workspaceId?: string; limit?: number } | void",
     responseType: "AsterSessionInfo[]",
     lifecycle: "current",
     mockStrategy: "bridge-only",
@@ -208,8 +198,7 @@ export const AGENT_RUNTIME_COMMAND_DESCRIPTORS = [
     key: "getSession",
     command: AGENT_RUNTIME_COMMANDS.getSession,
     domain: "session",
-    requestType:
-      "{ sessionId: string; resumeSessionStartHooks?: boolean; historyLimit?: number; historyOffset?: number; historyBeforeMessageId?: number }",
+    requestType: "{ sessionId: string; resumeSessionStartHooks?: boolean; historyLimit?: number; historyOffset?: number; historyBeforeMessageId?: number }",
     responseType: "AsterSessionDetail",
     lifecycle: "current",
     mockStrategy: "bridge-only",
@@ -401,7 +390,7 @@ export const AGENT_RUNTIME_COMMAND_NAMES = [
 ] as const satisfies readonly AgentRuntimeCommandName[];
 
 export const AGENT_RUNTIME_COMMANDS_BY_DOMAIN = {
-  thread: [
+  "thread": [
     AGENT_RUNTIME_COMMANDS.submitTurn,
     AGENT_RUNTIME_COMMANDS.interruptTurn,
     AGENT_RUNTIME_COMMANDS.compactSession,
@@ -415,14 +404,14 @@ export const AGENT_RUNTIME_COMMANDS_BY_DOMAIN = {
     AGENT_RUNTIME_COMMANDS.removeQueuedTurn,
     AGENT_RUNTIME_COMMANDS.respondAction,
   ],
-  session: [
+  "session": [
     AGENT_RUNTIME_COMMANDS.createSession,
     AGENT_RUNTIME_COMMANDS.listSessions,
     AGENT_RUNTIME_COMMANDS.getSession,
     AGENT_RUNTIME_COMMANDS.updateSession,
     AGENT_RUNTIME_COMMANDS.deleteSession,
   ],
-  export: [
+  "export": [
     AGENT_RUNTIME_COMMANDS.exportAnalysisHandoff,
     AGENT_RUNTIME_COMMANDS.exportHandoffBundle,
     AGENT_RUNTIME_COMMANDS.exportEvidencePack,
@@ -430,11 +419,11 @@ export const AGENT_RUNTIME_COMMANDS_BY_DOMAIN = {
     AGENT_RUNTIME_COMMANDS.saveReviewDecision,
     AGENT_RUNTIME_COMMANDS.exportReplayCase,
   ],
-  inventory: [
+  "inventory": [
     AGENT_RUNTIME_COMMANDS.getToolInventory,
     AGENT_RUNTIME_COMMANDS.listWorkspaceSkillBindings,
   ],
-  subagent: [
+  "subagent": [
     AGENT_RUNTIME_COMMANDS.spawnSubagent,
     AGENT_RUNTIME_COMMANDS.sendSubagentInput,
     AGENT_RUNTIME_COMMANDS.waitSubagents,

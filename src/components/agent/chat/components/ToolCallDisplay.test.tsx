@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToolCallDisplay, ToolCallList } from "./ToolCallDisplay";
 import type { AgentToolCallState as ToolCallState } from "@/lib/api/agentProtocol";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 vi.mock("@tauri-apps/plugin-shell", () => ({
   open: vi.fn().mockResolvedValue(undefined),
@@ -42,12 +43,13 @@ afterEach(() => {
   }
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
 });
 
 describe("ToolCallDisplay", () => {

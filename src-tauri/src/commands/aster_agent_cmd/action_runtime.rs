@@ -2,7 +2,9 @@ use super::agentruntime_profile::AgentRuntimeProfileStream;
 use super::runtime_turn::emit_agent_runtime_profile_event;
 use super::session_runtime::delete_runtime_session_internal_with_runtime;
 use super::*;
-use lime_agent::AgentEvent as RuntimeAgentEvent;
+use lime_agent::{
+    build_diagnostics_runtime_status_metadata, AgentEvent as RuntimeAgentEvent,
+};
 use lime_core::workspace::WorkspaceSettings;
 use tauri::Manager;
 
@@ -101,7 +103,7 @@ pub(crate) fn build_action_resume_runtime_status() -> AgentRuntimeStatus {
             "已唤醒当前执行链路".to_string(),
             "等待下一条执行事件".to_string(),
         ],
-        metadata: None,
+        metadata: Some(build_diagnostics_runtime_status_metadata()),
     }
 }
 

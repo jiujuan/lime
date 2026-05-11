@@ -57,7 +57,10 @@ import {
 import { isHiddenConversationArtifactPath } from "../utils/internalArtifactVisibility";
 import { buildInputbarRuntimeStatusLineModel } from "../utils/inputbarRuntimeStatusLine";
 import { resolvePromptCacheActivity } from "../utils/tokenUsageSummary";
-import { shouldHideTurnSummaryFromConversation } from "../utils/turnSummaryPresentation";
+import {
+  isRuntimeStatusDiagnosticsOnly,
+  shouldHideTurnSummaryFromConversation,
+} from "../utils/turnSummaryPresentation";
 import {
   Message,
   type ActionRequired,
@@ -488,6 +491,7 @@ function normalizeRuntimeStatusMetaText(value?: string | null): string {
 const MessageRuntimeStatusPill: React.FC<{
   status: AgentRuntimeStatus;
 }> = ({ status }) => {
+  const { t } = useTranslation("agent");
   const failed = status.phase === "failed";
   const cancelled = status.phase === "cancelled";
   const ToneIcon = failed ? AlertTriangle : cancelled ? Square : Loader2;
@@ -523,7 +527,9 @@ const MessageRuntimeStatusPill: React.FC<{
           failed || cancelled ? "" : "animate-spin",
         ].join(" ")}
       />
-      <span className="truncate">{titleText || "处理中"}</span>
+      <span className="truncate">
+        {titleText || t("agentChat.messageList.firstTokenStatus.routing.title")}
+      </span>
     </div>
   );
 };
@@ -566,20 +572,25 @@ const AssistantFirstTokenRuntimeStatus: React.FC<{
   status?: AgentRuntimeStatus | null;
 }> = ({ status }) => {
   const { t } = useTranslation("agent");
-  const fallbackTitle = t(
-    `agentChat.messageList.firstTokenStatus.${status?.phase || "submitted"}.title`,
-    t("agentChat.messageList.firstTokenStatus.submitted.title"),
+  const phase = status?.phase || "submitted";
+  const submittedTitle = t(
+    "agentChat.messageList.firstTokenStatus.submitted.title",
   );
-  const fallbackDetail = t(
-    `agentChat.messageList.firstTokenStatus.${status?.phase || "submitted"}.detail`,
-    t("agentChat.messageList.firstTokenStatus.submitted.detail"),
+  const submittedDetail = t(
+    "agentChat.messageList.firstTokenStatus.submitted.detail",
   );
-  const title = truncateRuntimeStatusText(status?.title || fallbackTitle, 48);
-  const detail =
-    [status?.detail]
-      .map((part) => (part ? truncateRuntimeStatusText(part, 120) : null))
-      .filter(Boolean)
-      .join(" · ") || fallbackDetail;
+  const title = truncateRuntimeStatusText(
+    t(`agentChat.messageList.firstTokenStatus.${phase}.title`, {
+      defaultValue: submittedTitle,
+    }),
+    48,
+  );
+  const detail = truncateRuntimeStatusText(
+    t(`agentChat.messageList.firstTokenStatus.${phase}.detail`, {
+      defaultValue: submittedDetail,
+    }),
+    120,
+  );
 
   return (
     <div
@@ -771,6 +782,25 @@ function shouldSuppressAmbientPlainAnswerReasoning(params: {
   }
 
   return !hasSubstantiveProcessTimelineItem(params.timelineItems);
+}
+
+function shouldSuppressAmbientStreamingReasoning(message: Message): boolean {
+  if (
+    !hasInlineThinkingContent(message) ||
+    !isRuntimeStatusDiagnosticsOnly(message.runtimeStatus)
+  ) {
+    return false;
+  }
+
+  if (
+    hasNonTextInlineProcessPart(message) ||
+    (message.toolCalls || []).length > 0 ||
+    (message.actionRequests || []).length > 0
+  ) {
+    return false;
+  }
+
+  return true;
 }
 
 interface InlineProcessCoverage {
@@ -1769,6 +1799,9 @@ const MessageListInner: React.FC<MessageListProps> = ({
       }
 
       if (message.isThinking) {
+        if (shouldSuppressAmbientStreamingReasoning(message)) {
+          return false;
+        }
         return true;
       }
 

@@ -53,10 +53,13 @@ function item(id: string, turnId: string): AgentThreadItem {
 function internalSummaryItem(id: string, turnId: string): AgentThreadItem {
   return {
     id,
+    thread_id: "thread-1",
     turn_id: turnId,
     type: "turn_summary",
     sequence: 1,
+    status: "completed",
     started_at: "2026-05-05T00:00:00.000Z",
+    updated_at: "2026-05-05T00:00:00.000Z",
     text: "runtime status should stay outside the conversation timeline",
     metadata: {
       sourceType: "runtime_status",

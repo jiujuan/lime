@@ -2546,6 +2546,12 @@ describe("HarnessStatusPanel", () => {
           title: "直接回答优先",
           detail: "当前请求无需默认升级为搜索或任务。",
           checkpoints: ["默认保持直接回答"],
+          metadata: {
+            sourceType: "runtime_status",
+            surface: "runtime_status",
+            visibility: "diagnostics",
+            persistence: "transient",
+          },
         },
       }),
     });

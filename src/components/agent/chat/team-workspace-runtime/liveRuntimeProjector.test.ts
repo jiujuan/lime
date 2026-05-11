@@ -136,6 +136,12 @@ describe("liveRuntimeProjector", () => {
           title: "Routing",
           detail: "Runtime is selecting the next step.",
           checkpoints: ["Direct answer candidate"],
+          metadata: {
+            sourceType: "runtime_status",
+            surface: "runtime_status",
+            visibility: "diagnostics",
+            persistence: "transient",
+          },
         },
       } as AgentEvent,
     });

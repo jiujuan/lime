@@ -1,7 +1,28 @@
 import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
-import type { AgentContextTraceStep as ContextTraceStep } from "@/lib/api/agentProtocol";
+import type {
+  AgentContextTraceStep as ContextTraceStep,
+  AgentRuntimeStatusMetadata,
+} from "@/lib/api/agentProtocol";
 import type { AgentRuntimeStatus } from "../types";
 import { resolveAgentRuntimeErrorPresentation } from "./agentRuntimeErrorPresentation";
+
+export function buildDiagnosticsRuntimeStatusMetadata(
+  extra?: AgentRuntimeStatusMetadata,
+): AgentRuntimeStatusMetadata {
+  return {
+    sourceType: "runtime_status",
+    source: "runtime_status",
+    surface: "runtime_status",
+    visibility: "diagnostics",
+    persistence: "transient",
+    agentui: {
+      eventClass: "run.status",
+      surface: "runtime_status",
+      visibility: "diagnostics",
+    },
+    ...extra,
+  };
+}
 
 function buildExecutionLabel(strategy: AsterExecutionStrategy): string {
   switch (strategy) {
@@ -38,6 +59,7 @@ export function buildInitialAgentRuntimeStatus(options: {
     title: "正在准备处理",
     detail: "正在理解你的需求并准备当前阶段。",
     checkpoints,
+    metadata: buildDiagnosticsRuntimeStatusMetadata(),
   };
 }
 
@@ -58,6 +80,7 @@ export function buildWaitingAgentRuntimeStatus(options: {
     title: "正在启动处理流程",
     detail: "已开始处理，正在准备环境并等待第一条进展。",
     checkpoints,
+    metadata: buildDiagnosticsRuntimeStatusMetadata(),
   };
 }
 

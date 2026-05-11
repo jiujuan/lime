@@ -154,6 +154,39 @@ pub struct AgentRuntimeStatus {
     pub metadata: Option<HashMap<String, Value>>,
 }
 
+pub fn build_diagnostics_runtime_status_metadata() -> HashMap<String, Value> {
+    HashMap::from([
+        (
+            "sourceType".to_string(),
+            Value::String("runtime_status".to_string()),
+        ),
+        (
+            "source".to_string(),
+            Value::String("runtime_status".to_string()),
+        ),
+        (
+            "surface".to_string(),
+            Value::String("runtime_status".to_string()),
+        ),
+        (
+            "visibility".to_string(),
+            Value::String("diagnostics".to_string()),
+        ),
+        (
+            "persistence".to_string(),
+            Value::String("transient".to_string()),
+        ),
+        (
+            "agentui".to_string(),
+            serde_json::json!({
+                "eventClass": "run.status",
+                "surface": "runtime_status",
+                "visibility": "diagnostics",
+            }),
+        ),
+    ])
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -652,6 +685,31 @@ mod tests {
 
         assert_eq!(value["type"], "runtime_status");
         assert_eq!(value["status"]["phase"], "routing");
+    }
+
+    #[test]
+    fn diagnostics_runtime_status_metadata_marks_runtime_status_as_transient() {
+        let metadata = build_diagnostics_runtime_status_metadata();
+
+        assert_eq!(
+            metadata.get("sourceType").and_then(Value::as_str),
+            Some("runtime_status")
+        );
+        assert_eq!(
+            metadata.get("visibility").and_then(Value::as_str),
+            Some("diagnostics")
+        );
+        assert_eq!(
+            metadata.get("persistence").and_then(Value::as_str),
+            Some("transient")
+        );
+        assert_eq!(
+            metadata
+                .get("agentui")
+                .and_then(|value| value.get("eventClass"))
+                .and_then(Value::as_str),
+            Some("run.status")
+        );
     }
 
     #[test]

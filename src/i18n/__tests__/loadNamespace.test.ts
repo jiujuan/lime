@@ -9,6 +9,30 @@ import {
 import { SUPPORTED_LOCALES } from "../locales";
 
 describe("i18n namespace loader", () => {
+  it("Agent 首字前状态文案覆盖所有支持 locale", () => {
+    const resources = loadBundledI18nResources();
+    const phases = [
+      "submitted",
+      "preparing",
+      "routing",
+      "context",
+      "permission_review",
+      "failed",
+      "cancelled",
+    ];
+
+    for (const locale of SUPPORTED_LOCALES) {
+      for (const phase of phases) {
+        expect(resources[locale].agent).toHaveProperty(
+          `agentChat.messageList.firstTokenStatus.${phase}.title`,
+        );
+        expect(resources[locale].agent).toHaveProperty(
+          `agentChat.messageList.firstTokenStatus.${phase}.detail`,
+        );
+      }
+    }
+  });
+
   it("应为每个支持 locale 内联核心 namespace", () => {
     const resources = loadBundledI18nResources();
 

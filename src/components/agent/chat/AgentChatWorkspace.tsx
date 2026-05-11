@@ -122,6 +122,7 @@ import {
 import { isHiddenInternalArtifactPath } from "./utils/internalArtifactVisibility";
 import { buildHarnessRequestMetadata } from "./utils/harnessRequestMetadata";
 import { deriveHarnessSessionState } from "./utils/harnessState";
+import { buildDiagnosticsRuntimeStatusMetadata } from "./utils/agentRuntimeStatus";
 import { resolveWorkflowLayoutBottomSpacing } from "./utils/workflowLayout";
 import {
   alignChatToolPreferencesWithExecutionStrategy,
@@ -525,6 +526,7 @@ function buildHomePendingPreviewMessages(
           request.webSearch ? "联网搜索候选能力待命" : "直接回答优先",
           request.thinking ? "深度思考待命" : "轻量响应优先",
         ],
+        metadata: buildDiagnosticsRuntimeStatusMetadata(),
       },
     },
   ];

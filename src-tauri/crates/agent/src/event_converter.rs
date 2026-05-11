@@ -1301,24 +1301,22 @@ fn convert_item_payload(payload: ItemRuntimePayload) -> AgentThreadItemPayload {
             title,
             detail,
             checkpoints,
-        } => AgentThreadItemPayload::TurnSummary {
-            text: format_runtime_status_text(&title, &detail, &checkpoints),
-            metadata: Some(serde_json::json!({
-                "sourceType": "runtime_status",
-                "source": "runtime_status",
-                "surface": "runtime_status",
-                "visibility": "diagnostics",
-                "persistence": "transient",
-                "agentui": {
-                    "eventClass": "run.status",
-                    "surface": "runtime_status",
-                    "visibility": "diagnostics",
-                },
-                "runtimeStatus": {
+        } => {
+            let mut metadata = crate::protocol::build_diagnostics_runtime_status_metadata();
+            metadata.insert(
+                "runtimeStatus".to_string(),
+                serde_json::json!({
                     "phase": phase,
-                },
-            })),
-        },
+                }),
+            );
+            AgentThreadItemPayload::TurnSummary {
+                text: format_runtime_status_text(&title, &detail, &checkpoints),
+                metadata: Some(
+                    serde_json::to_value(metadata)
+                        .expect("runtime status diagnostics metadata should serialize"),
+                ),
+            }
+        }
         ItemRuntimePayload::FileArtifact {
             path,
             source,
