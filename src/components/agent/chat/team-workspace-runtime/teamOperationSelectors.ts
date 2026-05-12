@@ -1,10 +1,14 @@
-import { formatRelativeTime } from "@/lib/api/project";
+import {
+  formatDate,
+  formatNumber,
+  formatRelativeTime as formatLocaleRelativeTime,
+} from "@/i18n/format";
 import {
   normalizeTeamWorkspaceRuntimeStatus,
+  type TeamWorkspaceResolvedRuntimeStatus,
   type TeamWorkspaceControlSummary,
   type TeamWorkspaceWaitSummary,
 } from "../teamWorkspaceRuntime";
-import { resolveTeamWorkspaceRuntimeStatusLabel } from "../teamWorkspaceRuntime";
 
 export interface TeamOperationDisplayEntry {
   id: string;
@@ -26,6 +30,50 @@ export interface TeamWorkspaceVisibleOperationState {
   entries: TeamOperationDisplayEntry[];
 }
 
+type TeamWorkspaceOperationResourceKey =
+  | "agentChat.teamWorkspace.operations.control.closeCount"
+  | "agentChat.teamWorkspace.operations.control.closeCompleted"
+  | "agentChat.teamWorkspace.operations.control.closeOne"
+  | "agentChat.teamWorkspace.operations.control.resumeCount"
+  | "agentChat.teamWorkspace.operations.control.resumeOne"
+  | "agentChat.teamWorkspace.operations.taskFallback"
+  | "agentChat.teamWorkspace.operations.title.close"
+  | "agentChat.teamWorkspace.operations.title.closeCompleted"
+  | "agentChat.teamWorkspace.operations.title.resume"
+  | "agentChat.teamWorkspace.operations.title.waitResolved"
+  | "agentChat.teamWorkspace.operations.title.waitTimedOut"
+  | "agentChat.teamWorkspace.operations.wait.resolved"
+  | "agentChat.teamWorkspace.operations.wait.timedOut"
+  | "agentChat.teamWorkspace.runtimeStatus.aborted"
+  | "agentChat.teamWorkspace.runtimeStatus.closed"
+  | "agentChat.teamWorkspace.runtimeStatus.completed"
+  | "agentChat.teamWorkspace.runtimeStatus.failed"
+  | "agentChat.teamWorkspace.runtimeStatus.idle"
+  | "agentChat.teamWorkspace.runtimeStatus.queued"
+  | "agentChat.teamWorkspace.runtimeStatus.running";
+
+export type TeamWorkspaceOperationTranslate = (
+  key: TeamWorkspaceOperationResourceKey,
+  options?: Record<string, unknown>,
+) => string;
+
+export interface TeamWorkspaceOperationCopy {
+  closeTitle: string;
+  closeCompletedTitle: string;
+  formatCloseCount: (count: number) => string;
+  formatCloseCompleted: (count: number) => string;
+  formatCloseOne: (sessionName: string) => string;
+  formatResumeCount: (count: number) => string;
+  formatResumeOne: (sessionName: string) => string;
+  formatRuntimeStatus: (status?: TeamWorkspaceResolvedRuntimeStatus) => string;
+  formatWaitResolved: (sessionName: string, status: string) => string;
+  formatWaitTimedOut: (count: number) => string;
+  resumeTitle: string;
+  taskFallback: string;
+  waitResolvedTitle: string;
+  waitTimedOutTitle: string;
+}
+
 const STATUS_BADGE_CLASS_NAME = {
   idle: "border border-slate-200 bg-white text-slate-600",
   queued: "border border-amber-200 bg-amber-50 text-amber-700",
@@ -42,20 +90,164 @@ function resolveStatusBadgeClassName(
   return STATUS_BADGE_CLASS_NAME[status ?? "idle"];
 }
 
-export function formatOperationUpdatedAt(updatedAt?: number) {
-  if (!updatedAt) {
-    return "刚刚";
+function resolveRuntimeStatusResourceKey(
+  status?: TeamWorkspaceResolvedRuntimeStatus,
+): TeamWorkspaceOperationResourceKey {
+  const normalized = status
+    ? normalizeTeamWorkspaceRuntimeStatus(status)
+    : "idle";
+
+  switch (normalized) {
+    case "queued":
+      return "agentChat.teamWorkspace.runtimeStatus.queued";
+    case "running":
+      return "agentChat.teamWorkspace.runtimeStatus.running";
+    case "completed":
+      return "agentChat.teamWorkspace.runtimeStatus.completed";
+    case "failed":
+      return "agentChat.teamWorkspace.runtimeStatus.failed";
+    case "aborted":
+      return "agentChat.teamWorkspace.runtimeStatus.aborted";
+    case "closed":
+      return "agentChat.teamWorkspace.runtimeStatus.closed";
+    case "idle":
+    default:
+      return "agentChat.teamWorkspace.runtimeStatus.idle";
   }
-  return formatRelativeTime(updatedAt);
+}
+
+export function buildTeamWorkspaceOperationCopy(params: {
+  locale?: string | null;
+  translate: TeamWorkspaceOperationTranslate;
+}): TeamWorkspaceOperationCopy {
+  const formatTaskCount = (count: number) =>
+    formatNumber(count, { locale: params.locale });
+
+  return {
+    closeTitle: params.translate(
+      "agentChat.teamWorkspace.operations.title.close",
+    ),
+    closeCompletedTitle: params.translate(
+      "agentChat.teamWorkspace.operations.title.closeCompleted",
+    ),
+    formatCloseCount: (count) =>
+      params.translate(
+        "agentChat.teamWorkspace.operations.control.closeCount",
+        {
+          formattedCount: formatTaskCount(count),
+        },
+      ),
+    formatCloseCompleted: (count) =>
+      params.translate(
+        "agentChat.teamWorkspace.operations.control.closeCompleted",
+        {
+          formattedCount: formatTaskCount(count),
+        },
+      ),
+    formatCloseOne: (sessionName) =>
+      params.translate("agentChat.teamWorkspace.operations.control.closeOne", {
+        sessionName,
+      }),
+    formatResumeCount: (count) =>
+      params.translate(
+        "agentChat.teamWorkspace.operations.control.resumeCount",
+        {
+          formattedCount: formatTaskCount(count),
+        },
+      ),
+    formatResumeOne: (sessionName) =>
+      params.translate("agentChat.teamWorkspace.operations.control.resumeOne", {
+        sessionName,
+      }),
+    formatRuntimeStatus: (status) =>
+      params.translate(resolveRuntimeStatusResourceKey(status)),
+    formatWaitResolved: (sessionName, status) =>
+      params.translate("agentChat.teamWorkspace.operations.wait.resolved", {
+        sessionName,
+        status,
+      }),
+    formatWaitTimedOut: (count) =>
+      params.translate("agentChat.teamWorkspace.operations.wait.timedOut", {
+        formattedCount: formatTaskCount(count),
+      }),
+    resumeTitle: params.translate(
+      "agentChat.teamWorkspace.operations.title.resume",
+    ),
+    taskFallback: params.translate(
+      "agentChat.teamWorkspace.operations.taskFallback",
+    ),
+    waitResolvedTitle: params.translate(
+      "agentChat.teamWorkspace.operations.title.waitResolved",
+    ),
+    waitTimedOutTitle: params.translate(
+      "agentChat.teamWorkspace.operations.title.waitTimedOut",
+    ),
+  };
+}
+
+const SECOND_MS = 1000;
+const MINUTE_MS = 60 * SECOND_MS;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+const MONTH_MS = 30 * DAY_MS;
+
+export function formatOperationUpdatedAt(
+  updatedAt: number | undefined,
+  options: {
+    locale?: string | null;
+    now?: number;
+    nowLabel: string;
+  },
+) {
+  if (!updatedAt) {
+    return options.nowLabel;
+  }
+
+  const diffMs = updatedAt - (options.now ?? Date.now());
+  const absDiffMs = Math.abs(diffMs);
+
+  if (absDiffMs < MINUTE_MS) {
+    return options.nowLabel;
+  }
+  if (absDiffMs < HOUR_MS) {
+    return formatLocaleRelativeTime(Math.round(diffMs / MINUTE_MS), "minute", {
+      locale: options.locale,
+      numeric: "auto",
+      style: "narrow",
+    });
+  }
+  if (absDiffMs < DAY_MS) {
+    return formatLocaleRelativeTime(Math.round(diffMs / HOUR_MS), "hour", {
+      locale: options.locale,
+      numeric: "auto",
+      style: "narrow",
+    });
+  }
+  if (absDiffMs < MONTH_MS) {
+    return formatLocaleRelativeTime(Math.round(diffMs / DAY_MS), "day", {
+      locale: options.locale,
+      numeric: "auto",
+      style: "narrow",
+    });
+  }
+
+  return formatDate(updatedAt, {
+    locale: options.locale,
+    month: "numeric",
+    day: "numeric",
+  });
 }
 
 function buildTeamWaitSummaryDisplay(params: {
+  copy: TeamWorkspaceOperationCopy;
   summary: TeamWorkspaceWaitSummary;
   sessionNameById: Map<string, string>;
 }) {
   if (params.summary.timedOut) {
     return {
-      text: `刚才等待结果时超时了，还有 ${params.summary.awaitedSessionIds.length} 项任务仍在处理中。`,
+      text: params.copy.formatWaitTimedOut(
+        params.summary.awaitedSessionIds.length,
+      ),
       badgeClassName: "border border-amber-200 bg-amber-50 text-amber-700",
     };
   }
@@ -63,18 +255,22 @@ function buildTeamWaitSummaryDisplay(params: {
   const resolvedName = params.summary.resolvedSessionId
     ? (params.sessionNameById.get(params.summary.resolvedSessionId) ??
       params.summary.resolvedSessionId)
-    : "这项任务";
+    : params.copy.taskFallback;
   const normalizedStatus = params.summary.resolvedStatus
     ? normalizeTeamWorkspaceRuntimeStatus(params.summary.resolvedStatus)
     : undefined;
 
   return {
-    text: `刚才等到 ${resolvedName} 返回了新结果，当前状态为${resolveTeamWorkspaceRuntimeStatusLabel(params.summary.resolvedStatus)}。`,
+    text: params.copy.formatWaitResolved(
+      resolvedName,
+      params.copy.formatRuntimeStatus(params.summary.resolvedStatus),
+    ),
     badgeClassName: resolveStatusBadgeClassName(normalizedStatus),
   };
 }
 
 function buildTeamControlSummaryDisplay(params: {
+  copy: TeamWorkspaceOperationCopy;
   summary: TeamWorkspaceControlSummary;
   sessionNameById: Map<string, string>;
 }) {
@@ -82,20 +278,20 @@ function buildTeamControlSummaryDisplay(params: {
   const firstAffectedId = params.summary.affectedSessionIds[0];
   const firstAffectedName = firstAffectedId
     ? (params.sessionNameById.get(firstAffectedId) ?? firstAffectedId)
-    : "这项任务";
+    : params.copy.taskFallback;
 
   switch (params.summary.action) {
     case "resume":
       return {
         text:
           affectedCount > 1
-            ? `刚才已继续 ${affectedCount} 项任务的处理。`
-            : `刚才已继续 ${firstAffectedName} 的处理。`,
+            ? params.copy.formatResumeCount(affectedCount)
+            : params.copy.formatResumeOne(firstAffectedName),
         badgeClassName: "border border-sky-200 bg-sky-50 text-sky-700",
       };
     case "close_completed":
       return {
-        text: `刚才已收起 ${affectedCount} 项已完成任务。`,
+        text: params.copy.formatCloseCompleted(affectedCount),
         badgeClassName: "border border-slate-200 bg-slate-100 text-slate-700",
       };
     case "close":
@@ -103,14 +299,15 @@ function buildTeamControlSummaryDisplay(params: {
       return {
         text:
           affectedCount > 1
-            ? `刚才已暂停 ${affectedCount} 项任务的处理。`
-            : `刚才已暂停 ${firstAffectedName} 的处理。`,
+            ? params.copy.formatCloseCount(affectedCount)
+            : params.copy.formatCloseOne(firstAffectedName),
         badgeClassName: "border border-slate-200 bg-slate-100 text-slate-700",
       };
   }
 }
 
 export function buildTeamOperationDisplayEntries(params: {
+  copy: TeamWorkspaceOperationCopy;
   sessionNameById: Map<string, string>;
   teamWaitSummary?: TeamWorkspaceWaitSummary | null;
   teamControlSummary?: TeamWorkspaceControlSummary | null;
@@ -119,12 +316,15 @@ export function buildTeamOperationDisplayEntries(params: {
 
   if (params.teamWaitSummary) {
     const display = buildTeamWaitSummaryDisplay({
+      copy: params.copy,
       summary: params.teamWaitSummary,
       sessionNameById: params.sessionNameById,
     });
     entries.push({
       id: `wait-${params.teamWaitSummary.updatedAt}`,
-      title: params.teamWaitSummary.timedOut ? "等待超时" : "收到结果",
+      title: params.teamWaitSummary.timedOut
+        ? params.copy.waitTimedOutTitle
+        : params.copy.waitResolvedTitle,
       detail: display.text,
       badgeClassName: display.badgeClassName,
       updatedAt: params.teamWaitSummary.updatedAt,
@@ -136,18 +336,19 @@ export function buildTeamOperationDisplayEntries(params: {
 
   if (params.teamControlSummary) {
     const display = buildTeamControlSummaryDisplay({
+      copy: params.copy,
       summary: params.teamControlSummary,
       sessionNameById: params.sessionNameById,
     });
     const title = (() => {
       switch (params.teamControlSummary.action) {
         case "resume":
-          return "继续处理";
+          return params.copy.resumeTitle;
         case "close_completed":
-          return "收起完成项";
+          return params.copy.closeCompletedTitle;
         case "close":
         default:
-          return "暂停处理";
+          return params.copy.closeTitle;
       }
     })();
 
@@ -167,6 +368,7 @@ export function buildTeamOperationDisplayEntries(params: {
 }
 
 export function buildVisibleTeamOperationState(params: {
+  copy: TeamWorkspaceOperationCopy;
   railSessions: TeamWorkspaceOperationSessionSnapshot[];
   teamWaitSummary?: TeamWorkspaceWaitSummary | null;
   teamControlSummary?: TeamWorkspaceControlSummary | null;
@@ -199,6 +401,7 @@ export function buildVisibleTeamOperationState(params: {
     visibleTeamWaitSummary,
     visibleTeamControlSummary,
     entries: buildTeamOperationDisplayEntries({
+      copy: params.copy,
       sessionNameById,
       teamWaitSummary: visibleTeamWaitSummary,
       teamControlSummary: visibleTeamControlSummary,

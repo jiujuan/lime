@@ -2,6 +2,7 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
 import { TeamWorkspaceDock } from "./TeamWorkspaceDock";
 
@@ -71,12 +72,13 @@ vi.mock("@/components/ui/button", () => ({
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
   mockGetAgentRuntimeSession.mockImplementation(async (sessionId: string) =>
     createSessionDetail(sessionId),
   );
@@ -85,7 +87,7 @@ beforeEach(() => {
   mockParseAgentEvent.mockImplementation((payload: unknown) => payload);
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mountedRoots.length > 0) {
     const mounted = mountedRoots.pop();
     if (!mounted) break;
@@ -95,6 +97,7 @@ afterEach(() => {
     mounted.container.remove();
   }
   vi.clearAllMocks();
+  await changeLimeLocale("zh-CN");
 });
 
 function createSessionDetail(
@@ -425,6 +428,73 @@ describe("TeamWorkspaceDock", () => {
     expect(
       document.body.querySelector('[data-testid="team-workspace-dock-panel"]'),
     ).toBeNull();
+  });
+
+  it("Dock current progress chrome 应读取英文资源", async () => {
+    await changeLimeLocale("en-US");
+
+    const { container } = await renderDock({
+      childSubagentSessions: [
+        {
+          id: "child-en",
+          name: "Researcher",
+          created_at: 1_710_000_000,
+          updated_at: 1_710_000_100,
+          session_type: "sub_agent",
+          runtime_status: "running",
+          task_summary: "Keep runtime task summary as data",
+          role_hint: "explorer",
+          team_active_count: 1,
+          team_parallel_budget: 2,
+          team_queued_count: 1,
+        },
+      ],
+    });
+
+    const toggleButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="team-workspace-dock-toggle"]',
+    );
+
+    expect(toggleButton?.textContent).toContain("Current progress");
+    expect(toggleButton?.textContent).toContain("1/2 running");
+    expect(toggleButton?.textContent).toContain("1 waiting");
+    expect(toggleButton?.getAttribute("aria-label")).toBe(
+      "Expand current progress",
+    );
+    expect(toggleButton?.textContent).not.toContain("当前进展");
+    expect(toggleButton?.textContent).not.toContain("处理中");
+  });
+
+  it("Dock 空态方案 chrome 应读取英文资源", async () => {
+    await changeLimeLocale("en-US");
+
+    const { container } = await renderDock({
+      selectedTeamLabel: "Frontend squad",
+      selectedTeamSummary: "Runtime team summary",
+      selectedTeamRoles: [
+        {
+          id: "explorer",
+          label: "Explorer",
+          summary: "Runtime role summary",
+        },
+      ],
+    });
+
+    const toggleButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="team-workspace-dock-toggle"]',
+    );
+
+    act(() => {
+      toggleButton?.click();
+    });
+
+    expect(document.body.textContent).toContain("Generate");
+    expect(document.body.textContent).toContain(
+      "Current team plan: Frontend squad",
+    );
+    expect(document.body.textContent).toContain("Keeps canvas clear");
+    expect(document.body.textContent).not.toContain("当前分工方案");
+    expect(document.body.textContent).not.toContain("不遮挡画布");
   });
 
   it("真实 team 图谱折叠时，应显示查看入口和动态提示", async () => {

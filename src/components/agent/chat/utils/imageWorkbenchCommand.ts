@@ -1,5 +1,6 @@
 export type ImageWorkbenchCommandTrigger =
   | "@配图"
+  | "@Nanobanana Pro"
   | "@分镜"
   | "@修图"
   | "@重绘"
@@ -24,10 +25,12 @@ export interface ParsedImageWorkbenchCommand {
   size?: string;
   aspectRatio?: string;
   targetRef?: string;
+  providerId?: string;
+  modelId?: string;
 }
 
 const IMAGE_COMMAND_PREFIX_REGEX =
-  /^\s*(@配图|@分镜|@修图|@重绘|@Vision 1|@image|\/image)(?:\s+|$)([\s\S]*)$/i;
+  /^\s*(@配图|@Nanobanana Pro|@分镜|@修图|@重绘|@Vision 1|@image|\/image)(?:\s+|$)([\s\S]*)$/i;
 const TARGET_REF_REGEX = /#(img-[a-z0-9_-]+)/i;
 const SIZE_REGEX = /\b(\d{3,4}x\d{3,4})\b/i;
 const ASPECT_RATIO_REGEX = /\b(1:1|16:9|9:16|4:3|3:4|3:2|2:3|21:9|4:5|5:4)\b/i;
@@ -42,6 +45,9 @@ function normalizeTrigger(value: string): ImageWorkbenchCommandTrigger {
   }
   if (normalized === "@vision 1") {
     return "@Vision 1";
+  }
+  if (normalized === "@nanobanana pro") {
+    return "@Nanobanana Pro";
   }
   if (normalized === "@分镜") {
     return "@分镜";
@@ -144,6 +150,19 @@ function resolveMode(
   return targetRef ? "variation" : "generate";
 }
 
+function resolveTriggerModelOverride(
+  trigger: ImageWorkbenchCommandTrigger,
+): Pick<ParsedImageWorkbenchCommand, "providerId" | "modelId"> {
+  if (trigger === "@Nanobanana Pro") {
+    return {
+      providerId: "fal",
+      modelId: "fal-ai/nano-banana-pro",
+    };
+  }
+
+  return {};
+}
+
 function stripPromptDecorations(body: string, layoutHint?: string): string {
   const normalizedBody = layoutHint
     ? body
@@ -220,6 +239,7 @@ export function parseImageWorkbenchCommand(
     explicitCount,
   });
   const { size, aspectRatio } = resolveSize(normalizedBody);
+  const modelOverride = resolveTriggerModelOverride(trigger);
 
   return {
     rawText: text,
@@ -236,6 +256,7 @@ export function parseImageWorkbenchCommand(
     size,
     aspectRatio,
     targetRef,
+    ...modelOverride,
   };
 }
 

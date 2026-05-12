@@ -15,7 +15,6 @@ import {
   Keyboard,
   Brain,
   Bot,
-  Blocks,
   Image,
   Plug,
   Search,
@@ -119,11 +118,6 @@ export function useSettingsCategory(): CategoryGroup[] {
           key: SettingsTabs.Providers,
           label: t("settings.tab.providers"),
           icon: Brain,
-        },
-        {
-          key: SettingsTabs.Skills,
-          label: t("settings.tab.skills"),
-          icon: Blocks,
         },
         {
           key: SettingsTabs.MediaServices,

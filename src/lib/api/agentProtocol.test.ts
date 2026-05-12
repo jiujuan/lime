@@ -90,6 +90,28 @@ describe("agentProtocol", () => {
     });
   });
 
+  it("应把编排 provider_config 透传到 runtime turn_config", () => {
+    expect(
+      createSubmitTurnRequestFromAgentOp({
+        type: "user_input",
+        text: "@Nanobanana Pro 生成一张广州塔春天照片",
+        sessionId: "session-image-1",
+        eventName: "aster_stream_image",
+        preferences: {
+          providerConfig: {
+            provider_id: "deepseek",
+            provider_name: "deepseek",
+            model_name: "deepseek-v4-pro",
+          },
+        },
+      }).turn_config?.provider_config,
+    ).toEqual({
+      provider_id: "deepseek",
+      provider_name: "deepseek",
+      model_name: "deepseek-v4-pro",
+    });
+  });
+
   it("缺少 workspaceId 时不应在 runtime submit request 中生成 workspace_id", () => {
     expect(
       createSubmitTurnRequestFromAgentOp({

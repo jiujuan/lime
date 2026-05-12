@@ -1,10 +1,33 @@
 import { describe, expect, it } from "vitest";
+import { changeLimeLocale, getLimeI18n } from "@/i18n/createI18n";
+import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
 import {
+  buildActivityPreviewCopy,
   buildPreviewableRailSessionsSyncKey,
   buildSelectedSessionActivityState,
   collectStaleSessionActivityTargets,
+  extractSessionActivitySnapshot,
+  type ActivityPreviewTranslate,
   type SessionActivityPreviewState,
 } from "./activityPreviewSelectors";
+
+async function buildEnglishActivityPreviewCopy() {
+  await changeLimeLocale("en-US");
+  const translate: ActivityPreviewTranslate = (key, options) =>
+    String(
+      getLimeI18n().t(
+        key as never,
+        {
+          ns: "agent",
+          ...(options ?? {}),
+        } as never,
+      ),
+    );
+
+  return buildActivityPreviewCopy({
+    translate,
+  });
+}
 
 describe("activityPreviewSelectors", () => {
   it("选中会话的 activity state 应优先合并实时进展并生成预览文案", () => {
@@ -64,6 +87,40 @@ describe("activityPreviewSelectors", () => {
     expect(state.refreshVersion).toBe(2);
     expect(state.shouldPoll).toBe(true);
     expect(state.fingerprint).toBe("child-1:0:queued:queued:0");
+  });
+
+  it("应支持注入英文 activity preview copy 且保留消息正文", async () => {
+    const copy = await buildEnglishActivityPreviewCopy();
+    const detail = {
+      id: "child-1",
+      created_at: 0,
+      updated_at: 0,
+      items: [],
+      messages: [
+        {
+          id: "message-1",
+          role: "assistant",
+          timestamp: 1,
+          content: [
+            {
+              type: "tool_response",
+              id: "tool-1",
+              success: true,
+              output: "页面结构差异已提取完成。",
+            },
+          ],
+        },
+      ],
+    } satisfies AsterSessionDetail;
+
+    const snapshot = extractSessionActivitySnapshot(detail, 3, { copy });
+
+    expect(snapshot.preview).toBe("Output: 页面结构差异已提取完成。");
+    expect(snapshot.entries[0]).toMatchObject({
+      title: "Output",
+      detail: "页面结构差异已提取完成。",
+      statusLabel: "Message",
+    });
   });
 
   it("preview sync key 应稳定编码 fingerprint 与 refreshVersion", () => {

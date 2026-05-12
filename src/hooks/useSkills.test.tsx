@@ -11,14 +11,21 @@ import {
 } from "@/components/workspace/hooks/testUtils";
 import { useSkills } from "./useSkills";
 
-const { mockGetLocal, mockGetAll, mockGetRepos, mockRefreshCache } = vi.hoisted(
-  () => ({
-    mockGetLocal: vi.fn(),
-    mockGetAll: vi.fn(),
-    mockGetRepos: vi.fn(),
-    mockRefreshCache: vi.fn(),
-  }),
-);
+const {
+  mockGetLocal,
+  mockGetAll,
+  mockGetRepos,
+  mockRefreshCache,
+  mockInstall,
+  mockUninstall,
+} = vi.hoisted(() => ({
+  mockGetLocal: vi.fn(),
+  mockGetAll: vi.fn(),
+  mockGetRepos: vi.fn(),
+  mockRefreshCache: vi.fn(),
+  mockInstall: vi.fn(),
+  mockUninstall: vi.fn(),
+}));
 
 vi.mock("@/lib/api/skills", async () => {
   const actual =
@@ -34,6 +41,8 @@ vi.mock("@/lib/api/skills", async () => {
       getAll: (...args: unknown[]) => mockGetAll(...args),
       getRepos: (...args: unknown[]) => mockGetRepos(...args),
       refreshCache: (...args: unknown[]) => mockRefreshCache(...args),
+      install: (...args: unknown[]) => mockInstall(...args),
+      uninstall: (...args: unknown[]) => mockUninstall(...args),
     },
   };
 });
@@ -81,6 +90,8 @@ describe("useSkills", () => {
     mockGetAll.mockResolvedValue([]);
     mockGetRepos.mockResolvedValue([] satisfies SkillRepo[]);
     mockRefreshCache.mockResolvedValue(true);
+    mockInstall.mockResolvedValue(true);
+    mockUninstall.mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -148,5 +159,42 @@ describe("useSkills", () => {
 
     expect(mockGetLocal).toHaveBeenCalledWith("gemini");
     expect(mockGetRepos).not.toHaveBeenCalled();
+  });
+
+  it("关闭 repo 拉取时刷新仍只更新本地技能", async () => {
+    const initialSkill = createSkill({ directory: "initial-skill" });
+    const refreshedSkill = createSkill({ directory: "refreshed-skill" });
+    mockGetLocal
+      .mockResolvedValueOnce([initialSkill])
+      .mockResolvedValueOnce([refreshedSkill]);
+
+    await renderHook("claude", false);
+
+    await act(async () => {
+      await getLatestValue().refresh();
+    });
+    await flushEffects(4);
+
+    expect(mockRefreshCache).toHaveBeenCalledTimes(1);
+    expect(mockGetLocal).toHaveBeenCalledTimes(2);
+    expect(mockGetAll).not.toHaveBeenCalled();
+    expect(getLatestValue().skills).toEqual([refreshedSkill]);
+  });
+
+  it("关闭 repo 拉取时卸载后重新读取本地技能", async () => {
+    const localSkill = createSkill({ directory: "local-skill" });
+    mockGetLocal.mockResolvedValueOnce([localSkill]).mockResolvedValueOnce([]);
+
+    await renderHook("codex", false);
+
+    await act(async () => {
+      await getLatestValue().uninstall("local-skill");
+    });
+    await flushEffects(4);
+
+    expect(mockUninstall).toHaveBeenCalledWith("local-skill", "codex");
+    expect(mockGetLocal).toHaveBeenCalledTimes(2);
+    expect(mockGetAll).not.toHaveBeenCalled();
+    expect(getLatestValue().skills).toEqual([]);
   });
 });

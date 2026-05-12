@@ -1,7 +1,7 @@
 # Lime AgentUI 路线图文档
 
 > 状态：路线图与架构设计
-> 更新时间：2026-05-05
+> 更新时间：2026-05-12
 > 范围：Lime 对话工作区下一阶段 AgentUI，包括 UI 架构、代码层级、事件流程、时序图、后端协作与落地顺序。
 
 ## 目标
@@ -31,7 +31,8 @@ AgentUI 不是再做一个聊天页面，而是把 Lime 已有的 runtime、time
 | [conversation-projection-implementation-plan.md](conversation-projection-implementation-plan.md) | 对话主链瘦身的分阶段实施计划，顺序为事实源盘点、Projection Store、controller、selector、UI。 |
 | [conversation-projection-acceptance.md](conversation-projection-acceptance.md) | 对话投影改造的固定验收场景、性能指标、Playwright 续测口径和完成判定。 |
 | [lime-agentui-standard-alignment.md](lime-agentui-standard-alignment.md) | AgentUI 标准全流程 taxonomy 与 Lime 当前实现差距，固定 current / compat / deprecated / dead 分类和下一刀。 |
-| [responsive-chat-ttft-sample-matrix-20260512.md](responsive-chat-ttft-sample-matrix-20260512.md) | `responsive_chat_auto` 的真实 TTFT 样本矩阵、当前证据强度与剩余 provider/model 缺口。 |
+| [responsive-chat-ttft-sample-matrix-20260512.md](responsive-chat-ttft-sample-matrix-20260512.md) | `responsive_chat_auto` 的真实 TTFT 样本矩阵、completion gate 与 fallback-only 证据。 |
+| [completion-audit-20260512.md](completion-audit-20260512.md) | AgentUI TTFT 完整目标 completion audit，逐项映射 prompt 要求、artifact、验证证据与可选优化。 |
 
 ## 当前结论
 

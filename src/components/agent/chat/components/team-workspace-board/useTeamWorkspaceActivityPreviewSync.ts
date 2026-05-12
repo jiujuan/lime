@@ -4,6 +4,7 @@ import {
   buildPreviewableRailSessionsSyncKey,
   collectStaleSessionActivityTargets,
   extractSessionActivitySnapshot,
+  type ActivityPreviewCopy,
   type ActivityPreviewSession,
   type SelectedSessionActivityState,
   type SessionActivityPreviewState,
@@ -15,6 +16,7 @@ interface UseTeamWorkspaceActivityPreviewSyncParams {
   activityRefreshVersionBySessionId?: Record<string, number>;
   activityTimelineEntryLimit: number;
   basePreviewableRailSessions: ActivityPreviewSession[];
+  copy: ActivityPreviewCopy;
   pollIntervalMs?: number;
   selectedSessionActivityState: SelectedSessionActivityState;
 }
@@ -23,6 +25,7 @@ export function useTeamWorkspaceActivityPreviewSync({
   activityRefreshVersionBySessionId = {},
   activityTimelineEntryLimit,
   basePreviewableRailSessions,
+  copy,
   pollIntervalMs = DEFAULT_ACTIVITY_PREVIEW_POLL_INTERVAL_MS,
   selectedSessionActivityState,
 }: UseTeamWorkspaceActivityPreviewSyncParams) {
@@ -99,6 +102,7 @@ export function useTeamWorkspaceActivityPreviewSync({
         const activitySnapshot = extractSessionActivitySnapshot(
           detail,
           activityTimelineEntryLimit,
+          { copy },
         );
         const syncedAt = Date.now();
         setSessionActivityPreviewById((previous) => ({
@@ -121,7 +125,7 @@ export function useTeamWorkspaceActivityPreviewSync({
             entries: previous[sessionId]?.entries ?? [],
             status: "error",
             errorMessage:
-              error instanceof Error ? error.message : "同步最近过程失败",
+              error instanceof Error ? error.message : copy.syncFailed,
             fingerprint,
             refreshVersion,
             syncedAt: previous[sessionId]?.syncedAt,
@@ -131,7 +135,7 @@ export function useTeamWorkspaceActivityPreviewSync({
         pendingSessionActivityRequestsRef.current.delete(sessionId);
       }
     },
-    [activityTimelineEntryLimit],
+    [activityTimelineEntryLimit, copy],
   );
 
   useEffect(() => {

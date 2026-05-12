@@ -3,8 +3,8 @@ import {
   type AgentToolExecutionResult as ToolExecutionResult,
   type AgentEvent,
 } from "@/lib/api/agentProtocol";
+import agentSourceResource from "@/i18n/resources/zh-CN/agent.json";
 import {
-  buildStatusEventActivityEntry,
   buildTeamWorkspaceActivityEntryFromThreadItem,
   buildTeamWorkspaceSessionFingerprint,
   normalizeTeamWorkspaceRuntimeStatus,
@@ -14,7 +14,6 @@ import {
   type TeamWorkspaceRuntimeStatus,
 } from "../teamWorkspaceRuntime";
 import { resolveUserFacingToolDisplayLabel } from "../utils/toolDisplayInfo";
-import { resolveTeamWorkspaceDisplayRuntimeStatusLabel } from "../utils/teamWorkspaceCopy";
 import {
   buildRuntimeStatusPresentationText,
   isRuntimeStatusDiagnosticsOnly,
@@ -46,6 +45,217 @@ const LIVE_RUNTIME_PATCH_KEYS = [
   "queueReason",
   "retryableOverload",
 ] as const;
+
+type LiveRuntimeProjectorResourceKey =
+  | "agentChat.teamWorkspace.liveRuntime.detail.statusChanged"
+  | "agentChat.teamWorkspace.liveRuntime.detail.toolCompletedFallback"
+  | "agentChat.teamWorkspace.liveRuntime.detail.toolProcessing"
+  | "agentChat.teamWorkspace.liveRuntime.lifecycle.queueAdded.detail"
+  | "agentChat.teamWorkspace.liveRuntime.lifecycle.queueAdded.title"
+  | "agentChat.teamWorkspace.liveRuntime.lifecycle.queueStarted.detail"
+  | "agentChat.teamWorkspace.liveRuntime.lifecycle.queueStarted.title"
+  | "agentChat.teamWorkspace.liveRuntime.lifecycle.turnCompleted.detail"
+  | "agentChat.teamWorkspace.liveRuntime.lifecycle.turnCompleted.title"
+  | "agentChat.teamWorkspace.liveRuntime.lifecycle.turnFailed.detail"
+  | "agentChat.teamWorkspace.liveRuntime.lifecycle.turnFailed.title"
+  | "agentChat.teamWorkspace.liveRuntime.lifecycle.turnStarted.detail"
+  | "agentChat.teamWorkspace.liveRuntime.lifecycle.turnStarted.title"
+  | "agentChat.teamWorkspace.liveRuntime.status.completed"
+  | "agentChat.teamWorkspace.liveRuntime.status.processing"
+  | "agentChat.teamWorkspace.liveRuntime.status.queued"
+  | "agentChat.teamWorkspace.liveRuntime.status.retry"
+  | "agentChat.teamWorkspace.liveRuntime.status.warning"
+  | "agentChat.teamWorkspace.runtimeStatus.aborted"
+  | "agentChat.teamWorkspace.runtimeStatus.closed"
+  | "agentChat.teamWorkspace.runtimeStatus.completed"
+  | "agentChat.teamWorkspace.runtimeStatus.failed"
+  | "agentChat.teamWorkspace.runtimeStatus.idle"
+  | "agentChat.teamWorkspace.runtimeStatus.queued"
+  | "agentChat.teamWorkspace.runtimeStatus.running"
+  | "agentChat.teamWorkspace.liveRuntime.title.currentProgress"
+  | "agentChat.teamWorkspace.liveRuntime.title.error"
+  | "agentChat.teamWorkspace.liveRuntime.title.processing"
+  | "agentChat.teamWorkspace.liveRuntime.title.statusChanged"
+  | "agentChat.teamWorkspace.liveRuntime.title.textDraft"
+  | "agentChat.teamWorkspace.liveRuntime.title.thinkingDraft"
+  | "agentChat.teamWorkspace.liveRuntime.title.tool"
+  | "agentChat.teamWorkspace.liveRuntime.title.toolTargetFallback"
+  | "agentChat.teamWorkspace.liveRuntime.title.warning";
+
+export type LiveRuntimeProjectorTranslate = (
+  key: LiveRuntimeProjectorResourceKey,
+  options?: Record<string, unknown>,
+) => string;
+
+type AgentSourceResourceKey = keyof typeof agentSourceResource;
+
+function interpolateLiveRuntimeProjectorSourceTemplate(
+  template: string,
+  values?: Record<string, unknown>,
+): string {
+  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, name) => {
+    const value = values?.[name];
+    return value == null ? match : String(value);
+  });
+}
+
+function translateLiveRuntimeProjectorSourceKey(
+  key: LiveRuntimeProjectorResourceKey,
+  values?: Record<string, unknown>,
+): string {
+  const template = agentSourceResource[key as AgentSourceResourceKey] ?? key;
+  return interpolateLiveRuntimeProjectorSourceTemplate(template, values);
+}
+
+export interface LiveRuntimeProjectorCopy {
+  completedStatus: string;
+  currentProgressTitle: string;
+  errorTitle: string;
+  formatStatusChangedDetail: (status: string) => string;
+  formatToolProcessingDetail: (target: string) => string;
+  formatToolTitle: (status: string, toolName: string) => string;
+  getRuntimeStatusLabel: (status?: TeamWorkspaceRuntimeStatus) => string;
+  lifecycle: {
+    queueAdded: { title: string; detail: string };
+    queueStarted: { title: string; detail: string };
+    turnCompleted: { title: string; detail: string };
+    turnFailed: { title: string; detail: string };
+    turnStarted: { title: string; detail: string };
+  };
+  processingStatus: string;
+  processingTitle: string;
+  queuedStatus: string;
+  retryStatus: string;
+  statusChangedTitle: string;
+  textDraftTitle: string;
+  thinkingDraftTitle: string;
+  toolCompletedFallback: string;
+  toolTargetFallback: string;
+  warningStatus: string;
+  warningTitle: string;
+}
+
+function resolveRuntimeStatusResourceKey(
+  status?: TeamWorkspaceRuntimeStatus,
+): LiveRuntimeProjectorResourceKey {
+  return `agentChat.teamWorkspace.runtimeStatus.${status ?? "idle"}` as LiveRuntimeProjectorResourceKey;
+}
+
+export function buildLiveRuntimeProjectorCopy(params: {
+  translate: LiveRuntimeProjectorTranslate;
+}): LiveRuntimeProjectorCopy {
+  return {
+    completedStatus: params.translate(
+      "agentChat.teamWorkspace.liveRuntime.status.completed",
+    ),
+    currentProgressTitle: params.translate(
+      "agentChat.teamWorkspace.liveRuntime.title.currentProgress",
+    ),
+    errorTitle: params.translate(
+      "agentChat.teamWorkspace.liveRuntime.title.error",
+    ),
+    formatStatusChangedDetail: (status) =>
+      params.translate(
+        "agentChat.teamWorkspace.liveRuntime.detail.statusChanged",
+        {
+          status,
+        },
+      ),
+    formatToolProcessingDetail: (target) =>
+      params.translate(
+        "agentChat.teamWorkspace.liveRuntime.detail.toolProcessing",
+        {
+          target,
+        },
+      ),
+    formatToolTitle: (status, toolName) =>
+      params.translate("agentChat.teamWorkspace.liveRuntime.title.tool", {
+        status,
+        toolName,
+      }),
+    getRuntimeStatusLabel: (status) =>
+      params.translate(resolveRuntimeStatusResourceKey(status)),
+    lifecycle: {
+      queueAdded: {
+        title: params.translate(
+          "agentChat.teamWorkspace.liveRuntime.lifecycle.queueAdded.title",
+        ),
+        detail: params.translate(
+          "agentChat.teamWorkspace.liveRuntime.lifecycle.queueAdded.detail",
+        ),
+      },
+      queueStarted: {
+        title: params.translate(
+          "agentChat.teamWorkspace.liveRuntime.lifecycle.queueStarted.title",
+        ),
+        detail: params.translate(
+          "agentChat.teamWorkspace.liveRuntime.lifecycle.queueStarted.detail",
+        ),
+      },
+      turnCompleted: {
+        title: params.translate(
+          "agentChat.teamWorkspace.liveRuntime.lifecycle.turnCompleted.title",
+        ),
+        detail: params.translate(
+          "agentChat.teamWorkspace.liveRuntime.lifecycle.turnCompleted.detail",
+        ),
+      },
+      turnFailed: {
+        title: params.translate(
+          "agentChat.teamWorkspace.liveRuntime.lifecycle.turnFailed.title",
+        ),
+        detail: params.translate(
+          "agentChat.teamWorkspace.liveRuntime.lifecycle.turnFailed.detail",
+        ),
+      },
+      turnStarted: {
+        title: params.translate(
+          "agentChat.teamWorkspace.liveRuntime.lifecycle.turnStarted.title",
+        ),
+        detail: params.translate(
+          "agentChat.teamWorkspace.liveRuntime.lifecycle.turnStarted.detail",
+        ),
+      },
+    },
+    processingStatus: params.translate(
+      "agentChat.teamWorkspace.liveRuntime.status.processing",
+    ),
+    processingTitle: params.translate(
+      "agentChat.teamWorkspace.liveRuntime.title.processing",
+    ),
+    queuedStatus: params.translate(
+      "agentChat.teamWorkspace.liveRuntime.status.queued",
+    ),
+    retryStatus: params.translate(
+      "agentChat.teamWorkspace.liveRuntime.status.retry",
+    ),
+    statusChangedTitle: params.translate(
+      "agentChat.teamWorkspace.liveRuntime.title.statusChanged",
+    ),
+    textDraftTitle: params.translate(
+      "agentChat.teamWorkspace.liveRuntime.title.textDraft",
+    ),
+    thinkingDraftTitle: params.translate(
+      "agentChat.teamWorkspace.liveRuntime.title.thinkingDraft",
+    ),
+    toolCompletedFallback: params.translate(
+      "agentChat.teamWorkspace.liveRuntime.detail.toolCompletedFallback",
+    ),
+    toolTargetFallback: params.translate(
+      "agentChat.teamWorkspace.liveRuntime.title.toolTargetFallback",
+    ),
+    warningStatus: params.translate(
+      "agentChat.teamWorkspace.liveRuntime.status.warning",
+    ),
+    warningTitle: params.translate(
+      "agentChat.teamWorkspace.liveRuntime.title.warning",
+    ),
+  };
+}
+
+const SOURCE_LIVE_RUNTIME_PROJECTOR_COPY = buildLiveRuntimeProjectorCopy({
+  translate: translateLiveRuntimeProjectorSourceKey,
+});
 
 type LiveRuntimePatchKey = (typeof LIVE_RUNTIME_PATCH_KEYS)[number];
 
@@ -153,24 +363,32 @@ function buildActivityEntry(params: {
   };
 }
 
-function buildTextDraftEntry(sessionId: string, draft?: string) {
+function buildTextDraftEntry(
+  sessionId: string,
+  draft?: string,
+  copy: LiveRuntimeProjectorCopy = SOURCE_LIVE_RUNTIME_PROJECTOR_COPY,
+) {
   return buildActivityEntry({
     id: `stream-text:${sessionId}`,
-    title: "内容生成中",
+    title: copy.textDraftTitle,
     detail: draft,
-    statusLabel: "处理中",
+    statusLabel: copy.processingStatus,
     badgeClassName: IN_PROGRESS_BADGE_CLASS_NAME,
     sourceType: "agent_message",
     sourceLabel: "stream text",
   });
 }
 
-function buildThinkingDraftEntry(sessionId: string, draft?: string) {
+function buildThinkingDraftEntry(
+  sessionId: string,
+  draft?: string,
+  copy: LiveRuntimeProjectorCopy = SOURCE_LIVE_RUNTIME_PROJECTOR_COPY,
+) {
   return buildActivityEntry({
     id: `stream-thinking:${sessionId}`,
-    title: "整理思路中",
+    title: copy.thinkingDraftTitle,
     detail: normalizeProcessDisplayText(draft),
-    statusLabel: "处理中",
+    statusLabel: copy.processingStatus,
     badgeClassName: IN_PROGRESS_BADGE_CLASS_NAME,
     sourceType: "reasoning",
     sourceLabel: "stream thinking",
@@ -180,6 +398,7 @@ function buildThinkingDraftEntry(sessionId: string, draft?: string) {
 function buildRuntimeStatusEntry(
   sessionId: string,
   status: AgentRuntimeStatusPayload,
+  copy: LiveRuntimeProjectorCopy = SOURCE_LIVE_RUNTIME_PROJECTOR_COPY,
 ) {
   if (isRuntimeStatusDiagnosticsOnly(status)) {
     return null;
@@ -194,9 +413,9 @@ function buildRuntimeStatusEntry(
   });
   return buildActivityEntry({
     id: `runtime-status:${sessionId}`,
-    title: status.title.trim() || "当前进展",
+    title: status.title.trim() || copy.currentProgressTitle,
     detail,
-    statusLabel: waiting ? "稍后开始" : "处理中",
+    statusLabel: waiting ? copy.queuedStatus : copy.processingStatus,
     badgeClassName: waiting
       ? QUEUED_BADGE_CLASS_NAME
       : IN_PROGRESS_BADGE_CLASS_NAME,
@@ -250,22 +469,39 @@ function buildToolActivityEntry(params: {
   toolId: string;
   toolName?: string;
   result?: ToolExecutionResult;
+  copy?: LiveRuntimeProjectorCopy;
 }) {
-  const { sessionId, toolId, toolName, result } = params;
+  const {
+    sessionId,
+    toolId,
+    toolName,
+    result,
+    copy = SOURCE_LIVE_RUNTIME_PROJECTOR_COPY,
+  } = params;
   const displayToolName = toolName?.trim()
     ? resolveUserFacingToolDisplayLabel(toolName)
     : null;
-  const title = displayToolName ? `处理中 · ${displayToolName}` : "处理中";
+  const title = displayToolName
+    ? copy.formatToolTitle(copy.processingStatus, displayToolName)
+    : copy.processingTitle;
+  const toolTarget = displayToolName || copy.toolTargetFallback;
   const detail = result
-    ? result.error || result.output || displayToolName || "当前步骤已完成。"
-    : `正在处理 ${displayToolName || "当前步骤"}。`;
+    ? result.error ||
+      result.output ||
+      displayToolName ||
+      copy.toolCompletedFallback
+    : copy.formatToolProcessingDetail(toolTarget);
   const success = result ? result.success !== false : true;
 
   return buildActivityEntry({
     id: `tool:${sessionId}:${toolId}`,
     title,
     detail,
-    statusLabel: result ? (success ? "完成" : "需重试") : "处理中",
+    statusLabel: result
+      ? success
+        ? copy.completedStatus
+        : copy.retryStatus
+      : copy.processingStatus,
     badgeClassName: result
       ? success
         ? COMPLETED_BADGE_CLASS_NAME
@@ -299,28 +535,68 @@ function buildWarningActivityEntry(
   sessionId: string,
   message: string,
   code?: string,
+  copy: LiveRuntimeProjectorCopy = SOURCE_LIVE_RUNTIME_PROJECTOR_COPY,
 ) {
   return buildActivityEntry({
     id: `warning:${sessionId}:${code ?? ""}:${message}`,
-    title: "警告",
+    title: copy.warningTitle,
     detail: message,
-    statusLabel: "警告",
+    statusLabel: copy.warningStatus,
     badgeClassName: QUEUED_BADGE_CLASS_NAME,
     sourceType: "warning",
     sourceLabel: "runtime warning",
   });
 }
 
-function buildErrorActivityEntry(sessionId: string, message: string) {
+function buildErrorActivityEntry(
+  sessionId: string,
+  message: string,
+  copy: LiveRuntimeProjectorCopy = SOURCE_LIVE_RUNTIME_PROJECTOR_COPY,
+) {
   return buildActivityEntry({
     id: `error:${sessionId}:${message}`,
-    title: "错误",
+    title: copy.errorTitle,
     detail: message,
-    statusLabel: "需重试",
+    statusLabel: copy.retryStatus,
     badgeClassName: FAILED_BADGE_CLASS_NAME,
     sourceType: "error",
     sourceLabel: "runtime error",
   });
+}
+
+function buildStatusChangedActivityEntry(params: {
+  sessionId: string;
+  status: TeamWorkspaceRuntimeStatus | "not_found";
+  copy?: LiveRuntimeProjectorCopy;
+}): TeamWorkspaceActivityEntry {
+  const copy = params.copy ?? SOURCE_LIVE_RUNTIME_PROJECTOR_COPY;
+  const normalizedStatus = normalizeTeamWorkspaceRuntimeStatus(params.status);
+  const statusLabel = copy.getRuntimeStatusLabel(normalizedStatus);
+  return {
+    id: `status-${params.sessionId}-${normalizedStatus}-${Date.now()}`,
+    title: copy.statusChangedTitle,
+    detail: copy.formatStatusChangedDetail(statusLabel),
+    statusLabel,
+    badgeClassName: resolveStatusBadgeClassName(normalizedStatus),
+    sourceType: "runtime_status",
+    sourceLabel: "runtime status",
+  };
+}
+
+function resolveStatusBadgeClassName(status: TeamWorkspaceRuntimeStatus) {
+  if (status === "queued") {
+    return QUEUED_BADGE_CLASS_NAME;
+  }
+  if (status === "running") {
+    return IN_PROGRESS_BADGE_CLASS_NAME;
+  }
+  if (status === "completed" || status === "closed") {
+    return COMPLETED_BADGE_CLASS_NAME;
+  }
+  if (status === "failed" || status === "aborted") {
+    return FAILED_BADGE_CLASS_NAME;
+  }
+  return "border border-slate-200 bg-slate-50 text-slate-600";
 }
 
 export function areActivityEntriesEqual(
@@ -501,6 +777,7 @@ export function buildStatusChangedProjection(params: {
   status: TeamWorkspaceRuntimeStatus | "not_found";
   session: TeamWorkspaceRuntimeSessionSnapshot;
   currentRuntime?: TeamWorkspaceLiveRuntimeState;
+  copy?: LiveRuntimeProjectorCopy;
 }): TeamWorkspaceStatusChangedProjection {
   const normalizedStatus = normalizeTeamWorkspaceRuntimeStatus(params.status);
   const nextQueuedTurnCount =
@@ -514,7 +791,11 @@ export function buildStatusChangedProjection(params: {
         params.session.queuedTurnCount);
 
   return {
-    entry: buildStatusEventActivityEntry(params.sessionId, params.status),
+    entry: buildStatusChangedActivityEntry({
+      sessionId: params.sessionId,
+      status: params.status,
+      copy: params.copy,
+    }),
     liveRuntimePatch: {
       runtimeStatus: normalizedStatus,
       latestTurnStatus: normalizedStatus,
@@ -530,6 +811,7 @@ export function projectRuntimeStreamEvent(params: {
   currentRuntime?: TeamWorkspaceLiveRuntimeState;
   streamState?: SessionLiveStreamState;
   toolNameById?: Record<string, string>;
+  copy?: LiveRuntimeProjectorCopy;
 }): TeamWorkspaceRuntimeStreamProjection | null {
   const {
     sessionId,
@@ -538,6 +820,7 @@ export function projectRuntimeStreamEvent(params: {
     currentRuntime,
     streamState,
     toolNameById,
+    copy = SOURCE_LIVE_RUNTIME_PROJECTOR_COPY,
   } = params;
 
   switch (event.type) {
@@ -581,7 +864,7 @@ export function projectRuntimeStreamEvent(params: {
         event.text,
       );
       return {
-        entry: buildTextDraftEntry(sessionId, nextTextDraft),
+        entry: buildTextDraftEntry(sessionId, nextTextDraft, copy),
         nextTextDraft: nextTextDraft ?? undefined,
       };
     }
@@ -591,7 +874,7 @@ export function projectRuntimeStreamEvent(params: {
         event.text,
       );
       return {
-        entry: buildThinkingDraftEntry(sessionId, nextThinkingDraft),
+        entry: buildThinkingDraftEntry(sessionId, nextThinkingDraft, copy),
         nextThinkingDraft: nextThinkingDraft ?? undefined,
       };
     }
@@ -601,6 +884,7 @@ export function projectRuntimeStreamEvent(params: {
           sessionId,
           toolId: event.tool_id,
           toolName: event.tool_name,
+          copy,
         }),
         rememberTool: {
           toolId: event.tool_id,
@@ -614,6 +898,7 @@ export function projectRuntimeStreamEvent(params: {
           toolId: event.tool_id,
           toolName: toolNameById?.[event.tool_id],
           result: event.result,
+          copy,
         }),
         forgetToolId: event.tool_id,
         refreshPreview: true,
@@ -631,7 +916,7 @@ export function projectRuntimeStreamEvent(params: {
               : undefined,
       });
       return {
-        entry: buildRuntimeStatusEntry(sessionId, event.status),
+        entry: buildRuntimeStatusEntry(sessionId, event.status, copy),
         liveRuntimePatch,
       };
     }
@@ -640,9 +925,9 @@ export function projectRuntimeStreamEvent(params: {
         entry: buildLifecycleActivityEntry({
           sessionId,
           key: "queue",
-          title: "稍后开始",
-          detail: "新的说明已经收到，这项子任务会在前一项完成后继续处理。",
-          statusLabel: resolveTeamWorkspaceDisplayRuntimeStatusLabel("queued"),
+          title: copy.lifecycle.queueAdded.title,
+          detail: copy.lifecycle.queueAdded.detail,
+          statusLabel: copy.queuedStatus,
           badgeClassName: QUEUED_BADGE_CLASS_NAME,
         }),
         liveRuntimePatch: {
@@ -656,9 +941,9 @@ export function projectRuntimeStreamEvent(params: {
         entry: buildLifecycleActivityEntry({
           sessionId,
           key: "queue",
-          title: "开始处理",
-          detail: "这项子任务已经开始处理当前任务。",
-          statusLabel: resolveTeamWorkspaceDisplayRuntimeStatusLabel("running"),
+          title: copy.lifecycle.queueStarted.title,
+          detail: copy.lifecycle.queueStarted.detail,
+          statusLabel: copy.processingStatus,
           badgeClassName: IN_PROGRESS_BADGE_CLASS_NAME,
         }),
         liveRuntimePatch: {
@@ -702,9 +987,9 @@ export function projectRuntimeStreamEvent(params: {
         entry: buildLifecycleActivityEntry({
           sessionId,
           key: "turn",
-          title: "继续处理",
-          detail: "这项子任务正在推进当前内容。",
-          statusLabel: resolveTeamWorkspaceDisplayRuntimeStatusLabel("running"),
+          title: copy.lifecycle.turnStarted.title,
+          detail: copy.lifecycle.turnStarted.detail,
+          statusLabel: copy.processingStatus,
           badgeClassName: IN_PROGRESS_BADGE_CLASS_NAME,
         }),
         liveRuntimePatch: {
@@ -718,9 +1003,9 @@ export function projectRuntimeStreamEvent(params: {
         entry: buildLifecycleActivityEntry({
           sessionId,
           key: "turn",
-          title: "阶段完成",
-          detail: "这一步已经完成，正在同步最新结果。",
-          statusLabel: "完成",
+          title: copy.lifecycle.turnCompleted.title,
+          detail: copy.lifecycle.turnCompleted.detail,
+          statusLabel: copy.completedStatus,
           badgeClassName: COMPLETED_BADGE_CLASS_NAME,
         }),
         liveRuntimePatch: {
@@ -749,11 +1034,11 @@ export function projectRuntimeStreamEvent(params: {
         entry: buildLifecycleActivityEntry({
           sessionId,
           key: "turn",
-          title: "处理失败",
+          title: copy.lifecycle.turnFailed.title,
           detail:
             event.turn.error_message?.trim() ||
-            "这一步处理失败，请查看错误详情。",
-          statusLabel: "需重试",
+            copy.lifecycle.turnFailed.detail,
+          statusLabel: copy.retryStatus,
           badgeClassName: FAILED_BADGE_CLASS_NAME,
         }),
         liveRuntimePatch: {
@@ -778,13 +1063,18 @@ export function projectRuntimeStreamEvent(params: {
     }
     case "warning":
       return {
-        entry: buildWarningActivityEntry(sessionId, event.message, event.code),
+        entry: buildWarningActivityEntry(
+          sessionId,
+          event.message,
+          event.code,
+          copy,
+        ),
         refreshPreview: true,
       };
     case "error": {
       const queuedTurnCount = getQueuedTurnCount(session, currentRuntime);
       return {
-        entry: buildErrorActivityEntry(sessionId, event.message),
+        entry: buildErrorActivityEntry(sessionId, event.message, copy),
         liveRuntimePatch: {
           runtimeStatus: resolveFinalRuntimeStatus({
             session,

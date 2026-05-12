@@ -1,12 +1,15 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import type {
   TeamWorkspaceActivityEntry,
   TeamWorkspaceRuntimeFormationState,
 } from "../../teamWorkspaceRuntime";
 import type { SessionActivityPreviewState } from "../../team-workspace-runtime/activityPreviewSelectors";
 import {
+  buildTeamWorkspaceCanvasLaneCopy,
   buildTeamWorkspaceCanvasLanes,
   type TeamWorkspaceCanvasLane,
+  type TeamWorkspaceCanvasLaneTranslate,
 } from "../../team-workspace-runtime/canvasLaneSelectors";
 import type { TeamRoleDefinition } from "../../utils/teamDefinitions";
 import { buildCanvasStageHint } from "../../utils/teamWorkspaceCanvas";
@@ -53,9 +56,24 @@ export function useTeamWorkspaceBoardCanvasRuntime({
   previewBySessionId,
   teamDispatchPreviewState = null,
 }: UseTeamWorkspaceBoardCanvasRuntimeParams): TeamWorkspaceBoardCanvasRuntimeState {
+  const { i18n, t } = useTranslation("agent");
+  const locale = i18n.resolvedLanguage || i18n.language;
+  const translateCanvasLane = useMemo<TeamWorkspaceCanvasLaneTranslate>(
+    () => (key, options) => String(t(key as never, options as never)),
+    [t],
+  );
+  const canvasLaneCopy = useMemo(
+    () =>
+      buildTeamWorkspaceCanvasLaneCopy({
+        locale,
+        translate: translateCanvasLane,
+      }),
+    [locale, translateCanvasLane],
+  );
   const canvasLanes = useMemo<TeamWorkspaceCanvasLane[]>(
     () =>
       buildTeamWorkspaceCanvasLanes({
+        copy: canvasLaneCopy,
         hasRealTeamGraph,
         sessions: memberCanvasSessions,
         runtimeMembers: teamDispatchPreviewState?.members ?? [],
@@ -66,6 +84,7 @@ export function useTeamWorkspaceBoardCanvasRuntime({
       }),
     [
       activityTimelineEntryLimit,
+      canvasLaneCopy,
       hasRealTeamGraph,
       liveActivityBySessionId,
       memberCanvasSessions,

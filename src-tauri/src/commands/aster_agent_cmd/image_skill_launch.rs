@@ -9,10 +9,14 @@ use std::path::{Path, PathBuf};
 
 const IMAGE_SKILL_INPUT_REF_PREFIX: &str = "skill-input-image://";
 pub(super) const IMAGE_SKILL_LAUNCH_PROMPT_MARKER: &str = "<<LIME_IMAGE_SKILL_LAUNCH_HINT>>";
+const IMAGE_GENERATION_CONFIRMATION_GUARD_MARKER: &str =
+    "<<LIME_IMAGE_GENERATION_CONFIRMATION_GUARD>>";
 const IMAGE_SKILL_LAUNCH_DETOUR_DENY_PATTERNS: &[&str] = &[
     TOOL_SEARCH_TOOL_NAME,
     "WebSearch",
     "web_search",
+    LIME_SEARCH_WEB_IMAGES_TOOL_NAME,
+    "search_web_images",
     "Bash",
     "Read",
     "read",
@@ -276,21 +280,45 @@ pub(crate) fn merge_system_prompt_with_image_skill_launch(
     request_metadata: Option<&serde_json::Value>,
 ) -> Option<String> {
     let Some(launch_prompt) = build_image_skill_launch_system_prompt(request_metadata) else {
-        return base_prompt;
+        return merge_prompt_once(
+            base_prompt,
+            IMAGE_GENERATION_CONFIRMATION_GUARD_MARKER,
+            build_image_generation_confirmation_guard_prompt(),
+        );
     };
 
+    merge_prompt_once(base_prompt, IMAGE_SKILL_LAUNCH_PROMPT_MARKER, launch_prompt)
+}
+
+fn merge_prompt_once(
+    base_prompt: Option<String>,
+    marker: &str,
+    appended_prompt: String,
+) -> Option<String> {
     match base_prompt {
         Some(base) => {
-            if base.contains(IMAGE_SKILL_LAUNCH_PROMPT_MARKER) {
+            if base.contains(marker) {
                 Some(base)
             } else if base.trim().is_empty() {
-                Some(launch_prompt)
+                Some(appended_prompt)
             } else {
-                Some(format!("{base}\n\n{launch_prompt}"))
+                Some(format!("{base}\n\n{appended_prompt}"))
             }
         }
-        None => Some(launch_prompt),
+        None => Some(appended_prompt),
     }
+}
+
+fn build_image_generation_confirmation_guard_prompt() -> String {
+    [
+        IMAGE_GENERATION_CONFIRMATION_GUARD_MARKER,
+        "- 普通聊天中，用户可能是在让你整理视觉方案、海报概念或生成提示词；不要因此自动调用 Skill(image_generate) 或 lime_create_image_generation_task。",
+        "- 只有当用户显式使用 @配图/@修图/@重绘/@image，或在你询问后明确确认“调用画图/现在生成/开始画”时，才允许进入图片生成主链。",
+        "- 如果用户没有 @ 命令但内容明显像配图提示词、海报 brief、封面 brief 或视觉设计 brief，必须先用 1 句简洁确认：是否要调用画图功能生成图片。",
+        "- 上述普通视觉 brief 确认回合不要输出 HTML/CSS/SVG/Markdown 草图，不要写完整设计方案，不要生成提示词全文，不要输出任务详情表、排队状态或任务已提交模板。",
+        "- 推荐确认句式：这看起来是图片生成需求，要我直接调用画图功能生成吗？",
+    ]
+    .join("\n")
 }
 
 pub(crate) fn should_lock_image_skill_launch_to_image_generation(
@@ -438,7 +466,8 @@ fn build_image_skill_launch_system_prompt(
         ),
         "- 当前回合已经显式知道要走图片技能主链，不要为了确认技能名、工具名或命令名再去调用 ToolSearch。".to_string(),
         "- 当前主会话第一刀必须先调用 Skill(image_generate)，但这不等于任务已经创建。".to_string(),
-        "- 在 Skill(image_generate) 真正执行前，不要先走 ToolSearch / WebSearch / Bash / Read / Write / Edit / Glob / Grep / 浏览器 MCP / Playwright 等通用工具发现、检索、脚本、文件或页面链路。".to_string(),
+        "- 在 Skill(image_generate) 真正执行前，不要先走 ToolSearch / WebSearch / lime_search_web_images / Bash / Read / Write / Edit / Glob / Grep / 浏览器 MCP / Playwright 等通用工具发现、检索、联网搜图、脚本、文件或页面链路。".to_string(),
+        "- `lime_search_web_images` 只服务 @素材 的联网图片候选检索，不是 @配图/@Nanobanana Pro 的图片生成入口；当前回合禁止调用它。".to_string(),
         "- 不要搜索 “Skill image_generate”、“lime media image generate --json”、“lime_create_image_generation_task” 之类目录信息；当前 image_task 已经提供了足够上下文。".to_string(),
         "- 如果某个通用搜索/读文件工具因为 session policy 被拒绝，不要重复同类调用；应立即改为直调 Skill(image_generate)。".to_string(),
         "- 如果 Skill(image_generate) 返回的 Lime 工具元数据里只有 allowed_tools=[\"lime_create_image_generation_task\"]，而没有 task_id/path/status，说明任务尚未创建；当前主会话必须立刻继续调用 lime_create_image_generation_task。".to_string(),
@@ -448,9 +477,10 @@ fn build_image_skill_launch_system_prompt(
         "- 调用 lime_create_image_generation_task 时，必须把 image_task 对象本身直接作为工具参数提交；不要再包一层 {\"image_task\": ...}，更不要把整个对象再次序列化成字符串。".to_string(),
         "- 调用 lime_create_image_generation_task 时，统一使用 snake_case 字段名；不要把 anchorHint / providerId / projectId 这类 camelCase 同义字段与 snake_case 一起重复提交。".to_string(),
         "- 调用 lime_create_image_generation_task 时，必须只提交标准 image task 参数；不要传 outputPath，不要把任务写成 markdown 文稿。".to_string(),
-        "- 不要伪造“图片已生成完成”；在 task file 真正返回结果前，只能汇报任务已提交、排队或执行中。".to_string(),
+        "- 不要伪造“图片已生成完成”；在 task file 真正返回结果前，只能让工具轨迹展示任务已提交、排队或执行中，不要额外输出递交模板。".to_string(),
         "- 如果当前回合已经拿到任何图片任务结果，且结果里含 task_id、path，或 status=pending_submit/queued/running/partial/succeeded，说明任务已提交；不要再次调用 Skill(image_generate) 或重复创建第二个图片任务。".to_string(),
-        "- 拿到上述任务结果后，直接基于现有 task_id、路径和状态给出提交摘要，并等待 task file 后续回流。".to_string(),
+        "- 拿到上述任务结果后，不要再输出“任务类型 / 任务 ID / 任务文件 / 状态”这类提交摘要；让同一条 assistant 消息内的工具调用和图片任务轻卡继续展示进度与结果。".to_string(),
+        "- 聊天输出必须保持极简自然：工具前最多一句“好嘞，用 <模型> 给你生成...”，随后只保留“先获取下工具参数”“马上生成”这类短过程；不要输出任务表格、任务 ID、任务文件、排队说明、Image Workbench/图片工作台文案，也不要拆成第二条 assistant 回复。".to_string(),
         format!("- 当前图片任务上下文(JSON)：{image_task_json}"),
         format!("- 当前模式：{mode}。"),
         format!("- 当前入口来源：{entry_source}。"),

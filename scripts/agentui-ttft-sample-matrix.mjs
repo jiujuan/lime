@@ -8,15 +8,48 @@ import process from "node:process";
 
 const DEFAULT_LIMIT_RUNS = 5000;
 const DEFAULT_LIMIT_GROUPS = 24;
+const DEFAULT_MIN_FIRST_TEXT_PER_RESPONSIVE_GROUP = 3;
+const MATRIX_PRESETS = {
+  "agentui-responsive-chat-ttft": {
+    minFirstTextPerResponsiveGroup: 3,
+    requiredResponsiveModels: ["deepseek-v4-flash", "MiniMax-M2.7"],
+    requiredResponsiveProviders: ["siliconflow-cn", "openrouter", "lime-hub"],
+  },
+};
+
+function applyPreset(result, presetName) {
+  const preset = MATRIX_PRESETS[presetName];
+  if (!preset) {
+    throw new Error(
+      `Unknown preset: ${presetName}. Available presets: ${Object.keys(MATRIX_PRESETS).join(", ")}`,
+    );
+  }
+  result.checkResponsiveMatrix = true;
+  result.matrixPreset = presetName;
+  result.minFirstTextPerResponsiveGroup = preset.minFirstTextPerResponsiveGroup;
+  result.requiredResponsiveModels = [...new Set([
+    ...result.requiredResponsiveModels,
+    ...preset.requiredResponsiveModels,
+  ])];
+  result.requiredResponsiveProviders = [...new Set([
+    ...result.requiredResponsiveProviders,
+    ...preset.requiredResponsiveProviders,
+  ])];
+}
 
 function parseArgs(argv) {
   const result = {
     dbPath: defaultLimeDbPath(),
     format: "markdown",
     help: false,
+    checkResponsiveMatrix: false,
     limitGroups: DEFAULT_LIMIT_GROUPS,
     limitRuns: DEFAULT_LIMIT_RUNS,
+    minFirstTextPerResponsiveGroup: DEFAULT_MIN_FIRST_TEXT_PER_RESPONSIVE_GROUP,
+    matrixPreset: "",
     outputPath: "",
+    requiredResponsiveModels: [],
+    requiredResponsiveProviders: [],
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -38,6 +71,30 @@ function parseArgs(argv) {
     }
     if (arg === "--limit-groups" && argv[index + 1]) {
       result.limitGroups = Number.parseInt(String(argv[index + 1]), 10);
+      index += 1;
+      continue;
+    }
+    if (arg === "--min-first-text-per-responsive-group" && argv[index + 1]) {
+      result.minFirstTextPerResponsiveGroup = Number.parseInt(String(argv[index + 1]), 10);
+      index += 1;
+      continue;
+    }
+    if (arg === "--check-responsive-matrix") {
+      result.checkResponsiveMatrix = true;
+      continue;
+    }
+    if (arg === "--preset" && argv[index + 1]) {
+      applyPreset(result, String(argv[index + 1]).trim());
+      index += 1;
+      continue;
+    }
+    if (arg === "--require-responsive-provider" && argv[index + 1]) {
+      result.requiredResponsiveProviders.push(String(argv[index + 1]).trim());
+      index += 1;
+      continue;
+    }
+    if (arg === "--require-responsive-model" && argv[index + 1]) {
+      result.requiredResponsiveModels.push(String(argv[index + 1]).trim());
       index += 1;
       continue;
     }
@@ -68,6 +125,15 @@ Lime AgentUI TTFT Sample Matrix
   --format FMT          markdown | json，默认 markdown
   --limit-runs N        最近 agent_runs 扫描上限，默认 ${DEFAULT_LIMIT_RUNS}
   --limit-groups N      Markdown 表格输出的 group 上限，默认 ${DEFAULT_LIMIT_GROUPS}
+  --check-responsive-matrix
+                        检查 responsive_chat latency group 是否满足 first-text TTFT 样本下限
+  --preset NAME         套用检查预设：${Object.keys(MATRIX_PRESETS).join(" | ")}
+  --min-first-text-per-responsive-group N
+                        每个 responsive_chat latency group 的 first-text TTFT 样本下限，默认 ${DEFAULT_MIN_FIRST_TEXT_PER_RESPONSIVE_GROUP}
+  --require-responsive-provider PROVIDER
+                        必须出现在 responsive_chat latency group 中的 provider；可重复
+  --require-responsive-model MODEL
+                        必须出现在 responsive_chat latency group 中的 model；可重复
   --output PATH         写入文件；默认 stdout
   -h, --help            显示帮助
 
@@ -93,6 +159,10 @@ function defaultLimeDbPath() {
 
 function normalizePositiveInt(value, fallback) {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
+function normalizeNonNegativeInt(value, fallback) {
+  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : fallback;
 }
 
 function abbreviateHomePath(filePath) {
@@ -156,8 +226,20 @@ function numberValue(value) {
   return null;
 }
 
+function saneFirstTextValue(value) {
+  const number = numberValue(value);
+  if (number === null || number < 0 || number > 600_000) {
+    return null;
+  }
+  return number;
+}
+
 function stringValue(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function normalizeRoutingToken(value) {
+  return stringValue(value)?.toLowerCase().replaceAll("-", "_") || "";
 }
 
 function redactProvider(provider) {
@@ -242,6 +324,9 @@ function parseRouting(metadata) {
       : Array.isArray(routingDecision?.fallback_chain)
         ? routingDecision.fallback_chain
         : [],
+    settingsSource: stringValue(
+      firstDefined(routingDecision?.settingsSource, routingDecision?.settings_source),
+    ),
     selectedModel,
     selectedProvider,
     serviceModelSlot: stringValue(
@@ -250,20 +335,38 @@ function parseRouting(metadata) {
   };
 }
 
+function isResponsiveChatLatencyRun(routing) {
+  return (
+    normalizeRoutingToken(routing.decisionSource) === "responsive_chat_auto" ||
+    normalizeRoutingToken(routing.serviceModelSlot) === "responsive_chat" ||
+    normalizeRoutingToken(routing.settingsSource) === "service_models.responsive_chat"
+  );
+}
+
 function parseRun(row) {
   const metadata = parseJsonObject(row.metadata) || {};
   const routing = parseRouting(metadata);
   const provider = redactProvider(routing.selectedProvider) || "(unknown)";
   const model = routing.selectedModel || "(unknown)";
   const decisionSource = routing.decisionSource || "(unknown)";
+  const metadataFirstTextMs = saneFirstTextValue(
+    firstDefined(metadata.model_first_text_delta_ms, metadata.modelFirstTextDeltaMs),
+  );
+  const timelineFirstTextMs =
+    row.status === "success" ? saneFirstTextValue(row.timeline_first_text_delta_ms) : null;
+  const firstTextMs = metadataFirstTextMs ?? timelineFirstTextMs;
 
   return {
     createdAt: row.created_at || null,
     decisionSource,
     durationMs: numberValue(row.duration_ms),
-    firstTextMs: numberValue(
-      firstDefined(metadata.model_first_text_delta_ms, metadata.modelFirstTextDeltaMs),
-    ),
+    firstTextMs,
+    firstTextSource:
+      metadataFirstTextMs !== null
+        ? "agent_runs.metadata"
+        : timelineFirstTextMs !== null
+          ? "thread_items.timeline"
+          : null,
     firstThinkingMs: numberValue(
       firstDefined(metadata.model_first_thinking_delta_ms, metadata.modelFirstThinkingDeltaMs),
     ),
@@ -274,6 +377,7 @@ function parseRun(row) {
     model,
     provider,
     routing,
+    responsiveLatencyEligible: isResponsiveChatLatencyRun(routing),
     status: row.status || "(unknown)",
   };
 }
@@ -321,6 +425,10 @@ function buildGroupKey(run) {
   return `${run.decisionSource}\u0000${run.provider}\u0000${run.model}`;
 }
 
+function buildResponsiveGroupKey(run) {
+  return `${run.provider}\u0000${run.model}`;
+}
+
 function buildReport({ dbPath, generatedAt = new Date().toISOString(), limitRuns }) {
   if (!fs.existsSync(dbPath)) {
     throw new Error(`DB not found: ${dbPath}`);
@@ -329,7 +437,31 @@ function buildReport({ dbPath, generatedAt = new Date().toISOString(), limitRuns
   const safeLimit = normalizePositiveInt(limitRuns, DEFAULT_LIMIT_RUNS);
   const rows = sqliteJson(
     dbPath,
-    `SELECT id, status, duration_ms, metadata, created_at
+    `SELECT id,
+            status,
+            duration_ms,
+            metadata,
+            created_at,
+            session_id,
+            (
+              SELECT CAST((julianday(agent_item.started_at) - julianday(user_item.started_at)) * 86400000 AS INTEGER)
+              FROM agent_thread_items AS user_item
+              JOIN agent_thread_items AS agent_item
+                ON agent_item.session_id = user_item.session_id
+               AND agent_item.item_type = 'agent_message'
+               AND (
+                 json_extract(agent_runs.metadata, '$.turn_state.turn_id') IS NULL
+                 OR agent_item.turn_id = json_extract(agent_runs.metadata, '$.turn_state.turn_id')
+               )
+              WHERE user_item.session_id = agent_runs.session_id
+                AND user_item.item_type = 'user_message'
+                AND (
+                  json_extract(agent_runs.metadata, '$.turn_state.turn_id') IS NULL
+                  OR user_item.turn_id = json_extract(agent_runs.metadata, '$.turn_state.turn_id')
+                )
+              ORDER BY user_item.sequence ASC, agent_item.sequence ASC
+              LIMIT 1
+            ) AS timeline_first_text_delta_ms
      FROM agent_runs
      WHERE metadata IS NOT NULL
      ORDER BY created_at DESC
@@ -337,6 +469,7 @@ function buildReport({ dbPath, generatedAt = new Date().toISOString(), limitRuns
   );
   const runs = rows.map(parseRun);
   const groups = new Map();
+  const responsiveLatencyGroups = new Map();
 
   for (const run of runs) {
     const key = buildGroupKey(run);
@@ -346,6 +479,7 @@ function buildReport({ dbPath, generatedAt = new Date().toISOString(), limitRuns
         durationStats: null,
         firstTextStats: null,
         firstTextCount: 0,
+        firstTextSourceCounts: {},
         model: run.model,
         provider: run.provider,
         runs: [],
@@ -358,9 +492,43 @@ function buildReport({ dbPath, generatedAt = new Date().toISOString(), limitRuns
     group.statusCounts[run.status] = (group.statusCounts[run.status] || 0) + 1;
     if (run.firstTextMs !== null) {
       group.firstTextCount += 1;
+      group.firstTextSourceCounts[run.firstTextSource] =
+        (group.firstTextSourceCounts[run.firstTextSource] || 0) + 1;
     }
     if (run.routing.selectedProvider || run.routing.selectedModel || run.routing.decisionReason) {
       group.withRoutingEvidence += 1;
+    }
+
+    if (run.responsiveLatencyEligible) {
+      const responsiveKey = buildResponsiveGroupKey(run);
+      if (!responsiveLatencyGroups.has(responsiveKey)) {
+        responsiveLatencyGroups.set(responsiveKey, {
+          decisionSourceCounts: {},
+          durationStats: null,
+          firstTextStats: null,
+          firstTextCount: 0,
+          firstTextSourceCounts: {},
+          model: run.model,
+          provider: run.provider,
+          runs: [],
+          statusCounts: {},
+          withRoutingEvidence: 0,
+        });
+      }
+      const responsiveGroup = responsiveLatencyGroups.get(responsiveKey);
+      responsiveGroup.runs.push(run);
+      responsiveGroup.statusCounts[run.status] =
+        (responsiveGroup.statusCounts[run.status] || 0) + 1;
+      responsiveGroup.decisionSourceCounts[run.decisionSource] =
+        (responsiveGroup.decisionSourceCounts[run.decisionSource] || 0) + 1;
+      if (run.firstTextMs !== null) {
+        responsiveGroup.firstTextCount += 1;
+        responsiveGroup.firstTextSourceCounts[run.firstTextSource] =
+          (responsiveGroup.firstTextSourceCounts[run.firstTextSource] || 0) + 1;
+      }
+      if (run.routing.selectedProvider || run.routing.selectedModel || run.routing.decisionReason) {
+        responsiveGroup.withRoutingEvidence += 1;
+      }
     }
   }
 
@@ -371,6 +539,32 @@ function buildReport({ dbPath, generatedAt = new Date().toISOString(), limitRuns
         decisionSource: group.decisionSource,
         durationStats: summarizeNumbers(group.runs.map((run) => run.durationMs)),
         firstTextCount: group.firstTextCount,
+        firstTextSourceCounts: group.firstTextSourceCounts,
+        firstTextStats: summarizeNumbers(group.runs.map((run) => run.firstTextMs)),
+        model: group.model,
+        provider: group.provider,
+        runCount,
+        statusCounts: group.statusCounts,
+        withRoutingEvidence: group.withRoutingEvidence,
+      };
+    })
+    .sort((left, right) => {
+      const firstTextDelta = right.firstTextCount - left.firstTextCount;
+      if (firstTextDelta !== 0) {
+        return firstTextDelta;
+      }
+      return right.runCount - left.runCount;
+    });
+
+  const responsiveLatencyGroupSummaries = [...responsiveLatencyGroups.values()]
+    .map((group) => {
+      const runCount = group.runs.length;
+      return {
+        decisionSourceCounts: group.decisionSourceCounts,
+        decisionSources: Object.keys(group.decisionSourceCounts).sort(),
+        durationStats: summarizeNumbers(group.runs.map((run) => run.durationMs)),
+        firstTextCount: group.firstTextCount,
+        firstTextSourceCounts: group.firstTextSourceCounts,
         firstTextStats: summarizeNumbers(group.runs.map((run) => run.firstTextMs)),
         model: group.model,
         provider: group.provider,
@@ -398,13 +592,17 @@ function buildReport({ dbPath, generatedAt = new Date().toISOString(), limitRuns
         "status counts",
         "duration stats",
         "first text TTFT stats",
+        "first text source counts",
         "routing evidence count",
       ],
       omittedFields: ["prompt", "assistant response", "error_message", "secrets", "run ids"],
     },
+    responsiveLatencyGroups: responsiveLatencyGroupSummaries,
     summary: {
       firstTextRuns: runs.filter((run) => run.firstTextMs !== null).length,
       groups: groupSummaries.length,
+      responsiveLatencyGroups: responsiveLatencyGroupSummaries.length,
+      responsiveLatencyRuns: runs.filter((run) => run.responsiveLatencyEligible).length,
       runs: runs.length,
       routingEvidenceRuns: runs.filter(
         (run) => run.routing.selectedProvider || run.routing.selectedModel || run.routing.decisionReason,
@@ -418,6 +616,196 @@ function statusSummary(statusCounts) {
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([status, count]) => `${status}:${count}`)
     .join(" / ");
+}
+
+function statusCount(statusCounts, status) {
+  return Number(statusCounts?.[status] || 0);
+}
+
+function errorLikeSampleCount(statusCounts) {
+  return Object.entries(statusCounts || {}).reduce((total, [status, count]) => {
+    if (status === "success" || status === "running") {
+      return total;
+    }
+    return total + Number(count || 0);
+  }, 0);
+}
+
+function isFallbackOnlyResponsiveGroup(group, minimum) {
+  return (
+    group.firstTextCount < minimum &&
+    statusCount(group.statusCounts, "success") === 0 &&
+    errorLikeSampleCount(group.statusCounts) > 0
+  );
+}
+
+function buildResponsiveMatrixCheck(
+  report,
+  {
+    minFirstTextPerGroup,
+    preset = "",
+    requiredModels = [],
+    requiredProviders = [],
+  },
+) {
+  const minimum = normalizeNonNegativeInt(
+    minFirstTextPerGroup,
+    DEFAULT_MIN_FIRST_TEXT_PER_RESPONSIVE_GROUP,
+  );
+  const responsiveGroups = report.responsiveLatencyGroups || [];
+  const fallbackOnlyGroups = responsiveGroups
+    .filter((group) => isFallbackOnlyResponsiveGroup(group, minimum))
+    .map((group) => ({
+      decisionSources: group.decisionSources || [],
+      firstTextCount: group.firstTextCount,
+      minimum,
+      model: group.model,
+      provider: group.provider,
+      runCount: group.runCount,
+      status: statusSummary(group.statusCounts) || "n/a",
+    }));
+  const missingGroups = responsiveGroups
+    .filter((group) => group.firstTextCount < minimum)
+    .filter((group) => !isFallbackOnlyResponsiveGroup(group, minimum))
+    .map((group) => ({
+      decisionSources: group.decisionSources || [],
+      firstTextCount: group.firstTextCount,
+      minimum,
+      model: group.model,
+      neededFirstTextSamples: minimum - group.firstTextCount,
+      provider: group.provider,
+      runCount: group.runCount,
+      status: statusSummary(group.statusCounts) || "n/a",
+    }));
+  const missingRequiredProviders = requiredProviders
+    .filter((provider) => provider)
+    .filter(
+      (provider) => !responsiveGroups.some((group) => group.provider === provider),
+    );
+  const missingRequiredModels = requiredModels
+    .filter((model) => model)
+    .filter((model) => !responsiveGroups.some((group) => group.model === model));
+
+  return {
+    fallbackOnlyGroups,
+    firstTextTargetPerGroup: minimum,
+    missingGroups,
+    missingRequiredModels,
+    missingRequiredProviders,
+    passingGroups: responsiveGroups.length - missingGroups.length - fallbackOnlyGroups.length,
+    preset,
+    requiredModels: requiredModels.filter(Boolean),
+    requiredProviders: requiredProviders.filter(Boolean),
+    responsiveGroupKind: "responsive_chat_latency",
+    responsiveGroups: responsiveGroups.length,
+    status:
+      responsiveGroups.length > 0 &&
+      missingGroups.length === 0 &&
+      missingRequiredProviders.length === 0 &&
+      missingRequiredModels.length === 0
+        ? "pass"
+        : "fail",
+    totalNeededFirstTextSamples: missingGroups.reduce(
+      (total, group) => total + group.neededFirstTextSamples,
+      0,
+    ),
+  };
+}
+
+function renderMatrixCheckMarkdown(matrixCheck) {
+  const lines = [
+    "",
+    "## Responsive matrix check",
+    "",
+    `- status: ${matrixCheck.status}`,
+    `- responsive_chat latency groups: ${matrixCheck.responsiveGroups}`,
+    `- passing groups: ${matrixCheck.passingGroups}`,
+    `- fallback-only groups: ${matrixCheck.fallbackOnlyGroups.length}`,
+    `- first-text target per group: ${matrixCheck.firstTextTargetPerGroup}`,
+    `- additional first-text samples needed: ${matrixCheck.totalNeededFirstTextSamples}`,
+  ];
+  if (matrixCheck.preset) {
+    lines.push(`- preset: ${matrixCheck.preset}`);
+  }
+  if (matrixCheck.requiredProviders.length > 0) {
+    lines.push(`- required providers: ${matrixCheck.requiredProviders.join(", ")}`);
+  }
+  if (matrixCheck.requiredModels.length > 0) {
+    lines.push(`- required models: ${matrixCheck.requiredModels.join(", ")}`);
+  }
+  if (matrixCheck.missingRequiredProviders.length > 0) {
+    lines.push(`- missing required providers: ${matrixCheck.missingRequiredProviders.join(", ")}`);
+  }
+  if (matrixCheck.missingRequiredModels.length > 0) {
+    lines.push(`- missing required models: ${matrixCheck.missingRequiredModels.join(", ")}`);
+  }
+  if (matrixCheck.missingGroups.length === 0) {
+    lines.push("- missing groups: none");
+  } else {
+    lines.push("- missing groups:");
+    for (const group of matrixCheck.missingGroups) {
+      lines.push(
+        [
+          `  - ${markdownInlineCode(`${group.provider}/${group.model}`)}`,
+          `${group.firstTextCount}/${group.minimum} first-text samples,`,
+          `need ${group.neededFirstTextSamples} more,`,
+          `${group.runCount} runs, status ${group.status}`,
+          group.decisionSources?.length ? `sources ${group.decisionSources.join("/")}` : "",
+        ].join(" "),
+      );
+    }
+  }
+
+  if (matrixCheck.fallbackOnlyGroups.length === 0) {
+    lines.push("- fallback-only groups: none");
+  } else {
+    lines.push("- fallback-only groups:");
+    for (const group of matrixCheck.fallbackOnlyGroups) {
+      lines.push(
+        [
+          `  - ${markdownInlineCode(`${group.provider}/${group.model}`)}`,
+          `${group.runCount} runs, status ${group.status},`,
+          "kept as routing fallback evidence rather than first-text baseline",
+          group.decisionSources?.length ? `sources ${group.decisionSources.join("/")}` : "",
+        ].join(" "),
+      );
+    }
+  }
+  return lines;
+}
+
+function reportMatrixCheckFailure(matrixCheck) {
+  const missing = matrixCheck.missingGroups
+    .map((group) => `${group.provider}/${group.model} (${group.firstTextCount}/${group.minimum})`)
+    .join(", ");
+  const missingProviders =
+    matrixCheck.missingRequiredProviders.length > 0
+      ? `Missing required providers: ${matrixCheck.missingRequiredProviders.join(", ")}.`
+      : "";
+  const missingModels =
+    matrixCheck.missingRequiredModels.length > 0
+      ? `Missing required models: ${matrixCheck.missingRequiredModels.join(", ")}.`
+      : "";
+  const fallbackOnly =
+    matrixCheck.fallbackOnlyGroups.length > 0
+      ? `Fallback-only groups: ${matrixCheck.fallbackOnlyGroups
+          .map((group) => `${group.provider}/${group.model} (${group.status})`)
+          .join(", ")}.`
+      : "";
+  console.error(
+    [
+      "Responsive matrix check failed:",
+      `${matrixCheck.passingGroups}/${matrixCheck.responsiveGroups} groups passed`,
+      `with target ${matrixCheck.firstTextTargetPerGroup} first-text samples per responsive_chat latency group.`,
+      `Need ${matrixCheck.totalNeededFirstTextSamples} additional first-text samples.`,
+      missing ? `Missing: ${missing}` : "",
+      fallbackOnly,
+      missingProviders,
+      missingModels,
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
 }
 
 function renderMarkdown(report, { limitGroups }) {
@@ -435,6 +823,8 @@ function renderMarkdown(report, { limitGroups }) {
     `- groups: ${report.summary.groups}`,
     `- runs with routing evidence: ${report.summary.routingEvidenceRuns}`,
     `- runs with first text TTFT: ${report.summary.firstTextRuns}`,
+    `- responsive_chat latency runs: ${report.summary.responsiveLatencyRuns}`,
+    `- responsive_chat latency groups: ${report.summary.responsiveLatencyGroups}`,
     "- privacy: prompt / response / error_message are not exported",
     "",
     "## Group summary",
@@ -458,6 +848,32 @@ function renderMarkdown(report, { limitGroups }) {
     );
   }
 
+  const responsiveLatencyGroups = (report.responsiveLatencyGroups || []).slice(
+    0,
+    safeLimitGroups,
+  );
+  lines.push(
+    "",
+    "## Responsive chat latency groups",
+    "",
+    "| provider/model | runs | decision sources | status | routing evidence | first text samples | first text min/p50/avg/max | duration min/p50/avg/max |",
+    "| --- | ---: | --- | --- | ---: | ---: | --- | --- |",
+  );
+  for (const group of responsiveLatencyGroups) {
+    lines.push(
+      [
+        markdownInlineCode(`${group.provider}/${group.model}`),
+        String(group.runCount),
+        markdownCell(group.decisionSources.join(" / ") || "n/a"),
+        markdownCell(statusSummary(group.statusCounts) || "n/a"),
+        String(group.withRoutingEvidence),
+        String(group.firstTextCount),
+        formatStats(group.firstTextStats),
+        formatStats(group.durationStats),
+      ].join(" | ").replace(/^/, "| ").replace(/$/, " |"),
+    );
+  }
+
   lines.push("", "## Missing first-text TTFT candidates", "");
   if (missingFirstText.length === 0) {
     lines.push("- none with routing evidence");
@@ -471,6 +887,10 @@ function renderMarkdown(report, { limitGroups }) {
         ].join(" "),
       );
     }
+  }
+
+  if (report.matrixCheck) {
+    lines.push(...renderMatrixCheckMarkdown(report.matrixCheck));
   }
 
   return `${lines.join("\n")}\n`;
@@ -496,14 +916,30 @@ function main() {
     dbPath: path.resolve(args.dbPath),
     limitRuns: args.limitRuns,
   });
+  if (args.checkResponsiveMatrix) {
+    report.matrixCheck = buildResponsiveMatrixCheck(report, {
+      minFirstTextPerGroup: args.minFirstTextPerResponsiveGroup,
+      preset: args.matrixPreset,
+      requiredModels: args.requiredResponsiveModels,
+      requiredProviders: args.requiredResponsiveProviders,
+    });
+  }
   if (args.format === "json") {
     writeOutput(args.outputPath, `${JSON.stringify(report, null, 2)}\n`);
+    if (report.matrixCheck && report.matrixCheck.status !== "pass") {
+      reportMatrixCheckFailure(report.matrixCheck);
+      process.exitCode = 1;
+    }
     return;
   }
   if (args.format !== "markdown") {
     throw new Error(`Unsupported format: ${args.format}`);
   }
   writeOutput(args.outputPath, renderMarkdown(report, { limitGroups: args.limitGroups }));
+  if (report.matrixCheck && report.matrixCheck.status !== "pass") {
+    reportMatrixCheckFailure(report.matrixCheck);
+    process.exitCode = 1;
+  }
 }
 
 main();

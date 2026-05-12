@@ -584,6 +584,39 @@ describe("EmptyState", () => {
     ).toBeNull();
   });
 
+  it("从 Skills 页带回的技能应显示在首页输入框内的 @ 标签", async () => {
+    const skill = {
+      key: "local:writer",
+      name: "写作助手",
+      description: "本地补充技能",
+      directory: "writer",
+      installed: true,
+      sourceKind: "other",
+    } as Skill;
+    const container = renderEmptyState({
+      activeTheme: "general",
+      skills: [skill],
+      initialInputCapability: {
+        capabilityRoute: {
+          kind: "installed_skill",
+          skillKey: skill.key,
+          skillName: skill.name,
+        },
+        requestKey: 20260512,
+      },
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const badge = container.querySelector('[data-testid="input-skill-badge"]');
+    expect(badge).toBeTruthy();
+    expect(badge?.textContent).toContain("@");
+    expect(badge?.textContent).toContain("写作助手");
+  });
+
   it("首页添加资料入口应打开输入框资料中枢，而不是预填一段说明", async () => {
     const setInput = vi.fn();
     const onToggleKnowledgePack = vi.fn<(enabled: boolean) => void>();

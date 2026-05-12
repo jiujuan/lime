@@ -712,6 +712,76 @@ describe("http-client", () => {
     taskUnlisten();
   });
 
+  it("事件流如果在绑定 onopen 前已经打开，也应立即完成监听注册", async () => {
+    class MockEventSource {
+      static instances: MockEventSource[] = [];
+
+      onopen: (() => void) | null = null;
+      onerror: ((error: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      readyState = 1;
+      readonly close = vi.fn(() => {
+        this.readyState = 2;
+      });
+
+      constructor(readonly url: string) {
+        MockEventSource.instances.push(this);
+      }
+    }
+
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal(
+      "EventSource",
+      MockEventSource as unknown as typeof EventSource,
+    );
+
+    const unlistenPromise = listenViaHttpEvent("aster_stream_test", vi.fn());
+    await vi.advanceTimersByTimeAsync(0);
+
+    await expect(unlistenPromise).resolves.toEqual(expect.any(Function));
+    expect(MockEventSource.instances).toHaveLength(1);
+    expect(MockEventSource.instances[0]?.close).not.toHaveBeenCalled();
+  });
+
+  it("事件流已打开但浏览器遗漏 onopen 时，超时检查应按已连接处理", async () => {
+    class MockEventSource {
+      static instances: MockEventSource[] = [];
+
+      onopen: (() => void) | null = null;
+      onerror: ((error: Event) => void) | null = null;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      readyState = 0;
+      readonly close = vi.fn(() => {
+        this.readyState = 2;
+      });
+
+      constructor(readonly url: string) {
+        MockEventSource.instances.push(this);
+      }
+    }
+
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal(
+      "EventSource",
+      MockEventSource as unknown as typeof EventSource,
+    );
+
+    const unlistenPromise = listenViaHttpEvent("aster_stream_test", vi.fn());
+    await vi.advanceTimersByTimeAsync(0);
+    const source = MockEventSource.instances[0]!;
+    source.readyState = 1;
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    await expect(unlistenPromise).resolves.toEqual(expect.any(Function));
+    expect(source.close).not.toHaveBeenCalled();
+  });
+
   it("事件流本地冷启动超过 1.5 秒但未超出桥接窗口时不应误判失败", async () => {
     class MockEventSource {
       static instances: MockEventSource[] = [];

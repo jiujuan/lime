@@ -36,13 +36,20 @@ import type {
   MessageImageWorkbenchPreview,
 } from "../types";
 import {
-  buildImageWorkbenchProcessDescriptor,
   resolveImageWorkbenchAssistantMessageId,
   resolveScopedImageWorkbenchApplyTarget,
   type ImageWorkbenchOutput,
   type ImageWorkbenchTask,
   type SessionImageWorkbenchState,
 } from "./imageWorkbenchHelpers";
+import {
+  buildImageWorkbenchAssistantContent,
+  buildImageWorkbenchCaption,
+} from "../utils/imageWorkbenchPresentation";
+import {
+  isImageWorkbenchStatusOnlyText,
+  isImageWorkbenchSubmissionTemplateText,
+} from "../utils/imageWorkbenchStatusText";
 
 const IMAGE_TASK_EVENT_NAME = "lime://creation_task_submitted";
 const IMAGE_TASK_FILE_PREVIEW_MAX_SIZE = 256 * 1024;
@@ -73,9 +80,14 @@ interface CreationTaskSubmittedPayload {
   mode?: string;
   layout_hint?: string;
   raw_text?: string;
+  provider?: string;
+  provider_id?: string;
+  model?: string;
   count?: number;
   reused_existing?: boolean;
   session_id?: string;
+  thread_id?: string;
+  turn_id?: string;
   project_id?: string;
   content_id?: string;
   entry_source?: string;
@@ -183,6 +195,10 @@ interface SeedImageTaskRecord {
   artifactPath?: string;
 }
 
+function isDraftImageWorkbenchTaskId(taskId?: string | null): boolean {
+  return taskId?.trim().startsWith("draft-image-") === true;
+}
+
 function contentPartContainsProcess(part: ContentPart): boolean {
   return part.type !== "text";
 }
@@ -200,7 +216,7 @@ function collectSeedImageTasks(messages?: Message[]): SeedImageTaskRecord[] {
     }
 
     const taskId = message.imageWorkbenchPreview?.taskId?.trim();
-    if (!taskId || seen.has(taskId)) {
+    if (!taskId || isDraftImageWorkbenchTaskId(taskId) || seen.has(taskId)) {
       return;
     }
 
@@ -906,6 +922,7 @@ function messageHasImageWorkbenchProcessSignal(message: Message): boolean {
     Boolean(message.isThinking) ||
     Boolean(message.runtimeStatus) ||
     Boolean(message.imageWorkbenchPreview) ||
+    isImageWorkbenchSubmissionTemplateText(message.content) ||
     (message.toolCalls?.length || 0) > 0 ||
     (message.contentParts || []).some(contentPartContainsProcess)
   );
@@ -1029,6 +1046,19 @@ function sanitizePreviewPrompt(value?: string): string {
   }
 
   return trimmed;
+}
+
+function resolveDisplayPromptFromImageTaskPayload(params: {
+  payload?: Record<string, unknown> | null;
+  fallbackPrompt: string;
+}): string {
+  const rawText = sanitizePreviewPrompt(
+    readString([params.payload || null], ["raw_text", "rawText"]) || "",
+  );
+  const parsedRawText = rawText ? parseImageWorkbenchCommand(rawText) : null;
+  const parsedPrompt = sanitizePreviewPrompt(parsedRawText?.prompt || "");
+
+  return parsedPrompt || rawText || params.fallbackPrompt;
 }
 
 function syncDocumentInlineImageTask(params: {
@@ -1218,38 +1248,6 @@ function resolveWorkbenchStatus(
   }
 }
 
-function resolvePreviewMessageContent(params: {
-  taskLabel: string;
-  normalizedStatus: string;
-  successCount: number;
-  failureMessage?: string;
-}): string {
-  const label = params.taskLabel;
-  switch (params.normalizedStatus) {
-    case "partial":
-      return `${label}已返回部分结果。`;
-    case "succeeded":
-      return params.successCount > 0
-        ? `${label}已完成，共生成 ${params.successCount} 张。`
-        : `${label}已完成。`;
-    case "cancelled":
-      return params.failureMessage
-        ? `${label}已取消：${params.failureMessage}`
-        : `${label}已取消。`;
-    case "failed":
-      return params.failureMessage
-        ? `${label}失败：${params.failureMessage}`
-        : `${label}失败。`;
-    case "queued":
-      return `${label}已进入队列，正在等待执行。`;
-    case "running":
-      return `${label}正在生成中。`;
-    case "pending":
-    default:
-      return `${label}已创建，正在准备执行。`;
-  }
-}
-
 function resolvePendingProgressPhase(status?: string): string {
   switch (normalizeTaskStatus(status)) {
     case "partial":
@@ -1271,27 +1269,6 @@ function resolvePendingProgressPhase(status?: string): string {
 }
 
 function resolvePreviewPhaseFromWorkbenchTaskStatus(
-  status: ImageWorkbenchTask["status"],
-): string {
-  switch (status) {
-    case "complete":
-      return "succeeded";
-    case "partial":
-      return "partial";
-    case "cancelled":
-      return "cancelled";
-    case "error":
-      return "failed";
-    case "queued":
-      return "queued";
-    case "routing":
-    case "running":
-    default:
-      return "running";
-  }
-}
-
-function resolveNormalizedStatusFromWorkbenchTaskStatus(
   status: ImageWorkbenchTask["status"],
 ): string {
   switch (status) {
@@ -1507,6 +1484,10 @@ function buildParsedImageTaskSnapshot(params: {
       ["prompt", "summary", "title", "placeholder_text", "placeholderText"],
     ) || "",
   );
+  const displayPrompt = resolveDisplayPromptFromImageTaskPayload({
+    payload,
+    fallbackPrompt: prompt,
+  });
   const fallbackProviderName = readString(
     [currentAttempt, payload],
     ["provider", "providerName", "provider_name", "providerId", "provider_id"],
@@ -1651,9 +1632,23 @@ function buildParsedImageTaskSnapshot(params: {
     : undefined;
   const taskFilePath = normalizeImageTaskPath(params.taskFilePath) ?? null;
   const artifactPath = normalizeImageTaskPath(params.artifactPath) ?? null;
+  const previewProviderName =
+    outputs[0]?.providerName ?? fallbackProviderName ?? null;
+  const previewModelName =
+    outputs[0]?.modelName ??
+    fallbackModelName ??
+    runtimeContract?.model ??
+    null;
+  const previewPrompt = displayPrompt || prompt || `${taskLabel}进行中`;
+  const previewCaption = buildImageWorkbenchCaption({
+    prompt: previewPrompt,
+    status: previewStatus,
+    imageCount: successCount || undefined,
+    statusMessage: lastError || null,
+  });
   const preview: MessageImageWorkbenchPreview = {
     taskId: params.taskId,
-    prompt: prompt || `${taskLabel}进行中`,
+    prompt: previewPrompt,
     mode: taskMode,
     status: previewStatus,
     projectId: params.projectId ?? null,
@@ -1665,6 +1660,9 @@ function buildParsedImageTaskSnapshot(params: {
     imageCount:
       previewStatus === "running" ? expectedCount : successCount || undefined,
     expectedImageCount: expectedCount,
+    providerName: previewProviderName,
+    modelName: previewModelName,
+    caption: previewCaption,
     layoutHint,
     storyboardSlots: storyboardSlots.length > 0 ? storyboardSlots : undefined,
     sourceImageUrl,
@@ -1683,88 +1681,30 @@ function buildParsedImageTaskSnapshot(params: {
     runtimeContract,
   };
 
-  const runtimeStatus =
-    previewStatus === "running"
-      ? {
-          phase:
-            normalizedStatus === "pending" || normalizedStatus === "queued"
-              ? ("preparing" as const)
-              : ("routing" as const),
-          title: `${taskLabel}进行中`,
-          detail:
-            readString([progressRecord], ["message"]) ||
-            (prompt
-              ? `正在处理：${prompt}`
-              : "任务已提交，生成完成后会自动展示结果。"),
-          checkpoints: ["创建任务文件", "轮询任务状态", "回填图片结果"],
-        }
-      : previewStatus === "cancelled"
-        ? {
-            phase: "cancelled" as const,
-            title: `${taskLabel}已取消`,
-            detail: lastError || "任务已停止，不会继续生成新的图片结果。",
-            checkpoints: [
-              "已保留当前任务记录",
-              "可在图片画布重新生成",
-              "如需继续可补充新的说明",
-            ],
-          }
-        : previewStatus === "failed"
-          ? {
-              phase: "failed" as const,
-              title: `${taskLabel}失败`,
-              detail: lastError || "任务未返回可用结果。",
-              checkpoints: [
-                "检查任务文件",
-                "查看失败详情",
-                "可在图片画布继续排查",
-              ],
-            }
-          : undefined;
   const messageTimestamp = new Date(createdAt);
-  const processDescriptor = buildImageWorkbenchProcessDescriptor({
-    taskId: params.taskId,
-    prompt: prompt || `${taskLabel}进行中`,
-    mode: taskMode,
-    status: previewStatus,
-    rawText:
-      readString([payload], ["raw_text", "rawText"]) ||
-      readString([params.taskRecord], ["summary"]) ||
-      undefined,
-    count: expectedCount,
-    successCount,
-    size: fallbackSize,
-    imageUrl: outputs[0]?.url ?? null,
-    failureMessage: lastError,
-    startedAt: messageTimestamp,
-    endedAt: previewStatus === "running" ? undefined : messageTimestamp,
-  });
 
   return {
     taskId: params.taskId,
     message: {
       id: resolveImageWorkbenchAssistantMessageId(params.taskId),
       role: "assistant",
-      content: resolvePreviewMessageContent({
-        taskLabel,
-        normalizedStatus,
-        successCount,
-        failureMessage: lastError,
+      content: buildImageWorkbenchAssistantContent({
+        prompt: previewPrompt,
+        mode: taskMode,
+        modelName: previewModelName,
+        expectedImageCount: expectedCount,
+        layoutHint,
       }),
       timestamp: messageTimestamp,
-      isThinking: previewStatus === "running",
-      toolCalls: processDescriptor.toolCalls,
-      contentParts: processDescriptor.contentParts,
       imageWorkbenchPreview: preview,
-      runtimeStatus,
     },
     task: {
       sessionId: params.taskId,
       id: params.taskId,
       mode: taskMode,
       status: resolveWorkbenchStatus(normalizedStatus),
-      prompt: prompt || `${taskLabel}进行中`,
-      rawText: prompt || `${taskLabel}进行中`,
+      prompt: previewPrompt,
+      rawText: prompt || previewPrompt,
       expectedCount,
       layoutHint,
       storyboardSlots: storyboardSlots.length > 0 ? storyboardSlots : undefined,
@@ -1818,6 +1758,18 @@ function buildPendingImageTaskSnapshot(params: {
     readString([params.payload || null], ["layout_hint", "layoutHint"]) || null;
   const taskLabel = resolveTaskLabel(params.taskType, taskMode);
   const startedAt = new Date();
+  const previewPrompt =
+    resolveDisplayPromptFromImageTaskPayload({
+      payload: params.payload,
+      fallbackPrompt:
+        readString([params.payload || null], ["prompt", "summary", "title"]) ||
+        "",
+    }) || `${taskLabel}进行中`;
+  const previewModelName =
+    readString(
+      [params.payload || null],
+      ["model", "modelName", "model_name"],
+    ) || null;
   return (
     buildParsedImageTaskSnapshot({
       taskRecord: {
@@ -1828,7 +1780,7 @@ function buildPendingImageTaskSnapshot(params: {
         payload: params.payload || {},
         progress: {
           phase: resolvePendingProgressPhase(params.status),
-          message: params.progressMessage || "任务已提交，正在排队处理。",
+          message: params.progressMessage || "正在生成图片。",
         },
         created_at: new Date().toISOString(),
       },
@@ -1844,23 +1796,28 @@ function buildPendingImageTaskSnapshot(params: {
       message: {
         id: resolveImageWorkbenchAssistantMessageId(params.taskId),
         role: "assistant",
-        content: `${taskLabel}已创建，正在准备执行。`,
-        timestamp: startedAt,
-        isThinking: true,
-        ...buildImageWorkbenchProcessDescriptor({
-          taskId: params.taskId,
-          prompt: `${taskLabel}进行中`,
+        content: buildImageWorkbenchAssistantContent({
+          prompt: previewPrompt,
           mode: taskMode,
-          status: "running",
-          count: expectedCount,
-          startedAt,
+          modelName: previewModelName,
+          expectedImageCount: expectedCount,
+          layoutHint,
         }),
+        timestamp: startedAt,
+        isThinking: false,
         imageWorkbenchPreview: {
           taskId: params.taskId,
-          prompt: `${taskLabel}进行中`,
+          prompt: previewPrompt,
           mode: taskMode,
           status: "running",
           expectedImageCount: expectedCount,
+          providerName:
+            readString(
+              [params.payload || null],
+              ["provider", "providerName", "provider_name", "provider_id"],
+            ) || null,
+          modelName: previewModelName,
+          caption: null,
           projectId: params.projectId ?? null,
           contentId: params.contentId ?? null,
           taskFilePath: normalizeImageTaskPath(params.taskFilePath) ?? null,
@@ -1870,7 +1827,7 @@ function buildPendingImageTaskSnapshot(params: {
           storyboardSlots:
             storyboardSlots.length > 0 ? storyboardSlots : undefined,
           phase: resolvePendingProgressPhase(params.status),
-          statusMessage: params.progressMessage || "任务已提交，正在排队处理。",
+          statusMessage: params.progressMessage || "正在生成图片。",
         },
       },
       task: {
@@ -1878,8 +1835,8 @@ function buildPendingImageTaskSnapshot(params: {
         id: params.taskId,
         mode: taskMode,
         status: "queued",
-        prompt: `${taskLabel}进行中`,
-        rawText: `${taskLabel}进行中`,
+        prompt: previewPrompt,
+        rawText: previewPrompt,
         expectedCount,
         layoutHint,
         storyboardSlots:
@@ -1941,15 +1898,6 @@ function buildImageTaskSnapshotFromArtifactOutput(params: {
     artifactPath: params.artifact.artifact_path,
     canvasState: params.canvasState,
   });
-}
-
-function normalizeImageWorkbenchStatusMessageText(
-  value?: string | null,
-): string {
-  return (value || "")
-    .trim()
-    .replace(/\s+/g, "")
-    .replace(/[。,:：，；;、()（）【】[\]「」『』]/g, "");
 }
 
 function normalizeImageWorkbenchPreviewIdentityText(
@@ -2047,56 +1995,11 @@ function resolveImageWorkbenchPreviewIdentityKeys(
 }
 
 function isImageWorkbenchStatusOnlyMessage(message: Message): boolean {
-  const normalized = normalizeImageWorkbenchStatusMessageText(message.content);
-  if (!normalized) {
-    return true;
-  }
-
-  if (
-    normalized.includes("正在同步任务状态") ||
-    normalized.includes("正在排队处理中") ||
-    normalized.includes("状态排队中pending_submit")
-  ) {
-    return true;
-  }
-
-  return [
-    /^图片任务已创建正在准备执行$/,
-    /^图片任务已进入队列正在等待执行$/,
-    /^图片任务正在生成中$/,
-    /^图片任务已取消.*$/,
-    /^图片任务失败.*$/,
-    /^图片编辑任务已创建正在准备执行$/,
-    /^图片编辑任务已进入队列正在等待执行$/,
-    /^图片编辑任务正在生成中$/,
-    /^图片编辑任务已取消.*$/,
-    /^图片编辑任务失败.*$/,
-    /^图片重绘任务已创建正在准备执行$/,
-    /^图片重绘任务已进入队列正在等待执行$/,
-    /^图片重绘任务正在生成中$/,
-    /^图片重绘任务已取消.*$/,
-    /^图片重绘任务失败.*$/,
-  ].some((pattern) => pattern.test(normalized));
+  return isImageWorkbenchStatusOnlyText(message.content);
 }
 
 function isImageWorkbenchSubmissionTemplateMessage(message: Message): boolean {
-  const normalized = normalizeImageWorkbenchStatusMessageText(
-    message.content,
-  ).toLowerCase();
-  if (!normalized) {
-    return false;
-  }
-
-  return [
-    "任务详情",
-    "任务id",
-    "状态",
-    "模型",
-    "尺寸",
-    "提示词",
-    "下一步流程",
-    "当前状态",
-  ].every((keyword) => normalized.includes(keyword));
+  return isImageWorkbenchSubmissionTemplateText(message.content);
 }
 
 function shouldReplaceImageWorkbenchMessageBody(params: {
@@ -2113,9 +2016,17 @@ function shouldReplaceImageWorkbenchMessageBody(params: {
     previewsReferToSameImageWorkbenchTask(existingPreview, nextPreview) &&
     isImageWorkbenchSubmissionTemplateMessage(params.existingMessage) &&
     nextPreview.status !== "running";
+  const shouldUseCanonicalImageMessageBody =
+    Boolean(nextPreview) &&
+    (previewsReferToSameImageWorkbenchTask(existingPreview, nextPreview) ||
+      (Boolean(params.existingMessage.runtimeTurnId) &&
+        params.existingMessage.runtimeTurnId ===
+          params.nextMessage.runtimeTurnId));
 
   return (
+    shouldUseCanonicalImageMessageBody ||
     shouldPromoteTerminalSnapshot ||
+    isImageWorkbenchSubmissionTemplateMessage(params.existingMessage) ||
     params.existingMessage.id ===
       resolveImageWorkbenchAssistantMessageId(nextPreview.taskId) ||
     isImageWorkbenchStatusOnlyMessage(params.existingMessage)
@@ -2233,11 +2144,61 @@ function dedupeImageWorkbenchPreviewMessages(messages: Message[]): Message[] {
   return dedupedMessages;
 }
 
+function shouldMergeImageWorkbenchPreviewIntoPreviousMessage(
+  previous: Message | undefined,
+  current: Message,
+): boolean {
+  if (
+    !previous ||
+    previous.role !== "assistant" ||
+    current.role !== "assistant" ||
+    !current.imageWorkbenchPreview
+  ) {
+    return false;
+  }
+
+  if (
+    previous.runtimeTurnId &&
+    current.runtimeTurnId &&
+    previous.runtimeTurnId === current.runtimeTurnId
+  ) {
+    return true;
+  }
+
+  return isImageWorkbenchSubmissionTemplateMessage(previous);
+}
+
+function mergeAdjacentImageWorkbenchPreviewMessages(
+  messages: Message[],
+): Message[] {
+  const mergedMessages: Message[] = [];
+
+  messages.forEach((message) => {
+    const previous = mergedMessages.at(-1);
+    if (
+      shouldMergeImageWorkbenchPreviewIntoPreviousMessage(previous, message)
+    ) {
+      mergedMessages[mergedMessages.length - 1] =
+        mergeImageWorkbenchPreviewMessage({
+          existingMessage: previous!,
+          nextMessage: message,
+        });
+      return;
+    }
+
+    mergedMessages.push(message);
+  });
+
+  return mergedMessages;
+}
+
 function finalizePreviewMessages(
   previousMessages: Message[],
   nextMessages: Message[],
 ): Message[] {
-  const dedupedMessages = dedupeImageWorkbenchPreviewMessages(nextMessages);
+  const dedupedMessages = mergeAdjacentImageWorkbenchPreviewMessages(
+    dedupeImageWorkbenchPreviewMessages(nextMessages),
+  );
   if (
     dedupedMessages.length === previousMessages.length &&
     dedupedMessages.every(
@@ -2263,79 +2224,29 @@ function buildImageWorkbenchMessagePatchFromTask(params: {
   | "contentParts"
   | "runtimeStatus"
 > {
-  const normalizedStatus = resolveNormalizedStatusFromWorkbenchTaskStatus(
-    params.task.status,
-  );
-  const taskLabel = resolveTaskLabelFromMode(params.task.mode);
   const prompt =
-    params.preview.prompt || params.task.prompt || `${taskLabel}进行中`;
+    params.preview.prompt ||
+    params.task.prompt ||
+    `${resolveTaskLabelFromMode(params.task.mode)}进行中`;
   const startedAt = new Date(params.task.createdAt || Date.now());
-  const processDescriptor = buildImageWorkbenchProcessDescriptor({
-    taskId: params.task.id,
-    prompt,
-    mode: params.task.mode,
-    status: params.preview.status,
-    rawText: params.task.rawText || undefined,
-    count: params.task.expectedCount,
-    successCount: params.outputs.length,
-    size: params.preview.size,
-    imageUrl: params.preview.imageUrl || null,
-    failureMessage: params.task.failureMessage,
-    startedAt,
-    endedAt: params.preview.status === "running" ? undefined : startedAt,
-  });
 
   return {
-    content: resolvePreviewMessageContent({
-      taskLabel,
-      normalizedStatus,
-      successCount: params.outputs.length,
-      failureMessage: params.task.failureMessage || undefined,
+    content: buildImageWorkbenchAssistantContent({
+      prompt,
+      mode: params.task.mode,
+      modelName:
+        params.preview.modelName ||
+        params.outputs[0]?.modelName ||
+        params.task.runtimeContract?.model ||
+        null,
+      expectedImageCount: params.task.expectedCount,
+      layoutHint: params.preview.layoutHint ?? params.task.layoutHint ?? null,
     }),
     timestamp: startedAt,
-    isThinking: params.preview.status === "running",
-    toolCalls: processDescriptor.toolCalls,
-    contentParts: processDescriptor.contentParts,
-    runtimeStatus:
-      params.preview.status === "running"
-        ? {
-            phase:
-              params.task.status === "queued"
-                ? ("preparing" as const)
-                : ("routing" as const),
-            title: `${taskLabel}进行中`,
-            detail:
-              params.preview.statusMessage?.trim() ||
-              (prompt
-                ? `正在处理：${prompt}`
-                : "任务已提交，生成完成后会自动展示结果。"),
-            checkpoints: ["创建任务文件", "轮询任务状态", "回填图片结果"],
-          }
-        : params.preview.status === "cancelled"
-          ? {
-              phase: "cancelled" as const,
-              title: `${taskLabel}已取消`,
-              detail:
-                params.task.failureMessage ||
-                "任务已停止，不会继续生成新的图片结果。",
-              checkpoints: [
-                "已保留当前任务记录",
-                "可在图片画布重新生成",
-                "如需继续可补充新的说明",
-              ],
-            }
-          : params.preview.status === "failed"
-            ? {
-                phase: "failed" as const,
-                title: `${taskLabel}失败`,
-                detail: params.task.failureMessage || "任务未返回可用结果。",
-                checkpoints: [
-                  "检查任务文件",
-                  "查看失败详情",
-                  "可在图片画布继续排查",
-                ],
-              }
-            : undefined,
+    isThinking: false,
+    toolCalls: undefined,
+    contentParts: undefined,
+    runtimeStatus: undefined,
   };
 }
 
@@ -2350,9 +2261,13 @@ function buildImageWorkbenchPreviewMessageFromTask(params: {
   const previewStatus = resolvePreviewStatusFromWorkbenchTask(
     params.task.status,
   );
+  const previewProviderName = preferredOutput?.providerName ?? null;
+  const previewModelName =
+    preferredOutput?.modelName ?? params.task.runtimeContract?.model ?? null;
+  const previewPrompt = params.task.prompt || "图片任务";
   const preview: MessageImageWorkbenchPreview = {
     taskId: params.task.id,
-    prompt: params.task.prompt || "图片任务",
+    prompt: previewPrompt,
     mode: params.task.mode,
     status: previewStatus,
     projectId: params.projectId ?? null,
@@ -2368,6 +2283,14 @@ function buildImageWorkbenchPreviewMessageFromTask(params: {
           ? params.task.expectedCount
           : undefined,
     expectedImageCount: params.task.expectedCount,
+    providerName: previewProviderName,
+    modelName: previewModelName,
+    caption: buildImageWorkbenchCaption({
+      prompt: previewPrompt,
+      status: previewStatus,
+      imageCount: outputs.length || undefined,
+      statusMessage: params.task.failureMessage || null,
+    }),
     layoutHint: params.task.layoutHint ?? null,
     storyboardSlots: params.task.storyboardSlots,
     sourceImageUrl: params.task.sourceImageUrl ?? null,
@@ -2430,8 +2353,50 @@ function buildImageWorkbenchPreviewMessagesFromState(params: {
 function upsertPreviewMessage(
   messages: Message[],
   nextMessage: Message,
+  options?: {
+    runtimeTurnId?: string | null;
+  },
 ): Message[] {
   const nextMessages = [...messages];
+  const nextPreview = nextMessage.imageWorkbenchPreview;
+  const normalizedRuntimeTurnId = normalizeTaskRef(options?.runtimeTurnId);
+  if (nextPreview && normalizedRuntimeTurnId) {
+    const turnMatchedIndex = nextMessages.findIndex(
+      (message) =>
+        message.role === "assistant" &&
+        message.runtimeTurnId === normalizedRuntimeTurnId,
+    );
+    if (turnMatchedIndex >= 0) {
+      const existingTurnMessage = nextMessages[turnMatchedIndex];
+      const runtimeBoundNextMessage = {
+        ...nextMessage,
+        runtimeTurnId:
+          nextMessage.runtimeTurnId || existingTurnMessage.runtimeTurnId,
+      };
+      const mergedMessage = mergeImageWorkbenchPreviewMessage({
+        existingMessage: existingTurnMessage,
+        nextMessage: runtimeBoundNextMessage,
+      });
+      nextMessages[turnMatchedIndex] = mergedMessage;
+      const withoutDuplicatePreviewMessages = nextMessages.filter(
+        (message, index) =>
+          index === turnMatchedIndex ||
+          message.role !== "assistant" ||
+          !previewsReferToSameImageWorkbenchTask(
+            message.imageWorkbenchPreview,
+            nextPreview,
+          ),
+      );
+      if (
+        mergedMessage === existingTurnMessage &&
+        withoutDuplicatePreviewMessages.length === messages.length
+      ) {
+        return messages;
+      }
+      return finalizePreviewMessages(messages, withoutDuplicatePreviewMessages);
+    }
+  }
+
   const existingIndex = nextMessages.findIndex(
     (message) => message.id === nextMessage.id,
   );
@@ -2447,7 +2412,6 @@ function upsertPreviewMessage(
     return finalizePreviewMessages(messages, nextMessages);
   }
 
-  const nextPreview = nextMessage.imageWorkbenchPreview;
   if (nextPreview) {
     const taskMatchedIndex = nextMessages.findIndex(
       (message) =>
@@ -2635,6 +2599,14 @@ function patchMessagesWithImageWorkbenchState(params: {
     const nextPreviewStatus = resolvePreviewStatusFromWorkbenchTask(
       task.status,
     );
+    const nextProviderName =
+      preferredOutput?.providerName ?? preview.providerName ?? null;
+    const nextModelName =
+      preferredOutput?.modelName ??
+      preview.modelName ??
+      task.runtimeContract?.model ??
+      preview.runtimeContract?.model ??
+      null;
     const nextPreview: MessageImageWorkbenchPreview = {
       ...preview,
       prompt: preview.prompt || task.prompt,
@@ -2649,6 +2621,14 @@ function patchMessagesWithImageWorkbenchState(params: {
           : preview.previewImages,
       imageCount: outputs.length > 0 ? outputs.length : preview.imageCount,
       expectedImageCount: task.expectedCount || preview.expectedImageCount,
+      providerName: nextProviderName,
+      modelName: nextModelName,
+      caption: buildImageWorkbenchCaption({
+        prompt: preview.prompt || task.prompt,
+        status: nextPreviewStatus,
+        imageCount: outputs.length || preview.imageCount,
+        statusMessage: task.failureMessage || preview.statusMessage || null,
+      }),
       layoutHint: task.layoutHint ?? preview.layoutHint ?? null,
       storyboardSlots: task.storyboardSlots ?? preview.storyboardSlots,
       sourceImageUrl: task.sourceImageUrl ?? preview.sourceImageUrl ?? null,
@@ -3489,16 +3469,16 @@ export function useWorkspaceImageTaskPreviewRuntime({
       );
       const normalizedEventStatus = normalizeTaskStatus(payload.status);
       const progressMessage = payload.reused_existing
-        ? "已复用现有图片任务，正在同步最新状态。"
+        ? "正在生成图片。"
         : normalizedEventStatus === "succeeded"
-          ? "图片已生成完成，可在右侧查看结果。"
+          ? "图片生成完成。"
           : normalizedEventStatus === "partial"
-            ? "图片已返回部分结果，可在右侧继续查看。"
+            ? "图片返回部分结果。"
             : normalizedEventStatus === "failed"
-              ? "图片任务执行失败，可查看详情后重试。"
+              ? "图片生成失败。"
               : normalizedEventStatus === "cancelled"
-                ? "图片任务已取消。"
-                : "任务已提交，正在排队处理。";
+                ? "图片生成已取消。"
+                : "正在生成图片。";
       const pendingSnapshot =
         taskId && taskType && taskFamily === "image"
           ? buildPendingImageTaskSnapshot({
@@ -3511,9 +3491,14 @@ export function useWorkspaceImageTaskPreviewRuntime({
                 mode: payload.mode,
                 layout_hint: payload.layout_hint,
                 raw_text: payload.raw_text,
+                provider: payload.provider,
+                provider_id: payload.provider_id,
+                model: payload.model,
                 count:
                   typeof payload.count === "number" ? payload.count : undefined,
                 session_id: payload.session_id,
+                thread_id: payload.thread_id,
+                turn_id: payload.turn_id,
                 project_id: payload.project_id,
                 content_id: payload.content_id,
                 entry_source: payload.entry_source,
@@ -3535,7 +3520,9 @@ export function useWorkspaceImageTaskPreviewRuntime({
           : null;
       if (pendingSnapshot && taskId && taskType) {
         setChatMessages((previous) =>
-          upsertPreviewMessage(previous, pendingSnapshot.message),
+          upsertPreviewMessage(previous, pendingSnapshot.message, {
+            runtimeTurnId: payload.turn_id,
+          }),
         );
         updateCurrentImageWorkbenchState((current) =>
           mergeImageTaskSnapshot(current, pendingSnapshot),
@@ -3557,9 +3544,14 @@ export function useWorkspaceImageTaskPreviewRuntime({
               mode: payload.mode,
               layout_hint: payload.layout_hint,
               raw_text: payload.raw_text,
+              provider: payload.provider,
+              provider_id: payload.provider_id,
+              model: payload.model,
               count:
                 typeof payload.count === "number" ? payload.count : undefined,
               session_id: payload.session_id,
+              thread_id: payload.thread_id,
+              turn_id: payload.turn_id,
               project_id: payload.project_id,
               content_id: payload.content_id,
               entry_source: payload.entry_source,

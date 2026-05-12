@@ -1,13 +1,38 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { changeLimeLocale, getLimeI18n } from "@/i18n/createI18n";
 import {
+  buildTeamWorkspaceBoardCopy,
   buildTeamWorkspaceBoardSurfaceClassNames,
   resolveTeamWorkspaceBoardCopyState,
+  type TeamWorkspaceBoardCopy,
+  type TeamWorkspaceBoardTranslate,
 } from "./teamWorkspaceBoardPresentationSelectors";
 
 describe("teamWorkspaceBoardPresentationSelectors", () => {
+  let boardCopy: TeamWorkspaceBoardCopy;
+
+  beforeEach(async () => {
+    await changeLimeLocale("en-US");
+    const translate: TeamWorkspaceBoardTranslate = (key, options) =>
+      String(
+        getLimeI18n().t(
+          key as never,
+          {
+            ns: "agent",
+            ...(options ?? {}),
+          } as never,
+        ),
+      );
+    boardCopy = buildTeamWorkspaceBoardCopy({
+      locale: "en-US",
+      translate,
+    });
+  });
+
   it("应为无真实成员画布的 schedule 状态返回稳定文案", () => {
     expect(
       resolveTeamWorkspaceBoardCopyState({
+        copy: boardCopy,
         detailExpanded: false,
         dispatchPreviewStatus: "forming",
         hasRuntimeSessions: false,
@@ -17,13 +42,14 @@ describe("teamWorkspaceBoardPresentationSelectors", () => {
         visibleSessionsCount: 0,
       }),
     ).toMatchObject({
-      detailToggleLabel: "查看细节",
+      detailToggleLabel: "View details",
       detailVisible: false,
-      memberCanvasTitle: "当前进展",
+      memberCanvasTitle: "Current progress",
     });
 
     expect(
       resolveTeamWorkspaceBoardCopyState({
+        copy: boardCopy,
         detailExpanded: false,
         dispatchPreviewStatus: "forming",
         hasRuntimeSessions: false,
@@ -32,9 +58,10 @@ describe("teamWorkspaceBoardPresentationSelectors", () => {
         shellExpanded: false,
         visibleSessionsCount: 0,
       }).memberCanvasSubtitle,
-    ).toContain("正在准备当前任务分工");
+    ).toContain("Preparing the current task split");
     expect(
       resolveTeamWorkspaceBoardCopyState({
+        copy: boardCopy,
         detailExpanded: false,
         dispatchPreviewStatus: "failed",
         hasRuntimeSessions: false,
@@ -43,11 +70,12 @@ describe("teamWorkspaceBoardPresentationSelectors", () => {
         shellExpanded: false,
         visibleSessionsCount: 0,
       }).memberCanvasSubtitle,
-    ).toContain("任务分工准备失败");
+    ).toContain("task split failed");
   });
 
   it("应为真实任务画布与嵌入态返回紧凑壳层样式", () => {
     const copyState = resolveTeamWorkspaceBoardCopyState({
+      copy: boardCopy,
       detailExpanded: false,
       dispatchPreviewStatus: null,
       hasRuntimeSessions: true,
@@ -65,7 +93,9 @@ describe("teamWorkspaceBoardPresentationSelectors", () => {
       useCompactCanvasChrome: true,
     });
 
-    expect(copyState.memberCanvasSubtitle).toContain("3 条当前进展已接入");
+    expect(copyState.memberCanvasSubtitle).toContain(
+      "3 current progress lane(s) connected",
+    );
     expect(classNames.boardShellClassName).toContain(
       "lime-workbench-theme-scope",
     );

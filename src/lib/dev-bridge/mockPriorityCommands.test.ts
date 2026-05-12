@@ -150,6 +150,22 @@ describe("mockPriorityCommands", () => {
     );
   });
 
+  it("Skills 管理命令在浏览器模式下禁止静默退回空 mock", () => {
+    expect(shouldPreferMockInBrowser("get_local_skills_for_app")).toBe(false);
+    expect(
+      shouldDisallowMockFallbackInBrowser("get_local_skills_for_app"),
+    ).toBe(true);
+    expect(shouldDisallowMockFallbackInBrowser("refresh_skill_cache")).toBe(
+      true,
+    );
+    expect(shouldDisallowMockFallbackInBrowser("uninstall_skill_for_app")).toBe(
+      true,
+    );
+    expect(
+      shouldDisallowMockFallbackInBrowser("import_local_skill_for_app"),
+    ).toBe(true);
+  });
+
   it("运行时真相事件在浏览器模式下禁止静默退回 mock", () => {
     expect(
       shouldDisallowMockEventFallbackInBrowser("voice-model-download-progress"),

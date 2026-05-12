@@ -10,7 +10,7 @@ describe("seededCommandPackage", () => {
 
     expect(pkg.id).toBe("lime-seeded-command-catalog");
     expect(pkg.version).toBe(SEEDED_SERVICE_SKILL_CATALOG_VERSION);
-    expect(pkg.catalogProjections).toHaveLength(39);
+    expect(pkg.catalogProjections).toHaveLength(40);
     expect(pkg.bindingProfiles.map((profile) => profile.id)).toEqual(
       expect.arrayContaining(["agent-turn-instant", "native-skill-instant"]),
     );
@@ -25,7 +25,7 @@ describe("seededCommandPackage", () => {
       getSeededServiceSkillCatalog().items,
     );
 
-    expect(entries).toHaveLength(39);
+    expect(entries).toHaveLength(40);
     expect(entries).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -55,6 +55,21 @@ describe("seededCommandPackage", () => {
             resultKind: "image_gallery",
             detailKind: "media_detail",
           }),
+        }),
+        expect.objectContaining({
+          id: "command:image_generate_nanobanana_pro",
+          commandKey: "image_generate_nanobanana_pro",
+          binding: {
+            skillId: "image_generate",
+            executionKind: "task_queue",
+          },
+          renderContract: expect.objectContaining({
+            resultKind: "image_gallery",
+            detailKind: "media_detail",
+          }),
+          triggers: expect.arrayContaining([
+            { mode: "mention", prefix: "@Nanobanana Pro" },
+          ]),
         }),
         expect.objectContaining({
           id: "command:voice_runtime",

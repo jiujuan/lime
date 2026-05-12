@@ -2,6 +2,7 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { useTeamWorkspaceRuntime } from "./useTeamWorkspaceRuntime";
 import {
   clearAgentUiProjectionEvents,
@@ -85,7 +86,8 @@ async function renderHookProbe(props?: Partial<HookProps>, deps?: HookDeps) {
 }
 
 describe("useTeamWorkspaceRuntime", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await changeLimeLocale("zh-CN");
     (
       globalThis as typeof globalThis & {
         IS_REACT_ACT_ENVIRONMENT?: boolean;

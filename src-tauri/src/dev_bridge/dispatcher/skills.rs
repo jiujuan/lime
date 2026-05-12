@@ -127,6 +127,49 @@ pub(super) async fn try_handle(
                 .map_err(|e| format!("导入本地 Skill 失败: {e}"))?;
             serde_json::to_value(result)?
         }
+        "uninstall_skill" | "uninstall_skill_for_app" => {
+            let args = args_or_default(args);
+            let app = args
+                .get("app")
+                .and_then(|value| value.as_str())
+                .unwrap_or("lime")
+                .to_string();
+            let directory = get_string_arg(&args, "directory", "directory")?;
+            let app_type: crate::models::app_type::AppType = app.parse().map_err(|e: String| e)?;
+
+            lime_services::skill_service::SkillService::uninstall_skill(&app_type, &directory)
+                .map_err(|e| format!("卸载本地 Skill 失败: {e}"))?;
+
+            if let Some(db) = &state.db {
+                let key = format!("{}:{directory}", app_type.to_string().to_lowercase());
+                let skill_state = crate::models::skill_model::SkillState {
+                    installed: false,
+                    installed_at: chrono::Utc::now(),
+                };
+                let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
+                crate::database::dao::skills::SkillDao::update_skill_state(
+                    &conn,
+                    &key,
+                    &skill_state,
+                )
+                .map_err(|e| format!("更新 Skill 安装状态失败: {e}"))?;
+            }
+
+            if matches!(app_type, crate::models::app_type::AppType::Lime) {
+                crate::agent::AsterAgentState::reload_lime_skills();
+            }
+
+            serde_json::json!(true)
+        }
+        "get_installed_lime_skills" => serde_json::to_value(
+            crate::commands::skill_cmd::get_installed_lime_skills()
+                .await
+                .map_err(|e| format!("读取 Lime Skills 列表失败: {e}"))?,
+        )?,
+        "refresh_skill_cache" => {
+            state.skill_service.refresh_cache();
+            serde_json::json!(true)
+        }
         "inspect_remote_skill" => {
             let args = args_or_default(args);
             let owner = get_string_arg(&args, "owner", "owner")?;

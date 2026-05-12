@@ -126,6 +126,21 @@ describe("parseImageWorkbenchCommand", () => {
     });
   });
 
+  it("应解析 @Nanobanana Pro，并固定到 Nanobanana Pro 模型", () => {
+    const result = parseImageWorkbenchCommand(
+      "@Nanobanana Pro 生成一张广州塔，从花城汇看过去的春天的照片",
+    );
+
+    expect(result).toMatchObject({
+      trigger: "@Nanobanana Pro",
+      mode: "generate",
+      count: 1,
+      providerId: "fal",
+      modelId: "fal-ai/nano-banana-pro",
+      prompt: "一张广州塔，从花城汇看过去的春天的照片",
+    });
+  });
+
   it("未显式声明动作但带目标图时应默认为变体", () => {
     const result = parseImageWorkbenchCommand("/image #img-7 更偏插画风，4:5");
 

@@ -1420,6 +1420,7 @@ export function AgentChatWorkspace({
     body: string;
   } | null>(null);
   const handledInitialPendingServiceSkillLaunchSignatureRef = useRef("");
+  const dismissedInitialPendingServiceSkillLaunchSignatureRef = useRef("");
   const handledInitialProjectFileOpenSignatureRef = useRef("");
   const initialCreationReplay = useMemo(
     () => extractCreationReplayMetadata(initialRequestMetadata),
@@ -3185,9 +3186,19 @@ export function AgentChatWorkspace({
   });
   const handlePendingServiceSkillLaunchSubmit =
     workspaceServiceSkillEntryActions.handlePendingServiceSkillLaunchSubmit;
+  const clearPendingServiceSkillLaunch =
+    workspaceServiceSkillEntryActions.clearPendingServiceSkillLaunch;
   useEffect(() => {
     if (!initialPendingServiceSkillLaunchSignature) {
       handledInitialPendingServiceSkillLaunchSignatureRef.current = "";
+      dismissedInitialPendingServiceSkillLaunchSignatureRef.current = "";
+      return;
+    }
+
+    if (
+      dismissedInitialPendingServiceSkillLaunchSignatureRef.current ===
+      initialPendingServiceSkillLaunchSignature
+    ) {
       return;
     }
 
@@ -3265,6 +3276,7 @@ export function AgentChatWorkspace({
     pendingSceneGateSource,
     openRuntimeSceneGate,
     handleSceneGateSubmit,
+    clearRuntimeSceneGate,
   } = useWorkspaceSceneGateRuntime({
     serviceSkills: activeTheme === "general" ? serviceSkills : [],
     projectId,
@@ -3282,6 +3294,19 @@ export function AgentChatWorkspace({
     pendingA2UISource;
   const hasPendingA2UIForm = Boolean(effectivePendingA2UIForm);
   const suppressCanvasAutoOpenForPendingA2UI = hasPendingA2UIForm;
+  const clearEntryPendingA2UI = useCallback(() => {
+    if (initialPendingServiceSkillLaunchSignature) {
+      dismissedInitialPendingServiceSkillLaunchSignatureRef.current =
+        initialPendingServiceSkillLaunchSignature;
+    }
+
+    clearPendingServiceSkillLaunch();
+    clearRuntimeSceneGate();
+  }, [
+    clearPendingServiceSkillLaunch,
+    clearRuntimeSceneGate,
+    initialPendingServiceSkillLaunchSignature,
+  ]);
 
   const {
     currentGate,
@@ -3822,6 +3847,7 @@ export function AgentChatWorkspace({
   const { handleBackHome, resetTopicLocalState } = useWorkspaceResetRuntime({
     clearMessages,
     clearRuntimeTeamState,
+    clearPendingEntryA2UI: clearEntryPendingA2UI,
     clearProjectSelectionRuntime,
     resetRestoredSessionState,
     resetGuideState,
@@ -4247,6 +4273,7 @@ export function AgentChatWorkspace({
     workspaceRequestMetadataBase: initialRequestMetadata,
     serviceModels,
     messages,
+    setChatMessages,
     bootstrapDispatchPreview,
     sendMessage,
     resolveSendBoundary,
@@ -5015,6 +5042,7 @@ export function AgentChatWorkspace({
       setTaskCenterTransitionTopicId(topicId);
       setTaskCenterDetachedTopicId(null);
       setActiveTaskCenterDraftTabId(null);
+      clearEntryPendingA2UI();
       if (options?.replaceOpenTabs === true) {
         replaceTaskCenterOpenTabs(topicId, topicWorkspaceId);
       } else if (shouldMaintainTaskCenterTab) {
@@ -5057,6 +5085,7 @@ export function AgentChatWorkspace({
     },
     [
       agentEntry,
+      clearEntryPendingA2UI,
       markTaskCenterLocalSessionOverride,
       replaceTaskCenterOpenTabs,
       setActiveTaskCenterDraftTabId,
@@ -5074,6 +5103,7 @@ export function AgentChatWorkspace({
       setActiveTaskCenterDraftTabId(null);
       setTaskCenterDetachedTopicId(topicId);
       setTaskCenterTransitionTopicId(topicId);
+      clearEntryPendingA2UI();
       markTaskCenterLocalSessionOverride(topicId);
       rememberInitialSessionNavigationStart(topicId);
       const switchResult = await switchTopic(topicId, {
@@ -5093,7 +5123,7 @@ export function AgentChatWorkspace({
         current === topicId ? null : current,
       );
     },
-    [markTaskCenterLocalSessionOverride, switchTopic],
+    [clearEntryPendingA2UI, markTaskCenterLocalSessionOverride, switchTopic],
   );
 
   const handleSelectTaskCenterDraftTab = useCallback(
@@ -5448,7 +5478,8 @@ export function AgentChatWorkspace({
       agentEntry !== "claw" ||
       !taskCenterWorkspaceId ||
       isAutoRestoringSession ||
-      isSessionHydrating
+      isSessionHydrating ||
+      initialPendingServiceSkillLaunchSignature
     ) {
       return;
     }
@@ -5519,6 +5550,7 @@ export function AgentChatWorkspace({
     agentEntry,
     handleOpenTaskTopic,
     hasDisplayMessages,
+    initialPendingServiceSkillLaunchSignature,
     isAutoRestoringSession,
     isSessionHydrating,
     normalizedInitialSessionId,
@@ -8192,6 +8224,7 @@ export function AgentChatWorkspace({
     skillsLoading: combinedSkillsLoading,
     onSelectServiceSkill:
       workspaceServiceSkillEntryActions.handleServiceSkillSelect,
+    initialInputCapability: effectiveInitialInputCapability,
     handleNavigateToSkillSettings,
     handleRefreshSkills,
     handleOpenBrowserAssistInCanvas: handleOpenBrowserRuntimeForBrowserAssist,

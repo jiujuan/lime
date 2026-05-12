@@ -238,8 +238,9 @@ export function resolveImageWorkbenchSkillRequest(
       size: parsedCommand.size || params.imageWorkbenchSelectedSize,
       aspect_ratio: parsedCommand.aspectRatio,
       usage,
-      provider_id: params.imageWorkbenchSelectedProviderId,
-      model: params.imageWorkbenchSelectedModelId,
+      provider_id:
+        parsedCommand.providerId || params.imageWorkbenchSelectedProviderId,
+      model: parsedCommand.modelId || params.imageWorkbenchSelectedModelId,
       session_id: resolvedSessionId || undefined,
       project_id: params.projectId,
       content_id: params.contentId || undefined,

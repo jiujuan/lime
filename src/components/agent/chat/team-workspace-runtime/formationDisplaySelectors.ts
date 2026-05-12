@@ -1,11 +1,9 @@
+import { formatNumber } from "@/i18n/format";
 import type { TeamRoleDefinition } from "../utils/teamDefinitions";
 import { normalizeTeamWorkspaceDisplayValue } from "../utils/teamWorkspaceDisplay";
 import {
-  TEAM_WORKSPACE_IDLE_STATUS_LABEL,
-  TEAM_WORKSPACE_PLAN_LABEL,
-  TEAM_WORKSPACE_WAITING_HEADLINE,
-} from "../utils/teamWorkspaceCopy";
-import {
+  type TeamWorkspaceRuntimeFormationStatus,
+  type TeamWorkspaceRuntimeMemberStatus,
   resolveRuntimeFormationStatusMeta,
   resolveRuntimeMemberStatusMeta,
   type TeamWorkspaceRuntimeFormationState,
@@ -56,22 +54,232 @@ export interface TeamWorkspaceRuntimeFormationDisplayState {
   blueprintRoleCards: TeamWorkspaceFormationRoleCard[];
 }
 
+type TeamWorkspaceFormationResourceKey =
+  | "agentChat.teamWorkspace.formation.emptyDetail.default"
+  | "agentChat.teamWorkspace.formation.emptyDetail.failed"
+  | "agentChat.teamWorkspace.formation.emptyDetail.formed"
+  | "agentChat.teamWorkspace.formation.emptyDetail.forming"
+  | "agentChat.teamWorkspace.formation.detail.hint.planOnly"
+  | "agentChat.teamWorkspace.formation.detail.hint.runtimeWithReference"
+  | "agentChat.teamWorkspace.formation.detail.referenceSummaryDefault"
+  | "agentChat.teamWorkspace.formation.detail.roleSection.plan"
+  | "agentChat.teamWorkspace.formation.detail.roleSection.runtime"
+  | "agentChat.teamWorkspace.formation.detail.summary.plan"
+  | "agentChat.teamWorkspace.formation.detail.summary.runtime"
+  | "agentChat.teamWorkspace.formation.hint.default"
+  | "agentChat.teamWorkspace.formation.hint.failed"
+  | "agentChat.teamWorkspace.formation.hint.formed"
+  | "agentChat.teamWorkspace.formation.hint.forming"
+  | "agentChat.teamWorkspace.formation.memberStatus.completed"
+  | "agentChat.teamWorkspace.formation.memberStatus.failed"
+  | "agentChat.teamWorkspace.formation.memberStatus.planned"
+  | "agentChat.teamWorkspace.formation.memberStatus.running"
+  | "agentChat.teamWorkspace.formation.memberStatus.spawning"
+  | "agentChat.teamWorkspace.formation.memberStatus.waiting"
+  | "agentChat.teamWorkspace.formation.notice.default"
+  | "agentChat.teamWorkspace.formation.notice.failed"
+  | "agentChat.teamWorkspace.formation.notice.formed"
+  | "agentChat.teamWorkspace.formation.notice.forming"
+  | "agentChat.teamWorkspace.formation.panel.description.default"
+  | "agentChat.teamWorkspace.formation.panel.description.failed"
+  | "agentChat.teamWorkspace.formation.panel.title"
+  | "agentChat.teamWorkspace.formation.status.failed.label"
+  | "agentChat.teamWorkspace.formation.status.failed.title"
+  | "agentChat.teamWorkspace.formation.status.formed.label"
+  | "agentChat.teamWorkspace.formation.status.formed.title"
+  | "agentChat.teamWorkspace.formation.status.forming.label"
+  | "agentChat.teamWorkspace.formation.status.forming.title"
+  | "agentChat.teamWorkspace.formation.summaryBadge.memberCount"
+  | "agentChat.teamWorkspace.formation.summaryBadge.planLabel"
+  | "agentChat.teamWorkspace.formation.summaryBadge.planRoleCount"
+  | "agentChat.teamWorkspace.formation.summaryBadge.referenceLabel"
+  | "agentChat.teamWorkspace.formation.summaryBadge.taskCount"
+  | "agentChat.teamWorkspace.formation.waitingHeadline";
+
+export type TeamWorkspaceFormationTranslate = (
+  key: TeamWorkspaceFormationResourceKey,
+  options?: Record<string, unknown>,
+) => string;
+
+export interface TeamWorkspaceFormationCopy {
+  emptyDetailDefault: string;
+  emptyDetailFailed: string;
+  emptyDetailFormed: string;
+  emptyDetailForming: string;
+  detailHintPlanOnly: string;
+  detailHintRuntimeWithReference: string;
+  detailReferenceSummaryDefault: string;
+  detailRoleSectionPlanLabel: string;
+  detailRoleSectionRuntimeLabel: string;
+  detailSummaryPlanLabel: string;
+  detailSummaryRuntimeLabel: string;
+  formatMemberCountBadge: (count: number) => string;
+  formatPlanLabelBadge: (label: string) => string;
+  formatPlanRoleCountBadge: (count: number) => string;
+  formatReferenceLabelBadge: (label: string) => string;
+  formatTaskCountBadge: (count: number) => string;
+  getFormationStatusLabel: (
+    status: TeamWorkspaceRuntimeFormationStatus,
+  ) => string;
+  getFormationStatusTitle: (
+    status: TeamWorkspaceRuntimeFormationStatus,
+  ) => string;
+  getMemberStatusLabel: (status: TeamWorkspaceRuntimeMemberStatus) => string;
+  hintDefault: string;
+  hintFailed: string;
+  hintFormed: string;
+  hintForming: string;
+  noticeDefault: string;
+  noticeFailed: string;
+  noticeFormed: string;
+  noticeForming: string;
+  panelDescriptionDefault: string;
+  panelDescriptionFailed: string;
+  panelTitle: string;
+  waitingHeadline: string;
+}
+
+export function buildTeamWorkspaceFormationCopy(params: {
+  locale?: string | null;
+  translate: TeamWorkspaceFormationTranslate;
+}): TeamWorkspaceFormationCopy {
+  const formatCount = (count: number) =>
+    formatNumber(count, { locale: params.locale });
+
+  return {
+    emptyDetailDefault: params.translate(
+      "agentChat.teamWorkspace.formation.emptyDetail.default",
+    ),
+    emptyDetailFailed: params.translate(
+      "agentChat.teamWorkspace.formation.emptyDetail.failed",
+    ),
+    emptyDetailFormed: params.translate(
+      "agentChat.teamWorkspace.formation.emptyDetail.formed",
+    ),
+    emptyDetailForming: params.translate(
+      "agentChat.teamWorkspace.formation.emptyDetail.forming",
+    ),
+    detailHintPlanOnly: params.translate(
+      "agentChat.teamWorkspace.formation.detail.hint.planOnly",
+    ),
+    detailHintRuntimeWithReference: params.translate(
+      "agentChat.teamWorkspace.formation.detail.hint.runtimeWithReference",
+    ),
+    detailReferenceSummaryDefault: params.translate(
+      "agentChat.teamWorkspace.formation.detail.referenceSummaryDefault",
+    ),
+    detailRoleSectionPlanLabel: params.translate(
+      "agentChat.teamWorkspace.formation.detail.roleSection.plan",
+    ),
+    detailRoleSectionRuntimeLabel: params.translate(
+      "agentChat.teamWorkspace.formation.detail.roleSection.runtime",
+    ),
+    detailSummaryPlanLabel: params.translate(
+      "agentChat.teamWorkspace.formation.detail.summary.plan",
+    ),
+    detailSummaryRuntimeLabel: params.translate(
+      "agentChat.teamWorkspace.formation.detail.summary.runtime",
+    ),
+    formatMemberCountBadge: (count) =>
+      params.translate(
+        "agentChat.teamWorkspace.formation.summaryBadge.memberCount",
+        {
+          formattedCount: formatCount(count),
+        },
+      ),
+    formatPlanLabelBadge: (label) =>
+      params.translate(
+        "agentChat.teamWorkspace.formation.summaryBadge.planLabel",
+        { label },
+      ),
+    formatPlanRoleCountBadge: (count) =>
+      params.translate(
+        "agentChat.teamWorkspace.formation.summaryBadge.planRoleCount",
+        {
+          formattedCount: formatCount(count),
+        },
+      ),
+    formatReferenceLabelBadge: (label) =>
+      params.translate(
+        "agentChat.teamWorkspace.formation.summaryBadge.referenceLabel",
+        { label },
+      ),
+    formatTaskCountBadge: (count) =>
+      params.translate(
+        "agentChat.teamWorkspace.formation.summaryBadge.taskCount",
+        {
+          formattedCount: formatCount(count),
+        },
+      ),
+    getFormationStatusLabel: (status) =>
+      params.translate(
+        `agentChat.teamWorkspace.formation.status.${status}.label` as TeamWorkspaceFormationResourceKey,
+      ),
+    getFormationStatusTitle: (status) =>
+      params.translate(
+        `agentChat.teamWorkspace.formation.status.${status}.title` as TeamWorkspaceFormationResourceKey,
+      ),
+    getMemberStatusLabel: (status) =>
+      params.translate(
+        `agentChat.teamWorkspace.formation.memberStatus.${status}` as TeamWorkspaceFormationResourceKey,
+      ),
+    hintDefault: params.translate(
+      "agentChat.teamWorkspace.formation.hint.default",
+    ),
+    hintFailed: params.translate(
+      "agentChat.teamWorkspace.formation.hint.failed",
+    ),
+    hintFormed: params.translate(
+      "agentChat.teamWorkspace.formation.hint.formed",
+    ),
+    hintForming: params.translate(
+      "agentChat.teamWorkspace.formation.hint.forming",
+    ),
+    noticeDefault: params.translate(
+      "agentChat.teamWorkspace.formation.notice.default",
+    ),
+    noticeFailed: params.translate(
+      "agentChat.teamWorkspace.formation.notice.failed",
+    ),
+    noticeFormed: params.translate(
+      "agentChat.teamWorkspace.formation.notice.formed",
+    ),
+    noticeForming: params.translate(
+      "agentChat.teamWorkspace.formation.notice.forming",
+    ),
+    panelDescriptionDefault: params.translate(
+      "agentChat.teamWorkspace.formation.panel.description.default",
+    ),
+    panelDescriptionFailed: params.translate(
+      "agentChat.teamWorkspace.formation.panel.description.failed",
+    ),
+    panelTitle: params.translate(
+      "agentChat.teamWorkspace.formation.panel.title",
+    ),
+    waitingHeadline: params.translate(
+      "agentChat.teamWorkspace.formation.waitingHeadline",
+    ),
+  };
+}
+
 export function buildRuntimeFormationHint(
+  copy: TeamWorkspaceFormationCopy,
   teamDispatchPreviewState?: TeamWorkspaceRuntimeFormationState | null,
 ) {
   switch (teamDispatchPreviewState?.status) {
     case "forming":
-      return "系统正在准备当前任务的分工，任务拆出后会自动开始处理。";
+      return copy.hintForming;
     case "formed":
-      return "当前任务的分工已经准备好，任务拆出后会继续接手处理。";
+      return copy.hintFormed;
     case "failed":
-      return "当前任务的分工准备失败，但你仍然可以继续在当前任务里推进。";
+      return copy.hintFailed;
     default:
-      return "需要时这里会自动展开成当前进展面板。";
+      return copy.hintDefault;
   }
 }
 
 export function buildRuntimeFormationEmptyDetail(
+  copy: TeamWorkspaceFormationCopy,
   teamDispatchPreviewState?: TeamWorkspaceRuntimeFormationState | null,
 ) {
   const errorMessage = normalizeTeamWorkspaceDisplayValue(
@@ -80,17 +288,18 @@ export function buildRuntimeFormationEmptyDetail(
 
   switch (teamDispatchPreviewState?.status) {
     case "forming":
-      return "系统正在根据当前任务准备分工。完成后，这里会先展示分工卡片，再接入真实处理进展。";
+      return copy.emptyDetailForming;
     case "formed":
-      return "当前分工方案已经准备好。画布会先展示当前分工，等任务真正开始处理后，再自动切换为当前进展。";
+      return copy.emptyDetailFormed;
     case "failed":
-      return errorMessage || "当前任务分工准备失败，暂时无法展示当前进展。";
+      return errorMessage || copy.emptyDetailFailed;
     default:
-      return `${TEAM_WORKSPACE_IDLE_STATUS_LABEL}。系统开始分工后，详情区会切换为进展摘要视图。`;
+      return copy.emptyDetailDefault;
   }
 }
 
 export function buildSelectedTeamPlanDisplayState(params: {
+  copy: TeamWorkspaceFormationCopy;
   selectedTeamLabel?: string | null;
   selectedTeamSummary?: string | null;
   selectedTeamRoles?: TeamRoleDefinition[] | null;
@@ -121,7 +330,7 @@ export function buildSelectedTeamPlanDisplayState(params: {
         ? [
             {
               key: "plan-label",
-              text: `${TEAM_WORKSPACE_PLAN_LABEL} · ${label}`,
+              text: params.copy.formatPlanLabelBadge(label),
               className:
                 "rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-sky-700",
             },
@@ -131,7 +340,7 @@ export function buildSelectedTeamPlanDisplayState(params: {
         ? [
             {
               key: "plan-role-count",
-              text: `${roleCards.length} 个计划分工`,
+              text: params.copy.formatPlanRoleCountBadge(roleCards.length),
               className:
                 "rounded-full border border-slate-200 bg-white px-2.5 py-1",
             },
@@ -145,12 +354,20 @@ export function buildSelectedTeamPlanDisplayState(params: {
 }
 
 export function buildRuntimeFormationDisplayState(params: {
+  copy: TeamWorkspaceFormationCopy;
   teamDispatchPreviewState?: TeamWorkspaceRuntimeFormationState | null;
   fallbackLabel?: string | null;
   fallbackSummary?: string | null;
 }): TeamWorkspaceRuntimeFormationDisplayState {
   const state = params.teamDispatchPreviewState ?? null;
-  const meta = state ? resolveRuntimeFormationStatusMeta(state.status) : null;
+  const meta = state
+    ? {
+        badgeClassName: resolveRuntimeFormationStatusMeta(state.status)
+          .badgeClassName,
+        label: params.copy.getFormationStatusLabel(state.status),
+        title: params.copy.getFormationStatusTitle(state.status),
+      }
+    : null;
   const label = normalizeTeamWorkspaceDisplayValue(
     state?.label || state?.blueprint?.label || params.fallbackLabel,
   );
@@ -168,7 +385,7 @@ export function buildRuntimeFormationDisplayState(params: {
       label: normalizeTeamWorkspaceDisplayValue(member.label) || member.label,
       summary:
         normalizeTeamWorkspaceDisplayValue(member.summary) || member.summary,
-      badgeLabel: memberMeta.label,
+      badgeLabel: params.copy.getMemberStatusLabel(member.status),
       badgeClassName: memberMeta.badgeClassName,
     };
   });
@@ -180,24 +397,24 @@ export function buildRuntimeFormationDisplayState(params: {
 
   const noticeText =
     state?.status === "forming"
-      ? "系统正在准备当前任务分工，完成后会先展示分工卡片，后续再切换为独立的当前进展。"
+      ? params.copy.noticeForming
       : state?.status === "formed"
-        ? "当前分工方案已就绪。任务拆出后，这里会从方案视图过渡到当前进展。"
+        ? params.copy.noticeFormed
         : state?.status === "failed"
-          ? errorMessage || "当前任务分工准备失败，暂时还没有任务接手。"
-          : `${TEAM_WORKSPACE_IDLE_STATUS_LABEL}。系统开始分工后，这里会生成独立的当前进展。`;
+          ? errorMessage || params.copy.noticeFailed
+          : params.copy.noticeDefault;
 
   return {
     hasRuntimeFormation: Boolean(state),
-    hint: buildRuntimeFormationHint(state),
-    emptyDetail: buildRuntimeFormationEmptyDetail(state),
+    hint: buildRuntimeFormationHint(params.copy, state),
+    emptyDetail: buildRuntimeFormationEmptyDetail(params.copy, state),
     noticeText,
     summaryBadges: [
       ...(label
         ? [
             {
               key: "runtime-label",
-              text: `${TEAM_WORKSPACE_PLAN_LABEL} · ${label}`,
+              text: params.copy.formatPlanLabelBadge(label),
               className:
                 "rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-sky-700",
             },
@@ -216,7 +433,7 @@ export function buildRuntimeFormationDisplayState(params: {
         ? [
             {
               key: "runtime-member-count",
-              text: `${memberCards.length} 条当前进展`,
+              text: params.copy.formatMemberCountBadge(memberCards.length),
               className:
                 "rounded-full border border-slate-200 bg-white px-2.5 py-1",
             },
@@ -226,22 +443,22 @@ export function buildRuntimeFormationDisplayState(params: {
         ? [
             {
               key: "runtime-blueprint-label",
-              text: `参考方案 · ${referenceLabel}`,
+              text: params.copy.formatReferenceLabelBadge(referenceLabel),
               className:
                 "rounded-full border border-slate-200 bg-white px-2.5 py-1",
             },
           ]
         : []),
     ],
-    panelTitle: "当前任务分工",
+    panelTitle: params.copy.panelTitle,
     panelStatusLabel: meta?.label ?? null,
     panelStatusBadgeClassName: meta?.badgeClassName ?? null,
     panelLabel: label,
-    panelHeadline: meta?.title || TEAM_WORKSPACE_WAITING_HEADLINE,
+    panelHeadline: meta?.title || params.copy.waitingHeadline,
     panelDescription:
       state?.status === "failed"
-        ? errorMessage || "当前任务分工准备失败，暂时无法展示更多内容。"
-        : summary || "这里会先展示当前分工方案，任务拆出后再切换成当前进展。",
+        ? errorMessage || params.copy.panelDescriptionFailed
+        : summary || params.copy.panelDescriptionDefault,
     referenceLabel,
     memberCards,
     blueprintRoleCards,

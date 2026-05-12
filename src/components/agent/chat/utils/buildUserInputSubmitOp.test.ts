@@ -292,6 +292,49 @@ describe("buildUserInputSubmitOp", () => {
     });
   });
 
+  it("图片生成首发应把聊天编排模型放进 provider_config，避免误锁图片模型槽位", () => {
+    const op = buildUserInputSubmitOp({
+      content: "@Nanobanana Pro 生成一张广州塔春天照片",
+      images: [],
+      sessionId: "session-image-1",
+      eventName: "aster_stream_image",
+      requestMetadata: {
+        harness: {
+          image_skill_launch: {
+            skill_name: "image_generate",
+            image_task: {
+              prompt: "一张广州塔春天照片",
+              provider_id: "fal",
+              model: "fal-ai/nano-banana-pro",
+              runtime_contract: {
+                contract_key: "image_generation",
+                routing_slot: "image_generation_model",
+              },
+            },
+          },
+        },
+      },
+      executionRuntime: null,
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: null,
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "react",
+      effectiveAccessMode: "current",
+      effectiveProviderType: "deepseek",
+      effectiveModel: "deepseek-v4-pro",
+      webSearch: false,
+      thinking: false,
+    });
+
+    expect(op.preferences?.providerConfig).toEqual({
+      provider_id: "deepseek",
+      provider_name: "deepseek",
+      model_name: "deepseek-v4-pro",
+    });
+    expect(op.preferences?.providerPreference).toBeUndefined();
+    expect(op.preferences?.modelPreference).toBeUndefined();
+  });
+
   it("应透传显式搜索模式，不从用户文本推断", () => {
     const op = buildUserInputSubmitOp({
       content: "请搜索最新 AI 新闻",

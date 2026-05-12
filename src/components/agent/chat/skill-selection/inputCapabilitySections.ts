@@ -439,6 +439,7 @@ const INPUT_COMMAND_GROUP_BY_KEY: Record<
   webpage_read: "search_read",
   url_parse: "search_read",
   image_generate: "generate_expression",
+  image_generate_nanobanana_pro: "generate_expression",
   image_storyboard: "generate_expression",
   cover_generate: "generate_expression",
   poster_generate: "generate_expression",

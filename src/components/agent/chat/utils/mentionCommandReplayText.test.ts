@@ -79,6 +79,19 @@ describe("buildMentionCommandReplayText", () => {
     ).toBe("16:9 一张春日咖啡馆插画 出 2 张");
   });
 
+  it("应把 @Nanobanana Pro 回放成 image_generate 同构参数", () => {
+    const parsedCommand = parseImageWorkbenchCommand(
+      "@Nanobanana Pro 生成一张广州塔，从花城汇看过去的春天的照片",
+    );
+
+    expect(
+      buildMentionCommandReplayText({
+        commandKey: "image_generate_nanobanana_pro",
+        parsedCommand: parsedCommand!,
+      }),
+    ).toBe("一张广州塔，从花城汇看过去的春天的照片");
+  });
+
   it("应把 @分镜 回放整理成可再次解析的布局骨架", () => {
     const parsedCommand = parseImageWorkbenchCommand(
       "@分镜 生成 三国主要人物，3x3 分镜，电影感",

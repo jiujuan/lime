@@ -784,6 +784,10 @@ export function useWorkspaceServiceSkillEntryActions({
     [handleServiceSkillLaunch, pendingServiceSkillLaunchInput],
   );
 
+  const clearPendingServiceSkillLaunch = useCallback(() => {
+    setPendingServiceSkillLaunchInput(null);
+  }, []);
+
   const handleServiceSkillSelect = useCallback(
     (skill: ServiceSkillHomeItem, options?: ServiceSkillSelectionOptions) => {
       const replayPrefill = resolveServiceSkillLaunchPrefill({
@@ -1014,6 +1018,7 @@ export function useWorkspaceServiceSkillEntryActions({
     automationJobSaving,
     handleServiceSkillSelect,
     handlePendingServiceSkillLaunchSubmit,
+    clearPendingServiceSkillLaunch,
     handleServiceSkillLaunch,
     handleAutoLaunchMatchedSiteSkill,
     handleServiceSkillBrowserRuntimeLaunch,

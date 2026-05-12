@@ -73,6 +73,11 @@ import {
   type AgentFastResponseRoutingDecision,
   type AgentFastResponseMode,
 } from "../utils/fastResponseRouting";
+import {
+  PLAIN_VISUAL_BRIEF_CONFIRMATION,
+  shouldConfirmPlainVisualBrief,
+} from "../utils/plainVisualBriefConfirmation";
+import { buildImageWorkbenchAssistantContent } from "../utils/imageWorkbenchPresentation";
 import { detectBrowserTaskRequirement } from "../utils/browserTaskRequirement";
 import { isTeamRuntimeRecommendation } from "../utils/contextualRecommendations";
 import {
@@ -87,7 +92,11 @@ import type { HandleSendOptions } from "../hooks/handleSendTypes";
 import { extractAgentUiPerformanceTraceMetadata } from "../hooks/agentStreamPerformanceMetrics";
 import type { UseRuntimeTeamFormationResult } from "../hooks/useRuntimeTeamFormation";
 import type { SendMessageFn } from "../hooks/agentChatShared";
-import type { Message, MessageImage } from "../types";
+import type {
+  Message,
+  MessageImage,
+  MessageImageWorkbenchPreview,
+} from "../types";
 import type { TeamDefinition } from "../utils/teamDefinitions";
 import type { AgentAccessMode } from "../hooks/agentChatStorage";
 import {
@@ -453,6 +462,118 @@ function buildFastResponseAssistantDraft(
   };
 }
 
+function readImageSkillLaunchContext(
+  requestMetadata: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  const harness = asRecord(requestMetadata?.harness);
+  const launch =
+    asRecord(harness?.image_skill_launch) ||
+    asRecord(harness?.imageSkillLaunch);
+  if (!launch) {
+    return undefined;
+  }
+
+  return (
+    asRecord(launch.image_task) ||
+    asRecord(asRecord(launch.request_context)?.image_task) ||
+    asRecord(asRecord(launch.requestContext)?.image_task)
+  );
+}
+
+function readPositiveInteger(value: unknown): number | undefined {
+  const numericValue =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number.parseInt(value, 10)
+        : Number.NaN;
+  return Number.isFinite(numericValue) && numericValue > 0
+    ? Math.floor(numericValue)
+    : undefined;
+}
+
+function normalizeImageWorkbenchMode(
+  value: unknown,
+): MessageImageWorkbenchPreview["mode"] {
+  return value === "edit" || value === "variation" || value === "generate"
+    ? value
+    : "generate";
+}
+
+function buildImageWorkbenchAssistantDraft(
+  requestMetadata: Record<string, unknown> | undefined,
+): HandleSendOptions["assistantDraft"] {
+  const imageTask = readImageSkillLaunchContext(requestMetadata);
+  if (!imageTask) {
+    return undefined;
+  }
+
+  const prompt =
+    normalizeOptionalText(imageTask.prompt as string | undefined) ||
+    normalizeOptionalText(imageTask.raw_text as string | undefined) ||
+    normalizeOptionalText(imageTask.rawText as string | undefined);
+  if (!prompt) {
+    return undefined;
+  }
+
+  const modelName =
+    normalizeOptionalText(imageTask.model as string | undefined) ||
+    normalizeOptionalText(imageTask.model_name as string | undefined) ||
+    normalizeOptionalText(imageTask.modelName as string | undefined) ||
+    null;
+  const expectedImageCount =
+    readPositiveInteger(imageTask.count) ||
+    readPositiveInteger(imageTask.image_count) ||
+    1;
+  const mode = normalizeImageWorkbenchMode(imageTask.mode);
+  const layoutHint =
+    normalizeOptionalText(imageTask.layout_hint as string | undefined) ||
+    normalizeOptionalText(imageTask.layoutHint as string | undefined) ||
+    null;
+  const preview: MessageImageWorkbenchPreview = {
+    taskId: `draft-image-${crypto.randomUUID()}`,
+    prompt,
+    mode,
+    status: "running",
+    projectId:
+      normalizeOptionalText(imageTask.project_id as string | undefined) ||
+      normalizeOptionalText(imageTask.projectId as string | undefined) ||
+      null,
+    contentId:
+      normalizeOptionalText(imageTask.content_id as string | undefined) ||
+      normalizeOptionalText(imageTask.contentId as string | undefined) ||
+      null,
+    providerName:
+      normalizeOptionalText(imageTask.provider as string | undefined) ||
+      normalizeOptionalText(imageTask.provider_name as string | undefined) ||
+      normalizeOptionalText(imageTask.providerName as string | undefined) ||
+      normalizeOptionalText(imageTask.provider_id as string | undefined) ||
+      normalizeOptionalText(imageTask.providerId as string | undefined) ||
+      null,
+    modelName,
+    imageCount: expectedImageCount,
+    expectedImageCount,
+    size:
+      normalizeOptionalText(imageTask.size as string | undefined) || undefined,
+    layoutHint,
+    caption: null,
+    phase: "preparing",
+    statusMessage: null,
+  };
+
+  return {
+    content: buildImageWorkbenchAssistantContent({
+      prompt,
+      mode,
+      modelName,
+      expectedImageCount,
+      layoutHint,
+    }),
+    imageWorkbenchPreview: preview,
+    preserveContent: true,
+  };
+}
+
 function normalizeServiceSkillUsageSlotValue(
   value: unknown,
 ): string | undefined {
@@ -807,6 +928,9 @@ function resolveImageMentionCommandKey(
   }
   if (trigger === "@重绘") {
     return "image_variation";
+  }
+  if (trigger === "@Nanobanana Pro") {
+    return "image_generate_nanobanana_pro";
   }
   if (trigger === "@配图" || trigger === "@Vision 1" || trigger === "@image") {
     return "image_generate";
@@ -2975,6 +3099,7 @@ interface UseWorkspaceSendActionsParams {
   workspaceRequestMetadataBase?: Record<string, unknown>;
   serviceModels?: ServiceModelsConfig;
   messages: Message[];
+  setChatMessages: Dispatch<SetStateAction<Message[]>>;
   bootstrapDispatchPreview?: InitialDispatchPreviewSnapshot | null;
   sendMessage: SendMessageFn;
   resolveSendBoundary: (input: {
@@ -3033,10 +3158,22 @@ interface WorkspaceSendPlan extends WorkspaceResolvedSendState {
   completedSlashUsage?: CompletedInputCapabilitySlashUsage | null;
 }
 
+interface WorkspaceLocalConfirmationPlan {
+  sourceText: string;
+  images: MessageImage[];
+  sendBoundary: GeneralWorkbenchSendBoundaryState;
+  submissionPreviewKey: string | null;
+  confirmation: string;
+}
+
 type WorkspaceSendResolution =
   | {
       kind: "done";
       result: boolean;
+    }
+  | {
+      kind: "local_confirmation";
+      plan: WorkspaceLocalConfirmationPlan;
     }
   | {
       kind: "ready";
@@ -3083,6 +3220,7 @@ export function useWorkspaceSendActions({
   workspaceRequestMetadataBase,
   serviceModels,
   messages,
+  setChatMessages,
   bootstrapDispatchPreview,
   sendMessage,
   resolveSendBoundary,
@@ -3570,6 +3708,23 @@ export function useWorkspaceSendActions({
           ),
         );
         hasBoundSkillLaunch = true;
+      }
+
+      if (
+        !sendOptions?.purpose &&
+        !hasBoundSkillLaunch &&
+        shouldConfirmPlainVisualBrief(sourceText)
+      ) {
+        return {
+          kind: "local_confirmation",
+          plan: {
+            sourceText,
+            images: effectiveImages,
+            sendBoundary,
+            submissionPreviewKey,
+            confirmation: PLAIN_VISUAL_BRIEF_CONFIRMATION,
+          },
+        };
       }
 
       const parsedCoverWorkbenchCommand =
@@ -5367,6 +5522,48 @@ export function useWorkspaceSendActions({
     ],
   );
 
+  const executeLocalConfirmationPlan = useCallback(
+    async (plan: WorkspaceLocalConfirmationPlan): Promise<boolean> => {
+      const { sourceText, images, sendBoundary, submissionPreviewKey } = plan;
+      setRuntimeTeamDispatchPreview(null);
+      setInput("");
+      setMentionedCharacters([]);
+
+      setChatMessages((previous) => {
+        const timestamp = new Date();
+        return [
+          ...previous,
+          {
+            id: crypto.randomUUID(),
+            role: "user",
+            content: sourceText,
+            images: images.length > 0 ? images : undefined,
+            timestamp,
+          },
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: plan.confirmation,
+            timestamp: new Date(),
+          },
+        ];
+      });
+
+      finalizeAfterSendSuccess(sendBoundary);
+      setSubmissionPreview((current) =>
+        current?.key === submissionPreviewKey ? null : current,
+      );
+      return true;
+    },
+    [
+      finalizeAfterSendSuccess,
+      setChatMessages,
+      setInput,
+      setMentionedCharacters,
+      setRuntimeTeamDispatchPreview,
+    ],
+  );
+
   const executeSendPlan = useCallback(
     async (plan: WorkspaceSendPlan): Promise<boolean> => {
       const {
@@ -5483,8 +5680,9 @@ export function useWorkspaceSendActions({
           hasPurpose: Boolean(sendOptions?.purpose),
           hasAutoContinue: Boolean(autoContinuePayload?.enabled),
         });
-        const fastResponseAssistantDraft =
+        const nextAssistantDraft =
           sendOptions?.assistantDraft ??
+          buildImageWorkbenchAssistantDraft(nextRequestMetadata) ??
           buildFastResponseAssistantDraft(fastResponseDecision);
         const nextSendOptions: HandleSendOptions = {
           ...(sendOptions || {}),
@@ -5510,7 +5708,7 @@ export function useWorkspaceSendActions({
                   searchMode: fastResponseDecision.searchMode,
                 })
               : undefined),
-          assistantDraft: fastResponseAssistantDraft,
+          assistantDraft: nextAssistantDraft,
         };
 
         logAgentDebug("WorkspaceSend", "sendMessage.start", {
@@ -5638,13 +5836,16 @@ export function useWorkspaceSendActions({
         if (resolution.kind === "done") {
           return resolution.result;
         }
+        if (resolution.kind === "local_confirmation") {
+          return executeLocalConfirmationPlan(resolution.plan);
+        }
         return executeSendPlan(resolution.plan);
       } finally {
         isPreparingSendRef.current = false;
         setIsPreparingSend(false);
       }
     },
-    [executeSendPlan, resolveSendExecutionPlan],
+    [executeLocalConfirmationPlan, executeSendPlan, resolveSendExecutionPlan],
   );
 
   const handleRecommendationClick = useCallback(

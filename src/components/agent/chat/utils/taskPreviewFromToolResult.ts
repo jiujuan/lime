@@ -1261,26 +1261,18 @@ export function buildImageTaskPreviewFromToolResult(
       : receivedCount || expectedImageCount || requestedCount;
   const statusMessage =
     previewStatus === "complete"
-      ? receivedCount && receivedCount > 0
-        ? layoutHint === "storyboard_3x3"
-          ? `3x3 分镜已生成完成，共 ${receivedCount} 张。`
-          : `图片已生成完成，共 ${receivedCount} 张。`
-        : layoutHint === "storyboard_3x3"
-          ? "3x3 分镜已生成完成，可在右侧继续查看与使用。"
-          : "图片结果已生成完成，可在右侧查看与使用。"
+      ? layoutHint === "storyboard_3x3"
+        ? "3x3 分镜生成完成。"
+        : "图片生成完成。"
       : previewStatus === "partial"
-        ? receivedCount && receivedCount > 0
-          ? layoutHint === "storyboard_3x3"
-            ? `3x3 分镜已返回部分结果，共 ${receivedCount} 张。`
-            : `图片已返回部分结果，共 ${receivedCount} 张。`
-          : layoutHint === "storyboard_3x3"
-            ? "3x3 分镜已返回部分结果，可在右侧继续查看。"
-            : "图片已返回部分结果，可在右侧继续查看。"
+        ? layoutHint === "storyboard_3x3"
+          ? "3x3 分镜返回部分结果。"
+          : "图片返回部分结果。"
         : previewStatus === "failed"
-          ? "图片任务执行失败，请查看工具结果或任务详情。"
+          ? "图片生成失败。"
           : previewStatus === "cancelled"
-            ? "图片任务已取消。"
-            : "图片任务已提交，正在排队处理。";
+            ? "图片生成已取消。"
+            : "正在生成图片。";
 
   return {
     taskId,

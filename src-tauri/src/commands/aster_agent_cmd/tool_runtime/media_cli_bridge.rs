@@ -90,6 +90,8 @@ pub(crate) fn emit_media_creation_task_event(app_handle: &AppHandle, output: &Me
         "storyboard_slots": payload_record.get("storyboard_slots").cloned(),
         "raw_text": read_payload_string(payload_record, &["raw_text", "rawText"]),
         "session_id": read_payload_string(payload_record, &["session_id", "sessionId"]),
+        "thread_id": read_payload_string(payload_record, &["thread_id", "threadId"]),
+        "turn_id": read_payload_string(payload_record, &["turn_id", "turnId"]),
         "project_id": read_payload_string(payload_record, &["project_id", "projectId"]),
         "content_id": read_payload_string(payload_record, &["content_id", "contentId"]),
         "entry_source": read_payload_string(payload_record, &["entry_source", "entrySource"]),
@@ -163,6 +165,20 @@ pub(crate) fn attach_media_task_metadata(
             serde_json::json!(read_payload_string(
                 &output.record.payload,
                 &["project_id", "projectId"]
+            )),
+        )
+        .with_metadata(
+            "thread_id",
+            serde_json::json!(read_payload_string(
+                &output.record.payload,
+                &["thread_id", "threadId"]
+            )),
+        )
+        .with_metadata(
+            "turn_id",
+            serde_json::json!(read_payload_string(
+                &output.record.payload,
+                &["turn_id", "turnId"]
             )),
         )
         .with_metadata(
@@ -295,7 +311,11 @@ mod tests {
                 task_family: "image".to_string(),
                 title: None,
                 summary: Some("demo".to_string()),
-                payload: serde_json::json!({ "prompt": "demo" }),
+                payload: serde_json::json!({
+                    "prompt": "demo",
+                    "thread_id": "thread-image-1",
+                    "turn_id": "turn-image-1"
+                }),
                 status: "pending_submit".to_string(),
                 normalized_status: "pending".to_string(),
                 created_at: "2026-04-03T00:00:00Z".to_string(),
@@ -341,6 +361,14 @@ mod tests {
         assert_eq!(
             result.metadata.get("artifact_paths"),
             Some(&serde_json::json!([".lime/tasks/image_generate/demo.json"]))
+        );
+        assert_eq!(
+            result.metadata.get("thread_id"),
+            Some(&serde_json::json!("thread-image-1"))
+        );
+        assert_eq!(
+            result.metadata.get("turn_id"),
+            Some(&serde_json::json!("turn-image-1"))
         );
     }
 }

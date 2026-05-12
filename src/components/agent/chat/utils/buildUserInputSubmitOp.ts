@@ -104,6 +104,9 @@ export function buildUserInputSubmitOp(
     turnId,
     images: buildSubmitImages(images),
     preferences: {
+      ...(compaction.providerConfig
+        ? { providerConfig: compaction.providerConfig }
+        : {}),
       providerPreference: compaction.shouldSubmitProviderPreference
         ? effectiveProviderType
         : undefined,

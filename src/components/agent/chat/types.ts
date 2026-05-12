@@ -83,6 +83,9 @@ export interface MessageImageWorkbenchPreview {
   previewImages?: string[];
   imageCount?: number;
   expectedImageCount?: number;
+  providerName?: string | null;
+  modelName?: string | null;
+  caption?: string | null;
   layoutHint?: string | null;
   storyboardSlots?: ImageStoryboardSlot[];
   sourceImageUrl?: string | null;

@@ -16,13 +16,21 @@ import type {
   TeamWorkspaceRuntimeFormationState,
   TeamWorkspaceWaitSummary,
 } from "../teamWorkspaceRuntime";
-import { extractSessionActivitySnapshot } from "../team-workspace-runtime/activityPreviewSelectors";
+import {
+  buildActivityPreviewCopy,
+  extractSessionActivitySnapshot,
+  type ActivityPreviewTranslate,
+} from "../team-workspace-runtime/activityPreviewSelectors";
 import {
   mergeSessionActivityEntries,
   resolveRuntimeMemberStatusMeta,
   summarizeTeamWorkspaceExecution,
 } from "../teamWorkspaceRuntime";
-import { buildRuntimeFormationDisplayState } from "../team-workspace-runtime/formationDisplaySelectors";
+import {
+  buildTeamWorkspaceFormationCopy,
+  buildRuntimeFormationDisplayState,
+  type TeamWorkspaceFormationTranslate,
+} from "../team-workspace-runtime/formationDisplaySelectors";
 import {
   formatAgentUiProjectionEventDetail,
   formatAgentUiProjectionEventAuxiliaryDetail,
@@ -828,10 +836,34 @@ export function TeamWorkbenchSummaryPanel({
   onWorkbenchAction,
   onWorkbenchReassign,
 }: TeamWorkbenchSummaryPanelProps) {
-  const { t } = useTranslation("agent");
+  const { i18n, t } = useTranslation("agent");
+  const locale = i18n.resolvedLanguage || i18n.language;
   const translateProjection = useCallback<AgentUiProjectionTranslation>(
     (key, options) => String(t(key as never, options as never)),
     [t],
+  );
+  const translateFormation = useCallback<TeamWorkspaceFormationTranslate>(
+    (key, options) => String(t(key as never, options as never)),
+    [t],
+  );
+  const translateActivityPreview = useCallback<ActivityPreviewTranslate>(
+    (key, options) => String(t(key as never, options as never)),
+    [t],
+  );
+  const formationCopy = useMemo(
+    () =>
+      buildTeamWorkspaceFormationCopy({
+        locale,
+        translate: translateFormation,
+      }),
+    [locale, translateFormation],
+  );
+  const activityPreviewCopy = useMemo(
+    () =>
+      buildActivityPreviewCopy({
+        translate: translateActivityPreview,
+      }),
+    [translateActivityPreview],
   );
   const [selectedWorkbenchItem, setSelectedWorkbenchItem] =
     useState<AgentUiTeamWorkbenchViewItem | null>(null);
@@ -863,6 +895,7 @@ export function TeamWorkbenchSummaryPanel({
   });
   const hasRuntimeSessions = executionSummary.totalSessionCount > 0;
   const runtimeFormationDisplay = buildRuntimeFormationDisplayState({
+    copy: formationCopy,
     teamDispatchPreviewState: dispatchPreviewState,
     fallbackLabel: selectedTeamLabel,
     fallbackSummary: selectedTeamSummary,
@@ -993,6 +1026,7 @@ export function TeamWorkbenchSummaryPanel({
         const snapshot = extractSessionActivitySnapshot(
           detail,
           TRANSCRIPT_HISTORY_ENTRY_LIMIT,
+          { copy: activityPreviewCopy },
         );
         setSelectedTranscriptHistoryState({
           sessionId,
@@ -1011,7 +1045,9 @@ export function TeamWorkbenchSummaryPanel({
           entries: [],
           queuedTurns: [],
           errorMessage:
-            error instanceof Error ? error.message : "读取历史正文失败",
+            error instanceof Error
+              ? error.message
+              : activityPreviewCopy.historyReadFailed,
         });
       });
 
@@ -1019,6 +1055,7 @@ export function TeamWorkbenchSummaryPanel({
       cancelled = true;
     };
   }, [
+    activityPreviewCopy,
     selectedTranscriptChildSessionId,
     selectedTranscriptLiveActivityEntries.length,
   ]);
@@ -1156,16 +1193,24 @@ export function TeamWorkbenchSummaryPanel({
     ? executionSummary.totalSessionCount
     : (dispatchPreviewState?.members.length ?? selectedRoleCount);
   const roleCards = dispatchPreviewState?.members.length
-    ? dispatchPreviewState.members.map((member) => ({
-        id: member.id,
-        label: normalizeTeamWorkspaceDisplayValue(member.label) || member.label,
-        roleKey: member.roleKey,
-        profileId: member.profileId,
-        summary:
-          normalizeTeamWorkspaceDisplayValue(member.summary) || member.summary,
-        skillIds: member.skillIds,
-        statusMeta: resolveRuntimeMemberStatusMeta(member.status),
-      }))
+    ? dispatchPreviewState.members.map((member) => {
+        const statusMeta = resolveRuntimeMemberStatusMeta(member.status);
+        return {
+          id: member.id,
+          label:
+            normalizeTeamWorkspaceDisplayValue(member.label) || member.label,
+          roleKey: member.roleKey,
+          profileId: member.profileId,
+          summary:
+            normalizeTeamWorkspaceDisplayValue(member.summary) ||
+            member.summary,
+          skillIds: member.skillIds,
+          statusMeta: {
+            badgeClassName: statusMeta.badgeClassName,
+            label: formationCopy.getMemberStatusLabel(member.status),
+          },
+        };
+      })
     : (selectedTeamRoles ?? []).map((role) => ({
         id: role.id,
         label: normalizeTeamWorkspaceDisplayValue(role.label) || role.label,
@@ -1947,7 +1992,11 @@ export function TeamWorkbenchSummaryPanel({
         <section className="rounded-[24px] border border-slate-200/80 bg-white p-4 shadow-sm shadow-slate-950/5">
           <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
             <Bot className="h-3.5 w-3.5" />
-            <span>{dispatchPreviewState ? "当前任务分工" : "角色分工"}</span>
+            <span>
+              {dispatchPreviewState
+                ? formationCopy.detailRoleSectionRuntimeLabel
+                : formationCopy.detailRoleSectionPlanLabel}
+            </span>
           </div>
           <div className="mt-3 space-y-2">
             {roleCards.map((role) => (

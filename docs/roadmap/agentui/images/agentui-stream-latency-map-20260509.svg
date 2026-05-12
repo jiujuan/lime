@@ -43,11 +43,11 @@
   <circle cx="165" cy="948" r="260" fill="#bbf7d0" opacity="0.28"/>
   <circle cx="1480" cy="965" r="185" fill="#fed7aa" opacity="0.26"/>
 
-  <text x="86" y="78" class="title">Lime AgentUI 流式延迟复测图 v5</text>
-  <text x="88" y="118" class="subtitle">2026-05-12 更新：runtime status 已是百毫秒级；真实瓶颈定位到 provider/model 首个 visible / thinking / text delta。</text>
+  <text x="86" y="78" class="title">Lime AgentUI 流式延迟复测图 v6</text>
+  <text x="88" y="118" class="subtitle">2026-05-12 收口：runtime status 百毫秒级；多 provider TTFT 矩阵 gate pass，剩余优化是 fallback 解释。</text>
 
   <rect x="1148" y="67" width="335" height="52" rx="26" fill="#ecfdf5" stroke="#86efac"/>
-  <text x="1178" y="100" class="pill" fill="#166534">已闭环：TTFT 落库 + 自动路由 + GUI 证据面</text>
+  <text x="1178" y="100" class="pill" fill="#166534">已完成：TTFT 落库 + 路由 + GUI 证据 + 样本矩阵</text>
 
   <rect x="86" y="156" width="1428" height="318" class="card"/>
   <text x="122" y="207" class="section">点击发送到用户可见反馈的实测链路</text>
@@ -61,31 +61,31 @@
   <line x1="355" y1="322" x2="420" y2="322" class="line"/>
 
   <rect x="435" y="247" width="248" height="150" class="mini blue"/>
-  <text x="461" y="286" class="num-ok">0.84-1.38s</text>
-  <text x="461" y="322" class="label">模型首字证据</text>
-  <text x="461" y="352" class="small">agent_runs.metadata 真实落库</text>
+  <text x="461" y="286" class="num-ok">1.53-1.94s</text>
+  <text x="461" y="322" class="label">GUI 最新 TTFT</text>
+  <text x="461" y="352" class="small">metadata -> read model</text>
   <text x="461" y="377" class="tiny">visible / thinking / text 可复核</text>
 
   <line x1="696" y1="322" x2="761" y2="322" class="line"/>
 
   <rect x="776" y="231" width="292" height="184" class="mini amber"/>
-  <text x="804" y="273" class="num-ok">1.24-1.80s</text>
-  <text x="804" y="310" class="label">answer text 首字</text>
-  <text x="804" y="340" class="small">deepseek-v4-flash 快样本达标</text>
-  <text x="804" y="365" class="small">首字 paint 已接近真实秒级</text>
-  <text x="804" y="390" class="tiny">仍需看跨 provider 稳定性</text>
+  <text x="804" y="273" class="num-ok">p50 2.30s</text>
+  <text x="804" y="310" class="label">deepseek 快基线</text>
+  <text x="804" y="340" class="small">17 条 first-text 样本</text>
+  <text x="804" y="365" class="small">跨 provider 已有可对照矩阵</text>
+  <text x="804" y="390" class="tiny">completion gate 已通过</text>
 
   <line x1="1082" y1="322" x2="1147" y2="322" class="line"/>
 
   <rect x="1162" y="231" width="300" height="184" class="mini rose"/>
-  <text x="1190" y="273" class="num-hot">瓶颈在波动</text>
-  <text x="1190" y="310" class="label">provider / model TTFT</text>
-  <text x="1190" y="340" class="small">慢样本、错误样本仍会拖慢</text>
-  <text x="1190" y="365" class="small">需要样本矩阵持续校准路由</text>
-  <text x="1190" y="390" class="tiny">不是 UI paint / DevBridge 问题</text>
+  <text x="1190" y="273" class="num-hot">已分类</text>
+  <text x="1190" y="310" class="label">provider / model 波动</text>
+  <text x="1190" y="340" class="small">慢候选降权，不可用候选 fallback-only</text>
+  <text x="1190" y="365" class="small">不再误判为 UI paint 问题</text>
+  <text x="1190" y="390" class="tiny">后续只补脱敏 reason code</text>
 
-  <text x="122" y="444" class="tiny">可靠样本：submitAccepted 95/102ms，firstRuntimeStatus 116/122ms；firstTextDelta 1.24s / 1.38s / 1.67s / 1.80s。</text>
-  <text x="122" y="466" class="tiny">GUI smoke latestModelDeltaTiming firstText 1.30s；旧慢样本保留为 provider 波动证据。</text>
+  <text x="122" y="444" class="tiny">矩阵：9 个 responsive_chat latency group；6 个 first-text baseline，3 个 fallback-only evidence；totalNeededFirstTextSamples=0。</text>
+  <text x="122" y="466" class="tiny">GUI 复核：latestModelDeltaTiming firstText 1.94s，Harness routing evidence 可见，console error=0。</text>
 
   <rect x="86" y="510" width="690" height="360" class="card"/>
   <text x="122" y="561" class="section">已经收口的 current 事实源</text>
@@ -103,36 +103,36 @@
   <text x="150" y="820" class="small">selected model、TTFT、decisionReason、fallbackChain 可展示和复制。</text>
 
   <rect x="824" y="510" width="690" height="360" class="card"/>
-  <text x="860" y="561" class="section">剩余瓶颈的正确打法</text>
+  <text x="860" y="561" class="section">完成后的治理打法</text>
 
   <rect x="860" y="594" width="610" height="68" class="mini amber"/>
-  <text x="888" y="624" class="label">补真实多 provider 样本矩阵</text>
-  <text x="888" y="648" class="small">slow service setting / unsupported / recent error / trusted unknown 各要样本。</text>
+  <text x="888" y="624" class="label">真实多 provider 样本矩阵已补齐</text>
+  <text x="888" y="648" class="small">6 个 first-text baseline；3 个 fallback-only 只作路由证据。</text>
 
   <rect x="860" y="680" width="610" height="68" class="mini amber"/>
   <text x="888" y="710" class="label">避免慢 service setting 锁死响应模型</text>
-  <text x="888" y="734" class="small">显式设置若历史不达标，应解释原因并继续进入 responsive_chat_auto。</text>
+  <text x="888" y="734" class="small">慢候选自动降权；fallback-only 候选继续避开。</text>
 
   <rect x="860" y="766" width="610" height="68" class="mini amber"/>
-  <text x="888" y="796" class="label">用可靠性面板做 GUI 验收门</text>
-  <text x="888" y="820" class="small">每个慢样本都要能看到 selected、TTFT、fallback reason 与证据来源。</text>
+  <text x="888" y="796" class="label">可靠性面板作为 GUI 回归门</text>
+  <text x="888" y="820" class="small">每次路由变化都要看到 selected、TTFT、fallback reason。</text>
 
   <rect x="86" y="908" width="452" height="122" class="card"/>
   <text x="122" y="954" class="section">当前证据</text>
-  <text x="122" y="986" class="small">SQLite：auto / override 均写入 TTFT。</text>
-  <text x="122" y="1012" class="small">Playwright：“收到 / 绿灯OK”首字进入秒级。</text>
+  <text x="122" y="986" class="small">Matrix gate：pass，need=0。</text>
+  <text x="122" y="1012" class="small">GUI：firstText 1.94s，console error=0。</text>
 
   <rect x="574" y="908" width="452" height="122" class="card"/>
   <text x="610" y="954" class="section">治理口径</text>
   <text x="610" y="986" class="small">current：metadata -> latestModelDeltaTiming。</text>
-  <text x="610" y="1012" class="small">compat：旧 run 缺少 TTFT 时只做低可信历史兜底。</text>
+  <text x="610" y="1012" class="small">compat：fallback-only 仅作降权证据。</text>
 
   <rect x="1062" y="908" width="452" height="122" class="card"/>
-  <text x="1098" y="954" class="section">下一刀</text>
-  <text x="1098" y="986" class="small">跑多 provider 真实样本矩阵并回灌到 AgentUI 面板。</text>
-  <text x="1098" y="1012" class="small">目标：answer TTFT 稳定秒级，而非单 provider 样本达标。</text>
+  <text x="1098" y="954" class="section">下一刀（可选）</text>
+  <text x="1098" y="986" class="small">补 fallback-only 脱敏 reason code。</text>
+  <text x="1098" y="1012" class="small">UI 显示低延迟 / 慢 / fallback-only 三段。</text>
 
   <rect x="86" y="1050" width="1428" height="42" rx="21" fill="#f8fafc" stroke="#dbe5ee"/>
-  <text x="122" y="1068" class="tiny">更新口径：UI / runtime status 秒级已经成立；answer 首字在 deepseek-v4-flash 快样本中达标。</text>
-  <text x="122" y="1087" class="tiny">完整目标仍要证明跨 provider、慢设置、错误与 unsupported 场景都能被 responsive_chat_auto 稳定避开。</text>
+  <text x="122" y="1068" class="tiny">更新口径：UI / runtime status 百毫秒级已经成立；answer 首字由 provider/model TTFT 决定。</text>
+  <text x="122" y="1087" class="tiny">完整目标已完成；后续只做解释性体验与脱敏 reason code 增强。</text>
 </svg>

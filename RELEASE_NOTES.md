@@ -1,47 +1,49 @@
-## Lime v1.36.0
+## Lime v1.37.0
 
 发布日期：`2026-05-12`
-递交范围：当前完整 worktree，包含 tracked、deleted 与新增文件；本次按发布要求完成版本号、release note、校验、提交、tag 与推送。
+递交范围：当前完整 worktree，包含 tracked、deleted 与新增文件；本次按发布要求完成版本号、release note、校验，并在获得明确确认后执行提交。
 
-> 发布说明：上一版 release tag 为 `v1.35.0`。本版升级到 `v1.36.0`，并继续清理旧 `RELEASE_NOTES.md` 历史堆叠内容，只保留当前版本说明；旧 v1.35.0 发布说明不再作为当前 release note 事实源保留。
+> 发布说明：上一版 release tag 为 `v1.36.0`。本版升级到 `v1.37.0`，并继续清理旧 `RELEASE_NOTES.md` 历史堆叠内容，只保留当前版本说明；旧 v1.36.0 发布说明不再作为当前 release note 事实源保留。
 
 ### 发布概览
 
-- 应用版本从 `1.35.0` 升级到 `1.36.0`，同步 `package.json`、`package-lock.json`、`packages/lime-cli-npm/package.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`、`src-tauri/tauri.conf.json` 与 `src-tauri/tauri.conf.headless.json`。
-- AgentRuntime Profile 从路线图提案推进到 current MVP 工程闭环：`agent_runtime_submit_turn -> AgentRuntimeProfileStream -> ThreadReadModel -> Evidence Pack -> Replay / Analysis / Review -> AgentUI projection`。
-- Runtime evidence pack 主编排完成拆分，request telemetry、profile projection、completion audit、modality contract、auxiliary runtime、verification、observability、known gaps、artifact index、Markdown locale copy 与输出渲染拆入专门服务，减少单文件巨型事实源。
-- AgentUI、Harness、可靠性诊断、Artifact timeline 与 Team Workbench 继续收敛到 key-based projection presentation，不再把 runtime stable facts 翻译回写到 read model。
-- 全球本地化规则升级为发布硬约束：前端 current resources 与 Rust/Tauri Markdown、copy prompt、artifact title presentation 覆盖 `zh-CN`、`zh-TW`、`en-US`、`ja-JP`、`ko-KR`。
+- 应用版本从 `1.36.0` 升级到 `1.37.0`，同步 `package.json`、`package-lock.json`、`packages/lime-cli-npm/package.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`、`src-tauri/tauri.conf.json` 与 `src-tauri/tauri.conf.headless.json`。
+- AgentUI / Team Workbench 继续收敛到 current 投影主链：补齐 team workspace canvas、formation、activity preview、selected session detail、team operations 与 live runtime projector 的结构化 selectors 和回归。
+- Agent Chat 工作区强化图片生成与视觉任务预览链路，新增图片 workbench 状态文案、普通视觉 brief 确认、service skill entry 操作与消息列表展示回归。
+- Settings v2 与 Skills 工作台删除旧入口残留，继续减少过时 surface 对 current 页面导航和技能注册投影的干扰。
+- i18n 资源与类型测试扩展到 Agent 工作区新增 presentation keys，维持 `zh-CN`、`zh-TW`、`en-US`、`ja-JP`、`ko-KR` 五语言事实源一致。
 
 ### 用户可见更新
 
-- Agent 工作台新增/强化 routing evidence、可靠性诊断、timeline artifact、team workspace、general workbench workflow、图片附件预览与场景技能入口展示。
-- 修复截图触发后的 React 队列崩溃恢复路径，Crash Recovery 面板与 RootRouter 自动恢复不再把已初始化 i18n 状态重置回默认语言。
-- 快速响应与模型路由能力增强，request model resolution 支持更明确的 fast response profile、视觉模型能力推断与 routing not possible/decided 诊断。
-- Skills、Memory、项目创建、模型能力徽标、账号资料、自动化、渠道日志、Web Search 等页面补齐用户可见回归与多语言资源。
-- 全局截图/语音快捷键增加统一 shortcut guard，降低桌面快捷键注册冲突和重复触发风险。
+- Team Workbench 增加更完整的队伍概览、画布分层、会话 inline detail、活动预览、协作状态与操作面板展示。
+- 图片生成体验补齐生成状态、素材预览、消息列表承接、workspace image task preview 与发送动作防护。
+- App Sidebar / 页面内容 / 设置首页导航继续向 current 页面集合收敛，移除旧 settings 分类和页面类型残留。
+- Capability Draft 与 Workspace Registered Skills 面板更新注册技能投影与工作区技能可用性展示。
+- `@` command registry smoke 和 TTFT 采样脚本补齐响应式聊天 / stream latency 证据，相关截图作为本轮 GUI 验证证据随 worktree 保留。
 
 ### 开发者与治理更新
 
-- `docs/roadmap/agentruntime` 增加完成审计，明确 current / compat / deprecated / dead 分类和后续非阻塞弱项，避免继续从旧 GUI 自拼状态或旧 evidence 摘要长出平行事实源。
-- Evidence / Replay / Analysis / Review 导出统一消费 `agent_runtime_export_evidence_pack`，request telemetry 无匹配请求时输出空摘要，不再保留伪 `unlinked`。
-- Rust AgentRuntime profile 增加 task、routing、permission、tool、subagent、job、remote channel 等结构测试；前端 projection 与 i18n 增加稳定回归。
-- 质量工作流与仓库规则同步更新：用户可见 presentation 文案必须走 current 五语言资源或 locale copy service。
+- `docs/roadmap/agentui` 增加 completion audit、responsive chat TTFT sample matrix 与 stream latency map 更新，记录 AgentUI 主线完成状态和剩余风险。
+- `docs/roadmap/i18n/prd.md` 更新本地化主线进度，明确新增 Agent 工作区文案与测试覆盖。
+- Rust media / image skill launch 链路整理生成任务参数、CLI bridge 与 media task 命令测试，避免图片工具运行时继续依赖旧参数假设。
+- Team Workspace runtime selectors、presentation hooks、operation state、activity previews 与 live runtime projector 增加定向单测，降低 UI 组件直接拼装 runtime facts 的风险。
+- Release note 继续按单版本事实源维护，旧版本说明不再堆叠在当前发布文件内。
 
 ### 校验状态
 
-- `npm run verify:app-version`：通过，版本一致为 `1.36.0`。
-- `cargo fmt --manifest-path "src-tauri/Cargo.toml" --all --check`：通过。
+- `npm run verify:app-version`：通过，目标版本 `1.37.0`。
 - `cargo fmt --manifest-path "src-tauri/Cargo.toml" --all`：通过。
+- `cargo fmt --manifest-path "src-tauri/Cargo.toml" --all -- --check`：通过。
 - `npm run format`：通过。
+- `npm run lint`：通过。
+- `npm test`：通过，55/55 批次通过。
+- `npm run test:contracts`：通过。
 - `cargo test --manifest-path "src-tauri/Cargo.toml" --workspace --locked`：通过。
 - `cargo clippy --manifest-path "src-tauri/Cargo.toml" --workspace --all-targets -- -D warnings`：通过。
-- `npm run lint`：通过。
-- `npm test`：通过。
-- `npm run test:contracts`：通过。
-- `npm run governance:legacy-report`：通过，边界违规 `0`。
-- `npm run verify:gui-smoke`：通过，包含 workspace ready、browser runtime、site adapters、agent service skill entry、runtime tool surface、`@` command registry、Claw chat ready streaming、knowledge GUI 与 design canvas smoke。
+- `npm run governance:legacy-report`：通过，零引用候选 `0`、边界违规 `0`。
+- `LIME_AGENT_QC_PROVIDER="custom-f74b38b5-6d3f-44ef-aa0f-99d70c3482ed" LIME_AGENT_QC_MODEL="sensenova-6.7-flash-lite" npm run verify:gui-smoke`：通过，覆盖 GUI 主路径发布风险。
+- `LIME_AGENT_QC_PROVIDER="custom-f74b38b5-6d3f-44ef-aa0f-99d70c3482ed" LIME_AGENT_QC_MODEL="sensenova-6.7-flash-lite" npm run verify:local`：通过，包含版本一致性、前端 lint/typecheck/test、contracts、Rust test 与 GUI smoke。
 
 ---
 
-**完整变更**: `v1.35.0` -> `v1.36.0`
+**完整变更**: `v1.36.0` -> `v1.37.0`

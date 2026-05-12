@@ -101,6 +101,8 @@ export interface AgentPageParams {
   initialPendingServiceSkillLaunch?: AgentPendingServiceSkillLaunchParams;
   /** 进入 Agent 后优先恢复一条输入能力路由 */
   initialInputCapability?: AgentInitialInputCapabilityParams;
+  /** 仅把输入能力放进首页输入框，不直接切进会话工作区 */
+  preferHomeForInitialInputCapability?: boolean;
   /** 从资料管理进入 Agent 时预启用的项目资料 */
   initialKnowledgePackSelection?: AgentInitialKnowledgePackSelectionParams;
   /** 进入 Agent 后自动打开项目内某个文件 */
@@ -160,6 +162,7 @@ export interface SkillsPageParams {
   initialScaffoldRequestKey?: number;
   creationProjectId?: string;
   highlightCapabilityDraftId?: string;
+  initialView?: "store" | "builtin" | "installed" | "discover" | "manage";
 }
 
 export interface KnowledgePageParams {

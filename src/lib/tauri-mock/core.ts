@@ -8093,6 +8093,7 @@ const defaultMocks: Record<string, any> = {
   add_skill_repo: () => ({ success: true }),
   remove_skill_repo: () => ({ success: true }),
   get_installed_lime_skills: () => [],
+  refresh_skill_cache: () => true,
   inspect_local_skill_for_app: () => ({
     content: "# Mock Skill",
     metadata: {},

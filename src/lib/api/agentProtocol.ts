@@ -16,6 +16,7 @@ import type {
 } from "./agentExecutionRuntime";
 import type {
   AsterApprovalPolicy,
+  AsterProviderConfig,
   AgentRuntimeSubmitTurnRequest,
   AgentRuntimeWebSearchMode,
   AsterExecutionStrategy,
@@ -770,6 +771,7 @@ export type AgentEvent =
   | AgentEventError;
 
 export interface AgentUserPreferences {
+  providerConfig?: AsterProviderConfig;
   providerPreference?: string;
   modelPreference?: string;
   thinking?: boolean;
@@ -1532,6 +1534,9 @@ export function createSubmitTurnRequestFromAgentOp(
     turn_id: op.turnId,
     images: op.images,
     turn_config: {
+      ...(preferences?.providerConfig
+        ? { provider_config: preferences.providerConfig }
+        : {}),
       provider_preference: preferences?.providerPreference,
       model_preference: preferences?.modelPreference,
       thinking_enabled: preferences?.thinking,

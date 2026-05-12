@@ -103,6 +103,7 @@ export function prepareAgentStreamSubmitDraft(
           skipUserMessage,
         }),
     purpose: messagePurpose,
+    imageWorkbenchPreview: assistantDraft?.imageWorkbenchPreview,
   };
 
   if (skipUserMessage) {

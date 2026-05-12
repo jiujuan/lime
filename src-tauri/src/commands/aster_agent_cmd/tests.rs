@@ -17,9 +17,9 @@ mod tests {
     };
     use crate::tests::runtime_test_support::shared_aster_runtime_test_root;
     use async_trait::async_trait;
-    use base64::{engine::general_purpose::STANDARD, Engine as _};
-    use lime_agent::request_tool_policy::resolve_request_tool_policy;
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
     use lime_agent::AgentEvent as RuntimeAgentEvent;
+    use lime_agent::request_tool_policy::resolve_request_tool_policy;
     use regex::Regex;
     use std::collections::HashSet;
     use std::ffi::OsString;
@@ -916,8 +916,8 @@ mod tests {
     }
 
     #[test]
-    fn test_append_fast_chat_request_tool_policy_session_permissions_blocks_web_tools_when_disabled(
-    ) {
+    fn test_append_fast_chat_request_tool_policy_session_permissions_blocks_web_tools_when_disabled()
+     {
         let policy = resolve_request_tool_policy(Some(false), false);
         let mut permissions = Vec::new();
 
@@ -943,14 +943,16 @@ mod tests {
             web_search_rule.conditions[0].value,
             serde_json::json!("session-fast-chat-1")
         );
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "WebFetch" && !permission.allowed));
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "WebFetch" && !permission.allowed)
+        );
     }
 
     #[test]
-    fn test_append_fast_chat_request_tool_policy_session_permissions_only_applies_to_disabled_fast_chat(
-    ) {
+    fn test_append_fast_chat_request_tool_policy_session_permissions_only_applies_to_disabled_fast_chat()
+     {
         let disabled_policy = resolve_request_tool_policy(Some(false), false);
         let allowed_policy = resolve_request_tool_policy(Some(true), false);
         let mut permissions = Vec::new();
@@ -1103,8 +1105,8 @@ mod tests {
     }
 
     #[test]
-    fn test_prune_fast_chat_request_tool_policy_tools_from_registry_keeps_web_tools_for_non_fast_chat_or_enabled_search(
-    ) {
+    fn test_prune_fast_chat_request_tool_policy_tools_from_registry_keeps_web_tools_for_non_fast_chat_or_enabled_search()
+     {
         let disabled_policy = resolve_request_tool_policy(Some(false), false);
         let allowed_policy = resolve_request_tool_policy(Some(true), false);
 
@@ -1293,27 +1295,44 @@ mod tests {
         assert!(!permissions.iter().any(|permission| permission.tool
             == LIME_CREATE_IMAGE_TASK_TOOL_NAME
             && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Bash" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Read" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Write" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Edit" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Glob" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Grep" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "mcp__lime-browser__*" && !permission.allowed));
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Bash" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Read" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Write" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Edit" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Glob" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Grep" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "mcp__lime-browser__*" && !permission.allowed)
+        );
+        assert!(permissions.iter().any(|permission| permission.tool
+            == LIME_SEARCH_WEB_IMAGES_TOOL_NAME
+            && !permission.allowed));
     }
 
     #[test]
@@ -1356,6 +1375,11 @@ mod tests {
             serde_json::json!({"type": "object"}),
         )));
         registry.register(Box::new(DummyTool::new(
+            LIME_SEARCH_WEB_IMAGES_TOOL_NAME,
+            "Search web images",
+            serde_json::json!({"type": "object"}),
+        )));
+        registry.register(Box::new(DummyTool::new(
             "Bash",
             "Run shell",
             serde_json::json!({"type": "object"}),
@@ -1379,6 +1403,7 @@ mod tests {
         assert!(!registry.contains("Read"));
         assert!(!registry.contains("Write"));
         assert!(!registry.contains("Glob"));
+        assert!(!registry.contains(LIME_SEARCH_WEB_IMAGES_TOOL_NAME));
         assert!(!registry.contains("mcp__lime-browser__tabs_context_mcp"));
         assert!(registry.contains("Skill"));
     }
@@ -1416,36 +1441,52 @@ mod tests {
             serde_json::json!("session-cover-skill-1")
         );
 
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Read" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Write" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Edit" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Bash" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Glob" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Grep" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "mcp__lime-browser__*" && !permission.allowed));
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Read" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Write" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Edit" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Bash" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Glob" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Grep" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "mcp__lime-browser__*" && !permission.allowed)
+        );
         assert!(permissions.iter().any(|permission| permission.tool
             == "social_generate_cover_image"
             && !permission.allowed));
         assert!(permissions.iter().any(|permission| permission.tool
             == LIME_CREATE_IMAGE_TASK_TOOL_NAME
             && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "TaskOutput" && !permission.allowed));
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "TaskOutput" && !permission.allowed)
+        );
     }
 
     #[test]
@@ -1560,15 +1601,21 @@ mod tests {
             serde_json::json!("session-video-skill-1")
         );
 
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Read" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Glob" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Grep" && !permission.allowed));
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Read" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Glob" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Grep" && !permission.allowed)
+        );
     }
 
     #[test]
@@ -1647,15 +1694,21 @@ mod tests {
             serde_json::json!("session-broadcast-skill-1")
         );
 
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Read" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Glob" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Grep" && !permission.allowed));
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Read" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Glob" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Grep" && !permission.allowed)
+        );
     }
 
     #[test]
@@ -1736,20 +1789,26 @@ mod tests {
             serde_json::json!("session-resource-search-skill-1")
         );
 
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Read" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Glob" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Grep" && !permission.allowed));
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Read" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Glob" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Grep" && !permission.allowed)
+        );
     }
 
     #[test]
-    fn test_prune_resource_search_skill_launch_detour_tools_from_registry_hides_tool_search_and_fs_tools(
-    ) {
+    fn test_prune_resource_search_skill_launch_detour_tools_from_registry_hides_tool_search_and_fs_tools()
+     {
         let metadata = serde_json::json!({
             "harness": {
                 "resource_search_skill_launch": {
@@ -1828,15 +1887,21 @@ mod tests {
             serde_json::json!("session-research-skill-1")
         );
 
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Read" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Glob" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Grep" && !permission.allowed));
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Read" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Glob" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Grep" && !permission.allowed)
+        );
     }
 
     #[test]
@@ -1922,20 +1987,26 @@ mod tests {
             serde_json::json!("session-deep-search-skill-1")
         );
 
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Read" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Glob" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Grep" && !permission.allowed));
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Read" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Glob" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Grep" && !permission.allowed)
+        );
     }
 
     #[test]
-    fn test_prune_deep_search_skill_launch_detour_tools_from_registry_hides_tool_search_and_fs_tools(
-    ) {
+    fn test_prune_deep_search_skill_launch_detour_tools_from_registry_hides_tool_search_and_fs_tools()
+     {
         let metadata = serde_json::json!({
             "harness": {
                 "deep_search_skill_launch": {
@@ -2016,15 +2087,21 @@ mod tests {
             serde_json::json!("session-report-skill-1")
         );
 
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Read" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Glob" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Grep" && !permission.allowed));
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Read" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Glob" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Grep" && !permission.allowed)
+        );
     }
 
     #[test]
@@ -2116,23 +2193,31 @@ mod tests {
             .expect("should add browser compat deny rule");
         assert!(!browser_deny_rule.allowed);
 
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "WebSearch" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Read" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Glob" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Grep" && !permission.allowed));
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "WebSearch" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Read" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Glob" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Grep" && !permission.allowed)
+        );
     }
 
     #[test]
-    fn test_prune_site_search_skill_launch_detour_tools_from_registry_hides_tool_search_and_fs_tools(
-    ) {
+    fn test_prune_site_search_skill_launch_detour_tools_from_registry_hides_tool_search_and_fs_tools()
+     {
         let metadata = serde_json::json!({
             "harness": {
                 "site_search_skill_launch": {
@@ -2220,18 +2305,26 @@ mod tests {
             serde_json::json!("session-pdf-read-skill-1")
         );
 
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "WebSearch" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Grep" && !permission.allowed));
-        assert!(!permissions
-            .iter()
-            .any(|permission| permission.tool == "Read" && !permission.allowed));
-        assert!(!permissions
-            .iter()
-            .any(|permission| permission.tool == "Glob" && !permission.allowed));
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "WebSearch" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Grep" && !permission.allowed)
+        );
+        assert!(
+            !permissions
+                .iter()
+                .any(|permission| permission.tool == "Read" && !permission.allowed)
+        );
+        assert!(
+            !permissions
+                .iter()
+                .any(|permission| permission.tool == "Glob" && !permission.allowed)
+        );
     }
 
     #[test]
@@ -2323,18 +2416,26 @@ mod tests {
             serde_json::json!("session-summary-skill-1")
         );
 
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "WebSearch" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Grep" && !permission.allowed));
-        assert!(!permissions
-            .iter()
-            .any(|permission| permission.tool == "Read" && !permission.allowed));
-        assert!(!permissions
-            .iter()
-            .any(|permission| permission.tool == "Glob" && !permission.allowed));
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "WebSearch" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Grep" && !permission.allowed)
+        );
+        assert!(
+            !permissions
+                .iter()
+                .any(|permission| permission.tool == "Read" && !permission.allowed)
+        );
+        assert!(
+            !permissions
+                .iter()
+                .any(|permission| permission.tool == "Glob" && !permission.allowed)
+        );
     }
 
     #[test]
@@ -2427,18 +2528,26 @@ mod tests {
             serde_json::json!("session-translation-skill-1")
         );
 
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "WebSearch" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Grep" && !permission.allowed));
-        assert!(!permissions
-            .iter()
-            .any(|permission| permission.tool == "Read" && !permission.allowed));
-        assert!(!permissions
-            .iter()
-            .any(|permission| permission.tool == "Glob" && !permission.allowed));
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "WebSearch" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Grep" && !permission.allowed)
+        );
+        assert!(
+            !permissions
+                .iter()
+                .any(|permission| permission.tool == "Read" && !permission.allowed)
+        );
+        assert!(
+            !permissions
+                .iter()
+                .any(|permission| permission.tool == "Glob" && !permission.allowed)
+        );
     }
 
     #[test]
@@ -2531,18 +2640,26 @@ mod tests {
             serde_json::json!("session-analysis-skill-1")
         );
 
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "WebSearch" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Grep" && !permission.allowed));
-        assert!(!permissions
-            .iter()
-            .any(|permission| permission.tool == "Read" && !permission.allowed));
-        assert!(!permissions
-            .iter()
-            .any(|permission| permission.tool == "Glob" && !permission.allowed));
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "WebSearch" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Grep" && !permission.allowed)
+        );
+        assert!(
+            !permissions
+                .iter()
+                .any(|permission| permission.tool == "Read" && !permission.allowed)
+        );
+        assert!(
+            !permissions
+                .iter()
+                .any(|permission| permission.tool == "Glob" && !permission.allowed)
+        );
     }
 
     #[test]
@@ -2635,23 +2752,31 @@ mod tests {
             serde_json::json!("session-transcription-skill-1")
         );
 
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "WebSearch" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Read" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Glob" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Grep" && !permission.allowed));
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "WebSearch" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Read" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Glob" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Grep" && !permission.allowed)
+        );
     }
 
     #[test]
-    fn test_prune_transcription_skill_launch_detour_tools_from_registry_hides_tool_search_and_fs_tools(
-    ) {
+    fn test_prune_transcription_skill_launch_detour_tools_from_registry_hides_tool_search_and_fs_tools()
+     {
         let metadata = serde_json::json!({
             "harness": {
                 "transcription_skill_launch": {
@@ -2740,18 +2865,26 @@ mod tests {
             serde_json::json!("session-url-parse-skill-1")
         );
 
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "WebSearch" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Read" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Glob" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Grep" && !permission.allowed));
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "WebSearch" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Read" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Glob" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Grep" && !permission.allowed)
+        );
     }
 
     #[test]
@@ -2846,23 +2979,31 @@ mod tests {
             serde_json::json!("session-typesetting-skill-1")
         );
 
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "WebSearch" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Read" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Glob" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Grep" && !permission.allowed));
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "WebSearch" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Read" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Glob" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Grep" && !permission.allowed)
+        );
     }
 
     #[test]
-    fn test_prune_typesetting_skill_launch_detour_tools_from_registry_hides_tool_search_and_fs_tools(
-    ) {
+    fn test_prune_typesetting_skill_launch_detour_tools_from_registry_hides_tool_search_and_fs_tools()
+     {
         let metadata = serde_json::json!({
             "harness": {
                 "typesetting_skill_launch": {
@@ -2956,23 +3097,31 @@ mod tests {
             serde_json::json!("session-presentation-skill-1")
         );
 
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "WebSearch" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Read" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Glob" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Grep" && !permission.allowed));
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "WebSearch" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Read" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Glob" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Grep" && !permission.allowed)
+        );
     }
 
     #[test]
-    fn test_prune_presentation_skill_launch_detour_tools_from_registry_hides_tool_search_and_fs_tools(
-    ) {
+    fn test_prune_presentation_skill_launch_detour_tools_from_registry_hides_tool_search_and_fs_tools()
+     {
         let metadata = serde_json::json!({
             "harness": {
                 "presentation_skill_launch": {
@@ -3065,18 +3214,26 @@ mod tests {
             serde_json::json!("session-form-skill-1")
         );
 
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "WebSearch" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Read" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Glob" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Grep" && !permission.allowed));
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "WebSearch" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Read" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Glob" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Grep" && !permission.allowed)
+        );
     }
 
     #[test]
@@ -3171,18 +3328,26 @@ mod tests {
             serde_json::json!("session-webpage-skill-1")
         );
 
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "WebSearch" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Read" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Glob" && !permission.allowed));
-        assert!(permissions
-            .iter()
-            .any(|permission| permission.tool == "Grep" && !permission.allowed));
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "WebSearch" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Read" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Glob" && !permission.allowed)
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|permission| permission.tool == "Grep" && !permission.allowed)
+        );
     }
 
     #[test]
@@ -4915,7 +5080,8 @@ mod tests {
         assert!(merged.contains("\"image_task\":"));
         assert!(merged.contains("不要为了确认技能名、工具名或命令名再去调用 ToolSearch"));
         assert!(merged.contains("当前主会话第一刀必须先调用 Skill(image_generate)"));
-        assert!(merged.contains("不要先走 ToolSearch / WebSearch / Bash / Read / Write / Edit / Glob / Grep / 浏览器 MCP / Playwright"));
+        assert!(merged.contains("不要先走 ToolSearch / WebSearch / lime_search_web_images / Bash / Read / Write / Edit / Glob / Grep / 浏览器 MCP / Playwright"));
+        assert!(merged.contains("`lime_search_web_images` 只服务 @素材"));
         assert!(merged.contains("应立即改为直调 Skill(image_generate)"));
         assert!(merged.contains(
             "如果 Skill(image_generate) 返回的 Lime 工具元数据里只有 allowed_tools=[\"lime_create_image_generation_task\"]"
@@ -4928,6 +5094,8 @@ mod tests {
         ));
         assert!(merged.contains("不要伪造“图片已生成完成”"));
         assert!(merged.contains("不要再次调用 Skill(image_generate) 或重复创建第二个图片任务"));
+        assert!(merged.contains("不要再输出“任务类型 / 任务 ID / 任务文件 / 状态”这类提交摘要"));
+        assert!(!merged.contains("给出提交摘要"));
         assert!(merged.contains("provider_id / model"));
         assert!(merged.contains(
             "count / layout_hint / session_id / project_id / raw_text / usage / size / requested_target / reference_images"
@@ -4938,6 +5106,30 @@ mod tests {
         assert!(merged.contains("每一格都必须提供完整 prompt"));
         assert!(merged.contains("电影、动漫、短视频、广告"));
         assert!(merged.contains("当前任务已经显式进入图片技能主链"));
+    }
+
+    #[test]
+    fn test_merge_system_prompt_with_image_skill_launch_adds_plain_chat_confirmation_guard() {
+        let metadata = serde_json::json!({
+            "harness": {
+                "theme": "general",
+                "session_mode": "general_workbench",
+                "allow_model_skills": true
+            }
+        });
+
+        let merged = merge_system_prompt_with_image_skill_launch(
+            Some("你是助手".to_string()),
+            Some(&metadata),
+        )
+        .expect("should contain guard prompt");
+
+        assert!(merged.contains("<<LIME_IMAGE_GENERATION_CONFIRMATION_GUARD>>"));
+        assert!(merged.contains("不要因此自动调用 Skill(image_generate)"));
+        assert!(merged.contains("是否要调用画图功能生成图片"));
+        assert!(merged.contains("不要输出 HTML/CSS/SVG/Markdown 草图"));
+        assert!(merged.contains("这看起来是图片生成需求，要我直接调用画图功能生成吗？"));
+        assert!(!merged.contains(super::image_skill_launch::IMAGE_SKILL_LAUNCH_PROMPT_MARKER));
     }
 
     #[test]
@@ -6436,8 +6628,11 @@ mod tests {
         assert!(merged.contains("不要先走 ToolSearch / WebSearch / Read / Glob / Grep"));
         assert!(merged.contains("目标是复用 Lime 现有 A2UI 协议输出一份真实可渲染的表单"));
         assert!(merged.contains("最终结果必须输出一个 ```a2ui 代码块"));
-        assert!(merged
-            .contains("字段类型只允许使用 simple form 已支持的 choice / text / slider / checkbox"));
+        assert!(
+            merged.contains(
+                "字段类型只允许使用 simple form 已支持的 choice / text / slider / checkbox"
+            )
+        );
     }
 
     #[test]
@@ -6735,8 +6930,8 @@ mod tests {
     }
 
     #[test]
-    fn test_merge_system_prompt_with_service_skill_launch_includes_missing_session_failure_contract(
-    ) {
+    fn test_merge_system_prompt_with_service_skill_launch_includes_missing_session_failure_contract()
+     {
         let metadata = serde_json::json!({
             "harness": {
                 "service_skill_launch": {
@@ -7035,8 +7230,8 @@ mod tests {
     }
 
     #[test]
-    fn test_merge_system_prompt_with_service_skill_launch_preload_adds_markdown_bundle_translation_contract(
-    ) {
+    fn test_merge_system_prompt_with_service_skill_launch_preload_adds_markdown_bundle_translation_contract()
+     {
         let execution = ServiceSkillLaunchPreloadExecution {
             request: RunSiteAdapterRequest {
                 adapter_name: "x/article-export".to_string(),
@@ -7258,12 +7453,16 @@ mod tests {
 
         assert_eq!(projection.tool_name, "lime_site_run");
         assert!(projection.tool_id.starts_with("service-skill-preload:"));
-        assert!(projection
-            .arguments
-            .contains("\"execution_origin\":\"preload\""));
-        assert!(projection
-            .arguments
-            .contains("\"skill_title\":\"X 文章转存\""));
+        assert!(
+            projection
+                .arguments
+                .contains("\"execution_origin\":\"preload\"")
+        );
+        assert!(
+            projection
+                .arguments
+                .contains("\"skill_title\":\"X 文章转存\"")
+        );
         assert!(projection.result.success);
         assert!(projection.result.output.contains("已完成站点技能预执行"));
         assert!(projection.result.output.contains("图片资源：2 张"));
@@ -7367,11 +7566,13 @@ mod tests {
         let permission = PermissionCheckResult::ask("需要确认");
         let normalized = normalize_workspace_tool_permission_behavior(permission, false);
         assert_eq!(normalized.behavior, PermissionBehavior::Deny);
-        assert!(normalized
-            .message
-            .as_deref()
-            .unwrap_or_default()
-            .contains("当前模式不支持交互确认"));
+        assert!(
+            normalized
+                .message
+                .as_deref()
+                .unwrap_or_default()
+                .contains("当前模式不支持交互确认")
+        );
     }
 
     #[test]
@@ -7727,8 +7928,8 @@ mod tests {
     }
 
     #[test]
-    fn test_build_team_preference_system_prompt_prefers_request_metadata_over_session_recent_team_selection(
-    ) {
+    fn test_build_team_preference_system_prompt_prefers_request_metadata_over_session_recent_team_selection()
+     {
         let prompt = build_team_preference_system_prompt(
             Some(&serde_json::json!({
                 "harness": {
@@ -7818,20 +8019,28 @@ mod tests {
             Some("code-triage-team")
         );
         assert_eq!(customization.theme.as_deref(), Some("engineering"));
-        assert!(customization
-            .skill_ids
-            .contains(&"repo-exploration".to_string()));
-        assert!(customization
-            .skill_ids
-            .contains(&"source-grounding".to_string()));
-        assert!(customization
-            .skill_ids
-            .contains(&"verification-report".to_string()));
-        assert!(customization
-            .hooks
-            .as_ref()
-            .and_then(|hooks| hooks.get(&aster::hooks::HookEvent::Stop))
-            .is_some());
+        assert!(
+            customization
+                .skill_ids
+                .contains(&"repo-exploration".to_string())
+        );
+        assert!(
+            customization
+                .skill_ids
+                .contains(&"source-grounding".to_string())
+        );
+        assert!(
+            customization
+                .skill_ids
+                .contains(&"verification-report".to_string())
+        );
+        assert!(
+            customization
+                .hooks
+                .as_ref()
+                .and_then(|hooks| hooks.get(&aster::hooks::HookEvent::Stop))
+                .is_some()
+        );
         assert_eq!(customization.allowed_tools, vec!["Read", "Bash"]);
         assert_eq!(customization.disallowed_tools, vec!["WebSearch"]);
     }
@@ -7979,16 +8188,20 @@ mod tests {
 
         let encoded = encode_tool_result_for_harness_observability(result);
         assert!(encoded.success);
-        assert!(encoded
-            .output
-            .as_deref()
-            .unwrap_or_default()
-            .contains(LIME_TOOL_METADATA_BEGIN));
-        assert!(encoded
-            .output
-            .as_deref()
-            .unwrap_or_default()
-            .contains("\"output_file\":\"/tmp/task.log\""));
+        assert!(
+            encoded
+                .output
+                .as_deref()
+                .unwrap_or_default()
+                .contains(LIME_TOOL_METADATA_BEGIN)
+        );
+        assert!(
+            encoded
+                .output
+                .as_deref()
+                .unwrap_or_default()
+                .contains("\"output_file\":\"/tmp/task.log\"")
+        );
     }
 
     #[test]
@@ -8289,10 +8502,12 @@ mod tests {
         let result = SocialGenerateCoverImageTool::extract_first_image_payload(&response);
 
         assert!(result.is_err());
-        assert!(result
-            .err()
-            .unwrap_or_default()
-            .contains("图像接口返回 data 为空"));
+        assert!(
+            result
+                .err()
+                .unwrap_or_default()
+                .contains("图像接口返回 data 为空")
+        );
     }
 
     #[test]
@@ -8396,10 +8611,12 @@ mod tests {
         assert_eq!(tools[0]["name"], serde_json::json!("docs_search"));
         assert_eq!(tools[0]["deferred_loading"], serde_json::json!(true));
         assert!(tools[0].get("input_schema").is_some());
-        assert!(tools[0]
-            .get("input_examples")
-            .and_then(|v| v.as_array())
-            .is_some());
+        assert!(
+            tools[0]
+                .get("input_examples")
+                .and_then(|v| v.as_array())
+                .is_some()
+        );
         assert!(tools.iter().all(|tool| tool["name"] != "admin_secret"));
     }
 
@@ -8411,11 +8628,13 @@ mod tests {
         guard.register(Box::new(aster::tools::ToolSearchTool::new(
             std::sync::Weak::new(),
         )));
-        assert!(guard
-            .get("ToolSearch")
-            .expect("legacy ToolSearch should exist")
-            .description()
-            .contains("Fetches full schema definitions"));
+        assert!(
+            guard
+                .get("ToolSearch")
+                .expect("legacy ToolSearch should exist")
+                .description()
+                .contains("Fetches full schema definitions")
+        );
 
         super::tool_runtime::register_tool_search_tool_to_registry(
             &mut guard,
@@ -8462,9 +8681,11 @@ mod tests {
             let definitions =
                 super::tool_runtime::list_current_surface_tool_definitions(&state).await;
 
-            assert!(definitions
-                .iter()
-                .any(|definition| definition.name == "Agent"));
+            assert!(
+                definitions
+                    .iter()
+                    .any(|definition| definition.name == "Agent")
+            );
         });
     }
 

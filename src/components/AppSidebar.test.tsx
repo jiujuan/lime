@@ -2747,6 +2747,33 @@ describe("AppSidebar", () => {
     expect(onNavigate).not.toHaveBeenCalled();
   });
 
+  it("从全局 Skills 入口进入时应带上当前工作区，避免能力草案面板丢上下文", async () => {
+    const onNavigate = vi.fn();
+    localStorage.setItem("agent_last_project_id", JSON.stringify("project-1"));
+    const container = mountSidebarContainer({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "new-task",
+      } as AgentPageParams,
+      onNavigate,
+    });
+    await flushEffects();
+
+    const button = container.querySelector(
+      'button[aria-label="Skills"]',
+    ) as HTMLButtonElement | null;
+
+    expect(button).not.toBeNull();
+
+    act(() => {
+      button?.click();
+    });
+
+    expect(onNavigate).toHaveBeenCalledWith("skills", {
+      creationProjectId: "project-1",
+    });
+  });
+
   it("旧的 enabled-items 本地缓存不应再复活历史导航", async () => {
     localStorage.setItem(
       APP_SIDEBAR_ENABLED_ITEMS_STORAGE_KEY,

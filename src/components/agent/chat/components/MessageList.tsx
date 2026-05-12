@@ -54,6 +54,7 @@ import {
   sanitizeContentPartsForDisplay,
   sanitizeMessageTextForDisplay,
 } from "../utils/internalImagePlaceholder";
+import { shouldSuppressImageWorkbenchStatusText } from "../utils/imageWorkbenchStatusText";
 import { isHiddenConversationArtifactPath } from "../utils/internalArtifactVisibility";
 import {
   buildInputbarRuntimeStatusLineModel,
@@ -643,6 +644,32 @@ const AssistantStreamingInlineIndicator: React.FC<{
           defaultValue: isQueued ? "等待输出" : "正在输出",
         })}
       </span>
+    </div>
+  );
+};
+
+const ImageWorkbenchAssistantIntro: React.FC<{ content: string }> = ({
+  content,
+}) => {
+  const lines = content
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      data-testid="image-workbench-assistant-intro"
+      className="max-w-[680px] space-y-0.5 text-[15px] leading-7 text-slate-950"
+    >
+      {lines.map((line, index) => (
+        <p key={`${index}:${line}`} className="m-0">
+          {line}
+        </p>
+      ))}
     </div>
   );
 };
@@ -2005,28 +2032,45 @@ const MessageListInner: React.FC<MessageListProps> = ({
     group: (typeof renderGroups)[number],
     streamingTextOverlay: AgentStreamTextOverlaySnapshot | null = null,
   ) => {
-    const hasImages = Array.isArray(msg.images) && msg.images.length > 0;
-    const shouldSuppressImageProcessFlow = Boolean(msg.imageWorkbenchPreview);
     const rawDisplayContent =
       msg.role === "assistant" && streamingTextOverlay?.content
         ? streamingTextOverlay.content
         : msg.content || "";
-    const displayContent = sanitizeMessageTextForDisplay(rawDisplayContent, {
-      role: msg.role,
-      hasImages,
-    });
+    const hasImages = Array.isArray(msg.images) && msg.images.length > 0;
+    const shouldSuppressStandaloneImageWorkbenchProcess =
+      msg.role === "assistant" &&
+      !msg.imageWorkbenchPreview &&
+      shouldSuppressImageWorkbenchStatusText(rawDisplayContent);
+    const shouldSuppressImageProcessFlow = Boolean(
+      msg.imageWorkbenchPreview ||
+      shouldSuppressStandaloneImageWorkbenchProcess,
+    );
+    const visibleRawDisplayContent =
+      msg.role === "assistant" &&
+      shouldSuppressImageWorkbenchStatusText(rawDisplayContent)
+        ? ""
+        : rawDisplayContent;
+    const displayContent = sanitizeMessageTextForDisplay(
+      visibleRawDisplayContent,
+      {
+        role: msg.role,
+        hasImages,
+      },
+    );
     const shouldDeferMessageDetails =
       shouldDeferHistoricalAssistantMessageDetails(msg);
-    const rawRuntimePeerContent = rawDisplayContent.trim();
+    const rawRuntimePeerContent = visibleRawDisplayContent.trim();
     const shouldRenderRuntimePeerCards =
       rawRuntimePeerContent.length > 0 &&
       isPureRuntimePeerMessageText(rawRuntimePeerContent);
     const displayContentParts = shouldDeferMessageDetails
       ? undefined
-      : sanitizeContentPartsForDisplay(msg.contentParts, {
-          role: msg.role,
-          hasImages,
-        });
+      : shouldSuppressImageProcessFlow
+        ? undefined
+        : sanitizeContentPartsForDisplay(msg.contentParts, {
+            role: msg.role,
+            hasImages,
+          });
     const isConversationTailAssistant =
       msg.role === "assistant" && msg.id === group.lastAssistantId;
     const timeline =
@@ -2038,6 +2082,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
     const hasProcessTimelineItems = hasTimelineProcessItems(timeline?.items);
     const includeInlineProcessFlow =
       !shouldDeferMessageDetails &&
+      !shouldSuppressImageProcessFlow &&
       msg.role === "assistant" &&
       shouldKeepInlineProcessForActiveAssistant(
         msg,
@@ -2150,7 +2195,9 @@ const MessageListInner: React.FC<MessageListProps> = ({
         ? { ...timeline, items: visiblePrimaryTimelineItems }
         : null;
     const trailingTimeline =
-      timeline && trailingTimelineItems.length > 0
+      !shouldSuppressImageProcessFlow &&
+      timeline &&
+      trailingTimelineItems.length > 0
         ? { ...timeline, items: trailingTimelineItems }
         : null;
     const hasTrailingArtifactTimelineItems = trailingTimelineItems.some(
@@ -2229,7 +2276,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
       shouldCollapseLongHistoricalMessage ||
       shouldFlattenHistoricalAssistantContent
         ? rendererContent
-        : rawDisplayContent;
+        : visibleRawDisplayContent;
     const rendererContentParts =
       shouldCollapseLongHistoricalMessage ||
       shouldFlattenHistoricalAssistantContent
@@ -2241,9 +2288,10 @@ const MessageListInner: React.FC<MessageListProps> = ({
     const rendererToolCalls = shouldCollapseLongHistoricalMessage
       ? undefined
       : conversationToolCalls;
-    const rendererActionRequests = shouldCollapseLongHistoricalMessage
-      ? undefined
-      : msg.actionRequests;
+    const rendererActionRequests =
+      shouldCollapseLongHistoricalMessage || shouldSuppressImageProcessFlow
+        ? undefined
+        : msg.actionRequests;
     const rendererMarkdownRenderMode =
       shouldCollapseLongHistoricalMessage ||
       shouldFlattenHistoricalAssistantContent
@@ -2279,10 +2327,11 @@ const MessageListInner: React.FC<MessageListProps> = ({
       knowledgeSaveContent.length >= 24,
     );
     const showMessageActions =
-      (msg.role === "user" && (canQuoteMessage || canCopyMessage)) ||
-      canSaveMessageAsSkill ||
-      canSaveMessageAsInspiration ||
-      canSaveMessageAsKnowledge;
+      !msg.imageWorkbenchPreview &&
+      ((msg.role === "user" && (canQuoteMessage || canCopyMessage)) ||
+        canSaveMessageAsSkill ||
+        canSaveMessageAsInspiration ||
+        canSaveMessageAsKnowledge);
     const messageSavedSiteContentTarget =
       msg.role === "assistant"
         ? resolveLatestProjectFileSavedSiteContentTargetFromMessage(msg)
@@ -2290,10 +2339,11 @@ const MessageListInner: React.FC<MessageListProps> = ({
     const shouldRenderMessageCanvasShortcut = Boolean(
       messageSavedSiteContentTarget &&
       onOpenSavedSiteContent &&
+      !msg.imageWorkbenchPreview &&
       !hasTrailingArtifactTimelineItems,
     );
     const visibleAssistantArtifacts =
-      msg.role === "assistant"
+      msg.role === "assistant" && !shouldSuppressImageProcessFlow
         ? (msg.artifacts || []).filter(
             (artifact) =>
               !isHiddenConversationArtifactPath(
@@ -2324,12 +2374,13 @@ const MessageListInner: React.FC<MessageListProps> = ({
     const shouldRenderFirstTokenRuntimeStatus =
       msg.role === "assistant" &&
       msg.isThinking &&
+      !shouldSuppressImageProcessFlow &&
       !shouldRenderRuntimeStatusPill(msg.runtimeStatus) &&
       !hasVisibleAssistantText &&
       !conversationContentParts?.length &&
       !conversationThinkingContent?.trim() &&
       !conversationToolCalls?.length &&
-      !((msg.actionRequests || []).length > 0) &&
+      !((rendererActionRequests || []).length > 0) &&
       !((msg.images || []).length > 0) &&
       visibleAssistantArtifacts.length === 0 &&
       !shouldRenderMessageCanvasShortcut &&
@@ -2341,7 +2392,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
       !conversationContentParts?.length &&
       !conversationThinkingContent?.trim() &&
       !conversationToolCalls?.length &&
-      !((msg.actionRequests || []).length > 0) &&
+      !((rendererActionRequests || []).length > 0) &&
       !primaryTimeline &&
       !trailingTimeline &&
       !((msg.images || []).length > 0) &&
@@ -2370,17 +2421,21 @@ const MessageListInner: React.FC<MessageListProps> = ({
         activeConversationRuntimeStatusLine?.status === "queued") &&
       !shouldPreviewHistoricalAssistantMessage &&
       !shouldDeferHistoricalMarkdownRender;
+    const shouldSuppressAssistantMetaFooter = shouldSuppressImageProcessFlow;
     const shouldRenderUsageFooter =
       isConversationTailAssistant &&
+      !shouldSuppressAssistantMetaFooter &&
       !shouldRenderTailRuntimeStatusLine &&
       !shouldRenderActiveRuntimeFooterIndicator &&
       !msg.isThinking &&
       Boolean(msg.usage);
     const shouldRenderStatusPill =
+      !shouldSuppressAssistantMetaFooter &&
       !shouldRenderTailRuntimeStatusLine &&
       shouldRenderRuntimeStatusPill(msg.runtimeStatus);
     const assistantMetaFooter =
       msg.role === "assistant" &&
+      !shouldSuppressAssistantMetaFooter &&
       (shouldRenderTailRuntimeStatusLine ||
         shouldRenderActiveRuntimeFooterIndicator ||
         shouldRenderStatusPill ||
@@ -2491,6 +2546,16 @@ const MessageListInner: React.FC<MessageListProps> = ({
       msg.role === "assistant" &&
       Boolean(primaryTimelineNode) &&
       hasVisibleAssistantText;
+    const shouldRenderImageWorkbenchBareBubble =
+      msg.role === "assistant" &&
+      Boolean(msg.imageWorkbenchPreview) &&
+      !primaryTimeline &&
+      !trailingTimeline &&
+      !hasImages &&
+      visibleAssistantArtifacts.length === 0 &&
+      !shouldRenderMessageCanvasShortcut &&
+      !msg.taskPreview &&
+      !assistantMetaFooter;
 
     return (
       <MessageWrapper
@@ -2518,6 +2583,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
           {hasAssistantBodyContent ? (
             <MessageBubble
               $isUser={msg.role === "user"}
+              $bareMedia={shouldRenderImageWorkbenchBareBubble}
               aria-label={msg.role === "assistant" ? assistantLabel : undefined}
             >
               {msg.role === "assistant" ? (
@@ -2546,6 +2612,8 @@ const MessageListInner: React.FC<MessageListProps> = ({
                     <HistoricalMarkdownHydrationPreview
                       content={rendererContent}
                     />
+                  ) : msg.imageWorkbenchPreview && hasVisibleAssistantText ? (
+                    <ImageWorkbenchAssistantIntro content={rendererContent} />
                   ) : (
                     <StreamingRenderer
                       content={rendererContent}
@@ -2634,21 +2702,23 @@ const MessageListInner: React.FC<MessageListProps> = ({
                     </button>
                   ) : null}
                   {msg.imageWorkbenchPreview ? (
-                    <ImageWorkbenchMessagePreview
-                      preview={msg.imageWorkbenchPreview}
-                      onOpen={
-                        onOpenMessagePreview
-                          ? (preview) =>
-                              onOpenMessagePreview(
-                                {
-                                  kind: "image_workbench",
-                                  preview,
-                                },
-                                msg,
-                              )
-                          : undefined
-                      }
-                    />
+                    <div className={hasVisibleAssistantText ? "mt-2.5" : ""}>
+                      <ImageWorkbenchMessagePreview
+                        preview={msg.imageWorkbenchPreview}
+                        onOpen={
+                          onOpenMessagePreview
+                            ? (preview) =>
+                                onOpenMessagePreview(
+                                  {
+                                    kind: "image_workbench",
+                                    preview,
+                                  },
+                                  msg,
+                                )
+                            : undefined
+                        }
+                      />
+                    </div>
                   ) : null}
                   {msg.taskPreview ? (
                     <TaskMessagePreview

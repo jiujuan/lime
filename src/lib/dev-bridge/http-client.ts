@@ -524,6 +524,10 @@ async function createBridgeEventConnection(
     if (hasOpened || !hubActive) {
       return;
     }
+    if (source.readyState === 1) {
+      handleOpen();
+      return;
+    }
     markBridgeUnavailable();
     hubActive = false;
     closeBridgeEventConnection(connection);
@@ -551,8 +555,11 @@ async function createBridgeEventConnection(
     dispatchBridgeEventMessage(events, parsed);
   };
 
-  source.onopen = () => {
+  const handleOpen = () => {
     if (!hubActive) {
+      return;
+    }
+    if (hasOpened) {
       return;
     }
     hasOpened = true;
@@ -563,6 +570,10 @@ async function createBridgeEventConnection(
     settleOpen = null;
     settleOpenError = null;
   };
+  source.onopen = handleOpen;
+  if (source.readyState === 1) {
+    handleOpen();
+  }
 
   source.onerror = (error) => {
     if (!hubActive) {

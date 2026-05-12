@@ -773,6 +773,102 @@ describe("agentStreamRuntimeHandler", () => {
     expect(getAgentStreamTextOverlay("assistant-1")?.content).toBe("123");
   });
 
+  it("图片生成草稿应保留极简文案，不被模型 text_delta 覆盖", () => {
+    const preservedContent =
+      "好嘞，用 Nanobanana Pro 给你生成一张广州塔春天照片\n先获取下工具参数\n马上生成";
+    let messages: Message[] = [
+      {
+        id: "assistant-image",
+        role: "assistant",
+        content: preservedContent,
+        timestamp: new Date("2026-05-12T10:00:00.000Z"),
+        isThinking: true,
+        contentParts: [],
+        imageWorkbenchPreview: {
+          taskId: "draft-image-1",
+          prompt: "一张广州塔春天照片",
+          mode: "generate",
+          status: "running",
+          modelName: "fal-ai/nano-banana-pro",
+        },
+      },
+    ];
+    const requestState = {
+      accumulatedContent: "",
+      queuedTurnId: null,
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    };
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const baseOptions = {
+      requestState,
+      callbacks: {
+        activateStream: vi.fn(),
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: () => {},
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
+          parts,
+      },
+      eventName: "agent-runtime-image-draft-test",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-image",
+      activeSessionId: "session-1",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react" as const,
+      preserveAssistantContent: preservedContent,
+      content: "@Nanobanana Pro 生成广州塔春天照片",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages: setMessages as never,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: vi.fn() as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    };
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "text_delta",
+        text: "我来为你生成这张照片。",
+      } as AgentEvent,
+    });
+
+    expect(requestState.accumulatedContent).toBe(preservedContent);
+    expect(messages[0]?.content).toBe(preservedContent);
+    expect(getAgentStreamTextOverlay("assistant-image")).toBeNull();
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: { type: "final_done" } as AgentEvent,
+    });
+
+    expect(messages[0]?.content).toBe(preservedContent);
+    expect(messages[0]?.content).not.toContain("我来为你生成");
+    expect(messages[0]?.imageWorkbenchPreview?.taskId).toBe("draft-image-1");
+    expect(messages[0]?.isThinking).toBe(false);
+  });
+
   it("text_delta_batch 应先写入 overlay，并在 final_done 时一次性 reconcile 回消息", () => {
     vi.useFakeTimers();
     let messages: Message[] = [

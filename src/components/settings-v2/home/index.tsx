@@ -1,6 +1,5 @@
 import {
   ArrowRight,
-  Blocks,
   Bot,
   Brain,
   Image as ImageIcon,
@@ -80,11 +79,6 @@ const quickAccessMeta = {
     titleKey: "settings.home.quickAccess.providers.title",
     descriptionKey: "settings.home.quickAccess.providers.description",
     icon: Brain,
-  },
-  [SettingsTabs.Skills]: {
-    titleKey: "settings.home.quickAccess.skills.title",
-    descriptionKey: "settings.home.quickAccess.skills.description",
-    icon: Blocks,
   },
   [SettingsTabs.MediaServices]: {
     titleKey: "settings.home.quickAccess.mediaServices.title",
@@ -323,15 +317,6 @@ export function SettingsHomePage({
             {onNavigate ? (
               <button
                 type="button"
-                onClick={() => onNavigate("skills")}
-                className="inline-flex items-center rounded-2xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
-              >
-                {t("settings.home.current.actions.skills")}
-              </button>
-            ) : null}
-            {onNavigate ? (
-              <button
-                type="button"
                 onClick={() => onNavigate("automation")}
                 className="inline-flex items-center rounded-2xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
               >
@@ -360,15 +345,6 @@ export function SettingsHomePage({
         </div>
 
         <div className="mt-5 grid gap-3 xl:grid-cols-2">
-          <article className="rounded-[22px] border border-slate-200 bg-white/90 p-4 shadow-sm shadow-slate-950/5">
-            <div className="text-sm font-semibold text-slate-900">
-              {t("settings.home.current.skills.title")}
-            </div>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              {t("settings.home.current.skills.description")}
-            </p>
-          </article>
-
           <article className="rounded-[22px] border border-slate-200 bg-white/90 p-4 shadow-sm shadow-slate-950/5">
             <div className="text-sm font-semibold text-slate-900">
               {t("settings.home.current.automation.title")}

@@ -138,7 +138,7 @@ describe("WorkspaceRegisteredSkillsPanel", () => {
   it("没有项目根目录时只显示选择项目提示，不读取已注册能力", () => {
     const { container } = renderPanel();
 
-    expect(container.textContent).toContain("Workspace 已注册能力");
+    expect(container.textContent).toContain("已保存技能");
     expect(container.textContent).toContain("选择或进入一个项目");
     expect(capabilityDraftsApi.listRegisteredSkills).not.toHaveBeenCalled();
     expect(listWorkspaceSkillBindings).not.toHaveBeenCalled();
@@ -459,7 +459,7 @@ describe("WorkspaceRegisteredSkillsPanel", () => {
     });
     expect(container.textContent).toContain("只读 CLI 报告");
     expect(container.textContent).toContain("已注册");
-    expect(container.textContent).toContain("P3C binding 候选");
+    expect(container.textContent).toContain("可试用");
     expect(container.textContent).toContain("capdraft-1 / capver-1");
     expect(container.textContent).toContain("注册 provenance");
     expect(container.textContent).toContain("只读 HTTP 执行 preflight");
@@ -555,14 +555,12 @@ describe("WorkspaceRegisteredSkillsPanel", () => {
       "当前仍未注入 Query Loop 或 tool_runtime",
     );
     expect(container.textContent).toContain("manual_runtime_enable");
-    expect(container.textContent).toContain("Agent envelope 草案");
-    expect(container.textContent).toContain("等待成功运行");
+    expect(container.textContent).toContain("项目助手");
+    expect(container.textContent).toContain("待试用");
     expect(container.textContent).toContain(
-      "成功运行后可把 Skill、权限、手动 rerun 和 evidence 组合成 Workspace Agent envelope。",
+      "试用结果没问题后，可以把它保存成当前项目里的助手。",
     );
-    expect(container.textContent).toContain(
-      "Evidence：还没有成功运行证据；先通过本回合启用拿到一次结果。",
-    );
+    expect(container.textContent).toContain("最近结果：还没有试用结果。");
     expect(container.textContent).toContain("Managed Job：未创建");
     expect(container.textContent).not.toContain("立即运行");
     expect(container.textContent).not.toContain("创建自动化");
@@ -927,11 +925,13 @@ describe("WorkspaceRegisteredSkillsPanel", () => {
     ) as HTMLButtonElement | null;
     expect(managedButton).toBeTruthy();
     expect(managedButton?.disabled).toBe(false);
-    expect(container.textContent).toContain("Agent card：等待 evidence-ready");
-    expect(container.textContent).toContain("Sharing：未完成审计前");
-    expect(container.textContent).toContain("Discovery：同 workspace 成员");
-    expect(container.textContent).toContain("Memory：引用 verification report");
-    expect(container.textContent).toContain("Widget：等待运行后展示状态");
+    expect(container.textContent).toContain("项目助手：试用通过后再保存。");
+    expect(container.textContent).toContain("共享：先只对你可见。");
+    expect(container.textContent).toContain(
+      "团队可见性：当前项目成员可以使用这条技能。",
+    );
+    expect(container.textContent).toContain("记录：已保留检查结果");
+    expect(container.textContent).toContain("结果：试用后展示最近状态");
     expect(container.textContent).toContain("Managed Job：草案暂停");
     expect(container.textContent).toContain("Schedule：Cron 0 9 * * *");
     expect(container.textContent).toContain("Managed Objective：paused");
@@ -943,7 +943,7 @@ describe("WorkspaceRegisteredSkillsPanel", () => {
       ),
     ).toHaveLength(1);
     expect(toggleButton).toBeTruthy();
-    expect(toggleButton?.textContent).toContain("恢复 Managed Job");
+    expect(toggleButton?.textContent).toContain("开启定时运行");
     expect(auditButton).toBeTruthy();
 
     await act(async () => {
@@ -983,10 +983,12 @@ describe("WorkspaceRegisteredSkillsPanel", () => {
     expect(exportAgentRuntimeEvidencePack).toHaveBeenCalledWith("session-1");
     expect(container.textContent).toContain("completion audit completed");
     expect(container.textContent).toContain(
-      "Agent card：workspace-local/capability-report",
+      "项目助手：已准备好保存（capability-report）",
     );
-    expect(container.textContent).toContain("workspace / team 内共享");
-    expect(container.textContent).toContain("复用同一 Managed Job / evidence");
+    expect(container.textContent).toContain("共享：可在当前项目内共享");
+    expect(container.textContent).toContain(
+      "团队可见性：当前项目成员可以使用这条技能。",
+    );
 
     const envelopeButton = container.querySelector(
       '[data-testid="workspace-registered-agent-envelope-action"]',
@@ -1274,10 +1276,10 @@ describe("WorkspaceRegisteredSkillsPanel", () => {
     ) as HTMLButtonElement | null;
     expect(initialEnvelopeButton).toBeTruthy();
     expect(initialEnvelopeButton?.disabled).toBe(true);
-    expect(container.textContent).toContain("Agent card：等待 evidence-ready");
-    expect(container.textContent).toContain("Sharing：未完成审计前");
+    expect(container.textContent).toContain("项目助手：试用通过后再保存。");
+    expect(container.textContent).toContain("共享：先只对你可见。");
     expect(container.textContent).not.toContain(
-      "Agent card：workspace-local/capability-report",
+      "项目助手：已准备好保存（capability-report）",
     );
 
     await act(async () => {
@@ -1300,11 +1302,12 @@ describe("WorkspaceRegisteredSkillsPanel", () => {
     expect(completedEnvelopeButton?.disabled).toBe(false);
     expect(container.textContent).toContain("completion audit completed");
     expect(container.textContent).toContain(
-      "Agent card：workspace-local/capability-report",
+      "项目助手：已准备好保存（capability-report）",
     );
-    expect(container.textContent).toContain("workspace / team 内共享");
-    expect(container.textContent).toContain("不进入 public Marketplace");
-    expect(container.textContent).toContain("同 workspace 成员");
+    expect(container.textContent).toContain("共享：可在当前项目内共享");
+    expect(container.textContent).toContain(
+      "团队可见性：当前项目成员可以使用这条技能。",
+    );
 
     await act(async () => {
       completedEnvelopeButton?.click();
@@ -1446,9 +1449,7 @@ describe("WorkspaceRegisteredSkillsPanel", () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(container.textContent).toContain(
-      "当前项目还没有通过 P3A 注册的能力",
-    );
+    expect(container.textContent).toContain("当前项目还没有已保存技能");
 
     await act(async () => {
       root.render(

@@ -396,22 +396,16 @@ describe("i18n namespace loader", () => {
         "agentChat.sessionOverview.queue.imageCount",
       );
       expect(resources[locale].agent).toHaveProperty(
-        "agentChat.imageWorkbenchPreview.status.complete.generate",
-      );
-      expect(resources[locale].agent).toHaveProperty(
-        "agentChat.imageWorkbenchPreview.description.complete.single",
-      );
-      expect(resources[locale].agent).toHaveProperty(
-        "agentChat.imageWorkbenchPreview.source.footnote",
-      );
-      expect(resources[locale].agent).toHaveProperty(
         "agentChat.imageWorkbenchPreview.media.alt",
       );
       expect(resources[locale].agent).toHaveProperty(
-        "agentChat.imageWorkbenchPreview.meta.imageProgress",
+        "agentChat.imageWorkbenchPreview.media.open",
       );
       expect(resources[locale].agent).toHaveProperty(
-        "agentChat.imageWorkbenchPreview.promptFallback",
+        "agentChat.imageWorkbenchPreview.placeholder.generating",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.imageWorkbenchPreview.placeholder.failed",
       );
       expect(resources[locale].agent).toHaveProperty(
         "agentChat.searchResultPreview.expandMore",
@@ -447,7 +441,160 @@ describe("i18n namespace loader", () => {
         "agentChat.teamWorkspace.canvasToolbar.fitProgress",
       );
       expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.canvasStage.badge",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.canvasStage.shortcutHint",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.canvasStage.emptyTitle",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.dock.currentProgress",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.dock.processingCount",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.dock.selectedPlan",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.dock.aria.expand",
+      );
+      expect(resources[locale].agent).toHaveProperty(
         "agentChat.teamWorkspace.teamActions.waitAny",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.board.canvas.title",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.board.canvas.subtitle.runtime",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.boardChrome.headline.runningWithQueued",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.boardChrome.hint.runtime",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.boardChrome.chip.focus",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.boardChrome.statusSummary",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.activityPreview.line",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.activityPreview.status.message",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.activityPreview.messageTitle.output",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.activityPreview.error.syncFailed",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.liveRuntime.title.statusChanged",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.liveRuntime.detail.toolProcessing",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.liveRuntime.lifecycle.turnFailed.detail",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.liveRuntime.status.retry",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.overview.selectedSession.focusBadge",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.overview.taskCount.waitable",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.runtimeStatus.completed",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.operations.heading",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.operations.recentCount",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.operations.wait.resolved",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.operations.control.closeOne",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.canvasLane.runtimeDetail.recentProgress",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.canvasLane.empty.syncLoading",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.canvasLane.planned.statusHint",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.formation.hint.formed",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.formation.summaryBadge.planRoleCount",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.formation.summaryBadge.referenceLabel",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.formation.summaryBadge.taskCount",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.formation.detail.hint.runtimeWithReference",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.formation.detail.roleSection.runtime",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.formation.status.formed.title",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.formation.memberStatus.planned",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.selectedSession.header.eyebrow",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.selectedSession.collaboration.wait",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.selectedSession.activity.entryCount",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.selectedSession.footer.updatedAt",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.selectedSession.detail.setting.preset",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.selectedSession.detail.metadata.createdFromTurn",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.selectedSession.detail.sessionType.subAgent",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.selectedSession.detail.roleHint.executor",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.teamPreset.codeTriageTeam",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.control.resume.resumedOne",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.control.wait.enteredStatusOne",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.teamWorkspace.control.sendInput.emptyError",
       );
       expect(resources[locale].workspace).toHaveProperty(
         "workspace.browserExistingSession.presentation.status.attached.label",

@@ -232,7 +232,7 @@ describe("SettingsHomePage", () => {
     const text = container.textContent ?? "";
 
     expect(text).toContain("Current Entrypoints");
-    expect(text).toContain("All Skills");
+    expect(text).not.toContain("All Skills");
     expect(text).toContain("Automation");
     expect(text).toContain("Message Channels");
     expect(text).toContain("Project Knowledge");
@@ -243,9 +243,6 @@ describe("SettingsHomePage", () => {
     const openChannelsButton = Array.from(
       container.querySelectorAll("button"),
     ).find((item) => item.textContent?.includes("Open Channels"));
-    const openSkillsButton = Array.from(
-      container.querySelectorAll("button"),
-    ).find((item) => item.textContent?.includes("Go to Skills"));
     const openResourcesButton = Array.from(
       container.querySelectorAll("button"),
     ).find((item) => item.textContent?.includes("Open Project Knowledge"));
@@ -257,16 +254,12 @@ describe("SettingsHomePage", () => {
       openChannelsButton?.dispatchEvent(
         new MouseEvent("click", { bubbles: true }),
       );
-      openSkillsButton?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
       openResourcesButton?.dispatchEvent(
         new MouseEvent("click", { bubbles: true }),
       );
     });
 
     expect(onTabChange).not.toHaveBeenCalled();
-    expect(onNavigate).toHaveBeenCalledWith("skills");
     expect(onNavigate).toHaveBeenCalledWith("automation");
     expect(onNavigate).toHaveBeenCalledWith("channels");
     expect(onNavigate).toHaveBeenCalledWith("resources");

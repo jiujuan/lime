@@ -1,5 +1,6 @@
 import type { AgentThreadItem } from "@/lib/api/agentProtocol";
 import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import agentSourceResource from "@/i18n/resources/zh-CN/agent.json";
 import {
   buildTeamWorkspaceActivityEntryFromThreadItem,
   buildTeamWorkspaceSessionFingerprint,
@@ -7,6 +8,100 @@ import {
   type TeamWorkspaceActivityEntry,
   type TeamWorkspaceRuntimeStatus,
 } from "../teamWorkspaceRuntime";
+
+type ActivityPreviewResourceKey =
+  | "agentChat.teamWorkspace.activityPreview.error.historyReadFailed"
+  | "agentChat.teamWorkspace.activityPreview.error.syncFailed"
+  | "agentChat.teamWorkspace.activityPreview.line"
+  | "agentChat.teamWorkspace.activityPreview.messageTitle.error"
+  | "agentChat.teamWorkspace.activityPreview.messageTitle.output"
+  | "agentChat.teamWorkspace.activityPreview.messageTitle.reply"
+  | "agentChat.teamWorkspace.activityPreview.status.completed"
+  | "agentChat.teamWorkspace.activityPreview.status.error"
+  | "agentChat.teamWorkspace.activityPreview.status.failed"
+  | "agentChat.teamWorkspace.activityPreview.status.inProgress"
+  | "agentChat.teamWorkspace.activityPreview.status.message"
+  | "agentChat.teamWorkspace.activityPreview.status.warning";
+
+export type ActivityPreviewTranslate = (
+  key: ActivityPreviewResourceKey,
+  options?: Record<string, unknown>,
+) => string;
+
+type AgentSourceResourceKey = keyof typeof agentSourceResource;
+
+function interpolateActivityPreviewSourceTemplate(
+  template: string,
+  values?: Record<string, unknown>,
+): string {
+  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, name) => {
+    const value = values?.[name];
+    return value == null ? match : String(value);
+  });
+}
+
+function translateActivityPreviewSourceKey(
+  key: ActivityPreviewResourceKey,
+  values?: Record<string, unknown>,
+): string {
+  const template = agentSourceResource[key as AgentSourceResourceKey] ?? key;
+  return interpolateActivityPreviewSourceTemplate(template, values);
+}
+
+type ActivityPreviewMessageTitleKind = "error" | "output" | "reply";
+type ActivityPreviewStatusKind =
+  | "completed"
+  | "error"
+  | "failed"
+  | "inProgress"
+  | "message"
+  | "warning";
+
+export interface ActivityPreviewCopy {
+  formatPreviewLine: (title: string, detail: string) => string;
+  getMessageTitle: (kind: ActivityPreviewMessageTitleKind) => string;
+  getStatusLabel: (kind: ActivityPreviewStatusKind) => string;
+  historyReadFailed: string;
+  syncFailed: string;
+}
+
+function resolveActivityPreviewStatusKey(
+  kind: ActivityPreviewStatusKind,
+): ActivityPreviewResourceKey {
+  return `agentChat.teamWorkspace.activityPreview.status.${kind}` as ActivityPreviewResourceKey;
+}
+
+function resolveActivityPreviewMessageTitleKey(
+  kind: ActivityPreviewMessageTitleKind,
+): ActivityPreviewResourceKey {
+  return `agentChat.teamWorkspace.activityPreview.messageTitle.${kind}` as ActivityPreviewResourceKey;
+}
+
+export function buildActivityPreviewCopy(params: {
+  translate: ActivityPreviewTranslate;
+}): ActivityPreviewCopy {
+  return {
+    formatPreviewLine: (title, detail) =>
+      params.translate("agentChat.teamWorkspace.activityPreview.line", {
+        detail,
+        title,
+      }),
+    getMessageTitle: (kind) =>
+      params.translate(resolveActivityPreviewMessageTitleKey(kind)),
+    getStatusLabel: (kind) =>
+      params.translate(resolveActivityPreviewStatusKey(kind)),
+    historyReadFailed: params.translate(
+      "agentChat.teamWorkspace.activityPreview.error.historyReadFailed",
+    ),
+    syncFailed: params.translate(
+      "agentChat.teamWorkspace.activityPreview.error.syncFailed",
+    ),
+  };
+}
+
+const SOURCE_ACTIVITY_PREVIEW_COPY = buildActivityPreviewCopy({
+  translate: translateActivityPreviewSourceKey,
+});
 
 export interface SessionActivityPreviewState {
   preview: string | null;
@@ -70,28 +165,30 @@ function normalizeActivityPreviewText(
 function buildActivityPreviewLine(
   label: string,
   value?: string | null,
+  copy: ActivityPreviewCopy = SOURCE_ACTIVITY_PREVIEW_COPY,
 ): string | null {
   const normalized = normalizeActivityPreviewText(value);
   if (!normalized) {
     return null;
   }
-  return `${label}：${normalized}`;
+  return copy.formatPreviewLine(label, normalized);
 }
 
 function resolveActivityEntryStatusMeta(
   item: AgentThreadItem | { type: "message_fallback" },
   status?: AgentThreadItem["status"],
+  copy: ActivityPreviewCopy = SOURCE_ACTIVITY_PREVIEW_COPY,
 ) {
   if (item.type === "error") {
     return {
-      label: "错误",
+      label: copy.getStatusLabel("error"),
       badgeClassName: "border border-rose-200 bg-rose-50 text-rose-700",
     };
   }
 
   if (item.type === "warning") {
     return {
-      label: "警告",
+      label: copy.getStatusLabel("warning"),
       badgeClassName: "border border-amber-200 bg-amber-50 text-amber-700",
     };
   }
@@ -99,23 +196,23 @@ function resolveActivityEntryStatusMeta(
   switch (status) {
     case "in_progress":
       return {
-        label: "进行中",
+        label: copy.getStatusLabel("inProgress"),
         badgeClassName: "border border-sky-200 bg-sky-50 text-sky-700",
       };
     case "failed":
       return {
-        label: "失败",
+        label: copy.getStatusLabel("failed"),
         badgeClassName: "border border-rose-200 bg-rose-50 text-rose-700",
       };
     case "completed":
       return {
-        label: "完成",
+        label: copy.getStatusLabel("completed"),
         badgeClassName:
           "border border-emerald-200 bg-emerald-50 text-emerald-700",
       };
     default:
       return {
-        label: "消息",
+        label: copy.getStatusLabel("message"),
         badgeClassName: "border border-slate-200 bg-slate-50 text-slate-600",
       };
   }
@@ -123,16 +220,18 @@ function resolveActivityEntryStatusMeta(
 
 export function buildActivityPreviewFromEntry(
   entry?: TeamWorkspaceActivityEntry | null,
+  copy: ActivityPreviewCopy = SOURCE_ACTIVITY_PREVIEW_COPY,
 ) {
   if (!entry) {
     return null;
   }
 
-  return buildActivityPreviewLine(entry.title, entry.detail);
+  return buildActivityPreviewLine(entry.title, entry.detail, copy);
 }
 
 function extractMessageActivityEntries(
   detail: AsterSessionDetail,
+  copy: ActivityPreviewCopy = SOURCE_ACTIVITY_PREVIEW_COPY,
 ): TeamWorkspaceActivityEntry[] {
   const reversedMessages = [...detail.messages].sort(
     (left, right) => right.timestamp - left.timestamp,
@@ -147,11 +246,11 @@ function extractMessageActivityEntries(
       const title =
         content.type === "tool_response"
           ? content.error
-            ? "错误"
+            ? copy.getMessageTitle("error")
             : content.output
-              ? "输出"
-              : "回复"
-          : "回复";
+              ? copy.getMessageTitle("output")
+              : copy.getMessageTitle("reply")
+          : copy.getMessageTitle("reply");
       const previewSource =
         content.type === "tool_response"
           ? content.error || content.output
@@ -167,6 +266,7 @@ function extractMessageActivityEntries(
         const statusMeta = resolveActivityEntryStatusMeta(
           { type: "message_fallback" },
           undefined,
+          copy,
         );
         return [
           {
@@ -189,10 +289,14 @@ function extractMessageActivityEntries(
 export function extractSessionActivitySnapshot(
   detail: AsterSessionDetail,
   activityTimelineEntryLimit: number,
+  options?: {
+    copy?: ActivityPreviewCopy;
+  },
 ): {
   preview: string | null;
   entries: TeamWorkspaceActivityEntry[];
 } {
+  const copy = options?.copy ?? SOURCE_ACTIVITY_PREVIEW_COPY;
   const orderedItems = [...(detail.items ?? [])].sort(
     (left, right) => right.sequence - left.sequence,
   );
@@ -210,14 +314,14 @@ export function extractSessionActivitySnapshot(
 
   if (entries.length > 0) {
     return {
-      preview: buildActivityPreviewFromEntry(entries[0]),
+      preview: buildActivityPreviewFromEntry(entries[0], copy),
       entries,
     };
   }
 
-  const messageEntries = extractMessageActivityEntries(detail);
+  const messageEntries = extractMessageActivityEntries(detail, copy);
   return {
-    preview: buildActivityPreviewFromEntry(messageEntries[0]),
+    preview: buildActivityPreviewFromEntry(messageEntries[0], copy),
     entries: messageEntries,
   };
 }
@@ -248,7 +352,9 @@ export function buildSelectedSessionActivityState(params: {
   previewBySessionId?: Record<string, SessionActivityPreviewState>;
   activityRefreshVersionBySessionId?: Record<string, number>;
   activityTimelineEntryLimit: number;
+  copy?: ActivityPreviewCopy;
 }): SelectedSessionActivityState {
+  const copy = params.copy ?? SOURCE_ACTIVITY_PREVIEW_COPY;
   const selectedSession = params.selectedSession ?? null;
   const previewState = selectedSession
     ? (params.previewBySessionId?.[selectedSession.id] ?? null)
@@ -261,7 +367,9 @@ export function buildSelectedSessionActivityState(params: {
       )
     : [];
   const previewText =
-    buildActivityPreviewFromEntry(entries[0]) ?? previewState?.preview ?? null;
+    buildActivityPreviewFromEntry(entries[0], copy) ??
+    previewState?.preview ??
+    null;
   const supportsPreview = Boolean(
     selectedSession && selectedSession.sessionType !== "user",
   );

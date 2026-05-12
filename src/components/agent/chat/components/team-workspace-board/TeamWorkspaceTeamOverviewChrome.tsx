@@ -1,4 +1,6 @@
 import { Clock3 } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { formatNumber } from "@/i18n/format";
 import type { TeamWorkspaceBoardChromeDisplayState } from "../../team-workspace-runtime/boardChromeSelectors";
 import type { TeamOperationDisplayEntry } from "../../team-workspace-runtime/teamOperationSelectors";
 import type { TeamWorkspaceRuntimeStatus } from "../../teamWorkspaceRuntime";
@@ -68,6 +70,9 @@ export function TeamWorkspaceTeamOverviewChrome({
   useCompactCanvasChrome,
   waitableCount,
 }: TeamWorkspaceTeamOverviewChromeProps) {
+  const { i18n, t } = useTranslation("agent");
+  const locale = i18n.resolvedLanguage || i18n.language;
+  const formatCount = (count: number) => formatNumber(count, { locale });
   const compactCanvasSummaryChipClassName =
     "rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] text-slate-500";
   const compactCanvasMutedChipClassName =
@@ -98,10 +103,19 @@ export function TeamWorkspaceTeamOverviewChrome({
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
                   <div className="truncate text-sm font-semibold text-slate-900">
-                    {selectedSession?.name?.trim() || "等待任务接手"}
+                    {selectedSession?.name?.trim() ||
+                      t(
+                        "agentChat.teamWorkspace.overview.selectedSession.waitingTitle",
+                      )}
                   </div>
                   <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-700">
-                    {selectedSession ? "当前焦点" : "等待接手"}
+                    {selectedSession
+                      ? t(
+                          "agentChat.teamWorkspace.overview.selectedSession.focusBadge",
+                        )
+                      : t(
+                          "agentChat.teamWorkspace.overview.selectedSession.waitingBadge",
+                        )}
                   </span>
                 </div>
                 <p className="mt-1 text-xs leading-5 text-slate-500">
@@ -112,11 +126,18 @@ export function TeamWorkspaceTeamOverviewChrome({
                 <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
                   <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
                     <Clock3 className="h-3.5 w-3.5" />
-                    更新于 {formatUpdatedAt(selectedSession.updatedAt)}
+                    {t(
+                      "agentChat.teamWorkspace.selectedSession.footer.updatedAt",
+                      {
+                        updatedAt: formatUpdatedAt(selectedSession.updatedAt),
+                      },
+                    )}
                   </span>
                   {selectedSession.isCurrent ? (
                     <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
-                      当前任务
+                      {t(
+                        "agentChat.teamWorkspace.selectedSession.header.currentTaskBadge",
+                      )}
                     </span>
                   ) : null}
                 </div>
@@ -159,7 +180,9 @@ export function TeamWorkspaceTeamOverviewChrome({
                 data-testid="team-workspace-compact-task-actions"
               >
                 <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                  任务处理
+                  {t(
+                    "agentChat.teamWorkspace.overview.compact.taskActionsLabel",
+                  )}
                 </span>
                 <TeamWorkspaceTeamActionButtons
                   buttonClassName={compactActionButtonClassName}
@@ -176,7 +199,7 @@ export function TeamWorkspaceTeamOverviewChrome({
               data-testid="team-workspace-compact-view-actions"
             >
               <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                视图
+                {t("agentChat.teamWorkspace.overview.compact.viewActionsLabel")}
               </span>
               <TeamWorkspaceCanvasViewButtons
                 buttonClassName={compactViewButtonClassName}
@@ -204,11 +227,18 @@ export function TeamWorkspaceTeamOverviewChrome({
               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
                 <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
                   <Clock3 className="h-3.5 w-3.5" />
-                  更新于 {formatUpdatedAt(selectedSession.updatedAt)}
+                  {t(
+                    "agentChat.teamWorkspace.selectedSession.footer.updatedAt",
+                    {
+                      updatedAt: formatUpdatedAt(selectedSession.updatedAt),
+                    },
+                  )}
                 </span>
                 {selectedSession.isCurrent ? (
                   <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
-                    当前任务
+                    {t(
+                      "agentChat.teamWorkspace.selectedSession.header.currentTaskBadge",
+                    )}
                   </span>
                 ) : null}
               </div>
@@ -230,12 +260,16 @@ export function TeamWorkspaceTeamOverviewChrome({
           />
           {canWaitAnyActiveTeamSession ? (
             <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] text-slate-500">
-              {waitableCount} 项任务正在处理中
+              {t("agentChat.teamWorkspace.overview.taskCount.waitable", {
+                formattedCount: formatCount(waitableCount),
+              })}
             </span>
           ) : null}
           {canCloseCompletedTeamSessions ? (
             <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] text-slate-500">
-              {completedCount} 项任务已完成
+              {t("agentChat.teamWorkspace.overview.taskCount.completed", {
+                formattedCount: formatCount(completedCount),
+              })}
             </span>
           ) : null}
         </div>

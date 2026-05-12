@@ -2289,11 +2289,14 @@ describe("MessageList", () => {
       '[data-testid="image-workbench-message-preview-task-1"]',
     ) as HTMLButtonElement | null;
 
-    expect(previewCard?.textContent).toContain("一颗戴耳机的青柠");
-    expect(previewCard?.textContent).toContain("已生成");
-    expect(previewCard?.textContent).toContain("可在右侧继续查看与使用");
+    expect(previewCard?.textContent).toContain("Image Generation");
+    expect(previewCard?.textContent).not.toContain("一颗戴耳机的青柠");
+    expect(previewCard?.textContent).not.toContain("已生成");
+    expect(previewCard?.textContent).not.toContain("可在右侧继续查看与使用");
+    expect(container.textContent).not.toContain("图片生成已完成");
     expect(previewCard?.className).not.toContain("max-w-[620px]");
-    expect(previewCard?.className).toContain("max-w-[360px]");
+    expect(previewCard?.className).toContain("w-full");
+    expect(previewCard?.querySelector("img")).not.toBeNull();
 
     act(() => {
       previewCard?.click();
@@ -2306,7 +2309,128 @@ describe("MessageList", () => {
     window.removeEventListener(IMAGE_WORKBENCH_FOCUS_EVENT, handleFocus);
   });
 
-  it("图片任务消息卡应展示 LimeCore 策略输入标签", () => {
+  it("图片任务消息应隐藏旧提交详情表，只保留自然正文和轻量工具条", async () => {
+    const messages: Message[] = [
+      {
+        id: "msg-assistant-image-workbench-verbose-template",
+        role: "assistant",
+        content:
+          "好的！我来为你生成一张三国群像海报。\n\n任务已创建成功！这里是生成详情：\n\n| 项目 | 内容 |\n| --- | --- |\n| 画面构图 | 刘关张桃园三结义居中 |\n| 风格 | 国风电影感 |\n| 尺寸 | 1792 x 1024 |\n| 色调 | 墨黑、赤红、暗金 |\n| 模型 | fal-ai/nano-banana-pro |\n| 状态 | 已进入队列，正在生成中... |\n\n生成完成后图片会显示在对话中，稍等一下即可看到效果。",
+        timestamp: new Date(),
+        imageWorkbenchPreview: {
+          taskId: "task-verbose-template",
+          prompt: "三国主要人物群像海报",
+          mode: "generate",
+          status: "complete",
+          imageUrl: "https://example.com/three-kingdoms.png",
+          imageCount: 1,
+          runtimeContract: {
+            model: "fal-ai/nano-banana-pro",
+          },
+        },
+      },
+    ];
+
+    const container = await renderZh(messages);
+    const previewCard = container.querySelector(
+      '[data-testid="image-workbench-message-preview-task-verbose-template"]',
+    );
+
+    expect(previewCard?.textContent).toContain("Image Generation");
+    expect(previewCard?.textContent).toContain("Nanobanana Pro");
+    expect(container.textContent).not.toContain("任务已创建成功");
+    expect(container.textContent).not.toContain("这里是生成详情");
+    expect(container.textContent).not.toContain("画面构图");
+    expect(container.textContent).not.toContain("已进入队列");
+    expect(container.textContent).not.toContain("稍等一下即可看到效果");
+    expect(previewCard?.querySelector("img")).not.toBeNull();
+  });
+
+  it("图片任务消息应在同一条 assistant 回复里呈现自然文案、工具条、图片和结果描述", async () => {
+    const messages: Message[] = [
+      {
+        id: "msg-assistant-image-workbench-natural",
+        role: "assistant",
+        content:
+          "好嘞，用 Nanobanana Pro 给你生成一张从花城汇看广州塔的春天照片\n先获取下工具参数\n马上生成",
+        timestamp: new Date(),
+        contentParts: [
+          { type: "text", text: "我先按你的描述创建异步图片任务" },
+          {
+            type: "tool_use",
+            toolCall: {
+              id: "tool-image-natural",
+              name: "limeCreateImageGenerationTask",
+              arguments: "{}",
+              status: "completed",
+              startTime: new Date(),
+              endTime: new Date(),
+            },
+          },
+        ],
+        toolCalls: [
+          {
+            id: "tool-image-natural",
+            name: "limeCreateImageGenerationTask",
+            arguments: "{}",
+            status: "completed",
+            startTime: new Date(),
+            endTime: new Date(),
+          },
+        ],
+        imageWorkbenchPreview: {
+          taskId: "task-natural-image",
+          prompt: "从花城汇看广州塔的春天照片",
+          mode: "generate",
+          status: "complete",
+          imageUrl: "https://example.com/guangzhou-tower.png",
+          imageCount: 1,
+          modelName: "fal-ai/nano-banana-pro",
+          caption: "搞定，已生成这张图。",
+        },
+      },
+    ];
+
+    const container = await renderZh(messages);
+    const text = container.textContent || "";
+    const intro = container.querySelector(
+      '[data-testid="image-workbench-assistant-intro"]',
+    );
+
+    expect(text).toContain("好嘞，用 Nanobanana Pro");
+    expect(text).toContain("先获取下工具参数");
+    expect(text).toContain("马上生成");
+    expect(text).toContain("Image Generation");
+    expect(text).toContain("Nanobanana Pro");
+    expect(text).toContain("搞定，已生成这张图。");
+    expect(text).not.toContain("limeCreateImageGenerationTask");
+    expect(text).not.toContain("异步图片任务");
+    expect(intro?.textContent).toContain("好嘞，用 Nanobanana Pro");
+    expect(container.querySelector('[data-testid="streaming-renderer"]')).toBe(
+      null,
+    );
+  });
+
+  it("历史助手消息没有图片轻卡时，也不应继续展示旧图片任务详情模板", async () => {
+    const messages: Message[] = [
+      {
+        id: "msg-assistant-image-workbench-legacy-template-only",
+        role: "assistant",
+        content:
+          "好的，我来为你生成一张青柠插画！\n\n✅ 青柠插画生成任务已创建\n\n任务 ID: 013dbd1b-0fc0-45de-a1c8-f78489ccc11c\nPrompt：一颗鲜嫩的青柠，水彩插画风格\n参数：\n🎨 风格：水彩插画\n📐 尺寸：1024×1024\n🤖 模型：fal-ai/nano-banana-pro\n🔧 Provider：fal\n任务已提交进入队列，你可以在 图片工作台（Image Workbench）中查看生成进度和最终结果。稍后如果已生成，你可以直接打开查看~",
+        timestamp: new Date(),
+      },
+    ];
+
+    const container = await renderZh(messages);
+
+    expect(container.textContent).not.toContain("任务 ID");
+    expect(container.textContent).not.toContain("Image Workbench");
+    expect(container.textContent).not.toContain("生成进度和最终结果");
+    expect(container.textContent).not.toContain("稍后如果已生成");
+  });
+
+  it("图片任务消息卡不应在聊天区展示 LimeCore 策略输入标签", () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -2343,7 +2467,10 @@ describe("MessageList", () => {
       '[data-testid="image-workbench-message-preview-task-policy-1"]',
     );
 
-    expect(previewCard?.textContent).toContain("LimeCore 策略输入待命中: 3");
+    expect(previewCard?.textContent).toContain("Image Generation");
+    expect(previewCard?.textContent).not.toContain(
+      "LimeCore 策略输入待命中: 3",
+    );
   });
 
   it("图片任务消息应收起内部 process flow，只保留任务卡与正文", () => {
@@ -2417,6 +2544,73 @@ describe("MessageList", () => {
 
     const streamingCall = mockStreamingRenderer.mock.calls.at(-1)?.[0];
     expect(streamingCall?.suppressProcessFlow).toBe(true);
+    expect(
+      container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
+    ).toBeNull();
+  });
+
+  it("旧图片提交过程消息没有轻卡时也应整体隐藏", () => {
+    const container = render(
+      [
+        {
+          id: "msg-assistant-image-submit-leak",
+          role: "assistant",
+          content:
+            "我来为你生成一张广州塔从花城汇视角的春天照片。图片生成任务已提交！正在为你生成从花城汇看广州塔的春天照片。",
+          timestamp: new Date(),
+          isThinking: true,
+          contentParts: [
+            { type: "thinking", text: "开始中 广州塔春天照片" },
+            {
+              type: "text",
+              text: '进度：正在生成工具输入：{"prompt":"广州塔"}',
+            },
+          ],
+          toolCalls: [
+            {
+              id: "tool-image-generate",
+              name: "lime_create_image_generation_task",
+              arguments: JSON.stringify({ prompt: "广州塔" }),
+              status: "completed",
+              result: { success: true },
+              startTime: new Date(),
+              endTime: new Date(),
+            },
+          ],
+        } as Message,
+      ],
+      {
+        currentTurnId: "turn-image-submit-leak",
+        turns: [
+          {
+            id: "turn-image-submit-leak",
+            thread_id: "thread-image-submit-leak",
+            prompt_text: "@Nanobanana Pro 生成广州塔春天照片",
+            status: "running",
+            started_at: "2026-04-24T01:36:56Z",
+            created_at: "2026-04-24T01:36:56Z",
+            updated_at: "2026-04-24T01:37:12Z",
+          },
+        ],
+        threadItems: [
+          {
+            id: "summary-image-submit-leak",
+            thread_id: "thread-image-submit-leak",
+            turn_id: "turn-image-submit-leak",
+            sequence: 1,
+            status: "in_progress",
+            started_at: "2026-04-24T01:36:56Z",
+            updated_at: "2026-04-24T01:37:12Z",
+            type: "turn_summary",
+            text: '进度：正在生成工具输入：{"prompt":"广州塔"}',
+          },
+        ],
+      },
+    );
+
+    expect(container.textContent).not.toContain("图片生成任务已提交");
+    expect(container.textContent).not.toContain("工具输入");
+    expect(mockStreamingRenderer).not.toHaveBeenCalled();
     expect(
       container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
     ).toBeNull();
@@ -2919,7 +3113,7 @@ describe("MessageList", () => {
     ).toBeTruthy();
   });
 
-  it("修图任务消息卡应展示来源图区域与修图语义", async () => {
+  it("修图任务消息卡应收敛为裸结果图", async () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -2949,10 +3143,11 @@ describe("MessageList", () => {
       '[data-testid="image-workbench-message-preview-task-edit-1"]',
     );
 
-    expect(previewCard?.textContent).toContain("已修图");
-    expect(previewCard?.textContent).toContain("来源图");
-    expect(previewCard?.textContent).toContain("原始街景海报");
-    expect(previewCard?.textContent).not.toContain("Image Editing");
+    expect(previewCard?.textContent).toContain("Image Editing");
+    expect(previewCard?.querySelector("img")).not.toBeNull();
+    expect(previewCard?.textContent).not.toContain("已修图");
+    expect(previewCard?.textContent).not.toContain("来源图");
+    expect(previewCard?.textContent).not.toContain("原始街景海报");
   });
 
   it("图片任务完成但图片仍在工作台时，不应继续显示生成中占位", async () => {
@@ -2979,9 +3174,9 @@ describe("MessageList", () => {
       '[data-testid="image-workbench-message-preview-task-complete-without-image"]',
     );
 
-    expect(previewCard?.textContent).toContain("结果已同步");
-    expect(previewCard?.textContent).toContain("已生成");
-    expect(previewCard?.textContent).toContain("可在右侧继续查看与使用");
+    expect(previewCard?.textContent).toContain("图片暂时无法显示");
+    expect(previewCard?.textContent).not.toContain("已生成");
+    expect(previewCard?.textContent).not.toContain("可在右侧继续查看与使用");
     expect(previewCard?.textContent).not.toContain("图片任务卡");
   });
 
@@ -3011,8 +3206,9 @@ describe("MessageList", () => {
       '[data-testid="image-workbench-message-preview-task-complete-sync-copy"]',
     );
 
-    expect(previewCard?.textContent).toContain("已生成");
-    expect(previewCard?.textContent).toContain("可在右侧继续查看与使用");
+    expect(previewCard?.textContent).toContain("Image Generation");
+    expect(previewCard?.textContent).not.toContain("已生成");
+    expect(previewCard?.textContent).not.toContain("可在右侧继续查看与使用");
     expect(previewCard?.textContent).not.toContain("正在同步任务状态");
     expect(previewCard?.textContent).not.toContain("图片任务已提交");
   });
@@ -3041,7 +3237,7 @@ describe("MessageList", () => {
     );
 
     expect(previewCard?.textContent).toContain("生成失败");
-    expect(previewCard?.textContent).toContain("调整描述后重试");
+    expect(previewCard?.textContent).not.toContain("调整描述后重试");
     expect(
       container.querySelector(
         '[data-testid="image-workbench-message-preview-action-task-failed-1-retry"]',
@@ -3049,7 +3245,7 @@ describe("MessageList", () => {
     ).toBeNull();
   });
 
-  it("生成中的图片任务卡应展示队列状态，但不再展示取消按钮", async () => {
+  it("生成中的图片任务卡应展示同会话占位，但不再展示取消按钮", async () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -3071,8 +3267,8 @@ describe("MessageList", () => {
     ];
 
     const container = await renderZh(messages);
-    expect(container.textContent).toContain("等待队列");
-    expect(container.textContent).toContain(
+    expect(container.textContent).toContain("正在生成图片");
+    expect(container.textContent).not.toContain(
       "任务已进入队列，等待图片服务分配执行槽位。",
     );
     expect(
@@ -3138,7 +3334,6 @@ describe("MessageList", () => {
     );
 
     expect(previewCard?.textContent).toContain("已取消");
-    expect(previewCard?.textContent).toContain("任务已取消");
     expect(previewCard?.textContent).not.toContain("打开查看");
     expect(
       container.querySelector(
@@ -3247,14 +3442,15 @@ describe("MessageList", () => {
       '[data-testid="image-workbench-message-preview-grid-task-storyboard-preview-1"]',
     ) as HTMLDivElement | null;
 
-    expect(container.textContent).toContain(
+    expect(container.textContent).toContain("Image Generation");
+    expect(container.textContent).not.toContain(
       "3x3 分镜已经完成，可在右侧继续查看与使用。",
     );
-    expect(container.textContent).toContain("9 张");
+    expect(container.textContent).not.toContain("9 张");
     expect(grid?.className).toContain("grid-cols-3");
     expect(grid?.querySelectorAll("img")).toHaveLength(9);
-    expect(grid?.textContent).toContain("1");
-    expect(grid?.textContent).toContain("9");
+    expect(grid?.textContent).not.toContain("1");
+    expect(grid?.textContent).not.toContain("9");
   });
 
   it("当前由聊天区底部承载的 assistant A2UI 不应继续在正文里内联渲染", () => {

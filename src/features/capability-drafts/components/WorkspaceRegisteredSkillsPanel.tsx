@@ -215,6 +215,94 @@ function buildReadonlyHttpApprovalPreview(
   };
 }
 
+function summarizePermissionForUser(
+  skill: WorkspaceRegisteredSkillRecord,
+  copy: {
+    defaultReadonly: string;
+    readonly: string;
+    draftWrite: string;
+    localCommand: string;
+  },
+) {
+  if (skill.permissionSummary.length === 0) {
+    return copy.defaultReadonly;
+  }
+
+  const labels = new Set<string>();
+  for (const item of skill.permissionSummary) {
+    const normalized = item.toLowerCase();
+    if (normalized.includes("level 0") || item.includes("只读")) {
+      labels.add(copy.readonly);
+      continue;
+    }
+    if (
+      normalized.includes("level 1") ||
+      normalized.includes("draft") ||
+      normalized.includes("write") ||
+      item.includes("草案") ||
+      item.includes("写入")
+    ) {
+      labels.add(copy.draftWrite);
+      continue;
+    }
+    if (
+      normalized.includes("cli") ||
+      normalized.includes("command") ||
+      item.includes("命令")
+    ) {
+      labels.add(copy.localCommand);
+      continue;
+    }
+    labels.add(item.replace(/^Level\s+\d+\s*/i, "").trim() || item);
+  }
+
+  return Array.from(labels).slice(0, 2).join(" / ");
+}
+
+function getUserScheduleLabel(
+  job: AutomationJobRecord | undefined,
+  copy: {
+    enabled: string;
+    notCreated: string;
+    paused: string;
+  },
+) {
+  if (!job) {
+    return copy.notCreated;
+  }
+  return job.enabled ? copy.enabled : copy.paused;
+}
+
+function getUserResultLabel(
+  job: AutomationJobRecord | undefined,
+  completionAuditSummary: AgentRuntimeCompletionAuditSummary | undefined,
+  copy: {
+    auditBlocked: string;
+    auditPassed: string;
+    noJob: string;
+    noRun: string;
+    readyToCheck: string;
+    running: string;
+  },
+) {
+  if (completionAuditSummary?.decision === "completed") {
+    return copy.auditPassed;
+  }
+  if (completionAuditSummary) {
+    return copy.auditBlocked;
+  }
+  if (!job) {
+    return copy.noJob;
+  }
+  if (job.last_status === "running") {
+    return copy.running;
+  }
+  if (job.last_status === "success") {
+    return copy.readyToCheck;
+  }
+  return copy.noRun;
+}
+
 function sortRegisteredSkills(
   skills: WorkspaceRegisteredSkillRecord[],
 ): WorkspaceRegisteredSkillRecord[] {
@@ -434,44 +522,43 @@ function WorkspaceRegisteredSkillCard({
     () => ({
       actionBlocked: t(
         "capabilityDraft.registeredPanel.agentEnvelope.action.blocked",
-        "先解除阻塞",
+        "先处理问题",
       ),
       actionDraft: t(
         "capabilityDraft.registeredPanel.agentEnvelope.action.draft",
-        "转成 Agent 草案",
+        "保存成项目助手",
       ),
       actionManualEnable: t(
         "capabilityDraft.registeredPanel.agentEnvelope.action.manualEnable",
-        "先本回合启用",
+        "先试用一次",
       ),
       agentCardPending: t(
         "capabilityDraft.registeredPanel.agentEnvelope.agentCard.pending",
-        "Agent card：等待 evidence-ready 后派生，不创建平行持久化实体。",
+        "项目助手：试用通过后再保存。",
       ),
       blockedReasonFallback: t(
         "capabilityDraft.registeredPanel.agentEnvelope.blockedReasonFallback",
-        "runtime binding 当前被 gate 阻断",
+        "当前还有问题需要处理",
       ),
       description: t(
         "capabilityDraft.registeredPanel.agentEnvelope.description",
-        "成功运行后可把 Skill、权限、手动 rerun 和 evidence 组合成 Workspace Agent envelope。",
+        "试用结果没问题后，可以把它保存成当前项目里的助手。",
       ),
       discoveryPending: t(
         "capabilityDraft.registeredPanel.agentEnvelope.discovery.pending",
-        "Discovery：等待 workspace-local skill 注册路径后再进入团队发现。",
+        "团队可见性：保存成项目助手后再开放。",
       ),
       evidenceMissing: t(
         "capabilityDraft.registeredPanel.agentEnvelope.evidence.missing",
-        "Evidence：还没有成功运行证据；先通过本回合启用拿到一次结果。",
+        "最近结果：还没有试用结果。",
       ),
       evidenceSourceMetadataOnly: t(
         "capabilityDraft.registeredPanel.agentEnvelope.evidence.sourceMetadataOnly",
-        "Evidence：已有 P3E source metadata，可追踪本次 session 授权来源。",
+        "最近结果：已记录这次试用来源，等待检查。",
       ),
       formatAgentCardReady: (directory) =>
         t("capabilityDraft.registeredPanel.agentEnvelope.agentCard.ready", {
-          defaultValue:
-            "Agent card：workspace-local/{{directory}}，由已注册 Skill、Managed Job 和 completion audit 派生。",
+          defaultValue: "项目助手：已准备好保存（{{directory}}）。",
           directory,
         }),
       formatCompletionAuditEvidenceLabel: buildCompletionAuditLabel,
@@ -480,32 +567,29 @@ function WorkspaceRegisteredSkillCard({
           ? t(
               "capabilityDraft.registeredPanel.agentEnvelope.evidence.completedPack",
               {
-                defaultValue: "Evidence：已关联 evidence pack {{packId}}。",
+                defaultValue: "最近结果：已通过检查（{{packId}}）。",
                 packId,
               },
             )
           : t(
               "capabilityDraft.registeredPanel.agentEnvelope.evidence.completedPackFallback",
-              "Evidence：已关联 evidence pack。",
+              "最近结果：已通过检查。",
             ),
       formatDiscoveryReady: (registeredSkillDirectory) =>
         t("capabilityDraft.registeredPanel.agentEnvelope.discovery.ready", {
-          defaultValue:
-            "Discovery：同 workspace 成员通过 registered skill 发现 {{directory}}，复用同一 Managed Job / evidence。",
+          defaultValue: "团队可见性：当前项目成员可以使用这条技能。",
           directory: registeredSkillDirectory,
         }),
       formatMemoryWithReport: (reportId) =>
         t("capabilityDraft.registeredPanel.agentEnvelope.memory.withReport", {
-          defaultValue:
-            "Memory：引用 verification report {{reportId}} 与后续运行修正。",
+          defaultValue: "记录：已保留检查结果，后续会继续积累使用反馈。",
           reportId,
         }),
       formatPendingEvidencePack: (packId) =>
         t(
           "capabilityDraft.registeredPanel.agentEnvelope.evidence.pendingPack",
           {
-            defaultValue:
-              "Evidence：已关联 evidence pack {{packId}}，但还缺 completed completion audit，不能固化为 Agent。",
+            defaultValue: "最近结果：已生成，等待检查后才能保存成项目助手。",
             packId,
           },
         ),
@@ -519,54 +603,54 @@ function WorkspaceRegisteredSkillCard({
         ),
       formatRunbook: (name) =>
         t("capabilityDraft.registeredPanel.agentEnvelope.runbook", {
-          defaultValue: "Runbook：{{name}}",
+          defaultValue: "使用方式：{{name}}",
           name,
         }),
       memoryPending: t(
         "capabilityDraft.registeredPanel.agentEnvelope.memory.pending",
-        "Memory：等待首轮运行后记录用户偏好、方法论和修正历史。",
+        "记录：等待首次试用后记录偏好和修正。",
       ),
       permissionEmpty: t(
         "capabilityDraft.registeredPanel.agentEnvelope.permission.empty",
-        "权限：默认手动确认，未声明额外外部写权限。",
+        "权限：默认需要手动确认。",
       ),
       schedule: t(
         "capabilityDraft.registeredPanel.agentEnvelope.schedule",
-        "Schedule：第一刀仅支持 manual rerun 草案，不创建长期任务。",
+        "定时运行：尚未设置。",
       ),
       sharingPending: t(
         "capabilityDraft.registeredPanel.agentEnvelope.sharing.pending",
-        "Sharing：未完成审计前仅对当前操作者展示草案。",
+        "共享：先只对你可见。",
       ),
       sharingReady: t(
         "capabilityDraft.registeredPanel.agentEnvelope.sharing.ready",
-        "Sharing：可在当前 workspace / team 内共享；不进入 public Marketplace。",
+        "共享：可在当前项目内共享。",
       ),
       statusLabels: {
         blocked: t(
           "capabilityDraft.registeredPanel.agentEnvelope.status.blocked",
-          "Agent 草案阻塞",
+          "需要处理",
         ),
         evidence_ready: t(
           "capabilityDraft.registeredPanel.agentEnvelope.status.evidenceReady",
-          "Evidence 已就绪",
+          "可保存",
         ),
         manual_enable_required: t(
           "capabilityDraft.registeredPanel.agentEnvelope.status.manualEnableRequired",
-          "等待成功运行",
+          "待试用",
         ),
         source_metadata_ready: t(
           "capabilityDraft.registeredPanel.agentEnvelope.status.sourceMetadataReady",
-          "等待 Completion Audit",
+          "待检查",
         ),
       },
       widgetPending: t(
         "capabilityDraft.registeredPanel.agentEnvelope.widget.pending",
-        "Widget：等待运行后展示状态、产物、阻塞点和 evidence 入口。",
+        "结果：试用后展示最近状态和下一步。",
       ),
       widgetReady: t(
         "capabilityDraft.registeredPanel.agentEnvelope.widget.ready",
-        "Widget：展示 Managed Job 状态、最近产物、审计结论和下一步动作。",
+        "结果：展示最近状态、产物和下一步动作。",
       ),
     }),
     [buildCompletionAuditLabel, t],
@@ -735,6 +819,70 @@ function WorkspaceRegisteredSkillCard({
       managedAutomationCopy,
     );
   const [managedAutomationJob] = managedAutomationJobs;
+  const canAuditManagedAutomationJob = Boolean(
+    managedAutomationJob?.last_run_at ||
+    managedAutomationJob?.last_finished_at ||
+    managedAutomationJob?.last_status,
+  );
+  const userPermissionSummary = summarizePermissionForUser(skill, {
+    defaultReadonly: t(
+      "capabilityDraft.registeredPanel.user.permission.defaultReadonly",
+      "默认只读取信息",
+    ),
+    draftWrite: t(
+      "capabilityDraft.registeredPanel.user.permission.draftWrite",
+      "可写入草案",
+    ),
+    localCommand: t(
+      "capabilityDraft.registeredPanel.user.permission.localCommand",
+      "可运行本地命令",
+    ),
+    readonly: t(
+      "capabilityDraft.registeredPanel.user.permission.readonly",
+      "只读取信息",
+    ),
+  });
+  const userScheduleLabel = getUserScheduleLabel(managedAutomationJob, {
+    enabled: t(
+      "capabilityDraft.registeredPanel.user.schedule.enabled",
+      "已开启",
+    ),
+    notCreated: t(
+      "capabilityDraft.registeredPanel.user.schedule.notCreated",
+      "未设置",
+    ),
+    paused: t("capabilityDraft.registeredPanel.user.schedule.paused", "已暂停"),
+  });
+  const userResultLabel = getUserResultLabel(
+    managedAutomationJob,
+    completionAuditSummary,
+    {
+      auditBlocked: t(
+        "capabilityDraft.registeredPanel.user.result.auditBlocked",
+        "最近结果需要处理",
+      ),
+      auditPassed: t(
+        "capabilityDraft.registeredPanel.user.result.auditPassed",
+        "最近结果已通过检查",
+      ),
+      noJob: t(
+        "capabilityDraft.registeredPanel.user.result.noJob",
+        "还没有定时运行",
+      ),
+      noRun: t(
+        "capabilityDraft.registeredPanel.user.result.noRun",
+        "还没有运行记录",
+      ),
+      readyToCheck: t(
+        "capabilityDraft.registeredPanel.user.result.readyToCheck",
+        "可以检查最近结果",
+      ),
+      running: t(
+        "capabilityDraft.registeredPanel.user.result.running",
+        "正在运行",
+      ),
+    },
+  );
   const managedAutomationUpdating =
     managedAutomationJob?.id === managedAutomationUpdatingJobId;
   const completionAuditAuditing =
@@ -769,11 +917,11 @@ function WorkspaceRegisteredSkillCard({
           {bindingBlocked
             ? t(
                 "capabilityDraft.registeredPanel.card.binding.blocked",
-                "Binding 阻塞",
+                "需要处理",
               )
             : t(
                 "capabilityDraft.registeredPanel.card.binding.candidate",
-                "P3C binding 候选",
+                "可试用",
               )}
         </span>
       </div>
@@ -789,617 +937,681 @@ function WorkspaceRegisteredSkillCard({
             )}
         </p>
       </div>
-      <div className="mt-3 space-y-1 text-[11px] leading-5 text-slate-500">
-        <div>
-          <span className="font-medium text-slate-700">
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        <div className="rounded-2xl border border-emerald-100 bg-white px-3 py-2">
+          <div className="text-[11px] text-slate-500">
+            {t("capabilityDraft.registeredPanel.user.step.saved", "已保存")}
+          </div>
+          <div className="mt-1 text-[12px] font-semibold text-emerald-700">
             {t(
-              "capabilityDraft.registeredPanel.card.field.directory",
-              "目录：",
+              "capabilityDraft.registeredPanel.user.step.savedValue",
+              "可在当前项目使用",
             )}
-          </span>
-          {skill.directory}
+          </div>
         </div>
-        <div>
-          <span className="font-medium text-slate-700">
-            {t("capabilityDraft.registeredPanel.card.field.source", "来源：")}
-          </span>
-          {skill.registration.sourceDraftId}
-          {skill.registration.sourceVerificationReportId
-            ? ` / ${skill.registration.sourceVerificationReportId}`
-            : ""}
+        <div className="rounded-2xl border border-sky-100 bg-white px-3 py-2">
+          <div className="text-[11px] text-slate-500">
+            {t("capabilityDraft.registeredPanel.user.step.permission", "权限")}
+          </div>
+          <div className="mt-1 text-[12px] font-semibold text-slate-800">
+            {userPermissionSummary}
+          </div>
         </div>
-        <div>
-          <span className="font-medium text-slate-700">
+        <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2">
+          <div className="text-[11px] text-slate-500">
             {t(
-              "capabilityDraft.registeredPanel.card.field.permission",
-              "权限：",
+              "capabilityDraft.registeredPanel.user.step.schedule",
+              "定时运行",
             )}
-          </span>
-          {summarizePermissionSummary(skill, summaryCopy)}
-        </div>
-        <div>
-          <span className="font-medium text-slate-700">
-            {t("capabilityDraft.registeredPanel.card.field.resource", "资源：")}
-          </span>
-          {summarizeResourceSummary(skill, summaryCopy)}
-        </div>
-        <div>
-          <span className="font-medium text-slate-700">
-            {t("capabilityDraft.registeredPanel.card.field.standard", "标准：")}
-          </span>
-          {summarizeStandardCompliance(skill, summaryCopy)}
-        </div>
-        <div>
-          <span className="font-medium text-slate-700">
-            {t(
-              "capabilityDraft.registeredPanel.card.field.runtimeBinding",
-              "运行绑定：",
-            )}
-          </span>
-          {summarizeBindingStatus(binding, summaryCopy)}
-        </div>
-        <div className="text-sky-700">
-          {t(
-            "capabilityDraft.registeredPanel.card.field.nextGate",
-            "下一道 gate：",
-          )}
-          {binding?.next_gate ||
-            t(
-              "capabilityDraft.registeredPanel.card.nextGateFallback",
-              "manual_runtime_enable / Query Loop metadata / tool_runtime 授权裁剪",
-            )}
+          </div>
+          <div className="mt-1 text-[12px] font-semibold text-slate-800">
+            {userScheduleLabel}
+          </div>
         </div>
       </div>
-      {preflightGate ? (
-        <div className="mt-3 rounded-2xl border border-sky-100 bg-white px-3 py-2.5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-[11px] font-semibold text-slate-800">
+      <p className="mt-3 rounded-2xl border border-sky-100 bg-sky-50 px-3 py-2 text-[12px] leading-5 text-sky-800">
+        {t(
+          "capabilityDraft.registeredPanel.user.nextStep",
+          "建议先试用一次。确认结果没问题后，再设置定时运行或保存成项目助手。",
+        )}
+      </p>
+      <details className="mt-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[11px] leading-5 text-slate-500">
+        <summary className="cursor-pointer select-none text-[12px] font-medium text-slate-700">
+          {t("capabilityDraft.registeredPanel.technicalDetails", "技术详情")}
+        </summary>
+        <div className="mt-2 space-y-1">
+          <div>
+            <span className="font-medium text-slate-700">
               {t(
-                "capabilityDraft.registeredPanel.provenance.title",
-                "注册 provenance",
+                "capabilityDraft.registeredPanel.card.field.directory",
+                "目录：",
               )}
             </span>
-            <span className="text-[10px] leading-4 text-sky-700">
-              {preflightGate.label || preflightGate.checkId}
+            {skill.directory}
+          </div>
+          <div>
+            <span className="font-medium text-slate-700">
+              {t("capabilityDraft.registeredPanel.card.field.source", "来源：")}
             </span>
+            {skill.registration.sourceDraftId}
+            {skill.registration.sourceVerificationReportId
+              ? ` / ${skill.registration.sourceVerificationReportId}`
+              : ""}
           </div>
-          <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
-            {preflightGate.evidence.slice(0, 6).map((evidence) => (
-              <div
-                key={`${preflightGate.checkId}:${evidence.key}`}
-                className="rounded-xl border border-sky-100 bg-sky-50 px-2.5 py-1.5"
-              >
-                <div className="text-[10px] leading-4 text-slate-400">
-                  {formatRegistrationEvidenceKey(evidence.key, evidenceLabels)}
-                </div>
-                <div className="truncate font-mono text-[10px] leading-4 text-slate-700">
-                  {formatRegistrationEvidenceValue(evidence)}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-      {approvalPreview ? (
-        <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2.5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-[11px] font-semibold text-amber-900">
+          <div>
+            <span className="font-medium text-slate-700">
               {t(
-                "capabilityDraft.registeredPanel.approval.title",
-                "Session approval request artifact",
+                "capabilityDraft.registeredPanel.card.field.permission",
+                "权限：",
               )}
             </span>
-            <span className="rounded-full border border-amber-200 bg-white px-2 py-0.5 text-[10px] font-medium text-amber-700">
-              {t("capabilityDraft.registeredPanel.approval.statusSummary", {
-                defaultValue: "{{status}} / 未执行 / 未保存凭证",
-                status: approvalPreview.status,
-              })}
-            </span>
+            {summarizePermissionSummary(skill, summaryCopy)}
           </div>
-          <p className="mt-1.5 text-[11px] leading-5 text-amber-800">
+          <div>
+            <span className="font-medium text-slate-700">
+              {t(
+                "capabilityDraft.registeredPanel.card.field.resource",
+                "资源：",
+              )}
+            </span>
+            {summarizeResourceSummary(skill, summaryCopy)}
+          </div>
+          <div>
+            <span className="font-medium text-slate-700">
+              {t(
+                "capabilityDraft.registeredPanel.card.field.standard",
+                "标准：",
+              )}
+            </span>
+            {summarizeStandardCompliance(skill, summaryCopy)}
+          </div>
+          <div>
+            <span className="font-medium text-slate-700">
+              {t(
+                "capabilityDraft.registeredPanel.card.field.runtimeBinding",
+                "运行绑定：",
+              )}
+            </span>
+            {summarizeBindingStatus(binding, summaryCopy)}
+          </div>
+          <div className="text-sky-700">
             {t(
-              "capabilityDraft.registeredPanel.approval.description",
-              "真实 API 执行前必须先消费这条授权请求 artifact；当前只持久化审计入口，不保存 token，也不发请求。",
+              "capabilityDraft.registeredPanel.card.field.nextGate",
+              "下一道 gate：",
             )}
-          </p>
-          {approvalPreview.consumptionGate ? (
-            <div className="mt-2 rounded-xl border border-amber-200 bg-white px-2.5 py-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[10px] font-semibold text-amber-700">
-                  {t(
-                    "capabilityDraft.registeredPanel.approval.consumptionGate.title",
-                    "消费门禁",
-                  )}
-                </span>
-                <span className="font-mono text-[10px] text-slate-700">
-                  {approvalPreview.consumptionGate.status}
-                </span>
-              </div>
-              <p className="mt-1 text-[10px] leading-4 text-amber-800">
-                {approvalPreview.consumptionGate.blockedReason}
-              </p>
-              <div className="mt-1.5 flex flex-wrap gap-1">
-                {approvalPreview.consumptionGate.requiredInputs.map((input) => (
-                  <span
-                    key={input}
-                    className="rounded-full border border-amber-100 bg-amber-50 px-2 py-0.5 font-mono text-[10px] text-amber-800"
-                  >
-                    {input}
-                  </span>
-                ))}
-              </div>
-              <div className="mt-1.5 text-[10px] leading-4 text-slate-600">
-                {t(
-                  "capabilityDraft.registeredPanel.approval.flag.runtimeExecution",
-                  {
-                    defaultValue: "runtimeExecution={{value}}",
-                    value: String(
-                      approvalPreview.consumptionGate.runtimeExecutionEnabled,
-                    ),
-                  },
-                )}{" "}
-                /{" "}
-                {t(
-                  "capabilityDraft.registeredPanel.approval.flag.credentialStorage",
-                  {
-                    defaultValue: "credentialStorage={{value}}",
-                    value: String(
-                      approvalPreview.consumptionGate.credentialStorageEnabled,
-                    ),
-                  },
-                )}
-              </div>
-            </div>
-          ) : null}
-          {approvalPreview.credentialResolver ? (
-            <div className="mt-2 rounded-xl border border-amber-200 bg-white px-2.5 py-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[10px] font-semibold text-amber-700">
-                  {t(
-                    "capabilityDraft.registeredPanel.approval.credentialResolver.title",
-                    "Session credential resolver",
-                  )}
-                </span>
-                <span className="font-mono text-[10px] text-slate-700">
-                  {approvalPreview.credentialResolver.status}
-                </span>
-              </div>
-              <p className="mt-1 text-[10px] leading-4 text-amber-800">
-                {approvalPreview.credentialResolver.blockedReason}
-              </p>
-              <div className="mt-1.5 grid gap-1 sm:grid-cols-2">
-                {[
-                  [
-                    t(
-                      "capabilityDraft.registeredPanel.approval.label.reference",
-                      "Reference",
-                    ),
-                    approvalPreview.credentialResolver.referenceId,
-                  ],
-                  [
-                    t(
-                      "capabilityDraft.registeredPanel.approval.label.scope",
-                      "Scope",
-                    ),
-                    approvalPreview.credentialResolver.scope,
-                  ],
-                  [
-                    t(
-                      "capabilityDraft.registeredPanel.approval.label.source",
-                      "Source",
-                    ),
-                    approvalPreview.credentialResolver.source,
-                  ],
-                  [
-                    t(
-                      "capabilityDraft.registeredPanel.approval.label.secret",
-                      "Secret",
-                    ),
-                    approvalPreview.credentialResolver.secretMaterialStatus,
-                  ],
-                  [
-                    t(
-                      "capabilityDraft.registeredPanel.approval.label.tokenPersisted",
-                      "tokenPersisted",
-                    ),
-                    String(approvalPreview.credentialResolver.tokenPersisted),
-                  ],
-                  [
-                    t(
-                      "capabilityDraft.registeredPanel.approval.label.runtimeInjection",
-                      "runtimeInjection",
-                    ),
-                    String(
-                      approvalPreview.credentialResolver
-                        .runtimeInjectionEnabled,
-                    ),
-                  ],
-                ].map(([label, value]) => (
-                  <div
-                    key={label}
-                    className="rounded-lg border border-amber-100 bg-amber-50 px-2 py-1"
-                  >
-                    <span className="text-[10px] text-amber-600">{label}</span>
-                    <span className="ml-1 break-words font-mono text-[10px] text-slate-700">
-                      {value}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          {approvalPreview.consumptionInputSchema ? (
-            <div className="mt-2 rounded-xl border border-amber-200 bg-white px-2.5 py-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[10px] font-semibold text-amber-700">
-                  {t(
-                    "capabilityDraft.registeredPanel.approval.inputSchema.title",
-                    "Approval consumption input schema",
-                  )}
-                </span>
-                <span className="font-mono text-[10px] text-slate-700">
-                  {approvalPreview.consumptionInputSchema.schemaId}
-                </span>
-              </div>
-              <p className="mt-1 text-[10px] leading-4 text-amber-800">
-                {approvalPreview.consumptionInputSchema.blockedReason}
-              </p>
-              <div className="mt-1.5 text-[10px] leading-4 text-slate-600">
-                {t(
-                  "capabilityDraft.registeredPanel.approval.flag.uiSubmission",
-                  {
-                    defaultValue: "uiSubmission={{value}}",
-                    value: String(
-                      approvalPreview.consumptionInputSchema
-                        .uiSubmissionEnabled,
-                    ),
-                  },
-                )}{" "}
-                /{" "}
-                {t(
-                  "capabilityDraft.registeredPanel.approval.flag.runtimeExecution",
-                  {
-                    defaultValue: "runtimeExecution={{value}}",
-                    value: String(
-                      approvalPreview.consumptionInputSchema
-                        .runtimeExecutionEnabled,
-                    ),
-                  },
-                )}
-              </div>
-              <div className="mt-1.5 flex flex-wrap gap-1">
-                {approvalPreview.consumptionInputSchema.fields.map((field) => (
-                  <span
-                    key={field.key}
-                    className="rounded-full border border-amber-100 bg-amber-50 px-2 py-0.5 font-mono text-[10px] text-amber-800"
-                    title={field.description}
-                  >
-                    {field.key}:{field.kind}
-                    {field.required
-                      ? t(
-                          "capabilityDraft.registeredPanel.approval.suffix.required",
-                          ":required",
-                        )
-                      : ""}
-                    {field.secret
-                      ? t(
-                          "capabilityDraft.registeredPanel.approval.suffix.secret",
-                          ":secret",
-                        )
-                      : ""}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          {approvalPreview.sessionInputIntake ? (
-            <div className="mt-2 rounded-xl border border-amber-200 bg-white px-2.5 py-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[10px] font-semibold text-amber-700">
-                  {t(
-                    "capabilityDraft.registeredPanel.approval.sessionInputIntake.title",
-                    "Session input intake",
-                  )}
-                </span>
-                <span className="font-mono text-[10px] text-slate-700">
-                  {approvalPreview.sessionInputIntake.status}
-                </span>
-              </div>
-              <p className="mt-1 text-[10px] leading-4 text-amber-800">
-                {approvalPreview.sessionInputIntake.blockedReason}
-              </p>
-              <div className="mt-1.5 grid gap-1 sm:grid-cols-2">
-                {[
-                  [
-                    t(
-                      "capabilityDraft.registeredPanel.approval.label.schema",
-                      "Schema",
-                    ),
-                    approvalPreview.sessionInputIntake.schemaId,
-                  ],
-                  [
-                    t(
-                      "capabilityDraft.registeredPanel.approval.label.scope",
-                      "Scope",
-                    ),
-                    approvalPreview.sessionInputIntake.scope,
-                  ],
-                  [
-                    t(
-                      "capabilityDraft.registeredPanel.approval.label.credential",
-                      "Credential",
-                    ),
-                    approvalPreview.sessionInputIntake.credentialReferenceId,
-                  ],
-                  [
-                    t(
-                      "capabilityDraft.registeredPanel.approval.label.secret",
-                      "Secret",
-                    ),
-                    approvalPreview.sessionInputIntake.secretMaterialStatus,
-                  ],
-                  [
-                    t(
-                      "capabilityDraft.registeredPanel.approval.label.endpointPersisted",
-                      "endpointPersisted",
-                    ),
-                    String(
-                      approvalPreview.sessionInputIntake.endpointInputPersisted,
-                    ),
-                  ],
-                  [
-                    t(
-                      "capabilityDraft.registeredPanel.approval.label.tokenPersisted",
-                      "tokenPersisted",
-                    ),
-                    String(approvalPreview.sessionInputIntake.tokenPersisted),
-                  ],
-                ].map(([label, value]) => (
-                  <div
-                    key={label}
-                    className="rounded-lg border border-amber-100 bg-amber-50 px-2 py-1"
-                  >
-                    <span className="text-[10px] text-amber-600">{label}</span>
-                    <span className="ml-1 break-words font-mono text-[10px] text-slate-700">
-                      {value}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-1.5 text-[10px] leading-4 text-slate-600">
-                {t(
-                  "capabilityDraft.registeredPanel.approval.flag.uiSubmission",
-                  {
-                    defaultValue: "uiSubmission={{value}}",
-                    value: String(
-                      approvalPreview.sessionInputIntake.uiSubmissionEnabled,
-                    ),
-                  },
-                )}{" "}
-                /{" "}
-                {t(
-                  "capabilityDraft.registeredPanel.approval.flag.runtimeExecution",
-                  {
-                    defaultValue: "runtimeExecution={{value}}",
-                    value: String(
-                      approvalPreview.sessionInputIntake
-                        .runtimeExecutionEnabled,
-                    ),
-                  },
-                )}
-              </div>
-              <div className="mt-1.5 flex flex-wrap gap-1">
-                {approvalPreview.sessionInputIntake.missingFieldKeys.map(
-                  (fieldKey) => (
-                    <span
-                      key={fieldKey}
-                      className="rounded-full border border-amber-100 bg-amber-50 px-2 py-0.5 font-mono text-[10px] text-amber-800"
-                    >
-                      {t(
-                        "capabilityDraft.registeredPanel.approval.prefix.missing",
-                        "missing:",
-                      )}
-                      {fieldKey}
-                    </span>
-                  ),
-                )}
-              </div>
-            </div>
-          ) : null}
-          {approvalPreview.sessionInputSubmissionContract ? (
-            <div className="mt-2 rounded-xl border border-amber-200 bg-white px-2.5 py-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[10px] font-semibold text-amber-700">
-                  {t(
-                    "capabilityDraft.registeredPanel.approval.sessionSubmissionContract.title",
-                    "Session submission contract",
-                  )}
-                </span>
-                <span className="font-mono text-[10px] text-slate-700">
-                  {approvalPreview.sessionInputSubmissionContract.status}
-                </span>
-              </div>
-              <p className="mt-1 text-[10px] leading-4 text-amber-800">
-                {approvalPreview.sessionInputSubmissionContract.blockedReason}
-              </p>
-              <div className="mt-1.5 grid gap-1 sm:grid-cols-2">
-                {[
-                  [
-                    t(
-                      "capabilityDraft.registeredPanel.approval.label.mode",
-                      "Mode",
-                    ),
-                    approvalPreview.sessionInputSubmissionContract.mode,
-                  ],
-                  [
-                    t(
-                      "capabilityDraft.registeredPanel.approval.label.retention",
-                      "Retention",
-                    ),
-                    approvalPreview.sessionInputSubmissionContract
-                      .valueRetention,
-                  ],
-                  [
-                    t(
-                      "capabilityDraft.registeredPanel.approval.label.submitHandler",
-                      "submitHandler",
-                    ),
-                    String(
-                      approvalPreview.sessionInputSubmissionContract
-                        .submissionHandlerEnabled,
-                    ),
-                  ],
-                  [
-                    t(
-                      "capabilityDraft.registeredPanel.approval.label.secretAccepted",
-                      "secretAccepted",
-                    ),
-                    String(
-                      approvalPreview.sessionInputSubmissionContract
-                        .secretMaterialAccepted,
-                    ),
-                  ],
-                  [
-                    t(
-                      "capabilityDraft.registeredPanel.approval.label.evidenceRequired",
-                      "evidenceRequired",
-                    ),
-                    String(
-                      approvalPreview.sessionInputSubmissionContract
-                        .evidenceCaptureRequired,
-                    ),
-                  ],
-                  [
-                    t(
-                      "capabilityDraft.registeredPanel.approval.label.runtimeExecution",
-                      "runtimeExecution",
-                    ),
-                    String(
-                      approvalPreview.sessionInputSubmissionContract
-                        .runtimeExecutionEnabled,
-                    ),
-                  ],
-                ].map(([label, value]) => (
-                  <div
-                    key={label}
-                    className="rounded-lg border border-amber-100 bg-amber-50 px-2 py-1"
-                  >
-                    <span className="text-[10px] text-amber-600">{label}</span>
-                    <span className="ml-1 break-words font-mono text-[10px] text-slate-700">
-                      {value}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-1.5 flex flex-wrap gap-1">
-                {approvalPreview.sessionInputSubmissionContract.validationRules.map(
-                  (rule) => (
-                    <span
-                      key={rule.fieldKey}
-                      className="rounded-full border border-amber-100 bg-amber-50 px-2 py-0.5 font-mono text-[10px] text-amber-800"
-                      title={rule.rule}
-                    >
-                      {t(
-                        "capabilityDraft.registeredPanel.approval.prefix.validate",
-                        "validate:",
-                      )}
-                      {rule.fieldKey}:{rule.kind}
-                      {rule.required
-                        ? t(
-                            "capabilityDraft.registeredPanel.approval.suffix.required",
-                            ":required",
-                          )
-                        : ""}
-                    </span>
-                  ),
-                )}
-              </div>
-            </div>
-          ) : null}
-          <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
-            {[
-              {
-                label: t(
-                  "capabilityDraft.registeredPanel.approval.label.approvalId",
-                  "Approval ID",
-                ),
-                value: approvalPreview.approvalId,
-              },
-              {
-                label: t(
-                  "capabilityDraft.registeredPanel.approval.label.status",
-                  "状态",
-                ),
-                value: approvalPreview.status,
-              },
-              {
-                label: t(
-                  "capabilityDraft.registeredPanel.approval.label.endpoint",
-                  "Endpoint",
-                ),
-                value: approvalPreview.endpointSource,
-              },
-              {
-                label: t(
-                  "capabilityDraft.registeredPanel.approval.label.method",
-                  "方法",
-                ),
-                value: approvalPreview.method,
-              },
-              {
-                label: t(
-                  "capabilityDraft.registeredPanel.approval.label.credentialReference",
-                  "凭证引用",
-                ),
-                value: approvalPreview.credentialReferenceId,
-              },
-              {
-                label: t(
-                  "capabilityDraft.registeredPanel.approval.label.policy",
-                  "Policy",
-                ),
-                value: approvalPreview.policyPath,
-              },
-              {
-                label: t(
-                  "capabilityDraft.registeredPanel.approval.label.createdAt",
-                  "创建时间",
-                ),
-                value: approvalPreview.createdAt,
-              },
-              {
-                label: t(
-                  "capabilityDraft.registeredPanel.approval.label.evidenceSchema",
-                  "证据 Schema",
-                ),
-                value: approvalPreview.evidenceSchema,
-                wide: true,
-              },
-            ].map(({ label, value, wide }) => (
-              <div
-                key={label}
-                className={cn(
-                  "rounded-xl border border-amber-100 bg-white px-2.5 py-1.5",
-                  wide && "sm:col-span-2",
-                )}
-              >
-                <div className="text-[10px] leading-4 text-amber-600">
-                  {label}
-                </div>
-                <div className="break-words font-mono text-[10px] leading-4 text-slate-700">
-                  {value}
-                </div>
-              </div>
-            ))}
+            {binding?.next_gate ||
+              t(
+                "capabilityDraft.registeredPanel.card.nextGateFallback",
+                "manual_runtime_enable / Query Loop metadata / tool_runtime 授权裁剪",
+              )}
           </div>
         </div>
-      ) : null}
-      <div className="mt-3 rounded-2xl border border-dashed border-cyan-200 bg-white px-3 py-2.5">
+        {preflightGate ? (
+          <div className="mt-3 rounded-2xl border border-sky-100 bg-white px-3 py-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[11px] font-semibold text-slate-800">
+                {t(
+                  "capabilityDraft.registeredPanel.provenance.title",
+                  "注册 provenance",
+                )}
+              </span>
+              <span className="text-[10px] leading-4 text-sky-700">
+                {preflightGate.label || preflightGate.checkId}
+              </span>
+            </div>
+            <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+              {preflightGate.evidence.slice(0, 6).map((evidence) => (
+                <div
+                  key={`${preflightGate.checkId}:${evidence.key}`}
+                  className="rounded-xl border border-sky-100 bg-sky-50 px-2.5 py-1.5"
+                >
+                  <div className="text-[10px] leading-4 text-slate-400">
+                    {formatRegistrationEvidenceKey(
+                      evidence.key,
+                      evidenceLabels,
+                    )}
+                  </div>
+                  <div className="truncate font-mono text-[10px] leading-4 text-slate-700">
+                    {formatRegistrationEvidenceValue(evidence)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        {approvalPreview ? (
+          <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[11px] font-semibold text-amber-900">
+                {t(
+                  "capabilityDraft.registeredPanel.approval.title",
+                  "Session approval request artifact",
+                )}
+              </span>
+              <span className="rounded-full border border-amber-200 bg-white px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                {t("capabilityDraft.registeredPanel.approval.statusSummary", {
+                  defaultValue: "{{status}} / 未执行 / 未保存凭证",
+                  status: approvalPreview.status,
+                })}
+              </span>
+            </div>
+            <p className="mt-1.5 text-[11px] leading-5 text-amber-800">
+              {t(
+                "capabilityDraft.registeredPanel.approval.description",
+                "真实 API 执行前必须先消费这条授权请求 artifact；当前只持久化审计入口，不保存 token，也不发请求。",
+              )}
+            </p>
+            {approvalPreview.consumptionGate ? (
+              <div className="mt-2 rounded-xl border border-amber-200 bg-white px-2.5 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[10px] font-semibold text-amber-700">
+                    {t(
+                      "capabilityDraft.registeredPanel.approval.consumptionGate.title",
+                      "消费门禁",
+                    )}
+                  </span>
+                  <span className="font-mono text-[10px] text-slate-700">
+                    {approvalPreview.consumptionGate.status}
+                  </span>
+                </div>
+                <p className="mt-1 text-[10px] leading-4 text-amber-800">
+                  {approvalPreview.consumptionGate.blockedReason}
+                </p>
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {approvalPreview.consumptionGate.requiredInputs.map(
+                    (input) => (
+                      <span
+                        key={input}
+                        className="rounded-full border border-amber-100 bg-amber-50 px-2 py-0.5 font-mono text-[10px] text-amber-800"
+                      >
+                        {input}
+                      </span>
+                    ),
+                  )}
+                </div>
+                <div className="mt-1.5 text-[10px] leading-4 text-slate-600">
+                  {t(
+                    "capabilityDraft.registeredPanel.approval.flag.runtimeExecution",
+                    {
+                      defaultValue: "runtimeExecution={{value}}",
+                      value: String(
+                        approvalPreview.consumptionGate.runtimeExecutionEnabled,
+                      ),
+                    },
+                  )}{" "}
+                  /{" "}
+                  {t(
+                    "capabilityDraft.registeredPanel.approval.flag.credentialStorage",
+                    {
+                      defaultValue: "credentialStorage={{value}}",
+                      value: String(
+                        approvalPreview.consumptionGate
+                          .credentialStorageEnabled,
+                      ),
+                    },
+                  )}
+                </div>
+              </div>
+            ) : null}
+            {approvalPreview.credentialResolver ? (
+              <div className="mt-2 rounded-xl border border-amber-200 bg-white px-2.5 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[10px] font-semibold text-amber-700">
+                    {t(
+                      "capabilityDraft.registeredPanel.approval.credentialResolver.title",
+                      "Session credential resolver",
+                    )}
+                  </span>
+                  <span className="font-mono text-[10px] text-slate-700">
+                    {approvalPreview.credentialResolver.status}
+                  </span>
+                </div>
+                <p className="mt-1 text-[10px] leading-4 text-amber-800">
+                  {approvalPreview.credentialResolver.blockedReason}
+                </p>
+                <div className="mt-1.5 grid gap-1 sm:grid-cols-2">
+                  {[
+                    [
+                      t(
+                        "capabilityDraft.registeredPanel.approval.label.reference",
+                        "Reference",
+                      ),
+                      approvalPreview.credentialResolver.referenceId,
+                    ],
+                    [
+                      t(
+                        "capabilityDraft.registeredPanel.approval.label.scope",
+                        "Scope",
+                      ),
+                      approvalPreview.credentialResolver.scope,
+                    ],
+                    [
+                      t(
+                        "capabilityDraft.registeredPanel.approval.label.source",
+                        "Source",
+                      ),
+                      approvalPreview.credentialResolver.source,
+                    ],
+                    [
+                      t(
+                        "capabilityDraft.registeredPanel.approval.label.secret",
+                        "Secret",
+                      ),
+                      approvalPreview.credentialResolver.secretMaterialStatus,
+                    ],
+                    [
+                      t(
+                        "capabilityDraft.registeredPanel.approval.label.tokenPersisted",
+                        "tokenPersisted",
+                      ),
+                      String(approvalPreview.credentialResolver.tokenPersisted),
+                    ],
+                    [
+                      t(
+                        "capabilityDraft.registeredPanel.approval.label.runtimeInjection",
+                        "runtimeInjection",
+                      ),
+                      String(
+                        approvalPreview.credentialResolver
+                          .runtimeInjectionEnabled,
+                      ),
+                    ],
+                  ].map(([label, value]) => (
+                    <div
+                      key={label}
+                      className="rounded-lg border border-amber-100 bg-amber-50 px-2 py-1"
+                    >
+                      <span className="text-[10px] text-amber-600">
+                        {label}
+                      </span>
+                      <span className="ml-1 break-words font-mono text-[10px] text-slate-700">
+                        {value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {approvalPreview.consumptionInputSchema ? (
+              <div className="mt-2 rounded-xl border border-amber-200 bg-white px-2.5 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[10px] font-semibold text-amber-700">
+                    {t(
+                      "capabilityDraft.registeredPanel.approval.inputSchema.title",
+                      "Approval consumption input schema",
+                    )}
+                  </span>
+                  <span className="font-mono text-[10px] text-slate-700">
+                    {approvalPreview.consumptionInputSchema.schemaId}
+                  </span>
+                </div>
+                <p className="mt-1 text-[10px] leading-4 text-amber-800">
+                  {approvalPreview.consumptionInputSchema.blockedReason}
+                </p>
+                <div className="mt-1.5 text-[10px] leading-4 text-slate-600">
+                  {t(
+                    "capabilityDraft.registeredPanel.approval.flag.uiSubmission",
+                    {
+                      defaultValue: "uiSubmission={{value}}",
+                      value: String(
+                        approvalPreview.consumptionInputSchema
+                          .uiSubmissionEnabled,
+                      ),
+                    },
+                  )}{" "}
+                  /{" "}
+                  {t(
+                    "capabilityDraft.registeredPanel.approval.flag.runtimeExecution",
+                    {
+                      defaultValue: "runtimeExecution={{value}}",
+                      value: String(
+                        approvalPreview.consumptionInputSchema
+                          .runtimeExecutionEnabled,
+                      ),
+                    },
+                  )}
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {approvalPreview.consumptionInputSchema.fields.map(
+                    (field) => (
+                      <span
+                        key={field.key}
+                        className="rounded-full border border-amber-100 bg-amber-50 px-2 py-0.5 font-mono text-[10px] text-amber-800"
+                        title={field.description}
+                      >
+                        {field.key}:{field.kind}
+                        {field.required
+                          ? t(
+                              "capabilityDraft.registeredPanel.approval.suffix.required",
+                              ":required",
+                            )
+                          : ""}
+                        {field.secret
+                          ? t(
+                              "capabilityDraft.registeredPanel.approval.suffix.secret",
+                              ":secret",
+                            )
+                          : ""}
+                      </span>
+                    ),
+                  )}
+                </div>
+              </div>
+            ) : null}
+            {approvalPreview.sessionInputIntake ? (
+              <div className="mt-2 rounded-xl border border-amber-200 bg-white px-2.5 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[10px] font-semibold text-amber-700">
+                    {t(
+                      "capabilityDraft.registeredPanel.approval.sessionInputIntake.title",
+                      "Session input intake",
+                    )}
+                  </span>
+                  <span className="font-mono text-[10px] text-slate-700">
+                    {approvalPreview.sessionInputIntake.status}
+                  </span>
+                </div>
+                <p className="mt-1 text-[10px] leading-4 text-amber-800">
+                  {approvalPreview.sessionInputIntake.blockedReason}
+                </p>
+                <div className="mt-1.5 grid gap-1 sm:grid-cols-2">
+                  {[
+                    [
+                      t(
+                        "capabilityDraft.registeredPanel.approval.label.schema",
+                        "Schema",
+                      ),
+                      approvalPreview.sessionInputIntake.schemaId,
+                    ],
+                    [
+                      t(
+                        "capabilityDraft.registeredPanel.approval.label.scope",
+                        "Scope",
+                      ),
+                      approvalPreview.sessionInputIntake.scope,
+                    ],
+                    [
+                      t(
+                        "capabilityDraft.registeredPanel.approval.label.credential",
+                        "Credential",
+                      ),
+                      approvalPreview.sessionInputIntake.credentialReferenceId,
+                    ],
+                    [
+                      t(
+                        "capabilityDraft.registeredPanel.approval.label.secret",
+                        "Secret",
+                      ),
+                      approvalPreview.sessionInputIntake.secretMaterialStatus,
+                    ],
+                    [
+                      t(
+                        "capabilityDraft.registeredPanel.approval.label.endpointPersisted",
+                        "endpointPersisted",
+                      ),
+                      String(
+                        approvalPreview.sessionInputIntake
+                          .endpointInputPersisted,
+                      ),
+                    ],
+                    [
+                      t(
+                        "capabilityDraft.registeredPanel.approval.label.tokenPersisted",
+                        "tokenPersisted",
+                      ),
+                      String(approvalPreview.sessionInputIntake.tokenPersisted),
+                    ],
+                  ].map(([label, value]) => (
+                    <div
+                      key={label}
+                      className="rounded-lg border border-amber-100 bg-amber-50 px-2 py-1"
+                    >
+                      <span className="text-[10px] text-amber-600">
+                        {label}
+                      </span>
+                      <span className="ml-1 break-words font-mono text-[10px] text-slate-700">
+                        {value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-1.5 text-[10px] leading-4 text-slate-600">
+                  {t(
+                    "capabilityDraft.registeredPanel.approval.flag.uiSubmission",
+                    {
+                      defaultValue: "uiSubmission={{value}}",
+                      value: String(
+                        approvalPreview.sessionInputIntake.uiSubmissionEnabled,
+                      ),
+                    },
+                  )}{" "}
+                  /{" "}
+                  {t(
+                    "capabilityDraft.registeredPanel.approval.flag.runtimeExecution",
+                    {
+                      defaultValue: "runtimeExecution={{value}}",
+                      value: String(
+                        approvalPreview.sessionInputIntake
+                          .runtimeExecutionEnabled,
+                      ),
+                    },
+                  )}
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {approvalPreview.sessionInputIntake.missingFieldKeys.map(
+                    (fieldKey) => (
+                      <span
+                        key={fieldKey}
+                        className="rounded-full border border-amber-100 bg-amber-50 px-2 py-0.5 font-mono text-[10px] text-amber-800"
+                      >
+                        {t(
+                          "capabilityDraft.registeredPanel.approval.prefix.missing",
+                          "missing:",
+                        )}
+                        {fieldKey}
+                      </span>
+                    ),
+                  )}
+                </div>
+              </div>
+            ) : null}
+            {approvalPreview.sessionInputSubmissionContract ? (
+              <div className="mt-2 rounded-xl border border-amber-200 bg-white px-2.5 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[10px] font-semibold text-amber-700">
+                    {t(
+                      "capabilityDraft.registeredPanel.approval.sessionSubmissionContract.title",
+                      "Session submission contract",
+                    )}
+                  </span>
+                  <span className="font-mono text-[10px] text-slate-700">
+                    {approvalPreview.sessionInputSubmissionContract.status}
+                  </span>
+                </div>
+                <p className="mt-1 text-[10px] leading-4 text-amber-800">
+                  {approvalPreview.sessionInputSubmissionContract.blockedReason}
+                </p>
+                <div className="mt-1.5 grid gap-1 sm:grid-cols-2">
+                  {[
+                    [
+                      t(
+                        "capabilityDraft.registeredPanel.approval.label.mode",
+                        "Mode",
+                      ),
+                      approvalPreview.sessionInputSubmissionContract.mode,
+                    ],
+                    [
+                      t(
+                        "capabilityDraft.registeredPanel.approval.label.retention",
+                        "Retention",
+                      ),
+                      approvalPreview.sessionInputSubmissionContract
+                        .valueRetention,
+                    ],
+                    [
+                      t(
+                        "capabilityDraft.registeredPanel.approval.label.submitHandler",
+                        "submitHandler",
+                      ),
+                      String(
+                        approvalPreview.sessionInputSubmissionContract
+                          .submissionHandlerEnabled,
+                      ),
+                    ],
+                    [
+                      t(
+                        "capabilityDraft.registeredPanel.approval.label.secretAccepted",
+                        "secretAccepted",
+                      ),
+                      String(
+                        approvalPreview.sessionInputSubmissionContract
+                          .secretMaterialAccepted,
+                      ),
+                    ],
+                    [
+                      t(
+                        "capabilityDraft.registeredPanel.approval.label.evidenceRequired",
+                        "evidenceRequired",
+                      ),
+                      String(
+                        approvalPreview.sessionInputSubmissionContract
+                          .evidenceCaptureRequired,
+                      ),
+                    ],
+                    [
+                      t(
+                        "capabilityDraft.registeredPanel.approval.label.runtimeExecution",
+                        "runtimeExecution",
+                      ),
+                      String(
+                        approvalPreview.sessionInputSubmissionContract
+                          .runtimeExecutionEnabled,
+                      ),
+                    ],
+                  ].map(([label, value]) => (
+                    <div
+                      key={label}
+                      className="rounded-lg border border-amber-100 bg-amber-50 px-2 py-1"
+                    >
+                      <span className="text-[10px] text-amber-600">
+                        {label}
+                      </span>
+                      <span className="ml-1 break-words font-mono text-[10px] text-slate-700">
+                        {value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {approvalPreview.sessionInputSubmissionContract.validationRules.map(
+                    (rule) => (
+                      <span
+                        key={rule.fieldKey}
+                        className="rounded-full border border-amber-100 bg-amber-50 px-2 py-0.5 font-mono text-[10px] text-amber-800"
+                        title={rule.rule}
+                      >
+                        {t(
+                          "capabilityDraft.registeredPanel.approval.prefix.validate",
+                          "validate:",
+                        )}
+                        {rule.fieldKey}:{rule.kind}
+                        {rule.required
+                          ? t(
+                              "capabilityDraft.registeredPanel.approval.suffix.required",
+                              ":required",
+                            )
+                          : ""}
+                      </span>
+                    ),
+                  )}
+                </div>
+              </div>
+            ) : null}
+            <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+              {[
+                {
+                  label: t(
+                    "capabilityDraft.registeredPanel.approval.label.approvalId",
+                    "Approval ID",
+                  ),
+                  value: approvalPreview.approvalId,
+                },
+                {
+                  label: t(
+                    "capabilityDraft.registeredPanel.approval.label.status",
+                    "状态",
+                  ),
+                  value: approvalPreview.status,
+                },
+                {
+                  label: t(
+                    "capabilityDraft.registeredPanel.approval.label.endpoint",
+                    "Endpoint",
+                  ),
+                  value: approvalPreview.endpointSource,
+                },
+                {
+                  label: t(
+                    "capabilityDraft.registeredPanel.approval.label.method",
+                    "方法",
+                  ),
+                  value: approvalPreview.method,
+                },
+                {
+                  label: t(
+                    "capabilityDraft.registeredPanel.approval.label.credentialReference",
+                    "凭证引用",
+                  ),
+                  value: approvalPreview.credentialReferenceId,
+                },
+                {
+                  label: t(
+                    "capabilityDraft.registeredPanel.approval.label.policy",
+                    "Policy",
+                  ),
+                  value: approvalPreview.policyPath,
+                },
+                {
+                  label: t(
+                    "capabilityDraft.registeredPanel.approval.label.createdAt",
+                    "创建时间",
+                  ),
+                  value: approvalPreview.createdAt,
+                },
+                {
+                  label: t(
+                    "capabilityDraft.registeredPanel.approval.label.evidenceSchema",
+                    "证据 Schema",
+                  ),
+                  value: approvalPreview.evidenceSchema,
+                  wide: true,
+                },
+              ].map(({ label, value, wide }) => (
+                <div
+                  key={label}
+                  className={cn(
+                    "rounded-xl border border-amber-100 bg-white px-2.5 py-1.5",
+                    wide && "sm:col-span-2",
+                  )}
+                >
+                  <div className="text-[10px] leading-4 text-amber-600">
+                    {label}
+                  </div>
+                  <div className="break-words font-mono text-[10px] leading-4 text-slate-700">
+                    {value}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </details>
+      <div className="mt-3 rounded-2xl border border-cyan-100 bg-white px-3 py-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-[11px] font-semibold text-cyan-800">
             {t(
               "capabilityDraft.registeredPanel.agentEnvelope.title",
-              "Agent envelope 草案",
+              "项目助手",
             )}
           </span>
           <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2 py-0.5 text-[10px] font-medium text-cyan-700">
@@ -1409,129 +1621,178 @@ function WorkspaceRegisteredSkillCard({
         <p className="mt-1.5 text-[11px] leading-5 text-slate-600">
           {envelopeDraft.description}
         </p>
-        <div className="mt-2 grid gap-1 text-[11px] leading-5 text-slate-500">
-          <span>{envelopeDraft.agentCardLabel}</span>
-          <span>{envelopeDraft.sharingLabel}</span>
-          <span>{envelopeDraft.sharingDiscoveryLabel}</span>
-          <span>{envelopeDraft.runbookLabel}</span>
-          <span>{envelopeDraft.memoryLabel}</span>
-          <span>{envelopeDraft.widgetLabel}</span>
-          <span>{envelopeDraft.permissionLabel}</span>
-          <span>{envelopeDraft.scheduleLabel}</span>
-          <span>{envelopeDraft.evidenceLabel}</span>
-          <span>{managedAutomationPresentation.statusLabel}</span>
-          <span>{managedAutomationPresentation.scheduleLabel}</span>
-          <span>{managedAutomationPresentation.lastRunLabel}</span>
-          <span>{managedAutomationPresentation.objectiveLabel}</span>
-          <span>{managedAutomationPresentation.auditLabel}</span>
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <div className="text-[11px] text-slate-500">
+              {t("capabilityDraft.registeredPanel.user.assistant.try", "试用")}
+            </div>
+            <div className="mt-1 text-[12px] font-semibold text-slate-800">
+              {runtimeEnableReady
+                ? t(
+                    "capabilityDraft.registeredPanel.user.assistant.tryReady",
+                    "可以试用一次",
+                  )
+                : t(
+                    "capabilityDraft.registeredPanel.user.assistant.tryBlocked",
+                    "暂不可试用",
+                  )}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <div className="text-[11px] text-slate-500">
+              {t(
+                "capabilityDraft.registeredPanel.user.assistant.schedule",
+                "定时运行",
+              )}
+            </div>
+            <div className="mt-1 text-[12px] font-semibold text-slate-800">
+              {userScheduleLabel}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <div className="text-[11px] text-slate-500">
+              {t(
+                "capabilityDraft.registeredPanel.user.assistant.result",
+                "最近结果",
+              )}
+            </div>
+            <div className="mt-1 text-[12px] font-semibold text-slate-800">
+              {userResultLabel}
+            </div>
+          </div>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="mt-2 h-7 rounded-xl px-2.5 text-[11px] text-cyan-700 hover:bg-cyan-50"
-          disabled={!canCreateAgentEnvelopeDraft}
-          onClick={() => {
-            if (binding && canCreateAgentEnvelopeDraft) {
-              onCreateManagedAutomationDraft?.(binding, automationDraftOptions);
-            }
-          }}
-          data-testid="workspace-registered-agent-envelope-action"
-        >
-          {envelopeDraft.actionLabel}
-        </Button>
-        {onCreateManagedAutomationDraft && binding ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="ml-2 mt-2 h-7 rounded-xl border-cyan-200 bg-cyan-50 px-2.5 text-[11px] text-cyan-800 hover:bg-cyan-100"
-            disabled={!canCreateManagedAutomationDraft}
-            onClick={() =>
-              onCreateManagedAutomationDraft(binding, automationDraftOptions)
-            }
-            data-testid="workspace-registered-agent-managed-automation"
-          >
+        <details className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] leading-5 text-slate-500">
+          <summary className="cursor-pointer select-none text-[12px] font-medium text-slate-700">
             {t(
-              "capabilityDraft.registeredPanel.action.createManagedJobDraft",
-              "创建 Managed Job 草案",
+              "capabilityDraft.registeredPanel.agentEnvelope.details",
+              "项目助手详情",
             )}
-          </Button>
-        ) : null}
-        {managedAutomationJob && onToggleManagedAutomationJob ? (
+          </summary>
+          <div className="mt-2 grid gap-1">
+            <span>{envelopeDraft.agentCardLabel}</span>
+            <span>{envelopeDraft.sharingLabel}</span>
+            <span>{envelopeDraft.sharingDiscoveryLabel}</span>
+            <span>{envelopeDraft.runbookLabel}</span>
+            <span>{envelopeDraft.memoryLabel}</span>
+            <span>{envelopeDraft.widgetLabel}</span>
+            <span>{envelopeDraft.permissionLabel}</span>
+            <span>{envelopeDraft.scheduleLabel}</span>
+            <span>{envelopeDraft.evidenceLabel}</span>
+            <span>{managedAutomationPresentation.statusLabel}</span>
+            <span>{managedAutomationPresentation.scheduleLabel}</span>
+            <span>{managedAutomationPresentation.lastRunLabel}</span>
+            <span>{managedAutomationPresentation.objectiveLabel}</span>
+            <span>{managedAutomationPresentation.auditLabel}</span>
+          </div>
+        </details>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {onEnableRuntime && binding ? (
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 rounded-2xl bg-slate-900 px-3 text-[12px] text-white hover:bg-slate-800"
+              disabled={!runtimeEnableReady}
+              onClick={() => onEnableRuntime(binding)}
+              data-testid="workspace-registered-skill-enable-runtime"
+            >
+              {t(
+                "capabilityDraft.registeredPanel.action.enableRuntime",
+                "试用一次",
+              )}
+            </Button>
+          ) : null}
+          {onCreateManagedAutomationDraft && binding ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 rounded-2xl border-slate-200 bg-white px-3 text-[12px] text-slate-700 hover:bg-slate-50"
+              disabled={!canCreateManagedAutomationDraft}
+              onClick={() =>
+                onCreateManagedAutomationDraft(binding, automationDraftOptions)
+              }
+              data-testid="workspace-registered-agent-managed-automation"
+            >
+              {t(
+                "capabilityDraft.registeredPanel.action.createManagedJobDraft",
+                "设置定时运行",
+              )}
+            </Button>
+          ) : null}
+          {managedAutomationJob && onToggleManagedAutomationJob ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-8 rounded-2xl px-3 text-[12px] text-slate-600 hover:bg-slate-50"
+              disabled={managedAutomationUpdating}
+              onClick={() =>
+                onToggleManagedAutomationJob(
+                  managedAutomationJob,
+                  !managedAutomationJob.enabled,
+                )
+              }
+              data-testid="workspace-registered-agent-managed-automation-toggle"
+            >
+              {managedAutomationJob.enabled
+                ? t(
+                    "capabilityDraft.registeredPanel.action.pauseManagedJob",
+                    "暂停定时运行",
+                  )
+                : t(
+                    "capabilityDraft.registeredPanel.action.resumeManagedJob",
+                    "开启定时运行",
+                  )}
+            </Button>
+          ) : null}
+          {managedAutomationJob && onAuditManagedAutomationJob ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-8 rounded-2xl px-3 text-[12px] text-emerald-700 hover:bg-emerald-50 disabled:text-slate-400"
+              disabled={
+                completionAuditAuditing || !canAuditManagedAutomationJob
+              }
+              onClick={() =>
+                onAuditManagedAutomationJob(
+                  skill.directory,
+                  managedAutomationJob,
+                )
+              }
+              data-testid="workspace-registered-agent-completion-audit"
+            >
+              {completionAuditAuditing
+                ? t(
+                    "capabilityDraft.registeredPanel.action.auditRunning",
+                    "正在检查",
+                  )
+                : t(
+                    "capabilityDraft.registeredPanel.action.auditRecentRun",
+                    "检查最近结果",
+                  )}
+            </Button>
+          ) : null}
           <Button
             type="button"
             size="sm"
             variant="ghost"
-            className="ml-2 mt-2 h-7 rounded-xl px-2.5 text-[11px] text-slate-600 hover:bg-slate-50"
-            disabled={managedAutomationUpdating}
-            onClick={() =>
-              onToggleManagedAutomationJob(
-                managedAutomationJob,
-                !managedAutomationJob.enabled,
-              )
-            }
-            data-testid="workspace-registered-agent-managed-automation-toggle"
+            className="h-8 rounded-2xl px-3 text-[12px] text-cyan-700 hover:bg-cyan-50 disabled:text-slate-400"
+            disabled={!canCreateAgentEnvelopeDraft}
+            onClick={() => {
+              if (binding && canCreateAgentEnvelopeDraft) {
+                onCreateManagedAutomationDraft?.(
+                  binding,
+                  automationDraftOptions,
+                );
+              }
+            }}
+            data-testid="workspace-registered-agent-envelope-action"
           >
-            {managedAutomationJob.enabled
-              ? t(
-                  "capabilityDraft.registeredPanel.action.pauseManagedJob",
-                  "暂停 Managed Job",
-                )
-              : t(
-                  "capabilityDraft.registeredPanel.action.resumeManagedJob",
-                  "恢复 Managed Job",
-                )}
+            {envelopeDraft.actionLabel}
           </Button>
-        ) : null}
-        {managedAutomationJob && onAuditManagedAutomationJob ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="ml-2 mt-2 h-7 rounded-xl px-2.5 text-[11px] text-emerald-700 hover:bg-emerald-50"
-            disabled={completionAuditAuditing}
-            onClick={() =>
-              onAuditManagedAutomationJob(skill.directory, managedAutomationJob)
-            }
-            data-testid="workspace-registered-agent-completion-audit"
-          >
-            {completionAuditAuditing
-              ? t(
-                  "capabilityDraft.registeredPanel.action.auditRunning",
-                  "正在审计",
-                )
-              : t(
-                  "capabilityDraft.registeredPanel.action.auditRecentRun",
-                  "审计最近运行",
-                )}
-          </Button>
-        ) : null}
+        </div>
       </div>
-      {onEnableRuntime && binding ? (
-        <div className="mt-3 border-t border-slate-200 pt-3">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="rounded-2xl border-sky-200 bg-white px-3 text-[12px] text-sky-700 hover:bg-sky-50 hover:text-sky-900"
-            disabled={!runtimeEnableReady}
-            onClick={() => onEnableRuntime(binding)}
-            data-testid="workspace-registered-skill-enable-runtime"
-          >
-            {t(
-              "capabilityDraft.registeredPanel.action.enableRuntime",
-              "本回合启用",
-            )}
-          </Button>
-          <span className="ml-2 align-middle text-[11px] text-slate-500">
-            {t(
-              "capabilityDraft.registeredPanel.action.enableRuntimeHelp",
-              "只写入 session enable metadata，不创建自动化。",
-            )}
-          </span>
-        </div>
-      ) : null}
     </article>
   );
 }
@@ -1703,12 +1964,13 @@ export function WorkspaceRegisteredSkillsPanel({
         const runs = await getAutomationRunHistory(job.id, 5);
         const sessionId = runs.find((run) => run.session_id)?.session_id;
         if (!sessionId) {
-          throw new Error(
+          setError(
             t(
               "capabilityDraft.registeredPanel.error.missingAutomationSession",
-              "最近 automation run 没有关联 session，无法导出 evidence。",
+              "还没有可检查的运行结果。请先试用一次，或开启定时运行后等待它完成。",
             ),
           );
+          return;
         }
         const evidencePack = await exportAgentRuntimeEvidencePack(sessionId);
         setCompletionAuditSummaries((previous) => ({
@@ -1738,19 +2000,16 @@ export function WorkspaceRegisteredSkillsPanel({
         <div className="space-y-1.5">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] font-medium text-sky-700">
-              {t("capabilityDraft.registeredPanel.badge", "注册区")}
+              {t("capabilityDraft.registeredPanel.badge", "已保存")}
             </span>
             <h2 className="text-[15px] font-semibold text-slate-900">
-              {t(
-                "capabilityDraft.registeredPanel.title",
-                "Workspace 已注册能力",
-              )}
+              {t("capabilityDraft.registeredPanel.title", "已保存技能")}
             </h2>
           </div>
           <p className="text-[11px] leading-5 text-slate-500">
             {t(
               "capabilityDraft.registeredPanel.description",
-              "这里只有已通过验证并写入当前项目的 Skill 包；运行仍要等 runtime gate。",
+              "这里是已经检查并保存到当前项目的技能。可以先试用，也可以设置定时运行。",
             )}
           </p>
         </div>
@@ -1776,28 +2035,39 @@ export function WorkspaceRegisteredSkillsPanel({
         <div className="mt-4 rounded-[22px] border border-dashed border-sky-200 bg-sky-50/60 px-4 py-5 text-sm leading-6 text-sky-800">
           {t(
             "capabilityDraft.registeredPanel.empty.missingProject",
-            "选择或进入一个项目后，才能查看该项目已注册的 generated skill。",
+            "选择或进入一个项目后，才能查看这个项目里保存的技能。",
           )}
         </div>
       ) : effectiveError ? (
         <div className="mt-4 rounded-[22px] border border-rose-200 bg-rose-50 px-4 py-5 text-sm leading-6 text-rose-700">
-          {t("capabilityDraft.registeredPanel.empty.error", {
-            defaultValue: "已注册能力暂时没读到：{{message}}",
-            message: effectiveError,
-          })}
+          <div>
+            {t(
+              "capabilityDraft.registeredPanel.empty.error",
+              "已保存技能暂时没读到，请稍后重试。",
+            )}
+          </div>
+          <details className="mt-2 text-[11px] text-rose-600">
+            <summary className="cursor-pointer">
+              {t(
+                "capabilityDraft.registeredPanel.technicalDetails",
+                "技术详情",
+              )}
+            </summary>
+            <div className="mt-1 break-words">{effectiveError}</div>
+          </details>
         </div>
       ) : isBusy ? (
         <div className="mt-4 rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-5 text-sm leading-6 text-slate-500">
           {t(
             "capabilityDraft.registeredPanel.empty.loading",
-            "正在读取已注册能力...",
+            "正在读取已保存技能...",
           )}
         </div>
       ) : visibleSkills.length === 0 ? (
         <div className="mt-4 rounded-[22px] border border-dashed border-sky-200 bg-sky-50/60 px-4 py-5 text-sm leading-6 text-sky-800">
           {t(
             "capabilityDraft.registeredPanel.empty.noSkills",
-            "当前项目还没有通过 P3A 注册的能力。草案通过验证并注册后，会先出现在这里。",
+            "当前项目还没有已保存技能。先在“正在制作”里检查并保存一个。",
           )}
         </div>
       ) : (

@@ -112,28 +112,43 @@ export const ContentColumn = styled.div<{ $isUser: boolean }>`
   align-items: ${({ $isUser }) => ($isUser ? "flex-end" : "stretch")};
 `;
 
-export const MessageBubble = styled.div<{ $isUser: boolean }>`
-  width: ${({ $isUser }) => ($isUser ? "fit-content" : "100%")};
-  max-width: ${({ $isUser }) =>
-    $isUser ? "min(72%, 560px)" : "min(100%, 1040px)"};
-  padding: ${({ $isUser }) => ($isUser ? "12px 16px" : "15px 17px")};
+export const MessageBubble = styled.div<{
+  $isUser: boolean;
+  $bareMedia?: boolean;
+}>`
+  width: ${({ $isUser, $bareMedia }) =>
+    $bareMedia || $isUser ? "fit-content" : "100%"};
+  max-width: ${({ $isUser, $bareMedia }) =>
+    $bareMedia
+      ? "min(100%, 560px)"
+      : $isUser
+        ? "min(72%, 560px)"
+        : "min(100%, 1040px)"};
+  padding: ${({ $isUser, $bareMedia }) =>
+    $bareMedia ? "0" : $isUser ? "12px 16px" : "15px 17px"};
   display: flex;
   flex-direction: column;
-  gap: ${({ $isUser }) => ($isUser ? "8px" : "12px")};
-  border-radius: 18px;
-  border: 1px solid
-    ${({ $isUser }) =>
-      $isUser
-        ? "var(--lime-surface-border-strong, rgba(187, 247, 208, 0.72))"
-        : "var(--lime-surface-border, rgba(226, 240, 226, 0.58))"};
-  background: ${({ $isUser }) =>
-    $isUser
-      ? "linear-gradient(180deg, var(--lime-surface, #ffffff) 0%, var(--lime-brand-soft, #ecfdf5) 100%)"
-      : "linear-gradient(180deg, var(--lime-surface, #ffffff) 0%, var(--lime-surface-subtle, #fcfff9) 100%)"};
-  box-shadow: ${({ $isUser }) =>
-    $isUser
-      ? "0 16px 36px -30px rgba(15, 23, 42, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.74)"
-      : "0 14px 34px -30px rgba(15, 23, 42, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.78)"};
+  gap: ${({ $isUser, $bareMedia }) =>
+    $bareMedia ? "0" : $isUser ? "8px" : "12px"};
+  border-radius: ${({ $bareMedia }) => ($bareMedia ? "0" : "18px")};
+  border: ${({ $isUser, $bareMedia }) =>
+    $bareMedia
+      ? "0"
+      : $isUser
+        ? "1px solid var(--lime-surface-border-strong, rgba(187, 247, 208, 0.72))"
+        : "1px solid var(--lime-surface-border, rgba(226, 240, 226, 0.58))"};
+  background: ${({ $isUser, $bareMedia }) =>
+    $bareMedia
+      ? "transparent"
+      : $isUser
+        ? "linear-gradient(180deg, var(--lime-surface, #ffffff) 0%, var(--lime-brand-soft, #ecfdf5) 100%)"
+        : "linear-gradient(180deg, var(--lime-surface, #ffffff) 0%, var(--lime-surface-subtle, #fcfff9) 100%)"};
+  box-shadow: ${({ $isUser, $bareMedia }) =>
+    $bareMedia
+      ? "none"
+      : $isUser
+        ? "0 16px 36px -30px rgba(15, 23, 42, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.74)"
+        : "0 14px 34px -30px rgba(15, 23, 42, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.78)"};
   color: ${({ $isUser }) =>
     $isUser ? "rgb(30, 41, 59)" : "var(--foreground)"};
   font-size: 15px;

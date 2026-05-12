@@ -1,7 +1,10 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import type { TeamWorkspaceActivityEntry } from "../../teamWorkspaceRuntime";
 import {
+  buildActivityPreviewCopy,
   buildSelectedSessionActivityState,
+  type ActivityPreviewTranslate,
   type ActivityPreviewSession,
   type SelectedSessionActivityState,
 } from "../../team-workspace-runtime/activityPreviewSelectors";
@@ -26,10 +29,23 @@ export function useTeamWorkspaceActivityPreviews({
   selectedBaseSession = null,
   selectedSession = null,
 }: UseTeamWorkspaceActivityPreviewsParams) {
+  const { t } = useTranslation("agent");
+  const translateActivityPreview = useMemo<ActivityPreviewTranslate>(
+    () => (key, options) => String(t(key as never, options as never)),
+    [t],
+  );
+  const activityPreviewCopy = useMemo(
+    () =>
+      buildActivityPreviewCopy({
+        translate: translateActivityPreview,
+      }),
+    [translateActivityPreview],
+  );
   const selectedSessionActivitySyncTarget =
     useMemo<SelectedSessionActivityState>(
       () =>
         buildSelectedSessionActivityState({
+          copy: activityPreviewCopy,
           selectedSession,
           selectedBaseSession,
           activityRefreshVersionBySessionId,
@@ -38,6 +54,7 @@ export function useTeamWorkspaceActivityPreviews({
       [
         activityRefreshVersionBySessionId,
         activityTimelineEntryLimit,
+        activityPreviewCopy,
         selectedBaseSession,
         selectedSession,
       ],
@@ -46,6 +63,7 @@ export function useTeamWorkspaceActivityPreviews({
     activityRefreshVersionBySessionId,
     activityTimelineEntryLimit,
     basePreviewableRailSessions,
+    copy: activityPreviewCopy,
     pollIntervalMs,
     selectedSessionActivityState: selectedSessionActivitySyncTarget,
   });
@@ -58,10 +76,12 @@ export function useTeamWorkspaceActivityPreviews({
         previewBySessionId: sessionActivityPreviewById,
         activityRefreshVersionBySessionId,
         activityTimelineEntryLimit,
+        copy: activityPreviewCopy,
       }),
     [
       activityRefreshVersionBySessionId,
       activityTimelineEntryLimit,
+      activityPreviewCopy,
       liveActivityBySessionId,
       selectedBaseSession,
       selectedSession,

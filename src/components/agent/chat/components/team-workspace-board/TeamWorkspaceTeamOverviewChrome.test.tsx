@@ -186,4 +186,58 @@ describe("TeamWorkspaceTeamOverviewChrome", () => {
         : 0;
     expect(operationsOrder).toBeTruthy();
   });
+
+  it("overview chrome 应读取英文资源", async () => {
+    await changeLimeLocale("en-US");
+
+    const compactContainer = renderChrome({
+      boardChromeDisplay: {
+        boardHeadline: "Tasks running",
+        boardHint: "Current tasks keep updating.",
+        compactBoardHeadline: "Tasks running",
+        compactToolbarChips: [
+          { key: "status", text: "Running", tone: "status", status: "running" },
+        ],
+        statusSummaryBadges: [],
+      },
+      formatUpdatedAt: () => "just now",
+      memberCanvasSubtitle: "2 current progress lane(s) connected.",
+      memberCanvasTitle: "Current progress",
+      selectedSession: {
+        name: "Researcher",
+        isCurrent: true,
+        updatedAt: 1710000000,
+      },
+    });
+
+    expect(compactContainer.textContent).toContain("Current focus");
+    expect(compactContainer.textContent).toContain("Updated just now");
+    expect(compactContainer.textContent).toContain("Current task");
+    expect(compactContainer.textContent).toContain("Task actions");
+    expect(compactContainer.textContent).toContain("View");
+    expect(compactContainer.textContent).not.toContain("当前焦点");
+
+    const expandedContainer = renderChrome({
+      boardChromeDisplay: {
+        boardHeadline: "Tasks running",
+        boardHint: "Current tasks keep updating.",
+        compactBoardHeadline: "Tasks running",
+        compactToolbarChips: [],
+        statusSummaryBadges: [],
+      },
+      formatUpdatedAt: () => "just now",
+      memberCanvasSubtitle: "2 current progress lane(s) connected.",
+      memberCanvasTitle: "Current progress",
+      selectedSession: {
+        name: "Researcher",
+        isCurrent: true,
+        updatedAt: 1710000000,
+      },
+      useCompactCanvasChrome: false,
+    });
+
+    expect(expandedContainer.textContent).toContain("2 task(s) running");
+    expect(expandedContainer.textContent).toContain("1 task(s) completed");
+    expect(expandedContainer.textContent).not.toContain("项任务正在处理中");
+  });
 });

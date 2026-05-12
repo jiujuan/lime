@@ -1027,6 +1027,7 @@ export function buildMentionCommandReplayText(
 ): string | undefined {
   if (
     input.commandKey === "image_generate" ||
+    input.commandKey === "image_generate_nanobanana_pro" ||
     input.commandKey === "image_storyboard" ||
     input.commandKey === "image_edit" ||
     input.commandKey === "image_variation"
@@ -1240,6 +1241,7 @@ function buildMentionCommandReplayTextFromSlotValues(params: {
 
   if (
     commandKey === "image_generate" ||
+    commandKey === "image_generate_nanobanana_pro" ||
     commandKey === "image_storyboard" ||
     commandKey === "image_edit" ||
     commandKey === "image_variation"

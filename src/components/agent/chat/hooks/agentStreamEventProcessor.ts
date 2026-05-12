@@ -21,7 +21,12 @@ import {
   resolveArtifactProtocolFilePath,
   resolveArtifactProtocolPreviewText,
 } from "@/lib/artifact-protocol";
-import type { ActionRequired, Message, WriteArtifactContext } from "../types";
+import type {
+  ActionRequired,
+  Message,
+  MessageImageWorkbenchPreview,
+  WriteArtifactContext,
+} from "../types";
 import { activityLogger } from "@/lib/workspace/workbenchRuntime";
 import {
   extractQuestionsFromRequestedSchema,
@@ -96,6 +101,89 @@ function isFileMutationToolName(toolName: string): boolean {
     "update",
     "replace",
   ].some((keyword) => normalized.includes(keyword));
+}
+
+function resolveImageTaskPreviewProgressScore(
+  preview?: MessageImageWorkbenchPreview,
+): number {
+  switch (preview?.status) {
+    case "complete":
+    case "failed":
+    case "cancelled":
+      return 3;
+    case "partial":
+      return 2;
+    case "running":
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+function mergeImageTaskPreviewByProgress(
+  current: MessageImageWorkbenchPreview | undefined,
+  candidate: MessageImageWorkbenchPreview | undefined,
+): MessageImageWorkbenchPreview | undefined {
+  if (!current) {
+    return candidate;
+  }
+  if (!candidate || candidate.taskId !== current.taskId) {
+    return current;
+  }
+
+  const candidateIsAtLeastAsFresh =
+    resolveImageTaskPreviewProgressScore(candidate) >=
+    resolveImageTaskPreviewProgressScore(current);
+  return candidateIsAtLeastAsFresh
+    ? {
+        ...current,
+        ...candidate,
+      }
+    : {
+        ...candidate,
+        ...current,
+      };
+}
+
+function collapseAssistantImageTaskPreviewDuplicates(params: {
+  messages: Message[];
+  assistantMsgId: string;
+  taskId: string;
+}): Message[] {
+  let mergedPreview: MessageImageWorkbenchPreview | undefined;
+  const retainedMessages: Message[] = [];
+
+  params.messages.forEach((message) => {
+    const preview = message.imageWorkbenchPreview;
+    const isSameImageTask =
+      message.role === "assistant" && preview?.taskId === params.taskId;
+    if (message.id === params.assistantMsgId) {
+      mergedPreview = mergeImageTaskPreviewByProgress(mergedPreview, preview);
+      retainedMessages.push(message);
+      return;
+    }
+    if (isSameImageTask) {
+      mergedPreview = mergeImageTaskPreviewByProgress(mergedPreview, preview);
+      return;
+    }
+    retainedMessages.push(message);
+  });
+
+  if (!mergedPreview) {
+    return retainedMessages;
+  }
+
+  return retainedMessages.map((message) =>
+    message.id === params.assistantMsgId
+      ? {
+          ...message,
+          imageWorkbenchPreview: mergeImageTaskPreviewByProgress(
+            message.imageWorkbenchPreview,
+            mergedPreview,
+          ),
+        }
+      : message,
+  );
 }
 
 function extractPatchPath(rawText?: string): string | undefined {
@@ -964,8 +1052,9 @@ export function handleToolEndEvent({
     });
   }
 
-  setMessages((prev) =>
-    prev.map((message) => {
+  setMessages((prev) => {
+    let completedImageTaskId: string | null = null;
+    const nextMessages = prev.map((message) => {
       if (message.id !== assistantMsgId) {
         return message;
       }
@@ -1013,6 +1102,7 @@ export function handleToolEndEvent({
         toolResult: normalizedResultRecord,
         fallbackPrompt: message.content || "图片任务进行中",
       });
+      completedImageTaskId = imageTaskPreview?.taskId || null;
       const taskPreview = buildTaskPreviewFromToolResult({
         toolId: data.tool_id,
         toolName: currentToolCall?.name || "",
@@ -1038,8 +1128,16 @@ export function handleToolEndEvent({
             }
           : message.taskPreview,
       };
-    }),
-  );
+    });
+
+    return completedImageTaskId
+      ? collapseAssistantImageTaskPreviewDuplicates({
+          messages: nextMessages,
+          assistantMsgId,
+          taskId: completedImageTaskId,
+        })
+      : nextMessages;
+  });
 
   const normalizedResultRecord =
     normalizedResult &&

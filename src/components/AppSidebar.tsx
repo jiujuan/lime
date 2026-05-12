@@ -3554,6 +3554,31 @@ export function AppSidebar({
       return;
     }
 
+    if (item.id === "skills") {
+      const targetParams = currentProjectId
+        ? { creationProjectId: currentProjectId }
+        : undefined;
+      const target = {
+        page: "skills" as Page,
+        rawParams: targetParams,
+        paramsKey: serializeNavigationParams(targetParams),
+      } satisfies SidebarNavigationTarget;
+
+      if (
+        isSameSidebarNavigationTarget(
+          target,
+          requestedNavigationTargetRef.current.page,
+          requestedNavigationTargetRef.current.rawParams,
+        )
+      ) {
+        return;
+      }
+
+      requestedNavigationTargetRef.current = target;
+      onNavigate(target.page, target.rawParams);
+      return;
+    }
+
     const target = resolveSidebarNavigationTarget(item);
 
     if (!target) {

@@ -1,5 +1,35 @@
 import { describe, expect, it } from "vitest";
-import { buildTeamWorkspaceCanvasLanes } from "./canvasLaneSelectors";
+import enAgentResource from "@/i18n/resources/en-US/agent.json";
+import {
+  buildTeamWorkspaceCanvasLaneCopy,
+  buildTeamWorkspaceCanvasLanes,
+  type TeamWorkspaceCanvasLaneTranslate,
+} from "./canvasLaneSelectors";
+
+type EnAgentResourceKey = keyof typeof enAgentResource;
+
+function interpolateResourceTemplate(
+  template: string,
+  values?: Record<string, unknown>,
+) {
+  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, name) => {
+    const value = values?.[name];
+    return value == null ? match : String(value);
+  });
+}
+
+function buildEnglishCanvasLaneCopy() {
+  const translate: TeamWorkspaceCanvasLaneTranslate = (key, options) =>
+    interpolateResourceTemplate(
+      enAgentResource[key as EnAgentResourceKey],
+      options,
+    );
+
+  return buildTeamWorkspaceCanvasLaneCopy({
+    locale: "en-US",
+    translate,
+  });
+}
 
 describe("canvasLaneSelectors", () => {
   it("真实成员图应把 session lane 投影为稳定的展示模型", () => {
@@ -182,6 +212,77 @@ describe("canvasLaneSelectors", () => {
         statusHint: "等待系统把这项任务拆出来",
         updatedAtLabel: "计划分工",
         previewText: "补测试并确认风险。",
+      }),
+    ]);
+  });
+
+  it("应支持注入英文 canvas lane chrome copy 且不翻译运行时数据", () => {
+    const copy = buildEnglishCanvasLaneCopy();
+
+    const sessionLanes = buildTeamWorkspaceCanvasLanes({
+      copy,
+      hasRealTeamGraph: true,
+      sessions: [
+        {
+          id: "child-en",
+          name: "Runtime worker",
+          runtimeStatus: "running",
+          latestTurnStatus: "running",
+          queuedTurnCount: 2,
+          teamParallelBudget: 3,
+          teamActiveCount: 1,
+          providerConcurrencyGroup: "openai",
+          providerParallelBudget: 1,
+        },
+      ],
+      runtimeMembers: [],
+      plannedRoles: [],
+      previewBySessionId: {
+        "child-en": {
+          preview: null,
+          entries: [],
+          status: "loading",
+        },
+      },
+      activityTimelineEntryLimit: 4,
+    });
+
+    expect(sessionLanes).toEqual([
+      expect.objectContaining({
+        id: "child-en",
+        title: "Runtime worker",
+        summary: "No task summary yet. Open details to view the full context.",
+        badgeLabel: "Running",
+        statusHint:
+          "Waiting 2 · Latest progress Running · Running 1/3 · Steady mode",
+        updatedAtLabel: "just now",
+        previewText: "Syncing the latest content for this task...",
+      }),
+    ]);
+
+    const plannedLanes = buildTeamWorkspaceCanvasLanes({
+      copy,
+      hasRealTeamGraph: false,
+      sessions: [],
+      runtimeMembers: [],
+      plannedRoles: [
+        {
+          id: "reviewer",
+          label: "Reviewer",
+          summary: "Keep this runtime summary as data.",
+          roleKey: "reviewer",
+        },
+      ],
+      activityTimelineEntryLimit: 4,
+    });
+
+    expect(plannedLanes).toEqual([
+      expect.objectContaining({
+        title: "Reviewer",
+        summary: "Keep this runtime summary as data.",
+        badgeLabel: "Not started",
+        statusHint: "Waiting for the system to split out this task",
+        updatedAtLabel: "Planned assignment",
       }),
     ]);
   });

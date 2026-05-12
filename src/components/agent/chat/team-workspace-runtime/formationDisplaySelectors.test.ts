@@ -1,12 +1,37 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { changeLimeLocale, getLimeI18n } from "@/i18n/createI18n";
 import {
+  buildTeamWorkspaceFormationCopy,
   buildRuntimeFormationDisplayState,
   buildSelectedTeamPlanDisplayState,
+  type TeamWorkspaceFormationCopy,
+  type TeamWorkspaceFormationTranslate,
 } from "./formationDisplaySelectors";
 
 describe("formationDisplaySelectors", () => {
+  let formationCopy: TeamWorkspaceFormationCopy;
+
+  beforeEach(async () => {
+    await changeLimeLocale("en-US");
+    const translate: TeamWorkspaceFormationTranslate = (key, options) =>
+      String(
+        getLimeI18n().t(
+          key as never,
+          {
+            ns: "agent",
+            ...(options ?? {}),
+          } as never,
+        ),
+      );
+    formationCopy = buildTeamWorkspaceFormationCopy({
+      locale: "en-US",
+      translate,
+    });
+  });
+
   it("已选 Team 但无 runtime formation 时，应产出计划分工展示模型", () => {
     const state = buildSelectedTeamPlanDisplayState({
+      copy: formationCopy,
       selectedTeamLabel: "代码排障团队",
       selectedTeamSummary: "分析、执行、验证三段式推进。",
       selectedTeamRoles: [
@@ -20,9 +45,10 @@ describe("formationDisplaySelectors", () => {
 
     expect(state.hasSelectedTeamPlan).toBe(true);
     expect(state.summaryBadges.map((badge) => badge.text)).toEqual([
-      "分工方案 · 代码排障团队",
-      "1 个计划分工",
+      "Team plan · 代码排障团队",
+      "1 planned role(s)",
     ]);
+    expect(formationCopy.detailRoleSectionPlanLabel).toBe("Role plan");
     expect(state.roleCards).toEqual([
       {
         id: "explorer",
@@ -34,6 +60,7 @@ describe("formationDisplaySelectors", () => {
 
   it("runtime formation 已就绪时，应产出状态、当前进展与参考分工", () => {
     const state = buildRuntimeFormationDisplayState({
+      copy: formationCopy,
       teamDispatchPreviewState: {
         requestId: "runtime-1",
         status: "formed",
@@ -64,29 +91,33 @@ describe("formationDisplaySelectors", () => {
     });
 
     expect(state.hasRuntimeFormation).toBe(true);
-    expect(state.hint).toContain("当前任务的分工已经准备好");
+    expect(state.hint).toContain("team split is ready");
     expect(state.summaryBadges.map((badge) => badge.text)).toEqual([
-      "分工方案 · 修复分工方案",
-      "已就绪",
-      "1 条当前进展",
-      "参考方案 · 代码排障团队",
+      "Team plan · 修复分工方案",
+      "Ready",
+      "1 active progress item(s)",
+      "Reference plan · 代码排障团队",
     ]);
-    expect(state.panelHeadline).toBe("任务分工已准备好");
+    expect(formationCopy.formatTaskCountBadge(2)).toBe("2 task(s)");
+    expect(formationCopy.detailHintRuntimeWithReference).toBe(
+      "View the current task split and reference plan",
+    );
+    expect(state.panelHeadline).toBe("Team split is ready");
     expect(state.memberCards[0]).toMatchObject({
       label: "分析",
-      badgeLabel: "待分配",
+      badgeLabel: "Planned",
     });
     expect(state.blueprintRoleCards[0]).toMatchObject({
       label: "分析",
       summary: "先定位问题与影响面。",
     });
-    expect(state.noticeText).toContain("当前分工方案已就绪");
-    expect(state.noticeText).toContain("任务拆出后");
-    expect(state.noticeText).toContain("当前进展");
+    expect(state.noticeText).toContain("team plan is ready");
+    expect(state.noticeText).toContain("current progress");
   });
 
   it("runtime formation 失败时，应优先使用失败原因", () => {
     const state = buildRuntimeFormationDisplayState({
+      copy: formationCopy,
       teamDispatchPreviewState: {
         requestId: "runtime-2",
         status: "failed",

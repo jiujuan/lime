@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, FolderOpen, RefreshCw, Search } from "lucide-react";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { useSkills } from "@/hooks/useSkills";
-import type { Skill } from "@/lib/api/skills";
+import {
+  skillsApi,
+  type CreateSkillScaffoldRequest,
+  type Skill,
+} from "@/lib/api/skills";
 import type {
   Page,
   PageParams,
@@ -11,30 +16,19 @@ import type {
   SkillsPageParams,
 } from "@/types/page";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { CuratedTaskLauncherDialog } from "@/components/agent/chat/components/CuratedTaskLauncherDialog";
 import { resolveServiceSkillEntryDescription } from "@/components/agent/chat/service-skills/entryAdapter";
 import { buildServiceSkillRecommendationBuckets } from "@/components/agent/chat/service-skills/recommendedServiceSkills";
 import {
-  buildServiceSkillLaunchPrefillSummary,
   resolveServiceSkillLaunchPrefill,
   type ServiceSkillLaunchPrefillCopy,
 } from "@/components/agent/chat/service-skills/serviceSkillLaunchPrefill";
 import {
   buildServiceSkillCapabilityDescription,
-  getServiceSkillActionLabel,
-  getServiceSkillOutputDestination,
-  getServiceSkillRunnerLabel,
   getServiceSkillTypeLabel,
-  summarizeServiceSkillRequiredInputs,
   type ServiceSkillPresentationCopy,
 } from "@/components/agent/chat/service-skills/skillPresentation";
 import type {
@@ -42,14 +36,12 @@ import type {
   ServiceSkillTone,
 } from "@/components/agent/chat/service-skills/types";
 import { useServiceSkills } from "@/components/agent/chat/service-skills/useServiceSkills";
-import { SkillsPage } from "./SkillsPage";
 import {
   buildInstalledSkillCapabilityDescription,
-  getInstalledSkillOutputHint,
   resolveInstalledSkillPromise,
-  summarizeInstalledSkillRequiredInputs,
   type InstalledSkillPresentationCopy,
 } from "./installedSkillPresentation";
+import { SkillScaffoldDialog } from "./SkillScaffoldDialog";
 import { buildHomeAgentParams } from "@/lib/workspace/navigation";
 import { buildSkillScaffoldCreationReplayRequestMetadata } from "@/components/agent/chat/utils/creationReplayMetadata";
 import {
@@ -59,26 +51,16 @@ import {
 import {
   FEATURED_HOME_CURATED_TASK_TEMPLATE_IDS,
   buildCuratedTaskTemplateCopy,
-  buildCuratedTaskRecentUsageDescription,
   buildCuratedTaskLaunchPrompt,
   filterCuratedTaskTemplates,
   getCuratedTaskOutputDestination,
   listCuratedTaskTemplates,
   listFeaturedHomeCuratedTaskTemplates,
   recordCuratedTaskTemplateUsage,
-  resolveCuratedTaskTemplateLaunchPrefill,
   subscribeCuratedTaskTemplateUsageChanged,
-  summarizeCuratedTaskFollowUpActions,
-  summarizeCuratedTaskOutputContract,
-  summarizeCuratedTaskRequiredInputs,
   type CuratedTaskInputValues,
-  type CuratedTaskPresentationCopy,
   type CuratedTaskTemplateItem,
 } from "@/components/agent/chat/utils/curatedTaskTemplates";
-import {
-  buildSceneAppExecutionReviewPrefillHighlights,
-  buildSceneAppExecutionReviewPrefillSnapshot,
-} from "@/components/agent/chat/utils/sceneAppCuratedTaskReference";
 import {
   buildCuratedTaskLaunchRequestMetadata,
   mergeCuratedTaskReferenceEntries,
@@ -87,37 +69,8 @@ import {
   normalizeCuratedTaskLaunchInputValues,
   type CuratedTaskReferenceSelection,
 } from "@/components/agent/chat/utils/curatedTaskReferenceSelection";
-import {
-  listCuratedTaskRecommendationSignals,
-  subscribeCuratedTaskRecommendationSignalsChanged,
-} from "@/components/agent/chat/utils/curatedTaskRecommendationSignals";
-import { buildReviewFeedbackProjection } from "@/components/agent/chat/utils/reviewFeedbackProjection";
-import { buildWorkspaceSkillRuntimeEnableHarnessMetadata } from "@/components/agent/chat/utils/workspaceSkillBindingsMetadata";
-import {
-  getSlashEntryUsageMap,
-  getSlashEntryUsageRecordKey,
-  recordSlashEntryUsage,
-  subscribeSlashEntryUsageChanged,
-} from "@/components/agent/chat/skill-selection/slashEntryUsage";
-import { resolveSceneAppsPageEntryParams } from "@/lib/sceneapp";
-import { getProject } from "@/lib/api/project";
-import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime";
-import {
-  CapabilityDraftPanel,
-  WorkspaceRegisteredSkillsPanel,
-} from "@/features/capability-drafts";
-import { createAutomationJob } from "@/lib/api/automation";
-import type { Project } from "@/lib/api/project";
-import {
-  AutomationJobDialog,
-  type AutomationJobDialogInitialValues,
-  type AutomationJobDialogSubmit,
-} from "@/components/settings-v2/system/automation/AutomationJobDialog";
-import {
-  buildWorkspaceSkillAgentAutomationInitialValues,
-  type WorkspaceSkillAgentAutomationDraftOptions,
-  type WorkspaceSkillManagedAutomationInitialValuesCopy,
-} from "@/features/capability-drafts/workspaceSkillAgentAutomationDraft";
+import { subscribeCuratedTaskRecommendationSignalsChanged } from "@/components/agent/chat/utils/curatedTaskRecommendationSignals";
+import { recordSlashEntryUsage } from "@/components/agent/chat/skill-selection/slashEntryUsage";
 import { formatList, formatNumber } from "@/i18n/format";
 import type agentResource from "@/i18n/resources/zh-CN/agent.json";
 
@@ -126,17 +79,126 @@ interface SkillsWorkspacePageProps {
   pageParams?: SkillsPageParams;
 }
 
-type AgentI18nKey = keyof typeof agentResource;
-type CuratedTaskWithMoreKey =
-  | "skills.workspace.curatedTask.factItems.withMore"
-  | "skills.workspace.curatedTask.referenceItems.withMore";
+type SkillsWorkspaceView = "store" | "builtin" | "installed";
 
-const TONE_BADGE_CLASSNAMES: Record<ServiceSkillTone, string> = {
-  slate: "border-slate-200 bg-slate-50 text-slate-700",
-  sky: "border-sky-200 bg-sky-50 text-sky-700",
-  emerald: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  amber: "border-amber-200 bg-amber-50 text-amber-700",
-};
+type AgentI18nKey = keyof typeof agentResource;
+
+function SkillsBannerSvg() {
+  return (
+    <svg
+      viewBox="0 0 260 150"
+      preserveAspectRatio="xMidYMid meet"
+      aria-hidden="true"
+      className="h-full w-full"
+    >
+      <defs>
+        <linearGradient id="skills-banner-green" x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0%" stopColor="#86efac" />
+          <stop offset="100%" stopColor="#34d399" />
+        </linearGradient>
+      </defs>
+      <circle cx="158" cy="34" r="52" fill="#bbf7d0" opacity="0.55" />
+      <g transform="translate(46 8) rotate(-16)">
+        <rect
+          width="92"
+          height="104"
+          rx="4"
+          fill="#fff"
+          stroke="#e5e7eb"
+          strokeWidth="2"
+        />
+        <rect x="12" y="14" width="56" height="8" rx="4" fill="#d1d5db" />
+        <rect x="12" y="30" width="48" height="6" rx="3" fill="#cbd5e1" />
+        <circle cx="44" cy="58" r="18" fill="#f59e0b" />
+        <path
+          d="M38 48h12c7 0 11 4 11 10s-5 10-12 10h-3v13h-8V48Zm10 14c4 0 6-1 6-4s-2-4-6-4h-2v8h2Z"
+          fill="#fff"
+        />
+      </g>
+      <g transform="translate(106 2) rotate(12)">
+        <rect
+          width="98"
+          height="110"
+          rx="4"
+          fill="#fff"
+          stroke="#e5e7eb"
+          strokeWidth="2"
+        />
+        <circle cx="34" cy="42" r="18" fill="url(#skills-banner-green)" />
+        <path
+          d="M25 42c5-8 14-8 19 0-5 8-14 8-19 0Z"
+          fill="#064e3b"
+          opacity="0.65"
+        />
+        <rect x="18" y="70" width="58" height="7" rx="3.5" fill="#cbd5e1" />
+        <rect x="18" y="85" width="42" height="7" rx="3.5" fill="#e2e8f0" />
+      </g>
+      <g transform="translate(156 66) rotate(10)">
+        <rect
+          width="78"
+          height="54"
+          rx="4"
+          fill="#fff"
+          stroke="#e5e7eb"
+          strokeWidth="2"
+        />
+        <circle cx="25" cy="27" r="13" fill="#60a5fa" />
+        <path d="M19 27c4-6 9-6 13 0-4 6-9 6-13 0Z" fill="#fff" />
+        <path
+          d="M46 18c12 5 14 19 4 27"
+          fill="none"
+          stroke="#fb7185"
+          strokeLinecap="round"
+          strokeWidth="4"
+        />
+      </g>
+    </svg>
+  );
+}
+
+function SkillTileSvg({ tone = "emerald" }: { tone?: ServiceSkillTone }) {
+  const fillByTone: Record<ServiceSkillTone, string> = {
+    amber: "#f59e0b",
+    emerald: "#10b981",
+    sky: "#0ea5e9",
+    slate: "#475569",
+  };
+  const fill = fillByTone[tone];
+
+  return (
+    <svg viewBox="0 0 48 48" aria-hidden="true" className="h-10 w-10">
+      <rect x="3" y="3" width="42" height="42" rx="13" fill="#fff" />
+      <rect
+        x="3"
+        y="3"
+        width="42"
+        height="42"
+        rx="13"
+        fill={fill}
+        opacity="0.1"
+      />
+      <rect
+        x="3"
+        y="3"
+        width="42"
+        height="42"
+        rx="13"
+        stroke={fill}
+        strokeOpacity="0.22"
+        strokeWidth="2"
+      />
+      <path d="M24 12 34 18v12l-10 6-10-6V18l10-6Z" fill={fill} opacity="0.9" />
+      <path
+        d="m18 20 6 4 6-4M24 24v8"
+        fill="none"
+        stroke="#fff"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2.4"
+      />
+    </svg>
+  );
+}
 
 function normalizeKeyword(value: string): string {
   return value.trim().toLowerCase();
@@ -158,31 +220,70 @@ function matchesText(
   );
 }
 
-function summarizeRecentReplayText(value: string, maxLength = 56): string {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  if (normalized.length <= maxLength) {
-    return normalized;
+const SKILL_AUTO_LOAD_PREFERENCES_STORAGE_KEY =
+  "lime.skills.autoLoadPreferences.v1";
+
+type SkillAutoLoadPreferences = Record<string, boolean>;
+
+function getSkillAutoLoadPreferenceKey(
+  skill: Pick<Skill, "directory" | "key">,
+) {
+  return skill.directory || skill.key;
+}
+
+function readSkillAutoLoadPreferences(): SkillAutoLoadPreferences {
+  if (typeof window === "undefined") {
+    return {};
   }
 
-  return `${normalized.slice(0, maxLength).trimEnd()}...`;
+  try {
+    const raw = window.localStorage.getItem(
+      SKILL_AUTO_LOAD_PREFERENCES_STORAGE_KEY,
+    );
+    if (!raw) {
+      return {};
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+
+    return Object.entries(parsed).reduce<SkillAutoLoadPreferences>(
+      (preferences, [key, value]) => {
+        if (typeof key === "string" && typeof value === "boolean") {
+          preferences[key] = value;
+        }
+        return preferences;
+      },
+      {},
+    );
+  } catch {
+    return {};
+  }
 }
 
-interface WorkspaceRuntimeEnablePromptCopy {
-  formatIntro: (skillName: string, directory: string) => string;
-  needsInput: string;
-  readSkill: string;
+function writeSkillAutoLoadPreferences(
+  preferences: SkillAutoLoadPreferences,
+): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      SKILL_AUTO_LOAD_PREFERENCES_STORAGE_KEY,
+      JSON.stringify(preferences),
+    );
+  } catch {
+    // 偏好保存失败不应阻断用户继续使用技能。
+  }
 }
 
-function buildWorkspaceRuntimeEnablePrompt(
-  binding: AgentRuntimeWorkspaceSkillBinding,
-  copy: WorkspaceRuntimeEnablePromptCopy,
-): string {
-  const skillName = binding.name?.trim() || binding.directory;
-  return [
-    copy.formatIntro(skillName, binding.directory),
-    copy.readSkill,
-    copy.needsInput,
-  ].join("\n");
+function isSkillAutoLoadEnabled(
+  skill: Pick<Skill, "directory" | "key">,
+  preferences: SkillAutoLoadPreferences,
+): boolean {
+  return preferences[getSkillAutoLoadPreferenceKey(skill)] ?? true;
 }
 
 function resolveSkillCardTone(skill: ServiceSkillHomeItem): ServiceSkillTone {
@@ -192,127 +293,11 @@ function resolveSkillCardTone(skill: ServiceSkillHomeItem): ServiceSkillTone {
   return skill.runnerTone;
 }
 
-function resolveSkillCardStatusLabel(
-  skill: ServiceSkillHomeItem,
-  copy: ServiceSkillPresentationCopy,
-): string {
-  if (skill.automationStatus?.statusLabel) {
-    return skill.automationStatus.statusLabel;
-  }
-  return getServiceSkillRunnerLabel(skill, { copy });
-}
-
-function resolveSkillGroupKey(skill: ServiceSkillHomeItem): string {
-  return (
-    (skill as ServiceSkillHomeItem & { groupKey?: string }).groupKey ??
-    "general"
-  );
-}
-
-function buildServiceSkillGroupMap(
-  skills: ServiceSkillHomeItem[],
-  groupKeys: Array<{ key: string }>,
-): Map<string, ServiceSkillHomeItem[]> {
-  const nextMap = new Map<string, ServiceSkillHomeItem[]>();
-  for (const group of groupKeys) {
-    nextMap.set(group.key, []);
-  }
-  for (const skill of skills) {
-    const groupKey = resolveSkillGroupKey(skill);
-    const current = nextMap.get(groupKey) ?? [];
-    current.push(skill);
-    nextMap.set(groupKey, current);
-  }
-  return nextMap;
-}
-
-function listPreferredGroupSkills(
-  skills: ServiceSkillHomeItem[],
-): ServiceSkillHomeItem[] {
-  const recommendationBuckets = buildServiceSkillRecommendationBuckets(skills, {
-    featuredLimit: 0,
-  });
-  return recommendationBuckets.remainingSkills.length > 0
-    ? recommendationBuckets.remainingSkills
-    : recommendationBuckets.recentSkills;
-}
-
 export function SkillsWorkspacePage({
   onNavigate,
   pageParams,
 }: SkillsWorkspacePageProps) {
   const { t, i18n } = useTranslation("agent");
-  const workspaceRuntimeEnablePromptCopy =
-    useMemo<WorkspaceRuntimeEnablePromptCopy>(
-      () => ({
-        formatIntro: (skillName, directory) =>
-          t("skills.workspace.runtimeEnable.prompt.intro", {
-            directory,
-            name: skillName,
-          }),
-        needsInput: t("skills.workspace.runtimeEnable.prompt.needsInput"),
-        readSkill: t("skills.workspace.runtimeEnable.prompt.readSkill"),
-      }),
-      [t],
-    );
-  const formatInstalledSkillRecentUsageDescription = useCallback(
-    (replayText: string | undefined): string => {
-      const normalizedReplayText = replayText?.trim();
-      if (!normalizedReplayText) {
-        return "";
-      }
-
-      return t("skills.workspace.sidebar.local.recentUsage", {
-        summary: summarizeRecentReplayText(normalizedReplayText),
-      });
-    },
-    [t],
-  );
-  const formatSkillGroupStarterSummary = useCallback(
-    (skills: ServiceSkillHomeItem[]): string => {
-      const starterTitles = skills
-        .slice(0, 2)
-        .map((skill) => `「${skill.title}」`);
-
-      if (starterTitles.length === 0) {
-        return t("skills.workspace.categories.defaultStarter");
-      }
-
-      const titles = starterTitles.join(" / ");
-      return starterTitles.length < skills.length
-        ? t("skills.workspace.categories.starterWithMore", {
-            titles,
-          })
-        : t("skills.workspace.categories.starter", {
-            titles,
-          });
-    },
-    [t],
-  );
-  const formatCompactReviewBaselineSummary = useCallback(
-    (params: { sourceTitle?: string | null; highlights: string[] }): string => {
-      const sourceTitle =
-        params.sourceTitle?.trim() ||
-        t("skills.workspace.featured.defaultSourceTitle");
-      const [firstHighlight] = params.highlights;
-
-      if (!firstHighlight) {
-        return sourceTitle;
-      }
-
-      return params.highlights.length > 1
-        ? t("skills.workspace.featured.compactBaselineWithCount", {
-            sourceTitle,
-            highlight: firstHighlight,
-            count: params.highlights.length,
-          })
-        : t("skills.workspace.featured.compactBaseline", {
-            sourceTitle,
-            highlight: firstHighlight,
-          });
-    },
-    [t],
-  );
   const installedSkillPresentationCopy =
     useMemo<InstalledSkillPresentationCopy>(
       () => ({
@@ -481,66 +466,6 @@ export function SkillsWorkspacePage({
           }),
       };
     }, [i18n.language, t]);
-  const curatedTaskPresentationCopy =
-    useMemo<CuratedTaskPresentationCopy>(() => {
-      const itemSeparator = t("skills.workspace.curatedTask.itemSeparator");
-      const formatItemsWithMore = (
-        key: CuratedTaskWithMoreKey,
-        visibleItems: string[],
-        totalCount: number,
-      ) => {
-        const items = visibleItems.join(itemSeparator);
-        if (visibleItems.length >= totalCount) {
-          return items;
-        }
-
-        const locale = i18n.language;
-        return t(key, {
-          items,
-          remaining: formatNumber(totalCount - visibleItems.length, {
-            locale,
-          }),
-          total: formatNumber(totalCount, { locale }),
-        });
-      };
-
-      return {
-        followUpPrefix: t("skills.workspace.curatedTask.followUpPrefix"),
-        itemSeparator,
-        outputPrefix: t("skills.workspace.curatedTask.outputPrefix"),
-        recentFilledPrefix: t(
-          "skills.workspace.curatedTask.recentFilledPrefix",
-        ),
-        recentReferencePrefix: t(
-          "skills.workspace.curatedTask.recentReferencePrefix",
-        ),
-        requiredPrefix: t("skills.workspace.curatedTask.requiredPrefix"),
-        resultDestinationPrefix: t(
-          "skills.workspace.curatedTask.resultDestinationPrefix",
-        ),
-        segmentSeparator: t("skills.workspace.curatedTask.segmentSeparator"),
-        formatFactItems: (visibleItems, totalCount) =>
-          formatItemsWithMore(
-            "skills.workspace.curatedTask.factItems.withMore",
-            visibleItems,
-            totalCount,
-          ),
-        formatRecentPrefillHint: (taskTitle) =>
-          t("skills.workspace.curatedTask.prefillHint", {
-            title: taskTitle,
-          }),
-        formatRecentReferenceFallback: (totalCount) =>
-          t("skills.workspace.curatedTask.recentReferenceFallback", {
-            count: totalCount,
-          }),
-        formatRecentReferenceItems: (visibleTitles, totalCount) =>
-          formatItemsWithMore(
-            "skills.workspace.curatedTask.referenceItems.withMore",
-            visibleTitles,
-            totalCount,
-          ),
-      };
-    }, [i18n.language, t]);
   const curatedTaskTemplateCopy = useMemo(
     () =>
       buildCuratedTaskTemplateCopy((key, values) =>
@@ -548,73 +473,8 @@ export function SkillsWorkspacePage({
       ),
     [t],
   );
-  const recentReviewReasonLabel = t(
-    "curatedTask.templates.recommendation.recentReviewReasonLabel",
-  );
-  const workspaceSkillManagedAutomationInitialValuesCopy =
-    useMemo<WorkspaceSkillManagedAutomationInitialValuesCopy>(
-      () => ({
-        descriptionPausedByDefault: t(
-          "skills.workspace.managedJob.initialValues.description.pausedByDefault",
-        ),
-        descriptionSource: t(
-          "skills.workspace.managedJob.initialValues.description.source",
-        ),
-        formatDescriptionProvenance: (
-          sourceDraftId,
-          sourceVerificationReportId,
-        ) =>
-          t(
-            "skills.workspace.managedJob.initialValues.description.provenance",
-            {
-              sourceDraftId,
-              sourceVerificationReportId,
-            },
-          ),
-        formatDescriptionSkill: (skillName) =>
-          t("skills.workspace.managedJob.initialValues.description.skill", {
-            skill: skillName,
-          }),
-        formatName: (displayName) =>
-          t("skills.workspace.managedJob.initialValues.name", {
-            name: displayName,
-          }),
-        formatObjective: (displayName) =>
-          t("skills.workspace.managedJob.initialValues.objective", {
-            name: displayName,
-          }),
-        formatPromptIntro: (displayName, skillName) =>
-          t("skills.workspace.managedJob.initialValues.prompt.intro", {
-            name: displayName,
-            skill: skillName,
-          }),
-        promptNeedsInput: t(
-          "skills.workspace.managedJob.initialValues.prompt.needsInput",
-        ),
-        promptReadRunbook: t(
-          "skills.workspace.managedJob.initialValues.prompt.readRunbook",
-        ),
-        promptResultEvidence: t(
-          "skills.workspace.managedJob.initialValues.prompt.resultEvidence",
-        ),
-        successCriteriaControlledGet: t(
-          "skills.workspace.managedJob.initialValues.successCriteria.controlledGet",
-        ),
-        successCriteriaEvidence: t(
-          "skills.workspace.managedJob.initialValues.successCriteria.evidence",
-        ),
-        successCriteriaRuntimeEnable: t(
-          "skills.workspace.managedJob.initialValues.successCriteria.runtimeEnable",
-        ),
-        successCriteriaSubmitTurn: t(
-          "skills.workspace.managedJob.initialValues.successCriteria.submitTurn",
-        ),
-      }),
-      [t],
-    );
   const {
     skills: serviceSkills = [],
-    groups: skillGroups = [],
     error: serviceSkillsError,
     refresh: refreshServiceSkills,
   } = useServiceSkills();
@@ -622,11 +482,16 @@ export function SkillsWorkspacePage({
     skills: localSkills = [],
     error: localSkillsError,
     refresh: refreshLocalSkills,
+    uninstall: uninstallLocalSkill,
   } = useSkills("lime", { includeRepos: false });
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
-  const [advancedManagerOpen, setAdvancedManagerOpen] = useState(false);
+  const [activeView, setActiveView] = useState<SkillsWorkspaceView>(
+    pageParams?.initialView === "manage" ||
+      pageParams?.initialView === "installed"
+      ? "installed"
+      : "store",
+  );
   const [curatedTaskLauncherTask, setCuratedTaskLauncherTask] =
     useState<CuratedTaskTemplateItem | null>(null);
   const [
@@ -649,8 +514,17 @@ export function SkillsWorkspacePage({
   ] = useState(0);
   const [curatedTaskTemplatesVersion, setCuratedTaskTemplatesVersion] =
     useState(0);
-  const [slashEntryUsageVersion, setSlashEntryUsageVersion] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [uninstallingSkillDirectory, setUninstallingSkillDirectory] = useState<
+    string | null
+  >(null);
+  const [skillAutoLoadPreferences, setSkillAutoLoadPreferences] =
+    useState<SkillAutoLoadPreferences>(() => readSkillAutoLoadPreferences());
+  const [scaffoldDialogOpen, setScaffoldDialogOpen] = useState(false);
+  const [scaffoldDialogDraft, setScaffoldDialogDraft] =
+    useState<SkillScaffoldDraft | null>(null);
+  const [scaffoldCreating, setScaffoldCreating] = useState(false);
+  const [importingLocalSkill, setImportingLocalSkill] = useState(false);
   const [
     highlightedInstalledSkillDirectory,
     setHighlightedInstalledSkillDirectory,
@@ -660,26 +534,6 @@ export function SkillsWorkspacePage({
   const [consumedScaffoldRequestKey, setConsumedScaffoldRequestKey] = useState<
     number | null
   >(null);
-  const [capabilityDraftWorkspaceRoot, setCapabilityDraftWorkspaceRoot] =
-    useState<string | null>(null);
-  const [capabilityDraftProject, setCapabilityDraftProject] =
-    useState<Project | null>(null);
-  const [capabilityDraftProjectLoading, setCapabilityDraftProjectLoading] =
-    useState(false);
-  const [capabilityDraftProjectError, setCapabilityDraftProjectError] =
-    useState<string | null>(null);
-  const [registeredSkillsRefreshSignal, setRegisteredSkillsRefreshSignal] =
-    useState(0);
-  const [
-    workspaceSkillAutomationDialogOpen,
-    setWorkspaceSkillAutomationDialogOpen,
-  ] = useState(false);
-  const [
-    workspaceSkillAutomationInitialValues,
-    setWorkspaceSkillAutomationInitialValues,
-  ] = useState<AutomationJobDialogInitialValues | null>(null);
-  const [workspaceSkillAutomationSaving, setWorkspaceSkillAutomationSaving] =
-    useState(false);
   const lastHandledScaffoldRequestKeyRef = useRef<number | null>(null);
 
   const installedLocalSkills = useMemo(() => {
@@ -711,21 +565,7 @@ export function SkillsWorkspacePage({
     () => [...recentServiceSkills, ...nonRecentServiceSkills],
     [nonRecentServiceSkills, recentServiceSkills],
   );
-  const allSkillGroupMap = useMemo(
-    () => buildServiceSkillGroupMap(workspaceServiceSkills, skillGroups),
-    [skillGroups, workspaceServiceSkills],
-  );
-  const recommendedSkillGroupMap = useMemo(
-    () => buildServiceSkillGroupMap(nonRecentServiceSkills, skillGroups),
-    [nonRecentServiceSkills, skillGroups],
-  );
-  const selectedGroup = useMemo(
-    () => skillGroups.find((group) => group.key === selectedGroupKey) ?? null,
-    [selectedGroupKey, skillGroups],
-  );
   const creationProjectId = pageParams?.creationProjectId?.trim() || undefined;
-  const highlightedCapabilityDraftId =
-    pageParams?.highlightCapabilityDraftId?.trim() || undefined;
   const scaffoldCreationReplay = useMemo(() => {
     if (!pageParams?.initialScaffoldDraft) {
       return undefined;
@@ -740,12 +580,6 @@ export function SkillsWorkspacePage({
   }, [creationProjectId, pageParams?.initialScaffoldDraft]);
 
   useEffect(() => {
-    if (selectedGroupKey && !selectedGroup) {
-      setSelectedGroupKey(null);
-    }
-  }, [selectedGroup, selectedGroupKey]);
-
-  useEffect(() => {
     return subscribeCuratedTaskTemplateUsageChanged(() => {
       setCuratedTaskTemplatesVersion((previous) => previous + 1);
     });
@@ -758,10 +592,21 @@ export function SkillsWorkspacePage({
   }, []);
 
   useEffect(() => {
-    return subscribeSlashEntryUsageChanged(() => {
-      setSlashEntryUsageVersion((previous) => previous + 1);
-    });
-  }, []);
+    if (
+      pageParams?.initialView === "manage" ||
+      pageParams?.initialView === "installed"
+    ) {
+      setActiveView("installed");
+      return;
+    }
+    if (pageParams?.initialView === "builtin") {
+      setActiveView("builtin");
+      return;
+    }
+    if (pageParams?.initialView === "store") {
+      setActiveView("store");
+    }
+  }, [pageParams?.initialView]);
 
   useEffect(() => {
     const requestKey = pageParams?.initialScaffoldRequestKey ?? null;
@@ -774,54 +619,8 @@ export function SkillsWorkspacePage({
     }
 
     lastHandledScaffoldRequestKeyRef.current = requestKey;
-    setAdvancedManagerOpen(true);
+    setActiveView("installed");
   }, [pageParams?.initialScaffoldDraft, pageParams?.initialScaffoldRequestKey]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (!creationProjectId) {
-      setCapabilityDraftWorkspaceRoot(null);
-      setCapabilityDraftProject(null);
-      setCapabilityDraftProjectError(null);
-      setCapabilityDraftProjectLoading(false);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    setCapabilityDraftProjectLoading(true);
-    setCapabilityDraftProjectError(null);
-    void getProject(creationProjectId)
-      .then((project) => {
-        if (cancelled) {
-          return;
-        }
-        const rootPath = project?.rootPath?.trim() || null;
-        setCapabilityDraftProject(project ?? null);
-        setCapabilityDraftWorkspaceRoot(rootPath);
-        setCapabilityDraftProjectError(
-          rootPath ? null : t("skills.workspace.capabilityDraft.missingRoot"),
-        );
-      })
-      .catch((error) => {
-        if (cancelled) {
-          return;
-        }
-        setCapabilityDraftProject(null);
-        setCapabilityDraftWorkspaceRoot(null);
-        setCapabilityDraftProjectError(String(error));
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setCapabilityDraftProjectLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [creationProjectId, t]);
 
   const handleBringScaffoldToCreation = useCallback(
     (draft: SkillScaffoldDraft) => {
@@ -841,74 +640,6 @@ export function SkillsWorkspacePage({
     },
     [creationProjectId, onNavigate],
   );
-
-  const visibleGroups = useMemo(() => {
-    return skillGroups.filter((group) => {
-      const groupSkills = allSkillGroupMap.get(group.key) ?? [];
-      if (groupSkills.length === 0) {
-        return false;
-      }
-      return matchesText(
-        searchQuery,
-        group.title,
-        group.summary,
-        group.entryHint,
-        group.themeTarget,
-        ...groupSkills.flatMap((skill) => [
-          skill.title,
-          skill.summary,
-          skill.outputHint,
-        ]),
-      );
-    });
-  }, [allSkillGroupMap, searchQuery, skillGroups]);
-
-  const visibleGroupSkills = useMemo(() => {
-    const scopedSkills = selectedGroup
-      ? listPreferredGroupSkills(allSkillGroupMap.get(selectedGroup.key) ?? [])
-      : [];
-
-    return scopedSkills.filter((skill) =>
-      matchesText(
-        searchQuery,
-        skill.title,
-        skill.summary,
-        skill.category,
-        skill.outputHint,
-        skill.badge,
-        skill.skillKey,
-        buildServiceSkillCapabilityDescription(skill, {
-          copy: serviceSkillPresentationCopy,
-        }),
-        getServiceSkillOutputDestination(skill, {
-          copy: serviceSkillPresentationCopy,
-        }),
-        getServiceSkillTypeLabel(skill, {
-          copy: serviceSkillPresentationCopy,
-        }),
-      ),
-    );
-  }, [
-    allSkillGroupMap,
-    searchQuery,
-    selectedGroup,
-    serviceSkillPresentationCopy,
-  ]);
-
-  const visibleRecentSkills = useMemo(() => {
-    return recentServiceSkills.filter((skill) =>
-      matchesText(
-        searchQuery,
-        skill.title,
-        skill.summary,
-        skill.category,
-        skill.outputHint,
-        buildServiceSkillCapabilityDescription(skill, {
-          copy: serviceSkillPresentationCopy,
-        }),
-      ),
-    );
-  }, [recentServiceSkills, searchQuery, serviceSkillPresentationCopy]);
 
   const visibleInstalledLocalSkills = useMemo(() => {
     const filteredSkills = installedLocalSkills.filter((skill) =>
@@ -973,107 +704,6 @@ export function SkillsWorkspacePage({
       visibleCuratedTaskTemplates,
     ],
   );
-  const latestReviewRecommendationSignal = useMemo(() => {
-    void curatedTaskRecommendationSignalsVersion;
-    return (
-      listCuratedTaskRecommendationSignals({
-        projectId: pageParams?.creationProjectId,
-      })
-        .filter((signal) => signal.source === "review_feedback")
-        .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null
-    );
-  }, [curatedTaskRecommendationSignalsVersion, pageParams?.creationProjectId]);
-  const reviewRecommendationBanner = useMemo(() => {
-    if (!latestReviewRecommendationSignal) {
-      return null;
-    }
-
-    const projection = buildReviewFeedbackProjection({
-      signal: latestReviewRecommendationSignal,
-    });
-    const highlightedTemplates = visibleFeaturedCuratedTaskTemplates
-      .filter((featured) => featured.reasonLabel === recentReviewReasonLabel)
-      .slice(0, 2);
-    if (highlightedTemplates.length === 0) {
-      return null;
-    }
-    const primarySuggestedTemplate =
-      (projection?.suggestedTasks[0]
-        ? highlightedTemplates.find(
-            (featured) =>
-              featured.template.id === projection.suggestedTasks[0]?.taskId,
-          )
-        : null) ?? highlightedTemplates[0];
-
-    return {
-      title: latestReviewRecommendationSignal.title,
-      summary: summarizeRecentReplayText(
-        [
-          latestReviewRecommendationSignal.summary,
-          projection?.suggestionText ?? "",
-        ]
-          .filter((segment) => segment.trim().length > 0)
-          .join(" "),
-        132,
-      ),
-      nextSteps: highlightedTemplates
-        .map((featured) => featured.template.title)
-        .join(" / "),
-      actionLabel: primarySuggestedTemplate
-        ? t("skills.workspace.reviewBanner.action", {
-            title: primarySuggestedTemplate.template.title,
-          })
-        : null,
-      onAction: primarySuggestedTemplate
-        ? () => {
-            setCuratedTaskLauncherTask(primarySuggestedTemplate.template);
-            setCuratedTaskLauncherInitialInputValues(null);
-            setCuratedTaskLauncherInitialReferenceMemoryIds(null);
-            setCuratedTaskLauncherInitialReferenceEntries(null);
-            setCuratedTaskLauncherPrefillHint(null);
-          }
-        : null,
-    };
-  }, [
-    latestReviewRecommendationSignal,
-    recentReviewReasonLabel,
-    t,
-    visibleFeaturedCuratedTaskTemplates,
-  ]);
-  const visibleRecentPreview = useMemo(
-    () => visibleRecentSkills.slice(0, 4),
-    [visibleRecentSkills],
-  );
-  const visibleInstalledPreview = useMemo(
-    () => visibleInstalledLocalSkills.slice(0, 4),
-    [visibleInstalledLocalSkills],
-  );
-  const hasSidebarSearchResults =
-    searchQuery.trim().length > 0 &&
-    (visibleRecentPreview.length > 0 || visibleInstalledPreview.length > 0);
-  const installedSkillUsageMap = useMemo(() => {
-    void slashEntryUsageVersion;
-    return getSlashEntryUsageMap();
-  }, [slashEntryUsageVersion]);
-  const highlightedInstalledSkill = useMemo(
-    () =>
-      highlightedInstalledSkillDirectory
-        ? (installedLocalSkills.find(
-            (skill) => skill.directory === highlightedInstalledSkillDirectory,
-          ) ?? null)
-        : null,
-    [highlightedInstalledSkillDirectory, installedLocalSkills],
-  );
-  const highlightedInstalledSkillUsage = useMemo(
-    () =>
-      highlightedInstalledSkill
-        ? installedSkillUsageMap.get(
-            getSlashEntryUsageRecordKey("skill", highlightedInstalledSkill.key),
-          )
-        : undefined,
-    [highlightedInstalledSkill, installedSkillUsageMap],
-  );
-
   const handleRefreshAll = async () => {
     setRefreshing(true);
     try {
@@ -1111,23 +741,10 @@ export function SkillsWorkspacePage({
   };
 
   const handleInstalledSkillSelect = useCallback(
-    (skill: Skill, replayText?: string) => {
-      const normalizedReplayText = replayText?.trim() || undefined;
+    (skill: Skill) => {
       onNavigate("agent", {
         ...buildHomeAgentParams({
           projectId: creationProjectId,
-          ...(normalizedReplayText
-            ? {
-                initialUserPrompt: normalizedReplayText,
-              }
-            : {}),
-          entryBannerMessage: normalizedReplayText
-            ? t("skills.workspace.installedSkill.entryBannerWithReplay", {
-                name: skill.name,
-              })
-            : t("skills.workspace.installedSkill.entryBanner", {
-                name: skill.name,
-              }),
         }),
         initialInputCapability: {
           capabilityRoute: {
@@ -1137,153 +754,81 @@ export function SkillsWorkspacePage({
           },
           requestKey: Date.now(),
         },
+        preferHomeForInitialInputCapability: true,
       });
     },
-    [creationProjectId, onNavigate, t],
+    [creationProjectId, onNavigate],
   );
 
-  const handleWorkspaceRuntimeEnable = useCallback(
-    (binding: AgentRuntimeWorkspaceSkillBinding) => {
-      if (!capabilityDraftWorkspaceRoot) {
-        toast.error(t("skills.workspace.runtimeEnable.missingRoot"));
+  const handleUninstallLocalSkill = useCallback(
+    async (skill: Skill) => {
+      if (skill.sourceKind === "builtin" || skill.catalogSource === "project") {
         return;
       }
 
-      const runtimeEnableMetadata =
-        buildWorkspaceSkillRuntimeEnableHarnessMetadata({
-          workspaceRoot: capabilityDraftWorkspaceRoot,
-          bindings: [binding],
-        });
-
-      if (!runtimeEnableMetadata) {
-        toast.error(t("skills.workspace.runtimeEnable.notReady"));
-        return;
-      }
-
-      const skillName = binding.name?.trim() || binding.directory;
-      onNavigate(
-        "agent",
-        buildHomeAgentParams({
-          projectId: creationProjectId,
-          initialUserPrompt: buildWorkspaceRuntimeEnablePrompt(
-            binding,
-            workspaceRuntimeEnablePromptCopy,
-          ),
-          autoRunInitialPromptOnMount: true,
-          initialAutoSendRequestMetadata: {
-            harness: runtimeEnableMetadata,
-          },
-          entryBannerMessage: t("skills.workspace.runtimeEnable.entryBanner", {
-            name: skillName,
-          }),
-        }),
-      );
-    },
-    [
-      capabilityDraftWorkspaceRoot,
-      creationProjectId,
-      onNavigate,
-      t,
-      workspaceRuntimeEnablePromptCopy,
-    ],
-  );
-
-  const handleWorkspaceManagedAutomationDraft = useCallback(
-    (
-      binding: AgentRuntimeWorkspaceSkillBinding,
-      options?: WorkspaceSkillAgentAutomationDraftOptions,
-    ) => {
-      if (!creationProjectId || !capabilityDraftProject) {
-        toast.error(t("skills.workspace.managedJob.missingProject"));
-        return;
-      }
-      if (!capabilityDraftWorkspaceRoot) {
-        toast.error(t("skills.workspace.managedJob.missingRoot"));
-        return;
-      }
-
-      const initialValues = buildWorkspaceSkillAgentAutomationInitialValues({
-        binding,
-        workspaceRoot: capabilityDraftWorkspaceRoot,
-        workspaceId: creationProjectId,
-        options,
-        copy: workspaceSkillManagedAutomationInitialValuesCopy,
-      });
-      if (!initialValues) {
-        toast.error(t("skills.workspace.managedJob.notReady"));
-        return;
-      }
-
-      setWorkspaceSkillAutomationInitialValues(initialValues);
-      setWorkspaceSkillAutomationDialogOpen(true);
-    },
-    [
-      capabilityDraftProject,
-      capabilityDraftWorkspaceRoot,
-      creationProjectId,
-      t,
-      workspaceSkillManagedAutomationInitialValuesCopy,
-    ],
-  );
-
-  const handleWorkspaceSkillAutomationDialogOpenChange = useCallback(
-    (open: boolean) => {
-      setWorkspaceSkillAutomationDialogOpen(open);
-      if (!open) {
-        setWorkspaceSkillAutomationInitialValues(null);
-      }
-    },
-    [],
-  );
-
-  const handleWorkspaceSkillAutomationSubmit = useCallback(
-    async (payload: AutomationJobDialogSubmit) => {
-      if (payload.mode !== "create") {
-        throw new Error(t("skills.workspace.managedJob.unsupportedMode"));
-      }
-
-      setWorkspaceSkillAutomationSaving(true);
+      setUninstallingSkillDirectory(skill.directory);
       try {
-        const createdJob = await createAutomationJob(payload.request);
+        await uninstallLocalSkill(skill.directory);
+        if (optimisticInstalledSkill?.directory === skill.directory) {
+          setOptimisticInstalledSkill(null);
+        }
+        if (highlightedInstalledSkillDirectory === skill.directory) {
+          setHighlightedInstalledSkillDirectory(null);
+        }
+        const preferenceKey = getSkillAutoLoadPreferenceKey(skill);
+        setSkillAutoLoadPreferences((previous) => {
+          if (!(preferenceKey in previous)) {
+            return previous;
+          }
+          const next = { ...previous };
+          delete next[preferenceKey];
+          writeSkillAutoLoadPreferences(next);
+          return next;
+        });
         toast.success(
-          t("skills.workspace.managedJob.created", {
-            name: createdJob.name,
+          t("skills.workspace.installedSkill.uninstallSuccess", {
+            name: skill.name,
           }),
         );
-        setWorkspaceSkillAutomationDialogOpen(false);
-        setWorkspaceSkillAutomationInitialValues(null);
       } catch (error) {
         toast.error(
-          t("skills.workspace.managedJob.createFailed", {
+          t("skills.workspace.installedSkill.uninstallFailed", {
             message: error instanceof Error ? error.message : String(error),
           }),
         );
       } finally {
-        setWorkspaceSkillAutomationSaving(false);
+        setUninstallingSkillDirectory(null);
       }
+    },
+    [
+      highlightedInstalledSkillDirectory,
+      optimisticInstalledSkill?.directory,
+      t,
+      uninstallLocalSkill,
+    ],
+  );
+
+  const handleSkillAutoLoadChange = useCallback(
+    (skill: Skill, enabled: boolean) => {
+      setSkillAutoLoadPreferences((previous) => {
+        const key = getSkillAutoLoadPreferenceKey(skill);
+        const next = { ...previous, [key]: enabled };
+        writeSkillAutoLoadPreferences(next);
+        return next;
+      });
+      toast.success(
+        t(
+          enabled
+            ? "skills.workspace.autoLoad.enabledToast"
+            : "skills.workspace.autoLoad.disabledToast",
+          {
+            name: skill.name,
+          },
+        ),
+      );
     },
     [t],
   );
-
-  const handleOpenSceneAppsDirectory = useCallback(() => {
-    const normalizedSearchQuery = searchQuery.trim();
-    onNavigate(
-      "sceneapps",
-      resolveSceneAppsPageEntryParams(
-        {
-          view: "catalog",
-          ...(normalizedSearchQuery
-            ? {
-                search: normalizedSearchQuery,
-              }
-            : {}),
-        },
-        {
-          mode: "browse",
-        },
-      ),
-    );
-  }, [onNavigate, searchQuery]);
 
   const handleScaffoldCreated = useCallback(
     async (skill: Skill) => {
@@ -1312,7 +857,7 @@ export function SkillsWorkspacePage({
 
       setSearchQuery("");
       setHighlightedInstalledSkillDirectory(skill.directory);
-      setAdvancedManagerOpen(false);
+      setActiveView("installed");
       setConsumedScaffoldRequestKey(
         pageParams?.initialScaffoldRequestKey ?? null,
       );
@@ -1330,10 +875,71 @@ export function SkillsWorkspacePage({
     ],
   );
 
-  const activeScaffoldRequestKey =
-    pageParams?.initialScaffoldRequestKey === consumedScaffoldRequestKey
-      ? null
-      : (pageParams?.initialScaffoldRequestKey ?? null);
+  const handleCreateScaffold = useCallback(
+    async (request: CreateSkillScaffoldRequest) => {
+      setScaffoldCreating(true);
+      try {
+        const inspection = await skillsApi.createSkillScaffold(request, "lime");
+        const createdSkill: Skill = {
+          key: `local:${request.directory}`,
+          name: request.name,
+          description: request.description,
+          directory: request.directory,
+          installed: true,
+          sourceKind: "other",
+          catalogSource: request.target,
+          license: inspection.license,
+          metadata: inspection.metadata,
+          allowedTools: inspection.allowedTools,
+          resourceSummary: inspection.resourceSummary,
+          standardCompliance: inspection.standardCompliance,
+        };
+        setScaffoldDialogOpen(false);
+        setScaffoldDialogDraft(null);
+        await handleScaffoldCreated(createdSkill);
+      } catch (error) {
+        toast.error(
+          t("skills.workspace.scaffold.createFailed", {
+            message: error instanceof Error ? error.message : String(error),
+          }),
+        );
+      } finally {
+        setScaffoldCreating(false);
+      }
+    },
+    [handleScaffoldCreated, t],
+  );
+
+  const handleImportLocalSkill = useCallback(async () => {
+    const selected = await openDialog({
+      directory: true,
+      multiple: false,
+      title: t("skills.workspace.import.dialogTitle"),
+    });
+
+    if (!selected || Array.isArray(selected)) {
+      return;
+    }
+
+    setImportingLocalSkill(true);
+    try {
+      const result = await skillsApi.importLocalSkill(selected, "lime");
+      await refreshLocalSkills();
+      setActiveView("installed");
+      setSearchQuery("");
+      setHighlightedInstalledSkillDirectory(result.directory);
+      toast.success(t("skills.workspace.import.success"));
+    } catch (error) {
+      toast.error(
+        t("skills.workspace.import.failed", {
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    } finally {
+      setImportingLocalSkill(false);
+    }
+  }, [refreshLocalSkills, t]);
+
   const activeScaffoldDraft =
     pageParams?.initialScaffoldRequestKey === consumedScaffoldRequestKey
       ? null
@@ -1344,29 +950,6 @@ export function SkillsWorkspacePage({
       t("skills.workspace.scaffold.defaultTitle"),
     [activeScaffoldDraft, t],
   );
-  const activeScaffoldReplayText = useMemo(
-    () =>
-      activeScaffoldDraft
-        ? buildSkillScaffoldReplayText(activeScaffoldDraft)
-        : undefined,
-    [activeScaffoldDraft],
-  );
-  const activeScaffoldSummary = useMemo(() => {
-    if (!activeScaffoldDraft) {
-      return null;
-    }
-
-    const candidates = [
-      activeScaffoldDraft.description,
-      activeScaffoldDraft.sourceExcerpt,
-      activeScaffoldDraft.whenToUse?.[0],
-    ]
-      .map((value) => value?.replace(/\s+/g, " ").trim())
-      .filter((value): value is string => Boolean(value));
-
-    return candidates[0] ?? null;
-  }, [activeScaffoldDraft]);
-
   const handleCuratedTaskTemplateLauncherRequest = useCallback(
     (
       template: CuratedTaskTemplateItem,
@@ -1486,846 +1069,585 @@ export function SkillsWorkspacePage({
     [creationProjectId, onNavigate, t],
   );
 
-  const renderSkillCard = (skill: ServiceSkillHomeItem) => {
-    const tone = resolveSkillCardTone(skill);
-    const statusLabel = resolveSkillCardStatusLabel(
-      skill,
-      serviceSkillPresentationCopy,
-    );
-    const promise = resolveServiceSkillEntryDescription(skill);
-    const requiredInputs = summarizeServiceSkillRequiredInputs(skill, {
-      copy: serviceSkillPresentationCopy,
-    });
-    const outputDestination = getServiceSkillOutputDestination(skill, {
-      copy: serviceSkillPresentationCopy,
-    });
-    const actionLabel = getServiceSkillActionLabel(skill, {
-      copy: serviceSkillPresentationCopy,
-    });
+  const visibleStoreSkills = useMemo(() => {
+    return workspaceServiceSkills
+      .filter((skill) =>
+        matchesText(
+          searchQuery,
+          skill.title,
+          skill.summary,
+          skill.category,
+          skill.outputHint,
+          buildServiceSkillCapabilityDescription(skill, {
+            copy: serviceSkillPresentationCopy,
+          }),
+        ),
+      )
+      .slice(0, 12);
+  }, [searchQuery, serviceSkillPresentationCopy, workspaceServiceSkills]);
+
+  const visibleBuiltinLocalSkills = useMemo(
+    () =>
+      localSkills
+        .filter((skill) => skill.sourceKind === "builtin")
+        .filter((skill) =>
+          matchesText(searchQuery, skill.name, skill.description, skill.key),
+        ),
+    [localSkills, searchQuery],
+  );
+  const visibleUserInstalledSkills = useMemo(
+    () =>
+      visibleInstalledLocalSkills.filter(
+        (skill) => skill.sourceKind !== "builtin",
+      ),
+    [visibleInstalledLocalSkills],
+  );
+  const skillStoreCount =
+    visibleCuratedTaskTemplates.length + workspaceServiceSkills.length;
+  const builtinSkillCount = visibleBuiltinLocalSkills.length;
+  const installedSkillCount = visibleUserInstalledSkills.length;
+  const viewTabs: Array<{
+    key: SkillsWorkspaceView;
+    label: string;
+    count?: number;
+  }> = [
+    {
+      key: "store",
+      label: t("skills.workspace.view.store", "技能广场"),
+      count: skillStoreCount,
+    },
+    {
+      key: "builtin",
+      label: t("skills.workspace.view.builtin", "内置"),
+      count: builtinSkillCount,
+    },
+    {
+      key: "installed",
+      label: t("skills.workspace.view.installed", "用户安装"),
+      count: installedSkillCount,
+    },
+  ];
+
+  const renderAutoLoadControl = (skill: Skill) => {
+    const enabled = isSkillAutoLoadEnabled(skill, skillAutoLoadPreferences);
 
     return (
-      <article
-        key={skill.id}
-        className="flex h-full flex-col rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm transition hover:border-slate-300 hover:shadow-md"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="line-clamp-1 text-sm font-medium text-slate-900">
-              {skill.title}
-            </h3>
-            <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-600">
-              {skill.summary || promise}
-            </p>
+      <div className="flex shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5">
+        <div className="hidden min-w-[86px] sm:block">
+          <div className="text-[11px] font-semibold leading-4 text-slate-700">
+            {t("skills.workspace.autoLoad.label", "自动加载")}
           </div>
-          <span
-            className={cn(
-              "shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium",
-              TONE_BADGE_CLASSNAMES[tone],
-            )}
-          >
-            {statusLabel}
-          </span>
-        </div>
-
-        <div className="mt-auto flex items-center justify-between gap-3 pt-3">
-          <div className="min-w-0 text-[11px] leading-5 text-slate-500">
-            <span className="line-clamp-1">{skill.outputHint}</span>
-            <span className="sr-only">
-              {requiredInputs}
-              {outputDestination}
-            </span>
+          <div className="text-[10px] leading-3 text-slate-400">
+            {enabled
+              ? t("skills.workspace.autoLoad.on", "已开启")
+              : t("skills.workspace.autoLoad.off", "已关闭")}
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 rounded-lg border-slate-200 bg-white px-2.5 text-xs text-slate-700 hover:bg-slate-50"
-            onClick={() => handleServiceSkillSelect(skill)}
-          >
-            {actionLabel}
-            <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-          </Button>
         </div>
-      </article>
+        <Switch
+          checked={enabled}
+          onCheckedChange={(nextEnabled) =>
+            handleSkillAutoLoadChange(skill, nextEnabled)
+          }
+          aria-label={t("skills.workspace.autoLoad.aria", {
+            name: skill.name,
+          })}
+        />
+      </div>
     );
   };
 
   return (
     <>
-      <div className="lime-workbench-theme-scope flex h-full min-h-0 flex-col overflow-hidden bg-[image:var(--lime-stage-surface)]">
-        <div className="mx-auto flex h-full w-full max-w-[1440px] flex-col gap-4 overflow-auto px-6 py-6">
-          <header className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="lime-workbench-theme-scope flex h-full min-h-0 flex-col overflow-hidden bg-white">
+        <header className="flex shrink-0 items-center justify-end gap-2 border-b border-slate-100 bg-white px-5 py-2.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 rounded-full p-0 text-slate-500 hover:bg-slate-100"
+            data-testid="skills-workspace-refresh-button"
+            onClick={() => void handleRefreshAll()}
+            disabled={refreshing}
+            aria-label={t("skills.workspace.header.refresh")}
+          >
+            <RefreshCw
+              className={cn("h-3.5 w-3.5", refreshing && "animate-spin")}
+            />
+          </Button>
+          <label className="relative hidden w-[220px] sm:block">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+            <Input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder={t("skills.workspace.search.placeholder", "搜索技能")}
+              className="h-8 rounded-full border-slate-200 bg-white pl-8 pr-3 text-xs shadow-none"
+            />
+          </label>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 rounded-full border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 shadow-none hover:bg-slate-50"
+            onClick={() => {
+              setScaffoldDialogDraft(null);
+              setScaffoldDialogOpen(true);
+            }}
+          >
+            {t("skills.workspace.header.createWithLime", "通过 Lime 创建")}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="h-8 rounded-full bg-slate-950 px-3 text-xs font-semibold text-white hover:bg-slate-800"
+            disabled={importingLocalSkill}
+            onClick={() => void handleImportLocalSkill()}
+          >
+            {importingLocalSkill
+              ? t("skills.workspace.header.installingSkill", "安装中")
+              : t("skills.workspace.header.installSkill", "安装技能")}
+          </Button>
+        </header>
+
+        <main className="min-h-0 flex-1 overflow-auto px-5 pb-10 pt-8 lg:px-10 xl:px-14">
+          <div className="mx-auto w-full max-w-[1180px] space-y-6 2xl:max-w-[1280px]">
+            <section className="space-y-3">
               <div>
-                <h1 className="text-2xl font-semibold text-slate-900">
-                  {t("skills.workspace.header.title")}
+                <h1 className="text-[24px] font-semibold tracking-[-0.02em] text-slate-950">
+                  {t("skills.workspace.header.title", "技能")}
                 </h1>
-                <p className="mt-1 text-sm text-slate-600">
-                  {t("skills.workspace.header.subtitle")}
+                <p className="mt-1 text-sm leading-6 text-slate-500">
+                  {t(
+                    "skills.workspace.header.subtitle",
+                    "安装和管理技能，需要时带回首页输入框使用。",
+                  )}
                 </p>
               </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="rounded-lg border-slate-200 bg-white px-3 text-slate-700 hover:bg-slate-50"
-                  data-testid="skills-workspace-refresh-button"
-                  onClick={() => void handleRefreshAll()}
-                  disabled={refreshing}
-                >
-                  <RefreshCw
-                    className={cn(
-                      "mr-1.5 h-3.5 w-3.5",
-                      refreshing && "animate-spin",
-                    )}
-                  />
-                  {t("skills.workspace.header.refresh")}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="rounded-lg border-slate-200 bg-white px-3 text-slate-700 hover:bg-slate-50"
-                  onClick={handleOpenSceneAppsDirectory}
-                >
-                  {t("skills.workspace.header.viewAll")}
-                </Button>
-              </div>
-            </div>
-
-            <div className="mt-4 space-y-3">
-              {activeScaffoldDraft ? (
-                <div
-                  className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5"
-                  data-testid="skills-workspace-active-scaffold-banner"
-                >
-                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                    <div className="min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-                      <span className="rounded-full border border-sky-200 bg-white px-2 py-0.5 text-[11px] font-medium text-sky-700">
-                        {t("skills.workspace.activeScaffold.badge")}
-                      </span>
-                      <span className="min-w-0 font-medium text-slate-900">
-                        {activeScaffoldTitle}
-                      </span>
-                      {activeScaffoldSummary ? (
-                        <span className="max-w-xl truncate text-xs leading-5 text-slate-500">
-                          {t("skills.workspace.activeScaffold.summary", {
-                            summary: summarizeRecentReplayText(
-                              activeScaffoldSummary,
-                            ),
-                          })}
-                        </span>
-                      ) : null}
-                      {activeScaffoldReplayText ? (
-                        <span className="max-w-xl truncate text-xs leading-5 text-slate-500">
-                          {t("skills.workspace.activeScaffold.replay", {
-                            summary: summarizeRecentReplayText(
-                              activeScaffoldReplayText,
-                            ),
-                          })}
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 rounded-lg px-2.5 text-slate-600 hover:bg-white hover:text-slate-900"
-                        data-testid="skills-workspace-open-scaffold-manager"
-                        onClick={() => setAdvancedManagerOpen(true)}
-                      >
-                        {t("skills.workspace.activeScaffold.continueEdit")}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8 rounded-lg border-slate-200 bg-white px-2.5 text-slate-700 hover:bg-slate-50 hover:text-slate-900"
-                        data-testid="skills-workspace-bring-scaffold-to-agent"
-                        onClick={() =>
-                          handleBringScaffoldToCreation(activeScaffoldDraft)
-                        }
-                      >
-                        {t("skills.workspace.activeScaffold.backToCreation")}
-                        <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                      </Button>
-                    </div>
+              <div
+                className="relative h-[116px] overflow-hidden rounded-lg lg:h-[132px]"
+                style={{
+                  background:
+                    "linear-gradient(135deg, #f3fbff 0%, #e6f7ff 52%, #dcf3ff 100%)",
+                }}
+              >
+                <div className="pointer-events-none absolute -right-4 top-1/2 hidden h-[128px] w-[222px] -translate-y-1/2 sm:block lg:right-8 lg:h-[148px] lg:w-[256px]">
+                  <SkillsBannerSvg />
+                </div>
+                <div className="absolute left-4 top-1/2 max-w-[420px] -translate-y-1/2 pr-5 lg:left-6">
+                  <div className="text-sm font-semibold text-slate-950">
+                    {t("skills.workspace.hero.title", "为你精选的职场技能")}
                   </div>
+                  <p className="mt-1 text-xs leading-5 text-slate-600">
+                    {t(
+                      "skills.workspace.hero.description",
+                      "覆盖写作、效率、设计、数据分析等多种场景，一键安装。",
+                    )}
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            {activeScaffoldDraft ? (
+              <section
+                className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
+                data-testid="skills-workspace-active-scaffold-banner"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <span className="font-semibold">
+                      {t("skills.workspace.activeScaffold.badge", "新技能")}
+                    </span>
+                    <span className="ml-2 text-emerald-900">
+                      {activeScaffoldTitle}
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-full border-emerald-200 bg-white px-3 text-xs text-emerald-800 hover:bg-emerald-50"
+                    data-testid="skills-workspace-bring-scaffold-to-agent"
+                    onClick={() =>
+                      handleBringScaffoldToCreation(activeScaffoldDraft)
+                    }
+                  >
+                    {t(
+                      "skills.workspace.activeScaffold.backToCreation",
+                      "回去继续完善",
+                    )}
+                  </Button>
+                </div>
+              </section>
+            ) : null}
+
+            {(serviceSkillsError || localSkillsError) && (
+              <section className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-700">
+                {serviceSkillsError
+                  ? t("skills.workspace.error.serviceSkills", {
+                      message: serviceSkillsError,
+                    })
+                  : null}
+                {serviceSkillsError && localSkillsError
+                  ? t("skills.workspace.error.separator")
+                  : null}
+                {localSkillsError
+                  ? t("skills.workspace.error.localSkills", {
+                      message: localSkillsError,
+                    })
+                  : null}
+              </section>
+            )}
+
+            <nav className="flex flex-wrap items-center justify-between gap-3">
+              <div
+                className="flex items-center gap-2 rounded-full bg-slate-100 p-1"
+                role="tablist"
+                aria-label={t("skills.workspace.view.tabsLabel", "技能分页")}
+              >
+                {viewTabs.map((tab) => {
+                  const active = activeView === tab.key;
+                  return (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      aria-controls={`skills-${tab.key}-view`}
+                      className={cn(
+                        "inline-flex h-8 items-center gap-1 rounded-full px-3 text-sm font-semibold transition",
+                        active
+                          ? "bg-white text-slate-950 shadow-sm shadow-slate-950/5"
+                          : "text-slate-500 hover:text-slate-800",
+                      )}
+                      onClick={() => setActiveView(tab.key)}
+                    >
+                      {tab.label}
+                      {tab.key === "installed" &&
+                      typeof tab.count === "number" ? (
+                        <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
+                          {formatNumber(tab.count, { locale: i18n.language })}
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+              {activeView === "store" ? (
+                <div className="hidden items-center gap-2 sm:flex">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-lg border-slate-200 bg-white px-3 text-xs text-slate-600 shadow-none hover:bg-slate-50"
+                  >
+                    {t("skills.workspace.filter.all", "全部")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-lg border-slate-200 bg-white px-3 text-xs text-slate-600 shadow-none hover:bg-slate-50"
+                  >
+                    {t("skills.workspace.sort.hot", "排序：热门")}
+                  </Button>
                 </div>
               ) : null}
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder={t("skills.workspace.search.placeholder")}
-                  className="h-10 rounded-lg border-slate-200 bg-slate-50 pl-10"
-                />
-              </div>
-            </div>
-          </header>
+            </nav>
 
-          {(serviceSkillsError || localSkillsError) && (
-            <div className="rounded-[24px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-700">
-              {serviceSkillsError
-                ? t("skills.workspace.error.serviceSkills", {
-                    message: serviceSkillsError,
-                  })
-                : null}
-              {serviceSkillsError && localSkillsError
-                ? t("skills.workspace.error.separator")
-                : null}
-              {localSkillsError
-                ? t("skills.workspace.error.localSkills", {
-                    message: localSkillsError,
-                  })
-                : null}
-            </div>
-          )}
-
-          <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="space-y-4">
-              <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="text-base font-semibold text-slate-900">
-                    {t("skills.workspace.recommendation.title")}
+            {activeView === "store" ? (
+              <div
+                id="skills-store-view"
+                role="tabpanel"
+                className="space-y-6"
+                data-testid="skills-store-view"
+              >
+                <section className="space-y-3">
+                  <h2 className="text-xs font-semibold text-slate-700">
+                    {t("skills.workspace.featured.title", "官方精选")}
                   </h2>
-                  <span className="text-xs text-slate-500">
-                    {t("skills.workspace.recommendation.subtitle")}
-                  </span>
-                </div>
-
-                {reviewRecommendationBanner ? (
-                  <div
-                    className="mt-3 flex flex-wrap items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5"
-                    data-testid="skills-workspace-review-feedback-banner"
-                  >
-                    <div className="min-w-0 flex-1 space-y-1">
-                      <div className="text-sm font-medium text-slate-900">
-                        {t("skills.workspace.reviewBanner.title", {
-                          title: reviewRecommendationBanner.title,
+                  {visibleFeaturedCuratedTaskTemplates.length > 0 ? (
+                    <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
+                      {visibleFeaturedCuratedTaskTemplates
+                        .slice(0, 9)
+                        .map((featured, index) => {
+                          const template = featured.template;
+                          return (
+                            <button
+                              key={template.id}
+                              type="button"
+                              className="group min-h-[120px] rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+                              onClick={() =>
+                                handleCuratedTaskTemplateLauncherRequest(
+                                  template,
+                                )
+                              }
+                            >
+                              <div className="flex items-start gap-3">
+                                <SkillTileSvg
+                                  tone={
+                                    index % 3 === 0
+                                      ? "sky"
+                                      : index % 3 === 1
+                                        ? "emerald"
+                                        : "slate"
+                                  }
+                                />
+                                <div className="min-w-0">
+                                  <div className="line-clamp-1 text-sm font-semibold text-slate-900">
+                                    {template.title}
+                                  </div>
+                                  <div className="line-clamp-1 text-xs text-slate-400">
+                                    {t(
+                                      "skills.workspace.store.officialBadge",
+                                      "官方精选",
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              <p className="mt-3 line-clamp-3 text-xs leading-5 text-slate-500">
+                                {template.summary}
+                              </p>
+                              <div className="mt-3 text-[11px] text-slate-400">
+                                {template.outputHint ||
+                                  getCuratedTaskOutputDestination(template)}
+                              </div>
+                            </button>
+                          );
                         })}
-                      </div>
-                      <div className="line-clamp-2 text-xs leading-5 text-slate-600">
-                        {reviewRecommendationBanner.summary}
-                      </div>
                     </div>
-                    <div className="sr-only">
-                      {t("skills.workspace.reviewBanner.nextSteps", {
-                        nextSteps: reviewRecommendationBanner.nextSteps,
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                      {t("skills.workspace.empty.resultTemplates.default")}
+                    </div>
+                  )}
+                </section>
+
+                {visibleStoreSkills.length > 0 ? (
+                  <section className="space-y-3">
+                    <h2 className="text-xs font-semibold text-slate-700">
+                      {t("skills.workspace.store.other" as AgentI18nKey, {
+                        count: visibleStoreSkills.length,
+                      })}
+                    </h2>
+                    <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
+                      {visibleStoreSkills.map((skill) => {
+                        const tone = resolveSkillCardTone(skill);
+                        return (
+                          <button
+                            key={skill.id}
+                            type="button"
+                            className="group min-h-[120px] rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+                            onClick={() => handleServiceSkillSelect(skill)}
+                          >
+                            <div className="flex items-start gap-3">
+                              <SkillTileSvg tone={tone} />
+                              <div className="min-w-0">
+                                <div className="line-clamp-1 text-sm font-semibold text-slate-900">
+                                  {skill.title}
+                                </div>
+                                <div className="line-clamp-1 text-xs text-slate-400">
+                                  {getServiceSkillTypeLabel(skill, {
+                                    copy: serviceSkillPresentationCopy,
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                            <p className="mt-3 line-clamp-3 text-xs leading-5 text-slate-500">
+                              {skill.summary ||
+                                resolveServiceSkillEntryDescription(skill)}
+                            </p>
+                            <div className="mt-3 text-[11px] text-slate-400">
+                              {skill.outputHint}
+                            </div>
+                          </button>
+                        );
                       })}
                     </div>
-                    {reviewRecommendationBanner.actionLabel &&
-                    reviewRecommendationBanner.onAction ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8 rounded-lg border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                        data-testid="skills-workspace-review-feedback-banner-action"
-                        onClick={() => reviewRecommendationBanner.onAction?.()}
-                      >
-                        {reviewRecommendationBanner.actionLabel}
-                      </Button>
-                    ) : null}
-                  </div>
+                  </section>
                 ) : null}
+              </div>
+            ) : null}
 
-                {visibleFeaturedCuratedTaskTemplates.length > 0 ? (
-                  <div className="mt-3 grid gap-3 md:grid-cols-2">
-                    {visibleFeaturedCuratedTaskTemplates.map(
-                      (featured, index) => {
-                        const template = featured.template;
-                        const isPrimaryRecommendation = index === 0;
-                        const launchPrefill =
-                          resolveCuratedTaskTemplateLaunchPrefill(
-                            template,
-                            curatedTaskPresentationCopy,
-                          );
-                        const reviewPrefillSnapshot =
-                          buildSceneAppExecutionReviewPrefillSnapshot({
-                            referenceEntries: launchPrefill?.referenceEntries,
-                            taskId: template.id,
-                          });
-                        const reviewPrefillHighlights =
-                          buildSceneAppExecutionReviewPrefillHighlights(
-                            reviewPrefillSnapshot,
-                          );
-                        const recentUsageDescription =
-                          buildCuratedTaskRecentUsageDescription({
-                            copy: curatedTaskPresentationCopy,
-                            task: template,
-                            prefill: launchPrefill,
-                          });
-                        const compactReasonSummary =
-                          featured.reasonSummary || recentUsageDescription;
-                        const compactBaselineSummary =
-                          formatCompactReviewBaselineSummary({
-                            sourceTitle: reviewPrefillSnapshot?.sourceTitle,
-                            highlights: reviewPrefillHighlights,
-                          });
-                        const requiredSummary =
-                          summarizeCuratedTaskRequiredInputs(
-                            template,
-                            2,
-                            curatedTaskPresentationCopy,
-                          );
-                        const outputSummary =
-                          summarizeCuratedTaskOutputContract(
-                            template,
-                            2,
-                            curatedTaskPresentationCopy,
-                          );
-                        const followUpSummary =
-                          summarizeCuratedTaskFollowUpActions(
-                            template,
-                            2,
-                            curatedTaskPresentationCopy,
-                          );
-                        const resultDestination =
-                          getCuratedTaskOutputDestination(template);
-
-                        return (
-                          <article
-                            key={template.id}
-                            className={cn(
-                              "flex h-full flex-col rounded-xl border px-3 py-2.5 transition hover:border-slate-300 hover:shadow-sm",
-                              isPrimaryRecommendation
-                                ? "border-emerald-200 bg-emerald-50/60"
-                                : "border-slate-200 bg-white",
+            {activeView === "builtin" ? (
+              <section
+                id="skills-builtin-view"
+                role="tabpanel"
+                className="space-y-3"
+                data-testid="skills-builtin-view"
+              >
+                <div>
+                  <h2 className="text-xs font-semibold text-slate-700">
+                    {t("skills.workspace.builtin.title", "内置技能")}
+                  </h2>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {t(
+                      "skills.workspace.builtin.subtitle",
+                      "Lime 自带的技能。开关只控制是否自动匹配，不影响你继续使用 Lime。",
+                    )}
+                  </p>
+                </div>
+                {visibleBuiltinLocalSkills.length > 0 ? (
+                  <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                    {visibleBuiltinLocalSkills.map((skill) => (
+                      <div
+                        key={skill.key}
+                        className="flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left last:border-b-0 hover:bg-slate-50"
+                      >
+                        <SkillTileSvg tone="slate" />
+                        <div className="min-w-0 flex-1">
+                          <div className="line-clamp-1 text-sm font-semibold text-slate-900">
+                            {skill.name}
+                          </div>
+                          <p className="line-clamp-1 text-xs leading-5 text-slate-500">
+                            {skill.description ||
+                              resolveInstalledSkillPromise(
+                                skill,
+                                installedSkillPresentationCopy,
+                              )}
+                          </p>
+                          <p className="mt-0.5 line-clamp-1 text-[11px] leading-4 text-slate-400">
+                            {t(
+                              "skills.workspace.autoLoad.description",
+                              "开启后，Lime 会在相关任务里自动带上；关闭后，不会主动匹配。",
                             )}
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <h3 className="line-clamp-1 text-sm font-medium text-slate-950">
-                                  {template.title}
-                                </h3>
-                                <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-600">
-                                  {template.summary}
-                                </p>
-                              </div>
-                              {isPrimaryRecommendation ? (
-                                <span className="shrink-0 rounded-full border border-emerald-200 bg-white px-2 py-0.5 text-[11px] font-medium text-emerald-700">
-                                  {t(
-                                    "skills.workspace.featured.recommendedBadge",
-                                  )}
-                                </span>
-                              ) : null}
+                          </p>
+                        </div>
+                        {renderAutoLoadControl(skill)}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                    {t(
+                      "skills.workspace.builtin.empty",
+                      "可以尝试刷新，或换个关键词继续找。",
+                    )}
+                  </div>
+                )}
+              </section>
+            ) : null}
+
+            {activeView === "installed" ? (
+              <section
+                id="skills-installed-view"
+                role="tabpanel"
+                className="space-y-3"
+                data-testid="skills-installed-view"
+              >
+                <div>
+                  <h2 className="text-xs font-semibold text-slate-700">
+                    {t("skills.workspace.installed.title", "用户安装")}
+                  </h2>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {t(
+                      "skills.workspace.installed.subtitle",
+                      "你安装的技能。自动加载、手动使用、卸载是三个独立操作。",
+                    )}
+                  </p>
+                </div>
+                {visibleUserInstalledSkills.length > 0 ? (
+                  <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                    {visibleUserInstalledSkills.map((skill) => {
+                      const isHighlighted =
+                        skill.directory === highlightedInstalledSkillDirectory;
+                      return (
+                        <div
+                          key={skill.key}
+                          className={cn(
+                            "flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left last:border-b-0",
+                            isHighlighted && "bg-emerald-50/60",
+                          )}
+                        >
+                          <SkillTileSvg
+                            tone={isHighlighted ? "emerald" : "slate"}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="line-clamp-1 text-sm font-semibold text-slate-900">
+                              {skill.name}
                             </div>
-                            <div className="mt-2 space-y-2">
-                              {featured.reasonLabel || compactReasonSummary ? (
-                                <div className="line-clamp-1 text-[11px] leading-5 text-slate-500">
-                                  {[featured.reasonLabel, compactReasonSummary]
-                                    .filter((segment): segment is string =>
-                                      Boolean(segment && segment.trim()),
-                                    )
-                                    .join(" · ")}
-                                </div>
-                              ) : null}
-                              {reviewPrefillHighlights.length > 0 ? (
-                                <div className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-[11px] leading-5 text-emerald-800">
-                                  <div className="flex flex-wrap items-center gap-1.5">
-                                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-medium text-emerald-900">
-                                      {t(
-                                        "skills.workspace.featured.reuseResult",
-                                      )}
-                                    </span>
-                                    <span className="min-w-0 flex-1 line-clamp-1">
-                                      {compactBaselineSummary}
-                                    </span>
-                                  </div>
-                                  <div className="sr-only">
-                                    {t(
-                                      "skills.workspace.featured.currentBaseline",
-                                      {
-                                        sourceTitle:
-                                          reviewPrefillSnapshot?.sourceTitle ||
-                                          t(
-                                            "skills.workspace.featured.defaultSourceTitle",
-                                          ),
-                                      },
-                                    )}
-                                    {reviewPrefillHighlights.map((item) => (
-                                      <div key={`${template.id}-${item}`}>
-                                        {item}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              ) : null}
-                            </div>
-                            <div className="mt-auto flex items-center justify-between gap-3 pt-3">
-                              <div className="min-w-0 text-[11px] leading-5 text-slate-500">
-                                <div className="line-clamp-1">
-                                  {template.outputHint || outputSummary}
-                                </div>
-                                <span className="sr-only">
-                                  {requiredSummary}
-                                  {resultDestination}
-                                  {followUpSummary}
-                                </span>
-                              </div>
+                            <p className="line-clamp-1 text-xs leading-5 text-slate-500">
+                              {skill.description ||
+                                resolveInstalledSkillPromise(
+                                  skill,
+                                  installedSkillPresentationCopy,
+                                )}
+                            </p>
+                            <p className="mt-0.5 line-clamp-1 text-[11px] leading-4 text-slate-400">
+                              {t(
+                                "skills.workspace.autoLoad.description",
+                                "开启后，Lime 会在相关任务里自动带上；关闭后，不会主动匹配。",
+                              )}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            {renderAutoLoadControl(skill)}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 rounded-full border-slate-200 bg-white px-3 text-xs text-slate-700 shadow-none hover:bg-slate-50"
+                              onClick={() => handleInstalledSkillSelect(skill)}
+                            >
+                              {t(
+                                "skills.workspace.installedSkill.action.use",
+                                "使用",
+                              )}
+                            </Button>
+                            {skill.sourceKind !== "builtin" &&
+                            skill.catalogSource !== "project" ? (
                               <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                className="h-8 rounded-lg border-slate-200 bg-white px-2.5 text-xs text-slate-700 hover:bg-slate-50"
+                                className="h-8 rounded-full border-rose-200 bg-white px-3 text-xs text-rose-700 shadow-none hover:bg-rose-50"
+                                disabled={
+                                  uninstallingSkillDirectory === skill.directory
+                                }
                                 onClick={() =>
-                                  handleCuratedTaskTemplateLauncherRequest(
-                                    template,
-                                  )
+                                  void handleUninstallLocalSkill(skill)
                                 }
                               >
-                                {t("skills.workspace.featured.launch")}
-                                <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                                {uninstallingSkillDirectory === skill.directory
+                                  ? t(
+                                      "skills.workspace.installedSkill.action.uninstalling",
+                                      "卸载中",
+                                    )
+                                  : t(
+                                      "skills.workspace.installedSkill.action.uninstall",
+                                      "卸载",
+                                    )}
                               </Button>
-                            </div>
-                          </article>
-                        );
-                      },
-                    )}
-                  </div>
-                ) : (
-                  <div className="mt-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-sm text-slate-500">
-                    {hasSidebarSearchResults
-                      ? t("skills.workspace.empty.resultTemplates.hasSidebar")
-                      : t("skills.workspace.empty.resultTemplates.default")}
-                  </div>
-                )}
-              </section>
-
-              {selectedGroup ? (
-                <>
-                  <section className="rounded-xl border border-slate-200 bg-slate-50 p-3 shadow-sm">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                      <div className="space-y-1">
-                        <h2 className="text-base font-semibold text-slate-900">
-                          {selectedGroup.title}
-                        </h2>
-                        <p className="text-xs leading-5 text-slate-600">
-                          {t("skills.workspace.group.selectedSubtitle")}
-                        </p>
-                        <span className="sr-only">
-                          {selectedGroup.summary}
-                          {selectedGroup.entryHint}
-                        </span>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8 rounded-lg border-slate-200 bg-white px-2.5 text-xs text-slate-700 hover:bg-slate-50"
-                        onClick={() => setSelectedGroupKey(null)}
-                      >
-                        {t("skills.workspace.group.back")}
-                      </Button>
-                    </div>
-                  </section>
-
-                  {visibleGroupSkills.length > 0 ? (
-                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                      {visibleGroupSkills.map(renderSkillCard)}
-                    </div>
-                  ) : (
-                    <div className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
-                      <div className="text-sm font-semibold text-slate-900">
-                        {t("skills.workspace.group.emptyTitle")}
-                      </div>
-                      <p className="mt-2 text-sm leading-6 text-slate-500">
-                        {t("skills.workspace.group.emptyDescription")}
-                      </p>
-                    </div>
-                  )}
-                </>
-              ) : visibleGroups.length > 0 ? (
-                <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="flex flex-col gap-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-base font-semibold text-slate-900">
-                        {t("skills.workspace.categories.title")}
-                      </h2>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8 rounded-lg border-slate-200 bg-white px-2.5 text-xs text-slate-700 hover:bg-slate-50"
-                        onClick={handleOpenSceneAppsDirectory}
-                      >
-                        {t("skills.workspace.header.viewAll")}
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
-                    {visibleGroups.map((group) => {
-                      const groupSkills =
-                        recommendedSkillGroupMap.get(group.key) ?? [];
-                      const hasRecommendedGroupSkills = groupSkills.length > 0;
-                      const starterSummary = hasRecommendedGroupSkills
-                        ? formatSkillGroupStarterSummary(groupSkills)
-                        : t("skills.workspace.categories.defaultStarter");
-
-                      return (
-                        <article
-                          key={group.key}
-                          className="flex items-center justify-between gap-3 border-b border-slate-100 px-3 py-3 text-left last:border-b-0"
-                        >
-                          <div className="min-w-0">
-                            <h3 className="text-sm font-medium text-slate-900">
-                              {group.title}
-                            </h3>
-                            <div className="mt-1 line-clamp-1 text-[12px] leading-5 text-slate-600">
-                              {starterSummary}
-                            </div>
-                            <span className="sr-only">
-                              {group.summary}
-                              {group.themeTarget}
-                              {group.entryHint}
-                            </span>
-                          </div>
-
-                          <div className="shrink-0">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-8 rounded-lg border-slate-200 bg-white px-2.5 text-xs text-slate-700 hover:bg-slate-50"
-                              onClick={() => setSelectedGroupKey(group.key)}
-                            >
-                              {t("skills.workspace.categories.open")}
-                              <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </article>
-                      );
-                    })}
-                  </div>
-                </section>
-              ) : (
-                <div className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
-                  <div className="text-sm font-semibold text-slate-900">
-                    {hasSidebarSearchResults
-                      ? t("skills.workspace.empty.skillGroups.hasSidebarTitle")
-                      : t("skills.workspace.empty.skillGroups.defaultTitle")}
-                  </div>
-                  <p className="mt-2 text-sm leading-6 text-slate-500">
-                    {hasSidebarSearchResults
-                      ? t(
-                          "skills.workspace.empty.skillGroups.hasSidebarDescription",
-                        )
-                      : t(
-                          "skills.workspace.empty.skillGroups.defaultDescription",
-                        )}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <aside className="space-y-3">
-              <section
-                className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 shadow-sm"
-                data-testid="skills-workspace-sidebar-section-continuation"
-              >
-                <h2 className="text-sm font-semibold text-emerald-900">
-                  {t("skills.workspace.sidebar.recent.title")}
-                </h2>
-
-                {visibleRecentPreview.length > 0 ? (
-                  <div className="mt-3 space-y-2">
-                    {visibleRecentPreview.map((skill) => {
-                      const recentPrefill = resolveServiceSkillLaunchPrefill({
-                        skill,
-                        copy: serviceSkillLaunchPrefillCopy,
-                      });
-                      const recentPrefillSummary =
-                        buildServiceSkillLaunchPrefillSummary({
-                          skill,
-                          slotValues: recentPrefill?.slotValues,
-                          launchUserInput: recentPrefill?.launchUserInput,
-                          copy: serviceSkillLaunchPrefillCopy,
-                        });
-
-                      return (
-                        <button
-                          key={skill.id}
-                          type="button"
-                          onClick={() => handleServiceSkillSelect(skill)}
-                          className="w-full rounded-lg border border-emerald-100 bg-white px-3 py-2.5 text-left transition hover:border-emerald-200 hover:bg-emerald-50/40"
-                        >
-                          <div className="line-clamp-1 text-sm font-medium text-slate-900">
-                            {skill.title}
-                          </div>
-                          <p className="mt-1 line-clamp-1 text-xs leading-5 text-slate-600">
-                            {skill.summary}
-                          </p>
-                          <div className="mt-1 flex items-center justify-between gap-3 text-[11px] leading-5 text-slate-500">
-                            <span className="min-w-0 line-clamp-1">
-                              {recentPrefillSummary || skill.outputHint}
-                            </span>
-                            <ArrowRight className="h-3.5 w-3.5 shrink-0 text-emerald-700" />
-                            <span className="sr-only">
-                              {summarizeServiceSkillRequiredInputs(skill, {
-                                copy: serviceSkillPresentationCopy,
-                              })}
-                              {getServiceSkillOutputDestination(skill, {
-                                copy: serviceSkillPresentationCopy,
-                              })}
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="mt-3 rounded-lg border border-dashed border-emerald-200 bg-white px-4 py-6 text-sm text-emerald-700/80">
-                    {t("skills.workspace.sidebar.recent.empty")}
-                    <span className="sr-only">
-                      {t("skills.workspace.sidebar.recent.emptySr")}
-                    </span>
-                  </div>
-                )}
-              </section>
-
-              <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <summary className="cursor-pointer list-none text-sm font-medium text-slate-800 [&::-webkit-details-marker]:hidden">
-                  {t("skills.workspace.sidebar.drafts.title")}
-                </summary>
-                <div className="mt-3">
-                  <CapabilityDraftPanel
-                    workspaceRoot={capabilityDraftWorkspaceRoot}
-                    projectPending={capabilityDraftProjectLoading}
-                    projectError={capabilityDraftProjectError}
-                    highlightedDraftId={highlightedCapabilityDraftId}
-                    onRegisteredSkillsChanged={() =>
-                      setRegisteredSkillsRefreshSignal(
-                        (previous) => previous + 1,
-                      )
-                    }
-                  />
-                </div>
-              </details>
-
-              <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <summary className="cursor-pointer list-none text-sm font-medium text-slate-800 [&::-webkit-details-marker]:hidden">
-                  {t("skills.workspace.sidebar.registered.title")}
-                </summary>
-                <div className="mt-3">
-                  <WorkspaceRegisteredSkillsPanel
-                    workspaceRoot={capabilityDraftWorkspaceRoot}
-                    workspaceId={creationProjectId}
-                    projectPending={capabilityDraftProjectLoading}
-                    projectError={capabilityDraftProjectError}
-                    refreshSignal={registeredSkillsRefreshSignal}
-                    onEnableRuntime={handleWorkspaceRuntimeEnable}
-                    onCreateManagedAutomationDraft={
-                      handleWorkspaceManagedAutomationDraft
-                    }
-                  />
-                </div>
-              </details>
-
-              <section
-                className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-                data-testid="skills-workspace-sidebar-section-library"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="text-sm font-semibold text-slate-900">
-                    {t("skills.workspace.sidebar.local.title")}
-                  </h2>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 rounded-lg px-2.5 text-xs text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                    onClick={() => setAdvancedManagerOpen(true)}
-                  >
-                    <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
-                    {t("skills.workspace.sidebar.local.manage")}
-                  </Button>
-                </div>
-
-                {visibleInstalledPreview.length > 0 ? (
-                  <div className="mt-3 space-y-2">
-                    {highlightedInstalledSkill ? (
-                      <div
-                        className="rounded-lg border border-emerald-200 bg-emerald-50/70 px-3 py-2.5 shadow-sm"
-                        data-testid="skills-workspace-highlighted-skill-banner"
-                      >
-                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                          <div className="min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm">
-                            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
-                              {t(
-                                "skills.workspace.sidebar.local.highlightedBadge",
-                              )}
-                            </span>
-                            <span className="min-w-0 font-semibold text-slate-900">
-                              {highlightedInstalledSkill.name}
-                            </span>
-                            {highlightedInstalledSkillUsage?.replayText ? (
-                              <span className="max-w-xl truncate text-xs leading-5 text-slate-500">
-                                {formatInstalledSkillRecentUsageDescription(
-                                  highlightedInstalledSkillUsage.replayText,
-                                )}
-                              </span>
                             ) : null}
-                            <span className="text-xs leading-5 text-slate-500">
-                              {t(
-                                "skills.workspace.sidebar.local.highlightedDescription",
-                              )}
-                            </span>
-                          </div>
-                          <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-8 rounded-lg border-slate-200 bg-white px-2.5 text-xs text-slate-700 hover:bg-slate-50 hover:text-slate-900"
-                              data-testid="skills-workspace-highlighted-skill-continue"
-                              onClick={() =>
-                                handleInstalledSkillSelect(
-                                  highlightedInstalledSkill,
-                                  highlightedInstalledSkillUsage?.replayText,
-                                )
-                              }
-                            >
-                              {t(
-                                "skills.workspace.sidebar.local.backToGeneration",
-                              )}
-                              <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                            </Button>
                           </div>
                         </div>
-                      </div>
-                    ) : null}
-                    {visibleInstalledPreview.map((skill) => {
-                      const isHighlighted =
-                        skill.directory === highlightedInstalledSkillDirectory;
-                      const usage = installedSkillUsageMap.get(
-                        getSlashEntryUsageRecordKey("skill", skill.key),
-                      );
-                      const recentUsageDescription =
-                        formatInstalledSkillRecentUsageDescription(
-                          usage?.replayText,
-                        );
-
-                      return (
-                        <article
-                          key={skill.directory}
-                          className={cn(
-                            "rounded-lg border bg-white px-3 py-2.5 transition",
-                            isHighlighted
-                              ? "border-emerald-300 bg-emerald-50/70 shadow-sm"
-                              : "border-slate-200 hover:border-slate-300",
-                          )}
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="line-clamp-1 text-sm font-medium text-slate-900">
-                              {skill.name}
-                            </div>
-                            {isHighlighted ? (
-                              <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700">
-                                {t(
-                                  "skills.workspace.sidebar.local.highlightedBadge",
-                                )}
-                              </span>
-                            ) : null}
-                          </div>
-                          <p className="mt-1 line-clamp-1 text-[12px] leading-5 text-slate-600">
-                            {resolveInstalledSkillPromise(
-                              skill,
-                              installedSkillPresentationCopy,
-                            )}
-                          </p>
-                          <div className="mt-1.5 text-[11px] leading-5 text-slate-500">
-                            <div className="line-clamp-1">
-                              {recentUsageDescription ||
-                                getInstalledSkillOutputHint(
-                                  skill,
-                                  installedSkillPresentationCopy,
-                                )}
-                            </div>
-                            <span className="sr-only">
-                              {summarizeInstalledSkillRequiredInputs(
-                                skill,
-                                installedSkillPresentationCopy,
-                              )}
-                              {getInstalledSkillOutputHint(
-                                skill,
-                                installedSkillPresentationCopy,
-                              )}
-                              {t("skills.workspace.sidebar.local.generationSr")}
-                            </span>
-                          </div>
-                          <div className="mt-3 flex items-center justify-between gap-3">
-                            <div className="line-clamp-1 text-[11px] leading-5 text-slate-500">
-                              {t("skills.workspace.sidebar.local.continueHint")}
-                              <span className="sr-only">
-                                {t(
-                                  "skills.workspace.sidebar.local.continueHintSr",
-                                )}
-                              </span>
-                            </div>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-8 shrink-0 rounded-lg border-slate-200 bg-white px-2.5 text-xs text-slate-700 hover:bg-slate-50"
-                              onClick={() =>
-                                handleInstalledSkillSelect(
-                                  skill,
-                                  usage?.replayText,
-                                )
-                              }
-                            >
-                              {t(
-                                "skills.workspace.sidebar.local.continueAction",
-                              )}
-                              <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </article>
                       );
                     })}
                   </div>
                 ) : (
-                  <div className="mt-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                  <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
                     {t("skills.workspace.sidebar.local.empty")}
                   </div>
                 )}
               </section>
-            </aside>
-          </section>
-        </div>
+            ) : null}
+          </div>
+        </main>
       </div>
 
-      <Dialog open={advancedManagerOpen} onOpenChange={setAdvancedManagerOpen}>
-        <DialogContent className="lime-workbench-theme-scope max-h-[calc(100vh-40px)] w-[min(1240px,calc(100vw-32px))] max-w-none overflow-hidden border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-0">
-          <div className="flex h-[calc(100vh-88px)] min-h-[680px] flex-col bg-white">
-            <DialogHeader className="border-b border-slate-200 px-6 py-5">
-              <div className="flex flex-wrap items-center gap-2">
-                <DialogTitle>{t("skills.workspace.manager.title")}</DialogTitle>
-                <WorkbenchInfoTip
-                  ariaLabel={t("skills.workspace.manager.tipAria")}
-                  content={t("skills.workspace.manager.tipContent")}
-                  tone="mint"
-                />
-              </div>
-            </DialogHeader>
-            <div className="min-h-0 flex-1 overflow-auto px-6 py-6">
-              <SkillsPage
-                hideHeader
-                initialScaffoldDraft={activeScaffoldDraft}
-                initialScaffoldRequestKey={activeScaffoldRequestKey}
-                onBringScaffoldToCreation={handleBringScaffoldToCreation}
-                onScaffoldCreated={handleScaffoldCreated}
-              />
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <SkillScaffoldDialog
+        open={scaffoldDialogOpen}
+        onOpenChange={(open) => {
+          setScaffoldDialogOpen(open);
+          if (!open) {
+            setScaffoldDialogDraft(null);
+          }
+        }}
+        onCreate={handleCreateScaffold}
+        creating={scaffoldCreating}
+        allowProjectTarget={Boolean(creationProjectId)}
+        initialValues={scaffoldDialogDraft}
+        sourceHint={scaffoldDialogDraft?.sourceExcerpt ?? null}
+        onBringBackToCreation={handleBringScaffoldToCreation}
+      />
 
       <CuratedTaskLauncherDialog
         open={Boolean(curatedTaskLauncherTask)}
@@ -2338,16 +1660,6 @@ export function SkillsWorkspacePage({
         onOpenChange={handleCuratedTaskLauncherOpenChange}
         onApplyReviewSuggestion={handleApplyLauncherReviewSuggestion}
         onConfirm={handleCuratedTaskTemplateSelect}
-      />
-
-      <AutomationJobDialog
-        open={workspaceSkillAutomationDialogOpen}
-        mode="create"
-        workspaces={capabilityDraftProject ? [capabilityDraftProject] : []}
-        initialValues={workspaceSkillAutomationInitialValues}
-        saving={workspaceSkillAutomationSaving}
-        onOpenChange={handleWorkspaceSkillAutomationDialogOpenChange}
-        onSubmit={handleWorkspaceSkillAutomationSubmit}
       />
     </>
   );

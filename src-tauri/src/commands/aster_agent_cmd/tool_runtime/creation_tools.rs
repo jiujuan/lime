@@ -384,6 +384,102 @@ impl Tool for LimeCreateResourceSearchTaskTool {
     }
 }
 
+fn parse_chinese_count_digit(value: char) -> Option<u32> {
+    match value {
+        '一' => Some(1),
+        '二' | '两' => Some(2),
+        '三' => Some(3),
+        '四' => Some(4),
+        '五' => Some(5),
+        '六' => Some(6),
+        '七' => Some(7),
+        '八' => Some(8),
+        '九' => Some(9),
+        _ => None,
+    }
+}
+
+fn parse_chinese_count_number(value: &str) -> Option<u32> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed == "十" {
+        return Some(10);
+    }
+
+    let parts = trimmed.split_once('十');
+    if let Some((left, right)) = parts {
+        let tens = if left.is_empty() {
+            1
+        } else {
+            let mut chars = left.chars();
+            let digit = chars.next().and_then(parse_chinese_count_digit)?;
+            if chars.next().is_some() {
+                return None;
+            }
+            digit
+        };
+        let ones = if right.is_empty() {
+            0
+        } else {
+            let mut chars = right.chars();
+            let digit = chars.next().and_then(parse_chinese_count_digit)?;
+            if chars.next().is_some() {
+                return None;
+            }
+            digit
+        };
+        return Some(tens * 10 + ones);
+    }
+
+    let mut chars = trimmed.chars();
+    let digit = chars.next().and_then(parse_chinese_count_digit)?;
+    if chars.next().is_some() {
+        return None;
+    }
+    Some(digit)
+}
+
+fn parse_relaxed_count_string(value: &str) -> Option<u32> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Ok(parsed) = trimmed.parse::<u32>() {
+        return (parsed > 0).then_some(parsed);
+    }
+
+    let mut ascii_digits = String::new();
+    for character in trimmed.chars() {
+        if character.is_ascii_digit() {
+            ascii_digits.push(character);
+        } else if !ascii_digits.is_empty() {
+            break;
+        }
+    }
+    if !ascii_digits.is_empty() {
+        if let Ok(parsed) = ascii_digits.parse::<u32>() {
+            if parsed > 0 {
+                return Some(parsed);
+            }
+        }
+    }
+
+    let mut chinese_digits = String::new();
+    for character in trimmed.chars() {
+        if matches!(
+            character,
+            '一' | '二' | '两' | '三' | '四' | '五' | '六' | '七' | '八' | '九' | '十'
+        ) {
+            chinese_digits.push(character);
+        } else if !chinese_digits.is_empty() {
+            break;
+        }
+    }
+    parse_chinese_count_number(&chinese_digits).filter(|count| *count > 0)
+}
+
 fn deserialize_optional_u32_from_any<'de, D>(deserializer: D) -> Result<Option<u32>, D::Error>
 where
     D: Deserializer<'de>,
@@ -397,6 +493,7 @@ where
         serde_json::Value::Number(number) => number
             .as_u64()
             .and_then(|raw| u32::try_from(raw).ok())
+            .filter(|count| *count > 0)
             .map(Some)
             .ok_or_else(|| de::Error::custom("count 必须是正整数")),
         serde_json::Value::String(raw) => {
@@ -404,10 +501,9 @@ where
             if trimmed.is_empty() {
                 return Ok(None);
             }
-            trimmed
-                .parse::<u32>()
+            parse_relaxed_count_string(trimmed)
                 .map(Some)
-                .map_err(|_| de::Error::custom("count 必须是正整数"))
+                .ok_or_else(|| de::Error::custom("count 必须是正整数"))
         }
         _ => Err(de::Error::custom("count 必须是整数或整数字符串")),
     }
@@ -442,7 +538,7 @@ fn normalize_image_task_tool_params(
         _ => {
             return Err(ToolError::invalid_params(
                 "image_task 必须是对象或 JSON 字符串".to_string(),
-            ))
+            ));
         }
     };
 
@@ -739,7 +835,7 @@ fn image_task_input_schema() -> serde_json::Value {
             { "type": "integer", "minimum": 1, "maximum": 20 },
             { "type": "string" }
         ],
-        "description": "生成数量（可选，兼容整数字符串）。"
+        "description": "生成数量（可选，兼容整数字符串、`1 张`、`一张` 等自然表达）。"
     });
     let reference_images_schema = serde_json::json!({
         "oneOf": [
@@ -2420,6 +2516,28 @@ mod tests {
         assert_eq!(input.prompt, "三国主要人物");
         assert_eq!(input.count, Some(9));
         assert!(input.reference_images.is_empty());
+    }
+
+    #[test]
+    fn image_task_input_should_parse_relaxed_count_strings() {
+        for (raw_count, expected_count) in [
+            ("1 张", 1),
+            ("一张", 1),
+            ("2 images", 2),
+            ("十二张", 12),
+            ("二十张", 20),
+        ] {
+            let input: ImageTaskInput = serde_json::from_value(serde_json::json!({
+                "prompt": "青柠实验室主视觉",
+                "count": raw_count
+            }))
+            .expect("parse relaxed image count");
+            assert_eq!(
+                input.count,
+                Some(expected_count),
+                "raw count should parse: {raw_count}"
+            );
+        }
     }
 
     #[test]

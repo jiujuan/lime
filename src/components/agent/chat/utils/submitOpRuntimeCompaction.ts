@@ -1,4 +1,5 @@
 import type {
+  AsterProviderConfig,
   AsterExecutionStrategy,
   AsterSessionExecutionRuntime,
   AsterSessionExecutionRuntimeRecentTeamSelection,
@@ -504,6 +505,7 @@ export interface BuildSubmitOpRuntimeCompactionOptions {
 
 export interface SubmitOpRuntimeCompactionResult {
   metadata?: Record<string, unknown>;
+  providerConfig?: AsterProviderConfig;
   shouldSubmitProviderPreference: boolean;
   shouldSubmitModelPreference: boolean;
   shouldSubmitExecutionStrategy: boolean;
@@ -548,19 +550,52 @@ export function buildSubmitOpRuntimeCompaction(
   const shouldDeferModelRoutingToBackend =
     hasFastResponseRouting || hasImageGenerationRouting;
   const hasExplicitModelOverride = Boolean(modelOverride?.trim());
+  const normalizedEffectiveProviderType = normalizeRuntimeIdentifier(
+    effectiveProviderType,
+  );
+  const normalizedEffectiveModel = normalizeRuntimeIdentifier(effectiveModel);
+  const knownProviderChanged = Boolean(
+    knownProviderSelector &&
+    normalizedEffectiveProviderType &&
+    normalizeRuntimeIdentifier(knownProviderSelector) !==
+      normalizedEffectiveProviderType,
+  );
+  const knownModelChanged = Boolean(
+    knownModelName &&
+    normalizedEffectiveModel &&
+    normalizeRuntimeIdentifier(knownModelName) !== normalizedEffectiveModel,
+  );
+  const shouldSubmitImageOrchestrationProviderConfig = Boolean(
+    hasImageGenerationRouting &&
+    effectiveProviderType.trim() &&
+    effectiveModel.trim() &&
+    (!knownProviderSelector ||
+      !knownModelName ||
+      knownProviderChanged ||
+      knownModelChanged ||
+      hasExplicitModelOverride),
+  );
+  const imageOrchestrationProviderConfig: AsterProviderConfig | undefined =
+    shouldSubmitImageOrchestrationProviderConfig
+      ? {
+          provider_id: effectiveProviderType.trim(),
+          provider_name: effectiveProviderType.trim(),
+          model_name: effectiveModel.trim(),
+        }
+      : undefined;
   const shouldSubmitProviderPreference =
     !shouldDeferModelRoutingToBackend &&
     (!knownProviderSelector ||
       normalizeRuntimeIdentifier(knownProviderSelector) !==
-        normalizeRuntimeIdentifier(effectiveProviderType));
-  const shouldSubmitModelPreference =
-    shouldDeferModelRoutingToBackend && !hasExplicitModelOverride
+        normalizedEffectiveProviderType);
+  const shouldSubmitModelPreference = hasImageGenerationRouting
+    ? false
+    : shouldDeferModelRoutingToBackend && !hasExplicitModelOverride
       ? false
       : hasExplicitModelOverride ||
         shouldSubmitProviderPreference ||
         !knownModelName ||
-        normalizeRuntimeIdentifier(knownModelName) !==
-          normalizeRuntimeIdentifier(effectiveModel);
+        normalizeRuntimeIdentifier(knownModelName) !== normalizedEffectiveModel;
 
   const knownExecutionStrategy =
     syncedExecutionStrategy?.trim() ||
@@ -770,6 +805,7 @@ export function buildSubmitOpRuntimeCompaction(
 
   return {
     metadata,
+    providerConfig: imageOrchestrationProviderConfig,
     shouldSubmitProviderPreference,
     shouldSubmitModelPreference,
     shouldSubmitExecutionStrategy,

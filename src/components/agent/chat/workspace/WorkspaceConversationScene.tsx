@@ -381,6 +381,9 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   runtimeToolAvailability?: ComponentProps<
     typeof EmptyState
   >["runtimeToolAvailability"];
+  initialInputCapability?: ComponentProps<
+    typeof EmptyState
+  >["initialInputCapability"];
   knowledgePackSelection?: ComponentProps<
     typeof EmptyState
   >["knowledgePackSelection"];
@@ -542,6 +545,7 @@ export function WorkspaceConversationScene({
   onDismissWorkspaceHint,
   onOpenSettings,
   runtimeToolAvailability,
+  initialInputCapability,
   knowledgePackSelection,
   knowledgePackOptions,
   onToggleKnowledgePack,
@@ -646,6 +650,7 @@ export function WorkspaceConversationScene({
     projectId,
     sessionId,
     runtimeToolAvailability,
+    initialInputCapability,
     knowledgePackSelection,
     knowledgePackOptions,
     onToggleKnowledgePack,

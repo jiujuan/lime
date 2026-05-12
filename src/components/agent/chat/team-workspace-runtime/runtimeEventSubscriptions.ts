@@ -14,6 +14,7 @@ import {
   buildStatusChangedProjection,
   projectRuntimeStreamEvent,
   removeLiveActivityEntries,
+  type LiveRuntimeProjectorCopy,
   type SessionLiveStreamState,
   upsertLiveActivityEntries,
 } from "./liveRuntimeProjector";
@@ -40,6 +41,7 @@ export interface TeamWorkspaceStatusEventSubscriptionDeps {
   setLiveRuntimeBySessionId: TeamWorkspaceRecordUpdater<LiveRuntimeBySessionId>;
   setLiveActivityBySessionId: TeamWorkspaceRecordUpdater<LiveActivityBySessionId>;
   scheduleActivityRefresh(sessionId: string): void;
+  copy?: LiveRuntimeProjectorCopy;
 }
 
 export interface TeamWorkspaceStreamEventSubscriptionDeps {
@@ -68,6 +70,7 @@ export interface TeamWorkspaceStreamEventSubscriptionDeps {
   setLiveRuntimeBySessionId: TeamWorkspaceRecordUpdater<LiveRuntimeBySessionId>;
   setLiveActivityBySessionId: TeamWorkspaceRecordUpdater<LiveActivityBySessionId>;
   scheduleActivityRefresh(sessionId: string): void;
+  copy?: LiveRuntimeProjectorCopy;
 }
 
 type SessionEventHandler = (event: { payload: unknown }) => void;
@@ -160,6 +163,7 @@ export async function subscribeTeamWorkspaceStatusEvents(
         status: data.status,
         session: matchingSession,
         currentRuntime: deps.getCurrentRuntime(data.session_id),
+        copy: deps.copy,
       });
 
       deps.setLiveRuntimeBySessionId((previous) => {
@@ -229,6 +233,7 @@ export async function subscribeTeamWorkspaceStreamEvents(
         currentRuntime: deps.getCurrentRuntime(sessionId),
         streamState: deps.getStreamState(sessionId),
         toolNameById: deps.getToolNames(sessionId),
+        copy: deps.copy,
       });
       if (!projection) {
         return;

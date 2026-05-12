@@ -1,10 +1,31 @@
 import { describe, expect, it } from "vitest";
+import { changeLimeLocale, getLimeI18n } from "@/i18n/createI18n";
 import type { AgentEvent } from "@/lib/api/agentProtocol";
 import type { TeamWorkspaceRuntimeSessionSnapshot } from "../teamWorkspaceRuntime";
 import {
+  buildLiveRuntimeProjectorCopy,
   buildStatusChangedProjection,
   projectRuntimeStreamEvent,
+  type LiveRuntimeProjectorTranslate,
 } from "./liveRuntimeProjector";
+
+async function buildEnglishLiveRuntimeCopy() {
+  await changeLimeLocale("en-US");
+  const translate: LiveRuntimeProjectorTranslate = (key, options) =>
+    String(
+      getLimeI18n().t(
+        key as never,
+        {
+          ns: "agent",
+          ...(options ?? {}),
+        } as never,
+      ),
+    );
+
+  return buildLiveRuntimeProjectorCopy({
+    translate,
+  });
+}
 
 function createSessionSnapshot(
   overrides: Partial<TeamWorkspaceRuntimeSessionSnapshot> = {},
@@ -33,6 +54,48 @@ describe("liveRuntimeProjector", () => {
       latestTurnStatus: "running",
       queuedTurnCount: 0,
     });
+  });
+
+  it("应支持注入英文 live runtime copy 且保留 runtime 工具名", async () => {
+    const copy = await buildEnglishLiveRuntimeCopy();
+    const statusProjection = buildStatusChangedProjection({
+      sessionId: "child-1",
+      status: "running",
+      session: createSessionSnapshot(),
+      copy,
+    });
+
+    expect(statusProjection.entry.title).toBe("Status changed");
+    expect(statusProjection.entry.detail).toContain("Running");
+
+    const toolProjection = projectRuntimeStreamEvent({
+      sessionId: "child-1",
+      session: createSessionSnapshot({
+        runtimeStatus: "running",
+        latestTurnStatus: "running",
+      }),
+      copy,
+      event: {
+        type: "tool_start",
+        tool_name: "browser_snapshot",
+        tool_id: "tool-1",
+      } as AgentEvent,
+    });
+
+    expect(toolProjection?.entry?.title).toBe("Processing · 页面截图");
+    expect(toolProjection?.entry?.detail).toBe("Working on 页面截图.");
+
+    const queueProjection = projectRuntimeStreamEvent({
+      sessionId: "child-1",
+      session: createSessionSnapshot(),
+      copy,
+      event: {
+        type: "queue_added",
+      } as AgentEvent,
+    });
+
+    expect(queueProjection?.entry?.title).toBe("Queued");
+    expect(queueProjection?.entry?.detail).toContain("New instructions");
   });
 
   it("tool_start 应把工具名映射为中文展示标题", () => {

@@ -226,6 +226,99 @@ function parseInvokeRequest(request, invokeUrl) {
   }
 }
 
+async function invokeBridgeCommand(options, cmd, args, timeoutMs = 30_000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(options.invokeUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ cmd, args }),
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    const payload = text ? JSON.parse(text) : null;
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${text}`);
+    }
+    return payload;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function interruptSubmittedTurn(options, request) {
+  const sessionId = String(
+    request.session_id || request.sessionId || "",
+  ).trim();
+  const turnId = String(request.turn_id || request.turnId || "").trim();
+  if (!sessionId) {
+    return { attempted: false, reason: "missing-session-id" };
+  }
+
+  const interruptRequest = {
+    session_id: sessionId,
+    ...(turnId ? { turn_id: turnId } : {}),
+  };
+
+  try {
+    await invokeBridgeCommand(
+      options,
+      "agent_runtime_interrupt_turn",
+      { request: interruptRequest },
+      20_000,
+    );
+  } catch (error) {
+    return {
+      attempted: true,
+      status: "failed",
+      sessionId,
+      turnId: turnId || null,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  const drained = await waitForCondition(
+    "等待 @配图 smoke 提交任务清理",
+    async () => {
+      const threadRead = await invokeBridgeCommand(
+        options,
+        "agent_runtime_get_thread_read",
+        { sessionId },
+        20_000,
+      ).catch(() => null);
+      if (!threadRead) {
+        return null;
+      }
+      const status = String(threadRead.status || "").toLowerCase();
+      const queuedTurns = Array.isArray(threadRead.queued_turns)
+        ? threadRead.queued_turns.length
+        : 0;
+      const activeTurnId =
+        threadRead.active_turn_id || threadRead.activeTurnId || null;
+      return !activeTurnId &&
+        queuedTurns === 0 &&
+        (status === "idle" || status === "completed" || status === "cancelled")
+        ? { status: threadRead.status || null, queuedTurns }
+        : null;
+    },
+    30_000,
+    options.intervalMs,
+  ).catch((error) => ({
+    status: "unknown",
+    error: error instanceof Error ? error.message : String(error),
+  }));
+
+  return {
+    attempted: true,
+    status: "sent",
+    sessionId,
+    turnId: turnId || null,
+    drained,
+  };
+}
+
 async function main() {
   if (typeof fetch !== "function") {
     throw new Error("当前 Node 运行时不支持 fetch，请使用 Node 18+");
@@ -372,7 +465,7 @@ async function main() {
       .waitFor({ state: "visible", timeout: options.timeoutMs });
     const imageCommandItem = commandItemByText(page, "@配图").first();
     await imageCommandItem.waitFor({
-      state: "visible",
+      state: "attached",
       timeout: options.timeoutMs,
     });
 
@@ -403,6 +496,7 @@ async function main() {
     });
 
     logStage(options, "select-image-command");
+    await imageCommandItem.scrollIntoViewIfNeeded();
     await imageCommandItem.click();
     await textarea.fill(IMAGE_PROMPT);
 
@@ -459,6 +553,8 @@ async function main() {
     summary.assertions.chatModelPreferenceSuppressed = true;
     summary.submitRequest = {
       message: request.message,
+      sessionId: request.session_id || null,
+      turnId: request.turn_id || null,
       providerPreference: turnConfig.provider_preference ?? null,
       modelPreference: turnConfig.model_preference ?? null,
       contractKey,
@@ -472,6 +568,8 @@ async function main() {
       ),
       fullPage: true,
     });
+
+    summary.cleanup = await interruptSubmittedTurn(options, request);
 
     const summaryPath = path.join(
       options.evidenceDir,

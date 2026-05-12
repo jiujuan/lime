@@ -1,4 +1,5 @@
 import { Bot, Clock3 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { SessionActivityPreviewState } from "../../team-workspace-runtime/activityPreviewSelectors";
 import type { SelectedSessionDetailDisplayState } from "../../team-workspace-runtime/selectedSessionDetailSelectors";
 import type { TeamWorkspaceActivityEntry } from "../../teamWorkspaceRuntime";
@@ -76,6 +77,8 @@ export function SelectedSessionInlineDetail({
   selectedSessionInputMessage,
   selectedSessionSupportsActivityPreview,
 }: SelectedSessionInlineDetailProps) {
+  const { t } = useTranslation("agent");
+
   return (
     <div
       className="mt-3 border-t border-slate-200 pt-3"
@@ -100,7 +103,9 @@ export function SelectedSessionInlineDetail({
         <div className={inlineDetailSectionClassName}>
           <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
             <Bot className="h-3.5 w-3.5" />
-            <span>任务分工</span>
+            <span>
+              {t("agentChat.teamWorkspace.selectedSession.settings.heading")}
+            </span>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
             {detailDisplay.settingBadges.map((badge) => (
@@ -162,7 +167,9 @@ export function SelectedSessionInlineDetail({
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
         <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1">
           <Clock3 className="h-3.5 w-3.5" />
-          更新于 {formatUpdatedAt(selectedSession.updatedAt)}
+          {t("agentChat.teamWorkspace.selectedSession.footer.updatedAt", {
+            updatedAt: formatUpdatedAt(selectedSession.updatedAt),
+          })}
         </span>
         {detailDisplay.metadata.map((meta) => (
           <span

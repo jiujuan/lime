@@ -1,4 +1,6 @@
 import { Activity } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { formatNumber } from "@/i18n/format";
 import { cn } from "@/lib/utils";
 import type { SessionActivityPreviewState } from "../../team-workspace-runtime/activityPreviewSelectors";
 import type { TeamWorkspaceActivityEntry } from "../../teamWorkspaceRuntime";
@@ -24,6 +26,9 @@ export function SelectedSessionInlineActivitySection({
   selectedSessionActivityShouldPoll,
   selectedSessionSupportsActivityPreview,
 }: SelectedSessionInlineActivitySectionProps) {
+  const { i18n, t } = useTranslation("agent");
+  const locale = i18n.resolvedLanguage || i18n.language;
+
   if (!selectedSessionSupportsActivityPreview) {
     return null;
   }
@@ -32,10 +37,12 @@ export function SelectedSessionInlineActivitySection({
     <div className={inlineDetailSectionClassName}>
       <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
         <Activity className="h-3.5 w-3.5" />
-        <span>完整进展</span>
+        <span>
+          {t("agentChat.teamWorkspace.selectedSession.activity.heading")}
+        </span>
         {selectedSessionActivityShouldPoll ? (
           <span className="rounded-full border border-sky-200 bg-white px-2 py-0.5 text-[10px] font-medium tracking-normal text-sky-700 normal-case">
-            处理中自动刷新
+            {t("agentChat.teamWorkspace.selectedSession.activity.autoRefresh")}
           </span>
         ) : null}
       </div>
@@ -45,16 +52,17 @@ export function SelectedSessionInlineActivitySection({
         </p>
       ) : selectedSessionActivityPreview?.status === "error" ? (
         <p className="mt-2 text-sm leading-6 text-rose-600">
-          最新进展暂不可用：
-          {selectedSessionActivityPreview.errorMessage ?? "同步失败"}
+          {t("agentChat.teamWorkspace.selectedSession.activity.errorPrefix")}
+          {selectedSessionActivityPreview.errorMessage ??
+            t("agentChat.teamWorkspace.selectedSession.activity.errorFallback")}
         </p>
       ) : selectedSessionActivityPreview?.status === "ready" ? (
         <p className="mt-2 text-sm leading-6 text-slate-500">
-          这项任务暂时还没有可展示的新进展。
+          {t("agentChat.teamWorkspace.selectedSession.activity.emptyReady")}
         </p>
       ) : (
         <p className="mt-2 text-sm leading-6 text-slate-500">
-          正在同步这项任务的最新进展...
+          {t("agentChat.teamWorkspace.selectedSession.activity.loading")}
         </p>
       )}
 
@@ -64,9 +72,21 @@ export function SelectedSessionInlineActivitySection({
           data-testid="team-workspace-activity-feed"
         >
           <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-            <span>进展记录</span>
+            <span>
+              {t(
+                "agentChat.teamWorkspace.selectedSession.activity.feedHeading",
+              )}
+            </span>
             <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium tracking-normal text-slate-600 normal-case">
-              {selectedSessionActivityEntries.length} 条
+              {t(
+                "agentChat.teamWorkspace.selectedSession.activity.entryCount",
+                {
+                  formattedCount: formatNumber(
+                    selectedSessionActivityEntries.length,
+                    { locale },
+                  ),
+                },
+              )}
             </span>
           </div>
           <div className="mt-3 space-y-2.5">

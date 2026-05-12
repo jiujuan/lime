@@ -1,8 +1,15 @@
 import { useMemo } from "react";
-import { buildTeamWorkspaceBoardChromeDisplayState } from "../../team-workspace-runtime/boardChromeSelectors";
+import { useTranslation } from "react-i18next";
 import {
+  buildTeamWorkspaceBoardChromeCopy,
+  buildTeamWorkspaceBoardChromeDisplayState,
+  type TeamWorkspaceBoardChromeTranslate,
+} from "../../team-workspace-runtime/boardChromeSelectors";
+import {
+  buildSelectedSessionDetailCopy,
   buildSelectedSessionDetailDisplayState,
   type SelectedSessionDetailDisplayState,
+  type SelectedSessionDetailTranslate,
 } from "../../team-workspace-runtime/selectedSessionDetailSelectors";
 import type { TeamWorkspaceRuntimeFormationDisplayState } from "../../team-workspace-runtime/formationDisplaySelectors";
 import type { TeamWorkspaceRuntimeFormationStatus } from "../../teamWorkspaceRuntime";
@@ -12,8 +19,10 @@ import {
   type TeamSessionCard,
 } from "../../utils/teamWorkspaceSessions";
 import {
+  buildTeamWorkspaceBoardCopy,
   buildTeamWorkspaceBoardSurfaceClassNames,
   resolveTeamWorkspaceBoardCopyState,
+  type TeamWorkspaceBoardTranslate,
 } from "./teamWorkspaceBoardPresentationSelectors";
 
 interface UseTeamWorkspaceBoardPresentationParams {
@@ -83,6 +92,45 @@ export function useTeamWorkspaceBoardPresentation({
   zoom,
   runtimeFormationDisplay,
 }: UseTeamWorkspaceBoardPresentationParams): TeamWorkspaceBoardPresentationState {
+  const { i18n, t } = useTranslation("agent");
+  const locale = i18n.resolvedLanguage || i18n.language;
+  const translateBoard = useMemo<TeamWorkspaceBoardTranslate>(
+    () => (key, options) => String(t(key as never, options as never)),
+    [t],
+  );
+  const translateBoardChrome = useMemo<TeamWorkspaceBoardChromeTranslate>(
+    () => (key, options) => String(t(key as never, options as never)),
+    [t],
+  );
+  const translateSelectedSessionDetail =
+    useMemo<SelectedSessionDetailTranslate>(
+      () => (key, options) => String(t(key as never, options as never)),
+      [t],
+    );
+  const boardCopy = useMemo(
+    () =>
+      buildTeamWorkspaceBoardCopy({
+        locale,
+        translate: translateBoard,
+      }),
+    [locale, translateBoard],
+  );
+  const boardChromeCopy = useMemo(
+    () =>
+      buildTeamWorkspaceBoardChromeCopy({
+        locale,
+        translate: translateBoardChrome,
+      }),
+    [locale, translateBoardChrome],
+  );
+  const selectedSessionDetailCopy = useMemo(
+    () =>
+      buildSelectedSessionDetailCopy({
+        locale,
+        translate: translateSelectedSessionDetail,
+      }),
+    [locale, translateSelectedSessionDetail],
+  );
   const hasRuntimeSessions = isChildSession || totalTeamSessions > 0;
   const useCompactCanvasChrome = hasRuntimeSessions;
   const {
@@ -91,6 +139,7 @@ export function useTeamWorkspaceBoardPresentation({
     memberCanvasSubtitle,
     memberCanvasTitle,
   } = resolveTeamWorkspaceBoardCopyState({
+    copy: boardCopy,
     detailExpanded,
     dispatchPreviewStatus,
     hasRuntimeSessions,
@@ -103,6 +152,7 @@ export function useTeamWorkspaceBoardPresentation({
   const boardChromeDisplay = useMemo(
     () =>
       buildTeamWorkspaceBoardChromeDisplayState({
+        copy: boardChromeCopy,
         hasRuntimeSessions,
         runtimeFormationTitle: hasRuntimeFormation
           ? runtimeFormationDisplay.panelHeadline
@@ -124,6 +174,7 @@ export function useTeamWorkspaceBoardPresentation({
       canCloseCompletedTeamSessions,
       canWaitAnyActiveTeamSession,
       completedCount,
+      boardChromeCopy,
       hasRuntimeSessions,
       hasRuntimeFormation,
       isChildSession,
@@ -149,11 +200,17 @@ export function useTeamWorkspaceBoardPresentation({
   const selectedSessionDetailDisplay = useMemo(
     () =>
       buildSelectedSessionDetailDisplayState({
+        copy: selectedSessionDetailCopy,
         selectedSession,
         isChildSession,
         parentSessionName,
       }),
-    [isChildSession, parentSessionName, selectedSession],
+    [
+      isChildSession,
+      parentSessionName,
+      selectedSession,
+      selectedSessionDetailCopy,
+    ],
   );
   const selectedStatusMeta = resolveStatusMeta(selectedSession?.runtimeStatus);
   const {

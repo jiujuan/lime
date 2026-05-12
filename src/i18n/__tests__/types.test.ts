@@ -286,25 +286,14 @@ function assertI18nKeyTypes() {
     ns: "agent",
     countLabel: "2",
   });
-  i18n.t("agentChat.imageWorkbenchPreview.status.complete.generate", {
-    ns: "agent",
-  });
-  i18n.t("agentChat.imageWorkbenchPreview.description.complete.single", {
-    ns: "agent",
-    result: "image result",
-  });
-  i18n.t("agentChat.imageWorkbenchPreview.source.footnote", {
-    ns: "agent",
-    label: "Reference images",
-    summary: "Attached 2 reference images.",
-  });
   i18n.t("agentChat.imageWorkbenchPreview.media.alt", { ns: "agent" });
-  i18n.t("agentChat.imageWorkbenchPreview.meta.imageProgress", {
+  i18n.t("agentChat.imageWorkbenchPreview.media.open", { ns: "agent" });
+  i18n.t("agentChat.imageWorkbenchPreview.placeholder.generating", {
     ns: "agent",
-    current: 2,
-    expected: 4,
   });
-  i18n.t("agentChat.imageWorkbenchPreview.promptFallback", { ns: "agent" });
+  i18n.t("agentChat.imageWorkbenchPreview.placeholder.failed", {
+    ns: "agent",
+  });
   i18n.t("agentChat.searchResultPreview.expandMore", {
     ns: "agent",
     countLabel: "2",
@@ -348,7 +337,167 @@ function assertI18nKeyTypes() {
     count: 3,
   });
   i18n.t("agentChat.teamWorkspace.canvasToolbar.fitProgress", { ns: "agent" });
+  i18n.t("agentChat.teamWorkspace.canvasStage.badge", { ns: "agent" });
+  i18n.t("agentChat.teamWorkspace.canvasStage.shortcutHint", { ns: "agent" });
+  i18n.t("agentChat.teamWorkspace.canvasStage.emptyTitle", { ns: "agent" });
+  i18n.t("agentChat.teamWorkspace.dock.currentProgress", { ns: "agent" });
+  i18n.t("agentChat.teamWorkspace.dock.processingCount", {
+    ns: "agent",
+    formattedCount: "2",
+  });
+  i18n.t("agentChat.teamWorkspace.dock.selectedPlan", {
+    ns: "agent",
+    label: "Writers",
+  });
+  i18n.t("agentChat.teamWorkspace.dock.aria.expand", { ns: "agent" });
   i18n.t("agentChat.teamWorkspace.teamActions.waitAny", { ns: "agent" });
+  i18n.t("agentChat.teamWorkspace.board.canvas.title", { ns: "agent" });
+  i18n.t("agentChat.teamWorkspace.board.canvas.subtitle.runtime", {
+    ns: "agent",
+    formattedCount: "2",
+  });
+  i18n.t("agentChat.teamWorkspace.boardChrome.headline.runningWithQueued", {
+    ns: "agent",
+    runningCount: "1",
+    queuedCount: "1",
+  });
+  i18n.t("agentChat.teamWorkspace.boardChrome.hint.runtime", { ns: "agent" });
+  i18n.t("agentChat.teamWorkspace.boardChrome.chip.focus", {
+    ns: "agent",
+    name: "Researcher",
+  });
+  i18n.t("agentChat.teamWorkspace.boardChrome.statusSummary", {
+    ns: "agent",
+    status: "Running",
+    formattedCount: "1",
+  });
+  i18n.t("agentChat.teamWorkspace.activityPreview.line", {
+    ns: "agent",
+    title: "Reply",
+    detail: "Done",
+  });
+  i18n.t("agentChat.teamWorkspace.activityPreview.status.message", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.teamWorkspace.activityPreview.messageTitle.output", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.teamWorkspace.activityPreview.error.syncFailed", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.teamWorkspace.liveRuntime.title.statusChanged", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.teamWorkspace.liveRuntime.detail.toolProcessing", {
+    ns: "agent",
+    target: "current step",
+  });
+  i18n.t("agentChat.teamWorkspace.liveRuntime.lifecycle.turnFailed.detail", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.teamWorkspace.liveRuntime.status.retry", { ns: "agent" });
+  i18n.t("agentChat.teamWorkspace.overview.selectedSession.focusBadge", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.teamWorkspace.overview.taskCount.waitable", {
+    ns: "agent",
+    formattedCount: "2",
+  });
+  i18n.t("agentChat.teamWorkspace.runtimeStatus.completed", { ns: "agent" });
+  i18n.t("agentChat.teamWorkspace.operations.heading", { ns: "agent" });
+  i18n.t("agentChat.teamWorkspace.operations.recentCount", {
+    ns: "agent",
+    formattedCount: "2",
+  });
+  i18n.t("agentChat.teamWorkspace.operations.wait.resolved", {
+    ns: "agent",
+    sessionName: "Researcher",
+    status: "Completed",
+  });
+  i18n.t("agentChat.teamWorkspace.operations.control.closeOne", {
+    ns: "agent",
+    sessionName: "Researcher",
+  });
+  i18n.t("agentChat.teamWorkspace.canvasLane.runtimeDetail.recentProgress", {
+    ns: "agent",
+    status: "Running",
+  });
+  i18n.t("agentChat.teamWorkspace.canvasLane.empty.syncLoading", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.teamWorkspace.canvasLane.planned.statusHint", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.teamWorkspace.formation.hint.formed", { ns: "agent" });
+  i18n.t("agentChat.teamWorkspace.formation.summaryBadge.planRoleCount", {
+    ns: "agent",
+    formattedCount: "2",
+  });
+  i18n.t("agentChat.teamWorkspace.formation.summaryBadge.referenceLabel", {
+    ns: "agent",
+    label: "Writers",
+  });
+  i18n.t("agentChat.teamWorkspace.formation.summaryBadge.taskCount", {
+    ns: "agent",
+    formattedCount: "2",
+  });
+  i18n.t("agentChat.teamWorkspace.formation.detail.hint.runtimeWithReference", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.teamWorkspace.formation.detail.roleSection.runtime", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.teamWorkspace.formation.status.formed.title", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.teamWorkspace.formation.memberStatus.planned", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.teamWorkspace.selectedSession.header.eyebrow", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.teamWorkspace.selectedSession.collaboration.wait", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.teamWorkspace.selectedSession.activity.entryCount", {
+    ns: "agent",
+    formattedCount: "2",
+  });
+  i18n.t("agentChat.teamWorkspace.selectedSession.footer.updatedAt", {
+    ns: "agent",
+    updatedAt: "just now",
+  });
+  i18n.t("agentChat.teamWorkspace.selectedSession.detail.setting.preset", {
+    ns: "agent",
+    label: "Writers",
+  });
+  i18n.t(
+    "agentChat.teamWorkspace.selectedSession.detail.metadata.createdFromTurn",
+    {
+      ns: "agent",
+      turnId: "turn-42",
+    },
+  );
+  i18n.t(
+    "agentChat.teamWorkspace.selectedSession.detail.sessionType.subAgent",
+    {
+      ns: "agent",
+    },
+  );
+  i18n.t("agentChat.teamWorkspace.selectedSession.detail.roleHint.executor", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.teamWorkspace.teamPreset.codeTriageTeam", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.teamWorkspace.control.resume.resumedOne", { ns: "agent" });
+  i18n.t("agentChat.teamWorkspace.control.wait.enteredStatusOne", {
+    ns: "agent",
+    status: "Completed",
+  });
+  i18n.t("agentChat.teamWorkspace.control.sendInput.emptyError", {
+    ns: "agent",
+  });
   i18n.t("navigation.sidebar.items.homeGeneral", { ns: "navigation" });
   i18n.t(
     "workspace.browserExistingSession.presentation.status.attached.label",

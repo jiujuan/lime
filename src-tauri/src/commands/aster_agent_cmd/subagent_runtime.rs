@@ -1694,8 +1694,7 @@ async fn maybe_cleanup_subagent_worktree_after_runtime_event(
             "[AsterAgent][Subagent] child session={} 已结束，但 worktree 含改动，保留现状以便后续继续",
             session_id
         ),
-        SubagentWorktreeCloseOutcome::CleanupFailed
-        | SubagentWorktreeCloseOutcome::NotEnabled => {}
+        SubagentWorktreeCloseOutcome::CleanupFailed | SubagentWorktreeCloseOutcome::NotEnabled => {}
     }
 
     Ok(())

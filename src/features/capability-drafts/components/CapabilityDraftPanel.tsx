@@ -155,35 +155,35 @@ export function CapabilityDraftPanel({
         registered: {
           description: t(
             "capabilityDraft.panel.status.registered.description",
-            "已写入当前 Workspace 的本地 Skill 目录；运行与自动化仍需后续 runtime gate。",
+            "已经保存到当前项目，可以去“已保存技能”里试用。",
           ),
-          label: t("capabilityDraft.panel.status.registered.label", "已注册"),
+          label: t("capabilityDraft.panel.status.registered.label", "已保存"),
         },
         unverified: {
           description: t(
             "capabilityDraft.panel.status.unverified.description",
-            "只能查看和继续修复，不能运行、注册或接入自动化。",
+            "还没有检查，先确认内容是否安全可用。",
           ),
-          label: t("capabilityDraft.panel.status.unverified.label", "未验证"),
+          label: t("capabilityDraft.panel.status.unverified.label", "待检查"),
         },
         verification_failed: {
           description: t(
             "capabilityDraft.panel.status.verificationFailed.description",
-            "verification gate 发现结构、权限或 contract 问题，需要修复后重试。",
+            "检查没有通过，需要修改后再保存。",
           ),
           label: t(
             "capabilityDraft.panel.status.verificationFailed.label",
-            "验证未通过",
+            "检查未通过",
           ),
         },
         verified_pending_registration: {
           description: t(
             "capabilityDraft.panel.status.verifiedPendingRegistration.description",
-            "最小验证已通过，可以注册到当前 Workspace，但仍不会运行或接入自动化。",
+            "检查已通过，可以保存到当前项目。",
           ),
           label: t(
             "capabilityDraft.panel.status.verifiedPendingRegistration.label",
-            "验证通过，待注册",
+            "检查通过，待保存",
           ),
         },
       },
@@ -393,16 +393,16 @@ export function CapabilityDraftPanel({
         <div className="space-y-1.5">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700">
-              {t("capabilityDraft.panel.badge", "草案区")}
+              {t("capabilityDraft.panel.badge", "待确认")}
             </span>
             <h2 className="text-[15px] font-semibold text-slate-900">
-              {t("capabilityDraft.panel.title", "能力草案")}
+              {t("capabilityDraft.panel.title", "正在制作")}
             </h2>
           </div>
           <p className="text-[11px] leading-5 text-slate-500">
             {t(
               "capabilityDraft.panel.description",
-              "Coding Agent 产出的 Skill 草案先停在这里；未验证前不会注册，也不会自动运行。",
+              "AI 生成的新技能会先放在这里。检查通过后，才能保存到项目里使用。",
             )}
           </p>
         </div>
@@ -428,25 +428,25 @@ export function CapabilityDraftPanel({
         <div className="mt-4 rounded-[22px] border border-dashed border-amber-200 bg-amber-50/60 px-4 py-5 text-sm leading-6 text-amber-800">
           {t(
             "capabilityDraft.panel.empty.missingProject",
-            "选择或进入一个项目后，才能查看该项目里的能力草案。",
+            "选择或进入一个项目后，才能查看正在制作的技能。",
           )}
         </div>
       ) : effectiveError ? (
         <div className="mt-4 rounded-[22px] border border-rose-200 bg-rose-50 px-4 py-5 text-sm leading-6 text-rose-700">
           {t("capabilityDraft.panel.empty.error", {
-            defaultValue: "能力草案暂时没读到：{{message}}",
+            defaultValue: "正在制作的技能暂时没读到：{{message}}",
             message: effectiveError,
           })}
         </div>
       ) : isBusy ? (
         <div className="mt-4 rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-5 text-sm leading-6 text-slate-500">
-          {t("capabilityDraft.panel.empty.loading", "正在读取能力草案...")}
+          {t("capabilityDraft.panel.empty.loading", "正在读取制作中的技能...")}
         </div>
       ) : visibleDrafts.length === 0 ? (
         <div className="mt-4 rounded-[22px] border border-dashed border-amber-200 bg-amber-50/60 px-4 py-5 text-sm leading-6 text-amber-800">
           {t(
             "capabilityDraft.panel.empty.noDrafts",
-            "当前项目还没有能力草案。后续 Coding Agent 生成的新能力会先进入这里复核。",
+            "当前项目还没有正在制作的技能。以后 AI 生成的新技能会先放到这里确认。",
           )}
         </div>
       ) : (
@@ -491,123 +491,146 @@ export function CapabilityDraftPanel({
                     {draft.description || draft.userGoal}
                   </p>
                 </div>
-                <div className="mt-3 space-y-1 text-[11px] leading-5 text-slate-500">
-                  <div>
-                    <span className="font-medium text-slate-700">
-                      {t("capabilityDraft.panel.field.goal", "目标：")}
-                    </span>
-                    {draft.userGoal}
-                  </div>
-                  <div>
-                    <span className="font-medium text-slate-700">
-                      {t("capabilityDraft.panel.field.permissions", "权限：")}
-                    </span>
-                    {summarizeCapabilityDraftPermissions(
-                      draft,
-                      presentationCopy,
-                    )}
-                  </div>
-                  <div>
-                    <span className="font-medium text-slate-700">
-                      {t("capabilityDraft.panel.field.files", "文件：")}
-                    </span>
-                    {summarizeCapabilityDraftFiles(draft, presentationCopy)}
-                  </div>
-                  <div>
-                    <span className="font-medium text-slate-700">
-                      {t("capabilityDraft.panel.field.verification", "验证：")}
-                    </span>
-                    {summarizeCapabilityDraftVerification(
-                      draft,
-                      presentationCopy,
-                    )}
-                  </div>
-                  <div>
-                    <span className="font-medium text-slate-700">
-                      {t("capabilityDraft.panel.field.registration", "注册：")}
-                    </span>
-                    {summarizeCapabilityDraftRegistration(
-                      draft,
-                      presentationCopy,
-                    )}
-                  </div>
-                  <div className="text-amber-700">
-                    {status.description}
-                    {!canRun &&
-                    !canRegister &&
-                    draft.verificationStatus !== "registered"
-                      ? t(
-                          "capabilityDraft.panel.guard.noEntry",
-                          " 当前没有运行、注册或自动化入口。",
-                        )
-                      : null}
-                    {canRegister
-                      ? t(
-                          "capabilityDraft.panel.guard.registerOnly",
-                          " 注册只会复制为 Workspace 本地 Skill，不会立即运行。",
-                        )
-                      : null}
-                    {draft.verificationStatus === "registered"
-                      ? t(
-                          "capabilityDraft.panel.guard.registeredNoEntry",
-                          " 当前没有运行或自动化入口。",
-                        )
-                      : null}
-                  </div>
-                </div>
-                {evidenceChecks.length > 0 ? (
-                  <div className="mt-3 rounded-[18px] border border-sky-100 bg-sky-50 px-3 py-2.5">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-[11px] font-semibold text-slate-800">
-                        {t("capabilityDraft.panel.evidence.title", "验证证据")}
+                <p className="mt-3 rounded-2xl border border-amber-100 bg-white px-3 py-2 text-[12px] leading-5 text-amber-800">
+                  {status.description}
+                  {canRegister
+                    ? t(
+                        "capabilityDraft.panel.guard.registerOnly",
+                        " 保存只会放到当前项目，不会自动运行。",
+                      )
+                    : null}
+                </p>
+                <details className="mt-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[11px] leading-5 text-slate-500">
+                  <summary className="cursor-pointer select-none text-[12px] font-medium text-slate-700">
+                    {t("capabilityDraft.panel.details", "制作详情")}
+                  </summary>
+                  <div className="mt-2 space-y-1">
+                    <div>
+                      <span className="font-medium text-slate-700">
+                        {t("capabilityDraft.panel.field.goal", "目标：")}
                       </span>
-                      <span className="text-[10px] leading-4 text-sky-700">
+                      {draft.userGoal}
+                    </div>
+                    <div>
+                      <span className="font-medium text-slate-700">
+                        {t("capabilityDraft.panel.field.permissions", "权限：")}
+                      </span>
+                      {summarizeCapabilityDraftPermissions(
+                        draft,
+                        presentationCopy,
+                      )}
+                    </div>
+                    <div>
+                      <span className="font-medium text-slate-700">
+                        {t("capabilityDraft.panel.field.files", "文件：")}
+                      </span>
+                      {summarizeCapabilityDraftFiles(draft, presentationCopy)}
+                    </div>
+                    <div>
+                      <span className="font-medium text-slate-700">
                         {t(
-                          "capabilityDraft.panel.evidence.subtitle",
-                          "本次 verification report",
+                          "capabilityDraft.panel.field.verification",
+                          "验证：",
                         )}
                       </span>
+                      {summarizeCapabilityDraftVerification(
+                        draft,
+                        presentationCopy,
+                      )}
                     </div>
-                    <div className="mt-2 space-y-2">
-                      {evidenceChecks.slice(0, 2).map((check) => (
-                        <div key={check.id} className="space-y-1.5">
-                          <div className="text-[11px] leading-5 text-slate-600">
-                            {check.label || check.id}
-                          </div>
-                          <div className="grid gap-1.5 sm:grid-cols-2">
-                            {check.evidence.slice(0, 6).map((evidence) => (
-                              <div
-                                key={`${check.id}:${evidence.key}`}
-                                className="rounded-xl border border-sky-100 bg-white px-2.5 py-1.5"
-                              >
-                                <div className="text-[10px] leading-4 text-slate-400">
-                                  {formatEvidenceKey(
-                                    evidence.key,
-                                    evidenceLabels,
-                                  )}
-                                </div>
-                                <div className="truncate font-mono text-[10px] leading-4 text-slate-700">
-                                  {formatEvidenceValue(evidence)}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
+                    <div>
+                      <span className="font-medium text-slate-700">
+                        {t(
+                          "capabilityDraft.panel.field.registration",
+                          "注册：",
+                        )}
+                      </span>
+                      {summarizeCapabilityDraftRegistration(
+                        draft,
+                        presentationCopy,
+                      )}
+                    </div>
+                    <div className="text-amber-700">
+                      {status.description}
+                      {!canRun &&
+                      !canRegister &&
+                      draft.verificationStatus !== "registered"
+                        ? t(
+                            "capabilityDraft.panel.guard.noEntry",
+                            " 当前没有运行、注册或自动化入口。",
+                          )
+                        : null}
+                      {canRegister
+                        ? t(
+                            "capabilityDraft.panel.guard.registerOnly",
+                            " 注册只会复制为 Workspace 本地 Skill，不会立即运行。",
+                          )
+                        : null}
+                      {draft.verificationStatus === "registered"
+                        ? t(
+                            "capabilityDraft.panel.guard.registeredNoEntry",
+                            " 当前没有运行或自动化入口。",
+                          )
+                        : null}
                     </div>
                   </div>
-                ) : null}
+                  {evidenceChecks.length > 0 ? (
+                    <div className="mt-3 rounded-[18px] border border-sky-100 bg-sky-50 px-3 py-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-[11px] font-semibold text-slate-800">
+                          {t(
+                            "capabilityDraft.panel.evidence.title",
+                            "验证证据",
+                          )}
+                        </span>
+                        <span className="text-[10px] leading-4 text-sky-700">
+                          {t(
+                            "capabilityDraft.panel.evidence.subtitle",
+                            "本次 verification report",
+                          )}
+                        </span>
+                      </div>
+                      <div className="mt-2 space-y-2">
+                        {evidenceChecks.slice(0, 2).map((check) => (
+                          <div key={check.id} className="space-y-1.5">
+                            <div className="text-[11px] leading-5 text-slate-600">
+                              {check.label || check.id}
+                            </div>
+                            <div className="grid gap-1.5 sm:grid-cols-2">
+                              {check.evidence.slice(0, 6).map((evidence) => (
+                                <div
+                                  key={`${check.id}:${evidence.key}`}
+                                  className="rounded-xl border border-sky-100 bg-white px-2.5 py-1.5"
+                                >
+                                  <div className="text-[10px] leading-4 text-slate-400">
+                                    {formatEvidenceKey(
+                                      evidence.key,
+                                      evidenceLabels,
+                                    )}
+                                  </div>
+                                  <div className="truncate font-mono text-[10px] leading-4 text-slate-700">
+                                    {formatEvidenceValue(evidence)}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </details>
                 {canVerify || canRegister ? (
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/80 pt-3">
                     <p className="text-[11px] leading-5 text-slate-500">
                       {canRegister
                         ? t(
                             "capabilityDraft.panel.action.registerHelp",
-                            "注册只写当前 Workspace 的 .agents/skills，不接运行或自动化。",
+                            "保存后会出现在“已保存技能”里，你可以再选择试用或设置定时运行。",
                           )
                         : t(
                             "capabilityDraft.panel.action.verifyHelp",
-                            "只做静态门禁检查，不执行草案脚本。",
+                            "先检查结构和权限，不会自动运行这条技能。",
                           )}
                     </p>
                     <div className="flex flex-wrap items-center gap-2">
@@ -630,7 +653,7 @@ export function CapabilityDraftPanel({
                               isVerifying && "animate-spin",
                             )}
                           />
-                          {t("capabilityDraft.panel.action.verify", "运行验证")}
+                          {t("capabilityDraft.panel.action.verify", "检查")}
                         </Button>
                       ) : null}
                       {canRegister ? (
@@ -653,7 +676,7 @@ export function CapabilityDraftPanel({
                           />
                           {t(
                             "capabilityDraft.panel.action.register",
-                            "注册到 Workspace",
+                            "保存到项目",
                           )}
                         </Button>
                       ) : null}

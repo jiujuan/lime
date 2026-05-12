@@ -55,6 +55,8 @@ const {
   mockExecutionRunListGeneralWorkbenchHistory,
   mockExecutionRunGet,
   mockSkillExecutionGetDetail,
+  mockGetAutomationJobs,
+  mockCreateAutomationJob,
   mockSkillsGetAll,
   mockSkillsGetLocal,
   mockCloseAgentRuntimeSubagent,
@@ -121,6 +123,8 @@ const {
   mockExecutionRunListGeneralWorkbenchHistory: vi.fn(),
   mockExecutionRunGet: vi.fn(),
   mockSkillExecutionGetDetail: vi.fn(),
+  mockGetAutomationJobs: vi.fn(),
+  mockCreateAutomationJob: vi.fn(),
   mockSkillsGetAll: vi.fn(),
   mockSkillsGetLocal: vi.fn(),
   mockCloseAgentRuntimeSubagent: vi.fn(),
@@ -701,6 +705,11 @@ vi.mock("@/lib/api/skill-execution", () => ({
   },
 }));
 
+vi.mock("@/lib/api/automation", () => ({
+  getAutomationJobs: () => mockGetAutomationJobs(),
+  createAutomationJob: (request: unknown) => mockCreateAutomationJob(request),
+}));
+
 vi.mock("@/lib/api/skills", () => ({
   skillsApi: {
     getAll: mockSkillsGetAll,
@@ -928,6 +937,53 @@ async function waitForElement(
   return null;
 }
 
+function collectPendingA2UIFormIds(): Array<string | null> {
+  return mockWorkspacePendingA2UIPanel.mock.calls.map((call) => {
+    const props = call[0] as
+      | {
+          pendingA2UIForm?: {
+            id?: string;
+          } | null;
+        }
+      | undefined;
+    return props?.pendingA2UIForm?.id ?? null;
+  });
+}
+
+async function waitForPendingA2UIForm(
+  predicate: (form: { id?: string } | null | undefined) => boolean,
+  attempts = 30,
+) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const matchedCall = mockWorkspacePendingA2UIPanel.mock.calls
+      .slice()
+      .reverse()
+      .find((call) => {
+        const props = call[0] as
+          | {
+              pendingA2UIForm?: {
+                id?: string;
+              } | null;
+            }
+          | undefined;
+        return predicate(props?.pendingA2UIForm);
+      });
+    if (matchedCall) {
+      const props = matchedCall[0] as
+        | {
+            pendingA2UIForm?: {
+              id?: string;
+            } | null;
+          }
+        | undefined;
+      return props?.pendingA2UIForm ?? null;
+    }
+    await flushEffects(1);
+  }
+
+  return null;
+}
+
 function getSendMessageCall(callIndex = 0) {
   const call = sharedSendMessageMock.mock.calls[callIndex];
   if (!call) {
@@ -1145,6 +1201,11 @@ beforeEach(() => {
     execution_mode: "prompt",
     has_workflow: false,
     workflow_steps: [],
+  });
+  mockGetAutomationJobs.mockResolvedValue([]);
+  mockCreateAutomationJob.mockResolvedValue({
+    id: "automation-job-1",
+    name: "自动化任务",
   });
   mockSkillsGetAll.mockResolvedValue([]);
   mockSkillsGetLocal.mockResolvedValue([]);
@@ -7096,7 +7157,6 @@ describe("AgentChatPage 服务技能 A2UI", () => {
       },
     });
     await waitForElement(container, '[data-testid="layout-transition"]');
-    await flushEffects(12);
 
     expect(
       container
@@ -7104,21 +7164,22 @@ describe("AgentChatPage 服务技能 A2UI", () => {
         ?.getAttribute("data-mode"),
     ).toBe("chat");
 
-    const latestPendingPanelProps = mockWorkspacePendingA2UIPanel.mock.calls.at(
-      -1,
-    )?.[0] as
-      | {
-          pendingA2UIForm?: {
-            id?: string;
-            components?: Array<Record<string, unknown>>;
-          } | null;
-        }
-      | undefined;
+    const pendingA2UIForm = (await waitForPendingA2UIForm(
+      (form) =>
+        form?.id ===
+        "service-skill-launch:daily-trend-briefing:daily-trend-briefing:20260409",
+    )) as {
+      id?: string;
+      components?: Array<Record<string, unknown>>;
+    } | null;
 
-    expect(latestPendingPanelProps?.pendingA2UIForm?.id).toBe(
+    expect(
+      pendingA2UIForm?.id,
+      `pending A2UI 调用历史：${JSON.stringify(collectPendingA2UIFormIds())}`,
+    ).toBe(
       "service-skill-launch:daily-trend-briefing:daily-trend-briefing:20260409",
     );
-    expect(latestPendingPanelProps?.pendingA2UIForm?.components || []).toEqual(
+    expect(pendingA2UIForm?.components || []).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           id: expect.stringContaining(":prefill-hint"),
@@ -7134,6 +7195,53 @@ describe("AgentChatPage 服务技能 A2UI", () => {
         }),
       ]),
     );
+  });
+
+  it("从挂起服务技能补参态新建任务时，应清掉旧补参表单", async () => {
+    installMockAgentChatUnifiedState(createMockAgentChatUnifiedState());
+
+    const mounted = mountPage({
+      projectId: "project-service-skill-a2ui",
+      contentId: "content-service-skill-a2ui",
+      theme: "general",
+      lockTheme: true,
+      initialPendingServiceSkillLaunch: {
+        skillId: "daily-trend-briefing",
+        requestKey: 20260409,
+        initialSlotValues: {
+          industry_keywords: "",
+          schedule_time: "每天 10:00",
+        },
+        prefillHint: "已根据 Skills 页入口推荐自动预填。",
+      },
+    });
+
+    const pendingFormBefore = await waitForPendingA2UIForm((form) =>
+      Boolean(form?.id?.includes("service-skill-launch:daily-trend-briefing")),
+    );
+    expect(
+      pendingFormBefore?.id,
+      `pending A2UI 调用历史：${JSON.stringify(collectPendingA2UIFormIds())}`,
+    ).toContain("service-skill-launch");
+
+    expect(requestTaskCenterDraftTask({ source: "sidebar" })).toBe(true);
+    await flushEffects();
+    mounted.rerender();
+    await flushEffects();
+
+    expect(
+      mounted.container.querySelector(
+        '[data-testid^="task-center-tab-task-draft-"][data-active="true"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      await waitForElement(mounted.container, '[data-testid="empty-state"]'),
+    ).not.toBeNull();
+    expect(
+      mounted.container.querySelector(
+        '[data-testid="workspace-pending-a2ui-panel"]',
+      ),
+    ).toBeNull();
   });
 });
 

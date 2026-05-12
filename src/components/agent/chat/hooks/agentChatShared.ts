@@ -8,6 +8,7 @@ import type {
   AgentRuntimeStatus,
   Message,
   MessageImage,
+  MessageImageWorkbenchPreview,
   WriteArtifactContext,
 } from "../types";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
@@ -73,6 +74,8 @@ export interface AssistantDraftState {
   content?: string;
   initialRuntimeStatus?: AgentRuntimeStatus;
   waitingRuntimeStatus?: AgentRuntimeStatus;
+  imageWorkbenchPreview?: MessageImageWorkbenchPreview;
+  preserveContent?: boolean;
 }
 
 export interface SlashSkillRequest {

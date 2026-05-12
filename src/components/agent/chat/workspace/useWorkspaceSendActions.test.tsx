@@ -92,6 +92,7 @@ const mockFinalizeAfterSendSuccess = vi.fn();
 const mockRollbackAfterSendFailure = vi.fn();
 const mockSetInput = vi.fn();
 const mockSetMentionedCharacters = vi.fn();
+const mockSetChatMessages = vi.fn();
 const mockSetChatToolPreferences = vi.fn();
 const mockEnsureBrowserAssistCanvas = vi.fn(async () => true);
 const mockHandleAutoLaunchMatchedSiteSkill = vi.fn(async () => undefined);
@@ -450,6 +451,7 @@ function mountHook(initialProps?: Partial<HookProps>): HookHarness {
     contentId: null,
     workspaceRequestMetadataBase: undefined,
     messages: [],
+    setChatMessages: mockSetChatMessages,
     bootstrapDispatchPreview: null,
     sendMessage: mockSendMessage,
     resolveSendBoundary: (({ sourceText }) => ({
@@ -734,6 +736,50 @@ describe("useWorkspaceSendActions", () => {
       });
       expect(sendOptions?.providerOverride).toBeUndefined();
       expect(sendOptions?.modelOverride).toBeUndefined();
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("普通视觉 brief 没有 @命令时应先确认画图，不直接进入长方案或图片主链", async () => {
+    const harness = mountHook();
+
+    try {
+      await act(async () => {
+        const started = await harness
+          .getValue()
+          .handleSend(
+            [],
+            false,
+            false,
+            "青柠新品发布海报，竖版 4:5，水彩插画风格，清爽绿色调，留出标题区：鲜榨灵感",
+            "react",
+          );
+        expect(started).toBe(true);
+      });
+
+      expect(mockResolveImageWorkbenchSkillRequest).not.toHaveBeenCalled();
+      expect(mockPrepareRuntimeTeamBeforeSend).not.toHaveBeenCalled();
+      expect(mockSendMessage).not.toHaveBeenCalled();
+      expect(mockSetChatMessages).toHaveBeenCalledTimes(1);
+      const applyLocalMessages = mockSetChatMessages.mock.calls[0]?.[0] as
+        | ((previous: Message[]) => Message[])
+        | undefined;
+      expect(applyLocalMessages).toBeTypeOf("function");
+      const nextMessages = applyLocalMessages?.([]);
+      expect(nextMessages?.[0]).toMatchObject({
+        role: "user",
+        content:
+          "青柠新品发布海报，竖版 4:5，水彩插画风格，清爽绿色调，留出标题区：鲜榨灵感",
+      });
+      expect(nextMessages?.[1]).toMatchObject({
+        role: "assistant",
+        content: "这看起来是图片生成需求，要我直接调用画图功能生成吗？",
+      });
+      expect(nextMessages?.[1]?.isThinking).toBeUndefined();
+      expect(nextMessages?.[1]?.runtimeStatus).toBeUndefined();
+      expect(mockSetInput).toHaveBeenCalledWith("");
+      expect(mockFinalizeAfterSendSuccess).toHaveBeenCalledTimes(1);
     } finally {
       harness.unmount();
     }
@@ -1325,12 +1371,94 @@ describe("useWorkspaceSendActions", () => {
             },
           },
         },
+        assistantDraft: {
+          content:
+            "好嘞，给你生成一组春日咖啡馆插画\n先获取下工具参数\n马上生成",
+          preserveContent: true,
+          imageWorkbenchPreview: {
+            prompt: "一张春日咖啡馆插画",
+            mode: "generate",
+            status: "running",
+            expectedImageCount: 2,
+          },
+        },
       });
       expect(listMentionEntryUsage()).toEqual([
         expect.objectContaining({
           kind: "builtin_command",
           entryId: "image_generate",
           replayText: "16:9 一张春日咖啡馆插画 出 2 张",
+        }),
+      ]);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("@Nanobanana Pro 首次发送应在同一 assistant draft 中显示极简图片轻卡", async () => {
+    mockResolveImageWorkbenchSkillRequest.mockReturnValueOnce({
+      images: [],
+      requestContext: {
+        kind: "image_task",
+        image_task: {
+          mode: "generate",
+          prompt: "一张广州塔，从花城汇看过去的春天的照片",
+          raw_text:
+            "@Nanobanana Pro 生成一张广州塔，从花城汇看过去的春天的照片",
+          count: 1,
+          provider_id: "fal",
+          model: "fal-ai/nano-banana-pro",
+        },
+      },
+    });
+    const harness = mountHook({
+      input: "@Nanobanana Pro 生成一张广州塔，从花城汇看过去的春天的照片",
+    });
+
+    try {
+      await act(async () => {
+        const started = await harness.getValue().handleSend();
+        expect(started).toBe(true);
+      });
+
+      const sendOptions = mockSendMessage.mock.calls[0]?.[8];
+      expect(sendOptions).toMatchObject({
+        assistantDraft: {
+          content:
+            "好嘞，用 Nanobanana Pro 给你生成一张广州塔，从花城汇看过去的春天的照片\n先获取下工具参数\n马上生成",
+          preserveContent: true,
+          imageWorkbenchPreview: {
+            prompt: "一张广州塔，从花城汇看过去的春天的照片",
+            mode: "generate",
+            status: "running",
+            providerName: "fal",
+            modelName: "fal-ai/nano-banana-pro",
+            expectedImageCount: 1,
+          },
+        },
+        requestMetadata: {
+          harness: {
+            image_skill_launch: {
+              image_task: {
+                model: "fal-ai/nano-banana-pro",
+                provider_id: "fal",
+              },
+            },
+          },
+        },
+      });
+      expect(
+        sendOptions?.assistantDraft?.imageWorkbenchPreview?.taskId,
+      ).toMatch(/^draft-image-/);
+      expect(sendOptions?.assistantDraft?.content).not.toContain("任务 ID");
+      expect(sendOptions?.assistantDraft?.content).not.toContain(
+        "Image Workbench",
+      );
+      expect(listMentionEntryUsage()).toEqual([
+        expect.objectContaining({
+          kind: "builtin_command",
+          entryId: "image_generate_nanobanana_pro",
+          replayText: "一张广州塔，从花城汇看过去的春天的照片",
         }),
       ]);
     } finally {

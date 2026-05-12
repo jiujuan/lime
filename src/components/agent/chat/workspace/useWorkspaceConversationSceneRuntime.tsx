@@ -349,6 +349,7 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   serviceSkillGroups: ConversationScenePresentationParams["scene"]["serviceSkillGroups"];
   skillsLoading: ConversationScenePresentationParams["scene"]["isSkillsLoading"];
   onSelectServiceSkill?: ConversationScenePresentationParams["scene"]["onSelectServiceSkill"];
+  initialInputCapability?: ConversationScenePresentationParams["scene"]["initialInputCapability"];
   handleNavigateToSkillSettings: ConversationScenePresentationParams["scene"]["onNavigateToSettings"];
   handleRefreshSkills: ConversationScenePresentationParams["scene"]["onRefreshSkills"];
   handleOpenBrowserAssistInCanvas: ConversationScenePresentationParams["scene"]["onLaunchBrowserAssist"];
@@ -512,6 +513,7 @@ export function useWorkspaceConversationSceneRuntime({
   serviceSkillGroups,
   skillsLoading,
   onSelectServiceSkill,
+  initialInputCapability,
   handleNavigateToSkillSettings,
   handleRefreshSkills,
   handleOpenBrowserAssistInCanvas,
@@ -1123,6 +1125,7 @@ export function useWorkspaceConversationSceneRuntime({
         ? navigationActions.handleOpenAppearanceSettings
         : undefined,
       runtimeToolAvailability: inputbarScene.runtimeToolAvailability,
+      initialInputCapability,
       knowledgePackSelection: inputbarScene.knowledgePackSelection,
       knowledgePackOptions: inputbarScene.knowledgePackOptions,
       onToggleKnowledgePack: inputbarScene.onToggleKnowledgePack,

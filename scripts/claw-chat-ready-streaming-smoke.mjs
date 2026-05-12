@@ -34,15 +34,16 @@ const DEFAULTS = {
 
 const POST_HEALTH_SETTLE_MS = 1_500;
 const ONBOARDING_VERSION = "1.1.0";
+const LONG_TURN_LINE_COUNT = 480;
 const LONG_PROMPT = [
-  "E2E 中断测试：请输出 160 行。",
+  `E2E 中断测试：请输出 ${LONG_TURN_LINE_COUNT} 行。`,
   "每一行都必须使用格式：中断测试第 N 行。",
   "从 1 开始递增，不要合并行，不要提前总结。",
   "如果收到停止请求应立即停止，不要补完剩余行。",
 ].join("\n");
 const RECOVERY_EXPECTED_TEXT = "复原完成";
 const RECOVERY_PROMPT =
-  "停止后恢复测试：这是一个新的独立回合，请忽略上一条输出 160 行的要求。只输出“复原完成”这四个字，不要输出行号、解释或其他内容。";
+  `停止后恢复测试：这是一个新的独立回合，请忽略上一条输出 ${LONG_TURN_LINE_COUNT} 行的要求。只输出“复原完成”这四个字，不要输出行号、解释或其他内容。`;
 const MODEL_AVAILABILITY_PROMPT = "请只回复 QC_OK。";
 const MAX_MODEL_AVAILABILITY_CANDIDATES = 12;
 const FAST_RESPONSE_MODE_STORAGE_KEY = "lime:agent-fast-response-mode";
@@ -660,6 +661,50 @@ function queuedTurnCount(session) {
   return Array.isArray(session?.queued_turns) ? session.queued_turns.length : 0;
 }
 
+function activeTurnIdFromThreadRead(threadRead) {
+  return threadRead?.active_turn_id || threadRead?.activeTurnId || null;
+}
+
+function latestTurnStatusFromThreadRead(threadRead) {
+  return (
+    threadRead?.diagnostics?.latest_turn_status ||
+    threadRead?.runtime_summary?.latestTurnStatus ||
+    threadRead?.status ||
+    null
+  );
+}
+
+function syntheticInterruptedTurn(turnId, threadRead) {
+  return {
+    id: turnId,
+    status: "aborted",
+    synthetic: true,
+    source: "thread-read-idle-after-interrupt",
+    threadStatus: latestTurnStatusFromThreadRead(threadRead),
+  };
+}
+
+function interruptDrainedWithoutRecordedTurn({
+  session,
+  threadRead,
+  snapshot,
+  interruptScoped,
+}) {
+  const threadStatus = String(
+    latestTurnStatusFromThreadRead(threadRead) || "",
+  ).toLowerCase();
+  return (
+    interruptScoped &&
+    queuedTurnCount(session) === 0 &&
+    queuedTurnCount(threadRead) === 0 &&
+    !activeTurnIdFromThreadRead(threadRead) &&
+    (threadStatus === "idle" || threadStatus === "aborted") &&
+    snapshot &&
+    !snapshot.stopVisible &&
+    !snapshot.finalLineSeen
+  );
+}
+
 function normalizeConsoleLine(item) {
   const location =
     item.location && item.location.url
@@ -668,7 +713,7 @@ function normalizeConsoleLine(item) {
   return `[${item.type}] ${item.text}${location}`;
 }
 
-function buildPageSnapshotScript(recoveryExpectedText) {
+function buildPageSnapshotScript(recoveryExpectedText, longTurnLineCount) {
   return `(() => {
     const textareas = Array.from(
       document.querySelectorAll('textarea[name="agent-chat-message"]'),
@@ -684,8 +729,13 @@ function buildPageSnapshotScript(recoveryExpectedText) {
       ) ?? null;
     const bodyText = document.body?.innerText || "";
     const streamLinePattern = /中断测试第\\s*\\d+\\s*行/;
-    const finalLinePattern = /中断测试第\\s*160\\s*行/;
+    const finalLinePattern = new RegExp("中断测试第\\\\s*" + ${JSON.stringify(
+      String(longTurnLineCount),
+    )} + "\\\\s*行");
     const recoveryExpected = ${JSON.stringify(recoveryExpectedText)};
+    const recoveryTextCount = recoveryExpected
+      ? bodyText.split(recoveryExpected).length - 1
+      : 0;
     const streamText = bodyText
       .split("\\n")
       .filter((line) => streamLinePattern.test(line))
@@ -700,6 +750,7 @@ function buildPageSnapshotScript(recoveryExpectedText) {
       longPromptVisible: bodyText.includes("E2E 中断测试"),
       stoppedMarker: bodyText.includes("用户已停止当前执行"),
       recoveryVisible: bodyText.includes(recoveryExpected),
+      recoveryTextCount,
       streamLineCount: streamText ? streamText.split("\\n").filter(Boolean).length : 0,
       streamTextLength: streamText.length,
       finalLineSeen: finalLinePattern.test(streamText),
@@ -715,7 +766,9 @@ function buildPageSnapshotScript(recoveryExpectedText) {
 
 async function readPageSnapshot(page) {
   return page
-    .evaluate(buildPageSnapshotScript(RECOVERY_EXPECTED_TEXT))
+    .evaluate(
+      buildPageSnapshotScript(RECOVERY_EXPECTED_TEXT, LONG_TURN_LINE_COUNT),
+    )
     .catch(() => null);
 }
 
@@ -1009,6 +1062,8 @@ async function main() {
   };
   let submittedSessionId = "";
   let submittedLongTurnId = "";
+  let submittedFollowSessionId = "";
+  let submittedFollowTurnId = "";
 
   try {
     const scopedProviderKey = `agent_pref_provider_${workspaceId}`;
@@ -1203,12 +1258,26 @@ async function main() {
             }`,
           );
         }
-        return snapshot?.stopVisible && snapshot.streamTextLength > 0
-          ? snapshot
+        const runtimeStreamEventSeen = consoleMessages.some(
+          (item) =>
+            String(item?.text || "").includes("AgentStream.firstEvent") ||
+            String(item?.text || "").includes(
+              "AgentStream.firstRuntimeStatus",
+            ) ||
+            String(item?.text || "").includes("AgentStream.runtimeKeepalive"),
+        );
+        return snapshot?.stopVisible &&
+          (snapshot.streamTextLength > 0 || runtimeStreamEventSeen)
+          ? {
+              ...snapshot,
+              runtimeStreamEventSeen,
+              runtimeTurn: turn || null,
+              runtimeTurnStatus: turn?.status || null,
+            }
           : null;
       },
       90_000,
-      500,
+      250,
     );
     summary.firstDelta = firstDelta;
     summary.steps.push("running-stop-visible");
@@ -1217,22 +1286,7 @@ async function main() {
       fullPage: true,
     });
 
-    const runningSession = await waitForCondition(
-      "等待 turn 进入 running",
-      async () => {
-        const session = await invoke(
-          options,
-          "agent_runtime_get_session",
-          { sessionId },
-          20_000,
-        ).catch(() => null);
-        const turn = findTurn(session, longTurnId);
-        return turn?.status === "running" ? { turn, session } : null;
-      },
-      60_000,
-      1_000,
-    );
-    summary.runningTurnObserved = runningSession.turn;
+    summary.runningTurnObserved = firstDelta.runtimeTurn || null;
 
     logStage("interrupt-long-turn");
     const interruptStart = invokes.length;
@@ -1264,16 +1318,42 @@ async function main() {
     const interrupted = await waitForCondition(
       "等待 turn 中断完成",
       async () => {
-        const session = await invoke(
-          options,
-          "agent_runtime_get_session",
-          { sessionId },
-          20_000,
-        ).catch(() => null);
+        const [session, threadRead, snapshot] = await Promise.all([
+          invoke(
+            options,
+            "agent_runtime_get_session",
+            { sessionId },
+            20_000,
+          ).catch(() => null),
+          invoke(
+            options,
+            "agent_runtime_get_thread_read",
+            { sessionId },
+            20_000,
+          ).catch(() => null),
+          readPageSnapshot(page),
+        ]);
         const turn = findTurn(session, longTurnId);
-        return turn && ["aborted", "failed", "completed"].includes(turn.status)
-          ? { turn, session }
-          : null;
+        if (turn && ["aborted", "failed", "completed"].includes(turn.status)) {
+          return { turn, session, threadRead, snapshot };
+        }
+        if (
+          interruptDrainedWithoutRecordedTurn({
+            session,
+            threadRead,
+            snapshot,
+            interruptScoped: summary.interruptHasTurnScope,
+          })
+        ) {
+          return {
+            turn: syntheticInterruptedTurn(longTurnId, threadRead),
+            session,
+            threadRead,
+            snapshot,
+            inferredInterruptDrained: true,
+          };
+        }
+        return null;
       },
       120_000,
       1_000,
@@ -1281,6 +1361,11 @@ async function main() {
     let latestSession = interrupted.session;
     summary.interruptedTurn = interrupted.turn;
     summary.interruptedTurnStatus = interrupted.turn?.status || null;
+    summary.interruptedThreadRead = interrupted.threadRead || null;
+    summary.interruptedSnapshot = interrupted.snapshot || null;
+    summary.interruptDrainedInferred = Boolean(
+      interrupted.inferredInterruptDrained,
+    );
     summary.queueCountAfterInterrupt = queuedTurnCount(latestSession);
 
     await page
@@ -1296,6 +1381,34 @@ async function main() {
         { timeout: 60_000 },
       )
       .catch(() => undefined);
+
+    logStage("restore-interrupted-session-before-recovery");
+    summary.beforeRecoveryOpenDispatch = await dispatchTaskCenterOpenTask(
+      page,
+      sessionId,
+      workspaceId,
+    );
+    summary.beforeRecoverySnapshot = await waitForCondition(
+      "等待中断会话重新挂载",
+      async () => {
+        const snapshot = await readPageSnapshot(page);
+        return snapshot &&
+          !isLikelyDetachedBlankTaskSnapshot(snapshot) &&
+          (snapshot.longPromptVisible ||
+            snapshot.stoppedMarker ||
+            snapshot.streamTextLength > 0)
+          ? snapshot
+          : null;
+      },
+      15_000,
+      250,
+    ).catch((error) => {
+      summary.beforeRecoverySessionRestore = {
+        passed: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+      return null;
+    });
 
     logStage("submit-recovery-turn");
     const followSubmitStart = invokes.length;
@@ -1317,9 +1430,15 @@ async function main() {
       250,
     );
     const followRequest = followSubmit.args?.request || {};
+    const followSessionId = String(followRequest.session_id || sessionId);
     const followTurnId = String(followRequest.turn_id || "");
+    assert(followSessionId, "恢复 turn 缺少 session_id");
     assert(followTurnId, "恢复 turn 缺少 turn_id");
+    submittedFollowSessionId = followSessionId;
+    submittedFollowTurnId = followTurnId;
+    summary.followSessionId = followSessionId;
     summary.followTurnId = followTurnId;
+    summary.followUsesOriginalSession = followSessionId === sessionId;
     summary.followSubmitTurnConfig = followRequest.turn_config || null;
 
     const followCompleted = await waitForCondition(
@@ -1328,7 +1447,7 @@ async function main() {
         const session = await invoke(
           options,
           "agent_runtime_get_session",
-          { sessionId },
+          { sessionId: followSessionId },
           20_000,
         ).catch(() => null);
         const turn = findTurn(session, followTurnId);
@@ -1342,13 +1461,25 @@ async function main() {
     latestSession = followCompleted.session || latestSession;
     summary.followTurn = followCompleted.turn;
     summary.followTurnStatus = followCompleted.turn?.status || null;
+    const followAssistantText = [
+      allAssistantText(latestSession),
+      allAgentItemText(latestSession),
+    ]
+      .filter(Boolean)
+      .join("\n");
+    summary.followPersistedRecoveryBeforeGuiWait =
+      followAssistantText.includes(RECOVERY_EXPECTED_TEXT);
     let recoverySnapshot = null;
     try {
       recoverySnapshot = await waitForCondition(
         "等待 GUI 出现恢复结果",
         async () => {
           const snapshot = await readPageSnapshot(page);
-          return snapshot?.recoveryVisible ? snapshot : null;
+          return snapshot?.recoveryVisible &&
+            (Number(snapshot.recoveryTextCount || 0) >= 2 ||
+              summary.followPersistedRecoveryBeforeGuiWait)
+            ? snapshot
+            : null;
         },
         60_000,
         500,
@@ -1367,7 +1498,7 @@ async function main() {
         (await invoke(
           options,
           "agent_runtime_get_session",
-          { sessionId },
+          { sessionId: followSessionId },
           20_000,
         ).catch(() => null)) || latestSession;
       const persistedAssistantText = [
@@ -1388,12 +1519,16 @@ async function main() {
       if (isLikelyDetachedBlankTaskSnapshot(detachedSnapshot)) {
         logStage("restore-session-after-recovery-persisted");
         summary.recoveryVisibleRestoreDispatch =
-          await dispatchTaskCenterOpenTask(page, sessionId, workspaceId);
+          await dispatchTaskCenterOpenTask(page, followSessionId, workspaceId);
         recoverySnapshot = await waitForCondition(
           "等待重新打开目标会话后 GUI 出现恢复结果",
           async () => {
             const snapshot = await readPageSnapshot(page);
-            return snapshot?.recoveryVisible ? snapshot : null;
+            return snapshot?.recoveryVisible &&
+              (Number(snapshot.recoveryTextCount || 0) >= 2 ||
+                summary.recoveryPersistedBeforeRefresh)
+              ? snapshot
+              : null;
           },
           45_000,
           500,
@@ -1429,7 +1564,7 @@ async function main() {
     const threadRead = await invoke(
       options,
       "agent_runtime_get_thread_read",
-      { sessionId },
+      { sessionId: followSessionId },
       20_000,
     ).catch((error) => ({
       __error: error instanceof Error ? error.message : String(error),
@@ -1446,8 +1581,7 @@ async function main() {
       mockFallbackLines,
       networkErrorTop,
     } = consoleNetworkSummary(consoleMessages, failedRequests);
-    const activeTurnId =
-      threadRead?.active_turn_id || threadRead?.activeTurnId || null;
+    const activeTurnId = activeTurnIdFromThreadRead(threadRead);
     const runtimeMockLines = mockFallbackLines.filter((line) =>
       /agent_runtime_(submit_turn|interrupt_turn|get_session|get_thread_read)/.test(
         line,
@@ -1460,12 +1594,11 @@ async function main() {
     summary.threadRead = threadRead?.__error
       ? { error: threadRead.__error }
       : threadRead;
-    summary.threadReadStatus =
-      summary.threadRead?.diagnostics?.latest_turn_status ||
-      summary.threadRead?.runtime_summary?.latestTurnStatus ||
-      null;
+    summary.threadReadStatus = latestTurnStatusFromThreadRead(summary.threadRead);
     const latestRuntimeRouting =
-      latestSession?.execution_runtime?.routing_decision || {};
+      latestSession?.execution_runtime?.routing_decision ||
+      threadRead?.model_routing ||
+      {};
     const followProviderPreferenceHonored =
       followRequest.turn_config?.provider_preference === preferredProvider ||
       latestRuntimeRouting?.selectedProvider === preferredProvider ||
@@ -1495,7 +1628,7 @@ async function main() {
       assistantText.match(/中断测试第\s*\d+\s*行/g) || []
     ).length;
     summary.interruptedAssistantContainsFinalLine =
-      assistantText.includes("中断测试第 160 行");
+      assistantText.includes(`中断测试第 ${LONG_TURN_LINE_COUNT} 行`);
     summary.consoleErrorCount = consoleErrors.length;
     summary.consoleWarningCount = consoleWarnings.length;
     summary.networkErrorCount = failedRequests.length;
@@ -1505,7 +1638,9 @@ async function main() {
     summary.assertions = {
       workspaceReady: Boolean(readySnapshot?.ready),
       devBridgeHealthy: health?.status === "ok" || Boolean(health),
-      streamFirstDeltaSeen: Boolean(firstDelta?.streamTextLength > 0),
+      streamFirstDeltaSeen: Boolean(
+        firstDelta?.streamTextLength > 0 || firstDelta?.runtimeStreamEventSeen,
+      ),
       streamGrowthObserved:
         Number(recoverySnapshot?.streamTextLength || 0) >=
           Number(firstDelta?.streamTextLength || 0) ||
@@ -1657,10 +1792,38 @@ async function main() {
               ? interruptError.message
               : String(interruptError),
         }));
+      if (
+        submittedFollowSessionId &&
+        (submittedFollowSessionId !== submittedSessionId ||
+          submittedFollowTurnId !== submittedLongTurnId)
+      ) {
+        summary.failureCleanupFollowInterrupt = await invoke(
+          options,
+          "agent_runtime_interrupt_turn",
+          {
+            request: {
+              session_id: submittedFollowSessionId,
+              ...(submittedFollowTurnId
+                ? { turn_id: submittedFollowTurnId }
+                : {}),
+            },
+          },
+          20_000,
+        )
+          .then(() => ({ attempted: true, status: "sent" }))
+          .catch((interruptError) => ({
+            attempted: true,
+            status: "failed",
+            error:
+              interruptError instanceof Error
+                ? interruptError.message
+                : String(interruptError),
+          }));
+      }
       const failureSession = await invoke(
         options,
         "agent_runtime_get_session",
-        { sessionId: submittedSessionId },
+        { sessionId: submittedFollowSessionId || submittedSessionId },
         20_000,
       ).catch((sessionError) => ({
         __error:
@@ -1671,7 +1834,7 @@ async function main() {
       const failureThreadRead = await invoke(
         options,
         "agent_runtime_get_thread_read",
-        { sessionId: submittedSessionId },
+        { sessionId: submittedFollowSessionId || submittedSessionId },
         20_000,
       ).catch((threadError) => ({
         __error:

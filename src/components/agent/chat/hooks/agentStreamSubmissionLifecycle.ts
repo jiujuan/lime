@@ -47,6 +47,7 @@ export interface StreamRequestState {
   queuedDraftCleanupTimerId?: ReturnType<typeof setTimeout> | null;
   pendingTextRenderTimerId?: ReturnType<typeof setTimeout> | null;
   renderedContent?: string;
+  preservedAssistantContentInitialized?: boolean;
   performanceTrace?: AgentUiPerformanceTraceMetadata | null;
 }
 

@@ -470,6 +470,23 @@ describe("useWorkspaceServiceSkillEntryActions", () => {
     expect(getValue().pendingServiceSkillLaunchForm).toBeNull();
   });
 
+  it("清理当前入口状态时应移除挂起的技能补参表单", async () => {
+    const { render, getValue } = renderHook();
+    await render();
+
+    act(() => {
+      getValue().handleServiceSkillSelect(createBrowserServiceSkill());
+    });
+    expect(getValue().pendingServiceSkillLaunchForm).not.toBeNull();
+
+    act(() => {
+      getValue().clearPendingServiceSkillLaunch();
+    });
+
+    expect(getValue().pendingServiceSkillLaunchForm).toBeNull();
+    expect(getValue().pendingServiceSkillLaunchSource).toBeNull();
+  });
+
   it("站点型技能主按钮应进入 Claw 工作区并复用当前主稿", async () => {
     const onNavigate = vi.fn();
     const recordServiceSkillUsage = vi.fn();

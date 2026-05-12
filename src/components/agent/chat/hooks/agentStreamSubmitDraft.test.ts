@@ -153,6 +153,61 @@ describe("agentStreamSubmitDraft", () => {
     expect(isSending).toBe(true);
   });
 
+  it("图片 assistant draft 应直接挂载图片轻卡预览", () => {
+    let messages: Message[] = [];
+    let isSending = false;
+
+    prepareAgentStreamSubmitDraft({
+      content: "@Nanobanana Pro 生成广州塔春天照片",
+      images: [],
+      skipUserMessage: false,
+      expectingQueue: false,
+      assistantMsgId: "assistant-image",
+      userMsgId: "user-image",
+      assistantDraft: {
+        content:
+          "好嘞，用 Nanobanana Pro 给你生成一张广州塔春天照片\n先获取下工具参数\n马上生成",
+        preserveContent: true,
+        imageWorkbenchPreview: {
+          taskId: "draft-image-1",
+          prompt: "一张广州塔春天照片",
+          mode: "generate",
+          status: "running",
+          modelName: "fal-ai/nano-banana-pro",
+          expectedImageCount: 1,
+        },
+      },
+      effectiveExecutionStrategy: "react",
+      webSearch: false,
+      thinking: false,
+      setMessages: createStateSetter(
+        () => messages,
+        (value) => {
+          messages = value;
+        },
+      ),
+      setIsSending: createStateSetter(
+        () => isSending,
+        (value) => {
+          isSending = value;
+        },
+      ),
+    });
+
+    expect(messages[1]).toMatchObject({
+      id: "assistant-image",
+      content:
+        "好嘞，用 Nanobanana Pro 给你生成一张广州塔春天照片\n先获取下工具参数\n马上生成",
+      imageWorkbenchPreview: {
+        taskId: "draft-image-1",
+        prompt: "一张广州塔春天照片",
+        status: "running",
+        modelName: "fal-ai/nano-banana-pro",
+      },
+    });
+    expect(isSending).toBe(true);
+  });
+
   it("带性能 trace 时应记录 assistant 草稿插入与绘制指标", () => {
     let messages: Message[] = [];
     let isSending = false;

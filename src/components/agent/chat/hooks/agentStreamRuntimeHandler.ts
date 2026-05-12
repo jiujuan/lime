@@ -164,6 +164,7 @@ interface StreamRequestState {
   prefilledMessageSnapshotReplayOffset?: number;
   prefilledMessageSnapshotText?: string | null;
   renderedContent?: string;
+  preservedAssistantContentInitialized?: boolean;
   hiddenThinkingPartsCleared?: boolean;
   performanceTrace?: AgentUiPerformanceTraceMetadata | null;
   agentUiEventSequence?: number;
@@ -236,6 +237,7 @@ interface HandleTurnStreamEventOptions {
   resolvedWorkspaceId: string;
   effectiveExecutionStrategy: AsterExecutionStrategy;
   surfaceThinkingDeltas?: boolean;
+  preserveAssistantContent?: string | null;
   content: string;
   runtime: AgentRuntimeAdapter;
   webSearch?: boolean;
@@ -319,6 +321,7 @@ export function handleTurnStreamEvent({
   resolvedWorkspaceId,
   effectiveExecutionStrategy,
   surfaceThinkingDeltas = true,
+  preserveAssistantContent,
   content,
   runtime,
   webSearch,
@@ -350,6 +353,16 @@ export function handleTurnStreamEvent({
     playTypewriterSound,
     appendThinkingToParts,
   } = callbacks;
+  const preservedAssistantContent = preserveAssistantContent?.trim() || null;
+  const shouldPreserveAssistantContent = Boolean(preservedAssistantContent);
+  if (
+    preservedAssistantContent &&
+    !requestState.preservedAssistantContentInitialized
+  ) {
+    requestState.accumulatedContent = preservedAssistantContent;
+    requestState.renderedContent = preservedAssistantContent;
+    requestState.preservedAssistantContentInitialized = true;
+  }
 
   const projectionEvents = buildAgentUiProjectionEvents(data, {
     sequence: (requestState.agentUiEventSequence ?? 0) + 1,
@@ -669,6 +682,7 @@ export function handleTurnStreamEvent({
       {
         const snapshotText = extractVisibleTextFromAgentMessage(data.message);
         const shouldPrefillVisibleText =
+          !shouldPreserveAssistantContent &&
           data.message.role === "assistant" &&
           !requestState.renderedContent &&
           !requestState.accumulatedContent &&
@@ -982,6 +996,9 @@ export function handleTurnStreamEvent({
     case "text_delta_batch": {
       activateStream();
       clearOptimisticItem();
+      if (shouldPreserveAssistantContent) {
+        break;
+      }
       let visibleTextDelta = data.text;
       {
         const visibleDelta = resolveVisibleTextDeltaAfterSnapshotPrefill({

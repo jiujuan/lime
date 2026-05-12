@@ -1,4 +1,5 @@
 import { Clock3, Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -36,6 +37,8 @@ export function SelectedSessionInlineCollaborationSection({
   selectedSessionInputDraft,
   selectedSessionInputMessage,
 }: SelectedSessionInlineCollaborationSectionProps) {
+  const { t } = useTranslation("agent");
+
   if (!canWaitSelectedSession && !canSendSelectedSessionInput) {
     return null;
   }
@@ -44,10 +47,14 @@ export function SelectedSessionInlineCollaborationSection({
     <div className={inlineDetailSectionClassName}>
       <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
         <Clock3 className="h-3.5 w-3.5" />
-        <span>继续处理</span>
+        <span>
+          {t("agentChat.teamWorkspace.selectedSession.collaboration.heading")}
+        </span>
         {canWaitSelectedSession ? (
           <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium tracking-normal text-slate-600 normal-case">
-            可直接查看结果
+            {t(
+              "agentChat.teamWorkspace.selectedSession.collaboration.waitReady",
+            )}
           </span>
         ) : null}
       </div>
@@ -64,11 +71,15 @@ export function SelectedSessionInlineCollaborationSection({
               <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
             ) : null}
             {selectedActionPending && pendingAction === "wait"
-              ? "等待中..."
-              : "等待结果 30 秒"}
+              ? t(
+                  "agentChat.teamWorkspace.selectedSession.collaboration.waitPending",
+                )
+              : t("agentChat.teamWorkspace.selectedSession.collaboration.wait")}
           </Button>
           <span className="text-xs leading-5 text-slate-500">
-            仅在当前内容确实依赖这项任务结果时使用。
+            {t(
+              "agentChat.teamWorkspace.selectedSession.collaboration.waitHint",
+            )}
           </span>
         </div>
       ) : null}
@@ -79,7 +90,9 @@ export function SelectedSessionInlineCollaborationSection({
             onChange={(event) =>
               onSelectedSessionInputDraftChange(event.target.value)
             }
-            placeholder="给这项任务补充说明、补充约束，或请它继续推进下一步。"
+            placeholder={t(
+              "agentChat.teamWorkspace.selectedSession.collaboration.inputPlaceholder",
+            )}
             className="min-h-[96px] resize-y border-slate-200 bg-white text-sm text-slate-700 placeholder:text-slate-400"
             data-testid="team-workspace-send-input-textarea"
           />
@@ -94,8 +107,12 @@ export function SelectedSessionInlineCollaborationSection({
                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
               ) : null}
               {selectedActionPending && pendingAction === "send"
-                ? "发送中..."
-                : "发送说明"}
+                ? t(
+                    "agentChat.teamWorkspace.selectedSession.collaboration.sendPending",
+                  )
+                : t(
+                    "agentChat.teamWorkspace.selectedSession.collaboration.send",
+                  )}
             </Button>
             <Button
               type="button"
@@ -108,11 +125,17 @@ export function SelectedSessionInlineCollaborationSection({
                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
               ) : null}
               {selectedActionPending && pendingAction === "interrupt_send"
-                ? "中断中..."
-                : "立即插入说明"}
+                ? t(
+                    "agentChat.teamWorkspace.selectedSession.collaboration.interruptPending",
+                  )
+                : t(
+                    "agentChat.teamWorkspace.selectedSession.collaboration.interrupt",
+                  )}
             </Button>
             <span className="text-xs leading-5 text-slate-500">
-              这条说明只会发送给当前任务，不影响其他并行任务。
+              {t(
+                "agentChat.teamWorkspace.selectedSession.collaboration.inputHint",
+              )}
             </span>
           </div>
         </div>

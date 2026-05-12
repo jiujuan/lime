@@ -239,7 +239,7 @@ describe("submitOpRuntimeCompaction", () => {
     expect(result.shouldSubmitModelPreference).toBe(true);
   });
 
-  it("图片生成命令应让后端图片路由解析模型，不应提交当前聊天模型偏好", () => {
+  it("图片生成命令新会话应提交编排聊天模型 provider_config，但不锁定图片模型偏好", () => {
     const requestMetadata = {
       harness: {
         image_skill_launch: {
@@ -278,7 +278,56 @@ describe("submitOpRuntimeCompaction", () => {
 
     expect(result.shouldSubmitProviderPreference).toBe(false);
     expect(result.shouldSubmitModelPreference).toBe(false);
+    expect(result.providerConfig).toEqual({
+      provider_id: "deepseek",
+      provider_name: "deepseek",
+      model_name: "deepseek-v4-flash",
+    });
     expect(result.metadata).toBe(requestMetadata);
+  });
+
+  it("图片生成命令已有会话模型时不重复提交编排 provider_config", () => {
+    const requestMetadata = {
+      harness: {
+        image_skill_launch: {
+          skill_name: "image_generate",
+          image_task: {
+            prompt: "生成一张公众号封面",
+            provider_id: "fal",
+            model: "fal-ai/nano-banana-pro",
+            runtime_contract: {
+              contract_key: "image_generation",
+              routing_slot: "image_generation_model",
+            },
+          },
+        },
+      },
+    };
+
+    const result = buildSubmitOpRuntimeCompaction({
+      requestMetadata,
+      executionRuntime: {
+        session_id: "session-image-1",
+        source: "runtime_snapshot",
+        provider_selector: "deepseek",
+        model_name: "deepseek-v4-flash",
+      },
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: {
+        providerType: "deepseek",
+        model: "deepseek-v4-flash",
+      },
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "react",
+      effectiveProviderType: "deepseek",
+      effectiveModel: "deepseek-v4-flash",
+      webSearch: false,
+      thinking: false,
+    });
+
+    expect(result.providerConfig).toBeUndefined();
+    expect(result.shouldSubmitProviderPreference).toBe(false);
+    expect(result.shouldSubmitModelPreference).toBe(false);
   });
 
   it("应将 legacy general workbench alias runtime 视为 general_workbench 做裁剪", () => {

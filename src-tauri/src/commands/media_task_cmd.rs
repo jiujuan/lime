@@ -4752,12 +4752,12 @@ pub(crate) fn create_image_generation_task_artifact_inner(
 
     let mode = normalize_mode(request.mode.clone())?;
     let normalized_storyboard_slots = normalize_storyboard_slots(request.storyboard_slots.clone());
-    let count = normalize_positive_count(Some(
-        request
-            .count
-            .unwrap_or(normalized_storyboard_slots.len() as u32)
-            .max(normalized_storyboard_slots.len() as u32),
-    ))?;
+    let requested_count = request.count.or_else(|| {
+        let slot_count = normalized_storyboard_slots.len() as u32;
+        (slot_count > 0).then_some(slot_count)
+    });
+    let count = normalize_positive_count(requested_count)
+        .map(|count| count.max(normalized_storyboard_slots.len() as u32))?;
     let size = normalize_optional_string(request.size.clone());
     let aspect_ratio = normalize_optional_string(request.aspect_ratio.clone());
     let usage = normalize_optional_string(request.usage.clone());
@@ -5468,6 +5468,24 @@ mod tests {
                 .get("executor_mode")
                 .and_then(Value::as_str),
             Some("responses_image_generation")
+        );
+    }
+
+    #[test]
+    fn image_generation_task_should_default_missing_count_to_one() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let mut request = minimal_image_generation_request(
+            temp_dir.path().to_string_lossy().to_string(),
+            Some("gpt-image-1"),
+        );
+        request.count = None;
+
+        let created = create_image_generation_task_artifact_inner(request)
+            .expect("create image task without explicit count");
+
+        assert_eq!(
+            created.record.payload.get("count").and_then(Value::as_u64),
+            Some(1)
         );
     }
 

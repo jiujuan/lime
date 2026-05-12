@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   defaultAgentRuntimeEventSource,
   dedupeAgentRuntimeEventNames,
@@ -15,7 +16,11 @@ import {
   type TeamWorkspaceRuntimeSessionSnapshot,
   type TeamWorkspaceRuntimeStatus,
 } from "../teamWorkspaceRuntime";
-import { type SessionLiveStreamState } from "../team-workspace-runtime/liveRuntimeProjector";
+import {
+  buildLiveRuntimeProjectorCopy,
+  type LiveRuntimeProjectorTranslate,
+  type SessionLiveStreamState,
+} from "../team-workspace-runtime/liveRuntimeProjector";
 import {
   subscribeTeamWorkspaceStatusEvents,
   subscribeTeamWorkspaceStreamEvents,
@@ -122,6 +127,18 @@ export function useTeamWorkspaceRuntime(
     subagentParentContext = null,
   } = options;
   const { eventSource = defaultAgentRuntimeEventSource } = deps;
+  const { t } = useTranslation("agent");
+  const translateLiveRuntime = useCallback<LiveRuntimeProjectorTranslate>(
+    (key, options) => String(t(key as never, options as never)),
+    [t],
+  );
+  const liveRuntimeCopy = useMemo(
+    () =>
+      buildLiveRuntimeProjectorCopy({
+        translate: translateLiveRuntime,
+      }),
+    [translateLiveRuntime],
+  );
   const [liveRuntimeBySessionId, setLiveRuntimeBySessionId] = useState<
     Record<string, TeamWorkspaceLiveRuntimeState>
   >({});
@@ -323,6 +340,7 @@ export function useTeamWorkspaceRuntime(
       setLiveRuntimeBySessionId,
       setLiveActivityBySessionId,
       scheduleActivityRefresh,
+      copy: liveRuntimeCopy,
     }).then((nextUnsubscribe) => {
       if (disposed) {
         nextUnsubscribe();
@@ -340,6 +358,7 @@ export function useTeamWorkspaceRuntime(
     activeSessionKey,
     currentSessionId,
     eventSource,
+    liveRuntimeCopy,
     subagentParentContext?.parent_session_id,
     scheduleActivityRefresh,
   ]);
@@ -370,6 +389,7 @@ export function useTeamWorkspaceRuntime(
       setLiveRuntimeBySessionId,
       setLiveActivityBySessionId,
       scheduleActivityRefresh,
+      copy: liveRuntimeCopy,
     }).then((nextUnsubscribe) => {
       if (disposed) {
         nextUnsubscribe();
@@ -387,6 +407,7 @@ export function useTeamWorkspaceRuntime(
     activeSessionKey,
     activeSnapshots,
     eventSource,
+    liveRuntimeCopy,
     scheduleActivityRefresh,
     setStreamState,
     setToolNames,

@@ -1,4 +1,5 @@
 import { Bot, Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 
 type SelectedSessionInlineDetailAction =
@@ -42,16 +43,22 @@ export function SelectedSessionInlineHeader({
   selectedActionPending,
   selectedSession,
 }: SelectedSessionInlineHeaderProps) {
+  const { t } = useTranslation("agent");
+
   return (
     <>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
             <Bot className="h-3.5 w-3.5" />
-            <span>当前查看</span>
+            <span>
+              {t("agentChat.teamWorkspace.selectedSession.header.eyebrow")}
+            </span>
             {selectedSession.isCurrent ? (
               <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium tracking-normal text-slate-600 normal-case">
-                当前任务
+                {t(
+                  "agentChat.teamWorkspace.selectedSession.header.currentTaskBadge",
+                )}
               </span>
             ) : null}
           </div>
@@ -76,8 +83,12 @@ export function SelectedSessionInlineHeader({
                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
               ) : null}
               {selectedActionPending && pendingAction === "resume"
-                ? "继续中..."
-                : "继续处理"}
+                ? t(
+                    "agentChat.teamWorkspace.selectedSession.header.action.resumePending",
+                  )
+                : t(
+                    "agentChat.teamWorkspace.selectedSession.header.action.resume",
+                  )}
             </Button>
           ) : null}
           {canStopSelectedSession ? (
@@ -92,8 +103,12 @@ export function SelectedSessionInlineHeader({
                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
               ) : null}
               {selectedActionPending && pendingAction === "close"
-                ? "暂停中..."
-                : "暂停处理"}
+                ? t(
+                    "agentChat.teamWorkspace.selectedSession.header.action.closePending",
+                  )
+                : t(
+                    "agentChat.teamWorkspace.selectedSession.header.action.close",
+                  )}
             </Button>
           ) : null}
           {canOpenSelectedSession ? (
@@ -103,7 +118,13 @@ export function SelectedSessionInlineHeader({
               variant="outline"
               onClick={() => void onOpenSelectedSession?.()}
             >
-              {isChildSession ? "切换进展" : "打开进展"}
+              {isChildSession
+                ? t(
+                    "agentChat.teamWorkspace.selectedSession.header.action.openChild",
+                  )
+                : t(
+                    "agentChat.teamWorkspace.selectedSession.header.action.open",
+                  )}
             </Button>
           ) : null}
         </div>

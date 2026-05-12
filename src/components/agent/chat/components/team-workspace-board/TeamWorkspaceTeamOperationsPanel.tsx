@@ -1,4 +1,6 @@
 import { Activity } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { formatNumber } from "@/i18n/format";
 import { cn } from "@/lib/utils";
 import {
   formatOperationUpdatedAt,
@@ -18,6 +20,9 @@ export function TeamWorkspaceTeamOperationsPanel({
   teamOperationEntries,
   useCompactCanvasChrome,
 }: TeamWorkspaceTeamOperationsPanelProps) {
+  const { i18n, t } = useTranslation("agent");
+  const locale = i18n.resolvedLanguage || i18n.language;
+
   if (teamOperationEntries.length === 0) {
     return null;
   }
@@ -25,9 +30,13 @@ export function TeamWorkspaceTeamOperationsPanel({
   const heading = (
     <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
       <Activity className="h-3.5 w-3.5" />
-      <span>任务进展</span>
+      <span>{t("agentChat.teamWorkspace.operations.heading")}</span>
       <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium tracking-normal text-slate-600 normal-case">
-        最近 {teamOperationEntries.length} 条
+        {t("agentChat.teamWorkspace.operations.recentCount", {
+          formattedCount: formatNumber(teamOperationEntries.length, {
+            locale,
+          }),
+        })}
       </span>
     </div>
   );
@@ -45,7 +54,10 @@ export function TeamWorkspaceTeamOperationsPanel({
             {entry.title}
           </span>
           <span className="text-[11px] text-slate-500">
-            {formatOperationUpdatedAt(entry.updatedAt)}
+            {formatOperationUpdatedAt(entry.updatedAt, {
+              locale,
+              nowLabel: t("agentChat.teamWorkspace.operations.updatedNow"),
+            })}
           </span>
         </div>
         <p

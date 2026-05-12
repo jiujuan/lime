@@ -1160,7 +1160,9 @@ describe("CharacterMention", () => {
       "当你需要复用本地写作 Skill 时使用。",
     );
     expect(document.body.textContent).toContain("需要：主题、受众与语气要求");
-    expect(document.body.textContent).toContain("交付：带着该 Skill 进入生成");
+    expect(document.body.textContent).toContain(
+      "交付：带着这个技能回到首页输入框",
+    );
   });
 
   it("只有最近使用的服务技能时，不应同时出现空态文案", async () => {
@@ -2293,7 +2295,9 @@ describe("CharacterMention", () => {
     );
     expect(document.body.textContent).toContain("脚本助手");
     expect(document.body.textContent).toContain("需要：主题、受众与语气要求");
-    expect(document.body.textContent).toContain("交付：带着该 Skill 进入生成");
+    expect(document.body.textContent).toContain(
+      "交付：带着这个技能回到首页输入框",
+    );
   });
 
   it("slash 面板打开后新增本地 skill 使用记录时，应即时刷新继续上次 Skill分组", async () => {

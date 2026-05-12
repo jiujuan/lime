@@ -1,19 +1,23 @@
 import type { AsterSubagentSkillInfo } from "@/lib/api/agentRuntime";
-import { formatRelativeTime } from "@/lib/api/project";
+import {
+  formatDate,
+  formatNumber,
+  formatRelativeTime as formatRelativeTimeUnit,
+} from "@/i18n/format";
+import agentSourceResource from "@/i18n/resources/zh-CN/agent.json";
 import type { TeamRoleDefinition } from "../utils/teamDefinitions";
 import { normalizeTeamWorkspaceDisplayValue } from "../utils/teamWorkspaceDisplay";
 import { getTeamPresetOption } from "../utils/teamPresets";
 import {
   buildTeamWorkspaceSkillDisplayName,
-  resolveTeamWorkspaceDisplayRuntimeStatusLabel,
   resolveTeamWorkspaceRoleHintLabel,
-  resolveTeamWorkspaceStableProcessingLabel,
 } from "../utils/teamWorkspaceCopy";
 import {
   mergeSessionActivityEntries,
   resolveRuntimeMemberStatusMeta,
   type TeamWorkspaceActivityEntry,
   type TeamWorkspaceRuntimeMember,
+  type TeamWorkspaceRuntimeMemberStatus,
   type TeamWorkspaceRuntimeStatus,
 } from "../teamWorkspaceRuntime";
 import {
@@ -23,46 +27,316 @@ import {
 
 const SESSION_LANE_PREVIEW_ENTRY_LIMIT = 3;
 
-const STATUS_META: Record<
-  NonNullable<TeamWorkspaceRuntimeStatus> | "idle",
+type TeamWorkspaceCanvasLaneRuntimeStatus =
+  | NonNullable<TeamWorkspaceRuntimeStatus>
+  | "idle";
+
+type TeamWorkspaceCanvasLaneResourceKey =
+  | "agentChat.teamWorkspace.canvasLane.empty.completed"
+  | "agentChat.teamWorkspace.canvasLane.empty.default"
+  | "agentChat.teamWorkspace.canvasLane.empty.failed"
+  | "agentChat.teamWorkspace.canvasLane.empty.queued"
+  | "agentChat.teamWorkspace.canvasLane.empty.running"
+  | "agentChat.teamWorkspace.canvasLane.empty.syncFailed"
+  | "agentChat.teamWorkspace.canvasLane.empty.syncLoading"
+  | "agentChat.teamWorkspace.canvasLane.memberHint.completed"
+  | "agentChat.teamWorkspace.canvasLane.memberHint.connected"
+  | "agentChat.teamWorkspace.canvasLane.memberHint.failed"
+  | "agentChat.teamWorkspace.canvasLane.memberHint.running"
+  | "agentChat.teamWorkspace.canvasLane.memberHint.spawning"
+  | "agentChat.teamWorkspace.canvasLane.memberHint.waiting"
+  | "agentChat.teamWorkspace.canvasLane.memberHint.waitingAssignment"
+  | "agentChat.teamWorkspace.canvasLane.planned.badge"
+  | "agentChat.teamWorkspace.canvasLane.planned.statusHint"
+  | "agentChat.teamWorkspace.canvasLane.planned.updatedAt"
+  | "agentChat.teamWorkspace.canvasLane.runtime.updatedAtWaiting"
+  | "agentChat.teamWorkspace.canvasLane.runtimeDetail.processingCount"
+  | "agentChat.teamWorkspace.canvasLane.runtimeDetail.recentProgress"
+  | "agentChat.teamWorkspace.canvasLane.runtimeDetail.stableProcessing"
+  | "agentChat.teamWorkspace.canvasLane.runtimeDetail.waitingCount"
+  | "agentChat.teamWorkspace.canvasLane.session.summaryEmpty"
+  | "agentChat.teamWorkspace.canvasLane.updatedNow"
+  | "agentChat.teamWorkspace.formation.memberStatus.completed"
+  | "agentChat.teamWorkspace.formation.memberStatus.failed"
+  | "agentChat.teamWorkspace.formation.memberStatus.planned"
+  | "agentChat.teamWorkspace.formation.memberStatus.running"
+  | "agentChat.teamWorkspace.formation.memberStatus.spawning"
+  | "agentChat.teamWorkspace.formation.memberStatus.waiting"
+  | "agentChat.teamWorkspace.runtimeStatus.aborted"
+  | "agentChat.teamWorkspace.runtimeStatus.closed"
+  | "agentChat.teamWorkspace.runtimeStatus.completed"
+  | "agentChat.teamWorkspace.runtimeStatus.failed"
+  | "agentChat.teamWorkspace.runtimeStatus.idle"
+  | "agentChat.teamWorkspace.runtimeStatus.queued"
+  | "agentChat.teamWorkspace.runtimeStatus.running";
+
+export type TeamWorkspaceCanvasLaneTranslate = (
+  key: TeamWorkspaceCanvasLaneResourceKey,
+  options?: Record<string, unknown>,
+) => string;
+
+export interface TeamWorkspaceRuntimeDetailCopy {
+  formatProcessingCount: (activeCount: number, totalCount: number) => string;
+  formatRecentProgress: (status: string) => string;
+  formatWaitingCount: (count: number) => string;
+  getRuntimeStatusLabel: (
+    status?: TeamWorkspaceRuntimeStatus | "idle",
+  ) => string;
+  stableProcessingLabel: string;
+}
+
+export interface TeamWorkspaceCanvasLaneCopy extends TeamWorkspaceRuntimeDetailCopy {
+  emptyCompleted: string;
+  emptyDefault: string;
+  emptyFailed: string;
+  emptyQueued: string;
+  emptyRunning: string;
+  emptySyncFailed: string;
+  emptySyncLoading: string;
+  formatUpdatedAt: (updatedAt?: number) => string;
+  getMemberStatusHint: (
+    status: TeamWorkspaceRuntimeMemberStatus,
+    hasSession: boolean,
+  ) => string;
+  getMemberStatusLabel: (status: TeamWorkspaceRuntimeMemberStatus) => string;
+  plannedBadge: string;
+  plannedStatusHint: string;
+  plannedUpdatedAt: string;
+  runtimeUpdatedAtWaiting: string;
+  sessionSummaryEmpty: string;
+}
+
+type AgentSourceResourceKey = keyof typeof agentSourceResource;
+
+function interpolateCanvasLaneSourceTemplate(
+  template: string,
+  values?: Record<string, unknown>,
+): string {
+  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, name) => {
+    const value = values?.[name];
+    return value == null ? match : String(value);
+  });
+}
+
+function translateCanvasLaneSourceKey(
+  key: TeamWorkspaceCanvasLaneResourceKey,
+  values?: Record<string, unknown>,
+): string {
+  const template = agentSourceResource[key as AgentSourceResourceKey] ?? key;
+  return interpolateCanvasLaneSourceTemplate(template, values);
+}
+
+function formatRelativeUpdatedAt(params: {
+  locale?: string | null;
+  updatedAt?: number;
+  updatedNow: string;
+}): string {
+  if (!params.updatedAt) {
+    return params.updatedNow;
+  }
+
+  const timestamp = params.updatedAt * 1000;
+  const diff = Date.now() - timestamp;
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+  const week = 7 * day;
+  const month = 30 * day;
+
+  if (diff < minute) {
+    return params.updatedNow;
+  }
+  if (diff < hour) {
+    return formatRelativeTimeUnit(-Math.floor(diff / minute), "minute", {
+      locale: params.locale,
+      numeric: "auto",
+    });
+  }
+  if (diff < day) {
+    return formatRelativeTimeUnit(-Math.floor(diff / hour), "hour", {
+      locale: params.locale,
+      numeric: "auto",
+    });
+  }
+  if (diff < week) {
+    return formatRelativeTimeUnit(-Math.floor(diff / day), "day", {
+      locale: params.locale,
+      numeric: "auto",
+    });
+  }
+  if (diff < month) {
+    return formatRelativeTimeUnit(-Math.floor(diff / week), "week", {
+      locale: params.locale,
+      numeric: "auto",
+    });
+  }
+
+  return formatDate(timestamp, { locale: params.locale });
+}
+
+function resolveRuntimeStatusKey(
+  status?: TeamWorkspaceRuntimeStatus | "idle",
+): TeamWorkspaceCanvasLaneResourceKey {
+  return `agentChat.teamWorkspace.runtimeStatus.${status ?? "idle"}` as TeamWorkspaceCanvasLaneResourceKey;
+}
+
+function resolveMemberStatusKey(
+  status: TeamWorkspaceRuntimeMemberStatus,
+): TeamWorkspaceCanvasLaneResourceKey {
+  return `agentChat.teamWorkspace.formation.memberStatus.${status}` as TeamWorkspaceCanvasLaneResourceKey;
+}
+
+export function buildTeamWorkspaceCanvasLaneCopy(params: {
+  locale?: string | null;
+  translate: TeamWorkspaceCanvasLaneTranslate;
+}): TeamWorkspaceCanvasLaneCopy {
+  const formatCount = (count: number) =>
+    formatNumber(count, { locale: params.locale });
+
+  return {
+    emptyCompleted: params.translate(
+      "agentChat.teamWorkspace.canvasLane.empty.completed",
+    ),
+    emptyDefault: params.translate(
+      "agentChat.teamWorkspace.canvasLane.empty.default",
+    ),
+    emptyFailed: params.translate(
+      "agentChat.teamWorkspace.canvasLane.empty.failed",
+    ),
+    emptyQueued: params.translate(
+      "agentChat.teamWorkspace.canvasLane.empty.queued",
+    ),
+    emptyRunning: params.translate(
+      "agentChat.teamWorkspace.canvasLane.empty.running",
+    ),
+    emptySyncFailed: params.translate(
+      "agentChat.teamWorkspace.canvasLane.empty.syncFailed",
+    ),
+    emptySyncLoading: params.translate(
+      "agentChat.teamWorkspace.canvasLane.empty.syncLoading",
+    ),
+    formatProcessingCount: (activeCount, totalCount) =>
+      params.translate(
+        "agentChat.teamWorkspace.canvasLane.runtimeDetail.processingCount",
+        {
+          activeCount: formatCount(activeCount),
+          totalCount: formatCount(totalCount),
+        },
+      ),
+    formatRecentProgress: (status) =>
+      params.translate(
+        "agentChat.teamWorkspace.canvasLane.runtimeDetail.recentProgress",
+        { status },
+      ),
+    formatUpdatedAt: (updatedAt) =>
+      formatRelativeUpdatedAt({
+        locale: params.locale,
+        updatedAt,
+        updatedNow: params.translate(
+          "agentChat.teamWorkspace.canvasLane.updatedNow",
+        ),
+      }),
+    formatWaitingCount: (count) =>
+      params.translate(
+        "agentChat.teamWorkspace.canvasLane.runtimeDetail.waitingCount",
+        { formattedCount: formatCount(count) },
+      ),
+    getMemberStatusHint: (status, hasSession) => {
+      if (status === "spawning") {
+        return params.translate(
+          "agentChat.teamWorkspace.canvasLane.memberHint.spawning",
+        );
+      }
+      if (status === "running") {
+        return params.translate(
+          "agentChat.teamWorkspace.canvasLane.memberHint.running",
+        );
+      }
+      if (status === "waiting") {
+        return params.translate(
+          "agentChat.teamWorkspace.canvasLane.memberHint.waiting",
+        );
+      }
+      if (status === "completed") {
+        return params.translate(
+          "agentChat.teamWorkspace.canvasLane.memberHint.completed",
+        );
+      }
+      if (status === "failed") {
+        return params.translate(
+          "agentChat.teamWorkspace.canvasLane.memberHint.failed",
+        );
+      }
+      return params.translate(
+        hasSession
+          ? "agentChat.teamWorkspace.canvasLane.memberHint.connected"
+          : "agentChat.teamWorkspace.canvasLane.memberHint.waitingAssignment",
+      );
+    },
+    getMemberStatusLabel: (status) =>
+      params.translate(resolveMemberStatusKey(status)),
+    getRuntimeStatusLabel: (status) =>
+      params.translate(resolveRuntimeStatusKey(status)),
+    plannedBadge: params.translate(
+      "agentChat.teamWorkspace.canvasLane.planned.badge",
+    ),
+    plannedStatusHint: params.translate(
+      "agentChat.teamWorkspace.canvasLane.planned.statusHint",
+    ),
+    plannedUpdatedAt: params.translate(
+      "agentChat.teamWorkspace.canvasLane.planned.updatedAt",
+    ),
+    runtimeUpdatedAtWaiting: params.translate(
+      "agentChat.teamWorkspace.canvasLane.runtime.updatedAtWaiting",
+    ),
+    sessionSummaryEmpty: params.translate(
+      "agentChat.teamWorkspace.canvasLane.session.summaryEmpty",
+    ),
+    stableProcessingLabel: params.translate(
+      "agentChat.teamWorkspace.canvasLane.runtimeDetail.stableProcessing",
+    ),
+  };
+}
+
+const SOURCE_TEAM_WORKSPACE_CANVAS_LANE_COPY = buildTeamWorkspaceCanvasLaneCopy(
   {
-    label: string;
+    locale: "zh-CN",
+    translate: translateCanvasLaneSourceKey,
+  },
+);
+
+const STATUS_STYLE_META: Record<
+  TeamWorkspaceCanvasLaneRuntimeStatus,
+  {
     badgeClassName: string;
     dotClassName: string;
   }
 > = {
   idle: {
-    label: resolveTeamWorkspaceDisplayRuntimeStatusLabel(undefined),
     badgeClassName: "border border-slate-200 bg-white text-slate-600",
     dotClassName: "bg-slate-300",
   },
   queued: {
-    label: resolveTeamWorkspaceDisplayRuntimeStatusLabel("queued"),
     badgeClassName: "border border-amber-200 bg-amber-50 text-amber-700",
     dotClassName: "bg-amber-400",
   },
   running: {
-    label: resolveTeamWorkspaceDisplayRuntimeStatusLabel("running"),
     badgeClassName: "border border-sky-200 bg-sky-50 text-sky-700",
     dotClassName: "bg-sky-500",
   },
   completed: {
-    label: resolveTeamWorkspaceDisplayRuntimeStatusLabel("completed"),
     badgeClassName: "border border-emerald-200 bg-emerald-50 text-emerald-700",
     dotClassName: "bg-emerald-500",
   },
   failed: {
-    label: resolveTeamWorkspaceDisplayRuntimeStatusLabel("failed"),
     badgeClassName: "border border-rose-200 bg-rose-50 text-rose-700",
     dotClassName: "bg-rose-500",
   },
   aborted: {
-    label: resolveTeamWorkspaceDisplayRuntimeStatusLabel("aborted"),
     badgeClassName: "border border-rose-200 bg-rose-50 text-rose-700",
     dotClassName: "bg-rose-500",
   },
   closed: {
-    label: resolveTeamWorkspaceDisplayRuntimeStatusLabel("closed"),
     badgeClassName: "border border-slate-200 bg-slate-100 text-slate-600",
     dotClassName: "bg-slate-400",
   },
@@ -128,19 +402,22 @@ export interface TeamWorkspaceCanvasLane {
   previewEntries?: TeamWorkspaceActivityEntry[];
 }
 
-function resolveStatusMeta(status?: TeamWorkspaceRuntimeStatus) {
-  return STATUS_META[status ?? "idle"];
+function resolveStatusMeta(
+  status?: TeamWorkspaceRuntimeStatus,
+  copy: Pick<
+    TeamWorkspaceRuntimeDetailCopy,
+    "getRuntimeStatusLabel"
+  > = SOURCE_TEAM_WORKSPACE_CANVAS_LANE_COPY,
+) {
+  const normalizedStatus = status ?? "idle";
+  return {
+    ...STATUS_STYLE_META[normalizedStatus],
+    label: copy.getRuntimeStatusLabel(normalizedStatus),
+  };
 }
 
 function normalizeComparableText(value?: string | null): string {
   return value?.trim().toLocaleLowerCase() || "";
-}
-
-function formatUpdatedAt(updatedAt?: number) {
-  if (!updatedAt) {
-    return "刚刚";
-  }
-  return formatRelativeTime(updatedAt * 1000);
 }
 
 function buildSkillDisplayName(skill: AsterSubagentSkillInfo): string {
@@ -149,6 +426,7 @@ function buildSkillDisplayName(skill: AsterSubagentSkillInfo): string {
 
 export function buildRuntimeDetailSummary(
   session?: TeamWorkspaceRuntimeDetailSession | null,
+  copy: TeamWorkspaceRuntimeDetailCopy = SOURCE_TEAM_WORKSPACE_CANVAS_LANE_COPY,
 ): string | null {
   if (!session) {
     return null;
@@ -157,89 +435,84 @@ export function buildRuntimeDetailSummary(
   const parts: string[] = [];
   const waitingCount = session.teamQueuedCount ?? session.queuedTurnCount ?? 0;
   if (waitingCount > 0) {
-    parts.push(`等待中 ${waitingCount}`);
+    parts.push(copy.formatWaitingCount(waitingCount));
   }
   if (session.latestTurnStatus) {
-    parts.push(`最近进展 ${resolveStatusMeta(session.latestTurnStatus).label}`);
+    parts.push(
+      copy.formatRecentProgress(
+        resolveStatusMeta(session.latestTurnStatus, copy).label,
+      ),
+    );
   }
   if (
     session.teamActiveCount !== undefined &&
     session.teamParallelBudget !== undefined
   ) {
     parts.push(
-      `处理中 ${session.teamActiveCount}/${session.teamParallelBudget}`,
+      copy.formatProcessingCount(
+        session.teamActiveCount,
+        session.teamParallelBudget,
+      ),
     );
   }
   if (
     session.providerParallelBudget === 1 &&
     session.providerConcurrencyGroup
   ) {
-    parts.push(resolveTeamWorkspaceStableProcessingLabel());
+    parts.push(copy.stableProcessingLabel);
   }
 
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 function buildSessionLaneEmptyState(params: {
+  copy: TeamWorkspaceCanvasLaneCopy;
   session?: TeamWorkspaceCanvasLaneSession | null;
   previewState?: SessionActivityPreviewState | null;
 }) {
-  const { session, previewState } = params;
+  const { copy, session, previewState } = params;
 
   if (previewState?.status === "error") {
     return (
       normalizeTeamWorkspaceDisplayValue(previewState.errorMessage) ||
-      "同步最新内容失败"
+      copy.emptySyncFailed
     );
   }
 
   if (previewState?.status === "loading") {
-    return "正在同步这项任务的最新内容...";
+    return copy.emptySyncLoading;
   }
 
   if (session?.runtimeStatus === "queued") {
-    return "这项任务已经收到安排，马上开始处理。";
+    return copy.emptyQueued;
   }
 
   if (session?.runtimeStatus === "running") {
-    return "这项任务正在处理，最新进展会持续刷新到这里。";
+    return copy.emptyRunning;
   }
 
   if (session?.runtimeStatus === "completed") {
-    return "这部分已经完成，结果会继续汇入当前内容。";
+    return copy.emptyCompleted;
   }
 
   if (
     session?.runtimeStatus === "failed" ||
     session?.runtimeStatus === "aborted"
   ) {
-    return "这一步没有顺利完成，你可以在下方查看细节并决定是否继续。";
+    return copy.emptyFailed;
   }
 
-  return "这项任务暂时还没有产出可展示的内容。";
+  return copy.emptyDefault;
 }
 
 function buildCanvasLaneTitleSummary(
   member: Pick<TeamWorkspaceRuntimeMember, "status" | "summary" | "sessionId">,
+  copy: TeamWorkspaceCanvasLaneCopy,
 ) {
   const memberMeta = resolveRuntimeMemberStatusMeta(member.status);
-  const statusHint =
-    member.status === "spawning"
-      ? "正在接入这项任务"
-      : member.status === "running"
-        ? "这项任务正在处理"
-        : member.status === "waiting"
-          ? "等待继续补充说明"
-          : member.status === "completed"
-            ? "这一步已经完成"
-            : member.status === "failed"
-              ? "这一步需要重试"
-              : member.sessionId
-                ? "已连接到真实任务"
-                : "等待任务接手";
 
   return {
-    badgeLabel: memberMeta.label,
+    badgeLabel: copy.getMemberStatusLabel(member.status),
     badgeClassName: memberMeta.badgeClassName,
     dotClassName:
       member.status === "failed"
@@ -251,17 +524,23 @@ function buildCanvasLaneTitleSummary(
             : "bg-sky-500",
     summary:
       normalizeTeamWorkspaceDisplayValue(member.summary) || member.summary,
-    statusHint,
+    statusHint: copy.getMemberStatusHint(
+      member.status,
+      Boolean(member.sessionId),
+    ),
   };
 }
 
-function buildPlannedRoleLaneSummary(role: TeamRoleDefinition) {
+function buildPlannedRoleLaneSummary(
+  role: TeamRoleDefinition,
+  copy: TeamWorkspaceCanvasLaneCopy,
+) {
   return {
-    badgeLabel: "待开始",
+    badgeLabel: copy.plannedBadge,
     badgeClassName: "border border-slate-200 bg-slate-50 text-slate-600",
     dotClassName: "bg-slate-300",
     summary: normalizeTeamWorkspaceDisplayValue(role.summary) || role.summary,
-    statusHint: "等待系统把这项任务拆出来",
+    statusHint: copy.plannedStatusHint,
   };
 }
 
@@ -432,6 +711,7 @@ function resolveRuntimeMemberMatchingPlannedRoleId(
 }
 
 function buildSessionCanvasLane(params: {
+  copy: TeamWorkspaceCanvasLaneCopy;
   session: TeamWorkspaceCanvasLaneSession;
   runtimeMembers: TeamWorkspaceRuntimeMember[];
   plannedRoles: TeamRoleDefinition[];
@@ -439,7 +719,7 @@ function buildSessionCanvasLane(params: {
   previewBySessionId?: Record<string, SessionActivityPreviewState>;
   activityTimelineEntryLimit: number;
 }): TeamWorkspaceCanvasLane {
-  const { session, runtimeMembers, plannedRoles } = params;
+  const { copy, session, runtimeMembers, plannedRoles } = params;
   const previewState = params.previewBySessionId?.[session.id] ?? null;
   const mergedEntries = mergeSessionActivityEntries(
     params.liveActivityBySessionId?.[session.id],
@@ -448,7 +728,7 @@ function buildSessionCanvasLane(params: {
   );
   const cardActivityPreview =
     buildActivityPreviewFromEntry(mergedEntries[0]) ?? previewState?.preview;
-  const meta = resolveStatusMeta(session.runtimeStatus);
+  const meta = resolveStatusMeta(session.runtimeStatus, copy);
   const matchedRuntimeMemberId = resolveLaneMatchingRuntimeMemberId(
     session,
     runtimeMembers,
@@ -472,7 +752,7 @@ function buildSessionCanvasLane(params: {
     title: session.name,
     summary:
       normalizeTeamWorkspaceDisplayValue(session.taskSummary) ||
-      "暂时还没有任务摘要，打开详情后可查看完整上下文。",
+      copy.sessionSummaryEmpty,
     badgeLabel: meta.label,
     badgeClassName: meta.badgeClassName,
     dotClassName: meta.dotClassName,
@@ -483,20 +763,21 @@ function buildSessionCanvasLane(params: {
     profileLabel: session.profileName || undefined,
     presetLabel,
     modelLabel: session.model || undefined,
-    statusHint: buildRuntimeDetailSummary(session),
-    updatedAtLabel: formatUpdatedAt(session.updatedAt),
+    statusHint: buildRuntimeDetailSummary(session, copy),
+    updatedAtLabel: copy.formatUpdatedAt(session.updatedAt),
     skillLabels: (session.skills ?? [])
       .slice(0, 4)
       .map((skill) => buildSkillDisplayName(skill)),
     session,
     previewText:
       cardActivityPreview ??
-      buildSessionLaneEmptyState({ session, previewState }),
+      buildSessionLaneEmptyState({ copy, session, previewState }),
     previewEntries: mergedEntries.slice(0, SESSION_LANE_PREVIEW_ENTRY_LIMIT),
   };
 }
 
 export function buildTeamWorkspaceCanvasLanes(params: {
+  copy?: TeamWorkspaceCanvasLaneCopy;
   hasRealTeamGraph: boolean;
   sessions: TeamWorkspaceCanvasLaneSession[];
   runtimeMembers: TeamWorkspaceRuntimeMember[];
@@ -505,9 +786,12 @@ export function buildTeamWorkspaceCanvasLanes(params: {
   previewBySessionId?: Record<string, SessionActivityPreviewState>;
   activityTimelineEntryLimit: number;
 }): TeamWorkspaceCanvasLane[] {
+  const copy = params.copy ?? SOURCE_TEAM_WORKSPACE_CANVAS_LANE_COPY;
+
   if (params.hasRealTeamGraph) {
     return params.sessions.map((session) =>
       buildSessionCanvasLane({
+        copy,
         session,
         runtimeMembers: params.runtimeMembers,
         plannedRoles: params.plannedRoles,
@@ -520,7 +804,7 @@ export function buildTeamWorkspaceCanvasLanes(params: {
 
   if (params.runtimeMembers.length > 0) {
     return params.runtimeMembers.map((member) => {
-      const laneSummary = buildCanvasLaneTitleSummary(member);
+      const laneSummary = buildCanvasLaneTitleSummary(member, copy);
       const matchedPlannedRoleId = resolveRuntimeMemberMatchingPlannedRoleId(
         member,
         params.plannedRoles,
@@ -542,7 +826,7 @@ export function buildTeamWorkspaceCanvasLanes(params: {
           resolveTeamWorkspaceRoleHintLabel(member.roleKey) || undefined,
         profileLabel: undefined,
         statusHint: laneSummary.statusHint,
-        updatedAtLabel: "等待任务接手",
+        updatedAtLabel: copy.runtimeUpdatedAtWaiting,
         skillLabels: [],
         previewText:
           normalizeTeamWorkspaceDisplayValue(member.summary) || member.summary,
@@ -552,7 +836,7 @@ export function buildTeamWorkspaceCanvasLanes(params: {
   }
 
   return params.plannedRoles.map((role) => {
-    const laneSummary = buildPlannedRoleLaneSummary(role);
+    const laneSummary = buildPlannedRoleLaneSummary(role, copy);
 
     return {
       id: role.id,
@@ -567,7 +851,7 @@ export function buildTeamWorkspaceCanvasLanes(params: {
       roleLabel: resolveTeamWorkspaceRoleHintLabel(role.roleKey) || undefined,
       profileLabel: undefined,
       statusHint: laneSummary.statusHint,
-      updatedAtLabel: "计划分工",
+      updatedAtLabel: copy.plannedUpdatedAt,
       skillLabels: [],
       previewText:
         normalizeTeamWorkspaceDisplayValue(role.summary) || role.summary,

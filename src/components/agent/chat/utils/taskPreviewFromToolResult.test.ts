@@ -42,7 +42,7 @@ describe("buildImageTaskPreviewFromToolResult", () => {
       taskFilePath: "/tmp/task-1.json",
       artifactPath: ".lime/tasks/image_generate/task-1.json",
       phase: "succeeded",
-      statusMessage: "图片已生成完成，共 2 张。",
+      statusMessage: "图片生成完成。",
     });
   });
 
@@ -67,7 +67,7 @@ describe("buildImageTaskPreviewFromToolResult", () => {
       taskId: "task-2",
       status: "failed",
       phase: "failed",
-      statusMessage: "图片任务执行失败，请查看工具结果或任务详情。",
+      statusMessage: "图片生成失败。",
     });
   });
 
@@ -94,11 +94,11 @@ describe("buildImageTaskPreviewFromToolResult", () => {
       taskId: "task-3",
       status: "complete",
       phase: "succeeded",
-      statusMessage: "图片结果已生成完成，可在右侧查看与使用。",
+      statusMessage: "图片生成完成。",
     });
   });
 
-  it("图片任务刚提交时，应输出用户可理解的排队态文案", () => {
+  it("图片任务刚提交时，应输出同会话生成态文案", () => {
     const preview = buildImageTaskPreviewFromToolResult({
       toolId: "tool-4",
       toolName: "Bash",
@@ -120,7 +120,7 @@ describe("buildImageTaskPreviewFromToolResult", () => {
       taskId: "task-4",
       status: "running",
       phase: "queued",
-      statusMessage: "图片任务已提交，正在排队处理。",
+      statusMessage: "正在生成图片。",
     });
   });
 
@@ -151,7 +151,7 @@ describe("buildImageTaskPreviewFromToolResult", () => {
       status: "complete",
       imageCount: 9,
       layoutHint: "storyboard_3x3",
-      statusMessage: "3x3 分镜已生成完成，共 9 张。",
+      statusMessage: "3x3 分镜生成完成。",
     });
   });
 });

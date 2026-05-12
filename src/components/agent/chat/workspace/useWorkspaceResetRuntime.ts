@@ -26,6 +26,7 @@ interface ClearMessagesOptions {
 interface UseWorkspaceResetRuntimeParams {
   clearMessages: (options?: ClearMessagesOptions) => void;
   clearRuntimeTeamState: () => void;
+  clearPendingEntryA2UI?: () => void;
   clearProjectSelectionRuntime: () => void;
   resetRestoredSessionState: () => void;
   resetGuideState: () => void;
@@ -55,6 +56,7 @@ interface UseWorkspaceResetRuntimeParams {
 export function useWorkspaceResetRuntime({
   clearMessages,
   clearRuntimeTeamState,
+  clearPendingEntryA2UI,
   clearProjectSelectionRuntime,
   resetRestoredSessionState,
   resetGuideState,
@@ -98,10 +100,12 @@ export function useWorkspaceResetRuntime({
 
   const resetTopicLocalState = useCallback(() => {
     resetWorkbenchSurface();
+    clearPendingEntryA2UI?.();
     clearRuntimeTeamState();
     resetRestoredSessionState();
     resetGuideState();
   }, [
+    clearPendingEntryA2UI,
     clearRuntimeTeamState,
     resetGuideState,
     resetRestoredSessionState,
@@ -116,11 +120,13 @@ export function useWorkspaceResetRuntime({
     setSelectedText("");
     setShowSidebar(true);
     resetWorkbenchSurface();
+    clearPendingEntryA2UI?.();
     setActiveTheme("general");
     setCreationMode("guided");
     onNavigate?.("agent", buildHomeAgentParams());
   }, [
     clearMessages,
+    clearPendingEntryA2UI,
     onNavigate,
     resetWorkbenchSurface,
     setActiveTheme,
@@ -149,6 +155,7 @@ export function useWorkspaceResetRuntime({
     autoCollapsedTopicSidebarRef.current = false;
     setShowSidebar(defaultTopicSidebarVisible);
     resetWorkbenchSurface();
+    clearPendingEntryA2UI?.();
     setMentionedCharacters([]);
     clearProjectSelectionRuntime();
     resetRestoredSessionState();
@@ -161,6 +168,7 @@ export function useWorkspaceResetRuntime({
   }, [
     autoCollapsedTopicSidebarRef,
     clearMessages,
+    clearPendingEntryA2UI,
     clearProjectSelectionRuntime,
     defaultTopicSidebarVisible,
     externalProjectId,

@@ -747,11 +747,13 @@ fn parse_runtime_permission_request_hook_updated_permissions(
                     );
                 };
                 if destination != "session" {
-                    return Some(RuntimePermissionRequestHookUpdatedPermissions::Unsupported {
-                        reason: format!(
-                            "updatedPermissions[{index}] 目标 `{destination}` 当前无 honest host；仅支持 destination=session"
-                        ),
-                    });
+                    return Some(
+                        RuntimePermissionRequestHookUpdatedPermissions::Unsupported {
+                            reason: format!(
+                                "updatedPermissions[{index}] 目标 `{destination}` 当前无 honest host；仅支持 destination=session"
+                            ),
+                        },
+                    );
                 }
 
                 let Some(mode) = object.get("mode").and_then(serde_json::Value::as_str) else {

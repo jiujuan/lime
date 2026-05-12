@@ -53,11 +53,6 @@ const AboutSection = lazy(() =>
     default: module.AboutSection,
   })),
 );
-const ExtensionsSettings = lazy(() =>
-  import("../agent/skills").then((module) => ({
-    default: module.ExtensionsSettings,
-  })),
-);
 const HotkeysSettings = lazy(() =>
   import("../general/hotkeys").then((module) => ({
     default: module.HotkeysSettings,
@@ -320,7 +315,6 @@ const ACTIVE_SETTINGS_TABS = new Set<SettingsTabs>([
   SettingsTabs.Hotkeys,
   SettingsTabs.Memory,
   SettingsTabs.Providers,
-  SettingsTabs.Skills,
   SettingsTabs.MediaServices,
   SettingsTabs.McpServer,
   SettingsTabs.WebSearch,
@@ -360,8 +354,6 @@ function preloadSettingsTab(tab: SettingsTabs): Promise<unknown> | null {
       return import("../general/memory");
     case SettingsTabs.Providers:
       return import("../agent/providers");
-    case SettingsTabs.Skills:
-      return import("../agent/skills");
     case SettingsTabs.MediaServices:
       return import("../agent/media-services");
     case SettingsTabs.McpServer:
@@ -455,12 +447,6 @@ function renderSettingsContent(
       return withSettingsContentFallback(
         <CloudProviderSettings initialView={initialProviderView} />,
         t("settings.layout.loading.providers"),
-      );
-
-    case SettingsTabs.Skills:
-      return withSettingsContentFallback(
-        <ExtensionsSettings />,
-        t("settings.layout.loading.skills"),
       );
 
     case SettingsTabs.MediaServices:

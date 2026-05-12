@@ -75,8 +75,10 @@ import {
 import { buildKnowledgeRequestMetadata } from "@/features/knowledge/agent/knowledgeMetadata";
 import {
   resolveInputCapabilityDispatch,
+  resolveInputCapabilitySelectionFromRoute,
   type InputCapabilitySelection,
 } from "../skill-selection/inputCapabilitySelection";
+import type { AgentInitialInputCapabilityParams } from "@/types/page";
 import type agentResource from "@/i18n/resources/zh-CN/agent.json";
 import type {
   InputbarKnowledgePackOption,
@@ -393,6 +395,8 @@ interface EmptyStateProps extends SkillSelectionSourceProps {
   runtimeToolAvailability?: RuntimeToolAvailability | null;
   /** 当前执行态摘要 */
   runtimeTaskCard?: AgentTaskRuntimeCardModel | null;
+  /** 进入首页时预选的输入框能力 */
+  initialInputCapability?: AgentInitialInputCapabilityParams;
   /** 打开记忆工作台 */
   onOpenMemoryWorkbench?: () => void;
   /** 打开消息渠道 */
@@ -514,6 +518,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   sessionId = null,
   isLoading = false,
   disabled = false,
+  initialInputCapability,
   creationReplaySurface = null,
   defaultCuratedTaskReferenceMemoryIds,
   defaultCuratedTaskReferenceEntries,
@@ -541,6 +546,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     [t],
   );
   const pageContainerRef = useRef<HTMLDivElement | null>(null);
+  const handledInitialInputCapabilitySignatureRef = useRef("");
   const [activeCapability, setActiveCapability] =
     useState<InputCapabilitySelection | null>(null);
   const [knowledgeHubOpenRequestKey, setKnowledgeHubOpenRequestKey] =
@@ -585,6 +591,59 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   const clearSelectedSkill = useCallback(() => {
     setActiveCapability(null);
   }, []);
+  const initialInputCapabilitySignature = useMemo(() => {
+    const route = initialInputCapability?.capabilityRoute;
+    if (!route) {
+      return "";
+    }
+
+    return JSON.stringify({
+      requestKey: initialInputCapability.requestKey ?? 0,
+      route,
+    });
+  }, [initialInputCapability]);
+
+  useEffect(() => {
+    if (!initialInputCapabilitySignature) {
+      handledInitialInputCapabilitySignatureRef.current = "";
+      return;
+    }
+
+    if (
+      handledInitialInputCapabilitySignatureRef.current ===
+      initialInputCapabilitySignature
+    ) {
+      return;
+    }
+
+    const route = initialInputCapability?.capabilityRoute;
+    if (!route) {
+      return;
+    }
+
+    handledInitialInputCapabilitySignatureRef.current =
+      initialInputCapabilitySignature;
+    const resolvedCapability = resolveInputCapabilitySelectionFromRoute({
+      route,
+      skills,
+    });
+
+    if (
+      route.kind === "curated_task" &&
+      !input.trim() &&
+      route.prompt.trim().length > 0
+    ) {
+      setInput(route.prompt);
+    }
+
+    setActiveCapability(resolvedCapability);
+  }, [
+    initialInputCapability,
+    initialInputCapabilitySignature,
+    input,
+    setInput,
+    skills,
+  ]);
   const handleSelectInputCapability = useCallback(
     (capability: InputCapabilitySelection) => {
       if (capability.kind === "service_skill") {

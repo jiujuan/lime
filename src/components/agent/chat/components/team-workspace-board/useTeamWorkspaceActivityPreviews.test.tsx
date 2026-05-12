@@ -2,6 +2,7 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
 import type { ActivityPreviewSession } from "../../team-workspace-runtime/activityPreviewSelectors";
 import { useTeamWorkspaceActivityPreviews } from "./useTeamWorkspaceActivityPreviews";
@@ -113,12 +114,13 @@ function renderHook(props?: Partial<HookProps>) {
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
   mockGetAgentRuntimeSession.mockReset();
 });
 
@@ -138,6 +140,7 @@ afterEach(async () => {
 
   vi.useRealTimers();
   vi.clearAllMocks();
+  await changeLimeLocale("zh-CN");
 });
 
 describe("useTeamWorkspaceActivityPreviews", () => {

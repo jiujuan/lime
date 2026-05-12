@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronUp, ListTodo } from "lucide-react";
 import styled, { css, keyframes } from "styled-components";
+import { formatNumber } from "@/i18n/format";
 import type {
   AsterSubagentParentContext,
   AsterSubagentSessionInfo,
@@ -17,14 +19,13 @@ import {
   resolveRuntimeMemberStatusMeta,
   summarizeTeamWorkspaceExecution,
 } from "../teamWorkspaceRuntime";
-import { buildRuntimeFormationDisplayState } from "../team-workspace-runtime/formationDisplaySelectors";
+import {
+  buildTeamWorkspaceFormationCopy,
+  buildRuntimeFormationDisplayState,
+  type TeamWorkspaceFormationTranslate,
+} from "../team-workspace-runtime/formationDisplaySelectors";
 import { TeamWorkspaceBoard } from "./TeamWorkspaceBoard";
 import type { TeamRoleDefinition } from "../utils/teamDefinitions";
-import {
-  TEAM_WORKSPACE_PLAN_LABEL,
-  TEAM_WORKSPACE_SURFACE_TITLE,
-  TEAM_WORKSPACE_WAITING_HEADLINE,
-} from "../utils/teamWorkspaceCopy";
 import { normalizeTeamWorkspaceDisplayValue } from "../utils/teamWorkspaceDisplay";
 
 const DockContainer = styled.div<{
@@ -566,6 +567,64 @@ export function TeamWorkspaceDock({
   selectedTeamRoles = [],
   teamDispatchPreviewState = null,
 }: TeamWorkspaceDockProps) {
+  const { i18n, t } = useTranslation("agent");
+  const locale = i18n.resolvedLanguage || i18n.language;
+  const translateFormation = useMemo<TeamWorkspaceFormationTranslate>(
+    () => (key, options) => String(t(key as never, options as never)),
+    [t],
+  );
+  const formationCopy = useMemo(
+    () =>
+      buildTeamWorkspaceFormationCopy({
+        locale,
+        translate: translateFormation,
+      }),
+    [locale, translateFormation],
+  );
+  const dockCopy = useMemo(() => {
+    const formatCount = (count: number) => formatNumber(count, { locale });
+
+    return {
+      currentProgress: String(
+        t("agentChat.teamWorkspace.dock.currentProgress"),
+      ),
+      surfaceTitle: String(t("agentChat.teamWorkspace.dock.surfaceTitle")),
+      idleStatus: String(t("agentChat.teamWorkspace.runtimeStatus.idle")),
+      unobstructiveBadge: String(
+        t("agentChat.teamWorkspace.dock.unobstructiveBadge"),
+      ),
+      openAria: String(t("agentChat.teamWorkspace.dock.aria.open")),
+      collapseAria: String(t("agentChat.teamWorkspace.dock.aria.collapse")),
+      expandAria: String(t("agentChat.teamWorkspace.dock.aria.expand")),
+      formatProcessingBudget: (activeCount: number, totalCount: number) =>
+        String(
+          t("agentChat.teamWorkspace.dock.processingBudget", {
+            activeCount: formatCount(activeCount),
+            totalCount: formatCount(totalCount),
+          }),
+        ),
+      formatProcessingCount: (count: number) =>
+        String(
+          t("agentChat.teamWorkspace.dock.processingCount", {
+            formattedCount: formatCount(count),
+          }),
+        ),
+      formatWaitingCount: (count: number) =>
+        String(
+          t("agentChat.teamWorkspace.dock.waitingCount", {
+            formattedCount: formatCount(count),
+          }),
+        ),
+      formatTaskCount: (count: number) =>
+        String(
+          t("agentChat.teamWorkspace.dock.taskCount", {
+            formattedCount: formatCount(count),
+          }),
+        ),
+      formatSelectedPlan: (label: string) =>
+        String(t("agentChat.teamWorkspace.dock.selectedPlan", { label })),
+    };
+  }, [locale, t]);
   const dispatchPreviewState = teamDispatchPreviewState;
   const launcherOnly = typeof onActivateWorkbench === "function";
   const executionSummary = summarizeTeamWorkspaceExecution({
@@ -580,6 +639,7 @@ export function TeamWorkspaceDock({
   const hasRuntimeSessions = executionSummary.totalSessionCount > 0;
   const hasRuntimeFormation = Boolean(dispatchPreviewState);
   const runtimeFormationDisplay = buildRuntimeFormationDisplayState({
+    copy: formationCopy,
     teamDispatchPreviewState: dispatchPreviewState,
     fallbackLabel: selectedTeamLabel,
     fallbackSummary: selectedTeamSummary,
@@ -637,14 +697,21 @@ export function TeamWorkspaceDock({
   );
   const teamConcurrencyBadgeText =
     teamConcurrencySnapshot?.team_parallel_budget !== undefined
-      ? `${teamConcurrencySnapshot.team_active_count ?? runningRuntimeSessionCount}/${teamConcurrencySnapshot.team_parallel_budget} 处理中`
+      ? dockCopy.formatProcessingBudget(
+          teamConcurrencySnapshot.team_active_count ??
+            runningRuntimeSessionCount,
+          teamConcurrencySnapshot.team_parallel_budget,
+        )
       : runningRuntimeSessionCount > 0
-        ? `${runningRuntimeSessionCount} 项处理中`
+        ? dockCopy.formatProcessingCount(runningRuntimeSessionCount)
         : null;
   const teamQueueBadgeText =
     (teamConcurrencySnapshot?.team_queued_count ?? queuedRuntimeSessionCount) >
     0
-      ? `${teamConcurrencySnapshot?.team_queued_count ?? queuedRuntimeSessionCount} 项等待中`
+      ? dockCopy.formatWaitingCount(
+          teamConcurrencySnapshot?.team_queued_count ??
+            queuedRuntimeSessionCount,
+        )
       : null;
   const teamQueueReason = normalizeTeamWorkspaceDisplayValue(
     teamConcurrencySnapshot?.queue_reason,
@@ -658,24 +725,31 @@ export function TeamWorkspaceDock({
     }
 
     if (dispatchPreviewState?.status === "forming") {
-      return { label: "准备中", tone: "active" };
+      return {
+        label: formationCopy.getFormationStatusLabel("forming"),
+        tone: "active",
+      };
     }
 
     if (dispatchPreviewState?.status === "failed") {
-      return { label: "失败", tone: "error" };
+      return {
+        label: formationCopy.getFormationStatusLabel("failed"),
+        tone: "error",
+      };
     }
 
     if (hasRuntimeSessions) {
       if (activeRuntimeSessionCount > 0) {
         return {
           label:
-            teamConcurrencyBadgeText || `${activeRuntimeSessionCount} 项处理中`,
+            teamConcurrencyBadgeText ||
+            dockCopy.formatProcessingCount(activeRuntimeSessionCount),
           tone: "active",
         };
       }
 
       return {
-        label: `${executionSummary.totalSessionCount} 项任务`,
+        label: dockCopy.formatTaskCount(executionSummary.totalSessionCount),
         tone: executionSummary.totalSessionCount > 0 ? "success" : "idle",
       };
     }
@@ -683,25 +757,32 @@ export function TeamWorkspaceDock({
     if (dispatchPreviewState?.status === "formed") {
       return runtimeTaskCount > 0
         ? {
-            label: `${runtimeTaskCount} 项任务`,
+            label: formationCopy.formatTaskCountBadge(runtimeTaskCount),
             tone: "success",
           }
         : {
-            label: runtimeFormationDisplay.panelStatusLabel || "已就绪",
+            label:
+              runtimeFormationDisplay.panelStatusLabel ||
+              formationCopy.getFormationStatusLabel("formed"),
             tone: "success",
           };
     }
 
     if (runtimeTeamLabel) {
-      return { label: "已准备", tone: "idle" };
+      return {
+        label: formationCopy.getFormationStatusLabel("formed"),
+        tone: "idle",
+      };
     }
 
-    return { label: "待开始", tone: "idle" };
+    return { label: dockCopy.idleStatus, tone: "idle" };
   }, [
     activeRuntimeSessionCount,
     executionSummary.totalSessionCount,
+    formationCopy,
     hasRuntimeSessions,
     launcherOnly,
+    dockCopy,
     teamConcurrencyBadgeText,
     runtimeFormationDisplay.panelStatusLabel,
     runtimeTaskCount,
@@ -732,7 +813,7 @@ export function TeamWorkspaceDock({
 
       return [
         {
-          label: `${executionSummary.totalSessionCount} 项任务`,
+          label: dockCopy.formatTaskCount(executionSummary.totalSessionCount),
           tone: executionSummary.totalSessionCount > 0 ? "success" : "idle",
         },
       ];
@@ -740,7 +821,9 @@ export function TeamWorkspaceDock({
     if (dispatchPreviewState?.status === "forming") {
       return [
         {
-          label: runtimeFormationDisplay.panelStatusLabel || "准备中",
+          label:
+            runtimeFormationDisplay.panelStatusLabel ||
+            formationCopy.getFormationStatusLabel("forming"),
           tone: "active",
         },
       ];
@@ -750,8 +833,9 @@ export function TeamWorkspaceDock({
         {
           label:
             runtimeTaskCount > 0
-              ? `${runtimeTaskCount} 项任务`
-              : runtimeFormationDisplay.panelStatusLabel || "已就绪",
+              ? formationCopy.formatTaskCountBadge(runtimeTaskCount)
+              : runtimeFormationDisplay.panelStatusLabel ||
+                formationCopy.getFormationStatusLabel("formed"),
           tone: "success",
         },
       ];
@@ -759,25 +843,36 @@ export function TeamWorkspaceDock({
     if (dispatchPreviewState?.status === "failed") {
       return [
         {
-          label: runtimeFormationDisplay.panelStatusLabel || "失败",
+          label:
+            runtimeFormationDisplay.panelStatusLabel ||
+            formationCopy.getFormationStatusLabel("failed"),
           tone: "error",
         },
       ];
     }
 
-    return runtimeTeamLabel ? [{ label: "已准备", tone: "idle" }] : [];
+    return runtimeTeamLabel
+      ? [
+          {
+            label: formationCopy.getFormationStatusLabel("formed"),
+            tone: "idle",
+          },
+        ]
+      : [];
   }, [
     executionSummary.totalSessionCount,
     hasRuntimeSessions,
     runtimeTaskCount,
     dispatchPreviewState,
+    formationCopy,
+    dockCopy,
     runtimeFormationDisplay.panelStatusLabel,
     teamConcurrencyBadgeText,
     teamQueueBadgeText,
     runtimeTeamLabel,
   ]);
-  const launcherPrimaryLabel = runtimeTeamLabel || "当前进展";
-  const dockPrimaryLabel = "当前进展";
+  const launcherPrimaryLabel = runtimeTeamLabel || dockCopy.currentProgress;
+  const dockPrimaryLabel = dockCopy.currentProgress;
 
   useEffect(() => {
     const normalizedSessionId = currentSessionId ?? null;
@@ -900,7 +995,7 @@ export function TeamWorkspaceDock({
     <EmptyStateCard data-testid="team-workspace-empty-card" role="status">
       <EmptyStateBody>
         <EmptyStateEyebrow>
-          <EmptyStateBadge>{TEAM_WORKSPACE_SURFACE_TITLE}</EmptyStateBadge>
+          <EmptyStateBadge>{dockCopy.surfaceTitle}</EmptyStateBadge>
           {runtimeFormationDisplay.panelStatusLabel ? (
             <EmptyStateBadge>
               {runtimeFormationDisplay.panelStatusLabel}
@@ -909,7 +1004,7 @@ export function TeamWorkspaceDock({
         </EmptyStateEyebrow>
         <EmptyStateTitle>
           {runtimeFormationDisplay.panelHeadline ||
-            TEAM_WORKSPACE_WAITING_HEADLINE}
+            formationCopy.waitingHeadline}
         </EmptyStateTitle>
         <EmptyStateDescription>
           {dispatchPreviewState
@@ -933,8 +1028,8 @@ export function TeamWorkspaceDock({
                 </EmptyStateDetailTitle>
                 <EmptyStateDetailHint>
                   {dispatchPreviewState
-                    ? "查看当前任务分工与参考方案"
-                    : "查看当前分工方案"}
+                    ? formationCopy.detailHintRuntimeWithReference
+                    : formationCopy.detailHintPlanOnly}
                 </EmptyStateDetailHint>
               </div>
               {teamDetailExpanded ? (
@@ -948,7 +1043,9 @@ export function TeamWorkspaceDock({
                 {runtimeTeamSummary ? (
                   <EmptyStateRoleItem>
                     <EmptyStateRoleName>
-                      {dispatchPreviewState ? "当前摘要" : "方案摘要"}
+                      {dispatchPreviewState
+                        ? formationCopy.detailSummaryRuntimeLabel
+                        : formationCopy.detailSummaryPlanLabel}
                     </EmptyStateRoleName>
                     <EmptyStateRoleSummary>
                       {runtimeTeamSummary}
@@ -969,7 +1066,7 @@ export function TeamWorkspaceDock({
                         <span
                           className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${memberStatusMeta.badgeClassName}`}
                         >
-                          {memberStatusMeta.label}
+                          {formationCopy.getMemberStatusLabel(member.status)}
                         </span>
                         {member.roleKey ? (
                           <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-500">
@@ -1018,11 +1115,13 @@ export function TeamWorkspaceDock({
                 {runtimeFormationDisplay.referenceLabel ? (
                   <EmptyStateRoleItem>
                     <EmptyStateRoleName>
-                      参考方案 · {runtimeFormationDisplay.referenceLabel}
+                      {formationCopy.formatReferenceLabelBadge(
+                        runtimeFormationDisplay.referenceLabel,
+                      )}
                     </EmptyStateRoleName>
                     <EmptyStateRoleSummary>
                       {runtimeBlueprintSummary ||
-                        "当前任务分工参考了当前方案里的角色偏好。"}
+                        formationCopy.detailReferenceSummaryDefault}
                     </EmptyStateRoleSummary>
                   </EmptyStateRoleItem>
                 ) : null}
@@ -1033,16 +1132,18 @@ export function TeamWorkspaceDock({
         <EmptyStateFooter>
           {runtimeTeamLabel ? (
             <EmptyStateBadge data-testid="team-workspace-selected-team">
-              当前{TEAM_WORKSPACE_PLAN_LABEL}：{runtimeTeamLabel}
+              {dockCopy.formatSelectedPlan(runtimeTeamLabel)}
             </EmptyStateBadge>
           ) : null}
           {runtimeTeamSummary ? (
             <EmptyStateBadge>{runtimeTeamSummary}</EmptyStateBadge>
           ) : null}
           {runtimeTaskCount > 0 ? (
-            <EmptyStateBadge>{runtimeTaskCount} 项任务</EmptyStateBadge>
+            <EmptyStateBadge>
+              {dockCopy.formatTaskCount(runtimeTaskCount)}
+            </EmptyStateBadge>
           ) : null}
-          <EmptyStateBadge>不遮挡画布</EmptyStateBadge>
+          <EmptyStateBadge>{dockCopy.unobstructiveBadge}</EmptyStateBadge>
         </EmptyStateFooter>
       </EmptyStateBody>
     </EmptyStateCard>
@@ -1083,10 +1184,10 @@ export function TeamWorkspaceDock({
         aria-expanded={launcherOnly ? false : expanded}
         aria-label={
           launcherOnly
-            ? "打开当前进展"
+            ? dockCopy.openAria
             : expanded
-              ? "收起当前进展"
-              : "展开当前进展"
+              ? dockCopy.collapseAria
+              : dockCopy.expandAria
         }
         $active={hasRuntimeSessions}
         $expanded={expanded}

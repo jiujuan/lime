@@ -58,6 +58,7 @@ export interface AgentChatWorkspaceProps {
   initialSiteSkillLaunch?: AgentSiteSkillLaunchParams;
   initialPendingServiceSkillLaunch?: AgentPendingServiceSkillLaunchParams;
   initialInputCapability?: AgentInitialInputCapabilityParams;
+  preferHomeForInitialInputCapability?: boolean;
   initialKnowledgePackSelection?: AgentInitialKnowledgePackSelectionParams;
   initialProjectFileOpenTarget?: AgentProjectFileOpenTarget;
 }

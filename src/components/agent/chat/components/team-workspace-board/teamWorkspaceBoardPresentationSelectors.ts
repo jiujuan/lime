@@ -1,8 +1,80 @@
 import { cn } from "@/lib/utils";
+import { formatNumber } from "@/i18n/format";
 import type { TeamWorkspaceRuntimeFormationStatus } from "../../teamWorkspaceRuntime";
 import { TEAM_WORKSPACE_CANVAS_STAGE_HEIGHT } from "../../utils/teamWorkspaceCanvas";
 
+type TeamWorkspaceBoardResourceKey =
+  | "agentChat.teamWorkspace.board.canvas.title"
+  | "agentChat.teamWorkspace.board.canvas.subtitle.childRuntime"
+  | "agentChat.teamWorkspace.board.canvas.subtitle.formation.default"
+  | "agentChat.teamWorkspace.board.canvas.subtitle.formation.failed"
+  | "agentChat.teamWorkspace.board.canvas.subtitle.formation.formed"
+  | "agentChat.teamWorkspace.board.canvas.subtitle.formation.forming"
+  | "agentChat.teamWorkspace.board.canvas.subtitle.runtime"
+  | "agentChat.teamWorkspace.board.detail.collapse"
+  | "agentChat.teamWorkspace.board.detail.expand";
+
+export type TeamWorkspaceBoardTranslate = (
+  key: TeamWorkspaceBoardResourceKey,
+  options?: Record<string, unknown>,
+) => string;
+
+export interface TeamWorkspaceBoardCopy {
+  detailCollapse: string;
+  detailExpand: string;
+  formatRuntimeCanvasSubtitle: (visibleSessionsCount: number) => string;
+  memberCanvasSubtitleChildRuntime: string;
+  memberCanvasSubtitleFormationDefault: string;
+  memberCanvasSubtitleFormationFailed: string;
+  memberCanvasSubtitleFormationFormed: string;
+  memberCanvasSubtitleFormationForming: string;
+  memberCanvasTitle: string;
+}
+
+export function buildTeamWorkspaceBoardCopy(params: {
+  locale?: string | null;
+  translate: TeamWorkspaceBoardTranslate;
+}): TeamWorkspaceBoardCopy {
+  const formatCount = (count: number) =>
+    formatNumber(count, { locale: params.locale });
+
+  return {
+    detailCollapse: params.translate(
+      "agentChat.teamWorkspace.board.detail.collapse",
+    ),
+    detailExpand: params.translate(
+      "agentChat.teamWorkspace.board.detail.expand",
+    ),
+    formatRuntimeCanvasSubtitle: (visibleSessionsCount) =>
+      params.translate(
+        "agentChat.teamWorkspace.board.canvas.subtitle.runtime",
+        {
+          formattedCount: formatCount(visibleSessionsCount),
+        },
+      ),
+    memberCanvasSubtitleChildRuntime: params.translate(
+      "agentChat.teamWorkspace.board.canvas.subtitle.childRuntime",
+    ),
+    memberCanvasSubtitleFormationDefault: params.translate(
+      "agentChat.teamWorkspace.board.canvas.subtitle.formation.default",
+    ),
+    memberCanvasSubtitleFormationFailed: params.translate(
+      "agentChat.teamWorkspace.board.canvas.subtitle.formation.failed",
+    ),
+    memberCanvasSubtitleFormationFormed: params.translate(
+      "agentChat.teamWorkspace.board.canvas.subtitle.formation.formed",
+    ),
+    memberCanvasSubtitleFormationForming: params.translate(
+      "agentChat.teamWorkspace.board.canvas.subtitle.formation.forming",
+    ),
+    memberCanvasTitle: params.translate(
+      "agentChat.teamWorkspace.board.canvas.title",
+    ),
+  };
+}
+
 interface ResolveTeamWorkspaceBoardCopyStateParams {
+  copy: TeamWorkspaceBoardCopy;
   detailExpanded: boolean;
   dispatchPreviewStatus?: TeamWorkspaceRuntimeFormationStatus | null;
   hasRuntimeSessions: boolean;
@@ -41,6 +113,7 @@ interface TeamWorkspaceBoardSurfaceClassNames {
 }
 
 export function resolveTeamWorkspaceBoardCopyState({
+  copy,
   detailExpanded,
   dispatchPreviewStatus = null,
   hasRuntimeSessions,
@@ -55,20 +128,20 @@ export function resolveTeamWorkspaceBoardCopyState({
       : false;
 
   return {
-    detailToggleLabel: detailVisible ? "收起细节" : "查看细节",
+    detailToggleLabel: detailVisible ? copy.detailCollapse : copy.detailExpand,
     detailVisible,
-    memberCanvasTitle: "当前进展",
+    memberCanvasTitle: copy.memberCanvasTitle,
     memberCanvasSubtitle: hasRuntimeSessions
       ? isChildSession
-        ? "并行任务会在各自面板里持续更新进展和结果，主对话只保留必要摘要。"
-        : `${visibleSessionsCount} 条当前进展已接入，当前焦点会优先落在正在处理的分工上。`
+        ? copy.memberCanvasSubtitleChildRuntime
+        : copy.formatRuntimeCanvasSubtitle(visibleSessionsCount)
       : dispatchPreviewStatus === "forming"
-        ? "正在准备当前任务分工，任务拆出后会在这里独立更新进展。"
+        ? copy.memberCanvasSubtitleFormationForming
         : dispatchPreviewStatus === "formed"
-          ? "当前任务分工已经就绪，任务拆出后会在各自进展面板里开始处理。"
+          ? copy.memberCanvasSubtitleFormationFormed
           : dispatchPreviewStatus === "failed"
-            ? "这次任务分工准备失败，暂时无法生成当前进展面板。"
-            : "任务拆出后，这里会展开为独立的当前进展。",
+            ? copy.memberCanvasSubtitleFormationFailed
+            : copy.memberCanvasSubtitleFormationDefault,
   };
 }
 

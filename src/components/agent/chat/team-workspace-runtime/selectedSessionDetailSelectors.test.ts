@@ -1,5 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { buildSelectedSessionDetailDisplayState } from "./selectedSessionDetailSelectors";
+import { changeLimeLocale, getLimeI18n } from "@/i18n/createI18n";
+import {
+  buildSelectedSessionDetailCopy,
+  buildSelectedSessionDetailDisplayState,
+  type SelectedSessionDetailTranslate,
+} from "./selectedSessionDetailSelectors";
+
+async function buildEnglishSelectedSessionDetailCopy() {
+  await changeLimeLocale("en-US");
+  const translate: SelectedSessionDetailTranslate = (key, options) =>
+    String(
+      getLimeI18n().t(
+        key as never,
+        {
+          ns: "agent",
+          ...(options ?? {}),
+        } as never,
+      ),
+    );
+
+  return buildSelectedSessionDetailCopy({
+    locale: "en-US",
+    translate,
+  });
+}
 
 describe("selectedSessionDetailSelectors", () => {
   it("应稳定产出选中成员详情区的 metadata、设置与技能标签", () => {
@@ -108,5 +132,73 @@ describe("selectedSessionDetailSelectors", () => {
       skillBadges: [],
       hasSettings: false,
     });
+  });
+
+  it("应支持注入英文详情 copy 且保留运行时业务数据", async () => {
+    const copy = await buildEnglishSelectedSessionDetailCopy();
+
+    const state = buildSelectedSessionDetailDisplayState({
+      copy,
+      selectedSession: {
+        blueprintRoleLabel: "执行",
+        createdFromTurnId: "turn-42",
+        latestTurnStatus: "running",
+        model: "gpt-5.4",
+        originTool: "spawn_agent",
+        outputContract: "Keep runtime contract.",
+        profileName: "代码执行员",
+        providerConcurrencyGroup: "openai",
+        providerName: "OpenAI",
+        providerParallelBudget: 1,
+        queueReason: "Runtime queue reason.",
+        queuedTurnCount: 1,
+        roleKey: "executor",
+        sessionType: "sub_agent",
+        skills: [
+          {
+            id: "bounded-implementation",
+            name: "边界实现",
+            description: "只改明确授权的边界。",
+          },
+        ],
+        teamActiveCount: 1,
+        teamParallelBudget: 3,
+        teamPresetId: "code-triage-team",
+        theme: "engineering",
+      },
+      isChildSession: true,
+      parentSessionName: "主线程总览",
+    });
+
+    expect(state.runtimeDetailSummary).toBe(
+      "Waiting 1 · Latest progress Running · Running 1/3 · Steady mode",
+    );
+    expect(state.metadata).toEqual([
+      "Role 执行",
+      "Subtask",
+      "Provider OpenAI",
+      "Model gpt-5.4",
+      "Source spawn_agent",
+      "From earlier task turn-42",
+      "Waiting 1",
+      "Running 1/3",
+      "Steady mode",
+      "Latest progress Running",
+      "From 主线程总览",
+    ]);
+    expect(state.settingBadges).toEqual([
+      "Plan Code triage team",
+      "Style 代码执行员",
+      "Role Execution",
+      "Theme engineering",
+    ]);
+    expect(state.outputContract).toBe("Keep runtime contract.");
+    expect(state.skillBadges).toEqual([
+      {
+        id: "bounded-implementation",
+        label: "边界实现",
+        title: "只改明确授权的边界。",
+      },
+    ]);
   });
 });
