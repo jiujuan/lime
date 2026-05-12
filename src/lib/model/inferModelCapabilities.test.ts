@@ -101,4 +101,89 @@ describe("inferModelCapabilities", () => {
       }),
     ).toEqual(expect.arrayContaining(["chat", "vision_understanding"]));
   });
+
+  it("显式 image 输入且输出文本时应识别为视觉理解模型", () => {
+    const taxonomyParams = {
+      modelId: "provider-vlm-chat",
+      providerId: "custom-provider",
+      explicitInputModalities: ["text", "image"],
+      explicitOutputModalities: ["text"],
+    };
+
+    expect(inferModelTaskFamilies(taxonomyParams)).toEqual(
+      expect.arrayContaining(["chat", "vision_understanding"]),
+    );
+    expect(inferModelCapabilities(taxonomyParams)).toMatchObject({
+      vision: true,
+    });
+  });
+
+  it("显式 chat 任务族不应遮蔽图片输入和已知视觉模型信号", () => {
+    expect(
+      inferModelTaskFamilies({
+        modelId: "provider-vlm-chat",
+        providerId: "custom-provider",
+        explicitTaskFamilies: ["chat"],
+        explicitInputModalities: ["text", "image"],
+        explicitOutputModalities: ["text"],
+        capabilities: { vision: false },
+      }),
+    ).toEqual(expect.arrayContaining(["chat", "vision_understanding"]));
+
+    expect(
+      inferModelCapabilities({
+        modelId: "o3",
+        providerId: "openai",
+        explicitTaskFamilies: ["chat"],
+        capabilities: { vision: false },
+      }),
+    ).toMatchObject({ vision: true });
+  });
+
+  it("应识别现代 Provider 中命名不含 vision 的图片输入模型", () => {
+    const cases = [
+      { modelId: "o3", providerId: "openai" },
+      { modelId: "o4-mini", providerId: "openai" },
+      { modelId: "grok-4.3", providerId: "xai" },
+      { modelId: "mistral-small-latest", providerId: "mistral" },
+      { modelId: "qwen3.5-27b", providerId: "alibaba" },
+      { modelId: "gemma-3-27b-it", providerId: "google" },
+    ];
+
+    for (const item of cases) {
+      expect(inferVisionCapability(item), item.modelId).toBe(true);
+    }
+  });
+
+  it("应避免把同系列无图片输入的小模型误判为视觉模型", () => {
+    const cases = [
+      { modelId: "o1-mini", providerId: "openai" },
+      { modelId: "o1-preview", providerId: "openai" },
+      { modelId: "o3-mini", providerId: "openai" },
+      { modelId: "grok-3-mini", providerId: "xai" },
+      { modelId: "gemma-3n-e4b-it", providerId: "google" },
+    ];
+
+    for (const item of cases) {
+      expect(inferVisionCapability(item), item.modelId).toBe(false);
+    }
+  });
+
+  it("别名模型应能从实际 provider 或 canonical id 继承视觉能力", () => {
+    expect(
+      inferModelCapabilities({
+        modelId: "relay-fast-default",
+        providerId: "openai",
+        providerModelId: "o3",
+      }),
+    ).toMatchObject({ vision: true });
+
+    expect(
+      inferModelCapabilities({
+        modelId: "relay-grok-latest",
+        providerId: "xai",
+        canonicalModelId: "grok-4.3",
+      }),
+    ).toMatchObject({ vision: true });
+  });
 });

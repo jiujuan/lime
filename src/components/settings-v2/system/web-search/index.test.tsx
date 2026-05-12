@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 const { mockGetConfig, mockSaveConfig } = vi.hoisted(() => ({
   mockGetConfig: vi.fn(),
@@ -9,30 +10,6 @@ const { mockGetConfig, mockSaveConfig } = vi.hoisted(() => ({
 const { mockOpen } = vi.hoisted(() => ({
   mockOpen: vi.fn(),
 }));
-const { mockUseTranslation } = vi.hoisted(() => {
-  const mockTranslate = vi.fn((key: string, options?: unknown) => {
-    if (typeof options === "string") {
-      return options;
-    }
-
-    if (options && typeof options === "object") {
-      const values = options as Record<string, unknown>;
-      const template =
-        typeof values.defaultValue === "string" ? values.defaultValue : key;
-      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-        String(values[name] ?? ""),
-      );
-    }
-
-    return key;
-  });
-
-  return {
-    mockUseTranslation: vi.fn((_namespace?: string) => ({
-      t: mockTranslate,
-    })),
-  };
-});
 
 vi.mock("@/lib/api/appConfig", () => ({
   getConfig: mockGetConfig,
@@ -40,9 +17,6 @@ vi.mock("@/lib/api/appConfig", () => ({
 }));
 vi.mock("@tauri-apps/plugin-shell", () => ({
   open: mockOpen,
-}));
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
 }));
 
 import { WebSearchSettings } from ".";
@@ -161,7 +135,8 @@ async function setSelectValue(select: HTMLSelectElement, value: string) {
   });
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  await changeLimeLocale("en-US");
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -202,7 +177,7 @@ beforeEach(() => {
   mockOpen.mockResolvedValue(undefined);
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mounted.length > 0) {
     const target = mounted.pop();
     if (!target) break;
@@ -212,6 +187,7 @@ afterEach(() => {
     target.container.remove();
   }
   vi.clearAllMocks();
+  await changeLimeLocale("zh-CN");
 });
 
 describe("WebSearchSettings", () => {
@@ -221,15 +197,27 @@ describe("WebSearchSettings", () => {
     await flushEffects();
 
     const text = container.textContent ?? "";
-    expect(text).toContain("网络搜索");
-    expect(text).toContain("管理搜索引擎、Provider 回退和图片搜索 Key。");
-    expect(text).toContain("当前 Provider：duckduckgo_instant");
-    expect(text).toContain("状态：已保存");
-    expect(text).toContain("联网搜索配置");
-    expect(text).toContain("Provider 凭证");
-    expect(text).toContain("MSE 聚合");
-    expect(text).toContain("图片搜索");
-    expect(text).not.toContain("联网图片搜索");
+    expect(text).toContain("Web Search");
+    expect(text).toContain(
+      "Manage search engines, provider fallback, and image search keys.",
+    );
+    expect(text).toContain("Current provider: duckduckgo_instant");
+    expect(text).toContain("Status: saved");
+    expect(text).toContain("Online Search Configuration");
+    expect(text).toContain("General search first");
+    expect(text).toContain("Choose search engine");
+    expect(text).toContain("Xiaohongshu");
+    expect(text).toContain("Preferred search provider");
+    expect(text).toContain("Provider fallback priority (comma-separated)");
+    expect(text).toContain("Provider credential status");
+    expect(text).toContain("Current fallback preview");
+    expect(text).toContain("duckduckgo_instant -> bing_search_api");
+    expect(text).toContain("Configuration advice");
+    expect(text).toContain("Provider Credentials");
+    expect(text).toContain("MSE Aggregation");
+    expect(text).toContain("Image Search");
+    expect(text).not.toContain("Online Image Search");
+    expect(text).not.toContain("网络搜索");
     expect(container.querySelector("#web-search-tavily-key")).toBeNull();
     expect(container.querySelector("#web-search-mse-priority")).toBeNull();
     expect(container.querySelector("#web-search-pexels-key")).toBeNull();
@@ -238,6 +226,43 @@ describe("WebSearchSettings", () => {
     expect(select.value).toBe("google");
     const provider = findSelect(container, "web-search-provider");
     expect(provider.value).toBe("duckduckgo_instant");
+    expect(
+      findInput(container, "web-search-provider-priority").placeholder,
+    ).toBe(
+      "tavily, multi_search_engine, bing_search_api, google_custom_search, duckduckgo_instant",
+    );
+
+    const searchChainTip = await hoverTip(
+      "Online search configuration details",
+    );
+    expect(getBodyText()).toContain(
+      "Choose the search engine and preferred provider first, then fill in fallback order and required credentials.",
+    );
+    await leaveTip(searchChainTip);
+
+    const engineTip = await hoverTip("Choose search engine details");
+    expect(getBodyText()).toContain(
+      "Google is for general search; Xiaohongshu is for Chinese lifestyle and shopping content.",
+    );
+    await leaveTip(engineTip);
+
+    const priorityTip = await hoverTip("Provider fallback priority details");
+    expect(getBodyText()).toContain(
+      "Uses the default fallback chain when empty; unknown providers are ignored.",
+    );
+    await leaveTip(priorityTip);
+
+    const previewTip = await hoverTip("Current fallback preview details");
+    expect(getBodyText()).toContain(
+      "Shows the search fallback chain in current provider order.",
+    );
+    await leaveTip(previewTip);
+
+    const suggestionTip = await hoverTip("Online search configuration advice");
+    expect(getBodyText()).toContain(
+      "For more stable general web search, fill Tavily, Bing, or Google Custom Search first. MSE works better as aggregate fallback.",
+    );
+    await leaveTip(suggestionTip);
   });
 
   it("切到 Provider 凭证 tab 后应加载搜索服务 Key", async () => {
@@ -245,9 +270,9 @@ describe("WebSearchSettings", () => {
     await flushEffects();
     await flushEffects();
 
-    await switchTab(container, "Provider 凭证");
+    await switchTab(container, "Provider Credentials");
 
-    expect(container.textContent).toContain("Provider 凭证");
+    expect(container.textContent).toContain("Provider Credentials");
     const tavilyInput = findInput(container, "web-search-tavily-key");
     expect(tavilyInput.value).toBe("tavily-old-key");
 
@@ -267,16 +292,51 @@ describe("WebSearchSettings", () => {
     await flushEffects();
     await flushEffects();
 
-    await switchTab(container, "MSE 聚合");
+    await switchTab(container, "MSE Aggregation");
 
-    expect(container.textContent).toContain("Multi Search Engine");
+    const text = container.textContent ?? "";
+    expect(text).toContain("Multi Search Engine");
+    expect(text).toContain("Custom template not configured");
+    expect(text).toContain("Multi Search Engine priority (comma-separated)");
+    expect(text).toContain("View MSE design reference");
+    expect(text).toContain("Per-engine result limit");
+    expect(text).toContain("Total aggregation limit");
+    expect(text).toContain("Per-engine timeout (ms)");
+    expect(text).toContain("Custom engine name (optional)");
+    expect(text).toContain("Custom engine URL template (must include {query})");
+    expect(text).toContain("MSE usage advice");
+    expect(text).toContain("Current template status");
+    expect(text).toContain(
+      "The custom engine is not ready yet. It needs a name and a template containing {query}.",
+    );
     expect(findInput(container, "web-search-mse-priority").value).toBe(
       "google, bing",
+    );
+    expect(findInput(container, "web-search-mse-priority").placeholder).toBe(
+      "google, bing, duckduckgo, brave",
     );
     expect(findInput(container, "web-search-mse-max-per-engine").value).toBe(
       "5",
     );
     expect(findInput(container, "web-search-mse-timeout").value).toBe("4000");
+    expect(
+      findInput(container, "web-search-mse-custom-engine-name").placeholder,
+    ).toBe("For example: hn");
+    expect(
+      findInput(container, "web-search-mse-custom-engine-template").placeholder,
+    ).toBe("https://example.com/search?q={query}");
+
+    const mseTip = await hoverTip("Multi Search Engine details");
+    expect(getBodyText()).toContain(
+      "Maintain MSE aggregation order, limits, timeouts, and custom engine templates in one place.",
+    );
+    await leaveTip(mseTip);
+
+    const suggestionTip = await hoverTip("MSE usage advice details");
+    expect(getBodyText()).toContain(
+      "Put frequently used engines first. Avoid high total limits that slow responses; around 4s is a balanced desktop timeout.",
+    );
+    await leaveTip(suggestionTip);
   });
 
   it("切到图片搜索 tab 后应加载图片 Key 和观测面板", async () => {
@@ -284,14 +344,57 @@ describe("WebSearchSettings", () => {
     await flushEffects();
     await flushEffects();
 
-    await switchTab(container, "图片搜索");
+    await switchTab(container, "Image Search");
 
-    expect(container.textContent).toContain("联网图片搜索");
-    expect(container.textContent).toContain("观测面板");
+    const text = container.textContent ?? "";
+    expect(text).toContain("Online Image Search");
+    expect(text).toContain("Pexels filled");
+    expect(text).toContain("Pixabay filled");
+    expect(text).toContain("Pexels API Key");
+    expect(text).toContain("Apply for Pexels Key");
+    expect(text).toContain("View docs");
+    expect(text).toContain("Pexels onboarding note is tucked away");
+    expect(text).toContain("Pixabay API Key");
+    expect(text).toContain("Apply for Pixabay Key");
+    expect(text).toContain("Pixabay onboarding note is tucked away");
+    expect(text).toContain("Observability Panel");
+    expect(text).toContain("MSE custom template not configured");
+    expect(text).toContain("Current provider fallback chain");
+    expect(text).toContain("duckduckgo_instant -> bing_search_api");
+    expect(text).toContain("Image search keys");
+    expect(text).toContain(
+      "Claw image material search has at least one online image source available.",
+    );
     const input = findInput(container, "web-search-pexels-key");
     expect(input.value).toBe("old-key");
+    expect(input.placeholder).toBe("Enter Pexels API Key");
     const pixabayInput = findInput(container, "web-search-pixabay-key");
     expect(pixabayInput.value).toBe("old-pixabay-key");
+    expect(pixabayInput.placeholder).toBe("Enter Pixabay API Key");
+
+    const imagesTip = await hoverTip("Online image search details");
+    expect(getBodyText()).toContain(
+      "Configure Pexels and Pixabay API keys used by Claw `@素材` online image search.",
+    );
+    await leaveTip(imagesTip);
+
+    const observabilityTip = await hoverTip("Observability panel details");
+    expect(getBodyText()).toContain(
+      "Quickly check whether the current search chain is complete before saving.",
+    );
+    await leaveTip(observabilityTip);
+
+    const pexelsKeyTip = await hoverTip("Pexels API Key details");
+    expect(getBodyText()).toContain(
+      "Falls back to the PEXELS_API_KEY environment variable when empty.",
+    );
+    await leaveTip(pexelsKeyTip);
+
+    const pixabayKeyTip = await hoverTip("Pixabay API Key details");
+    expect(getBodyText()).toContain(
+      "Falls back to the PIXABAY_API_KEY environment variable when empty.",
+    );
+    await leaveTip(pixabayKeyTip);
   });
 
   it("应把联网搜索补充说明收进 tips", async () => {
@@ -300,27 +403,39 @@ describe("WebSearchSettings", () => {
     await flushEffects();
 
     expect(getBodyText()).not.toContain(
-      "管理搜索引擎、Provider 回退链和图片搜索 Key；各服务的接入说明已经分别收进对应配置分区。",
+      "Manage search engines, provider fallback chains, and image search keys. Service onboarding notes are tucked into their respective configuration sections.",
     );
     expect(getBodyText()).not.toContain(
-      "申请地址：https://www.pexels.com/api/new/",
+      "Apply URL: https://www.pexels.com/api/new/",
+    );
+    expect(getBodyText()).not.toContain(
+      "Apply URL: https://pixabay.com/accounts/register/",
     );
 
-    const heroTip = await hoverTip("联网搜索设置总览说明");
+    const heroTip = await hoverTip("Online search settings overview");
     expect(getBodyText()).toContain(
-      "管理搜索引擎、Provider 回退链和图片搜索 Key；各服务的接入说明已经分别收进对应配置分区。",
+      "Manage search engines, provider fallback chains, and image search keys. Service onboarding notes are tucked into their respective configuration sections.",
     );
     await leaveTip(heroTip);
 
-    await switchTab(document.body, "图片搜索");
-    const pexelsTip = await hoverTip("Pexels 接入说明");
+    await switchTab(document.body, "Image Search");
+    const pexelsTip = await hoverTip("Pexels onboarding note");
     expect(getBodyText()).toContain(
-      "申请地址：https://www.pexels.com/api/new/",
+      "Apply URL: https://www.pexels.com/api/new/",
     );
     expect(getBodyText()).toContain(
-      "验证路径：Claw → @素材 → Pexels 图片候选。",
+      "Verification path: Claw → @素材 → Pexels image candidates.",
     );
     await leaveTip(pexelsTip);
+
+    const pixabayTip = await hoverTip("Pixabay onboarding note");
+    expect(getBodyText()).toContain(
+      "Apply URL: https://pixabay.com/accounts/register/",
+    );
+    expect(getBodyText()).toContain(
+      "Verification path: Claw → @素材 → Pixabay image candidates.",
+    );
+    await leaveTip(pixabayTip);
   });
 
   it("修改搜索提供商与图片 Key 后应统一保存", async () => {
@@ -341,7 +456,7 @@ describe("WebSearchSettings", () => {
       "multi_search_engine, tavily, bing_search_api",
     );
 
-    await switchTab(container, "Provider 凭证");
+    await switchTab(container, "Provider Credentials");
     await setInputValue(
       findInput(container, "web-search-tavily-key"),
       "tavily-new-key",
@@ -359,7 +474,7 @@ describe("WebSearchSettings", () => {
       "cx-new-id",
     );
 
-    await switchTab(container, "MSE 聚合");
+    await switchTab(container, "MSE Aggregation");
     await setInputValue(
       findInput(container, "web-search-mse-custom-engine-name"),
       "hn",
@@ -368,8 +483,11 @@ describe("WebSearchSettings", () => {
       findInput(container, "web-search-mse-custom-engine-template"),
       "https://hn.algolia.com/?q={query}",
     );
+    expect(container.textContent).toContain("Custom template ready");
+    expect(container.textContent).toContain("Custom engine ready: hn");
 
-    await switchTab(container, "图片搜索");
+    await switchTab(container, "Image Search");
+    expect(container.textContent).toContain("MSE custom template ready");
     await setInputValue(
       findInput(container, "web-search-pexels-key"),
       "new-key",
@@ -380,7 +498,7 @@ describe("WebSearchSettings", () => {
     );
 
     await act(async () => {
-      findButton(container, "保存").click();
+      findButton(container, "Save").click();
       await flushEffects();
     });
 
@@ -410,7 +528,7 @@ describe("WebSearchSettings", () => {
         }),
       }),
     );
-    expect(container.textContent).toContain("网络搜索设置已保存");
+    expect(container.textContent).toContain("Web search settings saved");
   });
 
   it("点击一键申请 Key 应打开官方申请页面", async () => {
@@ -418,9 +536,9 @@ describe("WebSearchSettings", () => {
     await flushEffects();
     await flushEffects();
 
-    await switchTab(container, "图片搜索");
+    await switchTab(container, "Image Search");
     await act(async () => {
-      findButton(container, "申请 Pexels Key").click();
+      findButton(container, "Apply for Pexels Key").click();
       await flushEffects();
     });
 
@@ -432,9 +550,9 @@ describe("WebSearchSettings", () => {
     await flushEffects();
     await flushEffects();
 
-    await switchTab(container, "Provider 凭证");
+    await switchTab(container, "Provider Credentials");
     await act(async () => {
-      findButton(container, "申请 Tavily Key").click();
+      findButton(container, "Apply for Tavily Key").click();
       await flushEffects();
     });
 
@@ -446,9 +564,9 @@ describe("WebSearchSettings", () => {
     await flushEffects();
     await flushEffects();
 
-    await switchTab(container, "图片搜索");
+    await switchTab(container, "Image Search");
     await act(async () => {
-      findButton(container, "申请 Pixabay Key").click();
+      findButton(container, "Apply for Pixabay Key").click();
       await flushEffects();
     });
 
@@ -462,9 +580,9 @@ describe("WebSearchSettings", () => {
     await flushEffects();
     await flushEffects();
 
-    await switchTab(container, "Provider 凭证");
+    await switchTab(container, "Provider Credentials");
     await act(async () => {
-      findButton(container, "申请 Bing Key").click();
+      findButton(container, "Apply for Bing Key").click();
       await flushEffects();
     });
 
@@ -478,9 +596,9 @@ describe("WebSearchSettings", () => {
     await flushEffects();
     await flushEffects();
 
-    await switchTab(container, "Provider 凭证");
+    await switchTab(container, "Provider Credentials");
     await act(async () => {
-      findButton(container, "申请 Google Key").click();
+      findButton(container, "Apply for Google Key").click();
       await flushEffects();
     });
 
@@ -494,9 +612,9 @@ describe("WebSearchSettings", () => {
     await flushEffects();
     await flushEffects();
 
-    await switchTab(container, "Provider 凭证");
+    await switchTab(container, "Provider Credentials");
     await act(async () => {
-      findButton(container, "创建 CSE").click();
+      findButton(container, "Create CSE").click();
       await flushEffects();
     });
 

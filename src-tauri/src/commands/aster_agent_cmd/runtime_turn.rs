@@ -28,10 +28,12 @@ use aster::hooks::{CompactTrigger, SessionSource};
 use aster::session::TurnContextOverride;
 use aster::tools::{ConfigTool, SkillTool};
 use lime_agent::{build_diagnostics_runtime_status_metadata, AgentEvent as RuntimeAgentEvent};
+use lime_core::database::dao::agent_timeline::{AgentThreadItemPayload, AgentThreadItemStatus};
 use lime_core::workspace::WorkspaceSettings;
 use regex::Regex;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use tauri::Manager;
 
@@ -5683,6 +5685,7 @@ async fn execute_runtime_stream_attempt(
         &request.event_name,
         profile_stream.model_requested(&provider_selector, &provider_name, &model_name),
     );
+    let tool_profile_state = Arc::new(Mutex::new(RuntimeToolProfileState::default()));
 
     let execution = match stream_reply_once(
         agent,
@@ -5699,6 +5702,8 @@ async fn execute_runtime_stream_attempt(
             let event_name = request.event_name.clone();
             let timeline_recorder = timeline_recorder.clone();
             let stream_timing = stream_timing.clone();
+            let profile_stream = profile_stream.clone();
+            let tool_profile_state = tool_profile_state.clone();
             move |event| {
                 record_runtime_stream_event(
                     &run_observation,
@@ -5709,6 +5714,8 @@ async fn execute_runtime_stream_attempt(
                     request_metadata,
                     provider_continuation_capability,
                     &stream_timing,
+                    &profile_stream,
+                    &tool_profile_state,
                     event,
                 )
             }
@@ -5805,6 +5812,14 @@ impl RuntimeStreamTiming {
         }
     }
 
+    fn elapsed_ms(&self) -> u64 {
+        self.started_at
+            .elapsed()
+            .as_millis()
+            .try_into()
+            .unwrap_or(u64::MAX)
+    }
+
     fn mark_direct_emit(&self, event_name: &str, event: &RuntimeAgentEvent) {
         let has_visible_delta = match event {
             RuntimeAgentEvent::TextDelta { text } | RuntimeAgentEvent::ThinkingDelta { text } => {
@@ -5885,6 +5900,198 @@ fn emit_direct_runtime_stream_event(
             event_name,
             error
         );
+    }
+}
+
+#[derive(Default)]
+struct RuntimeToolProfileState {
+    tool_names: HashMap<String, String>,
+    started_tool_call_ids: HashSet<String>,
+    terminal_tool_call_ids: HashSet<String>,
+}
+
+fn runtime_tool_profile_key(tool_call_id: &str, tool_name: Option<&str>) -> String {
+    let trimmed_id = tool_call_id.trim();
+    if !trimmed_id.is_empty() {
+        return trimmed_id.to_string();
+    }
+
+    let trimmed_name = tool_name.unwrap_or_default().trim();
+    if trimmed_name.is_empty() {
+        "tool_call_unavailable".to_string()
+    } else {
+        format!("tool_call_unavailable:{trimmed_name}")
+    }
+}
+
+fn remember_runtime_tool_name(
+    state: &mut RuntimeToolProfileState,
+    tool_call_id: &str,
+    tool_name: &str,
+) {
+    let normalized_name = tool_name.trim();
+    if normalized_name.is_empty() {
+        return;
+    }
+
+    let key = runtime_tool_profile_key(tool_call_id, Some(normalized_name));
+    state
+        .tool_names
+        .entry(key)
+        .and_modify(|current| {
+            if current.trim().is_empty() || current == "unknown_tool" {
+                *current = normalized_name.to_string();
+            }
+        })
+        .or_insert_with(|| normalized_name.to_string());
+}
+
+fn runtime_tool_name_from_result_metadata(result: &lime_agent::AgentToolResult) -> Option<&str> {
+    let metadata = result.metadata.as_ref()?;
+    ["toolName", "tool_name", "name"]
+        .iter()
+        .find_map(|key| metadata.get(*key)?.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
+fn emit_runtime_tool_started_profile_event(
+    profile_stream: &AgentRuntimeProfileStream,
+    state: &mut RuntimeToolProfileState,
+    tool_call_id: &str,
+    tool_name: &str,
+) -> Option<AgentRuntimeProfileEvent> {
+    remember_runtime_tool_name(state, tool_call_id, tool_name);
+    let key = runtime_tool_profile_key(tool_call_id, Some(tool_name));
+    if !state.started_tool_call_ids.insert(key) {
+        return None;
+    }
+
+    Some(profile_stream.tool_started(tool_call_id, tool_name))
+}
+
+fn emit_runtime_tool_terminal_profile_event(
+    profile_stream: &AgentRuntimeProfileStream,
+    state: &mut RuntimeToolProfileState,
+    tool_call_id: &str,
+    tool_name_hint: Option<&str>,
+    success: bool,
+    error: Option<&str>,
+) -> Option<AgentRuntimeProfileEvent> {
+    if let Some(tool_name) = tool_name_hint {
+        remember_runtime_tool_name(state, tool_call_id, tool_name);
+    }
+
+    let key = runtime_tool_profile_key(tool_call_id, tool_name_hint);
+    if !state.terminal_tool_call_ids.insert(key.clone()) {
+        return None;
+    }
+
+    let tool_name = tool_name_hint
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .or_else(|| state.tool_names.get(&key).cloned())
+        .unwrap_or_else(|| "unknown_tool".to_string());
+
+    if success {
+        Some(profile_stream.tool_result(tool_call_id, tool_name.as_str(), true))
+    } else {
+        Some(profile_stream.tool_failed(
+            tool_call_id,
+            tool_name.as_str(),
+            "tool_error",
+            error.unwrap_or("tool failed"),
+        ))
+    }
+}
+
+fn project_runtime_tool_profile_events(
+    profile_stream: &AgentRuntimeProfileStream,
+    state: &mut RuntimeToolProfileState,
+    event: &RuntimeAgentEvent,
+) -> Vec<AgentRuntimeProfileEvent> {
+    match event {
+        RuntimeAgentEvent::ToolStart {
+            tool_name, tool_id, ..
+        } => emit_runtime_tool_started_profile_event(profile_stream, state, tool_id, tool_name)
+            .into_iter()
+            .collect(),
+        RuntimeAgentEvent::ToolEnd { tool_id, result } => {
+            let tool_name_hint = runtime_tool_name_from_result_metadata(result);
+            emit_runtime_tool_terminal_profile_event(
+                profile_stream,
+                state,
+                tool_id,
+                tool_name_hint,
+                result.success,
+                result.error.as_deref(),
+            )
+            .into_iter()
+            .collect()
+        }
+        RuntimeAgentEvent::ItemStarted { item } | RuntimeAgentEvent::ItemUpdated { item } => {
+            if let AgentThreadItemPayload::ToolCall { tool_name, .. } = &item.payload {
+                return emit_runtime_tool_started_profile_event(
+                    profile_stream,
+                    state,
+                    item.id.as_str(),
+                    tool_name.as_str(),
+                )
+                .into_iter()
+                .collect();
+            }
+            Vec::new()
+        }
+        RuntimeAgentEvent::ItemCompleted { item } => {
+            let AgentThreadItemPayload::ToolCall {
+                tool_name,
+                success,
+                error,
+                ..
+            } = &item.payload
+            else {
+                return Vec::new();
+            };
+            let success =
+                item.status == AgentThreadItemStatus::Completed && !matches!(success, Some(false));
+            emit_runtime_tool_terminal_profile_event(
+                profile_stream,
+                state,
+                item.id.as_str(),
+                Some(tool_name.as_str()),
+                success,
+                error.as_deref(),
+            )
+            .into_iter()
+            .collect()
+        }
+        _ => Vec::new(),
+    }
+}
+
+fn emit_runtime_tool_profile_events(
+    app: &AppHandle,
+    event_name: &str,
+    profile_stream: &AgentRuntimeProfileStream,
+    tool_profile_state: &Arc<Mutex<RuntimeToolProfileState>>,
+    event: &RuntimeAgentEvent,
+) {
+    let profile_events = {
+        let mut state = match tool_profile_state.lock() {
+            Ok(guard) => guard,
+            Err(error) => {
+                tracing::warn!(
+                    "[AsterAgent][AgentRuntimeProfile] tool profile state lock poisoned"
+                );
+                error.into_inner()
+            }
+        };
+        project_runtime_tool_profile_events(profile_stream, &mut state, event)
+    };
+
+    for event in profile_events {
+        emit_agent_runtime_profile_event(app, event_name, event);
     }
 }
 
@@ -6295,6 +6502,8 @@ fn record_runtime_stream_event(
     request_metadata: Option<&serde_json::Value>,
     provider_continuation_capability: ProviderContinuationCapability,
     stream_timing: &RuntimeStreamTiming,
+    profile_stream: &AgentRuntimeProfileStream,
+    tool_profile_state: &Arc<Mutex<RuntimeToolProfileState>>,
     event: &RuntimeAgentEvent,
 ) -> bool {
     let emitted_directly = should_emit_runtime_stream_event_directly(event);
@@ -6309,12 +6518,14 @@ fn record_runtime_stream_event(
             error.into_inner()
         }
     };
+    observation.record_model_delta_timing(event, stream_timing.elapsed_ms());
     observation.record_event(
         event,
         workspace_root,
         request_metadata,
         provider_continuation_capability,
     );
+    emit_runtime_tool_profile_events(app, event_name, profile_stream, tool_profile_state, event);
 
     if !should_record_runtime_stream_event_on_timeline(event) {
         return emitted_directly;
@@ -7693,6 +7904,8 @@ mod tests {
     use aster::model::ModelConfig;
     use aster::providers::base::{Provider, ProviderMetadata, ProviderUsage, Usage};
     use aster::providers::errors::ProviderError;
+    use aster::providers::formats::openai::format_messages as format_openai_messages;
+    use aster::providers::utils::ImageFormat;
     use aster::session::{
         delete_managed_session, initialize_shared_session_runtime_with_root,
         is_global_session_store_set, SessionManager, SessionType,
@@ -7837,6 +8050,33 @@ mod tests {
         }
     }
 
+    fn build_runtime_turn_test_tool_item(
+        id: &str,
+        status: AgentThreadItemStatus,
+        success: Option<bool>,
+        error: Option<&str>,
+    ) -> AgentThreadItem {
+        let now = Utc::now().to_rfc3339();
+        AgentThreadItem {
+            id: id.to_string(),
+            thread_id: "thread-test".to_string(),
+            turn_id: "turn-test".to_string(),
+            sequence: 2,
+            status,
+            started_at: now.clone(),
+            completed_at: Some(now.clone()),
+            updated_at: now,
+            payload: AgentThreadItemPayload::ToolCall {
+                tool_name: "Read".to_string(),
+                arguments: Some(json!({ "path": "README.md" })),
+                output: None,
+                success,
+                error: error.map(str::to_string),
+                metadata: None,
+            },
+        }
+    }
+
     #[test]
     fn runtime_stream_text_delta_should_bypass_timeline_for_direct_emit() {
         let event = RuntimeAgentEvent::TextDelta {
@@ -7896,6 +8136,116 @@ mod tests {
 
         assert!(should_emit_runtime_stream_event_directly(&event));
         assert!(!should_record_runtime_stream_event_on_timeline(&event));
+    }
+
+    #[test]
+    fn runtime_tool_profile_should_follow_real_tool_start_and_end_once() {
+        let stream = AgentRuntimeProfileStream::new("session-test", "thread-test", "turn-test")
+            .expect("profile stream");
+        let mut state = RuntimeToolProfileState::default();
+
+        let started = project_runtime_tool_profile_events(
+            &stream,
+            &mut state,
+            &RuntimeAgentEvent::ToolStart {
+                tool_name: "Read".to_string(),
+                tool_id: "tool-1".to_string(),
+                arguments: Some("{\"path\":\"README.md\"}".to_string()),
+            },
+        );
+        assert_eq!(started.len(), 1);
+        assert_eq!(started[0].event_type, "tool.started");
+        assert_eq!(started[0].payload["toolCallId"], "tool-1");
+        assert_eq!(started[0].payload["toolName"], "Read");
+
+        let duplicate_started = project_runtime_tool_profile_events(
+            &stream,
+            &mut state,
+            &RuntimeAgentEvent::ItemStarted {
+                item: build_runtime_turn_test_tool_item(
+                    "tool-1",
+                    AgentThreadItemStatus::InProgress,
+                    None,
+                    None,
+                ),
+            },
+        );
+        assert!(duplicate_started.is_empty());
+
+        let completed = project_runtime_tool_profile_events(
+            &stream,
+            &mut state,
+            &RuntimeAgentEvent::ToolEnd {
+                tool_id: "tool-1".to_string(),
+                result: lime_agent::AgentToolResult {
+                    success: true,
+                    output: "ok".to_string(),
+                    error: None,
+                    images: None,
+                    metadata: None,
+                },
+            },
+        );
+        assert_eq!(completed.len(), 1);
+        assert_eq!(completed[0].event_type, "tool.result");
+        assert_eq!(completed[0].payload["toolCallId"], "tool-1");
+        assert_eq!(completed[0].payload["toolName"], "Read");
+        assert_eq!(completed[0].payload["success"], true);
+
+        let duplicate_completed = project_runtime_tool_profile_events(
+            &stream,
+            &mut state,
+            &RuntimeAgentEvent::ItemCompleted {
+                item: build_runtime_turn_test_tool_item(
+                    "tool-1",
+                    AgentThreadItemStatus::Completed,
+                    Some(true),
+                    None,
+                ),
+            },
+        );
+        assert!(duplicate_completed.is_empty());
+    }
+
+    #[test]
+    fn runtime_tool_profile_should_fallback_to_item_tool_call_failure() {
+        let stream = AgentRuntimeProfileStream::new("session-test", "thread-test", "turn-test")
+            .expect("profile stream");
+        let mut state = RuntimeToolProfileState::default();
+
+        let started = project_runtime_tool_profile_events(
+            &stream,
+            &mut state,
+            &RuntimeAgentEvent::ItemStarted {
+                item: build_runtime_turn_test_tool_item(
+                    "tool-2",
+                    AgentThreadItemStatus::InProgress,
+                    None,
+                    None,
+                ),
+            },
+        );
+        assert_eq!(started.len(), 1);
+        assert_eq!(started[0].event_type, "tool.started");
+
+        let failed = project_runtime_tool_profile_events(
+            &stream,
+            &mut state,
+            &RuntimeAgentEvent::ItemCompleted {
+                item: build_runtime_turn_test_tool_item(
+                    "tool-2",
+                    AgentThreadItemStatus::Failed,
+                    Some(false),
+                    Some("permission denied"),
+                ),
+            },
+        );
+        assert_eq!(failed.len(), 1);
+        assert_eq!(failed[0].event_type, "tool.failed");
+        assert_eq!(failed[0].payload["toolCallId"], "tool-2");
+        assert_eq!(failed[0].payload["toolName"], "Read");
+        assert_eq!(failed[0].payload["failureCategory"], "tool_error");
+        assert_eq!(failed[0].payload["message"], "permission denied");
     }
 
     #[test]
@@ -8938,6 +9288,41 @@ mod tests {
         assert_eq!(policy.forwarded_image_count, 1);
         assert_eq!(policy.dropped_image_count, 0);
         assert!(build_runtime_image_input_unsupported_warning(&request).is_none());
+    }
+
+    #[test]
+    fn runtime_vision_image_turn_should_keep_prompt_text_for_provider() {
+        let mut request = build_runtime_turn_test_request("请识别这张图里的文字", None);
+        request.images = Some(vec![ImageInput {
+            data: "aGVsbG8=".to_string(),
+            media_type: "image/png".to_string(),
+        }]);
+        request.provider_config = Some(ConfigureProviderRequest {
+            provider_id: Some("openai".to_string()),
+            provider_name: "openai".to_string(),
+            model_name: "gpt-4o".to_string(),
+            api_key: None,
+            base_url: None,
+            model_capabilities: Some(runtime_test_model_capabilities(true)),
+            tool_call_strategy: None,
+            toolshim_model: None,
+        });
+
+        let message = build_runtime_user_message(
+            &request.message,
+            resolve_runtime_forwarded_images(&request),
+        );
+        let spec = format_openai_messages(&[message], &ImageFormat::OpenAi);
+
+        let content = spec[0]["content"].as_array().expect("content parts");
+        assert_eq!(content.len(), 2);
+        assert_eq!(content[0]["type"], "text");
+        assert_eq!(content[0]["text"], "请识别这张图里的文字");
+        assert_eq!(content[1]["type"], "image_url");
+        assert_eq!(
+            content[1]["image_url"]["url"],
+            "data:image/png;base64,aGVsbG8="
+        );
     }
 
     #[test]

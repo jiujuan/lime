@@ -31,44 +31,12 @@ import {
   recordCuratedTaskRecommendationSignalFromMemory,
   recordCuratedTaskRecommendationSignalFromReviewDecision,
 } from "../utils/curatedTaskRecommendationSignals";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 const mockListServiceSkills = vi.hoisted(() => vi.fn());
 const mockListUnifiedMemories = vi.hoisted(() =>
   vi.fn<() => Promise<UnifiedMemory[]>>(async () => []),
 );
-const mockUseTranslation = vi.hoisted(() => {
-  const mockTranslate = vi.fn(
-    (
-      key: string,
-      fallbackOrOptions?: string | { defaultValue?: string },
-      options?: Record<string, unknown>,
-    ) => {
-      const values: Record<string, unknown> =
-        typeof fallbackOrOptions === "object" && fallbackOrOptions !== null
-          ? (fallbackOrOptions as Record<string, unknown>)
-          : (options ?? {});
-      const template =
-        typeof fallbackOrOptions === "string"
-          ? fallbackOrOptions
-          : typeof values.defaultValue === "string"
-            ? values.defaultValue
-            : key;
-
-      return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, name) => {
-        const value = values[name];
-        return value == null ? match : String(value);
-      });
-    },
-  );
-
-  return vi.fn((_namespace?: string) => ({
-    i18n: {
-      language: "zh-CN",
-      resolvedLanguage: "zh-CN",
-    },
-    t: mockTranslate,
-  }));
-});
 
 vi.mock("sonner", () => ({
   toast: {
@@ -88,10 +56,6 @@ vi.mock("@/lib/api/serviceSkills", async (importOriginal) => {
 
 vi.mock("@/lib/api/unifiedMemory", () => ({
   listUnifiedMemories: mockListUnifiedMemories,
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
 }));
 
 vi.mock("@/components/ui/popover", () => {
@@ -303,7 +267,9 @@ vi.mock("@/components/ui/dialog", () => ({
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
-beforeEach(() => {
+beforeEach(async () => {
+  await changeLimeLocale("zh-CN");
+
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -904,7 +870,7 @@ describe("CharacterMention", () => {
     expect(regularButtons).toHaveLength(1);
   });
 
-  it("@ 空查询时应优先显示最近调用的内建命令，且不在内建命令分组重复", async () => {
+  it("@ 空查询时应先显示命令注册表，最近调用只作为续跑入口", async () => {
     act(() => {
       recordMentionEntryUsage({
         kind: "builtin_command",
@@ -919,11 +885,15 @@ describe("CharacterMention", () => {
     await typeAtAndWait(textarea);
 
     expect(document.body.textContent).toContain("最近调用");
+    const bodyText = document.body.textContent ?? "";
+    expect(bodyText.indexOf("搜索 / 读取")).toBeLessThan(
+      bodyText.indexOf("最近调用"),
+    );
 
     const recentCommandButtons = Array.from(
       document.body.querySelectorAll("button"),
     ).filter((button) => button.textContent?.includes("@搜索"));
-    expect(recentCommandButtons).toHaveLength(1);
+    expect(recentCommandButtons).toHaveLength(2);
   });
 
   it("@ 面板打开后新增内建命令 recent usage 时，应即时刷新最近调用分组", async () => {
@@ -983,7 +953,11 @@ describe("CharacterMention", () => {
 
     const recentCommandButton = Array.from(
       document.body.querySelectorAll("button"),
-    ).find((button) => button.textContent?.includes("@搜索"));
+    ).find(
+      (button) =>
+        button.textContent?.includes("@搜索") &&
+        button.textContent.includes("上次输入："),
+    );
     expect(recentCommandButton).toBeTruthy();
 
     act(() => {

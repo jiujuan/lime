@@ -11,6 +11,8 @@ import {
   listCuratedTaskRecommendationSignals,
   type CuratedTaskRecommendationSignal,
 } from "./curatedTaskRecommendationSignals";
+import { formatNumber } from "@/i18n/format";
+import agentSourceResource from "@/i18n/resources/zh-CN/agent.json";
 
 export interface CuratedTaskTemplateItem {
   id: string;
@@ -62,7 +64,34 @@ export interface CuratedTaskFollowUpActionTarget {
   promptHint?: string;
 }
 
+interface CuratedTaskInputFieldDefinition {
+  key: string;
+  type: CuratedTaskInputFieldType;
+  hasHelperText?: boolean;
+}
+
+interface CuratedTaskFollowUpActionTargetDefinition {
+  taskId: string;
+  hasPromptHint?: boolean;
+}
+
 interface CuratedTaskTemplateDefinition {
+  id: string;
+  prompt: string;
+  requiredInputFields: CuratedTaskInputFieldDefinition[];
+  optionalReferenceCount: number;
+  outputContractCount: number;
+  followUpActionCount: number;
+  themeTarget?: string;
+  shouldEnableWebSearch?: boolean;
+  shouldEnableTeamMode?: boolean;
+  shouldLaunchBrowserAssist?: boolean;
+  followUpActionTargets?: Partial<
+    Record<number, CuratedTaskFollowUpActionTargetDefinition>
+  >;
+}
+
+interface ResolvedCuratedTaskTemplateDefinition {
   id: string;
   title: string;
   summary: string;
@@ -178,197 +207,121 @@ export interface CuratedTaskPresentationCopy {
 const CURATED_TASK_TEMPLATES: CuratedTaskTemplateDefinition[] = [
   {
     id: "daily-trend-briefing",
-    title: "每日趋势摘要",
-    summary:
-      "先收一版内容趋势、热点方向和值得继续跟进的切口，适合每天快速开工前拉一遍。",
-    outputHint: "趋势摘要 + 选题方向",
-    resultDestination: "趋势摘要会先写回当前内容，方便继续展开选题和主稿。",
-    categoryLabel: "趋势与选题",
     prompt:
       "请先给我做一版每日趋势摘要：围绕当前主题梳理最近值得关注的趋势、热点内容方向、代表案例、用户正在关心的问题，以及最值得立即开工的 3 个选题。",
     requiredInputFields: [
       {
         key: "theme_target",
-        label: "主题或赛道",
-        placeholder: "例如 AI 内容创作、咖啡品牌联名、跨境电商女装",
-        helperText: "先告诉 Lime 你今天要盯哪条内容主线。",
         type: "text",
       },
       {
         key: "platform_region",
-        label: "希望关注的平台/地域",
-        placeholder: "例如 X + TikTok（北美）或 小红书（中文）",
-        helperText: "先限定平台、地域或语种，趋势会更聚焦。",
         type: "text",
       },
     ],
-    optionalReferences: ["已有账号方向", "过去爆款链接"],
-    outputContract: ["趋势摘要", "3 个优先选题", "代表案例线索"],
-    followUpActions: ["继续展开其中一个选题", "生成首条内容主稿"],
+    optionalReferenceCount: 2,
+    outputContractCount: 3,
+    followUpActionCount: 2,
     shouldEnableWebSearch: true,
   },
   {
     id: "social-post-starter",
-    title: "内容主稿生成",
-    summary:
-      "围绕目标受众、表达结构和关键信息，先生成一版可继续迭代的内容首稿。",
-    outputHint: "内容首稿 + 结构提纲",
-    resultDestination:
-      "首版主稿会先进入当前内容，方便继续改写、拆成多平台版本。",
-    categoryLabel: "内容起稿",
     prompt:
       "请先帮我起草一版内容首稿：明确目标受众、标题方向、正文结构、核心观点和可继续扩写的角度，并给我一版适合继续打磨的正文。",
     requiredInputFields: [
       {
         key: "subject_or_product",
-        label: "主题或产品信息",
-        placeholder: "输入主题、产品、活动或你已经掌握的关键信息",
-        helperText: "这里适合放主题背景、产品卖点或活动主张。",
         type: "textarea",
       },
       {
         key: "target_audience",
-        label: "目标受众",
-        placeholder:
-          "例如 25-35 岁新消费品牌运营，或 正在找 AI 剪辑工具的创作者",
-        helperText: "先说清楚这条内容是写给谁看的。",
         type: "text",
       },
     ],
-    optionalReferences: ["品牌语气", "参考案例或灵感图片"],
-    outputContract: ["内容首稿", "结构提纲", "可继续扩写角度"],
-    followUpActions: ["改成多平台版本", "转成口播/字幕稿"],
+    optionalReferenceCount: 2,
+    outputContractCount: 3,
+    followUpActionCount: 2,
   },
   {
     id: "viral-content-breakdown",
-    title: "拆解一条爆款内容",
-    summary:
-      "把一条高表现内容拆成标题钩子、结构节奏、素材手法和可复用套路，方便快速复刻。",
-    outputHint: "爆款拆解 + 可复用模板",
-    resultDestination: "拆解结论会先沉淀到当前内容，方便马上复刻成你的版本。",
-    categoryLabel: "爆款拆解",
     prompt:
       "请帮我拆解这条爆款内容：识别它的目标受众、标题钩子、开场方式、结构节奏、视觉/素材手法、情绪推动点和转化动作，并总结一版可复用模板。",
     requiredInputFields: [
       {
         key: "source_content",
-        label: "爆款链接或内容文本",
-        placeholder: "贴链接、标题、正文，或一段关键内容摘要",
-        helperText: "Lime 需要知道你想拆哪条内容。",
         type: "textarea",
       },
       {
         key: "reuse_goal",
-        label: "你想复用的目标",
-        placeholder: "例如 学标题钩子、复刻结构、改成品牌账号版本",
-        helperText: "告诉 Lime 你想学它的哪一部分。",
         type: "text",
       },
     ],
-    optionalReferences: ["自己的账号定位", "竞品样本"],
-    outputContract: ["结构拆解", "可复用套路", "复刻建议"],
-    followUpActions: ["改成你的版本", "生成跟进主稿"],
+    optionalReferenceCount: 2,
+    outputContractCount: 3,
+    followUpActionCount: 2,
     shouldEnableWebSearch: true,
   },
   {
     id: "longform-multiplatform-rewrite",
-    title: "长文转多平台发布稿",
-    summary:
-      "把长文、资料或文章整理成多平台可直接发布的版本，不用再自己拆标题和结构。",
-    outputHint: "多平台发布稿 + 标题组",
-    resultDestination: "多平台发布稿会先回到当前内容里，方便继续整理和拆分。",
-    categoryLabel: "多平台改写",
     prompt:
       "请把这篇长文整理成多平台发布稿：先提炼核心观点，再给我输出标题组、摘要、正文结构，以及适合不同平台的发布版本和 CTA 建议。",
     requiredInputFields: [
       {
         key: "source_article",
-        label: "原始长文或资料",
-        placeholder: "粘贴文章、会议纪要、资料摘要，或放一段核心内容",
-        helperText: "给原始材料即可，不用先自己整理。",
         type: "textarea",
       },
       {
         key: "target_platform",
-        label: "目标平台",
-        placeholder: "例如 X、LinkedIn、小红书、公众号",
-        helperText: "告诉 Lime 你这次想优先改到哪些平台。",
         type: "text",
       },
     ],
-    optionalReferences: ["品牌语气", "发布限制或 CTA"],
-    outputContract: ["标题组", "多平台发布稿", "CTA 建议"],
-    followUpActions: ["生成配图方向", "补成口播或短视频脚本"],
+    optionalReferenceCount: 2,
+    outputContractCount: 3,
+    followUpActionCount: 2,
   },
   {
     id: "script-to-voiceover",
-    title: "脚本转口播/字幕稿",
-    summary:
-      "把现有脚本整理成更适合口播和字幕的版本，补齐停顿、节奏和适合出镜表达的语气。",
-    outputHint: "口播稿 + 字幕稿",
-    resultDestination:
-      "口播稿和字幕稿会先写回当前内容，方便继续改分镜、配音或多语言版本。",
-    categoryLabel: "视频脚本",
     prompt:
       "请把这份脚本整理成适合口播和字幕的版本：优化句长、停顿、重音提示、镜头感表达和字幕切分，并附上适合配音录制的版本。",
     requiredInputFields: [
       {
         key: "existing_script",
-        label: "现有脚本",
-        placeholder: "贴现有脚本、文案，或一段想改成口播的内容",
-        helperText: "先把原始表达给到 Lime。",
         type: "textarea",
       },
       {
         key: "voiceover_context",
-        label: "口播场景或时长",
-        placeholder: "例如 60 秒出镜口播、短视频字幕版、直播预告",
-        helperText: "用一句话告诉 Lime 你要把它说成什么样。",
         type: "text",
       },
     ],
-    optionalReferences: ["说话风格", "出镜人设"],
-    outputContract: ["口播稿", "字幕切分", "配音版本"],
-    followUpActions: ["继续生成分镜", "整理多语言版本"],
+    optionalReferenceCount: 2,
+    outputContractCount: 3,
+    followUpActionCount: 2,
   },
   {
     id: "account-project-review",
-    title: "复盘这个账号/项目",
-    summary:
-      "围绕目标、已有结果和下一步动作判断当前该怎么推进，适合内容账号、项目推进和运营回看。",
-    outputHint: "判断摘要 + 下一步建议",
-    resultDestination: "判断摘要会先回到当前内容，并把下一轮动作继续带回生成。",
-    categoryLabel: "判断与优化",
     prompt:
       "请帮我判断这个账号或项目当前该怎么推进：先明确目标、当前结果、关键问题、哪些动作有效、哪些地方拖后腿，再给出下一轮最值得执行的优化建议。",
     requiredInputFields: [
       {
         key: "project_goal",
-        label: "账号或项目目标",
-        placeholder: "例如 一个季度涨粉 1 万、提升新品转化、连续 30 天稳定输出",
-        helperText: "先说明这次要对齐什么目标。",
         type: "text",
       },
       {
         key: "existing_results",
-        label: "已有结果或数据",
-        placeholder: "贴关键数据、结果摘要、最近内容表现，或当前遇到的问题",
-        helperText: "Lime 需要知道现在做到哪一步了。",
         type: "textarea",
       },
     ],
-    optionalReferences: ["最近内容链接", "本轮想解决的问题"],
-    outputContract: ["判断摘要", "关键问题", "下一轮动作建议"],
-    followUpActions: ["继续做趋势摘要", "生成下一轮内容方案"],
+    optionalReferenceCount: 2,
+    outputContractCount: 3,
+    followUpActionCount: 2,
     followUpActionTargets: {
-      继续做趋势摘要: {
+      0: {
         taskId: "daily-trend-briefing",
-        promptHint:
-          "请承接这轮判断结论，先补一轮值得继续跟进的趋势与机会窗口。",
+        hasPromptHint: true,
       },
-      生成下一轮内容方案: {
+      1: {
         taskId: "social-post-starter",
-        promptHint: "请承接这轮判断结论，直接生成下一轮最值得执行的内容方案。",
+        hasPromptHint: true,
       },
     },
     shouldEnableTeamMode: true,
@@ -383,14 +336,6 @@ export const FEATURED_HOME_CURATED_TASK_TEMPLATE_IDS = [
   "script-to-voiceover",
   "account-project-review",
 ] as const;
-
-const CURATED_TASK_RECOMMENDATION_LABELS = {
-  identity: "风格",
-  context: "参考",
-  preference: "偏好",
-  experience: "成果",
-  activity: "收藏",
-} as const;
 
 const CURATED_TASK_RECOMMENDATION_KEYWORDS: Record<string, string[]> = {
   "daily-trend-briefing": [
@@ -467,7 +412,7 @@ const CURATED_TASK_RECOMMENDATION_KEYWORDS: Record<string, string[]> = {
 
 const CURATED_TASK_RECOMMENDATION_CATEGORY_WEIGHTS: Record<
   string,
-  Partial<Record<keyof typeof CURATED_TASK_RECOMMENDATION_LABELS, number>>
+  Partial<Record<CuratedTaskRecommendationCategory, number>>
 > = {
   "daily-trend-briefing": {
     context: 9,
@@ -504,7 +449,6 @@ const CURATED_TASK_RECOMMENDATION_CATEGORY_WEIGHTS: Record<
 
 export type CuratedTaskTemplateCopyTranslator = (
   key: string,
-  defaultValue: string,
   values?: Record<string, number | string>,
 ) => string;
 
@@ -512,110 +456,80 @@ export function buildCuratedTaskTemplateCopy(
   translate: CuratedTaskTemplateCopyTranslator,
 ): CuratedTaskTemplateCopy {
   return {
-    actionLabel: translate(
-      "curatedTask.templates.common.actionLabel",
-      "进入生成",
-    ),
-    recentBadgeLabel: translate(
-      "curatedTask.templates.common.recentBadge",
-      "最近使用",
-    ),
-    statusLabel: translate(
-      "curatedTask.templates.common.statusLabel",
-      "可直接开始",
-    ),
+    actionLabel: translate("curatedTask.templates.common.actionLabel"),
+    recentBadgeLabel: translate("curatedTask.templates.common.recentBadge"),
+    statusLabel: translate("curatedTask.templates.common.statusLabel"),
     recommendation: {
       activeReferenceReasonLabel: translate(
         "curatedTask.templates.recommendation.activeReferenceReasonLabel",
-        "围绕当前{{categoryLabel}}",
         { categoryLabel: "{{categoryLabel}}" },
       ),
       categoryLabels: {
         activity: translate(
           "curatedTask.templates.recommendation.category.activity",
-          "收藏",
         ),
         context: translate(
           "curatedTask.templates.recommendation.category.context",
-          "参考",
         ),
         experience: translate(
           "curatedTask.templates.recommendation.category.experience",
-          "成果",
         ),
         identity: translate(
           "curatedTask.templates.recommendation.category.identity",
-          "风格",
         ),
         preference: translate(
           "curatedTask.templates.recommendation.category.preference",
-          "偏好",
         ),
       },
       currentResultReasonLabel: translate(
         "curatedTask.templates.recommendation.currentResultReasonLabel",
-        "围绕当前成果",
       ),
       fallbackLabel: translate(
         "curatedTask.templates.recommendation.fallbackLabel",
-        "灵感",
       ),
       recentActivityReasonLabel: translate(
         "curatedTask.templates.recommendation.recentActivityReasonLabel",
-        "围绕最近收藏",
       ),
       recentContextReasonLabel: translate(
         "curatedTask.templates.recommendation.recentContextReasonLabel",
-        "围绕最近参考",
       ),
       recentExperienceReasonLabel: translate(
         "curatedTask.templates.recommendation.recentExperienceReasonLabel",
-        "围绕最近成果",
       ),
       recentIdentityReasonLabel: translate(
         "curatedTask.templates.recommendation.recentIdentityReasonLabel",
-        "围绕最近风格",
       ),
       recentPreferenceReasonLabel: translate(
         "curatedTask.templates.recommendation.recentPreferenceReasonLabel",
-        "围绕最近偏好",
       ),
       recentReviewReasonLabel: translate(
         "curatedTask.templates.recommendation.recentReviewReasonLabel",
-        "围绕最近判断",
       ),
       resultContinuationReasonLabel: translate(
         "curatedTask.templates.recommendation.resultContinuationReasonLabel",
-        "承接当前结果",
       ),
       formatAccountProjectReviewSummary: (title) =>
         translate(
           "curatedTask.templates.recommendation.accountProjectReviewSummary",
-          "先对齐「{{title}}」这轮结果基线，再决定下一轮动作",
           { title },
         ),
       formatDailyTrendBriefingSummary: (title) =>
         translate(
           "curatedTask.templates.recommendation.dailyTrendBriefingSummary",
-          "围绕「{{title}}」这轮结果继续找趋势窗口",
           { title },
         ),
       formatReviewReasonSummary: (title) =>
-        translate(
-          "curatedTask.templates.recommendation.reviewReasonSummary",
-          "判断：{{title}}",
-          { title },
-        ),
+        translate("curatedTask.templates.recommendation.reviewReasonSummary", {
+          title,
+        }),
       formatSignalReasonSummary: (categoryLabel, title) =>
-        translate(
-          "curatedTask.templates.recommendation.signalReasonSummary",
-          "{{categoryLabel}}：{{title}}",
-          { categoryLabel, title },
-        ),
+        translate("curatedTask.templates.recommendation.signalReasonSummary", {
+          categoryLabel,
+          title,
+        }),
       formatSocialPostStarterSummary: (title) =>
         translate(
           "curatedTask.templates.recommendation.socialPostStarterSummary",
-          "把「{{title}}」这轮结果直接带成下一版主稿",
           { title },
         ),
     },
@@ -635,95 +549,314 @@ function buildCuratedTaskTemplateDefinitionCopy(
   const keyPrefix = `curatedTask.templates.${template.id}`;
 
   return {
-    categoryLabel: translate(
-      `${keyPrefix}.categoryLabel`,
-      template.categoryLabel,
+    categoryLabel: translate(`${keyPrefix}.categoryLabel`),
+    followUpActions: Array.from(
+      { length: template.followUpActionCount },
+      (_, index) => {
+        const target = template.followUpActionTargets?.[index];
+        const actionKey = `${keyPrefix}.followUpActions.${index}`;
+        return {
+          label: translate(actionKey),
+          ...(target?.hasPromptHint
+            ? {
+                promptHint: translate(`${actionKey}.promptHint`),
+              }
+            : {}),
+        };
+      },
     ),
-    followUpActions: template.followUpActions.map((action, index) => {
-      const target = template.followUpActionTargets?.[action];
-      return {
-        label: translate(`${keyPrefix}.followUpActions.${index}`, action),
-        ...(target?.promptHint
-          ? {
-              promptHint: translate(
-                `${keyPrefix}.followUpActions.${index}.promptHint`,
-                target.promptHint,
-              ),
-            }
-          : {}),
-      };
-    }),
-    optionalReferences: template.optionalReferences.map((item, index) =>
-      translate(`${keyPrefix}.optionalReferences.${index}`, item),
+    optionalReferences: Array.from(
+      { length: template.optionalReferenceCount },
+      (_, index) => translate(`${keyPrefix}.optionalReferences.${index}`),
     ),
-    outputContract: template.outputContract.map((item, index) =>
-      translate(`${keyPrefix}.outputContract.${index}`, item),
+    outputContract: Array.from(
+      { length: template.outputContractCount },
+      (_, index) => translate(`${keyPrefix}.outputContract.${index}`),
     ),
-    outputHint: translate(`${keyPrefix}.outputHint`, template.outputHint),
+    outputHint: translate(`${keyPrefix}.outputHint`),
     requiredInputFields: Object.fromEntries(
       template.requiredInputFields.map((field) => [
         field.key,
         {
-          ...(field.helperText
+          ...(field.hasHelperText !== false
             ? {
                 helperText: translate(
                   `${keyPrefix}.fields.${field.key}.helperText`,
-                  field.helperText,
                 ),
               }
             : {}),
-          label: translate(
-            `${keyPrefix}.fields.${field.key}.label`,
-            field.label,
-          ),
+          label: translate(`${keyPrefix}.fields.${field.key}.label`),
           placeholder: translate(
             `${keyPrefix}.fields.${field.key}.placeholder`,
-            field.placeholder,
           ),
         },
       ]),
     ),
-    resultDestination: translate(
-      `${keyPrefix}.resultDestination`,
-      template.resultDestination,
-    ),
-    summary: translate(`${keyPrefix}.summary`, template.summary),
-    title: translate(`${keyPrefix}.title`, template.title),
+    resultDestination: translate(`${keyPrefix}.resultDestination`),
+    summary: translate(`${keyPrefix}.summary`),
+    title: translate(`${keyPrefix}.title`),
   };
+}
+
+type AgentSourceResourceKey = keyof typeof agentSourceResource;
+
+function interpolateCuratedTaskSourceTemplate(
+  template: string,
+  values?: Record<string, number | string>,
+): string {
+  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, name) => {
+    const value = values?.[name];
+    return value == null ? match : String(value);
+  });
+}
+
+function translateCuratedTaskSourceKey(
+  key: string,
+  values?: Record<string, number | string>,
+): string {
+  const template = agentSourceResource[key as AgentSourceResourceKey] ?? key;
+  return interpolateCuratedTaskSourceTemplate(template, values);
+}
+
+const SOURCE_CURATED_TASK_TEMPLATE_COPY = buildCuratedTaskTemplateCopy(
+  translateCuratedTaskSourceKey,
+);
+
+const SOURCE_CURATED_TASK_FACT_ITEM_SEPARATOR = translateCuratedTaskSourceKey(
+  "curatedTask.launcher.summary.itemSeparator",
+);
+
+const SOURCE_CURATED_TASK_PRESENTATION_COPY: CuratedTaskPresentationCopy = {
+  followUpPrefix: translateCuratedTaskSourceKey(
+    "skills.workspace.curatedTask.followUpPrefix",
+  ),
+  itemSeparator: translateCuratedTaskSourceKey(
+    "skills.workspace.curatedTask.itemSeparator",
+  ),
+  outputPrefix: translateCuratedTaskSourceKey(
+    "skills.workspace.curatedTask.outputPrefix",
+  ),
+  recentFilledPrefix: translateCuratedTaskSourceKey(
+    "skills.workspace.curatedTask.recentFilledPrefix",
+  ),
+  recentReferenceFallback: translateCuratedTaskSourceKey(
+    "skills.workspace.curatedTask.recentReferenceFallback",
+    { count: formatNumber(1, { locale: "zh-CN" }) },
+  ),
+  recentReferencePrefix: translateCuratedTaskSourceKey(
+    "skills.workspace.curatedTask.recentReferencePrefix",
+  ),
+  requiredPrefix: translateCuratedTaskSourceKey(
+    "skills.workspace.curatedTask.requiredPrefix",
+  ),
+  resultDestinationPrefix: translateCuratedTaskSourceKey(
+    "skills.workspace.curatedTask.resultDestinationPrefix",
+  ),
+  segmentSeparator: translateCuratedTaskSourceKey(
+    "skills.workspace.curatedTask.segmentSeparator",
+  ),
+  formatFactItems: (visibleItems, totalCount) => {
+    const items = visibleItems.join(SOURCE_CURATED_TASK_FACT_ITEM_SEPARATOR);
+    if (visibleItems.length >= totalCount) {
+      return items;
+    }
+
+    return translateCuratedTaskSourceKey(
+      "skills.workspace.curatedTask.factItems.withMore",
+      {
+        items,
+        remaining: formatNumber(totalCount - visibleItems.length, {
+          locale: "zh-CN",
+        }),
+        total: formatNumber(totalCount, { locale: "zh-CN" }),
+      },
+    );
+  },
+  formatRecentPrefillHint: (taskTitle) =>
+    translateCuratedTaskSourceKey("skills.workspace.curatedTask.prefillHint", {
+      title: taskTitle,
+    }),
+  formatRecentReferenceFallback: (totalCount) =>
+    translateCuratedTaskSourceKey(
+      "skills.workspace.curatedTask.recentReferenceFallback",
+      { count: formatNumber(totalCount, { locale: "zh-CN" }) },
+    ),
+  formatRecentReferenceItems: (visibleTitles, totalCount) => {
+    const items = visibleTitles.join(SOURCE_CURATED_TASK_FACT_ITEM_SEPARATOR);
+    if (visibleTitles.length >= totalCount) {
+      return items;
+    }
+
+    return translateCuratedTaskSourceKey(
+      "skills.workspace.curatedTask.referenceItems.withMore",
+      {
+        items,
+        remaining: formatNumber(totalCount - visibleTitles.length, {
+          locale: "zh-CN",
+        }),
+        total: formatNumber(totalCount, { locale: "zh-CN" }),
+      },
+    );
+  },
+};
+
+function resolveCuratedTaskPresentationCopy(
+  copy?: CuratedTaskPresentationCopy,
+): CuratedTaskPresentationCopy {
+  return {
+    ...SOURCE_CURATED_TASK_PRESENTATION_COPY,
+    ...(copy ?? {}),
+  };
+}
+
+function formatCuratedTaskSourceItemsWithMore(
+  key: string,
+  visibleItems: string[],
+  totalCount: number,
+  itemSeparator: string,
+): string {
+  const items = visibleItems.join(itemSeparator);
+  if (visibleItems.length >= totalCount) {
+    return items;
+  }
+
+  return translateCuratedTaskSourceKey(key, {
+    items,
+    remaining: formatNumber(totalCount - visibleItems.length, {
+      locale: "zh-CN",
+    }),
+    total: formatNumber(totalCount, { locale: "zh-CN" }),
+  });
+}
+
+function mergeCuratedTaskFollowUpActionCopies(
+  base: CuratedTaskFollowUpActionCopy[] | undefined,
+  override: CuratedTaskFollowUpActionCopy[] | undefined,
+): CuratedTaskFollowUpActionCopy[] | undefined {
+  if (!base && !override) {
+    return undefined;
+  }
+
+  const length = Math.max(base?.length ?? 0, override?.length ?? 0);
+  return Array.from({ length }, (_, index) => ({
+    ...(base?.[index] ?? {}),
+    ...(override?.[index] ?? {}),
+  }));
+}
+
+function mergeCuratedTaskTemplateDefinitionCopy(
+  base: CuratedTaskTemplateDefinitionCopy | undefined,
+  override: CuratedTaskTemplateDefinitionCopy | undefined,
+): CuratedTaskTemplateDefinitionCopy {
+  return {
+    ...(base ?? {}),
+    ...(override ?? {}),
+    followUpActions: mergeCuratedTaskFollowUpActionCopies(
+      base?.followUpActions,
+      override?.followUpActions,
+    ),
+    optionalReferences:
+      override?.optionalReferences ?? base?.optionalReferences ?? [],
+    outputContract: override?.outputContract ?? base?.outputContract ?? [],
+    requiredInputFields: {
+      ...(base?.requiredInputFields ?? {}),
+      ...(override?.requiredInputFields ?? {}),
+    },
+  };
+}
+
+function resolveCuratedTaskTemplateCopy(
+  copy: CuratedTaskTemplateCopy = {},
+): CuratedTaskTemplateCopy {
+  const templateIds = new Set([
+    ...Object.keys(SOURCE_CURATED_TASK_TEMPLATE_COPY.templates ?? {}),
+    ...Object.keys(copy.templates ?? {}),
+  ]);
+
+  return {
+    ...SOURCE_CURATED_TASK_TEMPLATE_COPY,
+    ...copy,
+    recommendation: {
+      ...(SOURCE_CURATED_TASK_TEMPLATE_COPY.recommendation ?? {}),
+      ...(copy.recommendation ?? {}),
+      categoryLabels: {
+        ...(SOURCE_CURATED_TASK_TEMPLATE_COPY.recommendation?.categoryLabels ??
+          {}),
+        ...(copy.recommendation?.categoryLabels ?? {}),
+      },
+    },
+    templates: Object.fromEntries(
+      Array.from(templateIds).map((templateId) => [
+        templateId,
+        mergeCuratedTaskTemplateDefinitionCopy(
+          SOURCE_CURATED_TASK_TEMPLATE_COPY.templates?.[templateId],
+          copy.templates?.[templateId],
+        ),
+      ]),
+    ),
+  };
+}
+
+function resolveTemplateCopyValue(
+  value: string | undefined,
+  key: string,
+): string {
+  return value?.trim() || key;
+}
+
+function resolveTemplateCopyItems(
+  items: string[] | undefined,
+  count: number,
+  keyPrefix: string,
+): string[] {
+  return Array.from({ length: count }, (_, index) =>
+    resolveTemplateCopyValue(items?.[index], `${keyPrefix}.${index}`),
+  );
 }
 
 function applyCuratedTaskTemplateCopy(
   template: CuratedTaskTemplateDefinition,
   copy: CuratedTaskTemplateCopy = {},
-): CuratedTaskTemplateDefinition {
-  const templateCopy = copy.templates?.[template.id];
-  if (!templateCopy) {
-    return template;
-  }
-
+): ResolvedCuratedTaskTemplateDefinition {
+  const resolvedCopy = resolveCuratedTaskTemplateCopy(copy);
+  const keyPrefix = `curatedTask.templates.${template.id}`;
+  const templateCopy = mergeCuratedTaskTemplateDefinitionCopy(
+    resolvedCopy.templates?.[template.id],
+    undefined,
+  );
   const followUpActionCopies = templateCopy.followUpActions ?? [];
-  const followUpActions = template.followUpActions.map(
-    (action, index) => followUpActionCopies[index]?.label?.trim() || action,
+  const followUpActions = Array.from(
+    { length: template.followUpActionCount },
+    (_, index) =>
+      resolveTemplateCopyValue(
+        followUpActionCopies[index]?.label,
+        `${keyPrefix}.followUpActions.${index}`,
+      ),
   );
   const followUpActionTargets = Object.fromEntries(
-    Object.entries(template.followUpActionTargets ?? {}).map(
-      ([sourceAction, target]) => {
-        const actionIndex = template.followUpActions.findIndex(
-          (action) => action === sourceAction,
-        );
+    Object.entries(template.followUpActionTargets ?? {}).flatMap(
+      ([actionIndexText, target]) => {
+        if (!target) {
+          return [];
+        }
+
+        const actionIndex = Number(actionIndexText);
         const localizedAction =
-          actionIndex >= 0 ? followUpActions[actionIndex] : sourceAction;
+          followUpActions[actionIndex] ??
+          `${keyPrefix}.followUpActions.${actionIndex}`;
         const localizedPromptHint =
-          actionIndex >= 0
-            ? followUpActionCopies[actionIndex]?.promptHint?.trim()
-            : undefined;
+          followUpActionCopies[actionIndex]?.promptHint?.trim();
 
         return [
-          localizedAction,
-          {
-            ...target,
-            ...(localizedPromptHint ? { promptHint: localizedPromptHint } : {}),
-          },
+          [
+            localizedAction,
+            {
+              taskId: target.taskId,
+              ...(localizedPromptHint
+                ? { promptHint: localizedPromptHint }
+                : {}),
+            },
+          ],
         ];
       },
     ),
@@ -731,24 +864,58 @@ function applyCuratedTaskTemplateCopy(
 
   return {
     ...template,
-    ...(templateCopy.categoryLabel
-      ? { categoryLabel: templateCopy.categoryLabel }
-      : {}),
-    ...(templateCopy.outputHint ? { outputHint: templateCopy.outputHint } : {}),
-    ...(templateCopy.resultDestination
-      ? { resultDestination: templateCopy.resultDestination }
-      : {}),
-    ...(templateCopy.summary ? { summary: templateCopy.summary } : {}),
-    ...(templateCopy.title ? { title: templateCopy.title } : {}),
+    categoryLabel: resolveTemplateCopyValue(
+      templateCopy.categoryLabel,
+      `${keyPrefix}.categoryLabel`,
+    ),
     followUpActions,
     followUpActionTargets,
-    optionalReferences:
-      templateCopy.optionalReferences ?? template.optionalReferences,
-    outputContract: templateCopy.outputContract ?? template.outputContract,
-    requiredInputFields: template.requiredInputFields.map((field) => ({
-      ...field,
-      ...templateCopy.requiredInputFields?.[field.key],
-    })),
+    optionalReferences: resolveTemplateCopyItems(
+      templateCopy.optionalReferences,
+      template.optionalReferenceCount,
+      `${keyPrefix}.optionalReferences`,
+    ),
+    outputContract: resolveTemplateCopyItems(
+      templateCopy.outputContract,
+      template.outputContractCount,
+      `${keyPrefix}.outputContract`,
+    ),
+    outputHint: resolveTemplateCopyValue(
+      templateCopy.outputHint,
+      `${keyPrefix}.outputHint`,
+    ),
+    requiredInputFields: template.requiredInputFields.map((field) => {
+      const fieldCopy = templateCopy.requiredInputFields?.[field.key];
+      return {
+        key: field.key,
+        type: field.type,
+        ...(field.hasHelperText !== false
+          ? {
+              helperText: resolveTemplateCopyValue(
+                fieldCopy?.helperText,
+                `${keyPrefix}.fields.${field.key}.helperText`,
+              ),
+            }
+          : {}),
+        label: resolveTemplateCopyValue(
+          fieldCopy?.label,
+          `${keyPrefix}.fields.${field.key}.label`,
+        ),
+        placeholder: resolveTemplateCopyValue(
+          fieldCopy?.placeholder,
+          `${keyPrefix}.fields.${field.key}.placeholder`,
+        ),
+      };
+    }),
+    resultDestination: resolveTemplateCopyValue(
+      templateCopy.resultDestination,
+      `${keyPrefix}.resultDestination`,
+    ),
+    summary: resolveTemplateCopyValue(
+      templateCopy.summary,
+      `${keyPrefix}.summary`,
+    ),
+    title: resolveTemplateCopyValue(templateCopy.title, `${keyPrefix}.title`),
   };
 }
 
@@ -912,12 +1079,10 @@ export function subscribeCuratedTaskTemplateUsageChanged(
 }
 
 export function resolveCuratedTaskTemplateLaunchPrefill(
-  task:
-    | Pick<CuratedTaskTemplateItem, "id" | "title">
-    | Pick<CuratedTaskTemplateDefinition, "id" | "title">
-    | null,
+  task: Pick<CuratedTaskTemplateItem, "id" | "title"> | null,
   copy: CuratedTaskPresentationCopy = {},
 ): CuratedTaskTemplateLaunchPrefill | null {
+  const resolvedCopy = resolveCuratedTaskPresentationCopy(copy);
   if (!task) {
     return null;
   }
@@ -940,18 +1105,23 @@ export function resolveCuratedTaskTemplateLaunchPrefill(
     referenceMemoryIds: recentRecord.referenceMemoryIds,
     referenceEntries: recentRecord.referenceEntries,
     hint:
-      copy.formatRecentPrefillHint?.(task.title) ??
-      `已根据你上次启动 ${task.title} 时的参数自动预填，可继续修改后进入生成。`,
+      resolvedCopy.formatRecentPrefillHint?.(task.title) ??
+      `skills.workspace.curatedTask.prefillHint:${task.title}`,
   };
 }
 
 function resolveCuratedTaskTemplateBadge(
-  template: CuratedTaskTemplateDefinition,
+  template: ResolvedCuratedTaskTemplateDefinition,
   isRecent: boolean,
   copy: CuratedTaskTemplateCopy = {},
 ): string {
+  const resolvedCopy = resolveCuratedTaskTemplateCopy(copy);
+
   if (isRecent) {
-    return copy.recentBadgeLabel ?? "最近使用";
+    return (
+      resolvedCopy.recentBadgeLabel ??
+      "curatedTask.templates.common.recentBadge"
+    );
   }
 
   return template.categoryLabel;
@@ -996,20 +1166,12 @@ function matchesTemplateQuery(
   ].some((value) => value.toLowerCase().includes(normalizedQuery));
 }
 
-function formatDefaultCuratedTaskFactItems(
-  visibleItems: string[],
-  totalCount: number,
-): string {
-  return visibleItems.length < totalCount
-    ? `${visibleItems.join("、")} 等 ${totalCount} 项`
-    : visibleItems.join("、");
-}
-
 function summarizeCuratedTaskFactItems(
   items: string[],
   limit = 2,
   copy: CuratedTaskPresentationCopy = {},
 ): string {
+  const resolvedCopy = resolveCuratedTaskPresentationCopy(copy);
   const normalizedItems = items
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
@@ -1023,8 +1185,7 @@ function summarizeCuratedTaskFactItems(
       : normalizedItems.slice(0, limit);
 
   return (
-    copy.formatFactItems?.(visibleItems, normalizedItems.length) ??
-    formatDefaultCuratedTaskFactItems(visibleItems, normalizedItems.length)
+    resolvedCopy.formatFactItems?.(visibleItems, normalizedItems.length) ?? ""
   );
 }
 
@@ -1083,8 +1244,11 @@ export function buildCuratedTaskRecentUsageDescription(params: {
   copy?: CuratedTaskPresentationCopy;
 }): string {
   const fieldLimit = params.fieldLimit ?? 2;
-  const copy = params.copy ?? {};
-  const itemSeparator = copy.itemSeparator ?? "；";
+  const copy = resolveCuratedTaskPresentationCopy(params.copy);
+  const itemSeparator =
+    copy.itemSeparator ?? "skills.workspace.curatedTask.itemSeparator";
+  const formatRecentFactItems = params.copy?.formatFactItems;
+  const formatRecentReferenceItems = params.copy?.formatRecentReferenceItems;
   const launchInputSummaryItems = params.task.requiredInputFields
     .map((field) => {
       const rawValue = params.prefill?.inputValues?.[field.key];
@@ -1104,13 +1268,17 @@ export function buildCuratedTaskRecentUsageDescription(params: {
   if (launchInputSummaryItems.length > 0) {
     const visibleItems = launchInputSummaryItems.slice(0, fieldLimit);
     segments.push(
-      `${copy.recentFilledPrefix ?? "上次填写："}${
-        copy.formatFactItems?.(visibleItems, launchInputSummaryItems.length) ??
-        `${visibleItems.join(itemSeparator)}${
-          launchInputSummaryItems.length > fieldLimit
-            ? ` 等 ${launchInputSummaryItems.length} 项`
-            : ""
-        }`
+      `${
+        copy.recentFilledPrefix ??
+        "skills.workspace.curatedTask.recentFilledPrefix"
+      }${
+        formatRecentFactItems?.(visibleItems, launchInputSummaryItems.length) ??
+        formatCuratedTaskSourceItemsWithMore(
+          "skills.workspace.curatedTask.factItems.withMore",
+          visibleItems,
+          launchInputSummaryItems.length,
+          itemSeparator,
+        )
       }`,
     );
   }
@@ -1125,26 +1293,35 @@ export function buildCuratedTaskRecentUsageDescription(params: {
     const visibleTitles = referenceTitles.slice(0, fieldLimit);
     segments.push(
       visibleTitles.length > 0
-        ? `${copy.recentReferencePrefix ?? "参考："}${
-            copy.formatRecentReferenceItems?.(
+        ? `${
+            copy.recentReferencePrefix ??
+            "skills.workspace.curatedTask.recentReferencePrefix"
+          }${
+            formatRecentReferenceItems?.(
               visibleTitles,
               referenceTitles.length,
             ) ??
-            `${visibleTitles.join(itemSeparator)}${
-              referenceTitles.length > fieldLimit
-                ? ` 等 ${referenceTitles.length} 条`
-                : ""
-            }`
+            formatCuratedTaskSourceItemsWithMore(
+              "skills.workspace.curatedTask.referenceItems.withMore",
+              visibleTitles,
+              referenceTitles.length,
+              itemSeparator,
+            )
           }`
-        : `${copy.recentReferencePrefix ?? "参考："}${
+        : `${
+            copy.recentReferencePrefix ??
+            "skills.workspace.curatedTask.recentReferencePrefix"
+          }${
             copy.formatRecentReferenceFallback?.(referenceEntries.length) ??
             copy.recentReferenceFallback ??
-            `${referenceEntries.length} 条参考对象`
+            `skills.workspace.curatedTask.recentReferenceFallback:${referenceEntries.length}`
           }`,
     );
   }
 
-  return segments.join(copy.segmentSeparator ?? " · ");
+  return segments.join(
+    copy.segmentSeparator ?? "skills.workspace.curatedTask.segmentSeparator",
+  );
 }
 
 export function buildCuratedTaskFollowUpDescription(
@@ -1155,7 +1332,7 @@ export function buildCuratedTaskFollowUpDescription(
     copy?: CuratedTaskPresentationCopy;
   } = {},
 ): string {
-  const copy = options.copy ?? {};
+  const copy = resolveCuratedTaskPresentationCopy(options.copy);
   const summary = summarizeCuratedTaskFollowUpActions(
     task,
     options.limit,
@@ -1165,7 +1342,11 @@ export function buildCuratedTaskFollowUpDescription(
     return "";
   }
 
-  return `${options.prefix ?? copy.followUpPrefix ?? "下一步："}${summary}`;
+  return `${
+    options.prefix ??
+    copy.followUpPrefix ??
+    "skills.workspace.curatedTask.followUpPrefix"
+  }${summary}`;
 }
 
 export function buildCuratedTaskCapabilityDescription(
@@ -1188,7 +1369,7 @@ export function buildCuratedTaskCapabilityDescription(
   } = {},
 ): string {
   const segments: string[] = [];
-  const copy = options.copy ?? {};
+  const copy = resolveCuratedTaskPresentationCopy(options.copy);
   const summary = task.summary.trim();
 
   if (options.includeSummary !== false && summary.length > 0) {
@@ -1201,7 +1382,11 @@ export function buildCuratedTaskCapabilityDescription(
     copy,
   );
   if (requiredSummary) {
-    segments.push(`${copy.requiredPrefix ?? "需要："}${requiredSummary}`);
+    segments.push(
+      `${
+        copy.requiredPrefix ?? "skills.workspace.curatedTask.requiredPrefix"
+      }${requiredSummary}`,
+    );
   }
 
   const outputSummary = summarizeCuratedTaskOutputContract(
@@ -1210,14 +1395,19 @@ export function buildCuratedTaskCapabilityDescription(
     copy,
   );
   if (outputSummary) {
-    segments.push(`${copy.outputPrefix ?? "交付："}${outputSummary}`);
+    segments.push(
+      `${copy.outputPrefix ?? "skills.workspace.curatedTask.outputPrefix"}${outputSummary}`,
+    );
   }
 
   if (options.includeResultDestination) {
     const resultDestination = task.resultDestination.trim();
     if (resultDestination.length > 0) {
       segments.push(
-        `${copy.resultDestinationPrefix ?? "去向："}${resultDestination}`,
+        `${
+          copy.resultDestinationPrefix ??
+          "skills.workspace.curatedTask.resultDestinationPrefix"
+        }${resultDestination}`,
       );
     }
   }
@@ -1232,7 +1422,9 @@ export function buildCuratedTaskCapabilityDescription(
     }
   }
 
-  return segments.join(copy.segmentSeparator ?? " · ");
+  return segments.join(
+    copy.segmentSeparator ?? "skills.workspace.curatedTask.segmentSeparator",
+  );
 }
 
 export function getCuratedTaskOutputDestination(
@@ -1345,9 +1537,13 @@ export function listCuratedTaskTemplates(
   copy: CuratedTaskTemplateCopy = {},
 ): CuratedTaskTemplateItem[] {
   const usageMap = getCuratedTaskTemplateUsageMap();
+  const resolvedCopy = resolveCuratedTaskTemplateCopy(copy);
 
   return CURATED_TASK_TEMPLATES.map((template, index) => {
-    const localizedTemplate = applyCuratedTaskTemplateCopy(template, copy);
+    const localizedTemplate = applyCuratedTaskTemplateCopy(
+      template,
+      resolvedCopy,
+    );
     const recentRecord = usageMap.get(template.id);
     const recentUsedAt = recentRecord?.usedAt ?? null;
 
@@ -1359,10 +1555,12 @@ export function listCuratedTaskTemplates(
       badge: resolveCuratedTaskTemplateBadge(
         localizedTemplate,
         typeof recentUsedAt === "number",
-        copy,
+        resolvedCopy,
       ),
-      actionLabel: copy.actionLabel ?? "进入生成",
-      statusLabel: copy.statusLabel ?? "可直接开始",
+      actionLabel:
+        resolvedCopy.actionLabel ?? "curatedTask.templates.common.actionLabel",
+      statusLabel:
+        resolvedCopy.statusLabel ?? "curatedTask.templates.common.statusLabel",
       statusTone: "emerald" as const,
       recentUsedAt,
       isRecent: typeof recentUsedAt === "number",
@@ -1464,26 +1662,32 @@ function resolveReferenceContinuationMatch(params: {
     case "account-project-review":
       return {
         score: 40,
-        reasonLabel: copy.currentResultReasonLabel ?? "围绕当前成果",
+        reasonLabel:
+          copy.currentResultReasonLabel ??
+          "curatedTask.templates.recommendation.currentResultReasonLabel",
         reasonSummary:
           copy.formatAccountProjectReviewSummary?.(summarizedTitle) ??
-          `先对齐「${summarizedTitle}」这轮结果基线，再决定下一轮动作`,
+          `curatedTask.templates.recommendation.accountProjectReviewSummary:${summarizedTitle}`,
       };
     case "daily-trend-briefing":
       return {
         score: 15,
-        reasonLabel: copy.resultContinuationReasonLabel ?? "承接当前结果",
+        reasonLabel:
+          copy.resultContinuationReasonLabel ??
+          "curatedTask.templates.recommendation.resultContinuationReasonLabel",
         reasonSummary:
           copy.formatDailyTrendBriefingSummary?.(summarizedTitle) ??
-          `围绕「${summarizedTitle}」这轮结果继续找趋势窗口`,
+          `curatedTask.templates.recommendation.dailyTrendBriefingSummary:${summarizedTitle}`,
       };
     case "social-post-starter":
       return {
         score: 14,
-        reasonLabel: copy.resultContinuationReasonLabel ?? "承接当前结果",
+        reasonLabel:
+          copy.resultContinuationReasonLabel ??
+          "curatedTask.templates.recommendation.resultContinuationReasonLabel",
         reasonSummary:
           copy.formatSocialPostStarterSummary?.(summarizedTitle) ??
-          `把「${summarizedTitle}」这轮结果直接带成下一版主稿`,
+          `curatedTask.templates.recommendation.socialPostStarterSummary:${summarizedTitle}`,
       };
     default:
       return null;
@@ -1495,26 +1699,29 @@ function resolveRecommendationReasonLabel(
   copy: CuratedTaskRecommendationCopy = {},
 ): string {
   if (signal.source === "review_feedback") {
-    return copy.recentReviewReasonLabel ?? "围绕最近判断";
+    return (
+      copy.recentReviewReasonLabel ??
+      "curatedTask.templates.recommendation.recentReviewReasonLabel"
+    );
   }
 
   const categoryLabel =
     copy.categoryLabels?.[signal.category] ||
-    CURATED_TASK_RECOMMENDATION_LABELS[signal.category] ||
     copy.fallbackLabel ||
-    "灵感";
+    signal.category;
 
   if (signal.source === "active_reference") {
     return (
       copy.activeReferenceReasonLabel?.replace(
         "{{categoryLabel}}",
         categoryLabel,
-      ) ?? `围绕当前${categoryLabel}`
+      ) ??
+      `curatedTask.templates.recommendation.activeReferenceReasonLabel:${categoryLabel}`
     );
   }
 
   const recentLabelByCategory: Partial<
-    Record<keyof typeof CURATED_TASK_RECOMMENDATION_LABELS, string | undefined>
+    Record<CuratedTaskRecommendationCategory, string | undefined>
   > = {
     activity: copy.recentActivityReasonLabel,
     context: copy.recentContextReasonLabel,
@@ -1523,7 +1730,10 @@ function resolveRecommendationReasonLabel(
     preference: copy.recentPreferenceReasonLabel,
   };
 
-  return recentLabelByCategory[signal.category] ?? `围绕最近${categoryLabel}`;
+  return (
+    recentLabelByCategory[signal.category] ??
+    `curatedTask.templates.recommendation.recent:${categoryLabel}`
+  );
 }
 
 function resolveRecommendationReasonSummary(
@@ -1535,7 +1745,10 @@ function resolveRecommendationReasonSummary(
       signal.title.length > 20
         ? `${signal.title.slice(0, 20).trimEnd()}…`
         : signal.title;
-    return copy.formatReviewReasonSummary?.(title) ?? `判断：${title}`;
+    return (
+      copy.formatReviewReasonSummary?.(title) ??
+      `curatedTask.templates.recommendation.reviewReasonSummary:${title}`
+    );
   }
 
   const categoryLabel =
@@ -1548,7 +1761,7 @@ function resolveRecommendationReasonSummary(
       : signal.title;
   return (
     copy.formatSignalReasonSummary?.(categoryLabel, title) ??
-    `${categoryLabel}：${title}`
+    `curatedTask.templates.recommendation.signalReasonSummary:${categoryLabel}:${title}`
   );
 }
 
@@ -1613,6 +1826,7 @@ export function listFeaturedHomeCuratedTaskTemplates(
   } = {},
 ): FeaturedCuratedTaskTemplateItem[] {
   const limit = options.limit ?? FEATURED_HOME_CURATED_TASK_TEMPLATE_IDS.length;
+  const resolvedCopy = resolveCuratedTaskTemplateCopy(options.copy);
   const referenceEntries = mergeCuratedTaskReferenceEntries(
     options.referenceEntries ?? [],
   );
@@ -1642,7 +1856,7 @@ export function listFeaturedHomeCuratedTaskTemplates(
             template,
             signal,
             projectId: options.projectId,
-            copy: options.copy?.recommendation,
+            copy: resolvedCopy.recommendation,
           });
           if (current.score <= best.score) {
             return best;
@@ -1660,7 +1874,7 @@ export function listFeaturedHomeCuratedTaskTemplates(
           const current = resolveReferenceContinuationMatch({
             template,
             referenceEntry,
-            copy: options.copy?.recommendation,
+            copy: resolvedCopy.recommendation,
           });
           if (!current || current.score <= best.score) {
             return best;

@@ -10,12 +10,19 @@ import { toast } from "sonner";
 import type { MessageImage } from "../../../types";
 import {
   getClipboardImageCandidates,
+  MAX_IMAGE_ATTACHMENTS_PER_TURN,
   readImageAttachment,
 } from "../../../utils/imageAttachments";
 
 export function useImageAttachments() {
   const [pendingImages, setPendingImages] = useState<MessageImage[]>([]);
+  const pendingImagesRef = useRef<MessageImage[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const setPendingImagesSnapshot = useCallback((images: MessageImage[]) => {
+    pendingImagesRef.current = images;
+    setPendingImages(images);
+  }, []);
 
   const appendImageFile = useCallback(
     async (
@@ -24,8 +31,18 @@ export function useImageAttachments() {
       preferredMediaType?: string,
     ) => {
       try {
+        if (pendingImagesRef.current.length >= MAX_IMAGE_ATTACHMENTS_PER_TURN) {
+          toast.error(`图片读取失败: ${file.name || "未命名图片"}`);
+          return;
+        }
+
         const image = await readImageAttachment(file, preferredMediaType);
-        setPendingImages((prev) => [...prev, image]);
+        if (pendingImagesRef.current.length >= MAX_IMAGE_ATTACHMENTS_PER_TURN) {
+          toast.error(`图片读取失败: ${file.name || "未命名图片"}`);
+          return;
+        }
+
+        setPendingImagesSnapshot([...pendingImagesRef.current, image]);
         toast.success(
           successMessage ?? `已添加图片: ${file.name || "未命名图片"}`,
         );
@@ -33,7 +50,7 @@ export function useImageAttachments() {
         toast.error(`图片读取失败: ${file.name || "未命名图片"}`);
       }
     },
-    [],
+    [setPendingImagesSnapshot],
   );
 
   const appendImageFiles = useCallback(
@@ -97,15 +114,20 @@ export function useImageAttachments() {
     [appendImageFiles],
   );
 
-  const handleRemoveImage = useCallback((index: number) => {
-    setPendingImages((prev) =>
-      prev.filter((_, currentIndex) => currentIndex !== index),
-    );
-  }, []);
+  const handleRemoveImage = useCallback(
+    (index: number) => {
+      setPendingImagesSnapshot(
+        pendingImagesRef.current.filter(
+          (_, currentIndex) => currentIndex !== index,
+        ),
+      );
+    },
+    [setPendingImagesSnapshot],
+  );
 
   const clearPendingImages = useCallback(() => {
-    setPendingImages([]);
-  }, []);
+    setPendingImagesSnapshot([]);
+  }, [setPendingImagesSnapshot]);
 
   const openFileDialog = useCallback(() => {
     fileInputRef.current?.click();

@@ -1,5 +1,7 @@
 import { ArrowRight } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
+import { formatNumber } from "@/i18n/format";
 import { cn } from "@/lib/utils";
 import {
   buildCuratedTaskRecentUsageDescription,
@@ -38,7 +40,9 @@ interface MemoryCuratedTaskSuggestionPanelProps {
 export function MemoryCuratedTaskSuggestionPanel(
   props: MemoryCuratedTaskSuggestionPanelProps,
 ) {
+  const { i18n, t } = useTranslation("agent");
   const compact = props.variant === "compact";
+  const locale = i18n.resolvedLanguage || i18n.language;
 
   return (
     <div className="space-y-4" data-testid={props.panelTestId}>
@@ -106,7 +110,14 @@ export function MemoryCuratedTaskSuggestionPanel(
                       variant="outline"
                       className={EMERALD_OUTLINE_BADGE_CLASS_NAME}
                     >
-                      {props.referenceEntryCount} 条参考对象
+                      {t(
+                        "skills.workspace.curatedTask.suggestion.referenceBadge",
+                        {
+                          countLabel: formatNumber(props.referenceEntryCount, {
+                            locale,
+                          }),
+                        },
+                      )}
                     </Badge>
                   ) : null}
                 </div>
@@ -157,13 +168,17 @@ export function MemoryCuratedTaskSuggestionPanel(
                     <div className="space-y-1 text-[11px] leading-5 text-slate-500">
                       <div>
                         <span className="font-medium text-slate-700">
-                          你先给：
+                          {t(
+                            "skills.workspace.curatedTask.suggestion.requiredPrefix",
+                          )}
                         </span>
                         {summarizeCuratedTaskRequiredInputs(task)}
                       </div>
                       <div>
                         <span className="font-medium text-slate-700">
-                          这一步先拿：
+                          {t(
+                            "skills.workspace.curatedTask.suggestion.outputPrefix",
+                          )}
                         </span>
                         {summarizeCuratedTaskOutputContract(task)}
                       </div>
@@ -185,7 +200,10 @@ export function MemoryCuratedTaskSuggestionPanel(
                     <div className="space-y-1 text-[11px] leading-5 text-slate-500">
                       <div>{getCuratedTaskOutputDestination(task)}</div>
                       <div>
-                        接着可做：{summarizeCuratedTaskFollowUpActions(task)}
+                        {t(
+                          "skills.workspace.curatedTask.suggestion.followUpPrefix",
+                        )}
+                        {summarizeCuratedTaskFollowUpActions(task)}
                       </div>
                     </div>
                   )}
@@ -194,7 +212,7 @@ export function MemoryCuratedTaskSuggestionPanel(
                     className={cn(BUTTON_CLASS_NAME, EMERALD_BUTTON_CLASS_NAME)}
                     onClick={() => props.onStartTask(task)}
                   >
-                    开始这一步
+                    {t("skills.workspace.curatedTask.suggestion.action.start")}
                     <ArrowRight className="h-4 w-4" />
                   </button>
                 </div>

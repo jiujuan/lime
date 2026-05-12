@@ -20,6 +20,7 @@ import type { TeamMemorySnapshot } from "@/lib/teamMemorySync";
 import type { HarnessSessionState } from "../utils/harnessState";
 import { recordRuntimeMemoryPrefetchHistory } from "@/lib/runtimeMemoryPrefetchHistory";
 import { conversationProjectionStore } from "../projection/conversationProjectionStore";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 const {
   diffAgentRuntimeFileCheckpointMock,
@@ -231,12 +232,13 @@ async function flushPromises(rounds = 4) {
   }
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
 
   originalClipboard = navigator.clipboard;
   Object.defineProperty(navigator, "clipboard", {
@@ -538,15 +540,113 @@ describe("AgentThreadReliabilityPanel", () => {
           decisionReason:
             "当前 provider 候选池共有 3 个兼容候选，已按连续性、能力与成本优选。",
         },
+        model_routing: {
+          serviceModelSlot: "responsive_chat",
+          decisionSource: "responsive_chat_auto",
+          selectedProvider: "deepseek",
+          selectedModel: "deepseek-v4-flash",
+          latestModelDeltaTiming: {
+            source: "agent_runs.metadata",
+            runStatus: "success",
+            durationMs: 1386,
+            firstVisibleDeltaMs: 986,
+            firstThinkingDeltaMs: 986,
+            firstTextDeltaMs: 1377,
+          },
+        },
       },
     });
 
     expect(container.textContent).toContain("当前路由事实");
+    expect(
+      container.querySelector(
+        '[data-testid="agent-thread-reliability-routing-evidence"]',
+      ),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("responsive_chat");
+    expect(container.textContent).toContain("responsive_chat_auto");
+    expect(container.textContent).toContain("deepseek/deepseek-v4-flash");
+    expect(container.textContent).toContain("首个正文");
+    expect(container.textContent).toContain("1.38s");
+    expect(container.textContent).toContain("agent_runs.metadata");
     expect(container.textContent).toContain("决策原因");
     expect(container.textContent).toContain("回退链");
     expect(container.textContent).toContain("品牌云端托管锁定");
     expect(container.textContent).toContain("品牌云端额度偏低");
     expect(container.textContent).toContain("claude-sonnet-4");
+  });
+
+  it("应从 latestModelDeltaTiming.routing 展示自动回退原因", () => {
+    const container = renderPanel({
+      threadRead: {
+        thread_id: "thread-routing-fallback",
+        status: "completed",
+        model_routing: {
+          latestModelDeltaTiming: {
+            source: "agent_runs.metadata",
+            runStatus: "success",
+            durationMs: 1300,
+            firstTextDeltaMs: 950,
+            routing: {
+              decisionSource: "responsive_chat_auto",
+              decisionReason:
+                "service_models.responsive_chat 历史样本不满足低延迟目标（unsupported_model），已继续进入自动 responsive_chat 候选。",
+              fallbackChain: [
+                "openrouter:unsupported-chat-model",
+                "deepseek:deepseek-v4-flash",
+              ],
+              serviceModelSlot: "responsive_chat",
+              selectedProvider: "deepseek",
+              selectedModel: "deepseek-v4-flash",
+            },
+          },
+        },
+      },
+    });
+
+    expect(container.textContent).toContain("当前路由事实");
+    expect(container.textContent).toContain("决策原因");
+    expect(container.textContent).toContain("unsupported_model");
+    expect(container.textContent).toContain("回退链");
+    expect(container.textContent).toContain(
+      "openrouter:unsupported-chat-model → deepseek:deepseek-v4-flash",
+    );
+  });
+
+  it("应使用当前 locale 展示路由证据标签", async () => {
+    await changeLimeLocale("en-US");
+
+    const container = renderPanel({
+      threadRead: {
+        thread_id: "thread-routing-en",
+        status: "completed",
+        model_routing: {
+          latestModelDeltaTiming: {
+            source: "agent_runs.metadata",
+            runStatus: "success",
+            firstTextDeltaMs: 1299,
+            routing: {
+              decisionSource: "responsive_chat_auto",
+              decisionReason: "Fallback to a faster model.",
+              fallbackChain: [
+                "deepseek:deepseek-v4-pro",
+                "deepseek:deepseek-v4-flash",
+              ],
+              selectedProvider: "deepseek",
+              selectedModel: "deepseek-v4-flash",
+            },
+          },
+        },
+      },
+    });
+
+    expect(container.textContent).toContain("Thread Reliability");
+    expect(container.textContent).toContain("Quick copy for AI");
+    expect(container.textContent).toContain("Current thread status: Completed");
+    expect(container.textContent).toContain("Current Routing Facts");
+    expect(container.textContent).toContain("Decision reason");
+    expect(container.textContent).toContain("Fallback chain");
+    expect(container.textContent).toContain("First text");
   });
 
   it("应从 AgentUI projection store 展示并导出标准投影诊断", async () => {

@@ -775,6 +775,15 @@ export const mergeAdjacentAssistantMessages = (
 const normalizeSignatureText = (text: string): string =>
   text.replace(/\s+/g, " ").trim();
 
+const OMITTED_HISTORY_CONTENT_TEXT =
+  "历史消息内容过大，首屏已省略完整内容；需要时可加载完整历史查看。";
+
+function isOmittedHistoryContentProjection(message: Message): boolean {
+  return normalizeSignatureText(message.content).includes(
+    OMITTED_HISTORY_CONTENT_TEXT,
+  );
+}
+
 const hasMessageImages = (message: Message): boolean =>
   Array.isArray(message.images) && message.images.length > 0;
 
@@ -942,6 +951,77 @@ const findMatchingLocalAssistantMessageIndex = (
   return -1;
 };
 
+function findNextLocalAssistantAfterUser(
+  localMessages: Message[],
+  localAssistantIndexById: Map<string, number>,
+  matchedLocalMessageIds: Set<string>,
+  userMessageIndex: number | null,
+): number {
+  if (userMessageIndex === null || userMessageIndex < 0) {
+    return -1;
+  }
+
+  for (
+    let index = userMessageIndex + 1;
+    index < localMessages.length;
+    index += 1
+  ) {
+    const candidate = localMessages[index];
+    if (!candidate) {
+      continue;
+    }
+    if (candidate.role === "user") {
+      return -1;
+    }
+    if (candidate.role !== "assistant") {
+      continue;
+    }
+    if (candidate.id && matchedLocalMessageIds.has(candidate.id)) {
+      continue;
+    }
+
+    return candidate.id
+      ? (localAssistantIndexById.get(candidate.id) ?? -1)
+      : -1;
+  }
+
+  return -1;
+}
+
+function shouldPreserveLocalAssistantVisibleOutput(
+  localMessage: Message | undefined,
+  remoteMessage: Message,
+): boolean {
+  if (!localMessage) {
+    return false;
+  }
+
+  const localContent = normalizeSignatureText(localMessage.content);
+  if (!localContent) {
+    return false;
+  }
+
+  const remoteContent = normalizeSignatureText(remoteMessage.content);
+  if (remoteContent === localContent) {
+    return false;
+  }
+  if (!remoteContent || isOmittedHistoryContentProjection(remoteMessage)) {
+    return true;
+  }
+
+  const localTimestampMs = resolveMessageTimestampMs(localMessage);
+  const remoteTimestampMs = resolveMessageTimestampMs(remoteMessage);
+  if (
+    localTimestampMs !== null &&
+    remoteTimestampMs !== null &&
+    remoteTimestampMs > localTimestampMs
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 function resolveMessageTimestampMs(message: Message): number | null {
   const timestampMs = message.timestamp.getTime();
   return Number.isFinite(timestampMs) ? timestampMs : null;
@@ -982,6 +1062,7 @@ export const mergeHydratedMessagesWithLocalState = (
   );
   const localUserMessageIndexById = new Map<string, number>();
   const localAssistantMessageIndexById = new Map<string, number>();
+  const localMessageIndexById = new Map<string, number>();
   const localImagePreviewByTaskId = new Map<
     string,
     MessageImageWorkbenchPreview
@@ -997,6 +1078,11 @@ export const mergeHydratedMessagesWithLocalState = (
   localAssistantMessages.forEach((message, index) => {
     if (message.id) {
       localAssistantMessageIndexById.set(message.id, index);
+    }
+  });
+  localMessages.forEach((message, index) => {
+    if (message.id) {
+      localMessageIndexById.set(message.id, index);
     }
   });
   hydratedMessages.forEach((message) => {
@@ -1038,6 +1124,7 @@ export const mergeHydratedMessagesWithLocalState = (
 
   let localUserCursor = 0;
   let localAssistantCursor = 0;
+  let lastMatchedLocalUserMessageIndex: number | null = null;
   const matchedLocalMessageIds = new Set<string>();
 
   const mergedMessages = hydratedMessages.map((message) => {
@@ -1053,14 +1140,27 @@ export const mergeHydratedMessagesWithLocalState = (
               message,
               localAssistantCursor,
             );
-      const localAssistantMessage =
+      const sequentialAssistantIndex =
         matchedAssistantIndex >= 0
-          ? localAssistantMessages[matchedAssistantIndex]
+          ? -1
+          : findNextLocalAssistantAfterUser(
+              localMessages,
+              localAssistantMessageIndexById,
+              matchedLocalMessageIds,
+              lastMatchedLocalUserMessageIndex,
+            );
+      const resolvedMatchedAssistantIndex =
+        matchedAssistantIndex >= 0
+          ? matchedAssistantIndex
+          : sequentialAssistantIndex;
+      const localAssistantMessage =
+        resolvedMatchedAssistantIndex >= 0
+          ? localAssistantMessages[resolvedMatchedAssistantIndex]
           : undefined;
-      if (matchedAssistantIndex >= 0) {
+      if (resolvedMatchedAssistantIndex >= 0) {
         localAssistantCursor = Math.max(
           localAssistantCursor,
-          matchedAssistantIndex + 1,
+          resolvedMatchedAssistantIndex + 1,
         );
         if (localAssistantMessage?.id) {
           matchedLocalMessageIds.add(localAssistantMessage.id);
@@ -1123,16 +1223,32 @@ export const mergeHydratedMessagesWithLocalState = (
           ? localAssistantMessage?.thinkingContent
           : undefined) ??
         extractThinkingContentFromParts(contentParts);
+      const shouldPreserveLocalVisibleOutput =
+        shouldPreserveLocalAssistantVisibleOutput(
+          localAssistantMessage,
+          message,
+        );
+      const resolvedContentParts = shouldPreserveLocalVisibleOutput
+        ? (localAssistantMessage?.contentParts ?? contentParts)
+        : contentParts;
+      const resolvedThinkingContent = shouldPreserveLocalVisibleOutput
+        ? (localAssistantMessage?.thinkingContent ??
+          extractThinkingContentFromParts(resolvedContentParts))
+        : thinkingContent;
 
       return {
         ...message,
+        id: localAssistantMessage?.id ?? message.id,
+        content: shouldPreserveLocalVisibleOutput
+          ? localAssistantMessage?.content || message.content
+          : message.content,
         usage: message.usage ?? localAssistantMessage?.usage,
-        contentParts,
+        contentParts: resolvedContentParts,
         toolCalls,
         actionRequests,
         contextTrace,
         artifacts,
-        thinkingContent,
+        thinkingContent: resolvedThinkingContent,
         imageWorkbenchPreview: mergeImageWorkbenchPreview(
           localImagePreview,
           message.imageWorkbenchPreview,
@@ -1157,6 +1273,7 @@ export const mergeHydratedMessagesWithLocalState = (
             localUserCursor,
           );
     if (matchedIndex < 0) {
+      lastMatchedLocalUserMessageIndex = null;
       return message;
     }
 
@@ -1164,17 +1281,25 @@ export const mergeHydratedMessagesWithLocalState = (
     const localMessage = localUserMessages[matchedIndex];
     if (localMessage?.id) {
       matchedLocalMessageIds.add(localMessage.id);
+      lastMatchedLocalUserMessageIndex =
+        localMessageIndexById.get(localMessage.id) ?? null;
+    } else {
+      lastMatchedLocalUserMessageIndex = null;
     }
-    if (
-      !localMessage ||
-      hasMessageImages(message) ||
-      !hasMessageImages(localMessage)
-    ) {
+    if (!localMessage) {
       return message;
+    }
+
+    if (hasMessageImages(message) || !hasMessageImages(localMessage)) {
+      return {
+        ...message,
+        id: localMessage.id || message.id,
+      };
     }
 
     return {
       ...message,
+      id: localMessage.id || message.id,
       images: localMessage.images,
     };
   });

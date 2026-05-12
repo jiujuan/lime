@@ -22,9 +22,7 @@ import {
 } from "@/lib/oemLimeHubProvider";
 import { hasTauriInvokeCapability } from "@/lib/tauri-runtime";
 
-const MANAGED_LIME_HUB_KEY_ALIAS_FALLBACK = "Lime 云端模型";
-const MANAGED_LIME_HUB_CLOUD_TOKEN_NAME_FALLBACK =
-  "Lime Desktop Cloud Model Key";
+const LEGACY_MANAGED_LIME_HUB_KEY_ALIAS = "Lime 云端模型";
 const MANAGED_LIME_HUB_KEY_MODELS_STATE =
   "oem_lime_hub_provider_sync:managed_key_models";
 
@@ -152,7 +150,7 @@ function isManagedLimeHubKey(
   return (
     key.enabled !== false &&
     (normalizedAlias === managedKeyAlias ||
-      normalizedAlias === MANAGED_LIME_HUB_KEY_ALIAS_FALLBACK)
+      normalizedAlias === LEGACY_MANAGED_LIME_HUB_KEY_ALIAS)
   );
 }
 
@@ -230,12 +228,8 @@ export function useOemLimeHubProviderSync() {
   const { t } = useTranslation("common");
   const copy = useMemo<ManagedLimeHubProviderSyncCopy>(
     () => ({
-      managedKeyAlias: t("common.oemLimeHubProviderSync.managedKeyAlias", {
-        defaultValue: MANAGED_LIME_HUB_KEY_ALIAS_FALLBACK,
-      }),
-      cloudTokenName: t("common.oemLimeHubProviderSync.cloudTokenName", {
-        defaultValue: MANAGED_LIME_HUB_CLOUD_TOKEN_NAME_FALLBACK,
-      }),
+      managedKeyAlias: t("common.oemLimeHubProviderSync.managedKeyAlias"),
+      cloudTokenName: t("common.oemLimeHubProviderSync.cloudTokenName"),
     }),
     [t],
   );

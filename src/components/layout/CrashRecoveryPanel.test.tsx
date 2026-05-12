@@ -4,9 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import {
   buildCrashRecoveryReloadUrl,
+  finalizeCrashRecoveryAutoReload,
   finalizeModuleImportAutoReload,
   isModuleImportFailureErrorMessage,
+  isReactFastRefreshHookFailureErrorMessage,
   prepareModuleImportAutoReload,
+  prepareReactFastRefreshHookAutoReload,
   stripCrashRecoveryReloadUrl,
 } from "./CrashRecoveryPanel.helpers";
 
@@ -121,6 +124,17 @@ describe("CrashRecoveryPanel", () => {
     );
   });
 
+  it("应识别 React Fast Refresh stale hook 队列错误", () => {
+    expect(
+      isReactFastRefreshHookFailureErrorMessage(
+        "Should have a queue. This is likely a bug in React. Please file an issue.",
+      ),
+    ).toBe(true);
+    expect(
+      isReactFastRefreshHookFailureErrorMessage("Random render error"),
+    ).toBe(false);
+  });
+
   it("应为强制刷新资源构造带缓存刷新参数的地址", () => {
     expect(
       buildCrashRecoveryReloadUrl("http://127.0.0.1:1420/settings", "123456"),
@@ -197,6 +211,53 @@ describe("CrashRecoveryPanel", () => {
       prepareModuleImportAutoReload(
         "http://127.0.0.1:1420/settings?tab=providers",
         "1.19.0",
+        storage,
+      ),
+    ).toContain("__lime_resource_reload=");
+  });
+
+  it("成功启动后应同时移除 React hook 自动刷新标记", () => {
+    const storage = {
+      state: new Map<string, string>(),
+      getItem(key: string) {
+        return this.state.get(key) ?? null;
+      },
+      setItem(key: string, value: string) {
+        this.state.set(key, value);
+      },
+      removeItem(key: string) {
+        this.state.delete(key);
+      },
+    };
+    const replaceState = vi.fn();
+    const reloadUrl = prepareReactFastRefreshHookAutoReload(
+      "http://127.0.0.1:1420/?tab=agent",
+      "1.36.0",
+      storage,
+    );
+
+    expect(reloadUrl).toContain("__lime_resource_reload=");
+    expect(
+      prepareReactFastRefreshHookAutoReload(
+        "http://127.0.0.1:1420/?tab=agent",
+        "1.36.0",
+        storage,
+      ),
+    ).toBeNull();
+
+    finalizeCrashRecoveryAutoReload(reloadUrl!, "1.36.0", storage, {
+      replaceState,
+    });
+
+    expect(replaceState).toHaveBeenCalledWith(
+      null,
+      "",
+      stripCrashRecoveryReloadUrl(reloadUrl!),
+    );
+    expect(
+      prepareReactFastRefreshHookAutoReload(
+        "http://127.0.0.1:1420/?tab=agent",
+        "1.36.0",
         storage,
       ),
     ).toContain("__lime_resource_reload=");

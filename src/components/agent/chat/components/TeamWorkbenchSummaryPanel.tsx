@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Activity, Bot, Clock3, Sparkles, Workflow } from "lucide-react";
 import {
   getAgentRuntimeSession,
@@ -27,9 +28,11 @@ import {
   formatAgentUiProjectionEventAuxiliaryDetail,
   formatAgentUiProjectionEventType,
   formatAgentUiProjectionPhase,
+  formatAgentUiProjectionSurfaceLabel,
   summarizeAgentUiTeamWorkbenchProjectionEvents,
   summarizeAgentUiTeamWorkbenchSurfaceLanes,
   summarizeAgentUiTeamWorkbenchSurfaces,
+  type AgentUiProjectionTranslation,
 } from "../projection/agentUiProjectionSummary";
 import type { AgentUiProjectionEvent } from "../projection/agentUiEventProjection";
 import type { AgentUiTeamWorkbenchViewItem } from "../projection/agentUiTeamWorkbenchViewModel";
@@ -744,12 +747,19 @@ function formatTranscriptEntrySourceLabel(sourceType?: string | null): string {
   return TRANSCRIPT_ENTRY_SOURCE_LABELS[normalized] ?? "活动";
 }
 
-function formatAgentUiSurfaceLabel(surface?: string | null): string {
+function formatAgentUiSurfaceLabel(
+  surface?: string | null,
+  t?: AgentUiProjectionTranslation,
+): string {
   const normalized = surface?.trim();
   if (!normalized) {
     return "工作区";
   }
-  return AGENT_UI_SURFACE_LABELS[normalized] ?? "工作区";
+  return formatAgentUiProjectionSurfaceLabel(
+    normalized,
+    t,
+    AGENT_UI_SURFACE_LABELS[normalized] ?? "工作区",
+  );
 }
 
 function matchesTranscriptEntrySource(
@@ -818,6 +828,11 @@ export function TeamWorkbenchSummaryPanel({
   onWorkbenchAction,
   onWorkbenchReassign,
 }: TeamWorkbenchSummaryPanelProps) {
+  const { t } = useTranslation("agent");
+  const translateProjection = useCallback<AgentUiProjectionTranslation>(
+    (key, options) => String(t(key as never, options as never)),
+    [t],
+  );
   const [selectedWorkbenchItem, setSelectedWorkbenchItem] =
     useState<AgentUiTeamWorkbenchViewItem | null>(null);
   const [
@@ -873,15 +888,19 @@ export function TeamWorkbenchSummaryPanel({
     [agentUiProjectionEvents],
   );
   const agentUiSurfaceLanes = useMemo(
-    () => summarizeAgentUiTeamWorkbenchSurfaceLanes(agentUiProjectionEvents),
-    [agentUiProjectionEvents],
+    () =>
+      summarizeAgentUiTeamWorkbenchSurfaceLanes(agentUiProjectionEvents, {
+        t: translateProjection,
+      }),
+    [agentUiProjectionEvents, translateProjection],
   );
   const agentUiSurfaceSummaries = useMemo(
     () =>
       summarizeAgentUiTeamWorkbenchSurfaces(agentUiProjectionEvents, {
         latestLimit: 3,
+        t: translateProjection,
       }),
-    [agentUiProjectionEvents],
+    [agentUiProjectionEvents, translateProjection],
   );
   const selectedWorkbenchTargetRows = useMemo(
     () =>
@@ -1339,7 +1358,7 @@ export function TeamWorkbenchSummaryPanel({
                   {card.value}
                 </div>
                 <div className="text-[10px] text-slate-500">
-                  {formatAgentUiSurfaceLabel(card.hint)}
+                  {formatAgentUiSurfaceLabel(card.hint, translateProjection)}
                 </div>
               </div>
             ))}
@@ -1372,11 +1391,17 @@ export function TeamWorkbenchSummaryPanel({
                       >
                         <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">
                           <span className="font-semibold text-slate-700">
-                            {formatAgentUiProjectionEventType(event.type)}
+                            {formatAgentUiProjectionEventType(
+                              event.type,
+                              translateProjection,
+                            )}
                           </span>
                           {event.surface ? (
                             <span>
-                              {formatAgentUiSurfaceLabel(event.surface)}
+                              {formatAgentUiSurfaceLabel(
+                                event.surface,
+                                translateProjection,
+                              )}
                             </span>
                           ) : null}
                         </div>
@@ -1414,6 +1439,7 @@ export function TeamWorkbenchSummaryPanel({
                   <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-500">
                     {formatAgentUiSurfaceLabel(
                       selectedWorkbenchItem.event.surface,
+                      translateProjection,
                     )}
                   </span>
                 ) : null}
@@ -1538,14 +1564,23 @@ export function TeamWorkbenchSummaryPanel({
                         >
                           <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">
                             <span className="font-semibold text-slate-700">
-                              {formatAgentUiProjectionEventType(event.type)}
+                              {formatAgentUiProjectionEventType(
+                                event.type,
+                                translateProjection,
+                              )}
                             </span>
                             <span>
-                              {formatAgentUiProjectionPhase(event.phase)}
+                              {formatAgentUiProjectionPhase(
+                                event.phase,
+                                translateProjection,
+                              )}
                             </span>
                             {event.surface ? (
                               <span>
-                                {formatAgentUiSurfaceLabel(event.surface)}
+                                {formatAgentUiSurfaceLabel(
+                                  event.surface,
+                                  translateProjection,
+                                )}
                               </span>
                             ) : null}
                           </div>
@@ -1817,7 +1852,10 @@ export function TeamWorkbenchSummaryPanel({
                         {surface.label}
                       </span>
                       <span className="ml-2 text-[10px] text-slate-500">
-                        {formatAgentUiSurfaceLabel(surface.surface)}
+                        {formatAgentUiSurfaceLabel(
+                          surface.surface,
+                          translateProjection,
+                        )}
                       </span>
                     </span>
                     <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
@@ -1838,10 +1876,16 @@ export function TeamWorkbenchSummaryPanel({
                         >
                           <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500">
                             <span className="font-semibold text-slate-700">
-                              {formatAgentUiProjectionEventType(event.type)}
+                              {formatAgentUiProjectionEventType(
+                                event.type,
+                                translateProjection,
+                              )}
                             </span>
                             <span>
-                              {formatAgentUiProjectionPhase(event.phase)}
+                              {formatAgentUiProjectionPhase(
+                                event.phase,
+                                translateProjection,
+                              )}
                             </span>
                           </div>
                           <div className="mt-0.5 truncate text-[10px] text-slate-500">
@@ -1869,14 +1913,23 @@ export function TeamWorkbenchSummaryPanel({
                 >
                   <div className="flex flex-wrap items-center gap-2 text-xs">
                     <span className="font-semibold text-slate-900">
-                      {formatAgentUiProjectionEventType(event.type)}
+                      {formatAgentUiProjectionEventType(
+                        event.type,
+                        translateProjection,
+                      )}
                     </span>
                     <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
-                      {formatAgentUiProjectionPhase(event.phase)}
+                      {formatAgentUiProjectionPhase(
+                        event.phase,
+                        translateProjection,
+                      )}
                     </span>
                     {event.surface ? (
                       <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500">
-                        {formatAgentUiSurfaceLabel(event.surface)}
+                        {formatAgentUiSurfaceLabel(
+                          event.surface,
+                          translateProjection,
+                        )}
                       </span>
                     ) : null}
                   </div>

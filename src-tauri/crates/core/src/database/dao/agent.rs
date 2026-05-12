@@ -15,6 +15,16 @@ const HISTORY_TOOL_RESPONSE_JSON_PARSE_BYTES_LIMIT: usize = 512 * 1024;
 const HISTORY_TOOL_RESPONSE_OMITTED_TEXT: &str =
     "历史消息内容过大，首屏已省略完整内容；需要时可加载完整历史查看。";
 
+fn history_tool_response_content_predicate_sql() -> &'static str {
+    "(content_json LIKE '%\"toolResult\"%'
+        OR content_json LIKE '%\"tool_result\"%'
+        OR content_json LIKE '%\"toolResponse\"%'
+        OR content_json LIKE '%\"tool_response\"%'
+        OR content_json LIKE '%\"ToolResponse\"%'
+        OR content_json LIKE '%\"type\":\"tool_response\"%'
+        OR content_json LIKE '%\"type\": \"tool_response\"%')"
+}
+
 fn history_content_json_projection_sql() -> String {
     let omitted_payload = serde_json::json!([
         {
@@ -24,12 +34,13 @@ fn history_content_json_projection_sql() -> String {
     ])
     .to_string()
     .replace('\'', "''");
+    let tool_response_predicate = history_tool_response_content_predicate_sql();
 
     format!(
         "CASE
-             WHEN length(content_json) > {parse_limit}
+             WHEN length(content_json) > {parse_limit} AND {tool_response_predicate}
              THEN '{omitted_payload}'
-             WHEN length(content_json) > {limit} AND json_valid(content_json)
+             WHEN length(content_json) > {limit} AND json_valid(content_json) AND {tool_response_predicate}
              THEN json_remove(
                  content_json,
                  '$.content[0].toolResult.value.structuredContent',
@@ -43,6 +54,7 @@ fn history_content_json_projection_sql() -> String {
         limit = HISTORY_TOOL_RESPONSE_INLINE_BYTES_LIMIT,
         parse_limit = HISTORY_TOOL_RESPONSE_JSON_PARSE_BYTES_LIMIT,
         omitted_payload = omitted_payload,
+        tool_response_predicate = tool_response_predicate,
     )
 }
 
@@ -2245,6 +2257,67 @@ mod tests {
         let text = messages[0].content.as_text();
         assert!(text.contains("图片结果已写入任务文件"));
         assert!(!text.contains("data:image/png;base64"));
+    }
+
+    #[test]
+    fn get_messages_tail_should_keep_large_user_image_content() {
+        let conn = setup_pattern_test_db();
+
+        conn.execute(
+            "INSERT INTO agent_sessions (id, model, system_prompt, title, created_at, updated_at, working_dir, execution_strategy)
+             VALUES (?1, ?2, NULL, ?3, ?4, ?5, NULL, ?6)",
+            params![
+                "session-large-user-image",
+                "gpt-4.1",
+                "大图用户消息",
+                "2026-03-19T10:00:00+08:00",
+                "2026-03-19T10:00:00+08:00",
+                "react"
+            ],
+        )
+        .unwrap();
+
+        let large_data_url = format!("data:image/png;base64,{}", "a".repeat(600_000));
+        let content_json = serde_json::json!([
+            {
+                "type": "text",
+                "text": "请识别这张图片"
+            },
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": large_data_url
+                }
+            }
+        ])
+        .to_string();
+
+        conn.execute(
+            "INSERT INTO agent_messages (session_id, role, content_json, timestamp)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![
+                "session-large-user-image",
+                "user",
+                content_json,
+                "2026-03-19T10:00:01+08:00",
+            ],
+        )
+        .unwrap();
+
+        let messages = AgentDao::get_messages_tail(&conn, "session-large-user-image", 1).unwrap();
+
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].content.as_text(), "请识别这张图片");
+        assert!(!messages[0].content.as_text().contains("历史消息内容过大"));
+
+        match &messages[0].content {
+            MessageContent::Parts(parts) => assert!(parts.iter().any(|part| matches!(
+                part,
+                crate::agent::types::ContentPart::ImageUrl { image_url }
+                    if image_url.url.starts_with("data:image/png;base64,")
+            ))),
+            _ => panic!("大图用户消息应保留图片 part"),
+        }
     }
 
     #[test]

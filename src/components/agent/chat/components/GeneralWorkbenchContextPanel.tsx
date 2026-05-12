@@ -1,4 +1,6 @@
 import { memo, type DragEvent, type RefObject } from "react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import {
   ArrowLeft,
   ArrowRight,
@@ -23,11 +25,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { formatDate } from "@/i18n/format";
 import { cn } from "@/lib/utils";
 import type {
   GeneralWorkbenchContextBudget,
   GeneralWorkbenchContextItem,
 } from "./generalWorkbenchContextData";
+
+type AgentTranslate = TFunction<"agent", undefined>;
 
 interface GeneralWorkbenchContextPanelProps {
   contextItems: GeneralWorkbenchContextItem[];
@@ -207,7 +212,10 @@ const CONTEXT_DETAIL_ACTION_ROW_CLASSNAME = "mt-1.5 flex gap-[5px]";
 const CONTEXT_DETAIL_ACTION_BUTTON_CLASSNAME =
   "inline-flex h-6 items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 text-[11px] text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900";
 
-function formatContextCreatedAt(createdAt?: number): string | null {
+function formatContextCreatedAt(
+  createdAt: number | undefined,
+  locale: string,
+): string | null {
   if (!createdAt || !Number.isFinite(createdAt)) {
     return null;
   }
@@ -215,7 +223,8 @@ function formatContextCreatedAt(createdAt?: number): string | null {
   if (Number.isNaN(date.getTime())) {
     return null;
   }
-  return date.toLocaleString([], {
+  return formatDate(date, {
+    locale,
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -225,15 +234,18 @@ function formatContextCreatedAt(createdAt?: number): string | null {
 
 function resolveContextSourceSubLabel(
   source: GeneralWorkbenchContextItem["source"],
-  searchMode?: GeneralWorkbenchContextItem["searchMode"],
+  searchMode: GeneralWorkbenchContextItem["searchMode"] | undefined,
+  t: AgentTranslate,
 ): string {
   if (source === "material") {
-    return "素材库";
+    return t("generalWorkbench.context.source.material");
   }
   if (source === "content") {
-    return "历史内容";
+    return t("generalWorkbench.context.source.content");
   }
-  return searchMode === "social" ? "社交媒体" : "网络搜索";
+  return searchMode === "social"
+    ? t("generalWorkbench.context.source.social")
+    : t("generalWorkbench.context.source.web");
 }
 
 function getContextRowClassName(active: boolean, interactive: boolean) {
@@ -283,6 +295,8 @@ function getContextConfirmButtonClassName(disabled: boolean) {
 function renderContextList(
   items: GeneralWorkbenchContextItem[],
   emptyText: string,
+  locale: string,
+  t: AgentTranslate,
   onSelectSearchResult: (contextId: string | null) => void,
   onToggleContextActive: (contextId: string) => void,
   onViewContextDetail?: (contextId: string) => void,
@@ -295,7 +309,7 @@ function renderContextList(
     <div className={CONTEXT_LIST_CLASSNAME}>
       {items.map((item) => {
         const interactive = item.source === "search";
-        const createdAtLabel = formatContextCreatedAt(item.createdAt);
+        const createdAtLabel = formatContextCreatedAt(item.createdAt, locale);
         return (
           <div
             key={item.id}
@@ -305,8 +319,12 @@ function renderContextList(
               type="button"
               aria-label={
                 interactive
-                  ? `查看搜索结果 ${item.name}`
-                  : `查看上下文 ${item.name}`
+                  ? t("generalWorkbench.context.row.openSearchResultAria", {
+                      name: item.name,
+                    })
+                  : t("generalWorkbench.context.row.openContextAria", {
+                      name: item.name,
+                    })
               }
               className={CONTEXT_OPEN_BUTTON_CLASSNAME}
               onClick={() => {
@@ -331,8 +349,16 @@ function renderContextList(
               <div className={CONTEXT_INFO_CLASSNAME}>
                 <div className={CONTEXT_NAME_CLASSNAME}>{item.name}</div>
                 <div className={CONTEXT_ROW_META_CLASSNAME}>
-                  {resolveContextSourceSubLabel(item.source, item.searchMode)}
-                  {createdAtLabel ? ` · ${createdAtLabel}` : ""}
+                  {[
+                    resolveContextSourceSubLabel(
+                      item.source,
+                      item.searchMode,
+                      t,
+                    ),
+                    createdAtLabel,
+                  ]
+                    .filter(Boolean)
+                    .join(t("generalWorkbench.context.meta.separator"))}
                 </div>
               </div>
               <ChevronRight size={13} />
@@ -341,7 +367,9 @@ function renderContextList(
               type="checkbox"
               className={CONTEXT_CHECKBOX_CLASSNAME}
               checked={item.active}
-              aria-label={`切换上下文 ${item.name}`}
+              aria-label={t("generalWorkbench.context.row.toggleAria", {
+                name: item.name,
+              })}
               onChange={() => onToggleContextActive(item.id)}
             />
           </div>
@@ -391,11 +419,20 @@ function GeneralWorkbenchContextPanelComponent({
   onSubmitTextContext,
   onSubmitLinkContext,
 }: GeneralWorkbenchContextPanelProps) {
+  const { i18n, t } = useTranslation("agent");
+  const searchModeLabel =
+    contextSearchMode === "social"
+      ? t("generalWorkbench.context.source.social")
+      : t("generalWorkbench.context.source.web");
+  const selectedSearchResultCreatedAtLabel = selectedSearchResult
+    ? formatContextCreatedAt(selectedSearchResult.createdAt, i18n.language)
+    : null;
+
   return (
     <>
       <section className={CONTEXT_SECTION_CLASSNAME}>
         <div className={CONTEXT_SECTION_TITLE_CLASSNAME}>
-          <span>搜索上下文</span>
+          <span>{t("generalWorkbench.context.search.title")}</span>
           <span className={CONTEXT_SECTION_BADGE_CLASSNAME}>
             {latestSearchLabel}
           </span>
@@ -406,7 +443,7 @@ function GeneralWorkbenchContextPanelComponent({
           onClick={onOpenAddContextDialog}
         >
           <Plus size={13} />
-          添加上下文
+          {t("generalWorkbench.context.search.addContext")}
         </button>
         <div className={CONTEXT_SEARCH_CARD_CLASSNAME}>
           <div className={CONTEXT_SEARCH_INPUT_WRAP_CLASSNAME}>
@@ -415,7 +452,7 @@ function GeneralWorkbenchContextPanelComponent({
               ref={searchInputRef}
               className={CONTEXT_SEARCH_INPUT_CLASSNAME}
               value={contextSearchQuery}
-              placeholder="搜索网络添加新上下文"
+              placeholder={t("generalWorkbench.context.search.placeholder")}
               onChange={(event) =>
                 onContextSearchQueryChange(event.target.value)
               }
@@ -432,7 +469,7 @@ function GeneralWorkbenchContextPanelComponent({
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  aria-label="选择上下文搜索来源"
+                  aria-label={t("generalWorkbench.context.search.modeAria")}
                   className={CONTEXT_SEARCH_MODE_TRIGGER_CLASSNAME}
                 >
                   {contextSearchMode === "social" ? (
@@ -440,9 +477,7 @@ function GeneralWorkbenchContextPanelComponent({
                   ) : (
                     <Globe size={13} />
                   )}
-                  <span>
-                    {contextSearchMode === "social" ? "社交媒体" : "网络搜索"}
-                  </span>
+                  <span>{searchModeLabel}</span>
                   <ChevronDown size={13} />
                 </button>
               </DropdownMenuTrigger>
@@ -452,7 +487,7 @@ function GeneralWorkbenchContextPanelComponent({
                 >
                   <div className={CONTEXT_SEARCH_MODE_ROW_CLASSNAME}>
                     <Globe size={14} />
-                    <span>网络搜索</span>
+                    <span>{t("generalWorkbench.context.source.web")}</span>
                     {contextSearchMode === "web" ? (
                       <div className={CONTEXT_SEARCH_MODE_CHECK_CLASSNAME}>
                         <Check size={13} />
@@ -465,7 +500,7 @@ function GeneralWorkbenchContextPanelComponent({
                 >
                   <div className={CONTEXT_SEARCH_MODE_ROW_CLASSNAME}>
                     <Share2 size={14} />
-                    <span>社交媒体</span>
+                    <span>{t("generalWorkbench.context.source.social")}</span>
                     {contextSearchMode === "social" ? (
                       <div className={CONTEXT_SEARCH_MODE_CHECK_CLASSNAME}>
                         <Check size={14} />
@@ -477,7 +512,7 @@ function GeneralWorkbenchContextPanelComponent({
             </DropdownMenu>
             <button
               type="button"
-              aria-label="提交上下文搜索"
+              aria-label={t("generalWorkbench.context.search.submitAria")}
               className={getContextSearchSubmitButtonClassName(
                 isSearchActionDisabled,
               )}
@@ -502,7 +537,7 @@ function GeneralWorkbenchContextPanelComponent({
           </div>
         ) : contextSearchLoading ? (
           <div className={getContextHintTextClassName()}>
-            正在联网检索并整理上下文...
+            {t("generalWorkbench.context.search.loading")}
           </div>
         ) : contextSearchBlockedReason ? (
           <div className={getContextHintTextClassName()}>
@@ -510,7 +545,7 @@ function GeneralWorkbenchContextPanelComponent({
           </div>
         ) : (
           <div className={getContextHintTextClassName()}>
-            输入关键词后按 Enter，可直接把检索结果加入当前上下文。
+            {t("generalWorkbench.context.search.helper")}
           </div>
         )}
       </section>
@@ -519,7 +554,7 @@ function GeneralWorkbenchContextPanelComponent({
         <section className={cn(CONTEXT_SECTION_CLASSNAME, "border-b-0")}>
           <div className={CONTEXT_DETAIL_TOP_BAR_CLASSNAME}>
             <div className={cn(CONTEXT_SECTION_TITLE_CLASSNAME, "mb-0")}>
-              <span>搜索结果详情</span>
+              <span>{t("generalWorkbench.context.detail.title")}</span>
             </div>
             <button
               type="button"
@@ -527,7 +562,7 @@ function GeneralWorkbenchContextPanelComponent({
               onClick={() => onSelectSearchResult(null)}
             >
               <ArrowLeft size={13} />
-              返回列表
+              {t("generalWorkbench.context.detail.back")}
             </button>
           </div>
           <div className={CONTEXT_DETAIL_CARD_CLASSNAME}>
@@ -535,22 +570,29 @@ function GeneralWorkbenchContextPanelComponent({
               {selectedSearchResult.name}
             </div>
             <div className={CONTEXT_DETAIL_META_CLASSNAME}>
-              {resolveContextSourceSubLabel(
-                selectedSearchResult.source,
-                selectedSearchResult.searchMode,
-              )}
-              {formatContextCreatedAt(selectedSearchResult.createdAt)
-                ? ` · ${formatContextCreatedAt(selectedSearchResult.createdAt)}`
-                : ""}
-              {selectedSearchResult.active ? " · 已启用" : " · 未启用"}
+              {[
+                resolveContextSourceSubLabel(
+                  selectedSearchResult.source,
+                  selectedSearchResult.searchMode,
+                  t,
+                ),
+                selectedSearchResultCreatedAtLabel,
+                selectedSearchResult.active
+                  ? t("generalWorkbench.context.detail.status.active")
+                  : t("generalWorkbench.context.detail.status.inactive"),
+              ]
+                .filter(Boolean)
+                .join(t("generalWorkbench.context.meta.separator"))}
             </div>
             <div className={CONTEXT_DETAIL_SECTION_CLASSNAME}>
               <div className={CONTEXT_DETAIL_SECTION_LABEL_CLASSNAME}>
-                Source guide
+                {t("generalWorkbench.context.detail.sourceGuide")}
               </div>
               {selectedSearchResult.query ? (
                 <div className={CONTEXT_QUERY_CLASSNAME}>
-                  检索词：{selectedSearchResult.query}
+                  {t("generalWorkbench.context.detail.query", {
+                    query: selectedSearchResult.query,
+                  })}
                 </div>
               ) : null}
               {selectedSearchResult.citations &&
@@ -570,11 +612,14 @@ function GeneralWorkbenchContextPanelComponent({
                   ))}
                 </div>
               ) : (
-                <div className={CONTEXT_META_TEXT_CLASSNAME}>暂无来源链接</div>
+                <div className={CONTEXT_META_TEXT_CLASSNAME}>
+                  {t("generalWorkbench.context.detail.noCitations")}
+                </div>
               )}
             </div>
             <div className={CONTEXT_DETAIL_BODY_CLASSNAME}>
-              {selectedSearchResult.previewText || "暂无可展示的搜索结果正文"}
+              {selectedSearchResult.previewText ||
+                t("generalWorkbench.context.detail.emptyPreview")}
             </div>
             <div className={CONTEXT_DETAIL_ACTION_ROW_CLASSNAME}>
               <button
@@ -582,7 +627,9 @@ function GeneralWorkbenchContextPanelComponent({
                 className={CONTEXT_DETAIL_ACTION_BUTTON_CLASSNAME}
                 onClick={() => onToggleContextActive(selectedSearchResult.id)}
               >
-                {selectedSearchResult.active ? "移出上下文" : "加入上下文"}
+                {selectedSearchResult.active
+                  ? t("generalWorkbench.context.detail.action.remove")
+                  : t("generalWorkbench.context.detail.action.add")}
               </button>
             </div>
           </div>
@@ -590,22 +637,30 @@ function GeneralWorkbenchContextPanelComponent({
       ) : (
         <section className={cn(CONTEXT_SECTION_CLASSNAME, "border-b-0")}>
           <div className={CONTEXT_SECTION_TITLE_CLASSNAME}>
-            <span>上下文列表</span>
+            <span>{t("generalWorkbench.context.list.title")}</span>
             <span className={CONTEXT_SECTION_BADGE_CLASSNAME}>
-              {contextItems.length} 条
+              {t("generalWorkbench.context.list.count", {
+                count: contextItems.length,
+              })}
             </span>
           </div>
           <div className={CONTEXT_META_TEXT_CLASSNAME}>
-            已生效 {contextBudget.activeCount}/{contextBudget.activeCountLimit}{" "}
-            条 · 检索结果 {searchContextItems.length} 条 · 估算{" "}
-            {contextBudget.estimatedTokens}/{contextBudget.tokenLimit} tokens
+            {t("generalWorkbench.context.list.summary", {
+              active: contextBudget.activeCount,
+              limit: contextBudget.activeCountLimit,
+              searchCount: searchContextItems.length,
+              estimatedTokens: contextBudget.estimatedTokens,
+              tokenLimit: contextBudget.tokenLimit,
+            })}
           </div>
           <div className={CONTEXT_META_TEXT_CLASSNAME}>
-            搜索结果可点击查看详情，其他上下文可直接勾选启用。
+            {t("generalWorkbench.context.list.helper")}
           </div>
           {renderContextList(
             orderedContextItems,
-            "当前还没有上下文，先添加项目资料或搜索一个主题试试",
+            t("generalWorkbench.context.list.empty"),
+            i18n.language,
+            t,
             onSelectSearchResult,
             onToggleContextActive,
             onViewContextDetail,
@@ -627,11 +682,13 @@ function GeneralWorkbenchContextPanelComponent({
             onClick={(event) => event.stopPropagation()}
           >
             <div className={CONTEXT_MODAL_HEADER_CLASSNAME}>
-              <h3 className={CONTEXT_MODAL_TITLE_CLASSNAME}>添加新上下文</h3>
+              <h3 className={CONTEXT_MODAL_TITLE_CLASSNAME}>
+                {t("generalWorkbench.context.modal.add.title")}
+              </h3>
               <div className={CONTEXT_MODAL_HEADER_ACTIONS_CLASSNAME}>
                 <button
                   type="button"
-                  aria-label="关闭添加上下文弹窗"
+                  aria-label={t("generalWorkbench.context.modal.add.closeAria")}
                   className={CONTEXT_MODAL_HEADER_BUTTON_CLASSNAME}
                   onClick={() => {
                     if (!contextCreateLoading) {
@@ -656,12 +713,14 @@ function GeneralWorkbenchContextPanelComponent({
                 }}
               >
                 <div className={CONTEXT_DROP_HINT_CLASSNAME}>
-                  or drop your files here
+                  {t("generalWorkbench.context.modal.add.dropHint")}
                 </div>
                 <div className={CONTEXT_MODAL_ACTION_GRID_CLASSNAME}>
                   <button
                     type="button"
-                    aria-label="上传文件上下文"
+                    aria-label={t(
+                      "generalWorkbench.context.modal.add.uploadAria",
+                    )}
                     className={CONTEXT_MODAL_ACTION_BUTTON_CLASSNAME}
                     disabled={contextCreateLoading}
                     onClick={() => {
@@ -671,11 +730,13 @@ function GeneralWorkbenchContextPanelComponent({
                     }}
                   >
                     <FileUp size={15} />
-                    上传文件
+                    {t("generalWorkbench.context.modal.add.upload")}
                   </button>
                   <button
                     type="button"
-                    aria-label="添加网站链接上下文"
+                    aria-label={t(
+                      "generalWorkbench.context.modal.add.linkAria",
+                    )}
                     className={CONTEXT_MODAL_ACTION_BUTTON_CLASSNAME}
                     disabled={contextCreateLoading}
                     onClick={() => {
@@ -685,11 +746,13 @@ function GeneralWorkbenchContextPanelComponent({
                     }}
                   >
                     <Link2 size={15} />
-                    网站链接
+                    {t("generalWorkbench.context.modal.add.link")}
                   </button>
                   <button
                     type="button"
-                    aria-label="输入文本上下文"
+                    aria-label={t(
+                      "generalWorkbench.context.modal.add.textAria",
+                    )}
                     className={CONTEXT_MODAL_ACTION_BUTTON_CLASSNAME}
                     disabled={contextCreateLoading}
                     onClick={() => {
@@ -699,7 +762,7 @@ function GeneralWorkbenchContextPanelComponent({
                     }}
                   >
                     <PencilLine size={15} />
-                    输入文本
+                    {t("generalWorkbench.context.modal.add.text")}
                   </button>
                 </div>
               </div>
@@ -730,7 +793,7 @@ function GeneralWorkbenchContextPanelComponent({
               <div className={CONTEXT_MODAL_HEADER_ACTIONS_CLASSNAME}>
                 <button
                   type="button"
-                  aria-label="返回添加上下文"
+                  aria-label={t("generalWorkbench.context.modal.backAria")}
                   className={CONTEXT_MODAL_HEADER_BUTTON_CLASSNAME}
                   onClick={() => {
                     if (!contextCreateLoading) {
@@ -742,12 +805,14 @@ function GeneralWorkbenchContextPanelComponent({
                 </button>
               </div>
               <h3 className={CONTEXT_MODAL_TITLE_CENTERED_CLASSNAME}>
-                添加文本内容
+                {t("generalWorkbench.context.modal.text.title")}
               </h3>
               <div className={CONTEXT_MODAL_HEADER_ACTIONS_CLASSNAME}>
                 <button
                   type="button"
-                  aria-label="关闭文本上下文弹窗"
+                  aria-label={t(
+                    "generalWorkbench.context.modal.text.closeAria",
+                  )}
                   className={CONTEXT_MODAL_HEADER_BUTTON_CLASSNAME}
                   onClick={() => {
                     if (!contextCreateLoading) {
@@ -763,7 +828,9 @@ function GeneralWorkbenchContextPanelComponent({
               <textarea
                 className={CONTEXT_TEXTAREA_CLASSNAME}
                 value={contextDraftText}
-                placeholder="在此粘贴或输入文本..."
+                placeholder={t(
+                  "generalWorkbench.context.modal.text.placeholder",
+                )}
                 onChange={(event) =>
                   onContextDraftTextChange(event.target.value)
                 }
@@ -776,7 +843,9 @@ function GeneralWorkbenchContextPanelComponent({
               <div className={CONTEXT_MODAL_FOOTER_CLASSNAME}>
                 <button
                   type="button"
-                  aria-label="确认添加文本上下文"
+                  aria-label={t(
+                    "generalWorkbench.context.modal.text.confirmAria",
+                  )}
                   className={getContextConfirmButtonClassName(
                     contextCreateLoading ||
                       contextDraftText.trim().length === 0,
@@ -791,7 +860,7 @@ function GeneralWorkbenchContextPanelComponent({
                   {contextCreateLoading ? (
                     <Loader2 size={22} className="animate-spin" />
                   ) : (
-                    "确认"
+                    t("generalWorkbench.context.modal.confirm")
                   )}
                 </button>
               </div>
@@ -817,7 +886,7 @@ function GeneralWorkbenchContextPanelComponent({
               <div className={CONTEXT_MODAL_HEADER_ACTIONS_CLASSNAME}>
                 <button
                   type="button"
-                  aria-label="返回添加上下文"
+                  aria-label={t("generalWorkbench.context.modal.backAria")}
                   className={CONTEXT_MODAL_HEADER_BUTTON_CLASSNAME}
                   onClick={() => {
                     if (!contextCreateLoading) {
@@ -829,12 +898,14 @@ function GeneralWorkbenchContextPanelComponent({
                 </button>
               </div>
               <h3 className={CONTEXT_MODAL_TITLE_CENTERED_CLASSNAME}>
-                添加网站链接
+                {t("generalWorkbench.context.modal.link.title")}
               </h3>
               <div className={CONTEXT_MODAL_HEADER_ACTIONS_CLASSNAME}>
                 <button
                   type="button"
-                  aria-label="关闭链接上下文弹窗"
+                  aria-label={t(
+                    "generalWorkbench.context.modal.link.closeAria",
+                  )}
                   className={CONTEXT_MODAL_HEADER_BUTTON_CLASSNAME}
                   onClick={() => {
                     if (!contextCreateLoading) {
@@ -850,7 +921,9 @@ function GeneralWorkbenchContextPanelComponent({
               <input
                 className={CONTEXT_LINK_INPUT_CLASSNAME}
                 value={contextDraftLink}
-                placeholder="请输入网站链接"
+                placeholder={t(
+                  "generalWorkbench.context.modal.link.placeholder",
+                )}
                 onChange={(event) =>
                   onContextDraftLinkChange(event.target.value)
                 }
@@ -863,7 +936,9 @@ function GeneralWorkbenchContextPanelComponent({
               <div className={CONTEXT_MODAL_FOOTER_CLASSNAME}>
                 <button
                   type="button"
-                  aria-label="确认添加链接上下文"
+                  aria-label={t(
+                    "generalWorkbench.context.modal.link.confirmAria",
+                  )}
                   className={getContextConfirmButtonClassName(
                     contextCreateLoading ||
                       contextDraftLink.trim().length === 0,
@@ -878,7 +953,7 @@ function GeneralWorkbenchContextPanelComponent({
                   {contextCreateLoading ? (
                     <Loader2 size={22} className="animate-spin" />
                   ) : (
-                    "确认"
+                    t("generalWorkbench.context.modal.confirm")
                   )}
                 </button>
               </div>

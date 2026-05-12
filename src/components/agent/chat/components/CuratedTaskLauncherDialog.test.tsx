@@ -10,40 +10,11 @@ import {
   recordCuratedTaskRecommendationSignalFromReviewDecision,
 } from "@/components/agent/chat/utils/curatedTaskRecommendationSignals";
 import type { UnifiedMemory } from "@/lib/api/unifiedMemory";
-
-const { mockUseTranslation } = vi.hoisted(() => {
-  const mockTranslate = vi.fn((key: string, options?: unknown) => {
-    if (typeof options === "string") {
-      return options;
-    }
-
-    if (options && typeof options === "object") {
-      const values = options as Record<string, unknown>;
-      const template =
-        typeof values.defaultValue === "string" ? values.defaultValue : key;
-      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-        String(values[name] ?? ""),
-      );
-    }
-
-    return key;
-  });
-
-  return {
-    mockUseTranslation: vi.fn((_namespace?: string) => ({
-      i18n: { language: "zh-CN" },
-      t: mockTranslate,
-    })),
-  };
-});
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 const mockListUnifiedMemories = vi.hoisted(() =>
   vi.fn<() => Promise<UnifiedMemory[]>>(async () => []),
 );
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
-}));
 
 vi.mock("@/lib/api/unifiedMemory", () => ({
   listUnifiedMemories: mockListUnifiedMemories,
@@ -89,7 +60,9 @@ describe("CuratedTaskLauncherDialog", () => {
   let container: HTMLDivElement;
   let root: Root;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await changeLimeLocale("zh-CN");
+
     // React 18 createRoot + act 在当前 Vitest 环境里需要显式打开该标记。
     (
       globalThis as typeof globalThis & {

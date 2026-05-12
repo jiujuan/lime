@@ -90,6 +90,28 @@ function Harness() {
       </button>
       <button
         type="button"
+        data-testid="paste-many-images"
+        onClick={() => {
+          const files = Array.from(
+            { length: 25 },
+            (_, index) =>
+              new File(["image"], `clipboard-${index}.png`, {
+                type: "image/png",
+              }),
+          );
+          handlePaste({
+            preventDefault: vi.fn(),
+            clipboardData: {
+              items: [],
+              files,
+            },
+          } as never);
+        }}
+      >
+        批量粘贴图片
+      </button>
+      <button
+        type="button"
         data-testid="remove-image"
         onClick={() => handleRemoveImage(0)}
       >
@@ -200,5 +222,23 @@ describe("useImageAttachments", () => {
       container.querySelector('[data-testid="image-type"]')?.textContent,
     ).toBe("image/png");
     expect(toastMock.success).toHaveBeenCalledWith("已粘贴图片");
+  });
+
+  it("单轮最多保留 20 张待发送图片", async () => {
+    const container = renderHarness();
+    const pasteButton = container.querySelector(
+      '[data-testid="paste-many-images"]',
+    ) as HTMLButtonElement | null;
+
+    await act(async () => {
+      pasteButton?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector('[data-testid="image-count"]')?.textContent,
+    ).toBe("20");
+    expect(toastMock.error).toHaveBeenCalled();
   });
 });

@@ -1,8 +1,34 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { buildThreadReliabilityView } from "./threadReliabilityView";
+import {
+  buildThreadReliabilityView,
+  type ThreadReliabilityViewTranslation,
+} from "./threadReliabilityView";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime";
 import type { ActionRequired } from "../types";
+import zhAgentTranslations from "@/i18n/resources/zh-CN/agent.json";
+
+type BuildThreadReliabilityViewParams = Parameters<
+  typeof buildThreadReliabilityView
+>[0];
+
+const translateView: ThreadReliabilityViewTranslation = (key, options) => {
+  const template = (zhAgentTranslations as Record<string, string>)[key] ?? key;
+  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, optionKey) => {
+    const value = options?.[optionKey];
+    return value === undefined || value === null ? match : String(value);
+  });
+};
+
+function buildZhThreadReliabilityView(
+  params: BuildThreadReliabilityViewParams,
+) {
+  return buildThreadReliabilityView({
+    ...params,
+    t: translateView,
+    locale: "zh-CN",
+  });
+}
 
 describe("buildThreadReliabilityView", () => {
   beforeEach(() => {
@@ -50,7 +76,7 @@ describe("buildThreadReliabilityView", () => {
       ],
     };
 
-    const view = buildThreadReliabilityView({
+    const view = buildZhThreadReliabilityView({
       threadRead,
       turns: [
         {
@@ -106,7 +132,7 @@ describe("buildThreadReliabilityView", () => {
       },
     };
 
-    const view = buildThreadReliabilityView({
+    const view = buildZhThreadReliabilityView({
       threadRead,
       turns: [
         {
@@ -166,7 +192,7 @@ describe("buildThreadReliabilityView", () => {
       status: "pending",
     };
 
-    const view = buildThreadReliabilityView({
+    const view = buildZhThreadReliabilityView({
       threadRead,
       turns: [
         {
@@ -219,7 +245,7 @@ describe("buildThreadReliabilityView", () => {
       ],
     };
 
-    const view = buildThreadReliabilityView({
+    const view = buildZhThreadReliabilityView({
       threadRead,
       turns: [
         {
@@ -253,7 +279,7 @@ describe("buildThreadReliabilityView", () => {
       updated_at: "2026-03-23T09:59:58Z",
     };
 
-    const view = buildThreadReliabilityView({
+    const view = buildZhThreadReliabilityView({
       threadRead,
       turns: [
         {
@@ -278,7 +304,7 @@ describe("buildThreadReliabilityView", () => {
   });
 
   it("应忽略 Artifact 自动恢复 warning，不把它升级为活跃 incident", () => {
-    const view = buildThreadReliabilityView({
+    const view = buildZhThreadReliabilityView({
       threadRead: {
         thread_id: "thread-1",
         status: "completed",
@@ -325,7 +351,7 @@ describe("buildThreadReliabilityView", () => {
   it("运行时权限确认等待不应投影为处理工作台异常或泄露内部字段", () => {
     const internalMessage =
       '运行时权限声明需要真实确认：已创建真实权限确认请求 {"confirmationStatus":"not_requested","askProfileKeys":["write"]}';
-    const view = buildThreadReliabilityView({
+    const view = buildZhThreadReliabilityView({
       threadRead: {
         thread_id: "thread-permission",
         status: "running",
@@ -384,7 +410,7 @@ describe("buildThreadReliabilityView", () => {
   it("运行时权限确认等待的失败 turn 应展示为等待处理 outcome", () => {
     const internalMessage =
       "运行时权限声明需要真实确认，当前 turn 已在模型执行前等待用户确认：confirmationStatus=not_requested，askProfileKeys=web_search。已创建真实权限确认请求；请确认后重试或恢复本轮执行。";
-    const view = buildThreadReliabilityView({
+    const view = buildZhThreadReliabilityView({
       turns: [
         {
           id: "turn-permission-failed",

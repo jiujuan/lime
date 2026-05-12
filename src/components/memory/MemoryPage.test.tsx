@@ -11,6 +11,7 @@ import {
   CURATED_TASK_RECOMMENDATION_SIGNAL_EVENT,
   recordCuratedTaskRecommendationSignalFromReviewDecision,
 } from "@/components/agent/chat/utils/curatedTaskRecommendationSignals";
+import agentZhCN from "@/i18n/resources/zh-CN/agent.json";
 import { recordRuntimeMemoryPrefetchHistory } from "@/lib/runtimeMemoryPrefetchHistory";
 import { MemoryPage } from "./MemoryPage";
 
@@ -30,6 +31,7 @@ const {
   mockGetStoredResourceProjectId,
   mockOnResourceProjectChange,
   mockBuildHomeAgentParams,
+  mockTranslate,
   mockUseTranslation,
 } = vi.hoisted(() => {
   const mockTranslate = vi.fn(
@@ -72,6 +74,7 @@ const {
     mockGetStoredResourceProjectId: vi.fn(),
     mockOnResourceProjectChange: vi.fn(),
     mockBuildHomeAgentParams: vi.fn(),
+    mockTranslate,
     mockUseTranslation: vi.fn((_namespace?: string) => ({
       i18n: {
         language: "zh-CN",
@@ -118,6 +121,32 @@ vi.mock("@/lib/workspace/navigation", () => ({
 vi.mock("react-i18next", () => ({
   useTranslation: mockUseTranslation,
 }));
+
+const agentDictionary = agentZhCN as Record<string, string>;
+
+function translateTestResource(
+  key: string,
+  fallbackOrOptions?: string | { defaultValue?: string },
+  options?: Record<string, unknown>,
+): string {
+  const values: Record<string, unknown> =
+    typeof fallbackOrOptions === "object" && fallbackOrOptions !== null
+      ? (fallbackOrOptions as Record<string, unknown>)
+      : (options ?? {});
+  const template =
+    typeof agentDictionary[key] === "string"
+      ? agentDictionary[key]
+      : typeof fallbackOrOptions === "string"
+        ? fallbackOrOptions
+        : typeof values.defaultValue === "string"
+          ? values.defaultValue
+          : key;
+
+  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, name) => {
+    const value = values[name];
+    return value == null ? match : String(value);
+  });
+}
 
 const mountedRoots: MountedRoot[] = [];
 
@@ -181,6 +210,7 @@ describe("MemoryPage", () => {
     setReactActEnvironment();
     vi.clearAllMocks();
     window.localStorage.clear();
+    mockTranslate.mockImplementation(translateTestResource);
 
     mockGetConfig.mockResolvedValue({
       memory: {

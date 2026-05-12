@@ -145,7 +145,7 @@ mod tests {
 
         let roots = assign_lime_skill_root_sources(
             vec![project_root.clone(), user_root.clone(), app_root.clone()],
-            &[project_root.clone()],
+            std::slice::from_ref(&project_root),
         );
 
         assert_eq!(

@@ -11,12 +11,13 @@ use crate::commands::modality_runtime_contracts::{
     TEXT_TRANSFORM_CONTRACT_KEY, VOICE_GENERATION_CONTRACT_KEY, WEB_RESEARCH_CONTRACT_KEY,
 };
 use crate::services::runtime_evidence_pack_service::{
-    export_runtime_evidence_pack, RuntimeEvidencePackExportResult,
+    export_runtime_evidence_pack_with_owner_runs_and_locale, RuntimeEvidencePackExportResult,
 };
 use crate::services::runtime_file_checkpoint_service::list_file_checkpoints;
 use crate::services::runtime_handoff_artifact_service::{
     export_runtime_handoff_bundle, RuntimeHandoffBundleExportResult,
 };
+use crate::services::runtime_replay_markdown_locale_service::runtime_replay_markdown_copy;
 use chrono::Utc;
 use lime_core::database::dao::agent_timeline::AgentThreadItemPayload;
 use serde::{Deserialize, Serialize};
@@ -105,6 +106,15 @@ pub fn export_runtime_replay_case(
     thread_read: &AgentRuntimeThreadReadModel,
     workspace_root: &Path,
 ) -> Result<RuntimeReplayCaseExportResult, String> {
+    export_runtime_replay_case_with_locale(detail, thread_read, workspace_root, Some("zh-CN"))
+}
+
+pub fn export_runtime_replay_case_with_locale(
+    detail: &SessionDetail,
+    thread_read: &AgentRuntimeThreadReadModel,
+    workspace_root: &Path,
+    locale: Option<&str>,
+) -> Result<RuntimeReplayCaseExportResult, String> {
     let session_id = detail.id.trim();
     if session_id.is_empty() {
         return Err("session_id 不能为空，无法导出 replay case".to_string());
@@ -125,8 +135,14 @@ pub fn export_runtime_replay_case(
 
     let handoff_bundle =
         export_runtime_handoff_bundle(detail, thread_read, workspace_root.as_path())?;
-    let evidence_pack =
-        export_runtime_evidence_pack(detail, thread_read, workspace_root.as_path())?;
+    let evidence_pack = export_runtime_evidence_pack_with_owner_runs_and_locale(
+        detail,
+        thread_read,
+        workspace_root.as_path(),
+        &[],
+        locale,
+    )?;
+    let markdown_copy = runtime_replay_markdown_copy(locale);
 
     fs::create_dir_all(&replay_absolute_root).map_err(|error| {
         format!(
@@ -176,7 +192,7 @@ pub fn export_runtime_replay_case(
             session_id,
             INPUT_FILE_NAME,
             RuntimeReplayArtifactKind::Input,
-            "回放输入",
+            markdown_copy.input_artifact_title,
             build_input_json(
                 detail,
                 thread_read,
@@ -201,7 +217,7 @@ pub fn export_runtime_replay_case(
             session_id,
             EXPECTED_FILE_NAME,
             RuntimeReplayArtifactKind::Expected,
-            "期望结果",
+            markdown_copy.expected_artifact_title,
             build_expected_json(
                 detail,
                 thread_read,
@@ -219,7 +235,7 @@ pub fn export_runtime_replay_case(
             session_id,
             GRADER_FILE_NAME,
             RuntimeReplayArtifactKind::Grader,
-            "评分说明",
+            markdown_copy.grader_artifact_title,
             build_grader_markdown(
                 detail,
                 goal_summary.as_deref(),
@@ -229,6 +245,7 @@ pub fn export_runtime_replay_case(
                 handoff_bundle.bundle_relative_root.as_str(),
                 evidence_pack.pack_relative_root.as_str(),
                 exported_at.as_str(),
+                locale,
             ),
         )?,
         write_replay_file(
@@ -236,7 +253,7 @@ pub fn export_runtime_replay_case(
             session_id,
             EVIDENCE_LINKS_FILE_NAME,
             RuntimeReplayArtifactKind::EvidenceLinks,
-            "证据链接",
+            markdown_copy.evidence_links_artifact_title,
             build_evidence_links_json(
                 &handoff_bundle,
                 &evidence_pack,
@@ -515,63 +532,57 @@ fn build_grader_markdown(
     handoff_relative_root: &str,
     evidence_relative_root: &str,
     exported_at: &str,
+    locale: Option<&str>,
 ) -> String {
+    let copy = runtime_replay_markdown_copy(locale);
     let mut markdown = String::new();
-    let _ = writeln!(markdown, "# Replay Case 评分说明");
+    let _ = writeln!(markdown, "# {}", copy.grader_title);
     let _ = writeln!(markdown);
-    let _ = writeln!(markdown, "- 会话：`{}`", detail.id);
-    let _ = writeln!(markdown, "- 线程：`{}`", detail.thread_id);
-    let _ = writeln!(markdown, "- 导出时间：{exported_at}");
+    let _ = writeln!(markdown, "- {}：`{}`", copy.session, detail.id);
+    let _ = writeln!(markdown, "- {}：`{}`", copy.thread, detail.thread_id);
+    let _ = writeln!(markdown, "- {}：{exported_at}", copy.exported_at);
     if let Some(summary) = goal_summary {
-        let _ = writeln!(markdown, "- 目标摘要：{summary}");
+        let _ = writeln!(markdown, "- {}：{summary}", copy.goal_summary);
     }
     let _ = writeln!(markdown);
-    let _ = writeln!(markdown, "## 建议读取顺序");
+    let _ = writeln!(markdown, "## {}", copy.reading_order);
     let _ = writeln!(markdown);
+    let _ = writeln!(markdown, "1. {}", copy.read_input);
+    let _ = writeln!(markdown, "2. {}", copy.read_expected);
+    let _ = writeln!(markdown, "3. {}", copy.read_evidence_links);
     let _ = writeln!(
         markdown,
-        "1. 先读 `input.json`，理解当前任务与运行时上下文。"
-    );
-    let _ = writeln!(markdown, "2. 再读 `expected.json`，确认只评估结果与风险。");
-    let _ = writeln!(
-        markdown,
-        "3. 再读 `evidence-links.json`，跳转到已有证据源。"
-    );
-    let _ = writeln!(
-        markdown,
-        "4. 如需补证据，优先回看 `{handoff_relative_root}` 与 `{evidence_relative_root}`。"
+        "4. {} `{handoff_relative_root}` / `{evidence_relative_root}`.",
+        copy.read_existing_evidence
     );
     let _ = writeln!(markdown);
-    let _ = writeln!(markdown, "## 评分原则");
+    let _ = writeln!(markdown, "## {}", copy.scoring_principles);
     let _ = writeln!(markdown);
-    let _ = writeln!(markdown, "- 只评结果，不评路径。");
-    let _ = writeln!(markdown, "- 先证据后结论；没有证据支撑的 PASS 不成立。");
-    let _ = writeln!(
-        markdown,
-        "- 如仍存在 pending request，必须解释它是已处理、仍保留，还是不影响判定。"
-    );
+    let _ = writeln!(markdown, "- {}", copy.principle_result_only);
+    let _ = writeln!(markdown, "- {}", copy.principle_evidence_first);
+    let _ = writeln!(markdown, "- {}", copy.principle_pending_request);
     let _ = writeln!(markdown);
-    let _ = writeln!(markdown, "## 最小通过条件");
+    let _ = writeln!(markdown, "## {}", copy.success_criteria);
     let _ = writeln!(markdown);
     for criterion in success_criteria {
         let _ = writeln!(markdown, "- {criterion}");
     }
     let _ = writeln!(markdown);
-    let _ = writeln!(markdown, "## 关键阻塞检查");
+    let _ = writeln!(markdown, "## {}", copy.blocking_checks);
     let _ = writeln!(markdown);
     for check in blocking_checks {
         let _ = writeln!(markdown, "- {check}");
     }
     if !modality_contract_checks.is_empty() {
         let _ = writeln!(markdown);
-        let _ = writeln!(markdown, "## 多模态运行合同检查");
+        let _ = writeln!(markdown, "## {}", copy.modality_contract_checks);
         let _ = writeln!(markdown);
         for check in modality_contract_checks {
             let _ = writeln!(markdown, "- {check}");
         }
     }
     let _ = writeln!(markdown);
-    let _ = writeln!(markdown, "## 建议输出模板");
+    let _ = writeln!(markdown, "## {}", copy.output_template);
     let _ = writeln!(markdown);
     let _ = writeln!(markdown, "```text");
     let _ = writeln!(markdown, "verdict: pass | fail | needs_review");
@@ -3441,6 +3452,32 @@ mod tests {
         assert!(links.contains("\"agentRuntimeProfile\""));
         assert!(links.contains("\"schemaVersion\": \"lime-profile-0.4.0\""));
         assert!(!links.contains("\"artifactValidator\""));
+    }
+
+    #[test]
+    fn replay_grader_markdown_should_follow_requested_locale() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let detail = build_detail();
+        let thread_read = build_thread_read();
+
+        let result = export_runtime_replay_case_with_locale(
+            &detail,
+            &thread_read,
+            temp_dir.path(),
+            Some("en-US"),
+        )
+        .expect("export");
+
+        assert_eq!(result.artifacts[2].title, "Grading Guide");
+
+        let grader_path = temp_dir
+            .path()
+            .join(".lime/harness/sessions/session-1/replay/grader.md");
+        let grader = fs::read_to_string(grader_path).expect("grader");
+        assert!(grader.contains("# Replay Case Grading Guide"));
+        assert!(grader.contains("## Recommended Reading Order"));
+        assert!(grader.contains("## Grading Principles"));
+        assert!(!grader.contains("## 建议读取顺序"));
     }
 
     #[test]

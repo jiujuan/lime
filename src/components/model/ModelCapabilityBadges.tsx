@@ -2,6 +2,10 @@ import React from "react";
 import { Brain, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ModelCapabilities } from "@/lib/types/modelRegistry";
+import {
+  getModelInputModalities,
+  getModelTaskFamilies,
+} from "@/lib/model/inferModelCapabilities";
 
 interface CapabilityBadgeProps {
   active: boolean;
@@ -14,6 +18,7 @@ interface CapabilityBadgeProps {
 
 interface ModelCapabilityBadgesProps {
   capabilities: ModelCapabilities;
+  model?: Parameters<typeof getModelTaskFamilies>[0];
   className?: string;
   compact?: boolean;
   showNegative?: boolean;
@@ -45,10 +50,17 @@ function CapabilityBadge({
 
 export const ModelCapabilityBadges: React.FC<ModelCapabilityBadgesProps> = ({
   capabilities,
+  model,
   className,
   compact = false,
   showNegative = true,
 }) => {
+  const resolvedTaskFamilies = model ? getModelTaskFamilies(model) : [];
+  const resolvedInputModalities = model ? getModelInputModalities(model) : [];
+  const visionActive =
+    capabilities.vision ||
+    resolvedTaskFamilies.includes("vision_understanding") ||
+    resolvedInputModalities.includes("image");
   const capabilityItems = [
     {
       key: "reasoning",
@@ -61,7 +73,7 @@ export const ModelCapabilityBadges: React.FC<ModelCapabilityBadgesProps> = ({
     },
     {
       key: "vision",
-      active: capabilities.vision,
+      active: Boolean(visionActive),
       icon: <Eye className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />,
       activeLabel: "支持多模态",
       inactiveLabel: "无多模态",

@@ -314,8 +314,8 @@ function SecretInput({
         className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
       >
         {visible
-          ? t("settings.webSearch.secret.hide", "隐藏")
-          : t("settings.webSearch.secret.show", "显示")}
+          ? t("settings.webSearch.secret.hide")
+          : t("settings.webSearch.secret.show")}
       </button>
     </div>
   );
@@ -419,7 +419,6 @@ export function WebSearchSettings() {
         type: "error",
         text: t("settings.webSearch.message.loadFailed", {
           message: error instanceof Error ? error.message : String(error),
-          defaultValue: "加载配置失败: {{message}}",
         }),
       });
     } finally {
@@ -521,58 +520,38 @@ export function WebSearchSettings() {
     draftMseCustomEngineTemplate.trim().includes("{query}");
   const pexelsKeyConfigured = draftPexelsApiKey.trim().length > 0;
   const pixabayKeyConfigured = draftPixabayApiKey.trim().length > 0;
-  const filledLabel = t("settings.webSearch.status.filled", "已填写");
-  const missingLabel = t("settings.webSearch.status.missing", "未填写");
-  const readyLabel = t("settings.webSearch.status.ready", "可用");
-  const notConfiguredLabel = t(
-    "settings.webSearch.status.notConfigured",
-    "未配置",
-  );
-  const googleEngineLabel = t("settings.webSearch.engine.google", "Google");
-  const xiaohongshuEngineLabel = t(
-    "settings.webSearch.engine.xiaohongshu",
-    "小红书",
-  );
-  const tavilyProviderLabel = t(
-    "settings.webSearch.provider.tavily",
-    "Tavily Search API",
-  );
+  const filledLabel = t("settings.webSearch.status.filled");
+  const missingLabel = t("settings.webSearch.status.missing");
+  const readyLabel = t("settings.webSearch.status.ready");
+  const notConfiguredLabel = t("settings.webSearch.status.notConfigured");
+  const googleEngineLabel = t("settings.webSearch.engine.google");
+  const xiaohongshuEngineLabel = t("settings.webSearch.engine.xiaohongshu");
+  const tavilyProviderLabel = t("settings.webSearch.provider.tavily");
   const multiSearchEngineProviderLabel = t(
     "settings.webSearch.provider.multiSearchEngine",
-    "Multi Search Engine v2.0.1",
   );
   const duckduckgoInstantProviderLabel = t(
     "settings.webSearch.provider.duckduckgoInstant",
-    "DuckDuckGo Instant Answer (免费)",
   );
   const bingSearchApiProviderLabel = t(
     "settings.webSearch.provider.bingSearchApi",
-    "Bing Search API",
   );
   const googleCustomSearchProviderLabel = t(
     "settings.webSearch.provider.googleCustomSearch",
-    "Google Custom Search API",
   );
-  const googleCseProviderLabel = t(
-    "settings.webSearch.provider.googleCse",
-    "Google CSE",
-  );
-  const pexelsProviderLabel = t("settings.webSearch.provider.pexels", "Pexels");
-  const pixabayProviderLabel = t(
-    "settings.webSearch.provider.pixabay",
-    "Pixabay",
-  );
+  const googleCseProviderLabel = t("settings.webSearch.provider.googleCse");
+  const pexelsProviderLabel = t("settings.webSearch.provider.pexels");
+  const pixabayProviderLabel = t("settings.webSearch.provider.pixabay");
   const credentialStatusLabel = (name: string, configured: boolean) =>
     t("settings.webSearch.status.credential", {
       name,
       status: configured ? filledLabel : missingLabel,
-      defaultValue: "{{name}} {{status}}",
     });
 
   const providerChainPreview =
     parseCsv(draftProviderPriority).length > 0
       ? parseCsv(draftProviderPriority).join(" -> ")
-      : t("settings.webSearch.providerChain.auto", "自动默认链");
+      : t("settings.webSearch.providerChain.auto");
 
   const handleSave = async () => {
     if (!config || !hasUnsavedChanges) return;
@@ -635,7 +614,7 @@ export function WebSearchSettings() {
       setConfig(nextConfig);
       setMessage({
         type: "success",
-        text: t("settings.webSearch.message.saved", "网络搜索设置已保存"),
+        text: t("settings.webSearch.message.saved"),
       });
       setTimeout(() => setMessage(null), 2500);
     } catch (error) {
@@ -643,7 +622,6 @@ export function WebSearchSettings() {
         type: "error",
         text: t("settings.webSearch.message.saveFailed", {
           message: error instanceof Error ? error.message : String(error),
-          defaultValue: "保存失败: {{message}}",
         }),
       });
     } finally {
@@ -701,7 +679,7 @@ export function WebSearchSettings() {
               onClick={() => void loadConfig()}
               className="rounded-full border border-current/15 bg-white/80 px-3 py-1.5 text-xs font-medium transition hover:bg-white"
             >
-              {t("settings.webSearch.action.reload", "重新加载")}
+              {t("settings.webSearch.action.reload")}
             </button>
           ) : null}
         </div>
@@ -713,25 +691,16 @@ export function WebSearchSettings() {
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-[24px] font-semibold tracking-tight text-slate-900">
-                  {t("settings.webSearch.title", "网络搜索")}
+                  {t("settings.webSearch.title")}
                 </h1>
                 <WorkbenchInfoTip
-                  ariaLabel={t(
-                    "settings.webSearch.hero.tipAria",
-                    "联网搜索设置总览说明",
-                  )}
-                  content={t(
-                    "settings.webSearch.hero.tip",
-                    "管理搜索引擎、Provider 回退链和图片搜索 Key；各服务的接入说明已经分别收进对应配置分区。",
-                  )}
+                  ariaLabel={t("settings.webSearch.hero.tipAria")}
+                  content={t("settings.webSearch.hero.tip")}
                   tone="mint"
                 />
               </div>
               <p className="text-sm text-slate-500">
-                {t(
-                  "settings.webSearch.description",
-                  "管理搜索引擎、Provider 回退和图片搜索 Key。",
-                )}
+                {t("settings.webSearch.description")}
               </p>
             </div>
 
@@ -743,13 +712,11 @@ export function WebSearchSettings() {
                       draftEngine === "google"
                         ? googleEngineLabel
                         : xiaohongshuEngineLabel,
-                    defaultValue: "搜索引擎：{{engine}}",
                   })}
                 </span>
                 <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
                   {t("settings.webSearch.summary.provider", {
                     provider: draftProvider,
-                    defaultValue: "当前 Provider：{{provider}}",
                   })}
                 </span>
                 <span
@@ -762,9 +729,8 @@ export function WebSearchSettings() {
                 >
                   {t("settings.webSearch.summary.status", {
                     status: hasUnsavedChanges
-                      ? t("settings.webSearch.status.pendingSave", "待保存")
-                      : t("settings.webSearch.status.saved", "已保存"),
-                    defaultValue: "状态：{{status}}",
+                      ? t("settings.webSearch.status.pendingSave")
+                      : t("settings.webSearch.status.saved"),
                   })}
                 </span>
               </div>
@@ -776,7 +742,7 @@ export function WebSearchSettings() {
                   className="gap-2 rounded-[14px] px-3 py-3"
                 >
                   <Search className="h-4 w-4" />
-                  {t("settings.webSearch.tabs.searchChain", "搜索链路")}
+                  {t("settings.webSearch.tabs.searchChain")}
                 </TabsTrigger>
                 <TabsTrigger
                   value="providers"
@@ -784,10 +750,7 @@ export function WebSearchSettings() {
                   className="gap-2 rounded-[14px] px-3 py-3"
                 >
                   <ShieldCheck className="h-4 w-4" />
-                  {t(
-                    "settings.webSearch.tabs.providerCredentials",
-                    "Provider 凭证",
-                  )}
+                  {t("settings.webSearch.tabs.providerCredentials")}
                 </TabsTrigger>
                 <TabsTrigger
                   value="mse"
@@ -795,7 +758,7 @@ export function WebSearchSettings() {
                   className="gap-2 rounded-[14px] px-3 py-3"
                 >
                   <Layers3 className="h-4 w-4" />
-                  {t("settings.webSearch.tabs.mse", "MSE 聚合")}
+                  {t("settings.webSearch.tabs.mse")}
                 </TabsTrigger>
                 <TabsTrigger
                   value="images"
@@ -803,7 +766,7 @@ export function WebSearchSettings() {
                   className="gap-2 rounded-[14px] px-3 py-3"
                 >
                   <ImageIcon className="h-4 w-4" />
-                  {t("settings.webSearch.tabs.imageSearch", "图片搜索")}
+                  {t("settings.webSearch.tabs.imageSearch")}
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -813,28 +776,18 @@ export function WebSearchSettings() {
         <TabsContent value="search" className="mt-0">
           <SurfacePanel
             icon={Search}
-            title={t("settings.webSearch.searchChain.title", "联网搜索配置")}
-            description={t(
-              "settings.webSearch.searchChain.description",
-              "先确定搜索引擎和首选 Provider，再补齐回退顺序与所需凭证。",
-            )}
-            tipAriaLabel={t(
-              "settings.webSearch.searchChain.tipAria",
-              "联网搜索配置说明",
-            )}
+            title={t("settings.webSearch.searchChain.title")}
+            description={t("settings.webSearch.searchChain.description")}
+            tipAriaLabel={t("settings.webSearch.searchChain.tipAria")}
             aside={
               <>
                 <StatusPill
                   active={draftEngine === "google"}
                   label={
                     draftEngine === "google"
-                      ? t(
-                          "settings.webSearch.searchChain.engineStatus.google",
-                          "通用搜索优先",
-                        )
+                      ? t("settings.webSearch.searchChain.engineStatus.google")
                       : t(
                           "settings.webSearch.searchChain.engineStatus.xiaohongshu",
-                          "小红书内容优先",
                         )
                   }
                 />
@@ -842,7 +795,6 @@ export function WebSearchSettings() {
                   active={draftProvider === "duckduckgo_instant"}
                   label={t("settings.webSearch.summary.provider", {
                     provider: draftProvider,
-                    defaultValue: "当前 Provider：{{provider}}",
                   })}
                 />
               </>
@@ -852,18 +804,11 @@ export function WebSearchSettings() {
               <article className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-4">
                 <div className="space-y-4">
                   <FieldBlock
-                    label={t(
-                      "settings.webSearch.searchChain.engine.label",
-                      "选择搜索引擎",
-                    )}
+                    label={t("settings.webSearch.searchChain.engine.label")}
                     htmlFor="web-search-engine"
-                    hint={t(
-                      "settings.webSearch.searchChain.engine.hint",
-                      "Google 适用于通用搜索，小红书适用于中文生活方式和购物内容。",
-                    )}
+                    hint={t("settings.webSearch.searchChain.engine.hint")}
                     tipAriaLabel={t(
                       "settings.webSearch.searchChain.engine.tipAria",
-                      "选择搜索引擎说明",
                     )}
                   >
                     <select
@@ -876,16 +821,13 @@ export function WebSearchSettings() {
                     >
                       <option value="google">{googleEngineLabel}</option>
                       <option value="xiaohongshu">
-                        {t("settings.webSearch.engine.xiaohongshu", "小红书")}
+                        {t("settings.webSearch.engine.xiaohongshu")}
                       </option>
                     </select>
                   </FieldBlock>
 
                   <FieldBlock
-                    label={t(
-                      "settings.webSearch.searchChain.provider.label",
-                      "首选搜索提供商",
-                    )}
+                    label={t("settings.webSearch.searchChain.provider.label")}
                     htmlFor="web-search-provider"
                   >
                     <select
@@ -915,16 +857,13 @@ export function WebSearchSettings() {
                   <FieldBlock
                     label={t(
                       "settings.webSearch.searchChain.providerPriority.label",
-                      "提供商回退优先级（逗号分隔）",
                     )}
                     htmlFor="web-search-provider-priority"
                     hint={t(
                       "settings.webSearch.searchChain.providerPriority.hint",
-                      "未填写时会自动使用默认回退链；未知 provider 会被忽略。",
                     )}
                     tipAriaLabel={t(
                       "settings.webSearch.searchChain.providerPriority.tipAria",
-                      "提供商回退优先级说明",
                     )}
                   >
                     <input
@@ -933,7 +872,6 @@ export function WebSearchSettings() {
                       onChange={(e) => setDraftProviderPriority(e.target.value)}
                       placeholder={t(
                         "settings.webSearch.searchChain.providerPriority.placeholder",
-                        "tavily, multi_search_engine, bing_search_api, google_custom_search, duckduckgo_instant",
                       )}
                       className={INPUT_CLASS_NAME}
                     />
@@ -947,7 +885,6 @@ export function WebSearchSettings() {
                     <p className="text-sm font-semibold text-slate-900">
                       {t(
                         "settings.webSearch.searchChain.credentialsStatus.title",
-                        "Provider 凭证状态",
                       )}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -987,17 +924,14 @@ export function WebSearchSettings() {
                       <span>
                         {t(
                           "settings.webSearch.searchChain.fallbackPreview.title",
-                          "当前回退预览",
                         )}
                       </span>
                       <WorkbenchInfoTip
                         ariaLabel={t(
                           "settings.webSearch.searchChain.fallbackPreview.tipAria",
-                          "当前回退预览说明",
                         )}
                         content={t(
                           "settings.webSearch.searchChain.fallbackPreview.tip",
-                          "按当前 Provider 顺序展示搜索回退链。",
                         )}
                         tone="slate"
                       />
@@ -1010,19 +944,14 @@ export function WebSearchSettings() {
                   <div className="rounded-[20px] border border-slate-200/80 bg-white p-4">
                     <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                       <span>
-                        {t(
-                          "settings.webSearch.searchChain.suggestion.title",
-                          "配置建议",
-                        )}
+                        {t("settings.webSearch.searchChain.suggestion.title")}
                       </span>
                       <WorkbenchInfoTip
                         ariaLabel={t(
                           "settings.webSearch.searchChain.suggestion.tipAria",
-                          "联网搜索配置建议",
                         )}
                         content={t(
                           "settings.webSearch.searchChain.suggestion.tip",
-                          "如果需要更稳定的通用联网搜索，优先补齐 Tavily、Bing 或 Google Custom Search；MSE 更适合做聚合兜底。",
                         )}
                         tone="slate"
                       />
@@ -1037,31 +966,18 @@ export function WebSearchSettings() {
         <TabsContent value="providers" className="mt-0">
           <SurfacePanel
             icon={ShieldCheck}
-            title={t("settings.webSearch.providers.title", "Provider 凭证")}
-            description={t(
-              "settings.webSearch.providers.description",
-              "把 Tavily、Bing、Google Custom Search 的 Key 放在同一块配置，减少来回跳转。",
-            )}
-            tipAriaLabel={t(
-              "settings.webSearch.providers.tipAria",
-              "Provider 凭证说明",
-            )}
+            title={t("settings.webSearch.providers.title")}
+            description={t("settings.webSearch.providers.description")}
+            tipAriaLabel={t("settings.webSearch.providers.tipAria")}
           >
             <div className="grid gap-4 xl:grid-cols-2">
               <article className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-4">
                 <FieldBlock
-                  label={t(
-                    "settings.webSearch.providers.tavily.label",
-                    "Tavily API Key",
-                  )}
+                  label={t("settings.webSearch.providers.tavily.label")}
                   htmlFor="web-search-tavily-key"
-                  hint={t(
-                    "settings.webSearch.providers.tavily.hint",
-                    "未填写时会回退环境变量 TAVILY_API_KEY。",
-                  )}
+                  hint={t("settings.webSearch.providers.tavily.hint")}
                   tipAriaLabel={t(
                     "settings.webSearch.providers.tavily.tipAria",
-                    "Tavily API Key 说明",
                   )}
                 >
                   <>
@@ -1071,17 +987,14 @@ export function WebSearchSettings() {
                         onClick={() => void openExternalUrl(TAVILY_APPLY_URL)}
                         className={TEXT_BUTTON_CLASS_NAME}
                       >
-                        {t(
-                          "settings.webSearch.providers.tavily.apply",
-                          "申请 Tavily Key",
-                        )}
+                        {t("settings.webSearch.providers.tavily.apply")}
                       </button>
                       <button
                         type="button"
                         onClick={() => void openExternalUrl(TAVILY_DOC_URL)}
                         className={TEXT_BUTTON_CLASS_NAME}
                       >
-                        {t("settings.webSearch.action.viewDocs", "查看文档")}
+                        {t("settings.webSearch.action.viewDocs")}
                       </button>
                     </div>
                     <SecretInput
@@ -1089,7 +1002,6 @@ export function WebSearchSettings() {
                       value={draftTavilyApiKey}
                       placeholder={t(
                         "settings.webSearch.providers.tavily.placeholder",
-                        "输入 TAVILY_API_KEY",
                       )}
                       visible={showTavilyApiKey}
                       onToggleVisible={() =>
@@ -1103,19 +1015,10 @@ export function WebSearchSettings() {
 
               <article className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-4">
                 <FieldBlock
-                  label={t(
-                    "settings.webSearch.providers.bing.label",
-                    "Bing Search API Key",
-                  )}
+                  label={t("settings.webSearch.providers.bing.label")}
                   htmlFor="web-search-bing-key"
-                  hint={t(
-                    "settings.webSearch.providers.bing.hint",
-                    "未填写时会回退环境变量 BING_SEARCH_API_KEY。",
-                  )}
-                  tipAriaLabel={t(
-                    "settings.webSearch.providers.bing.tipAria",
-                    "Bing Search API Key 说明",
-                  )}
+                  hint={t("settings.webSearch.providers.bing.hint")}
+                  tipAriaLabel={t("settings.webSearch.providers.bing.tipAria")}
                 >
                   <>
                     <div className="mb-2 flex items-center gap-2">
@@ -1126,10 +1029,7 @@ export function WebSearchSettings() {
                         }
                         className={TEXT_BUTTON_CLASS_NAME}
                       >
-                        {t(
-                          "settings.webSearch.providers.bing.apply",
-                          "申请 Bing Key",
-                        )}
+                        {t("settings.webSearch.providers.bing.apply")}
                       </button>
                       <button
                         type="button"
@@ -1138,7 +1038,7 @@ export function WebSearchSettings() {
                         }
                         className={TEXT_BUTTON_CLASS_NAME}
                       >
-                        {t("settings.webSearch.action.viewDocs", "查看文档")}
+                        {t("settings.webSearch.action.viewDocs")}
                       </button>
                     </div>
                     <SecretInput
@@ -1146,7 +1046,6 @@ export function WebSearchSettings() {
                       value={draftBingSearchApiKey}
                       placeholder={t(
                         "settings.webSearch.providers.bing.placeholder",
-                        "输入 BING_SEARCH_API_KEY",
                       )}
                       visible={showBingSearchApiKey}
                       onToggleVisible={() =>
@@ -1161,18 +1060,11 @@ export function WebSearchSettings() {
               <article className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-4 xl:col-span-2">
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,0.74fr)]">
                   <FieldBlock
-                    label={t(
-                      "settings.webSearch.providers.googleApi.label",
-                      "Google Search API Key",
-                    )}
+                    label={t("settings.webSearch.providers.googleApi.label")}
                     htmlFor="web-search-google-key"
-                    hint={t(
-                      "settings.webSearch.providers.googleApi.hint",
-                      "未填写时会回退环境变量 GOOGLE_SEARCH_API_KEY。",
-                    )}
+                    hint={t("settings.webSearch.providers.googleApi.hint")}
                     tipAriaLabel={t(
                       "settings.webSearch.providers.googleApi.tipAria",
-                      "Google Search API Key 说明",
                     )}
                   >
                     <>
@@ -1184,10 +1076,7 @@ export function WebSearchSettings() {
                           }
                           className={TEXT_BUTTON_CLASS_NAME}
                         >
-                          {t(
-                            "settings.webSearch.providers.googleApi.apply",
-                            "申请 Google Key",
-                          )}
+                          {t("settings.webSearch.providers.googleApi.apply")}
                         </button>
                         <button
                           type="button"
@@ -1196,7 +1085,7 @@ export function WebSearchSettings() {
                           }
                           className={TEXT_BUTTON_CLASS_NAME}
                         >
-                          {t("settings.webSearch.action.viewDocs", "查看文档")}
+                          {t("settings.webSearch.action.viewDocs")}
                         </button>
                       </div>
                       <SecretInput
@@ -1204,7 +1093,6 @@ export function WebSearchSettings() {
                         value={draftGoogleSearchApiKey}
                         placeholder={t(
                           "settings.webSearch.providers.googleApi.placeholder",
-                          "输入 GOOGLE_SEARCH_API_KEY",
                         )}
                         visible={showGoogleSearchApiKey}
                         onToggleVisible={() =>
@@ -1216,18 +1104,11 @@ export function WebSearchSettings() {
                   </FieldBlock>
 
                   <FieldBlock
-                    label={t(
-                      "settings.webSearch.providers.googleEngine.label",
-                      "Google Search Engine ID (CSE CX)",
-                    )}
+                    label={t("settings.webSearch.providers.googleEngine.label")}
                     htmlFor="web-search-google-engine-id"
-                    hint={t(
-                      "settings.webSearch.providers.googleEngine.hint",
-                      "未填写时会回退环境变量 GOOGLE_SEARCH_ENGINE_ID。",
-                    )}
+                    hint={t("settings.webSearch.providers.googleEngine.hint")}
                     tipAriaLabel={t(
                       "settings.webSearch.providers.googleEngine.tipAria",
-                      "Google Search Engine ID 说明",
                     )}
                   >
                     <>
@@ -1241,7 +1122,6 @@ export function WebSearchSettings() {
                         >
                           {t(
                             "settings.webSearch.providers.googleEngine.create",
-                            "创建 CSE",
                           )}
                         </button>
                       </div>
@@ -1253,7 +1133,6 @@ export function WebSearchSettings() {
                         }
                         placeholder={t(
                           "settings.webSearch.providers.googleEngine.placeholder",
-                          "输入 GOOGLE_SEARCH_ENGINE_ID",
                         )}
                         className={INPUT_CLASS_NAME}
                       />
@@ -1268,15 +1147,9 @@ export function WebSearchSettings() {
         <TabsContent value="mse" className="mt-0">
           <SurfacePanel
             icon={Layers3}
-            title={t("settings.webSearch.mse.title", "Multi Search Engine")}
-            description={t(
-              "settings.webSearch.mse.description",
-              "集中维护 MSE 聚合顺序、上限、超时和自定义引擎模板。",
-            )}
-            tipAriaLabel={t(
-              "settings.webSearch.mse.tipAria",
-              "Multi Search Engine 说明",
-            )}
+            title={t("settings.webSearch.mse.title")}
+            description={t("settings.webSearch.mse.description")}
+            tipAriaLabel={t("settings.webSearch.mse.tipAria")}
             aside={
               <StatusPill
                 active={mseCustomEngineReady}
@@ -1284,7 +1157,6 @@ export function WebSearchSettings() {
                   status: mseCustomEngineReady
                     ? readyLabel
                     : notConfiguredLabel,
-                  defaultValue: "自定义模板 {{status}}",
                 })}
               />
             }
@@ -1293,10 +1165,7 @@ export function WebSearchSettings() {
               <article className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-4">
                 <div className="space-y-4">
                   <FieldBlock
-                    label={t(
-                      "settings.webSearch.mse.priority.label",
-                      "Multi Search Engine 引擎优先级（逗号分隔）",
-                    )}
+                    label={t("settings.webSearch.mse.priority.label")}
                     htmlFor="web-search-mse-priority"
                   >
                     <>
@@ -1306,10 +1175,7 @@ export function WebSearchSettings() {
                           onClick={() => void openExternalUrl(MSE_DOC_URL)}
                           className={TEXT_BUTTON_CLASS_NAME}
                         >
-                          {t(
-                            "settings.webSearch.mse.action.viewDesign",
-                            "查看 MSE 设计参考",
-                          )}
+                          {t("settings.webSearch.mse.action.viewDesign")}
                         </button>
                       </div>
                       <input
@@ -1318,7 +1184,6 @@ export function WebSearchSettings() {
                         onChange={(e) => setDraftMsePriority(e.target.value)}
                         placeholder={t(
                           "settings.webSearch.mse.priority.placeholder",
-                          "google, bing, duckduckgo, brave",
                         )}
                         className={INPUT_CLASS_NAME}
                       />
@@ -1327,10 +1192,7 @@ export function WebSearchSettings() {
 
                   <div className="grid gap-3 sm:grid-cols-3">
                     <FieldBlock
-                      label={t(
-                        "settings.webSearch.mse.maxPerEngine.label",
-                        "每引擎结果上限",
-                      )}
+                      label={t("settings.webSearch.mse.maxPerEngine.label")}
                       htmlFor="web-search-mse-max-per-engine"
                     >
                       <input
@@ -1343,10 +1205,7 @@ export function WebSearchSettings() {
                       />
                     </FieldBlock>
                     <FieldBlock
-                      label={t(
-                        "settings.webSearch.mse.maxTotal.label",
-                        "聚合结果总上限",
-                      )}
+                      label={t("settings.webSearch.mse.maxTotal.label")}
                       htmlFor="web-search-mse-max-total"
                     >
                       <input
@@ -1359,10 +1218,7 @@ export function WebSearchSettings() {
                       />
                     </FieldBlock>
                     <FieldBlock
-                      label={t(
-                        "settings.webSearch.mse.timeout.label",
-                        "单引擎超时 (ms)",
-                      )}
+                      label={t("settings.webSearch.mse.timeout.label")}
                       htmlFor="web-search-mse-timeout"
                     >
                       <input
@@ -1375,10 +1231,7 @@ export function WebSearchSettings() {
                   </div>
 
                   <FieldBlock
-                    label={t(
-                      "settings.webSearch.mse.customName.label",
-                      "自定义引擎名称（可选）",
-                    )}
+                    label={t("settings.webSearch.mse.customName.label")}
                     htmlFor="web-search-mse-custom-engine-name"
                   >
                     <input
@@ -1389,17 +1242,13 @@ export function WebSearchSettings() {
                       }
                       placeholder={t(
                         "settings.webSearch.mse.customName.placeholder",
-                        "例如: hn",
                       )}
                       className={INPUT_CLASS_NAME}
                     />
                   </FieldBlock>
 
                   <FieldBlock
-                    label={t(
-                      "settings.webSearch.mse.customTemplate.label",
-                      "自定义引擎 URL 模板（必须包含 {query}）",
-                    )}
+                    label={t("settings.webSearch.mse.customTemplate.label")}
                     htmlFor="web-search-mse-custom-engine-template"
                   >
                     <input
@@ -1410,7 +1259,6 @@ export function WebSearchSettings() {
                       }
                       placeholder={t(
                         "settings.webSearch.mse.customTemplate.placeholder",
-                        "https://example.com/search?q={query}",
                       )}
                       className={INPUT_CLASS_NAME}
                     />
@@ -1423,41 +1271,27 @@ export function WebSearchSettings() {
                   <div className="rounded-[20px] border border-slate-200/80 bg-white p-4">
                     <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                       <span>
-                        {t(
-                          "settings.webSearch.mse.suggestion.title",
-                          "MSE 使用建议",
-                        )}
+                        {t("settings.webSearch.mse.suggestion.title")}
                       </span>
                       <WorkbenchInfoTip
                         ariaLabel={t(
                           "settings.webSearch.mse.suggestion.tipAria",
-                          "MSE 使用建议说明",
                         )}
-                        content={t(
-                          "settings.webSearch.mse.suggestion.tip",
-                          "优先把常用引擎放在前面，避免总上限太高导致响应慢；超时建议维持在 4s 左右作为桌面端均衡值。",
-                        )}
+                        content={t("settings.webSearch.mse.suggestion.tip")}
                         tone="slate"
                       />
                     </div>
                   </div>
                   <div className="rounded-[20px] border border-slate-200/80 bg-white p-4">
                     <p className="text-sm font-semibold text-slate-900">
-                      {t(
-                        "settings.webSearch.mse.templateStatus.title",
-                        "当前模板状态",
-                      )}
+                      {t("settings.webSearch.mse.templateStatus.title")}
                     </p>
                     <p className="mt-2 text-sm leading-6 text-slate-500">
                       {mseCustomEngineReady
                         ? t("settings.webSearch.mse.templateStatus.ready", {
                             name: draftMseCustomEngineName,
-                            defaultValue: "已准备好自定义引擎：{{name}}",
                           })
-                        : t(
-                            "settings.webSearch.mse.templateStatus.notReady",
-                            "自定义引擎还未就绪，需要名称和包含 {query} 的模板。",
-                          )}
+                        : t("settings.webSearch.mse.templateStatus.notReady")}
                     </p>
                   </div>
                 </div>
@@ -1469,15 +1303,9 @@ export function WebSearchSettings() {
         <TabsContent value="images" className="mt-0 space-y-6">
           <SurfacePanel
             icon={ImageIcon}
-            title={t("settings.webSearch.images.title", "联网图片搜索")}
-            description={t(
-              "settings.webSearch.images.description",
-              "配置 Claw `@素材` 在线搜图使用的 Pexels 与 Pixabay API Key。",
-            )}
-            tipAriaLabel={t(
-              "settings.webSearch.images.tipAria",
-              "联网图片搜索说明",
-            )}
+            title={t("settings.webSearch.images.title")}
+            description={t("settings.webSearch.images.description")}
+            tipAriaLabel={t("settings.webSearch.images.tipAria")}
             aside={
               <>
                 <StatusPill
@@ -1500,19 +1328,10 @@ export function WebSearchSettings() {
             <div className="space-y-5">
               <article className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-4">
                 <FieldBlock
-                  label={t(
-                    "settings.webSearch.images.pexels.label",
-                    "Pexels API Key",
-                  )}
+                  label={t("settings.webSearch.images.pexels.label")}
                   htmlFor="web-search-pexels-key"
-                  hint={t(
-                    "settings.webSearch.images.pexels.hint",
-                    "未填写时会回退读取环境变量 PEXELS_API_KEY。",
-                  )}
-                  tipAriaLabel={t(
-                    "settings.webSearch.images.pexels.tipAria",
-                    "Pexels API Key 说明",
-                  )}
+                  hint={t("settings.webSearch.images.pexels.hint")}
+                  tipAriaLabel={t("settings.webSearch.images.pexels.tipAria")}
                 >
                   <>
                     <div className="mb-2 flex items-center gap-2">
@@ -1521,17 +1340,14 @@ export function WebSearchSettings() {
                         onClick={() => void openExternalUrl(PEXELS_APPLY_URL)}
                         className={TEXT_BUTTON_CLASS_NAME}
                       >
-                        {t(
-                          "settings.webSearch.images.pexels.apply",
-                          "申请 Pexels Key",
-                        )}
+                        {t("settings.webSearch.images.pexels.apply")}
                       </button>
                       <button
                         type="button"
                         onClick={() => void openExternalUrl(PEXELS_DOC_URL)}
                         className={TEXT_BUTTON_CLASS_NAME}
                       >
-                        {t("settings.webSearch.action.viewDocs", "查看文档")}
+                        {t("settings.webSearch.action.viewDocs")}
                       </button>
                     </div>
                     <SecretInput
@@ -1539,7 +1355,6 @@ export function WebSearchSettings() {
                       value={draftPexelsApiKey}
                       placeholder={t(
                         "settings.webSearch.images.pexels.placeholder",
-                        "输入 Pexels API Key",
                       )}
                       visible={showPexelsApiKey}
                       onToggleVisible={() =>
@@ -1551,21 +1366,11 @@ export function WebSearchSettings() {
                 </FieldBlock>
 
                 <div className="mt-3 flex items-center justify-between gap-3 rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-xs leading-5 text-slate-500">
-                  <span>
-                    {t(
-                      "settings.webSearch.images.pexels.note",
-                      "Pexels 接入说明已收纳",
-                    )}
-                  </span>
+                  <span>{t("settings.webSearch.images.pexels.note")}</span>
                   <WorkbenchInfoTip
-                    ariaLabel={t(
-                      "settings.webSearch.images.pexels.noteAria",
-                      "Pexels 接入说明",
-                    )}
+                    ariaLabel={t("settings.webSearch.images.pexels.noteAria")}
                     content={t("settings.webSearch.images.pexels.noteTip", {
                       applyUrl: PEXELS_APPLY_URL,
-                      defaultValue:
-                        "申请地址：{{applyUrl}}\n验证路径：Claw → @素材 → Pexels 图片候选。",
                     })}
                     tone="slate"
                   />
@@ -1574,19 +1379,10 @@ export function WebSearchSettings() {
 
               <article className="rounded-[24px] border border-slate-200/80 bg-slate-50/60 p-4">
                 <FieldBlock
-                  label={t(
-                    "settings.webSearch.images.pixabay.label",
-                    "Pixabay API Key",
-                  )}
+                  label={t("settings.webSearch.images.pixabay.label")}
                   htmlFor="web-search-pixabay-key"
-                  hint={t(
-                    "settings.webSearch.images.pixabay.hint",
-                    "未填写时会回退读取环境变量 PIXABAY_API_KEY。",
-                  )}
-                  tipAriaLabel={t(
-                    "settings.webSearch.images.pixabay.tipAria",
-                    "Pixabay API Key 说明",
-                  )}
+                  hint={t("settings.webSearch.images.pixabay.hint")}
+                  tipAriaLabel={t("settings.webSearch.images.pixabay.tipAria")}
                 >
                   <>
                     <div className="mb-2 flex items-center gap-2">
@@ -1595,17 +1391,14 @@ export function WebSearchSettings() {
                         onClick={() => void openExternalUrl(PIXABAY_APPLY_URL)}
                         className={TEXT_BUTTON_CLASS_NAME}
                       >
-                        {t(
-                          "settings.webSearch.images.pixabay.apply",
-                          "申请 Pixabay Key",
-                        )}
+                        {t("settings.webSearch.images.pixabay.apply")}
                       </button>
                       <button
                         type="button"
                         onClick={() => void openExternalUrl(PIXABAY_DOC_URL)}
                         className={TEXT_BUTTON_CLASS_NAME}
                       >
-                        {t("settings.webSearch.action.viewDocs", "查看文档")}
+                        {t("settings.webSearch.action.viewDocs")}
                       </button>
                     </div>
                     <SecretInput
@@ -1613,7 +1406,6 @@ export function WebSearchSettings() {
                       value={draftPixabayApiKey}
                       placeholder={t(
                         "settings.webSearch.images.pixabay.placeholder",
-                        "输入 Pixabay API Key",
                       )}
                       visible={showPixabayApiKey}
                       onToggleVisible={() =>
@@ -1625,21 +1417,11 @@ export function WebSearchSettings() {
                 </FieldBlock>
 
                 <div className="mt-3 flex items-center justify-between gap-3 rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-xs leading-5 text-slate-500">
-                  <span>
-                    {t(
-                      "settings.webSearch.images.pixabay.note",
-                      "Pixabay 接入说明已收纳",
-                    )}
-                  </span>
+                  <span>{t("settings.webSearch.images.pixabay.note")}</span>
                   <WorkbenchInfoTip
-                    ariaLabel={t(
-                      "settings.webSearch.images.pixabay.noteAria",
-                      "Pixabay 接入说明",
-                    )}
+                    ariaLabel={t("settings.webSearch.images.pixabay.noteAria")}
                     content={t("settings.webSearch.images.pixabay.noteTip", {
                       applyUrl: PIXABAY_APPLY_URL,
-                      defaultValue:
-                        "申请地址：{{applyUrl}}\n验证路径：Claw → @素材 → Pixabay 图片候选。",
                     })}
                     tone="slate"
                   />
@@ -1650,15 +1432,9 @@ export function WebSearchSettings() {
 
           <SurfacePanel
             icon={Compass}
-            title={t("settings.webSearch.observability.title", "观测面板")}
-            description={t(
-              "settings.webSearch.observability.description",
-              "快速判断当前搜索链路是否齐全，便于在保存前做一次配置自检。",
-            )}
-            tipAriaLabel={t(
-              "settings.webSearch.observability.tipAria",
-              "观测面板说明",
-            )}
+            title={t("settings.webSearch.observability.title")}
+            description={t("settings.webSearch.observability.description")}
+            tipAriaLabel={t("settings.webSearch.observability.tipAria")}
           >
             <div className="space-y-4">
               <div className="flex flex-wrap gap-2">
@@ -1698,17 +1474,13 @@ export function WebSearchSettings() {
                       status: mseCustomEngineReady
                         ? readyLabel
                         : notConfiguredLabel,
-                      defaultValue: "MSE 自定义模板 {{status}}",
                     },
                   )}
                 />
               </div>
               <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/60 p-4">
                 <p className="text-sm font-semibold text-slate-900">
-                  {t(
-                    "settings.webSearch.observability.providerChain.title",
-                    "当前 provider 回退链",
-                  )}
+                  {t("settings.webSearch.observability.providerChain.title")}
                 </p>
                 <p className="mt-2 text-sm leading-6 text-slate-500">
                   {providerChainPreview}
@@ -1716,21 +1488,12 @@ export function WebSearchSettings() {
               </div>
               <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/60 p-4">
                 <p className="text-sm font-semibold text-slate-900">
-                  {t(
-                    "settings.webSearch.observability.imageKeys.title",
-                    "图片搜索 Key",
-                  )}
+                  {t("settings.webSearch.observability.imageKeys.title")}
                 </p>
                 <p className="mt-2 text-sm leading-6 text-slate-500">
                   {pexelsKeyConfigured || pixabayKeyConfigured
-                    ? t(
-                        "settings.webSearch.observability.imageKeys.ready",
-                        "Claw 图片素材搜索至少已有一个联网图片来源可用。",
-                      )
-                    : t(
-                        "settings.webSearch.observability.imageKeys.missing",
-                        "图片搜索 Key 仍未配置，Claw `@素材` 会回退到环境变量或不可用状态。",
-                      )}
+                    ? t("settings.webSearch.observability.imageKeys.ready")
+                    : t("settings.webSearch.observability.imageKeys.missing")}
                 </p>
               </div>
             </div>
@@ -1742,8 +1505,8 @@ export function WebSearchSettings() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm text-slate-500">
             {hasUnsavedChanges
-              ? t("settings.webSearch.status.unsavedChanges", "未保存的更改")
-              : t("settings.webSearch.status.allSaved", "所有更改已保存")}
+              ? t("settings.webSearch.status.unsavedChanges")
+              : t("settings.webSearch.status.allSaved")}
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -1752,7 +1515,7 @@ export function WebSearchSettings() {
               disabled={!hasUnsavedChanges || saving}
               className={ACTION_BUTTON_CLASS_NAME}
             >
-              {t("settings.webSearch.action.cancel", "取消")}
+              {t("settings.webSearch.action.cancel")}
             </button>
             <button
               type="button"
@@ -1761,8 +1524,8 @@ export function WebSearchSettings() {
               className={PRIMARY_BUTTON_CLASS_NAME}
             >
               {saving
-                ? t("settings.webSearch.action.saving", "保存中...")
-                : t("settings.webSearch.action.save", "保存")}
+                ? t("settings.webSearch.action.saving")
+                : t("settings.webSearch.action.save")}
             </button>
           </div>
         </div>

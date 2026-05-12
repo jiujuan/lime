@@ -16,6 +16,8 @@ use super::window;
 pub enum ShortcutError {
     #[error("快捷键格式无效: {0}")]
     InvalidFormat(String),
+    #[error("{0}")]
+    ReservedSystemShortcut(String),
     #[error("快捷键注册失败: {0}")]
     RegisterFailed(String),
     #[error("快捷键注销失败: {0}")]
@@ -49,7 +51,6 @@ fn get_current_shortcut() -> &'static parking_lot::RwLock<Option<String>> {
 /// # 有效格式示例
 /// - "CommandOrControl+Shift+S"
 /// - "Alt+F4"
-/// - "Super+Space"
 /// - "Ctrl+Alt+Delete"
 pub fn validate(shortcut: &str) -> Result<(), ShortcutError> {
     if shortcut.is_empty() {
@@ -60,6 +61,10 @@ pub fn validate(shortcut: &str) -> Result<(), ShortcutError> {
     shortcut
         .parse::<Shortcut>()
         .map_err(|e| ShortcutError::InvalidFormat(format!("无法解析快捷键 '{shortcut}': {e}")))?;
+
+    if let Some(reason) = crate::global_shortcut_guard::reserved_system_shortcut_reason(shortcut) {
+        return Err(ShortcutError::ReservedSystemShortcut(reason.to_string()));
+    }
 
     debug!("快捷键格式验证通过: {}", shortcut);
     Ok(())
@@ -301,7 +306,6 @@ mod tests {
         assert!(validate("CommandOrControl+Shift+S").is_ok());
         assert!(validate("Alt+F4").is_ok());
         assert!(validate("Ctrl+C").is_ok());
-        assert!(validate("Super+Space").is_ok());
         assert!(validate("Shift+A").is_ok());
     }
 
@@ -323,6 +327,20 @@ mod tests {
         assert!(validate("InvalidKey").is_err());
         assert!(validate("+++").is_err());
         assert!(validate("Ctrl++").is_err());
+    }
+
+    #[test]
+    fn test_validate_rejects_input_method_reserved_shortcuts() {
+        for shortcut in ["CommandOrControl+Space", "Ctrl+Space", "Super+Space"] {
+            let result = validate(shortcut);
+            assert!(result.is_err());
+            match result {
+                Err(ShortcutError::ReservedSystemShortcut(message)) => {
+                    assert!(message.contains("输入法切换"));
+                }
+                _ => panic!("Expected ReservedSystemShortcut error for {shortcut}"),
+            }
+        }
     }
 
     #[test]

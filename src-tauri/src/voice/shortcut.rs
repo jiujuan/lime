@@ -28,14 +28,24 @@ fn get_translate_shortcut() -> &'static parking_lot::RwLock<Option<String>> {
     TRANSLATE_SHORTCUT.get_or_init(|| parking_lot::RwLock::new(None))
 }
 
+fn parse_user_shortcut(shortcut_str: &str) -> Result<Shortcut, String> {
+    if let Some(reason) =
+        crate::global_shortcut_guard::reserved_system_shortcut_reason(shortcut_str)
+    {
+        return Err(reason.to_string());
+    }
+
+    shortcut_str
+        .parse()
+        .map_err(|e| format!("无效的快捷键: {e}"))
+}
+
 /// 注册全局快捷键
 pub fn register(app: &AppHandle, shortcut_str: &str) -> Result<(), String> {
     info!("[语音输入] 注册全局快捷键: {}", shortcut_str);
 
     // 解析快捷键
-    let shortcut: Shortcut = shortcut_str
-        .parse()
-        .map_err(|e| format!("无效的快捷键: {e}"))?;
+    let shortcut = parse_user_shortcut(shortcut_str)?;
 
     // 获取全局快捷键管理器
     let global_shortcut = app.global_shortcut();
@@ -183,9 +193,7 @@ pub fn register_translate(
     );
 
     // 解析快捷键
-    let shortcut: Shortcut = shortcut_str
-        .parse()
-        .map_err(|e| format!("无效的快捷键: {e}"))?;
+    let shortcut = parse_user_shortcut(shortcut_str)?;
 
     // 获取全局快捷键管理器
     let global_shortcut = app.global_shortcut();
@@ -374,5 +382,17 @@ mod tests {
         );
 
         reset_translate_shortcut_state();
+    }
+
+    #[test]
+    fn test_parse_user_shortcut_rejects_input_method_reserved_shortcuts() {
+        for shortcut in ["CommandOrControl+Space", "Ctrl+Space", "Super+Space"] {
+            let result = parse_user_shortcut(shortcut);
+            assert!(result.is_err());
+            assert!(
+                result.err().unwrap().contains("输入法切换"),
+                "{shortcut} should explain input method conflict",
+            );
+        }
     }
 }

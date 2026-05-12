@@ -12,7 +12,7 @@ import { ResourceManagerPage } from "./features/resource-manager";
 import { BrowserConnectorGuideWindow } from "./components/settings-v2/system/chrome-relay/guide-window";
 import { Toaster } from "./components/ui/sonner";
 import { AppCrashBoundary } from "./components/layout/AppCrashBoundary";
-import { finalizeModuleImportAutoReload } from "./components/layout/CrashRecoveryPanel.helpers";
+import { finalizeCrashRecoveryAutoReload } from "./components/layout/CrashRecoveryPanel.helpers";
 import { getRuntimeAppVersion } from "./lib/appVersion";
 
 const DesignCanvasSmokePage = lazy(() =>
@@ -58,7 +58,7 @@ export function RootRouter() {
       return;
     }
 
-    finalizeModuleImportAutoReload(
+    finalizeCrashRecoveryAutoReload(
       window.location.href,
       getRuntimeAppVersion(),
       window.sessionStorage,

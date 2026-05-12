@@ -15,10 +15,6 @@ export interface InstalledSkillPresentationCopy {
   outputPrefix?: string;
 }
 
-const FALLBACK_REQUIRED_INPUTS = "对话里继续补充目标与约束";
-const FALLBACK_OUTPUT_HINT = "带着该 Skill 进入生成";
-const DEFAULT_PROMISE = "当你需要复用这个 Skill 时使用。";
-
 function readInstalledSkillMetadata(
   skill: Pick<Skill, "metadata">,
   key: string,
@@ -43,7 +39,7 @@ export function resolveInstalledSkillPromise(
     readInstalledSkillMetadata(skill, "when_to_use") ??
     (description && description.length > 0 ? description : null) ??
     copy.defaultPromise ??
-    DEFAULT_PROMISE
+    ""
   );
 }
 
@@ -55,7 +51,7 @@ export function summarizeInstalledSkillRequiredInputs(
     readInstalledSkillMetadata(skill, "lime_argument_hint") ??
     readInstalledSkillMetadata(skill, "argument_hint") ??
     copy.fallbackRequiredInputs ??
-    FALLBACK_REQUIRED_INPUTS
+    ""
   );
 }
 
@@ -67,7 +63,7 @@ export function getInstalledSkillOutputHint(
     readInstalledSkillMetadata(skill, "lime_output_hint") ??
     readInstalledSkillMetadata(skill, "output_hint") ??
     copy.fallbackOutputHint ??
-    FALLBACK_OUTPUT_HINT
+    ""
   );
 }
 
@@ -79,25 +75,24 @@ export function buildInstalledSkillCapabilityDescription(
   const copy = options.copy ?? {};
 
   if (options.includePromise ?? true) {
-    segments.push(resolveInstalledSkillPromise(skill, copy));
+    const promise = resolveInstalledSkillPromise(skill, copy);
+    if (promise) {
+      segments.push(promise);
+    }
   }
 
   if (options.includeRequiredInputs ?? true) {
-    segments.push(
-      `${copy.requiredPrefix ?? "需要："}${summarizeInstalledSkillRequiredInputs(
-        skill,
-        copy,
-      )}`,
-    );
+    const requiredInputs = summarizeInstalledSkillRequiredInputs(skill, copy);
+    if (requiredInputs) {
+      segments.push(`${copy.requiredPrefix ?? ""}${requiredInputs}`);
+    }
   }
 
   if (options.includeOutputHint ?? true) {
-    segments.push(
-      `${copy.outputPrefix ?? "交付："}${getInstalledSkillOutputHint(
-        skill,
-        copy,
-      )}`,
-    );
+    const outputHint = getInstalledSkillOutputHint(skill, copy);
+    if (outputHint) {
+      segments.push(`${copy.outputPrefix ?? ""}${outputHint}`);
+    }
   }
 
   return segments.join(" · ");

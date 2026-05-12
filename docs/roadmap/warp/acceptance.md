@@ -1,7 +1,7 @@
 # Warp 对照多模态管理验收标准
 
 > 状态：current planning source
-> 更新时间：2026-04-30
+> 更新时间：2026-05-12
 > 目标：为 [implementation-plan.md](./implementation-plan.md) 提供可验证场景，避免“参考 Warp”停留在架构口号。
 
 ## 1. 总体验收口径
@@ -154,6 +154,11 @@
 5. 候选为空时输出 capability gap。
 6. 候选唯一时输出 `single_candidate_only`，不宣传智能优选。
 7. routing decision 写入 thread read 和 evidence。
+8. 图片输入能力判断优先消费明确事实源：`input_modalities=image`、`task_families=vision_understanding`、`capabilities.vision`；模型名启发式只做兜底，不能把“未知”当成“不支持”。
+9. 纯生图 / 纯修图模型不能被当作图片理解聊天模型推荐；但显式同时具备 `vision_understanding` 和文本输出的多模态模型不能因为也支持生图而被过滤。
+10. Provider 实时 `/models` 返回的 `input_modalities`、`output_modalities`、`task_families`、`runtime_features`、`capabilities` 必须进入统一模型注册表；不能在 API 解析层丢掉显式多模态事实。
+11. Provider 实时 `/models` 若返回 models.dev 风格的 `modalities.input/output`，或 Warp 风格的 `vision_supported=true`，也必须归一到同一套 `input_modalities=image` / `vision_understanding` 事实源；`attachment` 这类泛附件位不能单独当作图片输入事实。
+12. 图片理解回合进入 OpenAI-compatible Provider 请求时必须同时保留用户文本 prompt 和图片 part；不能因为消息里出现 `image_url` / `input_image` 就把“请识别图片文字”等文本指令丢掉。
 
 ## 9. Artifact / Viewer 验收
 
@@ -185,8 +190,11 @@
 2. contract / profile / artifact graph 改动：`npm run governance:modality-contracts`。
 3. command/runtime contract 改动：`npm run test:contracts`。
 4. UI 可见改动：相关 `*.test.tsx` 与 `npm run verify:gui-smoke`。
-5. 模型路由改动：相关 Rust / TS 路由测试与 thread read 断言。
-6. LimeCore 接口改动：同步改 LimeCore OpenAPI、SDK、类型与客户端消费测试。
+5. 图片输入 / 历史恢复改动：覆盖用户图片消息不被 tool-response 省略投影替换、会话 hydrate 不覆盖本地已显示输出、附件数量 / 大小 / 格式限制。
+6. 模型路由改动：相关 Rust / TS 路由测试与 thread read 断言；图片输入支持必须覆盖 `capabilities.vision=false` 但 `input_modalities=image` 或 `task_families=vision_understanding` 的模型。
+7. Provider 模型目录解析改动：覆盖 direct `input_modalities`、nested `modalities.input/output`、Warp 风格 `vision_supported`，以及 `o3/o4-mini/grok-4.3/qwen3.5/gemma-3` 等无 `vision` 字样但明确支持图片输入的兜底样本。
+8. Provider 请求格式改动：覆盖 runtime 图片回合 `build_runtime_user_message -> provider format_messages` 链路，断言文本 prompt 与 `data:image/*;base64,...` 图片 part 同时进入请求。
+9. LimeCore 接口改动：同步改 LimeCore OpenAPI、SDK、类型与客户端消费测试。
 
 最终收口前，至少跑：
 

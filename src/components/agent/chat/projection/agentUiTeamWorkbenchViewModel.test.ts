@@ -609,4 +609,53 @@ describe("agentUiTeamWorkbenchViewModel", () => {
       model.sections.every((section) => section.latestItems.length === 0),
     ).toBe(true);
   });
+
+  it("可通过 key-based presentation mapper 本地化 event/phase/control/surface 文案", () => {
+    const t = (key: string, options?: Record<string, unknown>) => {
+      const translations: Record<string, string> = {
+        "agentChat.agentUiProjection.control.assign": "Assign",
+        "agentChat.agentUiProjection.eventType.task.changed": "Task update",
+        "agentChat.agentUiProjection.phase.acting": "Acting",
+        "agentChat.agentUiProjection.surface.work_board.label": "Work board",
+        "agentChat.agentUiProjection.surface.work_board.description":
+          "Localized work board",
+      };
+      return translations[key] ?? `${options?.defaultValue ?? key}`;
+    };
+
+    const model = buildAgentUiTeamWorkbenchViewModel(
+      [
+        {
+          type: "task.changed",
+          sourceType: "team_formation_projection",
+          sequence: 1,
+          sessionId: "session-team-1",
+          taskId: "work-1",
+          workItemId: "work-1",
+          owner: "task",
+          scope: "task",
+          phase: "acting",
+          surface: "work_board",
+          persistence: "snapshot",
+          control: "assign",
+          runtimeEntity: "work_item",
+        },
+      ],
+      { t },
+    );
+
+    const section = model.sections[0];
+    const item = section?.primaryItem;
+    expect(section).toMatchObject({
+      label: "Work board",
+      description: "Localized work board",
+    });
+    expect(item).toMatchObject({
+      phaseLabel: "Acting",
+      action: { label: "Assign" },
+    });
+    expect(item?.chips).toEqual(
+      expect.arrayContaining(["Task update", "Acting", "Assign"]),
+    );
+  });
 });

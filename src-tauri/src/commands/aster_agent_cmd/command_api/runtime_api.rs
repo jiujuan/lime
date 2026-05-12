@@ -5,10 +5,10 @@ use crate::sceneapp::application::SceneAppService;
 use crate::services::agent_timeline_service::abort_running_turn_by_id;
 use crate::services::execution_tracker_service::ExecutionTracker;
 use crate::services::runtime_analysis_handoff_service::{
-    export_runtime_analysis_handoff, RuntimeAnalysisHandoffExportResult,
+    export_runtime_analysis_handoff_with_locale, RuntimeAnalysisHandoffExportResult,
 };
 use crate::services::runtime_evidence_pack_service::{
-    export_runtime_evidence_pack_with_owner_runs, resolve_runtime_export_workspace_root,
+    export_runtime_evidence_pack_with_owner_runs_and_locale, resolve_runtime_export_workspace_root,
     RuntimeEvidencePackExportResult,
 };
 use crate::services::runtime_file_checkpoint_service::{
@@ -18,17 +18,18 @@ use crate::services::runtime_handoff_artifact_service::{
     export_runtime_handoff_bundle, RuntimeHandoffBundleExportResult,
 };
 use crate::services::runtime_replay_case_service::{
-    export_runtime_replay_case, RuntimeReplayCaseExportResult,
+    export_runtime_replay_case_with_locale, RuntimeReplayCaseExportResult,
 };
 use crate::services::runtime_review_decision_service::{
-    export_runtime_review_decision_template, save_runtime_review_decision,
+    export_runtime_review_decision_template_with_locale, save_runtime_review_decision_with_locale,
     RuntimeReviewDecisionContent, RuntimeReviewDecisionTemplateExportResult,
 };
 use crate::services::thread_reliability_projection_service::sync_thread_reliability_projection;
 use aster::hooks::SessionSource;
 use lime_core::database::dao::agent::AgentDao;
-use lime_core::database::dao::agent_run::AgentRunDao;
+use lime_core::database::dao::agent_run::{AgentRun, AgentRunDao};
 use lime_core::database::dao::agent_timeline::{AgentThreadItemStatus, AgentThreadTurnStatus};
+use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::time::Instant;
 use tauri::Manager;
@@ -94,6 +95,139 @@ fn should_list_runtime_queue_snapshots(
             .items
             .iter()
             .any(|item| matches!(item.status, AgentThreadItemStatus::InProgress))
+}
+
+fn json_nested_object<'a>(
+    value: &'a Value,
+    path: &[&str],
+) -> Option<&'a serde_json::Map<String, Value>> {
+    let mut current = value;
+    for key in path {
+        current = current.get(*key)?;
+    }
+    current.as_object()
+}
+
+fn json_string_field(value: &Value, keys: &[&str]) -> Option<String> {
+    keys.iter().find_map(|key| {
+        value
+            .get(*key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .map(str::to_string)
+    })
+}
+
+fn json_string_vec_field(value: &Value, keys: &[&str]) -> Option<Vec<String>> {
+    keys.iter().find_map(|key| {
+        let values = value.get(*key)?.as_array()?;
+        let values = values
+            .iter()
+            .filter_map(Value::as_str)
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .map(str::to_string)
+            .collect::<Vec<_>>();
+        (!values.is_empty()).then_some(values)
+    })
+}
+
+fn json_u64_field(value: &Value, keys: &[&str]) -> Option<u64> {
+    keys.iter().find_map(|key| {
+        let field = value.get(*key)?;
+        field
+            .as_u64()
+            .or_else(|| field.as_i64().and_then(|number| u64::try_from(number).ok()))
+    })
+}
+
+fn latest_model_delta_timing_from_run(run: &AgentRun) -> Option<Value> {
+    let metadata = run.metadata.as_deref()?;
+    let metadata: Value = serde_json::from_str(metadata).ok()?;
+    let first_visible_delta_ms = json_u64_field(
+        &metadata,
+        &["model_first_visible_delta_ms", "modelFirstVisibleDeltaMs"],
+    );
+    let first_thinking_delta_ms = json_u64_field(
+        &metadata,
+        &["model_first_thinking_delta_ms", "modelFirstThinkingDeltaMs"],
+    );
+    let first_text_delta_ms = json_u64_field(
+        &metadata,
+        &["model_first_text_delta_ms", "modelFirstTextDeltaMs"],
+    );
+
+    if first_visible_delta_ms.is_none()
+        && first_thinking_delta_ms.is_none()
+        && first_text_delta_ms.is_none()
+    {
+        return None;
+    }
+
+    let routing = json_nested_object(
+        &metadata,
+        &["request_metadata", "lime_runtime", "routing_decision"],
+    )
+    .or_else(|| json_nested_object(&metadata, &["requestMetadata", "limeRuntime", "routingDecision"]))
+    .map(|routing| {
+        let routing_value = Value::Object(routing.clone());
+        json!({
+            "decisionSource": json_string_field(&routing_value, &["decisionSource", "decision_source"]),
+            "decisionReason": json_string_field(&routing_value, &["decisionReason", "decision_reason"]),
+            "fallbackChain": json_string_vec_field(&routing_value, &["fallbackChain", "fallback_chain"]),
+            "settingsSource": json_string_field(&routing_value, &["settingsSource", "settings_source"]),
+            "serviceModelSlot": json_string_field(&routing_value, &["serviceModelSlot", "service_model_slot"]),
+            "selectedProvider": json_string_field(&routing_value, &["selectedProvider", "selected_provider"]),
+            "selectedModel": json_string_field(&routing_value, &["selectedModel", "selected_model"]),
+            "requestedProvider": json_string_field(&routing_value, &["requestedProvider", "requested_provider"]),
+            "requestedModel": json_string_field(&routing_value, &["requestedModel", "requested_model"]),
+        })
+    });
+
+    Some(json!({
+        "source": "agent_runs.metadata",
+        "runId": run.id,
+        "runSource": run.source,
+        "runStatus": run.status.as_str(),
+        "startedAt": run.started_at,
+        "finishedAt": run.finished_at,
+        "durationMs": run.duration_ms,
+        "firstVisibleDeltaMs": first_visible_delta_ms,
+        "firstThinkingDeltaMs": first_thinking_delta_ms,
+        "firstTextDeltaMs": first_text_delta_ms,
+        "routing": routing,
+    }))
+}
+
+fn merge_latest_model_delta_timing_into_thread_read(
+    thread_read: &mut AgentRuntimeThreadReadModel,
+    latest_timing: Value,
+) {
+    let mut model_routing = thread_read
+        .model_routing
+        .take()
+        .and_then(|value| value.as_object().cloned())
+        .unwrap_or_default();
+    model_routing.insert("latestModelDeltaTiming".to_string(), latest_timing);
+    thread_read.model_routing = Some(Value::Object(model_routing));
+}
+
+fn hydrate_thread_read_with_latest_model_delta_timing(
+    db: &DbConnection,
+    session_id: &str,
+    thread_read: &mut AgentRuntimeThreadReadModel,
+) -> Result<(), String> {
+    let conn = lock_db(db)?;
+    let runs = AgentRunDao::list_runs_by_session(&conn, session_id, 8)
+        .map_err(|error| format!("查询 agent_runs 首字证据失败: {error}"))?;
+    drop(conn);
+
+    if let Some(latest_timing) = runs.iter().find_map(latest_model_delta_timing_from_run) {
+        merge_latest_model_delta_timing_into_thread_read(thread_read, latest_timing);
+    }
+
+    Ok(())
 }
 
 async fn resume_runtime_queue_with_warning(
@@ -341,7 +475,7 @@ pub async fn agent_runtime_get_session(
         let interrupt_marker_ms = interrupt_marker_started_at.elapsed().as_millis();
 
         let projection_started_at = Instant::now();
-        let thread_read = if normalized_history_limit.is_some() {
+        let mut thread_read = if normalized_history_limit.is_some() {
             let pending_requests =
                 crate::commands::aster_agent_cmd::build_pending_requests(&detail);
             let last_outcome = crate::commands::aster_agent_cmd::build_last_outcome(&detail);
@@ -366,6 +500,17 @@ pub async fn agent_runtime_get_session(
                 interrupt_marker.as_ref(),
             )
         };
+        if let Err(error) = hydrate_thread_read_with_latest_model_delta_timing(
+            runtime.db(),
+            &session_id,
+            &mut thread_read,
+        ) {
+            tracing::warn!(
+                "[AsterAgent] 读取 agent_runs 首字证据失败: session_id={}, error={}",
+                session_id,
+                error
+            );
+        }
         let projection_ms = projection_started_at.elapsed().as_millis();
 
         let dto_started_at = Instant::now();
@@ -513,14 +658,26 @@ pub async fn agent_runtime_get_thread_read(
     };
     let projection = sync_thread_reliability_projection(runtime.db(), &detail)?;
     let interrupt_marker = runtime.state().get_interrupt_marker(&session_id).await;
-    Ok(AgentRuntimeThreadReadModel::from_parts(
+    let mut thread_read = AgentRuntimeThreadReadModel::from_parts(
         &detail,
         &queued_turns,
         projection.pending_requests,
         projection.last_outcome,
         projection.incidents,
         interrupt_marker.as_ref(),
-    ))
+    );
+    if let Err(error) = hydrate_thread_read_with_latest_model_delta_timing(
+        runtime.db(),
+        &session_id,
+        &mut thread_read,
+    ) {
+        tracing::warn!(
+            "[AsterAgent] 读取 agent_runs 首字证据失败: session_id={}, error={}",
+            session_id,
+            error
+        );
+    }
+    Ok(thread_read)
 }
 
 /// 统一运行时：列出当前线程的文件快照。
@@ -708,6 +865,7 @@ pub async fn agent_runtime_export_evidence_pack(
     session_id: String,
 ) -> Result<RuntimeEvidencePackExportResult, String> {
     let db_handle = db.inner().clone();
+    let evidence_locale = config_manager.0.config().language;
     let runtime = build_runtime_command_context(
         app,
         state,
@@ -727,11 +885,12 @@ pub async fn agent_runtime_export_evidence_pack(
             .map_err(|error| format!("查询 evidence pack owner runs 失败: {error}"))?
     };
 
-    export_runtime_evidence_pack_with_owner_runs(
+    export_runtime_evidence_pack_with_owner_runs_and_locale(
         &context.detail,
         &context.thread_read,
         &context.workspace_root,
         &owner_runs,
+        Some(evidence_locale.as_str()),
     )
 }
 
@@ -748,6 +907,7 @@ pub async fn agent_runtime_export_analysis_handoff(
     automation_state: State<'_, AutomationServiceState>,
     session_id: String,
 ) -> Result<RuntimeAnalysisHandoffExportResult, String> {
+    let export_locale = config_manager.0.config().language;
     let runtime = build_runtime_command_context(
         app,
         state,
@@ -762,10 +922,11 @@ pub async fn agent_runtime_export_analysis_handoff(
     let context =
         load_runtime_export_context(&runtime, &session_id, "导出 analysis handoff 前").await?;
 
-    export_runtime_analysis_handoff(
+    export_runtime_analysis_handoff_with_locale(
         &context.detail,
         &context.thread_read,
         &context.workspace_root,
+        Some(export_locale.as_str()),
     )
 }
 
@@ -782,6 +943,7 @@ pub async fn agent_runtime_export_review_decision_template(
     automation_state: State<'_, AutomationServiceState>,
     session_id: String,
 ) -> Result<RuntimeReviewDecisionTemplateExportResult, String> {
+    let export_locale = config_manager.0.config().language;
     let runtime = build_runtime_command_context(
         app,
         state,
@@ -796,10 +958,11 @@ pub async fn agent_runtime_export_review_decision_template(
     let context =
         load_runtime_export_context(&runtime, &session_id, "导出 review decision 模板前").await?;
 
-    export_runtime_review_decision_template(
+    export_runtime_review_decision_template_with_locale(
         &context.detail,
         &context.thread_read,
         &context.workspace_root,
+        Some(export_locale.as_str()),
     )
 }
 
@@ -816,6 +979,7 @@ pub async fn agent_runtime_save_review_decision(
     automation_state: State<'_, AutomationServiceState>,
     request: AgentRuntimeSaveReviewDecisionRequest,
 ) -> Result<RuntimeReviewDecisionTemplateExportResult, String> {
+    let export_locale = config_manager.0.config().language;
     let runtime = build_runtime_command_context(
         app,
         state,
@@ -831,7 +995,7 @@ pub async fn agent_runtime_save_review_decision(
     let context =
         load_runtime_export_context(&runtime, &session_id, "保存 review decision 前").await?;
 
-    let saved = save_runtime_review_decision(
+    let saved = save_runtime_review_decision_with_locale(
         &context.detail,
         &context.thread_read,
         &context.workspace_root,
@@ -847,6 +1011,7 @@ pub async fn agent_runtime_save_review_decision(
             regression_requirements: request.regression_requirements,
             notes: request.notes,
         },
+        Some(export_locale.as_str()),
     )?;
 
     let tracker = ExecutionTracker::new(runtime.db().clone());
@@ -878,6 +1043,7 @@ pub async fn agent_runtime_export_replay_case(
     automation_state: State<'_, AutomationServiceState>,
     session_id: String,
 ) -> Result<RuntimeReplayCaseExportResult, String> {
+    let export_locale = config_manager.0.config().language;
     let runtime = build_runtime_command_context(
         app,
         state,
@@ -891,10 +1057,11 @@ pub async fn agent_runtime_export_replay_case(
     tracing::info!("[AsterAgent] 导出 replay case: {}", session_id);
     let context = load_runtime_export_context(&runtime, &session_id, "导出 replay case 前").await?;
 
-    export_runtime_replay_case(
+    export_runtime_replay_case_with_locale(
         &context.detail,
         &context.thread_read,
         &context.workspace_root,
+        Some(export_locale.as_str()),
     )
 }
 
@@ -1258,5 +1425,126 @@ mod tests {
         let detail = detail_with_turn_status(AgentThreadTurnStatus::Completed);
 
         assert!(should_list_runtime_queue_snapshots(&detail, None, 0, None));
+    }
+
+    #[test]
+    fn latest_model_delta_timing_from_run_should_project_agent_run_metadata() {
+        let run = AgentRun {
+            id: "run-ttft-1".to_string(),
+            source: "chat".to_string(),
+            source_ref: Some("turn-1".to_string()),
+            session_id: Some("session-ttft".to_string()),
+            status: lime_core::database::dao::agent_run::AgentRunStatus::Success,
+            started_at: "2026-05-12T02:48:34Z".to_string(),
+            finished_at: Some("2026-05-12T02:48:36Z".to_string()),
+            duration_ms: Some(1386),
+            error_code: None,
+            error_message: None,
+            metadata: Some(
+                json!({
+                    "model_first_visible_delta_ms": 986,
+                    "model_first_thinking_delta_ms": 986,
+                    "model_first_text_delta_ms": 1377,
+                    "request_metadata": {
+                        "lime_runtime": {
+                            "routing_decision": {
+                                "decisionSource": "responsive_chat_auto",
+                                "decisionReason": "service_models.responsive_chat 历史样本不满足低延迟目标，已继续进入自动 responsive_chat 候选。",
+                                "fallbackChain": ["deepseek:deepseek-v4-pro", "deepseek:deepseek-v4-flash"],
+                                "settingsSource": "service_models.responsive_chat:auto",
+                                "serviceModelSlot": "responsive_chat",
+                                "selectedProvider": "deepseek",
+                                "selectedModel": "deepseek-v4-flash"
+                            }
+                        }
+                    }
+                })
+                .to_string(),
+            ),
+            created_at: "2026-05-12T02:48:34Z".to_string(),
+            updated_at: "2026-05-12T02:48:36Z".to_string(),
+        };
+
+        let timing = latest_model_delta_timing_from_run(&run).expect("应投影首字证据");
+
+        assert_eq!(timing["source"], "agent_runs.metadata");
+        assert_eq!(timing["runId"], "run-ttft-1");
+        assert_eq!(timing["firstTextDeltaMs"], 1377);
+        assert_eq!(timing["routing"]["decisionSource"], "responsive_chat_auto");
+        assert_eq!(
+            timing["routing"]["decisionReason"],
+            "service_models.responsive_chat 历史样本不满足低延迟目标，已继续进入自动 responsive_chat 候选。"
+        );
+        assert_eq!(
+            timing["routing"]["fallbackChain"],
+            json!(["deepseek:deepseek-v4-pro", "deepseek:deepseek-v4-flash"])
+        );
+        assert_eq!(timing["routing"]["serviceModelSlot"], "responsive_chat");
+        assert_eq!(timing["routing"]["selectedModel"], "deepseek-v4-flash");
+    }
+
+    #[test]
+    fn merge_latest_model_delta_timing_should_keep_existing_model_routing() {
+        let mut thread_read = AgentRuntimeThreadReadModel {
+            thread_id: "thread-ttft".to_string(),
+            status: "completed".to_string(),
+            profile_status: "completed".to_string(),
+            active_turn_id: None,
+            turns: Vec::new(),
+            pending_requests: Vec::new(),
+            last_outcome: None,
+            incidents: Vec::new(),
+            queued_turns: Vec::new(),
+            tool_calls: Vec::new(),
+            model_routing: Some(json!({
+                "decisionSource": "responsive_chat_auto",
+                "selectedModel": "deepseek-v4-flash"
+            })),
+            evidence_summary: Default::default(),
+            telemetry_summary: Default::default(),
+            context_summary: None,
+            interrupt_state: None,
+            updated_at: None,
+            latest_compaction_boundary: None,
+            file_checkpoint_summary: None,
+            diagnostics: None,
+            task_kind: None,
+            service_model_slot: None,
+            routing_mode: None,
+            decision_source: None,
+            decision_reason: None,
+            candidate_count: None,
+            fallback_chain: None,
+            capability_gap: None,
+            estimated_cost_class: None,
+            single_candidate_only: None,
+            oem_policy: None,
+            runtime_summary: None,
+            auxiliary_task_runtime: None,
+            limit_state: None,
+            cost_state: None,
+            permission_state: None,
+            limit_event: None,
+        };
+
+        merge_latest_model_delta_timing_into_thread_read(
+            &mut thread_read,
+            json!({
+                "source": "agent_runs.metadata",
+                "firstTextDeltaMs": 1244
+            }),
+        );
+
+        let model_routing = thread_read
+            .model_routing
+            .as_ref()
+            .and_then(Value::as_object)
+            .expect("应保留 model_routing");
+        assert_eq!(model_routing["decisionSource"], "responsive_chat_auto");
+        assert_eq!(model_routing["selectedModel"], "deepseek-v4-flash");
+        assert_eq!(
+            model_routing["latestModelDeltaTiming"]["firstTextDeltaMs"],
+            1244
+        );
     }
 }

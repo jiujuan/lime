@@ -1,5 +1,7 @@
 import { resolveServiceSkillEntryDescription } from "./entryAdapter";
 import { isServiceSkillExecutableAsSiteAdapter } from "./siteCapabilityBinding";
+import { formatNumber } from "@/i18n/format";
+import agentSourceResource from "@/i18n/resources/zh-CN/agent.json";
 import type {
   ServiceSkillHomeItem,
   ServiceSkillItem,
@@ -8,34 +10,10 @@ import type {
   ServiceSkillType,
 } from "./types";
 
-const RUNNER_LABELS: Record<ServiceSkillRunnerType, string> = {
-  instant: "先做这一轮",
-  scheduled: "按时继续",
-  managed: "持续跟进",
-};
-
 const RUNNER_TONES: Record<ServiceSkillRunnerType, ServiceSkillTone> = {
   instant: "emerald",
   scheduled: "sky",
   managed: "amber",
-};
-
-const RUNNER_DESCRIPTIONS: Record<ServiceSkillRunnerType, string> = {
-  instant: "会先给出这一轮结果，接着就能继续改。",
-  scheduled: "会先给出第一轮结果，后面按设定时间继续带回来。",
-  managed: "会先给出这轮判断，后面持续带回新的结果和提醒。",
-};
-
-const LOCAL_ACTION_LABELS: Record<ServiceSkillRunnerType, string> = {
-  instant: "开始这一步",
-  scheduled: "开始持续",
-  managed: "开始跟进",
-};
-
-const SERVICE_SKILL_TYPE_LABELS: Record<ServiceSkillType, string> = {
-  service: "创作做法",
-  site: "站点做法",
-  prompt: "提示做法",
 };
 
 export interface ServiceSkillPresentationCopy {
@@ -82,14 +60,169 @@ type SummarizeServiceSkillRequiredInputsOptions =
       copy?: ServiceSkillPresentationCopy;
     };
 
-function formatDefaultServiceSkillFactItems(
-  visibleItems: string[],
-  totalCount: number,
+type AgentSourceResourceKey = keyof typeof agentSourceResource;
+
+function interpolateServiceSkillSourceTemplate(
+  template: string,
+  values?: Record<string, number | string>,
 ): string {
-  const joinedItems = visibleItems.join("、");
-  return visibleItems.length < totalCount
-    ? `${joinedItems} 等 ${totalCount} 项`
-    : joinedItems;
+  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, name) => {
+    const value = values?.[name];
+    return value == null ? match : String(value);
+  });
+}
+
+function translateServiceSkillSourceKey(
+  key: string,
+  values?: Record<string, number | string>,
+): string {
+  const template = agentSourceResource[key as AgentSourceResourceKey] ?? key;
+  return interpolateServiceSkillSourceTemplate(template, values);
+}
+
+const SOURCE_SERVICE_SKILL_PRESENTATION_COPY: ServiceSkillPresentationCopy = {
+  runnerLabels: {
+    instant: translateServiceSkillSourceKey(
+      "skills.workspace.serviceSkill.runner.instant.label",
+    ),
+    managed: translateServiceSkillSourceKey(
+      "skills.workspace.serviceSkill.runner.managed.label",
+    ),
+    scheduled: translateServiceSkillSourceKey(
+      "skills.workspace.serviceSkill.runner.scheduled.label",
+    ),
+  },
+  runnerDescriptions: {
+    instant: translateServiceSkillSourceKey(
+      "skills.workspace.serviceSkill.runner.instant.description",
+    ),
+    managed: translateServiceSkillSourceKey(
+      "skills.workspace.serviceSkill.runner.managed.description",
+    ),
+    scheduled: translateServiceSkillSourceKey(
+      "skills.workspace.serviceSkill.runner.scheduled.description",
+    ),
+  },
+  actionLabels: {
+    instant: translateServiceSkillSourceKey(
+      "skills.workspace.serviceSkill.action.instant",
+    ),
+    managed: translateServiceSkillSourceKey(
+      "skills.workspace.serviceSkill.action.managed",
+    ),
+    scheduled: translateServiceSkillSourceKey(
+      "skills.workspace.serviceSkill.action.scheduled",
+    ),
+  },
+  typeLabels: {
+    prompt: translateServiceSkillSourceKey(
+      "skills.workspace.serviceSkill.type.prompt",
+    ),
+    service: translateServiceSkillSourceKey(
+      "skills.workspace.serviceSkill.type.service",
+    ),
+    site: translateServiceSkillSourceKey(
+      "skills.workspace.serviceSkill.type.site",
+    ),
+  },
+  fallbackRequiredInputs: translateServiceSkillSourceKey(
+    "skills.workspace.serviceSkill.requiredInputs.empty",
+  ),
+  requiredPrefix: translateServiceSkillSourceKey(
+    "skills.workspace.serviceSkill.requiredPrefix",
+  ),
+  outputPrefix: translateServiceSkillSourceKey(
+    "skills.workspace.serviceSkill.outputPrefix",
+  ),
+  siteRunnerLabel: translateServiceSkillSourceKey(
+    "skills.workspace.serviceSkill.runner.site.label",
+  ),
+  siteRunnerDescription: translateServiceSkillSourceKey(
+    "skills.workspace.serviceSkill.runner.site.description",
+  ),
+  requiredSlotActionLabel: translateServiceSkillSourceKey(
+    "skills.workspace.serviceSkill.action.requiredSlot",
+  ),
+  siteActionLabel: translateServiceSkillSourceKey(
+    "skills.workspace.serviceSkill.action.site",
+  ),
+  automationActionLabel: translateServiceSkillSourceKey(
+    "skills.workspace.serviceSkill.action.automation",
+  ),
+  outputProjectResource: translateServiceSkillSourceKey(
+    "skills.workspace.serviceSkill.output.projectResource",
+  ),
+  outputCurrentContent: translateServiceSkillSourceKey(
+    "skills.workspace.serviceSkill.output.currentContent",
+  ),
+  outputScheduled: translateServiceSkillSourceKey(
+    "skills.workspace.serviceSkill.output.scheduled",
+  ),
+  outputManaged: translateServiceSkillSourceKey(
+    "skills.workspace.serviceSkill.output.managed",
+  ),
+  outputDefault: translateServiceSkillSourceKey(
+    "skills.workspace.serviceSkill.output.default",
+  ),
+  dependencyRequiresModel: translateServiceSkillSourceKey(
+    "skills.workspace.serviceSkill.dependency.model",
+  ),
+  dependencyRequiresBrowser: translateServiceSkillSourceKey(
+    "skills.workspace.serviceSkill.dependency.browser",
+  ),
+  dependencyRequiresProject: translateServiceSkillSourceKey(
+    "skills.workspace.serviceSkill.dependency.project",
+  ),
+  formatDependencyRequiresSkillKey: (skillKey) =>
+    translateServiceSkillSourceKey(
+      "skills.workspace.serviceSkill.dependency.skillKey",
+      { skillKey },
+    ),
+  formatFactItems: (visibleItems, totalCount) => {
+    const itemSeparator = translateServiceSkillSourceKey(
+      "skills.workspace.serviceSkill.factItems.separator",
+    );
+    const items = visibleItems.join(itemSeparator);
+    if (visibleItems.length >= totalCount) {
+      return items;
+    }
+
+    return translateServiceSkillSourceKey(
+      "skills.workspace.serviceSkill.factItems.withMore",
+      {
+        items,
+        remaining: formatNumber(totalCount - visibleItems.length, {
+          locale: "zh-CN",
+        }),
+        total: formatNumber(totalCount, { locale: "zh-CN" }),
+      },
+    );
+  },
+};
+
+function resolveServiceSkillPresentationCopy(
+  copy?: ServiceSkillPresentationCopy,
+): ServiceSkillPresentationCopy {
+  return {
+    ...SOURCE_SERVICE_SKILL_PRESENTATION_COPY,
+    ...(copy ?? {}),
+    actionLabels: {
+      ...SOURCE_SERVICE_SKILL_PRESENTATION_COPY.actionLabels,
+      ...(copy?.actionLabels ?? {}),
+    },
+    runnerDescriptions: {
+      ...SOURCE_SERVICE_SKILL_PRESENTATION_COPY.runnerDescriptions,
+      ...(copy?.runnerDescriptions ?? {}),
+    },
+    runnerLabels: {
+      ...SOURCE_SERVICE_SKILL_PRESENTATION_COPY.runnerLabels,
+      ...(copy?.runnerLabels ?? {}),
+    },
+    typeLabels: {
+      ...SOURCE_SERVICE_SKILL_PRESENTATION_COPY.typeLabels,
+      ...(copy?.typeLabels ?? {}),
+    },
+  };
 }
 
 function uniqueStrings(values: string[]): string[] {
@@ -119,9 +252,9 @@ function summarizeServiceSkillFactItems(
       ? normalizedItems
       : normalizedItems.slice(0, limit);
   const formatFactItems =
-    copy.formatFactItems ?? formatDefaultServiceSkillFactItems;
+    resolveServiceSkillPresentationCopy(copy).formatFactItems;
 
-  return formatFactItems(visibleItems, normalizedItems.length);
+  return formatFactItems?.(visibleItems, normalizedItems.length) ?? "";
 }
 
 function readServiceSkillBundleMetadata(
@@ -182,18 +315,27 @@ export function getServiceSkillTypeLabel(
   item: ServiceSkillItem,
   options: ServiceSkillPresentationOptions = {},
 ): string {
+  const copy = resolveServiceSkillPresentationCopy(options.copy);
   const type = resolveServiceSkillType(item);
-  return options.copy?.typeLabels?.[type] ?? SERVICE_SKILL_TYPE_LABELS[type];
+  return (
+    copy.typeLabels?.[type] ?? `skills.workspace.serviceSkill.type.${type}`
+  );
 }
 
 function normalizeRequiredInputsOptions(
   options: SummarizeServiceSkillRequiredInputsOptions = 2,
 ): { limit: number; copy: ServiceSkillPresentationCopy } {
   if (typeof options === "number") {
-    return { limit: options, copy: {} };
+    return {
+      limit: options,
+      copy: resolveServiceSkillPresentationCopy(),
+    };
   }
 
-  return { limit: options.limit ?? 2, copy: options.copy ?? {} };
+  return {
+    limit: options.limit ?? 2,
+    copy: resolveServiceSkillPresentationCopy(options.copy),
+  };
 }
 
 export function summarizeServiceSkillRequiredInputs(
@@ -206,7 +348,10 @@ export function summarizeServiceSkillRequiredInputs(
     .map((slot) => slot.label);
 
   if (requiredInputLabels.length === 0) {
-    return copy.fallbackRequiredInputs ?? "当前无必填信息";
+    return (
+      copy.fallbackRequiredInputs ??
+      "skills.workspace.serviceSkill.requiredInputs.empty"
+    );
   }
 
   return summarizeServiceSkillFactItems(requiredInputLabels, limit, copy);
@@ -220,7 +365,7 @@ export function buildServiceSkillCapabilityDescription(
   options: BuildServiceSkillCapabilityDescriptionOptions = {},
 ): string {
   const segments: string[] = [];
-  const copy = options.copy ?? {};
+  const copy = resolveServiceSkillPresentationCopy(options.copy);
 
   if (options.includeSummary ?? true) {
     segments.push(resolveServiceSkillEntryDescription(item));
@@ -228,18 +373,19 @@ export function buildServiceSkillCapabilityDescription(
 
   if (options.includeRequiredInputs ?? true) {
     segments.push(
-      `${copy.requiredPrefix ?? "需要："}${summarizeServiceSkillRequiredInputs(
-        item,
-        {
-          copy,
-          limit: options.requiredInputsLimit,
-        },
-      )}`,
+      `${
+        copy.requiredPrefix ?? "skills.workspace.serviceSkill.requiredPrefix"
+      }${summarizeServiceSkillRequiredInputs(item, {
+        copy,
+        limit: options.requiredInputsLimit,
+      })}`,
     );
   }
 
   if (options.includeOutputHint ?? true) {
-    segments.push(`${copy.outputPrefix ?? "交付："}${item.outputHint.trim()}`);
+    segments.push(
+      `${copy.outputPrefix ?? "skills.workspace.serviceSkill.outputPrefix"}${item.outputHint.trim()}`,
+    );
   }
 
   return segments.join(" · ");
@@ -249,12 +395,15 @@ export function getServiceSkillRunnerLabel(
   item: ServiceSkillItem,
   options: ServiceSkillPresentationOptions = {},
 ): string {
+  const copy = resolveServiceSkillPresentationCopy(options.copy);
   if (resolveServiceSkillType(item) === "site") {
-    return options.copy?.siteRunnerLabel ?? "接着浏览器继续";
+    return (
+      copy.siteRunnerLabel ?? "skills.workspace.serviceSkill.runner.site.label"
+    );
   }
   return (
-    options.copy?.runnerLabels?.[item.runnerType] ??
-    RUNNER_LABELS[item.runnerType]
+    copy.runnerLabels?.[item.runnerType] ??
+    `skills.workspace.serviceSkill.runner.${item.runnerType}.label`
   );
 }
 
@@ -268,15 +417,16 @@ export function getServiceSkillRunnerDescription(
   item: ServiceSkillItem,
   options: ServiceSkillPresentationOptions = {},
 ): string {
+  const copy = resolveServiceSkillPresentationCopy(options.copy);
   if (resolveServiceSkillType(item) === "site") {
     return (
-      options.copy?.siteRunnerDescription ??
-      "会接着当前浏览器里已经打开的页面把这一步做完，并把结果带回生成。"
+      copy.siteRunnerDescription ??
+      "skills.workspace.serviceSkill.runner.site.description"
     );
   }
   return (
-    options.copy?.runnerDescriptions?.[item.runnerType] ??
-    RUNNER_DESCRIPTIONS[item.runnerType]
+    copy.runnerDescriptions?.[item.runnerType] ??
+    `skills.workspace.serviceSkill.runner.${item.runnerType}.description`
   );
 }
 
@@ -284,16 +434,20 @@ export function getServiceSkillActionLabel(
   item: ServiceSkillItem,
   options: ServiceSkillPresentationOptions = {},
 ): string {
+  const copy = resolveServiceSkillPresentationCopy(options.copy);
   if (hasRequiredSlots(item)) {
-    return options.copy?.requiredSlotActionLabel ?? "补齐这一步";
+    return (
+      copy.requiredSlotActionLabel ??
+      "skills.workspace.serviceSkill.action.requiredSlot"
+    );
   }
 
   if (resolveServiceSkillType(item) === "site") {
-    return options.copy?.siteActionLabel ?? "接着继续";
+    return copy.siteActionLabel ?? "skills.workspace.serviceSkill.action.site";
   }
   return (
-    options.copy?.actionLabels?.[item.runnerType] ??
-    LOCAL_ACTION_LABELS[item.runnerType]
+    copy.actionLabels?.[item.runnerType] ??
+    `skills.workspace.serviceSkill.action.${item.runnerType}`
   );
 }
 
@@ -301,6 +455,7 @@ export function getServiceSkillOutputDestination(
   item: ServiceSkillItem,
   options: ServiceSkillPresentationOptions = {},
 ): string {
+  const copy = resolveServiceSkillPresentationCopy(options.copy);
   if (item.outputDestination?.trim()) {
     return item.outputDestination.trim();
   }
@@ -315,27 +470,23 @@ export function getServiceSkillOutputDestination(
 
   if (isServiceSkillExecutableAsSiteAdapter(item)) {
     return item.siteCapabilityBinding.saveMode === "project_resource"
-      ? (options.copy?.outputProjectResource ??
-          "结果会收进当前项目资料，后面还能继续拿来用。")
-      : (options.copy?.outputCurrentContent ??
-          "结果会先回到当前内容里，方便接着往下改。");
+      ? (copy.outputProjectResource ??
+          "skills.workspace.serviceSkill.output.projectResource")
+      : (copy.outputCurrentContent ??
+          "skills.workspace.serviceSkill.output.currentContent");
   }
 
   if (item.runnerType === "scheduled") {
     return (
-      options.copy?.outputScheduled ??
-      "第一轮结果会先回到生成，后面按时间继续接回来。"
+      copy.outputScheduled ?? "skills.workspace.serviceSkill.output.scheduled"
     );
   }
 
   if (item.runnerType === "managed") {
-    return (
-      options.copy?.outputManaged ??
-      "这轮判断会先回到生成，后面新的结果和提醒也会继续带回来。"
-    );
+    return copy.outputManaged ?? "skills.workspace.serviceSkill.output.managed";
   }
 
-  return options.copy?.outputDefault ?? "结果会回到生成，方便接着改。";
+  return copy.outputDefault ?? "skills.workspace.serviceSkill.output.default";
 }
 
 export function listServiceSkillDependencies(
@@ -343,21 +494,24 @@ export function listServiceSkillDependencies(
   options: ServiceSkillPresentationOptions = {},
 ): string[] {
   const requirements: string[] = [];
-  const copy = options.copy ?? {};
+  const copy = resolveServiceSkillPresentationCopy(options.copy);
 
   if (item.readinessRequirements?.requiresModel) {
-    requirements.push(copy.dependencyRequiresModel ?? "需要已选择可用模型。");
+    requirements.push(
+      copy.dependencyRequiresModel ??
+        "skills.workspace.serviceSkill.dependency.model",
+    );
   }
   if (item.readinessRequirements?.requiresBrowser) {
     requirements.push(
       copy.dependencyRequiresBrowser ??
-        "需要当前浏览器里已经打开并登录对应站点。",
+        "skills.workspace.serviceSkill.dependency.browser",
     );
   }
   if (item.readinessRequirements?.requiresProject) {
     requirements.push(
       copy.dependencyRequiresProject ??
-        "建议在目标项目内启动，便于结果直接回写。",
+        "skills.workspace.serviceSkill.dependency.project",
     );
   }
   if (item.readinessRequirements?.requiresSkillKey) {
@@ -365,7 +519,7 @@ export function listServiceSkillDependencies(
       copy.formatDependencyRequiresSkillKey?.(
         item.readinessRequirements.requiresSkillKey,
       ) ??
-        `需要先启用相关能力：${item.readinessRequirements.requiresSkillKey}。`,
+        `skills.workspace.serviceSkill.dependency.skillKey:${item.readinessRequirements.requiresSkillKey}`,
     );
   }
 
@@ -377,12 +531,13 @@ export function getServiceSkillPrimaryActionLabel(
   canCreateAutomation: boolean,
   options: ServiceSkillPresentationOptions = {},
 ): string {
+  const copy = resolveServiceSkillPresentationCopy(options.copy);
   if (canCreateAutomation) {
     return (
-      options.copy?.automationActionLabel ??
-      options.copy?.actionLabels?.scheduled ??
-      "开始持续"
+      copy.automationActionLabel ??
+      copy.actionLabels?.scheduled ??
+      "skills.workspace.serviceSkill.action.automation"
     );
   }
-  return getServiceSkillActionLabel(skill, options);
+  return getServiceSkillActionLabel(skill, { copy });
 }

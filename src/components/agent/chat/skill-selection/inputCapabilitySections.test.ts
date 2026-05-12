@@ -13,6 +13,33 @@ import {
 import { recordMentionEntryUsage } from "./mentionEntryUsage";
 import { recordSlashEntryUsage } from "./slashEntryUsage";
 import { buildCuratedTaskTemplateCopy } from "../utils/curatedTaskTemplates";
+import agentResource from "@/i18n/resources/zh-CN/agent.json";
+
+type AgentResourceKey = keyof typeof agentResource;
+
+function interpolateTemplate(
+  template: string,
+  values?: Record<string, number | string>,
+): string {
+  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, name) => {
+    const value = values?.[name];
+    return value == null ? match : String(value);
+  });
+}
+
+function translateAgentResource(
+  key: string,
+  values?: Record<string, number | string>,
+): string {
+  return interpolateTemplate(
+    agentResource[key as AgentResourceKey] ?? key,
+    values,
+  );
+}
+
+function buildTestInputCapabilityCopy() {
+  return buildInputCapabilitySectionsCopy(translateAgentResource);
+}
 
 function createBuiltinCommand(
   overrides: Partial<BuiltinInputCommand> & Pick<BuiltinInputCommand, "key">,
@@ -108,6 +135,7 @@ function buildEmptyParams() {
     projectId: undefined,
     sessionId: undefined,
     referenceEntries: undefined,
+    inputCapabilityCopy: buildTestInputCapabilityCopy(),
   };
 }
 
@@ -219,20 +247,20 @@ describe("buildInputCapabilitySections", () => {
 
   it("slash 结果模板应支持注入本地化模板 copy", () => {
     const curatedTaskTemplateCopy = buildCuratedTaskTemplateCopy(
-      (key, defaultValue) =>
+      (key, values) =>
         key === "curatedTask.templates.daily-trend-briefing.title"
           ? "Trend Briefing"
-          : defaultValue,
+          : translateAgentResource(key, values),
     );
     const inputCapabilityCopy = buildInputCapabilitySectionsCopy(
-      (key, defaultValue, values) => {
+      (key, values) => {
         const overrides: Record<string, string> = {
           "inputCapabilities.heading.resultTemplatesEmpty": "Get Results First",
           "inputCapabilities.review.action": "Continue with {{title}}",
         };
-        const template = overrides[key] ?? defaultValue;
-        return template.replace(/\{\{(\w+)\}\}/g, (_match, name) =>
-          String(values?.[name] ?? ""),
+        return interpolateTemplate(
+          overrides[key] ?? translateAgentResource(key),
+          values,
         );
       },
     );
@@ -264,7 +292,7 @@ describe("buildInputCapabilitySections", () => {
       replayText: "查找新品趋势",
     });
     const inputCapabilityCopy = buildInputCapabilitySectionsCopy(
-      (key, defaultValue, values) => {
+      (key, values) => {
         const overrides: Record<string, string> = {
           "inputCapabilities.heading.recentMention": "Recently Used",
           "inputCapabilities.inputGroup.generateExpression": "Create / Express",
@@ -274,9 +302,9 @@ describe("buildInputCapabilitySections", () => {
             "Resume recent or switch executor",
           "inputCapabilities.recentInput": "Previous input: {{preview}}",
         };
-        const template = overrides[key] ?? defaultValue;
-        return template.replace(/\{\{(\w+)\}\}/g, (_match, name) =>
-          String(values?.[name] ?? ""),
+        return interpolateTemplate(
+          overrides[key] ?? translateAgentResource(key),
+          values,
         );
       },
     );
@@ -302,19 +330,81 @@ describe("buildInputCapabilitySections", () => {
     const recentSection = sections.find(
       (section) => section.key === "recent-mention",
     );
+    const registryBannerSection = sections.find(
+      (section) =>
+        section.key.startsWith("builtin-commands:") && section.banner,
+    );
     const generateSection = sections.find(
       (section) => section.key === "builtin-commands:generate-expression",
     );
 
     expect(recentSection?.heading).toBe("Recently Used");
-    expect(recentSection?.banner?.badge).toBe("Unified invocation registry");
-    expect(recentSection?.banner?.title).toBe(
+    expect(recentSection?.banner).toBeUndefined();
+    expect(registryBannerSection?.banner?.badge).toBe(
+      "Unified invocation registry",
+    );
+    expect(registryBannerSection?.banner?.title).toBe(
       "Resume recent or switch executor",
     );
     expect(recentSection?.items[0]?.description).toBe(
       "Previous input: 查找新品趋势",
     );
     expect(generateSection?.heading).toBe("Create / Express");
+  });
+
+  it("@ 空查询有最近调用时仍应先展示完整命令注册表", () => {
+    recordMentionEntryUsage({
+      kind: "builtin_command",
+      entryId: "research",
+      usedAt: 1_712_345_678_900,
+      replayText: "查找新品趋势",
+    });
+
+    const sections = buildInputCapabilitySections({
+      ...buildEmptyParams(),
+      mode: "mention",
+      builtinCommands: [
+        createBuiltinCommand({
+          key: "research",
+          label: "搜索",
+          commandPrefix: "@搜索",
+        }),
+        createBuiltinCommand({
+          key: "image_generate",
+          label: "配图",
+          commandPrefix: "@配图",
+        }),
+      ],
+    });
+
+    const headings = sections.map((section) => section.heading);
+    const searchSection = sections.find(
+      (section) => section.key === "builtin-commands:search-read",
+    );
+    const recentSection = sections.find(
+      (section) => section.key === "recent-mention",
+    );
+
+    expect(headings.indexOf("搜索 / 读取")).toBeLessThan(
+      headings.indexOf("最近调用"),
+    );
+    expect(searchSection?.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: "@搜索",
+          replayText: undefined,
+          description: "搜索 · research 描述",
+        }),
+      ]),
+    );
+    expect(recentSection?.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: "@搜索",
+          replayText: "查找新品趋势",
+        }),
+      ]),
+    );
   });
 
   it("slash 搜索时仍应按工作台命令类型展开匹配结果", () => {

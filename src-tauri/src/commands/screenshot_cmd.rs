@@ -350,4 +350,11 @@ mod tests {
         assert!(validate_shortcut("".to_string()).is_err());
         assert!(validate_shortcut("InvalidKey".to_string()).is_err());
     }
+
+    #[test]
+    fn test_validate_shortcut_rejects_input_method_reserved_shortcuts() {
+        let result = validate_shortcut("CommandOrControl+Space".to_string());
+        assert!(result.is_err());
+        assert!(result.err().unwrap().contains("输入法切换"));
+    }
 }

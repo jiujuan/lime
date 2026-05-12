@@ -25,9 +25,15 @@ const MOCK_LOGS: LogEntry[] = [
   },
 ];
 
+const INVALID_REGEX_MESSAGE = "Invalid regex. Falling back to no filter.";
+
 describe("channel-log-filter", () => {
   it("预置 telegram 过滤应命中 TelegramGateway", () => {
-    const { regex, error } = buildChannelLogRegex("telegram", "");
+    const { regex, error } = buildChannelLogRegex(
+      "telegram",
+      "",
+      INVALID_REGEX_MESSAGE,
+    );
     expect(error).toBeNull();
     const result = filterChannelLogs(MOCK_LOGS, regex);
     expect(result).toHaveLength(1);
@@ -35,7 +41,11 @@ describe("channel-log-filter", () => {
   });
 
   it("预置 rpc 过滤应命中 RPC 与 agent.run", () => {
-    const { regex, error } = buildChannelLogRegex("rpc", "");
+    const { regex, error } = buildChannelLogRegex(
+      "rpc",
+      "",
+      INVALID_REGEX_MESSAGE,
+    );
     expect(error).toBeNull();
     const result = filterChannelLogs(MOCK_LOGS, regex);
     expect(result).toHaveLength(1);
@@ -43,7 +53,11 @@ describe("channel-log-filter", () => {
   });
 
   it("预置 wechat 过滤应命中 WechatGateway", () => {
-    const { regex, error } = buildChannelLogRegex("wechat", "");
+    const { regex, error } = buildChannelLogRegex(
+      "wechat",
+      "",
+      INVALID_REGEX_MESSAGE,
+    );
     expect(error).toBeNull();
     const result = filterChannelLogs(MOCK_LOGS, regex);
     expect(result).toHaveLength(1);
@@ -51,15 +65,23 @@ describe("channel-log-filter", () => {
   });
 
   it("自定义正则非法时应返回错误并回退不过滤", () => {
-    const { regex, error } = buildChannelLogRegex("custom", "[invalid");
+    const { regex, error } = buildChannelLogRegex(
+      "custom",
+      "[invalid",
+      INVALID_REGEX_MESSAGE,
+    );
     expect(regex).toBeNull();
-    expect(error).toContain("正则表达式无效");
+    expect(error).toContain("Invalid regex");
     const result = filterChannelLogs(MOCK_LOGS, regex);
     expect(result).toHaveLength(4);
   });
 
   it("all 模式应不过滤", () => {
-    const { regex, error } = buildChannelLogRegex("all", "");
+    const { regex, error } = buildChannelLogRegex(
+      "all",
+      "",
+      INVALID_REGEX_MESSAGE,
+    );
     expect(error).toBeNull();
     const result = filterChannelLogs(MOCK_LOGS, regex);
     expect(result).toHaveLength(4);

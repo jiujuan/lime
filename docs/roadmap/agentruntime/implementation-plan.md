@@ -1,8 +1,9 @@
 # Lime AgentRuntime Profile 分阶段落地计划
 
-> 状态：proposal
+> 状态：implementation-audited
 > 更新时间：2026-05-12
 > 作用：把 AgentRuntime Profile 从标准文档推进到 Lime current runtime、证据导出和 GUI 展示。
+> 完成审计：见 [./completion-audit.md](./completion-audit.md)。本文件保留阶段计划与退出条件，实际落地证据以完成审计为准。
 
 相邻标准边界同步纳入本计划：`AgentContext` 负责上下文 owner facts，`AgentPolicy` 负责策略/审批 owner facts，`AgentEvidence` 负责证据与 completeness owner facts，`AgentUI` 负责只读投影。详细合同见 [./adjacent-protocols.md](./adjacent-protocols.md)。
 
@@ -76,6 +77,7 @@
 - 本地结构测试能用真实 runtime 输出构造 `submit-turn-event.json` 等价 fixture。
 - 无 `session/thread/turn` 的 runtime 主路径事件不能进入 current read model。
 - 前端未知事件控制器能识别 Lime Profile 事件为已知旁路事实，不污染用户可见 projection。
+- AgentUI projection presentation mapper 支持用 key-based i18n 渲染 event type、phase/status、control、surface；Team Workbench、Harness、可靠性诊断和 Artifact timeline 这类 current projection 入口不得退回中文 fallback，不把 stable facts 翻译回写到 runtime/read model。
 - `turn.submitted / model.failed / task.failed` 等 profile fixtures 的 `type/status/failureCategory` 在不同 locale 下保持不变。
 
 ## 5. P2：ThreadReadModel 与 Context 收口
@@ -153,13 +155,17 @@
 2. Routing single candidate：
    - `task.profile.resolved`
    - `routing.single_candidate`
+   - `routing.not_possible`
+   - `routing.decided`
    - `cost.estimated`
    - `limit.changed`
 3. Tool approval：
    - `permission.evaluated`
    - `action.required`
    - `action.resolved`
+   - `tool.started`
    - `tool.result / tool.failed`
+   - 真实 stream hook 以 `RuntimeAgentEvent::ToolStart / ToolEnd` 为首选事实源，`ItemStarted / ItemCompleted(ToolCall)` 只作同一执行流 fallback，并按 `toolCallId` 去重。
 4. Policy linkage：
    - `policy.decision.created` owner ref
    - `approvalRequestId`
@@ -170,7 +176,8 @@
 
 退出条件：
 
-- `tool-approval-action-required-event.json`、`task-retry-attempt-failed-event.json`、`routing-single-candidate-event.json` 都有对应实现测试。
+- `tool-approval-action-required-event.json`、`task-retry-attempt-failed-event.json`、`routing-single-candidate-event.json`、`routing-not-possible-event.json`、`routing-decided-multi-candidate-event.json` 都有对应实现测试。
+- `runtime_tool_profile_should_follow_real_tool_start_and_end_once`、`runtime_tool_profile_should_fallback_to_item_tool_call_failure` 必须通过，证明 tool facts 已从 read-model 反推前移到真实执行事件 hook，且不会被 ToolStart/ItemStarted 双路重复写入。
 - `ask` 必须产生 `action.required`，`deny/indeterminate` 不能继续执行工具，`defer/escalate` 不能被 UI 当作允许，`allow/waive` 必须保留 obligations/constraints/scope refs。
 
 ## 8. P5：Subagent / Job / Remote Channel
@@ -188,6 +195,9 @@
 
 退出条件：
 
+- `subagent-parent-child-event.json` 有对应实现测试，且 profile event 能回挂 `parentSessionId/parentThreadId/parentTaskId/createdFromTurnId`。
+- `job-owner-run-event.json` 有对应实现测试，且 automation owner run 能输出 `job.created/job.status/job.item.started/job.item.failed/job.completed|job.failed`。
+- `remote-channel-resume-event.json` 有对应实现测试，且 remote task owner run 能输出 `channel.connected/channel.disconnected/channel.resumed/snapshot.repaired`。
 - 子代理失败能回挂 parent task。
 - remote reconnect 后先读 snapshot，再补 replay 或标记 stale。
 
@@ -229,15 +239,27 @@
 | Evidence 与 GUI 迁移不同步 | 中 | evidence 先修事实，GUI 后读 read model。 |
 | 子代理/job 复杂度过早进入 | 中 | P5 后置，P1-P4 先证明主链。 |
 
-## 11. 推荐下一刀
+## 11. PX / Markdown 本地化收口
 
-下一刀优先做 P1：
+2026-05-12 补记：
 
-```text
-agent_runtime_submit_turn
-  -> 统一生成 runtime/profile ids
-  -> 输出 turn.submitted / turn.started / turn.completed
-  -> 结构测试校验 submit-turn fixture
-```
+1. Evidence `summary.md` 保持 facts JSON 稳定，presentation copy 已按应用语言支持 zh-CN / zh-TW / en-US / ja-JP / ko-KR。
+2. Replay `grader.md` 已接 `RuntimeReplayMarkdownCopy`，artifact title、主标题、读取顺序、评分原则、通过条件、阻塞检查和输出模板可按 locale 渲染。
+3. Analysis `analysis-brief.md` 与 `copyPrompt` 已接 `RuntimeAnalysisMarkdownCopy`，外部分析标题、证据覆盖、读取顺序、文件分组、人工审核清单和关键摘录标题可按 locale 渲染。
+4. Review `review-decision.md` 已接 `RuntimeReviewMarkdownCopy`，不再用标题替换后处理作为主方案，审核上下文、验证摘要、决策状态、风险、回归、后续动作等结构标题与核心标签由 locale copy 输出。
+5. Runtime facts、`runtime.json`、`analysis-context.json`、`review-decision.json` 的 schema key 与 stable value 不随 locale 改变；locale 只影响 Markdown / copy prompt presentation。
 
-这一步收益最大，因为没有稳定关联键，后续 evidence、GUI、routing、task 都无法可靠 join。
+退出条件：
+
+- Rust 定向测试覆盖 Evidence / Replay / Analysis / Review Markdown locale。
+- `cargo check -p lime --lib` 不出现 presentation copy unused warning。
+- 未新增 Tauri command、前端 gateway、mock 或 request shape。
+
+## 12. 实施后的下一刀
+
+P1-P5/PX 的 current MVP 已按 [./completion-audit.md](./completion-audit.md) 完成审计。Evidence service 已先拆出 request telemetry、profile projection、completion audit / controlled GET evidence、modality contract、auxiliary runtime、verification / artifact validator、observability / signal coverage、known gaps、pack output renderer、Markdown locale copy、artifact index、JSON/path/tool helper 与单测 fixture 模块；后续不再从 P1 重走，而是优先收这些非阻塞弱项：
+
+1. 继续把 Replay / Analysis / Review Markdown 的正文段落、验证摘要和 review checklist 做细粒度 copy 化；当前已完成结构标题与核心标签 locale-aware。
+2. 把文档 fixture 名补成真实 JSON fixtures，或在测试用例文档中明确“结构测试等价覆盖”的映射表。
+3. 继续收敛超大测试 fixture，优先拆 `runtime_evidence_pack_service_tests.rs` 的 artifact / telemetry / approval 场景 fixture builder。
+4. 用 Playwright 补一个最小 tool approval approve/deny 和 remote resume 产品级 E2E。

@@ -44,30 +44,29 @@ vi.mock("sonner", () => ({
   },
 }));
 
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    i18n: { language: "zh-CN" },
-    t: (
-      key: string,
-      defaultValueOrOptions?:
-        | string
-        | ({ defaultValue?: string } & Record<string, unknown>),
-    ) => {
-      if (typeof defaultValueOrOptions === "string") {
-        return defaultValueOrOptions;
-      }
+vi.mock("react-i18next", async () => {
+  const agentZhCN = (await import("@/i18n/resources/zh-CN/agent.json"))
+    .default as Record<string, string>;
 
-      if (
-        defaultValueOrOptions &&
-        typeof defaultValueOrOptions.defaultValue === "string"
-      ) {
-        return defaultValueOrOptions.defaultValue;
-      }
+  const interpolate = (template: string, values: Record<string, unknown>) =>
+    template.replace(/{{\s*([^}]+?)\s*}}/g, (_, name: string) => {
+      const value = values[name.trim()];
+      return value == null ? "" : String(value);
+    });
 
-      return key;
-    },
-  }),
-}));
+  return {
+    useTranslation: () => ({
+      i18n: { language: "zh-CN" },
+      t: (key: string, options?: Record<string, unknown>) => {
+        const template = agentZhCN[key];
+        if (!template) {
+          return key;
+        }
+        return options ? interpolate(template, options) : template;
+      },
+    }),
+  };
+});
 
 beforeEach(() => {
   (

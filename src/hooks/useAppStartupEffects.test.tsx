@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 const serverRuntimeMocks = vi.hoisted(() => ({
   getWindowsStartupDiagnostics: vi.fn(),
@@ -17,15 +18,6 @@ const toastMocks = vi.hoisted(() => ({
 
 const tauriRuntimeMocks = vi.hoisted(() => ({
   hasTauriInvokeCapability: vi.fn(),
-}));
-
-const i18nMocks = vi.hoisted(() => ({
-  translations: {
-    "common.app.startup.windows.blockingTitle":
-      "Windows startup blocker translated",
-    "common.app.startup.windows.warningTitle":
-      "Windows environment warning translated",
-  } as Record<string, string>,
 }));
 
 vi.mock("@/lib/api/serverRuntime", () => ({
@@ -50,13 +42,6 @@ vi.mock("@/lib/tauri-runtime", () => ({
 
 vi.mock("sonner", () => ({
   toast: toastMocks,
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: (key: string, options?: { defaultValue?: string }) =>
-      i18nMocks.translations[key] ?? options?.defaultValue ?? key,
-  }),
 }));
 
 import { useAppStartupEffects } from "./useAppStartupEffects";
@@ -104,7 +89,8 @@ async function mountHook() {
 }
 
 describe("useAppStartupEffects", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await changeLimeLocale("en-US");
     (
       globalThis as typeof globalThis & {
         IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -121,7 +107,7 @@ describe("useAppStartupEffects", () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     if (mountedHarness) {
       act(() => {
         mountedHarness?.root.unmount();
@@ -131,13 +117,14 @@ describe("useAppStartupEffects", () => {
     }
 
     vi.clearAllMocks();
+    await changeLimeLocale("zh-CN");
   });
 
-  it("Windows 启动阻塞提示应使用 key-based i18n 标题", async () => {
+  it("Windows 启动阻塞提示应使用真实 common 资源标题", async () => {
     await mountHook();
 
     expect(toastMocks.error).toHaveBeenCalledWith(
-      "Windows startup blocker translated",
+      "Windows startup self-check found blocking issues",
       {
         description: "Driver policy is missing.",
         duration: 12000,
@@ -146,7 +133,7 @@ describe("useAppStartupEffects", () => {
     expect(toastMocks.warning).not.toHaveBeenCalled();
   });
 
-  it("Windows 启动警告提示应使用 key-based i18n 标题", async () => {
+  it("Windows 启动警告提示应使用真实 common 资源标题", async () => {
     serverRuntimeMocks.getWindowsStartupDiagnostics.mockResolvedValue({
       summary_message: "PowerShell execution policy needs attention.",
       has_blocking_issues: false,
@@ -156,7 +143,7 @@ describe("useAppStartupEffects", () => {
     await mountHook();
 
     expect(toastMocks.warning).toHaveBeenCalledWith(
-      "Windows environment warning translated",
+      "Windows environment check notice",
       {
         description: "PowerShell execution policy needs attention.",
         duration: 8000,

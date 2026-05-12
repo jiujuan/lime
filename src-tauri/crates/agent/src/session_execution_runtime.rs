@@ -1476,10 +1476,12 @@ mod tests {
 
     #[test]
     fn falls_back_to_session_when_runtime_snapshot_missing() {
-        let mut session = Session::default();
-        session.id = "session-1".to_string();
-        session.provider_name = Some("openai".to_string());
-        session.model_config = Some(ModelConfig::new("gpt-5.1").expect("model config"));
+        let session = Session {
+            id: "session-1".to_string(),
+            provider_name: Some("openai".to_string()),
+            model_config: Some(ModelConfig::new("gpt-5.1").expect("model config")),
+            ..Session::default()
+        };
 
         let runtime = build_session_execution_runtime(
             "session-1",
@@ -1502,10 +1504,12 @@ mod tests {
     #[test]
     fn prefers_latest_runtime_snapshot_with_output_schema_runtime() {
         let now = Utc::now();
-        let mut session = Session::default();
-        session.id = "session-2".to_string();
-        session.provider_name = Some("openai".to_string());
-        session.model_config = Some(ModelConfig::new("gpt-5.1").expect("model config"));
+        let session = Session {
+            id: "session-2".to_string(),
+            provider_name: Some("openai".to_string()),
+            model_config: Some(ModelConfig::new("gpt-5.1").expect("model config")),
+            ..Session::default()
+        };
 
         let latest_turn = TurnRuntime {
             id: "turn-new".to_string(),
@@ -1780,8 +1784,10 @@ mod tests {
 
     #[test]
     fn falls_back_to_session_recent_access_mode_when_runtime_snapshot_missing() {
-        let mut session = Session::default();
-        session.id = "session-access-fallback".to_string();
+        let mut session = Session {
+            id: "session-access-fallback".to_string(),
+            ..Session::default()
+        };
         SessionExecutionRuntimeAccessMode::ReadOnly
             .to_extension_data(&mut session.extension_data)
             .expect("persist access mode");
@@ -2144,16 +2150,18 @@ mod tests {
 
     #[test]
     fn falls_back_to_session_extension_data_recent_preferences() {
-        let mut session = Session::default();
-        session.id = "session-4".to_string();
-        session.extension_data = SessionExecutionRuntimePreferences {
-            web_search: false,
-            thinking: true,
-            task: true,
-            subagent: false,
-        }
-        .into_updated_extension_data(&Session::default())
-        .expect("extension data");
+        let session = Session {
+            id: "session-4".to_string(),
+            extension_data: SessionExecutionRuntimePreferences {
+                web_search: false,
+                thinking: true,
+                task: true,
+                subagent: false,
+            }
+            .into_updated_extension_data(&Session::default())
+            .expect("extension data"),
+            ..Session::default()
+        };
 
         let runtime =
             build_session_execution_runtime("session-4", Some(&session), None, None, None)
@@ -2173,21 +2181,23 @@ mod tests {
 
     #[test]
     fn falls_back_to_session_extension_data_recent_team_selection() {
-        let mut session = Session::default();
-        session.id = "session-6".to_string();
-        session.extension_data = SessionExecutionRuntimeRecentTeamSelection {
-            disabled: true,
-            theme: Some("general".to_string()),
-            preferred_team_preset_id: None,
-            selected_team_id: None,
-            selected_team_source: None,
-            selected_team_label: None,
-            selected_team_description: None,
-            selected_team_summary: None,
-            selected_team_roles: None,
-        }
-        .into_updated_extension_data(&Session::default())
-        .expect("extension data");
+        let session = Session {
+            id: "session-6".to_string(),
+            extension_data: SessionExecutionRuntimeRecentTeamSelection {
+                disabled: true,
+                theme: Some("general".to_string()),
+                preferred_team_preset_id: None,
+                selected_team_id: None,
+                selected_team_source: None,
+                selected_team_label: None,
+                selected_team_description: None,
+                selected_team_summary: None,
+                selected_team_roles: None,
+            }
+            .into_updated_extension_data(&Session::default())
+            .expect("extension data"),
+            ..Session::default()
+        };
 
         let runtime =
             build_session_execution_runtime("session-6", Some(&session), None, None, None)
@@ -2349,12 +2359,14 @@ mod tests {
     #[test]
     fn extracts_cost_state_and_limit_event_from_latest_turn() {
         let now = Utc::now();
-        let mut session = Session::default();
-        session.id = "session-cost".to_string();
-        session.input_tokens = Some(1200);
-        session.output_tokens = Some(300);
-        session.cached_input_tokens = Some(100);
-        session.cache_creation_input_tokens = Some(50);
+        let session = Session {
+            id: "session-cost".to_string(),
+            input_tokens: Some(1200),
+            output_tokens: Some(300),
+            cached_input_tokens: Some(100),
+            cache_creation_input_tokens: Some(50),
+            ..Session::default()
+        };
 
         let snapshot = SessionRuntimeSnapshot {
             session_id: "session-cost".to_string(),

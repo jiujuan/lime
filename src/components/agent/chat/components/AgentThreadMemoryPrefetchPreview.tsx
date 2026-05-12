@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { useCallback, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import type { TurnMemoryPrefetchResult } from "@/lib/api/memoryRuntime";
@@ -24,12 +25,12 @@ const SLATE_TITLE_CLASS_NAME = "text-slate-700";
 const MEMORY_PROMPT_SURFACE_CLASS_NAME =
   "overflow-x-auto rounded-lg border border-sky-100 bg-[linear-gradient(180deg,rgba(248,255,254,0.98)_0%,rgba(255,255,255,0.98)_55%,rgba(240,249,255,0.96)_100%)] px-3 py-2 text-xs leading-6 text-slate-700 shadow-sm shadow-sky-950/5";
 
-const DURABLE_CATEGORY_LABELS: Record<string, string> = {
-  identity: "风格",
-  context: "参考",
-  preference: "偏好",
-  experience: "成果",
-  activity: "收藏",
+const DURABLE_CATEGORY_KEY_SUFFIX: Record<string, string> = {
+  identity: "identity",
+  context: "context",
+  preference: "preference",
+  experience: "experience",
+  activity: "activity",
 };
 
 function normalizeText(value?: string | null): string {
@@ -62,13 +63,16 @@ function parseDate(value?: string | number | null): Date | null {
   return null;
 }
 
-function formatDateTime(value?: string | number | null): string | null {
+function formatDateTime(
+  value?: string | number | null,
+  locale?: string | null,
+): string | null {
   const date = parseDate(value);
   if (!date) {
     return null;
   }
 
-  return date.toLocaleString("zh-CN", {
+  return date.toLocaleString(locale || undefined, {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -78,17 +82,25 @@ function formatDateTime(value?: string | number | null): string | null {
 
 function formatMemoryLayerStatusLabel(
   label: string,
+  text: (key: string, options?: Record<string, unknown>) => string,
   count?: number | null,
   active?: boolean,
 ): string {
   if (typeof count === "number") {
-    return `${label} ${count}`;
+    return text("layerCount", { label, count });
   }
-  return `${label} ${active ? "已命中" : "未命中"}`;
+  return text("layerHitStatus", {
+    label,
+    status: active ? text("hit") : text("miss"),
+  });
 }
 
-function formatDurableCategoryLabel(category: string): string {
-  return DURABLE_CATEGORY_LABELS[category] || category;
+function formatDurableCategoryLabel(
+  category: string,
+  text: (key: string, options?: Record<string, unknown>) => string,
+): string {
+  const suffix = DURABLE_CATEGORY_KEY_SUFFIX[category];
+  return suffix ? text(`durableCategory.${suffix}`) : category;
 }
 
 function DetailPanel(props: {
@@ -121,6 +133,23 @@ export function AgentThreadMemoryPrefetchPreview({
   actions,
   className,
 }: AgentThreadMemoryPrefetchPreviewProps) {
+  const { t, i18n } = useTranslation("agent");
+  const text = useCallback(
+    (key: string, options?: Record<string, unknown>) =>
+      String(
+        t(
+          `agentChat.threadReliability.memoryPrefetchPreview.${key}` as never,
+          options as never,
+        ),
+      ),
+    [t],
+  );
+  const locale = i18n.resolvedLanguage || i18n.language;
+  const formatPreviewDateTime = useCallback(
+    (value?: string | number | null) => formatDateTime(value, locale),
+    [locale],
+  );
+
   return (
     <div
       className={cn(
@@ -140,7 +169,7 @@ export function AgentThreadMemoryPrefetchPreview({
               status === "error" ? "text-amber-900" : EMERALD_TITLE_CLASS_NAME,
             )}
           >
-            本回合记忆预取
+            {text("title")}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Badge
@@ -152,12 +181,12 @@ export function AgentThreadMemoryPrefetchPreview({
               )}
             >
               {status === "loading"
-                ? "加载中"
+                ? text("status.loading")
                 : status === "ready"
-                  ? "记忆命中预演"
+                  ? text("status.ready")
                   : status === "error"
-                    ? "暂不可用"
-                    : "待预取"}
+                    ? text("status.error")
+                    : text("status.idle")}
             </Badge>
           </div>
         </div>
@@ -172,10 +201,10 @@ export function AgentThreadMemoryPrefetchPreview({
         )}
       >
         {status === "loading"
-          ? "正在按最新回合 prompt 预演来源链 / 会话记忆 / 持久记忆 / Team Memory / 会话压缩的命中情况。"
+          ? text("description.loading")
           : status === "error"
             ? error
-            : "下面展示的是当前这轮真实会用到的记忆命中预演，不会改写会话，只帮助判断续接质量。"}
+            : text("description.default")}
       </div>
 
       {result ? (
@@ -186,7 +215,8 @@ export function AgentThreadMemoryPrefetchPreview({
               className={EMERALD_OUTLINE_BADGE_CLASS_NAME}
             >
               {formatMemoryLayerStatusLabel(
-                "规则",
+                text("layer.rules"),
+                text,
                 result.rules_source_paths.length,
               )}
             </Badge>
@@ -195,7 +225,8 @@ export function AgentThreadMemoryPrefetchPreview({
               className={EMERALD_OUTLINE_BADGE_CLASS_NAME}
             >
               {formatMemoryLayerStatusLabel(
-                "会话",
+                text("layer.working"),
+                text,
                 null,
                 Boolean(result.working_memory_excerpt),
               )}
@@ -205,7 +236,8 @@ export function AgentThreadMemoryPrefetchPreview({
               className={EMERALD_OUTLINE_BADGE_CLASS_NAME}
             >
               {formatMemoryLayerStatusLabel(
-                "持久",
+                text("layer.durable"),
+                text,
                 result.durable_memories.length,
               )}
             </Badge>
@@ -214,7 +246,8 @@ export function AgentThreadMemoryPrefetchPreview({
               className={EMERALD_OUTLINE_BADGE_CLASS_NAME}
             >
               {formatMemoryLayerStatusLabel(
-                "Team Memory",
+                text("layer.team"),
+                text,
                 result.team_memory_entries.length,
               )}
             </Badge>
@@ -223,7 +256,8 @@ export function AgentThreadMemoryPrefetchPreview({
               className={EMERALD_OUTLINE_BADGE_CLASS_NAME}
             >
               {formatMemoryLayerStatusLabel(
-                "压缩",
+                text("layer.compaction"),
+                text,
                 null,
                 Boolean(result.latest_compaction),
               )}
@@ -231,7 +265,10 @@ export function AgentThreadMemoryPrefetchPreview({
           </div>
 
           <div className="mt-3 grid gap-3 xl:grid-cols-2">
-            <DetailPanel title="规则来源" emptyText="当前没有命中的规则来源。">
+            <DetailPanel
+              title={text("sections.ruleSources")}
+              emptyText={text("empty.ruleSources")}
+            >
               {result.rules_source_paths.length > 0 ? (
                 <div className="space-y-2">
                   {result.rules_source_paths.slice(0, 3).map((path) => (
@@ -244,7 +281,9 @@ export function AgentThreadMemoryPrefetchPreview({
                   ))}
                   {result.rules_source_paths.length > 3 ? (
                     <div className="text-xs text-slate-500">
-                      另有 {result.rules_source_paths.length - 3} 个来源未展开。
+                      {text("more.ruleSources", {
+                        count: result.rules_source_paths.length - 3,
+                      })}
                     </div>
                   ) : null}
                 </div>
@@ -252,8 +291,8 @@ export function AgentThreadMemoryPrefetchPreview({
             </DetailPanel>
 
             <DetailPanel
-              title="会话记忆摘录"
-              emptyText="当前回合没有命中会话记忆摘录。"
+              title={text("sections.workingExcerpt")}
+              emptyText={text("empty.workingExcerpt")}
             >
               {result.working_memory_excerpt ? (
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700">
@@ -263,8 +302,8 @@ export function AgentThreadMemoryPrefetchPreview({
             </DetailPanel>
 
             <DetailPanel
-              title="持久记忆命中"
-              emptyText="当前没有命中的持久记忆。"
+              title={text("sections.durable")}
+              emptyText={text("empty.durable")}
             >
               {result.durable_memories.length > 0 ? (
                 <div className="space-y-2">
@@ -278,7 +317,7 @@ export function AgentThreadMemoryPrefetchPreview({
                           variant="outline"
                           className="border-slate-200 bg-white text-slate-700"
                         >
-                          {formatDurableCategoryLabel(entry.category)}
+                          {formatDurableCategoryLabel(entry.category, text)}
                         </Badge>
                         <span className="text-sm font-medium text-slate-900">
                           {entry.title}
@@ -289,18 +328,27 @@ export function AgentThreadMemoryPrefetchPreview({
                       </div>
                       <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
                         {entry.tags.length > 0 ? (
-                          <span>标签：{entry.tags.join("、")}</span>
+                          <span>
+                            {text("durableTags", {
+                              value: entry.tags.join(text("listSeparator")),
+                            })}
+                          </span>
                         ) : null}
-                        {formatDateTime(entry.updated_at) ? (
-                          <span>更新于 {formatDateTime(entry.updated_at)}</span>
+                        {formatPreviewDateTime(entry.updated_at) ? (
+                          <span>
+                            {text("updatedAt", {
+                              value: formatPreviewDateTime(entry.updated_at),
+                            })}
+                          </span>
                         ) : null}
                       </div>
                     </div>
                   ))}
                   {result.durable_memories.length > 3 ? (
                     <div className="text-xs text-slate-500">
-                      另有 {result.durable_memories.length - 3}{" "}
-                      条持久记忆未展开。
+                      {text("more.durable", {
+                        count: result.durable_memories.length - 3,
+                      })}
                     </div>
                   ) : null}
                 </div>
@@ -308,8 +356,8 @@ export function AgentThreadMemoryPrefetchPreview({
             </DetailPanel>
 
             <DetailPanel
-              title="Team Memory 明细"
-              emptyText="当前没有命中的 Team Memory。"
+              title={text("sections.team")}
+              emptyText={text("empty.team")}
             >
               {result.team_memory_entries.length > 0 ? (
                 <div className="space-y-2">
@@ -322,9 +370,9 @@ export function AgentThreadMemoryPrefetchPreview({
                         <span className="text-sm font-medium text-slate-900">
                           {entry.key}
                         </span>
-                        {formatDateTime(entry.updated_at) ? (
+                        {formatPreviewDateTime(entry.updated_at) ? (
                           <span className="text-xs text-slate-500">
-                            {formatDateTime(entry.updated_at)}
+                            {formatPreviewDateTime(entry.updated_at)}
                           </span>
                         ) : null}
                       </div>
@@ -338,8 +386,9 @@ export function AgentThreadMemoryPrefetchPreview({
                   ))}
                   {result.team_memory_entries.length > 3 ? (
                     <div className="text-xs text-slate-500">
-                      另有 {result.team_memory_entries.length - 3} 条 Team
-                      Memory 未展开。
+                      {text("more.team", {
+                        count: result.team_memory_entries.length - 3,
+                      })}
                     </div>
                   ) : null}
                 </div>
@@ -347,24 +396,35 @@ export function AgentThreadMemoryPrefetchPreview({
             </DetailPanel>
 
             <DetailPanel
-              title="会话压缩摘要"
-              emptyText="当前没有命中的会话压缩摘要。"
+              title={text("sections.compaction")}
+              emptyText={text("empty.compaction")}
             >
               {result.latest_compaction ? (
                 <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
                   <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
                     {result.latest_compaction.trigger ? (
-                      <span>触发原因：{result.latest_compaction.trigger}</span>
+                      <span>
+                        {text("compaction.trigger", {
+                          value: result.latest_compaction.trigger,
+                        })}
+                      </span>
                     ) : null}
                     {typeof result.latest_compaction.turn_count === "number" ? (
                       <span>
-                        覆盖回合：{result.latest_compaction.turn_count}
+                        {text("compaction.turnCount", {
+                          count: result.latest_compaction.turn_count,
+                        })}
                       </span>
                     ) : null}
-                    {formatDateTime(result.latest_compaction.created_at) ? (
+                    {formatPreviewDateTime(
+                      result.latest_compaction.created_at,
+                    ) ? (
                       <span>
-                        生成于{" "}
-                        {formatDateTime(result.latest_compaction.created_at)}
+                        {text("compaction.createdAt", {
+                          value: formatPreviewDateTime(
+                            result.latest_compaction.created_at,
+                          ),
+                        })}
                       </span>
                     ) : null}
                   </div>
@@ -379,8 +439,8 @@ export function AgentThreadMemoryPrefetchPreview({
             </DetailPanel>
 
             <DetailPanel
-              title="运行时记忆片段"
-              emptyText="当前没有返回组装后的运行时记忆片段。"
+              title={text("sections.runtimeSnippet")}
+              emptyText={text("empty.runtimeSnippet")}
             >
               {result.prompt ? (
                 <pre className={MEMORY_PROMPT_SURFACE_CLASS_NAME}>

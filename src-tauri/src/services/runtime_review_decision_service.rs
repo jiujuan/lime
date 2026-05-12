@@ -7,8 +7,10 @@
 use crate::agent::SessionDetail;
 use crate::commands::aster_agent_cmd::AgentRuntimeThreadReadModel;
 use crate::services::runtime_analysis_handoff_service::{
-    export_runtime_analysis_handoff, RuntimeAnalysisArtifact, RuntimeAnalysisHandoffExportResult,
+    export_runtime_analysis_handoff_with_locale, RuntimeAnalysisArtifact,
+    RuntimeAnalysisHandoffExportResult,
 };
+use crate::services::runtime_review_markdown_locale_service::runtime_review_markdown_copy;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -172,7 +174,21 @@ pub fn export_runtime_review_decision_template(
     thread_read: &AgentRuntimeThreadReadModel,
     workspace_root: &Path,
 ) -> Result<RuntimeReviewDecisionTemplateExportResult, String> {
-    sync_runtime_review_decision(detail, thread_read, workspace_root, None)
+    export_runtime_review_decision_template_with_locale(
+        detail,
+        thread_read,
+        workspace_root,
+        Some("zh-CN"),
+    )
+}
+
+pub fn export_runtime_review_decision_template_with_locale(
+    detail: &SessionDetail,
+    thread_read: &AgentRuntimeThreadReadModel,
+    workspace_root: &Path,
+    locale: Option<&str>,
+) -> Result<RuntimeReviewDecisionTemplateExportResult, String> {
+    sync_runtime_review_decision(detail, thread_read, workspace_root, None, locale)
 }
 
 pub fn save_runtime_review_decision(
@@ -181,7 +197,23 @@ pub fn save_runtime_review_decision(
     workspace_root: &Path,
     decision: RuntimeReviewDecisionContent,
 ) -> Result<RuntimeReviewDecisionTemplateExportResult, String> {
-    sync_runtime_review_decision(detail, thread_read, workspace_root, Some(decision))
+    save_runtime_review_decision_with_locale(
+        detail,
+        thread_read,
+        workspace_root,
+        decision,
+        Some("zh-CN"),
+    )
+}
+
+pub fn save_runtime_review_decision_with_locale(
+    detail: &SessionDetail,
+    thread_read: &AgentRuntimeThreadReadModel,
+    workspace_root: &Path,
+    decision: RuntimeReviewDecisionContent,
+    locale: Option<&str>,
+) -> Result<RuntimeReviewDecisionTemplateExportResult, String> {
+    sync_runtime_review_decision(detail, thread_read, workspace_root, Some(decision), locale)
 }
 
 fn sync_runtime_review_decision(
@@ -189,6 +221,7 @@ fn sync_runtime_review_decision(
     thread_read: &AgentRuntimeThreadReadModel,
     workspace_root: &Path,
     decision_override: Option<RuntimeReviewDecisionContent>,
+    locale: Option<&str>,
 ) -> Result<RuntimeReviewDecisionTemplateExportResult, String> {
     let session_id = detail.id.trim();
     if session_id.is_empty() {
@@ -208,7 +241,13 @@ fn sync_runtime_review_decision(
     let review_absolute_root =
         workspace_root.join(review_relative_root.replace('/', std::path::MAIN_SEPARATOR_STR));
 
-    let analysis = export_runtime_analysis_handoff(detail, thread_read, workspace_root.as_path())?;
+    let analysis = export_runtime_analysis_handoff_with_locale(
+        detail,
+        thread_read,
+        workspace_root.as_path(),
+        locale,
+    )?;
+    let markdown_copy = runtime_review_markdown_copy(locale);
 
     fs::create_dir_all(&review_absolute_root).map_err(|error| {
         format!(
@@ -236,21 +275,21 @@ fn sync_runtime_review_decision(
         validate_review_decision_write(&verification_context, &decision)?;
     }
     document.decision = decision;
-    let markdown = build_review_decision_markdown(&document);
+    let markdown = build_review_decision_markdown(&document, locale);
     let json = serde_json::to_string_pretty(&document)
         .map_err(|error| format!("序列化 review decision json 失败: {error}"))?;
 
     let artifacts = vec![
         write_review_decision_artifact(
             RuntimeReviewDecisionArtifactKind::ReviewDecisionMarkdown,
-            "人工审核记录",
+            markdown_copy.markdown_artifact_title,
             &review_absolute_root.join(REVIEW_DECISION_MARKDOWN_FILE_NAME),
             &format!("{review_relative_root}/{REVIEW_DECISION_MARKDOWN_FILE_NAME}"),
             markdown.as_bytes(),
         )?,
         write_review_decision_artifact(
             RuntimeReviewDecisionArtifactKind::ReviewDecisionJson,
-            "人工审核记录 JSON",
+            markdown_copy.json_artifact_title,
             &review_absolute_root.join(REVIEW_DECISION_JSON_FILE_NAME),
             &format!("{review_relative_root}/{REVIEW_DECISION_JSON_FILE_NAME}"),
             json.as_bytes(),
@@ -397,7 +436,12 @@ fn build_review_decision_document(
     }
 }
 
-fn build_review_decision_markdown(document: &ReviewDecisionDocument) -> String {
+fn build_review_decision_markdown(
+    document: &ReviewDecisionDocument,
+    locale: Option<&str>,
+) -> String {
+    let copy = runtime_review_markdown_copy(locale);
+    let body_copy = review_markdown_body_copy(locale);
     let checklist = document
         .review_checklist
         .iter()
@@ -413,27 +457,34 @@ fn build_review_decision_markdown(document: &ReviewDecisionDocument) -> String {
         .join("\n");
     let verification_summary =
         format_markdown_verification_summary(document.review_context.verification_summary.as_ref());
+    let none_list_placeholder = format!("- {}", copy.none);
+    let placeholder_list_item = format!("- {}", copy.placeholder);
+    let placeholder_check_item = format!("- [ ] {}", copy.placeholder);
     let verification_failure_outcomes = format_markdown_list(
         &document.review_context.verification_failure_outcomes,
-        "- 无",
+        &none_list_placeholder,
     );
     let verification_recovered_outcomes = format_markdown_list(
         &document.review_context.verification_recovered_outcomes,
-        "- 无",
+        &none_list_placeholder,
     );
     let agent_runtime_profile = format_markdown_agent_runtime_profile(
         document.review_context.agent_runtime_profile.as_ref(),
+        copy.not_exported,
     );
-    let permission_status = empty_fallback(&document.review_context.permission_status, "未导出");
+    let permission_status = empty_fallback(
+        &document.review_context.permission_status,
+        copy.not_exported,
+    );
     let permission_confirmation = empty_fallback(
         &document.review_context.permission_confirmation_summary,
-        "未导出",
+        copy.not_exported,
     );
-    let limit_status = empty_fallback(&document.review_context.limit_status, "未导出");
-    let capability_gap = empty_fallback(&document.review_context.capability_gap, "无");
+    let limit_status = empty_fallback(&document.review_context.limit_status, copy.not_exported);
+    let capability_gap = empty_fallback(&document.review_context.capability_gap, copy.none);
     let user_locked_capability = empty_fallback(
         &document.review_context.user_locked_capability_summary,
-        "未触发",
+        copy.not_triggered,
     );
     let decision_status_options = document
         .decision_status_options
@@ -441,129 +492,230 @@ fn build_review_decision_markdown(document: &ReviewDecisionDocument) -> String {
         .map(|status| format!("`{status}`"))
         .collect::<Vec<_>>()
         .join(" / ");
-    let risk_tags = format_markdown_inline_list(&document.decision.risk_tags, "待填写");
-    let regression_requirements =
-        format_markdown_list(&document.decision.regression_requirements, "- 待填写");
-    let followup_actions = format_markdown_list(&document.decision.followup_actions, "- 待填写");
+    let risk_tags = format_markdown_inline_list(&document.decision.risk_tags, copy.placeholder);
+    let regression_requirements = format_markdown_list(
+        &document.decision.regression_requirements,
+        &placeholder_list_item,
+    );
+    let followup_actions =
+        format_markdown_list(&document.decision.followup_actions, &placeholder_list_item);
     let decision_summary =
-        format_markdown_text_block(&document.decision.decision_summary, "待填写。");
+        format_markdown_text_block(&document.decision.decision_summary, copy.placeholder);
     let chosen_fix_strategy =
-        format_markdown_text_block(&document.decision.chosen_fix_strategy, "待填写。");
-    let notes = format_markdown_text_block(&document.decision.notes, "待填写。");
+        format_markdown_text_block(&document.decision.chosen_fix_strategy, copy.placeholder);
+    let notes = format_markdown_text_block(&document.decision.notes, copy.placeholder);
+    let label_separator = if copy.title == "Lime Human Review and Decision Record" {
+        ": "
+    } else {
+        "："
+    };
 
     format!(
-        "# Lime 人工审核与决策记录\n\n\
-> 状态：`{decision_status}`\n\
-> 导出时间：`{exported_at}`\n\
-> 说明：这份模板用于把外部代码助手 / Codex 的分析结论，回挂为 Lime 工作区内可版本化的人工审核记录；最终是否接受修复仍由开发者决定。\n\n\
-## 1. 审核上下文\n\
-- 标题：{title}\n\
-- session_id：`{session_id}`\n\
-- thread_id：`{thread_id}`\n\
-- 线程状态：`{thread_status}`\n\
-- 最新 Turn：`{latest_turn_status}`\n\
-	- 待处理请求：`{pending_request_count}`\n\
-	- 排队任务：`{queued_turn_count}`\n\
-	- 额度状态：`{limit_status}`\n\
-	- 能力缺口：`{capability_gap}`\n\
-	- 模型锁定能力缺口：{user_locked_capability}\n\
-	- 权限状态：`{permission_status}`\n\
-	- 权限确认：{permission_confirmation}\n\
-	- AgentRuntime Profile：{agent_runtime_profile}\n\
-	- analysis 目录：`{analysis_relative_root}`\n\
-- handoff 目录：`{handoff_bundle_relative_root}`\n\
-- evidence 目录：`{evidence_pack_relative_root}`\n\
-- replay 目录：`{replay_case_relative_root}`\n\n\
-### 关联分析文件\n\
+        "# {review_title}\n\n\
+> {status_label}{sep}`{decision_status}`\n\
+> {exported_at_label}{sep}`{exported_at}`\n\
+> {intro}\n\n\
+## 1. {context_label}\n\
+- {title_label}{sep}{title}\n\
+- session_id{sep}`{session_id}`\n\
+- thread_id{sep}`{thread_id}`\n\
+- {thread_status_label}{sep}`{thread_status}`\n\
+- {latest_turn_label}{sep}`{latest_turn_status}`\n\
+\t- {pending_request_label}{sep}`{pending_request_count}`\n\
+\t- {queued_task_label}{sep}`{queued_turn_count}`\n\
+\t- {limit_status_label}{sep}`{limit_status}`\n\
+\t- {capability_gap_label}{sep}`{capability_gap}`\n\
+\t- {user_locked_capability_label}{sep}{user_locked_capability}\n\
+\t- {permission_status_label}{sep}`{permission_status}`\n\
+\t- {permission_confirmation_label}{sep}{permission_confirmation}\n\
+\t- AgentRuntime Profile{sep}{agent_runtime_profile}\n\
+\t- {analysis_dir_label}{sep}`{analysis_relative_root}`\n\
+- {handoff_dir_label}{sep}`{handoff_bundle_relative_root}`\n\
+- {evidence_dir_label}{sep}`{evidence_pack_relative_root}`\n\
+- {replay_dir_label}{sep}`{replay_case_relative_root}`\n\n\
+### {related_analysis_files_label}\n\
 {analysis_files}\n\n\
-## 2. 上游对齐\n\
-- 执行环境参照：`codex`\n\
-- 运行时事实源：`aster-rust`\n\
-- 产品承接面：`lime`\n\n\
-## 3. 审核清单\n\
+## 2. {upstream_alignment_label}\n\
+- {execution_environment_reference_label}{sep}`codex`\n\
+- {runtime_fact_source_label}{sep}`aster-rust`\n\
+- {product_surface_label}{sep}`lime`\n\n\
+## 3. {review_checklist_label}\n\
 {checklist}\n\n\
-## 4. 结构化验证摘要\n\
+## 4. {verification_summary_label}\n\
 {verification_summary}\n\n\
-## 5. 验证焦点\n\
-- 阻塞 / 提示失败：\n\
+## 5. {verification_focus_label}\n\
+- {blocking_failures_label}{sep}\n\
 {verification_failure_outcomes}\n\n\
-- 已恢复结果：\n\
+- {recovered_outcomes_label}{sep}\n\
 {verification_recovered_outcomes}\n\n\
-## 6. 决策状态\n\
-- 当前值：`{decision_status}`\n\
-- 可选值：{decision_status_options}\n\n\
-## 7. 决策摘要\n\
+## 6. {decision_status_label}\n\
+- {current_value_label}{sep}`{decision_status}`\n\
+- {allowed_values_label}{sep}{decision_status_options}\n\n\
+## 7. {decision_summary_label}\n\
 {decision_summary}\n\n\
-## 8. 采用的修复策略\n\
+## 8. {chosen_fix_strategy_label}\n\
 {chosen_fix_strategy}\n\n\
-## 9. 风险等级与标签\n\
-- 风险等级：`{risk_level}`\n\
-- 风险标签：{risk_tags}\n\n\
-## 10. 回归要求\n\
+## 9. {risk_level_and_tags_label}\n\
+- {risk_level_label}{sep}`{risk_level}`\n\
+- {risk_tags_label}{sep}{risk_tags}\n\n\
+## 10. {regression_requirements_label}\n\
 {regression_requirements}\n\n\
-## 11. 后续动作\n\
+## 11. {followup_actions_label}\n\
 {followup_actions}\n\n\
-## 12. 审核备注\n\
-- 审核人：{human_reviewer}\n\
-- 审核时间：{reviewed_at}\n\
-- 备注：\n{notes}\n",
+## 12. {review_notes_label}\n\
+- {reviewer_label}{sep}{human_reviewer}\n\
+- {reviewed_at_label}{sep}{reviewed_at}\n\
+- {notes_label}{sep}\n{notes}\n",
+        review_title = copy.title,
+        status_label = copy.status,
         decision_status = document.decision.decision_status,
+        exported_at_label = copy.exported_at,
         exported_at = document.exported_at,
-        title = empty_fallback(&document.review_context.title, "未命名"),
+        intro = copy.intro,
+        context_label = copy.context,
+        title_label = copy.title_label,
+        title = empty_fallback(&document.review_context.title, copy.placeholder),
         session_id = document.review_context.session_id,
         thread_id = document.review_context.thread_id,
-        thread_status = empty_fallback(&document.review_context.thread_status, "unknown"),
+        thread_status_label = copy.thread_status,
+        thread_status = empty_fallback(&document.review_context.thread_status, copy.not_exported),
+        latest_turn_label = copy.latest_turn,
         latest_turn_status = document
             .review_context
             .latest_turn_status
             .as_deref()
             .filter(|value| !value.trim().is_empty())
-            .unwrap_or("unknown"),
+            .unwrap_or(copy.not_exported),
+        pending_request_label = copy.pending_request,
         pending_request_count = document.review_context.pending_request_count,
+        queued_task_label = copy.queued_task,
         queued_turn_count = document.review_context.queued_turn_count,
+        limit_status_label = copy.limit_status,
         limit_status = limit_status,
+        capability_gap_label = copy.capability_gap,
         capability_gap = capability_gap,
+        user_locked_capability_label = copy.user_locked_capability,
         user_locked_capability = user_locked_capability,
+        permission_status_label = copy.permission_status,
         permission_status = permission_status,
+        permission_confirmation_label = copy.permission_confirmation,
         permission_confirmation = permission_confirmation,
         agent_runtime_profile = agent_runtime_profile,
+        analysis_dir_label = copy.analysis_dir,
         analysis_relative_root = document.review_context.analysis_relative_root,
+        handoff_dir_label = copy.handoff_dir,
         handoff_bundle_relative_root = document.review_context.handoff_bundle_relative_root,
+        evidence_dir_label = copy.evidence_dir,
         evidence_pack_relative_root = document.review_context.evidence_pack_relative_root,
+        replay_dir_label = copy.replay_dir,
         replay_case_relative_root = document.review_context.replay_case_relative_root,
+        related_analysis_files_label = copy.related_analysis_files,
         analysis_files = if analysis_files.is_empty() {
-            "- 待补充".to_string()
+            placeholder_list_item.clone()
         } else {
             analysis_files
         },
+        upstream_alignment_label = copy.upstream_alignment,
+        execution_environment_reference_label = body_copy.execution_environment_reference,
+        runtime_fact_source_label = body_copy.runtime_fact_source,
+        product_surface_label = body_copy.product_surface,
+        review_checklist_label = copy.review_checklist,
         checklist = if checklist.is_empty() {
-            "- [ ] 待补充审核清单".to_string()
+            placeholder_check_item
         } else {
             checklist
         },
+        verification_summary_label = copy.verification_summary,
         verification_summary = verification_summary,
+        verification_focus_label = copy.verification_focus,
+        blocking_failures_label = body_copy.blocking_failures,
         verification_failure_outcomes = verification_failure_outcomes,
+        recovered_outcomes_label = body_copy.recovered_outcomes,
         verification_recovered_outcomes = verification_recovered_outcomes,
+        decision_status_label = copy.decision_status,
+        current_value_label = body_copy.current_value,
+        allowed_values_label = body_copy.allowed_values,
         decision_status_options = if decision_status_options.is_empty() {
             format!("`{DEFAULT_DECISION_STATUS}`")
         } else {
             decision_status_options
         },
+        decision_summary_label = copy.decision_summary,
         decision_summary = decision_summary,
+        chosen_fix_strategy_label = copy.chosen_fix_strategy,
         chosen_fix_strategy = chosen_fix_strategy,
+        risk_level_and_tags_label = copy.risk_level_and_tags,
+        risk_level_label = body_copy.risk_level,
         risk_level = document.decision.risk_level,
+        risk_tags_label = body_copy.risk_tags,
         risk_tags = risk_tags,
+        regression_requirements_label = copy.regression_requirements,
         regression_requirements = regression_requirements,
+        followup_actions_label = copy.followup_actions,
         followup_actions = followup_actions,
-        human_reviewer = empty_fallback(&document.decision.human_reviewer, "待填写"),
+        review_notes_label = copy.review_notes,
+        reviewer_label = body_copy.reviewer,
+        human_reviewer = empty_fallback(&document.decision.human_reviewer, copy.placeholder),
+        reviewed_at_label = body_copy.reviewed_at,
         reviewed_at = document
             .decision
             .reviewed_at
             .as_deref()
             .filter(|value: &&str| !value.trim().is_empty())
-            .unwrap_or("待填写"),
+            .unwrap_or(copy.placeholder),
+        notes_label = body_copy.notes,
         notes = notes,
+        sep = label_separator,
     )
+}
+
+struct ReviewMarkdownBodyCopy {
+    execution_environment_reference: &'static str,
+    runtime_fact_source: &'static str,
+    product_surface: &'static str,
+    blocking_failures: &'static str,
+    recovered_outcomes: &'static str,
+    current_value: &'static str,
+    allowed_values: &'static str,
+    risk_level: &'static str,
+    risk_tags: &'static str,
+    reviewer: &'static str,
+    reviewed_at: &'static str,
+    notes: &'static str,
+}
+
+fn review_markdown_body_copy(locale: Option<&str>) -> ReviewMarkdownBodyCopy {
+    if runtime_review_markdown_copy(locale).title == "Lime Human Review and Decision Record" {
+        return ReviewMarkdownBodyCopy {
+            execution_environment_reference: "Execution environment reference",
+            runtime_fact_source: "Runtime fact source",
+            product_surface: "Product surface",
+            blocking_failures: "Blocking / prompt failures",
+            recovered_outcomes: "Recovered outcomes",
+            current_value: "Current value",
+            allowed_values: "Allowed values",
+            risk_level: "Risk level",
+            risk_tags: "Risk tags",
+            reviewer: "Reviewer",
+            reviewed_at: "Reviewed at",
+            notes: "Notes",
+        };
+    }
+
+    ReviewMarkdownBodyCopy {
+        execution_environment_reference: "执行环境参照",
+        runtime_fact_source: "运行时事实源",
+        product_surface: "产品承接面",
+        blocking_failures: "阻塞 / 提示失败",
+        recovered_outcomes: "已恢复结果",
+        current_value: "当前值",
+        allowed_values: "可选值",
+        risk_level: "风险等级",
+        risk_tags: "风险标签",
+        reviewer: "审核人",
+        reviewed_at: "审核时间",
+        notes: "备注",
+    }
 }
 
 fn build_review_checklist(verification_context: &ReviewDecisionVerificationContext) -> Vec<String> {
@@ -591,9 +743,9 @@ fn build_review_checklist(verification_context: &ReviewDecisionVerificationConte
     checklist
 }
 
-fn format_markdown_agent_runtime_profile(profile: Option<&Value>) -> String {
+fn format_markdown_agent_runtime_profile(profile: Option<&Value>, not_exported: &str) -> String {
     let Some(profile) = profile else {
-        return "未导出".to_string();
+        return not_exported.to_string();
     };
     let schema_version = value_string(profile.pointer("/schemaVersion"));
     let runtime_id = value_string(profile.pointer("/runtimeId"));
@@ -615,7 +767,7 @@ fn format_markdown_agent_runtime_profile(profile: Option<&Value>) -> String {
     }
 
     if parts.is_empty() {
-        "未导出".to_string()
+        not_exported.to_string()
     } else {
         parts.join(" · ")
     }
@@ -1931,6 +2083,38 @@ mod tests {
         assert!(json.contains("\"verificationFailureOutcomes\": []"));
         assert!(json.contains("\"verificationRecoveredOutcomes\": []"));
         assert_eq!(result.permission_confirmation_status, "");
+    }
+
+    #[test]
+    fn review_decision_markdown_should_follow_requested_locale() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let detail = build_detail();
+        let thread_read = build_thread_read();
+
+        let result = export_runtime_review_decision_template_with_locale(
+            &detail,
+            &thread_read,
+            temp_dir.path(),
+            Some("en-US"),
+        )
+        .expect("export");
+
+        assert_eq!(result.artifacts[0].title, "Human Review Record");
+
+        let markdown_path = temp_dir
+            .path()
+            .join(".lime/harness/sessions/session-1/review/review-decision.md");
+        let markdown = fs::read_to_string(markdown_path).expect("markdown");
+
+        assert!(markdown.contains("# Lime Human Review and Decision Record"));
+        assert!(markdown.contains("## 1. Review Context"));
+        assert!(markdown.contains("## 4. Structured Verification Summary"));
+        assert!(markdown.contains("- Execution environment reference"));
+        assert!(markdown.contains("- Blocking / prompt failures:"));
+        assert!(markdown.contains("- Risk level:"));
+        assert!(!markdown.contains("## 1. 审核上下文"));
+        assert!(!markdown.contains("执行环境参照"));
+        assert!(!markdown.contains("风险等级："));
     }
 
     #[test]

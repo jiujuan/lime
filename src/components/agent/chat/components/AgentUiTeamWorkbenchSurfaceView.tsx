@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { AgentUiProjectionEvent } from "../projection/agentUiEventProjection";
 import {
   buildAgentUiTeamWorkbenchViewModel,
   type AgentUiTeamWorkbenchViewItem,
 } from "../projection/agentUiTeamWorkbenchViewModel";
+import type { AgentUiProjectionTranslation } from "../projection/agentUiProjectionSummary";
 import { formatNumber } from "@/i18n/format";
 import { cn } from "@/lib/utils";
 
@@ -56,9 +57,17 @@ export function AgentUiTeamWorkbenchSurfaceView({
 }: AgentUiTeamWorkbenchSurfaceViewProps) {
   const { i18n, t } = useTranslation("agent");
   const locale = i18n.language;
+  const translateProjection = useCallback<AgentUiProjectionTranslation>(
+    (key, options) => String(t(key as never, options as never)),
+    [t],
+  );
   const model = useMemo(
-    () => buildAgentUiTeamWorkbenchViewModel(events, { latestLimit }),
-    [events, latestLimit],
+    () =>
+      buildAgentUiTeamWorkbenchViewModel(events, {
+        latestLimit,
+        t: translateProjection,
+      }),
+    [events, latestLimit, translateProjection],
   );
 
   if (model.total === 0) {

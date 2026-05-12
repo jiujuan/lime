@@ -863,6 +863,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                                 capabilities={
                                   currentModelItem.metadata.capabilities
                                 }
+                                model={currentModelItem.metadata}
                                 compact
                               />
                               {currentModelItem.compatibilityIssue ? (

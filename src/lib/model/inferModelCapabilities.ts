@@ -19,11 +19,18 @@ const IMAGE_GENERATION_PATTERN =
 const IMAGE_EDIT_PATTERN =
   /\b(edit|inpaint|outpaint|img2img|image-edit|image_edit|image edits)\b/i;
 const OPENAI_VISION_PATTERN =
-  /\b(gpt-5(?:[._/-]|\b)|gpt-4o(?:[._/-]|\b)|gpt-4\.1(?:[._/-]|\b)|gpt-4\.5(?:[._/-]|\b)|gpt-5.*codex)\b/i;
+  /\b(chatgpt-4o|gpt-5(?:[._/-]|\b)|gpt-4o(?:[._/-]|\b)|gpt-4\.1(?:[._/-]|\b)|gpt-4\.5(?:[._/-]|\b)|gpt-4-turbo(?:[._/-]|\b)|gpt-5.*codex|o1(?!-(?:mini|preview))(?:[._/-]|\b)|o3(?!-mini)(?:[._/-]|\b)|o4-mini(?:[._/-]|\b))\b/i;
 const GEMINI_VISION_PATTERN = /\bgemini(?:[._/-]|\b)/i;
 const CLAUDE_VISION_PATTERN = /\bclaude(?:[._/-]|\b)/i;
-const QWEN_VISION_PATTERN = /\bqwen(?:[._/-]|\b).*(vl|vision)|\bqvq\b/i;
+const QWEN_VISION_PATTERN =
+  /\bqwen(?:[._/-]|\b).*(vl|vision)|\bqvq\b|\bqwen3[._-][56](?:[._/-]|\b)/i;
 const GLM_VISION_PATTERN = /\bglm-[\w.-]*v[\w.-]*\b/i;
+const XAI_VISION_PATTERN =
+  /\bgrok-(?:vision|2-vision|4(?:-1|-fast|\.20|\.3))(?:[._/-]|\b)/i;
+const MISTRAL_VISION_PATTERN =
+  /\b(pixtral|mistral-(?:small-latest|large-2512|medium-3\.1))(?:[._/-]|\b)/i;
+const GEMMA_VISION_PATTERN = /\bgemma-3(?!n)(?:[._/-]|\b)/i;
+const LLAMA_VISION_PATTERN = /\bllama-4-(?:maverick|scout)(?:[._/-]|\b)/i;
 const EMBEDDING_PATTERN =
   /\b(embedding|embed|text-embedding|voyage|jina-embeddings)\b/i;
 const RERANK_PATTERN = /\b(rerank|re-rank)\b/i;
@@ -163,7 +170,7 @@ export function inferVisionCapability(params: {
   }
 
   if (provider === "gemini" || provider === "google") {
-    return GEMINI_VISION_PATTERN.test(text);
+    return GEMINI_VISION_PATTERN.test(text) || GEMMA_VISION_PATTERN.test(text);
   }
 
   if (provider === "anthropic" || provider === "claude") {
@@ -177,12 +184,29 @@ export function inferVisionCapability(params: {
   if (provider === "zhipuai") {
     return GLM_VISION_PATTERN.test(text);
   }
+  if (provider === "xai" || provider === "x-ai") {
+    return XAI_VISION_PATTERN.test(text);
+  }
+  if (provider === "mistral" || provider === "mistralai") {
+    return MISTRAL_VISION_PATTERN.test(text);
+  }
+  if (
+    provider === "llama" ||
+    provider === "meta" ||
+    provider === "meta-llama"
+  ) {
+    return LLAMA_VISION_PATTERN.test(text);
+  }
 
   return (
     GEMINI_VISION_PATTERN.test(text) ||
     CLAUDE_VISION_PATTERN.test(text) ||
     QWEN_VISION_PATTERN.test(text) ||
-    GLM_VISION_PATTERN.test(text)
+    GLM_VISION_PATTERN.test(text) ||
+    XAI_VISION_PATTERN.test(text) ||
+    MISTRAL_VISION_PATTERN.test(text) ||
+    GEMMA_VISION_PATTERN.test(text) ||
+    LLAMA_VISION_PATTERN.test(text)
   );
 }
 
@@ -203,16 +227,39 @@ function inferBaseSignals(params: InferModelTaxonomyParams) {
   );
   const hasExplicitImageOutput = explicitOutputModalities.includes("image");
   const hasExplicitImageInput = explicitInputModalities.includes("image");
+  const hasExplicitTextOutput =
+    explicitOutputModalities.length === 0 ||
+    explicitOutputModalities.includes("text");
+  const hasExplicitVisionInput = hasExplicitImageInput && hasExplicitTextOutput;
   const inferredReasoning =
     capabilities.reasoning ?? inferReasoningCapability(params.modelId);
-  const inferredVision =
-    capabilities.vision ??
+  const inferredVisionByName =
     inferVisionCapability({
       modelId: params.modelId,
       providerId: params.providerId,
       family: params.family,
       description: params.description,
-    });
+    }) ||
+    (params.providerModelId
+      ? inferVisionCapability({
+          modelId: params.providerModelId,
+          providerId: params.providerId,
+          family: params.family,
+          description: params.description,
+        })
+      : false) ||
+    (params.canonicalModelId
+      ? inferVisionCapability({
+          modelId: params.canonicalModelId,
+          providerId: params.providerId,
+          family: params.family,
+          description: params.description,
+        })
+      : false);
+  const inferredVision =
+    capabilities.vision === true ||
+    hasExplicitVisionInput ||
+    inferredVisionByName;
 
   const isEmbedding = EMBEDDING_PATTERN.test(text);
   const isRerank = RERANK_PATTERN.test(text);
@@ -232,6 +279,7 @@ function inferBaseSignals(params: InferModelTaxonomyParams) {
     explicitOutputModalities,
     inferredReasoning,
     inferredVision,
+    hasExplicitVisionInput,
     isEmbedding,
     isRerank,
     isModeration,
@@ -248,9 +296,6 @@ export function inferModelTaskFamilies(
   const explicitTaskFamilies = normalizeTaskFamilies(
     params.explicitTaskFamilies,
   );
-  if (explicitTaskFamilies.length > 0) {
-    return explicitTaskFamilies;
-  }
 
   const {
     capabilities,
@@ -263,9 +308,10 @@ export function inferModelTaskFamilies(
     isTextToSpeech,
     isImageGeneration,
     isImageEdit,
+    hasExplicitVisionInput,
   } = inferBaseSignals(params);
 
-  const families: ModelTaskFamily[] = [];
+  const families: ModelTaskFamily[] = [...explicitTaskFamilies];
 
   if (isEmbedding) {
     families.push("embedding");
@@ -288,7 +334,7 @@ export function inferModelTaskFamilies(
   if (isImageEdit) {
     families.push("image_edit");
   }
-  if (inferredVision && !isImageGeneration) {
+  if (inferredVision && (!isImageGeneration || hasExplicitVisionInput)) {
     families.push("vision_understanding");
   }
   if (inferredReasoning) {

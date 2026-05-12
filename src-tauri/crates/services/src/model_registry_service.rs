@@ -106,9 +106,277 @@ fn parse_modalities(values: &[String]) -> Vec<ModelModality> {
     modalities
 }
 
+fn extract_string_list(value: Option<&serde_json::Value>) -> Vec<String> {
+    let Some(value) = value else {
+        return Vec::new();
+    };
+
+    match value {
+        serde_json::Value::String(item) => vec![item.clone()],
+        serde_json::Value::Array(items) => items
+            .iter()
+            .flat_map(|item| extract_string_list(Some(item)))
+            .collect(),
+        serde_json::Value::Object(map) => map
+            .iter()
+            .filter_map(|(key, value)| match value {
+                serde_json::Value::Bool(true) => Some(key.clone()),
+                serde_json::Value::String(item) => Some(item.clone()),
+                _ => None,
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn parse_modalities_value(value: Option<&serde_json::Value>) -> Vec<ModelModality> {
+    parse_modalities(&extract_string_list(value))
+}
+
+fn merge_modalities(target: &mut Vec<ModelModality>, modalities: Vec<ModelModality>) {
+    for modality in modalities {
+        push_unique(target, modality);
+    }
+}
+
+fn parse_task_family(value: &str) -> Option<ModelTaskFamily> {
+    match normalize_identifier(value)
+        .replace(['-', ' '], "_")
+        .as_str()
+    {
+        "llm" | "chat" | "dialog" | "conversation" | "text_generation" => {
+            Some(ModelTaskFamily::Chat)
+        }
+        "reasoning" | "thinking" => Some(ModelTaskFamily::Reasoning),
+        "vision"
+        | "vlm"
+        | "multimodal"
+        | "omni"
+        | "vision_understanding"
+        | "vision_language"
+        | "image_input"
+        | "input_image"
+        | "image_understanding" => Some(ModelTaskFamily::VisionUnderstanding),
+        "image" | "image_generation" | "text_to_image" | "drawing" | "image_output" => {
+            Some(ModelTaskFamily::ImageGeneration)
+        }
+        "image_edit" | "edit" | "img2img" | "inpaint" | "outpaint" => {
+            Some(ModelTaskFamily::ImageEdit)
+        }
+        "speech_to_text" | "stt" | "asr" | "transcribe" | "transcription" => {
+            Some(ModelTaskFamily::SpeechToText)
+        }
+        "text_to_speech" | "tts" | "speech_synthesis" => Some(ModelTaskFamily::TextToSpeech),
+        "embedding" | "embed" => Some(ModelTaskFamily::Embedding),
+        "rerank" | "re_rank" | "retrieval" => Some(ModelTaskFamily::Rerank),
+        "moderation" | "safety" => Some(ModelTaskFamily::Moderation),
+        _ => None,
+    }
+}
+
+fn parse_task_families_value(value: Option<&serde_json::Value>) -> Vec<ModelTaskFamily> {
+    let mut families = Vec::new();
+    for item in extract_string_list(value) {
+        if let Some(family) = parse_task_family(&item) {
+            push_unique(&mut families, family);
+        }
+    }
+    families
+}
+
+fn parse_runtime_feature(value: &str) -> Option<ModelRuntimeFeature> {
+    match normalize_identifier(value)
+        .replace(['-', ' '], "_")
+        .as_str()
+    {
+        "streaming" | "stream" => Some(ModelRuntimeFeature::Streaming),
+        "tool_calling" | "tools" | "function_calling" | "functions" => {
+            Some(ModelRuntimeFeature::ToolCalling)
+        }
+        "json_schema" | "json_mode" | "structured_output" => Some(ModelRuntimeFeature::JsonSchema),
+        "reasoning" | "thinking" => Some(ModelRuntimeFeature::Reasoning),
+        "prompt_cache" | "prompt_caching" => Some(ModelRuntimeFeature::PromptCache),
+        "responses_api" | "responses" => Some(ModelRuntimeFeature::ResponsesApi),
+        "chat_completions_api" | "chat_completions" => {
+            Some(ModelRuntimeFeature::ChatCompletionsApi)
+        }
+        "images_api" | "image_generation" | "image_edit" => Some(ModelRuntimeFeature::ImagesApi),
+        _ => None,
+    }
+}
+
+fn parse_runtime_features_value(value: Option<&serde_json::Value>) -> Vec<ModelRuntimeFeature> {
+    let mut features = Vec::new();
+    for item in extract_string_list(value) {
+        if let Some(feature) = parse_runtime_feature(&item) {
+            push_unique(&mut features, feature);
+        }
+    }
+    features
+}
+
+fn collect_capability_signals(value: Option<&serde_json::Value>, target: &mut Vec<String>) {
+    let Some(value) = value else {
+        return;
+    };
+
+    match value {
+        serde_json::Value::String(item) => target.push(item.clone()),
+        serde_json::Value::Array(items) => {
+            for item in items {
+                collect_capability_signals(Some(item), target);
+            }
+        }
+        serde_json::Value::Object(map) => {
+            for (key, value) in map {
+                match value {
+                    serde_json::Value::Bool(true) => target.push(key.clone()),
+                    serde_json::Value::String(item) => target.push(item.clone()),
+                    serde_json::Value::Array(_) | serde_json::Value::Object(_) => {
+                        collect_capability_signals(Some(value), target);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn merge_api_capability_signals(
+    capabilities: Option<&serde_json::Value>,
+    task_families: &mut Vec<ModelTaskFamily>,
+    input_modalities: &mut Vec<ModelModality>,
+    output_modalities: &mut Vec<ModelModality>,
+    runtime_features: &mut Vec<ModelRuntimeFeature>,
+) {
+    let mut signals = Vec::new();
+    collect_capability_signals(capabilities, &mut signals);
+
+    for signal in signals {
+        let normalized = normalize_identifier(&signal).replace(['-', ' '], "_");
+        match normalized.as_str() {
+            "vision"
+            | "vision_understanding"
+            | "vision_language"
+            | "vlm"
+            | "multimodal"
+            | "omni"
+            | "image_input"
+            | "input_image"
+            | "images_input"
+            | "image_understanding"
+            | "supports_vision"
+            | "supports_images" => {
+                push_unique(task_families, ModelTaskFamily::VisionUnderstanding);
+                push_unique(input_modalities, ModelModality::Image);
+            }
+            "image_generation" | "text_to_image" | "image_output" | "images_api" => {
+                push_unique(task_families, ModelTaskFamily::ImageGeneration);
+                push_unique(output_modalities, ModelModality::Image);
+                push_unique(runtime_features, ModelRuntimeFeature::ImagesApi);
+            }
+            "image_edit" | "img2img" | "inpaint" | "outpaint" => {
+                push_unique(task_families, ModelTaskFamily::ImageEdit);
+                push_unique(input_modalities, ModelModality::Image);
+                push_unique(output_modalities, ModelModality::Image);
+                push_unique(runtime_features, ModelRuntimeFeature::ImagesApi);
+            }
+            "reasoning" | "thinking" => {
+                push_unique(task_families, ModelTaskFamily::Reasoning);
+                push_unique(runtime_features, ModelRuntimeFeature::Reasoning);
+            }
+            "tools" | "tool_calling" | "function_calling" | "functions" => {
+                push_unique(runtime_features, ModelRuntimeFeature::ToolCalling);
+            }
+            "json_mode" | "json_schema" | "structured_output" => {
+                push_unique(runtime_features, ModelRuntimeFeature::JsonSchema);
+            }
+            "streaming" | "stream" => {
+                push_unique(runtime_features, ModelRuntimeFeature::Streaming);
+            }
+            "embedding" | "embed" => {
+                push_unique(task_families, ModelTaskFamily::Embedding);
+                push_unique(output_modalities, ModelModality::Embedding);
+            }
+            "rerank" | "re_rank" => {
+                push_unique(task_families, ModelTaskFamily::Rerank);
+            }
+            "moderation" | "safety" => {
+                push_unique(task_families, ModelTaskFamily::Moderation);
+            }
+            _ => {}
+        }
+    }
+}
+
 fn infer_reasoning_capability(model_id: &str) -> bool {
     let normalized = normalize_identifier(model_id);
     text_contains_any(&normalized, &["thinking", "reasoning"])
+}
+
+fn model_id_has_openai_vision_capability(model_id: &str, text: &str) -> bool {
+    let model = normalize_identifier(model_id);
+    let model_tail = model.rsplit('/').next().unwrap_or(model.as_str());
+    text_contains_any(
+        text,
+        &[
+            "chatgpt-4o",
+            "gpt-5",
+            "gpt-4o",
+            "gpt-4.1",
+            "gpt-4.5",
+            "gpt-4-turbo",
+            "codex",
+        ],
+    ) || model_tail == "o1"
+        || model_tail == "o1-pro"
+        || model_tail.starts_with("o1-pro-")
+        || model_tail.starts_with("o1-202")
+        || model_tail == "o3"
+        || (model_tail.starts_with("o3-") && !model_tail.starts_with("o3-mini"))
+        || model_tail.starts_with("o4-mini")
+}
+
+fn model_id_has_qwen_vision_capability(model_id: &str, text: &str) -> bool {
+    let model = normalize_identifier(model_id);
+    let model_tail = model.rsplit('/').next().unwrap_or(model.as_str());
+    (text.contains("qwen") && (text.contains("vl") || text.contains("vision")))
+        || text.contains("qvq")
+        || model_tail.starts_with("qwen3.5")
+        || model_tail.starts_with("qwen3-5")
+        || model_tail.starts_with("qwen3.6")
+        || model_tail.starts_with("qwen3-6")
+}
+
+fn model_id_has_xai_vision_capability(model_id: &str) -> bool {
+    let model = normalize_identifier(model_id);
+    model.contains("grok-vision")
+        || model.contains("grok-2-vision")
+        || model.starts_with("grok-4-1")
+        || model.starts_with("grok-4-fast")
+        || model.starts_with("grok-4.20")
+        || model.starts_with("grok-4.3")
+}
+
+fn model_id_has_mistral_vision_capability(model_id: &str, text: &str) -> bool {
+    let model = normalize_identifier(model_id);
+    let model_tail = model.rsplit('/').next().unwrap_or(model.as_str());
+    text.contains("pixtral")
+        || model_tail.starts_with("mistral-small-latest")
+        || model_tail.starts_with("mistral-large-2512")
+        || model_tail.starts_with("mistral-medium-3.1")
+}
+
+fn model_id_has_gemma_vision_capability(model_id: &str) -> bool {
+    let model = normalize_identifier(model_id);
+    let model_tail = model.rsplit('/').next().unwrap_or(model.as_str());
+    model_tail.starts_with("gemma-3") && !model_tail.starts_with("gemma-3n")
+}
+
+fn model_id_has_llama_vision_capability(model_id: &str) -> bool {
+    let model = normalize_identifier(model_id);
+    model.contains("llama-4-maverick") || model.contains("llama-4-scout")
 }
 
 fn infer_vision_capability(
@@ -173,30 +441,41 @@ fn infer_vision_capability(
     }
 
     let provider = provider_id.map(normalize_identifier).unwrap_or_default();
-    let openai_like = text_contains_any(&text, &["gpt-5", "gpt-4o", "gpt-4.1", "gpt-4.5", "codex"]);
+    let openai_like = model_id_has_openai_vision_capability(model_id, &text);
     if provider == "openai" || provider == "codex" {
         return openai_like;
     }
     if provider == "gemini" || provider == "google" {
-        return text.contains("gemini");
+        return text.contains("gemini") || model_id_has_gemma_vision_capability(model_id);
     }
     if provider == "anthropic" || provider == "claude" {
         return text.contains("claude");
     }
     if provider == "qwen" || provider == "alibaba" {
-        return (text.contains("qwen") && (text.contains("vl") || text.contains("vision")))
-            || text.contains("qvq");
+        return model_id_has_qwen_vision_capability(model_id, &text);
     }
     if provider == "zhipuai" {
         return text.contains("glm-") && text.contains('v');
+    }
+    if provider == "xai" || provider == "x-ai" {
+        return model_id_has_xai_vision_capability(model_id);
+    }
+    if provider == "mistral" || provider == "mistralai" {
+        return model_id_has_mistral_vision_capability(model_id, &text);
+    }
+    if provider == "llama" || provider == "meta" || provider == "meta-llama" {
+        return model_id_has_llama_vision_capability(model_id);
     }
 
     openai_like
         || text.contains("gemini")
         || text.contains("claude")
-        || text.contains("qvq")
-        || (text.contains("qwen") && (text.contains("vl") || text.contains("vision")))
+        || model_id_has_qwen_vision_capability(model_id, &text)
         || (text.contains("glm-") && text.contains('v'))
+        || model_id_has_xai_vision_capability(model_id)
+        || model_id_has_mistral_vision_capability(model_id, &text)
+        || model_id_has_gemma_vision_capability(model_id)
+        || model_id_has_llama_vision_capability(model_id)
 }
 
 fn infer_image_generation_capability(
@@ -282,10 +561,6 @@ fn infer_model_task_families(
     provider_model_id: Option<&str>,
     canonical_model_id: Option<&str>,
 ) -> Vec<ModelTaskFamily> {
-    if !explicit_task_families.is_empty() {
-        return explicit_task_families.to_vec();
-    }
-
     let text = build_search_text(&[
         Some(model_id.to_string()),
         family.map(ToString::to_string),
@@ -296,9 +571,19 @@ fn infer_model_task_families(
     let inferred_reasoning = capabilities
         .map(|caps| caps.reasoning)
         .unwrap_or_else(|| infer_reasoning_capability(model_id));
-    let inferred_vision = capabilities
-        .map(|caps| caps.vision)
-        .unwrap_or_else(|| infer_vision_capability(model_id, provider_id, family, description));
+    let has_explicit_vision_input = input_modalities.contains(&ModelModality::Image)
+        && (output_modalities.is_empty() || output_modalities.contains(&ModelModality::Text));
+    let inferred_vision_by_name =
+        infer_vision_capability(model_id, provider_id, family, description)
+            || provider_model_id
+                .map(|id| infer_vision_capability(id, provider_id, family, description))
+                .unwrap_or(false)
+            || canonical_model_id
+                .map(|id| infer_vision_capability(id, provider_id, family, description))
+                .unwrap_or(false);
+    let inferred_vision = capabilities.map(|caps| caps.vision).unwrap_or(false)
+        || has_explicit_vision_input
+        || inferred_vision_by_name;
     let is_embedding = text_contains_any(&text, &["embedding", "embed", "text-embedding"]);
     let is_rerank = text_contains_any(&text, &["rerank", "re-rank"]);
     let is_moderation = text_contains_any(&text, &["moderation"]);
@@ -341,7 +626,7 @@ fn infer_model_task_families(
         output_modalities,
     );
 
-    let mut families = Vec::new();
+    let mut families = explicit_task_families.to_vec();
     if is_embedding {
         push_unique(&mut families, ModelTaskFamily::Embedding);
     }
@@ -363,7 +648,7 @@ fn infer_model_task_families(
     if is_image_edit {
         push_unique(&mut families, ModelTaskFamily::ImageEdit);
     }
-    if inferred_vision && !is_image_generation {
+    if inferred_vision && (!is_image_generation || has_explicit_vision_input) {
         push_unique(&mut families, ModelTaskFamily::VisionUnderstanding);
     }
     if inferred_reasoning {
@@ -2157,6 +2442,13 @@ impl ModelRegistryService {
                 provider_name: None,
                 family: None,
                 context_length: None,
+                task_families: None,
+                input_modalities: None,
+                output_modalities: None,
+                modalities: None,
+                runtime_features: None,
+                vision_supported: None,
+                capabilities: None,
             })
             .collect();
 
@@ -2240,6 +2532,13 @@ impl ModelRegistryService {
                 provider_name: None,
                 family: None,
                 context_length: model.input_token_limit,
+                task_families: None,
+                input_modalities: None,
+                output_modalities: None,
+                modalities: None,
+                runtime_features: None,
+                vision_supported: None,
+                capabilities: None,
             })
             .collect();
 
@@ -2266,6 +2565,13 @@ impl ModelRegistryService {
                 provider_name: None,
                 family: model.details.and_then(|details| details.family),
                 context_length: None,
+                task_families: None,
+                input_modalities: None,
+                output_modalities: None,
+                modalities: None,
+                runtime_features: None,
+                vision_supported: None,
+                capabilities: None,
             })
             .collect())
     }
@@ -2286,16 +2592,42 @@ impl ModelRegistryService {
                 .to_string()
         });
         let canonical_model = maybe_get_canonical_model(provider_id, &model.id);
+        let mut api_task_families = parse_task_families_value(model.task_families.as_ref());
+        let mut api_input_modalities = parse_modalities_value(model.input_modalities.as_ref());
+        let mut api_output_modalities = parse_modalities_value(model.output_modalities.as_ref());
+        if let Some(modalities) = model.modalities.as_ref() {
+            merge_modalities(
+                &mut api_input_modalities,
+                parse_modalities_value(modalities.input.as_ref()),
+            );
+            merge_modalities(
+                &mut api_output_modalities,
+                parse_modalities_value(modalities.output.as_ref()),
+            );
+        }
+        let mut api_runtime_features =
+            parse_runtime_features_value(model.runtime_features.as_ref());
+        if model.vision_supported.unwrap_or(false) {
+            push_unique(&mut api_task_families, ModelTaskFamily::VisionUnderstanding);
+            push_unique(&mut api_input_modalities, ModelModality::Image);
+        }
+        merge_api_capability_signals(
+            model.capabilities.as_ref(),
+            &mut api_task_families,
+            &mut api_input_modalities,
+            &mut api_output_modalities,
+            &mut api_runtime_features,
+        );
         let initial_taxonomy = infer_model_taxonomy(ModelTaxonomyInput {
             model_id: &model.id,
             provider_id: Some(provider_id),
             family: model.family.as_deref(),
             description: None,
             capabilities: None,
-            explicit_task_families: &[],
-            explicit_input_modalities: &[],
-            explicit_output_modalities: &[],
-            explicit_runtime_features: &[],
+            explicit_task_families: &api_task_families,
+            explicit_input_modalities: &api_input_modalities,
+            explicit_output_modalities: &api_output_modalities,
+            explicit_runtime_features: &api_runtime_features,
             explicit_deployment_source: None,
             explicit_management_plane: None,
             provider_model_id: Some(model.id.as_str()),
@@ -2317,7 +2649,7 @@ impl ModelRegistryService {
             explicit_task_families: &initial_taxonomy.task_families,
             explicit_input_modalities: &initial_taxonomy.input_modalities,
             explicit_output_modalities: &initial_taxonomy.output_modalities,
-            explicit_runtime_features: &[],
+            explicit_runtime_features: &initial_taxonomy.runtime_features,
             explicit_deployment_source: None,
             explicit_management_plane: None,
             provider_model_id: Some(model.id.as_str()),
@@ -2375,6 +2707,13 @@ impl ModelRegistryService {
                 provider_name: Some(provider_id.to_string()),
                 family: None,
                 context_length: None,
+                task_families: None,
+                input_modalities: None,
+                output_modalities: None,
+                modalities: None,
+                runtime_features: None,
+                vision_supported: None,
+                capabilities: None,
             },
             provider_id,
             now,
@@ -2497,6 +2836,14 @@ struct ApiModelsResponse {
     data: Vec<ApiModelResponse>,
 }
 
+#[derive(Debug, Deserialize)]
+struct ApiModelModalitiesResponse {
+    #[serde(default, alias = "inputModalities", alias = "input_modalities")]
+    input: Option<serde_json::Value>,
+    #[serde(default, alias = "outputModalities", alias = "output_modalities")]
+    output: Option<serde_json::Value>,
+}
+
 /// 单个模型的 API 响应
 #[derive(Debug, Deserialize)]
 struct ApiModelResponse {
@@ -2509,6 +2856,35 @@ struct ApiModelResponse {
     family: Option<String>,
     #[serde(default)]
     context_length: Option<u32>,
+    #[serde(default, alias = "taskFamilies")]
+    task_families: Option<serde_json::Value>,
+    #[serde(
+        default,
+        alias = "inputModalities",
+        alias = "supportedInputModalities",
+        alias = "supported_input_modalities"
+    )]
+    input_modalities: Option<serde_json::Value>,
+    #[serde(
+        default,
+        alias = "outputModalities",
+        alias = "supportedOutputModalities",
+        alias = "supported_output_modalities"
+    )]
+    output_modalities: Option<serde_json::Value>,
+    #[serde(default)]
+    modalities: Option<ApiModelModalitiesResponse>,
+    #[serde(default, alias = "runtimeFeatures")]
+    runtime_features: Option<serde_json::Value>,
+    #[serde(
+        default,
+        alias = "visionSupported",
+        alias = "supportsVision",
+        alias = "supports_vision"
+    )]
+    vision_supported: Option<bool>,
+    #[serde(default)]
+    capabilities: Option<serde_json::Value>,
 }
 
 #[derive(Debug)]
@@ -2627,12 +3003,16 @@ pub struct FetchModelsResult {
 #[cfg(test)]
 mod tests {
     use super::{
+        infer_model_capabilities, infer_model_taxonomy, infer_vision_capability,
         ModelFetchErrorKind, ModelFetchProtocol, ModelFetchSource, ModelRegistryService,
-        LIME_TENANT_HEADER, PROVIDER_MODELS_CACHE_TTL_SECONDS,
+        ModelTaxonomyInput, LIME_TENANT_HEADER, PROVIDER_MODELS_CACHE_TTL_SECONDS,
     };
     use lime_core::database::dao::api_key_provider::ApiProviderType;
     use lime_core::database::DbConnection;
-    use lime_core::models::model_registry::{EnhancedModelMetadata, ModelSource};
+    use lime_core::models::model_registry::{
+        EnhancedModelMetadata, ModelCapabilities, ModelModality, ModelRuntimeFeature, ModelSource,
+        ModelTaskFamily,
+    };
     use rusqlite::{params, Connection};
     use std::sync::{Arc, Mutex};
 
@@ -2655,6 +3035,307 @@ mod tests {
             "OpenAI".to_string(),
         )
         .with_source(ModelSource::Api)
+    }
+
+    #[test]
+    fn test_infer_model_taxonomy_uses_image_input_as_vision_signal() {
+        let input_modalities = vec![ModelModality::Text, ModelModality::Image];
+        let output_modalities = vec![ModelModality::Text];
+        let taxonomy = infer_model_taxonomy(ModelTaxonomyInput {
+            model_id: "provider-vlm-chat",
+            provider_id: Some("custom-provider"),
+            family: None,
+            description: None,
+            capabilities: None,
+            explicit_task_families: &[],
+            explicit_input_modalities: &input_modalities,
+            explicit_output_modalities: &output_modalities,
+            explicit_runtime_features: &[],
+            explicit_deployment_source: None,
+            explicit_management_plane: None,
+            provider_model_id: Some("provider-vlm-chat"),
+            canonical_model_id: None,
+            explicit_alias_source: None,
+            canonical_model: None,
+        });
+        let capabilities = infer_model_capabilities(
+            "provider-vlm-chat",
+            Some("custom-provider"),
+            &taxonomy.task_families,
+        );
+
+        assert!(taxonomy
+            .task_families
+            .contains(&ModelTaskFamily::VisionUnderstanding));
+        assert!(capabilities.vision);
+    }
+
+    #[test]
+    fn test_infer_model_taxonomy_merges_incomplete_task_family_vision_signals() {
+        let explicit_task_families = vec![ModelTaskFamily::Chat];
+        let input_modalities = vec![ModelModality::Text, ModelModality::Image];
+        let output_modalities = vec![ModelModality::Text];
+        let stale_capabilities = ModelCapabilities {
+            vision: false,
+            tools: true,
+            streaming: true,
+            json_mode: true,
+            function_calling: true,
+            reasoning: false,
+        };
+        let modality_taxonomy = infer_model_taxonomy(ModelTaxonomyInput {
+            model_id: "provider-vlm-chat",
+            provider_id: Some("custom-provider"),
+            family: None,
+            description: None,
+            capabilities: Some(&stale_capabilities),
+            explicit_task_families: &explicit_task_families,
+            explicit_input_modalities: &input_modalities,
+            explicit_output_modalities: &output_modalities,
+            explicit_runtime_features: &[],
+            explicit_deployment_source: None,
+            explicit_management_plane: None,
+            provider_model_id: Some("provider-vlm-chat"),
+            canonical_model_id: None,
+            explicit_alias_source: None,
+            canonical_model: None,
+        });
+        let name_taxonomy = infer_model_taxonomy(ModelTaxonomyInput {
+            model_id: "o3",
+            provider_id: Some("openai"),
+            family: None,
+            description: None,
+            capabilities: Some(&stale_capabilities),
+            explicit_task_families: &explicit_task_families,
+            explicit_input_modalities: &[],
+            explicit_output_modalities: &[],
+            explicit_runtime_features: &[],
+            explicit_deployment_source: None,
+            explicit_management_plane: None,
+            provider_model_id: Some("o3"),
+            canonical_model_id: None,
+            explicit_alias_source: None,
+            canonical_model: None,
+        });
+
+        assert!(modality_taxonomy
+            .task_families
+            .contains(&ModelTaskFamily::VisionUnderstanding));
+        assert!(name_taxonomy
+            .task_families
+            .contains(&ModelTaskFamily::VisionUnderstanding));
+    }
+
+    #[test]
+    fn test_convert_api_model_preserves_live_modality_fields() {
+        let (service, _db) = setup_cache_service();
+        let response = ModelRegistryService::parse_openai_models_response(
+            r#"{
+              "data": [
+                {
+                  "id": "provider-vlm-chat",
+                  "display_name": "Provider VLM Chat",
+                  "task_families": ["chat"],
+                  "input_modalities": ["text", "image"],
+                  "output_modalities": ["text"],
+                  "capabilities": { "vision": false }
+                }
+              ]
+            }"#,
+        )
+        .expect("parse response");
+        let model =
+            service.convert_api_model(response.into_iter().next().expect("model"), "gateway", 0);
+
+        assert!(model.input_modalities.contains(&ModelModality::Image));
+        assert!(model
+            .task_families
+            .contains(&ModelTaskFamily::VisionUnderstanding));
+        assert!(model.capabilities.vision);
+    }
+
+    #[test]
+    fn test_convert_api_model_uses_capability_object_as_modality_signal() {
+        let (service, _db) = setup_cache_service();
+        let response = ModelRegistryService::parse_openai_models_response(
+            r#"{
+              "data": [
+                {
+                  "id": "provider-live-vlm",
+                  "capabilities": {
+                    "image_input": true,
+                    "tool_calling": true,
+                    "json_schema": true
+                  }
+                }
+              ]
+            }"#,
+        )
+        .expect("parse response");
+        let model =
+            service.convert_api_model(response.into_iter().next().expect("model"), "gateway", 0);
+
+        assert!(model.input_modalities.contains(&ModelModality::Image));
+        assert!(model
+            .task_families
+            .contains(&ModelTaskFamily::VisionUnderstanding));
+        assert!(model.capabilities.vision);
+        assert!(model
+            .runtime_features
+            .contains(&ModelRuntimeFeature::ToolCalling));
+        assert!(model
+            .runtime_features
+            .contains(&ModelRuntimeFeature::JsonSchema));
+    }
+
+    #[test]
+    fn test_convert_api_model_uses_nested_modalities_as_vision_signal() {
+        let (service, _db) = setup_cache_service();
+        let response = ModelRegistryService::parse_openai_models_response(
+            r#"{
+              "data": [
+                {
+                  "id": "grok-4.3",
+                  "modalities": {
+                    "input": ["text", "image"],
+                    "output": ["text"]
+                  }
+                }
+              ]
+            }"#,
+        )
+        .expect("parse response");
+        let model =
+            service.convert_api_model(response.into_iter().next().expect("model"), "xai", 0);
+
+        assert!(model.input_modalities.contains(&ModelModality::Image));
+        assert!(model
+            .task_families
+            .contains(&ModelTaskFamily::VisionUnderstanding));
+        assert!(model.capabilities.vision);
+    }
+
+    #[test]
+    fn test_convert_api_model_uses_warp_style_vision_supported_flag() {
+        let (service, _db) = setup_cache_service();
+        let response = ModelRegistryService::parse_openai_models_response(
+            r#"{
+              "data": [
+                {
+                  "id": "provider-auto",
+                  "vision_supported": true
+                }
+              ]
+            }"#,
+        )
+        .expect("parse response");
+        let model =
+            service.convert_api_model(response.into_iter().next().expect("model"), "gateway", 0);
+
+        assert!(model.input_modalities.contains(&ModelModality::Image));
+        assert!(model
+            .task_families
+            .contains(&ModelTaskFamily::VisionUnderstanding));
+        assert!(model.capabilities.vision);
+    }
+
+    #[test]
+    fn test_infer_vision_capability_recognizes_modern_vision_models() {
+        for (provider, model) in [
+            ("openai", "o3"),
+            ("openai", "o4-mini"),
+            ("xai", "grok-4.3"),
+            ("mistral", "mistral-small-latest"),
+            ("alibaba", "qwen3.5-27b"),
+            ("google", "gemma-3-27b-it"),
+        ] {
+            assert!(
+                infer_vision_capability(model, Some(provider), None, None),
+                "{provider}:{model} should support image input"
+            );
+        }
+    }
+
+    #[test]
+    fn test_infer_vision_capability_keeps_non_vision_siblings_false() {
+        for (provider, model) in [
+            ("openai", "o1-mini"),
+            ("openai", "o1-preview"),
+            ("openai", "o3-mini"),
+            ("xai", "grok-3-mini"),
+            ("google", "gemma-3n-e4b-it"),
+        ] {
+            assert!(
+                !infer_vision_capability(model, Some(provider), None, None),
+                "{provider}:{model} should not be inferred as image input"
+            );
+        }
+    }
+
+    #[test]
+    fn test_infer_model_taxonomy_uses_provider_and_canonical_ids_for_vision() {
+        let provider_model_taxonomy = infer_model_taxonomy(ModelTaxonomyInput {
+            model_id: "relay-fast-default",
+            provider_id: Some("openai"),
+            family: None,
+            description: None,
+            capabilities: None,
+            explicit_task_families: &[],
+            explicit_input_modalities: &[],
+            explicit_output_modalities: &[],
+            explicit_runtime_features: &[],
+            explicit_deployment_source: None,
+            explicit_management_plane: None,
+            provider_model_id: Some("o3"),
+            canonical_model_id: None,
+            explicit_alias_source: None,
+            canonical_model: None,
+        });
+        let canonical_taxonomy = infer_model_taxonomy(ModelTaxonomyInput {
+            model_id: "relay-grok-latest",
+            provider_id: Some("xai"),
+            family: None,
+            description: None,
+            capabilities: None,
+            explicit_task_families: &[],
+            explicit_input_modalities: &[],
+            explicit_output_modalities: &[],
+            explicit_runtime_features: &[],
+            explicit_deployment_source: None,
+            explicit_management_plane: None,
+            provider_model_id: Some("relay-grok-latest"),
+            canonical_model_id: Some("grok-4.3"),
+            explicit_alias_source: None,
+            canonical_model: None,
+        });
+
+        assert!(provider_model_taxonomy
+            .task_families
+            .contains(&ModelTaskFamily::VisionUnderstanding));
+        assert!(canonical_taxonomy
+            .task_families
+            .contains(&ModelTaskFamily::VisionUnderstanding));
+
+        let openai_canonical_taxonomy = infer_model_taxonomy(ModelTaxonomyInput {
+            model_id: "relay-o3-latest",
+            provider_id: Some("openai"),
+            family: None,
+            description: None,
+            capabilities: None,
+            explicit_task_families: &[],
+            explicit_input_modalities: &[],
+            explicit_output_modalities: &[],
+            explicit_runtime_features: &[],
+            explicit_deployment_source: None,
+            explicit_management_plane: None,
+            provider_model_id: Some("relay-o3-latest"),
+            canonical_model_id: Some("openai/o3"),
+            explicit_alias_source: None,
+            canonical_model: None,
+        });
+        assert!(openai_canonical_taxonomy
+            .task_families
+            .contains(&ModelTaskFamily::VisionUnderstanding));
     }
 
     #[test]

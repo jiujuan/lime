@@ -239,6 +239,48 @@ describe("submitOpRuntimeCompaction", () => {
     expect(result.shouldSubmitModelPreference).toBe(true);
   });
 
+  it("图片生成命令应让后端图片路由解析模型，不应提交当前聊天模型偏好", () => {
+    const requestMetadata = {
+      harness: {
+        image_skill_launch: {
+          skill_name: "image_generate",
+          kind: "image_task",
+          image_task: {
+            prompt: "生成一张公众号封面",
+            provider_id: "openai",
+            model: "gpt-image-2",
+            runtime_contract: {
+              contract_key: "image_generation",
+              routing_slot: "image_generation_model",
+              required_capabilities: [
+                "text_generation",
+                "image_generation",
+                "vision_input",
+              ],
+            },
+          },
+        },
+      },
+    };
+
+    const result = buildSubmitOpRuntimeCompaction({
+      requestMetadata,
+      executionRuntime: null,
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: null,
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "react",
+      effectiveProviderType: "deepseek",
+      effectiveModel: "deepseek-v4-flash",
+      webSearch: false,
+      thinking: false,
+    });
+
+    expect(result.shouldSubmitProviderPreference).toBe(false);
+    expect(result.shouldSubmitModelPreference).toBe(false);
+    expect(result.metadata).toBe(requestMetadata);
+  });
+
   it("应将 legacy general workbench alias runtime 视为 general_workbench 做裁剪", () => {
     const result = buildSubmitOpRuntimeCompaction({
       requestMetadata: {

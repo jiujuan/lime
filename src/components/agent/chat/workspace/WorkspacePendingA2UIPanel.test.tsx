@@ -21,34 +21,21 @@ vi.mock("../components/A2UITaskCard", () => ({
   A2UITaskCard: (props?: unknown) => mockA2UITaskCard(props),
 }));
 
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: (key: string, options?: unknown) => {
-      const translations: Record<string, string> = {
-        "workspace.pendingA2UI.footer.progressStep":
-          "Finish this step first; the remaining fields will follow.",
-        "workspace.pendingA2UI.footer.stale":
-          "Your latest details were received. No need to submit again for now.",
-        "workspace.pendingA2UI.status.progressStep":
-          "Step {{currentStep}}/{{totalSteps}}",
-        "workspace.pendingA2UI.status.stale": "Still processing",
-      };
-      let template: string | undefined = translations[key];
-      if (!template && typeof options === "string") {
-        template = options;
-      }
-      if (!template && options && typeof options === "object") {
-        const defaultValue = (options as { defaultValue?: unknown })
-          .defaultValue;
-        template = typeof defaultValue === "string" ? defaultValue : undefined;
-      }
-      template ??= key;
-      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-        String((options as Record<string, unknown> | undefined)?.[name] ?? ""),
-      );
-    },
-  }),
-}));
+vi.mock("react-i18next", async () => {
+  const workspaceZhCN = (await import("@/i18n/resources/zh-CN/workspace.json"))
+    .default as Record<string, string>;
+
+  return {
+    useTranslation: () => ({
+      t: (key: string, options?: Record<string, unknown>) => {
+        const template = workspaceZhCN[key] ?? key;
+        return template.replace(/{{\s*([^}]+?)\s*}}/g, (_, name: string) =>
+          String(options?.[name.trim()] ?? ""),
+        );
+      },
+    }),
+  };
+});
 
 vi.mock("./A2UISubmissionNotice", () => ({
   A2UISubmissionNotice: (props?: {
@@ -165,9 +152,8 @@ describe("WorkspacePendingA2UIPanel", () => {
         compact: true,
         surface: "embedded",
         submitDisabled: true,
-        statusLabel: "Still processing",
-        footerText:
-          "Your latest details were received. No need to submit again for now.",
+        statusLabel: "继续处理中",
+        footerText: "刚刚补充的信息已收到，暂时不用重复提交。",
       }),
     );
   });
@@ -210,8 +196,8 @@ describe("WorkspacePendingA2UIPanel", () => {
 
     expect(mockA2UITaskCard).toHaveBeenCalledWith(
       expect.objectContaining({
-        footerText: "Finish this step first; the remaining fields will follow.",
-        statusLabel: "Step 2/3",
+        footerText: "先完成这一步，后面会继续补齐。",
+        statusLabel: "第 2/3 步",
         submitDisabled: false,
       }),
     );

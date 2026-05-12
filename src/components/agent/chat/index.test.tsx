@@ -1397,10 +1397,10 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
       container.querySelector('[data-testid="task-center-tab-strip"]'),
     ).not.toBeNull();
     expect(
-      container
-        .querySelector('[data-testid^="task-center-tab-task-draft-"]')
-        ?.getAttribute("data-active"),
-    ).toBe("true");
+      container.querySelector(
+        '[data-testid^="task-center-tab-task-draft-"][data-active="true"]',
+      ),
+    ).not.toBeNull();
     expect(
       container.querySelector('[data-testid="chat-navbar"]'),
     ).not.toBeNull();

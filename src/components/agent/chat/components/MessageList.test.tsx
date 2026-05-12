@@ -2,7 +2,7 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import "@/i18n/config";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { MessageList } from "./MessageList";
 import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";
 import {
@@ -207,12 +207,13 @@ interface MountedHarness {
 
 const mountedRoots: MountedHarness[] = [];
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("en-US");
   if (!HTMLElement.prototype.scrollIntoView) {
     HTMLElement.prototype.scrollIntoView = () => {};
   }
@@ -220,7 +221,7 @@ beforeEach(() => {
   clearAllAgentStreamTextOverlays();
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mountedRoots.length > 0) {
     const mounted = mountedRoots.pop();
     if (!mounted) break;
@@ -238,6 +239,7 @@ afterEach(() => {
     loading: false,
   }));
   mockFindConfiguredProviderBySelection.mockImplementation(() => null);
+  await changeLimeLocale("en-US");
 });
 
 function render(
@@ -254,6 +256,14 @@ function render(
 
   mountedRoots.push({ container, root });
   return container;
+}
+
+async function renderZh(
+  messages: Message[],
+  props?: Partial<React.ComponentProps<typeof MessageList>>,
+): Promise<HTMLDivElement> {
+  await changeLimeLocale("zh-CN");
+  return render(messages, props);
 }
 
 function createConversationMessages(count: number): Message[] {
@@ -1804,13 +1814,24 @@ describe("MessageList", () => {
     expect(container.textContent).toContain("我正在处理你的请求。");
     expect(
       container.querySelector('[data-testid="assistant-message-meta-footer"]'),
-    ).toBeNull();
+    ).not.toBeNull();
     expect(
       container.querySelector('[data-testid="inputbar-runtime-status-line"]'),
     ).toBeNull();
     expect(
       container.querySelector(
         '[data-testid="assistant-first-token-runtime-status"]',
+      ),
+    ).toBeNull();
+    const inlineIndicator = container.querySelector(
+      '[data-testid="assistant-streaming-inline-indicator"]',
+    );
+    expect(inlineIndicator).not.toBeNull();
+    expect(inlineIndicator?.getAttribute("data-status")).toBe("running");
+    expect(container.textContent).toContain("Writing...");
+    expect(
+      container.querySelector(
+        '[data-testid="assistant-active-execution-indicator"]',
       ),
     ).toBeNull();
   });
@@ -2044,6 +2065,78 @@ describe("MessageList", () => {
     expect(container.textContent).not.toContain("直接回答优先");
   });
 
+  it("当前回合运行且只有执行轨迹时，应在消息结算区显示小型输出提示", () => {
+    const now = new Date("2026-05-12T09:00:00.000Z");
+    const messages: Message[] = [
+      {
+        id: "msg-user-active-loading",
+        role: "user",
+        content: "帮我整理国内新闻",
+        timestamp: now,
+      },
+      {
+        id: "msg-assistant-active-loading",
+        role: "assistant",
+        content: "",
+        timestamp: new Date(now.getTime() + 1000),
+      },
+    ];
+
+    const container = render(messages, {
+      currentTurnId: "turn-active-loading",
+      turns: [
+        {
+          id: "turn-active-loading",
+          thread_id: "thread-active-loading",
+          prompt_text: "帮我整理国内新闻",
+          status: "running",
+          started_at: "2026-05-12T09:00:00.000Z",
+          created_at: "2026-05-12T09:00:00.000Z",
+          updated_at: "2026-05-12T09:00:04.000Z",
+        },
+      ],
+      threadRead: {
+        thread_id: "thread-active-loading",
+        status: "running",
+      },
+      threadItems: [
+        {
+          id: "search-active-loading-1",
+          thread_id: "thread-active-loading",
+          turn_id: "turn-active-loading",
+          sequence: 1,
+          status: "completed",
+          started_at: "2026-05-12T09:00:01.000Z",
+          completed_at: "2026-05-12T09:00:02.000Z",
+          updated_at: "2026-05-12T09:00:02.000Z",
+          type: "web_search",
+          action: "web_search",
+          query: "国内新闻 2026年5月 最新",
+          output: "已找到 10 个可参考来源",
+        },
+      ],
+    });
+
+    const indicator = container.querySelector(
+      '[data-testid="assistant-streaming-inline-indicator"]',
+    );
+
+    expect(indicator).not.toBeNull();
+    expect(indicator?.getAttribute("data-status")).toBe("running");
+    expect(indicator?.textContent).toContain("Writing...");
+    expect(
+      container.querySelector('[data-testid="assistant-message-meta-footer"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="assistant-active-execution-indicator"]',
+      ),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="inputbar-runtime-status-line"]'),
+    ).toBeNull();
+  });
+
   it("assistant 消息结算区应以内联模式承载 token usage", () => {
     const now = new Date();
     const messages: Message[] = [
@@ -2161,7 +2254,7 @@ describe("MessageList", () => {
     );
   });
 
-  it("图片任务消息卡应在聊天区渲染预览并支持展开图片画布", () => {
+  it("图片任务消息卡应在聊天区渲染预览并支持展开图片画布", async () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -2191,7 +2284,7 @@ describe("MessageList", () => {
     };
     window.addEventListener(IMAGE_WORKBENCH_FOCUS_EVENT, handleFocus);
 
-    const container = render(messages);
+    const container = await renderZh(messages);
     const previewCard = container.querySelector(
       '[data-testid="image-workbench-message-preview-task-1"]',
     ) as HTMLButtonElement | null;
@@ -2826,7 +2919,7 @@ describe("MessageList", () => {
     ).toBeTruthy();
   });
 
-  it("修图任务消息卡应展示来源图区域与修图语义", () => {
+  it("修图任务消息卡应展示来源图区域与修图语义", async () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -2851,7 +2944,7 @@ describe("MessageList", () => {
       },
     ];
 
-    const container = render(messages);
+    const container = await renderZh(messages);
     const previewCard = container.querySelector(
       '[data-testid="image-workbench-message-preview-task-edit-1"]',
     );
@@ -2862,7 +2955,7 @@ describe("MessageList", () => {
     expect(previewCard?.textContent).not.toContain("Image Editing");
   });
 
-  it("图片任务完成但图片仍在工作台时，不应继续显示生成中占位", () => {
+  it("图片任务完成但图片仍在工作台时，不应继续显示生成中占位", async () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -2881,7 +2974,7 @@ describe("MessageList", () => {
       },
     ];
 
-    const container = render(messages);
+    const container = await renderZh(messages);
     const previewCard = container.querySelector(
       '[data-testid="image-workbench-message-preview-task-complete-without-image"]',
     );
@@ -2892,7 +2985,7 @@ describe("MessageList", () => {
     expect(previewCard?.textContent).not.toContain("图片任务卡");
   });
 
-  it("图片任务已经完成时，不应继续向用户暴露同步中的过渡文案", () => {
+  it("图片任务已经完成时，不应继续向用户暴露同步中的过渡文案", async () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -2913,7 +3006,7 @@ describe("MessageList", () => {
       },
     ];
 
-    const container = render(messages);
+    const container = await renderZh(messages);
     const previewCard = container.querySelector(
       '[data-testid="image-workbench-message-preview-task-complete-sync-copy"]',
     );
@@ -2924,7 +3017,7 @@ describe("MessageList", () => {
     expect(previewCard?.textContent).not.toContain("图片任务已提交");
   });
 
-  it("失败的图片任务卡应收敛为静态状态卡，不再展示操作按钮", () => {
+  it("失败的图片任务卡应收敛为静态状态卡，不再展示操作按钮", async () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -2942,7 +3035,7 @@ describe("MessageList", () => {
       },
     ];
 
-    const container = render(messages);
+    const container = await renderZh(messages);
     const previewCard = container.querySelector(
       '[data-testid="image-workbench-message-preview-task-failed-1"]',
     );
@@ -2956,7 +3049,7 @@ describe("MessageList", () => {
     ).toBeNull();
   });
 
-  it("生成中的图片任务卡应展示队列状态，但不再展示取消按钮", () => {
+  it("生成中的图片任务卡应展示队列状态，但不再展示取消按钮", async () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -2977,7 +3070,7 @@ describe("MessageList", () => {
       },
     ];
 
-    const container = render(messages);
+    const container = await renderZh(messages);
     expect(container.textContent).toContain("等待队列");
     expect(container.textContent).toContain(
       "任务已进入队列，等待图片服务分配执行槽位。",
@@ -2989,7 +3082,7 @@ describe("MessageList", () => {
     ).toBeNull();
   });
 
-  it("失败的图片任务卡应保留错误文案，但不再突出不可重试标签", () => {
+  it("失败的图片任务卡应保留错误文案，但不再突出不可重试标签", async () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -3009,7 +3102,7 @@ describe("MessageList", () => {
       },
     ];
 
-    const container = render(messages);
+    const container = await renderZh(messages);
     const previewCard = container.querySelector(
       '[data-testid="image-workbench-message-preview-task-failed-no-retry"]',
     );
@@ -3021,7 +3114,7 @@ describe("MessageList", () => {
     expect(previewCard?.textContent).not.toContain("不可重试");
   });
 
-  it("已取消的图片任务卡应显示独立状态且不再展示重试按钮", () => {
+  it("已取消的图片任务卡应显示独立状态且不再展示重试按钮", async () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -3039,7 +3132,7 @@ describe("MessageList", () => {
       },
     ];
 
-    const container = render(messages);
+    const container = await renderZh(messages);
     const previewCard = container.querySelector(
       '[data-testid="image-workbench-message-preview-task-cancelled-1"]',
     );
@@ -3124,7 +3217,7 @@ describe("MessageList", () => {
     ).toBe(0);
   });
 
-  it("3x3 分镜消息卡应渲染九宫格摘要而不是单图卡", () => {
+  it("3x3 分镜消息卡应渲染九宫格摘要而不是单图卡", async () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -3149,7 +3242,7 @@ describe("MessageList", () => {
       },
     ];
 
-    const container = render(messages);
+    const container = await renderZh(messages);
     const grid = container.querySelector(
       '[data-testid="image-workbench-message-preview-grid-task-storyboard-preview-1"]',
     ) as HTMLDivElement | null;
@@ -3503,7 +3596,7 @@ describe("MessageList", () => {
     );
   });
 
-  it("thinking 关闭的已完成短答不应在聊天区展示持久化 reasoning", () => {
+  it("已完成短答也应把持久化 reasoning 保留到执行轨迹", () => {
     const now = new Date("2026-05-09T06:02:56.361Z");
     const messages: Message[] = [
       {
@@ -3595,16 +3688,100 @@ describe("MessageList", () => {
 
     expect(
       container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
-    ).toBeNull();
-    expect(mockAgentThreadTimeline).not.toHaveBeenCalled();
+    ).not.toBeNull();
+    const leadingTimelineProps = mockAgentThreadTimeline.mock.calls.find(
+      ([props]) => props?.placement === "leading",
+    )?.[0] as { items?: AgentThreadItem[] } | undefined;
+    expect(leadingTimelineProps?.items).toEqual([
+      expect.objectContaining({
+        type: "reasoning",
+        id: "reasoning-fast-plain-answer",
+      }),
+    ]);
     expect(container.textContent).toContain("好");
-    expect(container.textContent).not.toContain("执行轨迹");
-    expect(container.textContent).not.toContain("我们被要求只回答一个字");
+    expect(container.textContent).toContain("执行轨迹");
     expect(mockStreamingRenderer).toHaveBeenCalledWith(
       expect.objectContaining({
         content: "好",
         thinkingContent: undefined,
         contentParts: undefined,
+      }),
+    );
+  });
+
+  it("历史对话恢复时也应保留已持久化 reasoning 执行轨迹", () => {
+    const now = new Date("2026-05-09T06:02:56.361Z");
+    const messages: Message[] = [
+      {
+        id: "msg-user-history-reasoning",
+        role: "user",
+        content: "只回答一个字：好",
+        timestamp: new Date("2026-05-09T06:02:54.927Z"),
+      },
+      {
+        id: "msg-assistant-history-reasoning",
+        role: "assistant",
+        content: "好",
+        timestamp: now,
+      },
+    ];
+
+    render(messages, {
+      isRestoringSession: true,
+      turns: [
+        {
+          id: "turn-history-reasoning",
+          thread_id: "thread-history-reasoning",
+          prompt_text: "只回答一个字：好",
+          status: "completed",
+          started_at: "2026-05-09T06:02:54.278Z",
+          completed_at: "2026-05-09T06:02:56.366Z",
+          created_at: "2026-05-09T06:02:54.278Z",
+          updated_at: "2026-05-09T06:02:56.366Z",
+        },
+      ],
+      threadItems: [
+        {
+          id: "reasoning-history-answer",
+          thread_id: "thread-history-reasoning",
+          turn_id: "turn-history-reasoning",
+          sequence: 1,
+          status: "completed",
+          started_at: "2026-05-09T06:02:55.716Z",
+          completed_at: "2026-05-09T06:02:56.361Z",
+          updated_at: "2026-05-09T06:02:56.361Z",
+          type: "reasoning",
+          text: "我们被要求只回答一个字：好。直接回复即可。",
+          summary: ["我们被要求只回答一个字：好。直接回复即可。"],
+        },
+        {
+          id: "assistant-history-answer",
+          thread_id: "thread-history-reasoning",
+          turn_id: "turn-history-reasoning",
+          sequence: 2,
+          status: "completed",
+          started_at: "2026-05-09T06:02:56.289Z",
+          completed_at: "2026-05-09T06:02:56.361Z",
+          updated_at: "2026-05-09T06:02:56.361Z",
+          type: "agent_message",
+          text: "好",
+        },
+      ],
+    });
+
+    const leadingTimelineProps = mockAgentThreadTimeline.mock.calls.find(
+      ([props]) => props?.placement === "leading",
+    )?.[0] as { items?: AgentThreadItem[] } | undefined;
+    expect(leadingTimelineProps?.items).toEqual([
+      expect.objectContaining({
+        type: "reasoning",
+        id: "reasoning-history-answer",
+      }),
+    ]);
+    expect(mockStreamingRenderer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: "好",
+        thinkingContent: undefined,
       }),
     );
   });
@@ -3749,6 +3926,72 @@ describe("MessageList", () => {
         '[data-testid="assistant-first-token-runtime-status"]',
       ),
     ).not.toBeNull();
+    expect(container.textContent).not.toContain("思考中");
+    expect(container.textContent).not.toContain("The user only asked");
+    expect(mockStreamingRenderer).not.toHaveBeenCalled();
+  });
+
+  it("首字前运行中的 reasoning 时间线不应先于答案暴露为思考卡", () => {
+    const now = new Date("2026-05-12T05:45:00.000Z");
+    const messages: Message[] = [
+      {
+        id: "msg-assistant-pre-answer-thread-reasoning",
+        role: "assistant",
+        content: "",
+        timestamp: now,
+        isThinking: true,
+        runtimeStatus: {
+          phase: "routing",
+          title: "正在生成回复",
+          detail: "运行时已开始处理，等待首个输出。",
+          metadata: {
+            sourceType: "runtime_status",
+            surface: "runtime_status",
+            visibility: "diagnostics",
+            persistence: "transient",
+          },
+        },
+      },
+    ];
+
+    const container = render(messages, {
+      isSending: true,
+      currentTurnId: "turn-pre-answer-thread-reasoning",
+      turns: [
+        {
+          id: "turn-pre-answer-thread-reasoning",
+          thread_id: "thread-pre-answer-thread-reasoning",
+          prompt_text: "只回答一个标记",
+          status: "running",
+          started_at: "2026-05-12T05:45:00.000Z",
+          created_at: "2026-05-12T05:45:00.000Z",
+          updated_at: "2026-05-12T05:45:02.000Z",
+        },
+      ],
+      threadItems: [
+        {
+          id: "reasoning-pre-answer-thread",
+          thread_id: "thread-pre-answer-thread-reasoning",
+          turn_id: "turn-pre-answer-thread-reasoning",
+          sequence: 1,
+          status: "in_progress",
+          started_at: "2026-05-12T05:45:01.000Z",
+          updated_at: "2026-05-12T05:45:02.000Z",
+          type: "reasoning",
+          text: "The user only asked for a marker, so answer directly.",
+          summary: ["The user only asked for a marker, so answer directly."],
+        },
+      ],
+    });
+
+    expect(
+      container.querySelector(
+        '[data-testid="assistant-first-token-runtime-status"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
+    ).toBeNull();
     expect(container.textContent).not.toContain("思考中");
     expect(container.textContent).not.toContain("The user only asked");
     expect(mockStreamingRenderer).not.toHaveBeenCalled();

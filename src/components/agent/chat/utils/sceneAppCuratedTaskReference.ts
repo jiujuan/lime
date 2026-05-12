@@ -13,7 +13,28 @@ import {
   type CuratedTaskInputValues,
   findCuratedTaskTemplateById,
 } from "./curatedTaskTemplates";
+import agentSourceResource from "@/i18n/resources/zh-CN/agent.json";
 import type { InputCapabilitySendRoute } from "../skill-selection/inputCapabilitySelection";
+
+type AgentSourceResourceKey = keyof typeof agentSourceResource;
+
+function interpolateSceneAppReferenceSourceTemplate(
+  template: string,
+  values?: Record<string, number | string>,
+): string {
+  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, name) => {
+    const value = values?.[name];
+    return value == null ? match : String(value);
+  });
+}
+
+function translateSceneAppReferenceSourceKey(
+  key: string,
+  values?: Record<string, number | string>,
+): string {
+  const template = agentSourceResource[key as AgentSourceResourceKey] ?? key;
+  return interpolateSceneAppReferenceSourceTemplate(template, values);
+}
 
 function normalizeOptionalText(value?: string | null): string | undefined {
   if (typeof value !== "string") {
@@ -106,6 +127,75 @@ export interface SceneAppExecutionReviewPrefillSnapshot {
   nextAction?: string;
   operatingAction?: string;
   destinationsLabel?: string;
+}
+
+export interface SceneAppCuratedTaskReferenceCopy {
+  categoryLabel?: string;
+  resultSummaryFallback?: string;
+  resultTitleFallback?: string;
+  formatDestinationHighlight?: (value: string) => string;
+  formatFailureSignalHighlight?: (value: string) => string;
+  formatFollowUpBannerMessage?: (title: string) => string;
+  formatOperatingActionHighlight?: (value: string) => string;
+  formatStatusHighlight?: (value: string) => string;
+}
+
+export interface ResolvedSceneAppCuratedTaskReferenceCopy {
+  categoryLabel: string;
+  resultSummaryFallback: string;
+  resultTitleFallback: string;
+  formatDestinationHighlight: (value: string) => string;
+  formatFailureSignalHighlight: (value: string) => string;
+  formatFollowUpBannerMessage: (title: string) => string;
+  formatOperatingActionHighlight: (value: string) => string;
+  formatStatusHighlight: (value: string) => string;
+}
+
+const SOURCE_SCENE_APP_CURATED_TASK_REFERENCE_COPY: ResolvedSceneAppCuratedTaskReferenceCopy =
+  {
+    categoryLabel: translateSceneAppReferenceSourceKey(
+      "curatedTask.sceneAppReference.categoryLabel",
+    ),
+    resultSummaryFallback: translateSceneAppReferenceSourceKey(
+      "curatedTask.sceneAppReference.resultSummaryFallback",
+    ),
+    resultTitleFallback: translateSceneAppReferenceSourceKey(
+      "curatedTask.sceneAppReference.resultTitleFallback",
+    ),
+    formatDestinationHighlight: (value) =>
+      translateSceneAppReferenceSourceKey(
+        "curatedTask.sceneAppReference.highlight.destination",
+        { value },
+      ),
+    formatFailureSignalHighlight: (value) =>
+      translateSceneAppReferenceSourceKey(
+        "curatedTask.sceneAppReference.highlight.failureSignal",
+        { value },
+      ),
+    formatFollowUpBannerMessage: (title) =>
+      translateSceneAppReferenceSourceKey(
+        "curatedTask.sceneAppReference.followUpBanner",
+        { title },
+      ),
+    formatOperatingActionHighlight: (value) =>
+      translateSceneAppReferenceSourceKey(
+        "curatedTask.sceneAppReference.highlight.operatingAction",
+        { value },
+      ),
+    formatStatusHighlight: (value) =>
+      translateSceneAppReferenceSourceKey(
+        "curatedTask.sceneAppReference.highlight.status",
+        { value },
+      ),
+  };
+
+export function resolveSceneAppCuratedTaskReferenceCopy(
+  copy?: SceneAppCuratedTaskReferenceCopy,
+): ResolvedSceneAppCuratedTaskReferenceCopy {
+  return {
+    ...SOURCE_SCENE_APP_CURATED_TASK_REFERENCE_COPY,
+    ...(copy ?? {}),
+  };
 }
 
 const SCENEAPP_REVIEW_BASELINE_FALLBACK_TASK_ID = "account-project-review";
@@ -207,19 +297,25 @@ export function buildSceneAppExecutionReviewPrefillSnapshot(params: {
 
 export function buildSceneAppExecutionReviewPrefillHighlights(
   snapshot?: SceneAppExecutionReviewPrefillSnapshot | null,
+  copyInput?: SceneAppCuratedTaskReferenceCopy,
 ): string[] {
   if (!snapshot) {
     return [];
   }
 
+  const copy = resolveSceneAppCuratedTaskReferenceCopy(copyInput);
   return dedupeNonEmptyText([
-    snapshot.statusLabel ? `当前判断：${snapshot.statusLabel}` : null,
-    snapshot.failureSignalLabel
-      ? `当前卡点：${snapshot.failureSignalLabel}`
+    snapshot.statusLabel
+      ? copy.formatStatusHighlight(snapshot.statusLabel)
       : null,
-    snapshot.operatingAction ? `经营动作：${snapshot.operatingAction}` : null,
+    snapshot.failureSignalLabel
+      ? copy.formatFailureSignalHighlight(snapshot.failureSignalLabel)
+      : null,
+    snapshot.operatingAction
+      ? copy.formatOperatingActionHighlight(snapshot.operatingAction)
+      : null,
     snapshot.destinationsLabel
-      ? `更适合去向：${snapshot.destinationsLabel}`
+      ? copy.formatDestinationHighlight(snapshot.destinationsLabel)
       : null,
   ]);
 }
@@ -250,6 +346,7 @@ function buildSceneAppExecutionBaselinePromptBlock(
 export function buildCuratedTaskReferenceEntryFromSceneAppExecution(params: {
   summary?: SceneAppExecutionSummaryViewModel | null;
   latestRunDetailView?: SceneAppRunDetailViewModel | null;
+  copy?: SceneAppCuratedTaskReferenceCopy;
 }): CuratedTaskReferenceEntry | null {
   const { summary, latestRunDetailView } = params;
   const sceneappId = normalizeOptionalText(summary?.sceneappId);
@@ -257,13 +354,15 @@ export function buildCuratedTaskReferenceEntryFromSceneAppExecution(params: {
     return null;
   }
 
+  const copy = resolveSceneAppCuratedTaskReferenceCopy(params.copy);
   const runId =
     normalizeOptionalText(latestRunDetailView?.runId) ||
     normalizeOptionalText(summary.runtimeBackflow?.runId);
   const id = runId
     ? `sceneapp:${sceneappId}:run:${runId}`
     : `sceneapp:${sceneappId}`;
-  const title = normalizeOptionalText(summary.title) || "当前项目结果";
+  const title =
+    normalizeOptionalText(summary.title) || copy.resultTitleFallback;
   const summaryText = truncateText(
     dedupeNonEmptyText([
       latestRunDetailView?.summary,
@@ -287,10 +386,9 @@ export function buildCuratedTaskReferenceEntryFromSceneAppExecution(params: {
     id,
     sourceKind: "sceneapp_execution_summary",
     title,
-    summary:
-      summaryText || "当前已有一轮项目结果与执行摘要，可直接带入下一步判断。",
+    summary: summaryText || copy.resultSummaryFallback,
     category: "experience",
-    categoryLabel: "成果",
+    categoryLabel: copy.categoryLabel,
     tags,
     taskPrefillByTaskId: {
       "account-project-review": {
@@ -308,6 +406,7 @@ export function buildCuratedTaskReferenceEntryFromSceneAppExecution(params: {
 
 export function buildSceneAppExecutionReviewFollowUpAction(params: {
   referenceEntries?: Array<CuratedTaskReferenceEntry | null | undefined> | null;
+  copy?: SceneAppCuratedTaskReferenceCopy;
 }): {
   prompt: string;
   bannerMessage?: string;
@@ -316,6 +415,7 @@ export function buildSceneAppExecutionReviewFollowUpAction(params: {
   return buildSceneAppExecutionCuratedTaskFollowUpAction({
     referenceEntries: params.referenceEntries,
     taskId: "account-project-review",
+    copy: params.copy,
   });
 }
 
@@ -323,6 +423,7 @@ export function buildSceneAppExecutionCuratedTaskFollowUpAction(params: {
   referenceEntries?: Array<CuratedTaskReferenceEntry | null | undefined> | null;
   taskId: string;
   inputValues?: CuratedTaskInputValues | null;
+  copy?: SceneAppCuratedTaskReferenceCopy;
 }): {
   prompt: string;
   bannerMessage?: string;
@@ -338,6 +439,7 @@ export function buildSceneAppExecutionCuratedTaskFollowUpAction(params: {
     return null;
   }
 
+  const copy = resolveSceneAppCuratedTaskReferenceCopy(params.copy);
   const referenceEntries = mergeCuratedTaskReferenceEntries(
     params.referenceEntries ?? [],
   ).slice(0, 3);
@@ -379,7 +481,7 @@ export function buildSceneAppExecutionCuratedTaskFollowUpAction(params: {
 
   return {
     prompt,
-    bannerMessage: `已切到“${task.title}”这条下一步，并带着当前结果继续进入生成。`,
+    bannerMessage: copy.formatFollowUpBannerMessage(task.title),
     capabilityRoute: {
       kind: "curated_task",
       taskId: task.id,

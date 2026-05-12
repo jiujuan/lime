@@ -33,6 +33,9 @@ import {
 } from "./inputCapabilitySections";
 import { buildCuratedTaskTemplateCopy } from "../utils/curatedTaskTemplates";
 import type { CuratedTaskReferenceEntry } from "../utils/curatedTaskReferenceSelection";
+import type agentResource from "@/i18n/resources/zh-CN/agent.json";
+
+type AgentI18nKey = keyof typeof agentResource;
 
 interface CharacterMentionPanelProps {
   mode: "mention" | "slash";
@@ -82,19 +85,18 @@ export const CharacterMentionPanel: React.FC<CharacterMentionPanelProps> = ({
   onNavigateToSettings,
 }) => {
   const { t } = useTranslation("agent");
-  const curatedTaskTemplateCopy = React.useMemo(
-    () =>
-      buildCuratedTaskTemplateCopy((key, defaultValue, values) =>
-        t(key, { defaultValue, ...values }),
-      ),
+  const translateAgentCopyKey = React.useCallback(
+    (key: string, values?: Record<string, number | string>) =>
+      t(key as AgentI18nKey, values ?? {}),
     [t],
   );
+  const curatedTaskTemplateCopy = React.useMemo(
+    () => buildCuratedTaskTemplateCopy(translateAgentCopyKey),
+    [translateAgentCopyKey],
+  );
   const inputCapabilityCopy = React.useMemo(
-    () =>
-      buildInputCapabilitySectionsCopy((key, defaultValue, values) =>
-        t(key, { defaultValue, ...values }),
-      ),
-    [t],
+    () => buildInputCapabilitySectionsCopy(translateAgentCopyKey),
+    [translateAgentCopyKey],
   );
   const sections = React.useMemo(() => {
     void curatedTaskTemplatesVersion;
@@ -193,38 +195,23 @@ export const CharacterMentionPanel: React.FC<CharacterMentionPanelProps> = ({
   const resolveSectionHelperText = (sectionKey: string): string | null => {
     if (isEmptyMentionQuery) {
       if (sectionKey === "recent-mention") {
-        return t(
-          "inputCapabilities.panel.helper.recentMention",
-          "优先继续刚调过的命令或 Skill，仍然回到当前生成线程。",
-        );
+        return t("inputCapabilities.panel.helper.recentMention");
       }
 
       if (sectionKey === "featured-service-skills") {
-        return t(
-          "inputCapabilities.panel.helper.featuredServiceSkills",
-          "需要一套现成起手时，再从这里进入，不替代上面的 @命令。",
-        );
+        return t("inputCapabilities.panel.helper.featuredServiceSkills");
       }
 
       if (sectionKey === "installed-skills") {
-        return t(
-          "inputCapabilities.panel.helper.installedSkillsMention",
-          "自己的固定方法也能通过 @ 直接接回生成，但优先级仍在命令之后。",
-        );
+        return t("inputCapabilities.panel.helper.installedSkillsMention");
       }
 
       if (sectionKey === "available-skills") {
-        return t(
-          "inputCapabilities.panel.helper.availableSkills",
-          "还没沉淀成固定入口的 Skill 放在这里，优先级低于上面的命令和已沉淀方法。",
-        );
+        return t("inputCapabilities.panel.helper.availableSkills");
       }
 
       if (sectionKey === "characters") {
-        return t(
-          "inputCapabilities.panel.helper.characters",
-          "需要点名协作对象时再用，不会替代上面的命令入口。",
-        );
+        return t("inputCapabilities.panel.helper.characters");
       }
     }
 
@@ -233,31 +220,19 @@ export const CharacterMentionPanel: React.FC<CharacterMentionPanelProps> = ({
     }
 
     if (sectionKey === "supported-slash-commands:workspace-action") {
-      return t(
-        "inputCapabilities.panel.helper.workspaceAction",
-        "整理当前任务时再用，不会替代上面的结果入口。",
-      );
+      return t("inputCapabilities.panel.helper.workspaceAction");
     }
 
     if (sectionKey === "recent-slash-operations") {
-      return t(
-        "inputCapabilities.panel.helper.recentOperations",
-        "最近用过的工作台动作；如果是继续产出，优先看上面的 Skill。",
-      );
+      return t("inputCapabilities.panel.helper.recentOperations");
     }
 
     if (sectionKey === "recent-slash-continuations") {
-      return t(
-        "inputCapabilities.panel.helper.recentContinuations",
-        "优先接着已经跑过的方法，通常比重新挑一条更省重来成本。",
-      );
+      return t("inputCapabilities.panel.helper.recentContinuations");
     }
 
     if (sectionKey === "installed-skills") {
-      return t(
-        "inputCapabilities.panel.helper.installedSkillsSlash",
-        "没命中上面的继续项时，再从这里换一条已经沉淀下来的方法。",
-      );
+      return t("inputCapabilities.panel.helper.installedSkillsSlash");
     }
 
     return null;
@@ -333,14 +308,8 @@ export const CharacterMentionPanel: React.FC<CharacterMentionPanelProps> = ({
       <CommandInput
         placeholder={
           mode === "slash"
-            ? t(
-                "inputCapabilities.panel.searchPlaceholder.slash",
-                "搜索结果模板、Skill 或操作...",
-              )
-            : t(
-                "inputCapabilities.panel.searchPlaceholder.mention",
-                "搜索 @命令、Skill 或协作角色...",
-              )
+            ? t("inputCapabilities.panel.searchPlaceholder.slash")
+            : t("inputCapabilities.panel.searchPlaceholder.mention")
         }
         value={mentionQuery}
         onValueChange={onQueryChange}
@@ -350,14 +319,8 @@ export const CharacterMentionPanel: React.FC<CharacterMentionPanelProps> = ({
           <div className="px-3 py-6 text-center text-sm text-muted-foreground">
             <div>
               {mode === "slash"
-                ? t(
-                    "inputCapabilities.panel.empty.slash",
-                    "暂无可用结果模板、Skill 或操作",
-                  )
-                : t(
-                    "inputCapabilities.panel.empty.mention",
-                    "暂无可用 @命令、Skill 或协作角色",
-                  )}
+                ? t("inputCapabilities.panel.empty.slash")
+                : t("inputCapabilities.panel.empty.mention")}
             </div>
             {onNavigateToSettings ? (
               <button
@@ -366,7 +329,7 @@ export const CharacterMentionPanel: React.FC<CharacterMentionPanelProps> = ({
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={onNavigateToSettings}
               >
-                {t("inputCapabilities.panel.action.skillCenter", "去技能中心")}
+                {t("inputCapabilities.panel.action.skillCenter")}
               </button>
             ) : null}
           </div>

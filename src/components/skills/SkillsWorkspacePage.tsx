@@ -119,11 +119,17 @@ import {
   type WorkspaceSkillManagedAutomationInitialValuesCopy,
 } from "@/features/capability-drafts/workspaceSkillAgentAutomationDraft";
 import { formatList, formatNumber } from "@/i18n/format";
+import type agentResource from "@/i18n/resources/zh-CN/agent.json";
 
 interface SkillsWorkspacePageProps {
   onNavigate: (page: Page, params?: PageParams) => void;
   pageParams?: SkillsPageParams;
 }
+
+type AgentI18nKey = keyof typeof agentResource;
+type CuratedTaskWithMoreKey =
+  | "skills.workspace.curatedTask.factItems.withMore"
+  | "skills.workspace.curatedTask.referenceItems.withMore";
 
 const TONE_BADGE_CLASSNAMES: Record<ServiceSkillTone, string> = {
   slate: "border-slate-200 bg-slate-50 text-slate-700",
@@ -162,22 +168,20 @@ function summarizeRecentReplayText(value: string, maxLength = 56): string {
 }
 
 interface WorkspaceRuntimeEnablePromptCopy {
-  formatIntro?: (skillName: string, directory: string) => string;
-  needsInput?: string;
-  readSkill?: string;
+  formatIntro: (skillName: string, directory: string) => string;
+  needsInput: string;
+  readSkill: string;
 }
 
 function buildWorkspaceRuntimeEnablePrompt(
   binding: AgentRuntimeWorkspaceSkillBinding,
-  copy: WorkspaceRuntimeEnablePromptCopy = {},
+  copy: WorkspaceRuntimeEnablePromptCopy,
 ): string {
   const skillName = binding.name?.trim() || binding.directory;
   return [
-    copy.formatIntro?.(skillName, binding.directory) ??
-      `请在本回合使用 Workspace 本地 Skill「${skillName}」（skill: project:${binding.directory}）。`,
-    copy.readSkill ?? "先读取这个 Skill 的说明与约束，再基于当前任务完成交付。",
-    copy.needsInput ??
-      "如果输入信息不足，请先提出最少必要问题；不要创建自动化、定时任务或 marketplace 发布。",
+    copy.formatIntro(skillName, binding.directory),
+    copy.readSkill,
+    copy.needsInput,
   ].join("\n");
 }
 
@@ -243,19 +247,11 @@ export function SkillsWorkspacePage({
       () => ({
         formatIntro: (skillName, directory) =>
           t("skills.workspace.runtimeEnable.prompt.intro", {
-            defaultValue:
-              "请在本回合使用 Workspace 本地 Skill「{{name}}」（skill: project:{{directory}}）。",
             directory,
             name: skillName,
           }),
-        needsInput: t(
-          "skills.workspace.runtimeEnable.prompt.needsInput",
-          "如果输入信息不足，请先提出最少必要问题；不要创建自动化、定时任务或 marketplace 发布。",
-        ),
-        readSkill: t(
-          "skills.workspace.runtimeEnable.prompt.readSkill",
-          "先读取这个 Skill 的说明与约束，再基于当前任务完成交付。",
-        ),
+        needsInput: t("skills.workspace.runtimeEnable.prompt.needsInput"),
+        readSkill: t("skills.workspace.runtimeEnable.prompt.readSkill"),
       }),
       [t],
     );
@@ -267,7 +263,6 @@ export function SkillsWorkspacePage({
       }
 
       return t("skills.workspace.sidebar.local.recentUsage", {
-        defaultValue: "上次目标：{{summary}}",
         summary: summarizeRecentReplayText(normalizedReplayText),
       });
     },
@@ -280,20 +275,15 @@ export function SkillsWorkspacePage({
         .map((skill) => `「${skill.title}」`);
 
       if (starterTitles.length === 0) {
-        return t(
-          "skills.workspace.categories.defaultStarter",
-          "先带着这次目标进去继续收窄。",
-        );
+        return t("skills.workspace.categories.defaultStarter");
       }
 
       const titles = starterTitles.join(" / ");
       return starterTitles.length < skills.length
         ? t("skills.workspace.categories.starterWithMore", {
-            defaultValue: "这一组里可以先从{{titles}}等 Skill 开始。",
             titles,
           })
         : t("skills.workspace.categories.starter", {
-            defaultValue: "这一组里可以先从{{titles}}开始。",
             titles,
           });
     },
@@ -303,7 +293,7 @@ export function SkillsWorkspacePage({
     (params: { sourceTitle?: string | null; highlights: string[] }): string => {
       const sourceTitle =
         params.sourceTitle?.trim() ||
-        t("skills.workspace.featured.defaultSourceTitle", "当前项目结果");
+        t("skills.workspace.featured.defaultSourceTitle");
       const [firstHighlight] = params.highlights;
 
       if (!firstHighlight) {
@@ -312,13 +302,11 @@ export function SkillsWorkspacePage({
 
       return params.highlights.length > 1
         ? t("skills.workspace.featured.compactBaselineWithCount", {
-            defaultValue: "{{sourceTitle}} · {{highlight}} 等 {{count}} 条",
             sourceTitle,
             highlight: firstHighlight,
             count: params.highlights.length,
           })
         : t("skills.workspace.featured.compactBaseline", {
-            defaultValue: "{{sourceTitle}} · {{highlight}}",
             sourceTitle,
             highlight: firstHighlight,
           });
@@ -328,139 +316,78 @@ export function SkillsWorkspacePage({
   const installedSkillPresentationCopy =
     useMemo<InstalledSkillPresentationCopy>(
       () => ({
-        defaultPromise: t(
-          "skills.workspace.installedSkill.defaultPromise",
-          "当你需要复用这个 Skill 时使用。",
-        ),
+        defaultPromise: t("skills.workspace.installedSkill.defaultPromise"),
         fallbackRequiredInputs: t(
           "skills.workspace.installedSkill.fallbackRequiredInputs",
-          "对话里继续补充目标与约束",
         ),
         fallbackOutputHint: t(
           "skills.workspace.installedSkill.fallbackOutputHint",
-          "带着该 Skill 进入生成",
         ),
-        requiredPrefix: t(
-          "skills.workspace.installedSkill.requiredPrefix",
-          "需要：",
-        ),
-        outputPrefix: t(
-          "skills.workspace.installedSkill.outputPrefix",
-          "交付：",
-        ),
+        requiredPrefix: t("skills.workspace.installedSkill.requiredPrefix"),
+        outputPrefix: t("skills.workspace.installedSkill.outputPrefix"),
       }),
       [t],
     );
   const serviceSkillPresentationCopy = useMemo<ServiceSkillPresentationCopy>(
     () => ({
       runnerLabels: {
-        instant: t(
-          "skills.workspace.serviceSkill.runner.instant.label",
-          "先做这一轮",
-        ),
-        scheduled: t(
-          "skills.workspace.serviceSkill.runner.scheduled.label",
-          "按时继续",
-        ),
-        managed: t(
-          "skills.workspace.serviceSkill.runner.managed.label",
-          "持续跟进",
-        ),
+        instant: t("skills.workspace.serviceSkill.runner.instant.label"),
+        scheduled: t("skills.workspace.serviceSkill.runner.scheduled.label"),
+        managed: t("skills.workspace.serviceSkill.runner.managed.label"),
       },
       runnerDescriptions: {
-        instant: t(
-          "skills.workspace.serviceSkill.runner.instant.description",
-          "会先给出这一轮结果，接着就能继续改。",
-        ),
+        instant: t("skills.workspace.serviceSkill.runner.instant.description"),
         scheduled: t(
           "skills.workspace.serviceSkill.runner.scheduled.description",
-          "会先给出第一轮结果，后面按设定时间继续带回来。",
         ),
-        managed: t(
-          "skills.workspace.serviceSkill.runner.managed.description",
-          "会先给出这轮判断，后面持续带回新的结果和提醒。",
-        ),
+        managed: t("skills.workspace.serviceSkill.runner.managed.description"),
       },
       actionLabels: {
-        instant: t(
-          "skills.workspace.serviceSkill.action.instant",
-          "开始这一步",
-        ),
-        scheduled: t(
-          "skills.workspace.serviceSkill.action.scheduled",
-          "开始持续",
-        ),
-        managed: t("skills.workspace.serviceSkill.action.managed", "开始跟进"),
+        instant: t("skills.workspace.serviceSkill.action.instant"),
+        scheduled: t("skills.workspace.serviceSkill.action.scheduled"),
+        managed: t("skills.workspace.serviceSkill.action.managed"),
       },
       typeLabels: {
-        service: t("skills.workspace.serviceSkill.type.service", "创作做法"),
-        site: t("skills.workspace.serviceSkill.type.site", "站点做法"),
-        prompt: t("skills.workspace.serviceSkill.type.prompt", "提示做法"),
+        service: t("skills.workspace.serviceSkill.type.service"),
+        site: t("skills.workspace.serviceSkill.type.site"),
+        prompt: t("skills.workspace.serviceSkill.type.prompt"),
       },
       fallbackRequiredInputs: t(
         "skills.workspace.serviceSkill.requiredInputs.empty",
-        "当前无必填信息",
       ),
-      requiredPrefix: t(
-        "skills.workspace.serviceSkill.requiredPrefix",
-        "需要：",
-      ),
-      outputPrefix: t("skills.workspace.serviceSkill.outputPrefix", "交付："),
-      siteRunnerLabel: t(
-        "skills.workspace.serviceSkill.runner.site.label",
-        "接着浏览器继续",
-      ),
+      requiredPrefix: t("skills.workspace.serviceSkill.requiredPrefix"),
+      outputPrefix: t("skills.workspace.serviceSkill.outputPrefix"),
+      siteRunnerLabel: t("skills.workspace.serviceSkill.runner.site.label"),
       siteRunnerDescription: t(
         "skills.workspace.serviceSkill.runner.site.description",
-        "会接着当前浏览器里已经打开的页面把这一步做完，并把结果带回生成。",
       ),
       requiredSlotActionLabel: t(
         "skills.workspace.serviceSkill.action.requiredSlot",
-        "补齐这一步",
       ),
-      siteActionLabel: t(
-        "skills.workspace.serviceSkill.action.site",
-        "接着继续",
-      ),
+      siteActionLabel: t("skills.workspace.serviceSkill.action.site"),
       automationActionLabel: t(
         "skills.workspace.serviceSkill.action.automation",
-        "开始持续",
       ),
       outputProjectResource: t(
         "skills.workspace.serviceSkill.output.projectResource",
-        "结果会收进当前项目资料，后面还能继续拿来用。",
       ),
       outputCurrentContent: t(
         "skills.workspace.serviceSkill.output.currentContent",
-        "结果会先回到当前内容里，方便接着往下改。",
       ),
-      outputScheduled: t(
-        "skills.workspace.serviceSkill.output.scheduled",
-        "第一轮结果会先回到生成，后面按时间继续接回来。",
-      ),
-      outputManaged: t(
-        "skills.workspace.serviceSkill.output.managed",
-        "这轮判断会先回到生成，后面新的结果和提醒也会继续带回来。",
-      ),
-      outputDefault: t(
-        "skills.workspace.serviceSkill.output.default",
-        "结果会回到生成，方便接着改。",
-      ),
+      outputScheduled: t("skills.workspace.serviceSkill.output.scheduled"),
+      outputManaged: t("skills.workspace.serviceSkill.output.managed"),
+      outputDefault: t("skills.workspace.serviceSkill.output.default"),
       dependencyRequiresModel: t(
         "skills.workspace.serviceSkill.dependency.model",
-        "需要已选择可用模型。",
       ),
       dependencyRequiresBrowser: t(
         "skills.workspace.serviceSkill.dependency.browser",
-        "需要当前浏览器里已经打开并登录对应站点。",
       ),
       dependencyRequiresProject: t(
         "skills.workspace.serviceSkill.dependency.project",
-        "建议在目标项目内启动，便于结果直接回写。",
       ),
       formatDependencyRequiresSkillKey: (skillKey) =>
         t("skills.workspace.serviceSkill.dependency.skillKey", {
-          defaultValue: "需要先启用相关能力：{{skillKey}}。",
           skillKey,
         }),
       formatFactItems: (visibleItems, totalCount) => {
@@ -471,7 +398,6 @@ export function SkillsWorkspacePage({
         }
 
         return t("skills.workspace.serviceSkill.factItems.withMore", {
-          defaultValue: "{{items}} 等 {{total}} 项",
           items,
           remaining: formatNumber(totalCount - visibleItems.length, {
             locale,
@@ -486,18 +412,15 @@ export function SkillsWorkspacePage({
     useMemo<ServiceSkillLaunchPrefillCopy>(() => {
       const itemSeparator = t(
         "skills.workspace.serviceSkill.prefill.itemSeparator",
-        "；",
       );
       return {
         creationReplay: {
           sourceLabels: {
             memoryEntry: t(
               "skills.workspace.serviceSkill.prefill.creationReplay.source.memoryEntry",
-              "当前灵感条目",
             ),
             skillScaffold: t(
               "skills.workspace.serviceSkill.prefill.creationReplay.source.skillScaffold",
-              "当前技能草稿",
             ),
           },
           formatFieldSummary: (visibleLabels, totalCount) => {
@@ -513,7 +436,6 @@ export function SkillsWorkspacePage({
             return t(
               "skills.workspace.serviceSkill.prefill.creationReplay.fieldSummaryWithMore",
               {
-                defaultValue: "{{fields}} 等参数",
                 fields,
                 remaining: formatNumber(totalCount - visibleLabels.length, {
                   locale,
@@ -524,24 +446,15 @@ export function SkillsWorkspacePage({
           },
           formatHint: (sourceLabel, fieldSummary) =>
             t("skills.workspace.serviceSkill.prefill.creationReplay.hint", {
-              defaultValue:
-                "已根据{{source}}自动预填 {{fields}}，可继续修改后执行。",
               fields: fieldSummary,
               source: sourceLabel,
             }),
         },
-        filledPrefix: t(
-          "skills.workspace.serviceSkill.prefill.filledPrefix",
-          "上次填写：",
-        ),
-        extraPrefix: t(
-          "skills.workspace.serviceSkill.prefill.extraPrefix",
-          "上次补充：",
-        ),
+        filledPrefix: t("skills.workspace.serviceSkill.prefill.filledPrefix"),
+        extraPrefix: t("skills.workspace.serviceSkill.prefill.extraPrefix"),
         itemSeparator,
         segmentSeparator: t(
           "skills.workspace.serviceSkill.prefill.segmentSeparator",
-          " · ",
         ),
         formatFilledItems: (visibleItems, totalCount) => {
           const items = visibleItems.join(itemSeparator);
@@ -551,7 +464,6 @@ export function SkillsWorkspacePage({
 
           const locale = i18n.language;
           return t("skills.workspace.serviceSkill.prefill.filledWithMore", {
-            defaultValue: "{{items}} 等 {{total}} 项",
             items,
             remaining: formatNumber(totalCount - visibleItems.length, {
               locale,
@@ -561,27 +473,19 @@ export function SkillsWorkspacePage({
         },
         formatRecentServiceHint: (skillTitle) =>
           t("skills.workspace.serviceSkill.prefill.recentServiceHint", {
-            defaultValue:
-              "已根据你上次成功执行 {{title}} 时的参数自动预填，可继续修改后执行。",
             title: skillTitle,
           }),
         formatRecentSceneHint: (sceneTitle) =>
           t("skills.workspace.serviceSkill.prefill.recentSceneHint", {
-            defaultValue:
-              "已根据你上次成功执行 {{title}} 时的输入自动预填，可继续修改后执行。",
             title: sceneTitle,
           }),
       };
     }, [i18n.language, t]);
   const curatedTaskPresentationCopy =
     useMemo<CuratedTaskPresentationCopy>(() => {
-      const itemSeparator = t(
-        "skills.workspace.curatedTask.itemSeparator",
-        "；",
-      );
+      const itemSeparator = t("skills.workspace.curatedTask.itemSeparator");
       const formatItemsWithMore = (
-        key: string,
-        defaultValue: string,
+        key: CuratedTaskWithMoreKey,
         visibleItems: string[],
         totalCount: number,
       ) => {
@@ -592,7 +496,6 @@ export function SkillsWorkspacePage({
 
         const locale = i18n.language;
         return t(key, {
-          defaultValue,
           items,
           remaining: formatNumber(totalCount - visibleItems.length, {
             locale,
@@ -602,57 +505,37 @@ export function SkillsWorkspacePage({
       };
 
       return {
-        followUpPrefix: t(
-          "skills.workspace.curatedTask.followUpPrefix",
-          "下一步：",
-        ),
+        followUpPrefix: t("skills.workspace.curatedTask.followUpPrefix"),
         itemSeparator,
-        outputPrefix: t("skills.workspace.curatedTask.outputPrefix", "交付："),
+        outputPrefix: t("skills.workspace.curatedTask.outputPrefix"),
         recentFilledPrefix: t(
           "skills.workspace.curatedTask.recentFilledPrefix",
-          "上次填写：",
         ),
         recentReferencePrefix: t(
           "skills.workspace.curatedTask.recentReferencePrefix",
-          "参考：",
         ),
-        requiredPrefix: t(
-          "skills.workspace.curatedTask.requiredPrefix",
-          "需要：",
-        ),
+        requiredPrefix: t("skills.workspace.curatedTask.requiredPrefix"),
         resultDestinationPrefix: t(
           "skills.workspace.curatedTask.resultDestinationPrefix",
-          "去向：",
         ),
-        segmentSeparator: t(
-          "skills.workspace.curatedTask.segmentSeparator",
-          " · ",
-        ),
+        segmentSeparator: t("skills.workspace.curatedTask.segmentSeparator"),
         formatFactItems: (visibleItems, totalCount) =>
           formatItemsWithMore(
             "skills.workspace.curatedTask.factItems.withMore",
-            "{{items}} 等 {{total}} 项",
             visibleItems,
             totalCount,
           ),
         formatRecentPrefillHint: (taskTitle) =>
           t("skills.workspace.curatedTask.prefillHint", {
-            defaultValue:
-              "已根据你上次启动 {{title}} 时的参数自动预填，可继续修改后进入生成。",
             title: taskTitle,
           }),
         formatRecentReferenceFallback: (totalCount) =>
-          t(
-            "skills.workspace.curatedTask.recentReferenceFallback",
-            "{{count}} 条参考对象",
-            {
-              count: totalCount,
-            },
-          ),
+          t("skills.workspace.curatedTask.recentReferenceFallback", {
+            count: totalCount,
+          }),
         formatRecentReferenceItems: (visibleTitles, totalCount) =>
           formatItemsWithMore(
             "skills.workspace.curatedTask.referenceItems.withMore",
-            "{{items}} 等 {{total}} 条",
             visibleTitles,
             totalCount,
           ),
@@ -660,21 +543,22 @@ export function SkillsWorkspacePage({
     }, [i18n.language, t]);
   const curatedTaskTemplateCopy = useMemo(
     () =>
-      buildCuratedTaskTemplateCopy((key, defaultValue, values) =>
-        t(key, { defaultValue, ...values }),
+      buildCuratedTaskTemplateCopy((key, values) =>
+        t(key as AgentI18nKey, values ?? {}),
       ),
     [t],
+  );
+  const recentReviewReasonLabel = t(
+    "curatedTask.templates.recommendation.recentReviewReasonLabel",
   );
   const workspaceSkillManagedAutomationInitialValuesCopy =
     useMemo<WorkspaceSkillManagedAutomationInitialValuesCopy>(
       () => ({
         descriptionPausedByDefault: t(
           "skills.workspace.managedJob.initialValues.description.pausedByDefault",
-          "默认先暂停，确认调度与权限后再启用。",
         ),
         descriptionSource: t(
           "skills.workspace.managedJob.initialValues.description.source",
-          "来源：P4 Workspace Agent envelope 草案。",
         ),
         formatDescriptionProvenance: (
           sourceDraftId,
@@ -683,62 +567,47 @@ export function SkillsWorkspacePage({
           t(
             "skills.workspace.managedJob.initialValues.description.provenance",
             {
-              defaultValue:
-                "Provenance：{{sourceDraftId}} / {{sourceVerificationReportId}}",
               sourceDraftId,
               sourceVerificationReportId,
             },
           ),
         formatDescriptionSkill: (skillName) =>
           t("skills.workspace.managedJob.initialValues.description.skill", {
-            defaultValue: "Skill：{{skill}}",
             skill: skillName,
           }),
         formatName: (displayName) =>
           t("skills.workspace.managedJob.initialValues.name", {
-            defaultValue: "{{name}}｜Managed Agent 草案",
             name: displayName,
           }),
         formatObjective: (displayName) =>
           t("skills.workspace.managedJob.initialValues.objective", {
-            defaultValue:
-              "按计划运行 Workspace Skill「{{name}}」，交付可审计结果。",
             name: displayName,
           }),
         formatPromptIntro: (displayName, skillName) =>
           t("skills.workspace.managedJob.initialValues.prompt.intro", {
-            defaultValue:
-              "请按当前 Workspace Agent envelope 草案运行 Skill「{{name}}」（{{skill}}）。",
             name: displayName,
             skill: skillName,
           }),
         promptNeedsInput: t(
           "skills.workspace.managedJob.initialValues.prompt.needsInput",
-          "如果执行缺少必要输入或外部写权限，请返回 needs_input / blocked 的原因，不要绕过确认。",
         ),
         promptReadRunbook: t(
           "skills.workspace.managedJob.initialValues.prompt.readRunbook",
-          "先读取 Skill 的 Runbook、权限说明和输入约束，再执行任务。",
         ),
         promptResultEvidence: t(
           "skills.workspace.managedJob.initialValues.prompt.resultEvidence",
-          "完成后输出结果摘要，并保留可进入 evidence pack 的产物与关键步骤。",
         ),
         successCriteriaControlledGet: t(
           "skills.workspace.managedJob.initialValues.successCriteria.controlledGet",
-          "Read-Only HTTP API 任务必须包含已执行的受控 GET 证据",
         ),
         successCriteriaEvidence: t(
           "skills.workspace.managedJob.initialValues.successCriteria.evidence",
-          "完成状态必须依赖产物、时间线与证据，而不是模型自报",
         ),
         successCriteriaRuntimeEnable: t(
           "skills.workspace.managedJob.initialValues.successCriteria.runtimeEnable",
-          "必须在本次运行会话中获得明确授权",
         ),
         successCriteriaSubmitTurn: t(
           "skills.workspace.managedJob.initialValues.successCriteria.submitTurn",
-          "必须通过统一的 Agent 运行入口执行",
         ),
       }),
       [t],
@@ -932,12 +801,7 @@ export function SkillsWorkspacePage({
         setCapabilityDraftProject(project ?? null);
         setCapabilityDraftWorkspaceRoot(rootPath);
         setCapabilityDraftProjectError(
-          rootPath
-            ? null
-            : t(
-                "skills.workspace.capabilityDraft.missingRoot",
-                "当前项目没有可用的本地目录",
-              ),
+          rootPath ? null : t("skills.workspace.capabilityDraft.missingRoot"),
         );
       })
       .catch((error) => {
@@ -1128,7 +992,7 @@ export function SkillsWorkspacePage({
       signal: latestReviewRecommendationSignal,
     });
     const highlightedTemplates = visibleFeaturedCuratedTaskTemplates
-      .filter((featured) => featured.reasonLabel === "围绕最近判断")
+      .filter((featured) => featured.reasonLabel === recentReviewReasonLabel)
       .slice(0, 2);
     if (highlightedTemplates.length === 0) {
       return null;
@@ -1157,7 +1021,6 @@ export function SkillsWorkspacePage({
         .join(" / "),
       actionLabel: primarySuggestedTemplate
         ? t("skills.workspace.reviewBanner.action", {
-            defaultValue: "继续去「{{title}}」",
             title: primarySuggestedTemplate.template.title,
           })
         : null,
@@ -1173,6 +1036,7 @@ export function SkillsWorkspacePage({
     };
   }, [
     latestReviewRecommendationSignal,
+    recentReviewReasonLabel,
     t,
     visibleFeaturedCuratedTaskTemplates,
   ]);
@@ -1214,13 +1078,10 @@ export function SkillsWorkspacePage({
     setRefreshing(true);
     try {
       await Promise.allSettled([refreshServiceSkills(), refreshLocalSkills()]);
-      toast.success(
-        t("skills.workspace.feedback.refreshSuccess", "Skills 已刷新"),
-      );
+      toast.success(t("skills.workspace.feedback.refreshSuccess"));
     } catch (error) {
       toast.error(
         t("skills.workspace.feedback.refreshError", {
-          defaultValue: "刷新 Skills 失败：{{message}}",
           message: String(error),
         }),
       );
@@ -1262,13 +1123,9 @@ export function SkillsWorkspacePage({
             : {}),
           entryBannerMessage: normalizedReplayText
             ? t("skills.workspace.installedSkill.entryBannerWithReplay", {
-                defaultValue:
-                  "已带着 Skill「{{name}}」和上次目标回到生成，接着把这轮做下去就行。",
                 name: skill.name,
               })
             : t("skills.workspace.installedSkill.entryBanner", {
-                defaultValue:
-                  "已带着 Skill「{{name}}」回到生成，接着把这轮做下去就行。",
                 name: skill.name,
               }),
         }),
@@ -1288,12 +1145,7 @@ export function SkillsWorkspacePage({
   const handleWorkspaceRuntimeEnable = useCallback(
     (binding: AgentRuntimeWorkspaceSkillBinding) => {
       if (!capabilityDraftWorkspaceRoot) {
-        toast.error(
-          t(
-            "skills.workspace.runtimeEnable.missingRoot",
-            "当前项目没有可用的本地目录，无法启用 Workspace Skill。",
-          ),
-        );
+        toast.error(t("skills.workspace.runtimeEnable.missingRoot"));
         return;
       }
 
@@ -1304,12 +1156,7 @@ export function SkillsWorkspacePage({
         });
 
       if (!runtimeEnableMetadata) {
-        toast.error(
-          t(
-            "skills.workspace.runtimeEnable.notReady",
-            "该 Workspace Skill 尚未通过 runtime enable gate。",
-          ),
-        );
+        toast.error(t("skills.workspace.runtimeEnable.notReady"));
         return;
       }
 
@@ -1327,8 +1174,6 @@ export function SkillsWorkspacePage({
             harness: runtimeEnableMetadata,
           },
           entryBannerMessage: t("skills.workspace.runtimeEnable.entryBanner", {
-            defaultValue:
-              "已在本回合显式启用 Workspace Skill「{{name}}」；这只授权当前会话调用，不创建自动化。",
             name: skillName,
           }),
         }),
@@ -1349,21 +1194,11 @@ export function SkillsWorkspacePage({
       options?: WorkspaceSkillAgentAutomationDraftOptions,
     ) => {
       if (!creationProjectId || !capabilityDraftProject) {
-        toast.error(
-          t(
-            "skills.workspace.managedJob.missingProject",
-            "缺少项目工作区，无法创建 Managed Job 草案。",
-          ),
-        );
+        toast.error(t("skills.workspace.managedJob.missingProject"));
         return;
       }
       if (!capabilityDraftWorkspaceRoot) {
-        toast.error(
-          t(
-            "skills.workspace.managedJob.missingRoot",
-            "当前项目没有可用的本地目录，无法创建 Managed Job 草案。",
-          ),
-        );
+        toast.error(t("skills.workspace.managedJob.missingRoot"));
         return;
       }
 
@@ -1375,12 +1210,7 @@ export function SkillsWorkspacePage({
         copy: workspaceSkillManagedAutomationInitialValuesCopy,
       });
       if (!initialValues) {
-        toast.error(
-          t(
-            "skills.workspace.managedJob.notReady",
-            "该 Workspace Skill 尚未满足 Managed Job 草案条件。",
-          ),
-        );
+        toast.error(t("skills.workspace.managedJob.notReady"));
         return;
       }
 
@@ -1409,12 +1239,7 @@ export function SkillsWorkspacePage({
   const handleWorkspaceSkillAutomationSubmit = useCallback(
     async (payload: AutomationJobDialogSubmit) => {
       if (payload.mode !== "create") {
-        throw new Error(
-          t(
-            "skills.workspace.managedJob.unsupportedMode",
-            "当前入口只支持创建新的 Managed Job 草案",
-          ),
-        );
+        throw new Error(t("skills.workspace.managedJob.unsupportedMode"));
       }
 
       setWorkspaceSkillAutomationSaving(true);
@@ -1422,7 +1247,6 @@ export function SkillsWorkspacePage({
         const createdJob = await createAutomationJob(payload.request);
         toast.success(
           t("skills.workspace.managedJob.created", {
-            defaultValue: "Managed Job 草案已创建：{{name}}",
             name: createdJob.name,
           }),
         );
@@ -1431,7 +1255,6 @@ export function SkillsWorkspacePage({
       } catch (error) {
         toast.error(
           t("skills.workspace.managedJob.createFailed", {
-            defaultValue: "创建 Managed Job 草案失败：{{message}}",
             message: error instanceof Error ? error.message : String(error),
           }),
         );
@@ -1474,7 +1297,6 @@ export function SkillsWorkspacePage({
       } catch (error) {
         toast.error(
           t("skills.workspace.feedback.refreshError", {
-            defaultValue: "刷新 Skills 失败：{{message}}",
             message: String(error),
           }),
         );
@@ -1496,7 +1318,6 @@ export function SkillsWorkspacePage({
       );
       toast.success(
         t("skills.workspace.scaffold.created", {
-          defaultValue: "已创建“{{name}}”并收进 Skills",
           name: skill.name,
         }),
       );
@@ -1520,7 +1341,7 @@ export function SkillsWorkspacePage({
   const activeScaffoldTitle = useMemo(
     () =>
       activeScaffoldDraft?.name?.trim() ||
-      t("skills.workspace.scaffold.defaultTitle", "当前 Skill 草稿"),
+      t("skills.workspace.scaffold.defaultTitle"),
     [activeScaffoldDraft, t],
   );
   const activeScaffoldReplayText = useMemo(
@@ -1590,10 +1411,7 @@ export function SkillsWorkspacePage({
         options.inputValues,
         options.referenceSelection.referenceMemoryIds,
         options.referenceSelection.referenceEntries,
-        t(
-          "skills.workspace.launcher.reviewPrefillHint",
-          "已按最近判断切到更适合的结果模板，接着把这一步补齐就能开始。",
-        ),
+        t("skills.workspace.launcher.reviewPrefillHint"),
       );
     },
     [handleCuratedTaskTemplateLauncherRequest, t],
@@ -1660,8 +1478,6 @@ export function SkillsWorkspacePage({
             requestKey: Date.now(),
           },
           entryBannerMessage: t("skills.workspace.curatedTask.entryBanner", {
-            defaultValue:
-              "已带着结果模板“{{title}}”的启动信息回到生成，接着把这轮做下去就行。",
             title: resolvedTemplate.title,
           }),
         }),
@@ -1742,13 +1558,10 @@ export function SkillsWorkspacePage({
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <h1 className="text-2xl font-semibold text-slate-900">
-                  {t("skills.workspace.header.title", "Skills")}
+                  {t("skills.workspace.header.title")}
                 </h1>
                 <p className="mt-1 text-sm text-slate-600">
-                  {t(
-                    "skills.workspace.header.subtitle",
-                    "选择一个 Skill 开始创作",
-                  )}
+                  {t("skills.workspace.header.subtitle")}
                 </p>
               </div>
 
@@ -1768,7 +1581,7 @@ export function SkillsWorkspacePage({
                       refreshing && "animate-spin",
                     )}
                   />
-                  {t("skills.workspace.header.refresh", "刷新")}
+                  {t("skills.workspace.header.refresh")}
                 </Button>
                 <Button
                   type="button"
@@ -1777,7 +1590,7 @@ export function SkillsWorkspacePage({
                   className="rounded-lg border-slate-200 bg-white px-3 text-slate-700 hover:bg-slate-50"
                   onClick={handleOpenSceneAppsDirectory}
                 >
-                  {t("skills.workspace.header.viewAll", "查看全部")}
+                  {t("skills.workspace.header.viewAll")}
                 </Button>
               </div>
             </div>
@@ -1791,7 +1604,7 @@ export function SkillsWorkspacePage({
                   <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div className="min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
                       <span className="rounded-full border border-sky-200 bg-white px-2 py-0.5 text-[11px] font-medium text-sky-700">
-                        {t("skills.workspace.activeScaffold.badge", "这次续用")}
+                        {t("skills.workspace.activeScaffold.badge")}
                       </span>
                       <span className="min-w-0 font-medium text-slate-900">
                         {activeScaffoldTitle}
@@ -1799,7 +1612,6 @@ export function SkillsWorkspacePage({
                       {activeScaffoldSummary ? (
                         <span className="max-w-xl truncate text-xs leading-5 text-slate-500">
                           {t("skills.workspace.activeScaffold.summary", {
-                            defaultValue: "这次沿用：{{summary}}",
                             summary: summarizeRecentReplayText(
                               activeScaffoldSummary,
                             ),
@@ -1809,7 +1621,6 @@ export function SkillsWorkspacePage({
                       {activeScaffoldReplayText ? (
                         <span className="max-w-xl truncate text-xs leading-5 text-slate-500">
                           {t("skills.workspace.activeScaffold.replay", {
-                            defaultValue: "上次目标：{{summary}}",
                             summary: summarizeRecentReplayText(
                               activeScaffoldReplayText,
                             ),
@@ -1826,10 +1637,7 @@ export function SkillsWorkspacePage({
                         data-testid="skills-workspace-open-scaffold-manager"
                         onClick={() => setAdvancedManagerOpen(true)}
                       >
-                        {t(
-                          "skills.workspace.activeScaffold.continueEdit",
-                          "继续补完",
-                        )}
+                        {t("skills.workspace.activeScaffold.continueEdit")}
                       </Button>
                       <Button
                         type="button"
@@ -1841,10 +1649,7 @@ export function SkillsWorkspacePage({
                           handleBringScaffoldToCreation(activeScaffoldDraft)
                         }
                       >
-                        {t(
-                          "skills.workspace.activeScaffold.backToCreation",
-                          "回到生成",
-                        )}
+                        {t("skills.workspace.activeScaffold.backToCreation")}
                         <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                       </Button>
                     </div>
@@ -1856,10 +1661,7 @@ export function SkillsWorkspacePage({
                 <Input
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder={t(
-                    "skills.workspace.search.placeholder",
-                    "搜索想拿的结果、这一步或 Skill 名",
-                  )}
+                  placeholder={t("skills.workspace.search.placeholder")}
                   className="h-10 rounded-lg border-slate-200 bg-slate-50 pl-10"
                 />
               </div>
@@ -1870,16 +1672,14 @@ export function SkillsWorkspacePage({
             <div className="rounded-[24px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-700">
               {serviceSkillsError
                 ? t("skills.workspace.error.serviceSkills", {
-                    defaultValue: "推荐 Skills 暂时没同步下来：{{message}}",
                     message: serviceSkillsError,
                   })
                 : null}
               {serviceSkillsError && localSkillsError
-                ? t("skills.workspace.error.separator", "；")
+                ? t("skills.workspace.error.separator")
                 : null}
               {localSkillsError
                 ? t("skills.workspace.error.localSkills", {
-                    defaultValue: "本地 Skills 暂时没读到：{{message}}",
                     message: localSkillsError,
                   })
                 : null}
@@ -1891,13 +1691,10 @@ export function SkillsWorkspacePage({
               <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h2 className="text-base font-semibold text-slate-900">
-                    {t("skills.workspace.recommendation.title", "推荐")}
+                    {t("skills.workspace.recommendation.title")}
                   </h2>
                   <span className="text-xs text-slate-500">
-                    {t(
-                      "skills.workspace.recommendation.subtitle",
-                      "先选结果，再补信息",
-                    )}
+                    {t("skills.workspace.recommendation.subtitle")}
                   </span>
                 </div>
 
@@ -1909,7 +1706,6 @@ export function SkillsWorkspacePage({
                     <div className="min-w-0 flex-1 space-y-1">
                       <div className="text-sm font-medium text-slate-900">
                         {t("skills.workspace.reviewBanner.title", {
-                          defaultValue: "最近判断已更新：{{title}}",
                           title: reviewRecommendationBanner.title,
                         })}
                       </div>
@@ -1919,7 +1715,6 @@ export function SkillsWorkspacePage({
                     </div>
                     <div className="sr-only">
                       {t("skills.workspace.reviewBanner.nextSteps", {
-                        defaultValue: "更适合继续：{{nextSteps}}",
                         nextSteps: reviewRecommendationBanner.nextSteps,
                       })}
                     </div>
@@ -2016,7 +1811,6 @@ export function SkillsWorkspacePage({
                                 <span className="shrink-0 rounded-full border border-emerald-200 bg-white px-2 py-0.5 text-[11px] font-medium text-emerald-700">
                                   {t(
                                     "skills.workspace.featured.recommendedBadge",
-                                    "推荐",
                                   )}
                                 </span>
                               ) : null}
@@ -2037,7 +1831,6 @@ export function SkillsWorkspacePage({
                                     <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-medium text-emerald-900">
                                       {t(
                                         "skills.workspace.featured.reuseResult",
-                                        "沿用结果",
                                       )}
                                     </span>
                                     <span className="min-w-0 flex-1 line-clamp-1">
@@ -2048,13 +1841,10 @@ export function SkillsWorkspacePage({
                                     {t(
                                       "skills.workspace.featured.currentBaseline",
                                       {
-                                        defaultValue:
-                                          "当前结果基线：{{sourceTitle}}",
                                         sourceTitle:
                                           reviewPrefillSnapshot?.sourceTitle ||
                                           t(
                                             "skills.workspace.featured.defaultSourceTitle",
-                                            "当前项目结果",
                                           ),
                                       },
                                     )}
@@ -2089,10 +1879,7 @@ export function SkillsWorkspacePage({
                                   )
                                 }
                               >
-                                {t(
-                                  "skills.workspace.featured.launch",
-                                  "进入生成",
-                                )}
+                                {t("skills.workspace.featured.launch")}
                                 <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                               </Button>
                             </div>
@@ -2104,14 +1891,8 @@ export function SkillsWorkspacePage({
                 ) : (
                   <div className="mt-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-sm text-slate-500">
                     {hasSidebarSearchResults
-                      ? t(
-                          "skills.workspace.empty.resultTemplates.hasSidebar",
-                          "结果模板暂无匹配；右侧已有可继续的 Skill，可以直接使用匹配结果。",
-                        )
-                      : t(
-                          "skills.workspace.empty.resultTemplates.default",
-                          "当前搜索下暂无结果模板。可以先清掉关键词，或直接从下方换个方向继续找。",
-                        )}
+                      ? t("skills.workspace.empty.resultTemplates.hasSidebar")
+                      : t("skills.workspace.empty.resultTemplates.default")}
                   </div>
                 )}
               </section>
@@ -2125,10 +1906,7 @@ export function SkillsWorkspacePage({
                           {selectedGroup.title}
                         </h2>
                         <p className="text-xs leading-5 text-slate-600">
-                          {t(
-                            "skills.workspace.group.selectedSubtitle",
-                            "选择这一组里的一个 Skill 继续",
-                          )}
+                          {t("skills.workspace.group.selectedSubtitle")}
                         </p>
                         <span className="sr-only">
                           {selectedGroup.summary}
@@ -2142,7 +1920,7 @@ export function SkillsWorkspacePage({
                         className="h-8 rounded-lg border-slate-200 bg-white px-2.5 text-xs text-slate-700 hover:bg-slate-50"
                         onClick={() => setSelectedGroupKey(null)}
                       >
-                        {t("skills.workspace.group.back", "换个方向")}
+                        {t("skills.workspace.group.back")}
                       </Button>
                     </div>
                   </section>
@@ -2154,16 +1932,10 @@ export function SkillsWorkspacePage({
                   ) : (
                     <div className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
                       <div className="text-sm font-semibold text-slate-900">
-                        {t(
-                          "skills.workspace.group.emptyTitle",
-                          "当前分组下暂无匹配 Skill",
-                        )}
+                        {t("skills.workspace.group.emptyTitle")}
                       </div>
                       <p className="mt-2 text-sm leading-6 text-slate-500">
-                        {t(
-                          "skills.workspace.group.emptyDescription",
-                          "可以调整搜索词，或先返回上一步换个方向继续找。",
-                        )}
+                        {t("skills.workspace.group.emptyDescription")}
                       </p>
                     </div>
                   )}
@@ -2173,7 +1945,7 @@ export function SkillsWorkspacePage({
                   <div className="flex flex-col gap-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="text-base font-semibold text-slate-900">
-                        {t("skills.workspace.categories.title", "分类")}
+                        {t("skills.workspace.categories.title")}
                       </h2>
                       <Button
                         type="button"
@@ -2182,7 +1954,7 @@ export function SkillsWorkspacePage({
                         className="h-8 rounded-lg border-slate-200 bg-white px-2.5 text-xs text-slate-700 hover:bg-slate-50"
                         onClick={handleOpenSceneAppsDirectory}
                       >
-                        {t("skills.workspace.header.viewAll", "查看全部")}
+                        {t("skills.workspace.header.viewAll")}
                       </Button>
                     </div>
                   </div>
@@ -2194,10 +1966,7 @@ export function SkillsWorkspacePage({
                       const hasRecommendedGroupSkills = groupSkills.length > 0;
                       const starterSummary = hasRecommendedGroupSkills
                         ? formatSkillGroupStarterSummary(groupSkills)
-                        : t(
-                            "skills.workspace.categories.defaultStarter",
-                            "先带着这次目标进去继续收窄。",
-                          );
+                        : t("skills.workspace.categories.defaultStarter");
 
                       return (
                         <article
@@ -2226,10 +1995,7 @@ export function SkillsWorkspacePage({
                               className="h-8 rounded-lg border-slate-200 bg-white px-2.5 text-xs text-slate-700 hover:bg-slate-50"
                               onClick={() => setSelectedGroupKey(group.key)}
                             >
-                              {t(
-                                "skills.workspace.categories.open",
-                                "进去看看",
-                              )}
+                              {t("skills.workspace.categories.open")}
                               <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                             </Button>
                           </div>
@@ -2242,24 +2008,16 @@ export function SkillsWorkspacePage({
                 <div className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
                   <div className="text-sm font-semibold text-slate-900">
                     {hasSidebarSearchResults
-                      ? t(
-                          "skills.workspace.empty.skillGroups.hasSidebarTitle",
-                          "分类暂无匹配，但已找到可用 Skill",
-                        )
-                      : t(
-                          "skills.workspace.empty.skillGroups.defaultTitle",
-                          "当前搜索下暂无 Skill 分组",
-                        )}
+                      ? t("skills.workspace.empty.skillGroups.hasSidebarTitle")
+                      : t("skills.workspace.empty.skillGroups.defaultTitle")}
                   </div>
                   <p className="mt-2 text-sm leading-6 text-slate-500">
                     {hasSidebarSearchResults
                       ? t(
                           "skills.workspace.empty.skillGroups.hasSidebarDescription",
-                          "先用右侧匹配到的本地或最近 Skill；需要更多方向时再调整搜索词。",
                         )
                       : t(
                           "skills.workspace.empty.skillGroups.defaultDescription",
-                          "可以尝试刷新，或换个结果方向、Skill 名继续找。",
                         )}
                   </p>
                 </div>
@@ -2272,7 +2030,7 @@ export function SkillsWorkspacePage({
                 data-testid="skills-workspace-sidebar-section-continuation"
               >
                 <h2 className="text-sm font-semibold text-emerald-900">
-                  {t("skills.workspace.sidebar.recent.title", "最近")}
+                  {t("skills.workspace.sidebar.recent.title")}
                 </h2>
 
                 {visibleRecentPreview.length > 0 ? (
@@ -2323,15 +2081,9 @@ export function SkillsWorkspacePage({
                   </div>
                 ) : (
                   <div className="mt-3 rounded-lg border border-dashed border-emerald-200 bg-white px-4 py-6 text-sm text-emerald-700/80">
-                    {t(
-                      "skills.workspace.sidebar.recent.empty",
-                      "还没有最近项。先开始一个 Skill。",
-                    )}
+                    {t("skills.workspace.sidebar.recent.empty")}
                     <span className="sr-only">
-                      {t(
-                        "skills.workspace.sidebar.recent.emptySr",
-                        "当前还没有可继续项。先从左侧拿一个结果或 Skill 开始，后续会自动回到这里。",
-                      )}
+                      {t("skills.workspace.sidebar.recent.emptySr")}
                     </span>
                   </div>
                 )}
@@ -2339,7 +2091,7 @@ export function SkillsWorkspacePage({
 
               <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 <summary className="cursor-pointer list-none text-sm font-medium text-slate-800 [&::-webkit-details-marker]:hidden">
-                  {t("skills.workspace.sidebar.drafts.title", "能力草案")}
+                  {t("skills.workspace.sidebar.drafts.title")}
                 </summary>
                 <div className="mt-3">
                   <CapabilityDraftPanel
@@ -2358,7 +2110,7 @@ export function SkillsWorkspacePage({
 
               <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 <summary className="cursor-pointer list-none text-sm font-medium text-slate-800 [&::-webkit-details-marker]:hidden">
-                  {t("skills.workspace.sidebar.registered.title", "已注册能力")}
+                  {t("skills.workspace.sidebar.registered.title")}
                 </summary>
                 <div className="mt-3">
                   <WorkspaceRegisteredSkillsPanel
@@ -2381,7 +2133,7 @@ export function SkillsWorkspacePage({
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h2 className="text-sm font-semibold text-slate-900">
-                    {t("skills.workspace.sidebar.local.title", "本地 Skills")}
+                    {t("skills.workspace.sidebar.local.title")}
                   </h2>
                   <Button
                     type="button"
@@ -2391,7 +2143,7 @@ export function SkillsWorkspacePage({
                     onClick={() => setAdvancedManagerOpen(true)}
                   >
                     <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
-                    {t("skills.workspace.sidebar.local.manage", "调整")}
+                    {t("skills.workspace.sidebar.local.manage")}
                   </Button>
                 </div>
 
@@ -2407,7 +2159,6 @@ export function SkillsWorkspacePage({
                             <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
                               {t(
                                 "skills.workspace.sidebar.local.highlightedBadge",
-                                "刚沉淀",
                               )}
                             </span>
                             <span className="min-w-0 font-semibold text-slate-900">
@@ -2423,7 +2174,6 @@ export function SkillsWorkspacePage({
                             <span className="text-xs leading-5 text-slate-500">
                               {t(
                                 "skills.workspace.sidebar.local.highlightedDescription",
-                                "已经收回这里，后面可以直接继续。",
                               )}
                             </span>
                           </div>
@@ -2443,7 +2193,6 @@ export function SkillsWorkspacePage({
                             >
                               {t(
                                 "skills.workspace.sidebar.local.backToGeneration",
-                                "回到生成",
                               )}
                               <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                             </Button>
@@ -2480,7 +2229,6 @@ export function SkillsWorkspacePage({
                               <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700">
                                 {t(
                                   "skills.workspace.sidebar.local.highlightedBadge",
-                                  "刚沉淀",
                                 )}
                               </span>
                             ) : null}
@@ -2508,22 +2256,15 @@ export function SkillsWorkspacePage({
                                 skill,
                                 installedSkillPresentationCopy,
                               )}
-                              {t(
-                                "skills.workspace.sidebar.local.generationSr",
-                                "回到生成后会继续按这个 Skill 往下做。",
-                              )}
+                              {t("skills.workspace.sidebar.local.generationSr")}
                             </span>
                           </div>
                           <div className="mt-3 flex items-center justify-between gap-3">
                             <div className="line-clamp-1 text-[11px] leading-5 text-slate-500">
-                              {t(
-                                "skills.workspace.sidebar.local.continueHint",
-                                "带着这个 Skill 继续生成",
-                              )}
+                              {t("skills.workspace.sidebar.local.continueHint")}
                               <span className="sr-only">
                                 {t(
                                   "skills.workspace.sidebar.local.continueHintSr",
-                                  "回到生成后会继续按这个 Skill 往下做，跑顺后的结果也会再沉淀回来。",
                                 )}
                               </span>
                             </div>
@@ -2541,7 +2282,6 @@ export function SkillsWorkspacePage({
                             >
                               {t(
                                 "skills.workspace.sidebar.local.continueAction",
-                                "继续这个 Skill",
                               )}
                               <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                             </Button>
@@ -2552,10 +2292,7 @@ export function SkillsWorkspacePage({
                   </div>
                 ) : (
                   <div className="mt-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-                    {t(
-                      "skills.workspace.sidebar.local.empty",
-                      "当前还没有本地 Skill。先从左侧 Skill 开始，后续再沉淀到这里也很自然。",
-                    )}
+                    {t("skills.workspace.sidebar.local.empty")}
                   </div>
                 )}
               </section>
@@ -2569,18 +2306,10 @@ export function SkillsWorkspacePage({
           <div className="flex h-[calc(100vh-88px)] min-h-[680px] flex-col bg-white">
             <DialogHeader className="border-b border-slate-200 px-6 py-5">
               <div className="flex flex-wrap items-center gap-2">
-                <DialogTitle>
-                  {t("skills.workspace.manager.title", "调整 Skills")}
-                </DialogTitle>
+                <DialogTitle>{t("skills.workspace.manager.title")}</DialogTitle>
                 <WorkbenchInfoTip
-                  ariaLabel={t(
-                    "skills.workspace.manager.tipAria",
-                    "调整 Skills 弹窗说明",
-                  )}
-                  content={t(
-                    "skills.workspace.manager.tipContent",
-                    "需要补、改、删时在这里处理；平时还是先从结果和顺手 Skill 开工。",
-                  )}
+                  ariaLabel={t("skills.workspace.manager.tipAria")}
+                  content={t("skills.workspace.manager.tipContent")}
                   tone="mint"
                 />
               </div>

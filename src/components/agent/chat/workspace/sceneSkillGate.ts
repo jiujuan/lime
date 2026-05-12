@@ -1,6 +1,7 @@
 import type { SkillCatalogSceneEntry } from "@/lib/api/skillCatalog";
 import type { Project } from "@/lib/api/project";
 import type { A2UIFormData, A2UIResponse } from "@/lib/workspace/a2ui";
+import agentSourceResource from "@/i18n/resources/zh-CN/agent.json";
 import type {
   ServiceSkillItem,
   ServiceSkillSlotDefinition,
@@ -63,6 +64,171 @@ export interface RuntimeSceneGatePrefill {
   hint?: string;
 }
 
+export interface RuntimeSceneGateCopy {
+  projectFieldLabel?: string;
+  projectFieldDescription?: string;
+  projectWorkspaceTypeGeneral?: string;
+  projectDefaultLabel?: string;
+  projectIdPlaceholder?: string;
+  projectIdHelperText?: string;
+  fallbackDescription?: string;
+  submitLabel?: string;
+  itemSeparator?: string;
+  missingProject?: string;
+  missingDefault?: string;
+  unavailableMessage?: string;
+  launchFailedFallback?: string;
+  formatTitle?: (sceneTitle: string) => string;
+  formatMissingSlotsAndProject?: (
+    slotLabels: string[],
+    projectLabel: string,
+  ) => string;
+  formatMissingSlots?: (slotLabels: string[]) => string;
+  formatLaunchFailed?: (message: string) => string;
+}
+
+export interface ResolvedRuntimeSceneGateCopy {
+  projectFieldLabel: string;
+  projectFieldDescription: string;
+  projectWorkspaceTypeGeneral: string;
+  projectDefaultLabel: string;
+  projectIdPlaceholder: string;
+  projectIdHelperText: string;
+  fallbackDescription: string;
+  submitLabel: string;
+  itemSeparator: string;
+  missingProject: string;
+  missingDefault: string;
+  unavailableMessage: string;
+  launchFailedFallback: string;
+  formatTitle: (sceneTitle: string) => string;
+  formatMissingSlotsAndProject: (
+    slotLabels: string[],
+    projectLabel: string,
+  ) => string;
+  formatMissingSlots: (slotLabels: string[]) => string;
+  formatLaunchFailed: (message: string) => string;
+}
+
+type AgentSourceResourceKey = keyof typeof agentSourceResource;
+
+function interpolateRuntimeSceneGateSourceTemplate(
+  template: string,
+  values?: Record<string, number | string>,
+): string {
+  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, name) => {
+    const value = values?.[name];
+    return value == null ? match : String(value);
+  });
+}
+
+function translateRuntimeSceneGateSourceKey(
+  key: string,
+  values?: Record<string, number | string>,
+): string {
+  const template = agentSourceResource[key as AgentSourceResourceKey] ?? key;
+  return interpolateRuntimeSceneGateSourceTemplate(template, values);
+}
+
+const SOURCE_RUNTIME_SCENE_GATE_COPY: ResolvedRuntimeSceneGateCopy = {
+  projectFieldLabel: translateRuntimeSceneGateSourceKey(
+    "sceneGate.project.label",
+  ),
+  projectFieldDescription: translateRuntimeSceneGateSourceKey(
+    "sceneGate.project.description",
+  ),
+  projectWorkspaceTypeGeneral: translateRuntimeSceneGateSourceKey(
+    "sceneGate.project.workspaceType.general",
+  ),
+  projectDefaultLabel: translateRuntimeSceneGateSourceKey(
+    "sceneGate.project.defaultLabel",
+  ),
+  projectIdPlaceholder: translateRuntimeSceneGateSourceKey(
+    "sceneGate.project.placeholder",
+  ),
+  projectIdHelperText: translateRuntimeSceneGateSourceKey(
+    "sceneGate.project.helperText",
+  ),
+  fallbackDescription: translateRuntimeSceneGateSourceKey(
+    "sceneGate.description.fallback",
+  ),
+  submitLabel: translateRuntimeSceneGateSourceKey("sceneGate.action.submit"),
+  itemSeparator: translateRuntimeSceneGateSourceKey(
+    "sceneGate.validation.itemSeparator",
+  ),
+  missingProject: translateRuntimeSceneGateSourceKey(
+    "sceneGate.validation.missingProject",
+  ),
+  missingDefault: translateRuntimeSceneGateSourceKey(
+    "sceneGate.validation.missingDefault",
+  ),
+  unavailableMessage: translateRuntimeSceneGateSourceKey(
+    "sceneGate.toast.unavailable",
+  ),
+  launchFailedFallback: translateRuntimeSceneGateSourceKey(
+    "sceneGate.toast.launchFailedFallback",
+  ),
+  formatTitle: (sceneTitle) =>
+    translateRuntimeSceneGateSourceKey("sceneGate.title", {
+      title: sceneTitle,
+    }),
+  formatMissingSlotsAndProject: (slotLabels, projectLabel) =>
+    translateRuntimeSceneGateSourceKey(
+      "sceneGate.validation.missingSlotsAndProject",
+      {
+        fields: slotLabels.join(
+          translateRuntimeSceneGateSourceKey(
+            "sceneGate.validation.itemSeparator",
+          ),
+        ),
+        project: projectLabel,
+      },
+    ),
+  formatMissingSlots: (slotLabels) =>
+    translateRuntimeSceneGateSourceKey("sceneGate.validation.missingSlots", {
+      fields: slotLabels.join(
+        translateRuntimeSceneGateSourceKey(
+          "sceneGate.validation.itemSeparator",
+        ),
+      ),
+    }),
+  formatLaunchFailed: (message) =>
+    translateRuntimeSceneGateSourceKey("sceneGate.toast.launchFailed", {
+      message,
+    }),
+};
+
+export function resolveRuntimeSceneGateCopy(
+  copy?: RuntimeSceneGateCopy,
+): ResolvedRuntimeSceneGateCopy {
+  const itemSeparator =
+    copy?.itemSeparator ?? SOURCE_RUNTIME_SCENE_GATE_COPY.itemSeparator;
+  return {
+    ...SOURCE_RUNTIME_SCENE_GATE_COPY,
+    ...(copy ?? {}),
+    itemSeparator,
+    formatMissingSlotsAndProject:
+      copy?.formatMissingSlotsAndProject ??
+      ((slotLabels, projectLabel) =>
+        translateRuntimeSceneGateSourceKey(
+          "sceneGate.validation.missingSlotsAndProject",
+          {
+            fields: slotLabels.join(itemSeparator),
+            project: projectLabel,
+          },
+        )),
+    formatMissingSlots:
+      copy?.formatMissingSlots ??
+      ((slotLabels) =>
+        translateRuntimeSceneGateSourceKey(
+          "sceneGate.validation.missingSlots",
+          {
+            fields: slotLabels.join(itemSeparator),
+          },
+        )),
+  };
+}
+
 function normalizeOptionalText(value: unknown): string | undefined {
   if (typeof value !== "string") {
     return undefined;
@@ -86,7 +252,9 @@ function buildGateKey(
 function buildRuntimeSceneGateFields(params: {
   missingSlots?: ServiceSkillSlotDefinition[];
   requireProject?: boolean;
+  copy?: RuntimeSceneGateCopy;
 }): RuntimeSceneGateField[] {
+  const copy = resolveRuntimeSceneGateCopy(params.copy);
   const fields: RuntimeSceneGateField[] = [];
 
   for (const slot of params.missingSlots || []) {
@@ -107,9 +275,9 @@ function buildRuntimeSceneGateFields(params: {
     fields.push({
       kind: "project",
       key: "project_id",
-      label: "项目工作区",
+      label: copy.projectFieldLabel,
       required: true,
-      description: "选择这次结果要落到哪个项目里。",
+      description: copy.projectFieldDescription,
     });
   }
 
@@ -122,10 +290,12 @@ export function buildRuntimeSceneGateRequest(params: {
   skill: ServiceSkillItem;
   missingSlots?: ServiceSkillSlotDefinition[];
   requireProject?: boolean;
+  copy?: RuntimeSceneGateCopy;
 }): RuntimeSceneGateRequest | null {
   const fields = buildRuntimeSceneGateFields({
     missingSlots: params.missingSlots,
     requireProject: params.requireProject,
+    copy: params.copy,
   });
   if (fields.length === 0) {
     return null;
@@ -144,7 +314,10 @@ export function buildRuntimeSceneGateRequest(params: {
   };
 }
 
-function buildProjectChoiceOptions(projects: Project[]): Array<{
+function buildProjectChoiceOptions(
+  projects: Project[],
+  copy: ResolvedRuntimeSceneGateCopy,
+): Array<{
   value: string;
   label: string;
   description?: string;
@@ -152,9 +325,9 @@ function buildProjectChoiceOptions(projects: Project[]): Array<{
   return projects.map((project) => {
     const descriptionParts = [
       project.workspaceType === "general"
-        ? "通用工作区"
+        ? copy.projectWorkspaceTypeGeneral
         : project.workspaceType,
-      project.isDefault ? "默认项目" : undefined,
+      project.isDefault ? copy.projectDefaultLabel : undefined,
       normalizeOptionalText(project.rootPath),
     ].filter((part): part is string => Boolean(part));
 
@@ -234,10 +407,11 @@ function buildProjectFieldComponent(
   prefill: RuntimeSceneGatePrefill | undefined,
   components: A2UIResponse["components"],
   childIds: string[],
+  copy: ResolvedRuntimeSceneGateCopy,
 ): void {
   const helperText = buildFieldHelperText(field);
   const fieldId = field.key;
-  const projectOptions = buildProjectChoiceOptions(projects);
+  const projectOptions = buildProjectChoiceOptions(projects, copy);
   const prefillProjectId = normalizeOptionalText(prefill?.projectId);
 
   if (projectOptions.length > 0) {
@@ -259,8 +433,8 @@ function buildProjectFieldComponent(
     component: "TextField",
     label: field.label,
     value: prefillProjectId || "",
-    placeholder: "输入项目 ID",
-    helperText: helperText || "当前未读取到项目列表，可手动输入目标项目 ID。",
+    placeholder: copy.projectIdPlaceholder,
+    helperText: helperText || copy.projectIdHelperText,
   });
   childIds.push(fieldId);
 }
@@ -269,8 +443,10 @@ export function buildRuntimeSceneGateA2UIForm(params: {
   request: RuntimeSceneGateRequest;
   projects?: Project[];
   prefill?: RuntimeSceneGatePrefill;
+  copy?: RuntimeSceneGateCopy;
 }): A2UIResponse {
   const { request, projects = [], prefill } = params;
+  const copy = resolveRuntimeSceneGateCopy(params.copy);
   const components: A2UIResponse["components"] = [];
   const childIds: string[] = [];
 
@@ -278,7 +454,7 @@ export function buildRuntimeSceneGateA2UIForm(params: {
   components.push({
     id: titleId,
     component: "Text",
-    text: `继续「${request.sceneTitle}」前，先补齐结果所需信息`,
+    text: copy.formatTitle(request.sceneTitle),
     variant: "h3",
   });
   childIds.push(titleId);
@@ -287,8 +463,7 @@ export function buildRuntimeSceneGateA2UIForm(params: {
   components.push({
     id: descriptionId,
     component: "Text",
-    text:
-      request.sceneSummary || "补齐后会继续当前结果流程，不用重新输入命令。",
+    text: request.sceneSummary || copy.fallbackDescription,
     variant: "caption",
   });
   childIds.push(descriptionId);
@@ -313,6 +488,7 @@ export function buildRuntimeSceneGateA2UIForm(params: {
         prefill,
         components,
         childIds,
+        copy,
       );
       continue;
     }
@@ -335,7 +511,7 @@ export function buildRuntimeSceneGateA2UIForm(params: {
     components,
     data: {},
     submitAction: {
-      label: "继续当前结果",
+      label: copy.submitLabel,
       action: {
         name: "submit",
       },
@@ -382,7 +558,9 @@ export function readRuntimeSceneGateSubmission(params: {
 
 export function formatRuntimeSceneGateValidationMessage(
   request: RuntimeSceneGateRequest,
+  copyInput?: RuntimeSceneGateCopy,
 ): string {
+  const copy = resolveRuntimeSceneGateCopy(copyInput);
   const slotLabels = request.fields
     .filter(
       (field): field is RuntimeSceneGateSlotField => field.kind === "slot",
@@ -394,16 +572,19 @@ export function formatRuntimeSceneGateValidationMessage(
   );
 
   if (slotLabels.length > 0 && requiresProject) {
-    return `还差${slotLabels.join("、")}和项目工作区，补齐后再继续。`;
+    return copy.formatMissingSlotsAndProject(
+      slotLabels,
+      copy.projectFieldLabel,
+    );
   }
 
   if (slotLabels.length > 0) {
-    return `还差${slotLabels.join("、")}，补齐后再继续。`;
+    return copy.formatMissingSlots(slotLabels);
   }
 
   if (requiresProject) {
-    return "还需要选择项目工作区，补齐后再继续。";
+    return copy.missingProject;
   }
 
-  return "请先补齐当前结果模板所需信息后再继续。";
+  return copy.missingDefault;
 }

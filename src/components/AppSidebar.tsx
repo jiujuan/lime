@@ -1995,9 +1995,12 @@ const AccountMenuItemTrailing = styled.span`
 const AccountSubmenuPopover = styled.div`
   position: absolute;
   left: calc(100% + 8px);
-  top: 0;
+  bottom: 0;
   z-index: 90;
   width: 188px;
+  max-height: min(300px, calc(100vh - 24px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border-radius: 16px;
   border: 1px solid var(--lime-card-subtle-border, rgba(226, 240, 226, 0.92));
   background: var(--lime-card-subtle, var(--lime-surface, #ffffff));
@@ -2022,6 +2025,7 @@ const AccountSubmenuPopover = styled.div`
   @media (max-width: 760px) {
     left: 0;
     top: calc(100% + 6px);
+    bottom: auto;
   }
 `;
 

@@ -29,6 +29,12 @@ const HARNESS_FAST_RESPONSE_ROUTING_KEYS = [
   "fast_response_routing",
   "fastResponseRouting",
 ] as const;
+const HARNESS_IMAGE_SKILL_LAUNCH_KEYS = [
+  "image_skill_launch",
+  "imageSkillLaunch",
+] as const;
+const IMAGE_GENERATION_CONTRACT_KEY = "image_generation";
+const IMAGE_GENERATION_ROUTING_SLOT = "image_generation_model";
 const HARNESS_TEAM_SELECTION_PRESET_KEYS = [
   "preferred_team_preset_id",
   "preferredTeamPresetId",
@@ -208,6 +214,110 @@ function hasHarnessObjectFromRequestMetadata(
     : requestMetadata;
 
   return keys.some((key) => isPlainRecord(harness[key]));
+}
+
+function readHarnessObjectFromRequestMetadata(
+  requestMetadata: Record<string, unknown> | undefined,
+  keys: readonly string[],
+): Record<string, unknown> | null {
+  if (!requestMetadata) {
+    return null;
+  }
+
+  const nestedHarness = requestMetadata.harness;
+  const harness = isPlainRecord(nestedHarness)
+    ? (nestedHarness as Record<string, unknown>)
+    : requestMetadata;
+
+  for (const key of keys) {
+    const value = harness[key];
+    if (isPlainRecord(value)) {
+      return value as Record<string, unknown>;
+    }
+  }
+
+  return null;
+}
+
+function readRecordString(
+  record: Record<string, unknown>,
+  keys: readonly string[],
+): string | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+function hasImageGenerationContractMarker(
+  record: Record<string, unknown> | null | undefined,
+): boolean {
+  if (!record) {
+    return false;
+  }
+
+  const contractKey = normalizeRuntimeIdentifier(
+    readRecordString(record, [
+      "contract_key",
+      "contractKey",
+      "modality_contract_key",
+      "modalityContractKey",
+    ]),
+  );
+  if (contractKey === IMAGE_GENERATION_CONTRACT_KEY) {
+    return true;
+  }
+
+  const routingSlot = normalizeRuntimeIdentifier(
+    readRecordString(record, ["routing_slot", "routingSlot"]),
+  );
+  if (routingSlot === IMAGE_GENERATION_ROUTING_SLOT) {
+    return true;
+  }
+
+  const runtimeContract = isPlainRecord(record.runtime_contract)
+    ? (record.runtime_contract as Record<string, unknown>)
+    : isPlainRecord(record.runtimeContract)
+      ? (record.runtimeContract as Record<string, unknown>)
+      : null;
+
+  return hasImageGenerationContractMarker(runtimeContract);
+}
+
+function hasImageGenerationLaunchRouting(
+  requestMetadata: Record<string, unknown> | undefined,
+): boolean {
+  const launch = readHarnessObjectFromRequestMetadata(
+    requestMetadata,
+    HARNESS_IMAGE_SKILL_LAUNCH_KEYS,
+  );
+  if (!launch) {
+    return false;
+  }
+
+  const requestContext = isPlainRecord(launch.request_context)
+    ? (launch.request_context as Record<string, unknown>)
+    : isPlainRecord(launch.requestContext)
+      ? (launch.requestContext as Record<string, unknown>)
+      : null;
+  const imageTask = isPlainRecord(launch.image_task)
+    ? (launch.image_task as Record<string, unknown>)
+    : isPlainRecord(launch.imageTask)
+      ? (launch.imageTask as Record<string, unknown>)
+      : isPlainRecord(requestContext?.image_task)
+        ? (requestContext?.image_task as Record<string, unknown>)
+        : isPlainRecord(requestContext?.imageTask)
+          ? (requestContext?.imageTask as Record<string, unknown>)
+          : null;
+
+  return (
+    hasImageGenerationContractMarker(launch) ||
+    hasImageGenerationContractMarker(imageTask)
+  );
 }
 
 function omitHarnessFieldsFromRequestMetadata(
@@ -433,14 +543,18 @@ export function buildSubmitOpRuntimeCompaction(
     requestMetadata,
     HARNESS_FAST_RESPONSE_ROUTING_KEYS,
   );
+  const hasImageGenerationRouting =
+    hasImageGenerationLaunchRouting(requestMetadata);
+  const shouldDeferModelRoutingToBackend =
+    hasFastResponseRouting || hasImageGenerationRouting;
   const hasExplicitModelOverride = Boolean(modelOverride?.trim());
   const shouldSubmitProviderPreference =
-    !hasFastResponseRouting &&
+    !shouldDeferModelRoutingToBackend &&
     (!knownProviderSelector ||
       normalizeRuntimeIdentifier(knownProviderSelector) !==
         normalizeRuntimeIdentifier(effectiveProviderType));
   const shouldSubmitModelPreference =
-    hasFastResponseRouting && !hasExplicitModelOverride
+    shouldDeferModelRoutingToBackend && !hasExplicitModelOverride
       ? false
       : hasExplicitModelOverride ||
         shouldSubmitProviderPreference ||

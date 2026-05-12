@@ -15,6 +15,7 @@ import {
   findCuratedTaskTemplateById,
   recordCuratedTaskTemplateUsage,
 } from "../utils/curatedTaskTemplates";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import {
   recordCuratedTaskRecommendationSignalFromMemory,
   recordCuratedTaskRecommendationSignalFromReviewDecision,
@@ -24,32 +25,6 @@ const { mockGetConfig, mockProjectSelector } = vi.hoisted(() => ({
   mockGetConfig: vi.fn(async () => ({})),
   mockProjectSelector: vi.fn(),
 }));
-
-const { mockUseTranslation } = vi.hoisted(() => {
-  const mockTranslate = vi.fn((key: string, options?: unknown) => {
-    if (typeof options === "string") {
-      return options;
-    }
-
-    if (options && typeof options === "object") {
-      const values = options as Record<string, unknown>;
-      const template =
-        typeof values.defaultValue === "string" ? values.defaultValue : key;
-      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-        String(values[name] ?? ""),
-      );
-    }
-
-    return key;
-  });
-
-  return {
-    mockUseTranslation: vi.fn((_namespace?: string) => ({
-      i18n: { language: "zh-CN" },
-      t: mockTranslate,
-    })),
-  };
-});
 
 const mockGetSkillCatalog = vi.hoisted(() =>
   vi.fn(async () => ({
@@ -111,10 +86,6 @@ vi.mock("@/lib/api/channelsRuntime", () => ({
 
 vi.mock("@/lib/api/unifiedMemory", () => ({
   listUnifiedMemories: mockListUnifiedMemories,
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
 }));
 
 vi.mock("@/lib/api/skillCatalog", async (importOriginal) => {
@@ -306,7 +277,8 @@ vi.mock("sonner", () => ({
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
-beforeEach(() => {
+beforeEach(async () => {
+  await changeLimeLocale("zh-CN");
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;

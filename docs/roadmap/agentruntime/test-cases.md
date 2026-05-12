@@ -1,6 +1,6 @@
 # Lime AgentRuntime Profile 测试用例
 
-> 状态：proposal
+> 状态：implementation-audited
 > 更新时间：2026-05-12
 > 作用：把 AgentRuntime Profile 的 PRD、架构和落地计划翻译成可执行测试矩阵，避免 Lime 继续靠局部测试或 GUI 观感判断运行主链是否正确。
 
@@ -48,8 +48,13 @@ agent_runtime_submit_turn
 | `tool-approval-action-required-event.json` | 工具调用触发权限审批等待点 | tool approval / `respond_action` |
 | `task-retry-attempt-failed-event.json` | task attempt 失败并保留 retry 历史 | TaskSnapshot attempts |
 | `routing-single-candidate-event.json` | 模型路由只有一个候选并给出解释 | `TaskProfile / RoutingDecision / LimitState` |
+| `routing-not-possible-event.json` | 模型路由没有可用候选并阻止假执行 | `TaskProfile / RoutingDecision / CapabilityGap` |
+| `routing-decided-multi-candidate-event.json` | 多候选路由选中目标模型并保留候选数 | `TaskProfile / RoutingDecision / LimitState` |
 | `evidence-export-event.json` | evidence pack 导出并关联 replay/review refs | `agent_runtime_export_evidence_pack` |
 | `thread-read-snapshot.json` | GUI 可消费的 thread read snapshot | `AgentRuntimeThreadReadModel` |
+| `subagent-parent-child-event.json` | 子代理会话回挂 parent session/thread/turn | `Subagent / TaskSnapshot / EvidenceSummary` |
+| `job-owner-run-event.json` | automation owner run 与 job item 进入 job profile event | `AgentRun / CompletionAudit / EvidenceSummary` |
+| `remote-channel-resume-event.json` | remote channel 断开、恢复与 snapshot repair 可审计 | `AgentRun.source_metadata.remote_task / EvidenceSummary` |
 
 Lime 仓库落地实现时，真实 runtime 输出可以不直接复制 fixture 内容，但必须满足同一结构约束和语义断言。
 
@@ -87,6 +92,8 @@ Owner 侧对应测试文档：
 | AR-SCHEMA-002 | action.required 事件包含审批等待点 | `tool-approval-action-required-event.json` | 必含 `actionId/toolCallId/actionType/decisionKind/scope`，并可 join 到 `turnId` |
 | AR-SCHEMA-003 | task retry 事件保留 attempt 历史 | `task-retry-attempt-failed-event.json` | 必含 `taskId/runId/attemptId/retryable/failureCategory` |
 | AR-SCHEMA-004 | routing single candidate 事件可解释 | `routing-single-candidate-event.json` | 必含 `taskKind/candidateCount/selectedModel/decisionSource`，`candidateCount` 必须为 1 |
+| AR-SCHEMA-008 | routing not possible 事件不能伪造执行 | `routing-not-possible-event.json` | 必含 `taskKind/candidateCount/reasonCode/status`，`candidateCount` 必须为 0，`status` 必须为 `blocked` |
+| AR-SCHEMA-009 | multi candidate routing decided 事件保留选择上下文 | `routing-decided-multi-candidate-event.json` | 必含 `taskKind/routingMode/candidateCount/selectedModel/decisionSource`，`candidateCount` 必须大于 1 |
 | AR-SCHEMA-005 | evidence export 事件带导出引用 | `evidence-export-event.json` | 必含 `evidenceId/packRef`，可选 `replayRef/reviewRef/verificationOutcomes` |
 | AR-SCHEMA-006 | thread read snapshot 可供 GUI 直接消费 | `thread-read-snapshot.json` | 必含 `threadId/status/profileStatus/turns/pendingRequests/incidents/toolCalls/modelRouting/limitState/evidenceSummary/telemetrySummary/contextSummary` |
 | AR-SCHEMA-007 | 缺失核心关联键会失败 | 删掉 `sessionId` 或 `turnId` 的 fixture | schema 或结构测试必须失败，不能 silently default |
@@ -114,6 +121,10 @@ Owner 侧对应测试文档：
 | AR-TASK-001 | attempt failed 保留历史 | `task.attempt.started -> task.attempt.failed` | `TaskSnapshot.attempts[]` 保留失败 attempt，`currentRunId` 不被误覆盖 |
 | AR-TASK-002 | retry 后 currentRunId 更新 | failed attempt 后 `task.retrying -> task.attempt.started(run_2)` | `currentRunId = run_2`，attempts 同时包含 run_1/run_2 |
 | AR-TASK-003 | parent-child graph 可追踪 | `subagent.spawned` 或 job item event | child task/subagent 能回挂 parent task/turn |
+| AR-SUB-001 | 子代理 profile event 保留 parent-child 关联 | `subagent-parent-child-event.json` | 必含 `subagentSessionId/parentSessionId/parentThreadId/parentTaskId/createdFromTurnId/runtimeStatus`，终态输出 `subagent.completed/failed/closed` |
+| AR-JOB-001 | owner run 进入 job profile event | `job-owner-run-event.json` | 必含 `jobId/source/sourceRef/runtimeStatus`，终态输出 `job.completed` 或 `job.failed` |
+| AR-JOB-002 | owner run metadata 进入 job item event | `job-owner-run-event.json` | 必含 `jobId/itemId/itemKind/sourceRef`，失败时输出 `job.item.failed` 且保留 `failureCategory/errorCode/retryable` |
+| AR-REMOTE-001 | remote channel resume / repair 进入 profile event | `remote-channel-resume-event.json` | 必含 `remoteTaskId/channel/accountId/runId`，断开输出 `channel.disconnected`，恢复输出 `channel.resumed`，修复输出 `snapshot.repaired` |
 
 ## 8. Model routing / limit 用例
 
@@ -132,6 +143,8 @@ Owner 侧对应测试文档：
 | AR-ACTION-002 | 审批通过后执行工具 | 已有 `action.required` | 调用 `respond_action(approve)` | 产生 `action.resolved/tool.started/tool.result` |
 | AR-ACTION-003 | 审批拒绝后不执行工具 | 已有 `action.required` | 调用 `respond_action(deny)` | 产生 `action.resolved/tool.failed` 或 denied event，不能产生成功 result |
 | AR-ACTION-004 | actionId 幂等 | 同一个 action 重复提交 response | 重复调用 `respond_action` | 第二次调用返回已处理或 no-op，不新增第二条成功工具事实 |
+| AR-ACTION-005 | 真实工具执行流产出 Profile facts | `RuntimeAgentEvent::ToolStart -> ToolEnd` | 经过 `record_runtime_stream_event` | 实时输出 `tool.started -> tool.result`，`toolName/toolCallId/success/status` 为 stable facts |
+| AR-ACTION-006 | ToolCall item fallback 不重复 | 同一工具同时出现 `ToolStart` 与 `ItemStarted/ItemCompleted(ToolCall)` | 经过同一 turn stream | Profile 按 `toolCallId` 去重；若只有 item fallback，仍输出 `tool.started/tool.failed` |
 
 ## 10. Evidence / Replay / Review 用例
 
@@ -160,6 +173,7 @@ Owner 侧对应测试文档：
 | AR-EVID-LINK-003 | completeness 按分类声明 | evidence export | 至少按 `runtime/telemetry/sources/claims/artifacts/verification/privacy/replay` 中适用分类输出状态 |
 | AR-UI-LINK-001 | AgentUI 静默兼容 P1 profile event | `schemaVersion=lime-profile-0.4.0` 且 `type=turn.submitted` | unknown event controller 不告警，保持 stream 活跃 |
 | AR-UI-LINK-002 | AgentUI 不把 profile event 写成 UI truth | dotted profile event stream | 只进入 runtime/read-model 投影或忽略；不得创建 `agentui_profile_store` / UI-only runtime status |
+| AR-UI-LINK-003 | AgentUI projection presentation 使用 i18n key | Team Workbench / Harness / Reliability / Artifact timeline 的 projection event、phase、control、source、surface | `buildAgentUiTeamWorkbenchViewModel(..., { t })` 与 current projection 组件能输出 locale 文案；`type/status/phase/control/sourceType` stable facts 不被翻译回写 |
 
 ## 12. Contract / command mapping 用例
 
@@ -218,8 +232,8 @@ npm run governance:legacy-report
 | P1 | AR-SCHEMA-001、AR-ID-001、AR-ID-003、AR-EVENT-001、AR-CONTRACT-001、AR-UI-LINK-001 |
 | P2 | AR-SCHEMA-006、AR-READ-001 到 AR-READ-004、AR-CTX-001 到 AR-CTX-003、AR-GUI-001 |
 | P3 | AR-EVID-001 到 AR-EVID-005、AR-EVID-LINK-001、AR-EVID-LINK-002、AR-CONTRACT-002、AR-GUI-005 |
-| P4 | AR-SCHEMA-002 到 AR-SCHEMA-005、AR-TASK-001、AR-TASK-002、AR-ROUTE-001 到 AR-ROUTE-004、AR-ACTION-001 到 AR-ACTION-004、AR-POL-001 到 AR-POL-003 |
-| P5 | AR-TASK-003、remote/subagent 恢复相关扩展用例 |
+| P4 | AR-SCHEMA-002 到 AR-SCHEMA-005、AR-SCHEMA-008、AR-SCHEMA-009、AR-TASK-001、AR-TASK-002、AR-ROUTE-001 到 AR-ROUTE-004、AR-ACTION-001 到 AR-ACTION-006、AR-POL-001 到 AR-POL-003 |
+| P5 | AR-TASK-003、AR-SUB-001、AR-JOB-001、AR-JOB-002、AR-REMOTE-001、remote/subagent 恢复相关扩展用例 |
 
 ## 16. 每轮改动的最小测试选择
 
@@ -231,7 +245,7 @@ npm run governance:legacy-report
 | 改 evidence/replay/review | Evidence Consistency 用例 + `npm run test:contracts` |
 | 改 Workspace/Harness runtime 展示 | GUI smoke + ReadModel 用例 |
 | 改 AgentContext / AgentPolicy / AgentEvidence linkage | 对应 AR-CTX / AR-POL / AR-EVID-LINK 用例 + 定向 owner ref 测试 |
-| 改 AgentUI profile event 兼容 | `agentStreamUnknownEventController` / `agentStreamListenerReadinessController` 定向单测 |
+| 改 AgentUI profile event 兼容 / presentation mapper | `agentStreamUnknownEventController` / `agentStreamListenerReadinessController` / `agentUiTeamWorkbenchViewModel` / `AgentUiTeamWorkbenchSurfaceView` / `TeamWorkbenchSummaryPanel` / `HarnessStatusPanel` / `AgentThreadReliabilityPanel` / `AgentThreadTimelineArtifactCard` 定向单测 |
 | 改 deprecated/compat 路径 | Governance guard + 相关 contract 用例 |
 | 改 Rust runtime 主链 | 定向 Rust 测试 + Runtime identity / Event 用例 + 必要时 `npm run verify:local` |
 

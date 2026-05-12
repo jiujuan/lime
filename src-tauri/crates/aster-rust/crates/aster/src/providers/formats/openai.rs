@@ -103,13 +103,25 @@ pub fn format_messages(messages: &[Message], image_format: &ImageFormat) -> Vec<
                     if !text.text.is_empty() {
                         if let Some(image_path) = detect_image_path(&text.text) {
                             if let Ok(image) = load_image_file(image_path) {
+                                flush_text_parts_into_openai_content(
+                                    &mut text_array,
+                                    &mut content_array,
+                                );
                                 content_array.push(json!({"type": "text", "text": text.text}));
                                 content_array.push(convert_image(&image, image_format));
                             } else {
-                                text_array.push(text.text.clone());
+                                push_openai_text_part(
+                                    &mut text_array,
+                                    &mut content_array,
+                                    text.text.clone(),
+                                );
                             }
                         } else {
-                            text_array.push(text.text.clone());
+                            push_openai_text_part(
+                                &mut text_array,
+                                &mut content_array,
+                                text.text.clone(),
+                            );
                         }
                     }
                 }
@@ -236,6 +248,7 @@ pub fn format_messages(messages: &[Message], image_format: &ImageFormat) -> Vec<
                 MessageContent::ActionRequired(_) => {}
                 MessageContent::ToolInputDelta(_) => {}
                 MessageContent::Image(image) => {
+                    flush_text_parts_into_openai_content(&mut text_array, &mut content_array);
                     content_array.push(convert_image(image, image_format));
                 }
                 MessageContent::FrontendToolRequest(request) => match &request.tool_call {
@@ -275,6 +288,7 @@ pub fn format_messages(messages: &[Message], image_format: &ImageFormat) -> Vec<
         }
 
         if !content_array.is_empty() {
+            flush_text_parts_into_openai_content(&mut text_array, &mut content_array);
             converted["content"] = json!(content_array);
         } else if !text_array.is_empty() {
             converted["content"] = json!(text_array.join("\n"));
@@ -293,6 +307,33 @@ pub fn format_messages(messages: &[Message], image_format: &ImageFormat) -> Vec<
     }
 
     messages_spec
+}
+
+fn push_openai_text_part(
+    text_array: &mut Vec<String>,
+    content_array: &mut Vec<Value>,
+    text: String,
+) {
+    if content_array.is_empty() {
+        text_array.push(text);
+        return;
+    }
+
+    content_array.push(json!({"type": "text", "text": text}));
+}
+
+fn flush_text_parts_into_openai_content(
+    text_array: &mut Vec<String>,
+    content_array: &mut Vec<Value>,
+) {
+    if text_array.is_empty() {
+        return;
+    }
+
+    content_array.push(json!({
+        "type": "text",
+        "text": std::mem::take(text_array).join("\n"),
+    }));
 }
 
 pub fn format_tools(tools: &[Tool]) -> anyhow::Result<Vec<Value>> {
@@ -1009,6 +1050,36 @@ mod tests {
         assert_eq!(spec.len(), 1);
         assert_eq!(spec[0]["role"], "user");
         assert_eq!(spec[0]["content"], "Hello");
+        Ok(())
+    }
+
+    #[test]
+    fn test_format_messages_with_text_and_image_keeps_prompt() -> anyhow::Result<()> {
+        let message = Message::user()
+            .with_text("请识别这张图里的文字")
+            .with_image("aGVsbG8=", "image/png")
+            .with_text("只输出识别结果");
+
+        let spec = format_messages(&[message], &ImageFormat::OpenAi);
+
+        assert_eq!(spec.len(), 1);
+        assert_eq!(spec[0]["role"], "user");
+        let content = spec[0]["content"].as_array().expect("content parts");
+        assert_eq!(content.len(), 3);
+        assert_eq!(
+            content[0],
+            json!({"type": "text", "text": "请识别这张图里的文字"})
+        );
+        assert_eq!(content[1]["type"], "image_url");
+        assert_eq!(
+            content[1]["image_url"]["url"],
+            "data:image/png;base64,aGVsbG8="
+        );
+        assert_eq!(
+            content[2],
+            json!({"type": "text", "text": "只输出识别结果"})
+        );
+
         Ok(())
     }
 

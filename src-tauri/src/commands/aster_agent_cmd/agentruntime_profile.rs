@@ -310,6 +310,48 @@ impl AgentRuntimeProfileStream {
         )
     }
 
+    pub(crate) fn routing_decided(
+        &self,
+        task_kind: Option<&str>,
+        routing_mode: Option<&str>,
+        candidate_count: u32,
+        selected_model: Option<&str>,
+        decision_source: Option<&str>,
+    ) -> AgentRuntimeProfileEvent {
+        self.next_event(
+            "routing.decided",
+            json!({
+                "taskKind": normalize_optional_label_option(task_kind),
+                "routingMode": normalize_optional_label_option(routing_mode),
+                "candidateCount": candidate_count,
+                "selectedModel": normalize_optional_label_option(selected_model),
+                "decisionSource": normalize_optional_label_option(decision_source),
+                "status": "selected",
+            }),
+        )
+    }
+
+    pub(crate) fn routing_not_possible(
+        &self,
+        task_kind: Option<&str>,
+        routing_mode: Option<&str>,
+        candidate_count: u32,
+        decision_source: Option<&str>,
+        reason_code: Option<&str>,
+    ) -> AgentRuntimeProfileEvent {
+        self.next_event(
+            "routing.not_possible",
+            json!({
+                "taskKind": normalize_optional_label_option(task_kind),
+                "routingMode": normalize_optional_label_option(routing_mode),
+                "candidateCount": candidate_count,
+                "decisionSource": normalize_optional_label_option(decision_source),
+                "reasonCode": normalize_optional_label_option(reason_code),
+                "status": "blocked",
+            }),
+        )
+    }
+
     pub(crate) fn cost_estimated(
         &self,
         estimated_cost_class: Option<&str>,
@@ -460,6 +502,295 @@ impl AgentRuntimeProfileStream {
                 "message": normalize_optional_label_option(message),
                 "retryable": retryable,
                 "status": "failed",
+            }),
+        )
+    }
+
+    pub(crate) fn subagent_spawned(
+        &self,
+        subagent_session_id: &str,
+        created_from_turn_id: Option<&str>,
+        parent_task_id: Option<&str>,
+        origin_tool: Option<&str>,
+        role_key: Option<&str>,
+    ) -> AgentRuntimeProfileEvent {
+        self.next_event(
+            "subagent.spawned",
+            json!({
+                "subagentSessionId": normalize_optional_label(subagent_session_id, "subagent_unavailable"),
+                "parentSessionId": self.session_id.clone(),
+                "parentThreadId": self.thread_id.clone(),
+                "createdFromTurnId": normalize_optional_label_option(created_from_turn_id),
+                "parentTaskId": normalize_optional_label_option(parent_task_id),
+                "originTool": normalize_optional_label_option(origin_tool),
+                "roleKey": normalize_optional_label_option(role_key),
+                "status": "spawned",
+            }),
+        )
+    }
+
+    pub(crate) fn subagent_status(
+        &self,
+        subagent_session_id: &str,
+        runtime_status: &str,
+        parent_task_id: Option<&str>,
+    ) -> AgentRuntimeProfileEvent {
+        self.next_event(
+            "subagent.status",
+            json!({
+                "subagentSessionId": normalize_optional_label(subagent_session_id, "subagent_unavailable"),
+                "parentSessionId": self.session_id.clone(),
+                "parentThreadId": self.thread_id.clone(),
+                "parentTaskId": normalize_optional_label_option(parent_task_id),
+                "runtimeStatus": normalize_optional_label(runtime_status, "unknown"),
+                "status": "updated",
+            }),
+        )
+    }
+
+    pub(crate) fn subagent_completed(
+        &self,
+        subagent_session_id: &str,
+        parent_task_id: Option<&str>,
+    ) -> AgentRuntimeProfileEvent {
+        self.next_event(
+            "subagent.completed",
+            json!({
+                "subagentSessionId": normalize_optional_label(subagent_session_id, "subagent_unavailable"),
+                "parentSessionId": self.session_id.clone(),
+                "parentThreadId": self.thread_id.clone(),
+                "parentTaskId": normalize_optional_label_option(parent_task_id),
+                "status": "completed",
+            }),
+        )
+    }
+
+    pub(crate) fn subagent_failed(
+        &self,
+        subagent_session_id: &str,
+        failure_category: &str,
+        parent_task_id: Option<&str>,
+    ) -> AgentRuntimeProfileEvent {
+        self.next_event(
+            "subagent.failed",
+            json!({
+                "subagentSessionId": normalize_optional_label(subagent_session_id, "subagent_unavailable"),
+                "parentSessionId": self.session_id.clone(),
+                "parentThreadId": self.thread_id.clone(),
+                "parentTaskId": normalize_optional_label_option(parent_task_id),
+                "failureCategory": normalize_optional_label(failure_category, "subagent_error"),
+                "status": "failed",
+            }),
+        )
+    }
+
+    pub(crate) fn subagent_closed(
+        &self,
+        subagent_session_id: &str,
+        parent_task_id: Option<&str>,
+    ) -> AgentRuntimeProfileEvent {
+        self.next_event(
+            "subagent.closed",
+            json!({
+                "subagentSessionId": normalize_optional_label(subagent_session_id, "subagent_unavailable"),
+                "parentSessionId": self.session_id.clone(),
+                "parentThreadId": self.thread_id.clone(),
+                "parentTaskId": normalize_optional_label_option(parent_task_id),
+                "status": "closed",
+            }),
+        )
+    }
+
+    pub(crate) fn job_created(
+        &self,
+        job_id: &str,
+        source: &str,
+        source_ref: Option<&str>,
+    ) -> AgentRuntimeProfileEvent {
+        self.next_event(
+            "job.created",
+            json!({
+                "jobId": normalize_optional_label(job_id, "job_unavailable"),
+                "source": normalize_optional_label(source, "unknown"),
+                "sourceRef": normalize_optional_label_option(source_ref),
+                "owner": "AgentRun",
+                "status": "created",
+            }),
+        )
+    }
+
+    pub(crate) fn job_status(
+        &self,
+        job_id: &str,
+        runtime_status: &str,
+    ) -> AgentRuntimeProfileEvent {
+        self.next_event(
+            "job.status",
+            json!({
+                "jobId": normalize_optional_label(job_id, "job_unavailable"),
+                "runtimeStatus": normalize_optional_label(runtime_status, "unknown"),
+                "owner": "AgentRun",
+                "status": "updated",
+            }),
+        )
+    }
+
+    pub(crate) fn job_item_started(
+        &self,
+        job_id: &str,
+        item_id: &str,
+        item_kind: Option<&str>,
+        source_ref: Option<&str>,
+    ) -> AgentRuntimeProfileEvent {
+        self.next_event(
+            "job.item.started",
+            json!({
+                "jobId": normalize_optional_label(job_id, "job_unavailable"),
+                "itemId": normalize_optional_label(item_id, "job_item_unavailable"),
+                "itemKind": normalize_optional_label_option(item_kind),
+                "sourceRef": normalize_optional_label_option(source_ref),
+                "owner": "AgentRun",
+                "status": "running",
+            }),
+        )
+    }
+
+    pub(crate) fn job_item_failed(
+        &self,
+        job_id: &str,
+        item_id: &str,
+        failure_category: &str,
+        error_code: Option<&str>,
+        retryable: bool,
+    ) -> AgentRuntimeProfileEvent {
+        self.next_event(
+            "job.item.failed",
+            json!({
+                "jobId": normalize_optional_label(job_id, "job_unavailable"),
+                "itemId": normalize_optional_label(item_id, "job_item_unavailable"),
+                "failureCategory": normalize_optional_label(failure_category, "runtime_error"),
+                "errorCode": normalize_optional_label_option(error_code),
+                "retryable": retryable,
+                "owner": "AgentRun",
+                "status": "failed",
+            }),
+        )
+    }
+
+    pub(crate) fn job_completed(&self, job_id: &str) -> AgentRuntimeProfileEvent {
+        self.next_event(
+            "job.completed",
+            json!({
+                "jobId": normalize_optional_label(job_id, "job_unavailable"),
+                "owner": "AgentRun",
+                "status": "completed",
+            }),
+        )
+    }
+
+    pub(crate) fn job_failed(
+        &self,
+        job_id: &str,
+        failure_category: &str,
+        error_code: Option<&str>,
+    ) -> AgentRuntimeProfileEvent {
+        self.next_event(
+            "job.failed",
+            json!({
+                "jobId": normalize_optional_label(job_id, "job_unavailable"),
+                "failureCategory": normalize_optional_label(failure_category, "runtime_error"),
+                "errorCode": normalize_optional_label_option(error_code),
+                "owner": "AgentRun",
+                "status": "failed",
+            }),
+        )
+    }
+
+    pub(crate) fn channel_connected(
+        &self,
+        remote_task_id: &str,
+        channel: Option<&str>,
+        account_id: Option<&str>,
+        run_id: Option<&str>,
+        source: Option<&str>,
+    ) -> AgentRuntimeProfileEvent {
+        self.next_event(
+            "channel.connected",
+            json!({
+                "remoteTaskId": normalize_optional_label(remote_task_id, "remote_task_unavailable"),
+                "channel": normalize_optional_label_option(channel),
+                "accountId": normalize_optional_label_option(account_id),
+                "runId": normalize_optional_label_option(run_id),
+                "source": normalize_optional_label_option(source),
+                "owner": "AgentRun",
+                "status": "connected",
+            }),
+        )
+    }
+
+    pub(crate) fn channel_disconnected(
+        &self,
+        remote_task_id: &str,
+        channel: Option<&str>,
+        account_id: Option<&str>,
+        reason_code: Option<&str>,
+        retryable: bool,
+    ) -> AgentRuntimeProfileEvent {
+        self.next_event(
+            "channel.disconnected",
+            json!({
+                "remoteTaskId": normalize_optional_label(remote_task_id, "remote_task_unavailable"),
+                "channel": normalize_optional_label_option(channel),
+                "accountId": normalize_optional_label_option(account_id),
+                "reasonCode": normalize_optional_label_option(reason_code),
+                "retryable": retryable,
+                "owner": "AgentRun",
+                "status": "disconnected",
+            }),
+        )
+    }
+
+    pub(crate) fn channel_resumed(
+        &self,
+        remote_task_id: &str,
+        channel: Option<&str>,
+        account_id: Option<&str>,
+        snapshot_ref: Option<&str>,
+        replay_ref: Option<&str>,
+    ) -> AgentRuntimeProfileEvent {
+        self.next_event(
+            "channel.resumed",
+            json!({
+                "remoteTaskId": normalize_optional_label(remote_task_id, "remote_task_unavailable"),
+                "channel": normalize_optional_label_option(channel),
+                "accountId": normalize_optional_label_option(account_id),
+                "snapshotRef": normalize_optional_label_option(snapshot_ref),
+                "replayRef": normalize_optional_label_option(replay_ref),
+                "owner": "AgentRun",
+                "status": "resumed",
+            }),
+        )
+    }
+
+    pub(crate) fn snapshot_repaired(
+        &self,
+        source: &str,
+        remote_task_id: Option<&str>,
+        channel: Option<&str>,
+        account_id: Option<&str>,
+        repair_status: Option<&str>,
+        stale: bool,
+    ) -> AgentRuntimeProfileEvent {
+        self.next_event(
+            "snapshot.repaired",
+            json!({
+                "source": normalize_optional_label(source, "runtime_snapshot"),
+                "remoteTaskId": normalize_optional_label_option(remote_task_id),
+                "channel": normalize_optional_label_option(channel),
+                "accountId": normalize_optional_label_option(account_id),
+                "repairStatus": normalize_optional_label_option(repair_status),
+                "stale": stale,
+                "status": "repaired",
             }),
         )
     }
@@ -717,6 +1048,20 @@ mod tests {
             Some("gpt-5.4-mini"),
             Some("service_model_setting"),
         );
+        let decided = stream.routing_decided(
+            Some("translation"),
+            Some("fallback_chain"),
+            2,
+            Some("gpt-5.4"),
+            Some("model_router"),
+        );
+        let blocked = stream.routing_not_possible(
+            Some("image_generation"),
+            Some("no_candidate"),
+            0,
+            Some("capability_filter"),
+            Some("image_generation_model_capability_gap"),
+        );
         let cost = stream.cost_estimated(Some("low"));
         let limit = stream.limit_changed(Some("single_candidate_only"), Some(true));
 
@@ -734,6 +1079,23 @@ mod tests {
             routing_value["payload"]["decisionSource"],
             "service_model_setting"
         );
+
+        let decided_value = serde_json::to_value(decided).expect("decided event");
+        assert_eq!(decided_value["type"], "routing.decided");
+        assert_eq!(decided_value["payload"]["routingMode"], "fallback_chain");
+        assert_eq!(decided_value["payload"]["candidateCount"], 2);
+        assert_eq!(decided_value["payload"]["selectedModel"], "gpt-5.4");
+        assert_eq!(decided_value["payload"]["status"], "selected");
+
+        let blocked_value = serde_json::to_value(blocked).expect("blocked event");
+        assert_eq!(blocked_value["type"], "routing.not_possible");
+        assert_eq!(blocked_value["payload"]["routingMode"], "no_candidate");
+        assert_eq!(blocked_value["payload"]["candidateCount"], 0);
+        assert_eq!(
+            blocked_value["payload"]["reasonCode"],
+            "image_generation_model_capability_gap"
+        );
+        assert_eq!(blocked_value["payload"]["status"], "blocked");
 
         let cost_value = serde_json::to_value(cost).expect("cost event");
         assert_eq!(cost_value["type"], "cost.estimated");
@@ -800,5 +1162,189 @@ mod tests {
         );
         assert_eq!(retrying_value["payload"]["queuedTurnId"], "queued-1");
         assert_eq!(retrying_value["payload"]["nextAttemptIndex"], 2);
+    }
+
+    #[test]
+    fn subagent_events_keep_parent_child_correlation_shape() {
+        let stream = AgentRuntimeProfileStream::new("parent-session-1", "thread-1", "turn-1")
+            .expect("profile stream");
+
+        let spawned = stream.subagent_spawned(
+            "child-session-1",
+            Some("turn-1"),
+            Some("task-thread-1"),
+            Some("SpawnAgent"),
+            Some("verifier"),
+        );
+        let status = stream.subagent_status("child-session-1", "running", Some("task-thread-1"));
+        let completed = stream.subagent_completed("child-session-1", Some("task-thread-1"));
+        let failed =
+            stream.subagent_failed("child-session-2", "runtime_error", Some("task-thread-1"));
+        let closed = stream.subagent_closed("child-session-3", Some("task-thread-1"));
+
+        let spawned_value = serde_json::to_value(spawned).expect("spawned event");
+        assert_eq!(spawned_value["type"], "subagent.spawned");
+        assert_eq!(
+            spawned_value["payload"]["parentSessionId"],
+            "parent-session-1"
+        );
+        assert_eq!(spawned_value["payload"]["parentThreadId"], "thread-1");
+        assert_eq!(
+            spawned_value["payload"]["subagentSessionId"],
+            "child-session-1"
+        );
+        assert_eq!(spawned_value["payload"]["createdFromTurnId"], "turn-1");
+        assert_eq!(spawned_value["payload"]["parentTaskId"], "task-thread-1");
+        assert_eq!(spawned_value["payload"]["roleKey"], "verifier");
+
+        let status_value = serde_json::to_value(status).expect("status event");
+        assert_eq!(status_value["type"], "subagent.status");
+        assert_eq!(status_value["payload"]["runtimeStatus"], "running");
+        assert_eq!(status_value["payload"]["parentTaskId"], "task-thread-1");
+
+        let completed_value = serde_json::to_value(completed).expect("completed event");
+        assert_eq!(completed_value["type"], "subagent.completed");
+        assert_eq!(completed_value["payload"]["status"], "completed");
+
+        let failed_value = serde_json::to_value(failed).expect("failed event");
+        assert_eq!(failed_value["type"], "subagent.failed");
+        assert_eq!(failed_value["payload"]["failureCategory"], "runtime_error");
+
+        let closed_value = serde_json::to_value(closed).expect("closed event");
+        assert_eq!(closed_value["type"], "subagent.closed");
+        assert_eq!(closed_value["payload"]["status"], "closed");
+    }
+
+    #[test]
+    fn job_events_keep_agent_run_owner_shape() {
+        let stream = AgentRuntimeProfileStream::new("session-1", "thread-1", "turn-1")
+            .expect("profile stream");
+
+        let created = stream.job_created("job-1", "automation", Some("owner-1"));
+        let status = stream.job_status("job-1", "running");
+        let item_started = stream.job_item_started(
+            "job-1",
+            "job-1:execution",
+            Some("agent_turn"),
+            Some("owner-1"),
+        );
+        let item_failed = stream.job_item_failed(
+            "job-2",
+            "job-2:execution",
+            "runtime_error",
+            Some("automation_job_failed"),
+            true,
+        );
+        let completed = stream.job_completed("job-1");
+        let failed = stream.job_failed("job-2", "timeout", Some("provider_timeout"));
+
+        let created_value = serde_json::to_value(created).expect("created event");
+        assert_eq!(created_value["type"], "job.created");
+        assert_eq!(created_value["payload"]["jobId"], "job-1");
+        assert_eq!(created_value["payload"]["source"], "automation");
+        assert_eq!(created_value["payload"]["sourceRef"], "owner-1");
+        assert_eq!(created_value["payload"]["owner"], "AgentRun");
+
+        let status_value = serde_json::to_value(status).expect("status event");
+        assert_eq!(status_value["type"], "job.status");
+        assert_eq!(status_value["payload"]["runtimeStatus"], "running");
+
+        let item_started_value = serde_json::to_value(item_started).expect("item started event");
+        assert_eq!(item_started_value["type"], "job.item.started");
+        assert_eq!(item_started_value["payload"]["jobId"], "job-1");
+        assert_eq!(item_started_value["payload"]["itemId"], "job-1:execution");
+        assert_eq!(item_started_value["payload"]["itemKind"], "agent_turn");
+
+        let item_failed_value = serde_json::to_value(item_failed).expect("item failed event");
+        assert_eq!(item_failed_value["type"], "job.item.failed");
+        assert_eq!(
+            item_failed_value["payload"]["failureCategory"],
+            "runtime_error"
+        );
+        assert_eq!(
+            item_failed_value["payload"]["errorCode"],
+            "automation_job_failed"
+        );
+        assert_eq!(item_failed_value["payload"]["retryable"], true);
+
+        let completed_value = serde_json::to_value(completed).expect("completed event");
+        assert_eq!(completed_value["type"], "job.completed");
+        assert_eq!(completed_value["payload"]["status"], "completed");
+
+        let failed_value = serde_json::to_value(failed).expect("failed event");
+        assert_eq!(failed_value["type"], "job.failed");
+        assert_eq!(failed_value["payload"]["failureCategory"], "timeout");
+        assert_eq!(failed_value["payload"]["errorCode"], "provider_timeout");
+    }
+
+    #[test]
+    fn remote_channel_events_keep_remote_task_correlation_shape() {
+        let stream = AgentRuntimeProfileStream::new("session-1", "thread-1", "turn-1")
+            .expect("profile stream");
+
+        let connected = stream.channel_connected(
+            "gateway:telegram:default:message-1",
+            Some("telegram"),
+            Some("default"),
+            Some("run-remote-1"),
+            Some("gateway_channel"),
+        );
+        let disconnected = stream.channel_disconnected(
+            "gateway:telegram:default:message-1",
+            Some("telegram"),
+            Some("default"),
+            Some("connection_lost"),
+            true,
+        );
+        let resumed = stream.channel_resumed(
+            "gateway:telegram:default:message-1",
+            Some("telegram"),
+            Some("default"),
+            Some("agent-runtime://snapshot/remote-1"),
+            Some("agent-runtime://replay/remote-1"),
+        );
+        let repaired = stream.snapshot_repaired(
+            "remote_channel_snapshot",
+            Some("gateway:telegram:default:message-1"),
+            Some("telegram"),
+            Some("default"),
+            Some("repaired"),
+            false,
+        );
+
+        let connected_value = serde_json::to_value(connected).expect("connected event");
+        assert_eq!(connected_value["type"], "channel.connected");
+        assert_eq!(
+            connected_value["payload"]["remoteTaskId"],
+            "gateway:telegram:default:message-1"
+        );
+        assert_eq!(connected_value["payload"]["channel"], "telegram");
+        assert_eq!(connected_value["payload"]["runId"], "run-remote-1");
+        assert_eq!(connected_value["payload"]["owner"], "AgentRun");
+
+        let disconnected_value = serde_json::to_value(disconnected).expect("disconnected event");
+        assert_eq!(disconnected_value["type"], "channel.disconnected");
+        assert_eq!(
+            disconnected_value["payload"]["reasonCode"],
+            "connection_lost"
+        );
+        assert_eq!(disconnected_value["payload"]["retryable"], true);
+
+        let resumed_value = serde_json::to_value(resumed).expect("resumed event");
+        assert_eq!(resumed_value["type"], "channel.resumed");
+        assert_eq!(
+            resumed_value["payload"]["snapshotRef"],
+            "agent-runtime://snapshot/remote-1"
+        );
+        assert_eq!(resumed_value["payload"]["status"], "resumed");
+
+        let repaired_value = serde_json::to_value(repaired).expect("repaired event");
+        assert_eq!(repaired_value["type"], "snapshot.repaired");
+        assert_eq!(
+            repaired_value["payload"]["source"],
+            "remote_channel_snapshot"
+        );
+        assert_eq!(repaired_value["payload"]["repairStatus"], "repaired");
+        assert_eq!(repaired_value["payload"]["stale"], false);
     }
 }

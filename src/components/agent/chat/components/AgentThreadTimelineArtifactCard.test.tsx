@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentThreadTimelineArtifactCard } from "./AgentThreadTimelineArtifactCard";
 import type { AgentThreadItem } from "../types";
 import { conversationProjectionStore } from "../projection/conversationProjectionStore";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 interface MountedHarness {
   container: HTMLDivElement;
@@ -13,12 +14,13 @@ interface MountedHarness {
 
 const mountedRoots: MountedHarness[] = [];
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
 });
 
 afterEach(() => {
@@ -235,6 +237,38 @@ describe("AgentThreadTimelineArtifactCard", () => {
     expect(badge?.getAttribute("title")).toContain("Agent UI 标准投影");
     expect(badge?.getAttribute("title")).toContain("产物快照");
     expect(badge?.getAttribute("title")).not.toContain("artifact_snapshot");
+  });
+
+  it("AgentUI projection 标签应按当前 locale 渲染", async () => {
+    await changeLimeLocale("en-US");
+    conversationProjectionStore.recordAgentUiProjectionEvents([
+      {
+        type: "artifact.preview.ready",
+        sourceType: "artifact_snapshot",
+        sequence: 1,
+        timestamp: "2026-03-28T01:00:02Z",
+        sessionId: "session-artifact-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        artifactId: "artifact-document:demo",
+        owner: "artifact",
+        scope: "artifact",
+        phase: "completed",
+        surface: "artifact_workspace",
+        persistence: "artifact_store",
+        payload: { status: "ready" },
+      },
+    ]);
+
+    const container = renderCard(createFileArtifactItem());
+    const badge = container.querySelector(
+      '[data-testid="timeline-file-artifact-agentui"]',
+    ) as HTMLElement | null;
+
+    expect(badge?.textContent).toContain("AgentUI Artifact preview");
+    expect(badge?.getAttribute("title")).toContain("Artifact snapshot");
+    expect(badge?.getAttribute("title")).toContain("Completed");
+    expect(badge?.getAttribute("title")).not.toContain("产物快照");
   });
 
   it("Markdown 文件产物应明确标识为可沉淀的 Document 产物", () => {

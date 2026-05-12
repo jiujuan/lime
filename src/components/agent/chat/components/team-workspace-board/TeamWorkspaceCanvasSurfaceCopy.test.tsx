@@ -1,9 +1,13 @@
 import { act, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { TeamWorkspaceCanvasStage } from "./TeamWorkspaceCanvasStage";
 import { TeamWorkspaceCanvasToolbar } from "./TeamWorkspaceCanvasToolbar";
-import { TeamWorkspaceCanvasViewButtons } from "./TeamWorkspaceTeamOverviewControls";
+import {
+  TeamWorkspaceCanvasViewButtons,
+  TeamWorkspaceTeamActionButtons,
+} from "./TeamWorkspaceTeamOverviewControls";
 
 function renderIntoDocument(element: ReactNode) {
   const container = document.createElement("div");
@@ -26,20 +30,22 @@ function renderIntoDocument(element: ReactNode) {
 }
 
 describe("TeamWorkspaceCanvasSurfaceCopy", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     (
       globalThis as typeof globalThis & {
         IS_REACT_ACT_ENVIRONMENT?: boolean;
       }
     ).IS_REACT_ACT_ENVIRONMENT = true;
+    await changeLimeLocale("zh-CN");
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     (
       globalThis as typeof globalThis & {
         IS_REACT_ACT_ENVIRONMENT?: boolean;
       }
     ).IS_REACT_ACT_ENVIRONMENT = true;
+    await changeLimeLocale("zh-CN");
   });
 
   it("应使用当前进口径展示任务布局提示", () => {
@@ -112,6 +118,44 @@ describe("TeamWorkspaceCanvasSurfaceCopy", () => {
       expect(container.textContent).toContain("整理布局");
       expect(container.textContent).toContain("聚焦进展");
       expect(container.textContent).not.toContain("适应视图");
+    } finally {
+      unmount();
+    }
+  });
+
+  it("画布工具栏与团队操作按钮应读取英文资源", async () => {
+    await changeLimeLocale("en-US");
+
+    const { container, unmount } = renderIntoDocument(
+      <div>
+        <TeamWorkspaceCanvasToolbar
+          laneCount={3}
+          onAutoArrangeCanvas={vi.fn()}
+          onFitCanvasView={vi.fn()}
+          onResetCanvasView={vi.fn()}
+          onZoomIn={vi.fn()}
+          onZoomOut={vi.fn()}
+          zoom={1.15}
+        />
+        <TeamWorkspaceTeamActionButtons
+          canCloseCompletedTeamSessions
+          canWaitAnyActiveTeamSession
+          onCloseCompletedTeamSessions={vi.fn()}
+          onWaitAnyActiveTeamSessions={vi.fn()}
+          pendingTeamAction={null}
+        />
+      </div>,
+    );
+
+    try {
+      expect(container.textContent).toContain("Current progress");
+      expect(container.textContent).toContain("Zoom 115%");
+      expect(container.textContent).toContain("3 active progress lane(s)");
+      expect(container.textContent).toContain("Fit progress");
+      expect(container.textContent).toContain("Wait for any task result");
+      expect(container.textContent).toContain("Close completed tasks");
+      expect(container.textContent).not.toContain("聚焦进展");
+      expect(container.textContent).not.toContain("等待任一任务结果");
     } finally {
       unmount();
     }

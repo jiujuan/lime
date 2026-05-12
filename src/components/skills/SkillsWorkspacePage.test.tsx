@@ -17,38 +17,9 @@ import {
   recordSlashEntryUsage,
 } from "@/components/agent/chat/skill-selection/slashEntryUsage";
 import { recordCuratedTaskTemplateUsage } from "@/components/agent/chat/utils/curatedTaskTemplates";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import type { SkillsPageParams } from "@/types/page";
 import { SkillsWorkspacePage } from "./SkillsWorkspacePage";
-
-const { mockUseTranslation } = vi.hoisted(() => {
-  const mockTranslate = vi.fn((key: string, options?: unknown) => {
-    if (typeof options === "string") {
-      return options;
-    }
-
-    if (options && typeof options === "object") {
-      const values = options as Record<string, unknown>;
-      const template =
-        typeof values.defaultValue === "string" ? values.defaultValue : key;
-      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-        String(values[name] ?? ""),
-      );
-    }
-
-    return key;
-  });
-
-  return {
-    mockUseTranslation: vi.fn((_namespace?: string) => ({
-      i18n: { language: "zh-CN" },
-      t: mockTranslate,
-    })),
-  };
-});
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
-}));
 
 vi.mock(
   "@/components/settings-v2/system/automation/AutomationJobDialog",
@@ -373,7 +344,9 @@ function updateFieldValue(
 }
 
 describe("SkillsWorkspacePage", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await changeLimeLocale("zh-CN");
+
     (
       globalThis as typeof globalThis & {
         IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -447,7 +420,6 @@ describe("SkillsWorkspacePage", () => {
   it("应默认渲染轻量 Skills 入口，并把右侧桥接区收成最近与本地 Skills", () => {
     const { container } = renderPage();
 
-    expect(mockUseTranslation).toHaveBeenCalledWith("agent");
     expect(container.textContent).toContain("Skills");
     expect(container.textContent).toContain("选择一个 Skill 开始创作");
     expect(container.textContent).toContain("推荐");

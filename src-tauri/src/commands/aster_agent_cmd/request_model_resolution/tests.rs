@@ -1,13 +1,18 @@
 use super::responsive_chat::{
     can_use_responsive_chat_provider, choose_responsive_chat_model_from_catalog,
-    is_responsive_chat_unsupported_model_error, responsive_chat_auto_candidate_sort,
-    responsive_chat_running_sample_is_stale, ResponsiveChatAutoCandidate,
+    collect_responsive_chat_models_from_catalog, is_responsive_chat_unsupported_model_error,
+    load_responsive_chat_auto_latency_hints, parse_responsive_chat_latency_run_metadata,
+    responsive_chat_auto_candidate_sort, responsive_chat_running_sample_is_stale,
+    responsive_chat_setting_fallback_reason, ResponsiveChatAutoCandidate,
     ResponsiveChatAutoLatencyHint,
 };
 use super::*;
 use lime_core::database::dao::api_key_provider::{
     ApiKeyEntry, ApiKeyProvider, ApiProviderType, ProviderGroup, ProviderWithKeys,
 };
+use lime_core::database::{schema::create_tables, DbConnection};
+use rusqlite::{params, Connection};
+use std::sync::{Arc, Mutex};
 
 fn build_model(
     id: &str,
@@ -110,6 +115,76 @@ fn build_provider_with_key(
     }
 }
 
+fn setup_responsive_chat_latency_db() -> DbConnection {
+    let conn = Connection::open_in_memory().expect("创建内存数据库失败");
+    create_tables(&conn).expect("创建测试表失败");
+    Arc::new(Mutex::new(conn))
+}
+
+fn insert_agent_run_latency_sample(
+    db: &DbConnection,
+    id: &str,
+    session_id: &str,
+    status: &str,
+    duration_ms: Option<i64>,
+    error_message: Option<&str>,
+    metadata: &str,
+    started_at: &str,
+) {
+    let conn = db.lock().expect("获取测试数据库失败");
+    conn.execute(
+        "INSERT INTO agent_runs (
+            id, source, source_ref, session_id, status, started_at, finished_at,
+            duration_ms, error_code, error_message, metadata, created_at, updated_at
+        ) VALUES (?1, 'chat', 'agent_runtime_submit_turn', ?2, ?3, ?4, ?5, ?6, NULL, ?7, ?8, ?4, ?4)",
+        params![
+            id,
+            session_id,
+            status,
+            started_at,
+            started_at,
+            duration_ms,
+            error_message,
+            metadata
+        ],
+    )
+    .expect("写入测试 agent_run 失败");
+}
+
+fn insert_agent_thread_item_latency_sample(
+    db: &DbConnection,
+    session_id: &str,
+    turn_id: &str,
+    id: &str,
+    sequence: i64,
+    item_type: &str,
+    started_at: &str,
+) {
+    let conn = db.lock().expect("获取测试数据库失败");
+    conn.execute(
+        "INSERT OR IGNORE INTO agent_sessions (id, model, created_at, updated_at)
+         VALUES (?1, 'test:model', ?2, ?2)",
+        params![session_id, started_at],
+    )
+    .expect("写入测试 agent_session 失败");
+    conn.execute(
+        "INSERT OR IGNORE INTO agent_thread_turns (
+            id, session_id, prompt_text, status, started_at, completed_at,
+            error_message, created_at, updated_at
+        ) VALUES (?1, ?2, 'hello', 'completed', ?3, ?3, NULL, ?3, ?3)",
+        params![turn_id, session_id, started_at],
+    )
+    .expect("写入测试 agent_thread_turn 失败");
+    conn.execute(
+        "INSERT INTO agent_thread_items (
+            id, session_id, turn_id, sequence, item_type, status, started_at,
+            completed_at, updated_at, payload_json
+        ) VALUES (?1, ?2, ?3, ?4, ?5, 'completed', ?6, ?6, ?6, '{}')",
+        params![id, session_id, turn_id, sequence, item_type, started_at],
+    )
+    .expect("写入测试 agent_thread_item 失败");
+}
+
 #[test]
 fn thinking_on_prefers_reasoning_variant() {
     let models = vec![
@@ -172,8 +247,8 @@ fn thinking_off_restores_base_variant() {
 fn vision_resolution_prefers_same_family_candidate() {
     let models = vec![
         build_model(
-            "gpt-5.4-mini",
-            Some("gpt-5.4"),
+            "text-chat-mini",
+            Some("text-chat"),
             false,
             false,
             true,
@@ -181,8 +256,8 @@ fn vision_resolution_prefers_same_family_candidate() {
             Some("2026-01-01"),
         ),
         build_model(
-            "gpt-5.4",
-            Some("gpt-5.4"),
+            "text-chat-vision",
+            Some("text-chat"),
             true,
             true,
             true,
@@ -201,8 +276,8 @@ fn vision_resolution_prefers_same_family_candidate() {
     ];
 
     assert_eq!(
-        resolve_vision_model_id("gpt-5.4-mini", &models).unwrap(),
-        "gpt-5.4"
+        resolve_vision_model_id("text-chat-mini", &models).unwrap(),
+        "text-chat-vision"
     );
 }
 
@@ -221,6 +296,133 @@ fn vision_resolution_keeps_unknown_model_when_name_implies_vision() {
     assert_eq!(
         resolve_vision_model_id("gpt-5.4-mini", &models).unwrap(),
         "gpt-5.4-mini"
+    );
+}
+
+#[test]
+fn vision_resolution_keeps_modern_unknown_vision_model_names() {
+    let models = vec![build_model(
+        "gpt-5.4",
+        Some("gpt-5.4"),
+        true,
+        true,
+        true,
+        ModelTier::Pro,
+        Some("2026-01-03"),
+    )];
+
+    for model_id in ["o3", "o4-mini", "grok-4.3", "qwen3.5-27b"] {
+        assert_eq!(
+            resolve_vision_model_id(model_id, &models).unwrap(),
+            model_id,
+            "{model_id} should stay selected when the name implies image input"
+        );
+    }
+}
+
+#[test]
+fn vision_resolution_keeps_stale_catalog_model_when_name_implies_vision() {
+    let models = vec![
+        build_model(
+            "o3",
+            Some("o3"),
+            false,
+            false,
+            true,
+            ModelTier::Pro,
+            Some("2026-01-03"),
+        ),
+        build_model(
+            "gpt-5.4",
+            Some("gpt-5.4"),
+            true,
+            true,
+            true,
+            ModelTier::Pro,
+            Some("2026-01-04"),
+        ),
+    ];
+
+    assert_eq!(resolve_vision_model_id("o3", &models).unwrap(), "o3");
+}
+
+#[test]
+fn vision_resolution_does_not_keep_non_vision_sibling_names() {
+    let models = vec![build_model(
+        "gpt-5.4",
+        Some("gpt-5.4"),
+        true,
+        true,
+        true,
+        ModelTier::Pro,
+        Some("2026-01-03"),
+    )];
+
+    assert_eq!(
+        resolve_vision_model_id("o3-mini", &models).unwrap(),
+        "gpt-5.4"
+    );
+    assert_eq!(
+        resolve_vision_model_id("grok-3-mini", &models).unwrap(),
+        "gpt-5.4"
+    );
+}
+
+#[test]
+fn vision_resolution_keeps_model_when_input_modality_declares_image() {
+    let mut model = build_model(
+        "provider-vlm-chat",
+        Some("provider-vlm"),
+        false,
+        false,
+        true,
+        ModelTier::Pro,
+        Some("2026-01-03"),
+    );
+    model.input_modalities = vec![ModelModality::Text, ModelModality::Image];
+
+    let models = vec![model];
+
+    assert_eq!(
+        resolve_vision_model_id("provider-vlm-chat", &models).unwrap(),
+        "provider-vlm-chat"
+    );
+}
+
+#[test]
+fn vision_resolution_does_not_keep_pure_image_model_for_chat_images() {
+    let mut image_model = build_model(
+        "gpt-image-1",
+        Some("gpt-image"),
+        false,
+        false,
+        true,
+        ModelTier::Pro,
+        Some("2026-01-04"),
+    );
+    image_model.capabilities.tools = false;
+    image_model.capabilities.function_calling = false;
+    image_model.capabilities.json_mode = false;
+    image_model.task_families = vec![ModelTaskFamily::ImageGeneration];
+    image_model.input_modalities = vec![ModelModality::Text, ModelModality::Image];
+    image_model.output_modalities = vec![ModelModality::Image];
+
+    let models = vec![
+        image_model,
+        build_model(
+            "gpt-5.4",
+            Some("gpt-5.4"),
+            true,
+            true,
+            true,
+            ModelTier::Pro,
+            Some("2026-01-03"),
+        ),
+    ];
+
+    assert_eq!(
+        resolve_vision_model_id("gpt-image-1", &models).unwrap(),
+        "gpt-5.4"
     );
 }
 
@@ -524,6 +726,91 @@ fn responsive_chat_catalog_excludes_code_agent_models() {
 }
 
 #[test]
+fn responsive_chat_auto_expands_all_provider_models_before_global_sort() {
+    let requirements = routing_slot_model_capability_requirements(Some("responsive_chat_model"));
+    let deepseek_models = vec![
+        build_model(
+            "deepseek-v4-flash",
+            Some("deepseek"),
+            false,
+            false,
+            true,
+            ModelTier::Pro,
+            None,
+        ),
+        build_model(
+            "deepseek-chat",
+            Some("deepseek"),
+            false,
+            false,
+            true,
+            ModelTier::Pro,
+            None,
+        ),
+    ];
+    let provider_models =
+        collect_responsive_chat_models_from_catalog(&deepseek_models, false, false, &requirements);
+
+    assert_eq!(
+        provider_models
+            .iter()
+            .map(|(model_name, _, _)| model_name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["deepseek-v4-flash", "deepseek-chat"]
+    );
+
+    let mut candidates = provider_models
+        .into_iter()
+        .map(
+            |(model_name, model, compatible_candidate_count)| ResponsiveChatAutoCandidate {
+                provider_selector: "deepseek".to_string(),
+                latency_hint: if model_name == "deepseek-v4-flash" {
+                    ResponsiveChatAutoLatencyHint {
+                        durations_ms: vec![1_800],
+                        reasoning_sample_count: 1,
+                        ..Default::default()
+                    }
+                } else {
+                    ResponsiveChatAutoLatencyHint::default()
+                },
+                model_name,
+                model,
+                compatible_candidate_count,
+                provider_order: 4,
+                provider_group: Some(ProviderGroup::Mainstream),
+            },
+        )
+        .collect::<Vec<_>>();
+    candidates.push(ResponsiveChatAutoCandidate {
+        provider_selector: "custom-minimax".to_string(),
+        model_name: "MiniMax-M2.7".to_string(),
+        model: build_model(
+            "MiniMax-M2.7",
+            Some("MiniMax"),
+            false,
+            false,
+            true,
+            ModelTier::Pro,
+            None,
+        ),
+        compatible_candidate_count: 1,
+        provider_order: 12,
+        provider_group: Some(ProviderGroup::Custom),
+        latency_hint: ResponsiveChatAutoLatencyHint {
+            durations_ms: vec![2_200],
+            reasoning_sample_count: 1,
+            ..Default::default()
+        },
+    });
+
+    candidates.sort_by(responsive_chat_auto_candidate_sort);
+
+    assert_eq!(candidates[0].provider_selector, "deepseek");
+    assert_eq!(candidates[0].model_name, "deepseek-chat");
+    assert_eq!(candidates[0].compatible_candidate_count, 2);
+}
+
+#[test]
 fn responsive_chat_auto_candidate_uses_provider_order_before_model_name_tiebreaker() {
     let mut candidates = vec![
         ResponsiveChatAutoCandidate {
@@ -615,6 +902,433 @@ fn responsive_chat_auto_candidate_demotes_slow_or_reasoning_history() {
 
     assert_eq!(candidates[0].provider_selector, "unknown-flash-lite");
     assert_eq!(candidates[0].model_name, "flash-lite");
+}
+
+#[test]
+fn responsive_chat_auto_candidate_prefers_first_text_latency_over_total_duration() {
+    let mut candidates = vec![
+        ResponsiveChatAutoCandidate {
+            provider_selector: "total-fast-text-slow".to_string(),
+            model_name: "slow-first-text".to_string(),
+            model: build_model(
+                "slow-first-text",
+                Some("provider-a"),
+                false,
+                false,
+                true,
+                ModelTier::Mini,
+                None,
+            ),
+            compatible_candidate_count: 1,
+            provider_order: 1,
+            provider_group: Some(ProviderGroup::Mainstream),
+            latency_hint: ResponsiveChatAutoLatencyHint {
+                durations_ms: vec![900],
+                first_text_durations_ms: vec![4_200],
+                ..Default::default()
+            },
+        },
+        ResponsiveChatAutoCandidate {
+            provider_selector: "total-slow-text-fast".to_string(),
+            model_name: "fast-first-text".to_string(),
+            model: build_model(
+                "fast-first-text",
+                Some("provider-b"),
+                false,
+                false,
+                true,
+                ModelTier::Mini,
+                None,
+            ),
+            compatible_candidate_count: 1,
+            provider_order: 2,
+            provider_group: Some(ProviderGroup::Mainstream),
+            latency_hint: ResponsiveChatAutoLatencyHint {
+                durations_ms: vec![5_000],
+                first_text_durations_ms: vec![850],
+                ..Default::default()
+            },
+        },
+    ];
+
+    candidates.sort_by(responsive_chat_auto_candidate_sort);
+
+    assert_eq!(candidates[0].provider_selector, "total-slow-text-fast");
+    assert_eq!(candidates[0].model_name, "fast-first-text");
+}
+
+#[test]
+fn responsive_chat_latency_metadata_accepts_service_model_setting_samples() {
+    let metadata = serde_json::json!({
+        "request_metadata": {
+            "lime_runtime": {
+                "routing_decision": {
+                    "decisionSource": "service_model_setting",
+                    "selectedProvider": "deepseek",
+                    "selectedModel": "deepseek-v4-pro",
+                    "settingsSource": "service_models.responsive_chat",
+                    "serviceModelSlot": "responsive_chat"
+                }
+            }
+        },
+        "turn_state": {
+            "turn_id": "turn-1"
+        },
+        "model_first_text_delta_ms": 4200
+    })
+    .to_string();
+
+    let parsed = parse_responsive_chat_latency_run_metadata(&metadata).expect("sample metadata");
+
+    assert_eq!(parsed.provider_selector, "deepseek");
+    assert_eq!(parsed.model_name, "deepseek-v4-pro");
+    assert_eq!(parsed.turn_id.as_deref(), Some("turn-1"));
+}
+
+#[test]
+fn responsive_chat_latency_hints_prefer_recorded_first_text_over_timeline() {
+    let db = setup_responsive_chat_latency_db();
+    let metadata = serde_json::json!({
+        "request_metadata": {
+            "lime_runtime": {
+                "routing_decision": {
+                    "decisionSource": "responsive_chat_auto",
+                    "selectedProvider": "openai",
+                    "selectedModel": "gpt-5.4-mini",
+                    "serviceModelSlot": "responsive_chat"
+                }
+            }
+        },
+        "turn_state": {
+            "turn_id": "turn-recorded"
+        },
+        "model_first_text_delta_ms": 900
+    })
+    .to_string();
+
+    insert_agent_thread_item_latency_sample(
+        &db,
+        "session-recorded",
+        "turn-recorded",
+        "user-recorded",
+        1,
+        "user_message",
+        "2026-05-12T00:00:00Z",
+    );
+    insert_agent_thread_item_latency_sample(
+        &db,
+        "session-recorded",
+        "turn-recorded",
+        "agent-recorded",
+        2,
+        "agent_message",
+        "2026-05-12T00:00:05Z",
+    );
+    insert_agent_run_latency_sample(
+        &db,
+        "run-recorded",
+        "session-recorded",
+        "success",
+        Some(12_000),
+        None,
+        &metadata,
+        "2026-05-12T00:00:00Z",
+    );
+
+    let hints = load_responsive_chat_auto_latency_hints(&db);
+    let hint = hints
+        .get(&("openai".to_string(), "gpt-5.4-mini".to_string()))
+        .expect("应读取 responsive_chat latency hint");
+
+    assert_eq!(hint.durations_ms, vec![12_000]);
+    assert_eq!(hint.first_text_durations_ms, vec![900]);
+}
+
+#[test]
+fn responsive_chat_latency_hints_fallback_to_timeline_first_text() {
+    let db = setup_responsive_chat_latency_db();
+    let metadata = serde_json::json!({
+        "request_metadata": {
+            "lime_runtime": {
+                "routing_decision": {
+                    "decisionSource": "responsive_chat_auto",
+                    "selectedProvider": "openai",
+                    "selectedModel": "gpt-5.4-mini",
+                    "serviceModelSlot": "responsive_chat"
+                }
+            }
+        },
+        "turn_state": {
+            "turn_id": "turn-timeline"
+        }
+    })
+    .to_string();
+
+    insert_agent_thread_item_latency_sample(
+        &db,
+        "session-timeline",
+        "turn-timeline",
+        "user-timeline",
+        1,
+        "user_message",
+        "2026-05-12T00:00:00Z",
+    );
+    insert_agent_thread_item_latency_sample(
+        &db,
+        "session-timeline",
+        "turn-timeline",
+        "agent-timeline",
+        2,
+        "agent_message",
+        "2026-05-12T00:00:02.500Z",
+    );
+    insert_agent_run_latency_sample(
+        &db,
+        "run-timeline",
+        "session-timeline",
+        "success",
+        Some(9_000),
+        None,
+        &metadata,
+        "2026-05-12T00:00:00Z",
+    );
+
+    let hints = load_responsive_chat_auto_latency_hints(&db);
+    let hint = hints
+        .get(&("openai".to_string(), "gpt-5.4-mini".to_string()))
+        .expect("应读取 responsive_chat latency hint");
+
+    assert_eq!(hint.durations_ms, vec![9_000]);
+    assert_eq!(hint.first_text_durations_ms, vec![2_500]);
+}
+
+#[test]
+fn responsive_chat_setting_fallback_reason_reads_slow_service_model_history() {
+    let db = setup_responsive_chat_latency_db();
+    let metadata = serde_json::json!({
+        "request_metadata": {
+            "lime_runtime": {
+                "routing_decision": {
+                    "decisionSource": "service_model_setting",
+                    "selectedProvider": "deepseek",
+                    "selectedModel": "deepseek-v4-pro",
+                    "settingsSource": "service_models.responsive_chat",
+                    "serviceModelSlot": "responsive_chat"
+                }
+            }
+        },
+        "turn_state": {
+            "turn_id": "turn-slow-setting"
+        },
+        "model_first_text_delta_ms": 4200
+    })
+    .to_string();
+
+    insert_agent_run_latency_sample(
+        &db,
+        "run-slow-setting",
+        "session-slow-setting",
+        "success",
+        Some(900),
+        None,
+        &metadata,
+        "2026-05-12T00:00:00Z",
+    );
+
+    assert_eq!(
+        responsive_chat_setting_fallback_reason(&db, "deepseek", "deepseek-v4-pro"),
+        Some("slow_first_text_p50_4200ms".to_string())
+    );
+}
+
+#[test]
+fn responsive_chat_setting_fallback_reason_reads_reasoning_service_model_history() {
+    let db = setup_responsive_chat_latency_db();
+    let metadata = serde_json::json!({
+        "request_metadata": {
+            "lime_runtime": {
+                "routing_decision": {
+                    "decisionSource": "service_model_setting",
+                    "selectedProvider": "deepseek",
+                    "selectedModel": "deepseek-v4-reasoner",
+                    "settingsSource": "service_models.responsive_chat",
+                    "serviceModelSlot": "responsive_chat"
+                }
+            }
+        },
+        "turn_state": {
+            "turn_id": "turn-reasoning-setting"
+        },
+        "model_first_text_delta_ms": 900
+    })
+    .to_string();
+
+    insert_agent_thread_item_latency_sample(
+        &db,
+        "session-reasoning-setting",
+        "turn-reasoning-setting",
+        "reasoning-reasoning-setting",
+        1,
+        "reasoning",
+        "2026-05-12T00:00:00Z",
+    );
+    insert_agent_run_latency_sample(
+        &db,
+        "run-reasoning-setting",
+        "session-reasoning-setting",
+        "success",
+        Some(1200),
+        None,
+        &metadata,
+        "2026-05-12T00:00:00Z",
+    );
+
+    assert_eq!(
+        responsive_chat_setting_fallback_reason(&db, "deepseek", "deepseek-v4-reasoner"),
+        Some("reasoning_output_observed".to_string())
+    );
+}
+
+#[test]
+fn responsive_chat_setting_fallback_reason_reads_unsupported_service_model_history() {
+    let db = setup_responsive_chat_latency_db();
+    let metadata = serde_json::json!({
+        "request_metadata": {
+            "lime_runtime": {
+                "routing_decision": {
+                    "decisionSource": "service_model_setting",
+                    "selectedProvider": "openrouter",
+                    "selectedModel": "unsupported-chat-model",
+                    "settingsSource": "service_models.responsive_chat",
+                    "serviceModelSlot": "responsive_chat"
+                }
+            }
+        },
+        "turn_state": {
+            "turn_id": "turn-unsupported-setting"
+        }
+    })
+    .to_string();
+
+    insert_agent_run_latency_sample(
+        &db,
+        "run-unsupported-setting",
+        "session-unsupported-setting",
+        "failed",
+        None,
+        Some("unsupported model for chat completions"),
+        &metadata,
+        "2026-05-12T00:00:00Z",
+    );
+
+    assert_eq!(
+        responsive_chat_setting_fallback_reason(&db, "openrouter", "unsupported-chat-model"),
+        Some("unsupported_model".to_string())
+    );
+}
+
+#[test]
+fn responsive_chat_setting_fallback_reason_reads_recent_error_without_success() {
+    let db = setup_responsive_chat_latency_db();
+    let metadata = serde_json::json!({
+        "request_metadata": {
+            "lime_runtime": {
+                "routing_decision": {
+                    "decisionSource": "service_model_setting",
+                    "selectedProvider": "openai",
+                    "selectedModel": "gpt-slow-edge",
+                    "settingsSource": "service_models.responsive_chat",
+                    "serviceModelSlot": "responsive_chat"
+                }
+            }
+        },
+        "turn_state": {
+            "turn_id": "turn-error-setting"
+        }
+    })
+    .to_string();
+
+    insert_agent_run_latency_sample(
+        &db,
+        "run-error-setting",
+        "session-error-setting",
+        "failed",
+        None,
+        Some("upstream timeout"),
+        &metadata,
+        "2026-05-12T00:00:00Z",
+    );
+
+    assert_eq!(
+        responsive_chat_setting_fallback_reason(&db, "openai", "gpt-slow-edge"),
+        Some("recent_error_without_success".to_string())
+    );
+}
+
+#[test]
+fn responsive_chat_auto_explores_trusted_unknown_before_above_target_latency() {
+    let mut candidates = vec![
+        ResponsiveChatAutoCandidate {
+            provider_selector: "known-aggregator".to_string(),
+            model_name: "known-above-target".to_string(),
+            model: build_model(
+                "known-above-target",
+                Some("known"),
+                false,
+                false,
+                true,
+                ModelTier::Mini,
+                None,
+            ),
+            compatible_candidate_count: 1,
+            provider_order: 99,
+            provider_group: Some(ProviderGroup::Aggregator),
+            latency_hint: ResponsiveChatAutoLatencyHint {
+                durations_ms: vec![1_200],
+                first_text_durations_ms: vec![2_400],
+                ..Default::default()
+            },
+        },
+        ResponsiveChatAutoCandidate {
+            provider_selector: "trusted-mainstream".to_string(),
+            model_name: "unmeasured-chat".to_string(),
+            model: build_model(
+                "unmeasured-chat",
+                Some("trusted"),
+                false,
+                false,
+                true,
+                ModelTier::Pro,
+                None,
+            ),
+            compatible_candidate_count: 1,
+            provider_order: 1,
+            provider_group: Some(ProviderGroup::Mainstream),
+            latency_hint: ResponsiveChatAutoLatencyHint::default(),
+        },
+        ResponsiveChatAutoCandidate {
+            provider_selector: "custom-new-fast-looking".to_string(),
+            model_name: "new-flash-lite".to_string(),
+            model: build_model(
+                "new-flash-lite",
+                Some("new"),
+                false,
+                false,
+                true,
+                ModelTier::Mini,
+                None,
+            ),
+            compatible_candidate_count: 1,
+            provider_order: 2,
+            provider_group: Some(ProviderGroup::Custom),
+            latency_hint: ResponsiveChatAutoLatencyHint::default(),
+        },
+    ];
+
+    candidates.sort_by(responsive_chat_auto_candidate_sort);
+
+    assert_eq!(candidates[0].provider_selector, "trusted-mainstream");
+    assert_eq!(candidates[0].model_name, "unmeasured-chat");
 }
 
 #[test]
@@ -877,8 +1591,8 @@ fn multi_candidate_selection_prefers_reasoning_model_when_thinking_enabled() {
 fn multi_candidate_selection_prefers_vision_candidate_when_images_present() {
     let models = vec![
         build_model(
-            "gpt-5.4-mini",
-            Some("gpt-5.4"),
+            "text-chat-mini",
+            Some("text-chat"),
             false,
             false,
             true,
@@ -886,8 +1600,8 @@ fn multi_candidate_selection_prefers_vision_candidate_when_images_present() {
             Some("2026-01-03"),
         ),
         build_model(
-            "gpt-5.4",
-            Some("gpt-5.4"),
+            "text-chat-vision",
+            Some("text-chat"),
             true,
             true,
             true,
@@ -897,8 +1611,8 @@ fn multi_candidate_selection_prefers_vision_candidate_when_images_present() {
     ];
 
     assert_eq!(
-        choose_best_multi_candidate_model("gpt-5.4-mini", &models, false, true, &[]).as_deref(),
-        Some("gpt-5.4")
+        choose_best_multi_candidate_model("text-chat-mini", &models, false, true, &[]).as_deref(),
+        Some("text-chat-vision")
     );
 }
 
@@ -975,6 +1689,53 @@ fn runtime_routing_slot_keeps_specialized_image_candidate_in_pool() {
         choose_best_multi_candidate_model("gpt-5.4-mini", &models, false, false, &requirements)
             .as_deref(),
         Some("gpt-image-1")
+    );
+}
+
+#[test]
+fn runtime_vision_requirement_accepts_declared_image_input_modality() {
+    let mut model = build_model(
+        "provider-vlm-chat",
+        Some("provider-vlm"),
+        false,
+        false,
+        true,
+        ModelTier::Pro,
+        Some("2026-01-03"),
+    );
+    model.input_modalities = vec![ModelModality::Text, ModelModality::Image];
+    let requirements = routing_slot_model_capability_requirements(Some("vision_input_model"));
+
+    assert!(model_satisfies_runtime_capability_requirement(
+        &model,
+        RuntimeModelCapabilityRequirement::VisionInput
+    ));
+    assert_eq!(
+        missing_runtime_model_capability_requirements(&model, &requirements),
+        Vec::<RuntimeModelCapabilityRequirement>::new()
+    );
+}
+
+#[test]
+fn runtime_vision_requirement_accepts_known_vision_name_from_stale_catalog() {
+    let model = build_model(
+        "o3",
+        Some("o3"),
+        false,
+        false,
+        true,
+        ModelTier::Pro,
+        Some("2026-01-03"),
+    );
+    let requirements = routing_slot_model_capability_requirements(Some("vision_input_model"));
+
+    assert!(model_satisfies_runtime_capability_requirement(
+        &model,
+        RuntimeModelCapabilityRequirement::VisionInput
+    ));
+    assert_eq!(
+        missing_runtime_model_capability_requirements(&model, &requirements),
+        Vec::<RuntimeModelCapabilityRequirement>::new()
     );
 }
 

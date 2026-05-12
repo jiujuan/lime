@@ -861,7 +861,137 @@ describe("agentChatHistory", () => {
     );
 
     expect(mergedMessages[0]?.images).toEqual(localMessages[0]?.images);
+    expect(mergedMessages[0]?.id).toBe("local-user-1");
+    expect(mergedMessages[1]?.id).toBe("local-assistant-1");
     expect(mergedMessages[1]?.images).toBeUndefined();
+  });
+
+  it("刷新会话详情时不应把已完成输出替换成后端历史投影", () => {
+    const localMessages = [
+      {
+        id: "local-user-output",
+        role: "user" as const,
+        content: "请识别这张截图",
+        timestamp: new Date("2026-05-12T10:00:00.000Z"),
+      },
+      {
+        id: "local-assistant-output",
+        role: "assistant" as const,
+        content: "这张截图展示了 Lime 聊天区把图片恢复成了可见缩略图。",
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "这张截图展示了 Lime 聊天区把图片恢复成了可见缩略图。",
+          },
+        ],
+        timestamp: new Date("2026-05-12T10:00:02.000Z"),
+      },
+    ];
+    const hydratedMessages = [
+      {
+        id: "history-user-output",
+        role: "user" as const,
+        content: "请识别这张截图",
+        timestamp: new Date("2026-05-12T10:00:03.000Z"),
+      },
+      {
+        id: "history-assistant-output",
+        role: "assistant" as const,
+        content:
+          "历史消息内容过大，首屏已省略完整内容；需要时可加载完整历史查看。",
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "历史消息内容过大，首屏已省略完整内容；需要时可加载完整历史查看。",
+          },
+        ],
+        timestamp: new Date("2026-05-12T10:00:04.000Z"),
+        usage: {
+          input_tokens: 1200,
+          output_tokens: 80,
+        },
+      },
+    ];
+
+    const mergedMessages = mergeHydratedMessagesWithLocalState(
+      localMessages,
+      hydratedMessages,
+    );
+
+    expect(mergedMessages).toHaveLength(2);
+    expect(mergedMessages[0]?.id).toBe("local-user-output");
+    expect(mergedMessages[1]?.id).toBe("local-assistant-output");
+    expect(mergedMessages[1]?.content).toBe(
+      "这张截图展示了 Lime 聊天区把图片恢复成了可见缩略图。",
+    );
+    expect(mergedMessages[1]?.contentParts).toEqual([
+      {
+        type: "text",
+        text: "这张截图展示了 Lime 聊天区把图片恢复成了可见缩略图。",
+      },
+    ]);
+    expect(mergedMessages[1]?.usage).toEqual({
+      input_tokens: 1200,
+      output_tokens: 80,
+    });
+  });
+
+  it("远端详情返回更新的 assistant 正文时应替换本地快照", () => {
+    const localMessages = [
+      {
+        id: "local-user-topic",
+        role: "user" as const,
+        content: "继续完善上一个方案",
+        timestamp: new Date("2026-04-24T10:00:00.000Z"),
+      },
+      {
+        id: "local-assistant-topic",
+        role: "assistant" as const,
+        content: "这是本地快照里的最近结果。",
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "这是本地快照里的最近结果。",
+          },
+        ],
+        timestamp: new Date("2026-04-24T10:00:02.000Z"),
+      },
+    ];
+    const hydratedMessages = [
+      {
+        id: "remote-user-topic",
+        role: "user" as const,
+        content: "继续完善上一个方案",
+        timestamp: new Date("2026-04-24T10:00:01.000Z"),
+      },
+      {
+        id: "remote-assistant-topic",
+        role: "assistant" as const,
+        content: "这是远端补全后的最终结果。",
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "这是远端补全后的最终结果。",
+          },
+        ],
+        timestamp: new Date("2026-04-24T10:00:05.000Z"),
+      },
+    ];
+
+    const mergedMessages = mergeHydratedMessagesWithLocalState(
+      localMessages,
+      hydratedMessages,
+    );
+
+    expect(mergedMessages[0]?.id).toBe("local-user-topic");
+    expect(mergedMessages[1]?.id).toBe("local-assistant-topic");
+    expect(mergedMessages[1]?.content).toBe("这是远端补全后的最终结果。");
+    expect(mergedMessages[1]?.contentParts).toEqual([
+      {
+        type: "text",
+        text: "这是远端补全后的最终结果。",
+      },
+    ]);
   });
 
   it("后端暂未返回历史时应保留本地消息，避免刷新后界面空白", () => {

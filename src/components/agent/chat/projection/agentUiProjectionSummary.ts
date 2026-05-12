@@ -1,4 +1,5 @@
 import type {
+  AgentUiControl,
   AgentUiEventClass,
   AgentUiProjectionEvent,
   AgentUiSurface,
@@ -52,6 +53,11 @@ export interface AgentUiTeamWorkbenchSurfaceSummary extends AgentUiTeamWorkbench
   total: number;
   latestEvents: AgentUiProjectionEvent[];
 }
+
+export type AgentUiProjectionTranslation = (
+  key: string,
+  options?: Record<string, unknown>,
+) => string;
 
 export const EMPTY_AGENT_UI_PROJECTION_SUMMARY: AgentUiProjectionSummary = {
   total: 0,
@@ -114,6 +120,14 @@ export const AGENT_UI_EVENT_LABELS: Partial<Record<AgentUiEventClass, string>> =
     "review.completed": "Review 完成",
   };
 
+const AGENT_UI_EVENT_LABEL_KEYS: Partial<Record<AgentUiEventClass, string>> =
+  Object.fromEntries(
+    Object.keys(AGENT_UI_EVENT_LABELS).map((type) => [
+      type,
+      `agentChat.agentUiProjection.eventType.${type}`,
+    ]),
+  ) as Partial<Record<AgentUiEventClass, string>>;
+
 const AGENT_UI_SOURCE_TYPE_LABELS: Record<string, string> = {
   action_required: "等待操作",
   artifact_snapshot: "产物快照",
@@ -130,6 +144,87 @@ const AGENT_UI_SOURCE_TYPE_LABELS: Record<string, string> = {
   tool_call: "工具调用",
   tool_start: "工具开始",
 };
+
+const AGENT_UI_SOURCE_TYPE_LABEL_KEYS: Record<string, string> =
+  Object.fromEntries(
+    Object.keys(AGENT_UI_SOURCE_TYPE_LABELS).map((sourceType) => [
+      sourceType,
+      `agentChat.agentUiProjection.sourceType.${sourceType}`,
+    ]),
+  );
+
+const AGENT_UI_PHASE_LABELS: Record<string, string> = {
+  accepted: "已接受",
+  acting: "执行中",
+  archived: "已归档",
+  cancelled: "已取消",
+  completed: "已完成",
+  failed: "失败",
+  hydrating: "恢复中",
+  interrupted: "已中断",
+  planning: "规划中",
+  preparing: "准备中",
+  producing: "生成中",
+  reasoning: "思考中",
+  reconciling: "对齐中",
+  reviewing: "评审中",
+  routing: "路由中",
+  submitted: "已提交",
+  unknown: "未知",
+  waiting: "等待中",
+};
+
+const AGENT_UI_PHASE_LABEL_KEYS: Record<string, string> = Object.fromEntries(
+  Object.keys(AGENT_UI_PHASE_LABELS).map((phase) => [
+    phase,
+    `agentChat.agentUiProjection.phase.${phase}`,
+  ]),
+);
+
+export const AGENT_UI_CONTROL_LABELS: Partial<Record<AgentUiControl, string>> =
+  {
+    answer: "补充输入",
+    approve: "批准",
+    assign: "指派",
+    close: "关闭",
+    continue_agent: "继续",
+    delegate: "委派",
+    edit: "编辑",
+    export: "导出",
+    interrupt: "中断",
+    none: "无控制",
+    open_detail: "打开详情",
+    queue: "加入队列",
+    reject: "拒绝",
+    remove: "移除",
+    request_review: "请求审核",
+    retry: "重试",
+    rollback: "回滚",
+    send: "发送",
+    steer: "调整方向",
+    stop: "停止",
+    unknown: "未知控制",
+    wait: "等待",
+  };
+
+const AGENT_UI_CONTROL_LABEL_KEYS: Partial<Record<AgentUiControl, string>> =
+  Object.fromEntries(
+    Object.keys(AGENT_UI_CONTROL_LABELS).map((control) => [
+      control,
+      `agentChat.agentUiProjection.control.${control}`,
+    ]),
+  ) as Partial<Record<AgentUiControl, string>>;
+
+function translateAgentUiProjectionLabel(
+  t: AgentUiProjectionTranslation | undefined,
+  key: string | undefined,
+  fallback: string,
+): string {
+  if (!t || !key) {
+    return fallback;
+  }
+  return t(key, { defaultValue: fallback });
+}
 
 export const AGENT_UI_ACTION_EVENT_TYPES = new Set<AgentUiEventClass>([
   "action.required",
@@ -309,61 +404,86 @@ function normalizeLookupKey(value?: string | null): string | null {
 
 export function formatAgentUiProjectionEventType(
   type: AgentUiEventClass,
+  t?: AgentUiProjectionTranslation,
 ): string {
-  return AGENT_UI_EVENT_LABELS[type] || type;
+  return translateAgentUiProjectionLabel(
+    t,
+    AGENT_UI_EVENT_LABEL_KEYS[type],
+    AGENT_UI_EVENT_LABELS[type] || type,
+  );
 }
 
 export function formatAgentUiProjectionSourceType(
   sourceType?: string | null,
+  t?: AgentUiProjectionTranslation,
 ): string {
   const normalized = sourceType?.trim();
   if (!normalized) {
-    return "事件来源";
+    return translateAgentUiProjectionLabel(
+      t,
+      "agentChat.agentUiProjection.sourceType.unknown",
+      "事件来源",
+    );
   }
-  return AGENT_UI_SOURCE_TYPE_LABELS[normalized] ?? "事件来源";
+  return translateAgentUiProjectionLabel(
+    t,
+    AGENT_UI_SOURCE_TYPE_LABEL_KEYS[normalized],
+    AGENT_UI_SOURCE_TYPE_LABELS[normalized] ?? "事件来源",
+  );
 }
 
-export function formatAgentUiProjectionPhase(phase: string): string {
-  switch (phase) {
-    case "accepted":
-      return "已接受";
-    case "acting":
-      return "执行中";
-    case "archived":
-      return "已归档";
-    case "cancelled":
-      return "已取消";
-    case "completed":
-      return "已完成";
-    case "failed":
-      return "失败";
-    case "hydrating":
-      return "恢复中";
-    case "interrupted":
-      return "已中断";
-    case "planning":
-      return "规划中";
-    case "preparing":
-      return "准备中";
-    case "producing":
-      return "生成中";
-    case "reasoning":
-      return "思考中";
-    case "reconciling":
-      return "对齐中";
-    case "reviewing":
-      return "评审中";
-    case "routing":
-      return "路由中";
-    case "submitted":
-      return "已提交";
-    case "unknown":
-      return "未知";
-    case "waiting":
-      return "等待中";
-    default:
-      return phase;
+export function formatAgentUiProjectionPhase(
+  phase: string,
+  t?: AgentUiProjectionTranslation,
+): string {
+  return translateAgentUiProjectionLabel(
+    t,
+    AGENT_UI_PHASE_LABEL_KEYS[phase],
+    AGENT_UI_PHASE_LABELS[phase] ?? phase,
+  );
+}
+
+export function formatAgentUiProjectionControl(
+  control: AgentUiControl,
+  t?: AgentUiProjectionTranslation,
+): string {
+  return translateAgentUiProjectionLabel(
+    t,
+    AGENT_UI_CONTROL_LABEL_KEYS[control],
+    AGENT_UI_CONTROL_LABELS[control] ?? control,
+  );
+}
+
+export function formatAgentUiProjectionSurfaceLabel(
+  surface: AgentUiSurface | string | null | undefined,
+  t?: AgentUiProjectionTranslation,
+  fallback = "工作区",
+): string {
+  const normalized = surface?.trim();
+  if (!normalized) {
+    return fallback;
   }
+  return translateAgentUiProjectionLabel(
+    t,
+    `agentChat.agentUiProjection.surface.${normalized}.label`,
+    fallback,
+  );
+}
+
+export function formatAgentUiProjectionSurfaceDescription(
+  surface: AgentUiSurface | string | null | undefined,
+  t?: AgentUiProjectionTranslation,
+  fallback = "",
+): string {
+  const normalized = surface?.trim();
+  if (!normalized) {
+    return fallback;
+  }
+  return translateAgentUiProjectionLabel(
+    t,
+    `agentChat.agentUiProjection.surface.${normalized}.description`,
+    fallback,
+  );
 }
 
 function isTeamReassignmentEvent(event: AgentUiProjectionEvent): boolean {
@@ -715,6 +835,7 @@ export function summarizeAgentUiTeamWorkbenchProjectionEvents(
 
 export function summarizeAgentUiTeamWorkbenchSurfaceLanes(
   events: AgentUiProjectionEvent[],
+  options: { t?: AgentUiProjectionTranslation } = {},
 ): AgentUiTeamWorkbenchSurfaceLaneSummary[] {
   return AGENT_UI_TEAM_WORKBENCH_SURFACE_LANES.map((lane) => {
     const surfaceSet = new Set(lane.surfaces);
@@ -724,6 +845,16 @@ export function summarizeAgentUiTeamWorkbenchSurfaceLanes(
 
     return {
       ...lane,
+      label: translateAgentUiProjectionLabel(
+        options.t,
+        `agentChat.agentUiProjection.lane.${lane.id}.label`,
+        lane.label,
+      ),
+      description: translateAgentUiProjectionLabel(
+        options.t,
+        `agentChat.agentUiProjection.lane.${lane.id}.description`,
+        lane.description,
+      ),
       total: laneEvents.length,
       latestEvents: laneEvents.slice().reverse().slice(0, 2),
     };
@@ -732,7 +863,10 @@ export function summarizeAgentUiTeamWorkbenchSurfaceLanes(
 
 export function summarizeAgentUiTeamWorkbenchSurfaces(
   events: AgentUiProjectionEvent[],
-  options: { latestLimit?: number } = {},
+  options: {
+    latestLimit?: number;
+    t?: AgentUiProjectionTranslation;
+  } = {},
 ): AgentUiTeamWorkbenchSurfaceSummary[] {
   const latestLimit = Math.max(1, options.latestLimit ?? 3);
   return AGENT_UI_TEAM_WORKBENCH_SURFACE_DEFINITIONS.map((definition) => {
@@ -742,6 +876,16 @@ export function summarizeAgentUiTeamWorkbenchSurfaces(
 
     return {
       ...definition,
+      label: formatAgentUiProjectionSurfaceLabel(
+        definition.surface,
+        options.t,
+        definition.label,
+      ),
+      description: formatAgentUiProjectionSurfaceDescription(
+        definition.surface,
+        options.t,
+        definition.description,
+      ),
       total: surfaceEvents.length,
       latestEvents: surfaceEvents.slice().reverse().slice(0, latestLimit),
     };

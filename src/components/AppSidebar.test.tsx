@@ -1095,6 +1095,8 @@ describe("AppSidebar", () => {
       '[data-testid="app-sidebar-language-menu"]',
     );
     expect(languageMenu).not.toBeNull();
+    expect(getComputedStyle(languageMenu as Element).bottom).toBe("0px");
+    expect(getComputedStyle(languageMenu as Element).overflowY).toBe("auto");
     expect(languageMenu?.textContent).toContain("中文");
     expect(languageMenu?.textContent).toContain("English");
 

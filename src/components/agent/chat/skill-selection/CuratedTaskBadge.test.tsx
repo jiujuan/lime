@@ -5,12 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CuratedTaskBadge } from "./CuratedTaskBadge";
 import { findCuratedTaskTemplateById } from "../utils/curatedTaskTemplates";
 import { recordCuratedTaskRecommendationSignalFromReviewDecision } from "../utils/curatedTaskRecommendationSignals";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 describe("CuratedTaskBadge", () => {
   let container: HTMLDivElement;
   let root: Root;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await changeLimeLocale("zh-CN");
     (
       globalThis as typeof globalThis & {
         IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -68,6 +70,7 @@ describe("CuratedTaskBadge", () => {
     );
     expect(reviewSignal?.textContent).toContain("围绕最近判断");
     expect(reviewSignal?.textContent).toContain("短视频编排");
+    expect(reviewSignal?.textContent).not.toContain("curatedTask.badge");
   });
 
   it("未命中最近判断偏好的结果模板时，不应显影判断提示", async () => {
@@ -150,6 +153,7 @@ describe("CuratedTaskBadge", () => {
     expect(statusPill?.getAttribute("title")).toContain(
       "当前结果基线：AI 内容周报",
     );
+    expect(statusPill?.textContent).not.toContain("curatedTask.badge");
   });
 
   it("切到下游结果模板后，badge 仍应显影同一份 sceneapp 基线", async () => {
@@ -238,6 +242,9 @@ describe("CuratedTaskBadge", () => {
 
     expect(reviewSignal?.textContent).toContain("更适合：复盘这个账号/项目");
     expect(reviewAction?.textContent).toContain("改用「复盘这个账号/项目」");
+    expect(reviewAction?.getAttribute("title")).toContain(
+      "按最近判断切到「复盘这个账号/项目」",
+    );
 
     await act(async () => {
       reviewAction?.click();

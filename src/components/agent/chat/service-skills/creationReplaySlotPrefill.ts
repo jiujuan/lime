@@ -1,4 +1,5 @@
 import type { CreationReplayMetadata } from "../utils/creationReplayMetadata";
+import agentSourceResource from "@/i18n/resources/zh-CN/agent.json";
 import type {
   ServiceSkillHomeItem,
   ServiceSkillSlotDefinition,
@@ -19,6 +20,17 @@ export interface CreationReplaySlotPrefillCopy {
   formatFieldSummary?: (visibleLabels: string[], totalCount: number) => string;
   formatHint?: (sourceLabel: string, fieldSummary: string) => string;
 }
+
+export interface ResolvedCreationReplaySlotPrefillCopy {
+  sourceLabels: {
+    memoryEntry: string;
+    skillScaffold: string;
+  };
+  formatFieldSummary: (visibleLabels: string[], totalCount: number) => string;
+  formatHint: (sourceLabel: string, fieldSummary: string) => string;
+}
+
+type AgentSourceResourceKey = keyof typeof agentSourceResource;
 
 const PLATFORM_MATCHERS = [
   {
@@ -111,6 +123,71 @@ const STRICT_REPLICATION_KEYWORDS = [
   "复刻",
   "同结构",
 ] as const;
+
+function interpolateCreationReplaySourceTemplate(
+  template: string,
+  values?: Record<string, number | string>,
+): string {
+  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, name) => {
+    const value = values?.[name];
+    return value == null ? match : String(value);
+  });
+}
+
+function translateCreationReplaySourceKey(
+  key: string,
+  values?: Record<string, number | string>,
+): string {
+  const template = agentSourceResource[key as AgentSourceResourceKey] ?? key;
+  return interpolateCreationReplaySourceTemplate(template, values);
+}
+
+const SOURCE_CREATION_REPLAY_SLOT_PREFILL_COPY: ResolvedCreationReplaySlotPrefillCopy =
+  {
+    sourceLabels: {
+      memoryEntry: translateCreationReplaySourceKey(
+        "skills.workspace.serviceSkill.prefill.creationReplay.source.memoryEntry",
+      ),
+      skillScaffold: translateCreationReplaySourceKey(
+        "skills.workspace.serviceSkill.prefill.creationReplay.source.skillScaffold",
+      ),
+    },
+    formatFieldSummary: (visibleLabels, totalCount) => {
+      const fieldSeparator = translateCreationReplaySourceKey(
+        "skills.workspace.serviceSkill.factItems.separator",
+      );
+      const fields = visibleLabels.join(fieldSeparator);
+      if (visibleLabels.length >= totalCount) {
+        return fields;
+      }
+
+      return translateCreationReplaySourceKey(
+        "skills.workspace.serviceSkill.prefill.creationReplay.fieldSummaryWithMore",
+        { fields },
+      );
+    },
+    formatHint: (sourceLabel, fieldSummary) =>
+      translateCreationReplaySourceKey(
+        "skills.workspace.serviceSkill.prefill.creationReplay.hint",
+        {
+          fields: fieldSummary,
+          source: sourceLabel,
+        },
+      ),
+  };
+
+export function resolveCreationReplaySlotPrefillCopy(
+  copy?: CreationReplaySlotPrefillCopy,
+): ResolvedCreationReplaySlotPrefillCopy {
+  return {
+    ...SOURCE_CREATION_REPLAY_SLOT_PREFILL_COPY,
+    ...(copy ?? {}),
+    sourceLabels: {
+      ...SOURCE_CREATION_REPLAY_SLOT_PREFILL_COPY.sourceLabels,
+      ...(copy?.sourceLabels ?? {}),
+    },
+  };
+}
 
 function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
@@ -216,11 +293,11 @@ function extractReplayUrl(creationReplay: CreationReplayMetadata): string {
 
 function resolveReplaySourceLabel(
   creationReplay: CreationReplayMetadata,
-  copy: CreationReplaySlotPrefillCopy = {},
+  copy: ResolvedCreationReplaySlotPrefillCopy,
 ): string {
   return creationReplay.kind === "memory_entry"
-    ? (copy.sourceLabels?.memoryEntry ?? "当前灵感条目")
-    : (copy.sourceLabels?.skillScaffold ?? "当前技能草稿");
+    ? copy.sourceLabels.memoryEntry
+    : copy.sourceLabels.skillScaffold;
 }
 
 function buildPrefillHint(
@@ -228,18 +305,15 @@ function buildPrefillHint(
   fieldLabels: string[],
   copy: CreationReplaySlotPrefillCopy = {},
 ): string {
+  const resolvedCopy = resolveCreationReplaySlotPrefillCopy(copy);
   const visibleLabels = fieldLabels.slice(0, 3);
-  const fieldSummary =
-    copy.formatFieldSummary?.(visibleLabels, fieldLabels.length) ??
-    (fieldLabels.length > 3
-      ? `${visibleLabels.join("、")} 等参数`
-      : visibleLabels.join("、"));
-  const sourceLabel = resolveReplaySourceLabel(creationReplay, copy);
-
-  return (
-    copy.formatHint?.(sourceLabel, fieldSummary) ??
-    `已根据${sourceLabel}自动预填 ${fieldSummary}，可继续修改后执行。`
+  const fieldSummary = resolvedCopy.formatFieldSummary(
+    visibleLabels,
+    fieldLabels.length,
   );
+  const sourceLabel = resolveReplaySourceLabel(creationReplay, resolvedCopy);
+
+  return resolvedCopy.formatHint(sourceLabel, fieldSummary);
 }
 
 function findFirstKeywordValue(

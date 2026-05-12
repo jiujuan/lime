@@ -2,6 +2,7 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
 import { TeamWorkspaceBoard } from "./TeamWorkspaceBoard";
 
@@ -41,19 +42,20 @@ vi.mock("@/components/ui/button", () => ({
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
   window.localStorage.clear();
   mockGetAgentRuntimeSession.mockImplementation(async (sessionId: string) =>
     createSessionDetail(sessionId),
   );
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mountedRoots.length > 0) {
     const mounted = mountedRoots.pop();
     if (!mounted) break;
@@ -62,6 +64,7 @@ afterEach(() => {
     });
     mounted.container.remove();
   }
+  await changeLimeLocale("zh-CN");
   window.localStorage.clear();
   vi.clearAllMocks();
 });

@@ -3179,7 +3179,7 @@ mod tests {
 
     #[test]
     fn auto_compaction_projection_swallows_aster_compaction_system_notifications() {
-        let mut state = AutoCompactionProjectionState::default();
+        let mut state = AutoCompactionProjectionState;
 
         let start_events = state.project_event(&AsterAgentEvent::Message(
             Message::assistant().with_system_notification(
@@ -3212,7 +3212,7 @@ mod tests {
 
     #[test]
     fn auto_compaction_projection_surfaces_compaction_failure_as_error() {
-        let mut state = AutoCompactionProjectionState::default();
+        let mut state = AutoCompactionProjectionState;
         let _ = state.project_event(&AsterAgentEvent::Message(
             Message::assistant().with_system_notification(
                 SystemNotificationType::InlineMessage,
@@ -3240,7 +3240,7 @@ mod tests {
 
     #[test]
     fn auto_compaction_projection_surfaces_disabled_auto_compaction_limit_as_error() {
-        let mut state = AutoCompactionProjectionState::default();
+        let mut state = AutoCompactionProjectionState;
 
         let events = state
             .project_event(&AsterAgentEvent::Message(

@@ -9,11 +9,14 @@ use crate::commands::aster_agent_cmd::{
     AgentRuntimeProfileStream, AgentRuntimeThreadReadModel, LIME_AGENT_RUNTIME_ID,
     LIME_AGENT_RUNTIME_PROFILE_SCHEMA_VERSION,
 };
+use lime_core::database::dao::agent_run::{AgentRun, AgentRunStatus};
 use serde_json::{json, Value};
+use std::collections::BTreeSet;
 
 pub(crate) fn build_agent_runtime_profile_spine_json(
     detail: &SessionDetail,
     thread_read: &AgentRuntimeThreadReadModel,
+    owner_runs: &[AgentRun],
 ) -> Value {
     json!({
         "schemaVersion": LIME_AGENT_RUNTIME_PROFILE_SCHEMA_VERSION,
@@ -23,7 +26,7 @@ pub(crate) fn build_agent_runtime_profile_spine_json(
         "profileStatus": thread_read.profile_status,
         "activeTurnId": thread_read.active_turn_id,
         "turns": thread_read.turns,
-        "events": build_agent_runtime_profile_events_json(detail, thread_read),
+        "events": build_agent_runtime_profile_events_json(detail, thread_read, owner_runs),
         "actions": build_agent_runtime_profile_actions_json(thread_read),
         "toolCalls": thread_read.tool_calls,
         "modelRouting": thread_read.model_routing,
@@ -45,6 +48,7 @@ pub(crate) fn build_agent_runtime_profile_spine_json(
 fn build_agent_runtime_profile_events_json(
     detail: &SessionDetail,
     thread_read: &AgentRuntimeThreadReadModel,
+    owner_runs: &[AgentRun],
 ) -> Vec<Value> {
     let mut events = build_agent_runtime_profile_policy_events_json(detail, thread_read);
     events.extend(build_agent_runtime_profile_tool_events_json(
@@ -58,6 +62,20 @@ fn build_agent_runtime_profile_events_json(
     events.extend(build_agent_runtime_profile_task_events_json(
         detail,
         thread_read,
+    ));
+    events.extend(build_agent_runtime_profile_subagent_events_json(
+        detail,
+        thread_read,
+    ));
+    events.extend(build_agent_runtime_profile_job_events_json(
+        detail,
+        thread_read,
+        owner_runs,
+    ));
+    events.extend(build_agent_runtime_profile_remote_channel_events_json(
+        detail,
+        thread_read,
+        owner_runs,
     ));
     events
 }
@@ -173,6 +191,7 @@ fn build_agent_runtime_profile_routing_events_json(
     let candidate_count = json_u32_field(model_routing, "candidateCount");
     let selected_model = json_string_field(model_routing, "selectedModel");
     let decision_source = json_string_field(model_routing, "decisionSource");
+    let capability_gap = json_string_field(model_routing, "capabilityGap");
     let estimated_cost_class = json_string_field(model_routing, "estimatedCostClass");
     let limit_status = thread_read
         .limit_state
@@ -197,6 +216,22 @@ fn build_agent_runtime_profile_routing_events_json(
                 decision_source.as_deref(),
             ),
         ));
+    } else if routing_mode.as_deref() == Some("no_candidate") || candidate_count == Some(0) {
+        events.push(serialize_profile_event_value(stream.routing_not_possible(
+            task_kind.as_deref(),
+            routing_mode.as_deref(),
+            candidate_count.unwrap_or(0),
+            decision_source.as_deref(),
+            capability_gap.as_deref().or(Some("no_candidate")),
+        )));
+    } else if candidate_count.is_some_and(|value| value > 1) {
+        events.push(serialize_profile_event_value(stream.routing_decided(
+            task_kind.as_deref(),
+            routing_mode.as_deref(),
+            candidate_count.unwrap_or_default(),
+            selected_model.as_deref(),
+            decision_source.as_deref(),
+        )));
     }
     if estimated_cost_class.is_some() {
         events.push(serialize_profile_event_value(
@@ -345,6 +380,651 @@ fn build_agent_runtime_profile_task_events_json(
     }
 
     events
+}
+
+fn build_agent_runtime_profile_subagent_events_json(
+    detail: &SessionDetail,
+    thread_read: &AgentRuntimeThreadReadModel,
+) -> Vec<Value> {
+    let parent_task_id = task_id_from_thread_id(&detail.thread_id);
+    detail
+        .child_subagent_sessions
+        .iter()
+        .flat_map(|session| {
+            let turn_id = session
+                .created_from_turn_id
+                .as_deref()
+                .or(thread_read.active_turn_id.as_deref())
+                .or_else(|| thread_read.turns.last().map(|turn| turn.turn_id.as_str()))
+                .unwrap_or("turn_unavailable");
+            let Ok(stream) = AgentRuntimeProfileStream::new(
+                detail.id.as_str(),
+                detail.thread_id.as_str(),
+                turn_id,
+            ) else {
+                return Vec::new();
+            };
+
+            let mut events = vec![serialize_profile_event_value(stream.subagent_spawned(
+                session.id.as_str(),
+                session.created_from_turn_id.as_deref(),
+                Some(parent_task_id.as_str()),
+                session.origin_tool.as_deref(),
+                session.role_key.as_deref(),
+            ))];
+
+            if let Some(status) = child_subagent_runtime_status_label(
+                session.runtime_status.or(session.latest_turn_status),
+            ) {
+                events.push(serialize_profile_event_value(stream.subagent_status(
+                    session.id.as_str(),
+                    status,
+                    Some(parent_task_id.as_str()),
+                )));
+                match status {
+                    "completed" => events.push(serialize_profile_event_value(
+                        stream
+                            .subagent_completed(session.id.as_str(), Some(parent_task_id.as_str())),
+                    )),
+                    "failed" => events.push(serialize_profile_event_value(stream.subagent_failed(
+                        session.id.as_str(),
+                        "runtime_error",
+                        Some(parent_task_id.as_str()),
+                    ))),
+                    "aborted" => {
+                        events.push(serialize_profile_event_value(stream.subagent_failed(
+                            session.id.as_str(),
+                            "aborted",
+                            Some(parent_task_id.as_str()),
+                        )))
+                    }
+                    "closed" => events.push(serialize_profile_event_value(
+                        stream.subagent_closed(session.id.as_str(), Some(parent_task_id.as_str())),
+                    )),
+                    _ => {}
+                }
+            }
+
+            events
+        })
+        .collect()
+}
+
+fn child_subagent_runtime_status_label(
+    status: Option<lime_agent::ChildSubagentRuntimeStatus>,
+) -> Option<&'static str> {
+    match status? {
+        lime_agent::ChildSubagentRuntimeStatus::Idle => Some("idle"),
+        lime_agent::ChildSubagentRuntimeStatus::Queued => Some("queued"),
+        lime_agent::ChildSubagentRuntimeStatus::Running => Some("running"),
+        lime_agent::ChildSubagentRuntimeStatus::Completed => Some("completed"),
+        lime_agent::ChildSubagentRuntimeStatus::Failed => Some("failed"),
+        lime_agent::ChildSubagentRuntimeStatus::Aborted => Some("aborted"),
+        lime_agent::ChildSubagentRuntimeStatus::Closed => Some("closed"),
+    }
+}
+
+fn build_agent_runtime_profile_job_events_json(
+    detail: &SessionDetail,
+    thread_read: &AgentRuntimeThreadReadModel,
+    owner_runs: &[AgentRun],
+) -> Vec<Value> {
+    if owner_runs.is_empty() {
+        return Vec::new();
+    }
+
+    let turn_id = thread_read
+        .active_turn_id
+        .as_deref()
+        .or_else(|| thread_read.turns.last().map(|turn| turn.turn_id.as_str()))
+        .unwrap_or("turn_unavailable");
+    let Ok(stream) =
+        AgentRuntimeProfileStream::new(detail.id.as_str(), detail.thread_id.as_str(), turn_id)
+    else {
+        return Vec::new();
+    };
+
+    owner_runs
+        .iter()
+        .flat_map(|run| {
+            let metadata = parse_agent_run_metadata_value(run);
+            let job_item_id = agent_run_job_item_id(run, metadata.as_ref());
+            let item_kind = agent_run_job_item_kind(metadata.as_ref());
+            let mut events = vec![
+                serialize_profile_event_value(stream.job_created(
+                    run.id.as_str(),
+                    run.source.as_str(),
+                    run.source_ref.as_deref(),
+                )),
+                serialize_profile_event_value(
+                    stream.job_status(run.id.as_str(), run.status.as_str()),
+                ),
+                serialize_profile_event_value(stream.job_item_started(
+                    run.id.as_str(),
+                    job_item_id.as_str(),
+                    item_kind.as_deref(),
+                    run.source_ref.as_deref(),
+                )),
+            ];
+
+            match run.status {
+                AgentRunStatus::Success => events.push(serialize_profile_event_value(
+                    stream.job_completed(run.id.as_str()),
+                )),
+                AgentRunStatus::Error | AgentRunStatus::Canceled | AgentRunStatus::Timeout => {
+                    events.push(serialize_profile_event_value(stream.job_item_failed(
+                        run.id.as_str(),
+                        job_item_id.as_str(),
+                        agent_run_failure_category(&run.status),
+                        run.error_code.as_deref(),
+                        !matches!(run.status, AgentRunStatus::Canceled),
+                    )));
+                    events.push(serialize_profile_event_value(stream.job_failed(
+                        run.id.as_str(),
+                        agent_run_failure_category(&run.status),
+                        run.error_code.as_deref(),
+                    )));
+                }
+                AgentRunStatus::Queued | AgentRunStatus::Running => {}
+            }
+
+            events
+        })
+        .collect()
+}
+
+fn agent_run_failure_category(status: &AgentRunStatus) -> &'static str {
+    match status {
+        AgentRunStatus::Timeout => "timeout",
+        AgentRunStatus::Canceled => "canceled",
+        AgentRunStatus::Error => "runtime_error",
+        AgentRunStatus::Queued | AgentRunStatus::Running | AgentRunStatus::Success => "unknown",
+    }
+}
+
+fn agent_run_job_item_id(run: &AgentRun, metadata: Option<&Value>) -> String {
+    metadata
+        .and_then(|value| {
+            read_json_string_from_paths(
+                value,
+                &[
+                    &["job_item_id"][..],
+                    &["jobItemId"][..],
+                    &["item_id"][..],
+                    &["itemId"][..],
+                    &["harness", "managed_objective", "item_id"][..],
+                    &["harness", "managedObjective", "itemId"][..],
+                ],
+            )
+        })
+        .unwrap_or_else(|| format!("{}:execution", run.id))
+}
+
+fn agent_run_job_item_kind(metadata: Option<&Value>) -> Option<String> {
+    metadata
+        .and_then(|value| {
+            read_json_string_from_paths(
+                value,
+                &[
+                    &["job_item_kind"][..],
+                    &["jobItemKind"][..],
+                    &["item_kind"][..],
+                    &["itemKind"][..],
+                    &["payload_kind"][..],
+                    &["payloadKind"][..],
+                    &["harness", "managed_objective", "owner_type"][..],
+                    &["harness", "managedObjective", "ownerType"][..],
+                ],
+            )
+        })
+        .or_else(|| Some("agent_run_execution".to_string()))
+}
+
+fn read_json_string_from_paths(value: &Value, paths: &[&[&str]]) -> Option<String> {
+    paths.iter().find_map(|path| {
+        let current = path.iter().try_fold(value, |current, segment| {
+            current.get(*segment).filter(|value| !value.is_null())
+        })?;
+        current
+            .as_str()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    })
+}
+
+pub(crate) fn agent_runtime_remote_task_ids(owner_runs: &[AgentRun]) -> Vec<String> {
+    collect_remote_channel_facts(owner_runs)
+        .into_iter()
+        .map(|fact| fact.remote_task_id)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+pub(crate) fn build_agent_runtime_remote_channels_json(owner_runs: &[AgentRun]) -> Value {
+    let facts = collect_remote_channel_facts(owner_runs);
+    let remote_task_ids = facts
+        .iter()
+        .map(|fact| fact.remote_task_id.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let channels = facts
+        .iter()
+        .filter_map(|fact| fact.channel.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+
+    json!({
+        "source": "agent_runs.source_metadata.remote_task",
+        "count": facts.len(),
+        "remoteTaskIds": remote_task_ids,
+        "channels": channels,
+        "tasks": facts.iter().map(|fact| {
+            json!({
+                "runId": fact.run_id,
+                "source": fact.source,
+                "sourceRef": fact.source_ref,
+                "sessionId": fact.session_id,
+                "runStatus": fact.run_status,
+                "remoteTaskId": fact.remote_task_id,
+                "channel": fact.channel,
+                "accountId": fact.account_id,
+                "remoteEvent": fact.remote_event,
+                "remoteStatus": fact.remote_status,
+                "snapshotStatus": fact.snapshot_status,
+                "snapshotRef": fact.snapshot_ref,
+                "replayRef": fact.replay_ref,
+                "disconnected": fact.disconnected,
+                "resumed": fact.resumed,
+                "snapshotRepaired": fact.snapshot_repaired,
+            })
+        }).collect::<Vec<_>>()
+    })
+}
+
+fn build_agent_runtime_profile_remote_channel_events_json(
+    detail: &SessionDetail,
+    thread_read: &AgentRuntimeThreadReadModel,
+    owner_runs: &[AgentRun],
+) -> Vec<Value> {
+    let facts = collect_remote_channel_facts(owner_runs);
+    if facts.is_empty() {
+        return Vec::new();
+    }
+
+    let turn_id = thread_read
+        .active_turn_id
+        .as_deref()
+        .or_else(|| thread_read.turns.last().map(|turn| turn.turn_id.as_str()))
+        .unwrap_or("turn_unavailable");
+    let Ok(stream) =
+        AgentRuntimeProfileStream::new(detail.id.as_str(), detail.thread_id.as_str(), turn_id)
+    else {
+        return Vec::new();
+    };
+
+    facts
+        .iter()
+        .flat_map(|fact| {
+            let mut events = vec![serialize_profile_event_value(stream.channel_connected(
+                fact.remote_task_id.as_str(),
+                fact.channel.as_deref(),
+                fact.account_id.as_deref(),
+                Some(fact.run_id.as_str()),
+                fact.source.as_deref(),
+            ))];
+            if fact.disconnected {
+                events.push(serialize_profile_event_value(stream.channel_disconnected(
+                    fact.remote_task_id.as_str(),
+                    fact.channel.as_deref(),
+                    fact.account_id.as_deref(),
+                    fact.disconnect_reason_code.as_deref(),
+                    fact.disconnect_retryable,
+                )));
+            }
+            if fact.resumed {
+                events.push(serialize_profile_event_value(stream.channel_resumed(
+                    fact.remote_task_id.as_str(),
+                    fact.channel.as_deref(),
+                    fact.account_id.as_deref(),
+                    fact.snapshot_ref.as_deref(),
+                    fact.replay_ref.as_deref(),
+                )));
+            }
+            if fact.snapshot_repaired {
+                events.push(serialize_profile_event_value(stream.snapshot_repaired(
+                    "remote_channel_snapshot",
+                    Some(fact.remote_task_id.as_str()),
+                    fact.channel.as_deref(),
+                    fact.account_id.as_deref(),
+                    fact.repair_status.as_deref(),
+                    fact.snapshot_stale,
+                )));
+            }
+            events
+        })
+        .collect()
+}
+
+#[derive(Debug, Clone)]
+struct RemoteChannelFact {
+    run_id: String,
+    source: Option<String>,
+    source_ref: Option<String>,
+    session_id: Option<String>,
+    run_status: String,
+    remote_task_id: String,
+    channel: Option<String>,
+    account_id: Option<String>,
+    remote_event: Option<String>,
+    remote_status: Option<String>,
+    snapshot_status: Option<String>,
+    snapshot_ref: Option<String>,
+    replay_ref: Option<String>,
+    disconnected: bool,
+    disconnect_reason_code: Option<String>,
+    disconnect_retryable: bool,
+    resumed: bool,
+    repair_status: Option<String>,
+    snapshot_repaired: bool,
+    snapshot_stale: bool,
+}
+
+fn collect_remote_channel_facts(owner_runs: &[AgentRun]) -> Vec<RemoteChannelFact> {
+    owner_runs
+        .iter()
+        .filter_map(remote_channel_fact_from_agent_run)
+        .collect()
+}
+
+fn remote_channel_fact_from_agent_run(run: &AgentRun) -> Option<RemoteChannelFact> {
+    let metadata = parse_agent_run_metadata_value(run)?;
+    let candidates = remote_task_metadata_candidates(&metadata);
+    if candidates.is_empty() {
+        return None;
+    }
+
+    let remote_task_id = first_json_string_from_candidates(
+        &candidates,
+        &["remoteTaskId", "remote_task_id", "taskId", "task_id"],
+    )?;
+    let channel = first_json_string_from_candidates(&candidates, &["channel", "provider"]);
+    let account_id = first_json_string_from_candidates(&candidates, &["accountId", "account_id"]);
+    let source = first_json_string_from_candidates(&candidates, &["source"])
+        .or_else(|| Some(run.source.clone()));
+    let remote_event = first_json_string_from_candidates(
+        &candidates,
+        &[
+            "event",
+            "remoteEvent",
+            "remote_event",
+            "taskEvent",
+            "task_event",
+            "lifecycleEvent",
+            "lifecycle_event",
+        ],
+    );
+    let remote_status = first_json_string_from_candidates(
+        &candidates,
+        &[
+            "runtimeStatus",
+            "runtime_status",
+            "taskStatus",
+            "task_status",
+            "remoteStatus",
+            "remote_status",
+            "status",
+            "state",
+            "phase",
+        ],
+    );
+    let snapshot_status = first_json_string_from_candidates(
+        &candidates,
+        &[
+            "snapshotStatus",
+            "snapshot_status",
+            "snapshotRepairStatus",
+            "snapshot_repair_status",
+            "repairStatus",
+            "repair_status",
+        ],
+    );
+    let snapshot_ref = first_json_string_from_candidates(
+        &candidates,
+        &["snapshotRef", "snapshot_ref", "snapshotUri", "snapshot_uri"],
+    );
+    let replay_ref = first_json_string_from_candidates(&candidates, &["replayRef", "replay_ref"]);
+    let repair_status = first_json_string_from_candidates(
+        &candidates,
+        &[
+            "repairStatus",
+            "repair_status",
+            "snapshotRepairStatus",
+            "snapshot_repair_status",
+        ],
+    )
+    .or_else(|| snapshot_status.clone());
+    let disconnected = remote_channel_disconnected(run, &candidates);
+    let resumed = remote_channel_resumed(&candidates);
+    let snapshot_repaired = remote_channel_snapshot_repaired(&candidates);
+
+    Some(RemoteChannelFact {
+        run_id: run.id.clone(),
+        source,
+        source_ref: run.source_ref.clone(),
+        session_id: run.session_id.clone(),
+        run_status: run.status.as_str().to_string(),
+        remote_task_id,
+        channel,
+        account_id,
+        remote_event,
+        remote_status,
+        snapshot_status,
+        snapshot_ref,
+        replay_ref,
+        disconnected,
+        disconnect_reason_code: remote_channel_disconnect_reason(run, &candidates),
+        disconnect_retryable: !matches!(run.status, AgentRunStatus::Canceled),
+        resumed,
+        repair_status,
+        snapshot_repaired,
+        snapshot_stale: remote_channel_snapshot_stale(&candidates),
+    })
+}
+
+fn parse_agent_run_metadata_value(run: &AgentRun) -> Option<Value> {
+    run.metadata
+        .as_deref()
+        .and_then(|metadata| serde_json::from_str::<Value>(metadata).ok())
+        .filter(Value::is_object)
+}
+
+fn remote_task_metadata_candidates(metadata: &Value) -> Vec<&Value> {
+    [
+        "/source_metadata/remote_task",
+        "/source_metadata/remoteTask",
+        "/sourceMetadata/remote_task",
+        "/sourceMetadata/remoteTask",
+        "/remote_task",
+        "/remoteTask",
+    ]
+    .iter()
+    .filter_map(|path| metadata.pointer(path))
+    .filter(|value| value.is_object())
+    .collect()
+}
+
+fn first_json_string_from_candidates(candidates: &[&Value], keys: &[&str]) -> Option<String> {
+    candidates.iter().find_map(|candidate| {
+        keys.iter()
+            .find_map(|key| json_string_field(candidate, key.as_ref()))
+    })
+}
+
+fn first_json_bool_from_candidates(candidates: &[&Value], keys: &[&str]) -> Option<bool> {
+    candidates
+        .iter()
+        .find_map(|candidate| keys.iter().find_map(|key| json_bool_field(candidate, key)))
+}
+
+fn remote_channel_tokens(candidates: &[&Value]) -> Vec<String> {
+    let token_keys = [
+        "event",
+        "remoteEvent",
+        "remote_event",
+        "taskEvent",
+        "task_event",
+        "lifecycleEvent",
+        "lifecycle_event",
+        "runtimeStatus",
+        "runtime_status",
+        "taskStatus",
+        "task_status",
+        "remoteStatus",
+        "remote_status",
+        "status",
+        "state",
+        "phase",
+        "snapshotStatus",
+        "snapshot_status",
+        "snapshotRepairStatus",
+        "snapshot_repair_status",
+        "repairStatus",
+        "repair_status",
+    ];
+    candidates
+        .iter()
+        .flat_map(|candidate| {
+            token_keys
+                .iter()
+                .filter_map(|key| json_string_field(candidate, key))
+        })
+        .map(|value| normalize_remote_channel_token(value.as_str()))
+        .collect()
+}
+
+fn normalize_remote_channel_token(value: &str) -> String {
+    value
+        .trim()
+        .to_ascii_lowercase()
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
+        .collect::<String>()
+        .split('_')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("_")
+}
+
+fn remote_channel_has_any_token(candidates: &[&Value], expected: &[&str]) -> bool {
+    let tokens = remote_channel_tokens(candidates);
+    tokens
+        .iter()
+        .any(|token| expected.iter().any(|expected| token == expected))
+}
+
+fn remote_channel_disconnected(run: &AgentRun, candidates: &[&Value]) -> bool {
+    matches!(
+        run.status,
+        AgentRunStatus::Error | AgentRunStatus::Canceled | AgentRunStatus::Timeout
+    ) || first_json_bool_from_candidates(
+        candidates,
+        &[
+            "disconnected",
+            "channelDisconnected",
+            "channel_disconnected",
+            "connectionLost",
+            "connection_lost",
+        ],
+    )
+    .unwrap_or(false)
+        || remote_channel_has_any_token(
+            candidates,
+            &[
+                "disconnected",
+                "disconnect",
+                "connection_lost",
+                "transport_disconnected",
+                "offline",
+                "stale",
+            ],
+        )
+}
+
+fn remote_channel_disconnect_reason(run: &AgentRun, candidates: &[&Value]) -> Option<String> {
+    first_json_string_from_candidates(
+        candidates,
+        &[
+            "reasonCode",
+            "reason_code",
+            "disconnectReason",
+            "disconnect_reason",
+        ],
+    )
+    .or_else(|| run.error_code.clone())
+    .or_else(|| match run.status {
+        AgentRunStatus::Timeout => Some("timeout".to_string()),
+        AgentRunStatus::Canceled => Some("canceled".to_string()),
+        AgentRunStatus::Error => Some("remote_run_error".to_string()),
+        AgentRunStatus::Queued | AgentRunStatus::Running | AgentRunStatus::Success => None,
+    })
+}
+
+fn remote_channel_resumed(candidates: &[&Value]) -> bool {
+    first_json_bool_from_candidates(
+        candidates,
+        &[
+            "resumed",
+            "channelResumed",
+            "channel_resumed",
+            "snapshotResumed",
+            "snapshot_resumed",
+        ],
+    )
+    .unwrap_or(false)
+        || remote_channel_has_any_token(
+            candidates,
+            &[
+                "resumed",
+                "resume",
+                "reconnected",
+                "reconnect",
+                "channel_resumed",
+            ],
+        )
+}
+
+fn remote_channel_snapshot_repaired(candidates: &[&Value]) -> bool {
+    first_json_bool_from_candidates(
+        candidates,
+        &[
+            "snapshotRepaired",
+            "snapshot_repaired",
+            "repaired",
+            "snapshotRecovered",
+            "snapshot_recovered",
+        ],
+    )
+    .unwrap_or(false)
+        || remote_channel_has_any_token(
+            candidates,
+            &[
+                "snapshot_repaired",
+                "repaired",
+                "repair_completed",
+                "snapshot_recovered",
+                "recovered",
+            ],
+        )
+}
+
+fn remote_channel_snapshot_stale(candidates: &[&Value]) -> bool {
+    first_json_bool_from_candidates(candidates, &["stale", "snapshotStale", "snapshot_stale"])
+        .unwrap_or(false)
+        || remote_channel_has_any_token(candidates, &["stale", "snapshot_stale"])
 }
 
 fn task_failure_message_for_turn(

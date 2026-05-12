@@ -9,6 +9,7 @@ import {
   setupReactActEnvironment,
   type MountedRoot,
 } from "@/components/workspace/hooks/testUtils";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { CreateProjectDialog } from "./CreateProjectDialog";
 
 const {
@@ -17,7 +18,6 @@ const {
   mockGetProjectByRootPath,
   mockGetWorkspaceProjectsRoot,
   mockResolveProjectRootPath,
-  mockTranslate,
 } = vi.hoisted(() => ({
   mockExtractErrorMessage: vi.fn((error: unknown) =>
     error instanceof Error ? error.message : String(error),
@@ -26,21 +26,6 @@ const {
   mockGetProjectByRootPath: vi.fn(),
   mockGetWorkspaceProjectsRoot: vi.fn(),
   mockResolveProjectRootPath: vi.fn(),
-  mockTranslate: (
-    key: string,
-    options?: string | { defaultValue?: string; [key: string]: unknown },
-  ) => {
-    const template =
-      typeof options === "string" ? options : (options?.defaultValue ?? key);
-
-    if (typeof options === "string") {
-      return template;
-    }
-
-    return template.replace(/{{(\w+)}}/g, (_, name: string) =>
-      String(options?.[name] ?? ""),
-    );
-  },
 }));
 
 vi.mock("sonner", () => ({
@@ -50,17 +35,10 @@ vi.mock("sonner", () => ({
   },
 }));
 
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: mockTranslate,
-  }),
-}));
-
 vi.mock("@/lib/api/project", () => ({
   USER_PROJECT_TYPES: ["general"],
   extractErrorMessage: mockExtractErrorMessage,
   getCreateProjectErrorMessage: mockGetCreateProjectErrorMessage,
-  getProjectTypeLabel: vi.fn(() => "通用"),
   getProjectTypeIcon: vi.fn(() => "📁"),
   getProjectByRootPath: mockGetProjectByRootPath,
   getWorkspaceProjectsRoot: mockGetWorkspaceProjectsRoot,
@@ -72,7 +50,8 @@ setupReactActEnvironment();
 const mountedRoots: MountedRoot[] = [];
 
 describe("CreateProjectDialog", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await changeLimeLocale("en-US");
     mockGetWorkspaceProjectsRoot.mockResolvedValue("/tmp/workspace");
     mockResolveProjectRootPath.mockImplementation(
       async (name: string) => `/tmp/workspace/${name}`,
@@ -80,12 +59,13 @@ describe("CreateProjectDialog", () => {
     mockGetProjectByRootPath.mockResolvedValue(null);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     cleanupMountedRoots(mountedRoots);
     vi.clearAllMocks();
+    await changeLimeLocale("zh-CN");
   });
 
-  it("应渲染新的项目创建工作台摘要", async () => {
+  it("uses common namespace resources for the project creation workspace", async () => {
     mountHarness(
       CreateProjectDialog,
       {
@@ -93,7 +73,7 @@ describe("CreateProjectDialog", () => {
         onOpenChange: vi.fn(),
         onSubmit: vi.fn(async () => undefined),
         defaultType: "general",
-        defaultName: "研究手记",
+        defaultName: "Research Notes",
       },
       mountedRoots,
     );
@@ -101,16 +81,20 @@ describe("CreateProjectDialog", () => {
     await flushEffects(3);
 
     const text = document.body.textContent ?? "";
-    expect(text).toContain("创建新的项目工作台");
-    expect(text).toContain("选择项目类型");
-    expect(text).toContain("目录与路径");
-    expect(text).toContain("/tmp/workspace/研究手记");
+    expect(text).toContain("Create a new project workspace");
+    expect(text).toContain("Choose project type");
+    expect(text).toContain("Folder and path");
+    expect(text).toContain("General chat");
+    expect(text).toContain("/tmp/workspace/Research Notes");
+    expect(text).not.toContain("创建新的项目工作台");
+    expect(text).not.toContain("选择项目类型");
+    expect(text).not.toContain("目录与路径");
   });
 
-  it("路径冲突时应展示提示并禁用创建", async () => {
+  it("localizes path conflict feedback and disables creation", async () => {
     mockGetProjectByRootPath.mockResolvedValue({
       id: "project-exists",
-      name: "已存在项目",
+      name: "Existing Project",
     });
 
     mountHarness(
@@ -128,14 +112,15 @@ describe("CreateProjectDialog", () => {
 
     const nameInput = findInputById(document.body, "name");
     expect(nameInput).not.toBeNull();
-    fillTextInput(nameInput, "冲突项目");
+    fillTextInput(nameInput, "Conflicting Project");
 
     await flushEffects(3);
 
     expect(document.body.textContent ?? "").toContain(
-      "路径已存在项目：已存在项目",
+      "Path already belongs to project: Existing Project",
     );
-    const createButton = findButtonByText(document.body, "创建", {
+    expect(document.body.textContent ?? "").not.toContain("路径已存在项目");
+    const createButton = findButtonByText(document.body, "Create", {
       exact: true,
     });
     expect(createButton).toBeDefined();

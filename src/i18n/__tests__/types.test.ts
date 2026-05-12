@@ -21,10 +21,27 @@ function assertI18nKeyTypes() {
   });
   i18n.t("common.projectSelector.delete.dangerDescription", { ns: "common" });
   i18n.t("common.createProjectDialog.title", { ns: "common" });
+  i18n.t("common.createProjectDialog.hero.title", { ns: "common" });
+  i18n.t("common.createProjectDialog.path.conflict", {
+    ns: "common",
+    name: "Project Alpha",
+  });
+  i18n.t("common.createProjectDialog.projectType.general", { ns: "common" });
   i18n.t("common.projects.rename.nameRequired", { ns: "common" });
   i18n.t("common.createProjectDialog.error.unknown", { ns: "common" });
   i18n.t("common.deepLink.referral.saved.title", { ns: "common" });
+  i18n.t("common.deepLink.referral.claimed.title", { ns: "common" });
+  i18n.t("common.deepLink.referral.tenantMismatch.description", {
+    ns: "common",
+  });
+  i18n.t("common.deepLink.referral.claimFailed.fallback", { ns: "common" });
+  i18n.t("common.deepLink.oauth.success.description", {
+    ns: "common",
+    providerName: "Lime Hub",
+  });
+  i18n.t("common.deepLink.payment.returned.title", { ns: "common" });
   i18n.t("common.app.startup.windows.blockingTitle", { ns: "common" });
+  i18n.t("common.app.startup.windows.warningTitle", { ns: "common" });
   i18n.t("common.updateNotification.version.new", { ns: "common" });
   i18n.t("common.smartInput.status.recording", { ns: "common" });
   i18n.t("common.shortcutSettings.label", { ns: "common" });
@@ -43,6 +60,7 @@ function assertI18nKeyTypes() {
     ns: "common",
   });
   i18n.t("common.oemLimeHubProviderSync.managedKeyAlias", { ns: "common" });
+  i18n.t("common.oemLimeHubProviderSync.cloudTokenName", { ns: "common" });
   i18n.t("skills.contentDialog.loading", { ns: "agent" });
   i18n.t("skills.contentDialog.section.metadata", { ns: "agent" });
   i18n.t("skills.contentDialog.emptyInspection", { ns: "agent" });
@@ -65,6 +83,178 @@ function assertI18nKeyTypes() {
   i18n.t("skills.page.title", { ns: "agent" });
   i18n.t("skills.page.action.refresh", { ns: "agent" });
   i18n.t("skills.page.sections.remote.empty", { ns: "agent" });
+  i18n.t("skills.workspace.header.title", { ns: "agent" });
+  i18n.t("skills.workspace.serviceSkill.runner.instant.label", {
+    ns: "agent",
+  });
+  i18n.t("skills.workspace.serviceSkill.factItems.separator", { ns: "agent" });
+  i18n.t("skills.workspace.serviceSkill.prefill.recentServiceHint", {
+    ns: "agent",
+    title: "Deep Research",
+  });
+  i18n.t("skills.workspace.serviceSkill.prefill.recentSceneHint", {
+    ns: "agent",
+    title: "/x export",
+  });
+  i18n.t("skills.workspace.serviceSkill.prefill.filledWithMore", {
+    ns: "agent",
+    items: "Topic",
+    remaining: "1",
+    total: "2",
+  });
+  i18n.t("skills.workspace.serviceSkill.prefill.creationReplay.hint", {
+    ns: "agent",
+    fields: "Topic",
+    source: "the current idea",
+  });
+  i18n.t("sceneGate.title", {
+    ns: "agent",
+    title: "X Article Export",
+  });
+  i18n.t("sceneGate.project.label", { ns: "agent" });
+  i18n.t("sceneGate.validation.missingSlotsAndProject", {
+    ns: "agent",
+    fields: "Article URL",
+    project: "Project workspace",
+  });
+  i18n.t("sceneGate.toast.launchFailed", {
+    ns: "agent",
+    message: "network down",
+  });
+  i18n.t("curatedTask.sceneAppReference.followUpBanner", {
+    ns: "agent",
+    title: "Break Down a Viral Piece",
+  });
+  i18n.t("curatedTask.sceneAppReference.highlight.status", {
+    ns: "agent",
+    value: "Ready to review",
+  });
+  i18n.t("curatedTask.sceneAppReference.resultSummaryFallback", {
+    ns: "agent",
+  });
+  i18n.t("sceneAppExecutionSummary.title", { ns: "agent" });
+  i18n.t("sceneAppExecutionSummary.overview.referenceCount", {
+    ns: "agent",
+    count: 2,
+  });
+  i18n.t("sceneAppExecutionSummary.runtimePack.title", { ns: "agent" });
+  i18n.t("sceneAppExecutionSummary.followup.action.saveInspiration", {
+    ns: "agent",
+  });
+  i18n.t("sceneAppExecutionSummary.orchestration.blockedReason", {
+    ns: "agent",
+    reason: "Missing cover",
+  });
+  i18n.t("generalWorkbench.workflow.current.title", { ns: "agent" });
+  i18n.t("generalWorkbench.workflow.queue.hiddenCount", {
+    ns: "agent",
+    visible: 2,
+    hidden: 1,
+  });
+  i18n.t("generalWorkbench.workflow.outputs.copyPath", { ns: "agent" });
+  i18n.t("generalWorkbench.workflow.runDetail.artifactCount", {
+    ns: "agent",
+    count: 3,
+  });
+  i18n.t("generalWorkbench.workflow.baseline.badge", { ns: "agent" });
+  i18n.t("generalWorkbench.workflow.outputs.summary.latestTitle", {
+    ns: "agent",
+    label: "Drafts",
+  });
+  i18n.t("generalWorkbench.workflow.activity.summary.latestTitle", {
+    ns: "agent",
+    name: "Tool run",
+  });
+  i18n.t("generalWorkbench.workflow.activity.viewRun", {
+    ns: "agent",
+    run: "abc123",
+  });
+  i18n.t("generalWorkbench.workflow.runDetail.summary.curatedTask", {
+    ns: "agent",
+    title: "Review",
+  });
+  i18n.t("generalWorkbench.workflow.followUp.applyAria", {
+    ns: "agent",
+    action: "Expand",
+  });
+  i18n.t("generalWorkbench.workflow.branch.status.inProgress", {
+    ns: "agent",
+  });
+  i18n.t("generalWorkbench.workflow.branch.summary.multiple.draft", {
+    ns: "agent",
+    title: "Draft A",
+    count: 2,
+  });
+  i18n.t("generalWorkbench.workflow.handoff.defaultContinuing", {
+    ns: "agent",
+    branchTitle: "Continuable drafts",
+  });
+  i18n.t("generalWorkbench.workflow.followUp.prompt.withTask", {
+    ns: "agent",
+    title: "Review",
+    action: "Expand",
+  });
+  i18n.t("generalWorkbench.workflow.reviewFeedback.followUpBanner", {
+    ns: "agent",
+    title: "Next task",
+  });
+  i18n.t("generalWorkbench.context.search.title", { ns: "agent" });
+  i18n.t("generalWorkbench.context.search.placeholder", { ns: "agent" });
+  i18n.t("generalWorkbench.context.detail.query", {
+    ns: "agent",
+    query: "brand 2026",
+  });
+  i18n.t("generalWorkbench.context.list.summary", {
+    ns: "agent",
+    active: 1,
+    limit: 12,
+    searchCount: 2,
+    estimatedTokens: 600,
+    tokenLimit: 32000,
+  });
+  i18n.t("generalWorkbench.context.modal.add.uploadAria", { ns: "agent" });
+  i18n.t("generalWorkbench.context.modal.text.placeholder", { ns: "agent" });
+  i18n.t("skills.workspace.curatedTask.suggestion.referenceBadge", {
+    ns: "agent",
+    countLabel: "2",
+  });
+  i18n.t("skills.workspace.curatedTask.suggestion.action.start", {
+    ns: "agent",
+  });
+  i18n.t("skills.workspace.curatedTask.home.title", { ns: "agent" });
+  i18n.t("skills.workspace.curatedTask.home.referenceSummary.focused", {
+    ns: "agent",
+    moreSuffix: "",
+    titles: "Example",
+  });
+  i18n.t("skills.workspace.runtimeEnable.prompt.intro", {
+    ns: "agent",
+    name: "Writer",
+    directory: "writer",
+  });
+  i18n.t("skills.workspace.installedSkill.entryBannerWithReplay", {
+    ns: "agent",
+    name: "Writer",
+  });
+  i18n.t("skills.workspace.managedJob.created", {
+    ns: "agent",
+    name: "Daily Review",
+  });
+  i18n.t("skills.workspace.reviewBanner.action", {
+    ns: "agent",
+    title: "Review This Account / Project",
+  });
+  i18n.t("curatedTask.templates.recommendation.recentReviewReasonLabel", {
+    ns: "agent",
+  });
+  i18n.t("curatedTask.badge.review.suggestedTask", {
+    ns: "agent",
+    title: "Review",
+  });
+  i18n.t("curatedTask.badge.sceneApp.failureSignal", {
+    ns: "agent",
+    value: "Needs review",
+  });
   i18n.t("skills.scaffoldDialog.title", { ns: "agent" });
   i18n.t("skills.scaffoldDialog.action.create", { ns: "agent" });
   i18n.t("skills.scaffoldDialog.sourceHint", {
@@ -96,6 +286,25 @@ function assertI18nKeyTypes() {
     ns: "agent",
     countLabel: "2",
   });
+  i18n.t("agentChat.imageWorkbenchPreview.status.complete.generate", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.imageWorkbenchPreview.description.complete.single", {
+    ns: "agent",
+    result: "image result",
+  });
+  i18n.t("agentChat.imageWorkbenchPreview.source.footnote", {
+    ns: "agent",
+    label: "Reference images",
+    summary: "Attached 2 reference images.",
+  });
+  i18n.t("agentChat.imageWorkbenchPreview.media.alt", { ns: "agent" });
+  i18n.t("agentChat.imageWorkbenchPreview.meta.imageProgress", {
+    ns: "agent",
+    current: 2,
+    expected: 4,
+  });
+  i18n.t("agentChat.imageWorkbenchPreview.promptFallback", { ns: "agent" });
   i18n.t("agentChat.searchResultPreview.expandMore", {
     ns: "agent",
     countLabel: "2",
@@ -112,11 +321,34 @@ function assertI18nKeyTypes() {
     recordCount: "1",
     repairedCount: "1",
   });
+  i18n.t("agentChat.agentUiProjection.eventType.artifact.preview.ready", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.agentUiProjection.sourceType.artifact_snapshot", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.agentUiProjection.phase.completed", { ns: "agent" });
+  i18n.t("agentChat.agentUiProjection.control.unknown", { ns: "agent" });
+  i18n.t("agentChat.agentUiProjection.lane.team-topology.label", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.agentUiProjection.surface.work_board.description", {
+    ns: "agent",
+  });
   i18n.t("agentChat.incidentPanel.empty", { ns: "agent" });
   i18n.t("agentChat.incidentPanel.priorityBadge", {
     ns: "agent",
     severity: "High",
   });
+  i18n.t("agentChat.teamWorkspace.canvasToolbar.currentProgress", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.teamWorkspace.canvasToolbar.laneCount", {
+    ns: "agent",
+    count: 3,
+  });
+  i18n.t("agentChat.teamWorkspace.canvasToolbar.fitProgress", { ns: "agent" });
+  i18n.t("agentChat.teamWorkspace.teamActions.waitAny", { ns: "agent" });
   i18n.t("navigation.sidebar.items.homeGeneral", { ns: "navigation" });
   i18n.t(
     "workspace.browserExistingSession.presentation.status.attached.label",
@@ -244,6 +476,51 @@ function assertI18nKeyTypes() {
   i18n.t("settings.layout.sidebar.experimentalBadge", { ns: "settings" });
   i18n.t("settings.layout.action.backHome", { ns: "settings" });
   i18n.t("settings.layout.loading.profile", { ns: "settings" });
+  i18n.t("settings.profile.field.nickname.label", { ns: "settings" });
+  i18n.t("settings.profile.field.tipAria", {
+    ns: "settings",
+    label: "Nickname",
+  });
+  i18n.t("settings.profile.field.tipsHint", { ns: "settings" });
+  i18n.t("settings.profile.action.save", { ns: "settings" });
+  i18n.t("settings.profile.message.saved", { ns: "settings" });
+  i18n.t("settings.profile.message.saveFailed", {
+    ns: "settings",
+    error: "network",
+  });
+  i18n.t("settings.profile.message.fileTooLarge", {
+    ns: "settings",
+    size: "6",
+    max: "5",
+  });
+  i18n.t("settings.profile.message.avatarWip", { ns: "settings" });
+  i18n.t("settings.profile.message.uploadFailed", {
+    ns: "settings",
+    error: "network",
+  });
+  i18n.t("settings.profile.status.complete", { ns: "settings" });
+  i18n.t("settings.profile.suggestedTag.programming", { ns: "settings" });
+  i18n.t("settings.profile.hero.status", {
+    ns: "settings",
+    status: "Complete profile",
+  });
+  i18n.t("settings.profile.avatar.extraTags", {
+    ns: "settings",
+    countLabel: "2",
+  });
+  i18n.t("settings.profile.basic.itemCount", {
+    ns: "settings",
+    countLabel: "3",
+  });
+  i18n.t("settings.profile.tags.selectedCount", {
+    ns: "settings",
+    countLabel: "2",
+  });
+  i18n.t("settings.profile.tags.removeAria", {
+    ns: "settings",
+    tag: "Programming",
+  });
+  i18n.t("settings.profile.usage.tipTags", { ns: "settings" });
   i18n.t("settings.layout.placeholder.notFound", { ns: "settings" });
   i18n.t("settings.layout.sidebar.floatingNav.openAria", { ns: "settings" });
   i18n.t("settings.about.version.label", {
@@ -346,8 +623,189 @@ function assertI18nKeyTypes() {
   i18n.t("settings.webSearch.providers.googleEngine.label", {
     ns: "settings",
   });
+  i18n.t("settings.webSearch.title", { ns: "settings" });
+  i18n.t("settings.webSearch.description", { ns: "settings" });
+  i18n.t("settings.webSearch.hero.tipAria", { ns: "settings" });
+  i18n.t("settings.webSearch.summary.status", {
+    ns: "settings",
+    status: "saved",
+  });
+  i18n.t("settings.webSearch.tabs.searchChain", { ns: "settings" });
+  i18n.t("settings.webSearch.action.save", { ns: "settings" });
+  i18n.t("settings.webSearch.message.saved", { ns: "settings" });
+  i18n.t("settings.webSearch.message.loadFailed", {
+    ns: "settings",
+    message: "network",
+  });
+  i18n.t("settings.webSearch.secret.hide", { ns: "settings" });
+  i18n.t("settings.webSearch.status.credential", {
+    ns: "settings",
+    name: "Tavily",
+    status: "filled",
+  });
+  i18n.t("settings.webSearch.providerChain.auto", { ns: "settings" });
+  i18n.t("settings.webSearch.searchChain.title", { ns: "settings" });
+  i18n.t("settings.webSearch.providers.title", { ns: "settings" });
+  i18n.t("settings.webSearch.providers.tavily.apply", { ns: "settings" });
+  i18n.t("settings.webSearch.providers.bing.placeholder", { ns: "settings" });
+  i18n.t("settings.webSearch.providers.googleApi.tipAria", {
+    ns: "settings",
+  });
+  i18n.t("settings.webSearch.providers.googleEngine.create", {
+    ns: "settings",
+  });
+  i18n.t("settings.webSearch.action.viewDocs", { ns: "settings" });
   i18n.t("settings.webSearch.mse.customTemplate.placeholder", {
     ns: "settings",
+  });
+  i18n.t("settings.webSearch.mse.customTemplateStatus", {
+    ns: "settings",
+    status: "ready",
+  });
+  i18n.t("settings.webSearch.mse.suggestion.title", { ns: "settings" });
+  i18n.t("settings.webSearch.mse.templateStatus.ready", {
+    ns: "settings",
+    name: "hn",
+  });
+  i18n.t("settings.webSearch.mse.action.viewDesign", { ns: "settings" });
+  i18n.t("settings.webSearch.images.title", { ns: "settings" });
+  i18n.t("settings.webSearch.images.pexels.apply", { ns: "settings" });
+  i18n.t("settings.webSearch.images.pexels.noteTip", {
+    ns: "settings",
+    applyUrl: "https://www.pexels.com/api/new/",
+  });
+  i18n.t("settings.webSearch.images.pixabay.apply", { ns: "settings" });
+  i18n.t("settings.webSearch.images.pixabay.noteTip", {
+    ns: "settings",
+    applyUrl: "https://pixabay.com/accounts/register/",
+  });
+  i18n.t("settings.webSearch.observability.title", { ns: "settings" });
+  i18n.t("settings.webSearch.observability.mseCustomTemplateStatus", {
+    ns: "settings",
+    status: "ready",
+  });
+  i18n.t("settings.webSearch.observability.providerChain.title", {
+    ns: "settings",
+  });
+  i18n.t("settings.webSearch.observability.imageKeys.ready", {
+    ns: "settings",
+  });
+  i18n.t("settings.webSearch.searchChain.engine.label", { ns: "settings" });
+  i18n.t("settings.webSearch.searchChain.provider.label", { ns: "settings" });
+  i18n.t("settings.webSearch.searchChain.providerPriority.placeholder", {
+    ns: "settings",
+  });
+  i18n.t("settings.webSearch.searchChain.fallbackPreview.tip", {
+    ns: "settings",
+  });
+  i18n.t("settings.webSearch.searchChain.suggestion.title", {
+    ns: "settings",
+  });
+  i18n.t("settings.webSearch.engine.xiaohongshu", { ns: "settings" });
+  i18n.t("settings.automation.main.load.timeout", {
+    ns: "settings",
+    label: "Scheduler config",
+    timeoutMs: 8000,
+  });
+  i18n.t("settings.automation.main.load.label.schedulerConfig", {
+    ns: "settings",
+  });
+  i18n.t("settings.automation.main.load.error.schedulerConfig", {
+    ns: "settings",
+  });
+  i18n.t("settings.automation.main.toast.partialLoad", {
+    ns: "settings",
+    details: "health",
+  });
+  i18n.t("settings.automation.main.toast.loadFailed", {
+    ns: "settings",
+    message: "network",
+  });
+  i18n.t("settings.automation.main.hero.title.settings", {
+    ns: "settings",
+  });
+  i18n.t("settings.automation.main.hero.description.workspace", {
+    ns: "settings",
+  });
+  i18n.t("settings.automation.main.summary.scheduler", {
+    ns: "settings",
+    status: "Enabled",
+  });
+  i18n.t("settings.automation.main.tab.overview", { ns: "settings" });
+  i18n.t("settings.automation.overview.title", { ns: "settings" });
+  i18n.t("settings.automation.overview.tipAria", { ns: "settings" });
+  i18n.t("settings.automation.overview.tipContent", { ns: "settings" });
+  i18n.t("settings.automation.overview.latestRunStatusLabel", {
+    ns: "settings",
+  });
+  i18n.t("settings.automation.overview.metric.scheduler", { ns: "settings" });
+  i18n.t("settings.automation.overview.status.running", { ns: "settings" });
+  i18n.t("settings.automation.overview.status.stopped", { ns: "settings" });
+  i18n.t("settings.automation.overview.metric.lastPoll", { ns: "settings" });
+  i18n.t("settings.automation.overview.metric.nextPoll", { ns: "settings" });
+  i18n.t("settings.automation.overview.metric.active", { ns: "settings" });
+  i18n.t("settings.automation.overview.active.empty", { ns: "settings" });
+  i18n.t("settings.automation.scheduler.title", { ns: "settings" });
+  i18n.t("settings.automation.scheduler.action.save", { ns: "settings" });
+  i18n.t("settings.automation.scheduler.pollWindow", {
+    ns: "settings",
+    last: "10:00",
+    next: "10:05",
+  });
+  i18n.t("settings.automation.scheduler.toast.saveFailed", {
+    ns: "settings",
+    message: "permission denied",
+  });
+  i18n.t("settings.automation.tasks.kicker", { ns: "settings" });
+  i18n.t("settings.automation.tasks.title", { ns: "settings" });
+  i18n.t("settings.automation.tasks.description", { ns: "settings" });
+  i18n.t("settings.automation.tasks.action.blankStart", { ns: "settings" });
+  i18n.t("settings.automation.tasks.legacyBrowserNotice", {
+    ns: "settings",
+    count: 2,
+  });
+  i18n.t("settings.automation.tasks.template.tipAria", {
+    ns: "settings",
+    name: "Daily Summary",
+  });
+  i18n.t("settings.automation.tasks.template.dailyBrief.name", {
+    ns: "settings",
+  });
+  i18n.t(
+    "settings.automation.tasks.template.structuredDelivery.initial.prompt",
+    { ns: "settings" },
+  );
+  i18n.t("settings.automation.tasks.template.blank.action", {
+    ns: "settings",
+  });
+  i18n.t("settings.automation.tasks.list.title", { ns: "settings" });
+  i18n.t("settings.automation.tasks.list.count", {
+    ns: "settings",
+    count: 3,
+  });
+  i18n.t("settings.automation.tasks.list.column.actions", { ns: "settings" });
+  i18n.t("settings.automation.tasks.list.descriptionFallback", {
+    ns: "settings",
+  });
+  i18n.t("settings.automation.tasks.list.serviceSkillSlotPreview", {
+    ns: "settings",
+    summary: "Platform: X",
+  });
+  i18n.t("settings.automation.tasks.list.nextRun", {
+    ns: "settings",
+    time: "10:00",
+  });
+  i18n.t("settings.automation.tasks.list.action.run", { ns: "settings" });
+  i18n.t("settings.automation.tasks.empty.title", { ns: "settings" });
+  i18n.t("settings.automation.tasks.toast.runCompleted", {
+    ns: "settings",
+    success: 1,
+    failed: 0,
+    timeout: 0,
+  });
+  i18n.t("settings.automation.tasks.confirm.delete", {
+    ns: "settings",
+    name: "Daily Summary",
   });
   i18n.t("settings.automation.tasks.list.badge.serviceSkillLegacyCompat", {
     ns: "settings",
@@ -361,8 +819,49 @@ function assertI18nKeyTypes() {
     workspace: "Default Workspace",
   });
   i18n.t("settings.automation.details.legacy.message", { ns: "settings" });
+  i18n.t("settings.automation.details.sceneApp.toast.returnUnsupported", {
+    ns: "settings",
+  });
+  i18n.t("settings.automation.details.sceneApp.toast.selectedBaselineMissing", {
+    ns: "settings",
+  });
+  i18n.t("settings.automation.details.sceneApp.file.bannerMessage", {
+    ns: "settings",
+    prefix: "Opened",
+    label: "brief.md",
+  });
+  i18n.t("settings.automation.details.sceneApp.file.followUpMissingPath", {
+    ns: "settings",
+    label: "review.md",
+  });
+  i18n.t("settings.automation.details.sceneApp.entry.missingContext", {
+    ns: "settings",
+  });
+  i18n.t("settings.automation.details.schedule.hours", {
+    ns: "settings",
+    count: 2,
+  });
+  i18n.t("settings.automation.details.legacy.payload.targetId", {
+    ns: "settings",
+    targetId: "page-1",
+  });
+  i18n.t("settings.automation.details.delivery.schema.links", {
+    ns: "settings",
+  });
   i18n.t("settings.automation.history.action.refresh", { ns: "settings" });
+  i18n.t("settings.automation.history.toast.loadFailed", {
+    ns: "settings",
+    message: "network",
+  });
   i18n.t("settings.automation.serviceSkill.runner.instant", {
+    ns: "settings",
+  });
+  i18n.t("settings.automation.serviceSkill.unknown", { ns: "settings" });
+  i18n.t("settings.automation.serviceSkill.slotFallback", {
+    ns: "settings",
+    index: 1,
+  });
+  i18n.t("settings.automation.serviceSkill.source.cloudCatalog", {
     ns: "settings",
   });
   i18n.t("settings.automation.jobDialog.title.create", { ns: "settings" });
@@ -372,8 +871,26 @@ function assertI18nKeyTypes() {
   });
   i18n.t("settings.automation.jobDialog.legacy.title", { ns: "settings" });
   i18n.t("settings.automation.jobDialog.footer.create", { ns: "settings" });
+  i18n.t("settings.automation.jobDialog.accessMode.policy.current", {
+    ns: "settings",
+  });
+  i18n.t("settings.automation.jobDialog.executionMode.intelligent", {
+    ns: "settings",
+  });
   i18n.t("settings.automation.details.statusDetail.blocking", {
     ns: "settings",
+  });
+  i18n.t("settings.automation.details.status.queued", { ns: "settings" });
+  i18n.t("settings.automation.details.statusDetail.running", {
+    ns: "settings",
+  });
+  i18n.t("settings.automation.details.serviceSkill.taskLine", {
+    ns: "settings",
+    title: "Daily Summary",
+  });
+  i18n.t("settings.automation.details.serviceSkill.moreItems", {
+    ns: "settings",
+    count: 2,
   });
   i18n.t("settings.automation.focus.label", { ns: "settings" });
   i18n.t("settings.automation.focus.title", { ns: "settings" });
@@ -388,6 +905,33 @@ function assertI18nKeyTypes() {
   i18n.t("settings.stats.segment.messages", { ns: "settings" });
   i18n.t("settings.channels.logTail.title", { ns: "settings" });
   i18n.t("settings.channels.logTail.error.invalidRegex", { ns: "settings" });
+  i18n.t("settings.channels.workbench.title", { ns: "settings" });
+  i18n.t("settings.channels.workbench.currentScope", {
+    ns: "settings",
+    scope: "Logs",
+  });
+  i18n.t("settings.channels.gatewayTunnel.confirm.installCloudflared", {
+    ns: "settings",
+  });
+  i18n.t("settings.channels.gatewayTunnel.state.running", {
+    ns: "settings",
+    action: "Start",
+  });
+  i18n.t("settings.channels.gatewayRuntime.message.actionFailed", {
+    ns: "settings",
+    error: "network down",
+  });
+  i18n.t("settings.channels.wechatRuntime.confirm.removeAccount", {
+    ns: "settings",
+    accountId: "wx-main",
+    purgeAction: "",
+    purgeScope: "",
+    purgeRisk: "",
+  });
+  i18n.t("settings.channels.wechatRuntime.accounts.runningCount", {
+    ns: "settings",
+    count: 1,
+  });
   i18n.t("settings.system.clipboardPermission.macos.title", {
     ns: "settings",
   });
@@ -420,6 +964,13 @@ function assertI18nKeyTypes() {
   i18n.t("settings.providers.importExport.import.result.errors", {
     ns: "settings",
     errors: "OpenAI exists",
+  });
+  i18n.t("settings.providers.companion.preference.title", { ns: "settings" });
+  i18n.t("settings.providers.companion.preference.general.title", {
+    ns: "settings",
+  });
+  i18n.t("settings.providers.companion.preference.message.saved", {
+    ns: "settings",
   });
   i18n.t("settings.mediaGeneration.image.title", { ns: "settings" });
   i18n.t("settings.mediaGeneration.video.hint.ready", { ns: "settings" });

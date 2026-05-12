@@ -166,6 +166,19 @@ describe("sceneAppCuratedTaskReference", () => {
       "经营动作：优先准备结果对齐包，再决定是否继续放大。",
       "更适合去向：结果对齐",
     ]);
+    expect(
+      buildSceneAppExecutionReviewPrefillHighlights(snapshot, {
+        formatDestinationHighlight: (value) => `Destination=${value}`,
+        formatFailureSignalHighlight: (value) => `Blocker=${value}`,
+        formatOperatingActionHighlight: (value) => `Action=${value}`,
+        formatStatusHighlight: (value) => `Status=${value}`,
+      }),
+    ).toEqual([
+      "Status=先补复核与修复",
+      "Blocker=复核阻塞",
+      "Action=优先准备结果对齐包，再决定是否继续放大。",
+      "Destination=结果对齐",
+    ]);
   });
 
   it("切到下游结果模板时，仍应继续复用 sceneapp 的复盘基线", () => {
@@ -354,6 +367,36 @@ describe("sceneAppCuratedTaskReference", () => {
       prompt: expect.stringContaining("请帮我判断这个账号或项目当前该怎么推进"),
     });
     expect(action?.prompt).toContain("账号或项目目标：AI 内容周报");
+  });
+
+  it("应允许调用方用本地化 copy 覆盖 follow-up UI 文案", () => {
+    const action = buildSceneAppExecutionCuratedTaskFollowUpAction({
+      taskId: "viral-content-breakdown",
+      referenceEntries: [
+        {
+          id: "sceneapp:content-pack:run:1",
+          sourceKind: "sceneapp_execution_summary",
+          title: "AI 内容周报",
+          summary: "当前已有一轮运行结果，可直接作为后续拆解基线。",
+          category: "experience",
+          categoryLabel: "成果",
+          tags: ["复盘", "项目结果"],
+          taskPrefillByTaskId: {
+            "account-project-review": {
+              project_goal: "AI 内容周报",
+              existing_results:
+                "这轮运行已产出项目结果 当前判断：先补复核与修复",
+            },
+          },
+        },
+      ],
+      copy: {
+        formatFollowUpBannerMessage: (title) => `Next result: ${title}`,
+      },
+    });
+
+    expect(action?.bannerMessage).toBe("Next result: 拆解一条爆款内容");
+    expect(action?.prompt).toContain("请帮我拆解这条爆款内容");
   });
 
   it("切到下游结果模板时，仍应继续带上 sceneapp 的当前结果基线", () => {

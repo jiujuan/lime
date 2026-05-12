@@ -1,6 +1,6 @@
 # Lime AgentRuntime Profile 路线图
 
-> 状态：proposal
+> 状态：implementation-audited
 > 更新时间：2026-05-12
 > 目标：把 Lime 已有的运行时、任务、模型路由、权限、证据、GUI read model 与 AgentRuntime 标准收敛成一条可执行、可测试、可回放的 current 主链。
 > 上游标准草案：`/Users/coso/Documents/dev/ai/limecloud/agentruntime`，当前对齐 `Agent Runtime v0.4.0` 与 `Lime AgentRuntime Profile`。
@@ -23,6 +23,7 @@
 - [./diagrams.md](./diagrams.md)：架构图、流程图、时序图
 - [./implementation-plan.md](./implementation-plan.md)：分阶段落地计划、风险和测试策略
 - [./test-cases.md](./test-cases.md)：结构测试、契约测试、回放测试、证据一致性和 GUI smoke 用例
+- [./completion-audit.md](./completion-audit.md)：实现完成度、证据路径、弱项和后续收口口径
 
 ## 1. 这套路线图回答什么
 
@@ -143,3 +144,5 @@ Objective / User Input
 3. tool approval、model routing、task retry、evidence export 都有 fixture 或结构测试覆盖。
 4. 旧旁路状态源被分类为 `compat / deprecated / dead`，并有退出条件。
 5. 主路径 GUI 冒烟能证明用户真实看到的是 profile read model 投影。
+
+当前完成审计见 [./completion-audit.md](./completion-audit.md)。审计口径是 current MVP 工程闭环完成；Evidence service 已完成 request telemetry、profile projection、completion audit、modality contract、auxiliary runtime、verification / artifact validator、observability / signal coverage、known gaps 与 pack output renderer 拆分。Evidence `summary.md` 已支持 zh-CN / zh-TW / en-US / ja-JP / ko-KR，Replay / Analysis / Review Markdown 已接入 locale-aware presentation copy。完整产品化仍需继续补细粒度正文 copy 与更强 GUI E2E。

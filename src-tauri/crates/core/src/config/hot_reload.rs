@@ -731,7 +731,7 @@ server:
         std::fs::write(&config_path, "server:\n  port: 8999\n").unwrap();
 
         let alias_path = temp_dir.path().join(".").join("config.yaml");
-        let filtered = filter_config_event_paths(&[alias_path.clone()], &config_path);
+        let filtered = filter_config_event_paths(std::slice::from_ref(&alias_path), &config_path);
 
         assert_eq!(filtered, vec![alias_path]);
     }

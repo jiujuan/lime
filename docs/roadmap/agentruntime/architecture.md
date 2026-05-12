@@ -1,6 +1,6 @@
 # Lime AgentRuntime Profile 架构蓝图
 
-> 状态：proposal
+> 状态：implementation-audited
 > 更新时间：2026-05-12
 > 作用：定义 AgentRuntime Profile 在 Lime current 主链中的分层、owner、事实源和接口边界。
 

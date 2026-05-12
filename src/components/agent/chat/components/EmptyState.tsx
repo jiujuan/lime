@@ -77,6 +77,7 @@ import {
   resolveInputCapabilityDispatch,
   type InputCapabilitySelection,
 } from "../skill-selection/inputCapabilitySelection";
+import type agentResource from "@/i18n/resources/zh-CN/agent.json";
 import type {
   InputbarKnowledgePackOption,
   InputbarKnowledgePackSelection,
@@ -118,6 +119,8 @@ import type {
   HomeSkillSurfaceItem,
   HomeStarterChip,
 } from "../home/homeSurfaceTypes";
+
+type AgentI18nKey = keyof typeof agentResource;
 
 const contentReveal = keyframes`
   from {
@@ -532,8 +535,8 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   const { t } = useTranslation("agent");
   const curatedTaskTemplateCopy = useMemo(
     () =>
-      buildCuratedTaskTemplateCopy((key, defaultValue, values) =>
-        t(key, { defaultValue, ...values }),
+      buildCuratedTaskTemplateCopy((key, values) =>
+        t(key as AgentI18nKey, values ?? {}),
       ),
     [t],
   );

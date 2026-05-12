@@ -1,4 +1,5 @@
 import { Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { TeamWorkspaceBoardChromeDisplayState } from "../../team-workspace-runtime/boardChromeSelectors";
@@ -25,6 +26,8 @@ export function TeamWorkspaceTeamActionButtons({
   onWaitAnyActiveTeamSessions,
   pendingTeamAction,
 }: TeamWorkspaceTeamActionButtonsProps) {
+  const { t } = useTranslation("agent");
+
   return (
     <>
       {canWaitAnyActiveTeamSession ? (
@@ -40,7 +43,9 @@ export function TeamWorkspaceTeamActionButtons({
           {pendingTeamAction === "wait_any" ? (
             <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
           ) : null}
-          {pendingTeamAction === "wait_any" ? "等待中..." : "等待任一任务结果"}
+          {pendingTeamAction === "wait_any"
+            ? t("agentChat.teamWorkspace.teamActions.waiting")
+            : t("agentChat.teamWorkspace.teamActions.waitAny")}
         </Button>
       ) : null}
       {canCloseCompletedTeamSessions ? (
@@ -57,8 +62,8 @@ export function TeamWorkspaceTeamActionButtons({
             <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
           ) : null}
           {pendingTeamAction === "close_completed"
-            ? "收起中..."
-            : "收起已完成任务"}
+            ? t("agentChat.teamWorkspace.teamActions.closing")
+            : t("agentChat.teamWorkspace.teamActions.closeCompleted")}
         </Button>
       ) : null}
     </>
@@ -82,6 +87,8 @@ export function TeamWorkspaceCanvasViewButtons({
   onZoomIn,
   onZoomOut,
 }: TeamWorkspaceCanvasViewButtonsProps) {
+  const { t } = useTranslation("agent");
+
   return (
     <>
       <Button
@@ -91,7 +98,7 @@ export function TeamWorkspaceCanvasViewButtons({
         className={buttonClassName}
         onClick={onFitCanvasView}
       >
-        聚焦进展
+        {t("agentChat.teamWorkspace.canvasToolbar.fitProgress")}
       </Button>
       <Button
         type="button"
@@ -101,7 +108,7 @@ export function TeamWorkspaceCanvasViewButtons({
         onClick={onAutoArrangeCanvas}
         data-testid="team-workspace-auto-arrange-button"
       >
-        整理布局
+        {t("agentChat.teamWorkspace.canvasToolbar.autoArrange")}
       </Button>
       {includeZoomControls ? (
         <>
@@ -112,7 +119,7 @@ export function TeamWorkspaceCanvasViewButtons({
             className={buttonClassName}
             onClick={onZoomOut}
           >
-            缩小
+            {t("agentChat.teamWorkspace.canvasToolbar.zoomOut")}
           </Button>
           <Button
             type="button"
@@ -121,7 +128,7 @@ export function TeamWorkspaceCanvasViewButtons({
             className={buttonClassName}
             onClick={onZoomIn}
           >
-            放大
+            {t("agentChat.teamWorkspace.canvasToolbar.zoomIn")}
           </Button>
         </>
       ) : null}

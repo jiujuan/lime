@@ -9,6 +9,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { open as openExternal } from "@tauri-apps/plugin-shell";
 import {
   AlertCircle,
@@ -90,10 +91,12 @@ import {
 } from "../projection/agentUiEventProjection";
 import {
   formatAgentUiProjectionEventDetail,
+  formatAgentUiProjectionControl,
   formatAgentUiProjectionEventType,
   formatAgentUiProjectionPhase,
   formatAgentUiProjectionSourceType,
   summarizeAgentUiProjectionEvents,
+  type AgentUiProjectionTranslation,
 } from "../projection/agentUiProjectionSummary";
 import {
   recordAgentUiProjectionEvents,
@@ -2312,6 +2315,12 @@ export function HarnessStatusPanel({
   teamMemorySnapshot = null,
   diagnosticRuntimeContext = null,
 }: HarnessStatusPanelProps) {
+  const { t, i18n } = useTranslation("agent");
+  const translateProjection = useCallback<AgentUiProjectionTranslation>(
+    (key, options) => String(t(key as never, options as never)),
+    [t],
+  );
+  const locale = i18n.resolvedLanguage || i18n.language;
   const [expanded, setExpanded] = useState(true);
   const isDialogLayout = layout === "dialog";
   const isDetailsExpanded = isDialogLayout ? true : expanded;
@@ -3026,14 +3035,18 @@ export function HarnessStatusPanel({
         pendingActions,
         submittedActionsInFlight,
         queuedTurns,
+        t: translateProjection,
+        locale,
       }),
     [
       currentTurnId,
+      locale,
       pendingActions,
       queuedTurns,
       submittedActionsInFlight,
       threadItems,
       threadRead,
+      translateProjection,
       turns,
     ],
   );
@@ -3306,8 +3319,9 @@ export function HarnessStatusPanel({
         title: "AgentUI 投影",
         value: `${agentUiProjectionSummary.total} 条`,
         hint: latestEvent
-          ? `${formatAgentUiProjectionEventType(latestEvent.type)} · ${formatAgentUiProjectionPhase(
+          ? `${formatAgentUiProjectionEventType(latestEvent.type, translateProjection)} · ${formatAgentUiProjectionPhase(
               latestEvent.phase,
+              translateProjection,
             )}`
           : "读取 conversationProjectionStore.agentUi",
         icon: Bot,
@@ -3479,6 +3493,7 @@ export function HarnessStatusPanel({
     threadReliabilityView.shouldRender,
     threadReliabilityView.statusLabel,
     threadReliabilityView.summary,
+    translateProjection,
   ]);
 
   const openPreview = useCallback(
@@ -5839,14 +5854,24 @@ export function HarnessStatusPanel({
                             >
                               <div className="flex flex-wrap items-center gap-2">
                                 <Badge variant="secondary">
-                                  {formatAgentUiProjectionEventType(event.type)}
+                                  {formatAgentUiProjectionEventType(
+                                    event.type,
+                                    translateProjection,
+                                  )}
                                 </Badge>
                                 <Badge variant="outline">
-                                  {formatAgentUiProjectionPhase(event.phase)}
+                                  {formatAgentUiProjectionPhase(
+                                    event.phase,
+                                    translateProjection,
+                                  )}
                                 </Badge>
                                 {event.control ? (
                                   <Badge variant="outline">
-                                    control · {event.control}
+                                    control ·{" "}
+                                    {formatAgentUiProjectionControl(
+                                      event.control,
+                                      translateProjection,
+                                    )}
                                   </Badge>
                                 ) : null}
                                 {event.timestamp ? (
@@ -5859,6 +5884,7 @@ export function HarnessStatusPanel({
                                 <span className="text-foreground">
                                   {formatAgentUiProjectionSourceType(
                                     event.sourceType,
+                                    translateProjection,
                                   )}
                                 </span>
                                 <span className="mx-1">·</span>

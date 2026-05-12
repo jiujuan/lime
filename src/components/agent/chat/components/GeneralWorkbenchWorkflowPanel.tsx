@@ -1,4 +1,5 @@
 import React, { memo, useEffect, useMemo, useState } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import {
   AlertCircle,
@@ -62,6 +63,8 @@ import type {
   GeneralWorkbenchRunMetadataSummary,
 } from "./generalWorkbenchWorkflowData";
 import type { GeneralWorkbenchFollowUpActionPayload } from "./generalWorkbenchSidebarContract";
+
+type AgentTranslate = TFunction<"agent", undefined>;
 
 interface GeneralWorkbenchWorkflowPanelProps {
   isVersionMode: boolean;
@@ -443,118 +446,185 @@ function getWorkflowStepIconClassName(status: StepStatus) {
   );
 }
 
-function getBranchStatusText(status: TopicBranchStatus): string {
-  if (status === "in_progress") return "进行中";
-  if (status === "pending") return "稍后再看";
-  if (status === "merged") return "已收进主稿";
-  return "候选";
+function getBranchStatusText(
+  status: TopicBranchStatus,
+  t: AgentTranslate,
+): string {
+  if (status === "in_progress") {
+    return t("generalWorkbench.workflow.branch.status.inProgress");
+  }
+  if (status === "pending") {
+    return t("generalWorkbench.workflow.branch.status.pending");
+  }
+  if (status === "merged") {
+    return t("generalWorkbench.workflow.branch.status.merged");
+  }
+  return t("generalWorkbench.workflow.branch.status.candidate");
 }
 
-function getBranchSectionTitle(isVersionMode: boolean): string {
-  return isVersionMode ? "可继续版本" : "可继续稿件";
-}
-
-function getBranchCreateLabel(isVersionMode: boolean): string {
-  return isVersionMode ? "留一版" : "留一稿";
-}
-
-function getBranchPrimaryActionLabel(isVersionMode: boolean): string {
-  return isVersionMode ? "设为主稿" : "收进主稿";
-}
-
-function getBranchSecondaryActionLabel(isVersionMode: boolean): string {
-  return isVersionMode ? "稍后再看" : "稍后再看";
-}
-
-function getEmptyBranchText(isVersionMode: boolean): string {
+function getBranchSectionTitle(
+  isVersionMode: boolean,
+  t: AgentTranslate,
+): string {
   return isVersionMode
-    ? "还没有可继续的版本，当前内容仍在主线上推进。"
-    : "还没有可继续的稿件，当前内容仍在主线上推进。";
+    ? t("generalWorkbench.workflow.branch.sectionTitle.version")
+    : t("generalWorkbench.workflow.branch.sectionTitle.draft");
+}
+
+function getBranchCreateLabel(
+  isVersionMode: boolean,
+  t: AgentTranslate,
+): string {
+  return isVersionMode
+    ? t("generalWorkbench.workflow.branch.create.version")
+    : t("generalWorkbench.workflow.branch.create.draft");
+}
+
+function getBranchPrimaryActionLabel(
+  isVersionMode: boolean,
+  t: AgentTranslate,
+): string {
+  return isVersionMode
+    ? t("generalWorkbench.workflow.branch.primaryAction.version")
+    : t("generalWorkbench.workflow.branch.primaryAction.draft");
+}
+
+function getBranchSecondaryActionLabel(t: AgentTranslate): string {
+  return t("generalWorkbench.workflow.branch.secondaryAction");
+}
+
+function getEmptyBranchText(isVersionMode: boolean, t: AgentTranslate): string {
+  return isVersionMode
+    ? t("generalWorkbench.workflow.branch.empty.version")
+    : t("generalWorkbench.workflow.branch.empty.draft");
 }
 
 function getBranchMetaText(
   item: TopicBranchItem,
   isVersionMode: boolean,
+  t: AgentTranslate,
 ): string {
   if (item.isCurrent) {
     return isVersionMode
-      ? "当前正在沿着这一版内容继续打磨"
-      : "当前正在沿着这一稿继续打磨";
+      ? t("generalWorkbench.workflow.branch.meta.current.version")
+      : t("generalWorkbench.workflow.branch.meta.current.draft");
   }
   if (item.status === "merged") {
-    return isVersionMode ? "这版内容已经收进主稿" : "这一稿已经收进主稿";
+    return isVersionMode
+      ? t("generalWorkbench.workflow.branch.meta.merged.version")
+      : t("generalWorkbench.workflow.branch.meta.merged.draft");
   }
   if (item.status === "pending") {
-    return "先保留下来，稍后再决定是否继续推进";
+    return t("generalWorkbench.workflow.branch.meta.pending");
   }
   if (item.status === "candidate") {
-    return isVersionMode ? "保留为可回看的候选版本" : "保留为可回看的候选稿件";
+    return isVersionMode
+      ? t("generalWorkbench.workflow.branch.meta.candidate.version")
+      : t("generalWorkbench.workflow.branch.meta.candidate.draft");
   }
   return isVersionMode
-    ? "记录一版仍在推进中的内容"
-    : "记录一稿仍在推进中的内容";
+    ? t("generalWorkbench.workflow.branch.meta.inProgress.version")
+    : t("generalWorkbench.workflow.branch.meta.inProgress.draft");
 }
 
 function buildBranchSectionSummaryText(params: {
   currentBranch: TopicBranchItem | null;
   relatedCount: number;
   isVersionMode: boolean;
+  t: AgentTranslate;
 }): string {
-  const { currentBranch, relatedCount, isVersionMode } = params;
+  const { currentBranch, relatedCount, isVersionMode, t } = params;
   if (!currentBranch) {
     return isVersionMode
-      ? "当前还没有沉淀出可继续的版本。"
-      : "当前还没有沉淀出可继续的稿件。";
+      ? t("generalWorkbench.workflow.branch.summary.empty.version")
+      : t("generalWorkbench.workflow.branch.summary.empty.draft");
   }
   if (relatedCount <= 0) {
-    return `当前焦点落在「${currentBranch.title}」，目前只保留这一${isVersionMode ? "版" : "稿"}可继续打磨。`;
+    return isVersionMode
+      ? t("generalWorkbench.workflow.branch.summary.single.version", {
+          title: currentBranch.title,
+        })
+      : t("generalWorkbench.workflow.branch.summary.single.draft", {
+          title: currentBranch.title,
+        });
   }
-  return `当前焦点落在「${currentBranch.title}」，另有 ${relatedCount} ${isVersionMode ? "个可继续版本" : "个可继续稿件"}可在需要时切换。`;
+  return isVersionMode
+    ? t("generalWorkbench.workflow.branch.summary.multiple.version", {
+        title: currentBranch.title,
+        count: relatedCount,
+      })
+    : t("generalWorkbench.workflow.branch.summary.multiple.draft", {
+        title: currentBranch.title,
+        count: relatedCount,
+      });
 }
 
 function buildCreationTaskSectionSummary(params: {
   groups: GeneralWorkbenchCreationTaskGroup[];
   totalCount: number;
+  t: AgentTranslate;
 }): {
   title: string;
   meta: string;
 } {
-  const { groups, totalCount } = params;
+  const { groups, totalCount, t } = params;
   if (totalCount <= 0 || groups.length === 0) {
     return {
-      title: "最近还没有新的产出记录",
-      meta: "后续生成的任务文件与结果索引会按类型留在这里。",
+      title: t("generalWorkbench.workflow.outputs.summary.emptyTitle"),
+      meta: t("generalWorkbench.workflow.outputs.summary.emptyMeta"),
     };
   }
 
   const latestGroup = groups[0];
-  const latestTime = latestGroup.latestTimeLabel || "最近";
+  const latestTime =
+    latestGroup.latestTimeLabel ||
+    t("generalWorkbench.workflow.outputs.summary.latestTimeFallback");
   return {
-    title: `最近一次：${latestGroup.label}`,
-    meta: `${latestTime} · 共 ${totalCount} 条产出记录，按 ${groups.length} 类归档。`,
+    title: t("generalWorkbench.workflow.outputs.summary.latestTitle", {
+      label: latestGroup.label,
+    }),
+    meta: t("generalWorkbench.workflow.outputs.summary.meta", {
+      time: latestTime,
+      count: totalCount,
+      groupCount: groups.length,
+    }),
   };
 }
 
-function formatCreationTaskCountLabel(count: number): string {
-  return `${count} 条记录`;
+function formatCreationTaskCountLabel(
+  count: number,
+  t: AgentTranslate,
+): string {
+  return t("generalWorkbench.workflow.outputs.summary.countLabel", { count });
 }
 
 function buildWorkflowResultHandoffText(params: {
   branchSectionTitle: string;
   hasRecordedOutputs: boolean;
   resultDestination?: string | null;
+  t: AgentTranslate;
 }): string {
-  const { branchSectionTitle, hasRecordedOutputs, resultDestination } = params;
-  const recordVerb = hasRecordedOutputs ? "会继续收进" : "会收进";
+  const { branchSectionTitle, hasRecordedOutputs, resultDestination, t } =
+    params;
   const normalizedResultDestination = resultDestination?.trim() || null;
   if (normalizedResultDestination) {
-    return `${normalizedResultDestination} 需要继续改写时，可从${branchSectionTitle}或首页“继续上次做法”接着跑。`;
+    return t("generalWorkbench.workflow.handoff.withDestination", {
+      destination: normalizedResultDestination,
+      branchTitle: branchSectionTitle,
+    });
   }
-  return `主稿、任务文件和运行产物${recordVerb}下方“产出记录 / 执行经过”；需要继续改写时，可从${branchSectionTitle}或首页“继续上次做法”接着跑。`;
+  return hasRecordedOutputs
+    ? t("generalWorkbench.workflow.handoff.defaultContinuing", {
+        branchTitle: branchSectionTitle,
+      })
+    : t("generalWorkbench.workflow.handoff.defaultInitial", {
+        branchTitle: branchSectionTitle,
+      });
 }
 
 function buildCuratedTaskFollowUpHintText(
   curatedTask: GeneralWorkbenchRunMetadataSummary["curatedTask"],
+  t: AgentTranslate,
 ): string | null {
   if (!curatedTask) {
     return null;
@@ -572,12 +642,19 @@ function buildCuratedTaskFollowUpHintText(
 
   if (followUpSummary) {
     return curatedTask.taskTitle
-      ? `按「${curatedTask.taskTitle}」这条结果模板的常见闭环，建议先做：${followUpSummary}。`
-      : `这轮结果的常见下一步是：${followUpSummary}。`;
+      ? t("generalWorkbench.workflow.followUp.hint.withTaskAndSummary", {
+          title: curatedTask.taskTitle,
+          summary: followUpSummary,
+        })
+      : t("generalWorkbench.workflow.followUp.hint.summaryOnly", {
+          summary: followUpSummary,
+        });
   }
 
   if (curatedTask.taskTitle) {
-    return `当前结果来自「${curatedTask.taskTitle}」，可继续围绕这轮产出补充下一稿、拆成更多版本，或回到首页继续下一轮。`;
+    return t("generalWorkbench.workflow.followUp.hint.taskOnly", {
+      title: curatedTask.taskTitle,
+    });
   }
 
   return null;
@@ -607,7 +684,7 @@ function ReviewFeedbackProjectionCard({
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className="inline-flex items-center rounded-full border border-emerald-200 bg-white px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-          {t("reviewFeedback.badge", "围绕最近判断")}
+          {t("reviewFeedback.badge")}
         </span>
         {!projection.matchedCurrentTask &&
         projection.suggestedTaskTitles.length > 0 ? (
@@ -619,7 +696,6 @@ function ReviewFeedbackProjectionCard({
       <div className="mt-1 text-[11px] font-medium leading-5 text-slate-900">
         {formatReviewFeedbackTemplate(
           t("reviewFeedback.title", {
-            defaultValue: "最近判断已更新：{{title}}",
             title: projection.signal.title,
           }),
           { title: projection.signal.title },
@@ -641,17 +717,13 @@ function ReviewFeedbackProjectionCard({
           >
             {formatReviewFeedbackTemplate(
               t("reviewFeedback.action", {
-                defaultValue: "继续去「{{title}}」",
                 title: primarySuggestedTask.title,
               }),
               { title: primarySuggestedTask.title },
             )}
           </button>
           <span className="text-[10px] leading-5 text-slate-500">
-            {t(
-              "reviewFeedback.helper.generalWorkbench",
-              "会继续带着这轮结果与参考对象，不用重新整理一遍。",
-            )}
+            {t("reviewFeedback.helper.generalWorkbench")}
           </span>
         </div>
       ) : null}
@@ -662,6 +734,7 @@ function ReviewFeedbackProjectionCard({
 function buildReviewFeedbackFollowUpActionPayload(params: {
   projection: ReviewFeedbackProjection;
   curatedTask: GeneralWorkbenchRunMetadataSummary["curatedTask"];
+  t: AgentTranslate;
 }): GeneralWorkbenchFollowUpActionPayload | null {
   const primarySuggestedTask = params.projection.suggestedTasks[0];
   if (!primarySuggestedTask) {
@@ -696,7 +769,12 @@ function buildReviewFeedbackFollowUpActionPayload(params: {
 
   return {
     prompt,
-    bannerMessage: `已切到“${targetTask.title}”这条下一步，并带着这轮结果继续进入生成。`,
+    bannerMessage: params.t(
+      "generalWorkbench.workflow.reviewFeedback.followUpBanner",
+      {
+        title: targetTask.title,
+      },
+    ),
     capabilityRoute: {
       kind: "curated_task",
       taskId: targetTask.id,
@@ -732,6 +810,8 @@ function SceneAppReviewBaselineCard({
   dataTestId?: string;
   className?: string;
 }) {
+  const { t } = useTranslation("agent");
+
   return (
     <div
       className={cn(
@@ -742,10 +822,10 @@ function SceneAppReviewBaselineCard({
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className="inline-flex items-center rounded-full border border-emerald-200 bg-white px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-          当前结果基线
+          {t("generalWorkbench.workflow.baseline.badge")}
         </span>
         <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-500">
-          项目结果
+          {t("generalWorkbench.workflow.baseline.projectResult")}
         </span>
       </div>
       <div className="mt-1 text-[11px] font-medium leading-5 text-slate-900">
@@ -782,6 +862,7 @@ function listVisibleCuratedTaskFollowUpActions(
 function buildCuratedTaskFollowUpPrompt(params: {
   action: string;
   curatedTask: GeneralWorkbenchRunMetadataSummary["curatedTask"];
+  t: AgentTranslate;
 }): string {
   const normalizedAction = params.action.trim();
   if (!normalizedAction) {
@@ -790,15 +871,21 @@ function buildCuratedTaskFollowUpPrompt(params: {
 
   const taskTitle = params.curatedTask?.taskTitle?.trim();
   if (taskTitle) {
-    return `请基于「${taskTitle}」这轮结果继续：${normalizedAction}`;
+    return params.t("generalWorkbench.workflow.followUp.prompt.withTask", {
+      title: taskTitle,
+      action: normalizedAction,
+    });
   }
-  return `请基于当前结果继续：${normalizedAction}`;
+  return params.t("generalWorkbench.workflow.followUp.prompt.current", {
+    action: normalizedAction,
+  });
 }
 
 function buildCuratedTaskFollowUpBannerMessage(params: {
   action: string;
   curatedTask: GeneralWorkbenchRunMetadataSummary["curatedTask"];
   targetTask?: { title: string } | null;
+  t: AgentTranslate;
 }): string | undefined {
   const normalizedAction = params.action.trim();
   if (!normalizedAction) {
@@ -807,20 +894,31 @@ function buildCuratedTaskFollowUpBannerMessage(params: {
 
   const targetTaskTitle = params.targetTask?.title?.trim();
   if (targetTaskTitle) {
-    return `已切到“${targetTaskTitle}”这条下一步，并带着这轮结果继续进入生成。`;
+    return params.t("generalWorkbench.workflow.followUp.banner.withTarget", {
+      title: targetTaskTitle,
+    });
   }
 
   const currentTaskTitle = params.curatedTask?.taskTitle?.trim();
   if (currentTaskTitle) {
-    return `已按“${normalizedAction}”接着推进「${currentTaskTitle}」，可继续改写后发送。`;
+    return params.t(
+      "generalWorkbench.workflow.followUp.banner.withCurrentTask",
+      {
+        action: normalizedAction,
+        title: currentTaskTitle,
+      },
+    );
   }
 
-  return `已按“${normalizedAction}”把这轮结果带回输入区，可继续改写后发送。`;
+  return params.t("generalWorkbench.workflow.followUp.banner.current", {
+    action: normalizedAction,
+  });
 }
 
 function buildCuratedTaskFollowUpActionPayload(params: {
   action: string;
   curatedTask: GeneralWorkbenchRunMetadataSummary["curatedTask"];
+  t: AgentTranslate;
 }): GeneralWorkbenchFollowUpActionPayload | null {
   const normalizedAction = params.action.trim();
   if (!normalizedAction) {
@@ -858,6 +956,7 @@ function buildCuratedTaskFollowUpActionPayload(params: {
       : buildCuratedTaskFollowUpPrompt({
           action: normalizedAction,
           curatedTask: params.curatedTask,
+          t: params.t,
         });
   if (!prompt) {
     return null;
@@ -895,6 +994,7 @@ function buildCuratedTaskFollowUpActionPayload(params: {
       action: normalizedAction,
       curatedTask: params.curatedTask,
       targetTask,
+      t: params.t,
     }),
     ...(capabilityRoute
       ? {
@@ -904,29 +1004,30 @@ function buildCuratedTaskFollowUpActionPayload(params: {
   };
 }
 
-function getCreationTaskTitle(path: string): string {
+function getCreationTaskTitle(path: string, t: AgentTranslate): string {
   const normalized = path.trim();
   if (!normalized) {
-    return "未命名任务";
+    return t("generalWorkbench.workflow.outputs.summary.untitledTask");
   }
   const segments = normalized.split(/[\\/]+/).filter(Boolean);
   return segments[segments.length - 1] || normalized;
 }
 
 function formatGateLabel(
+  t: AgentTranslate,
   gateKey?: SidebarActivityLog["gateKey"],
 ): string | null {
   if (!gateKey || gateKey === "idle") {
     return null;
   }
   if (gateKey === "topic_select") {
-    return "选题闸门";
+    return t("generalWorkbench.workflow.activity.gate.topicSelect");
   }
   if (gateKey === "write_mode") {
-    return "写作闸门";
+    return t("generalWorkbench.workflow.activity.gate.writeMode");
   }
   if (gateKey === "publish_confirm") {
-    return "发布闸门";
+    return t("generalWorkbench.workflow.activity.gate.publishConfirm");
   }
   return null;
 }
@@ -942,13 +1043,28 @@ function formatRunIdShort(runId?: string): string | null {
   return `${trimmed.slice(0, 8)}…`;
 }
 
-function formatRunStatusLabel(status: AgentRun["status"]): string {
-  if (status === "queued") return "稍后开始";
-  if (status === "running") return "处理中";
-  if (status === "success") return "成功";
-  if (status === "error") return "失败";
-  if (status === "canceled") return "已取消";
-  if (status === "timeout") return "超时";
+function formatRunStatusLabel(
+  t: AgentTranslate,
+  status: AgentRun["status"],
+): string {
+  if (status === "queued") {
+    return t("generalWorkbench.workflow.runDetail.status.queued");
+  }
+  if (status === "running") {
+    return t("generalWorkbench.workflow.runDetail.status.running");
+  }
+  if (status === "success") {
+    return t("generalWorkbench.workflow.runDetail.status.success");
+  }
+  if (status === "error") {
+    return t("generalWorkbench.workflow.runDetail.status.error");
+  }
+  if (status === "canceled") {
+    return t("generalWorkbench.workflow.runDetail.status.canceled");
+  }
+  if (status === "timeout") {
+    return t("generalWorkbench.workflow.runDetail.status.timeout");
+  }
   return status;
 }
 
@@ -959,11 +1075,16 @@ function getPrimaryActivityLog(
 }
 
 function formatActivityStatusLabel(
+  t: AgentTranslate,
   status: GeneralWorkbenchActivityLogGroup["status"],
 ): string {
-  if (status === "running") return "处理中";
-  if (status === "failed") return "失败";
-  return "已记录";
+  if (status === "running") {
+    return t("generalWorkbench.workflow.activity.status.running");
+  }
+  if (status === "failed") {
+    return t("generalWorkbench.workflow.activity.status.failed");
+  }
+  return t("generalWorkbench.workflow.activity.status.recorded");
 }
 
 function getActivityStatusBadgeClassName(
@@ -978,16 +1099,19 @@ function getActivityStatusBadgeClassName(
   );
 }
 
-function formatActivitySourceLabel(source?: string): string | null {
+function formatActivitySourceLabel(
+  t: AgentTranslate,
+  source?: string,
+): string | null {
   const normalized = source?.trim();
   if (!normalized) {
     return null;
   }
   if (normalized === "skill") {
-    return "技能";
+    return t("generalWorkbench.workflow.activity.source.skill");
   }
   if (normalized === "tool") {
-    return "工具";
+    return t("generalWorkbench.workflow.activity.source.tool");
   }
   return normalized;
 }
@@ -1007,31 +1131,47 @@ function getRunDetailStatusBadgeClassName(status: AgentRun["status"]) {
 function buildRunDetailSummaryText(params: {
   runMetadataSummary: GeneralWorkbenchRunMetadataSummary;
   activeRunStagesLabel?: string | null;
+  t: AgentTranslate;
 }): string {
-  const { runMetadataSummary, activeRunStagesLabel } = params;
+  const { runMetadataSummary, activeRunStagesLabel, t } = params;
   const parts: string[] = [];
   if (runMetadataSummary.curatedTask?.taskTitle) {
-    parts.push(`结果模板 ${runMetadataSummary.curatedTask.taskTitle}`);
+    parts.push(
+      t("generalWorkbench.workflow.runDetail.summary.curatedTask", {
+        title: runMetadataSummary.curatedTask.taskTitle,
+      }),
+    );
   }
   if (activeRunStagesLabel) {
     parts.push(activeRunStagesLabel);
   }
   if (runMetadataSummary.workflow) {
-    parts.push(`工作流 ${runMetadataSummary.workflow}`);
+    parts.push(
+      t("generalWorkbench.workflow.runDetail.summary.workflow", {
+        workflow: runMetadataSummary.workflow,
+      }),
+    );
   }
   if (runMetadataSummary.artifactPaths.length > 0) {
     parts.push(
       runMetadataSummary.artifactPaths.length === 1
-        ? `产物 ${runMetadataSummary.artifactPaths[0]}`
-        : `产物 ${runMetadataSummary.artifactPaths.length} 项`,
+        ? t("generalWorkbench.workflow.runDetail.summary.artifactPath", {
+            path: runMetadataSummary.artifactPaths[0],
+          })
+        : t("generalWorkbench.workflow.runDetail.summary.artifactCount", {
+            count: runMetadataSummary.artifactPaths.length,
+          }),
     );
   }
-  return parts.join(" · ") || "查看本次运行的状态与产物记录";
+  return (
+    parts.join(" · ") || t("generalWorkbench.workflow.runDetail.summary.empty")
+  );
 }
 
 function buildActivitySummary(
   group: GeneralWorkbenchActivityLogGroup,
   gateLabel: string | null,
+  t: AgentTranslate,
 ): string {
   const parts: string[] = [];
   if (gateLabel) {
@@ -1040,12 +1180,20 @@ function buildActivitySummary(
   if (group.artifactPaths.length > 0) {
     parts.push(
       group.artifactPaths.length === 1
-        ? `产物 ${group.artifactPaths[0]}`
-        : `产物 ${group.artifactPaths.length} 项`,
+        ? t("generalWorkbench.workflow.activity.summary.artifactPath", {
+            path: group.artifactPaths[0],
+          })
+        : t("generalWorkbench.workflow.activity.summary.artifactCount", {
+            count: group.artifactPaths.length,
+          }),
     );
   }
   if (group.logs.length > 1) {
-    parts.push(`共 ${group.logs.length} 步`);
+    parts.push(
+      t("generalWorkbench.workflow.activity.summary.stepCount", {
+        count: group.logs.length,
+      }),
+    );
   }
   return parts.join(" · ");
 }
@@ -1053,41 +1201,55 @@ function buildActivitySummary(
 function buildActivitySectionSummary(params: {
   groups: GeneralWorkbenchActivityLogGroup[];
   activeRunDetail?: AgentRun | null;
+  t: AgentTranslate;
 }): {
   title: string;
   meta: string;
 } {
-  const { groups, activeRunDetail } = params;
+  const { groups, activeRunDetail, t } = params;
   if (groups.length === 0) {
     return {
-      title: "最近还没有执行经过",
-      meta: "技能调用、工具步骤与运行详情会按组收纳在这里。",
+      title: t("generalWorkbench.workflow.activity.summary.emptyTitle"),
+      meta: t("generalWorkbench.workflow.activity.summary.emptyMeta"),
     };
   }
 
   const latestGroup = groups[0];
   const primaryLog = getPrimaryActivityLog(latestGroup);
-  const gateLabel = formatGateLabel(latestGroup.gateKey);
-  const sourceLabel = formatActivitySourceLabel(latestGroup.source);
+  const gateLabel = formatGateLabel(t, latestGroup.gateKey);
+  const sourceLabel = formatActivitySourceLabel(t, latestGroup.source);
   const activeRunLabel = activeRunDetail?.id
     ? formatRunIdShort(activeRunDetail.id) || activeRunDetail.id
     : null;
   const metaParts = [
-    latestGroup.timeLabel || "最近",
-    formatActivityStatusLabel(latestGroup.status),
+    latestGroup.timeLabel ||
+      t("generalWorkbench.workflow.activity.summary.latestTimeFallback"),
+    formatActivityStatusLabel(t, latestGroup.status),
     sourceLabel,
     gateLabel,
-    latestGroup.logs.length > 1 ? `${latestGroup.logs.length} 步` : null,
-    latestGroup.artifactPaths.length > 0
-      ? latestGroup.artifactPaths.length === 1
-        ? "1 个产物"
-        : `${latestGroup.artifactPaths.length} 个产物`
+    latestGroup.logs.length > 1
+      ? t("generalWorkbench.workflow.activity.summary.stepCount", {
+          count: latestGroup.logs.length,
+        })
       : null,
-    activeRunLabel ? `当前查看 ${activeRunLabel}` : null,
+    latestGroup.artifactPaths.length > 0
+      ? t("generalWorkbench.workflow.activity.summary.artifactBadge", {
+          count: latestGroup.artifactPaths.length,
+        })
+      : null,
+    activeRunLabel
+      ? t("generalWorkbench.workflow.activity.summary.activeRun", {
+          run: activeRunLabel,
+        })
+      : null,
   ].filter(Boolean);
 
   return {
-    title: `最近一组：${primaryLog?.name || "执行经过"}`,
+    title: t("generalWorkbench.workflow.activity.summary.latestTitle", {
+      name:
+        primaryLog?.name ||
+        t("generalWorkbench.workflow.activity.summary.nameFallback"),
+    }),
     meta: metaParts.join(" · "),
   };
 }
@@ -1109,21 +1271,25 @@ function renderActivityLogItem(
   onViewRunDetail: GeneralWorkbenchWorkflowPanelProps["onViewRunDetail"],
   onRevealArtifactInFinder: GeneralWorkbenchWorkflowPanelProps["onRevealArtifactInFinder"],
   onOpenArtifactWithDefaultApp: GeneralWorkbenchWorkflowPanelProps["onOpenArtifactWithDefaultApp"],
+  t: AgentTranslate,
 ) {
-  const gateLabel = formatGateLabel(group.gateKey);
+  const gateLabel = formatGateLabel(t, group.gateKey);
   const runLabel = formatRunIdShort(group.runId);
-  const sourceLabel = formatActivitySourceLabel(group.source);
+  const sourceLabel = formatActivitySourceLabel(t, group.source);
   const primaryLog = getPrimaryActivityLog(group);
-  const activitySummary = buildActivitySummary(group, gateLabel);
+  const activitySummary = buildActivitySummary(group, gateLabel, t);
 
   return (
     <ActivityLogCard key={`activity-${group.key}`}>
       <ActivityLogHeader>
         <div className={getActivityStatusBadgeClassName(group.status)}>
-          {formatActivityStatusLabel(group.status)}
+          {formatActivityStatusLabel(t, group.status)}
         </div>
         <ActivityLogTitleBlock>
-          <ActivityLogTitle>{primaryLog?.name || "执行经过"}</ActivityLogTitle>
+          <ActivityLogTitle>
+            {primaryLog?.name ||
+              t("generalWorkbench.workflow.activity.summary.nameFallback")}
+          </ActivityLogTitle>
           <ActivityLogMetaRow>
             {sourceLabel ? (
               <ActivityLogBadge>{sourceLabel}</ActivityLogBadge>
@@ -1132,13 +1298,17 @@ function renderActivityLogItem(
               <ActivityLogBadge>{gateLabel}</ActivityLogBadge>
             ) : null}
             {group.logs.length > 1 ? (
-              <ActivityLogBadge>{`${group.logs.length} 步`}</ActivityLogBadge>
+              <ActivityLogBadge>
+                {t("generalWorkbench.workflow.activity.summary.stepCount", {
+                  count: group.logs.length,
+                })}
+              </ActivityLogBadge>
             ) : null}
             {group.artifactPaths.length > 0 ? (
               <ActivityLogBadge>
-                {group.artifactPaths.length === 1
-                  ? "1 个产物"
-                  : `${group.artifactPaths.length} 个产物`}
+                {t("generalWorkbench.workflow.activity.summary.artifactBadge", {
+                  count: group.artifactPaths.length,
+                })}
               </ActivityLogBadge>
             ) : null}
           </ActivityLogMetaRow>
@@ -1174,7 +1344,9 @@ function renderActivityLogItem(
             type="button"
             onClick={() => onViewRunDetail(group.runId!)}
           >
-            查看运行 {runLabel || group.runId}
+            {t("generalWorkbench.workflow.activity.viewRun", {
+              run: runLabel || group.runId,
+            })}
           </RunLinkButton>
         ) : null}
         {!group.runId
@@ -1185,6 +1357,7 @@ function renderActivityLogItem(
                 sessionId={group.sessionId || null}
                 onRevealArtifactInFinder={onRevealArtifactInFinder}
                 onOpenArtifactWithDefaultApp={onOpenArtifactWithDefaultApp}
+                t={t}
               />
             ))
           : null}
@@ -1198,31 +1371,37 @@ function ActivityMetaFragment({
   sessionId,
   onRevealArtifactInFinder,
   onOpenArtifactWithDefaultApp,
+  t,
 }: {
   artifactPath: string;
   sessionId?: string | null;
   onRevealArtifactInFinder: GeneralWorkbenchWorkflowPanelProps["onRevealArtifactInFinder"];
   onOpenArtifactWithDefaultApp: GeneralWorkbenchWorkflowPanelProps["onOpenArtifactWithDefaultApp"];
+  t: AgentTranslate;
 }) {
   return (
     <>
       <TinyButton
         type="button"
-        aria-label={`定位活动产物路径-${artifactPath}`}
+        aria-label={t("generalWorkbench.workflow.activity.revealArtifactAria", {
+          path: artifactPath,
+        })}
         onClick={() => {
           void onRevealArtifactInFinder(artifactPath, sessionId);
         }}
       >
-        定位产物
+        {t("generalWorkbench.workflow.activity.revealArtifact")}
       </TinyButton>
       <TinyButton
         type="button"
-        aria-label={`打开活动产物路径-${artifactPath}`}
+        aria-label={t("generalWorkbench.workflow.activity.openArtifactAria", {
+          path: artifactPath,
+        })}
         onClick={() => {
           void onOpenArtifactWithDefaultApp(artifactPath, sessionId);
         }}
       >
-        打开产物
+        {t("generalWorkbench.workflow.activity.openArtifact")}
       </TinyButton>
     </>
   );
@@ -1235,6 +1414,7 @@ function CuratedTaskFollowUpActions({
   curatedTask: GeneralWorkbenchRunMetadataSummary["curatedTask"];
   onApplyFollowUpAction?: GeneralWorkbenchWorkflowPanelProps["onApplyFollowUpAction"];
 }) {
+  const { t } = useTranslation("agent");
   const visibleActions = listVisibleCuratedTaskFollowUpActions(curatedTask);
   if (!onApplyFollowUpAction || visibleActions.length === 0) {
     return null;
@@ -1246,6 +1426,7 @@ function CuratedTaskFollowUpActions({
         const payload = buildCuratedTaskFollowUpActionPayload({
           action,
           curatedTask,
+          t,
         });
         if (!payload) {
           return null;
@@ -1255,7 +1436,9 @@ function CuratedTaskFollowUpActions({
           <TinyButton
             key={action}
             type="button"
-            aria-label={`应用建议下一步-${action}`}
+            aria-label={t("generalWorkbench.workflow.followUp.applyAria", {
+              action,
+            })}
             onClick={() => {
               onApplyFollowUpAction(payload);
             }}
@@ -1344,17 +1527,21 @@ function GeneralWorkbenchWorkflowPanelComponent({
     leadingStep: currentWorkflowStep,
     remainingCount: remainingSteps,
     emptyLabel:
-      workflowSteps.length > 0 ? "当前流程已完成" : "等待创建第一条任务",
+      workflowSteps.length > 0
+        ? t("generalWorkbench.workflow.current.completedTitle")
+        : t("generalWorkbench.workflow.current.emptyTitle"),
   });
   const workflowProgressLabel = formatWorkflowProgressLabel({
     completedCount: completedSteps,
     totalCount: workflowSteps.length,
   });
-  const branchSectionTitle = getBranchSectionTitle(isVersionMode);
-  const branchCreateLabel = getBranchCreateLabel(isVersionMode);
-  const branchPrimaryActionLabel = getBranchPrimaryActionLabel(isVersionMode);
-  const branchSecondaryActionLabel =
-    getBranchSecondaryActionLabel(isVersionMode);
+  const branchSectionTitle = getBranchSectionTitle(isVersionMode, t);
+  const branchCreateLabel = getBranchCreateLabel(isVersionMode, t);
+  const branchPrimaryActionLabel = getBranchPrimaryActionLabel(
+    isVersionMode,
+    t,
+  );
+  const branchSecondaryActionLabel = getBranchSecondaryActionLabel(t);
   const currentBranchItem =
     sortedBranchItems.find((item) => item.isCurrent) ??
     sortedBranchItems[0] ??
@@ -1367,10 +1554,12 @@ function GeneralWorkbenchWorkflowPanelComponent({
     currentBranch: currentBranchItem,
     relatedCount: secondaryBranchCount,
     isVersionMode,
+    t,
   });
   const creationTaskSectionSummary = buildCreationTaskSectionSummary({
     groups: groupedCreationTaskEvents,
     totalCount: creationTaskEventsCount,
+    t,
   });
   const workflowResultHandoffText = buildWorkflowResultHandoffText({
     branchSectionTitle,
@@ -1379,9 +1568,11 @@ function GeneralWorkbenchWorkflowPanelComponent({
       groupedActivityLogs.length > 0 ||
       runMetadataSummary.artifactPaths.length > 0,
     resultDestination: runMetadataSummary.curatedTask?.resultDestination,
+    t,
   });
   const curatedTaskFollowUpHintText = buildCuratedTaskFollowUpHintText(
     runMetadataSummary.curatedTask,
+    t,
   );
   const latestReviewSignal = useMemo(() => {
     void recommendationSignalsVersion;
@@ -1412,8 +1603,9 @@ function GeneralWorkbenchWorkflowPanelComponent({
     return buildReviewFeedbackFollowUpActionPayload({
       projection: reviewFeedbackProjection,
       curatedTask: runMetadataSummary.curatedTask,
+      t,
     });
-  }, [reviewFeedbackProjection, runMetadataSummary.curatedTask]);
+  }, [reviewFeedbackProjection, runMetadataSummary.curatedTask, t]);
   const sceneAppReviewBaselineSnapshot = useMemo(() => {
     if (!runMetadataSummary.curatedTask?.taskId) {
       return null;
@@ -1442,6 +1634,7 @@ function GeneralWorkbenchWorkflowPanelComponent({
   const activitySectionSummary = buildActivitySectionSummary({
     groups: groupedActivityLogs,
     activeRunDetail,
+    t,
   });
 
   return (
@@ -1451,7 +1644,7 @@ function GeneralWorkbenchWorkflowPanelComponent({
         data-testid="workflow-sidebar-task-section"
       >
         <div className={WORKFLOW_SECTION_TITLE_CLASSNAME}>
-          <span>当前进展</span>
+          <span>{t("generalWorkbench.workflow.current.title")}</span>
           <span className={WORKFLOW_SECTION_BADGE_CLASSNAME}>
             {remainingSteps}
           </span>
@@ -1474,13 +1667,14 @@ function GeneralWorkbenchWorkflowPanelComponent({
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className={WORKFLOW_INLINE_LABEL_CLASSNAME}>
-                  当前焦点
+                  {t("generalWorkbench.workflow.current.focus")}
                 </span>
                 <span
                   className="break-words text-sm font-semibold leading-5 text-slate-900"
                   data-testid="workflow-sidebar-current-step"
                 >
-                  {currentWorkflowStep?.title || "当前流程已完成"}
+                  {currentWorkflowStep?.title ||
+                    t("generalWorkbench.workflow.current.completedTitle")}
                 </span>
                 <span
                   className={getStatusBadgeClassName(
@@ -1501,8 +1695,10 @@ function GeneralWorkbenchWorkflowPanelComponent({
                 </span>
                 <span className={WORKFLOW_TASK_SUMMARY_PILL_CLASSNAME}>
                   {remainingSteps > 0
-                    ? `剩余 ${remainingSteps} 项待处理`
-                    : "当前流程已全部完成"}
+                    ? t("generalWorkbench.workflow.current.remaining", {
+                        count: remainingSteps,
+                      })
+                    : t("generalWorkbench.workflow.current.allCompleted")}
                 </span>
                 <span className="inline-flex items-center gap-1 text-[10px] text-slate-400">
                   <span className="inline-flex h-1 w-14 overflow-hidden rounded-full bg-slate-200">
@@ -1521,7 +1717,7 @@ function GeneralWorkbenchWorkflowPanelComponent({
                 data-testid="workflow-sidebar-result-destination-hint"
               >
                 <div className="text-[10px] font-semibold text-slate-500">
-                  结果去向
+                  {t("generalWorkbench.workflow.current.resultDestination")}
                 </div>
                 <div className="mt-1 text-[11px] leading-5 text-slate-500">
                   {workflowResultHandoffText}
@@ -1534,7 +1730,7 @@ function GeneralWorkbenchWorkflowPanelComponent({
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="text-[10px] font-semibold text-slate-500">
-                      建议下一步
+                      {t("generalWorkbench.workflow.current.suggestedNext")}
                     </div>
                     {runMetadataSummary.curatedTask?.taskTitle ? (
                       <span className={WORKFLOW_TASK_SUMMARY_PILL_CLASSNAME}>
@@ -1584,11 +1780,16 @@ function GeneralWorkbenchWorkflowPanelComponent({
         {visibleQueueSteps.length > 0 ? (
           <div className={WORKFLOW_STEP_LIST_CLASSNAME}>
             <div className={WORKFLOW_QUEUE_HEADER_CLASSNAME}>
-              <span>后续任务</span>
+              <span>{t("generalWorkbench.workflow.queue.title")}</span>
               <span>
                 {hiddenQueueCount > 0
-                  ? `已展示 ${visibleQueueSteps.length} 项，另有 ${hiddenQueueCount} 项`
-                  : `${visibleQueueSteps.length} 项待处理`}
+                  ? t("generalWorkbench.workflow.queue.hiddenCount", {
+                      visible: visibleQueueSteps.length,
+                      hidden: hiddenQueueCount,
+                    })
+                  : t("generalWorkbench.workflow.queue.pendingCount", {
+                      count: visibleQueueSteps.length,
+                    })}
               </span>
             </div>
             <div className={WORKFLOW_QUEUE_LIST_CLASSNAME}>
@@ -1609,7 +1810,11 @@ function GeneralWorkbenchWorkflowPanelComponent({
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 text-[10px] text-slate-400">
-                      <span>{`后续 ${index + 1}`}</span>
+                      <span>
+                        {t("generalWorkbench.workflow.queue.item", {
+                          index: index + 1,
+                        })}
+                      </span>
                     </div>
                     <div className="mt-0.5 break-words text-[12px] leading-5 text-slate-900">
                       {step.title}
@@ -1626,12 +1831,20 @@ function GeneralWorkbenchWorkflowPanelComponent({
         {completedWorkflowSteps > 0 ? (
           <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
             <span className={WORKFLOW_TASK_SUMMARY_PILL_CLASSNAME}>
-              {`已完成 ${completedWorkflowSteps} 项`}
+              {t("generalWorkbench.workflow.completed.count", {
+                count: completedWorkflowSteps,
+              })}
             </span>
             {remainingSteps > 0 ? (
-              <span>已完成项已收起，优先聚焦当前与后续任务</span>
+              <span>
+                {t(
+                  "generalWorkbench.workflow.completed.collapsedWithRemaining",
+                )}
+              </span>
             ) : (
-              <span>当前流程已完成，可回看下方记录</span>
+              <span>
+                {t("generalWorkbench.workflow.completed.allDoneHint")}
+              </span>
             )}
           </div>
         ) : null}
@@ -1649,7 +1862,7 @@ function GeneralWorkbenchWorkflowPanelComponent({
             </span>
             <button
               type="button"
-              aria-label="切换可继续记录"
+              aria-label={t("generalWorkbench.workflow.branch.toggleAria")}
               className={TOGGLE_BUTTON_CLASSNAME}
               onClick={onToggleBranchRecords}
             >
@@ -1678,13 +1891,17 @@ function GeneralWorkbenchWorkflowPanelComponent({
                 {onAddImage ? (
                   <DropdownMenuItem onClick={onAddImage}>
                     <ImageIcon size={14} />
-                    <span>添加图片</span>
+                    <span>
+                      {t("generalWorkbench.workflow.branch.addImage")}
+                    </span>
                   </DropdownMenuItem>
                 ) : null}
                 {onImportDocument ? (
                   <DropdownMenuItem onClick={onImportDocument}>
                     <FileText size={14} />
-                    <span>导入文稿</span>
+                    <span>
+                      {t("generalWorkbench.workflow.branch.importDraft")}
+                    </span>
                   </DropdownMenuItem>
                 ) : null}
               </DropdownMenuContent>
@@ -1692,7 +1909,7 @@ function GeneralWorkbenchWorkflowPanelComponent({
           </span>
         </div>
         {branchItems.length === 0 ? (
-          <ActivityMeta>{getEmptyBranchText(isVersionMode)}</ActivityMeta>
+          <ActivityMeta>{getEmptyBranchText(isVersionMode, t)}</ActivityMeta>
         ) : (
           <>
             <BranchSectionSummary data-testid="workflow-sidebar-branch-summary">
@@ -1719,20 +1936,24 @@ function GeneralWorkbenchWorkflowPanelComponent({
                           </BranchTitleButton>
                           <StatusBadge $status={item.status}>
                             {item.isCurrent
-                              ? "当前焦点"
-                              : getBranchStatusText(item.status)}
+                              ? t(
+                                  "generalWorkbench.workflow.branch.currentFocus",
+                                )
+                              : getBranchStatusText(item.status, t)}
                           </StatusBadge>
                           {!isVersionMode ? (
                             <DeleteButton
                               onClick={() => onDeleteTopic(item.id)}
-                              aria-label="删除分支"
+                              aria-label={t(
+                                "generalWorkbench.workflow.branch.deleteAria",
+                              )}
                             >
                               <Trash2 size={12} />
                             </DeleteButton>
                           ) : null}
                         </div>
                         <BranchMeta>
-                          {getBranchMetaText(item, isVersionMode)}
+                          {getBranchMetaText(item, isVersionMode, t)}
                         </BranchMeta>
                         {item.isCurrent ? (
                           <ActionRow>
@@ -1753,7 +1974,9 @@ function GeneralWorkbenchWorkflowPanelComponent({
                           </ActionRow>
                         ) : (
                           <BranchHint>
-                            切到当前焦点后再继续处理这一条记录
+                            {t(
+                              "generalWorkbench.workflow.branch.focusFirstHint",
+                            )}
                           </BranchHint>
                         )}
                       </div>
@@ -1768,14 +1991,14 @@ function GeneralWorkbenchWorkflowPanelComponent({
 
       <section className={WORKFLOW_SECTION_CLASSNAME}>
         <div className={WORKFLOW_SECTION_TITLE_CLASSNAME}>
-          <span>产出记录</span>
+          <span>{t("generalWorkbench.workflow.outputs.title")}</span>
           <span className="inline-flex items-center gap-1.5">
             <span className={WORKFLOW_SECTION_BADGE_CLASSNAME}>
               {creationTaskEventsCount}
             </span>
             <button
               type="button"
-              aria-label="切换产出记录"
+              aria-label={t("generalWorkbench.workflow.outputs.toggleAria")}
               className={TOGGLE_BUTTON_CLASSNAME}
               onClick={onToggleCreationTasks}
             >
@@ -1798,14 +2021,16 @@ function GeneralWorkbenchWorkflowPanelComponent({
         {showCreationTasks ? (
           <ActivityList className="custom-scrollbar">
             {groupedCreationTaskEvents.length === 0 ? (
-              <ActivityMeta>最近还没有新的产出记录</ActivityMeta>
+              <ActivityMeta>
+                {t("generalWorkbench.workflow.outputs.empty")}
+              </ActivityMeta>
             ) : (
               groupedCreationTaskEvents.map((group) => (
                 <CreationTaskGroupCard key={`creation-task-${group.key}`}>
                   <CreationTaskGroupHeader>
                     <span>{group.label}</span>
                     <CreationTaskGroupCount>
-                      {formatCreationTaskCountLabel(group.tasks.length)}
+                      {formatCreationTaskCountLabel(group.tasks.length, t)}
                     </CreationTaskGroupCount>
                     <span className="ml-auto text-[10px] text-slate-400">
                       {group.latestTimeLabel}
@@ -1817,7 +2042,7 @@ function GeneralWorkbenchWorkflowPanelComponent({
                         <CreationTaskContent>
                           <CreationTaskTitleRow>
                             <CreationTaskTitle>
-                              {getCreationTaskTitle(task.path)}
+                              {getCreationTaskTitle(task.path, t)}
                             </CreationTaskTitle>
                             <CreationTaskTime>
                               {task.timeLabel}
@@ -1829,14 +2054,20 @@ function GeneralWorkbenchWorkflowPanelComponent({
                           type="button"
                           aria-label={
                             task.absolutePath
-                              ? `复制任务文件绝对路径-${task.taskId}`
-                              : `复制任务文件路径-${task.taskId}`
+                              ? t(
+                                  "generalWorkbench.workflow.outputs.copyAbsolutePathAria",
+                                  { taskId: task.taskId },
+                                )
+                              : t(
+                                  "generalWorkbench.workflow.outputs.copyPathAria",
+                                  { taskId: task.taskId },
+                                )
                           }
                           onClick={() => {
                             void onCopyText(task.absolutePath || task.path);
                           }}
                         >
-                          复制路径
+                          {t("generalWorkbench.workflow.outputs.copyPath")}
                         </RunDetailActionButton>
                       </CreationTaskRow>
                     ))}
@@ -1850,14 +2081,14 @@ function GeneralWorkbenchWorkflowPanelComponent({
 
       <section className={WORKFLOW_SECTION_CLASSNAME}>
         <div className={WORKFLOW_SECTION_TITLE_CLASSNAME}>
-          <span>执行经过</span>
+          <span>{t("generalWorkbench.workflow.activity.title")}</span>
           <span className="inline-flex items-center gap-1.5">
             <span className={WORKFLOW_SECTION_BADGE_CLASSNAME}>
               {groupedActivityLogs.length}
             </span>
             <button
               type="button"
-              aria-label="切换执行经过"
+              aria-label={t("generalWorkbench.workflow.activity.toggleAria")}
               className={TOGGLE_BUTTON_CLASSNAME}
               onClick={onToggleActivityLogs}
             >
@@ -1881,7 +2112,9 @@ function GeneralWorkbenchWorkflowPanelComponent({
           <>
             <ActivityList className="custom-scrollbar">
               {groupedActivityLogs.length === 0 ? (
-                <ActivityMeta>最近还没有执行经过</ActivityMeta>
+                <ActivityMeta>
+                  {t("generalWorkbench.workflow.activity.empty")}
+                </ActivityMeta>
               ) : (
                 groupedActivityLogs.map((group) =>
                   renderActivityLogItem(
@@ -1889,12 +2122,15 @@ function GeneralWorkbenchWorkflowPanelComponent({
                     onViewRunDetail,
                     onRevealArtifactInFinder,
                     onOpenArtifactWithDefaultApp,
+                    t,
                   ),
                 )
               )}
             </ActivityList>
             {activeRunDetailLoading ? (
-              <ActivityMeta>运行详情加载中...</ActivityMeta>
+              <ActivityMeta>
+                {t("generalWorkbench.workflow.runDetail.loading")}
+              </ActivityMeta>
             ) : activeRunDetail ? (
               <RunDetailPanel>
                 <RunDetailHeader>
@@ -1903,14 +2139,18 @@ function GeneralWorkbenchWorkflowPanelComponent({
                       activeRunDetail.status,
                     )}
                   >
-                    {formatRunStatusLabel(activeRunDetail.status)}
+                    {formatRunStatusLabel(t, activeRunDetail.status)}
                   </div>
                   <RunDetailTitleBlock>
-                    <RunDetailTitle>当前查看运行</RunDetailTitle>
+                    <RunDetailTitle>
+                      {t("generalWorkbench.workflow.runDetail.title")}
+                    </RunDetailTitle>
                     <RunDetailMetaRow>
                       <RunDetailBadge>
-                        {formatActivitySourceLabel(activeRunDetail.source) ||
-                          "运行"}
+                        {formatActivitySourceLabel(t, activeRunDetail.source) ||
+                          t(
+                            "generalWorkbench.workflow.runDetail.fallbackSource",
+                          )}
                       </RunDetailBadge>
                       {runMetadataSummary.workflow ? (
                         <RunDetailBadge>
@@ -1924,9 +2164,12 @@ function GeneralWorkbenchWorkflowPanelComponent({
                       ) : null}
                       {runMetadataSummary.artifactPaths.length > 0 ? (
                         <RunDetailBadge>
-                          {runMetadataSummary.artifactPaths.length === 1
-                            ? "1 个产物"
-                            : `${runMetadataSummary.artifactPaths.length} 个产物`}
+                          {t(
+                            "generalWorkbench.workflow.runDetail.artifactCount",
+                            {
+                              count: runMetadataSummary.artifactPaths.length,
+                            },
+                          )}
                         </RunDetailBadge>
                       ) : null}
                     </RunDetailMetaRow>
@@ -1936,6 +2179,7 @@ function GeneralWorkbenchWorkflowPanelComponent({
                   {buildRunDetailSummaryText({
                     runMetadataSummary,
                     activeRunStagesLabel,
+                    t,
                   })}
                 </RunDetailSummary>
                 {sceneAppReviewBaselineSnapshot ? (
@@ -1972,30 +2216,40 @@ function GeneralWorkbenchWorkflowPanelComponent({
                     />
                   </>
                 ) : null}
-                <RunDetailRow>运行ID：{activeRunDetail.id}</RunDetailRow>
+                <RunDetailRow>
+                  {t("generalWorkbench.workflow.runDetail.id", {
+                    id: activeRunDetail.id,
+                  })}
+                </RunDetailRow>
                 <RunDetailActions>
                   <RunDetailActionButton
                     type="button"
-                    aria-label="复制运行ID"
+                    aria-label={t(
+                      "generalWorkbench.workflow.runDetail.copyIdAria",
+                    )}
                     onClick={() => {
                       void onCopyText(activeRunDetail.id);
                     }}
                   >
-                    复制运行ID
+                    {t("generalWorkbench.workflow.runDetail.copyId")}
                   </RunDetailActionButton>
                   <RunDetailActionButton
                     type="button"
-                    aria-label="复制原始记录"
+                    aria-label={t(
+                      "generalWorkbench.workflow.runDetail.copyRawAria",
+                    )}
                     onClick={() => {
                       void onCopyText(runMetadataText);
                     }}
                   >
-                    复制原始记录
+                    {t("generalWorkbench.workflow.runDetail.copyRaw")}
                   </RunDetailActionButton>
                 </RunDetailActions>
                 {runMetadataSummary.artifactPaths.length > 0 ? (
                   <RunDetailArtifacts>
-                    <RunDetailArtifactsTitle>关联产物</RunDetailArtifactsTitle>
+                    <RunDetailArtifactsTitle>
+                      {t("generalWorkbench.workflow.runDetail.artifactsTitle")}
+                    </RunDetailArtifactsTitle>
                     {runMetadataSummary.artifactPaths.map((artifactPath) => (
                       <RunDetailArtifactRow key={`run-detail-${artifactPath}`}>
                         <RunDetailArtifactPath>
@@ -2004,30 +2258,45 @@ function GeneralWorkbenchWorkflowPanelComponent({
                         <RunDetailArtifactActions>
                           <RunDetailArtifactActionButton
                             type="button"
-                            aria-label={`复制产物路径-${artifactPath}`}
+                            aria-label={t(
+                              "generalWorkbench.workflow.runDetail.copyArtifactAria",
+                              { path: artifactPath },
+                            )}
                             onClick={() => {
                               void onCopyText(artifactPath);
                             }}
                           >
-                            复制
+                            {t(
+                              "generalWorkbench.workflow.runDetail.copyArtifact",
+                            )}
                           </RunDetailArtifactActionButton>
                           <RunDetailArtifactActionButton
                             type="button"
-                            aria-label={`定位产物路径-${artifactPath}`}
+                            aria-label={t(
+                              "generalWorkbench.workflow.runDetail.revealArtifactAria",
+                              { path: artifactPath },
+                            )}
                             onClick={() => {
                               void onRevealArtifactInFinder(artifactPath);
                             }}
                           >
-                            定位
+                            {t(
+                              "generalWorkbench.workflow.runDetail.revealArtifact",
+                            )}
                           </RunDetailArtifactActionButton>
                           <RunDetailArtifactActionButton
                             type="button"
-                            aria-label={`打开产物路径-${artifactPath}`}
+                            aria-label={t(
+                              "generalWorkbench.workflow.runDetail.openArtifactAria",
+                              { path: artifactPath },
+                            )}
                             onClick={() => {
                               void onOpenArtifactWithDefaultApp(artifactPath);
                             }}
                           >
-                            打开
+                            {t(
+                              "generalWorkbench.workflow.runDetail.openArtifact",
+                            )}
                           </RunDetailArtifactActionButton>
                         </RunDetailArtifactActions>
                       </RunDetailArtifactRow>

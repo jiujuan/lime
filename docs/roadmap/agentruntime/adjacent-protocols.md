@@ -1,7 +1,7 @@
 # AgentRuntime 与相邻标准边界
 
-> 状态：proposal
-> 更新时间：2026-05-11
+> 状态：implementation-audited
+> 更新时间：2026-05-12
 > 作用：把 `agentruntime`、`agentcontext`、`agentevidence`、`agentpolicy` 与 `agentui` 的 owner 边界写清楚，避免 Lime 把标准协议继续叠成多条事实源。
 
 ## 1. 标准来源

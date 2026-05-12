@@ -27,6 +27,9 @@ pub(in crate::commands::aster_agent_cmd) struct ChatRunObservation {
     pub(in crate::commands::aster_agent_cmd) provider_continuation:
         Option<ProviderContinuationState>,
     pub(in crate::commands::aster_agent_cmd) browser_runtime_ref: Option<ObservedBrowserRuntimeRef>,
+    pub(in crate::commands::aster_agent_cmd) first_visible_delta_ms: Option<u64>,
+    pub(in crate::commands::aster_agent_cmd) first_thinking_delta_ms: Option<u64>,
+    pub(in crate::commands::aster_agent_cmd) first_text_delta_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -92,6 +95,27 @@ impl ChatRunObservation {
                 {
                     self.record_artifact_path(path, request_metadata);
                 }
+            }
+            _ => {}
+        }
+    }
+
+    pub(in crate::commands::aster_agent_cmd) fn record_model_delta_timing(
+        &mut self,
+        event: &RuntimeAgentEvent,
+        elapsed_ms: u64,
+    ) {
+        match event {
+            RuntimeAgentEvent::TextDelta { text }
+            | RuntimeAgentEvent::TextDeltaBatch { text, .. }
+                if !text.is_empty() =>
+            {
+                self.first_text_delta_ms.get_or_insert(elapsed_ms);
+                self.first_visible_delta_ms.get_or_insert(elapsed_ms);
+            }
+            RuntimeAgentEvent::ThinkingDelta { text } if !text.is_empty() => {
+                self.first_thinking_delta_ms.get_or_insert(elapsed_ms);
+                self.first_visible_delta_ms.get_or_insert(elapsed_ms);
             }
             _ => {}
         }
@@ -651,6 +675,25 @@ pub(in crate::commands::aster_agent_cmd) fn build_chat_run_finish_metadata(
                 "session_id": browser_runtime_ref.session_id,
                 "target_id": browser_runtime_ref.target_id,
             }),
+        );
+    }
+
+    if let Some(elapsed_ms) = observation.first_visible_delta_ms {
+        metadata.insert(
+            "model_first_visible_delta_ms".to_string(),
+            serde_json::json!(elapsed_ms),
+        );
+    }
+    if let Some(elapsed_ms) = observation.first_thinking_delta_ms {
+        metadata.insert(
+            "model_first_thinking_delta_ms".to_string(),
+            serde_json::json!(elapsed_ms),
+        );
+    }
+    if let Some(elapsed_ms) = observation.first_text_delta_ms {
+        metadata.insert(
+            "model_first_text_delta_ms".to_string(),
+            serde_json::json!(elapsed_ms),
         );
     }
 

@@ -1574,6 +1574,27 @@ async function main() {
       npmCommand,
       [
         "run",
+        "smoke:at-command-registry",
+        "--",
+        "--app-url",
+        options.appUrl,
+        "--health-url",
+        options.healthUrl,
+        "--invoke-url",
+        options.invokeUrl,
+        "--timeout-ms",
+        String(options.timeoutMs),
+        "--interval-ms",
+        String(options.intervalMs),
+      ],
+      "smoke:at-command-registry",
+      options.timeoutMs + 30_000,
+    );
+
+    await runCommand(
+      npmCommand,
+      [
+        "run",
         "smoke:claw-chat-ready-streaming",
         "--",
         "--app-url",

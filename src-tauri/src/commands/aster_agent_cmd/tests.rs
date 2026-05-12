@@ -3826,6 +3826,44 @@ mod tests {
     }
 
     #[test]
+    fn test_build_chat_run_finish_metadata_includes_model_delta_timing() {
+        let mut observation = ChatRunObservation::default();
+        observation.record_model_delta_timing(
+            &RuntimeAgentEvent::ThinkingDelta {
+                text: "先分析".to_string(),
+            },
+            1_200,
+        );
+        observation.record_model_delta_timing(
+            &RuntimeAgentEvent::TextDelta {
+                text: "好".to_string(),
+            },
+            2_400,
+        );
+
+        let metadata = build_chat_run_finish_metadata(&serde_json::Map::new(), &observation);
+
+        assert_eq!(
+            metadata
+                .get("model_first_visible_delta_ms")
+                .and_then(serde_json::Value::as_u64),
+            Some(1_200)
+        );
+        assert_eq!(
+            metadata
+                .get("model_first_thinking_delta_ms")
+                .and_then(serde_json::Value::as_u64),
+            Some(1_200)
+        );
+        assert_eq!(
+            metadata
+                .get("model_first_text_delta_ms")
+                .and_then(serde_json::Value::as_u64),
+            Some(2_400)
+        );
+    }
+
+    #[test]
     fn test_extract_harness_bool_reads_nested_preferences() {
         let metadata = serde_json::json!({
             "harness": {
@@ -4938,8 +4976,9 @@ mod tests {
         assert!(merged.contains("\"cover_task\":"));
         assert!(merged.contains("不要为了确认技能名、工具名或命令名再去调用 ToolSearch"));
         assert!(merged.contains("不要先走 ToolSearch / WebSearch / Read / Glob / Grep"));
-        assert!(merged
-            .contains("不要直接调用 social_generate_cover_image 或 lime_create_image_generation_task"));
+        assert!(merged.contains(
+            "不要直接调用 social_generate_cover_image 或 lime_create_image_generation_task"
+        ));
         assert!(merged.contains("不要调用浏览器 MCP / Playwright / 页面工具"));
         assert!(merged.contains("不要用 Write/Edit/Bash 自行生成 HTML 封面"));
         assert!(merged.contains("应立即改为直调 Skill(cover_generate)"));
@@ -6914,10 +6953,7 @@ mod tests {
         );
         assert_markers_in_order(
             submit_slice,
-            &[
-                "emit_profile_turn_submitted",
-                "emit_profile_task_started",
-            ],
+            &["emit_profile_turn_submitted", "emit_profile_task_started"],
         );
 
         let finalize_slice = source_slice(

@@ -56,6 +56,7 @@ mod data;
 #[cfg(debug_assertions)]
 #[allow(dead_code)]
 mod dev_bridge;
+mod global_shortcut_guard;
 mod logger;
 mod profiling;
 mod theme;

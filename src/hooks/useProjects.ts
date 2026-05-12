@@ -88,9 +88,7 @@ export function useProjects(
 ): UseProjectsReturn {
   const { autoLoad = true, skipDefaultWorkspaceReadyCheck = false } = options;
   const { t } = useTranslation("common");
-  const renameNameRequiredMessage = t("common.projects.rename.nameRequired", {
-    defaultValue: "项目名称不能为空",
-  });
+  const renameNameRequiredMessage = t("common.projects.rename.nameRequired");
   const [projects, setProjects] = useState<Project[]>([]);
   const [defaultProject, setDefaultProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(autoLoad);

@@ -17,6 +17,9 @@ use tauri::AppHandle;
 
 pub(super) const RESPONSIVE_CHAT_SERVICE_MODEL_SLOT: &str = "responsive_chat";
 pub(super) const RESPONSIVE_CHAT_ROUTING_SLOT: &str = "responsive_chat_model";
+const RESPONSIVE_CHAT_TARGET_FIRST_TEXT_MS: u64 = 1_500;
+const RESPONSIVE_CHAT_SLOW_FIRST_TEXT_MS: u64 = 3_000;
+const RESPONSIVE_CHAT_STALE_FIRST_TEXT_MS: u64 = 6_000;
 
 #[derive(Debug, Clone)]
 pub(super) struct ResponsiveChatAutoPreferenceContext {
@@ -36,9 +39,16 @@ pub(super) struct ResponsiveChatAutoCandidate {
     pub(super) latency_hint: ResponsiveChatAutoLatencyHint,
 }
 
+pub(super) struct ResponsiveChatAutoRunMetadata {
+    pub(super) provider_selector: String,
+    pub(super) model_name: String,
+    pub(super) turn_id: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(super) struct ResponsiveChatAutoLatencyHint {
     pub(super) durations_ms: Vec<u64>,
+    pub(super) first_text_durations_ms: Vec<u64>,
     pub(super) reasoning_sample_count: u32,
     pub(super) error_sample_count: u32,
     pub(super) unsupported_model_sample_count: u32,
@@ -46,11 +56,16 @@ pub(super) struct ResponsiveChatAutoLatencyHint {
 
 impl ResponsiveChatAutoLatencyHint {
     fn p50_duration_ms(&self) -> Option<u64> {
-        if self.durations_ms.is_empty() {
+        let samples = if self.first_text_durations_ms.is_empty() {
+            &self.durations_ms
+        } else {
+            &self.first_text_durations_ms
+        };
+        if samples.is_empty() {
             return None;
         }
 
-        let mut durations = self.durations_ms.clone();
+        let mut durations = samples.clone();
         durations.sort_unstable();
         durations.get(durations.len() / 2).copied()
     }
@@ -111,12 +126,29 @@ pub(super) fn responsive_chat_model_sort(
     responsive_chat_model_quality_sort(left, right).then(left.id.cmp(&right.id))
 }
 
+#[cfg(test)]
 pub(super) fn choose_responsive_chat_model_from_catalog(
     catalog: &[EnhancedModelMetadata],
     thinking_enabled: bool,
     has_images: bool,
     runtime_requirements: &[RuntimeModelCapabilityRequirement],
 ) -> Option<(String, EnhancedModelMetadata, u32)> {
+    collect_responsive_chat_models_from_catalog(
+        catalog,
+        thinking_enabled,
+        has_images,
+        runtime_requirements,
+    )
+    .into_iter()
+    .next()
+}
+
+pub(super) fn collect_responsive_chat_models_from_catalog(
+    catalog: &[EnhancedModelMetadata],
+    thinking_enabled: bool,
+    has_images: bool,
+    runtime_requirements: &[RuntimeModelCapabilityRequirement],
+) -> Vec<(String, EnhancedModelMetadata, u32)> {
     let mut candidates = catalog
         .iter()
         .filter(|candidate| {
@@ -130,12 +162,21 @@ pub(super) fn choose_responsive_chat_model_from_catalog(
         .collect::<Vec<_>>();
 
     if candidates.is_empty() {
-        return None;
+        return Vec::new();
     }
 
     candidates.sort_by(|left, right| responsive_chat_model_sort(left, right));
-    let best = candidates.first()?;
-    Some((best.id.clone(), (*best).clone(), candidates.len() as u32))
+    let compatible_candidate_count = candidates.len() as u32;
+    candidates
+        .into_iter()
+        .map(|candidate| {
+            (
+                candidate.id.clone(),
+                (*candidate).clone(),
+                compatible_candidate_count,
+            )
+        })
+        .collect()
 }
 
 fn responsive_chat_model_quality_sort(
@@ -198,13 +239,21 @@ fn responsive_chat_model_looks_specialized_for_code_agent(model: &EnhancedModelM
     )
 }
 
-fn responsive_chat_latency_rank(hint: &ResponsiveChatAutoLatencyHint) -> (u8, u64) {
+fn responsive_chat_latency_rank(candidate: &ResponsiveChatAutoCandidate) -> (u8, u64) {
+    let hint = &candidate.latency_hint;
+    let provider_trust = responsive_chat_provider_trust_rank(candidate);
     let Some(p50_duration_ms) = hint.p50_duration_ms() else {
         if hint.unsupported_model_sample_count > 0 {
             return (7, u64::MAX);
         }
         if hint.error_sample_count > 0 {
             return (6, u64::MAX);
+        }
+        if provider_trust == 0 {
+            return (1, u64::MAX);
+        }
+        if provider_trust == 1 {
+            return (2, u64::MAX);
         }
         return (4, u64::MAX);
     };
@@ -215,17 +264,20 @@ fn responsive_chat_latency_rank(hint: &ResponsiveChatAutoLatencyHint) -> (u8, u6
     if hint.reasoning_sample_count > 0 {
         return (5, p50_duration_ms);
     }
-    if p50_duration_ms > 6_000 {
+    if p50_duration_ms > RESPONSIVE_CHAT_STALE_FIRST_TEXT_MS {
         return (5, p50_duration_ms);
     }
-    if p50_duration_ms > 3_000 {
+    if p50_duration_ms > RESPONSIVE_CHAT_SLOW_FIRST_TEXT_MS {
+        return (3, p50_duration_ms);
+    }
+    if p50_duration_ms > RESPONSIVE_CHAT_TARGET_FIRST_TEXT_MS {
         return (2, p50_duration_ms);
     }
-    if p50_duration_ms <= 1_500 {
+    if p50_duration_ms <= RESPONSIVE_CHAT_TARGET_FIRST_TEXT_MS {
         return (0, p50_duration_ms);
     }
 
-    (1, p50_duration_ms)
+    (2, p50_duration_ms)
 }
 
 fn responsive_chat_provider_trust_rank(candidate: &ResponsiveChatAutoCandidate) -> u8 {
@@ -249,8 +301,8 @@ pub(super) fn responsive_chat_auto_candidate_sort(
     left: &ResponsiveChatAutoCandidate,
     right: &ResponsiveChatAutoCandidate,
 ) -> std::cmp::Ordering {
-    responsive_chat_latency_rank(&left.latency_hint)
-        .cmp(&responsive_chat_latency_rank(&right.latency_hint))
+    responsive_chat_latency_rank(left)
+        .cmp(&responsive_chat_latency_rank(right))
         .then(
             responsive_chat_provider_trust_rank(left)
                 .cmp(&responsive_chat_provider_trust_rank(right)),
@@ -262,6 +314,49 @@ pub(super) fn responsive_chat_auto_candidate_sort(
         .then(left.provider_order.cmp(&right.provider_order))
         .then(left.provider_selector.cmp(&right.provider_selector))
         .then(left.model_name.cmp(&right.model_name))
+}
+
+fn responsive_chat_latency_fallback_reason(hint: &ResponsiveChatAutoLatencyHint) -> Option<String> {
+    if hint.unsupported_model_sample_count > 0 {
+        return Some("unsupported_model".to_string());
+    }
+    if hint.reasoning_sample_count > 0 {
+        return Some("reasoning_output_observed".to_string());
+    }
+    if let Some(p50_duration_ms) = hint.p50_duration_ms() {
+        if p50_duration_ms > RESPONSIVE_CHAT_SLOW_FIRST_TEXT_MS {
+            return Some(format!("slow_first_text_p50_{p50_duration_ms}ms"));
+        }
+    }
+    if hint.error_sample_count > 0 && hint.p50_duration_ms().is_none() {
+        return Some("recent_error_without_success".to_string());
+    }
+
+    None
+}
+
+pub(super) fn responsive_chat_setting_fallback_reason(
+    db: &DbConnection,
+    provider_selector: &str,
+    model_name: &str,
+) -> Option<String> {
+    let hints = load_responsive_chat_auto_latency_hints(db);
+    let exact_key = (provider_selector.to_string(), model_name.to_string());
+    let hint = hints.get(&exact_key).or_else(|| {
+        let provider_key = normalize_identifier(provider_selector);
+        let model_key = normalize_identifier(model_name);
+        hints.iter().find_map(|((provider, model), hint)| {
+            if normalize_identifier(provider) == provider_key
+                && normalize_identifier(model) == model_key
+            {
+                Some(hint)
+            } else {
+                None
+            }
+        })
+    })?;
+
+    responsive_chat_latency_fallback_reason(hint)
 }
 
 fn responsive_chat_provider_type_supports_text_chat(provider_type: ApiProviderType) -> bool {
@@ -354,31 +449,32 @@ pub(super) async fn resolve_responsive_chat_auto_preference(
         let context =
             build_provider_resolution_context(db, api_key_provider_service, &provider.provider.id)?;
         let (catalog, _alias_config) = load_model_registry_catalog(app, &context).await;
-        let Some((model_name, model, compatible_candidate_count)) =
-            choose_responsive_chat_model_from_catalog(
-                &catalog,
-                thinking_enabled,
-                has_images,
-                &runtime_requirements,
-            )
-        else {
+        let provider_candidates = collect_responsive_chat_models_from_catalog(
+            &catalog,
+            thinking_enabled,
+            has_images,
+            &runtime_requirements,
+        );
+        if provider_candidates.is_empty() {
             continue;
-        };
+        }
 
-        let latency_hint = latency_hints
-            .get(&(context.provider_selector.clone(), model_name.clone()))
-            .cloned()
-            .unwrap_or_default();
+        for (model_name, model, compatible_candidate_count) in provider_candidates {
+            let latency_hint = latency_hints
+                .get(&(context.provider_selector.clone(), model_name.clone()))
+                .cloned()
+                .unwrap_or_default();
 
-        candidates.push(ResponsiveChatAutoCandidate {
-            provider_selector: context.provider_selector,
-            model_name,
-            model,
-            compatible_candidate_count,
-            provider_order,
-            provider_group: context.provider_group,
-            latency_hint,
-        });
+            candidates.push(ResponsiveChatAutoCandidate {
+                provider_selector: context.provider_selector.clone(),
+                model_name,
+                model,
+                compatible_candidate_count,
+                provider_order,
+                provider_group: context.provider_group,
+                latency_hint,
+            });
+        }
     }
 
     candidates.sort_by(responsive_chat_auto_candidate_sort);
@@ -393,7 +489,9 @@ pub(super) async fn resolve_responsive_chat_auto_preference(
         }))
 }
 
-fn parse_responsive_chat_auto_run_metadata(metadata: &str) -> Option<(String, String)> {
+pub(super) fn parse_responsive_chat_latency_run_metadata(
+    metadata: &str,
+) -> Option<ResponsiveChatAutoRunMetadata> {
     let value: serde_json::Value = serde_json::from_str(metadata).ok()?;
     let routing_decision = value
         .pointer("/request_metadata/lime_runtime/routing_decision")
@@ -406,7 +504,28 @@ fn parse_responsive_chat_auto_run_metadata(metadata: &str) -> Option<(String, St
                 .get("decision_source")
                 .and_then(serde_json::Value::as_str)
         })?;
-    if decision_source != "responsive_chat_auto" {
+    let service_model_slot = routing_decision
+        .get("serviceModelSlot")
+        .and_then(serde_json::Value::as_str)
+        .or_else(|| {
+            routing_decision
+                .get("service_model_slot")
+                .and_then(serde_json::Value::as_str)
+        });
+    let settings_source = routing_decision
+        .get("settingsSource")
+        .and_then(serde_json::Value::as_str)
+        .or_else(|| {
+            routing_decision
+                .get("settings_source")
+                .and_then(serde_json::Value::as_str)
+        });
+    let is_responsive_chat_run = decision_source == "responsive_chat_auto"
+        || service_model_slot.map(normalize_identifier).as_deref()
+            == Some(RESPONSIVE_CHAT_SERVICE_MODEL_SLOT)
+        || settings_source.map(normalize_identifier).as_deref()
+            == Some("service_models.responsive_chat");
+    if !is_responsive_chat_run {
         return None;
     }
 
@@ -428,18 +547,78 @@ fn parse_responsive_chat_auto_run_metadata(metadata: &str) -> Option<(String, St
                 .and_then(serde_json::Value::as_str)
         })
         .and_then(|value| normalize_optional_text(Some(value.to_string())))?;
+    let turn_id = value
+        .pointer("/turn_state/turn_id")
+        .and_then(serde_json::Value::as_str)
+        .and_then(|value| normalize_optional_text(Some(value.to_string())));
 
-    Some((provider_selector, model_name))
+    Some(ResponsiveChatAutoRunMetadata {
+        provider_selector,
+        model_name,
+        turn_id,
+    })
 }
 
-fn session_has_reasoning_item(conn: &rusqlite::Connection, session_id: &str) -> bool {
+fn metadata_model_first_text_delta_ms(metadata: &str) -> Option<u64> {
+    let value: serde_json::Value = serde_json::from_str(metadata).ok()?;
+    value
+        .get("model_first_text_delta_ms")
+        .and_then(serde_json::Value::as_u64)
+}
+
+fn session_first_text_latency_ms(
+    conn: &rusqlite::Connection,
+    session_id: &str,
+    turn_id: Option<&str>,
+) -> Option<u64> {
+    let user_started_at = conn
+        .query_row(
+            "SELECT started_at
+             FROM agent_thread_items
+             WHERE session_id = ?1
+               AND item_type = 'user_message'
+               AND (?2 IS NULL OR turn_id = ?2)
+             ORDER BY sequence ASC
+             LIMIT 1",
+            rusqlite::params![session_id, turn_id],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()?;
+    let agent_started_at = conn
+        .query_row(
+            "SELECT started_at
+             FROM agent_thread_items
+             WHERE session_id = ?1
+               AND item_type = 'agent_message'
+               AND (?2 IS NULL OR turn_id = ?2)
+             ORDER BY sequence ASC
+             LIMIT 1",
+            rusqlite::params![session_id, turn_id],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()?;
+    let user_started_at = chrono::DateTime::parse_from_rfc3339(&user_started_at).ok()?;
+    let agent_started_at = chrono::DateTime::parse_from_rfc3339(&agent_started_at).ok()?;
+    let latency_ms = agent_started_at
+        .signed_duration_since(user_started_at)
+        .num_milliseconds();
+    u64::try_from(latency_ms).ok()
+}
+
+fn session_has_reasoning_item(
+    conn: &rusqlite::Connection,
+    session_id: &str,
+    turn_id: Option<&str>,
+) -> bool {
     conn.query_row(
         "SELECT EXISTS(
              SELECT 1 FROM agent_thread_items
-             WHERE session_id = ?1 AND item_type = 'reasoning'
+             WHERE session_id = ?1
+               AND item_type = 'reasoning'
+               AND (?2 IS NULL OR turn_id = ?2)
              LIMIT 1
          )",
-        [session_id],
+        rusqlite::params![session_id, turn_id],
         |row| row.get::<_, i64>(0),
     )
     .map(|value| value > 0)
@@ -518,16 +697,27 @@ pub(super) fn load_responsive_chat_auto_latency_hints(
     let mut hints: HashMap<(String, String), ResponsiveChatAutoLatencyHint> = HashMap::new();
     for row in rows.flatten() {
         let (session_id, status, duration_ms, error_message, metadata, started_at) = row;
-        let Some((provider_selector, model_name)) =
-            parse_responsive_chat_auto_run_metadata(&metadata)
-        else {
+        let Some(run_metadata) = parse_responsive_chat_latency_run_metadata(&metadata) else {
             continue;
         };
 
-        let entry = hints.entry((provider_selector, model_name)).or_default();
+        let entry = hints
+            .entry((run_metadata.provider_selector, run_metadata.model_name))
+            .or_default();
         if status == "success" {
             if let Some(duration_ms) = duration_ms.and_then(|value| u64::try_from(value).ok()) {
                 entry.durations_ms.push(duration_ms);
+            }
+            if let Some(first_text_duration_ms) = metadata_model_first_text_delta_ms(&metadata)
+                .or_else(|| {
+                    session_first_text_latency_ms(
+                        &conn,
+                        &session_id,
+                        run_metadata.turn_id.as_deref(),
+                    )
+                })
+            {
+                entry.first_text_durations_ms.push(first_text_duration_ms);
             }
         }
         if status != "success"
@@ -538,7 +728,7 @@ pub(super) fn load_responsive_chat_auto_latency_hints(
         if is_responsive_chat_unsupported_model_error(error_message.as_deref()) {
             entry.unsupported_model_sample_count += 1;
         }
-        if session_has_reasoning_item(&conn, &session_id) {
+        if session_has_reasoning_item(&conn, &session_id, run_metadata.turn_id.as_deref()) {
             entry.reasoning_sample_count += 1;
         }
     }

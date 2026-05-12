@@ -62,6 +62,8 @@ struct TaskCommand {
 }
 
 #[derive(Debug, Subcommand)]
+// 保持 clap derive 的直接子命令形态；这里是 CLI 解析结构，不在热路径上。
+#[allow(clippy::large_enum_variant)]
 enum TaskSubcommand {
     Create(TaskCreateCommand),
     Status(TaskLookupArgs),

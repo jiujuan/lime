@@ -417,9 +417,9 @@ describe("TeamWorkbenchSummaryPanel", () => {
     expect(container.textContent).toContain("分派关系");
     expect(container.textContent).toContain("任务板");
     expect(container.textContent).toContain("执行通知");
-    expect(container.textContent).toContain("队友记录");
-    expect(container.textContent).toContain("后台队友");
-    expect(container.textContent).toContain("远程队友");
+    expect(container.textContent).toContain("Transcript");
+    expect(container.textContent).toContain("Background");
+    expect(container.textContent).toContain("Remote");
     expect(container.textContent).toContain("交接");
     expect(container.textContent).toContain("评审");
     expect(container.textContent).toContain("决策：pending_review");
@@ -427,7 +427,7 @@ describe("TeamWorkbenchSummaryPanel", () => {
     expect(container.textContent).toContain("清单 2");
     expect(container.textContent).toContain("修复：复核权限确认");
     expect(container.textContent).toContain("回归项：npm run test:contracts");
-    expect(container.textContent).toContain("团队策略");
+    expect(container.textContent).toContain("Policy");
     expect(container.textContent).toContain("Review 请求");
     expect(container.textContent).toContain("Agent 交接");
 
@@ -500,6 +500,48 @@ describe("TeamWorkbenchSummaryPanel", () => {
     expect(container.textContent).toContain("child-1:completed");
     expect(container.textContent).toContain("不把队友输出混进主");
     expect(container.textContent).toContain("主回复");
+  });
+
+  it("AgentUI Team Workbench projection surface 应按 locale 渲染", async () => {
+    await changeLimeLocale("en-US");
+    recordAgentUiProjectionEvents([
+      {
+        type: "task.changed",
+        sourceType: "team_control_projection",
+        sequence: 1,
+        sessionId: "session-team-locale",
+        taskId: "work-1",
+        workItemId: "work-1",
+        owner: "task",
+        scope: "task",
+        phase: "acting",
+        surface: "work_board",
+        persistence: "snapshot",
+        control: "assign",
+        runtimeEntity: "work_item",
+        payload: {
+          taskEvent: "assignment_changed",
+        },
+      },
+    ]);
+
+    const container = renderPanel({
+      currentSessionId: "session-team-locale",
+      childSubagentSessions: [],
+    });
+
+    expect(container.textContent).toContain("Team topology");
+    expect(container.textContent).toContain(
+      "Members, delegation, work board, and policy facts",
+    );
+    expect(container.textContent).toContain(
+      "Tasks, assignments, and work items",
+    );
+    expect(container.textContent).toContain("Acting");
+    expect(container.textContent).not.toContain("Team 拓扑");
+    expect(container.textContent).not.toContain(
+      "任务项、assignment 与 work item",
+    );
   });
 
   it("应把工作台 action route 结果显示为可见状态", () => {

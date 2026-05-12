@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import type { WorkspaceEnsureResult } from "@/lib/api/project";
 
 const projectApiMocks = vi.hoisted(() => ({
@@ -17,13 +18,6 @@ const projectApiMocks = vi.hoisted(() => ({
 const telemetryMocks = vi.hoisted(() => ({
   recordWorkspaceRepair: vi.fn(),
 }));
-const i18nMocks = vi.hoisted(() => ({
-  t: vi.fn((key: string, options?: { defaultValue?: string }) =>
-    key === "common.projects.rename.nameRequired"
-      ? "Project name required from i18n"
-      : (options?.defaultValue ?? key),
-  ),
-}));
 
 vi.mock("@/lib/api/project", () => ({
   createProject: projectApiMocks.createProject,
@@ -38,12 +32,6 @@ vi.mock("@/lib/api/project", () => ({
 
 vi.mock("@/lib/workspaceHealthTelemetry", () => ({
   recordWorkspaceRepair: telemetryMocks.recordWorkspaceRepair,
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: i18nMocks.t,
-  }),
 }));
 
 import { useProjects } from "./useProjects";
@@ -135,7 +123,8 @@ function mountHook(): HookHarness {
 }
 
 describe("useProjects", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await changeLimeLocale("en-US");
     (
       globalThis as typeof globalThis & {
         IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -145,8 +134,9 @@ describe("useProjects", () => {
     vi.clearAllMocks();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.useRealTimers();
+    await changeLimeLocale("zh-CN");
   });
 
   it("不应等待默认项目目录健康检查完成才暴露项目列表", async () => {
@@ -252,7 +242,7 @@ describe("useProjects", () => {
 
       await expect(
         harness.getValue().rename(defaultProject.id, "   "),
-      ).rejects.toThrow("Project name required from i18n");
+      ).rejects.toThrow("Project name cannot be empty");
       expect(projectApiMocks.updateProject).not.toHaveBeenCalled();
     } finally {
       harness.unmount();

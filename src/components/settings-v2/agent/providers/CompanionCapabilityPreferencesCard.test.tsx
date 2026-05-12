@@ -1,21 +1,19 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import settingsZhCN from "@/i18n/resources/zh-CN/settings.json";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 const {
   mockGetConfig,
   mockSaveConfig,
   mockGetProviders,
   mockSubscribeProviderDataChanged,
-  mockUseTranslation,
 } = vi.hoisted(() => {
   return {
     mockGetConfig: vi.fn(),
     mockSaveConfig: vi.fn(),
     mockGetProviders: vi.fn(),
     mockSubscribeProviderDataChanged: vi.fn(),
-    mockUseTranslation: vi.fn(),
   };
 });
 
@@ -33,10 +31,6 @@ vi.mock("@/lib/api/apiKeyProvider", () => ({
 vi.mock("@/lib/providerDataEvents", () => ({
   subscribeProviderDataChanged: (...args: unknown[]) =>
     mockSubscribeProviderDataChanged(...args),
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
 }));
 
 vi.mock("@/components/input-kit", () => ({
@@ -60,37 +54,6 @@ vi.mock("@/components/input-kit", () => ({
 }));
 
 import { CompanionCapabilityPreferencesCard } from "./CompanionCapabilityPreferencesCard";
-
-const settingsDictionary = settingsZhCN as Record<string, string>;
-
-function interpolateTemplate(
-  template: string,
-  values?: Record<string, unknown>,
-): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-    String(values?.[name] ?? ""),
-  );
-}
-
-function createTranslate(dictionary: Record<string, string>) {
-  return (key: string, options?: unknown) => {
-    if (typeof options === "string") {
-      return options;
-    }
-
-    if (options && typeof options === "object") {
-      const values = options as Record<string, unknown>;
-      const template =
-        dictionary[key] ||
-        (typeof values.defaultValue === "string" ? values.defaultValue : key);
-      return interpolateTemplate(template, values);
-    }
-
-    return dictionary[key] || key;
-  };
-}
-
-const translate = createTranslate(settingsDictionary);
 
 interface MountedCard {
   container: HTMLDivElement;
@@ -131,7 +94,8 @@ function findButton(container: HTMLElement, text: string) {
   return button as HTMLButtonElement;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  await changeLimeLocale("en-US");
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -140,9 +104,6 @@ beforeEach(() => {
 
   vi.useFakeTimers();
   vi.clearAllMocks();
-  mockUseTranslation.mockImplementation((_namespace?: string) => ({
-    t: translate,
-  }));
 
   mockGetConfig.mockResolvedValue({
     workspace_preferences: {
@@ -211,7 +172,7 @@ beforeEach(() => {
   mockSubscribeProviderDataChanged.mockReturnValue(vi.fn());
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mounted.length > 0) {
     const current = mounted.pop();
     if (!current) {
@@ -226,6 +187,7 @@ afterEach(() => {
 
   vi.useRealTimers();
   vi.clearAllMocks();
+  await changeLimeLocale("zh-CN");
 });
 
 describe("CompanionCapabilityPreferencesCard", () => {
@@ -233,13 +195,13 @@ describe("CompanionCapabilityPreferencesCard", () => {
     const container = renderCard();
     await flushEffects();
 
-    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
-    expect(container.textContent).toContain("桌宠能力偏好");
-    expect(container.textContent).toContain("桌宠通用模型");
-    expect(container.textContent).toContain("最近当前 provider/model");
+    expect(container.textContent).toContain("Companion Capability Preferences");
+    expect(container.textContent).toContain("Companion general model");
+    expect(container.textContent).toContain("latest current provider/model");
     expect(container.textContent).toContain(
       "[general] deepseek / deepseek-chat",
     );
+    expect(container.textContent).not.toContain("桌宠能力偏好");
     expect(container.textContent).not.toContain("桌宠语音播报");
     expect(
       container.querySelectorAll("[data-testid='companion-model-selector']"),
@@ -251,7 +213,7 @@ describe("CompanionCapabilityPreferencesCard", () => {
     await flushEffects();
 
     await act(async () => {
-      findButton(container, "恢复通用默认").click();
+      findButton(container, "Restore general defaults").click();
       await flushEffects();
     });
 
@@ -263,6 +225,8 @@ describe("CompanionCapabilityPreferencesCard", () => {
     expect(
       savedConfig.workspace_preferences.companion_defaults.tts,
     ).toBeUndefined();
-    expect(container.textContent).toContain("桌宠能力偏好已保存");
+    expect(container.textContent).toContain(
+      "Companion capability preferences saved",
+    );
   });
 });

@@ -305,142 +305,65 @@ export function useOemCloudAccess() {
   const runtime = resolveOemCloudRuntimeContext();
   const authCopy = useMemo(
     () => ({
-      unavailable: t("common.oemCloudAccess.auth.unavailable", {
-        defaultValue: "当前版本未配置云端登录入口。",
-      }),
-      googleSynced: t("common.oemCloudAccess.auth.googleSynced", {
-        defaultValue: "Google 登录成功，已同步云端目录。",
-      }),
-      cloudSynced: t("common.oemCloudAccess.auth.cloudSynced", {
-        defaultValue: "云端登录成功，已同步目录。",
-      }),
-      googleDesktopOpened: t("common.oemCloudAccess.auth.googleDesktopOpened", {
-        defaultValue:
-          "已打开系统浏览器，请完成 Google 授权；如果浏览器出现确认页，请继续完成，桌面端会自动同步登录结果。",
-      }),
-      userCenterOpened: t("common.oemCloudAccess.auth.userCenterOpened", {
-        defaultValue:
-          "已打开 Lime 云端登录页，请在浏览器完成授权，桌面端会自动同步登录结果。",
-      }),
-      openFailedFallback: t("common.oemCloudAccess.auth.openFailedFallback", {
-        defaultValue: "打开 Lime 云端登录页失败",
-      }),
-      syncFailedFallback: t("common.oemCloudAccess.auth.syncFailedFallback", {
-        defaultValue: "同步云端登录结果失败",
-      }),
-      browserPreopenTitle: t("common.oemCloudAccess.auth.browserPreopenTitle", {
-        defaultValue: "正在打开登录页...",
-      }),
-      browserPreopenBody: t("common.oemCloudAccess.auth.browserPreopenBody", {
-        defaultValue: "正在打开登录页，请稍候...",
-      }),
+      unavailable: t("common.oemCloudAccess.auth.unavailable"),
+      googleSynced: t("common.oemCloudAccess.auth.googleSynced"),
+      cloudSynced: t("common.oemCloudAccess.auth.cloudSynced"),
+      googleDesktopOpened: t("common.oemCloudAccess.auth.googleDesktopOpened"),
+      userCenterOpened: t("common.oemCloudAccess.auth.userCenterOpened"),
+      openFailedFallback: t("common.oemCloudAccess.auth.openFailedFallback"),
+      syncFailedFallback: t("common.oemCloudAccess.auth.syncFailedFallback"),
+      browserPreopenTitle: t("common.oemCloudAccess.auth.browserPreopenTitle"),
+      browserPreopenBody: t("common.oemCloudAccess.auth.browserPreopenBody"),
       systemBrowserOpenFailed: t(
         "common.oemCloudAccess.auth.systemBrowserOpenFailed",
-        {
-          defaultValue: "系统浏览器打开失败。",
-        },
       ),
       systemBrowserOpenFailedWithMessage: (message: string) =>
         t("common.oemCloudAccess.auth.systemBrowserOpenFailedWithMessage", {
           message,
-          defaultValue: "系统浏览器打开失败：{{message}}",
         }),
       unsupportedExternalBrowser: t(
         "common.oemCloudAccess.auth.unsupportedExternalBrowser",
-        {
-          defaultValue: "当前环境不支持打开外部浏览器",
-        },
       ),
-      popupBlocked: t("common.oemCloudAccess.auth.popupBlocked", {
-        defaultValue:
-          "登录页没有被浏览器打开，可能被弹窗拦截。请点击“重新打开登录页”，或复制登录链接到浏览器打开。",
-      }),
+      popupBlocked: t("common.oemCloudAccess.auth.popupBlocked"),
     }),
     [t],
   );
   const paymentCopy = useMemo(
     () => ({
-      waitingForCallback: t(
-        "common.oemCloudAccess.payment.waitingForCallback",
-        {
-          defaultValue: "已打开支付页，正在等待支付渠道回调。",
-        },
-      ),
+      waitingForCallback: t("common.oemCloudAccess.payment.waitingForCallback"),
       confirmedPlanWatcher: t(
         "common.oemCloudAccess.payment.confirmedPlanWatcher",
-        {
-          defaultValue: "支付已确认，套餐权益已同步到客户端。",
-        },
       ),
       confirmedCreditWatcher: t(
         "common.oemCloudAccess.payment.confirmedCreditWatcher",
-        {
-          defaultValue: "支付已确认，Token 积分余额已同步到客户端。",
-        },
       ),
-      confirmedPlanInfo: t("common.oemCloudAccess.payment.confirmedPlanInfo", {
-        defaultValue: "支付已确认，套餐权益已同步，可以继续使用云端模型。",
-      }),
+      confirmedPlanInfo: t("common.oemCloudAccess.payment.confirmedPlanInfo"),
       confirmedCreditInfo: t(
         "common.oemCloudAccess.payment.confirmedCreditInfo",
-        {
-          defaultValue: "支付已确认，Token 积分余额已同步。",
-        },
       ),
       terminalUnpaidWatcher: t(
         "common.oemCloudAccess.payment.terminalUnpaidWatcher",
-        {
-          defaultValue: "支付渠道返回未完成终态，请重新发起支付或刷新状态。",
-        },
       ),
       terminalUnpaidError: t(
         "common.oemCloudAccess.payment.terminalUnpaidError",
-        {
-          defaultValue: "支付未完成，请重新发起支付或刷新云端状态。",
-        },
       ),
-      timeoutWatcher: t("common.oemCloudAccess.payment.timeoutWatcher", {
-        defaultValue: "仍未收到支付回调，请稍后手动刷新云端状态。",
-      }),
-      timeoutInfo: t("common.oemCloudAccess.payment.timeoutInfo", {
-        defaultValue: "仍在等待支付渠道回调，请稍后点击“刷新云端状态”。",
-      }),
+      timeoutWatcher: t("common.oemCloudAccess.payment.timeoutWatcher"),
+      timeoutInfo: t("common.oemCloudAccess.payment.timeoutInfo"),
       confirmFailedFallback: t(
         "common.oemCloudAccess.payment.confirmFailedFallback",
-        {
-          defaultValue: "确认支付结果失败",
-        },
       ),
-      returnSyncing: t("common.oemCloudAccess.payment.returnSyncing", {
-        defaultValue: "已回到 Lime，正在同步支付状态、权益与账本。",
-      }),
-      returnSynced: t("common.oemCloudAccess.payment.returnSynced", {
-        defaultValue: "已同步最新云端权益、积分余额与账本状态。",
-      }),
+      returnSyncing: t("common.oemCloudAccess.payment.returnSyncing"),
+      returnSynced: t("common.oemCloudAccess.payment.returnSynced"),
       returnUnpaidWatcher: t(
         "common.oemCloudAccess.payment.returnUnpaidWatcher",
-        {
-          defaultValue:
-            "支付页已返回未完成状态，请重新发起支付或刷新云端状态。",
-        },
       ),
-      returnUnpaidInfo: t("common.oemCloudAccess.payment.returnUnpaidInfo", {
-        defaultValue: "支付页已返回未完成状态，云端状态已同步。",
-      }),
+      returnUnpaidInfo: t("common.oemCloudAccess.payment.returnUnpaidInfo"),
       returnSyncFailedFallback: t(
         "common.oemCloudAccess.payment.returnSyncFailedFallback",
-        {
-          defaultValue: "同步支付回跳结果失败",
-        },
       ),
-      planOrderTitle: t("common.oemCloudAccess.payment.planOrderTitle", {
-        defaultValue: "套餐订单",
-      }),
+      planOrderTitle: t("common.oemCloudAccess.payment.planOrderTitle"),
       creditTopupOrderTitle: t(
         "common.oemCloudAccess.payment.creditTopupOrderTitle",
-        {
-          defaultValue: "充值订单",
-        },
       ),
     }),
     [t],
@@ -450,204 +373,102 @@ export function useOemCloudAccess() {
       session: {
         syncActivationFailedFallback: t(
           "common.oemCloudAccess.session.syncActivationFailedFallback",
-          {
-            defaultValue: "同步云端激活状态失败",
-          },
         ),
-        expiredRelogin: t("common.oemCloudAccess.session.expiredRelogin", {
-          defaultValue: "云端会话已过期，请重新登录。",
-        }),
-        invalidRelogin: t("common.oemCloudAccess.session.invalidRelogin", {
-          defaultValue: "云端会话已失效，请重新登录。",
-        }),
+        expiredRelogin: t("common.oemCloudAccess.session.expiredRelogin"),
+        invalidRelogin: t("common.oemCloudAccess.session.invalidRelogin"),
         restoreFailedFallback: t(
           "common.oemCloudAccess.session.restoreFailedFallback",
-          {
-            defaultValue: "恢复云端会话失败",
-          },
         ),
-        refreshSuccess: t("common.oemCloudAccess.session.refreshSuccess", {
-          defaultValue: "已同步最新云端会话、服务目录与服务技能快照。",
-        }),
+        refreshSuccess: t("common.oemCloudAccess.session.refreshSuccess"),
         refreshFailedFallback: t(
           "common.oemCloudAccess.session.refreshFailedFallback",
-          {
-            defaultValue: "刷新云端状态失败",
-          },
         ),
-        localCleared: t("common.oemCloudAccess.session.localCleared", {
-          defaultValue: "已清理本地云端会话。",
-        }),
-        logoutSuccess: t("common.oemCloudAccess.session.logoutSuccess", {
-          defaultValue: "已退出云端会话。",
-        }),
-        logoutFallback: t("common.oemCloudAccess.session.logoutFallback", {
-          defaultValue: "本地会话已清理，但服务端注销未确认。",
-        }),
+        localCleared: t("common.oemCloudAccess.session.localCleared"),
+        logoutSuccess: t("common.oemCloudAccess.session.logoutSuccess"),
+        logoutFallback: t("common.oemCloudAccess.session.logoutFallback"),
         logoutFailedFallback: t(
           "common.oemCloudAccess.session.logoutFailedFallback",
-          {
-            defaultValue: "服务端注销失败",
-          },
         ),
       },
       emailCode: {
         identifierRequired: t(
           "common.oemCloudAccess.emailCode.identifierRequired",
-          {
-            defaultValue: "请输入邮箱或账号后再发送验证码。",
-          },
         ),
         sent: (maskedEmail: string, minutes: number) =>
           t("common.oemCloudAccess.emailCode.sent", {
             maskedEmail,
             minutes,
-            defaultValue:
-              "验证码已发送至 {{maskedEmail}}，有效期约 {{minutes}} 分钟。",
           }),
         sendFailedFallback: t(
           "common.oemCloudAccess.emailCode.sendFailedFallback",
-          {
-            defaultValue: "发送验证码失败",
-          },
         ),
         loginFieldsRequired: t(
           "common.oemCloudAccess.emailCode.loginFieldsRequired",
-          {
-            defaultValue: "请先填写邮箱/账号和验证码。",
-          },
         ),
-        loginSuccess: t("common.oemCloudAccess.emailCode.loginSuccess", {
-          defaultValue: "验证码登录成功，已同步云端目录。",
-        }),
+        loginSuccess: t("common.oemCloudAccess.emailCode.loginSuccess"),
         loginFailedFallback: t(
           "common.oemCloudAccess.emailCode.loginFailedFallback",
-          {
-            defaultValue: "验证码登录失败",
-          },
         ),
       },
       password: {
-        fieldsRequired: t("common.oemCloudAccess.password.fieldsRequired", {
-          defaultValue: "请输入账号和密码。",
-        }),
-        loginSuccess: t("common.oemCloudAccess.password.loginSuccess", {
-          defaultValue: "账号登录成功，已同步云端目录。",
-        }),
+        fieldsRequired: t("common.oemCloudAccess.password.fieldsRequired"),
+        loginSuccess: t("common.oemCloudAccess.password.loginSuccess"),
         loginFailedFallback: t(
           "common.oemCloudAccess.password.loginFailedFallback",
-          {
-            defaultValue: "账号登录失败",
-          },
         ),
       },
       provider: {
         loadDetailFailedFallback: t(
           "common.oemCloudAccess.provider.loadDetailFailedFallback",
-          {
-            defaultValue: "加载云服务详情失败",
-          },
         ),
         setDefaultSuccess: (offerName: string) =>
           t("common.oemCloudAccess.provider.setDefaultSuccess", {
             offerName,
-            defaultValue: "已将 {{offerName}} 设为默认云端服务来源。",
           }),
         setDefaultFailedFallback: t(
           "common.oemCloudAccess.provider.setDefaultFailedFallback",
-          {
-            defaultValue: "设置默认服务商失败",
-          },
         ),
       },
       apiKey: {
-        defaultName: t("common.oemCloudAccess.apiKey.defaultName", {
-          defaultValue: "Lime Desktop API Key",
-        }),
-        createSuccess: t("common.oemCloudAccess.apiKey.createSuccess", {
-          defaultValue: "已创建 Lime API Key，明文只会在当前页面显示一次。",
-        }),
+        defaultName: t("common.oemCloudAccess.apiKey.defaultName"),
+        createSuccess: t("common.oemCloudAccess.apiKey.createSuccess"),
         createFailedFallback: t(
           "common.oemCloudAccess.apiKey.createFailedFallback",
-          {
-            defaultValue: "创建 API Key 失败",
-          },
         ),
-        rotateSuccess: t("common.oemCloudAccess.apiKey.rotateSuccess", {
-          defaultValue: "已轮换 Lime API Key，旧 Key 已撤销。",
-        }),
+        rotateSuccess: t("common.oemCloudAccess.apiKey.rotateSuccess"),
         rotateFailedFallback: t(
           "common.oemCloudAccess.apiKey.rotateFailedFallback",
-          {
-            defaultValue: "轮换 API Key 失败",
-          },
         ),
-        revokeSuccess: t("common.oemCloudAccess.apiKey.revokeSuccess", {
-          defaultValue: "已撤销 Lime API Key。",
-        }),
+        revokeSuccess: t("common.oemCloudAccess.apiKey.revokeSuccess"),
         revokeFailedFallback: t(
           "common.oemCloudAccess.apiKey.revokeFailedFallback",
-          {
-            defaultValue: "撤销 API Key 失败",
-          },
         ),
       },
       labels: {
-        unknown: t("common.oemCloudAccess.label.unknown", {
-          defaultValue: "未知",
-        }),
-        notSet: t("common.oemCloudAccess.label.notSet", {
-          defaultValue: "未设定",
-        }),
+        unknown: t("common.oemCloudAccess.label.unknown"),
+        notSet: t("common.oemCloudAccess.label.notSet"),
         localProviderSummary: t(
           "common.oemCloudAccess.label.localProviderSummary",
-          {
-            defaultValue: "本地开发者 Provider",
-          },
         ),
-        cloudService: t("common.oemCloudAccess.label.cloudService", {
-          defaultValue: "云端服务",
-        }),
+        cloudService: t("common.oemCloudAccess.label.cloudService"),
         accessMode: {
-          session: t("common.oemCloudAccess.label.accessMode.session", {
-            defaultValue: "登录会话",
-          }),
-          hubToken: t("common.oemCloudAccess.label.accessMode.hubToken", {
-            defaultValue: "平台令牌",
-          }),
-          apiKey: t("common.oemCloudAccess.label.accessMode.apiKey", {
-            defaultValue: "API Key",
-          }),
+          session: t("common.oemCloudAccess.label.accessMode.session"),
+          hubToken: t("common.oemCloudAccess.label.accessMode.hubToken"),
+          apiKey: t("common.oemCloudAccess.label.accessMode.apiKey"),
         },
         configMode: {
-          managed: t("common.oemCloudAccess.label.configMode.managed", {
-            defaultValue: "托管模式",
-          }),
-          hybrid: t("common.oemCloudAccess.label.configMode.hybrid", {
-            defaultValue: "混合模式",
-          }),
-          developer: t("common.oemCloudAccess.label.configMode.developer", {
-            defaultValue: "开发者模式",
-          }),
+          managed: t("common.oemCloudAccess.label.configMode.managed"),
+          hybrid: t("common.oemCloudAccess.label.configMode.hybrid"),
+          developer: t("common.oemCloudAccess.label.configMode.developer"),
         },
         modelsSource: {
-          hubCatalog: t("common.oemCloudAccess.label.modelsSource.hubCatalog", {
-            defaultValue: "云端目录",
-          }),
-          manual: t("common.oemCloudAccess.label.modelsSource.manual", {
-            defaultValue: "手动目录",
-          }),
+          hubCatalog: t("common.oemCloudAccess.label.modelsSource.hubCatalog"),
+          manual: t("common.oemCloudAccess.label.modelsSource.manual"),
         },
         developerAccess: {
-          disabled: t("common.oemCloudAccess.label.developerAccess.disabled", {
-            defaultValue: "已关闭",
-          }),
-          visible: t("common.oemCloudAccess.label.developerAccess.visible", {
-            defaultValue: "可见",
-          }),
-          hidden: t("common.oemCloudAccess.label.developerAccess.hidden", {
-            defaultValue: "已隐藏",
-          }),
+          disabled: t("common.oemCloudAccess.label.developerAccess.disabled"),
+          visible: t("common.oemCloudAccess.label.developerAccess.visible"),
+          hidden: t("common.oemCloudAccess.label.developerAccess.hidden"),
         },
       },
     }),

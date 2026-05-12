@@ -80,7 +80,7 @@ function ReviewFeedbackProjectionBanner({
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-          {t("reviewFeedback.badge", "围绕最近判断")}
+          {t("reviewFeedback.badge")}
         </span>
         {projection.suggestedTaskTitles.length > 0 ? (
           <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600">
@@ -91,7 +91,6 @@ function ReviewFeedbackProjectionBanner({
       <div className="mt-2 text-sm font-medium leading-6 text-slate-900">
         {formatReviewFeedbackTemplate(
           t("reviewFeedback.title", {
-            defaultValue: "最近判断已更新：{{title}}",
             title: projection.signal.title,
           }),
           { title: projection.signal.title },
@@ -117,17 +116,13 @@ function ReviewFeedbackProjectionBanner({
           >
             {formatReviewFeedbackTemplate(
               t("reviewFeedback.action", {
-                defaultValue: "继续去「{{title}}」",
                 title: primarySuggestedTask.title,
               }),
               { title: primarySuggestedTask.title },
             )}
           </Button>
           <span className="text-xs leading-5 text-slate-500">
-            {t(
-              "reviewFeedback.helper.sceneApp",
-              "会继续带着当前结果基线，不用重新整理一遍。",
-            )}
+            {t("reviewFeedback.helper.sceneApp")}
           </span>
         </div>
       ) : null}
@@ -286,13 +281,17 @@ export function SceneAppExecutionSummaryCard({
   const deliveryContractLabel =
     summary.projectPackPlan?.packKindLabel ?? summary.deliveryContractLabel;
   const deliveryDestinationLabel =
-    summary.projectPackPlan?.viewerLabel || deliveryContractLabel || "待补齐";
+    summary.projectPackPlan?.viewerLabel ||
+    deliveryContractLabel ||
+    t("sceneAppExecutionSummary.value.pending");
   const scorecardAggregate = summary.scorecardAggregate ?? null;
   const scorecardSummaryLabel =
     summary.scorecardProfileRef ||
     (summary.scorecardMetricKeys.length > 0
-      ? `${summary.scorecardMetricKeys.length} 项判断指标`
-      : "待补齐");
+      ? t("sceneAppExecutionSummary.scorecard.metricCount", {
+          count: summary.scorecardMetricKeys.length,
+        })
+      : t("sceneAppExecutionSummary.value.pending"));
   const hasFollowupSection = Boolean(
     onReviewCurrentProject ||
     onSaveAsInspiration ||
@@ -361,7 +360,7 @@ export function SceneAppExecutionSummaryCard({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="text-[11px] font-medium tracking-[0.08em] text-sky-700">
-              做法执行摘要
+              {t("sceneAppExecutionSummary.title")}
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <h3 className="text-sm font-semibold text-slate-900">
@@ -390,26 +389,36 @@ export function SceneAppExecutionSummaryCard({
 
         <div className="rounded-[20px] border border-sky-200 bg-sky-50/70 p-4">
           <div className="text-xs font-medium text-slate-500">
-            进入生成前已编译
+            {t("sceneAppExecutionSummary.planning.compiled")}
           </div>
           <p className="mt-2 text-sm leading-6 text-slate-700">
             {summary.planningSummary}
           </p>
           <div className="mt-3 grid gap-2 text-sm text-slate-700 md:grid-cols-2 xl:grid-cols-4">
             <div>
-              <span className="font-medium text-slate-900">执行主链：</span>
+              <span className="font-medium text-slate-900">
+                {t("sceneAppExecutionSummary.overview.executionChain")}
+              </span>
               {summary.executionChainLabel}
             </div>
             <div data-testid="sceneapp-execution-summary-reference-count">
-              <span className="font-medium text-slate-900">当前带入：</span>
-              {summary.referenceCount} 条参考对象
+              <span className="font-medium text-slate-900">
+                {t("sceneAppExecutionSummary.overview.referenceLabel")}
+              </span>
+              {t("sceneAppExecutionSummary.overview.referenceCount", {
+                count: summary.referenceCount,
+              })}
             </div>
             <div>
-              <span className="font-medium text-slate-900">结果去向：</span>
+              <span className="font-medium text-slate-900">
+                {t("sceneAppExecutionSummary.overview.destination")}
+              </span>
               {deliveryDestinationLabel}
             </div>
             <div>
-              <span className="font-medium text-slate-900">判断口径：</span>
+              <span className="font-medium text-slate-900">
+                {t("sceneAppExecutionSummary.overview.scorecard")}
+              </span>
               {scorecardSummaryLabel}
             </div>
           </div>
@@ -423,7 +432,7 @@ export function SceneAppExecutionSummaryCard({
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <div className="text-xs font-medium text-slate-500">
-                  运行态回流
+                  {t("sceneAppExecutionSummary.runtime.title")}
                 </div>
                 <p className="mt-2 text-sm leading-6 text-slate-700">
                   {summary.runtimeBackflow.summary}
@@ -437,25 +446,35 @@ export function SceneAppExecutionSummaryCard({
             </div>
             <div className="mt-3 grid gap-2 text-sm text-slate-700 md:grid-cols-2 xl:grid-cols-4">
               <div>
-                <span className="font-medium text-slate-900">最近运行：</span>
+                <span className="font-medium text-slate-900">
+                  {t("sceneAppExecutionSummary.runtime.recentRun")}
+                </span>
                 {summary.runtimeBackflow.sourceLabel}
               </div>
               <div>
-                <span className="font-medium text-slate-900">交付完成：</span>
+                <span className="font-medium text-slate-900">
+                  {t("sceneAppExecutionSummary.runtime.delivery")}
+                </span>
                 {summary.runtimeBackflow.deliveryCompletionLabel}
               </div>
               <div>
-                <span className="font-medium text-slate-900">证据链：</span>
+                <span className="font-medium text-slate-900">
+                  {t("sceneAppExecutionSummary.runtime.evidence")}
+                </span>
                 {summary.runtimeBackflow.evidenceSourceLabel}
               </div>
               <div>
-                <span className="font-medium text-slate-900">运行时间：</span>
+                <span className="font-medium text-slate-900">
+                  {t("sceneAppExecutionSummary.runtime.time")}
+                </span>
                 {summary.runtimeBackflow.finishedAtLabel ||
                   summary.runtimeBackflow.startedAtLabel}
               </div>
             </div>
             <div className="mt-3 text-sm leading-6 text-slate-700">
-              <span className="font-medium text-slate-900">下一步：</span>
+              <span className="font-medium text-slate-900">
+                {t("sceneAppExecutionSummary.runtime.next")}
+              </span>
               {summary.runtimeBackflow.nextAction}
             </div>
             {summary.runtimeBackflow.scorecardActionLabel ||
@@ -476,7 +495,7 @@ export function SceneAppExecutionSummaryCard({
             {summary.runtimeBackflow.deliveryCompletedParts.length ? (
               <div className="mt-3">
                 <div className="text-xs font-medium text-slate-500">
-                  已完成部件
+                  {t("sceneAppExecutionSummary.runtime.completedParts")}
                 </div>
                 {renderPartChips(
                   summary.runtimeBackflow.deliveryCompletedParts,
@@ -488,7 +507,7 @@ export function SceneAppExecutionSummaryCard({
             {summary.runtimeBackflow.deliveryMissingParts.length ? (
               <div className="mt-3">
                 <div className="text-xs font-medium text-slate-500">
-                  待补部件
+                  {t("sceneAppExecutionSummary.runtime.missingParts")}
                 </div>
                 {renderPartChips(
                   summary.runtimeBackflow.deliveryMissingParts,
@@ -500,7 +519,7 @@ export function SceneAppExecutionSummaryCard({
             {summary.runtimeBackflow.observedFailureSignals.length ? (
               <div className="mt-3">
                 <div className="text-xs font-medium text-slate-500">
-                  已观测信号
+                  {t("sceneAppExecutionSummary.runtime.observedSignals")}
                 </div>
                 {renderPartChips(
                   summary.runtimeBackflow.observedFailureSignals,
@@ -512,7 +531,7 @@ export function SceneAppExecutionSummaryCard({
             {summary.runtimeBackflow.governanceArtifacts.length ? (
               <div className="mt-3">
                 <div className="text-xs font-medium text-slate-500">
-                  结果材料
+                  {t("sceneAppExecutionSummary.runtime.governanceArtifacts")}
                 </div>
                 {renderPartChips(
                   summary.runtimeBackflow.governanceArtifacts,
@@ -527,10 +546,10 @@ export function SceneAppExecutionSummaryCard({
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)]">
           <section className="rounded-[20px] border border-slate-200 bg-slate-50/70 p-4">
             <div className="text-sm font-medium text-slate-900">
-              当前带入对象
+              {t("sceneAppExecutionSummary.context.title")}
             </div>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              这一轮开工前，参考、风格、偏好和项目结果已经被压成同一份可继续复用的准备基线。
+              {t("sceneAppExecutionSummary.context.description")}
             </p>
             {renderPartChips(
               summary.activeLayers,
@@ -549,24 +568,30 @@ export function SceneAppExecutionSummaryCard({
                 ))}
                 {summary.referenceItems.length > 4 ? (
                   <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500">
-                    +{summary.referenceItems.length - 4} 条参考
+                    {t("sceneAppExecutionSummary.context.moreReferences", {
+                      count: summary.referenceItems.length - 4,
+                    })}
                   </span>
                 ) : null}
               </div>
             ) : (
               <p className="mt-3 text-sm leading-6 text-slate-500">
-                当前没有显式带入参考对象，生成将主要依赖当前输入与项目上下文。
+                {t("sceneAppExecutionSummary.context.emptyReferences")}
               </p>
             )}
             {summary.tasteSummary ? (
               <div className="mt-3 text-sm leading-6 text-slate-700">
-                <span className="font-medium text-slate-900">风格摘要：</span>
+                <span className="font-medium text-slate-900">
+                  {t("sceneAppExecutionSummary.context.taste")}
+                </span>
                 {summary.tasteSummary}
               </div>
             ) : null}
             {summary.feedbackSummary ? (
               <div className="mt-2 text-sm leading-6 text-slate-700">
-                <span className="font-medium text-slate-900">最近反馈：</span>
+                <span className="font-medium text-slate-900">
+                  {t("sceneAppExecutionSummary.context.feedback")}
+                </span>
                 {summary.feedbackSummary}
               </div>
             ) : null}
@@ -583,27 +608,27 @@ export function SceneAppExecutionSummaryCard({
             data-testid="sceneapp-execution-summary-project-pack"
           >
             <div className="text-sm font-medium text-slate-900">
-              结果去向与交付
+              {t("sceneAppExecutionSummary.projectPack.title")}
             </div>
             {summary.projectPackPlan ? (
               <>
                 <div className="mt-3 space-y-2 text-sm leading-6 text-slate-700">
                   <div>
                     <span className="font-medium text-slate-900">
-                      结果形态：
+                      {t("sceneAppExecutionSummary.projectPack.kind")}
                     </span>
                     {summary.projectPackPlan.packKindLabel}
                   </div>
                   <div>
                     <span className="font-medium text-slate-900">
-                      完成判断：
+                      {t("sceneAppExecutionSummary.projectPack.completion")}
                     </span>
                     {summary.projectPackPlan.completionStrategyLabel}
                   </div>
                   {summary.projectPackPlan.primaryPart ? (
                     <div>
                       <span className="font-medium text-slate-900">
-                        默认主结果：
+                        {t("sceneAppExecutionSummary.projectPack.primary")}
                       </span>
                       {summary.projectPackPlan.primaryPart}
                     </div>
@@ -611,7 +636,7 @@ export function SceneAppExecutionSummaryCard({
                   {summary.projectPackPlan.viewerLabel ? (
                     <div>
                       <span className="font-medium text-slate-900">
-                        查看入口：
+                        {t("sceneAppExecutionSummary.projectPack.viewer")}
                       </span>
                       {summary.projectPackPlan.viewerLabel}
                     </div>
@@ -636,7 +661,7 @@ export function SceneAppExecutionSummaryCard({
               </>
             ) : (
               <p className="mt-3 text-sm leading-6 text-slate-500">
-                当前这套做法还没有明确结果去向，后续需要继续补齐。
+                {t("sceneAppExecutionSummary.projectPack.empty")}
               </p>
             )}
           </section>
@@ -646,10 +671,10 @@ export function SceneAppExecutionSummaryCard({
             data-testid="sceneapp-execution-summary-scorecard"
           >
             <div className="text-sm font-medium text-slate-900">
-              这轮怎么判断
+              {t("sceneAppExecutionSummary.scorecard.title")}
             </div>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              这里保留继续复核、放量或回退时最关键的判断线索，不把经营判断藏在后台。
+              {t("sceneAppExecutionSummary.scorecard.description")}
             </p>
             {scorecardAggregate ? (
               <div
@@ -700,7 +725,9 @@ export function SceneAppExecutionSummaryCard({
             ) : null}
             {summary.scorecardProfileRef ? (
               <div className="mt-3 text-sm leading-6 text-slate-700">
-                <span className="font-medium text-slate-900">判断基线：</span>
+                <span className="font-medium text-slate-900">
+                  {t("sceneAppExecutionSummary.scorecard.baseline")}
+                </span>
                 {summary.scorecardProfileRef}
               </div>
             ) : null}
@@ -718,9 +745,9 @@ export function SceneAppExecutionSummaryCard({
         </div>
 
         <SceneAppProjectPackRuntimePanel
-          title="最近可消费结果"
-          description="生成直接回看最近一轮可继续编辑、复核或发布的结果样本，不再只停留在摘要说明。"
-          emptyMessage="当前还没有可直接打开的结果样本，先继续跑出一轮带真实结果文件回流的结果包。"
+          title={t("sceneAppExecutionSummary.runtimePack.title")}
+          description={t("sceneAppExecutionSummary.runtimePack.description")}
+          emptyMessage={t("sceneAppExecutionSummary.runtimePack.empty")}
           testIdPrefix="sceneapp-execution-summary"
           className="border-slate-200 bg-slate-50/70"
           runDetailView={latestPackResultDetailView}
@@ -734,9 +761,11 @@ export function SceneAppExecutionSummaryCard({
             className="rounded-[18px] border border-slate-200 bg-white px-4 py-4"
             data-testid="sceneapp-execution-summary-followup-actions"
           >
-            <div className="text-xs font-medium text-slate-500">继续动作</div>
+            <div className="text-xs font-medium text-slate-500">
+              {t("sceneAppExecutionSummary.followup.title")}
+            </div>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              如果要补这轮信息、看结果判断或继续人工复核，直接回到同一套做法继续。
+              {t("sceneAppExecutionSummary.followup.description")}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {onReviewCurrentProject ? (
@@ -746,7 +775,7 @@ export function SceneAppExecutionSummaryCard({
                   data-testid="sceneapp-execution-summary-review-current-project"
                   onClick={onReviewCurrentProject}
                 >
-                  继续这轮结果
+                  {t("sceneAppExecutionSummary.followup.action.reviewCurrent")}
                 </Button>
               ) : null}
               {onSaveAsInspiration ? (
@@ -762,7 +791,13 @@ export function SceneAppExecutionSummaryCard({
                   }
                   onClick={onSaveAsInspiration}
                 >
-                  {savedAsInspiration ? "已收进灵感库" : "保存到灵感库"}
+                  {savedAsInspiration
+                    ? t(
+                        "sceneAppExecutionSummary.followup.action.inspirationSaved",
+                      )
+                    : t(
+                        "sceneAppExecutionSummary.followup.action.saveInspiration",
+                      )}
                 </Button>
               ) : null}
               {onSaveAsSkill ? (
@@ -772,7 +807,7 @@ export function SceneAppExecutionSummaryCard({
                   data-testid="sceneapp-execution-summary-save-as-skill"
                   onClick={onSaveAsSkill}
                 >
-                  沉淀为做法
+                  {t("sceneAppExecutionSummary.followup.action.saveAsSkill")}
                 </Button>
               ) : null}
               {onOpenSceneAppDetail ? (
@@ -782,7 +817,7 @@ export function SceneAppExecutionSummaryCard({
                   data-testid="sceneapp-execution-summary-open-detail"
                   onClick={onOpenSceneAppDetail}
                 >
-                  回补这轮信息
+                  {t("sceneAppExecutionSummary.followup.action.openDetail")}
                 </Button>
               ) : null}
               {onOpenSceneAppGovernance ? (
@@ -792,7 +827,7 @@ export function SceneAppExecutionSummaryCard({
                   data-testid="sceneapp-execution-summary-open-governance"
                   onClick={onOpenSceneAppGovernance}
                 >
-                  看最近结果
+                  {t("sceneAppExecutionSummary.followup.action.openGovernance")}
                 </Button>
               ) : null}
               {humanReviewAvailable ? (
@@ -802,7 +837,11 @@ export function SceneAppExecutionSummaryCard({
                   data-testid="sceneapp-execution-summary-open-human-review"
                   onClick={onOpenHumanReview}
                 >
-                  {humanReviewLoading ? "准备人工复核…" : "填写人工复核"}
+                  {humanReviewLoading
+                    ? t(
+                        "sceneAppExecutionSummary.followup.action.humanReviewLoading",
+                      )
+                    : t("sceneAppExecutionSummary.followup.action.humanReview")}
                 </Button>
               ) : null}
             </div>
@@ -812,7 +851,7 @@ export function SceneAppExecutionSummaryCard({
                   className="text-xs leading-5 text-emerald-700"
                   data-testid="sceneapp-execution-summary-saved-inspiration-hint"
                 >
-                  这轮结果已进入灵感库，下一轮推荐会继续带上它。
+                  {t("sceneAppExecutionSummary.followup.savedHint")}
                 </p>
                 {onOpenInspirationLibrary ? (
                   <Button
@@ -823,20 +862,22 @@ export function SceneAppExecutionSummaryCard({
                     data-testid="sceneapp-execution-summary-open-inspiration-library"
                     onClick={onOpenInspirationLibrary}
                   >
-                    去灵感库继续
+                    {t(
+                      "sceneAppExecutionSummary.followup.action.openInspiration",
+                    )}
                   </Button>
                 ) : null}
               </div>
             ) : null}
             {latestPackResultUsesFallback ? (
               <p className="mt-3 text-xs leading-5 text-slate-500">
-                当前主运行还在继续，最近结果会优先定位到最近一轮已交付样本，方便直接延续结果消费与下一步判断。
+                {t("sceneAppExecutionSummary.followup.fallbackNotice")}
               </p>
             ) : null}
             {humanReviewAvailable && quickReviewActions.length ? (
               <div className="mt-4">
                 <div className="text-xs font-medium text-slate-500">
-                  轻量判断
+                  {t("sceneAppExecutionSummary.quickReview.title")}
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {quickReviewActions.map((action) => (
@@ -866,10 +907,10 @@ export function SceneAppExecutionSummaryCard({
                 data-testid="sceneapp-execution-summary-orchestration"
               >
                 <div className="text-xs font-medium text-slate-500">
-                  结果后的下一步
+                  {t("sceneAppExecutionSummary.orchestration.title")}
                 </div>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  同一轮结果现在可以直接继续看结果、补结果材料或恢复到对应入口，不再只是回页面找下一步。
+                  {t("sceneAppExecutionSummary.orchestration.description")}
                 </p>
 
                 {followupDestinations.length ? (
@@ -913,7 +954,7 @@ export function SceneAppExecutionSummaryCard({
                 latestPackResultDetailView.entryAction ? (
                   <div className="mt-4">
                     <div className="text-xs font-medium text-slate-500">
-                      推荐动作
+                      {t("sceneAppExecutionSummary.orchestration.recommended")}
                     </div>
                     <div className="mt-2 grid gap-3 xl:grid-cols-2">
                       {latestPackResultDetailView.governanceActionEntries.map(
@@ -930,7 +971,10 @@ export function SceneAppExecutionSummaryCard({
                                 {entry.label}
                               </span>
                               <span className="rounded-full border border-lime-200 bg-white px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em] text-lime-700">
-                                打开 {entry.primaryArtifactLabel}
+                                {t(
+                                  "sceneAppExecutionSummary.orchestration.openArtifact",
+                                  { label: entry.primaryArtifactLabel },
+                                )}
                               </span>
                             </div>
                             <div className="mt-2 text-xs leading-5 text-slate-600">
@@ -966,7 +1010,7 @@ export function SceneAppExecutionSummaryCard({
                 {promptActions.length ? (
                   <div className="mt-4">
                     <div className="text-xs font-medium text-slate-500">
-                      同聊推进
+                      {t("sceneAppExecutionSummary.orchestration.chat")}
                     </div>
                     <div className="mt-2 grid gap-3 xl:grid-cols-2">
                       {promptActions.map((action) => {
@@ -988,7 +1032,9 @@ export function SceneAppExecutionSummaryCard({
                               </span>
                               {action.disabledReason ? (
                                 <span className="rounded-full border border-amber-200 bg-white px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em] text-amber-700">
-                                  需先处理前置项
+                                  {t(
+                                    "sceneAppExecutionSummary.orchestration.blockedBadge",
+                                  )}
                                 </span>
                               ) : null}
                             </div>
@@ -997,7 +1043,10 @@ export function SceneAppExecutionSummaryCard({
                             </div>
                             {action.disabledReason ? (
                               <div className="mt-2 text-[11px] leading-5 text-amber-700">
-                                当前阻塞：{action.disabledReason}
+                                {t(
+                                  "sceneAppExecutionSummary.orchestration.blockedReason",
+                                  { reason: action.disabledReason },
+                                )}
                               </div>
                             ) : null}
                           </button>
@@ -1013,10 +1062,10 @@ export function SceneAppExecutionSummaryCard({
                     data-testid="sceneapp-execution-summary-content-posts"
                   >
                     <div className="text-xs font-medium text-slate-500">
-                      最近发布产物
+                      {t("sceneAppExecutionSummary.contentPosts.title")}
                     </div>
                     <p className="mt-2 text-sm leading-6 text-slate-600">
-                      当前会话里刚整理出来的发布稿、渠道预览稿和上传稿，会直接回流到这里继续复核，不需要离开生成。
+                      {t("sceneAppExecutionSummary.contentPosts.description")}
                     </p>
                     <div className="mt-3 grid gap-3 xl:grid-cols-3">
                       {contentPostEntries.map((entry) => (
@@ -1069,7 +1118,7 @@ export function SceneAppExecutionSummaryCard({
                 {latestPackResultDetailView.governanceArtifactEntries.length ? (
                   <div className="mt-4">
                     <div className="text-xs font-medium text-slate-500">
-                      基础结果材料
+                      {t("sceneAppExecutionSummary.orchestration.artifacts")}
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {latestPackResultDetailView.governanceArtifactEntries.map(
@@ -1095,7 +1144,9 @@ export function SceneAppExecutionSummaryCard({
 
         {summary.notes.length ? (
           <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-3.5 py-3">
-            <div className="text-xs font-medium text-slate-500">规划备注</div>
+            <div className="text-xs font-medium text-slate-500">
+              {t("sceneAppExecutionSummary.notes.title")}
+            </div>
             <div
               className="mt-2 flex flex-wrap gap-2"
               data-testid="sceneapp-execution-summary-notes"

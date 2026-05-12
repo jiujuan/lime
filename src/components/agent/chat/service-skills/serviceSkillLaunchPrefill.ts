@@ -4,9 +4,13 @@ import {
 } from "../skill-selection/slashEntryUsage";
 import { resolveSiteSceneSlotValues } from "../workspace/serviceSkillSceneLaunch";
 import type { CreationReplayMetadata } from "../utils/creationReplayMetadata";
+import { formatNumber } from "@/i18n/format";
+import agentSourceResource from "@/i18n/resources/zh-CN/agent.json";
 import {
   buildCreationReplaySlotPrefill,
+  resolveCreationReplaySlotPrefillCopy,
   type CreationReplaySlotPrefillCopy,
+  type ResolvedCreationReplaySlotPrefillCopy,
 } from "./creationReplaySlotPrefill";
 import { getServiceSkillUsageMap } from "./storage";
 import type { ServiceSkillHomeItem, ServiceSkillSlotValues } from "./types";
@@ -26,6 +30,113 @@ export interface ServiceSkillLaunchPrefillCopy {
   formatFilledItems?: (visibleItems: string[], totalCount: number) => string;
   formatRecentServiceHint?: (skillTitle: string) => string;
   formatRecentSceneHint?: (sceneTitle: string) => string;
+}
+
+export interface ResolvedServiceSkillLaunchPrefillCopy {
+  creationReplay: ResolvedCreationReplaySlotPrefillCopy;
+  filledPrefix: string;
+  extraPrefix: string;
+  itemSeparator: string;
+  segmentSeparator: string;
+  formatFilledItems: (visibleItems: string[], totalCount: number) => string;
+  formatRecentServiceHint: (skillTitle: string) => string;
+  formatRecentSceneHint: (sceneTitle: string) => string;
+}
+
+type AgentSourceResourceKey = keyof typeof agentSourceResource;
+
+function interpolateServiceSkillPrefillSourceTemplate(
+  template: string,
+  values?: Record<string, number | string>,
+): string {
+  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, name) => {
+    const value = values?.[name];
+    return value == null ? match : String(value);
+  });
+}
+
+function translateServiceSkillPrefillSourceKey(
+  key: string,
+  values?: Record<string, number | string>,
+): string {
+  const template = agentSourceResource[key as AgentSourceResourceKey] ?? key;
+  return interpolateServiceSkillPrefillSourceTemplate(template, values);
+}
+
+const SOURCE_SERVICE_SKILL_LAUNCH_PREFILL_COPY: Omit<
+  ResolvedServiceSkillLaunchPrefillCopy,
+  "creationReplay"
+> = {
+  filledPrefix: translateServiceSkillPrefillSourceKey(
+    "skills.workspace.serviceSkill.prefill.filledPrefix",
+  ),
+  extraPrefix: translateServiceSkillPrefillSourceKey(
+    "skills.workspace.serviceSkill.prefill.extraPrefix",
+  ),
+  itemSeparator: translateServiceSkillPrefillSourceKey(
+    "skills.workspace.serviceSkill.prefill.itemSeparator",
+  ),
+  segmentSeparator: translateServiceSkillPrefillSourceKey(
+    "skills.workspace.serviceSkill.prefill.segmentSeparator",
+  ),
+  formatFilledItems: (visibleItems, totalCount) =>
+    formatSourceFilledItems(
+      visibleItems,
+      totalCount,
+      translateServiceSkillPrefillSourceKey(
+        "skills.workspace.serviceSkill.prefill.itemSeparator",
+      ),
+    ),
+  formatRecentServiceHint: (skillTitle) =>
+    translateServiceSkillPrefillSourceKey(
+      "skills.workspace.serviceSkill.prefill.recentServiceHint",
+      { title: skillTitle },
+    ),
+  formatRecentSceneHint: (sceneTitle) =>
+    translateServiceSkillPrefillSourceKey(
+      "skills.workspace.serviceSkill.prefill.recentSceneHint",
+      { title: sceneTitle },
+    ),
+};
+
+function formatSourceFilledItems(
+  visibleItems: string[],
+  totalCount: number,
+  itemSeparator: string,
+): string {
+  const items = visibleItems.join(itemSeparator);
+  if (visibleItems.length >= totalCount) {
+    return items;
+  }
+
+  return translateServiceSkillPrefillSourceKey(
+    "skills.workspace.serviceSkill.prefill.filledWithMore",
+    {
+      items,
+      remaining: formatNumber(totalCount - visibleItems.length, {
+        locale: "zh-CN",
+      }),
+      total: formatNumber(totalCount, { locale: "zh-CN" }),
+    },
+  );
+}
+
+export function resolveServiceSkillLaunchPrefillCopy(
+  copy?: ServiceSkillLaunchPrefillCopy,
+): ResolvedServiceSkillLaunchPrefillCopy {
+  const itemSeparator =
+    copy?.itemSeparator ??
+    SOURCE_SERVICE_SKILL_LAUNCH_PREFILL_COPY.itemSeparator;
+  return {
+    ...SOURCE_SERVICE_SKILL_LAUNCH_PREFILL_COPY,
+    ...(copy ?? {}),
+    itemSeparator,
+    creationReplay: resolveCreationReplaySlotPrefillCopy(copy?.creationReplay),
+    formatFilledItems:
+      copy?.formatFilledItems ??
+      ((visibleItems, totalCount) =>
+        formatSourceFilledItems(visibleItems, totalCount, itemSeparator)),
+  };
 }
 
 function summarizePrefillValue(value: string, maxLength = 32): string {
@@ -64,16 +175,6 @@ function compactSlotValues(
   return Object.keys(nextValues).length > 0 ? nextValues : undefined;
 }
 
-function formatDefaultFilledItems(
-  visibleItems: string[],
-  totalCount: number,
-  itemSeparator: string,
-): string {
-  return `${visibleItems.join(itemSeparator)}${
-    visibleItems.length < totalCount ? ` 等 ${totalCount} 项` : ""
-  }`;
-}
-
 export function buildServiceSkillLaunchPrefillSummary(params: {
   skill: Pick<ServiceSkillHomeItem, "slotSchema">;
   slotValues?: ServiceSkillSlotValues;
@@ -82,8 +183,7 @@ export function buildServiceSkillLaunchPrefillSummary(params: {
   copy?: ServiceSkillLaunchPrefillCopy;
 }): string {
   const limit = params.limit ?? 2;
-  const copy = params.copy ?? {};
-  const itemSeparator = copy.itemSeparator ?? "；";
+  const copy = resolveServiceSkillLaunchPrefillCopy(params.copy);
   const summaryItems = params.skill.slotSchema
     .map((slot) => {
       const value = compactSlotValues(params.slotValues)?.[slot.key];
@@ -110,33 +210,27 @@ export function buildServiceSkillLaunchPrefillSummary(params: {
   if (summaryItems.length > 0) {
     const visibleItems = summaryItems.slice(0, limit);
     segments.push(
-      `${copy.filledPrefix ?? "上次填写："}${
-        copy.formatFilledItems?.(visibleItems, summaryItems.length) ??
-        formatDefaultFilledItems(
-          visibleItems,
-          summaryItems.length,
-          itemSeparator,
-        )
-      }`,
+      `${copy.filledPrefix}${copy.formatFilledItems(
+        visibleItems,
+        summaryItems.length,
+      )}`,
     );
   }
 
   if (launchUserInput && !hasDuplicatedLaunchUserInput) {
     segments.push(
-      `${copy.extraPrefix ?? "上次补充："}${summarizePrefillValue(
-        launchUserInput,
-        40,
-      )}`,
+      `${copy.extraPrefix}${summarizePrefillValue(launchUserInput, 40)}`,
     );
   }
 
-  return segments.join(copy.segmentSeparator ?? " · ");
+  return segments.join(copy.segmentSeparator);
 }
 
 function resolveRecentServiceSkillPrefill(
   skill: ServiceSkillHomeItem,
   copy: ServiceSkillLaunchPrefillCopy = {},
 ): ServiceSkillLaunchPrefillResult | undefined {
+  const resolvedCopy = resolveServiceSkillLaunchPrefillCopy(copy);
   const recentUsage = getServiceSkillUsageMap().get(skill.id);
   const slotValues = compactSlotValues(recentUsage?.slotValues);
   const launchUserInput = normalizeOptionalText(recentUsage?.launchUserInput);
@@ -147,9 +241,7 @@ function resolveRecentServiceSkillPrefill(
   return {
     ...(slotValues ? { slotValues } : {}),
     ...(launchUserInput ? { launchUserInput } : {}),
-    hint:
-      copy.formatRecentServiceHint?.(skill.title) ??
-      `已根据你上次成功执行 ${skill.title} 时的参数自动预填，可继续修改后执行。`,
+    hint: resolvedCopy.formatRecentServiceHint(skill.title),
   };
 }
 
@@ -157,6 +249,7 @@ function resolveRecentScenePrefill(
   skill: ServiceSkillHomeItem,
   copy: ServiceSkillLaunchPrefillCopy = {},
 ): ServiceSkillLaunchPrefillResult | undefined {
+  const resolvedCopy = resolveServiceSkillLaunchPrefillCopy(copy);
   const sceneKey = normalizeOptionalText(skill.sceneBinding?.sceneKey);
   if (!sceneKey) {
     return undefined;
@@ -182,13 +275,9 @@ function resolveRecentScenePrefill(
 
   return {
     slotValues,
-    hint:
-      copy.formatRecentSceneHint?.(
-        skill.sceneBinding?.commandPrefix || skill.title,
-      ) ??
-      `已根据你上次成功执行 ${
-        skill.sceneBinding?.commandPrefix || skill.title
-      } 时的输入自动预填，可继续修改后执行。`,
+    hint: resolvedCopy.formatRecentSceneHint(
+      skill.sceneBinding?.commandPrefix || skill.title,
+    ),
   };
 }
 
@@ -197,7 +286,8 @@ export function resolveServiceSkillLaunchPrefill(params: {
   creationReplay?: CreationReplayMetadata;
   copy?: ServiceSkillLaunchPrefillCopy;
 }): ServiceSkillLaunchPrefillResult | null {
-  const { skill, creationReplay, copy } = params;
+  const { skill, creationReplay } = params;
+  const copy = resolveServiceSkillLaunchPrefillCopy(params.copy);
   if (!skill) {
     return null;
   }
@@ -209,7 +299,7 @@ export function resolveServiceSkillLaunchPrefill(params: {
   const creationReplayPrefill = buildCreationReplaySlotPrefill(
     skill,
     creationReplay,
-    copy?.creationReplay,
+    copy.creationReplay,
   );
   const slotValues = compactSlotValues({
     ...(recentServicePrefill?.slotValues ||
@@ -224,7 +314,9 @@ export function resolveServiceSkillLaunchPrefill(params: {
 
   return {
     slotValues,
-    launchUserInput: recentServicePrefill?.launchUserInput,
+    ...(recentServicePrefill?.launchUserInput
+      ? { launchUserInput: recentServicePrefill.launchUserInput }
+      : {}),
     hint:
       creationReplayPrefill?.hint ??
       recentServicePrefill?.hint ??

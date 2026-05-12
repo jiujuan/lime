@@ -26,7 +26,7 @@ interface BuildRegexResult {
 export function buildChannelLogRegex(
   preset: ChannelLogPreset,
   customPattern: string,
-  invalidRegexMessage = "正则表达式无效，已回退为不过滤",
+  invalidRegexMessage: string,
 ): BuildRegexResult {
   if (preset === "all") {
     return { regex: null, error: null };

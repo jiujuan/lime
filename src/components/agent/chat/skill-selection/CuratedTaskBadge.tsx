@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ListChecks, PencilLine, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   buildCuratedTaskCapabilityDescription,
   buildCuratedTaskFollowUpDescription,
@@ -45,6 +46,7 @@ export const CuratedTaskBadge: React.FC<CuratedTaskBadgeProps> = ({
   onApplyReviewSuggestion,
   onClear,
 }) => {
+  const { t } = useTranslation("agent");
   const [recommendationSignalsVersion, setRecommendationSignalsVersion] =
     useState(0);
 
@@ -98,6 +100,8 @@ export const CuratedTaskBadge: React.FC<CuratedTaskBadgeProps> = ({
     (reviewProjection.matchedCurrentTask || Boolean(onApplyReviewSuggestion))
       ? reviewProjection
       : null;
+  const recentReviewLabel = t("curatedTask.launcher.review.badge");
+  const recentReviewTitlePrefix = t("curatedTask.badge.review.titlePrefix");
   const primarySuggestedTask = useMemo(() => {
     if (
       !visibleReviewProjection ||
@@ -116,42 +120,62 @@ export const CuratedTaskBadge: React.FC<CuratedTaskBadgeProps> = ({
   const reviewSummary = visibleReviewProjection
     ? truncateBadgeReviewText(
         visibleReviewProjection.matchedCurrentTask
-          ? visibleReviewProjection.signal.title.startsWith("最近判断")
+          ? visibleReviewProjection.signal.title.startsWith(
+              recentReviewTitlePrefix,
+            )
             ? visibleReviewProjection.signal.title
-            : `判断：${visibleReviewProjection.signal.title}`
-          : `更适合：${primarySuggestedTask?.title || visibleReviewProjection.signal.title}`,
+            : t("curatedTask.templates.recommendation.reviewReasonSummary", {
+                title: visibleReviewProjection.signal.title,
+              })
+          : t("curatedTask.badge.review.suggestedTask", {
+              title:
+                primarySuggestedTask?.title ||
+                visibleReviewProjection.signal.title,
+            }),
       )
     : null;
   const sceneAppStatusSummary = sceneAppReviewSnapshot?.statusLabel
     ? truncateBadgeReviewText(
-        `当前判断：${sceneAppReviewSnapshot.statusLabel}`,
+        t("inputCapabilities.baseline.status", {
+          value: sceneAppReviewSnapshot.statusLabel,
+        }),
         34,
       )
     : sceneAppReviewSnapshot?.failureSignalLabel
       ? truncateBadgeReviewText(
-          `当前卡点：${sceneAppReviewSnapshot.failureSignalLabel}`,
+          t("curatedTask.badge.sceneApp.failureSignal", {
+            value: sceneAppReviewSnapshot.failureSignalLabel,
+          }),
           34,
         )
       : null;
   const sceneAppNextSummary = sceneAppReviewSnapshot?.destinationsLabel
     ? truncateBadgeReviewText(
-        `更适合去向：${sceneAppReviewSnapshot.destinationsLabel}`,
+        t("inputCapabilities.baseline.destination", {
+          value: sceneAppReviewSnapshot.destinationsLabel,
+        }),
         28,
       )
     : sceneAppReviewSnapshot?.operatingAction
       ? truncateBadgeReviewText(
-          `经营动作：${sceneAppReviewSnapshot.operatingAction}`,
+          t("inputCapabilities.baseline.operatingAction", {
+            value: sceneAppReviewSnapshot.operatingAction,
+          }),
           28,
         )
       : null;
   const sceneAppSummaryTitle =
     sceneAppReviewSnapshot && sceneAppReviewHighlights.length > 0
       ? [
-          `当前结果基线：${sceneAppReviewSnapshot.sourceTitle}`,
+          t("inputCapabilities.baseline.title", {
+            title: sceneAppReviewSnapshot.sourceTitle,
+          }),
           ...sceneAppReviewHighlights,
-        ].join(" · ")
+        ].join(t("skills.workspace.curatedTask.segmentSeparator"))
       : sceneAppReviewSnapshot?.sourceTitle
-        ? `当前结果基线：${sceneAppReviewSnapshot.sourceTitle}`
+        ? t("inputCapabilities.baseline.title", {
+            title: sceneAppReviewSnapshot.sourceTitle,
+          })
         : null;
 
   return (
@@ -166,11 +190,20 @@ export const CuratedTaskBadge: React.FC<CuratedTaskBadgeProps> = ({
         <span
           data-testid="curated-task-badge-review-signal"
           className="inline-flex max-w-[240px] items-center rounded-full border border-emerald-300/70 bg-white/90 px-2 py-0.5 text-[11px] leading-4 text-emerald-700"
-          title={`围绕最近判断 · ${visibleReviewProjection?.signal.summary || visibleReviewProjection?.signal.title || ""}`}
+          title={t("curatedTask.badge.review.signalTitle", {
+            label: recentReviewLabel,
+            summary:
+              visibleReviewProjection?.signal.summary ||
+              visibleReviewProjection?.signal.title ||
+              "",
+          })}
         >
           <span className="truncate">
             {visibleReviewProjection?.matchedCurrentTask
-              ? `围绕最近判断 · ${reviewSummary}`
+              ? t("curatedTask.badge.review.matchedSummary", {
+                  label: recentReviewLabel,
+                  summary: reviewSummary,
+                })
               : reviewSummary}
           </span>
         </span>
@@ -180,10 +213,16 @@ export const CuratedTaskBadge: React.FC<CuratedTaskBadgeProps> = ({
           type="button"
           data-testid="curated-task-badge-review-action"
           className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-white/90 px-2 py-0.5 text-[11px] leading-4 text-sky-700 transition hover:bg-white"
-          title={`按最近判断切到「${primarySuggestedTask.title}」`}
+          title={t("curatedTask.badge.review.switchTitle", {
+            title: primarySuggestedTask.title,
+          })}
           onClick={() => onApplyReviewSuggestion(primarySuggestedTask)}
         >
-          <span className="truncate">改用「{primarySuggestedTask.title}」</span>
+          <span className="truncate">
+            {t("curatedTask.launcher.review.switchAction", {
+              title: primarySuggestedTask.title,
+            })}
+          </span>
         </button>
       ) : null}
       {sceneAppStatusSummary ? (
@@ -214,19 +253,23 @@ export const CuratedTaskBadge: React.FC<CuratedTaskBadgeProps> = ({
           type="button"
           onClick={onEdit}
           className="ml-0.5 inline-flex items-center gap-1 rounded-full border border-amber-300/80 bg-white/80 px-1.5 py-0.5 text-[11px] text-amber-700 transition hover:bg-white"
-          aria-label={`编辑 ${task.title} 启动信息`}
-          title="重新编辑启动信息"
+          aria-label={t("curatedTask.badge.action.editAria", {
+            title: task.title,
+          })}
+          title={t("curatedTask.badge.action.editTitle")}
         >
           <PencilLine className="h-3 w-3" />
-          <span>编辑</span>
+          <span>{t("curatedTask.badge.action.edit")}</span>
         </button>
       ) : null}
       <button
         type="button"
         onClick={onClear}
         className="ml-0.5 hover:opacity-70"
-        aria-label={`清除 ${task.title}`}
-        title="清除当前结果模板"
+        aria-label={t("curatedTask.badge.action.clearAria", {
+          title: task.title,
+        })}
+        title={t("curatedTask.badge.action.clearTitle")}
       >
         <X className="h-3 w-3" />
       </button>

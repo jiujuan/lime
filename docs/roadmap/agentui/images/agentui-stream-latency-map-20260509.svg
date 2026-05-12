@@ -1,28 +1,29 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1120" viewBox="0 0 1600 1120">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#f7fbff"/>
-      <stop offset="44%" stop-color="#eefcf6"/>
+      <stop offset="0%" stop-color="#f8fbff"/>
+      <stop offset="45%" stop-color="#effdf7"/>
       <stop offset="100%" stop-color="#fff7ed"/>
     </linearGradient>
-    <linearGradient id="hot" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#fb7185"/>
-      <stop offset="100%" stop-color="#f59e0b"/>
+    <linearGradient id="ok" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
     </linearGradient>
     <filter id="shadow" x="-18%" y="-18%" width="136%" height="136%">
-      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#0f172a" flood-opacity="0.11"/>
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#0f172a" flood-opacity="0.11"/>
     </filter>
     <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
       <path d="M2,2 L10,6 L2,10 Z" fill="#334155"/>
     </marker>
     <style>
-      .title { font: 850 41px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#0f172a; }
-      .subtitle { font: 500 20px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#475569; }
+      .title { font: 850 40px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#0f172a; }
+      .subtitle { font: 500 19px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#475569; }
       .section { font: 800 22px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#0f172a; }
       .label { font: 750 18px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#0f172a; }
       .small { font: 500 15.5px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#475569; }
       .tiny { font: 600 13.5px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#64748b; }
       .num { font: 900 27px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#0f172a; }
+      .num-ok { font: 950 31px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#047857; }
       .num-hot { font: 950 31px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; fill:#be123c; }
       .card { rx:28; fill:#ffffff; stroke:#dbe5ee; stroke-width:1.5; filter:url(#shadow); }
       .mini { rx:20; fill:#ffffff; stroke:#dbe5ee; stroke-width:1.4; }
@@ -31,7 +32,6 @@
       .amber { fill:#fffbeb; stroke:#fde68a; }
       .rose { fill:#fff1f2; stroke:#fecdd3; }
       .slate { fill:#f8fafc; stroke:#dbe5ee; }
-      .violet { fill:#f5f3ff; stroke:#ddd6fe; }
       .pill { font: 750 13px ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;PingFang SC&quot;, &quot;Microsoft YaHei&quot;, sans-serif; }
       .line { stroke:#334155; stroke-width:3; fill:none; marker-end:url(#arrow); }
       .dash { stroke:#94a3b8; stroke-width:2; fill:none; stroke-dasharray:8 8; }
@@ -43,94 +43,96 @@
   <circle cx="165" cy="948" r="260" fill="#bbf7d0" opacity="0.28"/>
   <circle cx="1480" cy="965" r="185" fill="#fed7aa" opacity="0.26"/>
 
-  <text x="86" y="78" class="title">Lime 首字 Token 慢点复查图 v2</text>
-  <text x="88" y="118" class="subtitle">2026-05-11 更新：首字慢不靠删除 extension/MCP prompt context 解决；只精简 provider 工具 schema，并保持上下文与 broker 工具可达。</text>
+  <text x="86" y="78" class="title">Lime AgentUI 流式延迟复测图 v5</text>
+  <text x="88" y="118" class="subtitle">2026-05-12 更新：runtime status 已是百毫秒级；真实瓶颈定位到 provider/model 首个 visible / thinking / text delta。</text>
 
   <rect x="1148" y="67" width="335" height="52" rx="26" fill="#ecfdf5" stroke="#86efac"/>
-  <text x="1178" y="100" class="pill" fill="#166534">已纠偏：context 保留，schema 收敛</text>
+  <text x="1178" y="100" class="pill" fill="#166534">已闭环：TTFT 落库 + 自动路由 + GUI 证据面</text>
 
-  <rect x="86" y="156" width="1428" height="300" class="card"/>
-  <text x="122" y="207" class="section">点击发送到首字可见的链路归因</text>
+  <rect x="86" y="156" width="1428" height="318" class="card"/>
+  <text x="122" y="207" class="section">点击发送到用户可见反馈的实测链路</text>
 
-  <rect x="122" y="247" width="218" height="136" class="mini green"/>
-  <text x="148" y="283" class="num">&lt;100ms</text>
-  <text x="148" y="317" class="label">前端占位态</text>
-  <text x="148" y="346" class="small">draft / pending paint 快</text>
-  <text x="148" y="370" class="tiny">不是主瓶颈</text>
+  <rect x="122" y="247" width="220" height="150" class="mini green"/>
+  <text x="148" y="286" class="num-ok">0.09-0.12s</text>
+  <text x="148" y="322" class="label">runtime status</text>
+  <text x="148" y="352" class="small">Playwright submit / status</text>
+  <text x="148" y="377" class="tiny">不是当前主瓶颈</text>
 
-  <line x1="353" y1="315" x2="420" y2="315" class="line"/>
+  <line x1="355" y1="322" x2="420" y2="322" class="line"/>
 
-  <rect x="435" y="247" width="232" height="136" class="mini blue"/>
-  <text x="461" y="283" class="num">~300ms</text>
-  <text x="461" y="317" class="label">runtime 事件</text>
-  <text x="461" y="346" class="small">submit accepted / first event</text>
-  <text x="461" y="370" class="tiny">桥接响应正常</text>
+  <rect x="435" y="247" width="248" height="150" class="mini blue"/>
+  <text x="461" y="286" class="num-ok">0.84-1.38s</text>
+  <text x="461" y="322" class="label">模型首字证据</text>
+  <text x="461" y="352" class="small">agent_runs.metadata 真实落库</text>
+  <text x="461" y="377" class="tiny">visible / thinking / text 可复核</text>
 
-  <line x1="680" y1="315" x2="747" y2="315" class="line"/>
+  <line x1="696" y1="322" x2="761" y2="322" class="line"/>
 
-  <rect x="762" y="231" width="292" height="168" class="mini rose"/>
-  <text x="790" y="272" class="num-hot">旧：6s+</text>
-  <text x="790" y="309" class="label">FullRuntime 预热</text>
-  <text x="790" y="338" class="small">search-only 误触 MCP 启动</text>
-  <text x="790" y="362" class="small">context7 / playwright 前置</text>
-  <text x="790" y="386" class="tiny">已改：web-search-only 不预热 MCP</text>
+  <rect x="776" y="231" width="292" height="184" class="mini amber"/>
+  <text x="804" y="273" class="num-ok">1.24-1.80s</text>
+  <text x="804" y="310" class="label">answer text 首字</text>
+  <text x="804" y="340" class="small">deepseek-v4-flash 快样本达标</text>
+  <text x="804" y="365" class="small">首字 paint 已接近真实秒级</text>
+  <text x="804" y="390" class="tiny">仍需看跨 provider 稳定性</text>
 
-  <line x1="1068" y1="315" x2="1135" y2="315" class="line"/>
+  <line x1="1082" y1="322" x2="1147" y2="322" class="line"/>
 
-  <rect x="1150" y="231" width="300" height="168" class="mini amber"/>
-  <text x="1178" y="272" class="num-hot">新：payload</text>
-  <text x="1178" y="309" class="label">provider 首字等待</text>
-  <text x="1178" y="338" class="small">Anthropic / OpenAI / Gemini</text>
-  <text x="1178" y="362" class="small">工具 schema 从 50+ 收敛到 broker 面</text>
-  <text x="1178" y="386" class="tiny">stream 空内容时有诊断与 fallback</text>
+  <rect x="1162" y="231" width="300" height="184" class="mini rose"/>
+  <text x="1190" y="273" class="num-hot">瓶颈在波动</text>
+  <text x="1190" y="310" class="label">provider / model TTFT</text>
+  <text x="1190" y="340" class="small">慢样本、错误样本仍会拖慢</text>
+  <text x="1190" y="365" class="small">需要样本矩阵持续校准路由</text>
+  <text x="1190" y="390" class="tiny">不是 UI paint / DevBridge 问题</text>
 
-  <text x="122" y="428" class="tiny">旧数据仍有效：firstTextPaint 慢主要来自后端准备与 provider 首 token。v2 把“启动 MCP”和“发送 50+ tool schema”从首轮路径里拆开。</text>
+  <text x="122" y="444" class="tiny">可靠样本：submitAccepted 95/102ms，firstRuntimeStatus 116/122ms；firstTextDelta 1.24s / 1.38s / 1.67s / 1.80s。</text>
+  <text x="122" y="466" class="tiny">GUI smoke latestModelDeltaTiming firstText 1.30s；旧慢样本保留为 provider 波动证据。</text>
 
-  <rect x="86" y="492" width="690" height="382" class="card"/>
-  <text x="122" y="543" class="section">对标后确定不能做的事</text>
+  <rect x="86" y="510" width="690" height="360" class="card"/>
+  <text x="122" y="561" class="section">已经收口的 current 事实源</text>
 
-  <rect x="122" y="576" width="610" height="76" class="mini rose"/>
-  <text x="150" y="608" class="label">1. 不能删除完整 extension/MCP prompt context</text>
-  <text x="150" y="634" class="small">ClaudeCode 与 Warp 都保留上下文，只把工具加载 / MCP 执行面分层。</text>
+  <rect x="122" y="594" width="610" height="68" class="mini green"/>
+  <text x="150" y="624" class="label">TTFT telemetry 进入 agent_runs.metadata</text>
+  <text x="150" y="648" class="small">model_first_visible / thinking / text_delta_ms 成为首字事实源。</text>
 
-  <rect x="122" y="670" width="610" height="76" class="mini amber"/>
-  <text x="150" y="702" class="label">2. 不能把 allowed search 等同于重型 runtime</text>
-  <text x="150" y="728" class="small">allowed 只是能力许可；required / skill / browser 才需要更重准备。</text>
+  <rect x="122" y="680" width="610" height="68" class="mini green"/>
+  <text x="150" y="710" class="label">responsive_chat_auto 消费真实历史样本</text>
+  <text x="150" y="734" class="small">优先 first text；慢首字 / reasoning / unsupported / recent error 会回退。</text>
 
-  <rect x="122" y="764" width="610" height="76" class="mini amber"/>
-  <text x="150" y="796" class="label">3. 不能让 provider 看到所有 MCP 具体工具 schema</text>
-  <text x="150" y="822" class="small">具体 MCP 工具通过 ToolSearch / resource broker / 延迟加载触达。</text>
+  <rect x="122" y="766" width="610" height="68" class="mini green"/>
+  <text x="150" y="796" class="label">AgentUI 可靠性面板可见 routing evidence</text>
+  <text x="150" y="820" class="small">selected model、TTFT、decisionReason、fallbackChain 可展示和复制。</text>
 
-  <rect x="824" y="492" width="690" height="382" class="card"/>
-  <text x="860" y="543" class="section">v2 当前策略</text>
+  <rect x="824" y="510" width="690" height="360" class="card"/>
+  <text x="860" y="561" class="section">剩余瓶颈的正确打法</text>
 
-  <rect x="860" y="576" width="610" height="76" class="mini green"/>
-  <text x="888" y="608" class="label">完整上下文：保留</text>
-  <text x="888" y="634" class="small">system prompt 仍包含 extension instructions 与 MCP resource 说明。</text>
+  <rect x="860" y="594" width="610" height="68" class="mini amber"/>
+  <text x="888" y="624" class="label">补真实多 provider 样本矩阵</text>
+  <text x="888" y="648" class="small">slow service setting / unsupported / recent error / trusted unknown 各要样本。</text>
 
-  <rect x="860" y="670" width="610" height="76" class="mini green"/>
-  <text x="888" y="702" class="label">初始 schema：compact broker surface</text>
-  <text x="888" y="728" class="small">ToolSearch + 本地核心工具 + MCP resource broker，避免 50+ tools 入参。</text>
+  <rect x="860" y="680" width="610" height="68" class="mini amber"/>
+  <text x="888" y="710" class="label">避免慢 service setting 锁死响应模型</text>
+  <text x="888" y="734" class="small">显式设置若历史不达标，应解释原因并继续进入 responsive_chat_auto。</text>
 
-  <rect x="860" y="764" width="610" height="76" class="mini green"/>
-  <text x="888" y="796" class="label">跨协议一致：Anthropic / OpenAI / Gemini</text>
-  <text x="888" y="822" class="small">同一组 prepared tools 进入各 provider payload，避免只修 Anthropic。</text>
+  <rect x="860" y="766" width="610" height="68" class="mini amber"/>
+  <text x="888" y="796" class="label">用可靠性面板做 GUI 验收门</text>
+  <text x="888" y="820" class="small">每个慢样本都要能看到 selected、TTFT、fallback reason 与证据来源。</text>
 
-  <rect x="86" y="910" width="452" height="120" class="card"/>
-  <text x="122" y="956" class="section">ClaudeCode 参考</text>
-  <text x="122" y="988" class="small">ToolSearch / deferred tools 负责动态加载。</text>
-  <text x="122" y="1014" class="small">MCP prompt / skills / resources 不被粗暴删除。</text>
+  <rect x="86" y="908" width="452" height="122" class="card"/>
+  <text x="122" y="954" class="section">当前证据</text>
+  <text x="122" y="986" class="small">SQLite：auto / override 均写入 TTFT。</text>
+  <text x="122" y="1012" class="small">Playwright：“收到 / 绿灯OK”首字进入秒级。</text>
 
-  <rect x="574" y="910" width="452" height="120" class="card"/>
-  <text x="610" y="956" class="section">Warp 参考</text>
-  <text x="610" y="988" class="small">supported_tools 是能力枚举。</text>
-  <text x="610" y="1014" class="small">mcp_context 独立携带 server/tools/resources。</text>
+  <rect x="574" y="908" width="452" height="122" class="card"/>
+  <text x="610" y="954" class="section">治理口径</text>
+  <text x="610" y="986" class="small">current：metadata -> latestModelDeltaTiming。</text>
+  <text x="610" y="1012" class="small">compat：旧 run 缺少 TTFT 时只做低可信历史兜底。</text>
 
-  <rect x="1062" y="910" width="452" height="120" class="card"/>
-  <text x="1098" y="956" class="section">下一步复测</text>
-  <text x="1098" y="988" class="small">同一句短问记录 TTFT / firstTextDelta。</text>
-  <text x="1098" y="1014" class="small">重点看 submit preparation 与 provider payload。</text>
+  <rect x="1062" y="908" width="452" height="122" class="card"/>
+  <text x="1098" y="954" class="section">下一刀</text>
+  <text x="1098" y="986" class="small">跑多 provider 真实样本矩阵并回灌到 AgentUI 面板。</text>
+  <text x="1098" y="1012" class="small">目标：answer TTFT 稳定秒级，而非单 provider 样本达标。</text>
 
   <rect x="86" y="1050" width="1428" height="42" rx="21" fill="#f8fafc" stroke="#dbe5ee"/>
-  <text x="122" y="1077" class="tiny">更新口径：v2 解决首字慢的低风险主刀是“schema 收敛 + search-only 不预热 MCP + stream 诊断 fallback”，不是 prompt context 删除。</text>
+  <text x="122" y="1068" class="tiny">更新口径：UI / runtime status 秒级已经成立；answer 首字在 deepseek-v4-flash 快样本中达标。</text>
+  <text x="122" y="1087" class="tiny">完整目标仍要证明跨 provider、慢设置、错误与 unsupported 场景都能被 responsive_chat_auto 稳定避开。</text>
 </svg>

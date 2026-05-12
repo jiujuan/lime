@@ -4,11 +4,15 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RootRouter } from "./RootRouter";
 
-const { mockFinalizeModuleImportAutoReload, mockGetRuntimeAppVersion } =
-  vi.hoisted(() => ({
-    mockFinalizeModuleImportAutoReload: vi.fn(),
-    mockGetRuntimeAppVersion: vi.fn(() => "0.0.0-test"),
-  }));
+const {
+  mockFinalizeCrashRecoveryAutoReload,
+  mockFinalizeModuleImportAutoReload,
+  mockGetRuntimeAppVersion,
+} = vi.hoisted(() => ({
+  mockFinalizeCrashRecoveryAutoReload: vi.fn(),
+  mockFinalizeModuleImportAutoReload: vi.fn(),
+  mockGetRuntimeAppVersion: vi.fn(() => "0.0.0-test"),
+}));
 
 vi.mock("./App", () => ({
   default: () => <div data-testid="main-app">主应用</div>,
@@ -47,6 +51,7 @@ vi.mock("./components/layout/AppCrashBoundary", () => ({
 }));
 
 vi.mock("./components/layout/CrashRecoveryPanel.helpers", () => ({
+  finalizeCrashRecoveryAutoReload: mockFinalizeCrashRecoveryAutoReload,
   finalizeModuleImportAutoReload: mockFinalizeModuleImportAutoReload,
 }));
 

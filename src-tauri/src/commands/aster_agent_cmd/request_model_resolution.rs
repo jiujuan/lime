@@ -2,7 +2,12 @@ use super::*;
 use crate::commands::aster_agent_cmd::service_skill_launch::extract_service_scene_launch_context;
 use crate::commands::model_registry_cmd::ModelRegistryState;
 use crate::config::GlobalConfigManagerState;
+mod fast_response;
 mod responsive_chat;
+use fast_response::{
+    extract_fast_response_routing, extract_fast_response_routing_slot,
+    extract_fast_response_service_model_slot,
+};
 use lime_core::database::dao::api_key_provider::{ApiProviderType, ProviderGroup};
 use lime_core::models::model_registry::{
     EnhancedModelMetadata, ModelCapabilities, ModelDeploymentSource, ModelManagementPlane,
@@ -10,8 +15,9 @@ use lime_core::models::model_registry::{
     ProviderAliasConfig,
 };
 use responsive_chat::{
-    resolve_responsive_chat_auto_preference, responsive_chat_model_sort, targets_responsive_chat,
-    RESPONSIVE_CHAT_ROUTING_SLOT, RESPONSIVE_CHAT_SERVICE_MODEL_SLOT,
+    resolve_responsive_chat_auto_preference, responsive_chat_model_sort,
+    responsive_chat_setting_fallback_reason, targets_responsive_chat,
+    RESPONSIVE_CHAT_SERVICE_MODEL_SLOT,
 };
 use std::collections::HashSet;
 use tauri::Manager;
@@ -227,6 +233,70 @@ fn text_contains_any(text: &str, keywords: &[&str]) -> bool {
     keywords.iter().any(|keyword| text.contains(keyword))
 }
 
+fn model_id_has_openai_vision_capability(model_id: &str, text: &str) -> bool {
+    let model = normalize_identifier(model_id);
+    let model_tail = model.rsplit('/').next().unwrap_or(model.as_str());
+    text_contains_any(
+        text,
+        &[
+            "chatgpt-4o",
+            "gpt-5",
+            "gpt-4o",
+            "gpt-4.1",
+            "gpt-4.5",
+            "gpt-4-turbo",
+            "codex",
+        ],
+    ) || model_tail == "o1"
+        || model_tail == "o1-pro"
+        || model_tail.starts_with("o1-pro-")
+        || model_tail.starts_with("o1-202")
+        || model_tail == "o3"
+        || (model_tail.starts_with("o3-") && !model_tail.starts_with("o3-mini"))
+        || model_tail.starts_with("o4-mini")
+}
+
+fn model_id_has_qwen_vision_capability(model_id: &str, text: &str) -> bool {
+    let model = normalize_identifier(model_id);
+    let model_tail = model.rsplit('/').next().unwrap_or(model.as_str());
+    (text.contains("qwen") && (text.contains("vl") || text.contains("vision")))
+        || text.contains("qvq")
+        || model_tail.starts_with("qwen3.5")
+        || model_tail.starts_with("qwen3-5")
+        || model_tail.starts_with("qwen3.6")
+        || model_tail.starts_with("qwen3-6")
+}
+
+fn model_id_has_xai_vision_capability(model_id: &str) -> bool {
+    let model = normalize_identifier(model_id);
+    model.contains("grok-vision")
+        || model.contains("grok-2-vision")
+        || model.starts_with("grok-4-1")
+        || model.starts_with("grok-4-fast")
+        || model.starts_with("grok-4.20")
+        || model.starts_with("grok-4.3")
+}
+
+fn model_id_has_mistral_vision_capability(model_id: &str, text: &str) -> bool {
+    let model = normalize_identifier(model_id);
+    let model_tail = model.rsplit('/').next().unwrap_or(model.as_str());
+    text.contains("pixtral")
+        || model_tail.starts_with("mistral-small-latest")
+        || model_tail.starts_with("mistral-large-2512")
+        || model_tail.starts_with("mistral-medium-3.1")
+}
+
+fn model_id_has_gemma_vision_capability(model_id: &str) -> bool {
+    let model = normalize_identifier(model_id);
+    let model_tail = model.rsplit('/').next().unwrap_or(model.as_str());
+    model_tail.starts_with("gemma-3") && !model_tail.starts_with("gemma-3n")
+}
+
+fn model_id_has_llama_vision_capability(model_id: &str) -> bool {
+    let model = normalize_identifier(model_id);
+    model.contains("llama-4-maverick") || model.contains("llama-4-scout")
+}
+
 fn infer_vision_capability(
     model_id: &str,
     provider_id: Option<&str>,
@@ -293,17 +363,13 @@ fn infer_vision_capability(
         return true;
     }
 
-    let openai_like = text.contains("gpt-5")
-        || text.contains("gpt-4o")
-        || text.contains("gpt-4.1")
-        || text.contains("gpt-4.5")
-        || text.contains("codex");
+    let openai_like = model_id_has_openai_vision_capability(model_id, &text);
     if provider == "openai" || provider == "codex" {
         return openai_like;
     }
 
-    if provider == "gemini" {
-        return text.contains("gemini");
+    if provider == "gemini" || provider == "google" {
+        return text.contains("gemini") || model_id_has_gemma_vision_capability(model_id);
     }
 
     if provider == "anthropic" || provider == "claude" {
@@ -311,20 +377,31 @@ fn infer_vision_capability(
     }
 
     if provider == "qwen" || provider == "alibaba" {
-        return (text.contains("qwen") && (text.contains("vl") || text.contains("vision")))
-            || text.contains("qvq");
+        return model_id_has_qwen_vision_capability(model_id, &text);
     }
 
     if provider == "zhipuai" {
         return text.contains("glm-") && text.contains('v');
     }
+    if provider == "xai" || provider == "x-ai" {
+        return model_id_has_xai_vision_capability(model_id);
+    }
+    if provider == "mistral" || provider == "mistralai" {
+        return model_id_has_mistral_vision_capability(model_id, &text);
+    }
+    if provider == "llama" || provider == "meta" || provider == "meta-llama" {
+        return model_id_has_llama_vision_capability(model_id);
+    }
 
     openai_like
         || text.contains("gemini")
         || text.contains("claude")
-        || text.contains("qvq")
-        || (text.contains("qwen") && (text.contains("vl") || text.contains("vision")))
+        || model_id_has_qwen_vision_capability(model_id, &text)
         || (text.contains("glm-") && text.contains('v'))
+        || model_id_has_xai_vision_capability(model_id)
+        || model_id_has_mistral_vision_capability(model_id, &text)
+        || model_id_has_gemma_vision_capability(model_id)
+        || model_id_has_llama_vision_capability(model_id)
 }
 
 fn infer_model_capabilities(
@@ -1127,6 +1204,12 @@ fn resolve_catalog_fallback_model_id(
 }
 
 fn is_likely_image_generation_model(model: &EnhancedModelMetadata) -> bool {
+    let can_return_text =
+        model.output_modalities.is_empty() || model.has_output_modality(&ModelModality::Text);
+    if model.supports_task_family(&ModelTaskFamily::VisionUnderstanding) && can_return_text {
+        return false;
+    }
+
     if model.supports_task_family(&ModelTaskFamily::ImageGeneration)
         || model.supports_task_family(&ModelTaskFamily::ImageEdit)
         || model.has_output_modality(&ModelModality::Image)
@@ -1174,9 +1257,19 @@ fn is_likely_image_generation_model(model: &EnhancedModelMetadata) -> bool {
 
 fn supports_vision(model: Option<&EnhancedModelMetadata>, fallback_model_id: &str) -> bool {
     if let Some(item) = model {
-        return item.capabilities.vision
+        if item.capabilities.vision
             || item.supports_task_family(&ModelTaskFamily::VisionUnderstanding)
-            || item.has_input_modality(&ModelModality::Image);
+            || item.has_input_modality(&ModelModality::Image)
+        {
+            return true;
+        }
+
+        return infer_vision_capability(
+            &item.id,
+            Some(&item.provider_id),
+            item.family.as_deref(),
+            item.description.as_deref(),
+        );
     }
 
     infer_vision_capability(fallback_model_id, None, None, None)
@@ -1537,7 +1630,11 @@ fn resolve_vision_model_id(
     models: &[EnhancedModelMetadata],
 ) -> Result<String, String> {
     let current_model = find_model_meta(current_model_id, models);
-    if supports_vision(current_model, current_model_id) {
+    if supports_vision(current_model, current_model_id)
+        && !current_model
+            .map(is_likely_image_generation_model)
+            .unwrap_or(false)
+    {
         return Ok(current_model
             .map(|model| model.id.clone())
             .unwrap_or_else(|| current_model_id.to_string()));
@@ -1971,33 +2068,6 @@ fn build_request_oem_limit_event(
     })
 }
 
-fn extract_fast_response_routing(
-    request_metadata: Option<&serde_json::Value>,
-) -> Option<&serde_json::Map<String, serde_json::Value>> {
-    extract_harness_nested_object(
-        request_metadata,
-        &["fast_response_routing", "fastResponseRouting"],
-    )
-}
-
-fn extract_fast_response_service_model_slot(
-    request_metadata: Option<&serde_json::Value>,
-) -> Option<String> {
-    let routing = extract_fast_response_routing(request_metadata)?;
-    extract_metadata_text(routing, &["service_model_slot", "serviceModelSlot"])
-        .filter(|slot| normalize_identifier(slot) == RESPONSIVE_CHAT_SERVICE_MODEL_SLOT)
-        .or_else(|| Some(RESPONSIVE_CHAT_SERVICE_MODEL_SLOT.to_string()))
-}
-
-fn extract_fast_response_routing_slot(
-    request_metadata: Option<&serde_json::Value>,
-) -> Option<String> {
-    let routing = extract_fast_response_routing(request_metadata)?;
-    extract_metadata_text(routing, &["routing_slot", "routingSlot"])
-        .filter(|slot| normalize_identifier(slot) == RESPONSIVE_CHAT_ROUTING_SLOT)
-        .or_else(|| Some(RESPONSIVE_CHAT_ROUTING_SLOT.to_string()))
-}
-
 fn resolve_request_service_model_slot(
     request_metadata: Option<&serde_json::Value>,
 ) -> Option<String> {
@@ -2407,19 +2477,16 @@ fn is_compatible_candidate_model(
         model.task_families.is_empty() || model.task_families.contains(&ModelTaskFamily::Chat);
     let supports_reasoning =
         model.capabilities.reasoning || model.task_families.contains(&ModelTaskFamily::Reasoning);
-    let supports_vision = model.capabilities.vision
-        || model
-            .task_families
-            .contains(&ModelTaskFamily::VisionUnderstanding);
+    let has_vision_input = supports_vision(Some(model), &model.id);
 
-    if has_images && !supports_vision {
+    if has_images && !has_vision_input {
         return false;
     }
     if thinking_enabled && !supports_reasoning {
         return false;
     }
 
-    supports_chat || (has_images && supports_vision)
+    supports_chat || (has_images && has_vision_input)
 }
 
 fn routing_slot_model_capability_requirements(
@@ -2460,12 +2527,7 @@ fn model_satisfies_runtime_capability_requirement(
         RuntimeModelCapabilityRequirement::TextGeneration => {
             model.task_families.is_empty() || model.task_families.contains(&ModelTaskFamily::Chat)
         }
-        RuntimeModelCapabilityRequirement::VisionInput => {
-            model.capabilities.vision
-                || model
-                    .task_families
-                    .contains(&ModelTaskFamily::VisionUnderstanding)
-        }
+        RuntimeModelCapabilityRequirement::VisionInput => supports_vision(Some(model), &model.id),
         RuntimeModelCapabilityRequirement::ImageGeneration => model
             .task_families
             .contains(&ModelTaskFamily::ImageGeneration),
@@ -3108,12 +3170,9 @@ async fn build_runtime_request_provider_config_from_preference(
                 || model.task_families.contains(&ModelTaskFamily::Reasoning)
         });
     let vision_gap = has_images
-        && !catalog.iter().any(|model| {
-            model.capabilities.vision
-                || model
-                    .task_families
-                    .contains(&ModelTaskFamily::VisionUnderstanding)
-        });
+        && !catalog
+            .iter()
+            .any(|model| supports_vision(Some(model), &model.id));
 
     let mut resolved_model = if thinking_enabled {
         resolve_thinking_model_id(&normalized_model_preference, &catalog)
@@ -3217,7 +3276,7 @@ async fn build_runtime_request_provider_config_from_preference(
         RuntimeProviderConfigurationStrategy::ApiKeyProvider => None,
     };
     let model_meta = find_model_meta(&resolved_model, &catalog);
-    let model_capabilities = model_meta
+    let mut model_capabilities = model_meta
         .map(|model| model.capabilities.clone())
         .unwrap_or_else(|| {
             let inferred_task_families = infer_model_task_families(
@@ -3234,6 +3293,9 @@ async fn build_runtime_request_provider_config_from_preference(
                 None,
             )
         });
+    if supports_vision(model_meta, &resolved_model) {
+        model_capabilities.vision = true;
+    }
 
     let estimated_cost_class = estimate_cost_class(&resolved_model, model_meta);
     let runtime_capability_gap =
@@ -3362,6 +3424,13 @@ pub(super) async fn resolve_runtime_request_provider_resolution(
     request: &AsterChatRequest,
 ) -> Result<RuntimeRequestProviderResolution, String> {
     let task_profile = build_runtime_task_profile(request);
+    let request_runtime_requirements =
+        routing_slot_model_capability_requirements(task_profile.routing_slot.as_deref());
+    let request_targets_responsive_chat = targets_responsive_chat(&request_runtime_requirements)
+        || task_profile
+            .service_model_slot
+            .as_deref()
+            .is_some_and(|slot| normalize_identifier(slot) == RESPONSIVE_CHAT_SERVICE_MODEL_SLOT);
     let access_mode = resolve_runtime_request_access_mode(request);
     let permission_state = build_permission_state(&task_profile, access_mode);
     let request_oem_routing = resolve_request_oem_routing_context(request.metadata.as_ref());
@@ -3665,59 +3734,84 @@ pub(super) async fn resolve_runtime_request_provider_resolution(
         .await
         {
             Ok(selection) => {
-                let mut notes = vec![format!(
-                    "命中设置中的 {}，自动仅在当前 provider 候选池内做能力兼容。",
-                    setting_preference.settings_source
-                )];
-                if let Some(note) = fallback_note.clone() {
-                    notes.push(note);
-                }
-                let limit_state = build_limit_state(
-                    runtime_limit_status_for_selection(&selection),
-                    selection.candidate_count,
-                    true,
-                    true,
-                    oem_locked,
-                    selection.capability_gap.clone(),
-                    notes,
-                );
-                let routing_decision = build_routing_decision(
-                    &task_profile,
-                    "service_model_setting",
-                    compose_routing_decision_reason(
-                        format!(
-                            "当前回合命中 {}，优先使用设置中的 provider/model。",
-                            setting_preference.settings_source
+                let setting_latency_fallback = if request_targets_responsive_chat {
+                    responsive_chat_setting_fallback_reason(
+                        db,
+                        &selection.provider_selector,
+                        &selection.resolved_model,
+                    )
+                } else {
+                    None
+                };
+                if let Some(reason) = setting_latency_fallback {
+                    tracing::warn!(
+                        "[AsterAgent] responsive_chat 设置模型历史样本不满足低延迟目标，继续进入自动候选: session={}, provider={}, model={}, reason={}",
+                        request.session_id,
+                        selection.provider_selector,
+                        selection.resolved_model,
+                        reason
+                    );
+                    if fallback_note.is_none() {
+                        fallback_note = Some(format!(
+                            "{} 历史样本不满足低延迟目标（{}），已继续进入自动 responsive_chat 候选。",
+                            setting_preference.settings_source, reason
+                        ));
+                    }
+                } else {
+                    let mut notes = vec![format!(
+                        "命中设置中的 {}，自动仅在当前 provider 候选池内做能力兼容。",
+                        setting_preference.settings_source
+                    )];
+                    if let Some(note) = fallback_note.clone() {
+                        notes.push(note);
+                    }
+                    let limit_state = build_limit_state(
+                        runtime_limit_status_for_selection(&selection),
+                        selection.candidate_count,
+                        true,
+                        true,
+                        oem_locked,
+                        selection.capability_gap.clone(),
+                        notes,
+                    );
+                    let routing_decision = build_routing_decision(
+                        &task_profile,
+                        "service_model_setting",
+                        compose_routing_decision_reason(
+                            format!(
+                                "当前回合命中 {}，优先使用设置中的 provider/model。",
+                                setting_preference.settings_source
+                            ),
+                            Some(&selection),
+                            oem_locked,
+                            fallback_note.as_deref(),
                         ),
                         Some(&selection),
-                        oem_locked,
-                        fallback_note.as_deref(),
-                    ),
-                    Some(&selection),
-                    Some(setting_preference.provider_selector.clone()),
-                    Some(setting_preference.model_name.clone()),
-                    Some(setting_preference.settings_source.clone()),
-                );
-                let cost_state = build_cost_state(Some(&selection), None, "estimated");
-                let runtime_summary = build_runtime_summary(
-                    &routing_decision,
-                    &limit_state,
-                    &cost_state,
-                    &permission_state,
-                    oem_limit_event.as_ref(),
-                );
+                        Some(setting_preference.provider_selector.clone()),
+                        Some(setting_preference.model_name.clone()),
+                        Some(setting_preference.settings_source.clone()),
+                    );
+                    let cost_state = build_cost_state(Some(&selection), None, "estimated");
+                    let runtime_summary = build_runtime_summary(
+                        &routing_decision,
+                        &limit_state,
+                        &cost_state,
+                        &permission_state,
+                        oem_limit_event.as_ref(),
+                    );
 
-                return Ok(RuntimeRequestProviderResolution {
-                    provider_config: Some(selection.provider_config),
-                    task_profile,
-                    routing_decision,
-                    limit_state,
-                    cost_state,
-                    permission_state: permission_state.clone(),
-                    limit_event: oem_limit_event,
-                    oem_policy: oem_policy.clone(),
-                    runtime_summary,
-                });
+                    return Ok(RuntimeRequestProviderResolution {
+                        provider_config: Some(selection.provider_config),
+                        task_profile,
+                        routing_decision,
+                        limit_state,
+                        cost_state,
+                        permission_state: permission_state.clone(),
+                        limit_event: oem_limit_event,
+                        oem_policy: oem_policy.clone(),
+                        runtime_summary,
+                    });
+                }
             }
             Err(error) => {
                 tracing::warn!(
@@ -3760,8 +3854,13 @@ pub(super) async fn resolve_runtime_request_provider_resolution(
                 true,
             )
             .await?;
+            let auto_reason = if fallback_note.is_some() {
+                "当前回合命中 responsive_chat_model，但显式服务模型不可用或历史首字样本不满足低延迟目标；运行时改按已启用 Provider 的模型元数据自动选择低延迟对话候选。"
+            } else {
+                "当前回合命中 responsive_chat_model，且未配置服务模型；运行时按已启用 Provider 的模型元数据自动选择低延迟对话候选。"
+            };
             let mut notes = vec![format!(
-                "responsive_chat 未配置显式服务模型，已从已启用 Provider 的模型元数据中自动选择低延迟候选；当前 Provider 兼容候选数为 {}。",
+                "responsive_chat 已从已启用 Provider 的模型元数据中自动选择低延迟候选；当前 Provider 兼容候选数为 {}。",
                 auto_preference.compatible_candidate_count
             )];
             if let Some(note) = fallback_note.clone() {
@@ -3780,7 +3879,7 @@ pub(super) async fn resolve_runtime_request_provider_resolution(
                 &task_profile,
                 "responsive_chat_auto",
                 compose_routing_decision_reason(
-                    "当前回合命中 responsive_chat_model，且未配置服务模型；运行时按已启用 Provider 的模型元数据自动选择低延迟对话候选。",
+                    auto_reason,
                     Some(&selection),
                     oem_locked,
                     fallback_note.as_deref(),

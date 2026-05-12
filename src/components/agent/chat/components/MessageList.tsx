@@ -55,7 +55,10 @@ import {
   sanitizeMessageTextForDisplay,
 } from "../utils/internalImagePlaceholder";
 import { isHiddenConversationArtifactPath } from "../utils/internalArtifactVisibility";
-import { buildInputbarRuntimeStatusLineModel } from "../utils/inputbarRuntimeStatusLine";
+import {
+  buildInputbarRuntimeStatusLineModel,
+  type InputbarRuntimeStatusLineModel,
+} from "../utils/inputbarRuntimeStatusLine";
 import { resolvePromptCacheActivity } from "../utils/tokenUsageSummary";
 import {
   isRuntimeStatusDiagnosticsOnly,
@@ -244,7 +247,6 @@ const MESSAGE_LIST_COMPACT_HISTORICAL_ASSISTANT_THRESHOLD = 900;
 const MESSAGE_LIST_COMPACT_HISTORICAL_ASSISTANT_PREVIEW_CHARS = 900;
 const MESSAGE_LIST_LONG_HISTORICAL_MESSAGE_THRESHOLD = 24_000;
 const MESSAGE_LIST_LONG_HISTORICAL_MESSAGE_PREVIEW_CHARS = 2_000;
-const MESSAGE_LIST_PLAIN_ANSWER_REASONING_SUPPRESS_MAX_CHARS = 80;
 const MESSAGE_LIST_RESTORED_MARKDOWN_HYDRATION_INITIAL_COUNT = 2;
 const MESSAGE_LIST_RESTORED_MARKDOWN_HYDRATION_BATCH_SIZE = 2;
 const MESSAGE_LIST_RESTORED_MARKDOWN_HYDRATION_DELAY_MS = 140;
@@ -609,6 +611,42 @@ const AssistantFirstTokenRuntimeStatus: React.FC<{
   );
 };
 
+const AssistantStreamingInlineIndicator: React.FC<{
+  runtime: InputbarRuntimeStatusLineModel;
+}> = ({ runtime }) => {
+  const { t } = useTranslation("agent");
+  const status = runtime.status === "queued" ? "queued" : "running";
+  const isQueued = status === "queued";
+
+  return (
+    <div
+      data-testid="assistant-streaming-inline-indicator"
+      data-status={status}
+      role="status"
+      aria-live="polite"
+      className={[
+        "inline-flex items-center gap-1.5 rounded-md px-2 py-[3px] text-[11px] font-medium leading-4",
+        isQueued
+          ? "bg-slate-100 text-slate-500"
+          : "bg-slate-100 text-slate-600",
+      ].join(" ")}
+    >
+      <Loader2
+        className={[
+          "h-3 w-3 shrink-0 animate-spin motion-reduce:animate-none",
+          isQueued ? "text-slate-400" : "text-emerald-600",
+        ].join(" ")}
+        aria-hidden
+      />
+      <span>
+        {t(`agentChat.messageList.streamingInline.${status}`, {
+          defaultValue: isQueued ? "等待输出" : "正在输出",
+        })}
+      </span>
+    </div>
+  );
+};
+
 function shouldRenderRuntimeStatusPill(
   status?: AgentRuntimeStatus | null,
 ): boolean {
@@ -726,20 +764,6 @@ function hasInlineThinkingContent(message: Message): boolean {
   );
 }
 
-function hasSubstantiveProcessTimelineItem(items: AgentThreadItem[]): boolean {
-  return items.some((item) => {
-    switch (item.type) {
-      case "user_message":
-      case "agent_message":
-      case "turn_summary":
-      case "reasoning":
-        return false;
-      default:
-        return true;
-    }
-  });
-}
-
 function hasNonTextInlineProcessPart(message: Message): boolean {
   return Boolean(
     message.contentParts?.some(
@@ -748,45 +772,13 @@ function hasNonTextInlineProcessPart(message: Message): boolean {
   );
 }
 
-function shouldSuppressAmbientPlainAnswerReasoning(params: {
-  item: AgentThreadItem;
-  timelineItems: AgentThreadItem[];
-  turn: AgentThreadTurn;
-  message: Message;
-  displayContent: string;
-}): boolean {
-  if (
-    params.item.type !== "reasoning" ||
-    params.item.status !== "completed" ||
-    params.turn.status !== "completed"
-  ) {
-    return false;
-  }
-
-  if (
-    params.message.isThinking ||
-    hasInlineThinkingContent(params.message) ||
-    hasNonTextInlineProcessPart(params.message) ||
-    (params.message.toolCalls || []).length > 0 ||
-    (params.message.actionRequests || []).length > 0 ||
-    !params.displayContent.trim()
-  ) {
-    return false;
-  }
-
-  const displayTextLength = Array.from(params.displayContent.trim()).length;
-  if (
-    displayTextLength > MESSAGE_LIST_PLAIN_ANSWER_REASONING_SUPPRESS_MAX_CHARS
-  ) {
-    return false;
-  }
-
-  return !hasSubstantiveProcessTimelineItem(params.timelineItems);
-}
-
-function shouldSuppressAmbientStreamingReasoning(message: Message): boolean {
+function shouldSuppressAmbientStreamingReasoning(
+  message: Message,
+  displayContent: string,
+): boolean {
   if (
     !hasInlineThinkingContent(message) ||
+    displayContent.trim() ||
     !isRuntimeStatusDiagnosticsOnly(message.runtimeStatus)
   ) {
     return false;
@@ -801,6 +793,37 @@ function shouldSuppressAmbientStreamingReasoning(message: Message): boolean {
   }
 
   return true;
+}
+
+function isPreAnswerThinkingTimelineItem(item: AgentThreadItem): boolean {
+  if (item.status === "failed") {
+    return false;
+  }
+
+  return (
+    item.type === "plan" ||
+    item.type === "reasoning" ||
+    item.type === "turn_summary" ||
+    item.type === "context_compaction"
+  );
+}
+
+function shouldSuppressPreAnswerThinkingTimeline(params: {
+  message: Message;
+  turn: AgentThreadTurn;
+  items: AgentThreadItem[];
+  displayContent: string;
+}): boolean {
+  if (
+    !params.message.isThinking ||
+    params.turn.status === "completed" ||
+    params.displayContent.trim() ||
+    params.items.length === 0
+  ) {
+    return false;
+  }
+
+  return params.items.every(isPreAnswerThinkingTimelineItem);
 }
 
 interface InlineProcessCoverage {
@@ -1416,36 +1439,43 @@ const MessageListInner: React.FC<MessageListProps> = ({
         : null,
     [providerType, providers, shouldInspectPromptCacheNotice],
   );
+  const activeConversationRuntimeStatusLine = useMemo(
+    () =>
+      buildInputbarRuntimeStatusLineModel({
+        messages: renderedMessages,
+        turns: renderedTurns,
+        threadItems: renderedThreadItems,
+        currentTurnId: activeCurrentTurnId,
+        threadRead,
+        pendingActions,
+        submittedActionsInFlight,
+        queuedTurns,
+        childSubagentSessions,
+        isSending,
+      }),
+    [
+      activeCurrentTurnId,
+      childSubagentSessions,
+      isSending,
+      pendingActions,
+      queuedTurns,
+      renderedMessages,
+      renderedThreadItems,
+      renderedTurns,
+      submittedActionsInFlight,
+      threadRead,
+    ],
+  );
   const tailRuntimeStatusLine = useMemo(() => {
     if (!lastAssistantMessageId || shouldDeferTailRuntimeStatusLine) {
       return null;
     }
 
-    return buildInputbarRuntimeStatusLineModel({
-      messages: renderedMessages,
-      turns: renderedTurns,
-      threadItems: renderedThreadItems,
-      currentTurnId: activeCurrentTurnId,
-      threadRead,
-      pendingActions,
-      submittedActionsInFlight,
-      queuedTurns,
-      childSubagentSessions,
-      isSending,
-    });
+    return activeConversationRuntimeStatusLine;
   }, [
-    activeCurrentTurnId,
-    childSubagentSessions,
-    isSending,
+    activeConversationRuntimeStatusLine,
     lastAssistantMessageId,
-    pendingActions,
-    submittedActionsInFlight,
-    queuedTurns,
-    renderedMessages,
-    renderedThreadItems,
-    renderedTurns,
     shouldDeferTailRuntimeStatusLine,
-    threadRead,
   ]);
   const currentTurnTimeline = useMemo(() => {
     return buildCurrentTurnTimelineProjection({
@@ -1793,13 +1823,14 @@ const MessageListInner: React.FC<MessageListProps> = ({
       isConversationTailAssistant: boolean,
       hasProcessTimelineItems: boolean,
       hasTurnContext: boolean,
+      displayContent: string,
     ): boolean => {
       if (message.role !== "assistant") {
         return false;
       }
 
       if (message.isThinking) {
-        if (shouldSuppressAmbientStreamingReasoning(message)) {
+        if (shouldSuppressAmbientStreamingReasoning(message, displayContent)) {
           return false;
         }
         return true;
@@ -2013,6 +2044,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
         isConversationTailAssistant,
         hasProcessTimelineItems,
         Boolean(timeline),
+        displayContent,
       );
     const conversationContentParts =
       msg.role === "assistant"
@@ -2071,18 +2103,6 @@ const MessageListInner: React.FC<MessageListProps> = ({
             return false;
           }
 
-          if (
-            shouldSuppressAmbientPlainAnswerReasoning({
-              item,
-              timelineItems: timeline.items,
-              turn: timeline.turn,
-              message: msg,
-              displayContent,
-            })
-          ) {
-            return false;
-          }
-
           if (!inlineProcessCoverage.hasInlineProcessEntries) {
             return true;
           }
@@ -2094,6 +2114,17 @@ const MessageListInner: React.FC<MessageListProps> = ({
           return true;
         })
       : [];
+    const shouldHoldPreAnswerThinkingTimeline =
+      timeline !== null &&
+      shouldSuppressPreAnswerThinkingTimeline({
+        message: msg,
+        turn: timeline.turn,
+        items: primaryTimelineItems,
+        displayContent,
+      });
+    const visiblePrimaryTimelineItems = shouldHoldPreAnswerThinkingTimeline
+      ? []
+      : primaryTimelineItems;
     const trailingTimelineItems = timeline
       ? dedupeDeferredTimelineItems(
           timelineConversationItems.filter((item) =>
@@ -2114,8 +2145,9 @@ const MessageListInner: React.FC<MessageListProps> = ({
     const primaryTimeline =
       !shouldSuppressImageProcessFlow &&
       timeline &&
-      (primaryTimelineItems.length > 0 || hasDeferredHistoricalTimelineDetails)
-        ? { ...timeline, items: primaryTimelineItems }
+      (visiblePrimaryTimelineItems.length > 0 ||
+        hasDeferredHistoricalTimelineDetails)
+        ? { ...timeline, items: visiblePrimaryTimelineItems }
         : null;
     const trailingTimeline =
       timeline && trailingTimelineItems.length > 0
@@ -2129,9 +2161,13 @@ const MessageListInner: React.FC<MessageListProps> = ({
       ? undefined
       : msg.actionRequests;
     const primaryActionRequests =
-      primaryTimelineItems.length > 0 ? timelineActionRequests : undefined;
+      visiblePrimaryTimelineItems.length > 0
+        ? timelineActionRequests
+        : undefined;
     const trailingActionRequests =
-      primaryTimelineItems.length === 0 ? timelineActionRequests : undefined;
+      visiblePrimaryTimelineItems.length === 0
+        ? timelineActionRequests
+        : undefined;
     const shouldSuppressInlineA2UI =
       activePendingA2UISource?.kind !== "action_request" &&
       activePendingA2UISource?.messageId === msg.id;
@@ -2294,7 +2330,6 @@ const MessageListInner: React.FC<MessageListProps> = ({
       !conversationThinkingContent?.trim() &&
       !conversationToolCalls?.length &&
       !((msg.actionRequests || []).length > 0) &&
-      !primaryTimeline &&
       !((msg.images || []).length > 0) &&
       visibleAssistantArtifacts.length === 0 &&
       !shouldRenderMessageCanvasShortcut &&
@@ -2325,9 +2360,20 @@ const MessageListInner: React.FC<MessageListProps> = ({
       isConversationTailAssistant &&
       Boolean(tailRuntimeStatusLine) &&
       !shouldSuppressActiveRuntimeLine;
+    const shouldRenderActiveRuntimeFooterIndicator =
+      msg.role === "assistant" &&
+      msg.id === lastAssistantMessageId &&
+      isConversationTailAssistant &&
+      hasAssistantBodyContent &&
+      Boolean(activeConversationRuntimeStatusLine) &&
+      (activeConversationRuntimeStatusLine?.status === "running" ||
+        activeConversationRuntimeStatusLine?.status === "queued") &&
+      !shouldPreviewHistoricalAssistantMessage &&
+      !shouldDeferHistoricalMarkdownRender;
     const shouldRenderUsageFooter =
       isConversationTailAssistant &&
       !shouldRenderTailRuntimeStatusLine &&
+      !shouldRenderActiveRuntimeFooterIndicator &&
       !msg.isThinking &&
       Boolean(msg.usage);
     const shouldRenderStatusPill =
@@ -2336,6 +2382,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
     const assistantMetaFooter =
       msg.role === "assistant" &&
       (shouldRenderTailRuntimeStatusLine ||
+        shouldRenderActiveRuntimeFooterIndicator ||
         shouldRenderStatusPill ||
         shouldRenderUsageFooter) ? (
         <div
@@ -2351,6 +2398,12 @@ const MessageListInner: React.FC<MessageListProps> = ({
               runtime={tailRuntimeStatusLine || null}
               providerType={providerType}
               canStop={Boolean(onInterruptCurrentTurn)}
+            />
+          ) : null}
+          {shouldRenderActiveRuntimeFooterIndicator &&
+          activeConversationRuntimeStatusLine ? (
+            <AssistantStreamingInlineIndicator
+              runtime={activeConversationRuntimeStatusLine}
             />
           ) : null}
           {shouldRenderStatusPill && msg.runtimeStatus ? (

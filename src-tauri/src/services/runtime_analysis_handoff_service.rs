@@ -6,14 +6,17 @@
 
 use crate::agent::SessionDetail;
 use crate::commands::aster_agent_cmd::AgentRuntimeThreadReadModel;
+use crate::services::runtime_analysis_markdown_locale_service::runtime_analysis_markdown_copy;
 use crate::services::runtime_evidence_pack_service::{
-    export_runtime_evidence_pack, RuntimeEvidenceArtifactKind, RuntimeEvidencePackExportResult,
+    export_runtime_evidence_pack_with_owner_runs_and_locale, RuntimeEvidenceArtifactKind,
+    RuntimeEvidencePackExportResult,
 };
 use crate::services::runtime_handoff_artifact_service::{
     export_runtime_handoff_bundle, RuntimeHandoffArtifactKind, RuntimeHandoffBundleExportResult,
 };
 use crate::services::runtime_replay_case_service::{
-    export_runtime_replay_case, RuntimeReplayArtifactKind, RuntimeReplayCaseExportResult,
+    export_runtime_replay_case_with_locale, RuntimeReplayArtifactKind,
+    RuntimeReplayCaseExportResult,
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -185,6 +188,15 @@ pub fn export_runtime_analysis_handoff(
     thread_read: &AgentRuntimeThreadReadModel,
     workspace_root: &Path,
 ) -> Result<RuntimeAnalysisHandoffExportResult, String> {
+    export_runtime_analysis_handoff_with_locale(detail, thread_read, workspace_root, Some("zh-CN"))
+}
+
+pub fn export_runtime_analysis_handoff_with_locale(
+    detail: &SessionDetail,
+    thread_read: &AgentRuntimeThreadReadModel,
+    workspace_root: &Path,
+    locale: Option<&str>,
+) -> Result<RuntimeAnalysisHandoffExportResult, String> {
     let session_id = detail.id.trim();
     if session_id.is_empty() {
         return Err("session_id 不能为空，无法导出 analysis handoff".to_string());
@@ -206,9 +218,20 @@ pub fn export_runtime_analysis_handoff(
 
     let handoff_bundle =
         export_runtime_handoff_bundle(detail, thread_read, workspace_root.as_path())?;
-    let evidence_pack =
-        export_runtime_evidence_pack(detail, thread_read, workspace_root.as_path())?;
-    let replay_case = export_runtime_replay_case(detail, thread_read, workspace_root.as_path())?;
+    let evidence_pack = export_runtime_evidence_pack_with_owner_runs_and_locale(
+        detail,
+        thread_read,
+        workspace_root.as_path(),
+        &[],
+        locale,
+    )?;
+    let replay_case = export_runtime_replay_case_with_locale(
+        detail,
+        thread_read,
+        workspace_root.as_path(),
+        locale,
+    )?;
+    let markdown_copy = runtime_analysis_markdown_copy(locale);
 
     fs::create_dir_all(&analysis_absolute_root).map_err(|error| {
         format!(
@@ -530,7 +553,7 @@ pub fn export_runtime_analysis_handoff(
         queued_turn_count: thread_read.queued_turns.len(),
     };
 
-    let reading_order = build_reading_order();
+    let reading_order = build_reading_order(locale);
     let review_checklist =
         build_human_review_checklist(&input_payload, &expected_payload, &failure_modes, &summary);
     let external_contract = build_external_analysis_contract();
@@ -604,6 +627,7 @@ pub fn export_runtime_analysis_handoff(
         &analysis_context
             .observability
             .verification_recovered_outcomes,
+        locale,
     );
 
     let artifacts = vec![
@@ -612,7 +636,7 @@ pub fn export_runtime_analysis_handoff(
             session_id,
             ANALYSIS_BRIEF_FILE_NAME,
             RuntimeAnalysisArtifactKind::AnalysisBrief,
-            "外部分析简报",
+            markdown_copy.brief_artifact_title,
             analysis_brief,
         )?,
         write_analysis_file(
@@ -620,7 +644,7 @@ pub fn export_runtime_analysis_handoff(
             session_id,
             ANALYSIS_CONTEXT_FILE_NAME,
             RuntimeAnalysisArtifactKind::AnalysisContext,
-            "外部分析上下文",
+            markdown_copy.context_artifact_title,
             format!(
                 "{}\n",
                 serde_json::to_string_pretty(&analysis_context)
@@ -636,6 +660,7 @@ pub fn export_runtime_analysis_handoff(
         &handoff_bundle,
         &evidence_pack,
         &replay_case,
+        locale,
     );
 
     Ok(RuntimeAnalysisHandoffExportResult {
@@ -681,37 +706,48 @@ fn build_analysis_brief(
     observability_gap_signals: &[String],
     verification_failure_outcomes: &[String],
     verification_recovered_outcomes: &[String],
+    locale: Option<&str>,
 ) -> String {
+    let copy = runtime_analysis_markdown_copy(locale);
     let mut lines = vec![
-        "# 外部分析交接简报".to_string(),
+        format!("# {}", copy.brief_title),
         String::new(),
-        format!("- 标题：{title}"),
-        format!("- 生成时间：{exported_at}"),
-        format!("- 会话：`{}`", summary.session_id),
-        format!("- 线程：`{}`", summary.thread_id),
+        format!("- {}：{title}", copy.title),
+        format!("- {}：{exported_at}", copy.generated_at),
+        format!("- {}：`{}`", copy.session, summary.session_id),
+        format!("- {}：`{}`", copy.thread, summary.thread_id),
         format!(
-            "- 执行策略：{}",
+            "- {}：{}",
+            copy.execution_strategy,
             empty_fallback(&summary.execution_strategy, "unknown")
         ),
-        format!("- 模型：{}", empty_fallback(&summary.model, "unknown")),
+        format!(
+            "- {}：{}",
+            copy.model,
+            empty_fallback(&summary.model, "unknown")
+        ),
         String::new(),
-        "## 当前问题".to_string(),
+        format!("## {}", copy.current_issue),
         String::new(),
         format!(
-            "- 目标摘要：{}",
-            empty_fallback(&summary.goal_summary, "未知")
+            "- {}：{}",
+            copy.goal_summary,
+            empty_fallback(&summary.goal_summary, copy.unknown)
         ),
         format!(
-            "- 线程状态：{}",
-            empty_fallback(&summary.thread_status, "未知")
+            "- {}：{}",
+            copy.thread_status,
+            empty_fallback(&summary.thread_status, copy.unknown)
         ),
         format!(
-            "- 最新 turn 状态：{}",
-            empty_fallback(&summary.latest_turn_status, "未知")
+            "- {}：{}",
+            copy.latest_turn_status,
+            empty_fallback(&summary.latest_turn_status, copy.unknown)
         ),
         format!(
-            "- 主要阻塞：{}{}",
-            empty_fallback(&summary.primary_blocking_kind, "未知"),
+            "- {}：{}{}",
+            copy.primary_blocking,
+            empty_fallback(&summary.primary_blocking_kind, copy.unknown),
             if summary.primary_blocking_summary.is_empty() {
                 String::new()
             } else {
@@ -720,42 +756,47 @@ fn build_analysis_brief(
         ),
         format!(
             "- failure modes：{}",
-            join_or_fallback(&summary.failure_modes, "无")
+            join_or_fallback(&summary.failure_modes, copy.none)
         ),
         format!(
             "- suite tags：{}",
-            join_or_fallback(&summary.suite_tags, "无")
+            join_or_fallback(&summary.suite_tags, copy.none)
         ),
         format!("- pending request：{}", summary.pending_request_count),
         format!("- queued turn：{}", summary.queued_turn_count),
         format!(
-            "- 权限状态：{}",
-            empty_fallback(&summary.permission_status, "未导出")
+            "- {}：{}",
+            copy.permission_status,
+            empty_fallback(&summary.permission_status, copy.not_exported)
         ),
         format!(
-            "- 权限确认：{}",
-            empty_fallback(&summary.permission_confirmation_summary, "未导出")
+            "- {}：{}",
+            copy.permission_confirmation,
+            empty_fallback(&summary.permission_confirmation_summary, copy.not_exported)
         ),
         format!(
-            "- 模型锁定能力缺口：{}",
-            empty_fallback(&summary.user_locked_capability_summary, "未触发")
+            "- {}：{}",
+            copy.user_locked_capability,
+            empty_fallback(&summary.user_locked_capability_summary, copy.not_triggered)
         ),
         String::new(),
-        "## 证据关联与可观测覆盖".to_string(),
+        format!("## {}", copy.observability_coverage),
         String::new(),
         format!(
-            "- 关联键：{}",
-            join_or_fallback(observability_correlation_keys, "无")
+            "- {}：{}",
+            copy.correlation_keys,
+            join_or_fallback(observability_correlation_keys, copy.none)
         ),
         format!(
             "- AgentRuntime Profile：{}",
             format_agent_runtime_profile_summary(agent_runtime_profile)
         ),
         format!(
-            "- 当前缺口：{}",
-            join_or_fallback(observability_gap_signals, "无")
+            "- {}：{}",
+            copy.current_gaps,
+            join_or_fallback(observability_gap_signals, copy.none)
         ),
-        "- 结构化验证摘要：".to_string(),
+        format!("- {}：", copy.verification_summary),
     ];
     lines.extend(
         render_observability_verification_summary_lines(observability_summary)
@@ -764,15 +805,17 @@ fn build_analysis_brief(
     );
     lines.extend([
         format!(
-            "- 验证失败焦点：{}",
-            join_or_fallback(verification_failure_outcomes, "无")
+            "- {}：{}",
+            copy.verification_failure_focus,
+            join_or_fallback(verification_failure_outcomes, copy.none)
         ),
         format!(
-            "- 已恢复结果：{}",
-            join_or_fallback(verification_recovered_outcomes, "无")
+            "- {}：{}",
+            copy.recovered_outcomes,
+            join_or_fallback(verification_recovered_outcomes, copy.none)
         ),
         String::new(),
-        "## 推荐读取顺序".to_string(),
+        format!("## {}", copy.reading_order),
         String::new(),
     ]);
 
@@ -780,17 +823,86 @@ fn build_analysis_brief(
         lines.push(format!("{}. {}", index + 1, item));
     }
 
-    lines.extend([String::new(), "## Replay 文件".to_string(), String::new()]);
+    lines.extend([
+        String::new(),
+        format!("## {}", copy.replay_files),
+        String::new(),
+    ]);
     lines.extend(render_artifact_lines(replay_refs));
-    lines.extend([String::new(), "## Handoff 文件".to_string(), String::new()]);
+    lines.extend([
+        String::new(),
+        format!("## {}", copy.handoff_files),
+        String::new(),
+    ]);
     lines.extend(render_artifact_lines(handoff_refs));
-    lines.extend([String::new(), "## Evidence 文件".to_string(), String::new()]);
+    lines.extend([
+        String::new(),
+        format!("## {}", copy.evidence_files),
+        String::new(),
+    ]);
     lines.extend(render_artifact_lines(evidence_refs));
     lines.extend([
         String::new(),
-        "## 可直接给外部 AI 的任务说明".to_string(),
+        format!("## {}", copy.external_task),
         String::new(),
         "```text".to_string(),
+    ]);
+    lines.extend(analysis_external_task_block(locale));
+    lines.extend([
+        "```".to_string(),
+        String::new(),
+        format!("## {}", copy.human_review_checklist),
+        String::new(),
+    ]);
+    lines.extend(review_checklist.iter().map(|item| format!("- {item}")));
+    lines.extend([
+        String::new(),
+        format!("## {}", copy.key_excerpts),
+        String::new(),
+        format!("### {}", copy.replay_grader_excerpt),
+        String::new(),
+        empty_fallback(grader_excerpt, copy.no_excerpt).to_string(),
+        String::new(),
+        format!("### {}", copy.handoff_excerpt),
+        String::new(),
+        empty_fallback(handoff_excerpt, copy.no_excerpt).to_string(),
+        String::new(),
+        format!("### {}", copy.evidence_excerpt),
+        String::new(),
+        empty_fallback(evidence_excerpt, copy.no_excerpt).to_string(),
+        String::new(),
+        format!("## {}", copy.note),
+        String::new(),
+    ]);
+    lines.extend(analysis_note_lines(locale));
+    lines.push(String::new());
+
+    format!("{}\n", lines.join("\n"))
+}
+
+fn analysis_external_task_block(locale: Option<&str>) -> Vec<String> {
+    if analysis_markdown_uses_english(locale) {
+        return vec![
+            "You are receiving a Lime-exported analysis handoff. Diagnose the issue first, then propose the smallest executable fix; if the evidence is sufficient, you may implement the fix directly in the workspace.".to_string(),
+            String::new(),
+            "Read analysis-context.json and analysis-brief.md first, then continue through replay / handoff / evidence in the order listed here.".to_string(),
+            String::new(),
+            "The output must include at least:".to_string(),
+            "- Conclusion".to_string(),
+            "- Root cause assessment".to_string(),
+            "- Key evidence".to_string(),
+            "- Fix proposal".to_string(),
+            "- If code was changed, list the changes and regression points".to_string(),
+            "- Risks and unknowns".to_string(),
+            String::new(),
+            "Constraints:".to_string(),
+            "- Cite existing evidence first; do not pretend to have seen missing information.".to_string(),
+            "- If evidence is insufficient, list the gap and what requires human confirmation.".to_string(),
+            "- Do not expand into unrelated refactors.".to_string(),
+        ];
+    }
+
+    vec![
         "你将收到一个由 Lime 导出的 analysis handoff。你的职责是先诊断问题，再给出最小可执行修复方案；如果证据已足够明确，也可以直接在工作区内实施修复。".to_string(),
         String::new(),
         "请优先读取 analysis-context.json 与 analysis-brief.md，再按其中给出的 replay / handoff / evidence 顺序继续下钻。".to_string(),
@@ -807,38 +919,25 @@ fn build_analysis_brief(
         "- 优先引用现有证据，不要假装看到不存在的信息。".to_string(),
         "- 如果证据不足，明确写出缺口和需要人工确认的地方。".to_string(),
         "- 不顺手扩大到无关重构。".to_string(),
-        "```".to_string(),
-        String::new(),
-        "## 人工审核检查清单".to_string(),
-        String::new(),
-    ]);
-    lines.extend(review_checklist.iter().map(|item| format!("- {item}")));
-    lines.extend([
-        String::new(),
-        "## 关键摘录".to_string(),
-        String::new(),
-        "### Replay Grader 摘录".to_string(),
-        String::new(),
-        empty_fallback(grader_excerpt, "当前无可用摘录。").to_string(),
-        String::new(),
-        "### Handoff 摘录".to_string(),
-        String::new(),
-        empty_fallback(handoff_excerpt, "当前无可用摘录。").to_string(),
-        String::new(),
-        "### Evidence 摘录".to_string(),
-        String::new(),
-        empty_fallback(evidence_excerpt, "当前无可用摘录。").to_string(),
-        String::new(),
-        "## 注意".to_string(),
-        String::new(),
+    ]
+}
+
+fn analysis_note_lines(locale: Option<&str>) -> Vec<String> {
+    if analysis_markdown_uses_english(locale) {
+        return vec![
+            format!(
+                "- All paths are sanitized to `{DEFAULT_SANITIZED_WORKSPACE_ROOT}` for external AI consumption."
+            ),
+            "- This brief is for analysis handoff only; it does not approve or apply a Lime-internal fix by itself.".to_string(),
+        ];
+    }
+
+    vec![
         format!(
             "- 所有路径默认已按 `{DEFAULT_SANITIZED_WORKSPACE_ROOT}` 占位规则输出，便于外部 AI 消费。"
         ),
         "- 这份简报只负责分析交接，不负责 Lime 内部自动修复。".to_string(),
-        String::new(),
-    ]);
-
-    format!("{}\n", lines.join("\n"))
+    ]
 }
 
 fn format_agent_runtime_profile_summary(profile: &Value) -> String {
@@ -879,7 +978,10 @@ fn build_copy_prompt(
     handoff_bundle: &RuntimeHandoffBundleExportResult,
     evidence_pack: &RuntimeEvidencePackExportResult,
     replay_case: &RuntimeReplayCaseExportResult,
+    locale: Option<&str>,
 ) -> String {
+    let copy = runtime_analysis_markdown_copy(locale);
+    let prompt_copy = analysis_prompt_copy(locale);
     let analysis_brief_path = artifacts
         .iter()
         .find(|artifact| artifact.kind == RuntimeAnalysisArtifactKind::AnalysisBrief)
@@ -892,24 +994,29 @@ fn build_copy_prompt(
         .unwrap_or_default();
 
     let lines = vec![
-        "# Lime 外部诊断与修复任务".to_string(),
+        format!("# {}", copy.external_task),
         String::new(),
-        "你现在位于一个可读写的 Lime 工作区。请不要向我继续追问额外上下文，直接基于现有证据先诊断问题，再给出最小修复方案；如果证据已经足够明确，也可以直接修改代码完成修复。".to_string(),
+        prompt_copy.workspace_intro.to_string(),
         String::new(),
-        "请先读取下面两份文件：".to_string(),
+        prompt_copy.read_files.to_string(),
         format!("1. `{analysis_brief_path}`"),
         format!("2. `{analysis_context_path}`"),
         String::new(),
-        "如果需要继续下钻，再按 analysis brief 里的顺序读取 replay / handoff / evidence 文件。".to_string(),
+        prompt_copy.drilldown.to_string(),
         String::new(),
-        "当前任务摘要：".to_string(),
-        format!("- 标题：{title}"),
-        format!("- 会话：`{}`", summary.session_id),
-        format!("- 线程：`{}`", summary.thread_id),
-        format!("- 线程状态：{}", empty_fallback(&summary.thread_status, "未知")),
+        format!("{}：", copy.current_issue),
+        format!("- {}：{title}", copy.title),
+        format!("- {}：`{}`", copy.session, summary.session_id),
+        format!("- {}：`{}`", copy.thread, summary.thread_id),
         format!(
-            "- 主要阻塞：{}{}",
-            empty_fallback(&summary.primary_blocking_kind, "未知"),
+            "- {}：{}",
+            copy.thread_status,
+            empty_fallback(&summary.thread_status, copy.unknown)
+        ),
+        format!(
+            "- {}：{}{}",
+            copy.primary_blocking,
+            empty_fallback(&summary.primary_blocking_kind, copy.unknown),
             if summary.primary_blocking_summary.is_empty() {
                 String::new()
             } else {
@@ -917,34 +1024,120 @@ fn build_copy_prompt(
             }
         ),
         format!(
-            "- 权限确认：{}",
-            empty_fallback(&summary.permission_confirmation_summary, "未导出")
+            "- {}：{}",
+            copy.permission_confirmation,
+            empty_fallback(&summary.permission_confirmation_summary, copy.not_exported)
         ),
         format!(
-            "- 模型锁定能力缺口：{}",
-            empty_fallback(&summary.user_locked_capability_summary, "未触发")
+            "- {}：{}",
+            copy.user_locked_capability,
+            empty_fallback(&summary.user_locked_capability_summary, copy.not_triggered)
         ),
-        format!("- Handoff 根目录：`{}`", to_portable_path(&handoff_bundle.bundle_absolute_root)),
-        format!("- Evidence 根目录：`{}`", to_portable_path(&evidence_pack.pack_absolute_root)),
-        format!("- Replay 根目录：`{}`", to_portable_path(&replay_case.replay_absolute_root)),
+        format!(
+            "- {}：`{}`",
+            prompt_copy.handoff_root,
+            to_portable_path(&handoff_bundle.bundle_absolute_root)
+        ),
+        format!(
+            "- {}：`{}`",
+            prompt_copy.evidence_root,
+            to_portable_path(&evidence_pack.pack_absolute_root)
+        ),
+        format!(
+            "- {}：`{}`",
+            prompt_copy.replay_root,
+            to_portable_path(&replay_case.replay_absolute_root)
+        ),
         String::new(),
-        "输出要求：".to_string(),
-        "- 先给出结论与根因判断。".to_string(),
-        "- 明确引用关键证据文件，不要凭空推断。".to_string(),
-        "- 给出最小修复方案；如果已经修改代码，请列出改动点和原因。".to_string(),
-        "- 给出回归建议、风险与未知项。".to_string(),
+        prompt_copy.output_requirements.to_string(),
+        format!("- {}", prompt_copy.output_conclusion),
+        format!("- {}", prompt_copy.output_evidence),
+        format!("- {}", prompt_copy.output_fix),
+        format!("- {}", prompt_copy.output_regression),
         String::new(),
-        "约束：".to_string(),
-        "- 优先做最小修复，不顺手扩大到无关重构。".to_string(),
-        "- 如果证据不足，明确列出缺口。".to_string(),
-        "- 最终是否接受修复仍由人工审核决定。".to_string(),
+        prompt_copy.constraints.to_string(),
+        format!("- {}", prompt_copy.constraint_minimal),
+        format!("- {}", prompt_copy.constraint_gaps),
+        format!("- {}", prompt_copy.constraint_review_decides),
         String::new(),
     ];
 
     format!("{}\n", lines.join("\n"))
 }
 
-fn build_reading_order() -> Vec<String> {
+struct AnalysisPromptCopy {
+    workspace_intro: &'static str,
+    read_files: &'static str,
+    drilldown: &'static str,
+    handoff_root: &'static str,
+    evidence_root: &'static str,
+    replay_root: &'static str,
+    output_requirements: &'static str,
+    output_conclusion: &'static str,
+    output_evidence: &'static str,
+    output_fix: &'static str,
+    output_regression: &'static str,
+    constraints: &'static str,
+    constraint_minimal: &'static str,
+    constraint_gaps: &'static str,
+    constraint_review_decides: &'static str,
+}
+
+fn analysis_prompt_copy(locale: Option<&str>) -> AnalysisPromptCopy {
+    if analysis_markdown_uses_english(locale) {
+        return AnalysisPromptCopy {
+            workspace_intro: "You are in a writable Lime workspace. Do not ask me for more context; diagnose from the existing evidence first, then propose the smallest fix. If the evidence is already sufficient, you may edit the code directly.",
+            read_files: "Read these two files first:",
+            drilldown: "If more detail is needed, follow the replay / handoff / evidence order listed in the analysis brief.",
+            handoff_root: "Handoff root",
+            evidence_root: "Evidence root",
+            replay_root: "Replay root",
+            output_requirements: "Output requirements:",
+            output_conclusion: "Start with the conclusion and root cause assessment.",
+            output_evidence: "Cite the key evidence files explicitly; do not infer from missing facts.",
+            output_fix: "Provide the smallest fix proposal; if code was changed, list what changed and why.",
+            output_regression: "Provide regression advice, risks, and unknowns.",
+            constraints: "Constraints:",
+            constraint_minimal: "Prefer the smallest fix; do not expand into unrelated refactors.",
+            constraint_gaps: "If evidence is insufficient, list the gaps explicitly.",
+            constraint_review_decides: "A human review still decides whether the fix is accepted.",
+        };
+    }
+
+    AnalysisPromptCopy {
+        workspace_intro: "你现在位于一个可读写的 Lime 工作区。请不要向我继续追问额外上下文，直接基于现有证据先诊断问题，再给出最小修复方案；如果证据已经足够明确，也可以直接修改代码完成修复。",
+        read_files: "请先读取下面两份文件：",
+        drilldown: "如果需要继续下钻，再按 analysis brief 里的顺序读取 replay / handoff / evidence 文件。",
+        handoff_root: "Handoff 根目录",
+        evidence_root: "Evidence 根目录",
+        replay_root: "Replay 根目录",
+        output_requirements: "输出要求：",
+        output_conclusion: "先给出结论与根因判断。",
+        output_evidence: "明确引用关键证据文件，不要凭空推断。",
+        output_fix: "给出最小修复方案；如果已经修改代码，请列出改动点和原因。",
+        output_regression: "给出回归建议、风险与未知项。",
+        constraints: "约束：",
+        constraint_minimal: "优先做最小修复，不顺手扩大到无关重构。",
+        constraint_gaps: "如果证据不足，明确列出缺口。",
+        constraint_review_decides: "最终是否接受修复仍由人工审核决定。",
+    }
+}
+
+fn analysis_markdown_uses_english(locale: Option<&str>) -> bool {
+    runtime_analysis_markdown_copy(locale).brief_title == "External Analysis Handoff Brief"
+}
+
+fn build_reading_order(locale: Option<&str>) -> Vec<String> {
+    if analysis_markdown_uses_english(locale) {
+        return vec![
+            "Read replay/input.json and replay/expected.json first to confirm the task goal and grading criteria.".to_string(),
+            "Then read handoff/handoff.md and handoff/progress.json to confirm current state, continuation tasks, and recovery order.".to_string(),
+            "Then read evidence/summary.md and evidence/runtime.json to confirm current blockers, pending requests, and diagnostics.".to_string(),
+            "If process replay is needed, read evidence/timeline.json.".to_string(),
+            "Finally review replay/grader.md and return root cause, fix proposal, regression advice, and risks.".to_string(),
+        ];
+    }
+
     vec![
         "先读 replay/input.json 与 replay/expected.json，确认任务目标与判定标准。".to_string(),
         "再读 handoff/handoff.md 与 handoff/progress.json，确认当前状态、待继续事项与恢复顺序。"
@@ -1890,6 +2083,43 @@ mod tests {
         assert!(context.contains("\"matchedRequestCount\": 1"));
         assert!(context.contains("/workspace/lime"));
         assert!(!context.contains(temp_dir.path().to_string_lossy().as_ref()));
+    }
+
+    #[test]
+    fn analysis_brief_markdown_should_follow_requested_locale() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let detail = build_detail();
+        let thread_read = build_thread_read();
+        write_request_telemetry_fixture(temp_dir.path());
+
+        let result = export_runtime_analysis_handoff_with_locale(
+            &detail,
+            &thread_read,
+            temp_dir.path(),
+            Some("en-US"),
+        )
+        .expect("export");
+
+        assert_eq!(result.artifacts[0].title, "External Analysis Brief");
+        assert!(result
+            .copy_prompt
+            .contains("Task Instructions for an External AI"));
+        assert!(result.copy_prompt.contains("Read these two files first:"));
+        assert!(result.copy_prompt.contains("Output requirements:"));
+        assert!(!result.copy_prompt.contains("请先读取下面两份文件"));
+
+        let brief_path = temp_dir
+            .path()
+            .join(".lime/harness/sessions/session-1/analysis/analysis-brief.md");
+        let brief = fs::read_to_string(brief_path).expect("brief");
+
+        assert!(brief.contains("# External Analysis Handoff Brief"));
+        assert!(brief.contains("## Evidence Correlation and Observability Coverage"));
+        assert!(brief.contains("## Recommended Reading Order"));
+        assert!(brief.contains("You are receiving a Lime-exported analysis handoff."));
+        assert!(brief.contains("The output must include at least:"));
+        assert!(!brief.contains("## 推荐读取顺序"));
+        assert!(!brief.contains("你将收到一个由 Lime 导出的 analysis handoff"));
     }
 
     #[test]

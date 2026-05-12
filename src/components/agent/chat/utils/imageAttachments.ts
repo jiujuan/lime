@@ -11,15 +11,22 @@ const IMAGE_MIME_TYPE_BY_EXTENSION: Record<string, string> = {
   png: "image/png",
   gif: "image/gif",
   webp: "image/webp",
-  bmp: "image/bmp",
-  svg: "image/svg+xml",
-  tif: "image/tiff",
-  tiff: "image/tiff",
-  heic: "image/heic",
-  heif: "image/heif",
 };
 
-function normalizeImageMimeType(
+export const MAX_IMAGE_ATTACHMENTS_PER_TURN = 20;
+export const MAX_IMAGE_ATTACHMENT_BYTES = 3_932_160;
+export const SUPPORTED_IMAGE_ATTACHMENT_MEDIA_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+] as const;
+
+const SUPPORTED_IMAGE_ATTACHMENT_MEDIA_TYPE_SET = new Set<string>(
+  SUPPORTED_IMAGE_ATTACHMENT_MEDIA_TYPES,
+);
+
+export function normalizeImageMimeType(
   mimeType?: string | null,
   fileName?: string,
 ): string | null {
@@ -28,7 +35,7 @@ function normalizeImageMimeType(
     if (cleanedMimeType === "image/jpg") {
       return "image/jpeg";
     }
-    if (cleanedMimeType.startsWith("image/")) {
+    if (SUPPORTED_IMAGE_ATTACHMENT_MEDIA_TYPE_SET.has(cleanedMimeType)) {
       return cleanedMimeType;
     }
   }
@@ -39,6 +46,25 @@ function normalizeImageMimeType(
   }
 
   return IMAGE_MIME_TYPE_BY_EXTENSION[extension] ?? null;
+}
+
+function assertSupportedImageSize(byteLength: number) {
+  if (byteLength > MAX_IMAGE_ATTACHMENT_BYTES) {
+    throw new Error("image_too_large");
+  }
+}
+
+function estimateBase64DecodedBytes(base64Data: string): number {
+  const normalized = base64Data.replace(/\s+/g, "");
+  if (!normalized) {
+    return 0;
+  }
+  const paddingLength = normalized.endsWith("==")
+    ? 2
+    : normalized.endsWith("=")
+      ? 1
+      : 0;
+  return Math.max(0, Math.floor((normalized.length * 3) / 4) - paddingLength);
 }
 
 function buildClipboardCandidateKey(
@@ -78,6 +104,7 @@ export function readMessageImageFromDataUrl(dataUrl: string): MessageImage {
   if (!mediaType) {
     throw new Error("unsupported_image_type");
   }
+  assertSupportedImageSize(estimateBase64DecodedBytes(base64Data));
 
   return {
     data: base64Data,
@@ -176,6 +203,7 @@ export async function readImageAttachment(
   file: File,
   preferredMediaType?: string,
 ): Promise<MessageImage> {
+  assertSupportedImageSize(file.size);
   const dataUrl = await readFileAsDataUrl(file);
   const { mediaType: dataUrlMediaType, base64Data } = parseDataUrl(dataUrl);
 
@@ -187,6 +215,7 @@ export async function readImageAttachment(
   if (!mediaType) {
     throw new Error("unsupported_image_type");
   }
+  assertSupportedImageSize(estimateBase64DecodedBytes(base64Data));
 
   return {
     data: base64Data,

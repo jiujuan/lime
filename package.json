@@ -1,7 +1,7 @@
 {
   "name": "lime",
   "private": true,
-  "version": "1.35.0",
+  "version": "1.36.0",
   "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
   "keywords": [
     "ai",
@@ -115,6 +115,7 @@
     "smoke:agent-runtime-tool-surface": "node scripts/agent-runtime-tool-surface-smoke.mjs",
     "smoke:agent-runtime-tool-surface-page": "node scripts/agent-runtime-tool-surface-page-smoke.mjs",
     "smoke:claw-chat-ready-streaming": "node scripts/claw-chat-ready-streaming-smoke.mjs",
+    "smoke:at-command-registry": "node scripts/at-command-registry-e2e.mjs",
     "smoke:agent-service-skill-entry": "node scripts/agent-service-skill-entry-smoke.mjs",
     "smoke:knowledge-gui": "node scripts/knowledge-gui-smoke.mjs",
     "knowledge:product-e2e": "node scripts/knowledge-product-e2e.mjs",

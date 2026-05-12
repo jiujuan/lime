@@ -67,6 +67,13 @@ function buildModelSearchText(model: EnhancedModelMetadata): string {
 }
 
 function looksLikeImageGenerationModel(model: EnhancedModelMetadata): boolean {
+  const canReturnText =
+    !model.output_modalities?.length ||
+    model.output_modalities.includes("text");
+  if (modelSupportsTaskFamily(model, "vision_understanding") && canReturnText) {
+    return false;
+  }
+
   if (
     modelSupportsTaskFamily(model, "image_generation") ||
     modelSupportsTaskFamily(model, "image_edit")

@@ -1,6 +1,6 @@
 # Lime AgentRuntime Profile PRD
 
-> 状态：proposal
+> 状态：implementation-audited
 > 更新时间：2026-05-12
 > Owner：Lime runtime / evidence / GUI 主链
 > 关联标准：`/Users/coso/Documents/dev/ai/limecloud/agentruntime` 的 `Agent Runtime v0.4.0` 与 `Lime AgentRuntime Profile`；相邻 owner 为 `/Users/coso/Documents/dev/ai/limecloud/agentcontext`、`/Users/coso/Documents/dev/ai/limecloud/agentevidence`、`/Users/coso/Documents/dev/ai/limecloud/agentpolicy`、`/Users/coso/Documents/dev/ai/limecloud/agentui`

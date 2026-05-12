@@ -21,15 +21,21 @@ function syncDocumentLocale(locale: SupportedLocale): void {
 }
 
 export function initLimeI18n(initialLocale?: string | null): typeof i18n {
-  const locale = normalizeLocale(initialLocale);
-
   if (i18n.isInitialized) {
+    if (initialLocale === undefined) {
+      syncDocumentLocale(normalizeLocale(i18n.language));
+      return i18n;
+    }
+
+    const locale = normalizeLocale(initialLocale);
     if (i18n.language !== locale) {
       void i18n.changeLanguage(locale);
     }
     syncDocumentLocale(locale);
     return i18n;
   }
+
+  const locale = normalizeLocale(initialLocale);
 
   i18n.use(initReactI18next).init({
     lng: locale,

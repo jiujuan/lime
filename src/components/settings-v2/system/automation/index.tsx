@@ -124,39 +124,21 @@ function buildAutomationServiceSkillContextCopy(
   t: TFunction<"settings">,
 ): AutomationServiceSkillContextCopy {
   return {
-    defaultTitle: t(
-      "settings.automation.tasks.list.badge.serviceSkill",
-      "技能流程",
-    ),
-    unknownLabel: t("settings.automation.serviceSkill.unknown", "未标记"),
-    runnerInstant: t(
-      "settings.automation.serviceSkill.runner.instant",
-      "一次性交付",
-    ),
-    runnerScheduled: t(
-      "settings.automation.serviceSkill.runner.scheduled",
-      "定时运行",
-    ),
-    runnerManaged: t(
-      "settings.automation.serviceSkill.runner.managed",
-      "持续跟踪",
-    ),
+    defaultTitle: t("settings.automation.tasks.list.badge.serviceSkill"),
+    unknownLabel: t("settings.automation.serviceSkill.unknown"),
+    runnerInstant: t("settings.automation.serviceSkill.runner.instant"),
+    runnerScheduled: t("settings.automation.serviceSkill.runner.scheduled"),
+    runnerManaged: t("settings.automation.serviceSkill.runner.managed"),
     executionLocationClient: t(
       "settings.automation.serviceSkill.executionLocation.client",
-      "客户端执行",
     ),
     sourceCloudCatalog: t(
       "settings.automation.serviceSkill.source.cloudCatalog",
-      "云目录",
     ),
-    sourceLocalCustom: t(
-      "settings.automation.serviceSkill.source.localCustom",
-      "本地自定义",
-    ),
+    sourceLocalCustom: t("settings.automation.serviceSkill.source.localCustom"),
     slotFallbackLabel: (index) =>
       t("settings.automation.serviceSkill.slotFallback", {
         index: index + 1,
-        defaultValue: "参数 {{index}}",
       }),
   };
 }
@@ -166,201 +148,128 @@ function buildAutomationPresentationCopy(
   serviceSkillContextCopy: AutomationServiceSkillContextCopy,
 ): AutomationPresentationCopy {
   const accessModeCopy: AutomationAccessModeCopy = {
-    readOnly: t("settings.automation.jobDialog.accessMode.readOnly", "只读"),
-    current: t("settings.automation.jobDialog.accessMode.current", "按需确认"),
-    fullAccess: t(
-      "settings.automation.jobDialog.accessMode.fullAccess",
-      "完全访问",
-    ),
+    readOnly: t("settings.automation.jobDialog.accessMode.readOnly"),
+    current: t("settings.automation.jobDialog.accessMode.current"),
+    fullAccess: t("settings.automation.jobDialog.accessMode.fullAccess"),
     policyReadOnly: t(
       "settings.automation.jobDialog.accessMode.policy.readOnly",
-      "正式策略会写成 on-request + read-only。",
     ),
-    policyCurrent: t(
-      "settings.automation.jobDialog.accessMode.policy.current",
-      "正式策略会写成 on-request + workspace-write。",
-    ),
+    policyCurrent: t("settings.automation.jobDialog.accessMode.policy.current"),
     policyFullAccess: t(
       "settings.automation.jobDialog.accessMode.policy.fullAccess",
-      "正式策略会写成 never + danger-full-access。",
     ),
   };
 
   return {
     legacyBrowserAutomationNotice: t(
       "settings.automation.details.legacy.message",
-      "浏览器自动化已下线，系统不会再自动启动 Chrome。请删除旧流程，并改建为 Agent 对话持续流程。",
     ),
     legacyBrowserAutomationStatus: t(
       "settings.automation.details.status.offline",
-      "已下线",
     ),
     scheduleHours: (count) =>
       t("settings.automation.details.schedule.hours", {
         count,
-        defaultValue: "每 {{count}} 小时",
       }),
     scheduleMinutes: (count) =>
       t("settings.automation.details.schedule.minutes", {
         count,
-        defaultValue: "每 {{count}} 分钟",
       }),
     scheduleSeconds: (count) =>
       t("settings.automation.details.schedule.seconds", {
         count,
-        defaultValue: "每 {{count}} 秒",
       }),
     scheduleCron: (expr) =>
       t("settings.automation.details.schedule.cron", {
         expr,
-        defaultValue: "Cron: {{expr}}",
       }),
     scheduleAt: (time) =>
       t("settings.automation.details.schedule.at", {
         time,
-        defaultValue: "一次性: {{time}}",
       }),
     executionModeIntelligent: t(
       "settings.automation.jobDialog.executionMode.intelligent",
-      "智能执行",
     ),
-    executionModeSkill: t(
-      "settings.automation.jobDialog.executionMode.skill",
-      "技能执行",
-    ),
+    executionModeSkill: t("settings.automation.jobDialog.executionMode.skill"),
     executionModeLogOnly: t(
       "settings.automation.jobDialog.executionMode.logOnly",
-      "只记录",
     ),
     payloadBrowserSession: t(
       "settings.automation.details.payload.browserSession",
-      "浏览器自动化",
     ),
-    payloadAgentTurn: t(
-      "settings.automation.details.payload.agentTurn",
-      "Agent 对话",
-    ),
+    payloadAgentTurn: t("settings.automation.details.payload.agentTurn"),
     legacyPayloadProfile: (profile) =>
       t("settings.automation.details.legacy.payload.profile", {
         profile,
-        defaultValue: "资料: {{profile}}",
       }),
     legacyPayloadEnvironment: (environment) =>
       t("settings.automation.details.legacy.payload.environment", {
         environment,
-        defaultValue: "环境预设: {{environment}}",
       }),
     legacyPayloadUrl: (url) =>
       t("settings.automation.details.legacy.payload.url", {
         url,
-        defaultValue: "启动地址: {{url}}",
       }),
     legacyPayloadTargetId: (targetId) =>
       t("settings.automation.details.legacy.payload.targetId", {
         targetId,
-        defaultValue: "Target ID: {{targetId}}",
       }),
     legacyPayloadWindow: (status) =>
       t("settings.automation.details.legacy.payload.window", {
         status,
-        defaultValue: "调试窗口: {{status}}",
       }),
     legacyPayloadWindowOpen: t(
       "settings.automation.details.legacy.payload.windowOpen",
-      "打开",
     ),
     legacyPayloadWindowClosed: t(
       "settings.automation.details.legacy.payload.windowClosed",
-      "关闭",
     ),
     legacyPayloadStreamMode: (streamMode) =>
       t("settings.automation.details.legacy.payload.streamMode", {
         streamMode,
-        defaultValue: "流模式: {{streamMode}}",
       }),
-    statusQueued: t("settings.automation.details.status.queued", "排队中"),
-    statusSuccess: t("settings.automation.details.status.success", "成功"),
-    statusRunning: t("settings.automation.details.status.running", "运行中"),
+    statusQueued: t("settings.automation.details.status.queued"),
+    statusSuccess: t("settings.automation.details.status.success"),
+    statusRunning: t("settings.automation.details.status.running"),
     statusWaitingForHuman: t(
       "settings.automation.details.status.waitingForHuman",
-      "等待人工处理",
     ),
     statusHumanControlling: t(
       "settings.automation.details.status.humanControlling",
-      "人工接管中",
     ),
-    statusAgentResuming: t(
-      "settings.automation.details.status.agentResuming",
-      "恢复给 Agent",
-    ),
-    statusError: t("settings.automation.details.status.error", "失败"),
-    statusTimeout: t("settings.automation.details.status.timeout", "超时"),
-    statusPending: t("settings.automation.details.status.pending", "待执行"),
+    statusAgentResuming: t("settings.automation.details.status.agentResuming"),
+    statusError: t("settings.automation.details.status.error"),
+    statusTimeout: t("settings.automation.details.status.timeout"),
+    statusPending: t("settings.automation.details.status.pending"),
     statusDetailBlocking: t(
       "settings.automation.details.statusDetail.blocking",
-      "当前阻塞",
     ),
-    statusDetailResume: t(
-      "settings.automation.details.statusDetail.resume",
-      "恢复说明",
-    ),
+    statusDetailResume: t("settings.automation.details.statusDetail.resume"),
     statusDetailLastError: t(
       "settings.automation.details.statusDetail.lastError",
-      "最近异常",
     ),
-    statusDetailRunning: t(
-      "settings.automation.details.statusDetail.running",
-      "运行说明",
-    ),
+    statusDetailRunning: t("settings.automation.details.statusDetail.running"),
     deliveryModeAnnounce: t(
       "settings.automation.details.delivery.mode.announce",
-      "运行完成后投递",
     ),
-    deliveryModeNone: t(
-      "settings.automation.jobDialog.delivery.mode.none",
-      "关闭",
-    ),
+    deliveryModeNone: t("settings.automation.jobDialog.delivery.mode.none"),
     deliveryChannelLocalFile: t(
       "settings.automation.details.delivery.channel.localFile",
-      "本地文件",
     ),
-    outputSchemaJson: t(
-      "settings.automation.details.delivery.schema.json",
-      "JSON 对象",
-    ),
-    outputSchemaTable: t(
-      "settings.automation.details.delivery.schema.table",
-      "表格",
-    ),
-    outputSchemaCsv: t(
-      "settings.automation.details.delivery.schema.csv",
-      "CSV",
-    ),
-    outputSchemaLinks: t(
-      "settings.automation.details.delivery.schema.links",
-      "链接列表",
-    ),
-    outputSchemaText: t(
-      "settings.automation.details.delivery.schema.text",
-      "文本摘要",
-    ),
-    outputFormatJson: t(
-      "settings.automation.details.delivery.format.json",
-      "JSON 编码",
-    ),
-    outputFormatText: t(
-      "settings.automation.details.delivery.format.text",
-      "文本编码",
-    ),
+    outputSchemaJson: t("settings.automation.details.delivery.schema.json"),
+    outputSchemaTable: t("settings.automation.details.delivery.schema.table"),
+    outputSchemaCsv: t("settings.automation.details.delivery.schema.csv"),
+    outputSchemaLinks: t("settings.automation.details.delivery.schema.links"),
+    outputSchemaText: t("settings.automation.details.delivery.schema.text"),
+    outputFormatJson: t("settings.automation.details.delivery.format.json"),
+    outputFormatText: t("settings.automation.details.delivery.format.text"),
     serviceSkillTaskLine: (title) =>
       t("settings.automation.details.serviceSkill.taskLine", {
         title,
-        defaultValue: "技能：{{title}}",
       }),
     serviceSkillMoreItems: (count) =>
       t("settings.automation.details.serviceSkill.moreItems", {
         count,
-        defaultValue: " 等 {{count}} 项",
       }),
     serviceSkillContextCopy,
     accessModeCopy,
@@ -455,29 +364,18 @@ function createWorkspaceTemplates(
   return [
     {
       id: "daily-brief",
-      tag: t("settings.automation.tasks.template.dailyBrief.tag", "定时摘要"),
-      name: t("settings.automation.tasks.template.dailyBrief.name", "每日摘要"),
+      tag: t("settings.automation.tasks.template.dailyBrief.tag"),
+      name: t("settings.automation.tasks.template.dailyBrief.name"),
       description: t(
         "settings.automation.tasks.template.dailyBrief.description",
-        "每天固定时间整理这条内容链的关键进展。",
       ),
-      detail: t(
-        "settings.automation.tasks.template.dailyBrief.detail",
-        "适合日报、晨报和巡检总结。",
-      ),
-      actionLabel: t(
-        "settings.automation.tasks.template.dailyBrief.action",
-        "使用摘要模板",
-      ),
+      detail: t("settings.automation.tasks.template.dailyBrief.detail"),
+      actionLabel: t("settings.automation.tasks.template.dailyBrief.action"),
       icon: Bell,
       initialValues: {
-        name: t(
-          "settings.automation.tasks.template.dailyBrief.initial.name",
-          "每日摘要",
-        ),
+        name: t("settings.automation.tasks.template.dailyBrief.initial.name"),
         description: t(
           "settings.automation.tasks.template.dailyBrief.initial.description",
-          "按固定时间生成一份中文摘要",
         ),
         payload_kind: "agent_turn",
         schedule_kind: "cron",
@@ -485,49 +383,34 @@ function createWorkspaceTemplates(
         cron_tz: "Asia/Shanghai",
         prompt: t(
           "settings.automation.tasks.template.dailyBrief.initial.prompt",
-          "请总结最近一个周期内的关键进展、异常和待办，输出一份简洁的中文摘要。",
         ),
         delivery_mode: "none",
       },
     },
     {
       id: "structured-delivery",
-      tag: t(
-        "settings.automation.tasks.template.structuredDelivery.tag",
-        "结果投递",
-      ),
-      name: t(
-        "settings.automation.tasks.template.structuredDelivery.name",
-        "结构化投递",
-      ),
+      tag: t("settings.automation.tasks.template.structuredDelivery.tag"),
+      name: t("settings.automation.tasks.template.structuredDelivery.name"),
       description: t(
         "settings.automation.tasks.template.structuredDelivery.description",
-        "把结果整理成结构化输出，再投递到文件或外部渠道。",
       ),
-      detail: t(
-        "settings.automation.tasks.template.structuredDelivery.detail",
-        "适合 Webhook、本地文件和表格同步。",
-      ),
+      detail: t("settings.automation.tasks.template.structuredDelivery.detail"),
       actionLabel: t(
         "settings.automation.tasks.template.structuredDelivery.action",
-        "使用投递模板",
       ),
       icon: FileText,
       initialValues: {
         name: t(
           "settings.automation.tasks.template.structuredDelivery.initial.name",
-          "结构化结果投递",
         ),
         description: t(
           "settings.automation.tasks.template.structuredDelivery.initial.description",
-          "按固定周期生成结构化结果并投递",
         ),
         payload_kind: "agent_turn",
         schedule_kind: "every",
         every_secs: "3600",
         prompt: t(
           "settings.automation.tasks.template.structuredDelivery.initial.prompt",
-          "请整理本轮结果，输出结构化摘要并保留关键字段。",
         ),
         delivery_mode: "announce",
         delivery_channel: "local_file",
@@ -538,20 +421,11 @@ function createWorkspaceTemplates(
     },
     {
       id: "blank",
-      tag: t("settings.automation.tasks.template.blank.tag", "空白起手"),
-      name: t("settings.automation.tasks.template.blank.name", "空白持续流程"),
-      description: t(
-        "settings.automation.tasks.template.blank.description",
-        "从零定义节奏、起手提示和输出去向，不受模板约束。",
-      ),
-      detail: t(
-        "settings.automation.tasks.template.blank.detail",
-        "适合已经熟悉持续流程配置的人。",
-      ),
-      actionLabel: t(
-        "settings.automation.tasks.template.blank.action",
-        "空白开始",
-      ),
+      tag: t("settings.automation.tasks.template.blank.tag"),
+      name: t("settings.automation.tasks.template.blank.name"),
+      description: t("settings.automation.tasks.template.blank.description"),
+      detail: t("settings.automation.tasks.template.blank.detail"),
+      actionLabel: t("settings.automation.tasks.template.blank.action"),
       icon: Plus,
     },
   ];
@@ -620,7 +494,6 @@ export function AutomationSettings({
     automationPresentationCopy.legacyBrowserAutomationStatus;
   const serviceSkillExecutionCompatLabel = t(
     "settings.automation.tasks.list.badge.serviceSkillLegacyCompat",
-    "旧目录兼容",
   );
   const workspaceTemplates = useMemo(() => createWorkspaceTemplates(t), [t]);
   const workspaceOnly = mode === "workspace";
@@ -1011,20 +884,12 @@ export function AutomationSettings({
           t("settings.automation.main.load.timeout", {
             label,
             timeoutMs,
-            defaultValue: "{{label}}加载超时（{{timeoutMs}}ms）",
           });
         const schedulerConfigLoadLabel = t(
           "settings.automation.main.load.label.schedulerConfig",
-          "持续流程调度配置",
         );
-        const statusLoadLabel = t(
-          "settings.automation.main.load.label.status",
-          "自动化状态",
-        );
-        const jobsLoadLabel = t(
-          "settings.automation.main.load.label.jobs",
-          "持续流程列表",
-        );
+        const statusLoadLabel = t("settings.automation.main.load.label.status");
+        const jobsLoadLabel = t("settings.automation.main.load.label.jobs");
         const [schedulerConfigResult, statusResult, jobsResult] =
           await Promise.allSettled([
             withAutomationLoadTimeout(
@@ -1070,10 +935,7 @@ export function AutomationSettings({
           coreErrors.push(
             resolveAutomationLoadErrorMessage(
               schedulerConfigResult.reason,
-              t(
-                "settings.automation.main.load.error.schedulerConfig",
-                "持续流程调度配置加载失败",
-              ),
+              t("settings.automation.main.load.error.schedulerConfig"),
             ),
           );
         }
@@ -1084,10 +946,7 @@ export function AutomationSettings({
           coreErrors.push(
             resolveAutomationLoadErrorMessage(
               statusResult.reason,
-              t(
-                "settings.automation.main.load.error.status",
-                "自动化状态加载失败",
-              ),
+              t("settings.automation.main.load.error.status"),
             ),
           );
         }
@@ -1099,10 +958,7 @@ export function AutomationSettings({
           coreErrors.push(
             resolveAutomationLoadErrorMessage(
               jobsResult.reason,
-              t(
-                "settings.automation.main.load.error.jobs",
-                "持续流程列表加载失败",
-              ),
+              t("settings.automation.main.load.error.jobs"),
             ),
           );
         }
@@ -1117,12 +973,8 @@ export function AutomationSettings({
         if (!nextSchedulerConfig) {
           throw new Error(
             coreErrors.join(
-              t("settings.automation.main.load.errorSeparator", "；"),
-            ) ||
-              t(
-                "settings.automation.main.load.error.schedulerConfig",
-                "持续流程调度配置加载失败",
-              ),
+              t("settings.automation.main.load.errorSeparator"),
+            ) || t("settings.automation.main.load.error.schedulerConfig"),
           );
         }
 
@@ -1159,21 +1011,16 @@ export function AutomationSettings({
           toast.error(
             t("settings.automation.main.toast.partialLoad", {
               details: coreErrors.join(
-                t("settings.automation.main.load.errorSeparator", "；"),
+                t("settings.automation.main.load.errorSeparator"),
               ),
-              defaultValue: "持续流程页有部分数据未加载：{{details}}",
             }),
           );
         }
 
         const workspacesLoadLabel = t(
           "settings.automation.main.load.label.workspaces",
-          "归属位置列表",
         );
-        const healthLoadLabel = t(
-          "settings.automation.main.load.label.health",
-          "持续流程健康状态",
-        );
+        const healthLoadLabel = t("settings.automation.main.load.label.health");
         void Promise.allSettled([
           withAutomationLoadTimeout(
             listProjects(),
@@ -1206,10 +1053,7 @@ export function AutomationSettings({
             auxiliaryErrors.push(
               resolveAutomationLoadErrorMessage(
                 workspacesSettled.reason,
-                t(
-                  "settings.automation.main.load.error.workspaces",
-                  "归属位置列表加载失败",
-                ),
+                t("settings.automation.main.load.error.workspaces"),
               ),
             );
           }
@@ -1220,10 +1064,7 @@ export function AutomationSettings({
             auxiliaryErrors.push(
               resolveAutomationLoadErrorMessage(
                 healthSettled.reason,
-                t(
-                  "settings.automation.main.load.error.health",
-                  "持续流程健康状态加载失败",
-                ),
+                t("settings.automation.main.load.error.health"),
               ),
             );
           }
@@ -1232,9 +1073,8 @@ export function AutomationSettings({
             toast.error(
               t("settings.automation.main.toast.partialLoad", {
                 details: auxiliaryErrors.join(
-                  t("settings.automation.main.load.errorSeparator", "；"),
+                  t("settings.automation.main.load.errorSeparator"),
                 ),
-                defaultValue: "持续流程页有部分数据未加载：{{details}}",
               }),
             );
           }
@@ -1246,7 +1086,7 @@ export function AutomationSettings({
 
         const message = resolveAutomationLoadErrorMessage(
           error,
-          t("settings.automation.main.load.error.page", "加载持续流程失败"),
+          t("settings.automation.main.load.error.page"),
         );
         if (!hasVisibleContent) {
           setLoadError(message);
@@ -1254,7 +1094,6 @@ export function AutomationSettings({
         toast.error(
           t("settings.automation.main.toast.loadFailed", {
             message,
-            defaultValue: "加载持续流程失败: {{message}}",
           }),
         );
       } finally {
@@ -1266,37 +1105,42 @@ export function AutomationSettings({
     [initialSelectedJobId, showWorkspacePanels, t],
   );
 
-  const refreshHistory = useCallback(async (jobId: string) => {
-    const requestId = historyRequestIdRef.current + 1;
-    historyRequestIdRef.current = requestId;
-    const isCurrentRequest = () =>
-      isMountedRef.current && historyRequestIdRef.current === requestId;
+  const refreshHistory = useCallback(
+    async (jobId: string) => {
+      const requestId = historyRequestIdRef.current + 1;
+      historyRequestIdRef.current = requestId;
+      const isCurrentRequest = () =>
+        isMountedRef.current && historyRequestIdRef.current === requestId;
 
-    setHistoryLoading(true);
-    try {
-      const runs = await getAutomationRunHistory(jobId, 15);
-      if (!isCurrentRequest()) {
-        return;
+      setHistoryLoading(true);
+      try {
+        const runs = await getAutomationRunHistory(jobId, 15);
+        if (!isCurrentRequest()) {
+          return;
+        }
+        setJobRuns(runs);
+        const job = jobsRef.current.find((item) => item.id === jobId);
+        if (job) {
+          recordAutomationRunHistoryAgentUiProjection(job, runs);
+        }
+      } catch (error) {
+        if (!isCurrentRequest()) {
+          return;
+        }
+        toast.error(
+          t("settings.automation.history.toast.loadFailed", {
+            message: error instanceof Error ? error.message : String(error),
+          }),
+        );
+        setJobRuns([]);
+      } finally {
+        if (isCurrentRequest()) {
+          setHistoryLoading(false);
+        }
       }
-      setJobRuns(runs);
-      const job = jobsRef.current.find((item) => item.id === jobId);
-      if (job) {
-        recordAutomationRunHistoryAgentUiProjection(job, runs);
-      }
-    } catch (error) {
-      if (!isCurrentRequest()) {
-        return;
-      }
-      toast.error(
-        `加载运行历史失败: ${error instanceof Error ? error.message : error}`,
-      );
-      setJobRuns([]);
-    } finally {
-      if (isCurrentRequest()) {
-        setHistoryLoading(false);
-      }
-    }
-  }, []);
+    },
+    [t],
+  );
 
   useEffect(() => {
     void refreshAll();
@@ -1378,15 +1222,12 @@ export function AutomationSettings({
         ...schedulerConfig,
         poll_interval_secs: Math.max(5, schedulerConfig.poll_interval_secs),
       });
-      toast.success(
-        t("settings.automation.scheduler.toast.saved", "调度器配置已保存"),
-      );
+      toast.success(t("settings.automation.scheduler.toast.saved"));
       await refreshAll(true);
     } catch (error) {
       toast.error(
         t("settings.automation.scheduler.toast.saveFailed", {
           message: error instanceof Error ? error.message : String(error),
-          defaultValue: "保存调度器失败: {{message}}",
         }),
       );
     } finally {
@@ -1408,8 +1249,8 @@ export function AutomationSettings({
 
       toast.success(
         payload.mode === "create"
-          ? t("settings.automation.tasks.toast.created", "持续流程已创建")
-          : t("settings.automation.tasks.toast.updated", "持续流程已更新"),
+          ? t("settings.automation.tasks.toast.created")
+          : t("settings.automation.tasks.toast.updated"),
       );
       setDialogOpen(false);
       setDialogInitialValues(null);
@@ -1421,7 +1262,6 @@ export function AutomationSettings({
       toast.error(
         t("settings.automation.tasks.toast.saveFailed", {
           message: error instanceof Error ? error.message : String(error),
-          defaultValue: "保存持续流程失败: {{message}}",
         }),
       );
       throw error;
@@ -1435,7 +1275,6 @@ export function AutomationSettings({
       !window.confirm(
         t("settings.automation.tasks.confirm.delete", {
           name: job.name,
-          defaultValue: "确认删除持续流程“{{name}}”吗？",
         }),
       )
     ) {
@@ -1445,15 +1284,12 @@ export function AutomationSettings({
     try {
       await deleteAutomationJob(job.id);
       recordAutomationJobMutationAgentUiProjection(job, "deleted");
-      toast.success(
-        t("settings.automation.tasks.toast.deleted", "持续流程已删除"),
-      );
+      toast.success(t("settings.automation.tasks.toast.deleted"));
       await refreshAll(true);
     } catch (error) {
       toast.error(
         t("settings.automation.tasks.toast.deleteFailed", {
           message: error instanceof Error ? error.message : String(error),
-          defaultValue: "删除持续流程失败: {{message}}",
         }),
       );
     }
@@ -1473,8 +1309,6 @@ export function AutomationSettings({
           success: result.success_count,
           failed: result.failed_count,
           timeout: result.timeout_count,
-          defaultValue:
-            "执行完成: 成功 {{success}}，失败 {{failed}}，超时 {{timeout}}",
         }),
       );
       await refreshAll(true);
@@ -1483,7 +1317,6 @@ export function AutomationSettings({
       toast.error(
         t("settings.automation.tasks.toast.runFailed", {
           message: error instanceof Error ? error.message : String(error),
-          defaultValue: "立即运行失败: {{message}}",
         }),
       );
     } finally {
@@ -1541,11 +1374,17 @@ export function AutomationSettings({
   const handleContinueSelectedSceneAppReview = useCallback(
     (taskId: string) => {
       if (!onNavigate) {
-        toast.error("当前入口暂不支持直接回到生成。");
+        toast.error(
+          t("settings.automation.details.sceneApp.toast.returnUnsupported"),
+        );
         return;
       }
       if (!selectedSceneAppExecutionReferenceEntry) {
-        toast.error("当前还没有足够的结果基线，暂时无法直接继续这条建议。");
+        toast.error(
+          t(
+            "settings.automation.details.sceneApp.toast.selectedBaselineMissing",
+          ),
+        );
         return;
       }
 
@@ -1554,7 +1393,11 @@ export function AutomationSettings({
         taskId,
       });
       if (!followUpAction) {
-        toast.error("当前结果还缺少可恢复的下一步动作。");
+        toast.error(
+          t(
+            "settings.automation.details.sceneApp.toast.selectedFollowUpMissing",
+          ),
+        );
         return;
       }
 
@@ -1564,7 +1407,11 @@ export function AutomationSettings({
           requestKey: Date.now(),
         });
       if (!initialInputCapability) {
-        toast.error("当前建议暂时缺少可恢复的输入能力。");
+        toast.error(
+          t(
+            "settings.automation.details.sceneApp.toast.inputCapabilityMissing",
+          ),
+        );
         return;
       }
 
@@ -1590,6 +1437,7 @@ export function AutomationSettings({
       selectedSceneAppExecutionReferenceEntry,
       selectedSceneAppExecutionSummary,
       selectedSceneAppRuntime.sceneAppContext,
+      t,
     ],
   );
   const handleSaveSelectedSceneAppAsInspiration = useCallback(() => {
@@ -1629,12 +1477,16 @@ export function AutomationSettings({
   const handleContinueOverviewSceneAppReview = useCallback(
     (taskId: string) => {
       if (!onNavigate) {
-        toast.error("当前入口暂不支持直接回到生成。");
+        toast.error(
+          t("settings.automation.details.sceneApp.toast.returnUnsupported"),
+        );
         return;
       }
       if (!overviewSceneAppExecutionReferenceEntry) {
         toast.error(
-          "这条自动续上的做法还没有足够的结果基线，暂时无法直接继续。",
+          t(
+            "settings.automation.details.sceneApp.toast.overviewBaselineMissing",
+          ),
         );
         return;
       }
@@ -1644,7 +1496,11 @@ export function AutomationSettings({
         taskId,
       });
       if (!followUpAction) {
-        toast.error("这条自动续上的做法还缺少可恢复的下一步动作。");
+        toast.error(
+          t(
+            "settings.automation.details.sceneApp.toast.overviewFollowUpMissing",
+          ),
+        );
         return;
       }
 
@@ -1654,7 +1510,11 @@ export function AutomationSettings({
           requestKey: Date.now(),
         });
       if (!initialInputCapability) {
-        toast.error("当前建议暂时缺少可恢复的输入能力。");
+        toast.error(
+          t(
+            "settings.automation.details.sceneApp.toast.inputCapabilityMissing",
+          ),
+        );
         return;
       }
 
@@ -1680,6 +1540,7 @@ export function AutomationSettings({
       overviewFocusJob?.workspace_id,
       overviewSceneAppExecutionReferenceEntry,
       overviewSceneAppExecutionSummary,
+      t,
     ],
   );
 
@@ -1704,7 +1565,9 @@ export function AutomationSettings({
         return;
       }
       if (!onNavigate) {
-        toast.error("当前入口暂不支持直接打开结果文件。");
+        toast.error(
+          t("settings.automation.details.sceneApp.file.openUnsupported"),
+        );
         return;
       }
 
@@ -1732,13 +1595,20 @@ export function AutomationSettings({
           relativePath: openTargetPath,
           requestKey: Date.now(),
         },
-        entryBannerMessage: `${options.bannerPrefix}：${entry.label}。`,
+        entryBannerMessage: t(
+          "settings.automation.details.sceneApp.file.bannerMessage",
+          {
+            prefix: options.bannerPrefix,
+            label: entry.label,
+          },
+        ),
       });
     },
     [
       onNavigate,
       selectedJob?.workspace_id,
       selectedSceneAppRuntime.sceneAppContext,
+      t,
     ],
   );
 
@@ -1751,11 +1621,15 @@ export function AutomationSettings({
       >,
     ) => {
       openSelectedSceneAppFileEntry(artifactEntry, {
-        missingPathMessage: "当前这条持续流程还没有可打开的结果文件路径。",
-        bannerPrefix: "已从自动化详情打开结果包文件",
+        missingPathMessage: t(
+          "settings.automation.details.sceneApp.file.deliveryMissingPath",
+        ),
+        bannerPrefix: t(
+          "settings.automation.details.sceneApp.file.deliveryBannerPrefix",
+        ),
       });
     },
-    [openSelectedSceneAppFileEntry],
+    [openSelectedSceneAppFileEntry, t],
   );
 
   const handleOpenSelectedSceneAppGovernanceArtifact = useCallback(
@@ -1780,7 +1654,11 @@ export function AutomationSettings({
               artifactEntry.artifactRef.kind,
             );
             if (!refreshed) {
-              toast.error("当前运行已不存在，无法继续准备结果材料。");
+              toast.error(
+                t(
+                  "settings.automation.details.sceneApp.file.governanceRunMissing",
+                ),
+              );
               return;
             }
             selectedSceneAppRuntime.setLinkedRun(refreshed);
@@ -1795,8 +1673,12 @@ export function AutomationSettings({
                   entry.artifactRef.kind === artifactEntry.artifactRef.kind,
               );
             openSelectedSceneAppFileEntry(targetEntry, {
-              missingPathMessage: "当前这次运行还没有可打开的证据或复核文件。",
-              bannerPrefix: "已从持续流程详情打开结果材料",
+              missingPathMessage: t(
+                "settings.automation.details.sceneApp.file.governanceMissingPath",
+              ),
+              bannerPrefix: t(
+                "settings.automation.details.sceneApp.file.governanceBannerPrefix",
+              ),
             });
             return;
           } catch (error) {
@@ -1806,12 +1688,16 @@ export function AutomationSettings({
         }
 
         openSelectedSceneAppFileEntry(artifactEntry, {
-          missingPathMessage: "当前这次运行还没有可打开的证据或复核文件。",
-          bannerPrefix: "已从持续流程详情打开结果材料",
+          missingPathMessage: t(
+            "settings.automation.details.sceneApp.file.governanceMissingPath",
+          ),
+          bannerPrefix: t(
+            "settings.automation.details.sceneApp.file.governanceBannerPrefix",
+          ),
         });
       })();
     },
-    [openSelectedSceneAppFileEntry, selectedSceneAppRuntime],
+    [openSelectedSceneAppFileEntry, selectedSceneAppRuntime, t],
   );
 
   const handleRunSelectedSceneAppGovernanceAction = useCallback(
@@ -1835,7 +1721,9 @@ export function AutomationSettings({
             action.artifactKinds,
           );
           if (!refreshed) {
-            toast.error("当前运行已不存在，无法继续准备后续动作。");
+            toast.error(
+              t("settings.automation.details.sceneApp.file.followUpRunMissing"),
+            );
             return;
           }
 
@@ -1850,8 +1738,15 @@ export function AutomationSettings({
               (entry) => entry.artifactRef.kind === action.primaryArtifactKind,
             );
           openSelectedSceneAppFileEntry(targetEntry, {
-            missingPathMessage: `后续动作已准备完成，但当前没有可打开的${action.primaryArtifactLabel}路径。`,
-            bannerPrefix: "已从持续流程详情打开后续动作",
+            missingPathMessage: t(
+              "settings.automation.details.sceneApp.file.followUpMissingPath",
+              {
+                label: action.primaryArtifactLabel,
+              },
+            ),
+            bannerPrefix: t(
+              "settings.automation.details.sceneApp.file.followUpBannerPrefix",
+            ),
           });
         } catch (error) {
           toast.error(formatSceneAppErrorMessage(error));
@@ -1862,6 +1757,7 @@ export function AutomationSettings({
       openSelectedSceneAppFileEntry,
       selectedSceneAppRunDetailView,
       selectedSceneAppRuntime,
+      t,
     ],
   );
 
@@ -1878,7 +1774,9 @@ export function AutomationSettings({
           selectedSceneAppRuntime.descriptor?.id ??
           "",
         sceneTitle: selectedSceneAppRuntime.descriptor?.title,
-        sourceLabel: "持续流程",
+        sourceLabel: t(
+          "settings.automation.details.sceneApp.entry.sourceLabel",
+        ),
         projectId:
           selectedSceneAppRuntime.sceneAppContext?.projectId ??
           selectedSceneAppRuntime.sceneAppContext?.workspaceId ??
@@ -1888,7 +1786,9 @@ export function AutomationSettings({
         linkedSceneKey: selectedSceneAppRuntime.descriptor?.linkedSceneKey,
       });
       if (!target) {
-        toast.error("当前运行缺少可恢复的入口上下文。");
+        toast.error(
+          t("settings.automation.details.sceneApp.entry.missingContext"),
+        );
         return;
       }
 
@@ -1900,42 +1800,25 @@ export function AutomationSettings({
       selectedSceneAppRuntime.descriptor,
       selectedSceneAppRuntime.linkedRun?.sceneappId,
       selectedSceneAppRuntime.sceneAppContext,
+      t,
     ],
   );
 
   const heroTitle = settingsOnly
-    ? t("settings.automation.main.hero.title.settings", "持续流程设置")
+    ? t("settings.automation.main.hero.title.settings")
     : workspaceOnly
-      ? t("settings.automation.main.hero.title.workspace", "持续流程")
-      : t("settings.automation.main.hero.title.full", "持续流程");
+      ? t("settings.automation.main.hero.title.workspace")
+      : t("settings.automation.main.hero.title.full");
   const heroDescription = settingsOnly
-    ? t(
-        "settings.automation.main.hero.description.settings",
-        "这里只管理全局调度器开关、轮询间隔和执行历史保留。开始持续和最近运行都在持续流程页继续。",
-      )
+    ? t("settings.automation.main.hero.description.settings")
     : workspaceOnly
-      ? t(
-          "settings.automation.main.hero.description.workspace",
-          "把值得持续跟进的做法接成长期跟进，当前先聚焦从 Agent 对话接回来的持续流程。",
-        )
-      : t(
-          "settings.automation.main.hero.description.full",
-          "把值得持续跟进的做法接成长期跟进，统一查看持续流程、运行和调度设置。",
-        );
+      ? t("settings.automation.main.hero.description.workspace")
+      : t("settings.automation.main.hero.description.full");
   const headerSummary = settingsOnly
-    ? t(
-        "settings.automation.main.hero.summary.settings",
-        "管理调度器开关、轮询间隔和历史保留。",
-      )
+    ? t("settings.automation.main.hero.summary.settings")
     : workspaceOnly
-      ? t(
-          "settings.automation.main.hero.summary.workspace",
-          "聚焦开始持续、最近运行和概览切换。",
-        )
-      : t(
-          "settings.automation.main.hero.summary.full",
-          "统一查看持续流程、运行状态和调度设置。",
-        );
+      ? t("settings.automation.main.hero.summary.workspace")
+      : t("settings.automation.main.hero.summary.full");
 
   if (loading && !schedulerConfig) {
     return (
@@ -1950,20 +1833,13 @@ export function AutomationSettings({
       <Card className="rounded-[28px] border-slate-200/80 bg-white shadow-sm shadow-slate-950/5">
         <CardContent className="flex min-h-40 flex-col items-center justify-center gap-3 py-10 text-center">
           <div className="text-lg font-semibold text-slate-900">
-            {t(
-              "settings.automation.main.load.errorTitle",
-              "持续流程页面加载失败",
-            )}
+            {t("settings.automation.main.load.errorTitle")}
           </div>
           <p className="max-w-[520px] text-sm leading-6 text-slate-500">
-            {loadError ??
-              t(
-                "settings.automation.main.load.errorDescription",
-                "持续流程调度配置暂时不可用，请稍后重试。",
-              )}
+            {loadError ?? t("settings.automation.main.load.errorDescription")}
           </p>
           <Button onClick={() => void refreshAll()}>
-            {t("settings.automation.main.action.reload", "重新加载")}
+            {t("settings.automation.main.action.reload")}
           </Button>
         </CardContent>
       </Card>
@@ -1981,17 +1857,14 @@ export function AutomationSettings({
                   variant="outline"
                   className="rounded-full border-sky-200 bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700"
                 >
-                  {t("settings.automation.main.badge.systemEntry", "系统入口")}
+                  {t("settings.automation.main.badge.systemEntry")}
                 </Badge>
               ) : null}
               <h1 className="text-[24px] font-semibold tracking-tight text-slate-900">
                 {heroTitle}
               </h1>
               <WorkbenchInfoTip
-                ariaLabel={t(
-                  "settings.automation.main.hero.tipAria",
-                  "持续流程说明",
-                )}
+                ariaLabel={t("settings.automation.main.hero.tipAria")}
                 content={heroDescription}
                 tone="mint"
               />
@@ -2003,23 +1876,17 @@ export function AutomationSettings({
             {showWorkspacePanels ? (
               <Button variant="default" onClick={() => openCreateDialog()}>
                 <Plus className="mr-2 h-4 w-4" />
-                {t("settings.automation.main.action.create", "新建持续流程")}
+                {t("settings.automation.main.action.create")}
               </Button>
             ) : null}
             {workspaceOnly && onOpenSettings ? (
               <Button variant="outline" onClick={onOpenSettings}>
-                {t(
-                  "settings.automation.main.action.openSettings",
-                  "持续流程设置",
-                )}
+                {t("settings.automation.main.action.openSettings")}
               </Button>
             ) : null}
             {settingsOnly && onOpenWorkspace ? (
               <Button variant="outline" onClick={onOpenWorkspace}>
-                {t(
-                  "settings.automation.main.action.openWorkspace",
-                  "打开持续流程",
-                )}
+                {t("settings.automation.main.action.openWorkspace")}
               </Button>
             ) : null}
             <Button
@@ -2028,7 +1895,7 @@ export function AutomationSettings({
               disabled={loading}
             >
               <RefreshCw className="mr-2 h-4 w-4" />
-              {t("settings.automation.main.action.refresh", "刷新")}
+              {t("settings.automation.main.action.refresh")}
             </Button>
           </div>
         </div>
@@ -2044,15 +1911,13 @@ export function AutomationSettings({
             >
               {t("settings.automation.main.summary.scheduler", {
                 status: schedulerConfig.enabled
-                  ? t("settings.automation.main.status.enabled", "已启用")
-                  : t("settings.automation.main.status.disabled", "已停用"),
-                defaultValue: "调度器：{{status}}",
+                  ? t("settings.automation.main.status.enabled")
+                  : t("settings.automation.main.status.disabled"),
               })}
             </span>
             <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600">
               {t("settings.automation.main.summary.jobCount", {
                 count: jobs.length,
-                defaultValue: "持续流程数：{{count}}",
               })}
             </span>
             <span
@@ -2064,7 +1929,6 @@ export function AutomationSettings({
             >
               {t("settings.automation.main.summary.riskCount", {
                 count: health?.risky_jobs.length ?? 0,
-                defaultValue: "风险提醒：{{count}}",
               })}
             </span>
             <span
@@ -2076,16 +1940,14 @@ export function AutomationSettings({
             >
               {t("settings.automation.main.summary.polling", {
                 status: status?.running
-                  ? t("settings.automation.main.polling.running", "运行中")
-                  : t("settings.automation.main.polling.paused", "已暂停"),
-                defaultValue: "轮询状态：{{status}}",
+                  ? t("settings.automation.main.polling.running")
+                  : t("settings.automation.main.polling.paused"),
               })}
             </span>
             {legacyBrowserJobCount > 0 ? (
               <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700">
                 {t("settings.automation.main.summary.legacyBrowserCount", {
                   count: legacyBrowserJobCount,
-                  defaultValue: "遗留浏览器流程：{{count}}",
                 })}
               </span>
             ) : null}
@@ -2104,14 +1966,14 @@ export function AutomationSettings({
                   data-testid="automation-tab-tasks"
                   className="rounded-[14px] px-4 py-3"
                 >
-                  {t("settings.automation.main.tab.tasks", "持续流程")}
+                  {t("settings.automation.main.tab.tasks")}
                 </TabsTrigger>
                 <TabsTrigger
                   value="overview"
                   data-testid="automation-tab-overview"
                   className="rounded-[14px] px-4 py-3"
                 >
-                  {t("settings.automation.main.tab.overview", "概览")}
+                  {t("settings.automation.main.tab.overview")}
                 </TabsTrigger>
               </TabsList>
             </Tabs>
@@ -2126,25 +1988,19 @@ export function AutomationSettings({
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <CardTitle className="text-xl text-slate-900">
-                    {t("settings.automation.scheduler.title", "调度器设置")}
+                    {t("settings.automation.scheduler.title")}
                   </CardTitle>
                   <WorkbenchInfoTip
-                    ariaLabel={t(
-                      "settings.automation.scheduler.tipAria",
-                      "调度器设置说明",
-                    )}
-                    content={t(
-                      "settings.automation.scheduler.description",
-                      "这里只保留全局开关、轮询间隔和历史保留。开始持续与运行处理不再和设置区混排。",
-                    )}
+                    ariaLabel={t("settings.automation.scheduler.tipAria")}
+                    content={t("settings.automation.scheduler.description")}
                     tone="slate"
                   />
                 </div>
               </div>
               <Badge variant={schedulerConfig.enabled ? "default" : "outline"}>
                 {schedulerConfig.enabled
-                  ? t("settings.automation.main.status.enabled", "已启用")
-                  : t("settings.automation.main.status.disabled", "已停用")}
+                  ? t("settings.automation.main.status.enabled")
+                  : t("settings.automation.main.status.disabled")}
               </Badge>
             </div>
           </CardHeader>
@@ -2154,16 +2010,10 @@ export function AutomationSettings({
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="text-sm font-medium text-slate-900">
-                      {t(
-                        "settings.automation.scheduler.enable.label",
-                        "启用调度器",
-                      )}
+                      {t("settings.automation.scheduler.enable.label")}
                     </div>
                     <div className="mt-1 text-xs text-slate-500">
-                      {t(
-                        "settings.automation.scheduler.enable.description",
-                        "后台轮询 automation_jobs 表",
-                      )}
+                      {t("settings.automation.scheduler.enable.description")}
                     </div>
                   </div>
                   <Switch
@@ -2181,16 +2031,10 @@ export function AutomationSettings({
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="text-sm font-medium text-slate-900">
-                      {t(
-                        "settings.automation.scheduler.history.label",
-                        "记录执行历史",
-                      )}
+                      {t("settings.automation.scheduler.history.label")}
                     </div>
                     <div className="mt-1 text-xs text-slate-500">
-                      {t(
-                        "settings.automation.scheduler.history.description",
-                        "写入统一的 agent_runs 表",
-                      )}
+                      {t("settings.automation.scheduler.history.description")}
                     </div>
                   </div>
                   <Switch
@@ -2208,10 +2052,7 @@ export function AutomationSettings({
 
               <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/70 p-4">
                 <div className="text-sm font-medium text-slate-900">
-                  {t(
-                    "settings.automation.scheduler.pollInterval.label",
-                    "轮询间隔（秒）",
-                  )}
+                  {t("settings.automation.scheduler.pollInterval.label")}
                 </div>
                 <Input
                   className="mt-3"
@@ -2238,20 +2079,13 @@ export function AutomationSettings({
                 disabled={schedulerSaving}
               >
                 {schedulerSaving
-                  ? t(
-                      "settings.automation.scheduler.action.saving",
-                      "保存中...",
-                    )
-                  : t(
-                      "settings.automation.scheduler.action.save",
-                      "保存调度器",
-                    )}
+                  ? t("settings.automation.scheduler.action.saving")
+                  : t("settings.automation.scheduler.action.save")}
               </Button>
               <div className="text-sm text-slate-500">
                 {t("settings.automation.scheduler.pollWindow", {
                   last: formatTime(status?.last_polled_at, i18n.language),
                   next: formatTime(status?.next_poll_at, i18n.language),
-                  defaultValue: "最近轮询 {{last}}，下次轮询 {{next}}",
                 })}
               </div>
             </div>
@@ -2273,34 +2107,22 @@ export function AutomationSettings({
                 <div className="flex flex-wrap items-end justify-between gap-4">
                   <div>
                     <div className="text-xs font-medium tracking-[0.14em] text-slate-500">
-                      {t("settings.automation.tasks.kicker", "开始这条")}
+                      {t("settings.automation.tasks.kicker")}
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <CardTitle className="text-xl text-slate-900">
-                        {t(
-                          "settings.automation.tasks.title",
-                          "先把这条持续流程开起来",
-                        )}
+                        {t("settings.automation.tasks.title")}
                       </CardTitle>
                       <WorkbenchInfoTip
-                        ariaLabel={t(
-                          "settings.automation.tasks.tipAria",
-                          "开始这条说明",
-                        )}
-                        content={t(
-                          "settings.automation.tasks.description",
-                          "默认页只保留从 Agent 对话接回来的持续流程动作。模板会先帮你写好节奏、起手信息和输出去向，浏览器自动化不再保留单独起手入口。",
-                        )}
+                        ariaLabel={t("settings.automation.tasks.tipAria")}
+                        content={t("settings.automation.tasks.description")}
                         tone="slate"
                       />
                     </div>
                   </div>
                   <Button variant="outline" onClick={() => openCreateDialog()}>
                     <Plus className="mr-2 h-4 w-4" />
-                    {t(
-                      "settings.automation.tasks.action.blankStart",
-                      "空白开始",
-                    )}
+                    {t("settings.automation.tasks.action.blankStart")}
                   </Button>
                 </div>
               </CardHeader>
@@ -2309,8 +2131,6 @@ export function AutomationSettings({
                   <div className="mb-4 rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-6 text-amber-800">
                     {t("settings.automation.tasks.legacyBrowserNotice", {
                       count: legacyBrowserJobCount,
-                      defaultValue:
-                        "检测到 {{count}} 条旧浏览器流程。系统已停用这类流程，不会再后台启动 Chrome；请删除旧流程，并改用 Agent 对话持续流程重建。",
                     })}
                   </div>
                 ) : null}
@@ -2338,7 +2158,6 @@ export function AutomationSettings({
                                 "settings.automation.tasks.template.tipAria",
                                 {
                                   name: template.name,
-                                  defaultValue: "{{name}}模板说明",
                                 },
                               )}
                               content={template.detail}
@@ -2374,19 +2193,14 @@ export function AutomationSettings({
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
                         <CardTitle className="text-xl text-slate-900">
-                          {t(
-                            "settings.automation.tasks.list.title",
-                            "已在运行的持续流程",
-                          )}
+                          {t("settings.automation.tasks.list.title")}
                         </CardTitle>
                         <WorkbenchInfoTip
                           ariaLabel={t(
                             "settings.automation.tasks.list.tipAria",
-                            "持续流程列表说明",
                           )}
                           content={t(
                             "settings.automation.tasks.list.description",
-                            "每条持续流程都挂着归属、节奏和起手信息。需要看最近运行、输出去向或细节时，再打开详情。",
                           )}
                           tone="slate"
                         />
@@ -2395,7 +2209,6 @@ export function AutomationSettings({
                     <Badge variant="outline">
                       {t("settings.automation.tasks.list.count", {
                         count: jobs.length,
-                        defaultValue: "{{count}} 条",
                       })}
                     </Badge>
                   </div>
@@ -2406,46 +2219,29 @@ export function AutomationSettings({
                       <TableHeader>
                         <TableRow>
                           <TableHead className="min-w-[320px]">
-                            {t(
-                              "settings.automation.tasks.list.column.flow",
-                              "持续流程",
-                            )}
+                            {t("settings.automation.tasks.list.column.flow")}
                           </TableHead>
                           <TableHead className="min-w-[140px]">
                             {t(
                               "settings.automation.tasks.list.column.workspace",
-                              "归属",
                             )}
                           </TableHead>
                           <TableHead className="min-w-[150px]">
                             {t(
                               "settings.automation.tasks.list.column.schedule",
-                              "节奏",
                             )}
                           </TableHead>
                           <TableHead className="min-w-[110px]">
-                            {t(
-                              "settings.automation.tasks.list.column.mode",
-                              "方式",
-                            )}
+                            {t("settings.automation.tasks.list.column.mode")}
                           </TableHead>
                           <TableHead className="min-w-[210px]">
-                            {t(
-                              "settings.automation.tasks.list.column.status",
-                              "当前状态",
-                            )}
+                            {t("settings.automation.tasks.list.column.status")}
                           </TableHead>
                           <TableHead className="min-w-[150px]">
-                            {t(
-                              "settings.automation.tasks.list.column.lastRun",
-                              "最近执行",
-                            )}
+                            {t("settings.automation.tasks.list.column.lastRun")}
                           </TableHead>
                           <TableHead className="min-w-[240px] text-right">
-                            {t(
-                              "settings.automation.tasks.list.column.actions",
-                              "操作",
-                            )}
+                            {t("settings.automation.tasks.list.column.actions")}
                           </TableHead>
                         </TableRow>
                       </TableHeader>
@@ -2495,7 +2291,6 @@ export function AutomationSettings({
                                     {job.description ||
                                       t(
                                         "settings.automation.tasks.list.descriptionFallback",
-                                        "未填写流程说明",
                                       )}
                                   </div>
                                   {serviceSkillContext ? (
@@ -2510,7 +2305,6 @@ export function AutomationSettings({
                                         >
                                           {t(
                                             "settings.automation.tasks.list.badge.serviceSkill",
-                                            "技能流程",
                                           )}
                                         </Badge>
                                         <Badge variant="outline">
@@ -2541,8 +2335,6 @@ export function AutomationSettings({
                                             "settings.automation.tasks.list.serviceSkillSlotPreview",
                                             {
                                               summary: serviceSkillSlotPreview,
-                                              defaultValue:
-                                                "参数摘要: {{summary}}",
                                             },
                                           )}
                                         </div>
@@ -2611,7 +2403,6 @@ export function AutomationSettings({
                                       <Badge variant="outline">
                                         {t(
                                           "settings.automation.tasks.list.badge.disabled",
-                                          "已停用",
                                         )}
                                       </Badge>
                                     ) : null}
@@ -2620,17 +2411,13 @@ export function AutomationSettings({
                                         variant="outline"
                                         className="border-sky-200 bg-sky-50 text-sky-700"
                                       >
-                                        {t(
-                                          "settings.automation.focus.label",
-                                          "现在先继续这条",
-                                        )}
+                                        {t("settings.automation.focus.label")}
                                       </Badge>
                                     ) : null}
                                     {job.auto_disabled_until ? (
                                       <Badge variant="destructive">
                                         {t(
                                           "settings.automation.tasks.list.badge.cooldown",
-                                          "冷却中",
                                         )}
                                       </Badge>
                                     ) : null}
@@ -2663,7 +2450,6 @@ export function AutomationSettings({
                                           job.next_run_at,
                                           i18n.language,
                                         ),
-                                        defaultValue: "下次: {{time}}",
                                       },
                                     )}
                                   </div>
@@ -2675,7 +2461,6 @@ export function AutomationSettings({
                                           job.last_run_at,
                                           i18n.language,
                                         ),
-                                        defaultValue: "最近: {{time}}",
                                       },
                                     )}
                                   </div>
@@ -2701,11 +2486,9 @@ export function AutomationSettings({
                                       : runningJobId === job.id
                                         ? t(
                                             "settings.automation.tasks.list.action.running",
-                                            "执行中",
                                           )
                                         : t(
                                             "settings.automation.tasks.list.action.run",
-                                            "运行",
                                           )}
                                   </Button>
                                   <Button
@@ -2731,7 +2514,6 @@ export function AutomationSettings({
                                     <History className="h-4 w-4" />
                                     {t(
                                       "settings.automation.tasks.list.action.details",
-                                      "详情",
                                     )}
                                   </Button>
                                   <Button
@@ -2754,26 +2536,17 @@ export function AutomationSettings({
                   ) : (
                     <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50 p-10 text-center">
                       <div className="text-base font-medium text-slate-900">
-                        {t(
-                          "settings.automation.tasks.empty.title",
-                          "还没有持续流程",
-                        )}
+                        {t("settings.automation.tasks.empty.title")}
                       </div>
                       <p className="mt-2 text-sm text-slate-500">
-                        {t(
-                          "settings.automation.tasks.empty.description",
-                          "从这里开始接第一条持续流程，后面所有定时继续都走这条主链。",
-                        )}
+                        {t("settings.automation.tasks.empty.description")}
                       </p>
                       <Button
                         className="mt-5"
                         onClick={() => openCreateDialog()}
                       >
                         <Plus className="mr-2 h-4 w-4" />
-                        {t(
-                          "settings.automation.tasks.empty.action",
-                          "开始第一条持续流程",
-                        )}
+                        {t("settings.automation.tasks.empty.action")}
                       </Button>
                     </div>
                   )}
@@ -2789,18 +2562,20 @@ export function AutomationSettings({
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <CardTitle className="text-xl text-slate-900">
-                        运行概览
+                        {t("settings.automation.overview.title")}
                       </CardTitle>
                       <WorkbenchInfoTip
-                        ariaLabel="运行概览说明"
-                        content="统计、健康与风险提醒统一收在这里，不再进入持续流程首屏。"
+                        ariaLabel={t("settings.automation.overview.tipAria")}
+                        content={t("settings.automation.overview.tipContent")}
                         tone="slate"
                       />
                     </div>
                   </div>
                   <LatestRunStatusBadge
                     source="automation"
-                    label="统一执行状态"
+                    label={t(
+                      "settings.automation.overview.latestRunStatusLabel",
+                    )}
                   />
                 </div>
               </CardHeader>
@@ -2808,15 +2583,17 @@ export function AutomationSettings({
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/70 p-4">
                     <div className="text-sm font-medium text-slate-900">
-                      调度器
+                      {t("settings.automation.overview.metric.scheduler")}
                     </div>
                     <div className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">
-                      {status?.running ? "运行中" : "已停止"}
+                      {status?.running
+                        ? t("settings.automation.overview.status.running")
+                        : t("settings.automation.overview.status.stopped")}
                     </div>
                   </div>
                   <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/70 p-4">
                     <div className="text-sm font-medium text-slate-900">
-                      最近轮询
+                      {t("settings.automation.overview.metric.lastPoll")}
                     </div>
                     <div className="mt-3 text-base font-semibold text-slate-900">
                       {formatTime(status?.last_polled_at, i18n.language)}
@@ -2824,7 +2601,7 @@ export function AutomationSettings({
                   </div>
                   <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/70 p-4">
                     <div className="text-sm font-medium text-slate-900">
-                      下次轮询
+                      {t("settings.automation.overview.metric.nextPoll")}
                     </div>
                     <div className="mt-3 text-base font-semibold text-slate-900">
                       {formatTime(status?.next_poll_at, i18n.language)}
@@ -2832,10 +2609,11 @@ export function AutomationSettings({
                   </div>
                   <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/70 p-4">
                     <div className="text-sm font-medium text-slate-900">
-                      当前活跃
+                      {t("settings.automation.overview.metric.active")}
                     </div>
                     <div className="mt-3 text-base font-semibold text-slate-900">
-                      {status?.active_job_name ?? "当前空闲"}
+                      {status?.active_job_name ??
+                        t("settings.automation.overview.active.empty")}
                     </div>
                   </div>
                 </div>

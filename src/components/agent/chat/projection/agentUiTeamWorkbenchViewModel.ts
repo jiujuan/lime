@@ -7,10 +7,14 @@ import type {
 import {
   AGENT_UI_TEAM_WORKBENCH_SURFACE_DEFINITIONS,
   AGENT_UI_TEAM_WORKBENCH_SURFACES,
+  formatAgentUiProjectionControl,
   formatAgentUiProjectionEventAuxiliaryDetail,
   formatAgentUiProjectionEventDetail,
   formatAgentUiProjectionEventType,
   formatAgentUiProjectionPhase,
+  formatAgentUiProjectionSurfaceDescription,
+  formatAgentUiProjectionSurfaceLabel,
+  type AgentUiProjectionTranslation,
 } from "./agentUiProjectionSummary";
 
 export interface AgentUiTeamWorkbenchItemAction {
@@ -72,30 +76,8 @@ export interface AgentUiTeamWorkbenchViewModel {
 export interface AgentUiTeamWorkbenchViewModelOptions {
   latestLimit?: number;
   includeEmptySections?: boolean;
+  t?: AgentUiProjectionTranslation;
 }
-
-const CONTROL_LABELS: Partial<Record<AgentUiControl, string>> = {
-  answer: "补充输入",
-  approve: "批准",
-  assign: "指派",
-  close: "关闭",
-  continue_agent: "继续",
-  delegate: "委派",
-  edit: "编辑",
-  export: "导出",
-  interrupt: "中断",
-  open_detail: "打开详情",
-  queue: "加入队列",
-  reject: "拒绝",
-  remove: "移除",
-  request_review: "请求审核",
-  retry: "重试",
-  rollback: "回滚",
-  send: "发送",
-  steer: "调整方向",
-  stop: "停止",
-  wait: "等待",
-};
 
 const ATTENTION_PHASES = new Set([
   "failed",
@@ -123,6 +105,42 @@ const REQUESTED_FIX_EXECUTION_STATUS_LABELS: Record<string, string> = {
   pending: "待执行修复",
   running: "修复执行中",
 };
+
+const REQUESTED_FIX_EXECUTION_STATUS_LABEL_KEYS: Record<string, string> =
+  Object.fromEntries(
+    Object.keys(REQUESTED_FIX_EXECUTION_STATUS_LABELS).map((status) => [
+      status,
+      `agentChat.agentUiProjection.requestedFixStatus.${status}`,
+    ]),
+  );
+
+function translateViewModelLabel(
+  t: AgentUiProjectionTranslation | undefined,
+  key: string | undefined,
+  fallback: string,
+  options: Record<string, unknown> = {},
+): string {
+  if (!t || !key) {
+    return fallback;
+  }
+  return t(key, { defaultValue: fallback, ...options });
+}
+
+function formatSurfaceLabel(
+  surface: AgentUiSurface,
+  fallback: string,
+  t?: AgentUiProjectionTranslation,
+): string {
+  return formatAgentUiProjectionSurfaceLabel(surface, t, fallback);
+}
+
+function formatSurfaceDescription(
+  surface: AgentUiSurface,
+  fallback: string,
+  t?: AgentUiProjectionTranslation,
+): string {
+  return formatAgentUiProjectionSurfaceDescription(surface, t, fallback);
+}
 
 function normalizeText(
   value?: string | number | boolean | null,
@@ -257,12 +275,20 @@ function isReviewRequestedFixWorkItem(event: AgentUiProjectionEvent): boolean {
 
 function formatRequestedFixExecutionStatusLabel(
   event: AgentUiProjectionEvent,
+  t?: AgentUiProjectionTranslation,
 ): string | null {
   const status = readPayloadText(event, "executionStatus");
   if (!status) {
     return null;
   }
-  return REQUESTED_FIX_EXECUTION_STATUS_LABELS[status] ?? `修复状态：${status}`;
+  const fallback =
+    REQUESTED_FIX_EXECUTION_STATUS_LABELS[status] ?? `修复状态：${status}`;
+  return translateViewModelLabel(
+    t,
+    REQUESTED_FIX_EXECUTION_STATUS_LABEL_KEYS[status],
+    fallback,
+    { status },
+  );
 }
 
 function isTeamReassignmentWorkItem(event: AgentUiProjectionEvent): boolean {
@@ -365,7 +391,10 @@ function resolveTargetId(event: AgentUiProjectionEvent): string {
   );
 }
 
-function resolveItemTitle(event: AgentUiProjectionEvent): string {
+function resolveItemTitle(
+  event: AgentUiProjectionEvent,
+  t?: AgentUiProjectionTranslation,
+): string {
   switch (event.surface) {
     case "team_roster":
       return (
@@ -443,7 +472,7 @@ function resolveItemTitle(event: AgentUiProjectionEvent): string {
         ) ?? "Team policy"
       );
     default:
-      return formatAgentUiProjectionEventType(event.type);
+      return formatAgentUiProjectionEventType(event.type, t);
   }
 }
 
@@ -597,6 +626,7 @@ function buildTarget(
 
 function buildItemAction(
   event: AgentUiProjectionEvent,
+  t?: AgentUiProjectionTranslation,
 ): AgentUiTeamWorkbenchItemAction | null {
   if (
     !event.control ||
@@ -607,18 +637,29 @@ function buildItemAction(
   }
   const requestedFixActionLabel = isReviewRequestedFixWorkItem(event)
     ? event.control === "open_detail"
-      ? "查看修复结果"
+      ? translateViewModelLabel(
+          t,
+          "agentChat.agentUiProjection.control.openRequestedFixResult",
+          "查看修复结果",
+        )
       : event.control === "assign"
-        ? "指派修复"
+        ? translateViewModelLabel(
+            t,
+            "agentChat.agentUiProjection.control.assignRequestedFix",
+            "指派修复",
+          )
         : undefined
     : undefined;
   return {
     control: event.control,
     label: isTeamReassignmentWorkItem(event)
-      ? "重新指派"
+      ? translateViewModelLabel(
+          t,
+          "agentChat.agentUiProjection.control.reassign",
+          "重新指派",
+        )
       : (requestedFixActionLabel ??
-        CONTROL_LABELS[event.control] ??
-        event.control),
+        formatAgentUiProjectionControl(event.control, t)),
     targetId: resolveTargetId(event),
   };
 }
@@ -632,14 +673,29 @@ function isAttentionItem(event: AgentUiProjectionEvent): boolean {
   );
 }
 
-function buildItemChips(event: AgentUiProjectionEvent): string[] {
+function buildItemChips(
+  event: AgentUiProjectionEvent,
+  t?: AgentUiProjectionTranslation,
+): string[] {
   return uniqueValues([
-    formatAgentUiProjectionEventType(event.type),
-    formatAgentUiProjectionPhase(event.phase),
+    formatAgentUiProjectionEventType(event.type, t),
+    formatAgentUiProjectionPhase(event.phase, t),
     event.runtimeEntity,
     event.runtimeStatus,
-    isReviewRequestedFixWorkItem(event) ? "Review fix" : null,
-    isTeamReassignmentWorkItem(event) ? "Reassign" : null,
+    isReviewRequestedFixWorkItem(event)
+      ? translateViewModelLabel(
+          t,
+          "agentChat.agentUiProjection.chip.reviewFix",
+          "Review fix",
+        )
+      : null,
+    isTeamReassignmentWorkItem(event)
+      ? translateViewModelLabel(
+          t,
+          "agentChat.agentUiProjection.chip.reassign",
+          "Reassign",
+        )
+      : null,
     isTeamReassignmentWorkItem(event)
       ? uniqueValues([
           readPayloadText(event, "previousAssigneeId"),
@@ -647,22 +703,31 @@ function buildItemChips(event: AgentUiProjectionEvent): string[] {
         ]).join(" → ")
       : null,
     event.control && event.control !== "none"
-      ? (CONTROL_LABELS[event.control] ?? event.control)
+      ? formatAgentUiProjectionControl(event.control, t)
       : null,
     isReviewRequestedFixWorkItem(event)
-      ? formatRequestedFixExecutionStatusLabel(event)
+      ? formatRequestedFixExecutionStatusLabel(event, t)
       : null,
     readPayloadText(event, "decisionStatus"),
     readPayloadText(event, "riskLevel"),
     readPayloadText(event, "agentCardProvider"),
     event.surface === "remote_teammate" &&
     readPayloadText(event, "artifactCount")
-      ? `Artifact ${readPayloadText(event, "artifactCount")}`
+      ? translateViewModelLabel(
+          t,
+          "agentChat.agentUiProjection.chip.artifactCount",
+          `Artifact ${readPayloadText(event, "artifactCount")}`,
+          { count: readPayloadText(event, "artifactCount") },
+        )
       : null,
     event.surface === "remote_teammate" &&
     (readPayloadText(event, "primaryArtifactContentRef") ||
       readPayloadText(event, "primaryArtifactContentUrl"))
-      ? "远端内容"
+      ? translateViewModelLabel(
+          t,
+          "agentChat.agentUiProjection.chip.remoteContent",
+          "远端内容",
+        )
       : null,
     event.surface === "remote_teammate"
       ? readPayloadText(event, "primaryArtifactMimeType")
@@ -678,24 +743,38 @@ function buildItemChips(event: AgentUiProjectionEvent): string[] {
       : null,
     isReviewRequestedFixWorkItem(event) &&
     readPayloadText(event, "executionResultRef")
-      ? "有执行引用"
+      ? translateViewModelLabel(
+          t,
+          "agentChat.agentUiProjection.chip.hasExecutionRef",
+          "有执行引用",
+        )
       : null,
     event.surface === "worker_notifications"
       ? formatWorkerUsageChip(event)
       : null,
     event.surface === "worker_notifications" &&
     readPayloadText(event, "toolCount")
-      ? `工具 ${readPayloadText(event, "toolCount")}`
+      ? translateViewModelLabel(
+          t,
+          "agentChat.agentUiProjection.chip.toolCount",
+          `工具 ${readPayloadText(event, "toolCount")}`,
+          { count: readPayloadText(event, "toolCount") },
+        )
       : null,
     event.surface === "worker_notifications" &&
     readPayloadText(event, "resultRef")
-      ? "有结果引用"
+      ? translateViewModelLabel(
+          t,
+          "agentChat.agentUiProjection.chip.hasResultRef",
+          "有结果引用",
+        )
       : null,
   ]);
 }
 
 export function buildAgentUiTeamWorkbenchViewItem(
   event: AgentUiProjectionEvent,
+  t?: AgentUiProjectionTranslation,
 ): AgentUiTeamWorkbenchViewItem {
   const auxiliaryDetail = formatAgentUiProjectionEventAuxiliaryDetail(event);
   return {
@@ -703,13 +782,13 @@ export function buildAgentUiTeamWorkbenchViewItem(
       event.sequence ?? event.type
     }`,
     event,
-    title: resolveItemTitle(event),
+    title: resolveItemTitle(event, t),
     subtitle: resolveItemSubtitle(event),
     auxiliaryDetail,
-    phaseLabel: formatAgentUiProjectionPhase(event.phase),
-    chips: buildItemChips(event),
+    phaseLabel: formatAgentUiProjectionPhase(event.phase, t),
+    chips: buildItemChips(event, t),
     attention: isAttentionItem(event),
-    action: buildItemAction(event),
+    action: buildItemAction(event, t),
     target: buildTarget(event),
   };
 }
@@ -719,6 +798,7 @@ export function buildAgentUiTeamWorkbenchViewModel(
   options: AgentUiTeamWorkbenchViewModelOptions = {},
 ): AgentUiTeamWorkbenchViewModel {
   const latestLimit = Math.max(1, options.latestLimit ?? 4);
+  const t = options.t;
   const teamEvents = events.filter(isTeamWorkbenchEvent);
   const sections = AGENT_UI_TEAM_WORKBENCH_SURFACE_DEFINITIONS.map(
     (definition) => {
@@ -729,11 +809,17 @@ export function buildAgentUiTeamWorkbenchViewModel(
         .slice()
         .reverse()
         .slice(0, latestLimit)
-        .map(buildAgentUiTeamWorkbenchViewItem);
+        .map((event) => buildAgentUiTeamWorkbenchViewItem(event, t));
       const attentionCount = surfaceEvents.filter(isAttentionItem).length;
 
       return {
         ...definition,
+        label: formatSurfaceLabel(definition.surface, definition.label, t),
+        description: formatSurfaceDescription(
+          definition.surface,
+          definition.description,
+          t,
+        ),
         total: surfaceEvents.length,
         attentionCount,
         latestItems,

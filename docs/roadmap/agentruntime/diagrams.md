@@ -1,7 +1,7 @@
 # Lime AgentRuntime Profile 图纸集
 
-> 状态：proposal
-> 更新时间：2026-05-11
+> 状态：implementation-audited
+> 更新时间：2026-05-12
 > 作用：用图固定 AgentRuntime Profile 在 Lime 中的架构、主流程、时序和证据链路。
 
 ## 1. 总体架构图

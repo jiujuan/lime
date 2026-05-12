@@ -1,40 +1,16 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
-const { mockGetConfig, mockSaveConfig, mockUseTranslation } = vi.hoisted(
-  () => ({
-    mockGetConfig: vi.fn(),
-    mockSaveConfig: vi.fn(),
-    mockUseTranslation: vi.fn((_namespace?: string) => ({
-      i18n: { language: "zh-CN" },
-      t: (key: string, options?: unknown) => {
-        if (typeof options === "string") {
-          return options;
-        }
-
-        if (options && typeof options === "object") {
-          const values = options as Record<string, unknown>;
-          const template =
-            typeof values.defaultValue === "string" ? values.defaultValue : key;
-          return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-            String(values[name] ?? ""),
-          );
-        }
-
-        return key;
-      },
-    })),
-  }),
-);
+const { mockGetConfig, mockSaveConfig } = vi.hoisted(() => ({
+  mockGetConfig: vi.fn(),
+  mockSaveConfig: vi.fn(),
+}));
 
 vi.mock("@/lib/api/appConfig", () => ({
   getConfig: mockGetConfig,
   saveConfig: mockSaveConfig,
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: mockUseTranslation,
 }));
 
 import { ProfileSettings } from ".";
@@ -45,25 +21,6 @@ interface Mounted {
 }
 
 const mounted: Mounted[] = [];
-
-function createProfileTranslator() {
-  return (key: string, options?: unknown) => {
-    if (typeof options === "string") {
-      return options;
-    }
-
-    if (options && typeof options === "object") {
-      const values = options as Record<string, unknown>;
-      const template =
-        typeof values.defaultValue === "string" ? values.defaultValue : key;
-      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) =>
-        String(values[name] ?? ""),
-      );
-    }
-
-    return key;
-  };
-}
 
 function renderComponent(): HTMLDivElement {
   const container = document.createElement("div");
@@ -171,7 +128,8 @@ async function clickButton(button: HTMLButtonElement) {
   });
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  await changeLimeLocale("en-US");
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -192,7 +150,7 @@ beforeEach(() => {
   mockSaveConfig.mockResolvedValue(undefined);
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mounted.length > 0) {
     const target = mounted.pop();
     if (!target) {
@@ -205,6 +163,7 @@ afterEach(() => {
   }
 
   vi.clearAllMocks();
+  await changeLimeLocale("zh-CN");
 });
 
 describe("ProfileSettings", () => {
@@ -213,24 +172,28 @@ describe("ProfileSettings", () => {
     await waitForLoad();
 
     const text = container.textContent ?? "";
-    expect(text).toContain("个人资料");
-    expect(text).toContain("管理昵称、简介、邮箱和偏好标签。");
+    expect(text).toContain("Profile");
+    expect(text).toContain(
+      "Manage your nickname, bio, email, and preference tags.",
+    );
     expect(text).toContain("张三");
     expect(text).toContain("专注 AI 产品与工程效率");
-    expect(text).toContain("状态：资料完整");
-    expect(text).toContain("完成度：100%");
-    expect(text).toContain("偏好标签");
+    expect(text).toContain("Status: Complete profile");
+    expect(text).toContain("Completion: 100%");
+    expect(text).toContain("Preference Tags");
+    expect(text).toContain("Basic Profile");
+    expect(text).toContain("3 items");
+    expect(text).toContain("Avatar format limits are in Tips");
+    expect(text).toContain("How Profile Is Used");
+    expect(text).toContain("Suggested Tags");
+    expect(text).toContain("Programming");
     expect(text).toContain("编程");
     expect(text).toContain("设计");
-    expect(mockUseTranslation).toHaveBeenCalledWith("settings");
+    expect(text).not.toContain("个人资料");
+    expect(text).not.toContain("基础资料");
   });
 
   it("应按当前 locale 格式化资料统计数量", async () => {
-    const englishT = createProfileTranslator();
-    mockUseTranslation.mockImplementation(() => ({
-      i18n: { language: "en-US" },
-      t: englishT,
-    }));
     mockGetConfig.mockResolvedValueOnce({
       default_provider: "openai",
       user_profile: {
@@ -245,17 +208,17 @@ describe("ProfileSettings", () => {
     await waitForLoad();
 
     const text = container.textContent ?? "";
-    expect(text).toContain("标签：1,000");
-    expect(text).not.toContain("标签：1000");
+    expect(text).toContain("Tags: 1,000");
+    expect(text).not.toContain("Tags: 1000");
   });
 
   it("编辑昵称后应保存完整资料", async () => {
     const container = renderComponent();
     await waitForLoad();
 
-    await clickButton(findButtonByLabel(container, "编辑昵称"));
+    await clickButton(findButtonByLabel(container, "Edit Nickname"));
     await setInputValue(findInput(container, "profile-field-nickname"), "李四");
-    await clickButton(findButtonByLabel(container, "保存昵称"));
+    await clickButton(findButtonByLabel(container, "Save Nickname"));
 
     expect(mockSaveConfig).toHaveBeenCalledTimes(1);
     expect(mockSaveConfig).toHaveBeenCalledWith(
@@ -275,7 +238,7 @@ describe("ProfileSettings", () => {
     const container = renderComponent();
     await waitForLoad();
 
-    await clickButton(findButtonByLabel(container, "编辑昵称"));
+    await clickButton(findButtonByLabel(container, "Edit Nickname"));
 
     await setInputValue(findInput(container, "profile-field-nickname"), "王五");
     expect(findInput(container, "profile-field-nickname").value).toBe("王五");
@@ -292,7 +255,7 @@ describe("ProfileSettings", () => {
     await waitForLoad();
 
     await setInputValue(findInput(container, "profile-new-tag"), "效率工具");
-    await clickButton(findButtonByText(container, "添加标签"));
+    await clickButton(findButtonByText(container, "Add Tag"));
 
     expect(mockSaveConfig).toHaveBeenCalledTimes(1);
     expect(mockSaveConfig).toHaveBeenCalledWith(
@@ -308,15 +271,15 @@ describe("ProfileSettings", () => {
     renderComponent();
     await waitForLoad();
 
-    const nicknameTip = await hoverTip("昵称说明");
+    const nicknameTip = await hoverTip("Nickname info");
     expect(getBodyText()).toContain(
-      "建议使用你最常用的称呼，便于系统在多处一致展示。",
+      "Use the name you prefer so Lime can show it consistently.",
     );
     await leaveTip(nicknameTip);
 
-    const usageTip = await hoverTip("资料如何被使用说明");
+    const usageTip = await hoverTip("How profile is used info");
     expect(getBodyText()).toContain(
-      "标签只用于偏好判断，不会替代系统提示词，也不会自动暴露给外部服务。",
+      "Tags are only used for preference inference. They do not replace system prompts or automatically expose data to external services.",
     );
     await leaveTip(usageTip);
   });

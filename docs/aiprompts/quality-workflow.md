@@ -40,7 +40,7 @@
 2. **边界变更已同步** - 命令、桥接、配置、版本等结构性改动完成成组更新
 3. **GUI 主路径可运行** - 涉及 GUI 壳、Bridge、Workspace、主页面路径时，最小冒烟通过
 4. **用户可见回归已补齐** - 用户可见 UI 改动有稳定断言或既有 snapshot 回归
-5. **本地化事实源正确** - 新增或改动的用户可见产品文案进入 key-based i18n resources，不依赖 legacy DOM Patch 兜底
+5. **全球本地化事实源正确** - 新增或改动的用户可见产品文案必须覆盖 Lime current 五语言 `zh-CN / zh-TW / en-US / ja-JP / ko-KR`；前端进入 key-based i18n resources，Rust / Tauri 导出 Markdown、copy prompt、artifact title 等 presentation 文案进入 locale copy service，不依赖 legacy DOM Patch 或中英双语兜底
 6. **文档与锁文件不掉队** - 相关文档、schema、锁文件与实际实现保持一致
 
 ## 路线图任务防跑偏
@@ -136,9 +136,12 @@
 
 ### 3. 用户可见 UI 改动必须补稳定回归
 
-- 新增功能的按钮、标题、空态、toast、confirm、prompt、placeholder、aria/title 与错误提示必须走 current i18n：`useTranslation(ns)` / `Trans` + `src/i18n/resources/<locale>/<namespace>.json`
+- 新增或改动的按钮、标题、空态、toast、confirm、prompt、placeholder、aria/title、错误提示、导出 Markdown / copy prompt / artifact title 等用户可见 presentation 文案，必须覆盖 Lime current 五语言：`zh-CN / zh-TW / en-US / ja-JP / ko-KR`
+- 前端文案必须走 current i18n：`useTranslation(ns)` / `Trans` + `src/i18n/resources/<locale>/<namespace>.json`；Rust / Tauri 导出文案必须走对应 locale copy service，不得只在业务逻辑里硬编码中文或英文
+- 只做中文 / 英文双语兜底不算全球本地化；确需临时例外时，必须写入对应路线图或执行计划，说明覆盖范围、原因和退出条件
 - legacy DOM Patch 只允许作为迁移期兜底，不允许成为新功能或新文案的本地化事实源；确需临时例外时，必须写入对应路线图或执行计划并说明退出条件
 - 动态用户可见文案使用 i18next interpolation / plural / context；日期、数字、相对时间、列表和排序优先复用 `src/i18n/format.ts`
+- 协议 facts / JSON schema / stable enum（例如 `type/status/failureCategory/reasonCode`）不得随 locale 翻译；只翻译 presentation 层，避免测试、join key 或跨模块判断被本地化文案污染
 - 优先补现有 `*.test.tsx` 的关键文案、状态与交互断言
 - 如果目标区域已有 snapshot / 结构化快照机制，沿用现有机制
 - 不要因为“只是 UI”就跳过回归

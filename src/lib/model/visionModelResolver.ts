@@ -57,6 +57,21 @@ const buildSearchText = (model: EnhancedModelMetadata): string =>
 const isLikelyImageGenerationModel = (
   model: EnhancedModelMetadata,
 ): boolean => {
+  const canReturnText =
+    !model.output_modalities?.length ||
+    model.output_modalities.includes("text");
+  if (model.task_families?.includes("vision_understanding") && canReturnText) {
+    return false;
+  }
+
+  if (
+    model.task_families?.includes("image_generation") ||
+    model.task_families?.includes("image_edit") ||
+    model.output_modalities?.includes("image")
+  ) {
+    return true;
+  }
+
   const text = buildSearchText(model);
   if (!IMAGE_GENERATION_KEYWORDS.some((keyword) => text.includes(keyword))) {
     return false;
@@ -73,8 +88,15 @@ const supportsVision = (
   model: EnhancedModelMetadata | undefined,
   fallbackModelId?: string,
 ): boolean => {
-  if (model?.capabilities.vision) {
-    return true;
+  if (model) {
+    const hasExplicitVisionSignal =
+      model.capabilities.vision ||
+      model.task_families?.includes("vision_understanding") ||
+      model.input_modalities?.includes("image");
+
+    if (hasExplicitVisionSignal) {
+      return !isLikelyImageGenerationModel(model);
+    }
   }
 
   if (!fallbackModelId) {
@@ -126,10 +148,7 @@ export function resolveVisionModel(
   }
 
   const currentFamily = normalize(currentModel?.family);
-  const candidates = models.filter(
-    (model) =>
-      model.capabilities.vision && !isLikelyImageGenerationModel(model),
-  );
+  const candidates = models.filter((model) => supportsVision(model, model.id));
 
   if (candidates.length === 0) {
     return {

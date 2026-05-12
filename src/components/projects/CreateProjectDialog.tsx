@@ -24,7 +24,6 @@ import {
   USER_PROJECT_TYPES,
   extractErrorMessage,
   getCreateProjectErrorMessage,
-  getProjectTypeLabel,
   getProjectTypeIcon,
   getProjectByRootPath,
   getWorkspaceProjectsRoot,
@@ -41,6 +40,8 @@ interface CreateProjectDialogProps {
   allowedTypes?: ProjectType[];
 }
 
+type UserProjectType = (typeof USER_PROJECT_TYPES)[number];
+
 export function CreateProjectDialog({
   open,
   onOpenChange,
@@ -51,7 +52,7 @@ export function CreateProjectDialog({
 }: CreateProjectDialogProps) {
   const { t } = useTranslation("common");
   const [name, setName] = useState("");
-  const [type, setType] = useState<ProjectType>(defaultType || "general");
+  const [type, setType] = useState<UserProjectType>("general");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [workspaceRootPath, setWorkspaceRootPath] = useState("");
   const [resolvedProjectPath, setResolvedProjectPath] = useState("");
@@ -64,7 +65,7 @@ export function CreateProjectDialog({
         ? allowedTypes
         : USER_PROJECT_TYPES;
 
-    return candidates.filter((candidate): candidate is ProjectType =>
+    return candidates.filter((candidate): candidate is UserProjectType =>
       USER_PROJECT_TYPES.includes(
         candidate as (typeof USER_PROJECT_TYPES)[number],
       ),
@@ -72,27 +73,18 @@ export function CreateProjectDialog({
   }, [allowedTypes]);
 
   const fallbackType = visibleTypes[0] || "general";
-  const getProjectTypeDisplayLabel = (projectType: ProjectType) =>
-    t(`common.createProjectDialog.projectType.${projectType}`, {
-      defaultValue: getProjectTypeLabel(projectType),
-    });
+  const projectTypeLabels: Record<UserProjectType, string> = {
+    general: t("common.createProjectDialog.projectType.general"),
+  };
+  const getProjectTypeDisplayLabel = (projectType: UserProjectType) =>
+    projectTypeLabels[projectType];
   const createProjectErrorMessageCopy = useMemo(
     () => ({
-      invalidPath: t("common.createProjectDialog.error.invalidPath", {
-        defaultValue: "项目目录无效，请重新选择",
-      }),
-      objectError: t("common.createProjectDialog.error.object", {
-        defaultValue: "创建项目失败，请查看日志",
-      }),
-      pathExists: t("common.createProjectDialog.error.pathExists", {
-        defaultValue: "项目目录已存在，请更换项目名称或清理同名目录",
-      }),
-      staleSchema: t("common.createProjectDialog.error.staleSchema", {
-        defaultValue: "数据库结构过旧，请重启应用以执行迁移",
-      }),
-      unknown: t("common.createProjectDialog.error.unknown", {
-        defaultValue: "未知错误",
-      }),
+      invalidPath: t("common.createProjectDialog.error.invalidPath"),
+      objectError: t("common.createProjectDialog.error.object"),
+      pathExists: t("common.createProjectDialog.error.pathExists"),
+      staleSchema: t("common.createProjectDialog.error.staleSchema"),
+      unknown: t("common.createProjectDialog.error.unknown"),
     }),
     [t],
   );
@@ -103,8 +95,12 @@ export function CreateProjectDialog({
       return;
     }
 
-    if (defaultType && visibleTypes.includes(defaultType)) {
-      setType(defaultType);
+    if (
+      defaultType &&
+      USER_PROJECT_TYPES.includes(defaultType as UserProjectType) &&
+      visibleTypes.includes(defaultType as UserProjectType)
+    ) {
+      setType(defaultType as UserProjectType);
       return;
     }
 
@@ -206,7 +202,6 @@ export function CreateProjectDialog({
         if (existingProject) {
           setPathConflictMessage(
             t("common.createProjectDialog.path.conflict", {
-              defaultValue: "路径已存在项目：{{name}}",
               name: existingProject.name,
             }),
           );
@@ -240,8 +235,10 @@ export function CreateProjectDialog({
       await onSubmit(name.trim(), type);
       setName("");
       setType(
-        defaultType && visibleTypes.includes(defaultType)
-          ? defaultType
+        defaultType &&
+          USER_PROJECT_TYPES.includes(defaultType as UserProjectType) &&
+          visibleTypes.includes(defaultType as UserProjectType)
+          ? (defaultType as UserProjectType)
           : fallbackType,
       );
       onOpenChange(false);
@@ -254,7 +251,6 @@ export function CreateProjectDialog({
       );
       toast.error(
         t("common.createProjectDialog.toast.createFailed", {
-          defaultValue: "创建项目失败：{{message}}",
           message: friendlyMessage,
         }),
       );
@@ -265,35 +261,20 @@ export function CreateProjectDialog({
   const topBadges = [
     getProjectTypeDisplayLabel(type),
     workspaceRootPath
-      ? t("common.createProjectDialog.status.workspaceResolved", {
-          defaultValue: "工作区目录已解析",
-        })
-      : t("common.createProjectDialog.status.waitingWorkspace", {
-          defaultValue: "等待目录加载",
-        }),
+      ? t("common.createProjectDialog.status.workspaceResolved")
+      : t("common.createProjectDialog.status.waitingWorkspace"),
     pathConflictMessage
-      ? t("common.createProjectDialog.status.pathConflict", {
-          defaultValue: "路径冲突",
-        })
-      : t("common.createProjectDialog.status.pathAvailable", {
-          defaultValue: "路径可用",
-        }),
+      ? t("common.createProjectDialog.status.pathConflict")
+      : t("common.createProjectDialog.status.pathAvailable"),
   ];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[760px] overflow-hidden border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.98)_0%,rgba(255,255,255,0.98)_38%,rgba(240,249,255,0.94)_100%)] p-0">
         <DialogHeader className="border-b border-white/80 px-6 py-5">
-          <DialogTitle>
-            {t("common.createProjectDialog.title", {
-              defaultValue: "新建项目",
-            })}
-          </DialogTitle>
+          <DialogTitle>{t("common.createProjectDialog.title")}</DialogTitle>
           <DialogDescription>
-            {t("common.createProjectDialog.description", {
-              defaultValue:
-                "创建一个新的内容创作项目，目录将固定在 workspace 目录下。",
-            })}
+            {t("common.createProjectDialog.description")}
           </DialogDescription>
         </DialogHeader>
 
@@ -305,15 +286,10 @@ export function CreateProjectDialog({
               <div className="relative space-y-4">
                 <div>
                   <div className="text-sm font-semibold text-slate-900">
-                    {t("common.createProjectDialog.hero.title", {
-                      defaultValue: "创建新的项目工作台",
-                    })}
+                    {t("common.createProjectDialog.hero.title")}
                   </div>
                   <div className="mt-1 text-xs leading-5 text-slate-500">
-                    {t("common.createProjectDialog.hero.description", {
-                      defaultValue:
-                        "先确定项目名称和类型，再确认目录路径，后续内容、风格和记忆都会挂到这个项目下。",
-                    })}
+                    {t("common.createProjectDialog.hero.description")}
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -328,9 +304,7 @@ export function CreateProjectDialog({
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="name">
-                    {t("common.createProjectDialog.name.label", {
-                      defaultValue: "项目名称",
-                    })}
+                    {t("common.createProjectDialog.name.label")}
                   </Label>
                   <Input
                     id="name"
@@ -338,9 +312,6 @@ export function CreateProjectDialog({
                     onChange={(e) => setName(e.target.value)}
                     placeholder={t(
                       "common.createProjectDialog.name.placeholder",
-                      {
-                        defaultValue: "输入项目名称...",
-                      },
                     )}
                     autoFocus
                     className="h-11 border-slate-200/80 bg-white/90"
@@ -352,15 +323,10 @@ export function CreateProjectDialog({
             <section className="rounded-[28px] border border-slate-200/80 bg-white/92 p-5 shadow-sm shadow-slate-950/5">
               <div className="mb-4">
                 <div className="text-sm font-semibold text-slate-900">
-                  {t("common.createProjectDialog.type.title", {
-                    defaultValue: "选择项目类型",
-                  })}
+                  {t("common.createProjectDialog.type.title")}
                 </div>
                 <div className="mt-1 text-xs leading-5 text-slate-500">
-                  {t("common.createProjectDialog.type.description", {
-                    defaultValue:
-                      "类型会影响后续默认内容、工作台结构和推荐视图。",
-                  })}
+                  {t("common.createProjectDialog.type.description")}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -384,9 +350,7 @@ export function CreateProjectDialog({
                     </span>
                     {type === projectType ? (
                       <Badge className="border border-emerald-200 bg-emerald-50 text-emerald-700">
-                        {t("common.createProjectDialog.type.selected", {
-                          defaultValue: "当前选择",
-                        })}
+                        {t("common.createProjectDialog.type.selected")}
                       </Badge>
                     ) : null}
                   </button>
@@ -399,31 +363,22 @@ export function CreateProjectDialog({
             <section className="rounded-[28px] border border-slate-200/80 bg-white/92 p-5 shadow-sm shadow-slate-950/5">
               <div className="mb-4">
                 <div className="text-sm font-semibold text-slate-900">
-                  {t("common.createProjectDialog.path.title", {
-                    defaultValue: "目录与路径",
-                  })}
+                  {t("common.createProjectDialog.path.title")}
                 </div>
                 <div className="mt-1 text-xs leading-5 text-slate-500">
-                  {t("common.createProjectDialog.path.description", {
-                    defaultValue:
-                      "项目会固定创建在 workspace 根目录下，避免目录来源不一致。",
-                  })}
+                  {t("common.createProjectDialog.path.description")}
                 </div>
               </div>
 
               <div className="grid gap-4">
                 <div className="grid gap-2">
                   <Label htmlFor="workspace-root">
-                    {t("common.createProjectDialog.path.workspaceRootLabel", {
-                      defaultValue: "workspace 目录",
-                    })}
+                    {t("common.createProjectDialog.path.workspaceRootLabel")}
                   </Label>
                   <Input
                     id="workspace-root"
                     value={workspaceRootPath}
-                    placeholder={t("common.loading", {
-                      defaultValue: "加载中...",
-                    })}
+                    placeholder={t("common.loading")}
                     readOnly
                     className="bg-slate-50/80"
                   />
@@ -431,37 +386,27 @@ export function CreateProjectDialog({
 
                 <div className="grid gap-2">
                   <Label htmlFor="project-path-preview">
-                    {t("common.createProjectDialog.path.previewLabel", {
-                      defaultValue: "项目路径预览",
-                    })}
+                    {t("common.createProjectDialog.path.previewLabel")}
                   </Label>
                   <Input
                     id="project-path-preview"
                     value={resolvedProjectPath}
                     placeholder={t(
                       "common.createProjectDialog.path.nameRequired",
-                      {
-                        defaultValue: "请输入项目名称",
-                      },
                     )}
                     readOnly
                     className="bg-slate-50/80"
                   />
                   <p className="break-all text-xs leading-5 text-slate-500">
                     {t("common.createProjectDialog.path.willCreateAt", {
-                      defaultValue: "将创建到：{{path}}",
                       path:
                         resolvedProjectPath ||
-                        t("common.createProjectDialog.path.nameRequired", {
-                          defaultValue: "请输入项目名称",
-                        }),
+                        t("common.createProjectDialog.path.nameRequired"),
                     })}
                   </p>
                   {pathChecking && (
                     <p className="text-xs text-slate-500">
-                      {t("common.createProjectDialog.path.checking", {
-                        defaultValue: "正在检查路径...",
-                      })}
+                      {t("common.createProjectDialog.path.checking")}
                     </p>
                   )}
                   {!pathChecking && pathConflictMessage && (
@@ -475,29 +420,12 @@ export function CreateProjectDialog({
 
             <section className="rounded-[28px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.9)_0%,rgba(255,255,255,0.98)_100%)] p-5 shadow-sm shadow-slate-950/5">
               <div className="text-sm font-semibold text-slate-900">
-                {t("common.createProjectDialog.tips.title", {
-                  defaultValue: "创建建议",
-                })}
+                {t("common.createProjectDialog.tips.title")}
               </div>
               <div className="mt-2 space-y-2 text-xs leading-5 text-slate-500">
-                <p>
-                  {t("common.createProjectDialog.tips.name", {
-                    defaultValue:
-                      "项目名称尽量稳定，后续会同步影响目录名和项目识别。",
-                  })}
-                </p>
-                <p>
-                  {t("common.createProjectDialog.tips.path", {
-                    defaultValue:
-                      "如果路径已冲突，优先改项目名，不要手工改系统目录。",
-                  })}
-                </p>
-                <p>
-                  {t("common.createProjectDialog.tips.type", {
-                    defaultValue:
-                      "项目类型决定默认工作台结构，先选最贴近当前任务的类型。",
-                  })}
-                </p>
+                <p>{t("common.createProjectDialog.tips.name")}</p>
+                <p>{t("common.createProjectDialog.tips.path")}</p>
+                <p>{t("common.createProjectDialog.tips.type")}</p>
               </div>
             </section>
           </div>
@@ -508,7 +436,7 @@ export function CreateProjectDialog({
             className="border-slate-200/80 bg-white"
             onClick={() => onOpenChange(false)}
           >
-            {t("common.cancel", { defaultValue: "取消" })}
+            {t("common.cancel")}
           </Button>
           <Button
             onClick={handleSubmit}
@@ -520,12 +448,8 @@ export function CreateProjectDialog({
             }
           >
             {isSubmitting
-              ? t("common.createProjectDialog.action.creating", {
-                  defaultValue: "创建中...",
-                })
-              : t("common.createProjectDialog.action.create", {
-                  defaultValue: "创建",
-                })}
+              ? t("common.createProjectDialog.action.creating")
+              : t("common.createProjectDialog.action.create")}
           </Button>
         </DialogFooter>
       </DialogContent>

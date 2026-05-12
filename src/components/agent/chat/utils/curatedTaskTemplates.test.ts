@@ -13,6 +13,29 @@ import {
   type CuratedTaskPresentationCopy,
 } from "./curatedTaskTemplates";
 import { buildCuratedTaskReferenceEntries } from "./curatedTaskReferenceSelection";
+import agentResource from "@/i18n/resources/zh-CN/agent.json";
+
+type AgentResourceKey = keyof typeof agentResource;
+
+function interpolateTemplate(
+  template: string,
+  values?: Record<string, number | string>,
+): string {
+  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, name) => {
+    const value = values?.[name];
+    return value == null ? match : String(value);
+  });
+}
+
+function translateAgentResource(
+  key: string,
+  values?: Record<string, number | string>,
+): string {
+  return interpolateTemplate(
+    agentResource[key as AgentResourceKey] ?? key,
+    values,
+  );
+}
 
 describe("curatedTaskTemplates", () => {
   beforeEach(() => {
@@ -154,7 +177,7 @@ describe("curatedTaskTemplates", () => {
   });
 
   it("Agent Chat 输入能力区可注入 CuratedTask 模板 copy", () => {
-    const copy = buildCuratedTaskTemplateCopy((key, defaultValue) => {
+    const copy = buildCuratedTaskTemplateCopy((key, interpolateValues) => {
       const values: Record<string, string> = {
         "curatedTask.templates.common.actionLabel": "Launch",
         "curatedTask.templates.common.recentBadge": "Recent",
@@ -173,7 +196,10 @@ describe("curatedTaskTemplates", () => {
           "Align with {{title}} first",
       };
 
-      return values[key] ?? defaultValue;
+      return interpolateTemplate(
+        values[key] ?? translateAgentResource(key),
+        interpolateValues,
+      );
     });
 
     const trendTemplate = findCuratedTaskTemplateById(

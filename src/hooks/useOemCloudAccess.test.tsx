@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { setStoredOemCloudSessionState } from "@/lib/oemCloudSession";
 import { OEM_CLOUD_PAYMENT_RETURN_EVENT } from "@/lib/oemCloudPaymentReturn";
 
@@ -38,39 +39,6 @@ const tauriRuntimeMocks = vi.hoisted(() => ({
 const desktopAuthMocks = vi.hoisted(() => ({
   completeOemCloudDesktopOAuthLogin: vi.fn(),
 }));
-const i18nMocks = vi.hoisted(() => {
-  const translations = {
-    "common.oemCloudAccess.auth.googleSynced":
-      "Google cloud catalog synced from i18n",
-    "common.oemCloudAccess.auth.userCenterOpened":
-      "Lime cloud sign-in page opened from i18n",
-    "common.oemCloudAccess.payment.returnSyncing":
-      "Payment return syncing from i18n",
-    "common.oemCloudAccess.auth.browserPreopenTitle":
-      "Opening sign-in page from i18n",
-    "common.oemCloudAccess.auth.browserPreopenBody":
-      "Opening sign-in page body from i18n",
-    "common.oemCloudAccess.auth.systemBrowserOpenFailedWithMessage":
-      "System browser failed from i18n: {{message}}",
-    "common.oemCloudAccess.emailCode.identifierRequired":
-      "Email identifier required from i18n",
-    "common.oemCloudAccess.emailCode.sent":
-      "Verification code sent to {{maskedEmail}} for {{minutes}} minutes from i18n",
-    "common.oemCloudAccess.apiKey.createSuccess": "API key created from i18n",
-  } as Record<string, string>;
-  return {
-    translations,
-    t: vi.fn(
-      (key: string, options?: Record<string, string | number | undefined>) => {
-        const template = translations[key] ?? options?.defaultValue ?? key;
-        return String(template).replace(
-          /{{\s*(\w+)\s*}}/g,
-          (_, token: string) => String(options?.[token] ?? `{{${token}}}`),
-        );
-      },
-    ),
-  };
-});
 
 vi.mock("@/lib/api/oemCloudControlPlane", () => {
   class MockOemCloudControlPlaneError extends Error {
@@ -131,12 +99,6 @@ vi.mock("@/lib/oemCloudDesktopAuth", () => ({
   OEM_CLOUD_OAUTH_COMPLETED_EVENT: "lime:oem-cloud-oauth-completed",
   completeOemCloudDesktopOAuthLogin:
     desktopAuthMocks.completeOemCloudDesktopOAuthLogin,
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: i18nMocks.t,
-  }),
 }));
 
 vi.mock("@/lib/serviceSkillCatalogBootstrap", () => ({
@@ -217,7 +179,8 @@ async function flushEffects() {
 describe("useOemCloudAccess", () => {
   let mountedHarness: MountedHarness | null = null;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await changeLimeLocale("en-US");
     (
       globalThis as typeof globalThis & {
         IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -298,7 +261,7 @@ describe("useOemCloudAccess", () => {
     tauriRuntimeMocks.hasTauriRuntimeMarkers.mockReturnValue(true);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.clearAllMocks();
     vi.useRealTimers();
     window.localStorage.clear();
@@ -313,6 +276,7 @@ describe("useOemCloudAccess", () => {
       mountedHarness.container.remove();
       mountedHarness = null;
     }
+    await changeLimeLocale("zh-CN");
   });
 
   it("恢复本地会话时不应因重复 effect 触发而卡在初始化中", async () => {
@@ -484,7 +448,9 @@ describe("useOemCloudAccess", () => {
       },
     );
     expect(latestState?.lastIssuedRawToken).toBe("sk-lime-once");
-    expect(latestState?.infoMessage).toContain("API key created from i18n");
+    expect(latestState?.infoMessage).toContain(
+      "Lime API Key created. The secret is shown only once on this page.",
+    );
 
     act(() => {
       latestState?.handleDismissIssuedToken();
@@ -528,7 +494,7 @@ describe("useOemCloudAccess", () => {
       },
     );
     expect(latestState?.infoMessage).toContain(
-      "Verification code sent to op***@example.com for 10 minutes from i18n",
+      "Verification code sent to op***@example.com. It is valid for about 10 minutes.",
     );
   });
 
@@ -618,7 +584,7 @@ describe("useOemCloudAccess", () => {
       status: "waiting",
     });
     expect(latestState?.infoMessage).toContain(
-      "Payment return syncing from i18n",
+      "Back in Lime. Syncing payment status, entitlements, and ledger.",
     );
   });
 
@@ -710,7 +676,7 @@ describe("useOemCloudAccess", () => {
       error: null,
     });
     expect(latestState?.infoMessage).toContain(
-      "Google cloud catalog synced from i18n",
+      "Google sign-in succeeded and the cloud catalog is synced.",
     );
   });
 
@@ -754,7 +720,7 @@ describe("useOemCloudAccess", () => {
       "https://user.limeai.run/oauth/desktop/device-code-001/signin",
     );
     expect(latestState?.errorMessage).toContain(
-      "System browser failed from i18n: permission denied",
+      "Failed to open the system browser: permission denied",
     );
     expect(latestState?.infoMessage).toBeNull();
     expect(
@@ -798,7 +764,7 @@ describe("useOemCloudAccess", () => {
     expect(parsedUrl.searchParams.get("redirect")).toBe("/welcome");
     expect(latestState?.errorMessage).toBeNull();
     expect(latestState?.infoMessage).toContain(
-      "Lime cloud sign-in page opened from i18n",
+      "The Lime cloud sign-in page is open. Complete authorization in the browser and the desktop app will sync the result automatically.",
     );
   });
 
@@ -830,11 +796,9 @@ describe("useOemCloudAccess", () => {
       });
 
       expect(windowOpenSpy).toHaveBeenCalledWith("about:blank", "_blank");
-      expect(openedWindow.document.title).toBe(
-        "Opening sign-in page from i18n",
-      );
+      expect(openedWindow.document.title).toBe("Opening sign-in page...");
       expect(openedWindow.document.body.innerHTML).toBe(
-        "Opening sign-in page body from i18n",
+        "Opening the sign-in page. Please wait...",
       );
       expect(openedWindow.location.assign).toHaveBeenCalledTimes(1);
       const openedUrl = (

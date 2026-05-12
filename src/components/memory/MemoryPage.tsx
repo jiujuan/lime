@@ -7,7 +7,9 @@ import {
   type ReactNode,
 } from "react";
 import { ArrowRight, BrainCircuit, Database, FolderKanban } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
+import { formatNumber } from "@/i18n/format";
 import { cn } from "@/lib/utils";
 import {
   cleanupContextMemdir,
@@ -701,6 +703,8 @@ function MemorySurfacePanel(props: {
 }
 
 export function MemoryPage({ onNavigate, pageParams }: MemoryPageProps) {
+  const { i18n, t } = useTranslation("agent");
+  const locale = i18n.resolvedLanguage || i18n.language;
   const initialState = resolveSectionState(pageParams?.section);
   const [activeSection, setActiveSection] = useState<PrimarySection>(
     initialState.section,
@@ -1209,19 +1213,32 @@ export function MemoryPage({ onNavigate, pageParams }: MemoryPageProps) {
       return "";
     }
 
+    const referenceCountLabel = formatNumber(
+      activeRecommendationReferenceEntries.length,
+      { locale },
+    );
+    const itemSeparator = t("curatedTask.launcher.summary.itemSeparator");
     const visibleTitles = activeRecommendationReferenceEntries
       .slice(0, 2)
       .map((entry) => entry.title)
-      .join("、");
-
-    return `${
-      focusedDurableMemory ? "会优先带上" : "默认会带上"
-    }：${visibleTitles}${
+      .join(itemSeparator);
+    const moreSuffix =
       activeRecommendationReferenceEntries.length > 2
-        ? ` 等 ${activeRecommendationReferenceEntries.length} 条参考对象`
-        : ""
-    }`;
-  }, [activeRecommendationReferenceEntries, focusedDurableMemory]);
+        ? t("skills.workspace.curatedTask.home.referenceSummary.moreSuffix", {
+            countLabel: referenceCountLabel,
+          })
+        : "";
+
+    return t(
+      focusedDurableMemory
+        ? "skills.workspace.curatedTask.home.referenceSummary.focused"
+        : "skills.workspace.curatedTask.home.referenceSummary.default",
+      {
+        moreSuffix,
+        titles: visibleTitles,
+      },
+    );
+  }, [activeRecommendationReferenceEntries, focusedDurableMemory, locale, t]);
   const memoryLauncherPrefill = useMemo(
     () => resolveCuratedTaskTemplateLaunchPrefill(memoryLauncherTask),
     [memoryLauncherTask],
@@ -2006,7 +2023,9 @@ export function MemoryPage({ onNavigate, pageParams }: MemoryPageProps) {
             <>
               <div className="grid gap-5 xl:grid-cols-[minmax(0,1.18fr)_minmax(300px,0.82fr)]">
                 <div className="space-y-5">
-                  <MemorySurfacePanel title="先拿结果">
+                  <MemorySurfacePanel
+                    title={t("skills.workspace.curatedTask.home.title")}
+                  >
                     <div className="space-y-3">
                       {homeContinuationReferenceEntry ||
                       activeRecommendationReferenceEntries.length > 0 ? (
@@ -2017,7 +2036,9 @@ export function MemoryPage({ onNavigate, pageParams }: MemoryPageProps) {
                                 variant="outline"
                                 className={EMERALD_OUTLINE_BADGE_CLASS_NAME}
                               >
-                                当前续接成果
+                                {t(
+                                  "skills.workspace.curatedTask.home.continuationBadge",
+                                )}
                               </Badge>
                             ) : null}
                             {activeRecommendationReferenceEntries.length > 0 ? (
@@ -2025,8 +2046,15 @@ export function MemoryPage({ onNavigate, pageParams }: MemoryPageProps) {
                                 variant="outline"
                                 className={EMERALD_OUTLINE_BADGE_CLASS_NAME}
                               >
-                                {activeRecommendationReferenceEntries.length}{" "}
-                                条参考对象
+                                {t(
+                                  "skills.workspace.curatedTask.home.referenceBadge",
+                                  {
+                                    countLabel: formatNumber(
+                                      activeRecommendationReferenceEntries.length,
+                                      { locale },
+                                    ),
+                                  },
+                                )}
                               </Badge>
                             ) : null}
                           </div>
@@ -2090,7 +2118,9 @@ export function MemoryPage({ onNavigate, pageParams }: MemoryPageProps) {
                                     )}
                                     onClick={() => setMemoryLauncherTask(task)}
                                   >
-                                    开始这一步
+                                    {t(
+                                      "skills.workspace.curatedTask.suggestion.action.start",
+                                    )}
                                     <ArrowRight className="h-4 w-4" />
                                   </button>
                                 </div>
@@ -2101,7 +2131,7 @@ export function MemoryPage({ onNavigate, pageParams }: MemoryPageProps) {
                       ) : (
                         <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50/70 p-4">
                           <p className="text-sm leading-6 text-slate-500">
-                            当前还没有足够灵感可直接推下一步。先收藏一条风格、参考或成果，再回来这里继续起手。
+                            {t("skills.workspace.curatedTask.home.empty")}
                           </p>
                         </div>
                       )}
@@ -3240,7 +3270,9 @@ export function MemoryPage({ onNavigate, pageParams }: MemoryPageProps) {
                     referenceSummary={featuredMemoryReferenceSummary}
                     gridClassName="grid gap-4 xl:grid-cols-2"
                     contextCard={{
-                      badgeLabel: "当前续接成果",
+                      badgeLabel: t(
+                        "skills.workspace.curatedTask.home.continuationBadge",
+                      ),
                       title: focusedDurableMemory.title,
                       summary: focusedDurableMemory.summary,
                     }}

@@ -7,6 +7,8 @@ import {
   setupReactActEnvironment,
   type MountedRoot,
 } from "@/components/workspace/hooks/testUtils";
+import { changeLimeLocale } from "@/i18n/createI18n";
+import "@/i18n/config";
 
 const { mockGetConfig, mockHasTauriInvokeCapability } = vi.hoisted(() => ({
   mockGetConfig: vi.fn(),
@@ -31,9 +33,10 @@ function DemoComponent() {
 }
 
 describe("withI18nPatch", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     setupReactActEnvironment();
     vi.clearAllMocks();
+    await changeLimeLocale("zh-CN");
     vi.useFakeTimers();
     vi.stubGlobal("requestAnimationFrame", ((
       callback: (time: number) => void,

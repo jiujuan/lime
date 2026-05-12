@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { ArrowUpRight, FileStack, FileText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -21,6 +22,7 @@ import {
   formatAgentUiProjectionEventType,
   formatAgentUiProjectionPhase,
   formatAgentUiProjectionSourceType,
+  type AgentUiProjectionTranslation,
 } from "../projection/agentUiProjectionSummary";
 
 interface AgentThreadTimelineArtifactCardProps {
@@ -283,6 +285,9 @@ export function AgentThreadTimelineArtifactCard({
   sourceMessageId,
   onSaveFileArtifactAsKnowledge,
 }: AgentThreadTimelineArtifactCardProps) {
+  const { t } = useTranslation("agent");
+  const translateProjection: AgentUiProjectionTranslation = (key, options) =>
+    String(t(key as never, options as never));
   const metadata = asRecord(item.metadata);
   const navigation = resolveTimelineArtifactNavigation(item);
   const blockTargets = navigation?.blockTargets || [];
@@ -455,15 +460,18 @@ export function AgentThreadTimelineArtifactCard({
                     "Agent UI 标准投影",
                     formatAgentUiProjectionSourceType(
                       latestArtifactProjection.sourceType,
+                      translateProjection,
                     ),
                     formatAgentUiProjectionPhase(
                       latestArtifactProjection.phase,
+                      translateProjection,
                     ),
                   ].join(" · ")}
                 >
                   AgentUI{" "}
                   {formatAgentUiProjectionEventType(
                     latestArtifactProjection.type,
+                    translateProjection,
                   )}
                 </Badge>
               ) : null}

@@ -8,6 +8,7 @@ import {
   getSlashEntryUsageRecordKey,
   recordSlashEntryUsage,
 } from "../skill-selection/slashEntryUsage";
+import { resolveServiceSkillLaunchPrefillCopy } from "../service-skills/serviceSkillLaunchPrefill";
 import type { ServiceSkillHomeItem } from "../service-skills/types";
 import { buildCreationReplaySlotPrefill } from "../service-skills/creationReplaySlotPrefill";
 import type { CreationReplayMetadata } from "../utils/creationReplayMetadata";
@@ -15,6 +16,7 @@ import {
   buildRuntimeSceneGateA2UIForm,
   formatRuntimeSceneGateValidationMessage,
   readRuntimeSceneGateSubmission,
+  resolveRuntimeSceneGateCopy,
   type RuntimeSceneGatePrefill,
   type RuntimeSceneGateRequest,
 } from "./sceneSkillGate";
@@ -45,6 +47,10 @@ interface UseWorkspaceSceneGateRuntimeParams {
   applyProjectSelection?: (projectId?: string | null) => void;
   resumeSceneGate: (input: ResumeSceneGateInput) => Promise<boolean>;
 }
+
+const SOURCE_SERVICE_SKILL_LAUNCH_PREFILL_COPY =
+  resolveServiceSkillLaunchPrefillCopy();
+const SOURCE_RUNTIME_SCENE_GATE_COPY = resolveRuntimeSceneGateCopy();
 
 function normalizeOptionalText(value?: string | null): string | undefined {
   if (typeof value !== "string") {
@@ -113,7 +119,9 @@ function resolveRecentSceneGateReplayPrefill(params: {
 
   return {
     slotValues,
-    hint: `已根据你上次成功执行 ${params.request.commandPrefix} 时的输入自动预填，可继续修改后执行。`,
+    hint: SOURCE_SERVICE_SKILL_LAUNCH_PREFILL_COPY.formatRecentSceneHint(
+      params.request.commandPrefix,
+    ),
   };
 }
 
@@ -246,7 +254,7 @@ export function useWorkspaceSceneGateRuntime({
       });
       if (submission.missingFieldLabels.length > 0) {
         toast.info(
-          `还差${submission.missingFieldLabels.join("、")}，补齐后再继续。`,
+          formatRuntimeSceneGateValidationMessage(pendingSceneGate.request),
         );
         return false;
       }
@@ -263,7 +271,7 @@ export function useWorkspaceSceneGateRuntime({
         });
 
         if (!sceneLaunchRequest) {
-          toast.error("当前结果模板已不可用，请重新选择或重新输入命令后再试。");
+          toast.error(SOURCE_RUNTIME_SCENE_GATE_COPY.unavailableMessage);
           return false;
         }
 
@@ -305,9 +313,9 @@ export function useWorkspaceSceneGateRuntime({
         }
 
         const message =
-          error instanceof Error
-            ? error.message
-            : "结果模板启动失败，请稍后重试";
+          error instanceof Error && error.message.trim()
+            ? SOURCE_RUNTIME_SCENE_GATE_COPY.formatLaunchFailed(error.message)
+            : SOURCE_RUNTIME_SCENE_GATE_COPY.launchFailedFallback;
         toast.error(message);
         return false;
       }

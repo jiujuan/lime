@@ -1202,7 +1202,7 @@ mod tests {
         }))
         .expect_err("wrong adapter should return runtime preflight tool result");
 
-        assert_eq!(result.success, false);
+        assert!(!result.success);
         assert_eq!(result.metadata.get("runtime_preflight"), Some(&json!(true)));
         assert_eq!(
             result.metadata.get("normalized_status"),

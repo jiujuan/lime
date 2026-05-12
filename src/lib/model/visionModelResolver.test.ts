@@ -94,6 +94,154 @@ describe("resolveVisionModel", () => {
     });
   });
 
+  it("当前模型未收录但属于现代图片输入模型时应保持不变", () => {
+    const models = [
+      createModel("gpt-5.4", {
+        capabilities: {
+          vision: true,
+          tools: true,
+          streaming: true,
+          json_mode: true,
+          function_calling: true,
+          reasoning: true,
+        },
+      }),
+    ];
+
+    for (const currentModelId of ["o3", "o4-mini", "grok-4.3", "qwen3.5-27b"]) {
+      expect(
+        resolveVisionModel({
+          currentModelId,
+          models,
+        }),
+        currentModelId,
+      ).toEqual({
+        targetModelId: currentModelId,
+        switched: false,
+        reason: "already_vision",
+      });
+    }
+  });
+
+  it("当前模型来自旧缓存且缺少 vision 标记时应按已知视觉模型名保持不变", () => {
+    const models = [
+      createModel("o3", {
+        provider_id: "openai",
+        provider_name: "OpenAI",
+        task_families: ["chat"],
+        input_modalities: ["text"],
+        capabilities: {
+          vision: false,
+          tools: true,
+          streaming: true,
+          json_mode: true,
+          function_calling: true,
+          reasoning: false,
+        },
+      }),
+      createModel("gpt-5.4", {
+        provider_id: "openai",
+        provider_name: "OpenAI",
+        capabilities: {
+          vision: true,
+          tools: true,
+          streaming: true,
+          json_mode: true,
+          function_calling: true,
+          reasoning: true,
+        },
+      }),
+    ];
+
+    expect(
+      resolveVisionModel({
+        currentModelId: "o3",
+        models,
+      }),
+    ).toEqual({
+      targetModelId: "o3",
+      switched: false,
+      reason: "already_vision",
+    });
+  });
+
+  it("当前模型未收录且属于无图片输入同系列模型时仍应切换", () => {
+    const models = [
+      createModel("gpt-5.4", {
+        capabilities: {
+          vision: true,
+          tools: true,
+          streaming: true,
+          json_mode: true,
+          function_calling: true,
+          reasoning: true,
+        },
+      }),
+    ];
+
+    const result = resolveVisionModel({
+      currentModelId: "o3-mini",
+      models,
+    });
+
+    expect(result.targetModelId).toBe("gpt-5.4");
+    expect(result.switched).toBe(true);
+  });
+
+  it("显式输入模态包含 image 时应视为支持图片输入", () => {
+    const models = [
+      createModel("provider-vlm-chat", {
+        capabilities: {
+          vision: false,
+          tools: true,
+          streaming: true,
+          json_mode: true,
+          function_calling: true,
+          reasoning: false,
+        },
+        task_families: ["chat"],
+        input_modalities: ["text", "image"],
+        output_modalities: ["text"],
+      }),
+    ];
+
+    const result = resolveVisionModel({
+      currentModelId: "provider-vlm-chat",
+      models,
+    });
+
+    expect(result).toEqual({
+      targetModelId: "provider-vlm-chat",
+      switched: false,
+      reason: "already_vision",
+    });
+  });
+
+  it("显式 vision_understanding 任务族应优先于 capabilities.vision 的缺省值", () => {
+    const models = [
+      createModel("hub-vlm", {
+        capabilities: {
+          vision: false,
+          tools: true,
+          streaming: true,
+          json_mode: true,
+          function_calling: true,
+          reasoning: false,
+        },
+        task_families: ["chat", "vision_understanding"],
+        input_modalities: ["text"],
+        output_modalities: ["text"],
+      }),
+    ];
+
+    const result = resolveVisionModel({
+      currentModelId: "hub-vlm",
+      models,
+    });
+
+    expect(result.reason).toBe("already_vision");
+  });
+
   it("应优先选择支持视觉的聊天模型，而不是纯生图模型", () => {
     const models = [
       createModel("gemini-3-pro-image-preview", {
@@ -143,6 +291,45 @@ describe("resolveVisionModel", () => {
 
     expect(result.targetModelId).toBe("glm-4.6v-flash");
     expect(result.switched).toBe(true);
+    expect(result.reason).toBe("fallback_latest");
+  });
+
+  it("应允许显式同时支持视觉理解和生图的文本模型作为图片理解候选", () => {
+    const models = [
+      createModel("relay-vision-image-pro", {
+        family: "relay-vision-image",
+        capabilities: {
+          vision: false,
+          tools: true,
+          streaming: true,
+          json_mode: true,
+          function_calling: true,
+          reasoning: false,
+        },
+        task_families: ["chat", "vision_understanding", "image_generation"],
+        input_modalities: ["text", "image"],
+        output_modalities: ["text", "image"],
+        is_latest: true,
+      }),
+      createModel("glm-4.7", {
+        family: "glm-4.7",
+        capabilities: {
+          vision: false,
+          tools: true,
+          streaming: true,
+          json_mode: true,
+          function_calling: true,
+          reasoning: true,
+        },
+      }),
+    ];
+
+    const result = resolveVisionModel({
+      currentModelId: "glm-4.7",
+      models,
+    });
+
+    expect(result.targetModelId).toBe("relay-vision-image-pro");
     expect(result.reason).toBe("fallback_latest");
   });
 

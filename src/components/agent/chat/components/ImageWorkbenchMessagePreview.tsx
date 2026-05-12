@@ -1,4 +1,6 @@
 import React from "react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import { LoaderCircle, Sparkles } from "lucide-react";
 import { emitImageWorkbenchFocus } from "@/lib/imageWorkbenchEvents";
 import { cn } from "@/lib/utils";
@@ -11,69 +13,90 @@ interface ImageWorkbenchMessagePreviewProps {
   onOpen?: (preview: MessageImageWorkbenchPreview) => void;
 }
 
+type AgentTranslate = TFunction<"agent", undefined>;
+
+const TRANSITION_STATUS_MESSAGE_FRAGMENTS = [
+  "\u6b63\u5728\u540c\u6b65",
+  "\u540c\u6b65\u4efb\u52a1\u72b6\u6001",
+  "\u540c\u6b65\u5230\u5bf9\u8bdd",
+  "\u5f02\u6b65\u961f\u5217",
+];
+
 function resolveResultLabel(
-  mode?: MessageImageWorkbenchPreview["mode"],
+  mode: MessageImageWorkbenchPreview["mode"] | undefined,
+  t: AgentTranslate,
 ): string {
   switch (mode) {
     case "edit":
-      return "修图结果";
+      return t("agentChat.imageWorkbenchPreview.result.edit");
     case "variation":
-      return "重绘结果";
+      return t("agentChat.imageWorkbenchPreview.result.variation");
     case "generate":
     default:
-      return "图片结果";
+      return t("agentChat.imageWorkbenchPreview.result.generate");
   }
 }
 
 function resolveSourceLabel(
-  mode?: MessageImageWorkbenchPreview["mode"],
+  mode: MessageImageWorkbenchPreview["mode"] | undefined,
+  t: AgentTranslate,
 ): string {
-  return mode === "variation" ? "参考图" : "来源图";
+  if (mode === "variation") {
+    return t("agentChat.imageWorkbenchPreview.source.referenceLabel");
+  }
+  return t("agentChat.imageWorkbenchPreview.source.sourceLabel");
 }
 
-function resolveStatusPrefix(preview: MessageImageWorkbenchPreview): string {
+function resolveStatusPrefix(
+  preview: MessageImageWorkbenchPreview,
+  t: AgentTranslate,
+): string {
   switch (preview.status) {
     case "complete":
       switch (preview.mode) {
         case "edit":
-          return "已修图";
+          return t("agentChat.imageWorkbenchPreview.status.complete.edit");
         case "variation":
-          return "已重绘";
+          return t("agentChat.imageWorkbenchPreview.status.complete.variation");
         case "generate":
         default:
-          return "已生成";
+          return t("agentChat.imageWorkbenchPreview.status.complete.generate");
       }
     case "partial":
-      return "部分完成";
+      return t("agentChat.imageWorkbenchPreview.status.partial");
     case "cancelled":
-      return "已取消";
+      return t("agentChat.imageWorkbenchPreview.status.cancelled");
     case "failed":
       switch (preview.mode) {
         case "edit":
-          return "修图失败";
+          return t("agentChat.imageWorkbenchPreview.status.failed.edit");
         case "variation":
-          return "重绘失败";
+          return t("agentChat.imageWorkbenchPreview.status.failed.variation");
         case "generate":
         default:
-          return "生成失败";
+          return t("agentChat.imageWorkbenchPreview.status.failed.generate");
       }
     case "running":
     default:
       switch ((preview.phase || "").trim().toLowerCase()) {
         case "queued":
-          return "等待队列";
+          return t("agentChat.imageWorkbenchPreview.status.running.queued");
         case "running":
           switch (preview.mode) {
             case "edit":
-              return "修图中";
+              return t("agentChat.imageWorkbenchPreview.status.running.edit");
             case "variation":
-              return "重绘中";
+              return t(
+                "agentChat.imageWorkbenchPreview.status.running.variation",
+              );
             case "generate":
             default:
-              return "生成中";
+              return t(
+                "agentChat.imageWorkbenchPreview.status.running.generate",
+              );
           }
         default:
-          return "准备中";
+          return t("agentChat.imageWorkbenchPreview.status.running.preparing");
       }
   }
 }
@@ -97,15 +120,15 @@ function resolveStatusAccentClass(
 }
 
 function isTransitionStatusMessage(statusMessage: string): boolean {
-  return (
-    statusMessage.includes("正在同步") ||
-    statusMessage.includes("同步任务状态") ||
-    statusMessage.includes("同步到对话") ||
-    statusMessage.includes("异步队列")
+  return TRANSITION_STATUS_MESSAGE_FRAGMENTS.some((fragment) =>
+    statusMessage.includes(fragment),
   );
 }
 
-function resolveDescription(preview: MessageImageWorkbenchPreview): string {
+function resolveDescription(
+  preview: MessageImageWorkbenchPreview,
+  t: AgentTranslate,
+): string {
   const statusMessage = preview.statusMessage?.trim();
   if (
     statusMessage &&
@@ -114,9 +137,11 @@ function resolveDescription(preview: MessageImageWorkbenchPreview): string {
     return statusMessage;
   }
 
-  const resultLabel = resolveResultLabel(preview.mode);
+  const resultLabel = resolveResultLabel(preview.mode, t);
   const storyboardLabel =
-    preview.layoutHint === "storyboard_3x3" ? "3x3 分镜" : null;
+    preview.layoutHint === "storyboard_3x3"
+      ? t("agentChat.imageWorkbenchPreview.layout.storyboard")
+      : null;
   const returnedImageCount = Math.max(
     preview.previewImages?.length ?? 0,
     preview.imageUrl ? 1 : 0,
@@ -130,61 +155,90 @@ function resolveDescription(preview: MessageImageWorkbenchPreview): string {
   switch (preview.status) {
     case "complete":
       return storyboardLabel
-        ? `${storyboardLabel}已经完成，可在右侧继续查看与使用。`
+        ? t("agentChat.imageWorkbenchPreview.description.complete.storyboard", {
+            label: storyboardLabel,
+          })
         : returnedImageCount > 1
-          ? `已返回 ${returnedImageCount} 张${resultLabel}，可在右侧继续查看与使用。`
-          : `${resultLabel}已经完成，可在右侧继续查看与使用。`;
+          ? t("agentChat.imageWorkbenchPreview.description.complete.multiple", {
+              count: returnedImageCount,
+              result: resultLabel,
+            })
+          : t("agentChat.imageWorkbenchPreview.description.complete.single", {
+              result: resultLabel,
+            });
     case "partial":
       return storyboardLabel
-        ? `${storyboardLabel}已返回 ${returnedImageCount} / ${expectedImageCount || 9} 格，可在右侧继续查看。`
+        ? t("agentChat.imageWorkbenchPreview.description.partial.storyboard", {
+            expected: expectedImageCount || 9,
+            label: storyboardLabel,
+            returned: returnedImageCount,
+          })
         : returnedImageCount > 0
-          ? `已返回 ${returnedImageCount} / ${expectedImageCount || returnedImageCount} 张${resultLabel}，剩余结果未完成。`
-          : `${resultLabel}已同步一部分，可在右侧继续查看。`;
+          ? t("agentChat.imageWorkbenchPreview.description.partial.multiple", {
+              expected: expectedImageCount || returnedImageCount,
+              result: resultLabel,
+              returned: returnedImageCount,
+            })
+          : t("agentChat.imageWorkbenchPreview.description.partial.single", {
+              result: resultLabel,
+            });
     case "cancelled":
-      return "任务已经取消，当前不会继续生成新的图片结果。";
+      return t("agentChat.imageWorkbenchPreview.description.cancelled");
     case "failed":
       return preview.retryable === false
-        ? "当前错误需要先调整配置或参数。"
-        : "这次没有拿到可用结果，请调整描述后重试。";
+        ? t("agentChat.imageWorkbenchPreview.description.failed.notRetryable")
+        : t("agentChat.imageWorkbenchPreview.description.failed.retryable");
     case "running":
     default:
       if (storyboardLabel && expectedImageCount > 1) {
-        return `${storyboardLabel}已创建，${expectedImageCount} 格会逐步回填到同一张任务卡里。`;
+        return t(
+          "agentChat.imageWorkbenchPreview.description.running.storyboard",
+          {
+            expected: expectedImageCount,
+            label: storyboardLabel,
+          },
+        );
       }
       switch (preview.mode) {
         case "edit":
-          return "正在处理修图，完成后会自动替换成真实结果。";
+          return t("agentChat.imageWorkbenchPreview.description.running.edit");
         case "variation":
-          return "正在处理重绘，完成后会自动替换成真实结果。";
+          return t(
+            "agentChat.imageWorkbenchPreview.description.running.variation",
+          );
         case "generate":
         default:
-          return "正在生成图片，完成后会自动替换成真实结果。";
+          return t(
+            "agentChat.imageWorkbenchPreview.description.running.generate",
+          );
       }
   }
 }
 
 function resolvePlaceholderLabel(
   preview: MessageImageWorkbenchPreview,
+  t: AgentTranslate,
 ): string {
   if (preview.status === "failed") {
-    return "暂未生成成功";
+    return t("agentChat.imageWorkbenchPreview.placeholder.failed");
   }
   if (preview.status === "cancelled") {
-    return "任务已取消";
+    return t("agentChat.imageWorkbenchPreview.placeholder.cancelled");
   }
   if (preview.status === "complete" || preview.status === "partial") {
-    return "结果已同步";
+    return t("agentChat.imageWorkbenchPreview.placeholder.synced");
   }
-  return resolveStatusPrefix(preview);
+  return resolveStatusPrefix(preview, t);
 }
 
 function resolveImageUnavailableLabel(
   preview: MessageImageWorkbenchPreview,
+  t: AgentTranslate,
 ): string {
   if (preview.status === "complete" || preview.status === "partial") {
-    return "图片暂时无法显示";
+    return t("agentChat.imageWorkbenchPreview.placeholder.imageUnavailable");
   }
-  return resolvePlaceholderLabel(preview);
+  return resolvePlaceholderLabel(preview, t);
 }
 
 function shouldShowSourceFootnote(
@@ -200,7 +254,10 @@ function shouldShowSourceFootnote(
   );
 }
 
-function resolveSourceSummary(preview: MessageImageWorkbenchPreview): string {
+function resolveSourceSummary(
+  preview: MessageImageWorkbenchPreview,
+  t: AgentTranslate,
+): string {
   const prompt = preview.sourceImagePrompt?.trim();
   if (prompt) {
     return prompt;
@@ -208,33 +265,42 @@ function resolveSourceSummary(preview: MessageImageWorkbenchPreview): string {
 
   const ref = preview.sourceImageRef?.trim();
   if (ref) {
-    return `已引用 ${ref}`;
+    return t("agentChat.imageWorkbenchPreview.source.ref", { ref });
   }
 
   if (preview.sourceImageCount && preview.sourceImageCount > 1) {
     return preview.mode === "variation"
-      ? `已附加 ${preview.sourceImageCount} 张参考图。`
-      : `已引用 ${preview.sourceImageCount} 张来源图。`;
+      ? t("agentChat.imageWorkbenchPreview.source.referenceCount", {
+          count: preview.sourceImageCount,
+        })
+      : t("agentChat.imageWorkbenchPreview.source.sourceCount", {
+          count: preview.sourceImageCount,
+        });
   }
 
   return preview.mode === "variation"
-    ? "当前任务会基于参考图继续生成新的重绘结果。"
-    : "当前任务会基于已有图片结果继续完成修图。";
+    ? t("agentChat.imageWorkbenchPreview.source.variationSummary")
+    : t("agentChat.imageWorkbenchPreview.source.editSummary");
 }
 
 function resolveSourceFootnote(
   preview: MessageImageWorkbenchPreview,
+  t: AgentTranslate,
 ): string | null {
   if (!shouldShowSourceFootnote(preview)) {
     return null;
   }
 
-  return `${resolveSourceLabel(preview.mode)}：${resolveSourceSummary(preview)}`;
+  return t("agentChat.imageWorkbenchPreview.source.footnote", {
+    label: resolveSourceLabel(preview.mode, t),
+    summary: resolveSourceSummary(preview, t),
+  });
 }
 
 function renderPlaceholder(
   preview: MessageImageWorkbenchPreview,
   reason: string,
+  t: AgentTranslate,
 ) {
   return (
     <div className="flex aspect-[16/10] items-center justify-center bg-[linear-gradient(180deg,rgba(248,250,252,0.98),rgba(241,245,249,0.98))] px-6 text-center">
@@ -246,8 +312,8 @@ function renderPlaceholder(
         )}
         <div className="text-sm font-medium text-slate-700">
           {reason === "error"
-            ? resolveImageUnavailableLabel(preview)
-            : resolvePlaceholderLabel(preview)}
+            ? resolveImageUnavailableLabel(preview, t)
+            : resolvePlaceholderLabel(preview, t)}
         </div>
       </div>
     </div>
@@ -294,6 +360,7 @@ function resolvePreviewMetaLabels(
   preview: MessageImageWorkbenchPreview,
   imageCount: number,
   expectedImageCount: number,
+  t: AgentTranslate,
 ): string[] {
   const labels: string[] = [];
   const policyLabel = buildLimeCorePolicyEvaluationMetaItem({
@@ -312,19 +379,31 @@ function resolvePreviewMetaLabels(
   }
 
   if (preview.layoutHint === "storyboard_3x3" && expectedImageCount >= 4) {
-    labels.push("3x3 分镜");
+    labels.push(t("agentChat.imageWorkbenchPreview.layout.storyboard"));
   }
 
   if (expectedImageCount > imageCount && expectedImageCount > 1) {
-    labels.push(`${imageCount}/${expectedImageCount} 张`);
+    labels.push(
+      t("agentChat.imageWorkbenchPreview.meta.imageProgress", {
+        current: imageCount,
+        expected: expectedImageCount,
+      }),
+    );
   } else if (imageCount > 1) {
-    labels.push(`${imageCount} 张`);
+    labels.push(
+      t("agentChat.imageWorkbenchPreview.meta.imageCount", {
+        count: imageCount,
+      }),
+    );
   }
 
   return labels;
 }
 
-function renderPreviewMedia(preview: MessageImageWorkbenchPreview) {
+function renderPreviewMedia(
+  preview: MessageImageWorkbenchPreview,
+  t: AgentTranslate,
+) {
   const previewImages = resolvePreviewImages(preview);
   const expectedImageCount = Math.max(
     preview.expectedImageCount ?? 0,
@@ -341,9 +420,9 @@ function renderPreviewMedia(preview: MessageImageWorkbenchPreview) {
     return (
       <RenderableTaskImage
         src={previewImages[0] || preview.imageUrl}
-        alt={preview.prompt || "图片任务结果"}
+        alt={preview.prompt || t("agentChat.imageWorkbenchPreview.media.alt")}
         className={cn(aspectClass, "h-full w-full object-cover")}
-        renderFallback={(reason) => renderPlaceholder(preview, reason)}
+        renderFallback={(reason) => renderPlaceholder(preview, reason, t)}
       />
     );
   }
@@ -384,11 +463,13 @@ function renderPreviewMedia(preview: MessageImageWorkbenchPreview) {
             {url ? (
               <RenderableTaskImage
                 src={url}
-                alt={`${preview.prompt || "图片任务结果"} ${index + 1}`}
+                alt={`${preview.prompt || t("agentChat.imageWorkbenchPreview.media.alt")} ${
+                  index + 1
+                }`}
                 className="h-full w-full object-cover"
                 renderFallback={() => (
                   <div className="flex h-full w-full items-center justify-center bg-slate-100 text-[11px] font-medium text-slate-400">
-                    预览失败
+                    {t("agentChat.imageWorkbenchPreview.media.previewFailed")}
                   </div>
                 )}
               />
@@ -401,12 +482,12 @@ function renderPreviewMedia(preview: MessageImageWorkbenchPreview) {
                 )}
                 <span>
                   {preview.status === "partial"
-                    ? "等待补齐"
+                    ? t("agentChat.imageWorkbenchPreview.slot.waiting")
                     : preview.status === "failed"
-                      ? "本格失败"
+                      ? t("agentChat.imageWorkbenchPreview.slot.failed")
                       : preview.status === "cancelled"
-                        ? "已取消"
-                        : "待生成"}
+                        ? t("agentChat.imageWorkbenchPreview.slot.cancelled")
+                        : t("agentChat.imageWorkbenchPreview.slot.pending")}
                 </span>
               </div>
             )}
@@ -437,9 +518,10 @@ function renderPreviewMedia(preview: MessageImageWorkbenchPreview) {
 export const ImageWorkbenchMessagePreview: React.FC<
   ImageWorkbenchMessagePreviewProps
 > = ({ preview, onOpen }) => {
-  const sourceFootnote = resolveSourceFootnote(preview);
-  const statusPrefix = resolveStatusPrefix(preview);
-  const statusDescription = resolveDescription(preview);
+  const { t } = useTranslation("agent");
+  const sourceFootnote = resolveSourceFootnote(preview, t);
+  const statusPrefix = resolveStatusPrefix(preview, t);
+  const statusDescription = resolveDescription(preview, t);
   const previewImages = resolvePreviewImages(preview);
   const totalImageCount = Math.max(
     preview.imageCount ?? 0,
@@ -454,6 +536,7 @@ export const ImageWorkbenchMessagePreview: React.FC<
     preview,
     totalImageCount,
     expectedImageCount,
+    t,
   );
 
   return (
@@ -492,12 +575,13 @@ export const ImageWorkbenchMessagePreview: React.FC<
             ))}
           </div>
         ) : null}
-        {renderPreviewMedia(preview)}
+        {renderPreviewMedia(preview, t)}
       </div>
 
       <div className="space-y-1.5 px-0.5 pt-3">
         <div className="line-clamp-2 text-[15px] font-medium leading-6 text-slate-900">
-          {preview.prompt || "当前任务未提供提示词。"}
+          {preview.prompt ||
+            t("agentChat.imageWorkbenchPreview.promptFallback")}
         </div>
 
         <div className="flex items-start gap-2 text-[13px] leading-5 text-slate-500">
@@ -509,7 +593,11 @@ export const ImageWorkbenchMessagePreview: React.FC<
           />
           <span>
             <span className="font-medium text-slate-700">{statusPrefix}</span>
-            <span>{` · ${statusDescription}`}</span>
+            <span>
+              {t("agentChat.imageWorkbenchPreview.statusDescription", {
+                description: statusDescription,
+              })}
+            </span>
           </span>
         </div>
 

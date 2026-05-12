@@ -439,6 +439,36 @@ describe("ModelSelector", () => {
   });
 
   it("展开后应显示模型的思考与多模态能力标签", () => {
+    mockUseProviderModels.mockReturnValue({
+      modelIds: ["gpt-5.3-codex", "text-only-chat"],
+      models: [
+        {
+          id: "gpt-5.3-codex",
+          capabilities: {
+            vision: true,
+            tools: true,
+            streaming: true,
+            json_mode: true,
+            function_calling: true,
+            reasoning: true,
+          },
+        },
+        {
+          id: "text-only-chat",
+          capabilities: {
+            vision: false,
+            tools: true,
+            streaming: true,
+            json_mode: true,
+            function_calling: true,
+            reasoning: false,
+          },
+        },
+      ],
+      loading: false,
+      error: null,
+    });
+
     const { container } = renderModelSelector();
 
     const trigger = container.querySelector(

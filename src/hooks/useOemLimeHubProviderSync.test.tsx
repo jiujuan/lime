@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import {
   clearOemCloudBootstrapSnapshot,
   clearStoredOemCloudSessionState,
@@ -20,17 +21,6 @@ const apiKeyProviderMocks = vi.hoisted(() => ({
 const controlPlaneMocks = vi.hoisted(() => ({
   createClientAccessToken: vi.fn(),
   listClientProviderOfferModels: vi.fn(),
-}));
-const i18nMocks = vi.hoisted(() => ({
-  t: vi.fn((key: string, options?: { defaultValue?: string }) => {
-    if (key === "common.oemLimeHubProviderSync.managedKeyAlias") {
-      return "Lime cloud models from i18n";
-    }
-    if (key === "common.oemLimeHubProviderSync.cloudTokenName") {
-      return "Lime Desktop Cloud Model Key from i18n";
-    }
-    return options?.defaultValue ?? key;
-  }),
 }));
 
 vi.mock("@/lib/api/apiKeyProvider", () => ({
@@ -52,12 +42,6 @@ vi.mock("@/lib/api/oemCloudControlPlane", () => ({
 
 vi.mock("@/lib/tauri-runtime", () => ({
   hasTauriInvokeCapability: () => true,
-}));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: i18nMocks.t,
-  }),
 }));
 
 import { useOemLimeHubProviderSync } from "./useOemLimeHubProviderSync";
@@ -86,7 +70,8 @@ async function flushEffects() {
 describe("useOemLimeHubProviderSync", () => {
   let mountedHarness: MountedHarness | null = null;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    await changeLimeLocale("en-US");
     (
       globalThis as typeof globalThis & {
         IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -137,7 +122,7 @@ describe("useOemLimeHubProviderSync", () => {
     ]);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.clearAllMocks();
     clearStoredOemCloudSessionState();
     clearOemCloudBootstrapSnapshot();
@@ -150,6 +135,7 @@ describe("useOemLimeHubProviderSync", () => {
       mountedHarness.container.remove();
       mountedHarness = null;
     }
+    await changeLimeLocale("zh-CN");
   });
 
   it("应把默认云端来源的模型目录同步到内部 lime-hub provider", async () => {
@@ -311,7 +297,7 @@ describe("useOemLimeHubProviderSync", () => {
     expect(controlPlaneMocks.createClientAccessToken).toHaveBeenCalledWith(
       "tenant-0001",
       {
-        name: "Lime Desktop Cloud Model Key from i18n",
+        name: "Lime Desktop Cloud Model Key",
         scopes: ["llm:invoke"],
         allowedModels: [
           "gpt-5.2-pro",
@@ -337,7 +323,7 @@ describe("useOemLimeHubProviderSync", () => {
     expect(apiKeyProviderMocks.addApiKey).toHaveBeenCalledWith({
       provider_id: "lime-hub",
       api_key: "sk-lime-desktop",
-      alias: "Lime cloud models from i18n",
+      alias: "Lime cloud models",
     });
   });
 
@@ -482,7 +468,7 @@ describe("useOemLimeHubProviderSync", () => {
     expect(controlPlaneMocks.createClientAccessToken).toHaveBeenCalledWith(
       "tenant-0001",
       {
-        name: "Lime Desktop Cloud Model Key from i18n",
+        name: "Lime Desktop Cloud Model Key",
         scopes: ["llm:invoke"],
         allowedModels: ["gpt-5.2-pro", "gpt-5.2-fast", "claude-opus-4-7"],
       },
@@ -490,7 +476,7 @@ describe("useOemLimeHubProviderSync", () => {
     expect(apiKeyProviderMocks.addApiKey).toHaveBeenCalledWith({
       provider_id: "lime-hub",
       api_key: "sk-lime-desktop",
-      alias: "Lime cloud models from i18n",
+      alias: "Lime cloud models",
     });
     expect(apiKeyProviderMocks.toggleApiKey).toHaveBeenCalledWith(
       "old-managed-key",

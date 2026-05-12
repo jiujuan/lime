@@ -218,7 +218,11 @@ async function invoke(options, cmd, args, timeoutMs = options.timeoutMs) {
   return payload?.result;
 }
 
-async function restoreOriginalProviderConfig(options, originalProviderConfig, sessionId) {
+async function restoreOriginalProviderConfig(
+  options,
+  originalProviderConfig,
+  sessionId,
+) {
   if (
     !originalProviderConfig?.providerName ||
     !originalProviderConfig?.modelName
@@ -227,10 +231,12 @@ async function restoreOriginalProviderConfig(options, originalProviderConfig, se
   }
 
   const providerSelector =
-    originalProviderConfig.providerSelector || originalProviderConfig.providerName;
+    originalProviderConfig.providerSelector ||
+    originalProviderConfig.providerName;
   const request = {
     provider_id:
-      providerSelector && providerSelector !== originalProviderConfig.providerName
+      providerSelector &&
+      providerSelector !== originalProviderConfig.providerName
         ? providerSelector
         : undefined,
     provider_name: originalProviderConfig.providerName,
@@ -265,9 +271,10 @@ async function waitForCondition(label, predicate, timeoutMs, intervalMs) {
   );
 }
 
-
 function normalizeProviderId(provider) {
-  return String(provider?.id || provider?.provider_id || provider?.providerId || "").trim();
+  return String(
+    provider?.id || provider?.provider_id || provider?.providerId || "",
+  ).trim();
 }
 
 function providerMatchesId(provider, providerId) {
@@ -304,7 +311,9 @@ function providerReadyForLiveRuntime(provider) {
 }
 
 function modelLooksChatCapable(modelName) {
-  const normalized = String(modelName || "").trim().toLowerCase();
+  const normalized = String(modelName || "")
+    .trim()
+    .toLowerCase();
   if (!normalized) {
     return false;
   }
@@ -330,7 +339,9 @@ function pickModelPreference(provider) {
     .filter(Boolean);
 
   return (
-    candidates.find((value) => /flash|mini|lite/i.test(value) && modelLooksChatCapable(value)) ||
+    candidates.find(
+      (value) => /flash|mini|lite/i.test(value) && modelLooksChatCapable(value),
+    ) ||
     candidates.find((value) => modelLooksChatCapable(value)) ||
     ""
   );
@@ -343,25 +354,36 @@ function findProviderById(providers, providerId) {
   }
 
   return (
-    providers.find((provider) => providerMatchesId(provider, normalizedProviderId)) ||
-    null
+    providers.find((provider) =>
+      providerMatchesId(provider, normalizedProviderId),
+    ) || null
   );
 }
 
 function pickProvider(providers, preferredProviderId) {
-  const ready = providers.filter((provider) => providerReadyForLiveRuntime(provider));
+  const ready = providers.filter((provider) =>
+    providerReadyForLiveRuntime(provider),
+  );
   const enabled = providers.filter((provider) => providerEnabled(provider));
   if (preferredProviderId) {
     return (
-      ready.find((provider) => providerMatchesId(provider, preferredProviderId)) ||
-      enabled.find((provider) => providerMatchesId(provider, preferredProviderId)) ||
-      providers.find((provider) => providerMatchesId(provider, preferredProviderId)) ||
+      ready.find((provider) =>
+        providerMatchesId(provider, preferredProviderId),
+      ) ||
+      enabled.find((provider) =>
+        providerMatchesId(provider, preferredProviderId),
+      ) ||
+      providers.find((provider) =>
+        providerMatchesId(provider, preferredProviderId),
+      ) ||
       null
     );
   }
 
   for (const providerId of ["deepseek", "doubao", "lime-hub"]) {
-    const match = ready.find((provider) => normalizeProviderId(provider) === providerId);
+    const match = ready.find(
+      (provider) => normalizeProviderId(provider) === providerId,
+    );
     if (match) {
       return match;
     }
@@ -404,8 +426,15 @@ function uniqueProviderCandidates(candidates) {
   });
 }
 
-async function buildProviderCandidate(options, provider, modelPreference, source) {
-  const providerId = normalizeProviderId(provider) || String(provider?.provider_name || "").trim();
+async function buildProviderCandidate(
+  options,
+  provider,
+  modelPreference,
+  source,
+) {
+  const providerId =
+    normalizeProviderId(provider) ||
+    String(provider?.provider_name || "").trim();
   if (!providerId) {
     return null;
   }
@@ -413,8 +442,12 @@ async function buildProviderCandidate(options, provider, modelPreference, source
   let providerDetail = provider;
   try {
     providerDetail =
-      (await invoke(options, "get_api_key_provider", { id: providerId }, 30_000)) ||
-      provider;
+      (await invoke(
+        options,
+        "get_api_key_provider",
+        { id: providerId },
+        30_000,
+      )) || provider;
   } catch (error) {
     console.warn(
       `[smoke:claw-chat-ready-streaming] 读取 provider 详情失败，使用列表摘要继续: ${error.message}`,
@@ -448,7 +481,8 @@ async function verifyProviderCandidate(options, candidate) {
 }
 
 function sanitizeProbeError(error) {
-  const message = error instanceof Error ? error.message : String(error || "unknown");
+  const message =
+    error instanceof Error ? error.message : String(error || "unknown");
   return message.replace(/\s+/g, " ").slice(0, 160);
 }
 
@@ -467,7 +501,8 @@ async function resolveProviderPreference(options, agentStatus, providers) {
     agentStatus?.provider_selector || agentStatus?.provider_name || "",
   ).trim();
   const statusModel = String(agentStatus?.model_name || "").trim();
-  const providerListAvailable = Array.isArray(providers) && providers.length > 0;
+  const providerListAvailable =
+    Array.isArray(providers) && providers.length > 0;
   const statusProviderRecord = providerListAvailable
     ? findProviderById(providers, statusProvider)
     : null;
@@ -475,7 +510,8 @@ async function resolveProviderPreference(options, agentStatus, providers) {
     statusProvider &&
     statusModel &&
     (!providerListAvailable ||
-      (statusProviderRecord && providerReadyForLiveRuntime(statusProviderRecord)));
+      (statusProviderRecord &&
+        providerReadyForLiveRuntime(statusProviderRecord)));
   const providerList = Array.isArray(providers) ? providers : [];
   const selected = pickProvider(providerList, explicitProvider || "");
 
@@ -491,11 +527,14 @@ async function resolveProviderPreference(options, agentStatus, providers) {
       options,
       selected,
       explicitModel || (selectedMatchesStatusProvider ? statusModel : ""),
-      explicitProvider || explicitModel ? "partial-explicit" : "auto-enabled-provider",
+      explicitProvider || explicitModel
+        ? "partial-explicit"
+        : "auto-enabled-provider",
     );
     if (!candidate) {
       const providerId =
-        normalizeProviderId(selected) || String(selected?.provider_name || "").trim();
+        normalizeProviderId(selected) ||
+        String(selected?.provider_name || "").trim();
       throw new Error(
         `[smoke:claw-chat-ready-streaming] provider ${providerId} 缺少可用聊天模型；请传 --model-preference`,
       );
@@ -518,7 +557,9 @@ async function resolveProviderPreference(options, agentStatus, providers) {
       autoCandidates.push(statusCandidate);
     }
   }
-  for (const provider of providerList.filter((item) => providerReadyForLiveRuntime(item))) {
+  for (const provider of providerList.filter((item) =>
+    providerReadyForLiveRuntime(item),
+  )) {
     const candidate = await buildProviderCandidate(
       options,
       provider,
@@ -551,7 +592,9 @@ async function resolveProviderPreference(options, agentStatus, providers) {
           source: "auto-probed-provider",
         };
       }
-      probeFailures.push(`${candidate.providerPreference}/${candidate.modelPreference}: failed`);
+      probeFailures.push(
+        `${candidate.providerPreference}/${candidate.modelPreference}: failed`,
+      );
     } catch (error) {
       probeFailures.push(
         `${candidate.providerPreference}/${candidate.modelPreference}: ${sanitizeProbeError(
@@ -676,6 +719,31 @@ async function readPageSnapshot(page) {
     .catch(() => null);
 }
 
+async function clickLastEnabledButton(page, label, timeoutMs = 30_000) {
+  await page.waitForFunction(
+    (buttonLabel) => {
+      const buttons = Array.from(document.querySelectorAll("button"));
+      const button = buttons
+        .filter((item) => {
+          const text = (item.textContent || "").trim();
+          return (
+            item.getAttribute("aria-label") === buttonLabel ||
+            item.getAttribute("title") === buttonLabel ||
+            text === buttonLabel
+          );
+        })
+        .at(-1);
+      return Boolean(button && !button.disabled);
+    },
+    label,
+    { timeout: timeoutMs },
+  );
+  await page.getByRole("button", { name: label }).last().click({
+    force: true,
+    timeout: timeoutMs,
+  });
+}
+
 function isLikelyDetachedBlankTaskSnapshot(snapshot) {
   return (
     Boolean(snapshot?.ready) &&
@@ -690,7 +758,11 @@ function isLikelyDetachedBlankTaskSnapshot(snapshot) {
 async function dispatchTaskCenterOpenTask(page, sessionId, workspaceId) {
   return page
     .evaluate(
-      ({ eventName, sessionId: targetSessionId, workspaceId: targetWorkspaceId }) => {
+      ({
+        eventName,
+        sessionId: targetSessionId,
+        workspaceId: targetWorkspaceId,
+      }) => {
         const normalizedSessionId = String(targetSessionId || "").trim();
         if (!normalizedSessionId) {
           return { dispatched: false, reason: "missing-session-id" };
@@ -858,11 +930,19 @@ async function main() {
 
   logStage("prepare-runtime");
   const defaultProject =
-    (await invoke(options, "get_or_create_default_project", undefined, 30_000).catch(
-      () => null,
-    )) || null;
+    (await invoke(
+      options,
+      "get_or_create_default_project",
+      undefined,
+      30_000,
+    ).catch(() => null)) || null;
   const workspaceId = defaultProject?.id || "default";
-  const agentStatus = await invoke(options, "aster_agent_init", undefined, 45_000);
+  const agentStatus = await invoke(
+    options,
+    "aster_agent_init",
+    undefined,
+    45_000,
+  );
   const providers = await invoke(
     options,
     "get_api_key_providers",
@@ -948,7 +1028,9 @@ async function main() {
       [scopedMigratedKey]: JSON.stringify(true),
     };
 
-    await context.addInitScript(buildStorageBootstrapScript(storageMarker, storageOverrides));
+    await context.addInitScript(
+      buildStorageBootstrapScript(storageMarker, storageOverrides),
+    );
     page = context.pages()[0] ?? (await context.newPage());
 
     page.on("console", (message) => {
@@ -1002,7 +1084,9 @@ async function main() {
 
     logStage("open-app");
     await page.goto(options.appUrl, { waitUntil: "domcontentloaded" });
-    await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => undefined);
+    await page
+      .waitForLoadState("networkidle", { timeout: 30_000 })
+      .catch(() => undefined);
     await page
       .getByRole("button", { name: "新建任务" })
       .click({ timeout: 20_000 })
@@ -1037,9 +1121,7 @@ async function main() {
     const longSubmitStart = invokes.length;
     const textarea = page.locator('textarea[name="agent-chat-message"]').last();
     await textarea.fill(LONG_PROMPT);
-    await page.getByRole("button", { name: "发送" }).last().click({
-      timeout: 30_000,
-    });
+    await clickLastEnabledButton(page, "发送");
     const longSubmit = await waitForCondition(
       "等待长 turn submit",
       () =>
@@ -1048,7 +1130,9 @@ async function main() {
           .find(
             (item) =>
               item.cmd === "agent_runtime_submit_turn" &&
-              String(item.args?.request?.message || "").includes("E2E 中断测试"),
+              String(item.args?.request?.message || "").includes(
+                "E2E 中断测试",
+              ),
           ) || null,
       30_000,
       250,
@@ -1110,7 +1194,9 @@ async function main() {
         const turn = findTurn(session, longTurnId);
         if (turn && ["failed", "aborted", "completed"].includes(turn.status)) {
           summary.preStreamTurn = turn;
-          const errorMessage = String(turn.error_message || turn.errorMessage || "").trim();
+          const errorMessage = String(
+            turn.error_message || turn.errorMessage || "",
+          ).trim();
           throw new Error(
             `[smoke:claw-chat-ready-streaming] 长 turn 在首个流式增量前结束: status=${turn.status}${
               errorMessage ? ` error=${errorMessage}` : ""
@@ -1150,9 +1236,7 @@ async function main() {
 
     logStage("interrupt-long-turn");
     const interruptStart = invokes.length;
-    await page.getByRole("button", { name: "停止" }).last().click({
-      timeout: 30_000,
-    });
+    await clickLastEnabledButton(page, "停止");
     const interruptInvoke = await waitForCondition(
       "等待 interrupt invoke",
       () =>
@@ -1199,24 +1283,24 @@ async function main() {
     summary.interruptedTurnStatus = interrupted.turn?.status || null;
     summary.queueCountAfterInterrupt = queuedTurnCount(latestSession);
 
-    await page.waitForFunction(
-      () => {
-        const textareas = Array.from(
-          document.querySelectorAll('textarea[name="agent-chat-message"]'),
-        );
-        const textarea = textareas.at(-1);
-        return Boolean(textarea && !textarea.disabled);
-      },
-      null,
-      { timeout: 60_000 },
-    ).catch(() => undefined);
+    await page
+      .waitForFunction(
+        () => {
+          const textareas = Array.from(
+            document.querySelectorAll('textarea[name="agent-chat-message"]'),
+          );
+          const textarea = textareas.at(-1);
+          return Boolean(textarea && !textarea.disabled);
+        },
+        null,
+        { timeout: 60_000 },
+      )
+      .catch(() => undefined);
 
     logStage("submit-recovery-turn");
     const followSubmitStart = invokes.length;
     await textarea.fill(RECOVERY_PROMPT);
-    await page.getByRole("button", { name: "发送" }).last().click({
-      timeout: 30_000,
-    });
+    await clickLastEnabledButton(page, "发送");
     const followSubmit = await waitForCondition(
       "等待恢复 turn submit",
       () =>
@@ -1225,7 +1309,9 @@ async function main() {
           .find(
             (item) =>
               item.cmd === "agent_runtime_submit_turn" &&
-              String(item.args?.request?.message || "").includes("停止后恢复测试"),
+              String(item.args?.request?.message || "").includes(
+                "停止后恢复测试",
+              ),
           ) || null,
       30_000,
       250,
@@ -1278,9 +1364,12 @@ async function main() {
         error: recoveryWaitMessage,
       };
       latestSession =
-        (await invoke(options, "agent_runtime_get_session", { sessionId }, 20_000).catch(
-          () => null,
-        )) || latestSession;
+        (await invoke(
+          options,
+          "agent_runtime_get_session",
+          { sessionId },
+          20_000,
+        ).catch(() => null)) || latestSession;
       const persistedAssistantText = [
         allAssistantText(latestSession),
         allAgentItemText(latestSession),
@@ -1298,11 +1387,8 @@ async function main() {
       summary.recoveryDetachedSnapshot = detachedSnapshot;
       if (isLikelyDetachedBlankTaskSnapshot(detachedSnapshot)) {
         logStage("restore-session-after-recovery-persisted");
-        summary.recoveryVisibleRestoreDispatch = await dispatchTaskCenterOpenTask(
-          page,
-          sessionId,
-          workspaceId,
-        );
+        summary.recoveryVisibleRestoreDispatch =
+          await dispatchTaskCenterOpenTask(page, sessionId, workspaceId);
         recoverySnapshot = await waitForCondition(
           "等待重新打开目标会话后 GUI 出现恢复结果",
           async () => {
@@ -1317,7 +1403,9 @@ async function main() {
       } else {
         logStage("refresh-after-recovery-persisted");
         await page.reload({ waitUntil: "domcontentloaded" });
-        await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => undefined);
+        await page
+          .waitForLoadState("networkidle", { timeout: 30_000 })
+          .catch(() => undefined);
         recoverySnapshot = await waitForCondition(
           "等待刷新后 GUI 出现恢复结果",
           async () => {
@@ -1358,15 +1446,20 @@ async function main() {
       mockFallbackLines,
       networkErrorTop,
     } = consoleNetworkSummary(consoleMessages, failedRequests);
-    const activeTurnId = threadRead?.active_turn_id || threadRead?.activeTurnId || null;
+    const activeTurnId =
+      threadRead?.active_turn_id || threadRead?.activeTurnId || null;
     const runtimeMockLines = mockFallbackLines.filter((line) =>
-      /agent_runtime_(submit_turn|interrupt_turn|get_session|get_thread_read)/.test(line),
+      /agent_runtime_(submit_turn|interrupt_turn|get_session|get_thread_read)/.test(
+        line,
+      ),
     );
     const peripheralMockLines = mockFallbackLines.filter(
       (line) => !runtimeMockLines.includes(line),
     );
 
-    summary.threadRead = threadRead?.__error ? { error: threadRead.__error } : threadRead;
+    summary.threadRead = threadRead?.__error
+      ? { error: threadRead.__error }
+      : threadRead;
     summary.threadReadStatus =
       summary.threadRead?.diagnostics?.latest_turn_status ||
       summary.threadRead?.runtime_summary?.latestTurnStatus ||
@@ -1416,7 +1509,8 @@ async function main() {
       streamGrowthObserved:
         Number(recoverySnapshot?.streamTextLength || 0) >=
           Number(firstDelta?.streamTextLength || 0) ||
-        summary.runtimeStreamLineCount >= Number(firstDelta?.streamLineCount || 1),
+        summary.runtimeStreamLineCount >=
+          Number(firstDelta?.streamLineCount || 1),
       stopButtonVisible: Boolean(firstDelta?.stopVisible),
       interruptCommandSeen: summary.devBridgeCommands.includes(
         "agent_runtime_interrupt_turn",
@@ -1493,8 +1587,14 @@ async function main() {
         ? "pass"
         : "fail";
 
-    writeJsonFile(path.join(evidenceDir, `${prefix}-runtime-session.json`), latestSession);
-    writeJsonFile(path.join(evidenceDir, `${prefix}-thread-read.json`), threadRead);
+    writeJsonFile(
+      path.join(evidenceDir, `${prefix}-runtime-session.json`),
+      latestSession,
+    );
+    writeJsonFile(
+      path.join(evidenceDir, `${prefix}-thread-read.json`),
+      threadRead,
+    );
     writeConsoleNetworkEvidence(
       evidenceDir,
       prefix,
@@ -1564,7 +1664,9 @@ async function main() {
         20_000,
       ).catch((sessionError) => ({
         __error:
-          sessionError instanceof Error ? sessionError.message : String(sessionError),
+          sessionError instanceof Error
+            ? sessionError.message
+            : String(sessionError),
       }));
       const failureThreadRead = await invoke(
         options,
@@ -1572,7 +1674,10 @@ async function main() {
         { sessionId: submittedSessionId },
         20_000,
       ).catch((threadError) => ({
-        __error: threadError instanceof Error ? threadError.message : String(threadError),
+        __error:
+          threadError instanceof Error
+            ? threadError.message
+            : String(threadError),
       }));
       writeJsonFile(
         path.join(evidenceDir, `${prefix}-runtime-session.json`),
@@ -1605,9 +1710,9 @@ async function main() {
   } finally {
     try {
       if (page) {
-        await page.evaluate(buildRestoreLocalStorageScript(storageMarker)).catch(
-          () => undefined,
-        );
+        await page
+          .evaluate(buildRestoreLocalStorageScript(storageMarker))
+          .catch(() => undefined);
       }
       await restoreOriginalProviderConfig(
         options,

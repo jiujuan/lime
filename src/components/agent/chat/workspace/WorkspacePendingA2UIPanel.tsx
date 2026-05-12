@@ -38,24 +38,17 @@ export function WorkspacePendingA2UIPanel({
     : "border-emerald-200/90 bg-emerald-50/70";
   const progressMeta = readProgressiveA2UIProgressMeta(visibleForm);
   const statusLabel = isStale
-    ? t("workspace.pendingA2UI.status.stale", "继续处理中")
+    ? t("workspace.pendingA2UI.status.stale")
     : progressMeta
       ? t("workspace.pendingA2UI.status.progressStep", {
           currentStep: progressMeta.currentStep,
           totalSteps: progressMeta.totalSteps,
-          defaultValue: "第 {{currentStep}}/{{totalSteps}} 步",
         })
       : undefined;
   const footerText = isStale
-    ? t(
-        "workspace.pendingA2UI.footer.stale",
-        "刚刚补充的信息已收到，暂时不用重复提交。",
-      )
+    ? t("workspace.pendingA2UI.footer.stale")
     : progressMeta && !progressMeta.isFinalStep
-      ? t(
-          "workspace.pendingA2UI.footer.progressStep",
-          "先完成这一步，后面会继续补齐。",
-        )
+      ? t("workspace.pendingA2UI.footer.progressStep")
       : undefined;
 
   if (!shouldRender) {

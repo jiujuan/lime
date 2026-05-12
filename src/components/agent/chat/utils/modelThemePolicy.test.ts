@@ -109,4 +109,26 @@ describe("modelThemePolicy", () => {
     ]);
     expect(result.policyName).toBe("chat-only");
   });
+
+  it("general 主题应保留显式支持视觉理解的多模态图片模型", () => {
+    const models = [
+      createModel("relay-vision-image-pro", {
+        task_families: ["chat", "vision_understanding", "image_generation"],
+        input_modalities: ["text", "image"],
+        output_modalities: ["text", "image"],
+      }),
+      createModel("gpt-image-1", {
+        task_families: ["image_generation"],
+        input_modalities: ["text"],
+        output_modalities: ["image"],
+      }),
+    ];
+
+    const result = filterModelsByTheme("general", models);
+
+    expect(result.usedFallback).toBe(false);
+    expect(result.models.map((model) => model.id)).toEqual([
+      "relay-vision-image-pro",
+    ]);
+  });
 });

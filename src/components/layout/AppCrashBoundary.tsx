@@ -4,6 +4,8 @@ import { getRuntimeAppVersion } from "@/lib/appVersion";
 import {
   isModuleImportFailureErrorMessage,
   prepareModuleImportAutoReload,
+  isReactFastRefreshHookFailureErrorMessage,
+  prepareReactFastRefreshHookAutoReload,
 } from "./CrashRecoveryPanel.helpers";
 import { CrashRecoveryPanel } from "./CrashRecoveryPanel";
 
@@ -47,17 +49,27 @@ export class AppCrashBoundary extends React.Component<
 
     const pageUrl =
       typeof window !== "undefined" ? window.location.href : "unknown";
-    const shouldAutoReload =
+    const shouldAutoReloadModule =
       typeof window !== "undefined" &&
       isModuleImportFailureErrorMessage(error.message);
+    const shouldAutoReloadReactHook =
+      typeof window !== "undefined" &&
+      import.meta.env.DEV &&
+      isReactFastRefreshHookFailureErrorMessage(error.message);
     const autoReloadUrl =
-      shouldAutoReload && typeof window !== "undefined"
+      shouldAutoReloadModule && typeof window !== "undefined"
         ? prepareModuleImportAutoReload(
             window.location.href,
             getRuntimeAppVersion(),
             window.sessionStorage,
           )
-        : null;
+        : shouldAutoReloadReactHook && typeof window !== "undefined"
+          ? prepareReactFastRefreshHookAutoReload(
+              window.location.href,
+              getRuntimeAppVersion(),
+              window.sessionStorage,
+            )
+          : null;
 
     void reportFrontendError(error, {
       source: "app-crash-boundary",
@@ -66,6 +78,11 @@ export class AppCrashBoundary extends React.Component<
       component_stack: componentStack,
       page_url: pageUrl,
       auto_resource_reload_triggered: Boolean(autoReloadUrl),
+      auto_resource_reload_reason: shouldAutoReloadModule
+        ? "module_import"
+        : shouldAutoReloadReactHook
+          ? "react_fast_refresh_hook_queue"
+          : "none",
     });
 
     if (autoReloadUrl && typeof window !== "undefined") {
