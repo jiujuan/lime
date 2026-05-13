@@ -527,7 +527,12 @@ describe("ChatModelSelector + useAsterAgentChat 集成", () => {
   });
 
   it("关闭后台预加载时，应在打开选择器后再加载 Provider 和模型", async () => {
-    const { container } = mount("ws-model-selector-lazy-provider-load", {
+    const workspaceId = "ws-model-selector-lazy-provider-load";
+    localStorage.setItem(`agent_pref_provider_${workspaceId}`, "gemini");
+    localStorage.setItem(`agent_pref_model_${workspaceId}`, "gemini-2.5-pro");
+    localStorage.setItem(`agent_pref_migrated_${workspaceId}`, "true");
+
+    const { container } = mount(workspaceId, {
       chatModelSelectorProps: {
         backgroundPreload: "disabled",
       },

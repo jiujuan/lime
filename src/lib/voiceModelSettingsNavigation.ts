@@ -6,7 +6,7 @@ export const VOICE_MODEL_SETTINGS_FOCUS_STORAGE_KEY =
   "lime:voice-model-settings-focus";
 
 export interface VoiceModelSettingsNavigationDetail {
-  source?: "inputbar" | "smart-input" | string;
+  source?: string;
   reason?: "missing-model" | string;
   modelId?: string | null;
 }

@@ -2620,6 +2620,14 @@ fn honors_explicit_model_lock_with_capability_check(
     ) && matches!(model_preference_source, RequestPreferenceSource::Request)
 }
 
+fn should_allow_cross_provider_runtime_fallback(
+    provider_preference_source: RequestPreferenceSource,
+    model_preference_source: RequestPreferenceSource,
+) -> bool {
+    !matches!(provider_preference_source, RequestPreferenceSource::Request)
+        && !matches!(model_preference_source, RequestPreferenceSource::Request)
+}
+
 fn should_reselect_for_runtime_capability_gap(
     resolved_model: Option<&EnhancedModelMetadata>,
     compatible_candidate_count: u32,
@@ -3550,6 +3558,10 @@ pub(super) async fn resolve_runtime_request_provider_resolution(
                 &provider_selector,
                 session_context.as_ref(),
             )?;
+        let allow_runtime_fallback = should_allow_cross_provider_runtime_fallback(
+            provider_preference_source,
+            model_preference_source,
+        );
 
         if matches!(provider_preference_source, RequestPreferenceSource::Session) {
             tracing::info!(
@@ -3577,7 +3589,7 @@ pub(super) async fn resolve_runtime_request_provider_resolution(
             &provider_selector,
             &model_preference,
             model_preference_source,
-            matches!(model_preference_source, RequestPreferenceSource::Session),
+            allow_runtime_fallback,
         )
         .await?;
         let limit_state = build_limit_state(
@@ -3589,6 +3601,12 @@ pub(super) async fn resolve_runtime_request_provider_resolution(
             selection.capability_gap.clone(),
             {
                 let mut notes = vec!["当前回合显式指定了 provider/model 偏好。".to_string()];
+                if !allow_runtime_fallback {
+                    notes.push(
+                        "当前回合含显式 provider/model 选择，运行时不会静默切换到其他 Provider。"
+                            .to_string(),
+                    );
+                }
                 if selection.capability_gap_source.as_deref() == Some("explicit_model_lock") {
                     notes.push(
                             "显式用户模型锁定不满足当前 execution profile 的 routing slot，模型执行前必须阻断。"

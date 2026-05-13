@@ -1,0 +1,28 @@
+{
+  "text": "Lime\n邀请好友\n搜索任务\n新建任务\nSkills\n灵感\n项目资料\n最近对话\n新对话\n3分钟前\n新对话\n5分钟前\n国际形势分析无法执行\n20分钟前\n新对话\n42分钟前\n新对话\n43分钟前\n新对话\n47分钟前\n新对话\n49分钟前\nsmoke harness\n49分钟前\n<planner>\n58分钟前\n新对话\n1小时前\n查看更多对话\n归档\n开\n开源使用\n本地可用\nSkill Think Keep Audit 20260513\nHarness\n新对话\n@配图\n再生成一张青柠极简插画\n好啊，用 GPT Images 2 生成：再生成一张青柠极简插画\n先获取下工具参数\n马上生成\n图片生成\n|\nGPT Images 2\n正在生成图片\n添加资料\n模型\ndeepseek-v4-pro\n高级设置",
+  "oldPrompt": false,
+  "newPrompt": true,
+  "tags": [
+    "@配图"
+  ],
+  "intros": [
+    "好啊，用 GPT Images 2 生成：再生成一张青柠极简插画\n先获取下工具参数\n马上生成"
+  ],
+  "imageCards": [
+    {
+      "testid": "image-workbench-message-preview-968e9568-1dc4-4fba-be89-d3df274a4adb",
+      "text": "图片生成|GPT Images 2正在生成图片",
+      "imgCount": 0
+    },
+    {
+      "testid": "image-workbench-message-preview-toolbar-968e9568-1dc4-4fba-be89-d3df274a4adb",
+      "text": "图片生成|GPT Images 2",
+      "imgCount": 0
+    },
+    {
+      "testid": "image-workbench-message-preview-single-media-968e9568-1dc4-4fba-be89-d3df274a4adb",
+      "text": "正在生成图片",
+      "imgCount": 0
+    }
+  ]
+}

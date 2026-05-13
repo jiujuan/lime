@@ -3,7 +3,14 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OPEN_VOICE_MODEL_SETTINGS_EVENT } from "@/lib/voiceModelSettingsNavigation";
+import { changeLimeLocale } from "@/i18n/createI18n";
+import agentResource from "@/i18n/resources/zh-CN/agent.json";
+import enAgentResource from "@/i18n/resources/en-US/agent.json";
 import { InputbarCore } from "./InputbarCore";
+import {
+  buildInputbarCoreCopy,
+  type InputbarCoreCopyKey,
+} from "./inputbarCoreCopy";
 
 const {
   mockGetVoiceInputConfig,
@@ -15,7 +22,10 @@ const {
   mockGetRecordingSegment,
   mockGetRecordingStatus,
   mockGetDefaultLocalVoiceModelReadiness,
+  mockOnVoiceStartRecording,
+  mockOnVoiceStopRecording,
   mockToastError,
+  mockToastInfo,
 } = vi.hoisted(() => ({
   mockGetVoiceInputConfig: vi.fn(async () => ({
     enabled: true,
@@ -63,7 +73,10 @@ const {
   mockGetDefaultLocalVoiceModelReadiness: vi.fn(async () => ({
     ready: true,
   })),
+  mockOnVoiceStartRecording: vi.fn(),
+  mockOnVoiceStopRecording: vi.fn(),
   mockToastError: vi.fn(),
+  mockToastInfo: vi.fn(),
 }));
 
 vi.mock("./InputbarTools", () => ({
@@ -85,10 +98,15 @@ vi.mock("@/lib/api/voiceModels", () => ({
   getDefaultLocalVoiceModelReadiness: mockGetDefaultLocalVoiceModelReadiness,
 }));
 
+vi.mock("@/lib/api/voiceShortcutEvents", () => ({
+  onVoiceStartRecording: mockOnVoiceStartRecording,
+  onVoiceStopRecording: mockOnVoiceStopRecording,
+}));
+
 vi.mock("sonner", () => ({
   toast: {
     error: mockToastError,
-    info: vi.fn(),
+    info: mockToastInfo,
   },
 }));
 
@@ -101,12 +119,35 @@ vi.mock("@/hooks/useVoiceSound", () => ({
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
-beforeEach(() => {
+function translateResource(
+  resource: Partial<Record<InputbarCoreCopyKey, string>>,
+  key: InputbarCoreCopyKey,
+  values?: Record<string, number | string>,
+) {
+  return Object.entries(values ?? {}).reduce(
+    (text, [name, value]) =>
+      text.split(`{{${name}}}`).join(String(value)),
+    resource[key] ?? key,
+  );
+}
+
+const TEST_INPUTBAR_CORE_COPY = buildInputbarCoreCopy((key, values) =>
+  translateResource(agentResource, key, values),
+);
+
+const TEST_EN_INPUTBAR_CORE_COPY = buildInputbarCoreCopy((key, values) =>
+  translateResource(enAgentResource, key, values),
+);
+
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
+  mockOnVoiceStartRecording.mockImplementation(async () => vi.fn());
+  mockOnVoiceStopRecording.mockImplementation(async () => vi.fn());
 });
 
 afterEach(() => {
@@ -123,7 +164,11 @@ afterEach(() => {
 });
 
 const renderInputbarCore = async (
-  props?: Partial<React.ComponentProps<typeof InputbarCore>>,
+  props?: Partial<
+    Omit<React.ComponentProps<typeof InputbarCore>, "uiCopy">
+  > & {
+    uiCopy?: React.ComponentProps<typeof InputbarCore>["uiCopy"];
+  },
 ) => {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -132,6 +177,7 @@ const renderInputbarCore = async (
   act(() => {
     root.render(
       <InputbarCore
+        uiCopy={TEST_INPUTBAR_CORE_COPY}
         text=""
         setText={vi.fn()}
         onSend={vi.fn()}
@@ -199,6 +245,39 @@ describe("InputbarCore", () => {
     expect(textarea?.className).not.toContain("floating-collapsed");
     expect(
       container.querySelector('button[aria-label="添加图片"]'),
+    ).toBeTruthy();
+  });
+
+  it("应支持使用 en-US copy 渲染输入区 chrome 文案", async () => {
+    const container = await renderInputbarCore({
+      uiCopy: TEST_EN_INPUTBAR_CORE_COPY,
+      visualVariant: "default",
+      toolMode: "default",
+      isLoading: true,
+      queuedTurns: [
+        {
+          queued_turn_id: "queued-en-1",
+          message_preview: "Follow-up brief",
+          message_text: "Queue body",
+          created_at: 1700000000000,
+          image_count: 0,
+          position: 1,
+        },
+      ],
+    });
+
+    expect(
+      container.querySelector('button[aria-label="Add image"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('button[aria-label="Expand input"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('button[aria-label="Send"]'),
+    ).toBeNull();
+    expect(container.textContent).toContain("Handle later");
+    expect(
+      container.querySelector('button[aria-label="Stop"]'),
     ).toBeTruthy();
   });
 
@@ -545,6 +624,7 @@ describe("InputbarCore", () => {
 
     expect(mockGetDefaultLocalVoiceModelReadiness).toHaveBeenCalledTimes(1);
     expect(mockStartRecording).not.toHaveBeenCalled();
+    expect(mockToastInfo).toHaveBeenCalledWith("先下载语音模型");
     expect(container.querySelector('[aria-live="polite"]')).toBeNull();
     expect(navigationRequests).toEqual([
       expect.objectContaining({
@@ -553,6 +633,100 @@ describe("InputbarCore", () => {
         modelId: "sensevoice-small-int8-2024-07-17",
       }),
     ]);
+  });
+
+  it("语音输入未启用反馈应跟随 en-US 资源", async () => {
+    await changeLimeLocale("en-US");
+    mockGetVoiceInputConfig.mockResolvedValueOnce({
+      enabled: false,
+      shortcut: "Alt+Space",
+      processor: {
+        polish_enabled: true,
+        default_instruction_id: "default",
+      },
+      output: {
+        mode: "type",
+        type_delay_ms: 0,
+      },
+      instructions: [],
+      sound_enabled: false,
+      translate_instruction_id: "",
+    });
+    const container = await renderInputbarCore({
+      uiCopy: TEST_EN_INPUTBAR_CORE_COPY,
+      visualVariant: "default",
+      toolMode: "default",
+    });
+
+    const micButton = container.querySelector(
+      'button[aria-label="Start voice input"]',
+    ) as HTMLButtonElement | null;
+    expect(micButton).toBeTruthy();
+
+    await act(async () => {
+      micButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockToastInfo).toHaveBeenCalledWith(
+      "Enable voice input in Settings first",
+    );
+    expect(mockGetDefaultLocalVoiceModelReadiness).not.toHaveBeenCalled();
+    expect(mockStartRecording).not.toHaveBeenCalled();
+  });
+
+  it("启用快捷键监听后应复用输入框录音状态机完成开始和停止", async () => {
+    let startHandler: (() => void | Promise<void>) | null = null;
+    let stopHandler: (() => void | Promise<void>) | null = null;
+    const setText = vi.fn();
+
+    mockOnVoiceStartRecording.mockImplementationOnce(async (handler) => {
+      startHandler = handler;
+      return vi.fn();
+    });
+    mockOnVoiceStopRecording.mockImplementationOnce(async (handler) => {
+      stopHandler = handler;
+      return vi.fn();
+    });
+
+    await renderInputbarCore({
+      setText,
+      listenForVoiceShortcut: true,
+      visualVariant: "default",
+      toolMode: "default",
+    });
+
+    await act(async () => {
+      await startHandler?.();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockStartRecording).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await stopHandler?.();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockStopRecording).toHaveBeenCalledTimes(1);
+    expect(mockTranscribeAudio).toHaveBeenCalled();
+    expect(mockPolishVoiceText).toHaveBeenCalledWith("原始识别文本");
+    expect(setText).toHaveBeenLastCalledWith("润色后的文本");
+  });
+
+  it("未启用快捷键监听时不应注册语音快捷键事件", async () => {
+    await renderInputbarCore({
+      listenForVoiceShortcut: false,
+      visualVariant: "default",
+      toolMode: "default",
+    });
+
+    expect(mockOnVoiceStartRecording).not.toHaveBeenCalled();
+    expect(mockOnVoiceStopRecording).not.toHaveBeenCalled();
   });
 
   it("生成中应显示稍后处理与停止按钮，并渲染待处理列表", async () => {

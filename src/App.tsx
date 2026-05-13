@@ -23,7 +23,6 @@ import {
   isUserProjectType,
   resolveProjectRootPath,
 } from "./lib/api/project";
-import { useOnboardingState } from "./components/onboarding";
 import { useDeepLink } from "./hooks/useDeepLink";
 import { useRelayRegistry } from "./hooks/useRelayRegistry";
 import { useSkillCatalogBootstrap } from "./hooks/useSkillCatalogBootstrap";
@@ -128,11 +127,6 @@ const CreateProjectDialog = lazy(() =>
     default: module.CreateProjectDialog,
   })),
 );
-const OnboardingWizard = lazy(() =>
-  import("./components/onboarding").then((module) => ({
-    default: module.OnboardingWizard,
-  })),
-);
 const ConnectConfirmDialog = lazy(() =>
   import("./components/connect").then((module) => ({
     default: module.ConnectConfirmDialog,
@@ -154,7 +148,6 @@ function AppContent() {
     handleNavigate,
   } = useAppNavigation();
   const [agentHasMessages, setAgentHasMessages] = useState(false);
-  const { needsOnboarding, completeOnboarding } = useOnboardingState();
 
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [pendingRecommendation, setPendingRecommendation] = useState<{
@@ -401,10 +394,6 @@ function AppContent() {
     preloadDefaultProject();
   }, []);
 
-  const handleOnboardingComplete = useCallback(() => {
-    completeOnboarding();
-  }, [completeOnboarding]);
-
   const handleWindowDragStart = useCallback(
     (event: React.MouseEvent<HTMLElement>) => {
       void startWindowDragFromMouseEvent(event, { source: "app_shell" });
@@ -415,20 +404,6 @@ function AppContent() {
   if (showSplash) {
     startupTracker.mark("AppContent: showing splash");
     return <SplashScreen onComplete={handleSplashComplete} />;
-  }
-
-  if (needsOnboarding === null) {
-    startupTracker.mark("AppContent: checking onboarding");
-    return null;
-  }
-
-  if (needsOnboarding) {
-    startupTracker.mark("AppContent: showing onboarding");
-    return (
-      <Suspense fallback={null}>
-        <OnboardingWizard onComplete={handleOnboardingComplete} />
-      </Suspense>
-    );
   }
 
   startupTracker.mark("AppContent: rendering main app");

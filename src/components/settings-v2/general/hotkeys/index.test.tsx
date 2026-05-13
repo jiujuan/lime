@@ -4,17 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
 
 const {
-  mockGetExperimentalConfig,
   mockGetVoiceInputConfig,
   mockGetHotkeyRuntimeStatus,
 } = vi.hoisted(() => ({
-  mockGetExperimentalConfig: vi.fn(),
   mockGetVoiceInputConfig: vi.fn(),
   mockGetHotkeyRuntimeStatus: vi.fn(),
-}));
-
-vi.mock("@/lib/api/experimentalFeatures", () => ({
-  getExperimentalConfig: mockGetExperimentalConfig,
 }));
 
 vi.mock("@/lib/api/asrProvider", () => ({
@@ -127,16 +121,6 @@ beforeEach(async () => {
 
   vi.clearAllMocks();
 
-  mockGetExperimentalConfig.mockResolvedValue({
-    screenshot_chat: {
-      enabled: true,
-      shortcut: "CommandOrControl+Shift+4",
-    },
-    webmcp: {
-      enabled: false,
-    },
-  });
-
   mockGetVoiceInputConfig.mockResolvedValue({
     enabled: true,
     shortcut: "CommandOrControl+Shift+V",
@@ -150,20 +134,17 @@ beforeEach(async () => {
     },
     instructions: [],
     sound_enabled: true,
-    translate_shortcut: "",
     translate_instruction_id: "",
   });
 
   mockGetHotkeyRuntimeStatus.mockResolvedValue({
-    screenshot: {
-      shortcut_registered: true,
-      registered_shortcut: "CommandOrControl+Shift+4",
-    },
     voice: {
       shortcut_registered: true,
       registered_shortcut: "CommandOrControl+Shift+V",
-      translate_shortcut_registered: false,
-      registered_translate_shortcut: null,
+      fn_supported: false,
+      fn_registered: false,
+      fn_fallback_shortcut: "CommandOrControl+Shift+V",
+      fn_note: "Fn 按住录音当前仅支持 macOS；已使用普通语音快捷键回退。",
     },
   });
 });
@@ -193,13 +174,15 @@ describe("HotkeysSettings", () => {
     const text = getText(container);
     expect(text).toContain("Hotkeys");
     expect(text).toContain("Review implemented and audited hotkeys.");
-    expect(text).toContain("Global running 2 / 3");
+    expect(text).toContain("Global running 1 / 1");
     expect(text).toContain("Runtime status connected");
-    expect(text).toContain("8 audited");
+    expect(text).toContain("6 audited");
     expect(text).not.toContain("终端页面");
-    expect(text).toContain("2 total");
+    expect(text).toContain("1 total");
     expect(text).toContain("Document Canvas");
     expect(text).not.toContain("settings.hotkeys");
+    expect(text).not.toContain("Screenshot Chat");
+    expect(text).not.toContain("Voice Translation Mode");
   });
 
   it("运行时状态读取失败时应回退到配置判断", async () => {
@@ -210,23 +193,29 @@ describe("HotkeysSettings", () => {
 
     const text = getText(container);
     expect(text).toContain("Runtime status unreadable; using config fallback");
-    expect(text).toContain("Global running 2 / 3");
+    expect(text).toContain("Global running 1 / 1");
   });
 
   it("加载失败后应支持重试", async () => {
     const consoleErrorSpy = vi
       .spyOn(console, "error")
       .mockImplementation(() => {});
-    mockGetExperimentalConfig
+    mockGetVoiceInputConfig
       .mockRejectedValueOnce(new Error("网络异常"))
       .mockResolvedValue({
-        screenshot_chat: {
-          enabled: true,
-          shortcut: "CommandOrControl+Shift+4",
+        enabled: true,
+        shortcut: "CommandOrControl+Shift+V",
+        processor: {
+          polish_enabled: true,
+          default_instruction_id: "default",
         },
-        webmcp: {
-          enabled: false,
+        output: {
+          mode: "type",
+          type_delay_ms: 0,
         },
+        instructions: [],
+        sound_enabled: true,
+        translate_instruction_id: "",
       });
 
     try {
@@ -238,23 +227,14 @@ describe("HotkeysSettings", () => {
       await clickButton(findButtonByText(container, "Retry"));
       await waitForLoad();
 
-      expect(mockGetExperimentalConfig).toHaveBeenCalledTimes(2);
+      expect(mockGetVoiceInputConfig).toHaveBeenCalledTimes(2);
       expect(getText(container)).toContain("Hotkeys");
     } finally {
       consoleErrorSpy.mockRestore();
     }
   });
 
-  it("应展示未启用、未注册和未绑定指令状态", async () => {
-    mockGetExperimentalConfig.mockResolvedValue({
-      screenshot_chat: {
-        enabled: false,
-        shortcut: "",
-      },
-      webmcp: {
-        enabled: false,
-      },
-    });
+  it("应展示语音快捷键未注册状态", async () => {
     mockGetVoiceInputConfig.mockResolvedValue({
       enabled: true,
       shortcut: "CommandOrControl+Shift+V",
@@ -268,19 +248,16 @@ describe("HotkeysSettings", () => {
       },
       instructions: [],
       sound_enabled: true,
-      translate_shortcut: "CommandOrControl+Shift+T",
       translate_instruction_id: "",
     });
     mockGetHotkeyRuntimeStatus.mockResolvedValue({
-      screenshot: {
-        shortcut_registered: false,
-        registered_shortcut: null,
-      },
       voice: {
         shortcut_registered: false,
         registered_shortcut: null,
-        translate_shortcut_registered: false,
-        registered_translate_shortcut: null,
+        fn_supported: false,
+        fn_registered: false,
+        fn_fallback_shortcut: "CommandOrControl+Shift+V",
+        fn_note: "Fn 按住录音当前仅支持 macOS；已使用普通语音快捷键回退。",
       },
     });
 
@@ -288,10 +265,7 @@ describe("HotkeysSettings", () => {
     await waitForLoad();
 
     const text = getText(container);
-    expect(text).toContain("Feature disabled");
     expect(text).toContain("Not registered");
-    expect(text).toContain("Instruction not bound");
-    expect(text).toContain("Not set");
     expect(text).not.toContain("__lime_unset_shortcut__");
   });
 

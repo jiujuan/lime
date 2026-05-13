@@ -1,0 +1,32 @@
+{
+  "text": "Lime\n邀请好友\n搜索任务\n新建任务\nSkills\n灵感\n项目资料\n最近对话\n新对话\n5分钟前\n新对话\n8分钟前\n国际形势分析无法执行\n23分钟前\n新对话\n44分钟前\n新对话\n45分钟前\n新对话\n49分钟前\n新对话\n51分钟前\nsmoke harness\n52分钟前\n<planner>\n1小时前\n新对话\n1小时前\n查看更多对话\n归档\n开\n开源使用\n本地可用\nSkill Forge E2E 1778592514150\nHarness\n新对话\n工作台\n好啊，用 GPT Images 2 生成：一张广州塔，从花城汇看过去的春天照片\n先获取下工具参数\n马上生成\n图片生成\n|\nGPT Images 2\n搞定，图已经生成好了\n要调整的话直接说，我继续改\n添加资料\n模型\ndeepseek-v4-pro\n高级设置",
+  "guangzhou": true,
+  "lime": false,
+  "tags": [],
+  "intros": [
+    "好啊，用 GPT Images 2 生成：一张广州塔，从花城汇看过去的春天照片\n先获取下工具参数\n马上生成"
+  ],
+  "imageCards": [
+    {
+      "testid": "image-workbench-message-preview-e05d557e-60b5-4d47-b9e4-f825b3150df5",
+      "text": "图片生成|GPT Images 2搞定，图已经生成好了\n要调整的话直接说，我继续改",
+      "imgCount": 1
+    },
+    {
+      "testid": "image-workbench-message-preview-toolbar-e05d557e-60b5-4d47-b9e4-f825b3150df5",
+      "text": "图片生成|GPT Images 2",
+      "imgCount": 0
+    },
+    {
+      "testid": "image-workbench-message-preview-single-media-e05d557e-60b5-4d47-b9e4-f825b3150df5",
+      "text": "",
+      "imgCount": 1
+    },
+    {
+      "testid": "image-workbench-message-preview-caption-e05d557e-60b5-4d47-b9e4-f825b3150df5",
+      "text": "搞定，图已经生成好了\n要调整的话直接说，我继续改",
+      "imgCount": 0
+    }
+  ],
+  "failureText": false
+}

@@ -15,6 +15,7 @@ import {
 } from "../hooks/agentStreamTextOverlayStore";
 
 const IMAGE_WORKBENCH_FOCUS_EVENT = "lime:image-workbench-focus";
+const IMAGE_WORKBENCH_TASK_ACTION_EVENT = "lime:image-workbench-task-action";
 const VIDEO_WORKBENCH_TASK_ACTION_EVENT = "lime:video-workbench-task-action";
 type MockConfiguredProvider = {
   key: string;
@@ -446,11 +447,11 @@ describe("MessageList", () => {
     expect(
       container.querySelector('[data-testid="message-list-restoring-session"]'),
     ).not.toBeNull();
-    expect(container.textContent).toContain("正在恢复生成会话...");
+    expect(container.textContent).toContain("Restoring generation session...");
     expect(container.textContent).toContain(
-      "正在同步最近一次生成会话，请稍候。",
+      "Syncing the latest generation session. Please wait.",
     );
-    expect(container.textContent).not.toContain("开始一段新的对话吧");
+    expect(container.textContent).not.toContain("Start a new conversation");
   });
 
   it("旧会话首屏只加载尾部历史时应提供继续加载入口", () => {
@@ -470,13 +471,13 @@ describe("MessageList", () => {
         '[data-testid="message-list-persisted-history-window"]',
       ),
     ).not.toBeNull();
-    expect(container.textContent).toContain("最近 2 / 320 条消息");
+    expect(container.textContent).toContain("latest 2 / 320 messages");
 
     const button = container.querySelector(
       '[data-testid="message-list-load-full-history"]',
     ) as HTMLButtonElement | null;
     expect(button).not.toBeNull();
-    expect(button?.textContent).toContain("加载更多历史");
+    expect(button?.textContent).toContain("Load more history");
 
     act(() => {
       button?.click();
@@ -556,11 +557,11 @@ describe("MessageList", () => {
       },
     });
 
-    expect(container.textContent).toContain("最近 40 / 188 条消息");
+    expect(container.textContent).toContain("latest 40 / 188 messages");
     expect(container.textContent).toContain("消息 40");
     expect(container.textContent).toContain("消息 31");
     expect(container.textContent).not.toContain("消息 30");
-    expect(container.textContent).toContain("更早的 30 条可按需展开");
+    expect(container.textContent).toContain("30 earlier messages can be expanded");
 
     act(() => {
       vi.advanceTimersByTime(2_000);
@@ -782,7 +783,7 @@ describe("MessageList", () => {
       '[data-testid="message-list-historical-timeline-preview:leading"]',
     );
     expect(deferredPreview).not.toBeNull();
-    expect(deferredPreview?.textContent).toContain("点击展开后加载执行细节");
+    expect(deferredPreview?.textContent).toContain("Expand to load execution details");
     const idleCommit = getAgentUiPerformanceMetrics()
       .filter((entry) => entry.phase === "messageList.commit")
       .find(
@@ -1183,13 +1184,13 @@ describe("MessageList", () => {
     );
 
     expect(preview).not.toBeNull();
-    expect(preview?.textContent).toContain("此历史消息较长");
-    expect(preview?.textContent).toContain("纯文本预览");
+    expect(preview?.textContent).toContain("This history message is long");
+    expect(preview?.textContent).toContain("plain-text preview");
     expect(preview?.textContent).not.toContain("末尾完整内容");
     expect(mockStreamingRenderer).not.toHaveBeenCalled();
 
     const expandButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("展开完整内容"),
+      (button) => button.textContent?.includes("Show full content"),
     ) as HTMLButtonElement | undefined;
 
     act(() => {
@@ -1254,7 +1255,7 @@ describe("MessageList", () => {
     );
 
     expect(preview).not.toBeNull();
-    expect(preview?.textContent).toContain("历史助手回复较长");
+    expect(preview?.textContent).toContain("This assistant reply is long");
     expect(preview?.textContent).not.toContain("旧回复末尾完整内容");
     expect(container.textContent).toContain(latestAssistantContent);
     expect(mockStreamingRenderer).not.toHaveBeenCalledWith(
@@ -1264,7 +1265,7 @@ describe("MessageList", () => {
     );
 
     const expandButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("展开完整内容"),
+      (button) => button.textContent?.includes("Show full content"),
     ) as HTMLButtonElement | undefined;
 
     act(() => {
@@ -1315,18 +1316,18 @@ describe("MessageList", () => {
     expect(
       container.querySelector('[data-testid="message-list-empty-task-center"]'),
     ).not.toBeNull();
-    expect(container.textContent).toContain("对话");
-    expect(container.textContent).toContain("最近对话");
+    expect(container.textContent).toContain("Chat");
+    expect(container.textContent).toContain("Recent chats");
     expect(container.textContent).toContain(
-      "这里集中展示最近对话、待继续会话和更早归档，方便你随时回到上一次工作现场。",
+      "Recent chats, sessions to continue, and earlier archives are gathered here so you can return to the last working context.",
     );
     expect(container.textContent).toContain(
-      "还没有对话时，可以先从“新建对话”开始；后续的结果、素材和中间过程都会继续留在这里。",
+      "When there are no chats yet, start from “New chat”. Results, materials, and intermediate steps will stay here later.",
     );
-    expect(container.textContent).toContain("左侧会优先显示待继续的对话");
-    expect(container.textContent).toContain("最近对话和归档会按时间自动整理");
-    expect(container.textContent).toContain("恢复中的会话会自动回到这里继续");
-    expect(container.textContent).not.toContain("开始一段新的对话吧");
+    expect(container.textContent).toContain("Chats to continue appear on the left first");
+    expect(container.textContent).toContain("Recent chats and archives are organized by time");
+    expect(container.textContent).toContain("Restoring sessions return here automatically");
+    expect(container.textContent).not.toContain("Start a new conversation");
   });
 
   it("应过滤空白 user 消息，避免渲染空白气泡", () => {
@@ -1377,7 +1378,7 @@ describe("MessageList", () => {
     ) as HTMLButtonElement | null;
 
     expect(historyWindow).not.toBeNull();
-    expect(container.textContent).toContain("为了更快打开对话");
+    expect(container.textContent).toContain("To open the chat faster");
     expect(container.textContent).toContain("消息 90");
     expect(container.textContent).not.toContain("消息 1");
     expect(expandButton).not.toBeNull();
@@ -2289,7 +2290,7 @@ describe("MessageList", () => {
       '[data-testid="image-workbench-message-preview-task-1"]',
     ) as HTMLButtonElement | null;
 
-    expect(previewCard?.textContent).toContain("Image Generation");
+    expect(previewCard?.textContent).toContain("图片生成");
     expect(previewCard?.textContent).not.toContain("一颗戴耳机的青柠");
     expect(previewCard?.textContent).not.toContain("已生成");
     expect(previewCard?.textContent).not.toContain("可在右侧继续查看与使用");
@@ -2342,7 +2343,7 @@ describe("MessageList", () => {
       '[data-testid="image-workbench-message-preview-task-verbose-template"]',
     );
 
-    expect(previewCard?.textContent).toContain("Image Generation");
+    expect(previewCard?.textContent).toContain("图片生成");
     expect(previewCard?.textContent).toContain("Nanobanana Pro");
     expect(container.textContent).not.toContain("任务已创建成功");
     expect(container.textContent).not.toContain("这里是生成详情");
@@ -2352,7 +2353,7 @@ describe("MessageList", () => {
     expect(previewCard?.querySelector("img")).not.toBeNull();
   });
 
-  it("图片任务消息应在同一条 assistant 回复里呈现自然文案、工具条、图片和结果描述", async () => {
+  it("图片任务消息应在同一条 assistant 回复里保留自然铺垫、轻卡、图片和结果描述", async () => {
     const messages: Message[] = [
       {
         id: "msg-user-image-workbench-natural",
@@ -2419,9 +2420,8 @@ describe("MessageList", () => {
     expect(text).toContain("好啊，用 Nanobanana Pro");
     expect(text).toContain("先获取下工具参数");
     expect(text).toContain("马上生成");
-    expect(text).toContain("Image Generation");
+    expect(text).toContain("图片生成");
     expect(text).toContain("Nanobanana Pro");
-    expect(text).toContain("Lime");
     expect(text).toContain("我继续改");
     expect(
       container.querySelector('[data-testid="token-usage-display"]'),
@@ -2429,9 +2429,10 @@ describe("MessageList", () => {
     expect(text).not.toContain("limeCreateImageGenerationTask");
     expect(text).not.toContain("异步图片任务");
     expect(
-      container.querySelector('[data-testid="image-workbench-assistant-header"]')
-        ?.textContent,
-    ).toContain("Lime");
+      container.querySelector('[data-testid="image-workbench-assistant-header"]'),
+    ).toBeNull();
+    expect(intro).not.toBeNull();
+    expect(intro?.textContent).toContain("先获取下工具参数");
     expect(
       container.querySelector('[data-testid="message-user-command-tag"]')
         ?.textContent,
@@ -2440,10 +2441,113 @@ describe("MessageList", () => {
       container.querySelector('[data-testid="message-user-command-content"]')
         ?.textContent,
     ).toContain("广州塔");
-    expect(intro?.textContent).toContain("好啊，用 Nanobanana Pro");
     expect(container.querySelector('[data-testid="streaming-renderer"]')).toBe(
       null,
     );
+  });
+
+  it("同一会话连续两次图片生成应分别保留用户指令、自然铺垫和对应轻卡", async () => {
+    const now = new Date();
+    const messages: Message[] = [
+      {
+        id: "msg-user-image-turn-1",
+        role: "user",
+        content: "@配图 生成一张广州塔春天照片",
+        timestamp: now,
+      },
+      {
+        id: "msg-assistant-image-turn-1",
+        role: "assistant",
+        content: "好啊，先生成广州塔春天照片\n先获取下工具参数\n马上生成",
+        timestamp: new Date(now.getTime() + 1_000),
+        thinkingContent: "先判断广州塔照片的季节和视角。",
+        contentParts: [
+          { type: "thinking", text: "先判断广州塔照片的季节和视角。" },
+          {
+            type: "text",
+            text: "好啊，先生成广州塔春天照片\n先获取下工具参数\n马上生成",
+          },
+        ],
+        imageWorkbenchPreview: {
+          taskId: "task-image-turn-1",
+          prompt: "广州塔春天照片",
+          mode: "generate",
+          status: "complete",
+          imageUrl: "https://example.com/guangzhou-tower.png",
+          imageCount: 1,
+          modelName: "gpt-images-2",
+          caption: "第一张已经好了，可以继续调春天氛围。",
+        },
+      },
+      {
+        id: "msg-user-image-turn-2",
+        role: "user",
+        content: "@配图 再生成一张青柠极简插画",
+        timestamp: new Date(now.getTime() + 2_000),
+      },
+      {
+        id: "msg-assistant-image-turn-2",
+        role: "assistant",
+        content: "好啊，再生成青柠极简插画\n先获取下工具参数\n马上生成",
+        timestamp: new Date(now.getTime() + 3_000),
+        thinkingContent: "再判断青柠插画的极简构图。",
+        contentParts: [
+          { type: "thinking", text: "再判断青柠插画的极简构图。" },
+          {
+            type: "text",
+            text: "好啊，再生成青柠极简插画\n先获取下工具参数\n马上生成",
+          },
+        ],
+        imageWorkbenchPreview: {
+          taskId: "task-image-turn-2",
+          prompt: "青柠极简插画",
+          mode: "generate",
+          status: "complete",
+          imageUrl: "https://example.com/lime-minimal.png",
+          imageCount: 1,
+          modelName: "gpt-images-2",
+          caption: "第二张也好了，可以继续改构图。",
+        },
+      },
+    ];
+
+    const container = await renderZh(messages);
+    const commandTags = Array.from(
+      container.querySelectorAll('[data-testid="message-user-command-tag"]'),
+    ).map((node) => node.textContent);
+    const intros = Array.from(
+      container.querySelectorAll('[data-testid="image-workbench-assistant-intro"]'),
+    ).map((node) => node.textContent || "");
+
+    expect(commandTags).toEqual(["@配图", "@配图"]);
+    expect(intros).toHaveLength(2);
+    expect(intros[0]).toContain("广州塔春天照片");
+    expect(intros[0]).not.toContain("青柠极简插画");
+    expect(intros[1]).toContain("青柠极简插画");
+    expect(intros[1]).not.toContain("广州塔春天照片");
+    expect(
+      mockStreamingRenderer.mock.calls.map((call) => call[0].thinkingContent),
+    ).toEqual([
+      "先判断广州塔照片的季节和视角。",
+      "再判断青柠插画的极简构图。",
+    ]);
+    expect(
+      mockStreamingRenderer.mock.calls.every(
+        (call) => !call[0].toolCalls && !call[0].contentParts,
+      ),
+    ).toBe(true);
+    expect(
+      container.querySelector(
+        '[data-testid="image-workbench-message-preview-task-image-turn-1"]',
+      )?.textContent,
+    ).toContain("第一张已经好了");
+    expect(
+      container.querySelector(
+        '[data-testid="image-workbench-message-preview-task-image-turn-2"]',
+      )?.textContent,
+    ).toContain("第二张也好了");
+    expect(container.textContent).not.toContain("任务 ID");
+    expect(container.textContent).not.toContain("任务已提交");
   });
 
   it("用户消息带已安装 Skill route 时应保留 @ Skill 标签展示", async () => {
@@ -2473,6 +2577,31 @@ describe("MessageList", () => {
       container.querySelector('[data-testid="message-user-command-tag"]'),
     ).toBeNull();
     expect(container.textContent).toContain("帮我写一篇关于三国的故事");
+  });
+
+  it("用户消息仅通过 builtin command route 进入时，也应保留 @命令 标签展示", async () => {
+    const container = await renderZh([
+      {
+        id: "msg-user-builtin-route-only-image-command",
+        role: "user",
+        content: "生成一张广州塔，从花城汇看过去的春天照片",
+        timestamp: new Date(),
+        inputCapabilityRoute: {
+          kind: "builtin_command",
+          commandKey: "image_generate",
+          commandPrefix: "@配图",
+        },
+      } as Message,
+    ]);
+
+    expect(
+      container.querySelector('[data-testid="message-user-command-tag"]')
+        ?.textContent,
+    ).toBe("@配图");
+    expect(
+      container.querySelector('[data-testid="message-user-command-content"]')
+        ?.textContent,
+    ).toContain("广州塔");
   });
 
   it("历史助手消息没有图片轻卡时，也不应继续展示旧图片任务详情模板", async () => {
@@ -2537,7 +2666,7 @@ describe("MessageList", () => {
     );
   });
 
-  it("图片任务消息应收起内部 process flow，只保留任务卡与正文", () => {
+  it("图片任务消息应保留思考但收起内部工具 process flow", () => {
     const container = render(
       [
         {
@@ -2606,8 +2735,26 @@ describe("MessageList", () => {
       },
     );
 
-    const streamingCall = mockStreamingRenderer.mock.calls.at(-1)?.[0];
-    expect(streamingCall?.suppressProcessFlow).toBe(true);
+    expect(mockStreamingRenderer).toHaveBeenCalledTimes(1);
+    const rendererProps = mockStreamingRenderer.mock.calls[0]?.[0] as
+      | {
+          content?: string;
+          thinkingContent?: string;
+          contentParts?: unknown[];
+          toolCalls?: unknown[];
+        }
+      | undefined;
+    expect(rendererProps).toMatchObject({
+      content: "",
+      thinkingContent: "先执行图片技能。",
+    });
+    expect(rendererProps?.contentParts).toBeUndefined();
+    expect(rendererProps?.toolCalls).toBeUndefined();
+    expect(
+      container.querySelector(
+        '[data-testid="image-workbench-message-preview-task-image-process-flow"]',
+      ),
+    ).not.toBeNull();
     expect(
       container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
     ).toBeNull();
@@ -3207,7 +3354,7 @@ describe("MessageList", () => {
       '[data-testid="image-workbench-message-preview-task-edit-1"]',
     );
 
-    expect(previewCard?.textContent).toContain("Image Editing");
+    expect(previewCard?.textContent).toContain("图片编辑");
     expect(previewCard?.querySelector("img")).not.toBeNull();
     expect(previewCard?.textContent).not.toContain("已修图");
     expect(previewCard?.textContent).not.toContain("来源图");
@@ -3270,14 +3417,14 @@ describe("MessageList", () => {
       '[data-testid="image-workbench-message-preview-task-complete-sync-copy"]',
     );
 
-    expect(previewCard?.textContent).toContain("Image Generation");
+    expect(previewCard?.textContent).toContain("图片生成");
     expect(previewCard?.textContent).not.toContain("已生成");
     expect(previewCard?.textContent).not.toContain("可在右侧继续查看与使用");
     expect(previewCard?.textContent).not.toContain("正在同步任务状态");
     expect(previewCard?.textContent).not.toContain("图片任务已提交");
   });
 
-  it("失败的图片任务卡应收敛为静态状态卡，不再展示操作按钮", async () => {
+  it("失败的图片任务卡应提供单独重试按钮，并继续保留打开查看能力", async () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -3295,18 +3442,38 @@ describe("MessageList", () => {
       },
     ];
 
+    let actionDetail: Record<string, unknown> | null = null;
+    const handleAction = (event: Event) => {
+      if (!(event instanceof CustomEvent)) {
+        return;
+      }
+      actionDetail = event.detail as Record<string, unknown>;
+    };
+    window.addEventListener(IMAGE_WORKBENCH_TASK_ACTION_EVENT, handleAction);
+
     const container = await renderZh(messages);
     const previewCard = container.querySelector(
       '[data-testid="image-workbench-message-preview-task-failed-1"]',
-    );
+    ) as HTMLButtonElement | null;
+    const retryButton = container.querySelector(
+      '[data-testid="image-workbench-message-preview-action-task-failed-1-retry"]',
+    ) as HTMLButtonElement | null;
 
     expect(previewCard?.textContent).toContain("生成失败");
-    expect(previewCard?.textContent).not.toContain("调整描述后重试");
-    expect(
-      container.querySelector(
-        '[data-testid="image-workbench-message-preview-action-task-failed-1-retry"]',
-      ),
-    ).toBeNull();
+    expect(retryButton?.textContent).toContain("重试");
+
+    act(() => {
+      retryButton?.click();
+    });
+
+    expect(actionDetail).toEqual({
+      action: "retry",
+      taskId: "task-failed-1",
+      projectId: "project-1",
+      contentId: "content-1",
+    });
+
+    window.removeEventListener(IMAGE_WORKBENCH_TASK_ACTION_EVENT, handleAction);
   });
 
   it("生成中的图片任务卡应展示同会话占位，但不再展示取消按钮", async () => {
@@ -3342,7 +3509,7 @@ describe("MessageList", () => {
     ).toBeNull();
   });
 
-  it("失败的图片任务卡应保留错误文案，但不再突出不可重试标签", async () => {
+  it("失败的图片任务卡应保留错误文案，即使原状态标记不可重试也提供单独重试入口", async () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -3372,6 +3539,11 @@ describe("MessageList", () => {
       "FAL 请求参数无效，请先调整配置。",
     );
     expect(previewCard?.textContent).not.toContain("不可重试");
+    expect(
+      container.querySelector(
+        '[data-testid="image-workbench-message-preview-action-task-failed-no-retry-retry"]',
+      )?.textContent,
+    ).toContain("重试");
   });
 
   it("已取消的图片任务卡应显示独立状态且不再展示重试按钮", async () => {
@@ -3506,7 +3678,7 @@ describe("MessageList", () => {
       '[data-testid="image-workbench-message-preview-grid-task-storyboard-preview-1"]',
     ) as HTMLDivElement | null;
 
-    expect(container.textContent).toContain("Image Generation");
+    expect(container.textContent).toContain("图片生成");
     expect(container.textContent).not.toContain(
       "3x3 分镜已经完成，可在右侧继续查看与使用。",
     );
@@ -3785,6 +3957,319 @@ describe("MessageList", () => {
         contentParts: [
           { type: "thinking", text: "先列提纲，再组织答案。" },
           { type: "text", text: "这是最终回答。" },
+        ],
+      }),
+    );
+  });
+
+  it("当前尾部 assistant 完成后 turn timeline 暂缺时应继续显示本地思考内容", () => {
+    const now = new Date();
+    const messages: Message[] = [
+      {
+        id: "msg-user-tail-runtime-thinking-fallback",
+        role: "user",
+        content: "先思考再回答",
+        timestamp: now,
+      },
+      {
+        id: "msg-assistant-tail-runtime-thinking-fallback",
+        role: "assistant",
+        content: "这是最终回答。",
+        timestamp: now,
+        runtimeTurnId: "turn-tail-runtime-thinking-fallback",
+        thinkingContent: "先梳理约束。",
+        contentParts: [
+          {
+            type: "thinking",
+            text: "先梳理约束。",
+          },
+          {
+            type: "text",
+            text: "这是最终回答。",
+          },
+        ],
+      },
+    ];
+
+    render(messages, {
+      currentTurnId: null,
+      turns: [],
+      threadItems: [],
+    });
+
+    expect(mockStreamingRenderer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        thinkingContent: "先梳理约束。",
+        contentParts: [
+          { type: "thinking", text: "先梳理约束。" },
+          { type: "text", text: "这是最终回答。" },
+        ],
+      }),
+    );
+  });
+
+  it("已完成的直执 Skill 消息即使不在尾部，也不应丢失本地思考内容", () => {
+    const now = new Date();
+    const messages: Message[] = [
+      {
+        id: "msg-user-skill-inline-process",
+        role: "user",
+        content: "整理产品资料",
+        timestamp: now,
+      },
+      {
+        id: "msg-assistant-skill-inline-process",
+        role: "assistant",
+        content: "产品知识库说明。",
+        timestamp: now,
+        runtimeTurnId: "skill-exec-msg-assistant-skill-inline-process",
+        thinkingContent: "先读取 Skill，再分析产品资料边界。",
+        contentParts: [
+          {
+            type: "thinking",
+            text: "先读取 Skill，再分析产品资料边界。",
+          },
+          {
+            type: "text",
+            text: "产品知识库说明。",
+          },
+        ],
+      },
+      {
+        id: "msg-user-after-skill-inline-process",
+        role: "user",
+        content: "继续",
+        timestamp: now,
+      },
+      {
+        id: "msg-assistant-after-skill-inline-process",
+        role: "assistant",
+        content: "继续回答。",
+        timestamp: now,
+      },
+    ];
+
+    render(messages, {
+      currentTurnId: null,
+      turns: [],
+      threadItems: [],
+    });
+
+    expect(mockStreamingRenderer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: "产品知识库说明。",
+        thinkingContent: "先读取 Skill，再分析产品资料边界。",
+        contentParts: [
+          {
+            type: "thinking",
+            text: "先读取 Skill，再分析产品资料边界。",
+          },
+          {
+            type: "text",
+            text: "产品知识库说明。",
+          },
+        ],
+      }),
+    );
+  });
+
+  it("已完成的服务型 Skill 消息即使不在尾部，也不应丢失本地思考内容", () => {
+    const now = new Date();
+    const messages: Message[] = [
+      {
+        id: "msg-user-service-skill-inline-process",
+        role: "user",
+        content: "整理产品资料",
+        timestamp: now,
+      },
+      {
+        id: "msg-assistant-service-skill-inline-process",
+        role: "assistant",
+        content: "产品知识库说明。",
+        timestamp: now,
+        runtimeTurnId: "turn-service-skill-inline-process",
+        inlineProcessRetention: "skill",
+        thinkingContent: "先读取服务型 Skill，再分析产品资料边界。",
+        contentParts: [
+          {
+            type: "thinking",
+            text: "先读取服务型 Skill，再分析产品资料边界。",
+          },
+          {
+            type: "text",
+            text: "产品知识库说明。",
+          },
+        ],
+      },
+      {
+        id: "msg-user-after-service-skill-inline-process",
+        role: "user",
+        content: "继续",
+        timestamp: now,
+      },
+      {
+        id: "msg-assistant-after-service-skill-inline-process",
+        role: "assistant",
+        content: "继续回答。",
+        timestamp: now,
+      },
+    ];
+
+    render(messages, {
+      currentTurnId: null,
+      turns: [],
+      threadItems: [],
+    });
+
+    expect(mockStreamingRenderer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: "产品知识库说明。",
+        thinkingContent: "先读取服务型 Skill，再分析产品资料边界。",
+        contentParts: [
+          {
+            type: "thinking",
+            text: "先读取服务型 Skill，再分析产品资料边界。",
+          },
+          {
+            type: "text",
+            text: "产品知识库说明。",
+          },
+        ],
+      }),
+    );
+  });
+
+  it("已完成的直执 Skill 消息已有 turn timeline 时仍应保留内联思考内容", () => {
+    const now = new Date();
+    const turnId = "skill-exec-analysis-retained";
+    const messages: Message[] = [
+      {
+        id: "msg-user-skill-retained-with-timeline",
+        role: "user",
+        content: "@analysis 帮我分析一下今天的国际形势",
+        timestamp: now,
+      },
+      {
+        id: "msg-assistant-skill-retained-with-timeline",
+        role: "assistant",
+        content: "国际形势分析结果。",
+        timestamp: now,
+        runtimeTurnId: turnId,
+        inlineProcessRetention: "skill",
+        thinkingContent: "先读取 analysis Skill，再拆解地区变量。",
+        contentParts: [
+          {
+            type: "thinking",
+            text: "先读取 analysis Skill，再拆解地区变量。",
+          },
+          {
+            type: "text",
+            text: "国际形势分析结果。",
+          },
+        ],
+      },
+    ];
+
+    render(messages, {
+      currentTurnId: turnId,
+      turns: [
+        {
+          id: turnId,
+          thread_id: "thread-1",
+          prompt_text: "@analysis 帮我分析一下今天的国际形势",
+          status: "completed",
+          started_at: "2026-05-13T12:00:00Z",
+          completed_at: "2026-05-13T12:00:02Z",
+          created_at: "2026-05-13T12:00:00Z",
+          updated_at: "2026-05-13T12:00:02Z",
+        },
+      ],
+      threadItems: [
+        {
+          id: "reasoning-skill-retained-with-timeline",
+          thread_id: "thread-1",
+          turn_id: turnId,
+          sequence: 1,
+          status: "completed",
+          started_at: "2026-05-13T12:00:00Z",
+          completed_at: "2026-05-13T12:00:01Z",
+          updated_at: "2026-05-13T12:00:01Z",
+          type: "reasoning",
+          text: "先读取 analysis Skill，再拆解地区变量。",
+        },
+      ],
+    });
+
+    expect(mockStreamingRenderer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: "国际形势分析结果。",
+        thinkingContent: "先读取 analysis Skill，再拆解地区变量。",
+        contentParts: [
+          {
+            type: "thinking",
+            text: "先读取 analysis Skill，再拆解地区变量。",
+          },
+          {
+            type: "text",
+            text: "国际形势分析结果。",
+          },
+        ],
+      }),
+    );
+  });
+
+  it("当前尾部 assistant 完成后 turn 记录暂缺时应按 runtimeTurnId 保留过程 timeline", () => {
+    const now = new Date("2026-05-12T10:00:02.000Z");
+    const messages: Message[] = [
+      {
+        id: "msg-user-orphan-runtime-timeline",
+        role: "user",
+        content: "保留过程",
+        timestamp: new Date("2026-05-12T10:00:00.000Z"),
+      },
+      {
+        id: "msg-assistant-orphan-runtime-timeline",
+        role: "assistant",
+        content: "最终回答。",
+        timestamp: now,
+        runtimeTurnId: "turn-orphan-runtime-timeline",
+      },
+    ];
+
+    const container = render(messages, {
+      currentTurnId: null,
+      turns: [],
+      threadItems: [
+        {
+          id: "reasoning-orphan-runtime-timeline",
+          thread_id: "thread-1",
+          turn_id: "turn-orphan-runtime-timeline",
+          sequence: 1,
+          status: "completed",
+          started_at: "2026-05-12T10:00:01.000Z",
+          completed_at: "2026-05-12T10:00:02.000Z",
+          updated_at: "2026-05-12T10:00:02.000Z",
+          type: "reasoning",
+          text: "先确认过程是否还在。",
+        },
+      ],
+    });
+
+    expect(
+      container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
+    ).not.toBeNull();
+    expect(
+      container
+        .querySelector('[data-testid="agent-thread-timeline:leading"]')
+        ?.getAttribute("data-turn-id"),
+    ).toBe("turn-orphan-runtime-timeline");
+    expect(mockAgentThreadTimeline).toHaveBeenCalledWith(
+      expect.objectContaining({
+        items: [
+          expect.objectContaining({
+            id: "reasoning-orphan-runtime-timeline",
+            type: "reasoning",
+          }),
         ],
       }),
     );
@@ -5397,7 +5882,7 @@ describe("MessageList", () => {
 
     const container = render(messages, { onQuoteMessage });
     const quoteButton = container.querySelector(
-      'button[aria-label="引用消息"]',
+      'button[aria-label="Quote message"]',
     );
 
     expect(quoteButton).toBeTruthy();
@@ -5450,7 +5935,7 @@ describe("MessageList", () => {
 
     const container = render(messages, { onSaveMessageAsSkill });
     const saveButton = container.querySelector(
-      'button[aria-label="保存为技能"]',
+      'button[aria-label="Save as Skill"]',
     );
 
     expect(saveButton).not.toBeNull();
@@ -5481,7 +5966,7 @@ describe("MessageList", () => {
 
     const container = render(messages, { onSaveMessageAsInspiration });
     const saveButton = container.querySelector(
-      'button[aria-label="保存到灵感库"]',
+      'button[aria-label="Save to inspiration"]',
     );
 
     expect(saveButton).not.toBeNull();
@@ -5512,7 +5997,7 @@ describe("MessageList", () => {
 
     const container = render(messages, { onSaveMessageAsKnowledge });
     const saveButton = container.querySelector(
-      'button[aria-label="保存到项目资料"]',
+      'button[aria-label="Save to project knowledge"]',
     );
 
     expect(saveButton).not.toBeNull();
@@ -5559,10 +6044,10 @@ describe("MessageList", () => {
     ];
 
     const container = render(messages, { onSaveMessageAsKnowledge });
-    expect(container.textContent).toContain("Document 产物");
-    expect(container.textContent).toContain("可保存到项目资料");
+    expect(container.textContent).toContain("Document artifact");
+    expect(container.textContent).toContain("Can save to project knowledge");
     const saveButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("保存这份文档"),
+      (button) => button.textContent?.includes("Save this document"),
     );
 
     expect(saveButton).not.toBeNull();
@@ -5722,7 +6207,7 @@ describe("MessageList", () => {
     const artifactCard = container.querySelector("button");
     expect(artifactCard?.textContent).toContain("demo.md");
     expect(artifactCard?.textContent).toContain("docs/demo.md");
-    expect(container.textContent).toContain("Document 产物");
+    expect(container.textContent).toContain("Document artifact");
 
     act(() => {
       artifactCard?.dispatchEvent(new MouseEvent("click", { bubbles: true }));

@@ -1,5 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { buildInputbarToolsCopy } from "../components/inputbarToolsCopy";
 
 export interface InputbarToolStates {
   webSearch: boolean;
@@ -24,6 +26,11 @@ export function useInputbarToolState({
   onToolStatesChange,
   openFileDialog,
 }: UseInputbarToolStateParams) {
+  const { t } = useTranslation("agent");
+  const copy = useMemo(
+    () => buildInputbarToolsCopy((key) => t(key, {})),
+    [t],
+  );
   const [localToolStates, setLocalToolStates] = useState<InputbarToolStates>(
     DEFAULT_INPUTBAR_TOOL_STATES,
   );
@@ -70,7 +77,7 @@ export function useInputbarToolState({
             thinking: nextThinking,
             subagent: subagentEnabled,
           });
-          toast.info(`深度思考${nextThinking ? "已开启" : "已关闭"}`);
+          toast.info(copy.thinking.toast(nextThinking));
           break;
         }
         case "web_search": {
@@ -80,7 +87,7 @@ export function useInputbarToolState({
             thinking: thinkingEnabled,
             subagent: subagentEnabled,
           });
-          toast.info(`联网搜索${nextWebSearch ? "已开启" : "已关闭"}`);
+          toast.info(copy.webSearch.toast(nextWebSearch));
           break;
         }
         case "subagent_mode": {
@@ -90,7 +97,7 @@ export function useInputbarToolState({
             thinking: thinkingEnabled,
             subagent: nextSubagent,
           });
-          toast.info(`任务拆分${nextSubagent ? "偏好已开启" : "偏好已关闭"}`);
+          toast.info(copy.subagent.toast(nextSubagent));
           break;
         }
         case "attach":
@@ -98,13 +105,16 @@ export function useInputbarToolState({
           break;
         case "fullscreen":
           setIsFullscreen((prev) => !prev);
-          toast.info(isFullscreen ? "已退出全屏" : "已进入全屏编辑");
+          toast.info(
+            isFullscreen ? copy.fullscreen.exited : copy.fullscreen.entered,
+          );
           break;
         default:
           break;
       }
     },
     [
+      copy,
       isFullscreen,
       openFileDialog,
       thinkingEnabled,
@@ -124,9 +134,15 @@ export function useInputbarToolState({
         thinking: thinkingEnabled,
         subagent: enabled,
       });
-      toast.info(`任务拆分${enabled ? "偏好已开启" : "偏好已关闭"}`);
+      toast.info(copy.subagent.toast(enabled));
     },
-    [subagentEnabled, thinkingEnabled, updateToolStates, webSearchEnabled],
+    [
+      copy,
+      subagentEnabled,
+      thinkingEnabled,
+      updateToolStates,
+      webSearchEnabled,
+    ],
   );
 
   return {

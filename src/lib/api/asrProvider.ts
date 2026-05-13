@@ -110,8 +110,6 @@ export interface VoiceInputConfig {
   selected_device_id?: string;
   /** 是否启用交互音效 */
   sound_enabled: boolean;
-  /** 翻译模式快捷键（可选） */
-  translate_shortcut?: string;
   /** 翻译模式使用的指令 ID */
   translate_instruction_id: string;
 }
@@ -213,12 +211,6 @@ export interface TranscribeResult {
   provider: string;
 }
 
-export type VoiceWindowTarget = "companion-pet";
-
-export interface OpenVoiceWindowOptions {
-  target?: VoiceWindowTarget;
-}
-
 /** 润色结果 */
 export interface PolishResult {
   text: string;
@@ -247,18 +239,6 @@ export async function polishVoiceText(
     text,
     instructionId,
   });
-}
-
-/** 打开语音输入窗口 */
-export async function openVoiceWindow(
-  options: OpenVoiceWindowOptions = {},
-): Promise<void> {
-  return safeInvoke<void>("open_voice_window", { ...options });
-}
-
-/** 关闭语音输入窗口 */
-export async function closeVoiceWindow(): Promise<void> {
-  return safeInvoke<void>("close_voice_window");
 }
 
 /** 输出文本到系统 */
@@ -345,9 +325,4 @@ export async function cancelRecording(): Promise<void> {
 /** 获取录音状态 */
 export async function getRecordingStatus(): Promise<RecordingStatus> {
   return safeInvoke<RecordingStatus>("get_recording_status");
-}
-
-/** 打开带预填文本的输入框 */
-export async function openInputWithText(text: string): Promise<void> {
-  return safeInvoke<void>("open_input_with_text", { text });
 }

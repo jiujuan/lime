@@ -151,6 +151,41 @@ describe("useAgentStreamController", () => {
     }
   });
 
+  it("切换会话时应清空剩余 listener 与 active stream 绑定", () => {
+    const harness = mountHook();
+    const first = vi.fn();
+    const second = vi.fn();
+
+    try {
+      act(() => {
+        harness.getValue().setActiveStream({
+          assistantMsgId: "assistant-2",
+          eventName: "stream-2",
+          sessionId: "session-2",
+        });
+        harness.getValue().replaceStreamListener("stream-2", first);
+        harness.getValue().replaceStreamListener("stream-3", second);
+      });
+
+      act(() => {
+        harness.getValue().clearStreamBindings();
+      });
+
+      expect(first).toHaveBeenCalledTimes(1);
+      expect(second).toHaveBeenCalledTimes(1);
+      expect(harness.getValue().listenerMapRef.current.size).toBe(0);
+      expect(harness.getValue().activeStreamRef.current).toBeNull();
+      expect(harness.getValue().isSending).toBe(false);
+      expect(harness.getRefs()).toEqual({
+        assistantMsgId: null,
+        eventName: null,
+        sessionId: null,
+      });
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("卸载时应清理剩余 listener", () => {
     const harness = mountHook();
     const unlisten = vi.fn();

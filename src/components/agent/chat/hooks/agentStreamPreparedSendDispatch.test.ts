@@ -38,6 +38,12 @@ const preparedSend: PreparedAgentStreamUserInputSend = {
   syncedSessionModelPreference: null,
   assistantMsgId: "00000000-0000-0000-0000-000000000001",
   userMsgId: "00000000-0000-0000-0000-000000000002",
+  userMsg: {
+    id: "00000000-0000-0000-0000-000000000002",
+    role: "user",
+    content: "继续生成提纲",
+    timestamp: new Date("2026-03-27T01:00:00.000Z"),
+  },
   assistantMsg: {
     id: "assistant-1",
     role: "assistant",

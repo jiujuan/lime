@@ -5,7 +5,9 @@ import {
   type ChangeEvent,
   type ClipboardEvent,
   type DragEvent,
+  useMemo,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { MessageImage } from "../../../types";
 import {
@@ -13,8 +15,17 @@ import {
   MAX_IMAGE_ATTACHMENTS_PER_TURN,
   readImageAttachment,
 } from "../../../utils/imageAttachments";
+import { buildInputbarImageAttachmentsCopy } from "./inputbarImageAttachmentsCopy";
 
 export function useImageAttachments() {
+  const { t } = useTranslation("agent");
+  const copy = useMemo(
+    () =>
+      buildInputbarImageAttachmentsCopy((key, values) =>
+        t(key, values ?? {}),
+      ),
+    [t],
+  );
   const [pendingImages, setPendingImages] = useState<MessageImage[]>([]);
   const pendingImagesRef = useRef<MessageImage[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -30,27 +41,26 @@ export function useImageAttachments() {
       successMessage?: string,
       preferredMediaType?: string,
     ) => {
+      const fileName = file.name || copy.unnamedImage;
       try {
         if (pendingImagesRef.current.length >= MAX_IMAGE_ATTACHMENTS_PER_TURN) {
-          toast.error(`图片读取失败: ${file.name || "未命名图片"}`);
+          toast.error(copy.imageReadFailed(fileName));
           return;
         }
 
         const image = await readImageAttachment(file, preferredMediaType);
         if (pendingImagesRef.current.length >= MAX_IMAGE_ATTACHMENTS_PER_TURN) {
-          toast.error(`图片读取失败: ${file.name || "未命名图片"}`);
+          toast.error(copy.imageReadFailed(fileName));
           return;
         }
 
         setPendingImagesSnapshot([...pendingImagesRef.current, image]);
-        toast.success(
-          successMessage ?? `已添加图片: ${file.name || "未命名图片"}`,
-        );
+        toast.success(successMessage ?? copy.imageAdded(fileName));
       } catch {
-        toast.error(`图片读取失败: ${file.name || "未命名图片"}`);
+        toast.error(copy.imageReadFailed(fileName));
       }
     },
-    [setPendingImagesSnapshot],
+    [copy, setPendingImagesSnapshot],
   );
 
   const appendImageFiles = useCallback(
@@ -86,12 +96,12 @@ export function useImageAttachments() {
       imageFiles.forEach(({ file, mediaType }, index) => {
         void appendImageFile(
           file,
-          index === 0 ? "已粘贴图片" : undefined,
+          index === 0 ? copy.imagePasted : undefined,
           mediaType,
         );
       });
     },
-    [appendImageFile],
+    [appendImageFile, copy.imagePasted],
   );
 
   const handleDragOver = useCallback((event: DragEvent) => {

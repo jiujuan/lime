@@ -50,6 +50,7 @@ import {
   buildSkillSelectionBindings,
   type SkillSelectionProps,
 } from "../skill-selection/skillSelectionBindings";
+import type { HomeSurfaceComposerCopy } from "../home/homeSurfaceCopy";
 import type { AgentAccessMode } from "../hooks/agentChatStorage";
 import type {
   InputCapabilitySelection,
@@ -64,6 +65,7 @@ import type {
   InputbarKnowledgePackOption,
   InputbarKnowledgePackSelection,
 } from "./Inputbar/types";
+import type { InputbarCoreCopy } from "./Inputbar/components/inputbarCoreCopy";
 
 interface EmptyStateComposerPanelProps {
   input: string;
@@ -104,6 +106,8 @@ interface EmptyStateComposerPanelProps {
   onToggleKnowledgeCompanionPack?: (packName: string, enabled: boolean) => void;
   onStartKnowledgeOrganize?: () => void;
   onManageKnowledgePacks?: () => void;
+  copy: HomeSurfaceComposerCopy;
+  inputbarCopy: InputbarCoreCopy;
   showCreationModeSelector: boolean;
   creationMode: CreationMode;
   onCreationModeChange?: (mode: CreationMode) => void;
@@ -137,9 +141,13 @@ interface EmptyStateComposerPanelProps {
 
 function GuideHelpBadge({
   label,
+  closeLabel,
+  closeTitle,
   onClear,
 }: {
   label: string;
+  closeLabel: string;
+  closeTitle: string;
   onClear: () => void;
 }) {
   return (
@@ -154,8 +162,8 @@ function GuideHelpBadge({
         type="button"
         onClick={onClear}
         className="ml-0.5 text-emerald-800/70 hover:opacity-70"
-        aria-label={`关闭${label}`}
-        title="关闭引导帮助"
+        aria-label={closeLabel}
+        title={closeTitle}
       >
         <X className="h-3 w-3" />
       </button>
@@ -165,9 +173,11 @@ function GuideHelpBadge({
 
 function GuideHelpToolbarBadge({
   label,
+  title,
   onClear,
 }: {
   label: string;
+  title: string;
   onClear: () => void;
 }) {
   return (
@@ -175,7 +185,7 @@ function GuideHelpToolbarBadge({
       type="button"
       data-testid="home-guide-help-toolbar-badge"
       className="inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-full border border-emerald-200/80 bg-emerald-50/90 px-3 text-xs font-semibold text-emerald-900 shadow-sm shadow-emerald-950/5 transition hover:bg-white hover:text-emerald-950"
-      title="关闭引导帮助"
+      title={title}
       onClick={onClear}
     >
       <Lightbulb className="h-3.5 w-3.5" strokeWidth={1.9} />
@@ -222,6 +232,8 @@ export function EmptyStateComposerPanel({
   onToggleKnowledgeCompanionPack,
   onStartKnowledgeOrganize,
   onManageKnowledgePacks,
+  copy,
+  inputbarCopy,
   showCreationModeSelector,
   creationMode,
   onCreationModeChange,
@@ -249,7 +261,7 @@ export function EmptyStateComposerPanel({
   onToggleFileManager,
   inputSuggestions = [],
   guideHelpActive = false,
-  guideHelpLabel = "Lime 引导帮助",
+  guideHelpLabel,
   onClearGuideHelp,
 }: EmptyStateComposerPanelProps) {
   const [draftInput, setDraftInput] = useState(input);
@@ -407,6 +419,8 @@ export function EmptyStateComposerPanel({
     }
   };
 
+  const effectiveGuideHelpLabel =
+    guideHelpLabel ?? copy.guideHelpDefaultLabel;
   const topExtra =
     guideHelpActive ||
     activeBuiltinCommand ||
@@ -418,7 +432,9 @@ export function EmptyStateComposerPanel({
       <>
         {guideHelpActive ? (
           <GuideHelpBadge
-            label={guideHelpLabel}
+            label={effectiveGuideHelpLabel}
+            closeLabel={copy.guideHelpCloseWithLabel(effectiveGuideHelpLabel)}
+            closeTitle={copy.guideHelpClose}
             onClear={onClearGuideHelp ?? (() => undefined)}
           />
         ) : null}
@@ -524,6 +540,12 @@ export function EmptyStateComposerPanel({
     Boolean(onToggleFileManager);
   const shouldShowLeftExtra =
     Boolean(knowledgePackControl) || shouldShowAdvancedToggle;
+  const advancedToggleLabel = showAdvancedControls
+    ? copy.advancedSettings.collapse
+    : copy.advancedSettings.expand;
+  const fileManagerToggleLabel = fileManagerOpen
+    ? copy.fileManager.close
+    : copy.fileManager.open;
   const leftExtra = shouldShowLeftExtra ? (
     <>
       {knowledgePackControl}
@@ -532,10 +554,10 @@ export function EmptyStateComposerPanel({
         <MetaToggleButton
           type="button"
           $checked={showAdvancedControls || hasHighlightedAdvancedPreference}
-          aria-label={showAdvancedControls ? "收起高级设置" : "展开高级设置"}
+          aria-label={advancedToggleLabel}
           aria-expanded={showAdvancedControls}
           data-testid="empty-state-advanced-toggle"
-          title={showAdvancedControls ? "收起高级设置" : "展开高级设置"}
+          title={advancedToggleLabel}
           onClick={() => setShowAdvancedControls((previous) => !previous)}
         >
           <MetaToggleCheck
@@ -545,7 +567,7 @@ export function EmptyStateComposerPanel({
           <MetaToggleGlyph aria-hidden>
             <Settings2 strokeWidth={1.8} />
           </MetaToggleGlyph>
-          <MetaToggleLabel>高级设置</MetaToggleLabel>
+          <MetaToggleLabel>{copy.advancedSettings.label}</MetaToggleLabel>
           {showAdvancedControls ? (
             <ChevronUp className="h-3.5 w-3.5" aria-hidden />
           ) : (
@@ -556,7 +578,8 @@ export function EmptyStateComposerPanel({
 
       {guideHelpActive ? (
         <GuideHelpToolbarBadge
-          label={guideHelpLabel}
+          label={effectiveGuideHelpLabel}
+          title={copy.guideHelpClose}
           onClear={onClearGuideHelp ?? (() => undefined)}
         />
       ) : null}
@@ -565,9 +588,11 @@ export function EmptyStateComposerPanel({
         <Badge
           variant="outline"
           className={`${EMPTY_STATE_PASSIVE_BADGE_CLASSNAME} max-w-[240px] items-center overflow-hidden`}
-          title={`当前模型：${currentModelSummary}`}
+          title={copy.currentModel.title(currentModelSummary)}
         >
-          <span className="mr-1 text-slate-500">当前模型</span>
+          <span className="mr-1 text-slate-500">
+            {copy.currentModel.label}
+          </span>
           <span className="truncate">{trimmedModel}</span>
         </Badge>
       ) : null}
@@ -576,10 +601,8 @@ export function EmptyStateComposerPanel({
         <MetaIconButton
           type="button"
           $active={fileManagerOpen}
-          aria-label={
-            fileManagerOpen ? "关闭左侧文件管理器" : "打开左侧文件管理器"
-          }
-          title={fileManagerOpen ? "关闭左侧文件管理器" : "打开左侧文件管理器"}
+          aria-label={fileManagerToggleLabel}
+          title={fileManagerToggleLabel}
           data-testid="inputbar-file-manager-toggle"
           onClick={onToggleFileManager}
         >
@@ -639,7 +662,7 @@ export function EmptyStateComposerPanel({
               </SelectTrigger>
               <SelectContent className="min-w-[200px] p-1" side="top">
                 <div className="px-2 py-1.5 text-xs font-medium text-slate-500">
-                  选择创作模式
+                  {copy.creationMode.label}
                 </div>
                 {(
                   Object.entries(CREATION_MODE_CONFIG) as [
@@ -664,7 +687,7 @@ export function EmptyStateComposerPanel({
               className={EMPTY_STATE_PASSIVE_BADGE_CLASSNAME}
             >
               <Globe className="mr-1 h-3.5 w-3.5" />
-              通用任务上下文
+              {copy.generalContext}
             </Badge>
           ) : null}
         </>
@@ -706,6 +729,7 @@ export function EmptyStateComposerPanel({
       />
 
       <InputbarCore
+        uiCopy={inputbarCopy}
         textareaRef={textareaRef}
         text={draftInput}
         setText={setDraftInput}
@@ -741,6 +765,7 @@ export function EmptyStateComposerPanel({
         showMetaTools={showAdvancedControls}
         inputSuggestion={activeInputSuggestion}
         onAcceptInputSuggestion={handleAcceptInputSuggestion}
+        listenForVoiceShortcut
       />
     </>
   );

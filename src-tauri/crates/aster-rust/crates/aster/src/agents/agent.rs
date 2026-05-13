@@ -600,6 +600,128 @@ fn extract_tool_result_metadata<T: serde::Serialize>(result: &T) -> Option<Value
         .and_then(|value| find_metadata(&value, 0))
 }
 
+fn string_list_from_metadata(value: Option<&Value>) -> Vec<String> {
+    match value {
+        Some(Value::Array(items)) => items
+            .iter()
+            .filter_map(Value::as_str)
+            .map(str::trim)
+            .filter(|item| !item.is_empty())
+            .map(str::to_string)
+            .collect(),
+        Some(Value::String(item)) => item
+            .split(',')
+            .map(str::trim)
+            .filter(|item| !item.is_empty())
+            .map(str::to_string)
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn metadata_string_matches(actual: Option<&Value>, expected: &str) -> bool {
+    actual
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .is_some_and(|actual| actual.eq_ignore_ascii_case(expected.trim()))
+}
+
+fn tool_result_metadata_matches_stop_rule(metadata: &Value, rule: &Value) -> bool {
+    let Some(rule) = rule.as_object() else {
+        return false;
+    };
+
+    if let Some(expected) = rule
+        .get("metadata_equals")
+        .or_else(|| rule.get("metadataEquals"))
+        .and_then(Value::as_object)
+    {
+        let all_matched = expected.iter().all(|(key, expected_value)| {
+            expected_value
+                .as_str()
+                .map(|expected_text| metadata_string_matches(metadata.get(key), expected_text))
+                .unwrap_or_else(|| metadata.get(key) == Some(expected_value))
+        });
+        if !all_matched {
+            return false;
+        }
+    }
+
+    let required_keys = string_list_from_metadata(
+        rule.get("require_any")
+            .or_else(|| rule.get("requireAny"))
+            .or_else(|| rule.get("required_any"))
+            .or_else(|| rule.get("requiredAny")),
+    );
+    if !required_keys.is_empty() {
+        let has_required = required_keys.iter().any(|key| {
+            metadata.get(key).is_some_and(|value| match value {
+                Value::Null => false,
+                Value::String(text) => !text.trim().is_empty(),
+                _ => true,
+            })
+        });
+        if !has_required {
+            return false;
+        }
+    }
+
+    let statuses = string_list_from_metadata(
+        rule.get("statuses")
+            .or_else(|| rule.get("status_values"))
+            .or_else(|| rule.get("statusValues")),
+    );
+    if !statuses.is_empty() {
+        let Some(actual_status) = metadata
+            .get("status")
+            .and_then(Value::as_str)
+            .map(str::trim)
+        else {
+            return false;
+        };
+        if !statuses
+            .iter()
+            .any(|expected| actual_status.eq_ignore_ascii_case(expected))
+        {
+            return false;
+        }
+    }
+
+    true
+}
+
+fn should_stop_after_tool_result(
+    turn_context: Option<&TurnContextOverride>,
+    messages_to_add: &Conversation,
+) -> bool {
+    let Some(stop_rule) = turn_context
+        .and_then(|context| context.metadata.get("runtime_control"))
+        .or_else(|| turn_context.and_then(|context| context.metadata.get("runtimeControl")))
+        .and_then(|control| {
+            control
+                .get("stop_after_tool_result")
+                .or_else(|| control.get("stopAfterToolResult"))
+        })
+    else {
+        return false;
+    };
+
+    messages_to_add.messages().iter().any(|message| {
+        message.content.iter().any(|content| {
+            let MessageContent::ToolResponse(tool_response) = content else {
+                return false;
+            };
+            let Ok(result) = tool_response.tool_result.as_ref() else {
+                return false;
+            };
+            let Some(metadata) = extract_tool_result_metadata(result) else {
+                return false;
+            };
+            tool_result_metadata_matches_stop_rule(&metadata, stop_rule)
+        })
+    })
+}
+
 fn native_tool_metadata_to_value(
     metadata: std::collections::HashMap<String, Value>,
 ) -> Option<Value> {
@@ -1061,7 +1183,12 @@ impl TurnItemRuntimeProjector {
     }
 
     fn project_user_input(&mut self, turn: &TurnRuntime) -> Option<AgentEvent> {
-        let content = turn.input_text.as_ref()?.trim();
+        let content = turn
+            .context_override
+            .as_ref()
+            .and_then(|context| context.user_visible_input_text.as_deref())
+            .or(turn.input_text.as_deref())?
+            .trim();
         if content.is_empty() {
             return None;
         }
@@ -3421,7 +3548,15 @@ impl Agent {
         let scope_session_config = session_config.clone();
         let stream_session_config = session_config.clone();
         let scoped_session_config = session_config.clone();
-        let input_text_for_turn = (!message_text.trim().is_empty()).then_some(message_text.clone());
+        let input_text_for_turn = scoped_session_config
+            .turn_context
+            .as_ref()
+            .and_then(|context| context.user_visible_input_text.as_deref())
+            .and_then(|input_text| {
+                let value = input_text.trim();
+                (!value.is_empty()).then(|| value.to_string())
+            })
+            .or_else(|| (!message_text.trim().is_empty()).then_some(message_text.clone()));
 
         Ok(Self::scope_reply_stream(
             &scope_session_config,
@@ -4133,6 +4268,11 @@ impl Agent {
                             }
                         }
                     }
+                } else if should_stop_after_tool_result(
+                    session_config.turn_context.as_ref(),
+                    &messages_to_add,
+                ) {
+                    exit_chat = true;
                 }
 
                 for msg in &messages_to_add {
@@ -4962,6 +5102,38 @@ mod tests {
             events.is_empty(),
             "agent-only 消息不应再投影到用户可见事件流"
         );
+    }
+
+    #[test]
+    fn test_project_user_input_prefers_user_visible_turn_context() {
+        let turn = TurnRuntime::new(
+            "turn-skill-visible",
+            "session-1",
+            "thread-1",
+            Some("内部结构化执行输入".to_string()),
+            Some(TurnContextOverride {
+                user_visible_input_text: Some(
+                    "@analysis 帮我分析一下今天的国际形势".to_string(),
+                ),
+                ..TurnContextOverride::default()
+            }),
+        );
+        let mut projector = TurnItemRuntimeProjector::new(&turn);
+
+        let event = projector
+            .project_user_input(&turn)
+            .expect("user input event");
+
+        assert!(matches!(
+            event,
+            AgentEvent::ItemStarted { item }
+                if item.id == "user_input:turn-skill-visible"
+                    && matches!(
+                        item.payload,
+                        ItemRuntimePayload::UserInput { ref text }
+                            if text == "@analysis 帮我分析一下今天的国际形势"
+                    )
+        ));
     }
 
     #[test]
@@ -6849,6 +7021,86 @@ mod tests {
             Some(&Value::Bool(true))
         );
         assert!(tool_surface_updated_from_call_tool_result(&call_result));
+    }
+
+    #[test]
+    fn test_should_stop_after_tool_result_matches_forwarded_image_task_metadata() {
+        let turn_context = TurnContextOverride {
+            metadata: HashMap::from([(
+                "runtime_control".to_string(),
+                serde_json::json!({
+                    "stop_after_tool_result": {
+                        "metadata_equals": {
+                            "skill_forwarded_tool_name": "lime_create_image_generation_task",
+                            "task_type": "image_generate"
+                        },
+                        "require_any": ["task_id", "artifact_path", "path"],
+                        "statuses": ["pending_submit", "queued", "running", "partial", "succeeded"]
+                    }
+                }),
+            )]),
+            ..TurnContextOverride::default()
+        };
+        let mut messages = Conversation::default();
+        messages.push(Message::user().with_tool_response(
+            "call-image-skill",
+            Ok(CallToolResult {
+                content: vec![Content::text("图片任务已创建")],
+                structured_content: Some(serde_json::json!({
+                    "skill_forwarded_tool_name": "lime_create_image_generation_task",
+                    "task_type": "image_generate",
+                    "task_id": "task-image-1",
+                    "status": "pending_submit"
+                })),
+                is_error: Some(false),
+                meta: None,
+            }),
+        ));
+
+        assert!(should_stop_after_tool_result(
+            Some(&turn_context),
+            &messages
+        ));
+    }
+
+    #[test]
+    fn test_should_stop_after_tool_result_ignores_unmatched_metadata() {
+        let turn_context = TurnContextOverride {
+            metadata: HashMap::from([(
+                "runtime_control".to_string(),
+                serde_json::json!({
+                    "stop_after_tool_result": {
+                        "metadata_equals": {
+                            "skill_forwarded_tool_name": "lime_create_image_generation_task",
+                            "task_type": "image_generate"
+                        },
+                        "require_any": ["task_id"],
+                        "statuses": ["pending_submit"]
+                    }
+                }),
+            )]),
+            ..TurnContextOverride::default()
+        };
+        let mut messages = Conversation::default();
+        messages.push(Message::user().with_tool_response(
+            "call-other",
+            Ok(CallToolResult {
+                content: vec![Content::text("其它工具完成")],
+                structured_content: Some(serde_json::json!({
+                    "skill_forwarded_tool_name": "lime_create_cover_generation_task",
+                    "task_type": "cover_generate",
+                    "task_id": "task-cover-1",
+                    "status": "pending_submit"
+                })),
+                is_error: Some(false),
+                meta: None,
+            }),
+        ));
+
+        assert!(!should_stop_after_tool_result(
+            Some(&turn_context),
+            &messages
+        ));
     }
 
     #[tokio::test]

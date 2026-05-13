@@ -267,6 +267,285 @@ describe("agentChatHistory", () => {
     expect(messages[0]?.content).not.toContain("辅助标题生成");
   });
 
+  it("后端 messages 只有助手图片轨迹时应从真实 turn 补回用户指令", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-image-history-user-fallback",
+      created_at: 1,
+      updated_at: 2,
+      messages: [
+        {
+          role: "assistant",
+          timestamp: 1710000005,
+          content: [
+            {
+              type: "output_text",
+              text: "好啊，生成：画一张三国主要人物的群像海报",
+            } as never,
+            {
+              type: "tool_request",
+              id: "tool-image-history-user-fallback",
+              tool_name: "lime_create_image_generation_task",
+              arguments: {
+                prompt: "画一张三国主要人物的群像海报，电影感，国风，高清",
+                size: "1024x1024",
+              },
+            } as never,
+            {
+              type: "tool_response",
+              id: "tool-image-history-user-fallback",
+              success: true,
+              output: "图片任务已提交",
+              metadata: {
+                task_id: "task-image-history-user-fallback",
+                task_type: "image_generate",
+                status: "succeeded",
+                requested_count: 1,
+                received_count: 1,
+              },
+            } as never,
+          ],
+        },
+      ],
+      turns: [
+        {
+          id: "turn-image-history-user-fallback",
+          thread_id: "session-image-history-user-fallback",
+          prompt_text:
+            "@配图 画一张三国主要人物的群像海报，电影感，国风，高清",
+          status: "completed",
+          started_at: "2026-05-06T10:00:00.000Z",
+          completed_at: "2026-05-06T10:00:05.000Z",
+          created_at: "2026-05-06T10:00:00.000Z",
+          updated_at: "2026-05-06T10:00:05.000Z",
+        },
+      ],
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-image-history-user-fallback",
+    );
+
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+    ]);
+    expect(messages[0]).toMatchObject({
+      role: "user",
+      content: "@配图 画一张三国主要人物的群像海报，电影感，国风，高清",
+    });
+    expect(messages[1]).toMatchObject({
+      role: "assistant",
+      imageWorkbenchPreview: {
+        taskId: "task-image-history-user-fallback",
+        prompt: "画一张三国主要人物的群像海报，电影感，国风，高清",
+        status: "complete",
+      },
+    });
+  });
+
+  it("后端连续两轮只有助手图片轨迹时应按 turn 顺序补回各自用户指令", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-image-history-two-turns",
+      created_at: 1,
+      updated_at: 2,
+      messages: [
+        {
+          role: "assistant",
+          timestamp: 1710000005,
+          content: [
+            {
+              type: "output_text",
+              text: "好啊，生成：广州塔春天照片",
+            } as never,
+            {
+              type: "tool_response",
+              id: "tool-image-history-two-turns-1",
+              success: true,
+              output: "图片任务已提交",
+              metadata: {
+                task_id: "task-image-history-two-turns-1",
+                task_type: "image_generate",
+                status: "succeeded",
+                received_count: 1,
+              },
+            } as never,
+          ],
+        },
+        {
+          role: "assistant",
+          timestamp: 1710000015,
+          content: [
+            {
+              type: "output_text",
+              text: "好啊，生成：青柠极简插画",
+            } as never,
+            {
+              type: "tool_response",
+              id: "tool-image-history-two-turns-2",
+              success: true,
+              output: "图片任务已提交",
+              metadata: {
+                task_id: "task-image-history-two-turns-2",
+                task_type: "image_generate",
+                status: "succeeded",
+                received_count: 1,
+              },
+            } as never,
+          ],
+        },
+      ],
+      turns: [
+        {
+          id: "turn-image-history-two-turns-1",
+          thread_id: "session-image-history-two-turns",
+          prompt_text: "@配图 生成一张广州塔春天照片",
+          status: "completed",
+          started_at: "2026-05-06T10:00:00.000Z",
+          completed_at: "2026-05-06T10:00:05.000Z",
+          created_at: "2026-05-06T10:00:00.000Z",
+          updated_at: "2026-05-06T10:00:05.000Z",
+        },
+        {
+          id: "turn-image-history-two-turns-2",
+          thread_id: "session-image-history-two-turns",
+          prompt_text: "@配图 再生成一张青柠极简插画",
+          status: "completed",
+          started_at: "2026-05-06T10:00:10.000Z",
+          completed_at: "2026-05-06T10:00:15.000Z",
+          created_at: "2026-05-06T10:00:10.000Z",
+          updated_at: "2026-05-06T10:00:15.000Z",
+        },
+      ],
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-image-history-two-turns",
+    );
+
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+      "user",
+      "assistant",
+    ]);
+    expect(messages[0]?.content).toBe("@配图 生成一张广州塔春天照片");
+    expect(messages[2]?.content).toBe("@配图 再生成一张青柠极简插画");
+    expect(messages[1]?.imageWorkbenchPreview?.taskId).toBe(
+      "task-image-history-two-turns-1",
+    );
+    expect(messages[3]?.imageWorkbenchPreview?.taskId).toBe(
+      "task-image-history-two-turns-2",
+    );
+  });
+
+  it("后端只缺部分用户图片指令时也应按时间补回缺失轮次", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-image-history-partial-user-gap",
+      created_at: 1,
+      updated_at: 2,
+      messages: [
+        {
+          role: "user",
+          timestamp: 1710000000,
+          content: [
+            {
+              type: "input_text",
+              text: "@配图 生成一张广州塔春天照片",
+            } as never,
+          ],
+        },
+        {
+          role: "assistant",
+          timestamp: 1710000005,
+          content: [
+            {
+              type: "output_text",
+              text: "好啊，生成：广州塔春天照片",
+            } as never,
+            {
+              type: "tool_response",
+              id: "tool-image-history-partial-user-gap-1",
+              success: true,
+              output: "图片任务已提交",
+              metadata: {
+                task_id: "task-image-history-partial-user-gap-1",
+                task_type: "image_generate",
+                status: "succeeded",
+                received_count: 1,
+              },
+            } as never,
+          ],
+        },
+        {
+          role: "assistant",
+          timestamp: 1710000015,
+          content: [
+            {
+              type: "output_text",
+              text: "好啊，生成：青柠极简插画",
+            } as never,
+            {
+              type: "tool_response",
+              id: "tool-image-history-partial-user-gap-2",
+              success: true,
+              output: "图片任务已提交",
+              metadata: {
+                task_id: "task-image-history-partial-user-gap-2",
+                task_type: "image_generate",
+                status: "succeeded",
+                received_count: 1,
+              },
+            } as never,
+          ],
+        },
+      ],
+      turns: [
+        {
+          id: "turn-image-history-partial-user-gap-1",
+          thread_id: "session-image-history-partial-user-gap",
+          prompt_text: "@配图 生成一张广州塔春天照片",
+          status: "completed",
+          started_at: "2024-03-09T16:00:00.000Z",
+          completed_at: "2024-03-09T16:00:05.000Z",
+          created_at: "2024-03-09T16:00:00.000Z",
+          updated_at: "2024-03-09T16:00:05.000Z",
+        },
+        {
+          id: "turn-image-history-partial-user-gap-2",
+          thread_id: "session-image-history-partial-user-gap",
+          prompt_text: "@配图 再生成一张青柠极简插画",
+          status: "completed",
+          started_at: "2024-03-09T16:00:10.000Z",
+          completed_at: "2024-03-09T16:00:15.000Z",
+          created_at: "2024-03-09T16:00:10.000Z",
+          updated_at: "2024-03-09T16:00:15.000Z",
+        },
+      ],
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-image-history-partial-user-gap",
+    );
+
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+      "user",
+      "assistant",
+    ]);
+    expect(messages[0]?.content).toBe("@配图 生成一张广州塔春天照片");
+    expect(messages[2]?.content).toBe("@配图 再生成一张青柠极简插画");
+    expect(messages[1]?.imageWorkbenchPreview?.taskId).toBe(
+      "task-image-history-partial-user-gap-1",
+    );
+    expect(messages[3]?.imageWorkbenchPreview?.taskId).toBe(
+      "task-image-history-partial-user-gap-2",
+    );
+  });
+
   it("已完成旧会话压缩水合时应跳过工具过程，仅保留可见正文", () => {
     const detail: AsterSessionDetail = {
       id: "session-compact-history",
@@ -333,14 +612,18 @@ describe("agentChatHistory", () => {
       { compactCompletedHistory: true },
     );
 
-    expect(messages).toHaveLength(1);
+    expect(messages).toHaveLength(2);
     expect(messages[0]).toMatchObject({
+      role: "user",
+      content: "恢复旧会话",
+    });
+    expect(messages[1]).toMatchObject({
       role: "assistant",
       content: "最终回复正文",
       thinkingContent: undefined,
       toolCalls: undefined,
     });
-    expect(messages[0]?.contentParts).toEqual([
+    expect(messages[1]?.contentParts).toEqual([
       {
         type: "text",
         text: "最终回复正文",
@@ -389,12 +672,15 @@ describe("agentChatHistory", () => {
       { compactCompletedHistory: true },
     );
 
-    expect(messages[0]?.toolCalls?.[0]).toMatchObject({
+    const assistantMessage = messages.find(
+      (message) => message.role === "assistant",
+    );
+    expect(assistantMessage?.toolCalls?.[0]).toMatchObject({
       id: "call-running",
       status: "running",
     });
     expect(
-      messages[0]?.contentParts?.some((part) => part.type === "tool_use"),
+      assistantMessage?.contentParts?.some((part) => part.type === "tool_use"),
     ).toBe(true);
   });
 
@@ -1313,7 +1599,8 @@ describe("agentChatHistory", () => {
       {
         id: "local-user-skill-output",
         role: "user" as const,
-        content: "整理 Lime 产品知识库",
+        content:
+          "/brand-product-knowledge-builder 请根据现有资料整理 Lime 产品知识库并保留边界说明",
         timestamp: new Date("2026-05-13T03:37:00.000Z"),
       },
       {
@@ -1322,6 +1609,7 @@ describe("agentChatHistory", () => {
         content: "本地流式完成后的产品知识库结果。",
         timestamp: new Date("2026-05-13T03:37:01.000Z"),
         isThinking: false,
+        runtimeTurnId: "skill-exec-local-assistant-skill-output",
         thinkingContent: "先识别产品卖点，再输出知识库。",
         contentParts: [
           {
@@ -1339,7 +1627,7 @@ describe("agentChatHistory", () => {
       {
         id: "history-user-skill-output",
         role: "user" as const,
-        content: "整理 Lime 产品知识库",
+        content: "请根据现有资料整理 Lime 产品知识库并保留边界说明",
         timestamp: new Date("2026-05-13T03:37:02.000Z"),
       },
       {
@@ -1364,6 +1652,7 @@ describe("agentChatHistory", () => {
     expect(mergedMessages[1]).toMatchObject({
       id: "local-assistant-skill-output",
       content: "本地流式完成后的产品知识库结果。",
+      runtimeTurnId: "skill-exec-local-assistant-skill-output",
       thinkingContent: "先识别产品卖点，再输出知识库。",
     });
     expect(mergedMessages[1]?.contentParts).toEqual([
@@ -1374,6 +1663,80 @@ describe("agentChatHistory", () => {
       {
         type: "text",
         text: "本地流式完成后的产品知识库结果。",
+      },
+    ]);
+  });
+
+  it("服务型 Skill 本地过程不应被远端纯正文刷新掉", () => {
+    const localMessages = [
+      {
+        id: "local-user-service-skill-output",
+        role: "user" as const,
+        content: "整理 Lime 产品知识库",
+        timestamp: new Date("2026-05-13T03:38:00.000Z"),
+      },
+      {
+        id: "local-assistant-service-skill-output",
+        role: "assistant" as const,
+        content: "本地服务型 Skill 完成后的产品知识库结果。",
+        timestamp: new Date("2026-05-13T03:38:01.000Z"),
+        isThinking: false,
+        runtimeTurnId: "turn-service-skill-output",
+        inlineProcessRetention: "skill" as const,
+        thinkingContent: "先读取服务型 Skill，再输出知识库。",
+        contentParts: [
+          {
+            type: "thinking" as const,
+            text: "先读取服务型 Skill，再输出知识库。",
+          },
+          {
+            type: "text" as const,
+            text: "本地服务型 Skill 完成后的产品知识库结果。",
+          },
+        ],
+      },
+    ];
+    const hydratedMessages = [
+      {
+        id: "history-user-service-skill-output",
+        role: "user" as const,
+        content: "整理 Lime 产品知识库",
+        timestamp: new Date("2026-05-13T03:38:02.000Z"),
+      },
+      {
+        id: "history-assistant-service-skill-output",
+        role: "assistant" as const,
+        content: "远端服务型 Skill 纯正文结果。",
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "远端服务型 Skill 纯正文结果。",
+          },
+        ],
+        timestamp: new Date("2026-05-13T03:38:03.000Z"),
+      },
+    ];
+
+    const mergedMessages = mergeHydratedMessagesWithLocalState(
+      localMessages,
+      hydratedMessages,
+    );
+
+    expect(mergedMessages[1]).toMatchObject({
+      id: "local-assistant-service-skill-output",
+      content: "本地服务型 Skill 完成后的产品知识库结果。",
+      runtimeTurnId: "turn-service-skill-output",
+      inlineProcessRetention: "skill",
+      thinkingContent: "先读取服务型 Skill，再输出知识库。",
+    });
+    expect(mergedMessages[1]?.contentParts).toEqual([
+      {
+        type: "thinking",
+        text: "先读取服务型 Skill，再输出知识库。",
+      },
+      {
+        type: "text",
+        text: "本地服务型 Skill 完成后的产品知识库结果。",
       },
     ]);
   });

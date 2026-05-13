@@ -5,6 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { BuiltinCommandBadge } from "../components/BuiltinCommandBadge";
 import { RuntimeSceneBadge } from "../components/RuntimeSceneBadge";
 import { CuratedTaskBadge } from "../../../skill-selection/CuratedTaskBadge";
@@ -56,6 +57,7 @@ import {
   readSystemPathReferencesFromFiles,
 } from "../../../utils/pathReferences";
 import { toast } from "sonner";
+import { buildInputbarControllerCopy } from "./inputbarControllerCopy";
 
 interface UseInputbarControllerParams {
   input: string;
@@ -134,6 +136,11 @@ export function useInputbarController({
   onImportSkill,
   onRefreshSkills,
 }: UseInputbarControllerParams & SkillSelectionSourceProps) {
+  const { t } = useTranslation("agent");
+  const copy = useMemo(
+    () => buildInputbarControllerCopy((key) => t(key)),
+    [t],
+  );
   const [activeCapability, setActiveCapability] =
     useState<InputCapabilitySelection | null>(null);
   const [knowledgeHubOpenRequestKey, setKnowledgeHubOpenRequestKey] =
@@ -186,7 +193,7 @@ export function useInputbarController({
           file.type.startsWith("image/"),
         );
         if (!hasImageFile) {
-          toast.error("无法读取系统文件路径，请从内置文件管理器拖入。");
+          toast.error(copy.systemPathDropUnsupported);
           event.preventDefault();
           event.stopPropagation();
           return;
@@ -195,7 +202,7 @@ export function useInputbarController({
 
       handleImageDrop(event);
     },
-    [handleImageDrop, onAddPathReferences],
+    [copy.systemPathDropUnsupported, handleImageDrop, onAddPathReferences],
   );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isWorkspaceVariant = variant === "workspace";
@@ -532,10 +539,10 @@ export function useInputbarController({
         };
       });
       setCuratedTaskEditorPrefillHint(
-        "已按最近判断切到更适合的结果模板，你可以继续改后再发。",
+        copy.curatedTaskReviewSuggestionPrefillHint,
       );
     },
-    [],
+    [copy.curatedTaskReviewSuggestionPrefillHint],
   );
   const handleConfirmCuratedTaskEdit = useCallback(
     (

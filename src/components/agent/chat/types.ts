@@ -436,6 +436,8 @@ export interface Message {
   runtimeStatus?: AgentRuntimeStatus;
   /** 当前消息显式绑定的运行时回合 ID，用于避免执行过程跨轮串线 */
   runtimeTurnId?: string;
+  /** 完成后仍需保留的内联过程来源。 */
+  inlineProcessRetention?: "skill";
   /** 消息用途（用于跳过特定副作用） */
   purpose?: "content_review" | "text_stylize" | "style_rewrite" | "style_audit";
   /** 用户发送时显式选择的输入能力，用于历史气泡还原 @ Skill 等标签。 */

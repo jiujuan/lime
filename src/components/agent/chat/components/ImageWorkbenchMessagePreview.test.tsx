@@ -6,6 +6,7 @@ import type { MessageImageWorkbenchPreview } from "../types";
 import { ImageWorkbenchMessagePreview } from "./ImageWorkbenchMessagePreview";
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
+const IMAGE_WORKBENCH_TASK_ACTION_EVENT = "lime:image-workbench-task-action";
 
 function renderPreview(preview: MessageImageWorkbenchPreview) {
   const container = document.createElement("div");
@@ -60,6 +61,13 @@ describe("ImageWorkbenchMessagePreview", () => {
     expect(container.textContent).toContain("Image Generation");
     expect(container.textContent).toContain("Nanobanana Pro");
     expect(container.textContent).toContain("搞定，已生成这张图。");
+    expect(
+      container
+        .querySelector(
+          '[data-testid="image-workbench-message-preview-toolbar-image-preview-complete"]',
+        )
+        ?.className.toString(),
+    ).not.toContain("border");
     expect(container.querySelector("img")?.getAttribute("src")).toBe(
       "data:image/png;base64,aW1hZ2U=",
     );
@@ -100,5 +108,52 @@ describe("ImageWorkbenchMessagePreview", () => {
     );
     expect(container.textContent).not.toContain("参考图");
     expect(container.textContent).not.toContain("部分完成");
+  });
+
+  it("failed preview exposes a dedicated retry action without replacing the open card", () => {
+    const { container } = renderPreview({
+      taskId: "image-preview-failed",
+      prompt: "Create a lime poster",
+      mode: "generate",
+      status: "failed",
+      projectId: "project-1",
+      contentId: "content-1",
+      statusMessage: "Provider timeout",
+    });
+
+    let actionDetail: Record<string, unknown> | null = null;
+    const handleAction = (event: Event) => {
+      if (!(event instanceof CustomEvent)) {
+        return;
+      }
+      actionDetail = event.detail as Record<string, unknown>;
+    };
+    window.addEventListener(IMAGE_WORKBENCH_TASK_ACTION_EVENT, handleAction);
+
+    const openButton = container.querySelector(
+      '[data-testid="image-workbench-message-preview-image-preview-failed"]',
+    ) as HTMLButtonElement | null;
+    const retryButton = container.querySelector(
+      '[data-testid="image-workbench-message-preview-action-image-preview-failed-retry"]',
+    ) as HTMLButtonElement | null;
+
+    expect(openButton?.getAttribute("aria-label")).toBe("Open image result");
+    expect(retryButton?.textContent).toContain("Retry");
+
+    act(() => {
+      retryButton?.click();
+    });
+
+    expect(actionDetail).toEqual({
+      action: "retry",
+      taskId: "image-preview-failed",
+      projectId: "project-1",
+      contentId: "content-1",
+    });
+
+    window.removeEventListener(
+      IMAGE_WORKBENCH_TASK_ACTION_EVENT,
+      handleAction,
+    );
   });
 });

@@ -316,6 +316,8 @@ interface UseAgentSessionOptions {
   sessionIdRef: MutableRefObject<string | null>;
   currentAssistantMsgIdRef: MutableRefObject<string | null>;
   currentStreamingSessionIdRef: MutableRefObject<string | null>;
+  currentStreamingEventNameRef: MutableRefObject<string | null>;
+  detachStreamBindingsRef: MutableRefObject<(() => void) | null>;
   resetPendingActions: () => void;
   persistSessionModelPreference: (
     sessionId: string,
@@ -365,6 +367,8 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     sessionIdRef,
     currentAssistantMsgIdRef,
     currentStreamingSessionIdRef,
+    currentStreamingEventNameRef,
+    detachStreamBindingsRef,
     resetPendingActions,
     persistSessionModelPreference,
     loadSessionModelPreference,
@@ -537,9 +541,16 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   }, []);
 
   const resetStreamingRefs = useCallback(() => {
+    detachStreamBindingsRef.current?.();
     currentAssistantMsgIdRef.current = null;
     currentStreamingSessionIdRef.current = null;
-  }, [currentAssistantMsgIdRef, currentStreamingSessionIdRef]);
+    currentStreamingEventNameRef.current = null;
+  }, [
+    currentAssistantMsgIdRef,
+    currentStreamingEventNameRef,
+    currentStreamingSessionIdRef,
+    detachStreamBindingsRef,
+  ]);
   const setMessagesState = useCallback<Dispatch<SetStateAction<Message[]>>>(
     (value) => {
       const nextMessages =
@@ -551,6 +562,30 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     },
     [],
   );
+  const setThreadTurnsState = useCallback<
+    Dispatch<SetStateAction<AgentThreadTurn[]>>
+  >((value) => {
+    const nextThreadTurns =
+      typeof value === "function"
+        ? (value as (previous: AgentThreadTurn[]) => AgentThreadTurn[])(
+            threadTurnsRef.current,
+          )
+        : value;
+    threadTurnsRef.current = nextThreadTurns;
+    setThreadTurns(nextThreadTurns);
+  }, []);
+  const setThreadItemsState = useCallback<
+    Dispatch<SetStateAction<AgentThreadItem[]>>
+  >((value) => {
+    const nextThreadItems =
+      typeof value === "function"
+        ? (value as (previous: AgentThreadItem[]) => AgentThreadItem[])(
+            threadItemsRef.current,
+          )
+        : value;
+    threadItemsRef.current = nextThreadItems;
+    setThreadItems(nextThreadItems);
+  }, []);
 
   const persistSessionRestoreCandidate = useCallback(
     (nextSessionId: string | null) => {
@@ -3075,9 +3110,9 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     messages,
     setMessages: setMessagesState,
     threadTurns,
-    setThreadTurns,
+    setThreadTurns: setThreadTurnsState,
     threadItems,
-    setThreadItems,
+    setThreadItems: setThreadItemsState,
     currentTurnId,
     setCurrentTurnId,
     todoItems,

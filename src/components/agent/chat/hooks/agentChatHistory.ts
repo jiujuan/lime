@@ -31,6 +31,7 @@ import {
   sanitizeContentPartsForDisplay,
   sanitizeMessageTextForDisplay,
 } from "../utils/internalImagePlaceholder";
+import { isRetainedSkillProcessMessage } from "../utils/skillInlineProcessRetention";
 
 export const normalizeHistoryPartType = (value: unknown): string => {
   if (typeof value !== "string") return "";
@@ -325,6 +326,15 @@ export function normalizeHistoricalTopicSnapshotMessage(
     return message;
   }
 
+  if (isRetainedSkillProcessMessage(message)) {
+    return {
+      ...message,
+      thinkingContent:
+        message.thinkingContent ??
+        extractThinkingContentFromParts(message.contentParts),
+    };
+  }
+
   const visibleContentParts = (message.contentParts || []).filter(
     (part) => part.type === "text" || part.type === "action_required",
   );
@@ -515,6 +525,132 @@ function hydrateSessionDetailMessagesFromTurns(
     .filter((message): message is Message => message !== null);
 
   return dedupeAdjacentHistoryMessages(messages);
+}
+
+function hasHistoryAssistantProcessGap(messages: Message[]): boolean {
+  return messages.some(
+    (message) =>
+      message.role === "assistant" &&
+      ((message.contentParts || []).some(contentPartContainsProcess) ||
+        (message.toolCalls?.length || 0) > 0 ||
+        Boolean(message.imageWorkbenchPreview) ||
+        Boolean(message.taskPreview)),
+  );
+}
+
+function mergeMissingUserMessagesFromTimeline(
+  messages: Message[],
+  detail: AsterSessionDetail,
+  topicId: string,
+): Message[] {
+  const buildFallbackUserSignature = (message: Message): string =>
+    [
+      normalizeSignatureText(message.content || ""),
+      messageImageSignature(message.images),
+    ].join("::");
+  const fallbackUserMessages: Message[] = [];
+  const seenFallbackUserSignatures = new Set<string>();
+  for (const candidate of [
+    ...hydrateSessionDetailMessagesFromThreadItems(detail, topicId),
+    ...hydrateSessionDetailMessagesFromTurns(detail, topicId),
+  ]) {
+    if (candidate.role !== "user") {
+      continue;
+    }
+    const signature = buildFallbackUserSignature(candidate);
+    if (seenFallbackUserSignatures.has(signature)) {
+      continue;
+    }
+    seenFallbackUserSignatures.add(signature);
+    fallbackUserMessages.push(candidate);
+  }
+  if (fallbackUserMessages.length === 0) {
+    return messages;
+  }
+
+  const knownUserSignatures = new Set(
+    messages
+      .filter((message) => message.role === "user")
+      .map(buildFallbackUserSignature),
+  );
+  const uniqueFallbackUserMessages = fallbackUserMessages.filter(
+    (fallbackMessage) => {
+      const signature = buildFallbackUserSignature(fallbackMessage);
+      if (knownUserSignatures.has(signature)) {
+        return false;
+      }
+      knownUserSignatures.add(signature);
+      return true;
+    },
+  );
+  if (uniqueFallbackUserMessages.length === 0) {
+    return messages;
+  }
+
+  const interleavedMessages: Message[] = [];
+  const hasExistingUserMessage = messages.some(
+    (message) => message.role === "user",
+  );
+
+  if (hasExistingUserMessage && !hasHistoryAssistantProcessGap(messages)) {
+    return messages;
+  }
+
+  if (!hasExistingUserMessage) {
+    let fallbackUserIndex = 0;
+    for (const message of messages) {
+      if (fallbackUserIndex < uniqueFallbackUserMessages.length) {
+        interleavedMessages.push(uniqueFallbackUserMessages[fallbackUserIndex]!);
+        fallbackUserIndex += 1;
+      }
+      interleavedMessages.push(message);
+    }
+    interleavedMessages.push(
+      ...uniqueFallbackUserMessages.slice(fallbackUserIndex),
+    );
+  } else {
+    interleavedMessages.push(...messages);
+    const orderedFallbackUserMessages = uniqueFallbackUserMessages
+      .map((message, index) => ({ message, index }))
+      .sort((left, right) => {
+        const leftTimestampMs = resolveMessageTimestampMs(left.message);
+        const rightTimestampMs = resolveMessageTimestampMs(right.message);
+        if (leftTimestampMs === rightTimestampMs) {
+          return left.index - right.index;
+        }
+        if (leftTimestampMs === null) {
+          return 1;
+        }
+        if (rightTimestampMs === null) {
+          return -1;
+        }
+        return leftTimestampMs - rightTimestampMs;
+      });
+
+    for (const { message } of orderedFallbackUserMessages) {
+      const fallbackTimestampMs = resolveMessageTimestampMs(message);
+      const insertIndex =
+        fallbackTimestampMs === null
+          ? -1
+          : interleavedMessages.findIndex((candidate) => {
+              const candidateTimestampMs = resolveMessageTimestampMs(candidate);
+              return (
+                candidate.role !== "user" &&
+                candidateTimestampMs !== null &&
+                candidateTimestampMs >= fallbackTimestampMs
+              );
+            });
+      if (insertIndex >= 0) {
+        interleavedMessages.splice(insertIndex, 0, message);
+      } else {
+        interleavedMessages.push(message);
+      }
+    }
+  }
+
+  return mergeAdjacentAssistantMessages(
+    dedupeAdjacentHistoryMessages(interleavedMessages),
+  );
 }
 
 function normalizePreviewSignatureValue(value: unknown): string {
@@ -865,6 +1001,22 @@ function shouldMergeAdjacentAssistantMessages(
     return true;
   }
 
+  if (
+    previous.imageWorkbenchPreview?.taskId &&
+    current.imageWorkbenchPreview?.taskId &&
+    previous.imageWorkbenchPreview.taskId !== current.imageWorkbenchPreview.taskId
+  ) {
+    return false;
+  }
+
+  if (
+    previous.taskPreview?.taskId &&
+    current.taskPreview?.taskId &&
+    previous.taskPreview.taskId !== current.taskPreview.taskId
+  ) {
+    return false;
+  }
+
   const previousHasThinking = hasAssistantThinkingContent(previous);
   const currentHasThinking = hasAssistantThinkingContent(current);
   if (!previousHasThinking && !currentHasThinking) {
@@ -882,6 +1034,14 @@ const findMatchingLocalUserMessageIndex = (
   startIndex: number,
 ): number => {
   const targetContent = normalizeSignatureText(targetMessage.content || "");
+  const hasLooseContentMatch = (candidateContent: string): boolean => {
+    const minLength = Math.min(candidateContent.length, targetContent.length);
+    return (
+      minLength >= 24 &&
+      (candidateContent.includes(targetContent) ||
+        targetContent.includes(candidateContent))
+    );
+  };
 
   for (let index = startIndex; index < localUserMessages.length; index += 1) {
     const candidate = localUserMessages[index];
@@ -890,7 +1050,10 @@ const findMatchingLocalUserMessageIndex = (
     }
 
     const candidateContent = normalizeSignatureText(candidate.content || "");
-    if (candidateContent === targetContent) {
+    if (
+      candidateContent === targetContent ||
+      hasLooseContentMatch(candidateContent)
+    ) {
       return index;
     }
   }
@@ -1310,6 +1473,11 @@ export const mergeHydratedMessagesWithLocalState = (
         contextTrace,
         artifacts,
         thinkingContent: resolvedThinkingContent,
+        runtimeTurnId:
+          message.runtimeTurnId ?? localAssistantMessage?.runtimeTurnId,
+        inlineProcessRetention:
+          message.inlineProcessRetention ??
+          localAssistantMessage?.inlineProcessRetention,
         imageWorkbenchPreview: mergeImageWorkbenchPreview(
           localImagePreview,
           message.imageWorkbenchPreview,
@@ -1822,6 +1990,7 @@ export const hydrateSessionDetailMessages = (
           role: normalizedRole,
           hasImages: images.length > 0,
         }) || [];
+
       const hasToolMetadata =
         toolCalls.length > 0 ||
         sanitizedContentParts.some((part) => part.type === "tool_use");
@@ -1870,7 +2039,15 @@ export const hydrateSessionDetailMessages = (
     dedupeAdjacentHistoryMessages(loadedMessages),
   );
 
-  if (hydratedMessages.length > 0 || detail.messages.length > 0) {
+  if (hydratedMessages.length > 0) {
+    return mergeMissingUserMessagesFromTimeline(
+      hydratedMessages,
+      detail,
+      topicId,
+    );
+  }
+
+  if (detail.messages.length > 0) {
     return hydratedMessages;
   }
 

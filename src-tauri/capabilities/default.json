@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Lime 默认权限配置",
-  "windows": ["main", "smart-input", "browser-connector-guide-*"],
+  "windows": ["main", "browser-connector-guide-*"],
   "permissions": [
     "core:default",
     "core:event:default",

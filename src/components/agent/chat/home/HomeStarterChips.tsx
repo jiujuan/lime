@@ -1,4 +1,5 @@
 import type { HomeStarterChip } from "./homeSurfaceTypes";
+import type { HomeSurfaceChromeCopy } from "./homeSurfaceCopy";
 import styled from "styled-components";
 import { BookOpen, Lightbulb, Settings } from "lucide-react";
 
@@ -68,6 +69,7 @@ const StarterIcon = styled.span`
 
 interface HomeStarterChipsProps {
   chips: HomeStarterChip[];
+  copy: Pick<HomeSurfaceChromeCopy, "starterManagerLabel" | "starterRowLabel">;
   onSelect: (chip: HomeStarterChip) => void;
 }
 
@@ -97,17 +99,26 @@ function renderStarterIcon(chip: HomeStarterChip) {
   return null;
 }
 
-export function HomeStarterChips({ chips, onSelect }: HomeStarterChipsProps) {
+export function HomeStarterChips({
+  chips,
+  copy,
+  onSelect,
+}: HomeStarterChipsProps) {
   return (
-    <StarterRow data-testid="home-starter-chips" aria-label="首页起手入口">
+    <StarterRow
+      data-testid="home-starter-chips"
+      aria-label={copy.starterRowLabel}
+    >
       {chips.map((chip) => (
         <StarterButton
           key={chip.id}
           type="button"
           $primary={chip.primary}
           data-testid={chip.testId}
-          aria-label={chip.label === "⚙" ? "管理做法" : chip.label}
-          title={chip.label === "⚙" ? "管理做法" : chip.label}
+          aria-label={
+            chip.label === "⚙" ? copy.starterManagerLabel : chip.label
+          }
+          title={chip.label === "⚙" ? copy.starterManagerLabel : chip.label}
           onClick={() => onSelect(chip)}
         >
           {renderStarterIcon(chip)}

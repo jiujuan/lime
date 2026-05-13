@@ -312,6 +312,51 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
     expect(messageDispatchCount).toBe(0);
   });
 
+  it("空白新草稿不应从旧图片工作台状态回灌轻卡", async () => {
+    let messageDispatchCount = 0;
+    const staleImageWorkbenchState: SessionImageWorkbenchState = {
+      ...createInitialSessionImageWorkbenchState(),
+      tasks: [
+        {
+          sessionId: "stale-local-image-session",
+          id: "task-image-stale-local",
+          mode: "generate",
+          status: "running",
+          prompt: "上一条会话的广州塔图片",
+          rawText: "@配图 上一条会话的广州塔图片",
+          expectedCount: 1,
+          outputIds: [],
+          createdAt: Date.now(),
+          hookImageIds: [],
+          applyTarget: null,
+        },
+      ],
+    };
+    const { render, getValue } = renderHook(
+      {
+        sessionId: "local-image-session-new-draft",
+        contentId: null,
+        restoreFromWorkspace: false,
+      },
+      {
+        initialImageWorkbenchState: staleImageWorkbenchState,
+        onSetChatMessagesDispatch: () => {
+          messageDispatchCount += 1;
+        },
+      },
+    );
+
+    await render();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(getValue().messages).toEqual([]);
+    expect(messageDispatchCount).toBe(0);
+    expect(getValue().imageWorkbenchState.tasks).toHaveLength(1);
+  });
+
   it("应先插入运行中占位卡，再根据 task file 回填图片与工作台状态", async () => {
     let listener: CreationTaskListener | null = null;
     vi.mocked(safeListen).mockImplementationOnce(async (event, handler) => {
@@ -1054,6 +1099,7 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
         "马上生成",
       ].join("\n"),
       isThinking: false,
+      thinkingContent: "开始中 广州塔春天照片",
       contentParts: undefined,
       toolCalls: undefined,
       runtimeStatus: undefined,
@@ -2472,6 +2518,11 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
 
     expect(getValue().messages).toEqual([
       expect.objectContaining({
+        id: `image-workbench:${taskId}:user`,
+        role: "user",
+        content: "@配图 生成 三国人物插画",
+      }),
+      expect.objectContaining({
         id: `image-workbench:${taskId}:assistant`,
         content: expect.stringContaining("三国人物插画"),
         isThinking: false,
@@ -2642,6 +2693,11 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
     });
 
     expect(getValue().messages).toEqual([
+      expect.objectContaining({
+        id: `image-workbench:${taskId}:user`,
+        role: "user",
+        content: "@配图 生成 已缓存的三国群像",
+      }),
       expect.objectContaining({
         id: `image-workbench:${taskId}:assistant`,
         content: expect.stringContaining("已缓存的三国群像"),

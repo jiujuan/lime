@@ -26,7 +26,7 @@ use crate::commands::modality_runtime_contracts::hydrate_limecore_policy_hits_fr
 use aster::agents::extension::PlatformExtensionContext;
 use aster::hooks::{CompactTrigger, SessionSource};
 use aster::session::TurnContextOverride;
-use aster::tools::{ConfigTool, SkillTool};
+use aster::tools::{ConfigTool, SkillTool, ToolContext};
 use lime_agent::{build_diagnostics_runtime_status_metadata, AgentEvent as RuntimeAgentEvent};
 use lime_core::database::dao::agent_timeline::{AgentThreadItemPayload, AgentThreadItemStatus};
 use lime_core::workspace::WorkspaceSettings;
@@ -264,10 +264,13 @@ async fn sync_runtime_skill_source_agent(session_id: &str, agent: &Agent) -> Res
             extension_manager: Some(Arc::downgrade(&donor.extension_manager)),
         })
         .await;
-    donor
-        .inherit_runtime_tool_surface_from(agent)
-        .await
-        .map_err(|error| format!("继承 runtime tool surface 失败: {error}"))?;
+    if let Err(error) = donor.inherit_runtime_tool_surface_from(agent).await {
+        tracing::warn!(
+            "[AsterAgent] 继承 runtime extension 工具面失败，保留 native 工具面供 Skill 使用: session={}, error={}",
+            session_id,
+            error
+        );
+    }
     SkillTool::register_source_agent_for_session(session_id.to_string(), Arc::new(donor)).await;
     Ok(())
 }
@@ -875,6 +878,177 @@ fn emit_service_skill_preload_runtime_events(
             result: projection.result,
         },
     );
+}
+
+fn build_image_skill_launch_tool_context(
+    workspace_root: &str,
+    session_id: &str,
+    thread_id: &str,
+    turn_id: &str,
+    project_id: Option<&str>,
+    content_id: Option<&str>,
+) -> ToolContext {
+    let mut environment = HashMap::new();
+    environment.insert("LIME_THREAD_ID".to_string(), thread_id.to_string());
+    environment.insert("PROXYCAST_THREAD_ID".to_string(), thread_id.to_string());
+    environment.insert("LIME_TURN_ID".to_string(), turn_id.to_string());
+    environment.insert("PROXYCAST_TURN_ID".to_string(), turn_id.to_string());
+    if let Some(project_id) = project_id.map(str::trim).filter(|value| !value.is_empty()) {
+        environment.insert("LIME_PROJECT_ID".to_string(), project_id.to_string());
+        environment.insert("PROXYCAST_PROJECT_ID".to_string(), project_id.to_string());
+    }
+    if let Some(content_id) = content_id.map(str::trim).filter(|value| !value.is_empty()) {
+        environment.insert("LIME_CONTENT_ID".to_string(), content_id.to_string());
+        environment.insert("PROXYCAST_CONTENT_ID".to_string(), content_id.to_string());
+    }
+
+    ToolContext::new(Path::new(workspace_root).to_path_buf())
+        .with_session_id(session_id.to_string())
+        .with_environment(environment)
+}
+
+fn image_skill_launch_agent_tool_result(
+    tool_result: aster::tools::ToolResult,
+) -> lime_agent::AgentToolResult {
+    let success = tool_result.success;
+    let error = tool_result.error;
+    let mut metadata = tool_result.metadata;
+    let forwarded_metadata = metadata.clone();
+    metadata.insert(
+        "skill_forwarded_tool_name".to_string(),
+        serde_json::json!(LIME_CREATE_IMAGE_TASK_TOOL_NAME),
+    );
+    metadata.insert(
+        "skill_forwarded_tool_metadata".to_string(),
+        serde_json::json!(forwarded_metadata),
+    );
+    metadata.insert(
+        "allowed_tools".to_string(),
+        serde_json::json!([LIME_CREATE_IMAGE_TASK_TOOL_NAME]),
+    );
+    metadata.insert(
+        "command_name".to_string(),
+        serde_json::json!("user:image_generate"),
+    );
+    metadata.insert(
+        "skill".to_string(),
+        serde_json::json!({
+            "success": success,
+            "error": error.clone(),
+            "stepsCompleted": [],
+        }),
+    );
+
+    lime_agent::AgentToolResult {
+        success,
+        output: String::new(),
+        error,
+        images: None,
+        metadata: Some(metadata),
+    }
+}
+
+fn image_skill_launch_failed_tool_result(error: &str) -> lime_agent::AgentToolResult {
+    lime_agent::AgentToolResult {
+        success: false,
+        output: String::new(),
+        error: Some(error.to_string()),
+        images: None,
+        metadata: Some(HashMap::from([
+            (
+                "skill_forwarded_tool_name".to_string(),
+                serde_json::json!(LIME_CREATE_IMAGE_TASK_TOOL_NAME),
+            ),
+            (
+                "source".to_string(),
+                serde_json::json!("image_skill_launch"),
+            ),
+            ("task_type".to_string(), serde_json::json!("image_generate")),
+        ])),
+    }
+}
+
+fn emit_image_skill_launch_tool_event(
+    app: &AppHandle,
+    event_name: &str,
+    timeline_recorder: &Arc<Mutex<AgentTimelineRecorder>>,
+    workspace_root: &str,
+    event: RuntimeAgentEvent,
+) {
+    emit_runtime_side_event(app, event_name, timeline_recorder, workspace_root, event);
+}
+
+fn execute_image_skill_launch_direct_task(
+    app: &AppHandle,
+    request: &AsterChatRequest,
+    timeline_recorder: &Arc<Mutex<AgentTimelineRecorder>>,
+    workspace_root: &str,
+    session_id: &str,
+    thread_id: &str,
+    turn_id: &str,
+    request_metadata: Option<&serde_json::Value>,
+) -> Result<bool, String> {
+    let Some(task) = build_image_skill_launch_direct_task(
+        request_metadata,
+        session_id,
+        thread_id,
+        turn_id,
+        request.project_id.as_deref(),
+    )?
+    else {
+        return Ok(false);
+    };
+
+    let tool_id = format!("image-skill-launch:{turn_id}");
+    emit_image_skill_launch_tool_event(
+        app,
+        &request.event_name,
+        timeline_recorder,
+        workspace_root,
+        RuntimeAgentEvent::ToolStart {
+            tool_name: "Skill".to_string(),
+            tool_id: tool_id.clone(),
+            arguments: Some(task.skill_tool_arguments),
+        },
+    );
+
+    let context = build_image_skill_launch_tool_context(
+        workspace_root,
+        session_id,
+        thread_id,
+        turn_id,
+        request.project_id.as_deref(),
+        None,
+    );
+    match submit_image_generation_task_value(app, &context, task.tool_params) {
+        Ok(tool_result) => {
+            emit_image_skill_launch_tool_event(
+                app,
+                &request.event_name,
+                timeline_recorder,
+                workspace_root,
+                RuntimeAgentEvent::ToolEnd {
+                    tool_id,
+                    result: image_skill_launch_agent_tool_result(tool_result),
+                },
+            );
+            Ok(true)
+        }
+        Err(error) => {
+            let message = format!("创建图片任务失败: {error}");
+            emit_image_skill_launch_tool_event(
+                app,
+                &request.event_name,
+                timeline_recorder,
+                workspace_root,
+                RuntimeAgentEvent::ToolEnd {
+                    tool_id,
+                    result: image_skill_launch_failed_tool_result(&message),
+                },
+            );
+            Err(message)
+        }
+    }
 }
 
 fn build_artifact_document_warning_message(
@@ -1519,6 +1693,59 @@ impl RuntimeTurnPreparedExecution {
                     &error,
                 );
                 return Err(error);
+            }
+        }
+
+        match execute_image_skill_launch_direct_task(
+            app,
+            request,
+            &self.runtime_turn_execution_context.timeline_recorder,
+            workspace_root,
+            session_id,
+            self.thread_id(),
+            self.turn_id(),
+            request_metadata,
+        ) {
+            Ok(true) => {
+                return finalize_runtime_turn_result(
+                    agent,
+                    app,
+                    state,
+                    db,
+                    &request.event_name,
+                    &self.runtime_turn_execution_context.timeline_recorder,
+                    workspace_root,
+                    &self
+                        .runtime_turn_execution_context
+                        .runtime_status_session_config,
+                    &self.runtime_turn_execution_context.profile_stream,
+                    &self.runtime_turn_execution_context.task_profile_refs,
+                    session_id,
+                    request_metadata,
+                    Ok(String::new()),
+                )
+                .await;
+            }
+            Ok(false) => {}
+            Err(error) => {
+                return finalize_runtime_turn_result(
+                    agent,
+                    app,
+                    state,
+                    db,
+                    &request.event_name,
+                    &self.runtime_turn_execution_context.timeline_recorder,
+                    workspace_root,
+                    &self
+                        .runtime_turn_execution_context
+                        .runtime_status_session_config,
+                    &self.runtime_turn_execution_context.profile_stream,
+                    &self.runtime_turn_execution_context.task_profile_refs,
+                    session_id,
+                    request_metadata,
+                    Err(error),
+                )
+                .await;
             }
         }
 

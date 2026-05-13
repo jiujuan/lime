@@ -92,6 +92,7 @@ import {
   getSiteSkillAutoLaunchExample,
   hasAutoLaunchableSiteSkill,
 } from "../service-skills/siteSkillExamplePrompts";
+import { buildServiceSkillHomeCopy } from "../service-skills/homeCopy";
 import { listFeaturedHomeServiceSkills } from "../service-skills/homeEntrySkills";
 import type { SceneAppEntryCardItem } from "../sceneappEntryTypes";
 import type { RuntimeToolAvailability } from "../utils/runtimeToolAvailability";
@@ -111,11 +112,8 @@ import {
   buildHomeSkillSections,
   buildHomeStarterChips,
 } from "../home/buildHomeSkillSurface";
-import {
-  HOME_COMPOSER_PLACEHOLDER,
-  HOME_GUIDE_HELP_CONTEXT_LABEL,
-  HOME_GUIDE_HELP_PLACEHOLDER,
-} from "../home/homeSurfaceCopy";
+import { buildHomeSurfaceCopy } from "../home/homeSurfaceCopy";
+import { buildInputbarCoreCopy } from "./Inputbar/components/inputbarCoreCopy";
 import type {
   HomeGuideCard,
   HomeSkillSurfaceItem,
@@ -439,22 +437,6 @@ const THEME_ICONS: Record<string, string> = {
   general: "✨",
 };
 
-const THEME_WORKBENCH_COPY: Record<
-  string,
-  {
-    title: string;
-    description: string;
-    supportingDescription?: string;
-  }
-> = {
-  general: {
-    title: "",
-    description: "说一句目标，Lime 就接着帮你做。",
-    supportingDescription:
-      "文案、图片、视频、搜索和网页任务围绕同一目标持续推进，并沉淀上下文、偏好和做法。",
-  },
-};
-
 function truncatePrompt(value: string, maxLength = 92) {
   const normalized = value.trim().replace(/\s+/g, " ");
   if (normalized.length <= maxLength) {
@@ -511,7 +493,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   onResumeRecentSceneApp,
   recentSessionTitle = null,
   recentSessionSummary = null,
-  recentSessionActionLabel = "继续最近会话",
+  recentSessionActionLabel,
   onResumeRecentSession,
   onOpenSceneAppsDirectory,
   projectId = null,
@@ -538,12 +520,26 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   onToggleFileManager,
 }) => {
   const { t } = useTranslation("agent");
-  const curatedTaskTemplateCopy = useMemo(
-    () =>
-      buildCuratedTaskTemplateCopy((key, values) =>
-        t(key as AgentI18nKey, values ?? {}),
-      ),
+  const translateAgentCopyKey = useCallback(
+    (key: string, values?: Record<string, number | string>) =>
+      t(key as AgentI18nKey, values ?? {}),
     [t],
+  );
+  const curatedTaskTemplateCopy = useMemo(
+    () => buildCuratedTaskTemplateCopy(translateAgentCopyKey),
+    [translateAgentCopyKey],
+  );
+  const serviceSkillHomeCopy = useMemo(
+    () => buildServiceSkillHomeCopy(translateAgentCopyKey),
+    [translateAgentCopyKey],
+  );
+  const homeSurfaceCopy = useMemo(
+    () => buildHomeSurfaceCopy(translateAgentCopyKey),
+    [translateAgentCopyKey],
+  );
+  const inputbarCoreCopy = useMemo(
+    () => buildInputbarCoreCopy(translateAgentCopyKey),
+    [translateAgentCopyKey],
   );
   const pageContainerRef = useRef<HTMLDivElement | null>(null);
   const handledInitialInputCapabilitySignatureRef = useRef("");
@@ -859,7 +855,11 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
           setPendingImages((prev) => [...prev, image]);
         })
         .catch(() => {
-          toast.error(`图片读取失败: ${file.name || "未命名图片"}`);
+          toast.error(
+            homeSurfaceCopy.toast.imageReadFailed(
+              file.name || homeSurfaceCopy.toast.unnamedImage,
+            ),
+          );
         });
     });
 
@@ -878,11 +878,15 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         .then((image) => {
           setPendingImages((prev) => [...prev, image]);
           if (index === 0) {
-            toast.success("已粘贴图片");
+            toast.success(homeSurfaceCopy.toast.imagePasted);
           }
         })
         .catch(() => {
-          toast.error(`图片读取失败: ${file.name || "未命名图片"}`);
+          toast.error(
+            homeSurfaceCopy.toast.imageReadFailed(
+              file.name || homeSurfaceCopy.toast.unnamedImage,
+            ),
+          );
         });
     });
   };
@@ -922,11 +926,15 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
           .then((image) => {
             setPendingImages((prev) => [...prev, image]);
             if (index === 0) {
-              toast.success("已添加图片");
+              toast.success(homeSurfaceCopy.toast.imageAdded);
             }
           })
           .catch(() => {
-            toast.error(`图片读取失败: ${file.name || "未命名图片"}`);
+            toast.error(
+              homeSurfaceCopy.toast.imageReadFailed(
+                file.name || homeSurfaceCopy.toast.unnamedImage,
+              ),
+            );
           });
       });
       return;
@@ -935,7 +943,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     if (files && files.length > 0) {
       event.preventDefault();
       event.stopPropagation();
-      toast.error("无法读取系统文件路径，请从内置文件管理器拖入。");
+      toast.error(homeSurfaceCopy.toast.systemPathDropUnsupported);
     }
   };
 
@@ -981,7 +989,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     const effectiveInput = inputOverride.trim()
       ? inputOverride
       : hasPathReferences
-        ? "请查看这些文件或文件夹。"
+        ? homeSurfaceCopy.composerPathReferenceFallbackPrompt
         : inputOverride;
     const sendOptions =
       capabilityDispatch.capabilityRoute ||
@@ -1008,14 +1016,13 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     clearSelectedSkill?.();
   };
 
-  const workbenchCopy =
-    THEME_WORKBENCH_COPY[activeTheme] || THEME_WORKBENCH_COPY.general;
-
   // Dynamic Placeholder
   const getPlaceholder = () => {
     return hasAutoLaunchSiteSkill
-      ? `直接说一句话，例如：${siteSkillAutoLaunchExample}`
-      : HOME_COMPOSER_PLACEHOLDER;
+      ? homeSurfaceCopy.composerAutoLaunchPlaceholder(
+          siteSkillAutoLaunchExample,
+        )
+      : homeSurfaceCopy.composerPlaceholder;
   };
 
   const handleApplyRecommendation = useCallback(
@@ -1105,10 +1112,10 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         options.referenceSelection.referenceEntries,
       );
       setCuratedTaskLauncherPrefillHint(
-        `已按最近判断切到更适合的结果模板，你可以继续改后再进入生成。`,
+        homeSurfaceCopy.curatedTaskReviewSuggestionPrefillHint,
       );
     },
-    [],
+    [homeSurfaceCopy.curatedTaskReviewSuggestionPrefillHint],
   );
 
   const handleApplyCuratedTaskTemplate = useCallback(
@@ -1201,67 +1208,15 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         key: `${activeTheme}-${shortLabel}`,
         title: shortLabel,
         description: truncatePrompt(fullPrompt),
-        badge: `${THEME_ICONS[activeTheme] || "✨"} 快速启动`,
+        badge: homeSurfaceCopy.quickActions.badge(
+          THEME_ICONS[activeTheme] || "✨",
+        ),
         prompt: fullPrompt,
       })),
-    [activeTheme, currentRecommendations],
+    [activeTheme, currentRecommendations, homeSurfaceCopy.quickActions],
   );
 
-  const quickStartPresets = useMemo(() => {
-    const presets = [
-      {
-        key: "generate-image",
-        label: "生成配图",
-        icon: "✨",
-        prompt:
-          "请帮我生成一张适合当前主题的高质量图片，并先帮我整理一版可直接用于生图模型的详细 Prompt。",
-      },
-      {
-        key: "join-notebook",
-        label: "整理为 Notebook",
-        icon: "📒",
-        prompt:
-          "请把这个主题整理成 notebook 工作方式：背景、资料、思路、草稿、待办分栏组织。",
-      },
-      {
-        key: "create-skill",
-        label: "设计 Skill",
-        icon: "🧩",
-        prompt:
-          "请帮我设计一个可复用的 Skill，先定义适用场景、输入输出、执行步骤和失败回退策略。",
-      },
-      {
-        key: "create-slides",
-        label: "生成演示稿",
-        icon: "🖥️",
-        prompt:
-          "请基于当前主题生成一份演示文稿结构，包含封面、目录、核心论点、案例页和结论页。",
-      },
-      {
-        key: "frontend-design",
-        label: "前端界面方案",
-        icon: "🌐",
-        prompt:
-          "请帮我设计一个前端界面方案，先给出信息架构、关键模块、视觉方向和组件层级。",
-      },
-      {
-        key: "copymail-skill",
-        label: "专业邮件草稿",
-        icon: "✉️",
-        prompt:
-          "请帮我起草一封专业邮件，先确认收件对象、语气、目标和希望对方采取的下一步动作。",
-      },
-      {
-        key: "research-skills",
-        label: "进入研究模式",
-        icon: "🔎",
-        prompt:
-          "请先进入研究模式，帮我围绕当前主题做信息收集、观点归纳、风险点识别和结论总结。",
-      },
-    ];
-
-    return presets;
-  }, []);
+  const quickStartPresets = homeSurfaceCopy.quickActions.presets;
 
   const [homeCatalogEntries, setHomeCatalogEntries] = useState<
     SkillCatalogEntry[]
@@ -1318,16 +1273,16 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     [serviceSkills],
   );
   const homeStarterChips = useMemo(
-    () => buildHomeStarterChips(homeCatalogEntries),
-    [homeCatalogEntries],
+    () => buildHomeStarterChips(homeCatalogEntries, homeSurfaceCopy),
+    [homeCatalogEntries, homeSurfaceCopy],
   );
   const homeInputSuggestions = useMemo(
-    () => buildHomeInputSuggestions(homeCatalogEntries),
-    [homeCatalogEntries],
+    () => buildHomeInputSuggestions(homeCatalogEntries, homeSurfaceCopy),
+    [homeCatalogEntries, homeSurfaceCopy],
   );
   const homeGuideCards = useMemo(
-    () => buildHomeGuideCards(homeCatalogEntries),
-    [homeCatalogEntries],
+    () => buildHomeGuideCards(homeCatalogEntries, homeSurfaceCopy),
+    [homeCatalogEntries, homeSurfaceCopy],
   );
   const guideHelpStarterLabel = useMemo(
     () =>
@@ -1336,13 +1291,14 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     [homeStarterChips],
   );
   const guideHelpLabel = guideHelpStarterLabel
-    ? `Lime ${guideHelpStarterLabel}`
-    : HOME_GUIDE_HELP_CONTEXT_LABEL;
+    ? homeSurfaceCopy.guideHelpContextLabelWithStarter(guideHelpStarterLabel)
+    : homeSurfaceCopy.guideHelpContextLabel;
 
   const homeSkillItems = useMemo(() => {
     void slashEntryUsageVersion;
     return buildHomeSkillItems({
       curatedTasks: curatedTaskTemplates,
+      serviceSkillHomeCopy,
       catalogSceneEntries: homeCatalogSceneEntries,
       serviceSkills: homeServiceSkillItems,
       installedSkills: skillSelection.skills ?? [],
@@ -1354,13 +1310,14 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     featuredSceneApps,
     homeCatalogSceneEntries,
     homeServiceSkillItems,
+    serviceSkillHomeCopy,
     skillSelection.skills,
     slashEntryUsageVersion,
   ]);
 
   const homeSkillSections = useMemo(
-    () => buildHomeSkillSections(homeSkillItems),
-    [homeSkillItems],
+    () => buildHomeSkillSections(homeSkillItems, homeSurfaceCopy),
+    [homeSkillItems, homeSurfaceCopy],
   );
   const homeGalleryItems = useMemo(
     () => buildHomeGalleryItems(homeSkillItems, "all"),
@@ -1535,11 +1492,18 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
 
   const recentSessionLinkLabel = useMemo(() => {
     const normalizedTitle = truncatePrompt(recentSessionTitle || "", 18);
+    const effectiveRecentSessionActionLabel =
+      recentSessionActionLabel ??
+      homeSurfaceCopy.chrome.recentSessionDefaultActionLabel;
     if (!normalizedTitle) {
-      return recentSessionActionLabel;
+      return effectiveRecentSessionActionLabel;
     }
-    return `${recentSessionActionLabel} · ${normalizedTitle}`;
-  }, [recentSessionActionLabel, recentSessionTitle]);
+    return `${effectiveRecentSessionActionLabel} · ${normalizedTitle}`;
+  }, [
+    homeSurfaceCopy.chrome.recentSessionDefaultActionLabel,
+    recentSessionActionLabel,
+    recentSessionTitle,
+  ]);
   const recentSessionLinkTitle = useMemo(
     () =>
       [recentSessionTitle, recentSessionSummary]
@@ -1565,7 +1529,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     if (canResumeRecentSceneApp && onResumeRecentSceneApp) {
       actions.push({
         id: "recent-sceneapp",
-        label: "继续最近做法",
+        label: homeSurfaceCopy.chrome.recentSceneAppActionLabel,
         testId: "entry-sceneapp-resume",
         onSelect: onResumeRecentSceneApp,
       });
@@ -1574,6 +1538,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     return actions;
   }, [
     canResumeRecentSceneApp,
+    homeSurfaceCopy.chrome.recentSceneAppActionLabel,
     onResumeRecentSceneApp,
     onResumeRecentSession,
     recentSessionLinkLabel,
@@ -1586,7 +1551,9 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       <EmptyStateComposerPanel
         input={input}
         placeholder={
-          guideHelpActive ? HOME_GUIDE_HELP_PLACEHOLDER : getPlaceholder()
+          guideHelpActive
+            ? homeSurfaceCopy.guideHelpPlaceholder
+            : getPlaceholder()
         }
         onSend={handleSend}
         activeTheme={activeTheme}
@@ -1630,7 +1597,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
                     effectiveDefaultCuratedTaskReferenceMemoryIds,
                   activeCuratedTaskReferenceEntries ||
                     effectiveDefaultCuratedTaskReferenceEntries,
-                  "已按最近判断切到更适合的结果模板，你可以继续改后再进入生成。",
+                  homeSurfaceCopy.curatedTaskReviewSuggestionPrefillHint,
                 )
             : undefined
         }
@@ -1651,6 +1618,8 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         onToggleKnowledgeCompanionPack={onToggleKnowledgeCompanionPack}
         onStartKnowledgeOrganize={onStartKnowledgeOrganize}
         onManageKnowledgePacks={onManageKnowledgePacks}
+        copy={homeSurfaceCopy.composer}
+        inputbarCopy={inputbarCoreCopy}
         showCreationModeSelector={showCreationModeSelector}
         creationMode={creationMode}
         onCreationModeChange={onCreationModeChange}
@@ -1688,8 +1657,8 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
 
   const defaultQuickActionsPanel = (
     <EmptyStateQuickActions
-      title="快速启动"
-      description="先选一个任务模板，再在当前会话里继续补充和追问。"
+      title={homeSurfaceCopy.quickActions.title}
+      description={homeSurfaceCopy.quickActions.description}
       selectedTextPreview={selectedTextPreview}
       presets={quickStartPresets}
       items={quickActionItems}
@@ -1704,6 +1673,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   const homeStartSurfacePanel = (
     <HomeStartSurface
       starterChips={homeStarterChips}
+      copy={homeSurfaceCopy.chrome}
       guideCards={homeGuideCards}
       guideOpen={guideHelpActive}
       sections={homeSkillSections}
@@ -1730,11 +1700,11 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     <PageContainer ref={pageContainerRef}>
       <ContentWrapper>
         <EmptyStateHero
-          eyebrow="创作"
-          title={workbenchCopy.title}
-          slogan="青柠一下，灵感即来"
-          description={workbenchCopy.description}
-          supportingDescription={workbenchCopy.supportingDescription}
+          eyebrow={homeSurfaceCopy.hero.eyebrow}
+          title=""
+          slogan={homeSurfaceCopy.hero.slogan}
+          description={homeSurfaceCopy.hero.description}
+          supportingDescription={homeSurfaceCopy.hero.supportingDescription}
           cards={[]}
           prioritySlot={composerPanel}
           supportingSlot={
@@ -1745,11 +1715,11 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
           <ScrollCue
             href="#home-skill-gallery-screen"
             data-testid="home-scroll-cue"
-            aria-label="向下滑，看看 Lime 可以帮你做什么"
+            aria-label={homeSurfaceCopy.chrome.scrollCueLabel}
           >
             <ScrollCueLine aria-hidden />
             <ScrollCueText>
-              向下滑，看看 Lime 可以帮你做什么
+              {homeSurfaceCopy.chrome.scrollCueLabel}
               <ScrollCueArrow aria-hidden>↓</ScrollCueArrow>
             </ScrollCueText>
             <ScrollCueLine aria-hidden />
@@ -1759,13 +1729,14 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       {isGeneralTheme && homeGalleryItems.length > 0 ? (
         <SecondScreenSection
           id="home-skill-gallery-screen"
-          aria-label="Lime 可执行任务示例"
+          aria-label={homeSurfaceCopy.chrome.secondScreenLabel}
           data-testid="home-second-screen"
           onWheel={handleSecondScreenWheel}
         >
           <SecondScreenInner>
             <HomeSkillGallery
               items={homeGalleryItems}
+              copy={homeSurfaceCopy.chrome}
               onSelectItem={handleSelectHomeSkillItem}
             />
           </SecondScreenInner>

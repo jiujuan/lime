@@ -29,6 +29,8 @@ import {
   CONTENT_POST_SKILL_KEY,
   mergeContentPostArtifactMetadata,
 } from "../utils/contentPostSkill";
+import { SKILL_INLINE_PROCESS_RETENTION } from "../utils/skillInlineProcessRetention";
+import { saveAgentSessionCachedMessagesSnapshot } from "./agentSessionScopedStorage";
 import {
   buildImageTaskPreviewFromToolResult,
   buildTaskPreviewFromToolResult,
@@ -43,6 +45,7 @@ import {
   appendTextToParts,
   appendTextWithOverlapDetection,
 } from "./agentChatHistory";
+import { reconcileAgentStreamFinalContentParts } from "./agentStreamCompletionController";
 
 /** 解析 /skill-name args 命令 */
 export interface ParsedSkillCommand {
@@ -60,6 +63,7 @@ export interface SlashSkillExecutionContext {
   images?: MessageImage[];
   requestContext?: Record<string, unknown>;
   requestMetadata?: Record<string, unknown>;
+  workspaceId?: string;
   ensureSession: () => Promise<string | null>;
   setMessages: Dispatch<SetStateAction<Message[]>>;
   setIsSending: (value: boolean) => void;
@@ -94,6 +98,7 @@ const VALID_ACTION_TYPES = new Set<ActionRequired["actionType"]>([
   "ask_user",
   "elicitation",
 ]);
+const SKILL_EXECUTION_THINKING_PREFIX = "正在执行 Skill:";
 const WRITE_FILE_TAG_REGEX =
   /<write_file(?:\s+path=["'][^"']+["'])?\s*>[\s\S]*?<\/write_file>/i;
 
@@ -186,7 +191,6 @@ function appendTextPart(
       ...msg,
       content: nextContent,
       isThinking: false,
-      thinkingContent: undefined,
       contentParts: appendTextToParts(msg.contentParts || [], textDelta),
     };
   });
@@ -202,11 +206,18 @@ function appendThinkingPart(
 
     const nextParts = [...(msg.contentParts || [])];
     const lastPart = nextParts[nextParts.length - 1];
+    const shouldReplacePlaceholder =
+      lastPart?.type === "thinking" &&
+      lastPart.text.trim().startsWith(SKILL_EXECUTION_THINKING_PREFIX) &&
+      (!msg.thinkingContent?.trim() ||
+        msg.thinkingContent.trim().startsWith(SKILL_EXECUTION_THINKING_PREFIX));
 
     if (lastPart && lastPart.type === "thinking") {
       nextParts[nextParts.length - 1] = {
         type: "thinking",
-        text: appendTextWithOverlapDetection(lastPart.text, textDelta),
+        text: shouldReplacePlaceholder
+          ? textDelta
+          : appendTextWithOverlapDetection(lastPart.text, textDelta),
       };
     } else {
       nextParts.push({ type: "thinking", text: textDelta });
@@ -215,12 +226,29 @@ function appendThinkingPart(
     return {
       ...msg,
       isThinking: true,
-      thinkingContent: appendTextWithOverlapDetection(
-        msg.thinkingContent || "",
-        textDelta,
-      ),
+      thinkingContent: shouldReplacePlaceholder
+        ? textDelta
+        : appendTextWithOverlapDetection(msg.thinkingContent || "", textDelta),
       contentParts: nextParts,
     };
+  });
+}
+
+function hasTextContentPart(parts: Message["contentParts"]): boolean {
+  return Boolean(
+    parts?.some((part) => part.type === "text" && part.text.trim().length > 0),
+  );
+}
+
+function reconcileFinalSkillContentParts(
+  parts: Message["contentParts"],
+  finalContent: string,
+): Message["contentParts"] {
+  return reconcileAgentStreamFinalContentParts({
+    parts,
+    finalContent,
+    rawContent: finalContent,
+    surfaceThinkingDeltas: true,
   });
 }
 
@@ -391,6 +419,7 @@ export async function tryExecuteSlashSkillCommand(
     images,
     requestContext,
     requestMetadata,
+    workspaceId,
     ensureSession,
     setMessages,
     setIsSending,
@@ -406,6 +435,7 @@ export async function tryExecuteSlashSkillCommand(
   const { matchedSkill, catalogLoadFailed } = await findMatchedSkill(
     command.skillName,
   );
+  const skillRuntimeTurnId = `skill-exec-${assistantMsgId}`;
   if (!matchedSkill) {
     const failure = resolveSkillFailure(
       catalogLoadFailed
@@ -460,6 +490,7 @@ export async function tryExecuteSlashSkillCommand(
   }
 
   setActiveSessionIdForStop(activeSessionId);
+  const initialThinkingText = `${SKILL_EXECUTION_THINKING_PREFIX} ${matchedSkill.display_name}...`;
 
   setMessages((prev) =>
     prev.map((msg) =>
@@ -467,9 +498,16 @@ export async function tryExecuteSlashSkillCommand(
         ? {
             ...msg,
             isThinking: true,
-            thinkingContent: `正在执行 Skill: ${matchedSkill.display_name}...`,
+            thinkingContent: initialThinkingText,
             content: "",
-            contentParts: [],
+            contentParts: [
+              {
+                type: "thinking" as const,
+                text: initialThinkingText,
+              },
+            ],
+            runtimeTurnId: skillRuntimeTurnId,
+            inlineProcessRetention: SKILL_INLINE_PROCESS_RETENTION,
           }
         : msg,
     ),
@@ -517,6 +555,18 @@ export async function tryExecuteSlashSkillCommand(
     setIsSending(false);
     setCurrentAssistantMsgId(null);
     setActiveSessionIdForStop(null);
+  };
+  const persistSkillExecutionSnapshot = (messages: Message[]) => {
+    const resolvedWorkspaceId = workspaceId?.trim();
+    if (!resolvedWorkspaceId || !activeSessionId) {
+      return;
+    }
+
+    saveAgentSessionCachedMessagesSnapshot(
+      resolvedWorkspaceId,
+      activeSessionId,
+      messages,
+    );
   };
 
   try {
@@ -840,8 +890,11 @@ export async function tryExecuteSlashSkillCommand(
                 ? {
                     ...msg,
                     isThinking: false,
-                    thinkingContent: undefined,
                     content: accumulatedContent || msg.content,
+                    contentParts: reconcileFinalSkillContentParts(
+                      msg.contentParts,
+                      accumulatedContent || msg.content || "",
+                    ),
                   }
                 : msg,
             ),
@@ -852,15 +905,21 @@ export async function tryExecuteSlashSkillCommand(
           streamCounters.error += 1;
           setMessages((prev) =>
             prev.map((msg) =>
-              msg.id === assistantMsgId
-                ? {
-                    ...msg,
-                    isThinking: false,
-                    thinkingContent: undefined,
-                    content:
-                      accumulatedContent || `错误: ${streamEvent.message}`,
-                  }
-                : msg,
+              msg.id !== assistantMsgId
+                ? msg
+                : (() => {
+                    const finalErrorContent =
+                      accumulatedContent || `错误: ${streamEvent.message}`;
+                    return {
+                      ...msg,
+                      isThinking: false,
+                      content: finalErrorContent,
+                      contentParts: reconcileFinalSkillContentParts(
+                        msg.contentParts,
+                        finalErrorContent,
+                      ),
+                    };
+                  })(),
             ),
           );
           break;
@@ -923,31 +982,32 @@ ${failureText}`
       );
     }
 
-    setMessages((prev) =>
-      prev.map((msg) => {
+    setMessages((prev) => {
+      const nextMessages = prev.map((msg) => {
         if (msg.id !== assistantMsgId) return msg;
-
-        const nextParts = shouldForceResultOutput
-          ? [
-              ...(msg.contentParts || []).filter(
-                (part) => part.type !== "text" && part.type !== "thinking",
-              ),
-              { type: "text" as const, text: finalContent },
-            ]
-          : [...(msg.contentParts || [])];
-        if (nextParts.length === 0 && finalContent) {
-          nextParts.push({ type: "text", text: finalContent });
-        }
+        const nextParts =
+          shouldForceResultOutput || hasTextContentPart(msg.contentParts)
+            ? reconcileFinalSkillContentParts(msg.contentParts, finalContent)
+            : [
+                ...(msg.contentParts || []),
+                ...(finalContent
+                  ? ([{ type: "text", text: finalContent }] as const)
+                  : []),
+              ];
 
         return {
           ...msg,
           content: finalContent,
           isThinking: false,
-          thinkingContent: undefined,
           contentParts: nextParts,
+          runtimeTurnId: msg.runtimeTurnId || skillRuntimeTurnId,
+          inlineProcessRetention:
+            msg.inlineProcessRetention || SKILL_INLINE_PROCESS_RETENTION,
         };
-      }),
-    );
+      });
+      persistSkillExecutionSnapshot(nextMessages);
+      return nextMessages;
+    });
 
     if (
       !failure &&
@@ -996,24 +1056,35 @@ ${failureText}`
       error,
     );
 
-    setMessages((prev) =>
-      prev.map((msg) =>
+    setMessages((prev) => {
+      const nextMessages = prev.map((msg) =>
         msg.id === assistantMsgId
           ? {
               ...msg,
               isThinking: false,
-              thinkingContent: undefined,
               content: failureText,
               contentParts: [
+                ...(msg.contentParts || []).filter(
+                  (part) =>
+                    !(
+                      part.type === "text" &&
+                      part.text.trim() === failureText.trim()
+                    ),
+                ),
                 {
-                  type: "text",
+                  type: "text" as const,
                   text: failureText,
                 },
               ],
+              runtimeTurnId: msg.runtimeTurnId || skillRuntimeTurnId,
+              inlineProcessRetention:
+                msg.inlineProcessRetention || SKILL_INLINE_PROCESS_RETENTION,
             }
           : msg,
-      ),
-    );
+      );
+      persistSkillExecutionSnapshot(nextMessages);
+      return nextMessages;
+    });
 
     cleanup();
     return true;

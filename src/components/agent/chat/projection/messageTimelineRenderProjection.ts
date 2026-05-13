@@ -2,6 +2,7 @@ import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";
 import {
   buildMessageTurnTimeline,
   filterConversationThreadItems,
+  sortThreadItems,
   type MessageTurnTimeline,
 } from "../utils/threadTimelineView";
 import {
@@ -31,11 +32,131 @@ export function buildTimelineByMessageIdProjection(params: {
     return new Map<string, MessageTurnTimeline>();
   }
 
-  return buildMessageTurnTimeline(
+  const timelineByMessageId = buildMessageTurnTimeline(
     params.renderedMessages,
     params.renderedTurns,
     params.renderedThreadItems,
   );
+
+  return attachRuntimeTurnItemFallbackTimelines({
+    renderedMessages: params.renderedMessages,
+    renderedTurns: params.renderedTurns,
+    renderedThreadItems: params.renderedThreadItems,
+    timelineByMessageId,
+  });
+}
+
+function normalizeRuntimeTurnId(message: Message): string | null {
+  const normalized = message.runtimeTurnId?.trim();
+  return normalized || null;
+}
+
+function hasConversationProcessItem(items: AgentThreadItem[]): boolean {
+  return items.some(
+    (item) => item.type !== "user_message" && item.type !== "agent_message",
+  );
+}
+
+function resolveFallbackTurnStatus(
+  items: AgentThreadItem[],
+): AgentThreadTurn["status"] {
+  if (items.some((item) => item.status === "failed")) {
+    return "failed";
+  }
+  if (items.some((item) => item.status === "in_progress")) {
+    return "running";
+  }
+  return "completed";
+}
+
+function buildFallbackTurnFromItems(
+  turnId: string,
+  items: AgentThreadItem[],
+  message: Message,
+): AgentThreadTurn {
+  const firstItem = items[0];
+  const lastItem = items[items.length - 1] || firstItem;
+  const messageTimestamp =
+    message.timestamp instanceof Date
+      ? message.timestamp.toISOString()
+      : new Date(message.timestamp).toISOString();
+  const startedAt = firstItem?.started_at || messageTimestamp;
+  const updatedAt = lastItem?.updated_at || lastItem?.completed_at || startedAt;
+  const status = resolveFallbackTurnStatus(items);
+
+  return {
+    id: turnId,
+    thread_id: firstItem?.thread_id || "",
+    prompt_text: "",
+    status,
+    started_at: startedAt,
+    ...(status !== "running"
+      ? { completed_at: lastItem?.completed_at || updatedAt }
+      : {}),
+    created_at: startedAt,
+    updated_at: updatedAt,
+  };
+}
+
+function attachRuntimeTurnItemFallbackTimelines(params: {
+  renderedMessages: Message[];
+  renderedTurns: AgentThreadTurn[];
+  renderedThreadItems: AgentThreadItem[];
+  timelineByMessageId: Map<string, MessageTurnTimeline>;
+}): Map<string, MessageTurnTimeline> {
+  if (params.renderedThreadItems.length === 0) {
+    return params.timelineByMessageId;
+  }
+
+  const mappedTurnIds = new Set(
+    [...params.timelineByMessageId.values()].map((entry) => entry.turn.id),
+  );
+  const turnById = new Map(params.renderedTurns.map((turn) => [turn.id, turn]));
+  const itemsByTurnId = new Map<string, AgentThreadItem[]>();
+  for (const item of sortThreadItems(
+    filterConversationThreadItems(params.renderedThreadItems),
+  )) {
+    const existing = itemsByTurnId.get(item.turn_id);
+    if (existing) {
+      existing.push(item);
+    } else {
+      itemsByTurnId.set(item.turn_id, [item]);
+    }
+  }
+
+  let nextTimelineByMessageId = params.timelineByMessageId;
+  for (const message of params.renderedMessages) {
+    if (
+      message.role !== "assistant" ||
+      nextTimelineByMessageId.has(message.id)
+    ) {
+      continue;
+    }
+
+    const runtimeTurnId = normalizeRuntimeTurnId(message);
+    if (!runtimeTurnId || mappedTurnIds.has(runtimeTurnId)) {
+      continue;
+    }
+
+    const items = itemsByTurnId.get(runtimeTurnId);
+    if (!items?.length || !hasConversationProcessItem(items)) {
+      continue;
+    }
+
+    if (nextTimelineByMessageId === params.timelineByMessageId) {
+      nextTimelineByMessageId = new Map(params.timelineByMessageId);
+    }
+    nextTimelineByMessageId.set(message.id, {
+      messageId: message.id,
+      turn:
+        turnById.get(runtimeTurnId) ||
+        buildFallbackTurnFromItems(runtimeTurnId, items, message),
+      items,
+    });
+    mappedTurnIds.add(runtimeTurnId);
+  }
+
+  return nextTimelineByMessageId;
 }
 
 export function resolveLastAssistantMessage(

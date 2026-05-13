@@ -16,7 +16,6 @@ import {
   Monitor,
   Moon,
   Palette,
-  RotateCcw,
   Sparkles,
   Sun,
   Volume2,
@@ -28,7 +27,6 @@ import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
 import { cn } from "@/lib/utils";
 import { getConfig, saveConfig, type Config } from "@/lib/api/appConfig";
 import type { NavigationEnabledItemId } from "@/lib/api/appConfigTypes";
-import { useOnboardingState } from "@/components/onboarding";
 import { useI18nPatch } from "@/i18n/legacy-patch/I18nPatchProvider";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import {
@@ -119,9 +117,6 @@ const ACTIVE_OPTION_CARD_CLASS =
 const INACTIVE_OPTION_CARD_CLASS =
   "border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] text-[color:var(--lime-text)] hover:border-[color:var(--lime-surface-border-strong)] hover:bg-[color:var(--lime-surface-hover)] hover:text-[color:var(--lime-text-strong)]";
 
-const PRIMARY_ACTION_BUTTON_CLASS =
-  "inline-flex w-full items-center justify-center gap-2 rounded-full bg-[image:var(--lime-primary-gradient-simple)] px-4 py-2.5 text-sm font-medium text-white shadow-sm shadow-emerald-950/15 transition hover:opacity-95";
-
 const HEADER_INFO_PILL_CLASS =
   "rounded-full border border-[color:var(--lime-info-border)] bg-[color:var(--lime-info-soft)] px-2.5 py-1 text-[11px] font-medium text-[color:var(--lime-info)]";
 
@@ -139,12 +134,6 @@ const CURRENT_SUCCESS_PILL_CLASS =
 
 const CONTEXT_STATUS_PILL_CLASS =
   "rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] px-3 py-1 text-xs font-medium text-[color:var(--lime-text-muted)]";
-
-const RECOVERY_ICON_BADGE_CLASS =
-  "inline-flex h-12 w-12 items-center justify-center rounded-[18px] border border-[color:var(--lime-info-border)] bg-[color:var(--lime-info-soft)] text-[color:var(--lime-info)]";
-
-const RECOVERY_NOTICE_CLASS =
-  "flex items-center justify-between gap-3 rounded-[18px] border border-[color:var(--lime-info-border)] bg-[color:var(--lime-info-soft)] px-4 py-3 text-xs leading-5 text-[color:var(--lime-info)]";
 
 function SurfacePanel({
   icon: Icon,
@@ -207,7 +196,6 @@ export function AppearanceSettings() {
   const { setLanguage: setI18nLanguage } = useI18nPatch();
   const { soundEnabled, setSoundEnabled, playToolcallSound } =
     useSoundContext();
-  const { resetOnboarding } = useOnboardingState();
 
   const loadConfig = useCallback(async () => {
     setLoading(true);
@@ -517,11 +505,6 @@ export function AppearanceSettings() {
     },
     [config, enabledNavigationItems, t],
   );
-
-  const handleResetOnboarding = useCallback(() => {
-    resetOnboarding();
-    window.location.reload();
-  }, [resetOnboarding]);
 
   if (loading) {
     return <LoadingSkeleton />;
@@ -887,83 +870,6 @@ export function AppearanceSettings() {
           </div>
         </SurfacePanel>
 
-        <SurfacePanel
-          icon={RotateCcw}
-          iconClassName="text-cyan-600"
-          title={t("settings.appearance.recovery.title", "初始化与恢复")}
-          description={t(
-            "settings.appearance.recovery.description",
-            "当你想重新走一遍首次启动流程，或者排查引导配置异常时，从这里恢复。",
-          )}
-          tipAriaLabel={t(
-            "settings.appearance.recovery.tipAria",
-            "初始化与恢复说明",
-          )}
-          aside={
-            <span className={CURRENT_INFO_PILL_CLASS}>
-              {t("settings.appearance.recovery.badge", "适合排障")}
-            </span>
-          }
-        >
-          <div className="flex flex-col gap-4 rounded-[24px] border border-slate-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.94)_0%,rgba(248,250,252,0.92)_100%)] p-4">
-            <div className="space-y-3">
-              <div className={RECOVERY_ICON_BADGE_CLASS}>
-                <RotateCcw className="h-5 w-5" />
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-semibold text-slate-900">
-                    {t(
-                      "settings.appearance.recovery.rerun.title",
-                      "重新运行初始化向导",
-                    )}
-                  </h3>
-                  <WorkbenchInfoTip
-                    ariaLabel={t(
-                      "settings.appearance.recovery.rerun.tipAria",
-                      "重新运行初始化向导说明",
-                    )}
-                    content={t(
-                      "settings.appearance.recovery.rerun.tip",
-                      "会重新展示首次启动时的关键配置步骤，适合在更换工作方式或排查环境问题时使用。",
-                    )}
-                    tone="slate"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-2.5">
-              <div className={RECOVERY_NOTICE_CLASS}>
-                <span>
-                  {t(
-                    "settings.appearance.recovery.notice.title",
-                    "重新运行不会删除现有数据",
-                  )}
-                </span>
-                <WorkbenchInfoTip
-                  ariaLabel={t(
-                    "settings.appearance.recovery.notice.tipAria",
-                    "重新运行引导注意事项",
-                  )}
-                  content={t(
-                    "settings.appearance.recovery.notice.tip",
-                    "重新运行后会刷新当前界面，但不会删除已有的账号、聊天和工作区数据。",
-                  )}
-                  tone="slate"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={handleResetOnboarding}
-                className={PRIMARY_ACTION_BUTTON_CLASS}
-              >
-                <RotateCcw className="h-4 w-4" />
-                {t("settings.appearance.recovery.action.rerun", "重新运行引导")}
-              </button>
-            </div>
-          </div>
-        </SurfacePanel>
       </section>
 
       <SurfacePanel

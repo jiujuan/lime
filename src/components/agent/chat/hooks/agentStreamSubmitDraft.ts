@@ -11,6 +11,10 @@ import {
   extractAgentUiPerformanceTraceMetadata,
   recordAgentStreamPerformanceMetric,
 } from "./agentStreamPerformanceMetrics";
+import {
+  SKILL_INLINE_PROCESS_RETENTION,
+  shouldRetainSkillInlineProcessFromMetadata,
+} from "../utils/skillInlineProcessRetention";
 
 export function buildQueuedMessagePreview(content: string): string {
   const compact = content.split(/\s+/).filter(Boolean).join(" ");
@@ -107,20 +111,28 @@ export function prepareAgentStreamSubmitDraft(
         }),
     purpose: messagePurpose,
     imageWorkbenchPreview: assistantDraft?.imageWorkbenchPreview,
+    inlineProcessRetention: shouldRetainSkillInlineProcessFromMetadata(
+      requestMetadata,
+    )
+      ? SKILL_INLINE_PROCESS_RETENTION
+      : undefined,
   };
 
-  if (skipUserMessage) {
+  const userMsg: Message | null = skipUserMessage
+    ? null
+    : {
+        id: userMsgId as string,
+        role: "user",
+        content: displayContent ?? content,
+        images: images.length > 0 ? images : undefined,
+        timestamp: new Date(),
+        purpose: messagePurpose,
+        inputCapabilityRoute: capabilityRoute,
+      };
+
+  if (!userMsg) {
     setMessages((prev) => [...prev, assistantMsg]);
   } else {
-    const userMsg: Message = {
-      id: userMsgId as string,
-      role: "user",
-      content: displayContent ?? content,
-      images: images.length > 0 ? images : undefined,
-      timestamp: new Date(),
-      purpose: messagePurpose,
-      inputCapabilityRoute: capabilityRoute,
-    };
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
   }
 
@@ -170,5 +182,6 @@ export function prepareAgentStreamSubmitDraft(
 
   return {
     assistantMsg,
+    userMsg,
   };
 }

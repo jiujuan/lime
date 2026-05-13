@@ -265,4 +265,100 @@ describe("agentStreamSubmissionLifecycle", () => {
     expect(threadTurns[0]?.thread_id).toBe("session-fast");
     expect(threadItems).toHaveLength(0);
   });
+
+  it("activateStream 应恢复首轮建会话时被快照覆盖的本地用户与助手草稿", () => {
+    const userMsg: Message = {
+      id: "user-image",
+      role: "user",
+      content: "@Nanobanana Pro 生成一张城市春日照片",
+      timestamp: new Date("2026-03-27T01:00:00.000Z"),
+    };
+    const assistantMsg: Message = {
+      id: "assistant-image",
+      role: "assistant",
+      content: "好啊，用 Nanobanana Pro 生成：一张城市春日照片\n先获取下工具参数\n马上生成",
+      timestamp: new Date("2026-03-27T01:00:01.000Z"),
+      isThinking: true,
+      contentParts: [],
+      runtimeStatus: buildWaitingAgentRuntimeStatus({
+        executionStrategy: "react",
+        webSearch: false,
+        thinking: false,
+      }),
+      imageWorkbenchPreview: {
+        taskId: "draft-image-1",
+        prompt: "一张城市春日照片",
+        mode: "generate",
+        status: "running",
+        imageCount: 1,
+        expectedImageCount: 1,
+        caption: null,
+        phase: "preparing",
+        statusMessage: null,
+      },
+    };
+
+    let messages: Message[] = [];
+    let threadItems: AgentThreadItem[] = [];
+    let threadTurns: AgentThreadTurn[] = [];
+    let currentTurnId: string | null = null;
+    const lifecycle = createAgentStreamSubmissionLifecycle({
+      assistantMsg,
+      assistantMsgId: assistantMsg.id,
+      userMsgId: userMsg.id,
+      userMsg,
+      content: userMsg.content,
+      expectingQueue: false,
+      initialThreadId: "local-thread:assistant-image",
+      listenerMapRef: { current: new Map() },
+      setActiveStream: () => {},
+      setMessages: createStateSetter(
+        () => messages,
+        (value) => {
+          messages = value;
+        },
+      ),
+      setQueuedTurns: createStateSetter(
+        () => [] as QueuedTurnSnapshot[],
+        () => {},
+      ),
+      setThreadItems: createStateSetter(
+        () => threadItems,
+        (value) => {
+          threadItems = value;
+        },
+      ),
+      setThreadTurns: createStateSetter(
+        () => threadTurns,
+        (value) => {
+          threadTurns = value;
+        },
+      ),
+      setCurrentTurnId: createStateSetter(
+        () => currentTurnId,
+        (value) => {
+          currentTurnId = value;
+        },
+      ),
+    });
+
+    messages = [];
+
+    const runtimeStatus = buildWaitingAgentRuntimeStatus({
+      executionStrategy: "react",
+      webSearch: false,
+      thinking: false,
+    });
+    lifecycle.activateStream("session-image", runtimeStatus);
+
+    expect(messages.map((message) => message.id)).toEqual([
+      "user-image",
+      "assistant-image",
+    ]);
+    expect(messages[1]?.runtimeStatus).toEqual(runtimeStatus);
+    expect(messages[1]?.runtimeTurnId).toBe(lifecycle.pendingTurnKey);
+    expect(messages[1]?.imageWorkbenchPreview?.taskId).toBe("draft-image-1");
+    expect(threadTurns[0]?.thread_id).toBe("session-image");
+    expect(threadItems[0]?.thread_id).toBe("session-image");
+  });
 });

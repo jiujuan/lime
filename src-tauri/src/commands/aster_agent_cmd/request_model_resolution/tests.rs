@@ -2127,6 +2127,30 @@ fn explicit_provider_preference_wins_over_session_fallback() {
 }
 
 #[test]
+fn explicit_request_preference_disables_cross_provider_runtime_fallback() {
+    assert!(!should_allow_cross_provider_runtime_fallback(
+        RequestPreferenceSource::Request,
+        RequestPreferenceSource::Session,
+    ));
+    assert!(!should_allow_cross_provider_runtime_fallback(
+        RequestPreferenceSource::Session,
+        RequestPreferenceSource::Request,
+    ));
+    assert!(!should_allow_cross_provider_runtime_fallback(
+        RequestPreferenceSource::Request,
+        RequestPreferenceSource::Request,
+    ));
+}
+
+#[test]
+fn session_recovered_preference_can_keep_runtime_fallback() {
+    assert!(should_allow_cross_provider_runtime_fallback(
+        RequestPreferenceSource::Session,
+        RequestPreferenceSource::Session,
+    ));
+}
+
+#[test]
 fn service_scene_model_preference_reads_complete_preference() {
     let metadata = serde_json::json!({
         "harness": {

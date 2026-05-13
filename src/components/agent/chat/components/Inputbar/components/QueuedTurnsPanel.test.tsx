@@ -2,16 +2,18 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { QueuedTurnsPanel } from "./QueuedTurnsPanel";
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
 });
 
 afterEach(() => {
@@ -56,6 +58,36 @@ function renderQueuedTurnsPanel(
 }
 
 describe("QueuedTurnsPanel", () => {
+  it("排队消息 chrome 文案应跟随 en-US 资源", async () => {
+    await changeLimeLocale("en-US");
+    const container = renderQueuedTurnsPanel({
+      queuedTurns: [
+        {
+          queued_turn_id: "queued-en-1",
+          message_preview: "",
+          message_text: "",
+          created_at: 1_700_000_000_000,
+          image_count: 2,
+          position: 1,
+        },
+      ],
+    });
+
+    expect(container.textContent).toContain("Handle later 1");
+    expect(container.textContent).toContain("Starts in order");
+    expect(container.textContent).toContain("Blank input");
+    expect(container.textContent).toContain("2 images attached");
+    expect(container.textContent).toContain("View");
+    expect(
+      container.querySelector('button[aria-label="Run queued message now"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('button[aria-label="Remove queued message"]'),
+    ).toBeTruthy();
+    expect(container.textContent).not.toContain("稍后处理");
+    expect(container.textContent).not.toContain("附图");
+  });
+
   it("应展示立即执行按钮，并触发 promote 回调", async () => {
     const onPromoteQueuedTurn = vi.fn().mockResolvedValue(true);
     const container = renderQueuedTurnsPanel({ onPromoteQueuedTurn });

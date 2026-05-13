@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { loadPersisted, loadTransient } from "./agentChatStorage";
+import {
+  loadPersisted,
+  loadTransient,
+  resolveWorkspaceAgentPreferences,
+} from "./agentChatStorage";
 
 afterEach(() => {
   sessionStorage.clear();
@@ -31,5 +35,12 @@ describe("agentChatStorage", () => {
       fallback: true,
     });
     expect(localStorage.getItem(key)).toBeNull();
+  });
+
+  it("没有任何持久化偏好时不应回退到硬编码 Claude 默认值", () => {
+    expect(resolveWorkspaceAgentPreferences("workspace-empty-pref")).toEqual({
+      providerType: "",
+      model: "",
+    });
   });
 });

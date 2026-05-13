@@ -7,8 +7,13 @@ import type {
   HomeSkillSection,
   HomeSkillSurfaceItem,
 } from "./homeSurfaceTypes";
+import type { HomeSurfaceChromeCopy } from "./homeSurfaceCopy";
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
+
+const TEST_CHROME_COPY: Pick<HomeSurfaceChromeCopy, "moreSkillsDrawerLabel"> = {
+  moreSkillsDrawerLabel: "更多做法",
+};
 
 beforeEach(() => {
   (
@@ -48,6 +53,7 @@ function renderDrawer(
     root.render(
       <HomeMoreSkillsDrawer
         open={open}
+        copy={TEST_CHROME_COPY}
         sections={sections}
         onSelectItem={onSelectItem}
       />,

@@ -232,7 +232,7 @@ describe("CrashRecoveryPanel", () => {
     const replaceState = vi.fn();
     const reloadUrl = prepareReactFastRefreshHookAutoReload(
       "http://127.0.0.1:1420/?tab=agent",
-      "1.37.0",
+      "1.38.0",
       storage,
     );
 
@@ -240,12 +240,12 @@ describe("CrashRecoveryPanel", () => {
     expect(
       prepareReactFastRefreshHookAutoReload(
         "http://127.0.0.1:1420/?tab=agent",
-        "1.37.0",
+        "1.38.0",
         storage,
       ),
     ).toBeNull();
 
-    finalizeCrashRecoveryAutoReload(reloadUrl!, "1.37.0", storage, {
+    finalizeCrashRecoveryAutoReload(reloadUrl!, "1.38.0", storage, {
       replaceState,
     });
 
@@ -257,7 +257,7 @@ describe("CrashRecoveryPanel", () => {
     expect(
       prepareReactFastRefreshHookAutoReload(
         "http://127.0.0.1:1420/?tab=agent",
-        "1.37.0",
+        "1.38.0",
         storage,
       ),
     ).toContain("__lime_resource_reload=");

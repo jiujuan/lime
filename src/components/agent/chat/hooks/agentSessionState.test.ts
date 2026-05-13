@@ -642,6 +642,300 @@ describe("agentSessionState", () => {
     );
   });
 
+  it("切回直执 Skill 历史会话时不应被远端纯正文刷新掉本地思考", () => {
+    const now = new Date("2026-04-08T10:00:02.000Z");
+    const detail = {
+      id: "topic-skill-history-target",
+      created_at: 1700000000,
+      updated_at: 1700000001,
+      messages: [
+        {
+          role: "user",
+          timestamp: 1710000001,
+          content: [
+            {
+              type: "text",
+              text: "请整理产品知识库",
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          timestamp: 1710000002,
+          content: [
+            {
+              type: "text",
+              text: "最终 Skill 回复",
+            },
+          ],
+        },
+      ],
+      turns: [],
+      items: [],
+      queued_turns: [],
+    } satisfies AsterSessionDetail;
+
+    const result = buildHydratedAgentSessionSnapshot({
+      topicId: "topic-skill-history-target",
+      detail,
+      currentSessionId: "topic-other",
+      currentMessages: [
+        createMessage({
+          id: "other-session-message",
+          role: "assistant",
+          content: "这是另一个会话，不应参与合并",
+        }),
+      ],
+      currentThreadTurns: [],
+      currentThreadItems: [],
+      currentExecutionRuntime: null,
+      currentExecutionStrategy: "react",
+      topics: [],
+      localSnapshotOverride: {
+        sessionId: "topic-skill-history-target",
+        messages: [
+          createMessage({
+            id: "local-skill-user",
+            role: "user",
+            content: "请整理产品知识库",
+            timestamp: new Date("2026-04-08T10:00:00.000Z"),
+          }),
+          createMessage({
+            id: "local-skill-assistant",
+            role: "assistant",
+            content: "最终 Skill 回复",
+            timestamp: now,
+            runtimeTurnId: "skill-exec-local-skill-assistant",
+            thinkingContent:
+              "正在执行 Skill: brand-product-knowledge-builder...",
+            contentParts: [
+              {
+                type: "thinking",
+                text: "正在执行 Skill: brand-product-knowledge-builder...",
+              },
+              {
+                type: "text",
+                text: "最终 Skill 回复",
+              },
+            ],
+          }),
+        ],
+        threadTurns: [],
+        threadItems: [],
+      },
+      syncSessionId: true,
+    });
+
+    expect(result.snapshot.messages).toHaveLength(2);
+    expect(result.snapshot.messages[1]?.content).toBe("最终 Skill 回复");
+    expect(result.snapshot.messages[1]?.runtimeTurnId).toBe(
+      "skill-exec-local-skill-assistant",
+    );
+    expect(result.snapshot.messages[1]?.thinkingContent).toBe(
+      "正在执行 Skill: brand-product-knowledge-builder...",
+    );
+    expect(result.snapshot.messages[1]?.contentParts).toEqual([
+      {
+        type: "thinking",
+        text: "正在执行 Skill: brand-product-knowledge-builder...",
+      },
+      {
+        type: "text",
+        text: "最终 Skill 回复",
+      },
+    ]);
+  });
+
+  it("切回服务型 Skill 历史会话时不应被远端纯正文刷新掉本地思考", () => {
+    const now = new Date("2026-04-08T10:00:03.000Z");
+    const detail = {
+      id: "topic-service-skill-history-target",
+      created_at: 1700000000,
+      updated_at: 1700000001,
+      messages: [
+        {
+          role: "user",
+          timestamp: 1710000001,
+          content: [
+            {
+              type: "text",
+              text: "请整理产品知识库",
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          timestamp: 1710000002,
+          content: [
+            {
+              type: "text",
+              text: "服务型 Skill 最终回复",
+            },
+          ],
+        },
+      ],
+      turns: [],
+      items: [],
+      queued_turns: [],
+    } satisfies AsterSessionDetail;
+
+    const result = buildHydratedAgentSessionSnapshot({
+      topicId: "topic-service-skill-history-target",
+      detail,
+      currentSessionId: "topic-other",
+      currentMessages: [],
+      currentThreadTurns: [],
+      currentThreadItems: [],
+      currentExecutionRuntime: null,
+      currentExecutionStrategy: "react",
+      topics: [],
+      localSnapshotOverride: {
+        sessionId: "topic-service-skill-history-target",
+        messages: [
+          createMessage({
+            id: "local-service-skill-user",
+            role: "user",
+            content: "请整理产品知识库",
+            timestamp: new Date("2026-04-08T10:00:00.000Z"),
+          }),
+          createMessage({
+            id: "local-service-skill-assistant",
+            role: "assistant",
+            content: "服务型 Skill 最终回复",
+            timestamp: now,
+            runtimeTurnId: "turn-service-skill-runtime",
+            inlineProcessRetention: "skill",
+            thinkingContent: "先读取服务 Skill，再分析产品资料边界。",
+            contentParts: [
+              {
+                type: "thinking",
+                text: "先读取服务 Skill，再分析产品资料边界。",
+              },
+              {
+                type: "text",
+                text: "服务型 Skill 最终回复",
+              },
+            ],
+          }),
+        ],
+        threadTurns: [],
+        threadItems: [],
+      },
+      syncSessionId: true,
+    });
+
+    expect(result.snapshot.messages).toHaveLength(2);
+    expect(result.snapshot.messages[1]?.content).toBe(
+      "服务型 Skill 最终回复",
+    );
+    expect(result.snapshot.messages[1]?.runtimeTurnId).toBe(
+      "turn-service-skill-runtime",
+    );
+    expect(result.snapshot.messages[1]?.inlineProcessRetention).toBe("skill");
+    expect(result.snapshot.messages[1]?.thinkingContent).toBe(
+      "先读取服务 Skill，再分析产品资料边界。",
+    );
+    expect(result.snapshot.messages[1]?.contentParts).toEqual([
+      {
+        type: "thinking",
+        text: "先读取服务 Skill，再分析产品资料边界。",
+      },
+      {
+        type: "text",
+        text: "服务型 Skill 最终回复",
+      },
+    ]);
+  });
+
+  it("新建会话 ID 尚未同步时也不应让远端纯正文刷新掉本地 Skill 过程", () => {
+    const now = new Date("2026-04-08T10:00:04.000Z");
+    const detail = {
+      id: "topic-detached-skill-history-target",
+      created_at: 1700000000,
+      updated_at: 1700000001,
+      messages: [
+        {
+          role: "user",
+          timestamp: 1710000001,
+          content: [
+            {
+              type: "text",
+              text: "请整理产品知识库",
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          timestamp: 1710000002,
+          content: [
+            {
+              type: "text",
+              text: "最终 Skill 回复",
+            },
+          ],
+        },
+      ],
+      turns: [],
+      items: [],
+      queued_turns: [],
+    } satisfies AsterSessionDetail;
+
+    const result = buildHydratedAgentSessionSnapshot({
+      topicId: "topic-detached-skill-history-target",
+      detail,
+      currentSessionId: null,
+      currentMessages: [
+        createMessage({
+          id: "local-detached-skill-user",
+          role: "user",
+          content: "请整理产品知识库",
+          timestamp: new Date("2026-04-08T10:00:00.000Z"),
+        }),
+        createMessage({
+          id: "local-detached-skill-assistant",
+          role: "assistant",
+          content: "最终 Skill 回复",
+          timestamp: now,
+          runtimeTurnId: "skill-exec-local-detached-skill-assistant",
+          thinkingContent:
+            "正在执行 Skill: brand-product-knowledge-builder...",
+          contentParts: [
+            {
+              type: "thinking",
+              text: "正在执行 Skill: brand-product-knowledge-builder...",
+            },
+            {
+              type: "text",
+              text: "最终 Skill 回复",
+            },
+          ],
+        }),
+      ],
+      currentThreadTurns: [],
+      currentThreadItems: [],
+      currentExecutionRuntime: null,
+      currentExecutionStrategy: "react",
+      topics: [],
+    });
+
+    expect(result.snapshot.messages[1]).toMatchObject({
+      id: "local-detached-skill-assistant",
+      content: "最终 Skill 回复",
+      runtimeTurnId: "skill-exec-local-detached-skill-assistant",
+      thinkingContent: "正在执行 Skill: brand-product-knowledge-builder...",
+    });
+    expect(result.snapshot.messages[1]?.contentParts).toEqual([
+      {
+        type: "thinking",
+        text: "正在执行 Skill: brand-product-knowledge-builder...",
+      },
+      {
+        type: "text",
+        text: "最终 Skill 回复",
+      },
+    ]);
+  });
+
   it("同会话 hydrate 时远端最后停在 user 且时间更晚，也应保留本地 assistant 尾部", () => {
     const currentMessages = [
       createMessage({

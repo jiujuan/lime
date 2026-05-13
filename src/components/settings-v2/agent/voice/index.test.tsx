@@ -57,6 +57,7 @@ vi.mock("@/lib/api/asrProvider", () => ({
 
 vi.mock("@/lib/api/hotkeys", () => ({
   getVoiceShortcutRuntimeStatus: mockGetVoiceShortcutRuntimeStatus,
+  validateShortcut: mockValidateShortcut,
 }));
 
 vi.mock("@/lib/api/voiceModels", () => ({
@@ -67,10 +68,6 @@ vi.mock("@/lib/api/voiceModels", () => ({
   deleteVoiceModel: mockDeleteVoiceModel,
   setDefaultVoiceModel: mockSetDefaultVoiceModel,
   testTranscribeVoiceModelFile: mockTestTranscribeVoiceModelFile,
-}));
-
-vi.mock("@/lib/api/experimentalFeatures", () => ({
-  validateShortcut: mockValidateShortcut,
 }));
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
@@ -118,7 +115,7 @@ vi.mock("@/components/input-kit", () => ({
   ),
 }));
 
-vi.mock("@/components/smart-input/ShortcutSettings", () => ({
+vi.mock("@/components/settings-v2/shared/ShortcutSettings", () => ({
   ShortcutSettings: ({
     currentShortcut,
     onShortcutChange,
@@ -287,7 +284,6 @@ function createVoiceInputConfig(overrides: Record<string, unknown> = {}) {
   return {
     enabled: true,
     shortcut: "CommandOrControl+Shift+V",
-    translate_shortcut: "CommandOrControl+Shift+T",
     processor: {
       polish_enabled: true,
       polish_provider: "openai",
@@ -382,8 +378,6 @@ beforeEach(async () => {
   mockGetVoiceShortcutRuntimeStatus.mockResolvedValue({
     shortcut_registered: true,
     registered_shortcut: "CommandOrControl+Shift+V",
-    translate_shortcut_registered: true,
-    registered_translate_shortcut: "CommandOrControl+Shift+T",
     fn_supported: false,
     fn_registered: false,
     fn_fallback_shortcut: "CommandOrControl+Shift+V",
@@ -533,7 +527,8 @@ describe("VoiceSettings", () => {
     expect(text).toContain("openai / gpt-4.1-mini");
     expect(text).toContain("openai / gpt-4o-mini-tts");
     expect(text).toContain("Registered in runtime");
-    expect(text).toContain("Translation mode shortcut registered");
+    expect(text).toContain("Translation mode instruction");
+    expect(text).not.toContain("Translation mode shortcut registered");
     expect(text).not.toContain("settings.voice");
   });
 

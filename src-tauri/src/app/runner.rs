@@ -531,21 +531,6 @@ pub fn run() {
                 });
             }
 
-            // 初始化截图对话模块
-            // _Requirements: 7.3_
-            {
-                let app_handle = app.handle();
-                match crate::screenshot::init(app_handle) {
-                    Ok(()) => {
-                        tracing::info!("[启动] 截图对话模块初始化成功");
-                    }
-                    Err(e) => {
-                        tracing::error!("[启动] 截图对话模块初始化失败: {}", e);
-                        // 截图模块初始化失败不影响应用运行
-                    }
-                }
-            }
-
             // 初始化语音输入模块
             {
                 let app_handle = app.handle();
@@ -1355,18 +1340,10 @@ pub fn run() {
             commands::webview_cmd::get_browser_event_buffer,
             commands::webview_cmd::browser_execute_action,
             commands::webview_cmd::get_browser_action_audit_logs,
-            // Screenshot Chat commands
-            // _Requirements: 1.1, 1.4, 1.5, 2.2, 2.4, 3.1, 5.1_
-            commands::screenshot_cmd::get_experimental_config,
-            commands::screenshot_cmd::get_screenshot_shortcut_runtime_status,
-            commands::screenshot_cmd::save_experimental_config,
-            commands::screenshot_cmd::start_screenshot,
-            commands::screenshot_cmd::validate_shortcut,
-            commands::screenshot_cmd::update_screenshot_shortcut,
-            commands::screenshot_cmd::close_screenshot_chat_window,
-            commands::screenshot_cmd::open_input_with_text,
-            commands::screenshot_cmd::read_image_as_base64,
-            commands::screenshot_cmd::send_screenshot_chat,
+            // Experimental settings commands
+            commands::experimental_cmd::get_experimental_config,
+            commands::experimental_cmd::save_experimental_config,
+            commands::hotkey_cmd::validate_shortcut,
             // Update Check commands
             commands::update_cmd::check_update,
             commands::update_cmd::check_for_updates,
@@ -1562,8 +1539,6 @@ pub fn run() {
             crate::voice::commands::get_voice_instructions,
             crate::voice::commands::save_voice_instruction,
             crate::voice::commands::delete_voice_instruction,
-            crate::voice::commands::open_voice_window,
-            crate::voice::commands::close_voice_window,
             crate::voice::commands::transcribe_audio,
             crate::voice::commands::polish_voice_text,
             crate::voice::commands::output_voice_text,

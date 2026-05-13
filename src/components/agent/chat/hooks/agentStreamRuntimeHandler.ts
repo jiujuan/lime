@@ -110,9 +110,11 @@ import {
   buildAgentStreamThinkingDeltaMessagePatch,
   buildAgentStreamThinkingDeltaPreApplyPlan,
 } from "./agentStreamThinkingDeltaController";
+import { saveAgentSessionCachedMessagesSnapshot } from "./agentSessionScopedStorage";
 import { isRuntimePermissionConfirmationWaitMessage } from "../utils/runtimeActionConfirmation";
 import { buildAgentUiProjectionEvents } from "../projection/agentUiEventProjection";
 import { recordAgentUiProjectionEvents } from "../projection/conversationProjectionStore";
+import { isRetainedSkillProcessMessage } from "../utils/skillInlineProcessRetention";
 
 function extractVisibleTextFromAgentMessage(
   message: AgentEvent extends never
@@ -282,6 +284,18 @@ function bindAssistantMessageToRuntimeTurn(
           }
         : message,
     ),
+  );
+}
+
+function hasRetainedSkillInlineProcess(message: Message): boolean {
+  return (
+    isRetainedSkillProcessMessage(message) &&
+    (Boolean(message.thinkingContent?.trim()) ||
+      Boolean(
+        message.contentParts?.some(
+          (part) => part.type === "thinking" && part.text.trim().length > 0,
+        ),
+      ))
   );
 }
 
@@ -515,6 +529,27 @@ export function handleTurnStreamEvent({
     clearAgentStreamTextOverlay(assistantMsgId);
   };
 
+  const persistRetainedSkillProcessSnapshot = (messages: Message[]) => {
+    const resolvedSessionId = activeSessionId.trim();
+    const workspaceId = resolvedWorkspaceId.trim();
+    if (!resolvedSessionId || !workspaceId) {
+      return;
+    }
+
+    const targetMessage = messages.find(
+      (message) => message.id === assistantMsgId,
+    );
+    if (!targetMessage || !hasRetainedSkillInlineProcess(targetMessage)) {
+      return;
+    }
+
+    saveAgentSessionCachedMessagesSnapshot(
+      workspaceId,
+      resolvedSessionId,
+      messages,
+    );
+  };
+
   const buildStreamingTextCommitPatch = (
     msg: Message,
   ): Partial<Pick<Message, "content" | "contentParts">> => {
@@ -529,7 +564,8 @@ export function handleTurnStreamEvent({
         parts: msg.contentParts,
         finalContent,
         rawContent: requestState.accumulatedContent || finalContent,
-        surfaceThinkingDeltas,
+        surfaceThinkingDeltas:
+          surfaceThinkingDeltas || isRetainedSkillProcessMessage(msg),
       }),
     };
   };
@@ -969,27 +1005,30 @@ export function handleTurnStreamEvent({
         if (thinkingPlan.shouldActivateStream) {
           activateStream();
         }
-        if (!thinkingPlan.shouldApplyThinkingDelta) {
-          break;
-        }
-      }
-      setMessages((prev) =>
-        prev.map((msg) => {
-          if (msg.id !== assistantMsgId) {
-            return msg;
-          }
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg.id !== assistantMsgId) {
+              return msg;
+            }
+            if (
+              !thinkingPlan.shouldApplyThinkingDelta &&
+              !isRetainedSkillProcessMessage(msg)
+            ) {
+              return msg;
+            }
 
-          return {
-            ...msg,
-            ...buildAgentStreamThinkingDeltaMessagePatch({
-              appendThinkingToParts,
-              contentParts: msg.contentParts,
-              textDelta: data.text,
-              thinkingContent: msg.thinkingContent,
-            }),
-          };
-        }),
-      );
+            return {
+              ...msg,
+              ...buildAgentStreamThinkingDeltaMessagePatch({
+                appendThinkingToParts,
+                contentParts: msg.contentParts,
+                textDelta: data.text,
+                thinkingContent: msg.thinkingContent,
+              }),
+            };
+          }),
+        );
+      }
       break;
 
     case "text_delta":
@@ -1057,10 +1096,14 @@ export function handleTurnStreamEvent({
               msg.id === assistantMsgId
                 ? {
                     ...msg,
-                    thinkingContent: undefined,
-                    contentParts: (msg.contentParts || []).filter(
-                      (part) => part.type !== "thinking",
-                    ),
+                    thinkingContent: isRetainedSkillProcessMessage(msg)
+                      ? msg.thinkingContent
+                      : undefined,
+                    contentParts: isRetainedSkillProcessMessage(msg)
+                      ? msg.contentParts
+                      : (msg.contentParts || []).filter(
+                          (part) => part.type !== "thinking",
+                        ),
                   }
                 : msg,
             ),
@@ -1252,8 +1295,8 @@ export function handleTurnStreamEvent({
       finishRequestLog(requestState, finalDonePlan.requestLogPayload);
       const finalContent = finalDonePlan.finalContent;
       observer?.onComplete?.(finalContent);
-      setMessages((prev) =>
-        prev.map((msg) => {
+      setMessages((prev) => {
+        const nextMessages = prev.map((msg) => {
           if (msg.id !== assistantMsgId) {
             return msg;
           }
@@ -1265,13 +1308,16 @@ export function handleTurnStreamEvent({
               finalContent,
               previousContent: msg.content,
               rawContent: requestState.accumulatedContent,
-              surfaceThinkingDeltas,
+              surfaceThinkingDeltas:
+                surfaceThinkingDeltas || isRetainedSkillProcessMessage(msg),
               thinkingContent: msg.thinkingContent,
               usage: data.usage ?? msg.usage,
             }),
           };
-        }),
-      );
+        });
+        persistRetainedSkillProcessSnapshot(nextMessages);
+        return nextMessages;
+      });
       clearStreamingTextOverlay();
       clearActiveStreamIfMatch(eventName);
       disposeListener();
@@ -1288,8 +1334,8 @@ export function handleTurnStreamEvent({
           status: "success",
           description: "等待用户确认运行时权限",
         });
-        setMessages((prev) =>
-          prev.map((msg) =>
+        setMessages((prev) => {
+          const nextMessages = prev.map((msg) =>
             msg.id === assistantMsgId
               ? {
                   ...updateMessageArtifactsStatus(msg, "complete"),
@@ -1297,8 +1343,10 @@ export function handleTurnStreamEvent({
                   isThinking: false,
                 }
               : msg,
-          ),
-        );
+          );
+          persistRetainedSkillProcessSnapshot(nextMessages);
+          return nextMessages;
+        });
         clearStreamingTextOverlay();
         setIsSending(false);
         clearActiveStreamIfMatch(eventName);
@@ -1323,8 +1371,8 @@ export function handleTurnStreamEvent({
         finishRequestLog(requestState, emptyFinalErrorPlan.requestLogPayload);
         const gracefulContent = emptyFinalErrorPlan.finalContent;
         observer?.onComplete?.(gracefulContent);
-        setMessages((prev) =>
-          prev.map((msg) =>
+        setMessages((prev) => {
+          const nextMessages = prev.map((msg) =>
             msg.id === assistantMsgId
               ? {
                   ...updateMessageArtifactsStatus(msg, "complete"),
@@ -1333,13 +1381,17 @@ export function handleTurnStreamEvent({
                     finalContent: gracefulContent,
                     previousContent: msg.content,
                     rawContent: requestState.accumulatedContent,
-                    surfaceThinkingDeltas,
+                    surfaceThinkingDeltas:
+                      surfaceThinkingDeltas ||
+                      isRetainedSkillProcessMessage(msg),
                     thinkingContent: msg.thinkingContent,
                   }),
                 }
               : msg,
-          ),
-        );
+          );
+          persistRetainedSkillProcessSnapshot(nextMessages);
+          return nextMessages;
+        });
         clearStreamingTextOverlay();
         clearActiveStreamIfMatch(eventName);
         disposeListener();
@@ -1355,8 +1407,8 @@ export function handleTurnStreamEvent({
       finishRequestLog(requestState, errorFailurePlan.requestLogPayload);
       observer?.onError?.(errorFailurePlan.errorMessage);
       applyAgentStreamErrorToastPlan(errorFailurePlan.toast, toast);
-      setMessages((prev) =>
-        prev.map((msg) =>
+      setMessages((prev) => {
+        const nextMessages = prev.map((msg) =>
           msg.id === assistantMsgId
             ? {
                 ...updateMessageArtifactsStatus(msg, "error"),
@@ -1368,8 +1420,10 @@ export function handleTurnStreamEvent({
                 }),
               }
             : msg,
-        ),
-      );
+        );
+        persistRetainedSkillProcessSnapshot(nextMessages);
+        return nextMessages;
+      });
       clearStreamingTextOverlay();
       clearActiveStreamIfMatch(eventName);
       disposeListener();

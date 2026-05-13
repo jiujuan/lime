@@ -6445,10 +6445,6 @@ const defaultMocks: Record<string, any> = {
     minimize_to_tray: false,
     language: "zh-CN",
     experimental: {
-      screenshot_chat: {
-        enabled: false,
-        shortcut: "",
-      },
       webmcp: {
         enabled: false,
       },
@@ -9682,22 +9678,15 @@ const defaultMocks: Record<string, any> = {
 
   // Experimental Features 相关
   get_experimental_config: () => ({
-    screenshot_chat: { enabled: false, shortcut: "" },
     webmcp: { enabled: false },
   }),
-  get_screenshot_shortcut_runtime_status: () => ({
-    shortcut_registered: false,
-    registered_shortcut: null,
-  }),
   save_experimental_config: () => ({}),
-  validate_shortcut: () => ({ valid: true }),
-  update_screenshot_shortcut: () => ({ success: true }),
+  validate_shortcut: () => true,
 
   // Voice 相关
   get_voice_input_config: () => ({
     enabled: false,
     shortcut: "CommandOrControl+Shift+V",
-    translate_shortcut: "CommandOrControl+Shift+T",
     processor: {
       polish_enabled: true,
       polish_provider: "openai",
@@ -9850,8 +9839,6 @@ const defaultMocks: Record<string, any> = {
   get_voice_shortcut_runtime_status: () => ({
     shortcut_registered: false,
     registered_shortcut: null,
-    translate_shortcut_registered: false,
-    registered_translate_shortcut: null,
     fn_supported: false,
     fn_registered: false,
     fn_fallback_shortcut: "CommandOrControl+Shift+V",
@@ -9887,10 +9874,6 @@ const defaultMocks: Record<string, any> = {
     volume: 0,
     duration: 0,
   }),
-
-  // Screenshot Chat 相关
-  send_screenshot_chat: () => ({ success: true }),
-  close_screenshot_chat_window: () => ({}),
 
   // Update 相关
   check_update: () => ({

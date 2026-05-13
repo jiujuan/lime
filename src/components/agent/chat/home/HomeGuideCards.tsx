@@ -1,5 +1,6 @@
 import styled from "styled-components";
 import type { HomeGuideCard } from "./homeSurfaceTypes";
+import type { HomeSurfaceChromeCopy } from "./homeSurfaceCopy";
 
 const GuideGrid = styled.div`
   display: grid;
@@ -83,16 +84,17 @@ const GuideSummary = styled.span`
 
 interface HomeGuideCardsProps {
   cards: HomeGuideCard[];
+  copy: Pick<HomeSurfaceChromeCopy, "guideCardsLabel">;
   onSelect: (card: HomeGuideCard) => void;
 }
 
-export function HomeGuideCards({ cards, onSelect }: HomeGuideCardsProps) {
+export function HomeGuideCards({ cards, copy, onSelect }: HomeGuideCardsProps) {
   if (cards.length === 0) {
     return null;
   }
 
   return (
-    <GuideGrid data-testid="home-guide-cards" aria-label="首页引导帮助">
+    <GuideGrid data-testid="home-guide-cards" aria-label={copy.guideCardsLabel}>
       {cards.map((card) => (
         <GuideButton
           key={card.id}

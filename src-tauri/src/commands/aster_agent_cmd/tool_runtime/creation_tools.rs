@@ -1350,6 +1350,23 @@ fn submit_image_generation_task_record(
     ))
 }
 
+pub(crate) fn submit_image_generation_task_value(
+    app_handle: &AppHandle,
+    context: &ToolContext,
+    params: serde_json::Value,
+) -> Result<ToolResult, ToolError> {
+    let normalized_params =
+        normalize_flat_image_task_tool_params(normalize_image_task_tool_params(params)?)?;
+    let input: ImageTaskInput = serde_json::from_value(normalized_params)
+        .map_err(|error| ToolError::invalid_params(format!("参数解析失败: {error}")))?;
+    if input.prompt.trim().is_empty() {
+        return Err(ToolError::invalid_params(
+            "prompt 不能为空字符串".to_string(),
+        ));
+    }
+    submit_image_generation_task_record(app_handle, context, input)
+}
+
 #[async_trait]
 impl Tool for LimeCreateImageTaskTool {
     fn name(&self) -> &str {
@@ -1369,16 +1386,7 @@ impl Tool for LimeCreateImageTaskTool {
         params: serde_json::Value,
         context: &ToolContext,
     ) -> Result<ToolResult, ToolError> {
-        let normalized_params =
-            normalize_flat_image_task_tool_params(normalize_image_task_tool_params(params)?)?;
-        let input: ImageTaskInput = serde_json::from_value(normalized_params)
-            .map_err(|error| ToolError::invalid_params(format!("参数解析失败: {error}")))?;
-        if input.prompt.trim().is_empty() {
-            return Err(ToolError::invalid_params(
-                "prompt 不能为空字符串".to_string(),
-            ));
-        }
-        submit_image_generation_task_record(&self.app_handle, context, input)
+        submit_image_generation_task_value(&self.app_handle, context, params)
     }
 }
 

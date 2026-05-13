@@ -7,6 +7,17 @@ import {
   createSkillSelectionProps,
   type SkillSelectionProps,
 } from "../skill-selection/skillSelectionBindings";
+import agentResource from "@/i18n/resources/zh-CN/agent.json";
+import enAgentResource from "@/i18n/resources/en-US/agent.json";
+import {
+  buildHomeSurfaceCopy,
+  type HomeSurfaceCopyKey,
+} from "../home/homeSurfaceCopy";
+import {
+  buildInputbarCoreCopy,
+  type InputbarCoreCopyKey,
+} from "./Inputbar/components/inputbarCoreCopy";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 vi.mock("./ChatModelSelector", () => ({
   ChatModelSelector: () => <div data-testid="empty-state-model-selector" />,
@@ -44,6 +55,34 @@ vi.mock("./Inputbar/components/TeamSelector", () => ({
     />
   ),
 }));
+
+function translateResource(
+  resource: Partial<Record<HomeSurfaceCopyKey | InputbarCoreCopyKey, string>>,
+  key: HomeSurfaceCopyKey | InputbarCoreCopyKey,
+  values?: Record<string, number | string>,
+) {
+  return Object.entries(values ?? {}).reduce(
+    (text, [name, value]) =>
+      text.split(`{{${name}}}`).join(String(value)),
+    resource[key] ?? key,
+  );
+}
+
+const TEST_COMPOSER_COPY = buildHomeSurfaceCopy((key, values) =>
+  translateResource(agentResource, key, values),
+).composer;
+
+const TEST_EN_COMPOSER_COPY = buildHomeSurfaceCopy((key, values) =>
+  translateResource(enAgentResource, key, values),
+).composer;
+
+const TEST_INPUTBAR_CORE_COPY = buildInputbarCoreCopy((key, values) =>
+  translateResource(agentResource, key, values),
+);
+
+const TEST_EN_INPUTBAR_CORE_COPY = buildInputbarCoreCopy((key, values) =>
+  translateResource(enAgentResource, key, values),
+);
 
 const mockSelectedTeam = {
   id: "frontend-triage-team",
@@ -105,12 +144,13 @@ function createGithubSearchServiceSkill() {
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
 });
 
 afterEach(() => {
@@ -162,6 +202,8 @@ function renderPanel(
     isGeneralTheme: false,
     characters: [],
     skillSelection: createSkillSelection(),
+    copy: TEST_COMPOSER_COPY,
+    inputbarCopy: TEST_INPUTBAR_CORE_COPY,
     showCreationModeSelector: false,
     creationMode: "guided",
     onCreationModeChange: vi.fn(),
@@ -218,6 +260,8 @@ function renderStatefulPanel(
         isGeneralTheme
         characters={[]}
         skillSelection={createSkillSelection()}
+        copy={TEST_COMPOSER_COPY}
+        inputbarCopy={TEST_INPUTBAR_CORE_COPY}
         showCreationModeSelector={false}
         creationMode="guided"
         onCreationModeChange={vi.fn()}
@@ -358,6 +402,62 @@ describe("EmptyStateComposerPanel", () => {
     });
 
     expect(onToggleFileManager).toHaveBeenCalledTimes(1);
+  });
+
+  it("首页空态输入区 chrome 文案应支持 en-US copy", () => {
+    const container = renderPanel({
+      copy: TEST_EN_COMPOSER_COPY,
+      inputbarCopy: TEST_EN_INPUTBAR_CORE_COPY,
+      isGeneralTheme: true,
+      guideHelpActive: true,
+      onClearGuideHelp: vi.fn(),
+      onToggleFileManager: vi.fn(),
+      showCreationModeSelector: true,
+    });
+
+    const guideBadge = container.querySelector(
+      '[data-testid="home-guide-help-active-badge"]',
+    );
+    expect(guideBadge?.textContent).toContain("Lime guide help");
+
+    const guideCloseButton = guideBadge?.querySelector("button");
+    expect(guideCloseButton?.getAttribute("aria-label")).toBe(
+      "Close Lime guide help",
+    );
+    expect(guideCloseButton?.getAttribute("title")).toBe("Close guide help");
+    expect(
+      container
+        .querySelector('[data-testid="home-guide-help-toolbar-badge"]')
+        ?.getAttribute("title"),
+    ).toBe("Close guide help");
+
+    const advancedToggle = container.querySelector(
+      '[data-testid="empty-state-advanced-toggle"]',
+    ) as HTMLButtonElement | null;
+    expect(advancedToggle?.getAttribute("aria-label")).toBe(
+      "Expand advanced settings",
+    );
+    expect(advancedToggle?.getAttribute("title")).toBe(
+      "Expand advanced settings",
+    );
+    expect(advancedToggle?.textContent).toContain("Advanced settings");
+    expect(container.textContent).toContain("Current model");
+
+    const fileManagerToggle = container.querySelector(
+      '[data-testid="inputbar-file-manager-toggle"]',
+    ) as HTMLButtonElement | null;
+    expect(fileManagerToggle?.getAttribute("aria-label")).toBe(
+      "Open file manager sidebar",
+    );
+
+    expandAdvancedControls(container);
+
+    expect(
+      container
+        .querySelector('[data-testid="empty-state-advanced-toggle"]')
+        ?.getAttribute("aria-label"),
+    ).toBe("Collapse advanced settings");
+    expect(container.textContent).toContain("General task context");
   });
 
   it("首页空态输入区应把项目资料作为底栏主入口", () => {

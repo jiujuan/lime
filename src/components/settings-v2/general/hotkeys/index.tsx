@@ -24,10 +24,6 @@ import { useTranslation } from "react-i18next";
 import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
 import { cn } from "@/lib/utils";
 import {
-  getExperimentalConfig,
-  type ExperimentalFeatures,
-} from "@/lib/api/experimentalFeatures";
-import {
   getVoiceInputConfig,
   type VoiceInputConfig,
 } from "@/lib/api/asrProvider";
@@ -219,8 +215,6 @@ export function HotkeysSettings() {
   const { t } = useTranslation("settings");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [experimentalConfig, setExperimentalConfig] =
-    useState<ExperimentalFeatures | null>(null);
   const [voiceConfig, setVoiceConfig] = useState<VoiceInputConfig | null>(null);
   const [runtimeStatus, setRuntimeStatus] =
     useState<HotkeyRuntimeStatus | null>(null);
@@ -233,16 +227,13 @@ export function HotkeysSettings() {
     setError(null);
 
     try {
-      const [experimentalResult, voiceResult, runtimeResult] =
-        await Promise.all([
-          getExperimentalConfig(),
-          getVoiceInputConfig(),
-          getHotkeyRuntimeStatus()
-            .then((result) => ({ ok: true as const, result }))
-            .catch(() => ({ ok: false as const, result: null })),
-        ]);
+      const [voiceResult, runtimeResult] = await Promise.all([
+        getVoiceInputConfig(),
+        getHotkeyRuntimeStatus()
+          .then((result) => ({ ok: true as const, result }))
+          .catch(() => ({ ok: false as const, result: null })),
+      ]);
 
-      setExperimentalConfig(experimentalResult);
       setVoiceConfig(voiceResult);
       setRuntimeStatus(runtimeResult.result);
       setRuntimeAvailability(runtimeResult.ok ? "ready" : "fallback");
@@ -325,18 +316,17 @@ export function HotkeysSettings() {
   );
 
   const catalog = useMemo(() => {
-    if (!experimentalConfig || !voiceConfig) {
+    if (!voiceConfig) {
       return null;
     }
 
     return buildAuditedHotkeyCatalog({
       platform,
-      experimentalConfig,
       voiceConfig,
       runtimeStatus,
       copy: catalogCopy,
     });
-  }, [catalogCopy, experimentalConfig, platform, runtimeStatus, voiceConfig]);
+  }, [catalogCopy, platform, runtimeStatus, voiceConfig]);
 
   if (loading) {
     return <LoadingSkeleton />;
@@ -420,7 +410,7 @@ export function HotkeysSettings() {
               <SummaryChip tone="success">
                 {t("settings.hotkeys.summary.globalReady", {
                   ready: catalog.summary.globalReady,
-                  total: 3,
+                  total: catalog.sections[0]?.hotkeys.length ?? 0,
                 })}
               </SummaryChip>
               <SummaryChip

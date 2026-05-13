@@ -125,6 +125,8 @@ import {
   useAgentStreamTextOverlay,
 } from "../hooks/agentStreamTextOverlayStore";
 import { INPUTBAR_BUILTIN_COMMANDS } from "../skill-selection/builtinCommands";
+import { isRetainedSkillProcessMessage } from "../utils/skillInlineProcessRetention";
+import { formatNumber } from "@/i18n/format";
 
 interface MessageListProps {
   sessionId?: string | null;
@@ -348,7 +350,7 @@ function buildLongHistoricalMessagePreview(content: string): string {
 }
 
 function formatContentLength(value: number): string {
-  return value.toLocaleString("zh-CN");
+  return formatNumber(value);
 }
 
 interface HistoricalAssistantMessagePreviewProps {
@@ -364,7 +366,11 @@ function HistoricalAssistantMessagePreview({
   variant,
   onExpand,
 }: HistoricalAssistantMessagePreviewProps) {
+  const { t } = useTranslation("agent");
   const isLong = variant === "long";
+  const noticeKey = isLong
+    ? "agentChat.messageList.historicalAssistantPreview.longNotice"
+    : "agentChat.messageList.historicalAssistantPreview.compactNotice";
 
   return (
     <div
@@ -381,15 +387,16 @@ function HistoricalAssistantMessagePreview({
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200/80 bg-slate-50/80 px-3 py-2 text-sm text-slate-600">
         <span>
-          {isLong ? "此历史消息较长" : "历史助手回复较长"}（约{" "}
-          {formatContentLength(contentLength)} 字），已先展示纯文本预览。
+          {t(noticeKey, {
+            countLabel: formatContentLength(contentLength),
+          })}
         </span>
         <button
           type="button"
           className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
           onClick={onExpand}
         >
-          展开完整内容
+          {t("agentChat.messageList.historicalAssistantPreview.expandFull")}
         </button>
       </div>
     </div>
@@ -407,9 +414,22 @@ const HistoricalMarkdownHydrationPreview: React.FC<{ content: string }> = ({
   </div>
 );
 
+const ImageWorkbenchAssistantIntro: React.FC<{ content: string }> = ({
+  content,
+}) => (
+  <div
+    data-testid="image-workbench-assistant-intro"
+    className="max-w-[760px] whitespace-pre-line break-words px-0.5 text-[15px] leading-7 text-slate-950"
+  >
+    {content}
+  </div>
+);
+
 function summarizeHistoricalTimelineItems(items: AgentThreadItem[]): {
   stepsCount: number;
-  metaText: string;
+  toolStepsCount: number;
+  thinkingStepsCount: number;
+  artifactStepsCount: number;
 } {
   const visibleItems = items.filter((item) => {
     if (item.type === "user_message" || item.type === "agent_message") {
@@ -437,15 +457,11 @@ function summarizeHistoricalTimelineItems(items: AgentThreadItem[]): {
   const artifactStepsCount = visibleItems.filter(
     (item) => item.type === "file_artifact",
   ).length;
-  const metaParts = [
-    toolStepsCount > 0 ? `${toolStepsCount} 个工具步骤` : null,
-    thinkingStepsCount > 0 ? `${thinkingStepsCount} 条思路` : null,
-    artifactStepsCount > 0 ? `${artifactStepsCount} 份产物` : null,
-  ].filter((part): part is string => Boolean(part));
-
   return {
     stepsCount: visibleItems.length,
-    metaText: metaParts.length > 0 ? metaParts.join("，") : "执行细节已折叠",
+    toolStepsCount,
+    thinkingStepsCount,
+    artifactStepsCount,
   };
 }
 
@@ -455,6 +471,7 @@ const HistoricalTimelinePreview: React.FC<{
   detailsDeferred?: boolean;
   onExpand: () => void;
 }> = ({ items, placement, detailsDeferred = false, onExpand }) => {
+  const { t } = useTranslation("agent");
   const summary = useMemo(
     () => summarizeHistoricalTimelineItems(items),
     [items],
@@ -463,10 +480,34 @@ const HistoricalTimelinePreview: React.FC<{
   if (summary.stepsCount <= 0 && !detailsDeferred) {
     return null;
   }
+  const metaParts = [
+    summary.toolStepsCount > 0
+      ? t("agentChat.messageList.historicalTimeline.toolSteps", {
+          countLabel: formatContentLength(summary.toolStepsCount),
+        })
+      : null,
+    summary.thinkingStepsCount > 0
+      ? t("agentChat.messageList.historicalTimeline.thinkingSteps", {
+          countLabel: formatContentLength(summary.thinkingStepsCount),
+        })
+      : null,
+    summary.artifactStepsCount > 0
+      ? t("agentChat.messageList.historicalTimeline.artifactSteps", {
+          countLabel: formatContentLength(summary.artifactStepsCount),
+        })
+      : null,
+  ].filter((part): part is string => Boolean(part));
+  const summaryMetaText =
+    metaParts.length > 0
+      ? metaParts.join(t("agentChat.messageList.historicalTimeline.separator"))
+      : t("agentChat.messageList.historicalTimeline.foldedMeta");
   const metaText =
     summary.stepsCount > 0
-      ? `${summary.stepsCount} 步 · ${summary.metaText}`
-      : "点击展开后加载执行细节";
+      ? t("agentChat.messageList.historicalTimeline.meta", {
+          stepCountLabel: formatContentLength(summary.stepsCount),
+          meta: summaryMetaText,
+        })
+      : t("agentChat.messageList.historicalTimeline.deferredMeta");
 
   return (
     <button
@@ -476,13 +517,15 @@ const HistoricalTimelinePreview: React.FC<{
       onClick={onExpand}
     >
       <span className="min-w-0 flex-1">
-        <span className="block font-medium text-slate-800">执行过程已折叠</span>
+        <span className="block font-medium text-slate-800">
+          {t("agentChat.messageList.historicalTimeline.title")}
+        </span>
         <span className="mt-0.5 block text-xs leading-5 text-slate-500">
           {metaText}
         </span>
       </span>
       <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700">
-        展开
+        {t("agentChat.messageList.historicalTimeline.expand")}
       </span>
     </button>
   );
@@ -577,22 +620,12 @@ const AssistantFirstTokenRuntimeStatus: React.FC<{
 }> = ({ status }) => {
   const { t } = useTranslation("agent");
   const phase = status?.phase || "submitted";
-  const submittedTitle = t(
-    "agentChat.messageList.firstTokenStatus.submitted.title",
-  );
-  const submittedDetail = t(
-    "agentChat.messageList.firstTokenStatus.submitted.detail",
-  );
   const title = truncateRuntimeStatusText(
-    t(`agentChat.messageList.firstTokenStatus.${phase}.title`, {
-      defaultValue: submittedTitle,
-    }),
+    t(`agentChat.messageList.firstTokenStatus.${phase}.title`),
     48,
   );
   const detail = truncateRuntimeStatusText(
-    t(`agentChat.messageList.firstTokenStatus.${phase}.detail`, {
-      defaultValue: submittedDetail,
-    }),
+    t(`agentChat.messageList.firstTokenStatus.${phase}.detail`),
     120,
   );
 
@@ -641,89 +674,11 @@ const AssistantStreamingInlineIndicator: React.FC<{
         aria-hidden
       />
       <span>
-        {t(`agentChat.messageList.streamingInline.${status}`, {
-          defaultValue: isQueued ? "等待输出" : "正在输出",
-        })}
+        {t(`agentChat.messageList.streamingInline.${status}`)}
       </span>
     </div>
   );
 };
-
-const ImageWorkbenchAssistantIntro: React.FC<{ content: string }> = ({
-  content,
-}) => {
-  const lines = content
-    .split(/\r?\n/u)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  if (lines.length === 0) {
-    return null;
-  }
-
-  return (
-    <div
-      data-testid="image-workbench-assistant-intro"
-      className="max-w-[680px] space-y-0.5 text-[15px] leading-7 text-slate-950"
-    >
-      {lines.map((line, index) => (
-        <p
-          key={`${index}:${line}`}
-          className={index === 2 ? "m-0 pt-2" : "m-0"}
-        >
-          {line}
-        </p>
-      ))}
-    </div>
-  );
-};
-
-const ImageWorkbenchAssistantHeader: React.FC<{ label: string }> = ({
-  label,
-}) => (
-  <div
-    data-testid="image-workbench-assistant-header"
-    className="mb-5 flex items-center gap-2.5"
-  >
-    <svg
-      aria-hidden
-      className="h-8 w-8 shrink-0"
-      viewBox="0 0 32 32"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path
-        d="M4.4 18.2C3.6 12.8 7.7 8.4 14.3 7.4c7-1 12.4 2.1 13.3 7.5.8 5.5-3.5 9.8-10.4 10.8C10.4 26.7 5.2 23.5 4.4 18.2Z"
-        fill="#D9F222"
-        stroke="#111111"
-        strokeWidth="1.7"
-      />
-      <path
-        d="M7 12.1c1.9-3.1 6.9-4.8 12-3.8 2.3.4 4.2 1.4 5.6 2.7-2.1 1.2-5.1 1.8-8.2 1.4-3.8-.5-7-1.5-9.4-.3Z"
-        fill="#F0FF63"
-      />
-      <path
-        d="M5.7 18.4c4.5-.6 7.4-2.4 9.2-5.6 1.1 3.5-.3 7-3.6 8.3-2.2.8-4.3.2-5.6-2.7Z"
-        fill="#111111"
-      />
-      <path
-        d="M26.4 15.1c-4.3.4-7.1-.7-9-3.7-.4 3.8 1.8 6.9 5.2 7.4 2.1.4 3.4-.8 3.8-3.7Z"
-        fill="#111111"
-      />
-      <circle cx="11.7" cy="14.6" r="2.2" fill="#E9FF54" />
-      <circle cx="22" cy="13.3" r="2" fill="#E9FF54" />
-      <path
-        d="M12.1 22.1c2.7 1.1 6.2.6 8.4-1.3"
-        stroke="#111111"
-        strokeWidth="1.3"
-        strokeLinecap="round"
-      />
-    </svg>
-    <span className="text-[15px] font-semibold leading-6 text-slate-900">
-      {label}
-    </span>
-  </div>
-);
 
 const USER_COMMAND_TAG_CANDIDATES = INPUTBAR_BUILTIN_COMMANDS.map((command) =>
   command.commandPrefix.trim(),
@@ -749,11 +704,16 @@ function parseLeadingUserCommandTag(
   route?: Message["inputCapabilityRoute"],
 ): { tag: string; body: string } | null {
   const trimmed = content.trimStart();
+  const routePrefix = resolveUserCommandRoutePrefix(route);
   if (!trimmed.startsWith("@")) {
-    return null;
+    return routePrefix
+      ? {
+          tag: routePrefix,
+          body: content.trim(),
+        }
+      : null;
   }
 
-  const routePrefix = resolveUserCommandRoutePrefix(route);
   const candidates = routePrefix
     ? [
         routePrefix,
@@ -789,11 +749,14 @@ const UserCommandMessageContent: React.FC<{
   if (!command) {
     return null;
   }
+  const ariaLabel = command.body
+    ? `${command.tag} ${command.body}`.trim()
+    : command.tag;
 
   return (
     <div
       data-testid="message-user-command-content"
-      aria-label={content}
+      aria-label={ariaLabel}
       className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[15px] leading-7 text-slate-950"
     >
       <span
@@ -955,6 +918,29 @@ function hasInlineThinkingContent(message: Message): boolean {
       ),
     )
   );
+}
+
+function resolveInlineThinkingContent(message: Message): string | undefined {
+  const explicitThinking = message.thinkingContent?.trim()
+    ? message.thinkingContent
+    : undefined;
+  if (explicitThinking) {
+    return explicitThinking;
+  }
+
+  const thinkingText = (message.contentParts || [])
+    .filter(
+      (
+        part,
+      ): part is Extract<
+        NonNullable<Message["contentParts"]>[number],
+        { type: "thinking"; text: string }
+      > => part.type === "thinking" && part.text.trim().length > 0,
+    )
+    .map((part) => part.text)
+    .join("");
+
+  return thinkingText.trim() ? thinkingText : undefined;
 }
 
 function hasNonTextInlineProcessPart(message: Message): boolean {
@@ -1278,6 +1264,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
   activePendingA2UISource = null,
   providerType,
 }) => {
+  const { t } = useTranslation("agent");
   const scrollRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const previousVisibleMessageCountRef = useRef<number | null>(null);
@@ -2029,6 +2016,13 @@ const MessageListInner: React.FC<MessageListProps> = ({
         return true;
       }
 
+      if (
+        isRetainedSkillProcessMessage(message) &&
+        hasInlineThinkingContent(message)
+      ) {
+        return true;
+      }
+
       if (!isConversationTailAssistant) {
         return false;
       }
@@ -2036,6 +2030,14 @@ const MessageListInner: React.FC<MessageListProps> = ({
       if (
         hasTurnContext &&
         !hasProcessTimelineItems &&
+        hasInlineThinkingContent(message)
+      ) {
+        return true;
+      }
+
+      if (
+        !hasTurnContext &&
+        message.runtimeTurnId?.trim() &&
         hasInlineThinkingContent(message)
       ) {
         return true;
@@ -2166,10 +2168,10 @@ const MessageListInner: React.FC<MessageListProps> = ({
     try {
       await navigator.clipboard.writeText(content);
       setCopiedId(id);
-      toast.success("已复制到剪贴板");
+      toast.success(t("agentChat.messageList.toast.copySuccess"));
       setTimeout(() => setCopiedId(null), 2000);
     } catch {
-      toast.error("复制失败");
+      toast.error(t("agentChat.messageList.toast.copyFailed"));
     }
   };
 
@@ -2211,9 +2213,14 @@ const MessageListInner: React.FC<MessageListProps> = ({
       msg.imageWorkbenchPreview ||
       shouldSuppressStandaloneImageWorkbenchProcess,
     );
+    const shouldSuppressImageWorkbenchAssistantText =
+      msg.role === "assistant" &&
+      Boolean(msg.imageWorkbenchPreview) &&
+      shouldSuppressImageWorkbenchStatusText(rawDisplayContent);
     const visibleRawDisplayContent =
       msg.role === "assistant" &&
-      shouldSuppressImageWorkbenchStatusText(rawDisplayContent)
+      (shouldSuppressImageWorkbenchAssistantText ||
+        shouldSuppressStandaloneImageWorkbenchProcess)
         ? ""
         : rawDisplayContent;
     const displayContent = sanitizeMessageTextForDisplay(
@@ -2270,6 +2277,10 @@ const MessageListInner: React.FC<MessageListProps> = ({
     const conversationThinkingContent =
       msg.role === "assistant" && includeInlineProcessFlow
         ? msg.thinkingContent
+        : undefined;
+    const imageWorkbenchThinkingContent =
+      msg.role === "assistant" && msg.imageWorkbenchPreview
+        ? resolveInlineThinkingContent(msg)
         : undefined;
     const conversationToolCalls =
       msg.role === "assistant" && includeInlineProcessFlow
@@ -2785,9 +2796,6 @@ const MessageListInner: React.FC<MessageListProps> = ({
             >
               {msg.role === "assistant" ? (
                 <>
-                  {msg.imageWorkbenchPreview ? (
-                    <ImageWorkbenchAssistantHeader label={assistantLabel} />
-                  ) : null}
                   {shouldRenderPrimaryTimelineOutsideBubble
                     ? null
                     : primaryTimelineNode}
@@ -2812,8 +2820,27 @@ const MessageListInner: React.FC<MessageListProps> = ({
                     <HistoricalMarkdownHydrationPreview
                       content={rendererContent}
                     />
-                  ) : msg.imageWorkbenchPreview && hasVisibleAssistantText ? (
-                    <ImageWorkbenchAssistantIntro content={rendererContent} />
+                  ) : msg.imageWorkbenchPreview ? (
+                    <>
+                      {imageWorkbenchThinkingContent ? (
+                        <StreamingRenderer
+                          content=""
+                          rawContent=""
+                          isStreaming={false}
+                          showCursor={false}
+                          thinkingContent={imageWorkbenchThinkingContent}
+                          contentParts={undefined}
+                          toolCalls={undefined}
+                          actionRequests={undefined}
+                          markdownRenderMode="light"
+                        />
+                      ) : null}
+                      {hasVisibleAssistantText ? (
+                        <ImageWorkbenchAssistantIntro
+                          content={rendererContent}
+                        />
+                      ) : null}
+                    </>
                   ) : (
                     <StreamingRenderer
                       content={rendererContent}
@@ -3028,8 +3055,8 @@ const MessageListInner: React.FC<MessageListProps> = ({
                       size="icon"
                       className="h-7 w-7 rounded-full border border-slate-200/90 bg-white/92 text-slate-400 shadow-sm shadow-slate-950/5 hover:bg-slate-50 hover:text-slate-700"
                       onClick={() => onQuoteMessage?.(actionContent, msg.id)}
-                      aria-label="引用消息"
-                      title="引用消息"
+                      aria-label={t("agentChat.messageList.actions.quote")}
+                      title={t("agentChat.messageList.actions.quote")}
                     >
                       <Quote size={12} />
                     </Button>
@@ -3040,8 +3067,8 @@ const MessageListInner: React.FC<MessageListProps> = ({
                       size="icon"
                       className="h-7 w-7 rounded-full border border-slate-200/90 bg-white/92 text-slate-400 shadow-sm shadow-slate-950/5 hover:bg-slate-50 hover:text-slate-700"
                       onClick={() => handleCopy(actionContent, msg.id)}
-                      aria-label="复制消息"
-                      title="复制消息"
+                      aria-label={t("agentChat.messageList.actions.copy")}
+                      title={t("agentChat.messageList.actions.copy")}
                     >
                       {copiedId === msg.id ? (
                         <Check size={12} className="text-emerald-600" />
@@ -3061,8 +3088,8 @@ const MessageListInner: React.FC<MessageListProps> = ({
                           content: actionContent,
                         })
                       }
-                      aria-label="保存为技能"
-                      title="保存为技能"
+                      aria-label={t("agentChat.messageList.actions.saveAsSkill")}
+                      title={t("agentChat.messageList.actions.saveAsSkill")}
                     >
                       <Sparkles size={12} />
                     </Button>
@@ -3078,8 +3105,12 @@ const MessageListInner: React.FC<MessageListProps> = ({
                           content: actionContent,
                         })
                       }
-                      aria-label="保存到灵感库"
-                      title="保存到灵感库"
+                      aria-label={t(
+                        "agentChat.messageList.actions.saveToInspiration",
+                      )}
+                      title={t(
+                        "agentChat.messageList.actions.saveToInspiration",
+                      )}
                     >
                       <BookmarkPlus size={12} />
                     </Button>
@@ -3097,11 +3128,17 @@ const MessageListInner: React.FC<MessageListProps> = ({
                           description: knowledgeArtifactSource?.description,
                         })
                       }
-                      aria-label="保存到项目资料"
-                      title="保存到项目资料"
+                      aria-label={t(
+                        "agentChat.messageList.actions.saveToKnowledge",
+                      )}
+                      title={t(
+                        "agentChat.messageList.actions.saveToKnowledge",
+                      )}
                     >
                       <FileText size={12} />
-                      <span>保存到项目资料</span>
+                      <span>
+                        {t("agentChat.messageList.actions.saveToKnowledge")}
+                      </span>
                     </Button>
                   ) : null}
                 </MessageActions>
@@ -3166,11 +3203,11 @@ const MessageListInner: React.FC<MessageListProps> = ({
                 <div className="min-w-0 flex-1">
                   <div className="mb-1 flex flex-wrap items-center gap-1.5">
                     <span className="inline-flex rounded-full border border-sky-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-sky-700">
-                      Document 产物
+                      {t("agentChat.messageList.artifact.documentBadge")}
                     </span>
                     {knowledgeSource ? (
                       <span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
-                        可保存到项目资料
+                        {t("agentChat.messageList.artifact.saveableBadge")}
                       </span>
                     ) : null}
                   </div>
@@ -3190,7 +3227,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
                       </span>
                     ) : artifact.status === "streaming" ? (
                       <span className="text-xs text-slate-500">
-                        正在准备文件内容...
+                        {t("agentChat.messageList.artifact.streaming")}
                       </span>
                     ) : null}
                   </div>
@@ -3210,7 +3247,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
                   }
                   className="flex shrink-0 items-center justify-center rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-sky-700 transition-colors hover:border-sky-300 hover:bg-sky-100 sm:py-0"
                 >
-                  保存这份文档
+                  {t("agentChat.messageList.artifact.saveDocument")}
                 </button>
               ) : null}
             </div>
@@ -3242,10 +3279,16 @@ const MessageListInner: React.FC<MessageListProps> = ({
             className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/80 px-4 py-3 text-sm text-slate-600"
           >
             <div className="min-w-0 flex-1">
-              为了更快打开旧对话，当前先展示最近{" "}
-              {sessionHistoryWindow?.loadedMessages ?? renderedMessages.length}{" "}
-              / {sessionHistoryWindow?.totalMessages ?? renderedMessages.length}{" "}
-              条消息。
+              {t("agentChat.messageList.history.persistedSummary", {
+                loaded: formatContentLength(
+                  sessionHistoryWindow?.loadedMessages ??
+                    renderedMessages.length,
+                ),
+                total: formatContentLength(
+                  sessionHistoryWindow?.totalMessages ??
+                    renderedMessages.length,
+                ),
+              })}
               {sessionHistoryWindow?.error ? (
                 <span className="ml-2 text-red-600">
                   {sessionHistoryWindow.error}
@@ -3265,8 +3308,8 @@ const MessageListInner: React.FC<MessageListProps> = ({
               }}
             >
               {sessionHistoryWindow?.isLoadingFull
-                ? "正在加载更多历史"
-                : "加载更多历史"}
+                ? t("agentChat.messageList.history.loadingMore")
+                : t("agentChat.messageList.history.loadMore")}
             </button>
           </div>
         ) : null}
@@ -3276,11 +3319,15 @@ const MessageListInner: React.FC<MessageListProps> = ({
             className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/80 px-4 py-3 text-sm text-slate-600"
           >
             <div className="min-w-0 flex-1">
-              为了更快打开对话，当前先展示最近 {renderedMessages.length}{" "}
-              条消息，
-              {isRestoredHistoryWindow
-                ? `更早的 ${hiddenHistoryCount} 条可按需展开。`
-                : `更早的 ${hiddenHistoryCount} 条会在空闲时继续补齐。`}
+              {t(
+                isRestoredHistoryWindow
+                  ? "agentChat.messageList.history.windowSummaryRestored"
+                  : "agentChat.messageList.history.windowSummaryDeferred",
+                {
+                  loaded: formatContentLength(renderedMessages.length),
+                  hidden: formatContentLength(hiddenHistoryCount),
+                },
+              )}
             </div>
             <button
               type="button"
@@ -3288,7 +3335,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
               className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
               onClick={handleExpandAllHistory}
             >
-              立即展开更早消息
+              {t("agentChat.messageList.history.expandEarlier")}
             </button>
           </div>
         ) : null}
@@ -3305,10 +3352,10 @@ const MessageListInner: React.FC<MessageListProps> = ({
               </div>
               <div className="space-y-1 text-center">
                 <p className="text-lg font-medium text-foreground">
-                  正在恢复生成会话...
+                  {t("agentChat.messageList.restoring.title")}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  正在同步最近一次生成会话，请稍候。
+                  {t("agentChat.messageList.restoring.description")}
                 </p>
               </div>
             </div>
@@ -3328,18 +3375,18 @@ const MessageListInner: React.FC<MessageListProps> = ({
                   </div>
                   <div className="min-w-0 flex-1">
                     <span className="inline-flex items-center rounded-full border border-slate-200/80 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
-                      对话
+                      {t("agentChat.messageList.taskCenterEmpty.badge")}
                     </span>
 
                     <div className="mt-4 space-y-2">
                       <h2 className="text-[32px] font-semibold tracking-tight text-slate-900 md:text-[36px]">
-                        最近对话
+                        {t("agentChat.messageList.taskCenterEmpty.title")}
                       </h2>
                       <p className="max-w-[48rem] text-[15px] leading-7 text-slate-600">
-                        这里集中展示最近对话、待继续会话和更早归档，方便你随时回到上一次工作现场。
+                        {t("agentChat.messageList.taskCenterEmpty.description")}
                       </p>
                       <p className="text-sm leading-7 text-slate-500">
-                        还没有对话时，可以先从“新建对话”开始；后续的结果、素材和中间过程都会继续留在这里。
+                        {t("agentChat.messageList.taskCenterEmpty.helper")}
                       </p>
                     </div>
                   </div>
@@ -3347,13 +3394,13 @@ const MessageListInner: React.FC<MessageListProps> = ({
 
                 <div className="mt-6 flex flex-wrap gap-2">
                   <span className="inline-flex items-center rounded-full border border-slate-200/80 bg-white px-3 py-1.5 text-xs text-slate-500">
-                    左侧会优先显示待继续的对话
+                    {t("agentChat.messageList.taskCenterEmpty.chip.pending")}
                   </span>
                   <span className="inline-flex items-center rounded-full border border-slate-200/80 bg-white px-3 py-1.5 text-xs text-slate-500">
-                    最近对话和归档会按时间自动整理
+                    {t("agentChat.messageList.taskCenterEmpty.chip.organized")}
                   </span>
                   <span className="inline-flex items-center rounded-full border border-slate-200/80 bg-white px-3 py-1.5 text-xs text-slate-500">
-                    恢复中的会话会自动回到这里继续
+                    {t("agentChat.messageList.taskCenterEmpty.chip.restore")}
                   </span>
                 </div>
               </section>
@@ -3365,7 +3412,9 @@ const MessageListInner: React.FC<MessageListProps> = ({
                 alt={LIME_BRAND_NAME}
                 className="w-12 h-12 mb-4 opacity-20"
               />
-              <p className="text-lg font-medium">开始一段新的对话吧</p>
+              <p className="text-lg font-medium">
+                {t("agentChat.messageList.empty.defaultTitle")}
+              </p>
             </div>
           ))}
 

@@ -70,6 +70,7 @@ export interface PreparedAgentStreamUserInputSend {
   expectingQueue: boolean;
   assistantMsgId: string;
   userMsgId: string | null;
+  userMsg: Message | null;
   assistantMsg: Message;
   runtimeStatusPresentation?: AgentRuntimeStatusPresentation;
 }
@@ -125,7 +126,7 @@ export function prepareAgentStreamUserInputSend(
     env.hasPendingPreparedSubmit();
   const assistantMsgId = crypto.randomUUID();
   const userMsgId = skipUserMessage ? null : crypto.randomUUID();
-  const { assistantMsg } = prepareAgentStreamSubmitDraft({
+  const { assistantMsg, userMsg } = prepareAgentStreamSubmitDraft({
     content,
     displayContent,
     images,
@@ -168,6 +169,7 @@ export function prepareAgentStreamUserInputSend(
     expectingQueue,
     assistantMsgId,
     userMsgId,
+    userMsg,
     assistantMsg,
     runtimeStatusPresentation,
   };

@@ -677,6 +677,44 @@ describe("useAsterAgentChat 首页新会话", () => {
     }
   });
 
+  it("已有工作区持久化偏好时应优先按当前偏好解析真实可用模型，不再读取默认 provider", async () => {
+    const workspaceId = "ws-init-prefer-persisted-selection";
+    localStorage.setItem(
+      `agent_pref_provider_${workspaceId}`,
+      JSON.stringify("gemini"),
+    );
+    localStorage.setItem(
+      `agent_pref_model_${workspaceId}`,
+      JSON.stringify("gemini-2.5-pro"),
+    );
+    mockInitAsterAgent.mockResolvedValue({
+      initialized: true,
+      provider_configured: false,
+    });
+    mockResolveClawWorkspaceProviderSelection.mockResolvedValue({
+      providerType: "gemini",
+      model: "gemini-2.5-flash",
+    });
+
+    const harness = mountHook(workspaceId);
+
+    try {
+      await flushEffects();
+      await flushEffects();
+
+      expect(mockGetDefaultProvider).not.toHaveBeenCalled();
+      expect(mockResolveClawWorkspaceProviderSelection).toHaveBeenCalledWith({
+        currentProviderType: "gemini",
+        currentModel: "gemini-2.5-pro",
+        theme: "general",
+      });
+      expect(harness.getValue().providerType).toBe("gemini");
+      expect(harness.getValue().model).toBe("gemini-2.5-flash");
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("话题列表暂时未返回当前执行会话时不应清空本地执行态", async () => {
     const workspaceId = "ws-topic-missing-active-session";
     mockCreateAgentRuntimeSession.mockResolvedValue("session-live-missing");
@@ -2836,7 +2874,115 @@ describe("useAsterAgentChat runtime routing", () => {
       expect(assistantMessage?.runtimeStatus).toBeUndefined();
       expect(assistantMessage?.isThinking).toBe(false);
       expect(assistantMessage?.content).toContain("我会先分析你的诉求。");
+      expect(assistantMessage?.thinkingContent).toContain(
+        "先判断任务是直接回答还是需要联网",
+      );
+      expect(
+        assistantMessage?.contentParts?.some(
+          (part) =>
+            part.type === "thinking" &&
+            part.text.includes("先判断任务是直接回答还是需要联网"),
+        ),
+      ).toBe(true);
       expect(getAgentStreamTextOverlay(assistantMessage?.id)).toBeNull();
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("final_done 立即刷新会话详情时不应丢掉本地已到达的 reasoning 过程", async () => {
+    const workspaceId = "ws-final-done-retain-local-reasoning";
+    const sessionId = "session-final-done-retain-local-reasoning";
+    seedSession(workspaceId, sessionId);
+    const harness = mountHook(workspaceId);
+    const stream = captureTurnStream();
+    mockGetAgentRuntimeSession.mockResolvedValueOnce({
+      id: sessionId,
+      messages: [
+        {
+          role: "user",
+          timestamp: 1710000000,
+          content: [{ type: "text", text: "请先分析，再回答" }],
+        },
+        {
+          role: "assistant",
+          timestamp: 1710000005,
+          content: [{ type: "output_text", text: "最终回答。" }],
+        },
+      ],
+      turns: [],
+      items: [],
+    });
+
+    try {
+      await flushEffects();
+
+      await act(async () => {
+        await harness
+          .getValue()
+          .sendMessage("请先分析，再回答", [], false, true, false, "react");
+      });
+
+      act(() => {
+        stream.emit({
+          type: "turn_started",
+          turn: {
+            id: "turn-local-reasoning",
+            thread_id: sessionId,
+            prompt_text: "请先分析，再回答",
+            status: "running",
+            started_at: "2026-05-13T04:20:00.000Z",
+            created_at: "2026-05-13T04:20:00.000Z",
+            updated_at: "2026-05-13T04:20:00.000Z",
+          },
+        });
+        stream.emit({
+          type: "item_completed",
+          item: {
+            id: "reasoning-local-retained",
+            thread_id: sessionId,
+            turn_id: "turn-local-reasoning",
+            sequence: 1,
+            status: "completed",
+            started_at: "2026-05-13T04:20:00.100Z",
+            completed_at: "2026-05-13T04:20:00.900Z",
+            updated_at: "2026-05-13T04:20:00.900Z",
+            type: "reasoning",
+            text: "先分析本轮产品资料整理边界。",
+          },
+        });
+        stream.emit({
+          type: "text_delta",
+          text: "最终回答。",
+        });
+        stream.emit({
+          type: "final_done",
+        });
+      });
+
+      await flushEffects();
+      await flushEffects();
+
+      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(sessionId, {
+        historyLimit: 40,
+      });
+      expect(harness.getValue().threadItems).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: "reasoning-local-retained",
+            type: "reasoning",
+            status: "completed",
+          }),
+        ]),
+      );
+      expect(harness.getValue().turns).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: "turn-local-reasoning",
+            status: "running",
+          }),
+        ]),
+      );
     } finally {
       harness.unmount();
     }
@@ -3879,6 +4025,70 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
       expect(harness.getValue().turns).toEqual([]);
       expect(harness.getValue().threadItems).toEqual([]);
       expect(mockGenerateAgentRuntimeSessionTitle).not.toHaveBeenCalled();
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("新建会话后旧会话的流事件不应继续写入当前消息列表", async () => {
+    const workspaceId = "ws-create-fresh-detach-old-stream";
+    const previousSessionId = "session-old-stream";
+    const createdSessionId = "session-fresh-after-stream";
+    seedSession(workspaceId, previousSessionId);
+    mockCreateAgentRuntimeSession.mockResolvedValue(createdSessionId);
+    const stream = captureTurnStream();
+    const harness = mountHook(workspaceId);
+
+    try {
+      await flushEffects();
+
+      await act(async () => {
+        await harness
+          .getValue()
+          .sendMessage("请继续生成配图", [], false, false, false, "react");
+      });
+
+      expect(stream.getEventName()).toMatch(/^aster_stream_/);
+      expect(harness.getValue().messages.length).toBeGreaterThan(0);
+
+      await act(async () => {
+        const newSessionId = await harness.getValue().createFreshSession();
+        expect(newSessionId).toBe(createdSessionId);
+      });
+
+      expect(harness.getValue().sessionId).toBe(createdSessionId);
+      expect(harness.getValue().messages).toEqual([]);
+      expect(harness.getValue().turns).toEqual([]);
+      expect(harness.getValue().threadItems).toEqual([]);
+      expect(harness.getValue().isSending).toBe(false);
+      expect(stream.getEventName()).toBeNull();
+
+      await act(async () => {
+        stream.emit({
+          type: "turn_started",
+          turn: {
+            id: "turn-old-stream-1",
+            thread_id: previousSessionId,
+            prompt_text: "请继续生成配图",
+            status: "running",
+            started_at: "2026-05-13T10:00:00.000Z",
+            created_at: "2026-05-13T10:00:00.000Z",
+            updated_at: "2026-05-13T10:00:00.000Z",
+          },
+        });
+        stream.emit({
+          type: "text_delta",
+          text: "这段旧流不应该出现在新会话里",
+        });
+        stream.emit({
+          type: "final_done",
+        });
+      });
+
+      expect(harness.getValue().sessionId).toBe(createdSessionId);
+      expect(harness.getValue().messages).toEqual([]);
+      expect(harness.getValue().turns).toEqual([]);
+      expect(harness.getValue().threadItems).toEqual([]);
     } finally {
       harness.unmount();
     }

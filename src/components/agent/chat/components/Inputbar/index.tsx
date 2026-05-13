@@ -1,5 +1,6 @@
 import React from "react";
 import styled from "styled-components";
+import { useTranslation } from "react-i18next";
 import type { MessageImage, MessagePathReference } from "../../types";
 import type { Character } from "@/lib/api/memory";
 import type {
@@ -29,6 +30,8 @@ import type {
   InputbarKnowledgePackOption,
   InputbarKnowledgePackSelection,
 } from "./types";
+import { buildInputbarComposerSectionCopy } from "./components/inputbarComposerSectionCopy";
+import { buildInputbarCoreCopy } from "./components/inputbarCoreCopy";
 
 const SecondaryControlsRow = styled.div`
   position: absolute;
@@ -201,6 +204,18 @@ export const Inputbar: React.FC<InputbarProps> = ({
   defaultCuratedTaskReferenceEntries = [],
   inputCompletionEnabled = true,
 }) => {
+  const { t } = useTranslation("agent");
+  const inputbarCopy = React.useMemo(
+    () => buildInputbarCoreCopy((key, values) => t(key, values ?? {})),
+    [t],
+  );
+  const inputbarComposerCopy = React.useMemo(
+    () =>
+      buildInputbarComposerSectionCopy((key, values) =>
+        t(key, values ?? {}),
+      ),
+    [t],
+  );
   const {
     textareaRef,
     isWorkspaceVariant,
@@ -372,6 +387,8 @@ export const Inputbar: React.FC<InputbarProps> = ({
         onRemoveQueuedTurn={onRemoveQueuedTurn}
         contextVariant={contextVariant}
         inputCompletionEnabled={inputCompletionEnabled}
+        copy={inputbarComposerCopy}
+        inputbarCopy={inputbarCopy}
       />
       {dialogLayer}
     </InputbarSurface>

@@ -191,6 +191,10 @@ export function useGlobalTrayModelSync({
       const providerType = override?.providerType || preference.providerType;
       const model = override?.model || preference.model;
 
+      if (!providerType.trim() || !model.trim()) {
+        return;
+      }
+
       if (projectId) {
         savePersistedProjectId(projectId);
       }

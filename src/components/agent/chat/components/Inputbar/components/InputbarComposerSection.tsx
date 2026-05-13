@@ -34,6 +34,8 @@ import type {
   InputbarKnowledgePackSelection,
 } from "../types";
 import { InputbarKnowledgeControl } from "../knowledge/InputbarKnowledgeControl";
+import type { InputbarComposerSectionCopy } from "./inputbarComposerSectionCopy";
+import type { InputbarCoreCopy } from "./inputbarCoreCopy";
 import type {
   WorkflowGateState,
   WorkflowQuickAction,
@@ -112,6 +114,8 @@ interface InputbarComposerSectionProps {
   projectId?: string | null;
   sessionId?: string | null;
   inputCompletionEnabled?: boolean;
+  copy: InputbarComposerSectionCopy;
+  inputbarCopy: InputbarCoreCopy;
 }
 
 export const InputbarComposerSection: React.FC<
@@ -177,6 +181,8 @@ export const InputbarComposerSection: React.FC<
   projectId = null,
   sessionId = null,
   inputCompletionEnabled = true,
+  copy,
+  inputbarCopy,
 }) => {
   const [teamSelectorAutoOpenToken, setTeamSelectorAutoOpenToken] = useState<
     number | null
@@ -262,6 +268,18 @@ export const InputbarComposerSection: React.FC<
     Boolean(onToggleFileManager);
   const shouldShowLeftExtra =
     Boolean(knowledgePackControl) || shouldShowAdvancedToggle;
+  const advancedSettingsLabel = showAdvancedControls
+    ? copy.advancedSettings.collapse
+    : copy.advancedSettings.expand;
+  const fileManagerLabel = fileManagerOpen
+    ? copy.fileManager.close
+    : copy.fileManager.open;
+  const workspacePlaceholder =
+    workflowGate?.status === "waiting"
+      ? copy.workspacePlaceholder.waiting
+      : contextVariant === "task-center"
+        ? copy.workspacePlaceholder.taskCenter
+        : copy.workspacePlaceholder.default;
   const leftExtra = shouldShowLeftExtra ? (
     <>
       {knowledgePackControl}
@@ -270,9 +288,11 @@ export const InputbarComposerSection: React.FC<
         <Badge
           variant="outline"
           className="h-8 max-w-[240px] items-center overflow-hidden rounded-full border-slate-200/80 bg-white/90 px-3 text-xs font-medium text-slate-600"
-          title={`当前模型：${currentModelSummary}`}
+          title={copy.currentModel.title(currentModelSummary)}
         >
-          <span className="mr-1 text-slate-500">模型</span>
+          <span className="mr-1 text-slate-500">
+            {copy.currentModel.label}
+          </span>
           <span className="truncate">{trimmedModel}</span>
         </Badge>
       ) : null}
@@ -296,10 +316,10 @@ export const InputbarComposerSection: React.FC<
         <MetaToggleButton
           type="button"
           $checked={showAdvancedControls || hasHighlightedAdvancedPreference}
-          aria-label={showAdvancedControls ? "收起高级设置" : "展开高级设置"}
+          aria-label={advancedSettingsLabel}
           aria-expanded={showAdvancedControls}
           data-testid="inputbar-advanced-toggle"
-          title={showAdvancedControls ? "收起高级设置" : "展开高级设置"}
+          title={advancedSettingsLabel}
           onClick={() => setShowAdvancedControls((previous) => !previous)}
         >
           <MetaToggleCheck
@@ -309,7 +329,7 @@ export const InputbarComposerSection: React.FC<
           <MetaToggleGlyph aria-hidden>
             <Settings2 strokeWidth={1.8} />
           </MetaToggleGlyph>
-          <MetaToggleLabel>高级设置</MetaToggleLabel>
+          <MetaToggleLabel>{copy.advancedSettings.label}</MetaToggleLabel>
           {showAdvancedControls ? (
             <ChevronUp className="h-3.5 w-3.5" aria-hidden />
           ) : (
@@ -322,10 +342,8 @@ export const InputbarComposerSection: React.FC<
         <MetaIconButton
           type="button"
           $active={fileManagerOpen}
-          aria-label={
-            fileManagerOpen ? "关闭左侧文件管理器" : "打开左侧文件管理器"
-          }
-          title={fileManagerOpen ? "关闭左侧文件管理器" : "打开左侧文件管理器"}
+          aria-label={fileManagerLabel}
+          title={fileManagerLabel}
           data-testid="inputbar-file-manager-toggle"
           onClick={onToggleFileManager}
         >
@@ -434,6 +452,7 @@ export const InputbarComposerSection: React.FC<
         inputCompletionEnabled={inputCompletionEnabled}
       />
       <InputbarCore
+        uiCopy={inputbarCopy}
         textareaRef={textareaRef}
         text={inputAdapter.state.text}
         setText={inputAdapter.actions.setText}
@@ -451,13 +470,7 @@ export const InputbarComposerSection: React.FC<
         onPaste={onPaste}
         isFullscreen={isFullscreen}
         placeholder={
-          isWorkspaceVariant
-            ? workflowGate?.status === "waiting"
-              ? "说说你的选择，剩下的交给我"
-              : contextVariant === "task-center"
-                ? "继续补充这轮生成，或回到左侧继续旧历史"
-                : "试着输入任何指令，剩下的交给我"
-            : undefined
+          isWorkspaceVariant ? workspacePlaceholder : undefined
         }
         toolMode={isWorkspaceVariant ? "attach-only" : "default"}
         showDragHandle={!isWorkspaceVariant}
@@ -469,6 +482,7 @@ export const InputbarComposerSection: React.FC<
         onRemoveQueuedTurn={onRemoveQueuedTurn}
         leftExtra={leftExtra}
         showMetaTools={showAdvancedControls}
+        listenForVoiceShortcut={isWorkspaceVariant}
       />
     </>
   );

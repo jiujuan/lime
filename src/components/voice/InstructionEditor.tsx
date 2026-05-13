@@ -511,6 +511,11 @@ export function InstructionEditor({
     useState<EditingInstruction | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const onInstructionsChangeRef = useRef(onInstructionsChange);
+
+  useEffect(() => {
+    onInstructionsChangeRef.current = onInstructionsChange;
+  }, [onInstructionsChange]);
 
   // 加载指令列表
   const loadInstructions = useCallback(async () => {
@@ -519,13 +524,13 @@ export function InstructionEditor({
     try {
       const list = await getVoiceInstructions();
       setInstructions(list);
-      onInstructionsChange?.(list);
+      onInstructionsChangeRef.current?.(list);
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载失败");
     } finally {
       setLoading(false);
     }
-  }, [onInstructionsChange]);
+  }, []);
 
   useEffect(() => {
     loadInstructions();

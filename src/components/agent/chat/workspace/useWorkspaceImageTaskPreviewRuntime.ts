@@ -206,6 +206,55 @@ function contentPartContainsProcess(part: ContentPart): boolean {
   return part.type !== "text";
 }
 
+function extractMessageThinkingContent(
+  message: Pick<Message, "thinkingContent" | "contentParts">,
+): string | undefined {
+  const explicitThinking = message.thinkingContent?.trim()
+    ? message.thinkingContent
+    : undefined;
+  if (explicitThinking) {
+    return explicitThinking;
+  }
+
+  const thinkingText = (message.contentParts || [])
+    .filter(
+      (
+        part,
+      ): part is Extract<ContentPart, { type: "thinking"; text: string }> =>
+        part.type === "thinking" && part.text.trim().length > 0,
+    )
+    .map((part) => part.text)
+    .join("");
+  return thinkingText.trim() ? thinkingText : undefined;
+}
+
+function mergeMessageThinkingContent(params: {
+  existingMessage: Message;
+  nextMessage: Message;
+}): string | undefined {
+  const existingThinking = extractMessageThinkingContent(
+    params.existingMessage,
+  );
+  const nextThinking = extractMessageThinkingContent(params.nextMessage);
+
+  if (!existingThinking) {
+    return nextThinking;
+  }
+  if (!nextThinking) {
+    return existingThinking;
+  }
+  if (
+    existingThinking === nextThinking ||
+    existingThinking.includes(nextThinking)
+  ) {
+    return existingThinking;
+  }
+  if (nextThinking.includes(existingThinking)) {
+    return nextThinking;
+  }
+  return `${existingThinking}\n\n${nextThinking}`;
+}
+
 function collectSeedImageTasks(messages?: Message[]): SeedImageTaskRecord[] {
   if (!messages || messages.length === 0) {
     return [];
@@ -1573,6 +1622,10 @@ function buildParsedImageTaskSnapshot(params: {
     payload,
     fallbackPrompt: prompt,
   });
+  const rawText =
+    sanitizePreviewPrompt(readString([payload], ["raw_text", "rawText"]) || "") ||
+    prompt ||
+    displayPrompt;
   const fallbackProviderName = readString(
     [currentAttempt, payload],
     ["provider", "providerName", "provider_name", "providerId", "provider_id"],
@@ -1809,7 +1862,7 @@ function buildParsedImageTaskSnapshot(params: {
       prompt: previewPrompt,
       assistantIntro: presentationText || null,
       caption: previewCaption,
-      rawText: prompt || previewPrompt,
+      rawText,
       expectedCount,
       layoutHint,
       storyboardSlots: storyboardSlots.length > 0 ? storyboardSlots : undefined,
@@ -1870,6 +1923,10 @@ function buildPendingImageTaskSnapshot(params: {
         readString([params.payload || null], ["prompt", "summary", "title"]) ||
         "",
     }) || `${taskLabel}进行中`;
+  const rawText =
+    sanitizePreviewPrompt(
+      readString([params.payload || null], ["raw_text", "rawText"]) || "",
+    ) || previewPrompt;
   const previewModelName =
     readString(
       [params.payload || null],
@@ -1945,7 +2002,7 @@ function buildPendingImageTaskSnapshot(params: {
           params.payload || null,
         ]) || null,
         caption: null,
-        rawText: previewPrompt,
+        rawText,
         expectedCount,
         layoutHint,
         storyboardSlots:
@@ -2150,6 +2207,7 @@ function buildImageWorkbenchMessageStateSignature(
     | "toolCalls"
     | "timestamp"
     | "isThinking"
+    | "thinkingContent"
     | "runtimeStatus"
     | "imageWorkbenchPreview"
   >,
@@ -2161,6 +2219,7 @@ function buildImageWorkbenchMessageStateSignature(
     timestamp:
       message.timestamp instanceof Date ? message.timestamp.getTime() : null,
     isThinking: message.isThinking,
+    thinkingContent: message.thinkingContent ?? null,
     runtimeStatus: message.runtimeStatus ?? null,
     imageWorkbenchPreview: message.imageWorkbenchPreview ?? null,
   });
@@ -2204,6 +2263,7 @@ function mergeImageWorkbenchPreviewMessage(params: {
       : mergedPreview?.status === "running"
         ? params.existingMessage.isThinking
         : false,
+    thinkingContent: mergeMessageThinkingContent(params),
     runtimeStatus: params.nextMessage.runtimeStatus,
     imageWorkbenchPreview: mergedPreview,
   };
@@ -2431,10 +2491,27 @@ function buildImageWorkbenchPreviewMessageFromTask(params: {
   };
 }
 
+function buildImageWorkbenchUserMessageFromTask(
+  task: ImageWorkbenchTask,
+): Message | null {
+  const rawText = (task.rawText || task.prompt || "").trim();
+  if (!rawText) {
+    return null;
+  }
+
+  return {
+    id: `image-workbench:${task.id}:user`,
+    role: "user",
+    content: rawText,
+    timestamp: new Date(Math.max(0, (task.createdAt || Date.now()) - 1)),
+  };
+}
+
 function buildImageWorkbenchPreviewMessagesFromState(params: {
   imageWorkbenchState?: SessionImageWorkbenchState;
   projectId?: string | null;
   contentId?: string | null;
+  includeUserMessages?: boolean;
 }): Message[] {
   const imageWorkbenchState = params.imageWorkbenchState;
   if (!imageWorkbenchState || imageWorkbenchState.tasks.length === 0) {
@@ -2451,14 +2528,18 @@ function buildImageWorkbenchPreviewMessagesFromState(params: {
   return imageWorkbenchState.tasks
     .slice()
     .sort((left, right) => left.createdAt - right.createdAt)
-    .map((task) =>
-      buildImageWorkbenchPreviewMessageFromTask({
+    .flatMap((task) => {
+      const assistantMessage = buildImageWorkbenchPreviewMessageFromTask({
         task,
         outputs: outputsByTaskId.get(task.id) || [],
         projectId: params.projectId,
         contentId: params.contentId,
-      }),
-    );
+      });
+      const userMessage = params.includeUserMessages
+        ? buildImageWorkbenchUserMessageFromTask(task)
+        : null;
+      return userMessage ? [userMessage, assistantMessage] : [assistantMessage];
+    });
 }
 
 function upsertPreviewMessage(
@@ -2801,15 +2882,21 @@ function syncMessagesWithImageWorkbenchState(params: {
   imageWorkbenchState?: SessionImageWorkbenchState;
   projectId?: string | null;
   contentId?: string | null;
+  allowAppendCachedPreviewMessages?: boolean;
 }): Message[] {
   const patchedMessages = patchMessagesWithImageWorkbenchState({
     messages: params.messages,
     imageWorkbenchState: params.imageWorkbenchState,
   });
+  if (params.allowAppendCachedPreviewMessages !== true) {
+    return patchedMessages;
+  }
+
   const cachedPreviewMessages = buildImageWorkbenchPreviewMessagesFromState({
     imageWorkbenchState: params.imageWorkbenchState,
     projectId: params.projectId,
     contentId: params.contentId,
+    includeUserMessages: patchedMessages.length === 0,
   }).filter(
     (candidateMessage) =>
       !patchedMessages.some(
@@ -2888,6 +2975,7 @@ export function useWorkspaceImageTaskPreviewRuntime({
       imageWorkbenchState: currentImageWorkbenchState,
       projectId,
       contentId,
+      allowAppendCachedPreviewMessages: restoreFromWorkspace,
     });
     if (nextMessages === effectiveMessages) {
       return;
@@ -2899,6 +2987,7 @@ export function useWorkspaceImageTaskPreviewRuntime({
         imageWorkbenchState: currentImageWorkbenchState,
         projectId,
         contentId,
+        allowAppendCachedPreviewMessages: restoreFromWorkspace,
       });
     });
   }, [
@@ -2906,6 +2995,7 @@ export function useWorkspaceImageTaskPreviewRuntime({
     currentImageWorkbenchState,
     effectiveMessages,
     projectId,
+    restoreFromWorkspace,
     setChatMessages,
   ]);
 

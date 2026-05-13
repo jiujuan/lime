@@ -118,6 +118,65 @@ describe("legacySurfaceCatalog", () => {
     ]);
   });
 
+  it("应将 smart-input、截图对话和初装引导旧面标记为 dead surface", () => {
+    const importMonitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "smart-input-screenshot-onboarding-surface",
+    );
+    const commandMonitor = legacySurfaceCatalogJson.commands.find(
+      (entry) => entry.id === "smart-input-screenshot-command-surface",
+    );
+    const frontendMonitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) =>
+        entry.id === "smart-input-screenshot-onboarding-frontend-surface",
+    );
+    const rustMonitor = legacySurfaceCatalogJson.rustText.find(
+      (entry) => entry.id === "rust-smart-input-screenshot-surface",
+    );
+
+    expect(importMonitor).toBeTruthy();
+    expect(importMonitor?.classification).toBe("dead");
+    expect(importMonitor?.allowedPaths).toEqual([]);
+    expect(importMonitor?.targets).toEqual(
+      expect.arrayContaining([
+        "src/pages/smart-input.tsx",
+        "src/lib/api/screenshotChat.ts",
+        "src/components/onboarding/OnboardingWizard.tsx",
+      ]),
+    );
+
+    expect(commandMonitor).toBeTruthy();
+    expect(commandMonitor?.classification).toBe("dead");
+    expect(commandMonitor?.allowedPaths).toEqual([]);
+    expect(commandMonitor?.commands).toEqual(
+      expect.arrayContaining([
+        "send_screenshot_chat",
+        "open_input_with_text",
+        "update_screenshot_shortcut",
+      ]),
+    );
+
+    expect(frontendMonitor).toBeTruthy();
+    expect(frontendMonitor?.classification).toBe("dead");
+    expect(frontendMonitor?.patterns).toEqual(
+      expect.arrayContaining([
+        "@/components/smart-input",
+        "settings.experimental.screenshot.",
+        "common.smartInput.",
+        "OnboardingWizard",
+      ]),
+    );
+
+    expect(rustMonitor).toBeTruthy();
+    expect(rustMonitor?.classification).toBe("dead");
+    expect(rustMonitor?.patterns).toEqual(
+      expect.arrayContaining([
+        "commands::screenshot_cmd::",
+        "ScreenshotChatConfig",
+        "open_floating_window",
+      ]),
+    );
+  });
+
   it("应记录已删除的 KnowledgePage 旧拆分组件", () => {
     const monitor = legacySurfaceCatalogJson.imports.find(
       (entry) => entry.id === "knowledge-page-legacy-component-split",
@@ -1777,7 +1836,6 @@ describe("legacySurfaceCatalog", () => {
       "src/components/agent/chat/components/Inputbar/components/InputbarComposerSection.tsx",
       "src/components/agent/chat/components/Inputbar/components/BuiltinCommandBadge.tsx",
       "src/components/agent/chat/components/Inputbar/components/TeamSelector.tsx",
-      "src/components/smart-input/ChatInput.tsx",
     ]);
     expect(monitor?.patterns).toEqual(
       expect.arrayContaining([

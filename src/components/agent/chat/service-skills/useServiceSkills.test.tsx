@@ -7,6 +7,7 @@ import {
   saveSkillCatalog,
   type SkillCatalog,
 } from "@/lib/api/skillCatalog";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { recordServiceSkillAutomationLink } from "./automationLinkStorage";
 import { recordServiceSkillUsage } from "./storage";
 import { useServiceSkills } from "./useServiceSkills";
@@ -202,7 +203,8 @@ async function flushEffects(times = 3) {
 }
 
 describe("useServiceSkills", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await changeLimeLocale("zh-CN");
     (
       globalThis as typeof globalThis & {
         IS_REACT_ACT_ENVIRONMENT?: boolean;

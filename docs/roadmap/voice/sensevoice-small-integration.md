@@ -386,7 +386,7 @@ npm run verify:gui-smoke
 2026-05-01 实时录音预览验证：
 
 1. `DevBridge` 真实链路：`voice_models_get_install_state -> start_recording -> get_recording_segment -> stop_recording -> transcribe_audio` 通过；录音中返回增量 PCM，最终转写 provider 为 `SenseVoice Small 本地`。
-2. 前端定向回归：`npm test -- src/lib/api/asrProvider.test.ts src/components/agent/chat/components/Inputbar/components/InputbarCore.test.tsx src/pages/smart-input.test.tsx src/lib/voiceModelSettingsNavigation.test.ts src/components/settings-v2/agent/voice/index.test.tsx` 通过。
+2. 前端定向回归：`npm test -- src/lib/api/asrProvider.test.ts src/components/agent/chat/components/Inputbar/components/InputbarCore.test.tsx src/lib/voiceModelSettingsNavigation.test.ts src/components/settings-v2/agent/voice/index.test.tsx` 通过。
 3. 契约与 GUI 主路径：`npm run typecheck`、`npm run test:contracts`、`npm run verify:gui-smoke` 通过。
 
 收口：
@@ -401,7 +401,7 @@ npm run verify:local
 2. 用户能从设置页显式下载模型。
 3. 断网但已安装模型时，语音转写可工作。
 4. 删除模型后，转写不再假装可用，并提示重新下载。
-5. 输入栏听写和悬浮语音窗消费同一条 ASR 主链。
+5. 首页 / 工作区输入栏听写与 Fn / 语音全局快捷键消费同一条 ASR 主链。
 6. 已安装模型后，可以用本机 16-bit PCM WAV 文件做测试转写，证明模型目录和本地推理链路可用。
 7. 开启语音输入后，macOS Fn 监听进入 registered 状态；无法捕获时明确回退到普通语音快捷键。
 8. 日志能区分下载失败、模型损坏、运行时加载失败和识别失败。

@@ -21,8 +21,6 @@
 //! - `voice_asr_service` - ASR 识别服务
 //! - `voice_command_service` - 语音命令业务服务
 //! - `voice_recording_service` - 录音状态与设备服务
-//! - `screenshot_capture_service` - 跨平台截图服务
-//! - `screenshot_image_service` - 截图图片编码服务
 //! - `machine_id_service` - 机器 ID 服务
 //! - `live_sync` - 实时同步
 //! - `mcp_sync` - MCP 同步
@@ -43,8 +41,6 @@
 // 无外部依赖的服务
 pub mod context_memory_service;
 pub mod file_browser_service;
-pub mod screenshot_capture_service;
-pub mod screenshot_image_service;
 pub mod sysinfo_service;
 pub mod update_check_service;
 pub mod voice_asr_service;

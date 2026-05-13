@@ -1425,7 +1425,9 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     const createFreshSession = vi.fn(async () => {
       return "new-topic";
     });
+    const clearMessages = vi.fn();
     state.createFreshSession = createFreshSession;
+    state.clearMessages = clearMessages;
     installMockAgentChatUnifiedState(state);
 
     const mounted = mountPage({
@@ -1449,6 +1451,7 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     await flushEffects();
 
     expect(createFreshSession).not.toHaveBeenCalled();
+    expect(clearMessages).toHaveBeenCalledWith({ showToast: false });
     expect(buildHomeAgentParams).not.toHaveBeenCalled();
     expect(onNavigate).not.toHaveBeenCalled();
     expect(
@@ -1497,7 +1500,9 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
       ],
     });
     const createFreshSession = vi.fn(async () => "new-topic");
+    const clearMessages = vi.fn();
     state.createFreshSession = createFreshSession;
+    state.clearMessages = clearMessages;
     installMockAgentChatUnifiedState(state);
 
     const mounted = mountPage({
@@ -1515,6 +1520,7 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     await flushEffects();
 
     expect(createFreshSession).not.toHaveBeenCalled();
+    expect(clearMessages).toHaveBeenCalledWith({ showToast: false });
     expect(buildHomeAgentParams).not.toHaveBeenCalled();
     expect(onNavigate).not.toHaveBeenCalled();
     expect(
@@ -1571,7 +1577,9 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
       ],
     });
     const createFreshSession = vi.fn(async () => "new-topic");
+    const clearMessages = vi.fn();
     state.createFreshSession = createFreshSession;
+    state.clearMessages = clearMessages;
     installMockAgentChatUnifiedState(state);
 
     const mounted = mountPage({
@@ -1594,6 +1602,10 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
 
     expect(mounted.container.textContent).not.toContain("旧会话问题");
     expect(mounted.container.textContent).not.toContain("旧会话回答");
+    expect(clearMessages).toHaveBeenCalledWith({ showToast: false });
+    expect(
+      mounted.container.querySelector('[data-testid="empty-state"]'),
+    ).not.toBeNull();
 
     clickButton(mounted.container, "mock-empty-type");
     await flushEffects(8);
@@ -1604,6 +1616,146 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
         preserveCurrentSnapshot: false,
       }),
     );
+  });
+
+  it("旧会话仍在生成时点击顶部加号也不应把旧内容带进新草稿", async () => {
+    const state: Record<string, unknown> = createMockAgentChatUnifiedState({
+      sessionId: "topic-running",
+      isSending: true,
+      messages: [
+        {
+          id: "running-user",
+          role: "user",
+          content: "@配图 旧会话正在生成的提示词",
+          timestamp: new Date(FIXED_TOPIC_UPDATED_AT),
+        },
+        {
+          id: "running-assistant",
+          role: "assistant",
+          content: "旧会话正在生成图片",
+          timestamp: new Date(FIXED_TOPIC_UPDATED_AT + 1_000),
+        },
+      ],
+      topics: [
+        {
+          id: "topic-running",
+          title: "运行中的旧会话",
+          updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
+          workspaceId: "workspace-test",
+        },
+      ],
+    });
+    const clearMessages = vi.fn();
+    state.clearMessages = clearMessages;
+    installMockAgentChatUnifiedState(state);
+
+    const mounted = mountPage({
+      agentEntry: "claw",
+      initialSessionId: "topic-running",
+      projectId: "workspace-test",
+    });
+    await flushEffects();
+
+    expect(
+      await waitForElement(
+        mounted.container,
+        '[data-testid="task-center-tab-create-button"]',
+      ),
+    ).not.toBeNull();
+    clickButton(mounted.container, "task-center-tab-create-button");
+    await flushEffects();
+    mounted.rerender();
+    await flushEffects();
+
+    expect(clearMessages).toHaveBeenCalledWith({ showToast: false });
+    expect(mounted.container.textContent).not.toContain(
+      "@配图 旧会话正在生成的提示词",
+    );
+    expect(mounted.container.textContent).not.toContain("旧会话正在生成图片");
+    expect(
+      mounted.container.querySelector(
+        '[data-testid^="task-center-tab-task-draft-"][data-active="true"]',
+      ),
+    ).not.toBeNull();
+  });
+
+  it("连续新建两个草稿对话时也不应串入上一条图片生成会话", async () => {
+    const state: Record<string, unknown> = createMockAgentChatUnifiedState({
+      sessionId: "topic-image-old",
+      isSending: true,
+      messages: [
+        {
+          id: "image-old-user",
+          role: "user",
+          content: "@配图 上一条图片生成提示词",
+          timestamp: new Date(FIXED_TOPIC_UPDATED_AT),
+        },
+        {
+          id: "image-old-assistant",
+          role: "assistant",
+          content: "好啊，上一条图片正在生成",
+          timestamp: new Date(FIXED_TOPIC_UPDATED_AT + 1_000),
+          imageWorkbenchPreview: {
+            taskId: "task-image-old",
+            prompt: "上一条图片生成提示词",
+            status: "running",
+          },
+        },
+      ],
+      topics: [
+        {
+          id: "topic-image-old",
+          title: "图片旧会话",
+          updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
+          workspaceId: "workspace-test",
+        },
+      ],
+    });
+    const clearMessages = vi.fn();
+    state.clearMessages = clearMessages;
+    installMockAgentChatUnifiedState(state);
+
+    const mounted = mountPage({
+      agentEntry: "claw",
+      initialSessionId: "topic-image-old",
+      projectId: "workspace-test",
+    });
+    await flushEffects();
+
+    expect(
+      await waitForElement(
+        mounted.container,
+        '[data-testid="task-center-tab-create-button"]',
+      ),
+    ).not.toBeNull();
+
+    clickButton(mounted.container, "task-center-tab-create-button");
+    await flushEffects();
+    mounted.rerender();
+    await flushEffects();
+
+    expect(mounted.container.textContent).not.toContain(
+      "@配图 上一条图片生成提示词",
+    );
+    expect(mounted.container.textContent).not.toContain("上一条图片正在生成");
+    expect(mounted.container.textContent).not.toContain("正在生成图片");
+
+    clickButton(mounted.container, "task-center-tab-create-button");
+    await flushEffects();
+    mounted.rerender();
+    await flushEffects();
+
+    expect(clearMessages).toHaveBeenCalledTimes(2);
+    expect(mounted.container.textContent).not.toContain(
+      "@配图 上一条图片生成提示词",
+    );
+    expect(mounted.container.textContent).not.toContain("上一条图片正在生成");
+    expect(mounted.container.textContent).not.toContain("正在生成图片");
+    expect(
+      mounted.container.querySelectorAll(
+        '[data-testid^="task-center-tab-task-draft-"]',
+      ).length,
+    ).toBeGreaterThanOrEqual(2);
   });
 
   it("草稿标签输入后应预热创建会话，发送时复用同一次创建", async () => {

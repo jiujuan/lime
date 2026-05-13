@@ -7,7 +7,6 @@ const mockSaveConfig = vi.fn();
 const mockSetLanguage = vi.fn();
 const mockSetSoundEnabled = vi.fn();
 const mockPlayToolcallSound = vi.fn();
-const mockResetOnboarding = vi.fn();
 
 vi.mock("@/lib/api/appConfig", () => ({
   getConfig: () => mockGetConfig(),
@@ -25,12 +24,6 @@ vi.mock("@/contexts/useSoundContext", () => ({
     soundEnabled: true,
     setSoundEnabled: mockSetSoundEnabled,
     playToolcallSound: mockPlayToolcallSound,
-  }),
-}));
-
-vi.mock("@/components/onboarding", () => ({
-  useOnboardingState: () => ({
-    resetOnboarding: mockResetOnboarding,
   }),
 }));
 
@@ -147,7 +140,6 @@ afterEach(() => {
   mockSetLanguage.mockReset();
   mockSetSoundEnabled.mockReset();
   mockPlayToolcallSound.mockReset();
-  mockResetOnboarding.mockReset();
 
   while (mounted.length > 0) {
     const target = mounted.pop();
@@ -171,7 +163,7 @@ afterEach(() => {
 });
 
 describe("AppearanceSettings", () => {
-  it("应在同一页面中渲染基础外观、初始化恢复与推荐行为设置", async () => {
+  it("应在同一页面中渲染基础外观、可选系统入口与推荐行为设置", async () => {
     const { container } = await renderPage();
     const text = container.textContent ?? "";
     const buttonTexts = Array.from(container.querySelectorAll("button")).map(
@@ -206,7 +198,8 @@ describe("AppearanceSettings", () => {
     expect(text).toContain("桌宠");
     expect(text).toContain("推荐行为");
     expect(text).toContain("推荐自动附带选中内容");
-    expect(text).toContain("重新运行引导");
+    expect(text).not.toContain("重新运行引导");
+    expect(text).not.toContain("初始化与恢复");
     expect(text).not.toContain("已合并旧入口");
     expect(buttonTexts).not.toContain("设置");
   });
@@ -230,7 +223,7 @@ describe("AppearanceSettings", () => {
     expect(text).toContain("Theme Mode");
     expect(text).toContain("Color Palette");
     expect(text).toContain("Random");
-    expect(text).toContain("Setup & Recovery");
+    expect(text).not.toContain("Setup & Recovery");
     expect(text).toContain("Optional System Entries");
     expect(text).not.toContain("Plugin Center");
     expect(text).toContain("Recommendation Behavior");

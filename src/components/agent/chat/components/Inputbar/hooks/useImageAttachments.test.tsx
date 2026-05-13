@@ -2,6 +2,7 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { useImageAttachments } from "./useImageAttachments";
 
 const { toastMock } = vi.hoisted(() => ({
@@ -136,7 +137,7 @@ function renderHarness(): HTMLDivElement {
   return container;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -144,6 +145,7 @@ beforeEach(() => {
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
   globalThis.FileReader = MockFileReader as never;
+  await changeLimeLocale("zh-CN");
 });
 
 afterEach(() => {
@@ -222,6 +224,24 @@ describe("useImageAttachments", () => {
       container.querySelector('[data-testid="image-type"]')?.textContent,
     ).toBe("image/png");
     expect(toastMock.success).toHaveBeenCalledWith("已粘贴图片");
+  });
+
+  it("图片粘贴反馈应跟随 en-US 资源", async () => {
+    await changeLimeLocale("en-US");
+    const container = renderHarness();
+    const pasteButton = container.querySelector(
+      '[data-testid="paste-image"]',
+    ) as HTMLButtonElement | null;
+
+    await act(async () => {
+      pasteButton?.click();
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector('[data-testid="image-count"]')?.textContent,
+    ).toBe("1");
+    expect(toastMock.success).toHaveBeenCalledWith("Image pasted");
   });
 
   it("单轮最多保留 20 张待发送图片", async () => {

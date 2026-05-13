@@ -579,6 +579,14 @@ export async function registerAgentStreamTurnEventBinding(
   return () => {
     clearFirstEventWatchdog();
     clearInactivityWatchdog();
+    if (requestState.queuedDraftCleanupTimerId) {
+      clearTimeout(requestState.queuedDraftCleanupTimerId);
+      requestState.queuedDraftCleanupTimerId = null;
+    }
+    if (requestState.pendingTextRenderTimerId) {
+      clearTimeout(requestState.pendingTextRenderTimerId);
+      requestState.pendingTextRenderTimerId = null;
+    }
     unlisten();
   };
 }

@@ -5,7 +5,6 @@
 
 import { lazy, Suspense, useEffect } from "react";
 import App from "./App";
-import { SmartInputPage } from "./pages/smart-input";
 import { UpdateNotificationPage } from "./pages/update-notification";
 import { BrowserRuntimeDebuggerPage } from "./pages";
 import { ResourceManagerPage } from "./features/resource-manager";
@@ -43,7 +42,6 @@ function getEffectivePathname(location: Location): string {
 /**
  * 根据 URL 路径渲染对应的组件
  *
- * - /smart-input: 截图对话悬浮窗口（独立 Tauri 窗口，支持语音模式）
  * - /update-notification: 更新提醒悬浮窗口（独立 Tauri 窗口）
  * - /browser-runtime-debugger: 浏览器运行时独立调试窗口
  * - /resource-manager: 独立资源管理器窗口
@@ -65,15 +63,6 @@ export function RootRouter() {
       window.history,
     );
   }, [pathname]);
-
-  // 截图对话悬浮窗口路由（也用于语音输入）
-  if (pathname === "/smart-input") {
-    return (
-      <AppCrashBoundary>
-        <SmartInputPage />
-      </AppCrashBoundary>
-    );
-  }
 
   // 更新提醒悬浮窗口路由
   if (pathname === "/update-notification") {

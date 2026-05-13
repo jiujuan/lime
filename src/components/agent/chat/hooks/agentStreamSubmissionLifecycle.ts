@@ -55,6 +55,7 @@ interface CreateSubmissionLifecycleOptions {
   assistantMsg: Message;
   assistantMsgId: string;
   userMsgId: string | null;
+  userMsg?: Message | null;
   content: string;
   expectingQueue: boolean;
   runtimeStatusPresentation?: AgentRuntimeStatusPresentation;
@@ -83,6 +84,7 @@ export function createAgentStreamSubmissionLifecycle(
     assistantMsg,
     assistantMsgId,
     userMsgId,
+    userMsg,
     content,
     expectingQueue,
     runtimeStatusPresentation = "timeline",
@@ -256,8 +258,30 @@ export function createAgentStreamSubmissionLifecycle(
       pendingTurnKey,
       pendingItemKey,
     });
-    setMessages((prev) =>
-      prev.map((msg) =>
+    setMessages((prev) => {
+      const hasUserMsg = userMsg
+        ? prev.some((msg) => msg.id === userMsg.id)
+        : true;
+      const hasAssistantMsg = prev.some((msg) => msg.id === assistantMsgId);
+      let nextMessages = prev;
+
+      if (!hasAssistantMsg) {
+        nextMessages = [...nextMessages, assistantMsg];
+      }
+      if (!hasUserMsg && userMsg) {
+        const assistantIndex = nextMessages.findIndex(
+          (msg) => msg.id === assistantMsgId,
+        );
+        nextMessages =
+          assistantIndex >= 0
+            ? [
+                ...nextMessages.slice(0, assistantIndex),
+                userMsg,
+                ...nextMessages.slice(assistantIndex),
+              ]
+            : [...nextMessages, userMsg];
+      }
+      return nextMessages.map((msg) =>
         msg.id === assistantMsgId
           ? {
               ...msg,
@@ -265,8 +289,8 @@ export function createAgentStreamSubmissionLifecycle(
               runtimeTurnId: msg.runtimeTurnId || pendingTurnKey,
             }
           : msg,
-      ),
-    );
+      );
+    });
 
     if (expectingQueue) {
       return;

@@ -75,6 +75,14 @@ export function useAgentStreamController(
     return true;
   }, []);
 
+  const clearStreamBindings = useCallback(() => {
+    for (const [eventName, unlisten] of listenerMapRef.current.entries()) {
+      unlisten();
+      listenerMapRef.current.delete(eventName);
+    }
+    setActiveStream(null);
+  }, [setActiveStream]);
+
   useEffect(() => {
     const listenerMap = listenerMapRef.current;
     return () => {
@@ -94,5 +102,6 @@ export function useAgentStreamController(
     clearActiveStreamIfMatch,
     replaceStreamListener,
     removeStreamListener,
+    clearStreamBindings,
   };
 }

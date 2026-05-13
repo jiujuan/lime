@@ -23,7 +23,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
-import { ShortcutSettings } from "@/components/smart-input/ShortcutSettings";
+import { ShortcutSettings } from "@/components/settings-v2/shared/ShortcutSettings";
 import { MicrophoneTest } from "@/components/voice/MicrophoneTest";
 import { InstructionEditor } from "@/components/voice/InstructionEditor";
 import { Label } from "@/components/ui/label";
@@ -37,9 +37,9 @@ import {
   type VoiceInputConfig,
   type VoiceInstruction,
 } from "@/lib/api/asrProvider";
-import { validateShortcut } from "@/lib/api/experimentalFeatures";
 import {
   getVoiceShortcutRuntimeStatus,
+  validateShortcut,
   type VoiceShortcutRuntimeStatus,
 } from "@/lib/api/hotkeys";
 import {
@@ -337,59 +337,6 @@ function buildPrimaryShortcutStatus(
   };
 }
 
-function buildTranslateShortcutStatus(
-  t: VoiceSettingsTranslate,
-  voiceConfig: VoiceInputConfig | null,
-  runtimeStatus: VoiceShortcutRuntimeStatus | null,
-): { text: string; tone: PillTone } {
-  if (!voiceConfig) {
-    return {
-      text: t("settings.voice.shortcut.status.loading"),
-      tone: "neutral",
-    };
-  }
-
-  if (!voiceConfig.translate_shortcut) {
-    return {
-      text: t("settings.voice.shortcut.status.translateUnset"),
-      tone: "neutral",
-    };
-  }
-
-  if (!voiceConfig.enabled) {
-    return {
-      text: t("settings.voice.shortcut.status.translateNeedsVoice"),
-      tone: "warning",
-    };
-  }
-
-  const hasInstruction = voiceConfig.instructions.some(
-    (instruction) => instruction.id === voiceConfig.translate_instruction_id,
-  );
-  if (!hasInstruction) {
-    return {
-      text: t("settings.voice.shortcut.status.translateNeedsInstruction"),
-      tone: "warning",
-    };
-  }
-
-  if (
-    runtimeStatus?.translate_shortcut_registered &&
-    runtimeStatus.registered_translate_shortcut ===
-      voiceConfig.translate_shortcut
-  ) {
-    return {
-      text: t("settings.voice.shortcut.status.translateRegistered"),
-      tone: "success",
-    };
-  }
-
-  return {
-    text: t("settings.voice.shortcut.status.translatePending"),
-    tone: "warning",
-  };
-}
-
 function buildFnShortcutStatus(
   t: VoiceSettingsTranslate,
   runtimeStatus: VoiceShortcutRuntimeStatus | null,
@@ -666,11 +613,6 @@ export function VoiceSettings() {
     [t, voiceConfig, voiceShortcutStatus],
   );
 
-  const translateShortcutStatus = useMemo(
-    () => buildTranslateShortcutStatus(t, voiceConfig, voiceShortcutStatus),
-    [t, voiceConfig, voiceShortcutStatus],
-  );
-
   const fnShortcutStatus = useMemo(
     () => buildFnShortcutStatus(t, voiceShortcutStatus),
     [t, voiceShortcutStatus],
@@ -746,13 +688,6 @@ export function VoiceSettings() {
     await persistVoiceConfig((current) => ({
       ...current,
       shortcut: normalizedShortcut,
-    }));
-  };
-
-  const handleTranslateShortcutChange = async (shortcut: string) => {
-    await persistVoiceConfig((current) => ({
-      ...current,
-      translate_shortcut: normalizeOptionalText(shortcut),
     }));
   };
 
@@ -1157,25 +1092,6 @@ export function VoiceSettings() {
             />
             <StatusPill tone={primaryShortcutStatus.tone}>
               {primaryShortcutStatus.text}
-            </StatusPill>
-          </div>
-        </SettingRow>
-
-        <SettingRow
-          label={t("settings.voice.input.translateShortcut.label")}
-          description={t("settings.voice.input.translateShortcut.description")}
-        >
-          <div className="space-y-3">
-            <ShortcutSettings
-              currentShortcut={voiceConfig?.translate_shortcut ?? ""}
-              onShortcutChange={handleTranslateShortcutChange}
-              onValidate={validateShortcut}
-              disabled={!voiceConfig}
-              emptyLabel={t("settings.voice.input.translateShortcut.empty")}
-              allowClear
-            />
-            <StatusPill tone={translateShortcutStatus.tone}>
-              {translateShortcutStatus.text}
             </StatusPill>
           </div>
         </SettingRow>

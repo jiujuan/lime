@@ -5,7 +5,10 @@ import type {
   SkillCatalogSceneEntry,
 } from "@/lib/api/skillCatalog";
 import type { ServiceSkillHomeItem } from "../service-skills/types";
+import type { ServiceSkillHomeCopy } from "../service-skills/homeCopy";
 import type { CuratedTaskTemplateItem } from "../utils/curatedTaskTemplates";
+import agentResource from "@/i18n/resources/zh-CN/agent.json";
+import enAgentResource from "@/i18n/resources/en-US/agent.json";
 import {
   buildHomeGalleryItems,
   buildHomeGuideCards,
@@ -14,6 +17,33 @@ import {
   buildHomeSkillSections,
   buildHomeStarterChips,
 } from "./buildHomeSkillSurface";
+import { buildHomeSurfaceCopy } from "./homeSurfaceCopy";
+
+type AgentResourceKey = keyof typeof agentResource;
+
+const TEST_HOME_SURFACE_COPY = buildHomeSurfaceCopy(
+  (key) => agentResource[key as AgentResourceKey],
+);
+const TEST_HOME_SURFACE_EN_COPY = buildHomeSurfaceCopy((key, values) =>
+  enAgentResource[key as AgentResourceKey].replace(
+    "{{example}}",
+    String(values?.example ?? ""),
+  ),
+);
+
+const TEST_SERVICE_SKILL_HOME_COPY: ServiceSkillHomeCopy = {
+  badge: {
+    recent: "最近使用",
+    browserAssist: "浏览器继续",
+    readyMade: "现成做法",
+    installed: "已安装",
+    customScene: "自定义场景",
+  },
+  catalogSource: {
+    seeded: "起步做法",
+    synced: "已同步做法",
+  },
+};
 
 function createCuratedTask(
   id: string,
@@ -74,7 +104,9 @@ function createServiceSkill(): ServiceSkillHomeItem {
 
 describe("buildHomeSkillSurface", () => {
   it("服务端未下发首页展示时使用 参考站式本地兜底入口", () => {
-    const labels = buildHomeStarterChips().map((chip) => chip.label);
+    const labels = buildHomeStarterChips(undefined, TEST_HOME_SURFACE_COPY).map(
+      (chip) => chip.label,
+    );
 
     expect(labels).toEqual([
       "引导帮助",
@@ -143,22 +175,24 @@ describe("buildHomeSkillSurface", () => {
       },
     ];
 
-    expect(buildHomeStarterChips(entries).map((chip) => chip.label)).toEqual([
-      "做海报",
-      "更多做法",
-      "⚙",
-    ]);
-    expect(buildHomeStarterChips(entries)[0]).toMatchObject({
+    expect(
+      buildHomeStarterChips(entries, TEST_HOME_SURFACE_COPY).map(
+        (chip) => chip.label,
+      ),
+    ).toEqual(["做海报", "更多做法", "⚙"]);
+    expect(
+      buildHomeStarterChips(entries, TEST_HOME_SURFACE_COPY)[0],
+    ).toMatchObject({
       launchKind: "prefill_prompt",
       prompt: "请帮我做一张海报。",
     });
-    expect(buildHomeInputSuggestions(entries)).toEqual([
+    expect(buildHomeInputSuggestions(entries, TEST_HOME_SURFACE_COPY)).toEqual([
       expect.objectContaining({
         label: "帮我写一封工作邮件",
         prompt: "请帮我写一封工作邮件。",
       }),
     ]);
-    expect(buildHomeGuideCards(entries)).toEqual([
+    expect(buildHomeGuideCards(entries, TEST_HOME_SURFACE_COPY)).toEqual([
       expect.objectContaining({
         title: "语音输入怎么设置？",
         prompt: "请告诉我语音输入怎么设置。",
@@ -199,6 +233,7 @@ describe("buildHomeSkillSurface", () => {
         createCuratedTask("daily-trend-briefing", "每日趋势摘要"),
         createCuratedTask("social-post-starter", "内容主稿生成", 10),
       ],
+      serviceSkillHomeCopy: TEST_SERVICE_SKILL_HOME_COPY,
       serviceSkills: [createServiceSkill()],
       installedSkills: [installedSkill],
       catalogSceneEntries: [catalogScene],
@@ -251,9 +286,10 @@ describe("buildHomeSkillSurface", () => {
         createCuratedTask("daily-trend-briefing", "每日趋势摘要", 10),
         createCuratedTask("script-to-voiceover", "脚本转口播"),
       ],
+      serviceSkillHomeCopy: TEST_SERVICE_SKILL_HOME_COPY,
     });
 
-    const sections = buildHomeSkillSections(items);
+    const sections = buildHomeSkillSections(items, TEST_HOME_SURFACE_COPY);
     const gallery = buildHomeGalleryItems(items);
 
     expect(sections[0]).toMatchObject({
@@ -262,5 +298,39 @@ describe("buildHomeSkillSurface", () => {
     });
     expect(sections.some((section) => section.id === "video")).toBe(true);
     expect(gallery).toHaveLength(2);
+  });
+
+  it("本地兜底首页 copy 可从 en-US 资源派生", () => {
+    const items = buildHomeSkillItems({
+      curatedTasks: [createCuratedTask("daily-trend-briefing", "Trend brief")],
+      serviceSkillHomeCopy: TEST_SERVICE_SKILL_HOME_COPY,
+    });
+
+    expect(
+      TEST_HOME_SURFACE_EN_COPY.composerAutoLaunchPlaceholder(
+        "open example.com",
+      ),
+    ).toBe("Say one sentence, for example: open example.com");
+    expect(
+      buildHomeStarterChips(undefined, TEST_HOME_SURFACE_EN_COPY).map(
+        (chip) => chip.label,
+      ),
+    ).toContain("Guide help");
+    expect(
+      buildHomeInputSuggestions(undefined, TEST_HOME_SURFACE_EN_COPY)[0],
+    ).toMatchObject({
+      label: "Help me summarize meeting notes",
+    });
+    expect(
+      buildHomeGuideCards(undefined, TEST_HOME_SURFACE_EN_COPY)[0],
+    ).toMatchObject({
+      title: "How do I create a long-term plan?",
+    });
+    expect(
+      buildHomeSkillSections(items, TEST_HOME_SURFACE_EN_COPY)[0],
+    ).toMatchObject({
+      id: "social",
+      title: "Social media",
+    });
   });
 });

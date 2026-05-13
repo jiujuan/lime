@@ -1,7 +1,9 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { Lightbulb, Globe, Workflow } from "lucide-react";
 import { ToolButton } from "../styles";
 import { isGeneralResearchTheme } from "../../../utils/generalAgentPrompt";
+import { buildInputbarToolsCopy } from "./inputbarToolsCopy";
 
 interface InputbarToolsProps {
   onToolClick: (tool: string) => void;
@@ -16,7 +18,15 @@ export const InputbarTools: React.FC<InputbarToolsProps> = ({
   toolMode = "default",
   activeTheme,
 }) => {
+  const { t } = useTranslation("agent");
+  const copy = React.useMemo(
+    () => buildInputbarToolsCopy((key) => t(key, {})),
+    [t],
+  );
   const isGeneralTheme = isGeneralResearchTheme(activeTheme);
+  const thinkingEnabled = Boolean(activeTools["thinking"]);
+  const webSearchEnabled = Boolean(activeTools["web_search"]);
+  const subagentEnabled = Boolean(activeTools["subagent_mode"]);
 
   return (
     <div className="flex items-center flex-wrap gap-2">
@@ -25,24 +35,24 @@ export const InputbarTools: React.FC<InputbarToolsProps> = ({
           <ToolButton
             type="button"
             onClick={() => onToolClick("thinking")}
-            className={activeTools["thinking"] ? "active" : ""}
-            aria-pressed={activeTools["thinking"]}
-            title={`深度思考${activeTools["thinking"] ? "已开启" : "已关闭"}`}
+            className={thinkingEnabled ? "active" : ""}
+            aria-pressed={thinkingEnabled}
+            title={copy.thinking.title(thinkingEnabled)}
           >
             <Lightbulb />
-            <span>思考</span>
+            <span>{copy.thinking.label}</span>
           </ToolButton>
 
           <ToolButton
             type="button"
             onClick={() => onToolClick("web_search")}
-            className={activeTools["web_search"] ? "active" : ""}
-            aria-pressed={activeTools["web_search"]}
-            title={`联网搜索${activeTools["web_search"] ? "已开启" : "已关闭"}`}
+            className={webSearchEnabled ? "active" : ""}
+            aria-pressed={webSearchEnabled}
+            title={copy.webSearch.title(webSearchEnabled)}
             data-testid="toggle-web-search"
           >
             <Globe />
-            <span>搜索</span>
+            <span>{copy.webSearch.label}</span>
           </ToolButton>
 
           {isGeneralTheme ? (
@@ -50,13 +60,13 @@ export const InputbarTools: React.FC<InputbarToolsProps> = ({
               <ToolButton
                 type="button"
                 onClick={() => onToolClick("subagent_mode")}
-                className={activeTools["subagent_mode"] ? "active" : ""}
-                aria-pressed={activeTools["subagent_mode"]}
-                title={`任务拆分偏好${activeTools["subagent_mode"] ? "已开启" : "已关闭"}`}
+                className={subagentEnabled ? "active" : ""}
+                aria-pressed={subagentEnabled}
+                title={copy.subagent.title(subagentEnabled)}
                 data-testid="toggle-subagent-mode"
               >
                 <Workflow />
-                <span>任务拆分</span>
+                <span>{copy.subagent.label}</span>
               </ToolButton>
             </>
           ) : null}

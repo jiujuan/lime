@@ -19,11 +19,18 @@ type SlashSkillPreflightEnv = Pick<
   | "playTypewriterSound"
   | "playToolcallSound"
   | "onWriteFile"
+  | "getRequiredWorkspaceId"
 >;
 
 interface MaybeHandleSlashSkillBeforeSendOptions {
   preparedSend: PreparedAgentStreamUserInputSend;
   env: SlashSkillPreflightEnv;
+}
+
+interface ResolvedSkillPreflightLaunch {
+  skillName: string;
+  userInput: string;
+  requestContext?: Record<string, unknown>;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -32,6 +39,10 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   }
 
   return value as Record<string, unknown>;
+}
+
+function readTrimmedString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 function hasStructuredSlashLaunchMetadata(
@@ -51,31 +62,58 @@ function hasStructuredSlashLaunchMetadata(
   return Boolean(launch && Object.keys(launch).length > 0);
 }
 
-export async function maybeHandleSlashSkillBeforeSend(
-  options: MaybeHandleSlashSkillBeforeSendOptions,
+function resolveAnalysisSkillLaunch(
+  requestMetadata: Record<string, unknown> | undefined,
+): ResolvedSkillPreflightLaunch | undefined {
+  const harness = extractExistingHarnessMetadata(requestMetadata);
+  if (!harness) {
+    return undefined;
+  }
+
+  const launch =
+    asRecord(harness.analysis_skill_launch) ??
+    asRecord(harness.analysisSkillLaunch);
+  if (!launch) {
+    return undefined;
+  }
+
+  const kind = readTrimmedString(launch.kind) ?? "analysis_request";
+  if (kind !== "analysis_request") {
+    return undefined;
+  }
+
+  const skillName =
+    readTrimmedString(launch.skill_name) ??
+    readTrimmedString(launch.skillName) ??
+    "analysis";
+  if (skillName !== "analysis") {
+    return undefined;
+  }
+
+  const analysisRequest =
+    asRecord(launch.analysis_request) ?? asRecord(launch.analysisRequest);
+  if (!analysisRequest) {
+    return undefined;
+  }
+
+  return {
+    skillName,
+    userInput:
+      readTrimmedString(analysisRequest.raw_text) ??
+      readTrimmedString(analysisRequest.rawText) ??
+      readTrimmedString(analysisRequest.prompt) ??
+      "",
+    requestContext: launch,
+  };
+}
+
+async function executeResolvedSkillPreflight(
+  preparedSend: PreparedAgentStreamUserInputSend,
+  env: SlashSkillPreflightEnv,
+  launch: ResolvedSkillPreflightLaunch,
 ): Promise<boolean> {
-  const { preparedSend, env } = options;
-  const {
-    content,
-    skipUserMessage,
-    expectingQueue,
-    assistantMsgId,
-    effectiveProviderType,
-    effectiveModel,
-  } = preparedSend;
-
-  if (skipUserMessage || expectingQueue) {
-    return false;
-  }
-
-  if (hasStructuredSlashLaunchMetadata(preparedSend.requestMetadata)) {
-    return false;
-  }
-
-  const parsedSkillCommand = parseSkillSlashCommand(content);
-  if (!parsedSkillCommand) {
-    return false;
-  }
+  const { content, assistantMsgId, effectiveProviderType, effectiveModel } =
+    preparedSend;
 
   const skillEventName = `skill-exec-${assistantMsgId}`;
   env.setActiveStream({
@@ -85,14 +123,19 @@ export async function maybeHandleSlashSkillBeforeSend(
   });
 
   const skillHandled = await tryExecuteSlashSkillCommand({
-    command: parsedSkillCommand,
+    command: {
+      skillName: launch.skillName,
+      userInput: launch.userInput || content,
+    },
     rawContent: content,
     assistantMsgId,
     providerType: effectiveProviderType,
     model: effectiveModel || undefined,
     images: preparedSend.skillRequest?.images ?? preparedSend.images,
-    requestContext: preparedSend.skillRequest?.requestContext,
+    requestContext:
+      launch.requestContext ?? preparedSend.skillRequest?.requestContext,
     requestMetadata: preparedSend.requestMetadata,
+    workspaceId: env.getRequiredWorkspaceId(),
     ensureSession: env.ensureSession,
     setMessages: env.setMessages,
     setIsSending: env.setIsSending,
@@ -147,4 +190,40 @@ export async function maybeHandleSlashSkillBeforeSend(
 
   env.clearActiveStreamIfMatch(skillEventName);
   return false;
+}
+
+export async function maybeHandleSlashSkillBeforeSend(
+  options: MaybeHandleSlashSkillBeforeSendOptions,
+): Promise<boolean> {
+  const { preparedSend, env } = options;
+  const { skipUserMessage, expectingQueue } = preparedSend;
+
+  if (skipUserMessage || expectingQueue) {
+    return false;
+  }
+
+  if (hasStructuredSlashLaunchMetadata(preparedSend.requestMetadata)) {
+    return false;
+  }
+
+  const analysisSkillLaunch = resolveAnalysisSkillLaunch(
+    preparedSend.requestMetadata,
+  );
+  if (analysisSkillLaunch) {
+    return executeResolvedSkillPreflight(
+      preparedSend,
+      env,
+      analysisSkillLaunch,
+    );
+  }
+
+  const parsedSkillCommand = parseSkillSlashCommand(preparedSend.content);
+  if (!parsedSkillCommand) {
+    return false;
+  }
+
+  return executeResolvedSkillPreflight(preparedSend, env, {
+    skillName: parsedSkillCommand.skillName,
+    userInput: parsedSkillCommand.userInput,
+  });
 }

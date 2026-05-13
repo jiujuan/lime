@@ -2,6 +2,7 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { HomeSceneSkillManagerDialog } from "./HomeSceneSkillManagerDialog";
 import type { SkillCatalog } from "@/lib/api/skillCatalog";
 
@@ -114,7 +115,8 @@ function setSelectValue(element: HTMLSelectElement, value: string) {
   element.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  await changeLimeLocale("zh-CN");
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -219,5 +221,34 @@ describe("HomeSceneSkillManagerDialog", () => {
     });
 
     expect(container.textContent).toContain("每日复盘");
+  });
+
+  it("场景管理弹窗 chrome 与表单文案应跟随 en-US 资源", async () => {
+    await changeLimeLocale("en-US");
+    const container = renderDialog();
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("Scene management");
+    expect(container.textContent).toContain("Add scene");
+    expect(container.textContent).toContain("Visible");
+    expect(container.textContent).toContain("Done");
+
+    const add = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Add scene",
+    );
+    act(() => {
+      add?.click();
+    });
+
+    expect(container.textContent).toContain("Add custom scene");
+    expect(container.textContent).toContain("Scene name");
+    expect(container.querySelector("input")?.placeholder).toBe(
+      "Example: daily account review",
+    );
+    expect(container.textContent).toContain("Add to list");
   });
 });

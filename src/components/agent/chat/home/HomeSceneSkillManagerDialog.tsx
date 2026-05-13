@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import styled from "styled-components";
+import type agentResource from "@/i18n/resources/zh-CN/agent.json";
 import {
   getClientSceneSkillPreferences,
   updateClientSceneSkillPreferences,
@@ -280,6 +282,46 @@ interface DraftScene {
   templatePrompt: string;
 }
 
+type AgentI18nKey = keyof typeof agentResource;
+
+interface SceneManagerCopy {
+  defaultTemplateTitle: string;
+  customSceneSummaryFallback: string;
+  syncSignInRequiredError: string;
+  createRequiredError: string;
+  titleList: string;
+  titleCreate: string;
+  descriptionList: string;
+  descriptionCreate: string;
+  closeAction: string;
+  noSessionNotice: string;
+  addSceneAction: string;
+  loadingNotice: string;
+  listLabel: string;
+  kindScene: string;
+  kindSkill: string;
+  moveUpLabel: (title: string) => string;
+  moveDownLabel: (title: string) => string;
+  visibleLabel: string;
+  sceneNameLabel: string;
+  sceneNamePlaceholder: string;
+  linkedSkillLabel: string;
+  linkedSkillEmptyOption: string;
+  placeholderLabel: string;
+  placeholderPlaceholder: string;
+  templateTitleLabel: string;
+  templateDescriptionLabel: string;
+  templateDescriptionPlaceholder: string;
+  templatePromptLabel: string;
+  templatePromptPlaceholder: string;
+  backAction: string;
+  addToListAction: string;
+  restoreDefaultAction: string;
+  cancelAction: string;
+  doneAction: string;
+  savingAction: string;
+}
+
 const emptyPreference: OemCloudSceneSkillPreference = {
   tenantId: "",
   userId: "",
@@ -288,15 +330,17 @@ const emptyPreference: OemCloudSceneSkillPreference = {
   customScenes: [],
 };
 
-const defaultDraft: DraftScene = {
-  title: "",
-  summary: "",
-  linkedEntryId: "",
-  placeholder: "",
-  templateTitle: "开始",
-  templateDescription: "",
-  templatePrompt: "",
-};
+function createDefaultDraft(templateTitle: string): DraftScene {
+  return {
+    title: "",
+    summary: "",
+    linkedEntryId: "",
+    placeholder: "",
+    templateTitle,
+    templateDescription: "",
+    templatePrompt: "",
+  };
+}
 
 function canManageEntry(entry: SkillCatalogEntry): boolean {
   return entry.kind === "skill" || entry.kind === "scene";
@@ -338,7 +382,10 @@ function toRows(
   return [...ordered, ...baseRows.filter((row) => !orderedIds.has(row.id))];
 }
 
-function buildCustomScene(draft: DraftScene): OemCloudCustomScene {
+function buildCustomScene(
+  draft: DraftScene,
+  defaultTemplateTitle: string,
+): OemCloudCustomScene {
   const idSuffix =
     draft.title
       .trim()
@@ -356,7 +403,7 @@ function buildCustomScene(draft: DraftScene): OemCloudCustomScene {
     templates: [
       {
         id: "default",
-        title: draft.templateTitle.trim() || "开始",
+        title: draft.templateTitle.trim() || defaultTemplateTitle,
         description: draft.templateDescription.trim(),
         prompt: draft.templatePrompt.trim(),
       },
@@ -373,13 +420,114 @@ export function HomeSceneSkillManagerDialog({
   open,
   onClose,
 }: HomeSceneSkillManagerDialogProps) {
+  const { t } = useTranslation("agent");
+  const sceneManagerCopy = useMemo<SceneManagerCopy>(
+    () => ({
+      defaultTemplateTitle: t(
+        "agentChat.home.sceneManager.defaultTemplateTitle" as AgentI18nKey,
+      ),
+      customSceneSummaryFallback: t(
+        "agentChat.home.sceneManager.customSceneSummaryFallback" as AgentI18nKey,
+      ),
+      syncSignInRequiredError: t(
+        "agentChat.home.sceneManager.error.syncSignInRequired" as AgentI18nKey,
+      ),
+      createRequiredError: t(
+        "agentChat.home.sceneManager.error.createRequired" as AgentI18nKey,
+      ),
+      titleList: t("agentChat.home.sceneManager.title.list" as AgentI18nKey),
+      titleCreate: t(
+        "agentChat.home.sceneManager.title.create" as AgentI18nKey,
+      ),
+      descriptionList: t(
+        "agentChat.home.sceneManager.description.list" as AgentI18nKey,
+      ),
+      descriptionCreate: t(
+        "agentChat.home.sceneManager.description.create" as AgentI18nKey,
+      ),
+      closeAction: t(
+        "agentChat.home.sceneManager.action.close" as AgentI18nKey,
+      ),
+      noSessionNotice: t(
+        "agentChat.home.sceneManager.notice.noSession" as AgentI18nKey,
+      ),
+      addSceneAction: t(
+        "agentChat.home.sceneManager.action.addScene" as AgentI18nKey,
+      ),
+      loadingNotice: t(
+        "agentChat.home.sceneManager.notice.loading" as AgentI18nKey,
+      ),
+      listLabel: t("agentChat.home.sceneManager.list.label" as AgentI18nKey),
+      kindScene: t("agentChat.home.sceneManager.kind.scene" as AgentI18nKey),
+      kindSkill: t("agentChat.home.sceneManager.kind.skill" as AgentI18nKey),
+      moveUpLabel: (title) =>
+        t("agentChat.home.sceneManager.row.moveUp" as AgentI18nKey, { title }),
+      moveDownLabel: (title) =>
+        t("agentChat.home.sceneManager.row.moveDown" as AgentI18nKey, {
+          title,
+        }),
+      visibleLabel: t(
+        "agentChat.home.sceneManager.row.visible" as AgentI18nKey,
+      ),
+      sceneNameLabel: t(
+        "agentChat.home.sceneManager.field.sceneName.label" as AgentI18nKey,
+      ),
+      sceneNamePlaceholder: t(
+        "agentChat.home.sceneManager.field.sceneName.placeholder" as AgentI18nKey,
+      ),
+      linkedSkillLabel: t(
+        "agentChat.home.sceneManager.field.linkedSkill.label" as AgentI18nKey,
+      ),
+      linkedSkillEmptyOption: t(
+        "agentChat.home.sceneManager.field.linkedSkill.emptyOption" as AgentI18nKey,
+      ),
+      placeholderLabel: t(
+        "agentChat.home.sceneManager.field.placeholder.label" as AgentI18nKey,
+      ),
+      placeholderPlaceholder: t(
+        "agentChat.home.sceneManager.field.placeholder.placeholder" as AgentI18nKey,
+      ),
+      templateTitleLabel: t(
+        "agentChat.home.sceneManager.field.templateTitle.label" as AgentI18nKey,
+      ),
+      templateDescriptionLabel: t(
+        "agentChat.home.sceneManager.field.templateDescription.label" as AgentI18nKey,
+      ),
+      templateDescriptionPlaceholder: t(
+        "agentChat.home.sceneManager.field.templateDescription.placeholder" as AgentI18nKey,
+      ),
+      templatePromptLabel: t(
+        "agentChat.home.sceneManager.field.templatePrompt.label" as AgentI18nKey,
+      ),
+      templatePromptPlaceholder: t(
+        "agentChat.home.sceneManager.field.templatePrompt.placeholder" as AgentI18nKey,
+      ),
+      backAction: t("agentChat.home.sceneManager.action.back" as AgentI18nKey),
+      addToListAction: t(
+        "agentChat.home.sceneManager.action.addToList" as AgentI18nKey,
+      ),
+      restoreDefaultAction: t(
+        "agentChat.home.sceneManager.action.restoreDefault" as AgentI18nKey,
+      ),
+      cancelAction: t(
+        "agentChat.home.sceneManager.action.cancel" as AgentI18nKey,
+      ),
+      doneAction: t("agentChat.home.sceneManager.action.done" as AgentI18nKey),
+      savingAction: t(
+        "agentChat.home.sceneManager.action.saving" as AgentI18nKey,
+      ),
+    }),
+    [t],
+  );
   const [view, setView] = useState<"list" | "create">("list");
   const [entries, setEntries] = useState<SkillCatalogEntry[]>([]);
   const [preference, setPreference] =
     useState<OemCloudSceneSkillPreference>(emptyPreference);
   const [rows, setRows] = useState<ManagerRow[]>([]);
   const [customScenes, setCustomScenes] = useState<OemCloudCustomScene[]>([]);
-  const [draft, setDraft] = useState<DraftScene>(defaultDraft);
+  const [draft, setDraft] = useState<DraftScene>(() =>
+    createDefaultDraft(sceneManagerCopy.defaultTemplateTitle),
+  );
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -411,7 +559,7 @@ export function HomeSceneSkillManagerDialog({
             runtime.tenantId,
           );
         } else {
-          setError("需要登录云端账号后，才能同步场景 Skills 管理结果。");
+          setError(sceneManagerCopy.syncSignInRequiredError);
         }
         if (cancelled) {
           return;
@@ -436,7 +584,7 @@ export function HomeSceneSkillManagerDialog({
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, sceneManagerCopy.syncSignInRequiredError]);
 
   const linkableEntries = useMemo(
     () =>
@@ -481,23 +629,29 @@ export function HomeSceneSkillManagerDialog({
     const linkedEntryId = draft.linkedEntryId.trim();
     const prompt = draft.templatePrompt.trim();
     if (!title || !linkedEntryId || !prompt) {
-      setError("请填写场景名称、关联技能和模板提示词。");
+      setError(sceneManagerCopy.createRequiredError);
       return;
     }
 
-    const scene = buildCustomScene(draft);
+    const scene = buildCustomScene(
+      draft,
+      sceneManagerCopy.defaultTemplateTitle,
+    );
     setCustomScenes((current) => [...current, scene]);
     setRows((current) => [
       ...current,
       {
         id: scene.id ?? `custom_scene:${Date.now()}`,
         title: scene.title,
-        summary: scene.summary || scene.templates[0]?.prompt || "自定义场景",
+        summary:
+          scene.summary ||
+          scene.templates[0]?.prompt ||
+          sceneManagerCopy.customSceneSummaryFallback,
         kind: "scene",
         visible: true,
       },
     ]);
-    setDraft(defaultDraft);
+    setDraft(createDefaultDraft(sceneManagerCopy.defaultTemplateTitle));
     setView("list");
     setError(null);
   };
@@ -507,7 +661,7 @@ export function HomeSceneSkillManagerDialog({
     const syncAvailable = hasOemCloudSession(runtime);
     if (!runtime || !syncAvailable) {
       setCanSync(false);
-      setError("需要登录云端账号后，才能同步场景 Skills 管理结果。");
+      setError(sceneManagerCopy.syncSignInRequiredError);
       return;
     }
     setSaving(true);
@@ -541,36 +695,38 @@ export function HomeSceneSkillManagerDialog({
         <Header>
           <TitleBlock>
             <Title id="home-scene-skill-manager-title">
-              {view === "list" ? "场景管理" : "新增自定义场景"}
+              {view === "list"
+                ? sceneManagerCopy.titleList
+                : sceneManagerCopy.titleCreate}
             </Title>
             <Description>
               {view === "list"
-                ? "调整首页场景和 Skills 的顺序、显隐；新增入口会同步到云端。"
-                : "把已有 SkillCatalog 里的技能包装成更贴近你工作流的起手场景。"}
+                ? sceneManagerCopy.descriptionList
+                : sceneManagerCopy.descriptionCreate}
             </Description>
           </TitleBlock>
           <Button type="button" onClick={onClose}>
-            关闭
+            {sceneManagerCopy.closeAction}
           </Button>
         </Header>
 
         <Body>
           {error ? <ErrorNotice role="alert">{error}</ErrorNotice> : null}
           {!error && !canSync ? (
-            <Notice>
-              当前未检测到云端会话，列表可以预览，但保存需要先登录。
-            </Notice>
+            <Notice>{sceneManagerCopy.noSessionNotice}</Notice>
           ) : null}
 
           {view === "list" ? (
             <>
               <ActionRow>
                 <Button type="button" onClick={() => setView("create")}>
-                  新增场景
+                  {sceneManagerCopy.addSceneAction}
                 </Button>
               </ActionRow>
-              {loading ? <Notice>正在载入场景 Skills…</Notice> : null}
-              <List aria-label="场景 Skills 列表">
+              {loading ? (
+                <Notice>{sceneManagerCopy.loadingNotice}</Notice>
+              ) : null}
+              <List aria-label={sceneManagerCopy.listLabel}>
                 {rows.map((row, index) => (
                   <Row
                     key={row.id}
@@ -583,14 +739,16 @@ export function HomeSceneSkillManagerDialog({
                     <RowTitle>
                       <RowName>{row.title}</RowName>
                       <RowMeta>
-                        {row.kind === "scene" ? "场景" : "Skill"} ·{" "}
-                        {row.summary}
+                        {row.kind === "scene"
+                          ? sceneManagerCopy.kindScene
+                          : sceneManagerCopy.kindSkill}{" "}
+                        · {row.summary}
                       </RowMeta>
                     </RowTitle>
                     <RowControls>
                       <IconButton
                         type="button"
-                        aria-label={`上移 ${row.title}`}
+                        aria-label={sceneManagerCopy.moveUpLabel(row.title)}
                         disabled={index === 0}
                         onClick={() =>
                           setRows((current) => moveRow(current, row.id, -1))
@@ -600,7 +758,7 @@ export function HomeSceneSkillManagerDialog({
                       </IconButton>
                       <IconButton
                         type="button"
-                        aria-label={`下移 ${row.title}`}
+                        aria-label={sceneManagerCopy.moveDownLabel(row.title)}
                         disabled={index === rows.length - 1}
                         onClick={() =>
                           setRows((current) => moveRow(current, row.id, 1))
@@ -623,7 +781,7 @@ export function HomeSceneSkillManagerDialog({
                             );
                           }}
                         />
-                        显示
+                        {sceneManagerCopy.visibleLabel}
                       </ToggleLabel>
                     </RowControls>
                   </Row>
@@ -633,10 +791,10 @@ export function HomeSceneSkillManagerDialog({
           ) : (
             <FieldGrid onSubmit={handleCreateSubmit}>
               <Field>
-                场景名称
+                {sceneManagerCopy.sceneNameLabel}
                 <Input
                   value={draft.title}
-                  placeholder="例如：每日账号复盘"
+                  placeholder={sceneManagerCopy.sceneNamePlaceholder}
                   onChange={(event) =>
                     setDraft((current) => ({
                       ...current,
@@ -646,7 +804,7 @@ export function HomeSceneSkillManagerDialog({
                 />
               </Field>
               <Field>
-                关联技能
+                {sceneManagerCopy.linkedSkillLabel}
                 <Select
                   value={draft.linkedEntryId}
                   onChange={(event) =>
@@ -656,20 +814,24 @@ export function HomeSceneSkillManagerDialog({
                     }))
                   }
                 >
-                  <option value="">选择已有 Skill / 场景</option>
+                  <option value="">
+                    {sceneManagerCopy.linkedSkillEmptyOption}
+                  </option>
                   {linkableEntries.map((entry) => (
                     <option key={entry.id} value={entry.id}>
-                      {entry.kind === "scene" ? "场景" : "Skill"} ·{" "}
-                      {entry.title}
+                      {entry.kind === "scene"
+                        ? sceneManagerCopy.kindScene
+                        : sceneManagerCopy.kindSkill}{" "}
+                      · {entry.title}
                     </option>
                   ))}
                 </Select>
               </Field>
               <Field>
-                输入框占位提示
+                {sceneManagerCopy.placeholderLabel}
                 <Input
                   value={draft.placeholder}
-                  placeholder="例如：今天想复盘哪个账号？"
+                  placeholder={sceneManagerCopy.placeholderPlaceholder}
                   onChange={(event) =>
                     setDraft((current) => ({
                       ...current,
@@ -679,7 +841,7 @@ export function HomeSceneSkillManagerDialog({
                 />
               </Field>
               <Field>
-                快捷模板标题
+                {sceneManagerCopy.templateTitleLabel}
                 <Input
                   value={draft.templateTitle}
                   onChange={(event) =>
@@ -691,10 +853,10 @@ export function HomeSceneSkillManagerDialog({
                 />
               </Field>
               <Field>
-                快捷模板描述
+                {sceneManagerCopy.templateDescriptionLabel}
                 <Input
                   value={draft.templateDescription}
-                  placeholder="简短说明这个模板适合什么场景"
+                  placeholder={sceneManagerCopy.templateDescriptionPlaceholder}
                   onChange={(event) =>
                     setDraft((current) => ({
                       ...current,
@@ -704,10 +866,10 @@ export function HomeSceneSkillManagerDialog({
                 />
               </Field>
               <Field>
-                模板提示词
+                {sceneManagerCopy.templatePromptLabel}
                 <TextArea
                   value={draft.templatePrompt}
-                  placeholder="点击该场景时填入输入框的启动文本"
+                  placeholder={sceneManagerCopy.templatePromptPlaceholder}
                   onChange={(event) =>
                     setDraft((current) => ({
                       ...current,
@@ -718,10 +880,10 @@ export function HomeSceneSkillManagerDialog({
               </Field>
               <ActionRow>
                 <Button type="button" onClick={() => setView("list")}>
-                  返回
+                  {sceneManagerCopy.backAction}
                 </Button>
                 <Button type="submit" $primary>
-                  加入列表
+                  {sceneManagerCopy.addToListAction}
                 </Button>
               </ActionRow>
             </FieldGrid>
@@ -731,11 +893,11 @@ export function HomeSceneSkillManagerDialog({
         {view === "list" ? (
           <Footer>
             <Button type="button" onClick={handleRestoreDefault}>
-              恢复默认
+              {sceneManagerCopy.restoreDefaultAction}
             </Button>
             <ActionRow>
               <Button type="button" onClick={onClose}>
-                取消
+                {sceneManagerCopy.cancelAction}
               </Button>
               <Button
                 type="button"
@@ -743,7 +905,9 @@ export function HomeSceneSkillManagerDialog({
                 disabled={saving || loading}
                 onClick={handleSave}
               >
-                {saving ? "同步中…" : "完成"}
+                {saving
+                  ? sceneManagerCopy.savingAction
+                  : sceneManagerCopy.doneAction}
               </Button>
             </ActionRow>
           </Footer>

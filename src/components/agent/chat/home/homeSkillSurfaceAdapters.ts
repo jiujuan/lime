@@ -1,6 +1,7 @@
 import type { Skill } from "@/lib/api/skills";
 import type { SkillCatalogSceneEntry } from "@/lib/api/skillCatalog";
 import type { ServiceSkillHomeItem } from "../service-skills/types";
+import type { ServiceSkillHomeCopy } from "../service-skills/homeCopy";
 import type { SceneAppEntryCardItem } from "../sceneappEntryTypes";
 import type { CuratedTaskTemplateItem } from "../utils/curatedTaskTemplates";
 import type { SlashEntryUsageRecord } from "../skill-selection/slashEntryUsage";
@@ -141,7 +142,8 @@ export function fromCuratedTaskTemplate(
 
 export function fromServiceSkill(
   skill: ServiceSkillHomeItem,
-  usage?: SlashEntryUsageRecord,
+  usage: SlashEntryUsageRecord | undefined,
+  copy: ServiceSkillHomeCopy,
 ): HomeSkillSurfaceItem {
   return {
     id: skill.id,
@@ -160,13 +162,14 @@ export function fromServiceSkill(
     isRecommended: false,
     usedAt: usage?.usedAt ?? skill.recentUsedAt,
     testId: `entry-service-skill-${skill.id}`,
-    badge: usage ? "最近使用" : skill.badge,
+    badge: usage ? copy.badge.recent : skill.badge,
   };
 }
 
 export function fromInstalledSkill(
   skill: Skill,
-  usage?: SlashEntryUsageRecord,
+  usage: SlashEntryUsageRecord | undefined,
+  copy: ServiceSkillHomeCopy,
 ): HomeSkillSurfaceItem {
   return {
     id: skill.key,
@@ -180,13 +183,14 @@ export function fromInstalledSkill(
     isRecommended: false,
     usedAt: usage?.usedAt ?? null,
     testId: `entry-installed-skill-${skill.key}`,
-    badge: usage ? "最近使用" : "已安装",
+    badge: usage ? copy.badge.recent : copy.badge.installed,
   };
 }
 
 export function fromSceneAppEntry(
   item: SceneAppEntryCardItem,
-  usage?: SlashEntryUsageRecord,
+  usage: SlashEntryUsageRecord | undefined,
+  copy: ServiceSkillHomeCopy,
 ): HomeSkillSurfaceItem {
   return {
     id: item.id,
@@ -200,13 +204,14 @@ export function fromSceneAppEntry(
     isRecommended: false,
     usedAt: usage?.usedAt ?? null,
     testId: `entry-sceneapp-${item.id}`,
-    badge: usage ? "最近使用" : item.businessLabel,
+    badge: usage ? copy.badge.recent : item.businessLabel,
   };
 }
 
 export function fromSkillCatalogSceneEntry(
   entry: SkillCatalogSceneEntry,
-  usage?: SlashEntryUsageRecord,
+  usage: SlashEntryUsageRecord | undefined,
+  copy: ServiceSkillHomeCopy,
 ): HomeSkillSurfaceItem {
   const launchPrompt = entry.templates?.[0]?.prompt?.trim();
 
@@ -222,7 +227,7 @@ export function fromSkillCatalogSceneEntry(
     isRecommended: false,
     usedAt: usage?.usedAt ?? null,
     testId: `entry-skill-catalog-scene-${entry.id.replace(/[^a-z0-9_-]/gi, "-")}`,
-    badge: usage ? "最近使用" : "自定义场景",
+    badge: usage ? copy.badge.recent : copy.badge.customScene,
     linkedSkillId: entry.linkedSkillId,
     launchPrompt,
     placeholder: entry.placeholder,

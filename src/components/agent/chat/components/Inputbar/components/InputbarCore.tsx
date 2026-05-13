@@ -50,6 +50,7 @@ import type { MessageImage, MessagePathReference } from "../../../types";
 import type { QueuedTurnSnapshot } from "@/lib/api/agentRuntime";
 import { QueuedTurnsPanel } from "./QueuedTurnsPanel";
 import { useInputbarDictation } from "../hooks/useInputbarDictation";
+import type { InputbarCoreCopy } from "./inputbarCoreCopy";
 
 const INTERACTIVE_TARGET_SELECTOR =
   "button, a, input, textarea, select, option, [role='button'], [contenteditable=''], [contenteditable='true'], [contenteditable='plaintext-only']";
@@ -63,15 +64,16 @@ function formatDictationDuration(duration = 0): string {
 
 function buildDictationStatusText(
   state: "idle" | "listening" | "transcribing" | "polishing",
+  copy: InputbarCoreCopy,
   duration = 0,
 ): string {
   switch (state) {
     case "listening":
-      return `录音中 ${formatDictationDuration(duration)}`;
+      return copy.dictation.recording(formatDictationDuration(duration));
     case "transcribing":
-      return "识别中";
+      return copy.dictation.transcribing;
     case "polishing":
-      return "润色中";
+      return copy.dictation.polishing;
     case "idle":
     default:
       return "";
@@ -86,6 +88,7 @@ function shouldFocusComposerTextarea(target: EventTarget | null): boolean {
 }
 
 interface InputbarCoreProps {
+  uiCopy: InputbarCoreCopy;
   text: string;
   setText: (text: string) => void;
   onSend: () => void;
@@ -135,9 +138,11 @@ interface InputbarCoreProps {
     prompt: string;
     testId?: string;
   }) => void;
+  listenForVoiceShortcut?: boolean;
 }
 
 export const InputbarCore: React.FC<InputbarCoreProps> = ({
+  uiCopy,
   text,
   setText,
   onSend,
@@ -170,6 +175,7 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
   showMetaTools = true,
   inputSuggestion = null,
   onAcceptInputSuggestion,
+  listenForVoiceShortcut = false,
 }) => {
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
   const inputBarContainerRef = useRef<HTMLDivElement | null>(null);
@@ -191,6 +197,7 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
     setText,
     textareaRef: resolvedTextareaRef,
     disabled,
+    listenForVoiceShortcut,
   });
   const hasInlineComposerContent =
     text.trim().length > 0 ||
@@ -247,21 +254,24 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
     Boolean(inputSuggestion) && text.trim().length === 0 && !disabled;
   const dictationStatusText = buildDictationStatusText(
     dictationState,
+    uiCopy,
     recordingStatus?.duration,
   );
   const dictationStatusLabel =
     dictationState === "listening" && liveTranscript
-      ? `${dictationStatusText} · 实时识别`
+      ? `${dictationStatusText} · ${uiCopy.dictation.liveTranscript}`
       : dictationStatusText;
   const dictationButtonTitle = isDictationProcessing
     ? dictationState === "polishing"
-      ? "语音润色中"
-      : "语音识别中"
+      ? uiCopy.dictation.polishingTitle
+      : uiCopy.dictation.transcribingTitle
     : isDictating
-      ? `${dictationStatusLabel || "录音中"}，点击停止`
+      ? uiCopy.dictation.stopRecording(
+          dictationStatusLabel || uiCopy.dictation.recordingLabel,
+        )
       : dictationEnabled || !voiceConfigLoaded
-        ? "开始语音输入"
-        : "语音输入未启用";
+        ? uiCopy.dictation.start
+        : uiCopy.dictation.disabled;
 
   const handleInputSuggestionKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -394,8 +404,8 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
           ? ""
           : placeholder ||
             (isFullscreen
-              ? "全屏编辑模式，按 ESC 退出，Enter 发送"
-              : "在这里输入消息, 按 Enter 发送")
+              ? uiCopy.placeholder.fullscreen
+              : uiCopy.placeholder.default)
       }
     >
       {({ textareaProps, textareaRef, isPrimaryDisabled, onPrimaryAction }) => {
@@ -432,11 +442,11 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
                     <ImagePreviewItem key={index}>
                       <ImagePreviewImg
                         src={`data:${img.mediaType};base64,${img.data}`}
-                        alt={`预览 ${index + 1}`}
+                        alt={uiCopy.image.previewAlt(index + 1)}
                       />
                       <ImageRemoveButton
                         type="button"
-                        aria-label={`移除图片 ${index + 1}`}
+                        aria-label={uiCopy.image.remove(index + 1)}
                         onMouseDown={handleRemoveImageMouseDown}
                         onClick={(event) =>
                           handleRemoveImageClick(event, index)
@@ -450,7 +460,7 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
               )}
 
               {pathReferences.length > 0 ? (
-                <PathReferenceContainer aria-label="已添加的本地路径">
+                <PathReferenceContainer aria-label={uiCopy.path.containerLabel}>
                   {pathReferences.map((reference) => {
                     const ReferenceIcon = reference.isDir ? Folder : FileText;
                     return (
@@ -467,26 +477,30 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
                             {reference.name}
                           </PathReferenceName>
                           <PathReferencePath>
-                            {reference.isDir ? "本地文件夹" : "本地文件"}
+                            {reference.isDir
+                              ? uiCopy.path.localFolder
+                              : uiCopy.path.localFile}
                           </PathReferencePath>
                         </PathReferenceText>
                         {onImportPathReferenceAsKnowledge &&
                         isKnowledgeTextSourceCandidate(reference) ? (
                           <PathReferenceKnowledgeButton
                             type="button"
-                            aria-label={`设为项目资料 ${reference.name}`}
+                            aria-label={uiCopy.path.importAsKnowledge(
+                              reference.name,
+                            )}
                             onMouseDown={handleImportPathReferenceMouseDown}
                             onClick={(event) =>
                               handleImportPathReferenceClick(event, reference)
                             }
                           >
                             <FileText size={12} aria-hidden />
-                            设为资料
+                            {uiCopy.path.importAction}
                           </PathReferenceKnowledgeButton>
                         ) : null}
                         <PathReferenceRemoveButton
                           type="button"
-                          aria-label={`移除路径 ${reference.name}`}
+                          aria-label={uiCopy.path.remove(reference.name)}
                           onMouseDown={handleRemovePathReferenceMouseDown}
                           onClick={(event) =>
                             handleRemovePathReferenceClick(event, reference.id)
@@ -511,8 +525,8 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
                 <InputIconButton
                   type="button"
                   onClick={() => onToolClick("attach")}
-                  aria-label="添加图片"
-                  title="添加图片"
+                  aria-label={uiCopy.image.add}
+                  title={uiCopy.image.add}
                 >
                   <ImagePlus size={14} />
                 </InputIconButton>
@@ -521,7 +535,7 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
                     <InputSuggestionLayer
                       className={textareaClassName}
                       data-testid="home-input-tab-suggestion"
-                      title="按 Tab 使用这条起手建议"
+                      title={uiCopy.suggestion.acceptTitle}
                     >
                       <InputSuggestionText>
                         {inputSuggestion.label}
@@ -542,9 +556,15 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
                     disabled={disabled}
                     className={isTextareaExpanded ? "is-active" : ""}
                     aria-label={
-                      isTextareaExpanded ? "收起输入框" : "展开输入框"
+                      isTextareaExpanded
+                        ? uiCopy.textarea.collapse
+                        : uiCopy.textarea.expand
                     }
-                    title={isTextareaExpanded ? "收起输入框" : "展开输入框"}
+                    title={
+                      isTextareaExpanded
+                        ? uiCopy.textarea.collapse
+                        : uiCopy.textarea.expand
+                    }
                   >
                     {isTextareaExpanded ? (
                       <ChevronDown size={14} />
@@ -585,7 +605,7 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
                       onClick={onPrimaryAction}
                       disabled={isPrimaryDisabled}
                     >
-                      <span>稍后处理</span>
+                      <span>{uiCopy.action.defer}</span>
                     </SecondaryActionButton>
                   ) : null}
                   {isLoading ? (
@@ -594,8 +614,8 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
                       onClick={onStop}
                       disabled={!onStop}
                       $destructive
-                      aria-label="停止"
-                      title="停止"
+                      aria-label={uiCopy.action.stop}
+                      title={uiCopy.action.stop}
                     >
                       <Square size={14} fill="currentColor" />
                     </InputIconButton>
@@ -605,8 +625,8 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
                       type="button"
                       onClick={onPrimaryAction}
                       disabled={isPrimaryDisabled}
-                      aria-label="发送"
-                      title="发送"
+                      aria-label={uiCopy.action.send}
+                      title={uiCopy.action.send}
                     >
                       <ArrowUp size={16} strokeWidth={2.4} />
                     </SendButton>

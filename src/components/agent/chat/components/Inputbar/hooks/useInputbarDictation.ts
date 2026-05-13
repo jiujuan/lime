@@ -1,10 +1,12 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type RefObject,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   cancelRecording,
@@ -19,6 +21,10 @@ import {
   type VoiceInputConfig,
 } from "@/lib/api/asrProvider";
 import { getDefaultLocalVoiceModelReadiness } from "@/lib/api/voiceModels";
+import {
+  onVoiceStartRecording,
+  onVoiceStopRecording,
+} from "@/lib/api/voiceShortcutEvents";
 import { requestOpenVoiceModelSettings } from "@/lib/voiceModelSettingsNavigation";
 import {
   isAudiblePcm16LeSegment,
@@ -28,6 +34,7 @@ import {
   mergeLiveTranscript,
 } from "@/lib/voiceLivePreview";
 import { useVoiceSound } from "@/hooks/useVoiceSound";
+import { buildInputbarDictationCopy } from "./inputbarDictationCopy";
 
 type InputbarDictationState =
   | "idle"
@@ -40,6 +47,7 @@ interface UseInputbarDictationArgs {
   setText: (value: string) => void;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
   disabled: boolean;
+  listenForVoiceShortcut?: boolean;
 }
 
 interface TranscriptSelection {
@@ -85,12 +93,34 @@ function insertTranscriptAtCursor(
   });
 }
 
+function getRuntimeErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error === "string" && error.trim()) {
+    return error;
+  }
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) {
+      return message;
+    }
+  }
+  return fallback;
+}
+
 export function useInputbarDictation({
   text,
   setText,
   textareaRef,
   disabled,
+  listenForVoiceShortcut = false,
 }: UseInputbarDictationArgs) {
+  const { t } = useTranslation("agent");
+  const copy = useMemo(
+    () => buildInputbarDictationCopy((key) => t(key)),
+    [t],
+  );
   const [dictationState, setDictationState] =
     useState<InputbarDictationState>("idle");
   const [recordingStatus, setRecordingStatus] =
@@ -107,6 +137,14 @@ export function useInputbarDictation({
   const lastLiveTranscriptRef = useRef("");
   const lastLiveTranscribedSampleRef = useRef(0);
   const { playStartSound, playStopSound } = useVoiceSound(soundEnabled);
+
+  const updateDictationState = useCallback(
+    (nextState: InputbarDictationState) => {
+      dictationStateRef.current = nextState;
+      setDictationState(nextState);
+    },
+    [],
+  );
 
   const focusTextarea = useCallback(
     (cursor: number) => {
@@ -293,19 +331,19 @@ export function useInputbarDictation({
       config = await refreshVoiceConfig();
     } catch (error) {
       console.error("[输入栏] 读取语音配置失败:", error);
-      toast.error("语音输入暂不可用");
+      toast.error(copy.unavailable);
       return;
     }
 
     if (!config.enabled) {
-      toast.info("请先在设置里启用语音输入");
+      toast.info(copy.enableInSettings);
       return;
     }
 
     try {
       const readiness = await getDefaultLocalVoiceModelReadiness();
       if (!readiness.ready) {
-        toast.info(readiness.message || "先下载语音模型");
+        toast.info(readiness.message || copy.downloadVoiceModel);
         requestOpenVoiceModelSettings({
           source: "inputbar",
           reason: "missing-model",
@@ -317,7 +355,7 @@ export function useInputbarDictation({
       console.error("[输入栏] 检查本地语音模型失败:", error);
     }
 
-    setDictationState("listening");
+      updateDictationState("listening");
     setLiveTranscript("");
     lastLiveTranscriptRef.current = "";
     lastLiveTranscribedSampleRef.current = 0;
@@ -342,15 +380,20 @@ export function useInputbarDictation({
         volume: 0,
         duration: 0,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("[输入栏] 开始录音失败:", error);
-      const message =
-        typeof error === "string" ? error : error?.message || "无法开始录音";
-      toast.error(message);
+      toast.error(getRuntimeErrorMessage(error, copy.startFailed));
       setRecordingStatus(null);
-      setDictationState("idle");
+      updateDictationState("idle");
     }
-  }, [disabled, playStartSound, refreshVoiceConfig, textareaRef]);
+  }, [
+    copy,
+    disabled,
+    playStartSound,
+    refreshVoiceConfig,
+    textareaRef,
+    updateDictationState,
+  ]);
 
   const finishDictation = useCallback(async () => {
     if (dictationStateRef.current !== "listening") {
@@ -359,14 +402,14 @@ export function useInputbarDictation({
 
     playStopSound();
     setRecordingStatus(null);
-    setDictationState("transcribing");
+    updateDictationState("transcribing");
 
     try {
       const result = await stopRecording();
       if (result.duration < 0.5) {
-        toast.info("录音时间太短，请再试一次");
+        toast.info(copy.tooShort);
         setRecordingStatus(null);
-        setDictationState("idle");
+        updateDictationState("idle");
         return;
       }
 
@@ -377,9 +420,9 @@ export function useInputbarDictation({
 
       if (!transcription.text.trim()) {
         if (!lastLiveTranscriptRef.current) {
-          toast.info("未识别到语音内容");
+          toast.info(copy.emptyTranscript);
           setRecordingStatus(null);
-          setDictationState("idle");
+          updateDictationState("idle");
           return;
         }
       }
@@ -389,7 +432,7 @@ export function useInputbarDictation({
       const config = voiceConfigRef.current ?? (await refreshVoiceConfig());
 
       if (config.processor.polish_enabled) {
-        setDictationState("polishing");
+        updateDictationState("polishing");
         try {
           const polished = await polishVoiceText(finalText);
           finalText = polished.text;
@@ -400,16 +443,20 @@ export function useInputbarDictation({
 
       applyTranscriptToDictationBase(finalText, true);
       setRecordingStatus(null);
-      setDictationState("idle");
-    } catch (error: any) {
+      updateDictationState("idle");
+    } catch (error: unknown) {
       console.error("[输入栏] 完成语音输入失败:", error);
-      const message =
-        typeof error === "string" ? error : error?.message || "语音识别失败";
-      toast.error(message);
+      toast.error(getRuntimeErrorMessage(error, copy.recognitionFailed));
       setRecordingStatus(null);
-      setDictationState("idle");
+      updateDictationState("idle");
     }
-  }, [applyTranscriptToDictationBase, playStopSound, refreshVoiceConfig]);
+  }, [
+    applyTranscriptToDictationBase,
+    copy,
+    playStopSound,
+    refreshVoiceConfig,
+    updateDictationState,
+  ]);
 
   const handleDictationToggle = useCallback(async () => {
     if (dictationStateRef.current === "listening") {
@@ -423,6 +470,42 @@ export function useInputbarDictation({
 
     await startDictation();
   }, [finishDictation, startDictation]);
+
+  useEffect(() => {
+    if (!listenForVoiceShortcut) {
+      return;
+    }
+
+    let disposed = false;
+    let unlistenStart: (() => void) | null = null;
+    let unlistenStop: (() => void) | null = null;
+
+    void onVoiceStartRecording(async () => {
+      await startDictation();
+    }).then((unlisten) => {
+      if (disposed) {
+        unlisten();
+        return;
+      }
+      unlistenStart = unlisten;
+    });
+
+    void onVoiceStopRecording(async () => {
+      await finishDictation();
+    }).then((unlisten) => {
+      if (disposed) {
+        unlisten();
+        return;
+      }
+      unlistenStop = unlisten;
+    });
+
+    return () => {
+      disposed = true;
+      unlistenStart?.();
+      unlistenStop?.();
+    };
+  }, [finishDictation, listenForVoiceShortcut, startDictation]);
 
   return {
     dictationEnabled,

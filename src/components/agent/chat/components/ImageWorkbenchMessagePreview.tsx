@@ -1,8 +1,11 @@
 import React from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
-import { Leaf, LoaderCircle } from "lucide-react";
-import { emitImageWorkbenchFocus } from "@/lib/imageWorkbenchEvents";
+import { Leaf, LoaderCircle, RotateCcw } from "lucide-react";
+import {
+  emitImageWorkbenchFocus,
+  emitImageWorkbenchTaskAction,
+} from "@/lib/imageWorkbenchEvents";
 import { cn } from "@/lib/utils";
 import type { MessageImageWorkbenchPreview } from "../types";
 import { resolveImageWorkbenchPreviewModelLabel } from "../utils/imageWorkbenchPresentation";
@@ -206,48 +209,76 @@ export const ImageWorkbenchMessagePreview: React.FC<
   const toolLabel = resolveToolLabel(preview, t);
   const modelLabel = resolveImageWorkbenchPreviewModelLabel(preview);
   const caption = preview.caption?.trim();
+  const showRetryAction = preview.status === "failed";
+
+  const openPreview = () => {
+    if (onOpen) {
+      onOpen(preview);
+      return;
+    }
+    emitImageWorkbenchFocus({
+      projectId: preview.projectId ?? null,
+      contentId: preview.contentId ?? null,
+    });
+  };
+
+  const handleRetry = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    emitImageWorkbenchTaskAction({
+      action: "retry",
+      taskId: preview.taskId,
+      projectId: preview.projectId ?? null,
+      contentId: preview.contentId ?? null,
+    });
+  };
 
   return (
-    <button
-      type="button"
-      aria-label={t("agentChat.imageWorkbenchPreview.media.open")}
-      onClick={() => {
-        if (onOpen) {
-          onOpen(preview);
-          return;
-        }
-        emitImageWorkbenchFocus({
-          projectId: preview.projectId ?? null,
-          contentId: preview.contentId ?? null,
-        });
-      }}
-      data-testid={`image-workbench-message-preview-${preview.taskId}`}
-      className="group block w-full max-w-[800px] text-left"
-    >
-      <div
-        data-testid={`image-workbench-message-preview-toolbar-${preview.taskId}`}
-        className="mb-2.5 flex min-h-10 w-full max-w-full items-center gap-2 rounded-[12px] border border-stone-200 bg-stone-100/75 px-3.5 py-2 text-[13px] font-medium leading-5 text-[#435d2e] shadow-[0_8px_24px_-22px_rgba(15,23,42,0.32)]"
+    <div className="w-full max-w-[800px]">
+      <button
+        type="button"
+        aria-label={t("agentChat.imageWorkbenchPreview.media.open")}
+        onClick={openPreview}
+        data-testid={`image-workbench-message-preview-${preview.taskId}`}
+        className="group block w-full text-left"
       >
-        <Leaf className="h-3.5 w-3.5 shrink-0 fill-[#496631]/15 text-[#496631]" />
-        <span className="truncate">{toolLabel}</span>
-        {modelLabel ? (
-          <>
-            <span className="text-[#8aa47b]/55">|</span>
-            <span className="truncate text-[#8aa47b]">{modelLabel}</span>
-          </>
-        ) : null}
-      </div>
-      <div className="relative max-w-full transition">
-        {renderPreviewMedia(preview, t)}
-      </div>
-      {caption ? (
         <div
-          data-testid={`image-workbench-message-preview-caption-${preview.taskId}`}
-          className="mt-2 max-w-[800px] whitespace-pre-line text-sm leading-6 text-slate-700"
+          data-testid={`image-workbench-message-preview-toolbar-${preview.taskId}`}
+          className="mb-2 flex min-h-6 w-full max-w-full items-center gap-2 px-0.5 text-[13px] font-medium leading-5 text-[#435d2e]"
         >
-          {caption}
+          <Leaf className="h-3.5 w-3.5 shrink-0 fill-[#496631]/15 text-[#496631]" />
+          <span className="truncate">{toolLabel}</span>
+          {modelLabel ? (
+            <>
+              <span className="text-[#8aa47b]/55">|</span>
+              <span className="truncate text-[#8aa47b]">{modelLabel}</span>
+            </>
+          ) : null}
+        </div>
+        <div className="relative max-w-full transition">
+          {renderPreviewMedia(preview, t)}
+        </div>
+        {caption ? (
+          <div
+            data-testid={`image-workbench-message-preview-caption-${preview.taskId}`}
+            className="mt-2 max-w-[800px] whitespace-pre-line text-sm leading-6 text-slate-700"
+          >
+            {caption}
+          </div>
+        ) : null}
+      </button>
+      {showRetryAction ? (
+        <div className="mt-2 flex items-center">
+          <button
+            type="button"
+            onClick={handleRetry}
+            data-testid={`image-workbench-message-preview-action-${preview.taskId}-retry`}
+            className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-stone-50"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            {t("agentChat.imageWorkbenchPreview.action.retry")}
+          </button>
         </div>
       ) : null}
-    </button>
+    </div>
   );
 };

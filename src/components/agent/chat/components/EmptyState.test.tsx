@@ -584,6 +584,102 @@ describe("EmptyState", () => {
     ).toBeNull();
   });
 
+  it("通用首页静态起手与引导文案应跟随 en-US 资源", async () => {
+    await changeLimeLocale("en-US");
+    const container = renderEmptyState({
+      activeTheme: "general",
+      serviceSkills: [],
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("Creation");
+    expect(container.textContent).toContain("Ask Lime, spark the idea");
+    expect(container.textContent).toContain(
+      "Say the goal and Lime will keep going with you.",
+    );
+    expect(container.textContent).toContain("Guide help");
+    expect(container.textContent).toContain("Writing");
+    expect(container.textContent).toContain("Add knowledge");
+    expect(container.textContent).toContain("More methods");
+    expect(container.textContent).toContain("Start from these tasks");
+    expect(
+      container.querySelector('[data-testid="home-scroll-cue"]')?.textContent,
+    ).toContain("Scroll down to see what Lime can help you do");
+
+    const guideTrigger = container.querySelector(
+      '[data-testid="home-guide-help-trigger"]',
+    ) as HTMLButtonElement | null;
+    act(() => {
+      guideTrigger?.click();
+    });
+
+    expect(container.textContent).toContain(
+      "How do I add and use project knowledge?",
+    );
+    expect(container.querySelector("textarea")?.placeholder).toContain(
+      "What would you like to learn?",
+    );
+  });
+
+  it("非通用首页快速启动面板应跟随 en-US 资源", async () => {
+    await changeLimeLocale("en-US");
+    const container = renderEmptyState({
+      activeTheme: "image",
+      serviceSkills: [],
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("Quick start");
+    expect(container.textContent).toContain(
+      "Choose a task template first, then keep adding details and follow-ups in this session.",
+    );
+    expect(container.textContent).toContain("Generate image");
+    expect(container.textContent).toContain("Organize as Notebook");
+    expect(container.textContent).toContain("Enter research mode");
+  });
+
+  it("仅发送路径引用时应使用当前 locale 的兜底 prompt", async () => {
+    await changeLimeLocale("en-US");
+    const onSend = vi.fn();
+    const container = renderEmptyState({
+      activeTheme: "general",
+      input: "",
+      onSend,
+      pathReferences: [
+        {
+          id: "path-1",
+          path: "/tmp/report.md",
+          name: "report.md",
+          isDir: false,
+          source: "file_manager",
+        },
+      ],
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const sendButton = container.querySelector(
+      'button[aria-label="Send"]',
+    ) as HTMLButtonElement | null;
+    expect(sendButton).toBeTruthy();
+
+    act(() => {
+      sendButton?.click();
+    });
+
+    expect(onSend.mock.calls[0]?.[0]).toBe(
+      "Please review these files or folders.",
+    );
+  });
+
   it("从 Skills 页带回的技能应显示在首页输入框内的 @ 标签", async () => {
     const onSend = vi.fn();
     const skill = {
@@ -628,14 +724,19 @@ describe("EmptyState", () => {
       sendButton?.click();
     });
 
-    expect(onSend).toHaveBeenCalledWith("整理最近发布计划", "react", undefined, {
-      capabilityRoute: {
-        kind: "installed_skill",
-        skillKey: "writer",
-        skillName: "写作助手",
+    expect(onSend).toHaveBeenCalledWith(
+      "整理最近发布计划",
+      "react",
+      undefined,
+      {
+        capabilityRoute: {
+          kind: "installed_skill",
+          skillKey: "writer",
+          skillName: "写作助手",
+        },
+        displayContent: "整理最近发布计划",
       },
-      displayContent: "整理最近发布计划",
-    });
+    );
   });
 
   it("首页添加资料入口应打开输入框资料中枢，而不是预填一段说明", async () => {
@@ -2635,6 +2736,9 @@ describe("EmptyState", () => {
     });
 
     const textarea = container.querySelector("textarea");
+    expect(textarea?.getAttribute("placeholder")).toContain(
+      "直接说一句话，例如：",
+    );
     expect(textarea?.getAttribute("placeholder")).toContain(
       "帮我用 GitHub 查一下 AI Agent 项目",
     );

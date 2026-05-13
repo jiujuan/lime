@@ -10,6 +10,7 @@ import type {
   HomeSkillSurfaceItem,
   HomeStarterChip,
 } from "./homeSurfaceTypes";
+import type { HomeSurfaceChromeCopy } from "./homeSurfaceCopy";
 
 const Surface = styled.div`
   display: flex;
@@ -62,6 +63,7 @@ export interface HomeSupplementalAction {
 
 interface HomeStartSurfaceProps {
   starterChips: HomeStarterChip[];
+  copy: HomeSurfaceChromeCopy;
   guideCards?: HomeGuideCard[];
   guideOpen?: boolean;
   sections: HomeSkillSection[];
@@ -74,6 +76,7 @@ interface HomeStartSurfaceProps {
 
 export function HomeStartSurface({
   starterChips,
+  copy,
   guideCards = [],
   guideOpen,
   sections,
@@ -137,6 +140,7 @@ export function HomeStartSurface({
       {!resolvedGuideOpen ? (
         <HomeStarterChips
           chips={starterChips}
+          copy={copy}
           onSelect={handleSelectStarterChip}
         />
       ) : null}
@@ -144,6 +148,7 @@ export function HomeStartSurface({
       {resolvedGuideOpen ? (
         <HomeGuideCards
           cards={guideCards}
+          copy={copy}
           onSelect={(card) => onSelectGuideCard?.(card)}
         />
       ) : null}
@@ -166,6 +171,7 @@ export function HomeStartSurface({
 
       <HomeMoreSkillsDrawer
         open={drawerOpen}
+        copy={copy}
         sections={sections}
         onSelectItem={onSelectSkillItem}
       />

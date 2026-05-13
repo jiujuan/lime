@@ -17,7 +17,6 @@ import {
 import {
   Globe,
   AlertCircle,
-  Camera,
   AlertTriangle,
   RefreshCw,
   Bug,
@@ -40,8 +39,6 @@ import {
   DEFAULT_EXPERIMENTAL_FEATURES,
   getExperimentalConfig,
   saveExperimentalConfig,
-  updateScreenshotShortcut,
-  validateShortcut,
   type ExperimentalFeatures,
 } from "@/lib/api/experimentalFeatures";
 import { getLogs, getPersistedLogsTail } from "@/lib/api/logs";
@@ -69,11 +66,6 @@ import {
   normalizeToolCallingConfig,
 } from "./tool-calling-config";
 
-const ShortcutSettings = lazy(() =>
-  import("@/components/smart-input/ShortcutSettings").then((module) => ({
-    default: module.ShortcutSettings,
-  })),
-);
 const UpdateCheckSettings = lazy(() =>
   import("./UpdateCheckSettings").then((module) => ({
     default: module.UpdateCheckSettings,
@@ -245,9 +237,6 @@ export function ExperimentalSettings({
   } | null>(null);
   const [showClipboardGuide, setShowClipboardGuide] = useState(false);
 
-  // 检测是否为 macOS（使用 userAgentData 或 userAgent 替代已弃用的 platform）
-  const isMacOS = navigator.userAgent.includes("Mac");
-
   // 加载配置
   const loadConfig = useCallback(async () => {
     setLoading(true);
@@ -279,46 +268,6 @@ export function ExperimentalSettings({
   useEffect(() => {
     loadConfig();
   }, [loadConfig]);
-
-  // 切换截图对话功能开关
-  const handleToggleSmartInput = useCallback(async () => {
-    if (!config) return;
-
-    const newEnabled = !config.screenshot_chat.enabled;
-    const newConfig: ExperimentalFeatures = {
-      ...config,
-      screenshot_chat: {
-        ...config.screenshot_chat,
-        enabled: newEnabled,
-      },
-    };
-
-    setSaving(true);
-    setMessage(null);
-
-    try {
-      await saveExperimentalConfig(newConfig);
-      setConfig(newConfig);
-      setMessage({
-        type: "success",
-        text: newEnabled
-          ? t("settings.experimental.message.screenshotChatEnabled")
-          : t("settings.experimental.message.screenshotChatDisabled"),
-      });
-      setTimeout(() => setMessage(null), 2000);
-    } catch (err) {
-      console.error("保存配置失败:", err);
-      setMessage({
-        type: "error",
-        text:
-          err instanceof Error
-            ? err.message
-            : t("settings.experimental.message.saveFailed"),
-      });
-    } finally {
-      setSaving(false);
-    }
-  }, [config, t]);
 
   const handleToggleWebMcp = useCallback(async () => {
     if (!config) return;
@@ -357,37 +306,6 @@ export function ExperimentalSettings({
       setSaving(false);
     }
   }, [config, t]);
-
-  // 更新快捷键
-  const handleShortcutChange = useCallback(
-    async (newShortcut: string) => {
-      if (!config) return;
-
-      await updateScreenshotShortcut(newShortcut);
-      setConfig({
-        ...config,
-        screenshot_chat: {
-          ...config.screenshot_chat,
-          shortcut: newShortcut,
-        },
-      });
-      setMessage({
-        type: "success",
-        text: t("settings.experimental.message.shortcutUpdated"),
-      });
-      setTimeout(() => setMessage(null), 2000);
-    },
-    [config, t],
-  );
-
-  // 验证快捷键
-  const handleValidateShortcut = useCallback(async (shortcut: string) => {
-    try {
-      return await validateShortcut(shortcut);
-    } catch {
-      return false;
-    }
-  }, []);
 
   const persistToolCallingConfig = useCallback(
     async (next: ToolCallingConfig, successText: string) => {
@@ -813,83 +731,6 @@ export function ExperimentalSettings({
                   )}
                 />
               </div>
-            </div>
-          </SurfacePanel>
-
-          <SurfacePanel
-            icon={Camera}
-            title={t("settings.experimental.screenshot.title")}
-            description={t("settings.experimental.screenshot.description")}
-          >
-            <div className="space-y-3">
-              <CompactSwitchRow
-                title={t("settings.experimental.screenshot.enabled.title")}
-                description={t(
-                  "settings.experimental.screenshot.enabled.description",
-                )}
-                checked={config?.screenshot_chat.enabled ?? false}
-                onCheckedChange={handleToggleSmartInput}
-                disabled={saving}
-                ariaLabel={t("settings.experimental.screenshot.enabled.aria")}
-              />
-
-              {config?.screenshot_chat.enabled ? (
-                <div className="rounded-[22px] border border-slate-200/80 bg-slate-50 p-4">
-                  <Suspense
-                    fallback={
-                      <DeferredPanelFallback
-                        label={t(
-                          "settings.experimental.screenshot.shortcut.fallbackLabel",
-                        )}
-                      />
-                    }
-                  >
-                    <ShortcutSettings
-                      currentShortcut={config.screenshot_chat.shortcut}
-                      onShortcutChange={handleShortcutChange}
-                      onValidate={handleValidateShortcut}
-                      disabled={saving}
-                    />
-                  </Suspense>
-                </div>
-              ) : null}
-
-              {isMacOS && config?.screenshot_chat.enabled ? (
-                <div className="rounded-[22px] border border-amber-200 bg-amber-50/85 p-4">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                    <div>
-                      <p className="text-sm font-semibold text-amber-800">
-                        {t("settings.experimental.screenshot.permission.title")}
-                      </p>
-                      <p className="mt-1 text-sm leading-6 text-amber-700">
-                        {t(
-                          "settings.experimental.screenshot.permission.description",
-                        )}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            const { open } =
-                              await import("@tauri-apps/plugin-shell");
-                            await open(
-                              "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
-                            );
-                          } catch (e) {
-                            console.error("打开系统设置失败:", e);
-                          }
-                        }}
-                        className="mt-3 inline-flex items-center gap-2 rounded-full border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-800 transition hover:bg-amber-100"
-                      >
-                        {t(
-                          "settings.experimental.screenshot.permission.action",
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
             </div>
           </SurfacePanel>
         </div>

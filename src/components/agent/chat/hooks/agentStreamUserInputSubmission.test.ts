@@ -135,6 +135,12 @@ describe("agentStreamUserInputSubmission", () => {
         syncedSessionModelPreference: null,
         assistantMsgId: "assistant-1",
         userMsgId: "user-1",
+        userMsg: {
+          id: "user-1",
+          role: "user",
+          content: "继续生成提纲",
+          timestamp: new Date("2026-03-27T01:00:00.000Z"),
+        },
         assistantMsg,
       },
       env,

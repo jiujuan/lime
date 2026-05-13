@@ -4,16 +4,11 @@ import type {
   SkillCatalogSceneEntry,
 } from "@/lib/api/skillCatalog";
 import type { ServiceSkillHomeItem } from "../service-skills/types";
+import type { ServiceSkillHomeCopy } from "../service-skills/homeCopy";
 import type { SceneAppEntryCardItem } from "../sceneappEntryTypes";
 import type { CuratedTaskTemplateItem } from "../utils/curatedTaskTemplates";
 import type { SlashEntryUsageRecord } from "../skill-selection/slashEntryUsage";
-import {
-  HOME_CATEGORY_LABELS,
-  HOME_CATEGORY_ORDER,
-  HOME_GUIDE_CARDS,
-  HOME_INPUT_SUGGESTIONS,
-  HOME_STARTER_CHIPS,
-} from "./homeSurfaceCopy";
+import { HOME_CATEGORY_ORDER, type HomeSurfaceCopy } from "./homeSurfaceCopy";
 import {
   fromCuratedTaskTemplate,
   fromInstalledSkill,
@@ -32,6 +27,7 @@ import type {
 
 interface BuildHomeSkillSurfaceInput {
   curatedTasks: CuratedTaskTemplateItem[];
+  serviceSkillHomeCopy: ServiceSkillHomeCopy;
   serviceSkills?: ServiceSkillHomeItem[];
   catalogSceneEntries?: SkillCatalogSceneEntry[];
   installedSkills?: Skill[];
@@ -84,6 +80,7 @@ function uniqueItems(items: HomeSkillSurfaceItem[]): HomeSkillSurfaceItem[] {
 
 export function buildHomeSkillItems({
   curatedTasks,
+  serviceSkillHomeCopy,
   serviceSkills = [],
   catalogSceneEntries = [],
   installedSkills = [],
@@ -96,26 +93,36 @@ export function buildHomeSkillItems({
   return uniqueItems([
     ...curatedTasks.map(fromCuratedTaskTemplate),
     ...catalogSceneEntries.map((entry) =>
-      fromSkillCatalogSceneEntry(entry, sceneUsage.get(entry.id)),
+      fromSkillCatalogSceneEntry(
+        entry,
+        sceneUsage.get(entry.id),
+        serviceSkillHomeCopy,
+      ),
     ),
     ...serviceSkills.map((skill) =>
       fromServiceSkill(
         skill,
         sceneUsage.get(skill.sceneBinding?.sceneKey ?? "") ??
           sceneUsage.get(skill.id),
+        serviceSkillHomeCopy,
       ),
     ),
     ...installedSkills.map((skill) =>
-      fromInstalledSkill(skill, installedUsage.get(skill.key)),
+      fromInstalledSkill(
+        skill,
+        installedUsage.get(skill.key),
+        serviceSkillHomeCopy,
+      ),
     ),
     ...sceneApps.map((item) =>
-      fromSceneAppEntry(item, sceneUsage.get(item.id)),
+      fromSceneAppEntry(item, sceneUsage.get(item.id), serviceSkillHomeCopy),
     ),
   ]).sort(compareHomeItems);
 }
 
 export function buildHomeSkillSections(
   items: HomeSkillSurfaceItem[],
+  copy: HomeSurfaceCopy,
 ): HomeSkillSection[] {
   const recentItems = items
     .filter((item) => item.isRecent)
@@ -133,7 +140,7 @@ export function buildHomeSkillSections(
 
     return {
       id: category,
-      title: HOME_CATEGORY_LABELS[category],
+      title: copy.categoryLabels[category],
       items: sectionItems,
     };
   }).filter((section) => section.items.length > 0);
@@ -205,7 +212,8 @@ function listHomePresentationEntries(
 }
 
 export function buildHomeStarterChips(
-  entries?: SkillCatalogEntry[],
+  entries: SkillCatalogEntry[] | undefined,
+  copy: HomeSurfaceCopy,
 ): HomeStarterChip[] {
   const dynamicChips = listHomePresentationEntries(entries, "starter_chip").map(
     (entry) => {
@@ -218,10 +226,7 @@ export function buildHomeStarterChips(
         id: `home-starter-${entry.id}`,
         label: presentation?.label?.trim() || entry.title,
         launchKind: isGuideHelp ? "toggle_guide" : "prefill_prompt",
-        primary:
-          presentation?.order === 0 ||
-          isGuideHelp ||
-          presentation?.label === "引导帮助",
+        primary: presentation?.order === 0 || isGuideHelp,
         prompt,
         groupKey,
         iconToken: presentation?.iconToken,
@@ -231,14 +236,14 @@ export function buildHomeStarterChips(
   );
 
   if (dynamicChips.length === 0) {
-    return HOME_STARTER_CHIPS;
+    return copy.starterChips;
   }
 
   return [
     ...dynamicChips,
     {
       id: "starter-more",
-      label: "更多做法",
+      label: copy.starterMoreLabel,
       launchKind: "open_drawer",
       testId: "home-more-skills-trigger",
     },
@@ -252,7 +257,8 @@ export function buildHomeStarterChips(
 }
 
 export function buildHomeInputSuggestions(
-  entries?: SkillCatalogEntry[],
+  entries: SkillCatalogEntry[] | undefined,
+  copy: HomeSurfaceCopy,
 ): HomeInputSuggestion[] {
   const dynamicSuggestions = listHomePresentationEntries(
     entries,
@@ -278,11 +284,12 @@ export function buildHomeInputSuggestions(
 
   return dynamicSuggestions.length > 0
     ? dynamicSuggestions
-    : HOME_INPUT_SUGGESTIONS;
+    : copy.inputSuggestions;
 }
 
 export function buildHomeGuideCards(
-  entries?: SkillCatalogEntry[],
+  entries: SkillCatalogEntry[] | undefined,
+  copy: HomeSurfaceCopy,
 ): HomeGuideCard[] {
   const dynamicCards = listHomePresentationEntries(entries, "guide_card")
     .map((entry) => {
@@ -307,5 +314,5 @@ export function buildHomeGuideCards(
     })
     .filter((item): item is HomeGuideCard => Boolean(item));
 
-  return dynamicCards.length > 0 ? dynamicCards : HOME_GUIDE_CARDS;
+  return dynamicCards.length > 0 ? dynamicCards : copy.guideCards;
 }

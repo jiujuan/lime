@@ -5,16 +5,9 @@
 
 import { safeInvoke } from "@/lib/dev-bridge";
 
-export interface ScreenshotShortcutRuntimeStatus {
-  shortcut_registered: boolean;
-  registered_shortcut?: string | null;
-}
-
 export interface VoiceShortcutRuntimeStatus {
   shortcut_registered: boolean;
   registered_shortcut?: string | null;
-  translate_shortcut_registered: boolean;
-  registered_translate_shortcut?: string | null;
   fn_supported: boolean;
   fn_registered: boolean;
   fn_fallback_shortcut?: string | null;
@@ -22,14 +15,7 @@ export interface VoiceShortcutRuntimeStatus {
 }
 
 export interface HotkeyRuntimeStatus {
-  screenshot: ScreenshotShortcutRuntimeStatus;
   voice: VoiceShortcutRuntimeStatus;
-}
-
-export async function getScreenshotShortcutRuntimeStatus(): Promise<ScreenshotShortcutRuntimeStatus> {
-  return safeInvoke<ScreenshotShortcutRuntimeStatus>(
-    "get_screenshot_shortcut_runtime_status",
-  );
 }
 
 export async function getVoiceShortcutRuntimeStatus(): Promise<VoiceShortcutRuntimeStatus> {
@@ -39,10 +25,11 @@ export async function getVoiceShortcutRuntimeStatus(): Promise<VoiceShortcutRunt
 }
 
 export async function getHotkeyRuntimeStatus(): Promise<HotkeyRuntimeStatus> {
-  const [screenshot, voice] = await Promise.all([
-    getScreenshotShortcutRuntimeStatus(),
-    getVoiceShortcutRuntimeStatus(),
-  ]);
+  const voice = await getVoiceShortcutRuntimeStatus();
 
-  return { screenshot, voice };
+  return { voice };
+}
+
+export async function validateShortcut(shortcut: string): Promise<boolean> {
+  return safeInvoke("validate_shortcut", { shortcutStr: shortcut });
 }

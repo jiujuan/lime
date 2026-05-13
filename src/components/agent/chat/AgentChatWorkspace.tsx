@@ -434,6 +434,14 @@ function createTaskCenterDraftTabId(): string {
   return `${TASK_CENTER_DRAFT_TAB_PREFIX}-${Date.now().toString(36)}-${random}`;
 }
 
+function createLocalImageWorkbenchSessionKey(): string {
+  const random =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID().slice(0, 8)
+      : Math.random().toString(36).slice(2, 10);
+  return `__local_image_workbench__:${Date.now().toString(36)}:${random}`;
+}
+
 function isTaskCenterDraftTabId(value: string): boolean {
   return value.startsWith(`${TASK_CENTER_DRAFT_TAB_PREFIX}-`);
 }
@@ -2492,13 +2500,27 @@ export function AgentChatWorkspace({
     clearPreparedRuntimeTeamState();
   }, [clearPreparedRuntimeTeamState]);
   const localImageWorkbenchSessionKeyRef = useRef(
-    `__local_image_workbench__:${Date.now().toString(36)}:${Math.random()
-      .toString(36)
-      .slice(2, 8)}`,
+    createLocalImageWorkbenchSessionKey(),
   );
+  const [localImageWorkbenchSessionKey, setLocalImageWorkbenchSessionKey] =
+    useState(() => localImageWorkbenchSessionKeyRef.current);
+  const resetLocalImageWorkbenchSessionScope = useCallback(() => {
+    const previousLocalSessionKey = localImageWorkbenchSessionKeyRef.current;
+    const nextLocalSessionKey = createLocalImageWorkbenchSessionKey();
+    localImageWorkbenchSessionKeyRef.current = nextLocalSessionKey;
+    setLocalImageWorkbenchSessionKey(nextLocalSessionKey);
+    setImageWorkbenchBySessionId((previous) => {
+      if (!previous[previousLocalSessionKey]) {
+        return previous;
+      }
+      const next = { ...previous };
+      delete next[previousLocalSessionKey];
+      return next;
+    });
+  }, []);
   const imageWorkbenchSessionKey = useMemo(
-    () => sessionId?.trim() || localImageWorkbenchSessionKeyRef.current,
-    [sessionId],
+    () => sessionId?.trim() || localImageWorkbenchSessionKey,
+    [localImageWorkbenchSessionKey, sessionId],
   );
   const cachedImageWorkbenchState = useMemo(() => {
     const normalizedProjectId = normalizeProjectId(projectId);
@@ -2593,7 +2615,7 @@ export function AgentChatWorkspace({
   );
   useEffect(() => {
     const normalizedSessionId = sessionId?.trim();
-    const localSessionKey = localImageWorkbenchSessionKeyRef.current;
+    const localSessionKey = localImageWorkbenchSessionKey;
     if (!normalizedSessionId || normalizedSessionId === localSessionKey) {
       return;
     }
@@ -2613,6 +2635,7 @@ export function AgentChatWorkspace({
     );
   }, [
     imageWorkbenchBySessionId,
+    localImageWorkbenchSessionKey,
     sessionId,
     updateImageWorkbenchStateForSession,
   ]);
@@ -4446,9 +4469,7 @@ export function AgentChatWorkspace({
   const isTaskCenterDraftSendInFlight = Boolean(
     agentEntry === "claw" &&
     activeTaskCenterDraftTab &&
-    (taskCenterDraftSendRequest?.draftTabId === activeTaskCenterDraftTab.id ||
-      isPreparingSend ||
-      isSending),
+    taskCenterDraftSendRequest?.draftTabId === activeTaskCenterDraftTab.id,
   );
   const shouldSuppressTaskCenterDraftContent =
     isTaskCenterDraftTabActive && !isTaskCenterDraftSendInFlight;
@@ -4717,6 +4738,8 @@ export function AgentChatWorkspace({
       status: "draft",
     };
 
+    resetLocalImageWorkbenchSessionScope();
+    clearMessages({ showToast: false });
     startTransition(() => {
       setTaskCenterTransitionTopicId(null);
       setTaskCenterDetachedTopicId(null);
@@ -4742,6 +4765,8 @@ export function AgentChatWorkspace({
 
     return draftTab.id;
   }, [
+    clearMessages,
+    resetLocalImageWorkbenchSessionScope,
     resetTopicLocalState,
     setInput,
     setMentionedCharacters,
@@ -4987,6 +5012,7 @@ export function AgentChatWorkspace({
         );
       };
 
+      resetLocalImageWorkbenchSessionScope();
       setTaskCenterTransitionTopicId(topicId);
       setTaskCenterDetachedTopicId(null);
       setActiveTaskCenterDraftTabId(null);
@@ -5036,6 +5062,7 @@ export function AgentChatWorkspace({
       clearEntryPendingA2UI,
       markTaskCenterLocalSessionOverride,
       replaceTaskCenterOpenTabs,
+      resetLocalImageWorkbenchSessionScope,
       setActiveTaskCenterDraftTabId,
       switchTopic,
       taskCenterWorkspaceId,
@@ -5048,6 +5075,7 @@ export function AgentChatWorkspace({
 
   const handleOpenArchivedTaskTopic = useCallback(
     async (topicId: string) => {
+      resetLocalImageWorkbenchSessionScope();
       setActiveTaskCenterDraftTabId(null);
       setTaskCenterDetachedTopicId(topicId);
       setTaskCenterTransitionTopicId(topicId);
@@ -5071,7 +5099,12 @@ export function AgentChatWorkspace({
         current === topicId ? null : current,
       );
     },
-    [clearEntryPendingA2UI, markTaskCenterLocalSessionOverride, switchTopic],
+    [
+      clearEntryPendingA2UI,
+      markTaskCenterLocalSessionOverride,
+      resetLocalImageWorkbenchSessionScope,
+      switchTopic,
+    ],
   );
 
   const handleSelectTaskCenterDraftTab = useCallback(
@@ -5083,6 +5116,8 @@ export function AgentChatWorkspace({
         return;
       }
 
+      resetLocalImageWorkbenchSessionScope();
+      clearMessages({ showToast: false });
       startTransition(() => {
         setTaskCenterTransitionTopicId(null);
         setTaskCenterDetachedTopicId(null);
@@ -5095,7 +5130,14 @@ export function AgentChatWorkspace({
         setMentionedCharacters([]);
       });
     },
-    [resetTopicLocalState, setInput, setMentionedCharacters, setSelectedText],
+    [
+      clearMessages,
+      resetLocalImageWorkbenchSessionScope,
+      resetTopicLocalState,
+      setInput,
+      setMentionedCharacters,
+      setSelectedText,
+    ],
   );
 
   const handleSwitchTaskTopic = useCallback(

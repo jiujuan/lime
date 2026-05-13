@@ -10,23 +10,10 @@ use super::config;
 use super::recording_service::{AudioDeviceInfo, RecordingServiceState};
 use tauri::State;
 
-fn normalize_shortcut(value: Option<String>) -> Option<String> {
-    value.and_then(|raw| {
-        let trimmed = raw.trim();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed.to_string())
-        }
-    })
-}
-
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct VoiceShortcutRuntimeStatus {
     pub shortcut_registered: bool,
     pub registered_shortcut: Option<String>,
-    pub translate_shortcut_registered: bool,
-    pub registered_translate_shortcut: Option<String>,
     pub fn_supported: bool,
     pub fn_registered: bool,
     pub fn_fallback_shortcut: Option<String>,
@@ -52,8 +39,6 @@ pub async fn get_voice_shortcut_runtime_status() -> Result<VoiceShortcutRuntimeS
     Ok(VoiceShortcutRuntimeStatus {
         shortcut_registered: super::shortcut::is_registered(),
         registered_shortcut: super::shortcut::get_current(),
-        translate_shortcut_registered: super::shortcut::is_translate_registered(),
-        registered_translate_shortcut: super::shortcut::get_current_translate(),
         fn_supported: fn_status.supported,
         fn_registered: fn_status.registered,
         fn_fallback_shortcut: super::shortcut::get_current()
@@ -78,54 +63,12 @@ pub async fn save_voice_input_config(
         if old_config.shortcut != voice_config.shortcut {
             super::shortcut::update(&app, &voice_config.shortcut)?;
         }
-
-        let old_translate_shortcut = normalize_shortcut(old_config.translate_shortcut.clone());
-        let new_translate_shortcut = normalize_shortcut(voice_config.translate_shortcut.clone());
-        let instruction_changed =
-            old_config.translate_instruction_id != voice_config.translate_instruction_id;
-
-        if old_translate_shortcut != new_translate_shortcut || instruction_changed {
-            match (
-                old_translate_shortcut.as_deref(),
-                new_translate_shortcut.as_deref(),
-            ) {
-                (Some(_), Some(new_shortcut)) => {
-                    super::shortcut::update_translate(
-                        &app,
-                        new_shortcut,
-                        &voice_config.translate_instruction_id,
-                    )?;
-                }
-                (None, Some(new_shortcut)) => {
-                    super::shortcut::register_translate(
-                        &app,
-                        new_shortcut,
-                        &voice_config.translate_instruction_id,
-                    )?;
-                }
-                (Some(_), None) => {
-                    super::shortcut::unregister_translate(&app)?;
-                }
-                (None, None) => {}
-            }
-        }
     } else if old_enabled && !new_enabled {
         super::shortcut::unregister(&app)?;
-        let _ = super::shortcut::unregister_translate(&app);
         let _ = super::fn_shortcut::unregister();
     } else if !old_enabled && new_enabled {
         super::shortcut::register(&app, &voice_config.shortcut)?;
         super::register_fn_shortcut_if_supported(&app);
-
-        if let Some(translate_shortcut) =
-            normalize_shortcut(voice_config.translate_shortcut.clone())
-        {
-            super::shortcut::register_translate(
-                &app,
-                &translate_shortcut,
-                &voice_config.translate_instruction_id,
-            )?;
-        }
     }
 
     config::save_voice_config(voice_config)
@@ -147,18 +90,6 @@ pub async fn save_voice_instruction(instruction: VoiceInstruction) -> Result<(),
 #[command]
 pub async fn delete_voice_instruction(id: String) -> Result<(), String> {
     config::delete_voice_instruction(&id)
-}
-
-/// 打开语音输入窗口
-#[command]
-pub async fn open_voice_window(app: AppHandle, target: Option<String>) -> Result<(), String> {
-    super::window::open_voice_window(&app, target.as_deref())
-}
-
-/// 关闭语音输入窗口
-#[command]
-pub async fn close_voice_window(app: AppHandle) -> Result<(), String> {
-    super::window::close_voice_window(&app)
 }
 
 pub use lime_services::voice_command_service::{PolishResult, TranscribeResult};

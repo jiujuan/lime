@@ -39,6 +39,8 @@ pub struct TurnContextOverride {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub collaboration_mode: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_visible_input_text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Object)]
     pub output_schema: Option<Value>,
     #[serde(skip, default)]

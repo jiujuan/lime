@@ -4,8 +4,17 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HomeStarterChips } from "./HomeStarterChips";
 import type { HomeStarterChip } from "./homeSurfaceTypes";
+import type { HomeSurfaceChromeCopy } from "./homeSurfaceCopy";
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
+
+const TEST_CHROME_COPY: Pick<
+  HomeSurfaceChromeCopy,
+  "starterManagerLabel" | "starterRowLabel"
+> = {
+  starterRowLabel: "首页起手入口",
+  starterManagerLabel: "管理做法",
+};
 
 beforeEach(() => {
   (
@@ -22,7 +31,13 @@ function renderChips(chips: HomeStarterChip[], onSelect = vi.fn()) {
   mountedRoots.push({ root, container });
 
   act(() => {
-    root.render(<HomeStarterChips chips={chips} onSelect={onSelect} />);
+    root.render(
+      <HomeStarterChips
+        chips={chips}
+        copy={TEST_CHROME_COPY}
+        onSelect={onSelect}
+      />,
+    );
   });
 
   return { container, onSelect };

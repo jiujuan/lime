@@ -43,7 +43,6 @@ function assertI18nKeyTypes() {
   i18n.t("common.app.startup.windows.blockingTitle", { ns: "common" });
   i18n.t("common.app.startup.windows.warningTitle", { ns: "common" });
   i18n.t("common.updateNotification.version.new", { ns: "common" });
-  i18n.t("common.smartInput.status.recording", { ns: "common" });
   i18n.t("common.shortcutSettings.label", { ns: "common" });
   i18n.t("common.shortcutSettings.error.invalid", { ns: "common" });
   i18n.t("common.execution.latestRunStatus.status.success", { ns: "common" });
@@ -70,6 +69,257 @@ function assertI18nKeyTypes() {
     ns: "agent",
     message: "network down",
   });
+  i18n.t("agentChat.messageList.historicalAssistantPreview.longNotice", {
+    ns: "agent",
+    countLabel: "12,000",
+  });
+  i18n.t("agentChat.messageList.historicalTimeline.meta", {
+    ns: "agent",
+    stepCountLabel: "3",
+    meta: "2 tool steps",
+  });
+  i18n.t("agentChat.messageList.actions.saveToKnowledge", { ns: "agent" });
+  i18n.t("agentChat.messageList.artifact.saveDocument", { ns: "agent" });
+  i18n.t("agentChat.messageList.history.windowSummaryRestored", {
+    ns: "agent",
+    loaded: "40",
+    hidden: "30",
+  });
+  i18n.t("agentChat.messageList.taskCenterEmpty.title", { ns: "agent" });
+  i18n.t("agentChat.messageList.empty.defaultTitle", { ns: "agent" });
+  i18n.t("agentChat.serviceSkills.badge.recent", { ns: "agent" });
+  i18n.t("agentChat.serviceSkills.badge.browserAssist", { ns: "agent" });
+  i18n.t("agentChat.serviceSkills.badge.readyMade", { ns: "agent" });
+  i18n.t("agentChat.serviceSkills.badge.installed", { ns: "agent" });
+  i18n.t("agentChat.serviceSkills.badge.customScene", { ns: "agent" });
+  i18n.t("agentChat.serviceSkills.catalogSource.seeded", { ns: "agent" });
+  i18n.t("agentChat.serviceSkills.catalogSource.synced", { ns: "agent" });
+  i18n.t("agentChat.home.composer.placeholder", { ns: "agent" });
+  i18n.t("agentChat.home.composer.autoLaunchExample", {
+    ns: "agent",
+    example: "open example.com",
+  });
+  i18n.t("agentChat.home.composer.pathReferenceFallbackPrompt", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.home.composer.guideHelpDefaultLabel", { ns: "agent" });
+  i18n.t("agentChat.home.composer.guideHelpClose", { ns: "agent" });
+  i18n.t("agentChat.home.composer.guideHelpCloseWithLabel", {
+    ns: "agent",
+    label: "Lime guide help",
+  });
+  i18n.t("agentChat.home.composer.advancedSettings.label", { ns: "agent" });
+  i18n.t("agentChat.home.composer.advancedSettings.expand", { ns: "agent" });
+  i18n.t("agentChat.home.composer.advancedSettings.collapse", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.home.composer.currentModel.label", { ns: "agent" });
+  i18n.t("agentChat.home.composer.currentModel.title", {
+    ns: "agent",
+    model: "OpenAI / gpt-4.1",
+  });
+  i18n.t("agentChat.home.composer.fileManager.open", { ns: "agent" });
+  i18n.t("agentChat.home.composer.fileManager.close", { ns: "agent" });
+  i18n.t("agentChat.home.composer.creationMode.label", { ns: "agent" });
+  i18n.t("agentChat.home.composer.generalContext", { ns: "agent" });
+  i18n.t("agentChat.inputbar.core.dictation.recording", {
+    ns: "agent",
+    duration: "0:12",
+  });
+  i18n.t("agentChat.inputbar.core.dictation.recordingLabel", { ns: "agent" });
+  i18n.t("agentChat.inputbar.core.dictation.transcribing", { ns: "agent" });
+  i18n.t("agentChat.inputbar.core.dictation.polishing", { ns: "agent" });
+  i18n.t("agentChat.inputbar.core.dictation.liveTranscript", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.inputbar.core.dictation.polishingTitle", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.inputbar.core.dictation.transcribingTitle", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.inputbar.core.dictation.stopRecording", {
+    ns: "agent",
+    label: "Recording 0:12",
+  });
+  i18n.t("agentChat.inputbar.core.dictation.start", { ns: "agent" });
+  i18n.t("agentChat.inputbar.core.dictation.disabled", { ns: "agent" });
+  i18n.t("agentChat.inputbar.core.placeholder.fullscreen", { ns: "agent" });
+  i18n.t("agentChat.inputbar.core.placeholder.default", { ns: "agent" });
+  i18n.t("agentChat.inputbar.core.image.previewAlt", {
+    ns: "agent",
+    index: 1,
+  });
+  i18n.t("agentChat.inputbar.core.image.remove", {
+    ns: "agent",
+    index: 1,
+  });
+  i18n.t("agentChat.inputbar.core.image.add", { ns: "agent" });
+  i18n.t("agentChat.inputbar.core.path.containerLabel", { ns: "agent" });
+  i18n.t("agentChat.inputbar.core.path.localFolder", { ns: "agent" });
+  i18n.t("agentChat.inputbar.core.path.localFile", { ns: "agent" });
+  i18n.t("agentChat.inputbar.core.path.importAsKnowledge", {
+    ns: "agent",
+    name: "brief.txt",
+  });
+  i18n.t("agentChat.inputbar.core.path.importAction", { ns: "agent" });
+  i18n.t("agentChat.inputbar.core.path.remove", {
+    ns: "agent",
+    name: "brief.txt",
+  });
+  i18n.t("agentChat.inputbar.core.suggestion.acceptTitle", { ns: "agent" });
+  i18n.t("agentChat.inputbar.core.textarea.expand", { ns: "agent" });
+  i18n.t("agentChat.inputbar.core.textarea.collapse", { ns: "agent" });
+  i18n.t("agentChat.inputbar.core.action.defer", { ns: "agent" });
+  i18n.t("agentChat.inputbar.core.action.stop", { ns: "agent" });
+  i18n.t("agentChat.inputbar.core.action.send", { ns: "agent" });
+  i18n.t("agentChat.inputbar.dictation.feedback.unavailable", { ns: "agent" });
+  i18n.t("agentChat.inputbar.dictation.feedback.enableInSettings", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.inputbar.dictation.feedback.downloadVoiceModel", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.inputbar.dictation.feedback.startFailed", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.inputbar.dictation.feedback.tooShort", { ns: "agent" });
+  i18n.t("agentChat.inputbar.dictation.feedback.emptyTranscript", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.inputbar.dictation.feedback.recognitionFailed", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.inputbar.controller.toast.systemPathDropUnsupported", {
+    ns: "agent",
+  });
+  i18n.t(
+    "agentChat.inputbar.controller.curatedTask.reviewSuggestionPrefillHint",
+    { ns: "agent" },
+  );
+  i18n.t("agentChat.inputbar.queuedTurns.header.count", {
+    ns: "agent",
+    count: 2,
+  });
+  i18n.t("agentChat.inputbar.queuedTurns.header.sequenceHint", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.inputbar.queuedTurns.emptyInput", { ns: "agent" });
+  i18n.t("agentChat.inputbar.queuedTurns.action.expand", { ns: "agent" });
+  i18n.t("agentChat.inputbar.queuedTurns.action.collapse", { ns: "agent" });
+  i18n.t("agentChat.inputbar.queuedTurns.meta.imageCount", {
+    ns: "agent",
+    count: 2,
+  });
+  i18n.t("agentChat.inputbar.queuedTurns.meta.textOnly", { ns: "agent" });
+  i18n.t("agentChat.inputbar.queuedTurns.action.promoteAria", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.inputbar.queuedTurns.action.promoting", { ns: "agent" });
+  i18n.t("agentChat.inputbar.queuedTurns.action.promote", { ns: "agent" });
+  i18n.t("agentChat.inputbar.queuedTurns.action.remove", { ns: "agent" });
+  i18n.t("agentChat.inputbar.queuedTurns.action.removing", { ns: "agent" });
+  i18n.t("agentChat.inputbar.composer.advancedSettings.label", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.inputbar.composer.advancedSettings.expand", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.inputbar.composer.advancedSettings.collapse", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.inputbar.composer.currentModel.label", { ns: "agent" });
+  i18n.t("agentChat.inputbar.composer.currentModel.title", {
+    ns: "agent",
+    model: "OpenAI / gpt-4.1",
+  });
+  i18n.t("agentChat.inputbar.composer.fileManager.open", { ns: "agent" });
+  i18n.t("agentChat.inputbar.composer.fileManager.close", { ns: "agent" });
+  i18n.t("agentChat.inputbar.composer.workspacePlaceholder.waiting", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.inputbar.composer.workspacePlaceholder.taskCenter", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.inputbar.composer.workspacePlaceholder.default", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.inputbar.tools.thinking.label", { ns: "agent" });
+  i18n.t("agentChat.inputbar.tools.thinking.title.enabled", { ns: "agent" });
+  i18n.t("agentChat.inputbar.tools.thinking.title.disabled", { ns: "agent" });
+  i18n.t("agentChat.inputbar.tools.thinking.toast.enabled", { ns: "agent" });
+  i18n.t("agentChat.inputbar.tools.thinking.toast.disabled", { ns: "agent" });
+  i18n.t("agentChat.inputbar.tools.webSearch.label", { ns: "agent" });
+  i18n.t("agentChat.inputbar.tools.webSearch.title.enabled", { ns: "agent" });
+  i18n.t("agentChat.inputbar.tools.webSearch.title.disabled", { ns: "agent" });
+  i18n.t("agentChat.inputbar.tools.webSearch.toast.enabled", { ns: "agent" });
+  i18n.t("agentChat.inputbar.tools.webSearch.toast.disabled", { ns: "agent" });
+  i18n.t("agentChat.inputbar.tools.subagent.label", { ns: "agent" });
+  i18n.t("agentChat.inputbar.tools.subagent.title.enabled", { ns: "agent" });
+  i18n.t("agentChat.inputbar.tools.subagent.title.disabled", { ns: "agent" });
+  i18n.t("agentChat.inputbar.tools.subagent.toast.enabled", { ns: "agent" });
+  i18n.t("agentChat.inputbar.tools.subagent.toast.disabled", { ns: "agent" });
+  i18n.t("agentChat.inputbar.tools.fullscreen.toast.entered", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.inputbar.tools.fullscreen.toast.exited", { ns: "agent" });
+  i18n.t("agentChat.inputbar.imageAttachments.unnamedImage", { ns: "agent" });
+  i18n.t("agentChat.inputbar.imageAttachments.imageReadFailed", {
+    ns: "agent",
+    fileName: "cover.png",
+  });
+  i18n.t("agentChat.inputbar.imageAttachments.imageAdded", {
+    ns: "agent",
+    fileName: "cover.png",
+  });
+  i18n.t("agentChat.inputbar.imageAttachments.imagePasted", { ns: "agent" });
+  i18n.t("agentChat.home.hero.slogan", { ns: "agent" });
+  i18n.t("agentChat.home.toast.imageReadFailed", {
+    ns: "agent",
+    fileName: "cover.png",
+  });
+  i18n.t("agentChat.home.curatedTask.reviewSuggestionPrefillHint", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.home.quickActions.title", { ns: "agent" });
+  i18n.t("agentChat.home.quickActions.badge", {
+    ns: "agent",
+    icon: "✨",
+  });
+  i18n.t("agentChat.home.quickActions.preset.generateImage.prompt", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.home.quickActions.preset.researchMode.label", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.home.guideHelp.contextLabelWithStarter", {
+    ns: "agent",
+    label: "Guide help",
+  });
+  i18n.t("agentChat.home.starter.rowLabel", { ns: "agent" });
+  i18n.t("agentChat.home.starter.guideHelp.label", { ns: "agent" });
+  i18n.t("agentChat.home.starter.ppt.prompt", { ns: "agent" });
+  i18n.t("agentChat.home.inputSuggestion.meetingNotes.label", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.home.guide.longTermPlan.title", { ns: "agent" });
+  i18n.t("agentChat.home.guideCards.label", { ns: "agent" });
+  i18n.t("agentChat.home.gallery.title", { ns: "agent" });
+  i18n.t("agentChat.home.category.recent", { ns: "agent" });
+  i18n.t("agentChat.home.supplemental.recentSceneApp.label", { ns: "agent" });
+  i18n.t("agentChat.home.sceneManager.title.list", { ns: "agent" });
+  i18n.t("agentChat.home.sceneManager.action.addScene", { ns: "agent" });
+  i18n.t("agentChat.home.sceneManager.error.syncSignInRequired", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.home.sceneManager.row.moveUp", {
+    ns: "agent",
+    title: "趋势简报",
+  });
+  i18n.t("agentChat.home.sceneManager.field.sceneName.placeholder", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.home.sceneManager.action.done", { ns: "agent" });
   i18n.t("skills.skillCard.source.builtin", { ns: "agent" });
   i18n.t("skills.skillCard.action.install", { ns: "agent" });
   i18n.t("skills.skillCard.compliance.standard", { ns: "agent" });
@@ -288,6 +538,7 @@ function assertI18nKeyTypes() {
   });
   i18n.t("agentChat.imageWorkbenchPreview.media.alt", { ns: "agent" });
   i18n.t("agentChat.imageWorkbenchPreview.media.open", { ns: "agent" });
+  i18n.t("agentChat.imageWorkbenchPreview.action.retry", { ns: "agent" });
   i18n.t("agentChat.imageWorkbenchPreview.placeholder.generating", {
     ns: "agent",
   });
@@ -756,9 +1007,6 @@ function assertI18nKeyTypes() {
   i18n.t("settings.hotkeys.title", { ns: "settings" });
   i18n.t("settings.hotkeys.summary.globalReady", { ns: "settings" });
   i18n.t("settings.hotkeys.catalog.scene.global.title", { ns: "settings" });
-  i18n.t("settings.hotkeys.catalog.status.voiceTranslate.ready.source", {
-    ns: "settings",
-  });
   i18n.t("settings.memory.title", { ns: "settings" });
   i18n.t("settings.memory.hero.profileCompletion", {
     ns: "settings",

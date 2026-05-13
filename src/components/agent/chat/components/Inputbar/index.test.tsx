@@ -3,6 +3,8 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Inputbar } from "./index";
+import { changeLimeLocale } from "@/i18n/createI18n";
+import { toast } from "sonner";
 import type { Character } from "@/lib/api/memory";
 import type { Skill } from "@/lib/api/skills";
 import type { ServiceSkillHomeItem } from "@/components/agent/chat/service-skills/types";
@@ -502,13 +504,14 @@ vi.mock("sonner", () => ({
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
   window.localStorage.clear();
+  await changeLimeLocale("zh-CN");
 });
 
 afterEach(() => {
@@ -588,6 +591,30 @@ function updateFieldValue(
   setter?.call(element, value);
   element.dispatchEvent(new Event("input", { bubbles: true }));
   element.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function dispatchInputbarDrop(
+  container: HTMLDivElement,
+  dataTransfer: {
+    files: File[];
+    getData: (format: string) => string;
+  },
+): Event {
+  const surface = container.firstElementChild;
+  expect(surface).toBeTruthy();
+
+  const event = new Event("drop", {
+    bubbles: true,
+    cancelable: true,
+  });
+  Object.defineProperty(event, "dataTransfer", {
+    value: dataTransfer,
+  });
+
+  act(() => {
+    surface?.dispatchEvent(event);
+  });
+  return event;
 }
 
 describe("Inputbar", () => {
@@ -1054,6 +1081,33 @@ describe("Inputbar", () => {
     );
   });
 
+  it("无法读取系统文件路径时应按 en-US 资源提示", async () => {
+    await changeLimeLocale("en-US");
+    const onAddPathReferences = vi.fn();
+    const { container } = renderInputbar({
+      onAddPathReferences,
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const dropEvent = dispatchInputbarDrop(container, {
+      files: [
+        new File(["notes"], "notes.txt", {
+          type: "text/plain",
+        }),
+      ],
+      getData: () => "",
+    });
+
+    expect(toast.error).toHaveBeenCalledWith(
+      "Cannot read system file paths. Drag files in from the built-in file manager.",
+    );
+    expect(onAddPathReferences).not.toHaveBeenCalled();
+    expect(dropEvent.defaultPrevented).toBe(true);
+  });
+
   it("应在输入框底栏提供文件管理器打开按钮", async () => {
     const onToggleFileManager = vi.fn();
     const { container } = renderInputbar({
@@ -1077,6 +1131,58 @@ describe("Inputbar", () => {
     });
 
     expect(onToggleFileManager).toHaveBeenCalledTimes(1);
+  });
+
+  it("通用输入区 chrome 文案应跟随 en-US 资源", async () => {
+    await changeLimeLocale("en-US");
+    const { container } = renderInputbar({
+      providerType: "openai",
+      setProviderType: vi.fn(),
+      model: "gpt-4.1",
+      setModel: vi.fn(),
+      onToggleFileManager: vi.fn(),
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("Model");
+    expect(container.textContent).toContain("Advanced settings");
+
+    const modelBadge = Array.from(
+      container.querySelectorAll("[title]"),
+    ).find((element) =>
+      element.getAttribute("title")?.startsWith("Current model:"),
+    );
+    expect(modelBadge?.getAttribute("title")).toBe(
+      "Current model: OpenAI / gpt-4.1",
+    );
+
+    const advancedToggle = container.querySelector(
+      '[data-testid="inputbar-advanced-toggle"]',
+    ) as HTMLButtonElement | null;
+    expect(advancedToggle?.getAttribute("aria-label")).toBe(
+      "Expand advanced settings",
+    );
+    expect(advancedToggle?.getAttribute("title")).toBe(
+      "Expand advanced settings",
+    );
+
+    const fileManagerToggle = container.querySelector(
+      '[data-testid="inputbar-file-manager-toggle"]',
+    ) as HTMLButtonElement | null;
+    expect(fileManagerToggle?.getAttribute("aria-label")).toBe(
+      "Open file manager sidebar",
+    );
+
+    expandAdvancedControls(container);
+
+    expect(
+      container
+        .querySelector('[data-testid="inputbar-advanced-toggle"]')
+        ?.getAttribute("aria-label"),
+    ).toBe("Collapse advanced settings");
   });
 
   it("带着初始已安装技能进入时，应恢复 capability badge 并继续按 route 发送", async () => {
@@ -1719,7 +1825,8 @@ describe("Inputbar", () => {
     );
   });
 
-  it("输入条编辑态 launcher 按最近判断切模板时，应保留参考选择并显示提示", async () => {
+  it("输入条编辑态 launcher 按最近判断切模板时，应保留参考选择并显示 en-US 提示", async () => {
+    await changeLimeLocale("en-US");
     const initialLaunchInputValues = {
       theme_target: "AI 内容创作",
       platform_region: "X 与 TikTok 北美区",
@@ -1805,8 +1912,8 @@ describe("Inputbar", () => {
     const prefillHint = document.querySelector(
       '[data-testid="curated-task-launcher-prefill-hint"]',
     );
-    expect(prefillHint?.textContent).toContain(
-      "已按最近判断切到更适合的结果模板",
+    expect(prefillHint?.textContent).toBe(
+      "Switched to a better-fit result template based on the latest review. You can keep editing before sending.",
     );
   });
 
@@ -2634,6 +2741,39 @@ describe("Inputbar", () => {
       thinking: false,
       subagent: false,
     });
+    expect(toast.info).toHaveBeenCalledWith("联网搜索已开启");
+  });
+
+  it("工具开关 toast 应跟随 en-US 资源", async () => {
+    await changeLimeLocale("en-US");
+    const onToolStatesChange = vi.fn();
+    const { container } = renderInputbar({
+      input: "please search the web",
+      toolStates: { webSearch: false, thinking: false, subagent: false },
+      onToolStatesChange,
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expandAdvancedControls(container);
+
+    const toggleButton = container.querySelector(
+      '[data-testid="toggle-web-search"]',
+    ) as HTMLButtonElement | null;
+    expect(toggleButton).toBeTruthy();
+
+    act(() => {
+      toggleButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(onToolStatesChange).toHaveBeenCalledWith({
+      webSearch: true,
+      thinking: false,
+      subagent: false,
+    });
+    expect(toast.info).toHaveBeenCalledWith("Web search is on");
   });
 
   it("通用聊天态复杂任务应显示任务分工建议并支持开启多代理", async () => {
@@ -3545,6 +3685,79 @@ describe("Inputbar", () => {
     expect(latestCall).toBeTruthy();
     expect(latestCall.placeholder).toContain(
       "继续补充这轮生成，或回到左侧继续旧历史",
+    );
+  });
+
+  it("工作区输入提示应跟随 en-US 资源", async () => {
+    await changeLimeLocale("en-US");
+    const { rerender } = renderInputbar({
+      variant: "workspace",
+      providerType: "openai",
+      setProviderType: vi.fn(),
+      model: "gpt-4.1",
+      setModel: vi.fn(),
+      executionStrategy: "auto",
+      setExecutionStrategy: vi.fn(),
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    let latestCall =
+      mockInputbarCore.mock.calls[mockInputbarCore.mock.calls.length - 1]?.[0];
+    expect(latestCall?.placeholder).toBe(
+      "Try entering any instruction and I will handle the rest.",
+    );
+
+    rerender({
+      variant: "workspace",
+      contextVariant: "task-center",
+      providerType: "openai",
+      setProviderType: vi.fn(),
+      model: "gpt-4.1",
+      setModel: vi.fn(),
+      executionStrategy: "auto",
+      setExecutionStrategy: vi.fn(),
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    latestCall =
+      mockInputbarCore.mock.calls[mockInputbarCore.mock.calls.length - 1]?.[0];
+    expect(latestCall?.placeholder).toBe(
+      "Keep adding to this generation, or use the left side to return to earlier history.",
+    );
+
+    rerender({
+      variant: "workspace",
+      workflowGate: {
+        key: "review_choice",
+        title: "Review choice",
+        status: "waiting",
+        description: "Choose how to continue.",
+      },
+      providerType: "openai",
+      setProviderType: vi.fn(),
+      model: "gpt-4.1",
+      setModel: vi.fn(),
+      executionStrategy: "auto",
+      setExecutionStrategy: vi.fn(),
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    latestCall =
+      mockInputbarCore.mock.calls[mockInputbarCore.mock.calls.length - 1]?.[0];
+    expect(latestCall?.placeholder).toBe(
+      "Tell me your choice and I will handle the rest.",
     );
   });
 

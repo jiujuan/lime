@@ -3,6 +3,7 @@ import type {
   HomeSkillSection,
   HomeSkillSurfaceItem,
 } from "./homeSurfaceTypes";
+import type { HomeSurfaceChromeCopy } from "./homeSurfaceCopy";
 import { resolveHomeCoverAsset } from "./homeCoverAssets";
 
 const Drawer = styled.div`
@@ -131,12 +132,14 @@ function resolveCoverGradient(token: string): string {
 
 interface HomeMoreSkillsDrawerProps {
   open: boolean;
+  copy: Pick<HomeSurfaceChromeCopy, "moreSkillsDrawerLabel">;
   sections: HomeSkillSection[];
   onSelectItem: (item: HomeSkillSurfaceItem) => void;
 }
 
 export function HomeMoreSkillsDrawer({
   open,
+  copy,
   sections,
   onSelectItem,
 }: HomeMoreSkillsDrawerProps) {
@@ -145,7 +148,10 @@ export function HomeMoreSkillsDrawer({
   }
 
   return (
-    <Drawer data-testid="home-more-skills-drawer" aria-label="更多做法">
+    <Drawer
+      data-testid="home-more-skills-drawer"
+      aria-label={copy.moreSkillsDrawerLabel}
+    >
       {sections.map((section) => (
         <Section key={section.id}>
           <SectionTitle>{section.title}</SectionTitle>

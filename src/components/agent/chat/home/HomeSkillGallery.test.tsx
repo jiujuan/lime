@@ -4,8 +4,17 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HomeSkillGallery } from "./HomeSkillGallery";
 import type { HomeSkillSurfaceItem } from "./homeSurfaceTypes";
+import type { HomeSurfaceChromeCopy } from "./homeSurfaceCopy";
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
+
+const TEST_CHROME_COPY: Pick<
+  HomeSurfaceChromeCopy,
+  "galleryDescription" | "galleryTitle"
+> = {
+  galleryTitle: "你可以从这些任务开始",
+  galleryDescription: "往下看更多任务样例；真正执行仍会回到生成里继续补充。",
+};
 
 beforeEach(() => {
   (
@@ -38,7 +47,13 @@ function renderGallery(items: HomeSkillSurfaceItem[], onSelectItem = vi.fn()) {
   mountedRoots.push({ root, container });
 
   act(() => {
-    root.render(<HomeSkillGallery items={items} onSelectItem={onSelectItem} />);
+    root.render(
+      <HomeSkillGallery
+        items={items}
+        copy={TEST_CHROME_COPY}
+        onSelectItem={onSelectItem}
+      />,
+    );
   });
 
   return { container, onSelectItem };

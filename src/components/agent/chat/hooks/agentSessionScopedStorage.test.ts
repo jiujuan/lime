@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";
 import {
   loadAgentSessionCachedSnapshot,
+  saveAgentSessionCachedMessagesSnapshot,
   saveAgentSessionCachedSnapshot,
 } from "./agentSessionScopedStorage";
 
@@ -95,6 +96,62 @@ function createHeavyAssistantMessage(): Message {
   };
 }
 
+function createStandaloneSkillAssistantMessage(): Message {
+  const timestamp = new Date("2026-04-24T00:00:03.000Z");
+
+  return {
+    id: "message-skill-assistant",
+    role: "assistant",
+    content: "最终 Skill 回复",
+    timestamp,
+    runtimeTurnId: "skill-exec-message-skill-assistant",
+    thinkingContent: "正在执行 Skill: brand-product-knowledge-builder...",
+    contentParts: [
+      {
+        type: "thinking",
+        text: "正在执行 Skill: brand-product-knowledge-builder...",
+      },
+      {
+        type: "text",
+        text: "最终 Skill 回复",
+      },
+    ],
+  };
+}
+
+function createServiceSceneSkillAssistantMessage(): Message {
+  const timestamp = new Date("2026-04-24T00:00:06.000Z");
+
+  return {
+    id: "message-service-scene-skill-assistant",
+    role: "assistant",
+    content: "服务型 Skill 最终回复",
+    timestamp,
+    runtimeTurnId: "turn-service-scene-skill",
+    inlineProcessRetention: "skill",
+    thinkingContent: "先读取服务 Skill，再整理产品边界。",
+    contentParts: [
+      {
+        type: "thinking",
+        text: "先读取服务 Skill，再整理产品边界。",
+      },
+      {
+        type: "text",
+        text: "服务型 Skill 最终回复",
+      },
+    ],
+  };
+}
+
+function createStandaloneSkillUserMessage(): Message {
+  return {
+    id: "message-skill-user",
+    role: "user",
+    content: "请整理产品知识库",
+    timestamp: new Date("2026-04-24T00:00:02.000Z"),
+  };
+}
+
 describe("agentSessionScopedStorage", () => {
   beforeEach(() => {
     sessionStorage.clear();
@@ -152,6 +209,196 @@ describe("agentSessionScopedStorage", () => {
         text: "最终回复正文",
       },
     ]);
+  });
+
+  it("保存已完成直执 Skill 快照时应保留本地思考，因为后端会话详情没有对应 timeline", () => {
+    const workspaceId = "ws-session-snapshot-skill-process";
+    const sessionId = "topic-skill-process";
+
+    saveAgentSessionCachedSnapshot(workspaceId, sessionId, {
+      messages: [createMessage(1), createStandaloneSkillAssistantMessage()],
+      threadTurns: [],
+      threadItems: [],
+      currentTurnId: null,
+    });
+
+    const restored = loadAgentSessionCachedSnapshot(workspaceId, sessionId);
+    const restoredAssistant = restored?.messages.find(
+      (message) => message.id === "message-skill-assistant",
+    );
+
+    expect(restoredAssistant).toMatchObject({
+      role: "assistant",
+      content: "最终 Skill 回复",
+      runtimeTurnId: "skill-exec-message-skill-assistant",
+      thinkingContent: "正在执行 Skill: brand-product-knowledge-builder...",
+    });
+    expect(restoredAssistant?.contentParts).toEqual([
+      {
+        type: "thinking",
+        text: "正在执行 Skill: brand-product-knowledge-builder...",
+      },
+      {
+        type: "text",
+        text: "最终 Skill 回复",
+      },
+    ]);
+  });
+
+  it("远端纯正文刷新缓存时不应覆盖直执 Skill 本地思考", () => {
+    const workspaceId = "ws-session-snapshot-skill-remote-refresh";
+    const sessionId = "topic-skill-remote-refresh";
+
+    saveAgentSessionCachedSnapshot(workspaceId, sessionId, {
+      messages: [
+        createStandaloneSkillUserMessage(),
+        createStandaloneSkillAssistantMessage(),
+      ],
+      threadTurns: [],
+      threadItems: [],
+      currentTurnId: null,
+    });
+
+    saveAgentSessionCachedSnapshot(workspaceId, sessionId, {
+      messages: [
+        {
+          id: "remote-skill-user",
+          role: "user",
+          content: "请整理产品知识库",
+          timestamp: new Date("2026-04-24T00:00:04.000Z"),
+        },
+        {
+          id: "remote-skill-assistant",
+          role: "assistant",
+          content: "远端会话详情里的纯正文结果",
+          contentParts: [
+            {
+              type: "text",
+              text: "远端会话详情里的纯正文结果",
+            },
+          ],
+          timestamp: new Date("2026-04-24T00:00:05.000Z"),
+        },
+      ],
+      threadTurns: [],
+      threadItems: [],
+      currentTurnId: null,
+    });
+
+    const restored = loadAgentSessionCachedSnapshot(workspaceId, sessionId);
+    const restoredAssistant = restored?.messages.find(
+      (message) => message.role === "assistant",
+    );
+
+    expect(restoredAssistant).toMatchObject({
+      id: "message-skill-assistant",
+      content: "最终 Skill 回复",
+      runtimeTurnId: "skill-exec-message-skill-assistant",
+      thinkingContent: "正在执行 Skill: brand-product-knowledge-builder...",
+    });
+    expect(restoredAssistant?.contentParts).toEqual([
+      {
+        type: "thinking",
+        text: "正在执行 Skill: brand-product-knowledge-builder...",
+      },
+      {
+        type: "text",
+        text: "最终 Skill 回复",
+      },
+    ]);
+  });
+
+  it("远端纯正文刷新缓存时不应覆盖服务型 Skill 本地思考", () => {
+    const workspaceId = "ws-session-snapshot-service-skill-remote-refresh";
+    const sessionId = "topic-service-skill-remote-refresh";
+
+    saveAgentSessionCachedSnapshot(workspaceId, sessionId, {
+      messages: [
+        createStandaloneSkillUserMessage(),
+        createServiceSceneSkillAssistantMessage(),
+      ],
+      threadTurns: [],
+      threadItems: [],
+      currentTurnId: null,
+    });
+
+    saveAgentSessionCachedSnapshot(workspaceId, sessionId, {
+      messages: [
+        {
+          id: "remote-service-skill-user",
+          role: "user",
+          content: "请整理产品知识库",
+          timestamp: new Date("2026-04-24T00:00:07.000Z"),
+        },
+        {
+          id: "remote-service-skill-assistant",
+          role: "assistant",
+          content: "远端服务型 Skill 纯正文结果",
+          contentParts: [
+            {
+              type: "text",
+              text: "远端服务型 Skill 纯正文结果",
+            },
+          ],
+          timestamp: new Date("2026-04-24T00:00:08.000Z"),
+        },
+      ],
+      threadTurns: [],
+      threadItems: [],
+      currentTurnId: null,
+    });
+
+    const restored = loadAgentSessionCachedSnapshot(workspaceId, sessionId);
+    const restoredAssistant = restored?.messages.find(
+      (message) => message.role === "assistant",
+    );
+
+    expect(restoredAssistant).toMatchObject({
+      id: "message-service-scene-skill-assistant",
+      content: "服务型 Skill 最终回复",
+      runtimeTurnId: "turn-service-scene-skill",
+      inlineProcessRetention: "skill",
+      thinkingContent: "先读取服务 Skill，再整理产品边界。",
+    });
+    expect(restoredAssistant?.contentParts).toEqual([
+      {
+        type: "thinking",
+        text: "先读取服务 Skill，再整理产品边界。",
+      },
+      {
+        type: "text",
+        text: "服务型 Skill 最终回复",
+      },
+    ]);
+  });
+
+  it("只保存消息快照时应保留已有时间线状态", () => {
+    const workspaceId = "ws-session-snapshot-message-only";
+    const sessionId = "topic-message-only";
+
+    saveAgentSessionCachedSnapshot(workspaceId, sessionId, {
+      messages: [createStandaloneSkillUserMessage()],
+      threadTurns: [createTurn(1)],
+      threadItems: [createItem(1)],
+      currentTurnId: "turn-1",
+    });
+
+    saveAgentSessionCachedMessagesSnapshot(workspaceId, sessionId, [
+      createStandaloneSkillUserMessage(),
+      createServiceSceneSkillAssistantMessage(),
+    ]);
+
+    const restored = loadAgentSessionCachedSnapshot(workspaceId, sessionId);
+    expect(restored?.messages[1]).toMatchObject({
+      content: "服务型 Skill 最终回复",
+      thinkingContent: "先读取服务 Skill，再整理产品边界。",
+      inlineProcessRetention: "skill",
+    });
+    expect(restored?.threadTurns).toHaveLength(1);
+    expect(restored?.threadTurns[0]?.id).toBe("turn-1");
+    expect(restored?.threadItems).toHaveLength(1);
+    expect(restored?.threadItems[0]?.id).toBe("item-1");
+    expect(restored?.currentTurnId).toBe("turn-1");
   });
 
   it("保存运行中会话快照时应保留过程字段，避免切回执行中会话丢状态", () => {

@@ -48,6 +48,7 @@ pub struct SkillWorkflowExecution<'a> {
     pub aster_state: &'a AsterAgentState,
     pub skill: &'a LoadedSkillDefinition,
     pub user_input: &'a str,
+    pub user_visible_input: Option<&'a str>,
     pub images: &'a [SkillInputImage],
     pub execution_id: &'a str,
     pub session_id: &'a str,
@@ -60,6 +61,7 @@ pub struct SkillPromptExecution<'a> {
     pub aster_state: &'a AsterAgentState,
     pub skill: &'a LoadedSkillDefinition,
     pub user_input: &'a str,
+    pub user_visible_input: Option<&'a str>,
     pub images: &'a [SkillInputImage],
     pub execution_id: &'a str,
     pub session_id: &'a str,
@@ -132,29 +134,61 @@ fn build_prompt_system_prompt(skill_markdown: &str, memory_prompt: Option<&str>)
     }
 }
 
-fn build_user_message(user_input: &str, images: &[SkillInputImage]) -> Message {
+fn should_hide_execution_input_from_user(
+    execution_input: &str,
+    user_visible_input: Option<&str>,
+) -> bool {
+    user_visible_input
+        .map(|input| {
+            let visible = input.trim();
+            !visible.is_empty() && visible != execution_input.trim()
+        })
+        .unwrap_or(false)
+}
+
+fn build_user_message(
+    user_input: &str,
+    user_visible_input: Option<&str>,
+    images: &[SkillInputImage],
+) -> Message {
     let mut user_message = Message::user().with_text(user_input);
     for image in images {
         user_message = user_message.with_image(image.data.clone(), image.media_type.clone());
     }
+    if should_hide_execution_input_from_user(user_input, user_visible_input) {
+        user_message = user_message.agent_only();
+    }
     user_message
 }
 
-fn build_skill_turn_context(skill: &LoadedSkillDefinition) -> Option<TurnContextOverride> {
+fn build_skill_turn_context(
+    skill: &LoadedSkillDefinition,
+    user_visible_input: Option<&str>,
+) -> Option<TurnContextOverride> {
     let allowed_tools = skill
         .allowed_tools
         .as_ref()
-        .filter(|tools| !tools.is_empty())?;
+        .filter(|tools| !tools.is_empty());
+    let user_visible_input_text = user_visible_input.and_then(|input| {
+        (!input.trim().is_empty()).then(|| input.trim().to_string())
+    });
+
+    if allowed_tools.is_none() && user_visible_input_text.is_none() {
+        return None;
+    }
 
     let mut metadata = HashMap::new();
-    metadata.insert(
-        "subagent".to_string(),
-        json!({
-            "allowed_tools": allowed_tools,
-        }),
-    );
+    if let Some(allowed_tools) = allowed_tools {
+        metadata.insert(
+            "subagent".to_string(),
+            json!({
+                "allowed_tools": allowed_tools,
+            }),
+        );
+    }
 
     Some(TurnContextOverride {
+        user_visible_input_text,
         metadata,
         ..TurnContextOverride::default()
     })
@@ -232,6 +266,7 @@ pub async fn execute_skill_workflow(
         aster_state,
         skill,
         user_input,
+        user_visible_input,
         images,
         execution_id,
         session_id,
@@ -246,7 +281,7 @@ pub async fn execute_skill_workflow(
     let mut artifact_paths = Vec::new();
     let mut accumulated_context = user_input.to_string();
     let mut final_output = String::new();
-    let skill_turn_context = build_skill_turn_context(skill);
+    let skill_turn_context = build_skill_turn_context(skill, user_visible_input);
 
     tracing::info!(
         "[execute_skill_workflow] 开始 workflow 执行: steps={}, skill={}",
@@ -283,7 +318,7 @@ pub async fn execute_skill_workflow(
         }
         let session_config = session_config_builder.build();
         let step_input = build_step_input(user_input, &accumulated_context, idx == 0);
-        let user_message = build_user_message(&step_input, images);
+        let user_message = build_user_message(&step_input, user_visible_input, images);
 
         let reply = stream_skill_session(
             aster_state,
@@ -364,6 +399,7 @@ pub async fn execute_skill_prompt(
         aster_state,
         skill,
         user_input,
+        user_visible_input,
         images,
         execution_id,
         session_id,
@@ -377,11 +413,11 @@ pub async fn execute_skill_prompt(
             memory_prompt,
         ))
         .include_context_trace(true);
-    if let Some(turn_context) = build_skill_turn_context(skill) {
+    if let Some(turn_context) = build_skill_turn_context(skill, user_visible_input) {
         session_config_builder = session_config_builder.turn_context(turn_context);
     }
     let session_config = session_config_builder.build();
-    let user_message = build_user_message(user_input, images);
+    let user_message = build_user_message(user_input, user_visible_input, images);
     let reply = stream_skill_session(
         aster_state,
         session_id,
@@ -425,7 +461,7 @@ pub async fn execute_skill_prompt(
 
 #[cfg(test)]
 mod tests {
-    use super::build_skill_turn_context;
+    use super::{build_skill_turn_context, build_user_message};
     use lime_skills::LoadedSkillDefinition;
     use std::collections::HashMap;
 
@@ -464,7 +500,7 @@ mod tests {
             "social_generate_cover_image",
         ]));
 
-        let turn_context = build_skill_turn_context(&skill).expect("turn context");
+        let turn_context = build_skill_turn_context(&skill, None).expect("turn context");
         assert_eq!(
             turn_context.metadata["subagent"]["allowed_tools"],
             serde_json::json!([
@@ -477,9 +513,44 @@ mod tests {
     #[test]
     fn build_skill_turn_context_skips_empty_allowed_tools() {
         let skill = build_loaded_skill(Some(Vec::new()));
-        assert!(build_skill_turn_context(&skill).is_none());
+        assert!(build_skill_turn_context(&skill, None).is_none());
 
         let skill = build_loaded_skill(None);
-        assert!(build_skill_turn_context(&skill).is_none());
+        assert!(build_skill_turn_context(&skill, None).is_none());
+    }
+
+    #[test]
+    fn build_skill_turn_context_keeps_user_visible_input_without_allowed_tools() {
+        let skill = build_loaded_skill(None);
+
+        let turn_context =
+            build_skill_turn_context(&skill, Some("  @analysis 帮我分析一下  "))
+                .expect("turn context");
+
+        assert_eq!(
+            turn_context.user_visible_input_text.as_deref(),
+            Some("@analysis 帮我分析一下")
+        );
+        assert!(turn_context.metadata.is_empty());
+    }
+
+    #[test]
+    fn build_user_message_hides_execution_input_when_visible_input_differs() {
+        let message = build_user_message(
+            "结构化执行输入",
+            Some("@analysis 帮我分析一下今天的国际形势"),
+            &[],
+        );
+
+        assert!(!message.is_user_visible());
+        assert!(message.is_agent_visible());
+    }
+
+    #[test]
+    fn build_user_message_keeps_plain_input_user_visible() {
+        let message = build_user_message("普通用户输入", Some("普通用户输入"), &[]);
+
+        assert!(message.is_user_visible());
+        assert!(message.is_agent_visible());
     }
 }

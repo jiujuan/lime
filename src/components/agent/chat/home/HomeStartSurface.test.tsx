@@ -9,6 +9,7 @@ import type {
   HomeSkillSurfaceItem,
   HomeStarterChip,
 } from "./homeSurfaceTypes";
+import type { HomeSurfaceChromeCopy } from "./homeSurfaceCopy";
 
 vi.mock("./HomeSceneSkillManagerDialog", () => ({
   HomeSceneSkillManagerDialog: ({
@@ -28,6 +29,19 @@ vi.mock("./HomeSceneSkillManagerDialog", () => ({
 }));
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
+
+const TEST_CHROME_COPY: HomeSurfaceChromeCopy = {
+  starterRowLabel: "首页起手入口",
+  starterManagerLabel: "管理做法",
+  guideCardsLabel: "首页引导帮助",
+  moreSkillsDrawerLabel: "更多做法",
+  galleryTitle: "你可以从这些任务开始",
+  galleryDescription: "往下看更多任务样例；真正执行仍会回到生成里继续补充。",
+  scrollCueLabel: "向下滑，看看 Lime 可以帮你做什么",
+  secondScreenLabel: "Lime 可执行任务示例",
+  recentSessionDefaultActionLabel: "继续最近会话",
+  recentSceneAppActionLabel: "继续最近做法",
+};
 
 function createItem(): HomeSkillSurfaceItem {
   return {
@@ -111,6 +125,7 @@ function renderSurface(options?: {
     root.render(
       <HomeStartSurface
         starterChips={options?.starterChips ?? createStarterChips()}
+        copy={TEST_CHROME_COPY}
         guideCards={options?.guideCards ?? createGuideCards()}
         sections={
           options?.sections ?? [

@@ -60,6 +60,52 @@ export function createEmptyAgentSessionSnapshot(options?: {
   };
 }
 
+function normalizeConversationText(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function firstUserMessageText(messages: Message[]): string {
+  return normalizeConversationText(
+    messages.find((message) => message.role === "user")?.content || "",
+  );
+}
+
+function hasAssistantProcessSnapshot(messages: Message[]): boolean {
+  return messages.some(
+    (message) =>
+      message.role === "assistant" &&
+      (Boolean(message.thinkingContent?.trim()) ||
+        Boolean(message.contentParts?.some((part) => part.type !== "text")) ||
+        Boolean(message.runtimeTurnId?.trim().startsWith("skill-exec-")) ||
+        message.inlineProcessRetention === "skill"),
+  );
+}
+
+function shouldPreserveDetachedLocalSnapshot(params: {
+  hydratedMessages: Message[];
+  localMessages: Message[];
+  sessionId: string | null;
+}): boolean {
+  if (
+    params.sessionId !== null ||
+    !hasAssistantProcessSnapshot(params.localMessages)
+  ) {
+    return false;
+  }
+
+  const localUserText = firstUserMessageText(params.localMessages);
+  const hydratedUserText = firstUserMessageText(params.hydratedMessages);
+  if (!localUserText || !hydratedUserText) {
+    return false;
+  }
+
+  return (
+    localUserText === hydratedUserText ||
+    localUserText.includes(hydratedUserText) ||
+    hydratedUserText.includes(localUserText)
+  );
+}
+
 export function hasSessionHydrationActivity(options: {
   currentTurnId: string | null;
   threadTurnsCount: number;
@@ -190,7 +236,7 @@ export function buildHydratedAgentSessionSnapshot(
     localSnapshotOverride?.threadTurns ?? currentThreadTurns;
   const effectiveCurrentThreadItems =
     localSnapshotOverride?.threadItems ?? currentThreadItems;
-  const shouldPreserveExistingTimeline =
+  const shouldPreserveExistingTimelineBySession =
     effectiveCurrentSessionId === topicId ||
     (effectiveCurrentSessionId === null &&
       syncSessionId &&
@@ -200,8 +246,16 @@ export function buildHydratedAgentSessionSnapshot(
   const hydratedMessages = hydrateSessionDetailMessages(detail, topicId, {
     compactCompletedHistory: shouldCompactCompletedSessionHistory(detail),
     includeTimelineFallback:
-      !shouldPreserveExistingTimeline || effectiveCurrentMessages.length === 0,
+      !shouldPreserveExistingTimelineBySession ||
+      effectiveCurrentMessages.length === 0,
   });
+  const shouldPreserveExistingTimeline =
+    shouldPreserveExistingTimelineBySession ||
+    shouldPreserveDetachedLocalSnapshot({
+      hydratedMessages,
+      localMessages: effectiveCurrentMessages,
+      sessionId: effectiveCurrentSessionId,
+    });
   const incomingTurns = detail.turns || [];
   const incomingItems = normalizeLegacyThreadItems(detail.items || []);
   const shouldPreserveExecutionRuntimeOnMissingDetail =

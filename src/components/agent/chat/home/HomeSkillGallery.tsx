@@ -1,5 +1,6 @@
 import styled from "styled-components";
 import type { HomeSkillSurfaceItem } from "./homeSurfaceTypes";
+import type { HomeSurfaceChromeCopy } from "./homeSurfaceCopy";
 import { resolveHomeCoverAsset } from "./homeCoverAssets";
 
 const GallerySection = styled.section`
@@ -140,11 +141,13 @@ function resolveCoverGradient(token: string): string {
 
 interface HomeSkillGalleryProps {
   items: HomeSkillSurfaceItem[];
+  copy: Pick<HomeSurfaceChromeCopy, "galleryDescription" | "galleryTitle">;
   onSelectItem: (item: HomeSkillSurfaceItem) => void;
 }
 
 export function HomeSkillGallery({
   items,
+  copy,
   onSelectItem,
 }: HomeSkillGalleryProps) {
   if (items.length === 0) {
@@ -155,10 +158,8 @@ export function HomeSkillGallery({
     <GallerySection data-testid="home-skill-gallery">
       <GalleryHeader>
         <HeaderText>
-          <Title>你可以从这些任务开始</Title>
-          <Description>
-            往下看更多任务样例；真正执行仍会回到生成里继续补充。
-          </Description>
+          <Title>{copy.galleryTitle}</Title>
+          <Description>{copy.galleryDescription}</Description>
         </HeaderText>
       </GalleryHeader>
       <Grid>

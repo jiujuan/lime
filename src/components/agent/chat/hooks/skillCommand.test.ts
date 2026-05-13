@@ -238,7 +238,14 @@ describe("tryExecuteSlashSkillCommand 社媒主链路", () => {
 
     expect(handled).toBe(true);
     expect(store.getMessages()[0]?.content).toBe(writeFileOutput);
+    expect(store.getMessages()[0]?.thinkingContent).toBe(
+      "正在执行 Skill: content_post_with_cover...",
+    );
     expect(store.getMessages()[0]?.contentParts).toEqual([
+      {
+        type: "thinking",
+        text: "正在执行 Skill: content_post_with_cover...",
+      },
       { type: "text", text: writeFileOutput },
     ]);
     expect(onWriteFile).not.toHaveBeenCalled();
@@ -280,6 +287,216 @@ describe("tryExecuteSlashSkillCommand 社媒主链路", () => {
         entryId: "content_post_with_cover",
         replayText: "写一版主稿",
       }),
+    ]);
+  });
+
+  it("Skill 流式思考在正文与完成态之后仍应保留", async () => {
+    const store = createMessageStore([buildBaseMessage()]);
+    let streamHandler: ((event: { payload: unknown }) => void) | null = null;
+
+    mockSafeListen.mockImplementation(async (_eventName, handler) => {
+      streamHandler = handler as (event: { payload: unknown }) => void;
+      return () => {
+        streamHandler = null;
+      };
+    });
+
+    mockExecuteSkill.mockImplementation(async () => {
+      streamHandler?.({
+        payload: {
+          type: "thinking_delta",
+          text: "先分析产品资料边界。",
+        },
+      });
+      streamHandler?.({
+        payload: {
+          type: "text_delta",
+          text: "最终产品知识库说明。",
+        },
+      });
+      streamHandler?.({ payload: { type: "final_done" } });
+
+      return {
+        success: true,
+        output: "最终产品知识库说明。",
+        steps_completed: [],
+      };
+    });
+
+    const handled = await tryExecuteSlashSkillCommand({
+      command: {
+        skillName: "content_post_with_cover",
+        userInput: "整理产品资料",
+      },
+      rawContent: "/content_post_with_cover 整理产品资料",
+      assistantMsgId: "assistant-1",
+      providerType: "deepseek",
+      model: "deepseek-v4-flash",
+      ensureSession: async () => "session-1",
+      setMessages: store.setMessages,
+      setIsSending: vi.fn(),
+      setCurrentAssistantMsgId: vi.fn(),
+      setStreamUnlisten: vi.fn(),
+      setActiveSessionIdForStop: vi.fn(),
+      isExecutionCancelled: () => false,
+      playTypewriterSound: vi.fn(),
+      playToolcallSound: vi.fn(),
+    });
+
+    expect(handled).toBe(true);
+    expect(store.getMessages()[0]).toMatchObject({
+      content: "最终产品知识库说明。",
+      isThinking: false,
+      thinkingContent: "先分析产品资料边界。",
+      runtimeTurnId: "skill-exec-assistant-1",
+    });
+    expect(store.getMessages()[0]?.contentParts).toEqual([
+      {
+        type: "thinking",
+        text: "先分析产品资料边界。",
+      },
+      {
+        type: "text",
+        text: "最终产品知识库说明。",
+      },
+    ]);
+  });
+
+  it("Skill 收口时应使用最终正文对齐 contentParts 文本", async () => {
+    const store = createMessageStore([buildBaseMessage()]);
+    let streamHandler: ((event: { payload: unknown }) => void) | null = null;
+
+    mockSafeListen.mockImplementation(async (_eventName, handler) => {
+      streamHandler = handler as (event: { payload: unknown }) => void;
+      return () => {
+        streamHandler = null;
+      };
+    });
+
+    const finalContent = "AUDIT2659BEGIN\nTHINKKEEP2659\nAUDIT2659END";
+
+    mockExecuteSkill.mockImplementation(async () => {
+      streamHandler?.({
+        payload: {
+          type: "thinking_delta",
+          text: "先按要求逐字输出。",
+        },
+      });
+      streamHandler?.({
+        payload: {
+          type: "text_delta",
+          text: finalContent,
+        },
+      });
+
+      store.setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === "assistant-1"
+            ? {
+                ...msg,
+                contentParts: [
+                  {
+                    type: "thinking" as const,
+                    text: "先按要求逐字输出。",
+                  },
+                  {
+                    type: "text" as const,
+                    text: "AUDIT2659BEGIN\nTHIN9\nAUDIT2659END",
+                  },
+                ],
+              }
+            : msg,
+        ),
+      );
+
+      streamHandler?.({ payload: { type: "final_done" } });
+
+      return {
+        success: true,
+        output: finalContent,
+        steps_completed: [],
+      };
+    });
+
+    const handled = await tryExecuteSlashSkillCommand({
+      command: {
+        skillName: "content_post_with_cover",
+        userInput: "整理产品资料",
+      },
+      rawContent: "/content_post_with_cover 整理产品资料",
+      assistantMsgId: "assistant-1",
+      providerType: "deepseek",
+      model: "deepseek-v4-flash",
+      ensureSession: async () => "session-1",
+      setMessages: store.setMessages,
+      setIsSending: vi.fn(),
+      setCurrentAssistantMsgId: vi.fn(),
+      setStreamUnlisten: vi.fn(),
+      setActiveSessionIdForStop: vi.fn(),
+      isExecutionCancelled: () => false,
+      playTypewriterSound: vi.fn(),
+      playToolcallSound: vi.fn(),
+    });
+
+    expect(handled).toBe(true);
+    expect(store.getMessages()[0]?.content).toBe(finalContent);
+    expect(store.getMessages()[0]?.contentParts).toEqual([
+      {
+        type: "thinking",
+        text: "先按要求逐字输出。",
+      },
+      {
+        type: "text",
+        text: finalContent,
+      },
+    ]);
+  });
+
+  it("Skill 无显式 thinking_delta 时也应保留执行过程占位并渲染最终正文", async () => {
+    const store = createMessageStore([buildBaseMessage()]);
+
+    mockExecuteSkill.mockResolvedValue({
+      success: true,
+      output: "没有思考事件的最终回答。",
+      steps_completed: [],
+    });
+
+    const handled = await tryExecuteSlashSkillCommand({
+      command: {
+        skillName: "content_post_with_cover",
+        userInput: "整理产品资料",
+      },
+      rawContent: "/content_post_with_cover 整理产品资料",
+      assistantMsgId: "assistant-1",
+      providerType: "deepseek",
+      model: "deepseek-v4-flash",
+      ensureSession: async () => "session-1",
+      setMessages: store.setMessages,
+      setIsSending: vi.fn(),
+      setCurrentAssistantMsgId: vi.fn(),
+      setStreamUnlisten: vi.fn(),
+      setActiveSessionIdForStop: vi.fn(),
+      isExecutionCancelled: () => false,
+      playTypewriterSound: vi.fn(),
+      playToolcallSound: vi.fn(),
+    });
+
+    expect(handled).toBe(true);
+    expect(store.getMessages()[0]).toMatchObject({
+      content: "没有思考事件的最终回答。",
+      isThinking: false,
+      thinkingContent: "正在执行 Skill: content_post_with_cover...",
+      runtimeTurnId: "skill-exec-assistant-1",
+    });
+    expect(store.getMessages()[0]?.contentParts).toEqual([
+      {
+        type: "thinking",
+        text: "正在执行 Skill: content_post_with_cover...",
+      },
+      {
+        type: "text",
+        text: "没有思考事件的最终回答。",
+      },
     ]);
   });
 

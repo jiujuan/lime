@@ -95,14 +95,13 @@ mod platform {
         match (was_down, fn_down) {
             (false, true) => {
                 info!("[语音输入] Fn 按下");
-                if let Err(error) = crate::screenshot::window::open_floating_window_with_voice(app)
-                {
-                    error!("[语音输入] Fn 打开语音窗口失败: {}", error);
+                if let Err(error) = crate::voice::events::request_start_recording(app) {
+                    error!("[语音输入] Fn 发送开始录音事件失败: {}", error);
                 }
             }
             (true, false) => {
                 info!("[语音输入] Fn 释放，发送停止录音事件");
-                if let Err(error) = crate::screenshot::window::send_voice_stop_event(app) {
+                if let Err(error) = crate::voice::events::request_stop_recording(app) {
                     error!("[语音输入] Fn 发送停止录音事件失败: {}", error);
                 }
             }

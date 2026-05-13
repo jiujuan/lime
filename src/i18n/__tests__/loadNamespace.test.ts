@@ -30,6 +30,135 @@ describe("i18n namespace loader", () => {
           `agentChat.messageList.firstTokenStatus.${phase}.detail`,
         );
       }
+      for (const key of [
+        "agentChat.messageList.historicalAssistantPreview.longNotice",
+        "agentChat.messageList.historicalTimeline.deferredMeta",
+        "agentChat.messageList.actions.saveToKnowledge",
+        "agentChat.messageList.artifact.saveDocument",
+        "agentChat.messageList.history.windowSummaryRestored",
+        "agentChat.messageList.taskCenterEmpty.title",
+        "agentChat.messageList.empty.defaultTitle",
+        "agentChat.serviceSkills.badge.recent",
+        "agentChat.serviceSkills.badge.browserAssist",
+        "agentChat.serviceSkills.badge.readyMade",
+        "agentChat.serviceSkills.badge.installed",
+        "agentChat.serviceSkills.badge.customScene",
+        "agentChat.serviceSkills.catalogSource.seeded",
+        "agentChat.serviceSkills.catalogSource.synced",
+        "agentChat.home.composer.placeholder",
+        "agentChat.home.composer.autoLaunchExample",
+        "agentChat.home.composer.pathReferenceFallbackPrompt",
+        "agentChat.home.composer.guideHelpDefaultLabel",
+        "agentChat.home.composer.guideHelpClose",
+        "agentChat.home.composer.guideHelpCloseWithLabel",
+        "agentChat.home.composer.advancedSettings.label",
+        "agentChat.home.composer.advancedSettings.expand",
+        "agentChat.home.composer.advancedSettings.collapse",
+        "agentChat.home.composer.currentModel.label",
+        "agentChat.home.composer.currentModel.title",
+        "agentChat.home.composer.fileManager.open",
+        "agentChat.home.composer.fileManager.close",
+        "agentChat.home.composer.creationMode.label",
+        "agentChat.home.composer.generalContext",
+        "agentChat.inputbar.core.dictation.recording",
+        "agentChat.inputbar.core.dictation.recordingLabel",
+        "agentChat.inputbar.core.dictation.transcribing",
+        "agentChat.inputbar.core.dictation.polishing",
+        "agentChat.inputbar.core.dictation.liveTranscript",
+        "agentChat.inputbar.core.dictation.polishingTitle",
+        "agentChat.inputbar.core.dictation.transcribingTitle",
+        "agentChat.inputbar.core.dictation.stopRecording",
+        "agentChat.inputbar.core.dictation.start",
+        "agentChat.inputbar.core.dictation.disabled",
+        "agentChat.inputbar.core.placeholder.fullscreen",
+        "agentChat.inputbar.core.placeholder.default",
+        "agentChat.inputbar.core.image.previewAlt",
+        "agentChat.inputbar.core.image.remove",
+        "agentChat.inputbar.core.image.add",
+        "agentChat.inputbar.core.path.containerLabel",
+        "agentChat.inputbar.core.path.localFolder",
+        "agentChat.inputbar.core.path.localFile",
+        "agentChat.inputbar.core.path.importAsKnowledge",
+        "agentChat.inputbar.core.path.importAction",
+        "agentChat.inputbar.core.path.remove",
+        "agentChat.inputbar.core.suggestion.acceptTitle",
+        "agentChat.inputbar.core.textarea.expand",
+        "agentChat.inputbar.core.textarea.collapse",
+        "agentChat.inputbar.core.action.defer",
+        "agentChat.inputbar.core.action.stop",
+        "agentChat.inputbar.core.action.send",
+        "agentChat.inputbar.dictation.feedback.unavailable",
+        "agentChat.inputbar.dictation.feedback.enableInSettings",
+        "agentChat.inputbar.dictation.feedback.downloadVoiceModel",
+        "agentChat.inputbar.dictation.feedback.startFailed",
+        "agentChat.inputbar.dictation.feedback.tooShort",
+        "agentChat.inputbar.dictation.feedback.emptyTranscript",
+        "agentChat.inputbar.dictation.feedback.recognitionFailed",
+        "agentChat.inputbar.controller.toast.systemPathDropUnsupported",
+        "agentChat.inputbar.controller.curatedTask.reviewSuggestionPrefillHint",
+        "agentChat.inputbar.queuedTurns.header.count",
+        "agentChat.inputbar.queuedTurns.header.sequenceHint",
+        "agentChat.inputbar.queuedTurns.emptyInput",
+        "agentChat.inputbar.queuedTurns.action.expand",
+        "agentChat.inputbar.queuedTurns.action.collapse",
+        "agentChat.inputbar.queuedTurns.meta.imageCount",
+        "agentChat.inputbar.queuedTurns.meta.textOnly",
+        "agentChat.inputbar.queuedTurns.action.promoteAria",
+        "agentChat.inputbar.queuedTurns.action.promoting",
+        "agentChat.inputbar.queuedTurns.action.promote",
+        "agentChat.inputbar.queuedTurns.action.remove",
+        "agentChat.inputbar.queuedTurns.action.removing",
+        "agentChat.inputbar.composer.advancedSettings.label",
+        "agentChat.inputbar.composer.advancedSettings.expand",
+        "agentChat.inputbar.composer.advancedSettings.collapse",
+        "agentChat.inputbar.composer.currentModel.label",
+        "agentChat.inputbar.composer.currentModel.title",
+        "agentChat.inputbar.composer.fileManager.open",
+        "agentChat.inputbar.composer.fileManager.close",
+        "agentChat.inputbar.composer.workspacePlaceholder.waiting",
+        "agentChat.inputbar.composer.workspacePlaceholder.taskCenter",
+        "agentChat.inputbar.composer.workspacePlaceholder.default",
+        "agentChat.inputbar.tools.thinking.label",
+        "agentChat.inputbar.tools.thinking.title.enabled",
+        "agentChat.inputbar.tools.thinking.toast.disabled",
+        "agentChat.inputbar.tools.webSearch.label",
+        "agentChat.inputbar.tools.webSearch.title.disabled",
+        "agentChat.inputbar.tools.webSearch.toast.enabled",
+        "agentChat.inputbar.tools.subagent.label",
+        "agentChat.inputbar.tools.subagent.title.enabled",
+        "agentChat.inputbar.tools.subagent.toast.disabled",
+        "agentChat.inputbar.tools.fullscreen.toast.entered",
+        "agentChat.inputbar.tools.fullscreen.toast.exited",
+        "agentChat.inputbar.imageAttachments.unnamedImage",
+        "agentChat.inputbar.imageAttachments.imageReadFailed",
+        "agentChat.inputbar.imageAttachments.imageAdded",
+        "agentChat.inputbar.imageAttachments.imagePasted",
+        "agentChat.home.hero.slogan",
+        "agentChat.home.toast.imageReadFailed",
+        "agentChat.home.curatedTask.reviewSuggestionPrefillHint",
+        "agentChat.home.quickActions.title",
+        "agentChat.home.quickActions.badge",
+        "agentChat.home.quickActions.preset.generateImage.prompt",
+        "agentChat.home.quickActions.preset.researchMode.label",
+        "agentChat.home.guideHelp.contextLabelWithStarter",
+        "agentChat.home.starter.rowLabel",
+        "agentChat.home.starter.guideHelp.label",
+        "agentChat.home.starter.ppt.prompt",
+        "agentChat.home.inputSuggestion.meetingNotes.label",
+        "agentChat.home.guide.longTermPlan.title",
+        "agentChat.home.guideCards.label",
+        "agentChat.home.gallery.title",
+        "agentChat.home.category.recent",
+        "agentChat.home.supplemental.recentSceneApp.label",
+        "agentChat.home.sceneManager.title.list",
+        "agentChat.home.sceneManager.action.addScene",
+        "agentChat.home.sceneManager.error.syncSignInRequired",
+        "agentChat.home.sceneManager.row.moveUp",
+        "agentChat.home.sceneManager.field.sceneName.placeholder",
+        "agentChat.home.sceneManager.action.done",
+      ]) {
+        expect(resources[locale].agent).toHaveProperty(key);
+      }
     }
   });
 
@@ -118,9 +247,6 @@ describe("i18n namespace loader", () => {
       );
       expect(resources[locale].common).toHaveProperty(
         "common.updateNotification.version.new",
-      );
-      expect(resources[locale].common).toHaveProperty(
-        "common.smartInput.status.recording",
       );
       expect(resources[locale].common).toHaveProperty(
         "common.shortcutSettings.label",
@@ -400,6 +526,9 @@ describe("i18n namespace loader", () => {
       );
       expect(resources[locale].agent).toHaveProperty(
         "agentChat.imageWorkbenchPreview.media.open",
+      );
+      expect(resources[locale].agent).toHaveProperty(
+        "agentChat.imageWorkbenchPreview.action.retry",
       );
       expect(resources[locale].agent).toHaveProperty(
         "agentChat.imageWorkbenchPreview.placeholder.generating",
@@ -893,9 +1022,6 @@ describe("i18n namespace loader", () => {
       );
       expect(resources[locale].settings).toHaveProperty(
         "settings.hotkeys.catalog.scene.global.title",
-      );
-      expect(resources[locale].settings).toHaveProperty(
-        "settings.hotkeys.catalog.status.voiceTranslate.ready.source",
       );
       expect(resources[locale].settings).toHaveProperty(
         "settings.memory.title",
@@ -1460,11 +1586,6 @@ describe("i18n namespace loader", () => {
         "common.updateNotification.version.new"
       ],
     ).toBe("发现新版本 {{version}}");
-    expect(
-      loadNamespaceResource("fr-FR", "common")[
-        "common.smartInput.status.recording"
-      ],
-    ).toBe("录音中");
     expect(
       loadNamespaceResource("fr-FR", "common")[
         "common.execution.latestRunStatus.status.success"

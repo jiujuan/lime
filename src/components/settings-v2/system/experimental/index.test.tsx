@@ -11,13 +11,9 @@ const { mockGetConfig, mockSaveConfig } = vi.hoisted(() => ({
 const {
   mockGetExperimentalConfig,
   mockSaveExperimentalConfig,
-  mockUpdateScreenshotShortcut,
-  mockValidateShortcut,
 } = vi.hoisted(() => ({
   mockGetExperimentalConfig: vi.fn(),
   mockSaveExperimentalConfig: vi.fn(),
-  mockUpdateScreenshotShortcut: vi.fn(),
-  mockValidateShortcut: vi.fn(),
 }));
 
 const { mockGetLogs, mockGetPersistedLogsTail } = vi.hoisted(() => ({
@@ -74,8 +70,6 @@ vi.mock("@/lib/api/experimentalFeatures", async () => {
     ...actual,
     getExperimentalConfig: mockGetExperimentalConfig,
     saveExperimentalConfig: mockSaveExperimentalConfig,
-    updateScreenshotShortcut: mockUpdateScreenshotShortcut,
-    validateShortcut: mockValidateShortcut,
   };
 });
 
@@ -119,10 +113,6 @@ vi.mock("@/lib/crashDiagnostic", () => {
       mockOpenCrashDiagnosticDownloadDirectory,
   };
 });
-
-vi.mock("@/components/smart-input/ShortcutSettings", () => ({
-  ShortcutSettings: () => <div>Shortcut settings placeholder</div>,
-}));
 
 vi.mock("./UpdateCheckSettings", () => ({
   UpdateCheckSettings: () => <div>Update settings placeholder</div>,
@@ -217,17 +207,11 @@ beforeEach(async () => {
   vi.clearAllMocks();
 
   mockGetExperimentalConfig.mockResolvedValue({
-    screenshot_chat: {
-      enabled: false,
-      shortcut: "CommandOrControl+Alt+Q",
-    },
     webmcp: {
       enabled: false,
     },
   });
   mockSaveExperimentalConfig.mockResolvedValue(undefined);
-  mockUpdateScreenshotShortcut.mockResolvedValue(undefined);
-  mockValidateShortcut.mockResolvedValue(true);
 
   mockGetConfig.mockResolvedValue({
     tool_calling: {
@@ -310,7 +294,7 @@ describe("ExperimentalSettings", () => {
       "Centralized switches for unstable capabilities. Turn them back off after use.",
     );
     expect(text).toContain("Tool Calling 2.0");
-    expect(text).toContain("Screenshot Chat");
+    expect(text).not.toContain("Screenshot Chat");
     expect(text).not.toContain("settings.experimental");
     expect(text).not.toContain("当前空闲");
   });
@@ -383,10 +367,6 @@ describe("ExperimentalSettings", () => {
     expect(mockSaveExperimentalConfig).toHaveBeenCalledTimes(1);
     expect(mockSaveExperimentalConfig).toHaveBeenCalledWith(
       expect.objectContaining({
-        screenshot_chat: expect.objectContaining({
-          enabled: false,
-          shortcut: "CommandOrControl+Alt+Q",
-        }),
         webmcp: {
           enabled: true,
         },

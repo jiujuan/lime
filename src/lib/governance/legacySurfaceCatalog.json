@@ -127,6 +127,27 @@
       "allowedPaths": []
     },
     {
+      "id": "smart-input-screenshot-onboarding-surface",
+      "classification": "dead",
+      "description": "已删除的 smart-input 独立浮窗、截图对话和初装引导旧入口；不得重新接回路由、组件、API 网关或 Rust 模块",
+      "targets": [
+        "src/pages/smart-input.tsx",
+        "src/pages/smart-input.css",
+        "src/lib/api/screenshotChat.ts",
+        "src/components/smart-input/ShortcutSettings.tsx",
+        "src/components/onboarding/index.ts",
+        "src/components/onboarding/OnboardingWizard.tsx",
+        "src/components/onboarding/constants.ts",
+        "src/components/onboarding/hooks/useOnboarding.ts",
+        "src/components/onboarding/steps/WelcomeStep.tsx",
+        "src/components/onboarding/steps/VoiceDemoStep.tsx",
+        "src/components/onboarding/steps/MicrophoneTestStep.tsx",
+        "src/components/onboarding/steps/VoiceShortcutTestStep.tsx",
+        "src/components/onboarding/steps/CompleteStep.tsx"
+      ],
+      "allowedPaths": []
+    },
+    {
       "id": "knowledge-page-legacy-component-split",
       "classification": "dead-candidate",
       "description": "已删除的 KnowledgePage 旧拆分组件；资料库页面当前收敛到 KnowledgePage 主链与 StatusPill 共享组件",
@@ -2466,6 +2487,21 @@
         "plugin_rpc_call"
       ],
       "allowedPaths": []
+    },
+    {
+      "id": "smart-input-screenshot-command-surface",
+      "classification": "dead",
+      "description": "已删除的截图对话 / smart-input 命令族；语音快捷键只保留 current voice_input 主链和通用 validate_shortcut",
+      "commands": [
+        "send_screenshot_chat",
+        "close_screenshot_chat_window",
+        "open_input_with_text",
+        "update_screenshot_shortcut",
+        "get_screenshot_shortcut_runtime_status",
+        "start_screenshot",
+        "read_image_as_base64"
+      ],
+      "allowedPaths": []
     }
   ],
   "frontendText": [
@@ -2482,6 +2518,39 @@
         "src"
       ],
       "allowedPaths": []
+    },
+    {
+      "id": "smart-input-screenshot-onboarding-frontend-surface",
+      "classification": "dead",
+      "description": "前端不得恢复 smart-input 独立浮窗、截图对话实验项、初装引导或相关文案 key",
+      "patterns": [
+        "@/components/smart-input",
+        "./pages/smart-input",
+        "/smart-input",
+        "SmartInputPage",
+        "SmartInputRetiredRoute",
+        "screenshotChat",
+        "Screenshot Chat",
+        "screenshot_chat",
+        "send_screenshot_chat",
+        "close_screenshot_chat_window",
+        "open_input_with_text",
+        "settings.experimental.screenshot.",
+        "settings.experimental.message.screenshotChat",
+        "settings.hotkeys.catalog.definitions.screenshotChat",
+        "settings.hotkeys.catalog.status.screenshot",
+        "settings.appearance.recovery.",
+        "common.smartInput.",
+        "OnboardingWizard",
+        "useOnboardingState"
+      ],
+      "includePathPrefixes": [
+        "src"
+      ],
+      "allowedPaths": [
+        "src/components/agent/chat/protocol-fact-source-guard.test.ts",
+        "src/lib/governance/legacySurfaceCatalog.test.ts"
+      ]
     },
     {
       "id": "agent-legacy-session-api-helpers",
@@ -3027,8 +3096,7 @@
         "src/components/agent/chat/components/Inputbar/hooks/useInputbarSend.ts",
         "src/components/agent/chat/components/Inputbar/components/InputbarComposerSection.tsx",
         "src/components/agent/chat/components/Inputbar/components/BuiltinCommandBadge.tsx",
-        "src/components/agent/chat/components/Inputbar/components/TeamSelector.tsx",
-        "src/components/smart-input/ChatInput.tsx"
+        "src/components/agent/chat/components/Inputbar/components/TeamSelector.tsx"
       ],
       "allowedPaths": []
     },
@@ -3635,6 +3703,27 @@
       "description": "已删除的旧 subagent scheduler Rust 事件名",
       "patterns": [
         "subagent-scheduler-event"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "rust-smart-input-screenshot-surface",
+      "classification": "dead",
+      "description": "Rust 不得恢复 smart-input 独立窗口、截图对话配置、截图命令模块或旧语音浮窗命令",
+      "patterns": [
+        "/smart-input",
+        "smart-input-message",
+        "pub mod screenshot",
+        "commands::screenshot_cmd::",
+        "screenshot_chat",
+        "ScreenshotChatConfig",
+        "open_input_with_text",
+        "open_floating_window",
+        "read_image_as_base64"
+      ],
+      "includePathPrefixes": [
+        "src-tauri/src",
+        "src-tauri/crates"
       ],
       "allowedPaths": []
     },

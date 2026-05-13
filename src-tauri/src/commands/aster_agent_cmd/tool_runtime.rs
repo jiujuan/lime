@@ -28,7 +28,9 @@ mod workspace_tools;
 pub(crate) use browser_tools::ensure_browser_mcp_tools_registered;
 #[allow(unused_imports)]
 pub(crate) use browser_tools::LimeBrowserMcpTool;
-pub(crate) use creation_tools::ensure_creation_task_tools_registered;
+pub(crate) use creation_tools::{
+    ensure_creation_task_tools_registered, submit_image_generation_task_value,
+};
 pub(crate) use mcp_resource_tools::ensure_mcp_resource_tools_registered;
 #[allow(unused_imports)]
 pub(crate) use mcp_resource_tools::{ListMcpResourcesBridgeTool, ReadMcpResourceBridgeTool};

@@ -677,10 +677,8 @@ impl CompanionServiceState {
 
         let _ = self.send_pet_bubble("你说吧，我在认真听", 1600).await;
 
-        if let Err(error) =
-            crate::voice::window::open_voice_window(app_handle, Some("companion-pet"))
-        {
-            tracing::warn!("[Companion] 打开桌宠语音窗口失败: {}", error);
+        if let Err(error) = crate::voice::events::request_start_recording(app_handle) {
+            tracing::warn!("[Companion] 启动主输入框语音录音失败: {}", error);
             let _ = self
                 .send_pet_bubble("语音入口暂时没打开，你先打字和我聊吧", 2200)
                 .await;

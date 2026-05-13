@@ -179,6 +179,46 @@ describe("messageTimelineRenderProjection", () => {
     });
   });
 
+  it("turn 记录暂缺时应按 assistant runtimeTurnId 保留过程 timeline", () => {
+    const projection = buildTimelineByMessageIdProjection({
+      canBuildHistoricalTimeline: true,
+      renderedMessages: [
+        messageAt("user-1", "user", "2026-05-05T00:00:00.000Z"),
+        messageAt(
+          "assistant-1",
+          "assistant",
+          "2026-05-05T00:00:02.000Z",
+          "turn-runtime-1",
+        ),
+      ],
+      renderedTurns: [],
+      renderedThreadItems: [
+        {
+          id: "reasoning-runtime-1",
+          thread_id: "thread-1",
+          turn_id: "turn-runtime-1",
+          sequence: 1,
+          status: "completed",
+          started_at: "2026-05-05T00:00:01.000Z",
+          completed_at: "2026-05-05T00:00:02.000Z",
+          updated_at: "2026-05-05T00:00:02.000Z",
+          type: "reasoning",
+          text: "先分析。",
+        },
+      ],
+    });
+
+    expect(projection.get("assistant-1")).toMatchObject({
+      messageId: "assistant-1",
+      turn: {
+        id: "turn-runtime-1",
+        thread_id: "thread-1",
+        status: "completed",
+      },
+      items: [{ id: "reasoning-runtime-1", type: "reasoning" }],
+    });
+  });
+
   it("应为消息组补齐 timeline 与 active 标记", () => {
     const messages = [
       message("message-user", "user"),

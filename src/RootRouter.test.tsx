@@ -18,10 +18,6 @@ vi.mock("./App", () => ({
   default: () => <div data-testid="main-app">主应用</div>,
 }));
 
-vi.mock("./pages/smart-input", () => ({
-  SmartInputPage: () => <div data-testid="smart-input-page" />,
-}));
-
 vi.mock("./pages/update-notification", () => ({
   UpdateNotificationPage: () => <div data-testid="update-notification-page" />,
 }));
@@ -100,14 +96,6 @@ describe("RootRouter", () => {
     const { container } = await renderRootRouter("/");
 
     expect(container.textContent).toContain("主应用");
-  });
-
-  it("独立工具窗口不应触发主应用登录流程", async () => {
-    const { container } = await renderRootRouter("/smart-input");
-
-    expect(
-      container.querySelector('[data-testid="smart-input-page"]'),
-    ).not.toBeNull();
   });
 
   it("Windows 独立窗口从 index.html 入口启动时应映射到连接器引导页", async () => {

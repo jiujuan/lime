@@ -33,6 +33,18 @@ const IMAGE_SKILL_LAUNCH_DETOUR_DENY_PATTERNS: &[&str] = &[
     "mcp__playwright__*",
     "playwright*",
 ];
+const IMAGE_SKILL_LAUNCH_MAIN_ALLOWED_TOOLS: &[&str] = &["Skill"];
+const IMAGE_SKILL_LAUNCH_RUNTIME_METADATA_KEY: &str = "lime_runtime";
+const IMAGE_SKILL_LAUNCH_TOOL_SURFACE_KEY: &str = "tool_surface";
+const IMAGE_SKILL_LAUNCH_RUNTIME_CONTROL_KEY: &str = "runtime_control";
+const IMAGE_SKILL_LAUNCH_STOP_AFTER_TOOL_RESULT_KEY: &str = "stop_after_tool_result";
+const IMAGE_SKILL_LAUNCH_DEFAULT_SKILL_NAME: &str = "image_generate";
+
+#[derive(Debug, Clone)]
+pub(crate) struct ImageSkillLaunchDirectTask {
+    pub tool_params: serde_json::Value,
+    pub skill_tool_arguments: String,
+}
 
 fn extract_object_string(
     object: &serde_json::Map<String, serde_json::Value>,
@@ -44,6 +56,37 @@ fn extract_object_string(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
+}
+
+fn insert_non_empty_string_if_missing(
+    record: &mut serde_json::Map<String, serde_json::Value>,
+    key: &str,
+    value: Option<&str>,
+) {
+    if record
+        .get(key)
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .is_some()
+    {
+        return;
+    }
+    let Some(value) = value.map(str::trim).filter(|item| !item.is_empty()) else {
+        return;
+    };
+    record.insert(
+        key.to_string(),
+        serde_json::Value::String(value.to_string()),
+    );
+}
+
+fn build_image_skill_launch_direct_skill_arguments(skill_name: &str) -> String {
+    serde_json::to_string(&serde_json::json!({
+        "skill": skill_name,
+        "source": "image_skill_launch"
+    }))
+    .unwrap_or_else(|_| "{\"skill\":\"image_generate\"}".to_string())
 }
 
 fn build_image_skill_input_ref(index: usize) -> String {
@@ -215,6 +258,55 @@ fn ensure_image_skill_launch_workbench_chat_mode(value: &mut serde_json::Value) 
     );
 }
 
+fn ensure_image_skill_launch_turn_tool_scope(value: &mut serde_json::Value) {
+    let Some(root) = value.as_object_mut() else {
+        return;
+    };
+    let launch_container = root
+        .get("harness")
+        .and_then(serde_json::Value::as_object)
+        .unwrap_or(root);
+    let has_launch = ["image_skill_launch", "imageSkillLaunch"]
+        .iter()
+        .any(|key| {
+            launch_container
+                .get(*key)
+                .and_then(serde_json::Value::as_object)
+                .is_some()
+        });
+    if !has_launch {
+        return;
+    }
+
+    root.insert(
+        "tool_scope".to_string(),
+        serde_json::json!({
+            "allowed_tools": IMAGE_SKILL_LAUNCH_MAIN_ALLOWED_TOOLS,
+            "source": "image_skill_launch"
+        }),
+    );
+    root.insert(
+        IMAGE_SKILL_LAUNCH_RUNTIME_CONTROL_KEY.to_string(),
+        serde_json::json!({
+            IMAGE_SKILL_LAUNCH_STOP_AFTER_TOOL_RESULT_KEY: {
+                "source": "image_skill_launch",
+                "metadata_equals": {
+                    "skill_forwarded_tool_name": "lime_create_image_generation_task",
+                    "task_type": "image_generate"
+                },
+                "require_any": ["task_id", "artifact_path", "path"],
+                "statuses": ["pending_submit", "queued", "running", "partial", "succeeded"]
+            }
+        }),
+    );
+    if let Some(runtime) = root
+        .get_mut(IMAGE_SKILL_LAUNCH_RUNTIME_METADATA_KEY)
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        runtime.remove(IMAGE_SKILL_LAUNCH_TOOL_SURFACE_KEY);
+    }
+}
+
 fn ensure_image_generation_contract_metadata(
     launch: &mut serde_json::Map<String, serde_json::Value>,
 ) {
@@ -255,6 +347,7 @@ pub(crate) fn prepare_image_skill_launch_request_metadata(
 ) -> Option<serde_json::Value> {
     let mut metadata = request_metadata.cloned()?;
     ensure_image_skill_launch_workbench_chat_mode(&mut metadata);
+    ensure_image_skill_launch_turn_tool_scope(&mut metadata);
 
     let Some(launch) = extract_harness_nested_object_mut(
         &mut metadata,
@@ -282,6 +375,44 @@ pub(crate) fn prepare_image_skill_launch_request_metadata(
     }
 
     Some(metadata)
+}
+
+pub(crate) fn build_image_skill_launch_direct_task(
+    request_metadata: Option<&serde_json::Value>,
+    session_id: &str,
+    thread_id: &str,
+    turn_id: &str,
+    project_id: Option<&str>,
+) -> Result<Option<ImageSkillLaunchDirectTask>, String> {
+    let Some(launch) = extract_harness_nested_object(
+        request_metadata,
+        &["image_skill_launch", "imageSkillLaunch"],
+    ) else {
+        return Ok(None);
+    };
+    let kind = extract_object_string(launch, &["kind"]).unwrap_or_else(|| "image_task".to_string());
+    if kind != "image_task" {
+        return Ok(None);
+    }
+
+    let skill_name = extract_object_string(launch, &["skill_name", "skillName"])
+        .unwrap_or_else(|| IMAGE_SKILL_LAUNCH_DEFAULT_SKILL_NAME.to_string());
+    let mut image_task = launch
+        .get("image_task")
+        .and_then(serde_json::Value::as_object)
+        .cloned()
+        .ok_or_else(|| "图片技能启动缺少 image_task 上下文".to_string())?;
+
+    insert_image_generation_contract_fields(&mut image_task);
+    insert_non_empty_string_if_missing(&mut image_task, "session_id", Some(session_id));
+    insert_non_empty_string_if_missing(&mut image_task, "thread_id", Some(thread_id));
+    insert_non_empty_string_if_missing(&mut image_task, "turn_id", Some(turn_id));
+    insert_non_empty_string_if_missing(&mut image_task, "project_id", project_id);
+
+    Ok(Some(ImageSkillLaunchDirectTask {
+        tool_params: serde_json::Value::Object(image_task),
+        skill_tool_arguments: build_image_skill_launch_direct_skill_arguments(&skill_name),
+    }))
 }
 
 pub(crate) fn merge_system_prompt_with_image_skill_launch(
@@ -447,9 +578,9 @@ fn build_image_skill_launch_system_prompt(
     let presentation_json = truncate_json_value(image_task.get("presentation"), 2_000);
     let taste_context_json = truncate_json_value(image_task.get("taste_context"), 2_000);
     let args_payload = serde_json::json!({
-        "user_input": raw_text
+        "user_input": prompt
             .clone()
-            .or(prompt.clone())
+            .or(raw_text.clone())
             .unwrap_or_else(|| "请根据当前要求执行图片任务".to_string()),
         "image_task": serde_json::Value::Object(image_task.clone()),
     });
@@ -477,18 +608,18 @@ fn build_image_skill_launch_system_prompt(
             serde_json::to_string(&args_json).unwrap_or_else(|_| "\"{}\"".to_string())
         ),
         "- 当前回合已经显式知道要走图片技能主链，不要为了确认技能名、工具名或命令名再去调用 ToolSearch。".to_string(),
-        "- 当前主会话第一刀必须先调用 Skill(image_generate)，但这不等于任务已经创建。".to_string(),
+        "- 当前主会话第一刀必须先调用 Skill(image_generate)，且用户文本里的 @命令 / 模型标签不是 Skill 名称；不要把 @ 后面的展示名当成 Skill.skill 参数。".to_string(),
         "- 在 Skill(image_generate) 真正执行前，不要先走 ToolSearch / WebSearch / lime_search_web_images / Bash / Read / Write / Edit / Glob / Grep / 浏览器 MCP / Playwright 等通用工具发现、检索、联网搜图、脚本、文件或页面链路。".to_string(),
-        "- `lime_search_web_images` 只服务 @素材 的联网图片候选检索，不是 @配图/@Nanobanana Pro 的图片生成入口；当前回合禁止调用它。".to_string(),
+        "- `lime_search_web_images` 只服务 @素材 的联网图片候选检索，不是当前 @图片生成入口；当前回合禁止调用它。".to_string(),
         "- 不要搜索 “Skill image_generate”、“lime media image generate --json”、“lime_create_image_generation_task” 之类目录信息；当前 image_task 已经提供了足够上下文。".to_string(),
         "- 如果某个通用搜索/读文件工具因为 session policy 被拒绝，不要重复同类调用；应立即改为直调 Skill(image_generate)。".to_string(),
-        "- 如果 Skill(image_generate) 返回的 Lime 工具元数据里只有 allowed_tools=[\"lime_create_image_generation_task\"]，而没有 task_id/path/status，说明任务尚未创建；当前主会话必须立刻继续调用 lime_create_image_generation_task。".to_string(),
-        "- 不要把 Skill(image_generate) success=true 误判成“任务已提交”；只有拿到 task_id、path，或 status=pending_submit/queued/running/partial/succeeded，才算真实提交成功。".to_string(),
-        "- 当前图片主链是 Skill(image_generate) -> lime_create_image_generation_task -> 标准 image task artifact + worker，不要停在 Skill 返回后直接写总结。".to_string(),
+        "- 不要把 Skill(image_generate) success=true 单独误判成任务已提交；但只要 Skill 返回的 Lime 工具元数据里出现 skill_forwarded_tool_name=lime_create_image_generation_task，或拿到 task_id/path/status，就表示真实图片任务已创建。".to_string(),
+        "- status=pending_submit 是标准 image task artifact 已创建、等待 worker 回流的合法状态；看到它后必须停止本回合工具调用，不要再次调用 Skill(image_generate)，也不要改用“查看结果/提交/状态”等新参数重复创建第二个任务。".to_string(),
+        "- 当前图片主链是 Skill(image_generate) -> lime_create_image_generation_task -> 标准 image task artifact + worker；拿到任务元数据后立即收口，让同一条 assistant 消息里的任务轻卡继续展示进度与结果。".to_string(),
         "- 不要再通过 Bash 拼接 CLI 命令或临时 /tmp 任务文件替代 lime_create_image_generation_task。".to_string(),
-        "- 调用 lime_create_image_generation_task 时，必须把 image_task 对象本身直接作为工具参数提交；不要再包一层 {\"image_task\": ...}，更不要把整个对象再次序列化成字符串。".to_string(),
-        "- 调用 lime_create_image_generation_task 时，统一使用 snake_case 字段名；不要把 anchorHint / providerId / projectId 这类 camelCase 同义字段与 snake_case 一起重复提交。".to_string(),
-        "- 调用 lime_create_image_generation_task 时，必须只提交标准 image task 参数；不要传 outputPath，不要把任务写成 markdown 文稿。".to_string(),
+        "- Skill 内部调用 lime_create_image_generation_task 时，必须把 image_task 对象本身直接作为工具参数提交；不要再包一层 {\"image_task\": ...}，更不要把整个对象再次序列化成字符串。".to_string(),
+        "- Skill 内部调用 lime_create_image_generation_task 时，统一使用 snake_case 字段名；不要把 anchorHint / providerId / projectId 这类 camelCase 同义字段与 snake_case 一起重复提交。".to_string(),
+        "- Skill 内部调用 lime_create_image_generation_task 时，必须只提交标准 image task 参数；不要传 outputPath，不要把任务写成 markdown 文稿。".to_string(),
         "- 不要伪造“图片已生成完成”；在 task file 真正返回结果前，只能让工具轨迹展示任务已提交、排队或执行中，不要额外输出递交模板。".to_string(),
         "- 如果当前回合已经拿到任何图片任务结果，且结果里含 task_id、path，或 status=pending_submit/queued/running/partial/succeeded，说明任务已提交；不要再次调用 Skill(image_generate) 或重复创建第二个图片任务。".to_string(),
         "- 拿到上述任务结果后，不要再输出“任务类型 / 任务 ID / 任务文件 / 状态”这类提交摘要；让同一条 assistant 消息内的工具调用和图片任务轻卡继续展示进度与结果。".to_string(),

@@ -5102,9 +5102,9 @@ mod tests {
         assert!(merged.contains("`lime_search_web_images` 只服务 @素材"));
         assert!(merged.contains("应立即改为直调 Skill(image_generate)"));
         assert!(merged.contains(
-            "如果 Skill(image_generate) 返回的 Lime 工具元数据里只有 allowed_tools=[\"lime_create_image_generation_task\"]"
+            "skill_forwarded_tool_name=lime_create_image_generation_task"
         ));
-        assert!(merged.contains("不要把 Skill(image_generate) success=true 误判成“任务已提交”"));
+        assert!(merged.contains("status=pending_submit 是标准 image task artifact 已创建"));
         assert!(merged.contains("Skill(image_generate) -> lime_create_image_generation_task -> 标准 image task artifact + worker"));
         assert!(merged.contains("不要再通过 Bash 拼接 CLI 命令或临时 /tmp 任务文件"));
         assert!(merged.contains(
@@ -6757,6 +6757,20 @@ mod tests {
             harness.get("chat_mode").and_then(serde_json::Value::as_str),
             Some("workbench")
         );
+        assert_eq!(
+            prepared
+                .pointer("/tool_scope/allowed_tools/0")
+                .and_then(serde_json::Value::as_str),
+            Some("Skill")
+        );
+        assert_eq!(
+            prepared
+                .pointer(
+                    "/runtime_control/stop_after_tool_result/metadata_equals/skill_forwarded_tool_name"
+                )
+                .and_then(serde_json::Value::as_str),
+            Some("lime_create_image_generation_task")
+        );
         let launch = harness
             .get("image_skill_launch")
             .and_then(serde_json::Value::as_object)
@@ -6810,6 +6824,9 @@ mod tests {
     #[test]
     fn test_prepare_image_skill_launch_request_metadata_sets_workbench_chat_mode_without_images() {
         let metadata = serde_json::json!({
+            "lime_runtime": {
+                "tool_surface": "compact_tools"
+            },
             "harness": {
                 "image_skill_launch": {
                     "skill_name": "image_generate",
@@ -6838,6 +6855,37 @@ mod tests {
             harness.get("chat_mode").and_then(serde_json::Value::as_str),
             Some("workbench")
         );
+        assert_eq!(
+            prepared
+                .pointer("/tool_scope/source")
+                .and_then(serde_json::Value::as_str),
+            Some("image_skill_launch")
+        );
+        assert_eq!(
+            prepared
+                .pointer("/tool_scope/allowed_tools/0")
+                .and_then(serde_json::Value::as_str),
+            Some("Skill")
+        );
+        assert!(
+            prepared.pointer("/lime_runtime/tool_surface").is_none(),
+            "image launch must not keep compact tool surface because it hides Skill"
+        );
+        assert_eq!(
+            prepared
+                .pointer("/runtime_control/stop_after_tool_result/source")
+                .and_then(serde_json::Value::as_str),
+            Some("image_skill_launch")
+        );
+        assert!(
+            prepared
+                .pointer("/runtime_control/stop_after_tool_result/statuses")
+                .and_then(serde_json::Value::as_array)
+                .is_some_and(|items| items
+                    .iter()
+                    .any(|item| item.as_str() == Some("pending_submit"))),
+            "image launch must stop the provider loop once the task artifact is created"
+        );
         let launch = harness
             .get("image_skill_launch")
             .and_then(serde_json::Value::as_object)
@@ -6857,6 +6905,88 @@ mod tests {
                 .get("modality_contract_key")
                 .and_then(serde_json::Value::as_str),
             Some("image_generation")
+        );
+    }
+
+    #[test]
+    fn test_build_image_skill_launch_direct_task_keeps_current_task_contract() {
+        let metadata = serde_json::json!({
+            "harness": {
+                "image_skill_launch": {
+                    "skill_name": "image_generate",
+                    "kind": "image_task",
+                    "image_task": {
+                        "prompt": "一张城市春日照片",
+                        "provider_id": "fal",
+                        "model": "fal-ai/nano-banana-pro",
+                        "presentation": {
+                            "assistant_intro": "好啊\n先获取下工具参数\n马上生成"
+                        },
+                        "taste_context": {
+                            "version": "lime-image-taste-v1"
+                        }
+                    }
+                }
+            }
+        });
+
+        let direct = build_image_skill_launch_direct_task(
+            Some(&metadata),
+            "session-image",
+            "thread-image",
+            "turn-image",
+            Some("project-image"),
+        )
+        .expect("direct task result")
+        .expect("direct image task");
+        let params = direct
+            .tool_params
+            .as_object()
+            .expect("tool params should be flat object");
+
+        assert_eq!(
+            params.get("prompt").and_then(serde_json::Value::as_str),
+            Some("一张城市春日照片")
+        );
+        assert_eq!(
+            params.get("provider_id").and_then(serde_json::Value::as_str),
+            Some("fal")
+        );
+        assert_eq!(
+            params.get("model").and_then(serde_json::Value::as_str),
+            Some("fal-ai/nano-banana-pro")
+        );
+        assert_eq!(
+            params.get("session_id").and_then(serde_json::Value::as_str),
+            Some("session-image")
+        );
+        assert_eq!(
+            params.get("thread_id").and_then(serde_json::Value::as_str),
+            Some("thread-image")
+        );
+        assert_eq!(
+            params.get("turn_id").and_then(serde_json::Value::as_str),
+            Some("turn-image")
+        );
+        assert_eq!(
+            params.get("project_id").and_then(serde_json::Value::as_str),
+            Some("project-image")
+        );
+        assert_eq!(
+            params
+                .get("modality_contract_key")
+                .and_then(serde_json::Value::as_str),
+            Some("image_generation")
+        );
+        let skill_args: serde_json::Value =
+            serde_json::from_str(&direct.skill_tool_arguments).expect("skill args json");
+        assert_eq!(
+            skill_args.get("skill").and_then(serde_json::Value::as_str),
+            Some("image_generate")
+        );
+        assert!(
+            !direct.skill_tool_arguments.contains("一张城市春日照片"),
+            "Skill trace arguments should not expose the full prompt in chat chrome"
         );
     }
 

@@ -1,4 +1,8 @@
 import { getLimeI18n } from "@/i18n/createI18n";
+import {
+  getSeededSkillCatalog,
+  listSkillCatalogCommandEntries,
+} from "@/lib/api/skillCatalog";
 import type { MessageImageWorkbenchPreview } from "../types";
 
 function titleCaseModelSegment(value: string): string {
@@ -19,6 +23,28 @@ function titleCaseModelSegment(value: string): string {
     .join(" ");
 }
 
+function resolveImageWorkbenchCatalogModelLabel(modelId: string): string {
+  const normalizedModelId = modelId.trim().toLowerCase();
+  if (!normalizedModelId) {
+    return "";
+  }
+
+  const command = listSkillCatalogCommandEntries(getSeededSkillCatalog()).find(
+    (entry) => {
+      const defaults = entry.binding?.requestDefaults;
+      const defaultModel = (
+        defaults?.model ||
+        defaults?.modelId ||
+        ""
+      )
+        .trim()
+        .toLowerCase();
+      return defaultModel === normalizedModelId;
+    },
+  );
+  return command?.title?.trim() || "";
+}
+
 export function collapseImageWorkbenchWhitespace(
   value: string | null | undefined,
 ): string {
@@ -33,15 +59,9 @@ export function resolveImageWorkbenchModelLabel(
     return "";
   }
 
-  const normalized = rawModel.toLowerCase();
-  if (normalized.includes("nano-banana-pro")) {
-    return "Nanobanana Pro";
-  }
-  if (
-    normalized.includes("gpt-image-2") ||
-    normalized.includes("gpt-images-2")
-  ) {
-    return "GPT Image 2";
+  const catalogLabel = resolveImageWorkbenchCatalogModelLabel(rawModel);
+  if (catalogLabel) {
+    return catalogLabel;
   }
 
   const tail = rawModel.split("/").filter(Boolean).at(-1) || rawModel;

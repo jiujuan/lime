@@ -164,18 +164,6 @@ pub(super) async fn try_handle(
             crate::voice::commands::delete_voice_instruction(id).await?;
             JsonValue::Null
         }
-        "open_voice_window" => {
-            let args = args_or_default(args);
-            let target = get_optional_string_arg(&args, "target", "target");
-            let app_handle = require_app_handle(state)?;
-            crate::voice::commands::open_voice_window(app_handle, target).await?;
-            JsonValue::Null
-        }
-        "close_voice_window" => {
-            let app_handle = require_app_handle(state)?;
-            crate::voice::commands::close_voice_window(app_handle).await?;
-            JsonValue::Null
-        }
         "list_audio_devices" => {
             serde_json::to_value(crate::voice::recording_service::list_audio_devices()?)?
         }
@@ -276,13 +264,6 @@ pub(super) async fn try_handle(
                 volume: service.get_volume(),
                 duration: service.get_duration(),
             })?
-        }
-        "open_input_with_text" => {
-            let args = args_or_default(args);
-            let text = get_string_arg(&args, "text", "text")?;
-            let app_handle = require_app_handle(state)?;
-            crate::commands::screenshot_cmd::open_input_with_text(app_handle, text)?;
-            JsonValue::Null
         }
         _ => return Ok(None),
     };

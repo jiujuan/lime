@@ -62,7 +62,7 @@ describe("voiceModelSettingsNavigation", () => {
 
   it("应持久化并消费语音模型设置页聚焦请求", () => {
     persistVoiceModelSettingsFocusRequest({
-      source: "smart-input",
+      source: "inputbar",
       reason: "missing-model",
       modelId: "sensevoice-small-int8-2024-07-17",
     });
@@ -71,7 +71,7 @@ describe("voiceModelSettingsNavigation", () => {
       window.sessionStorage.getItem(VOICE_MODEL_SETTINGS_FOCUS_STORAGE_KEY),
     ).toContain("sensevoice-small-int8-2024-07-17");
     expect(consumeVoiceModelSettingsFocusRequest()).toEqual({
-      source: "smart-input",
+      source: "inputbar",
       reason: "missing-model",
       modelId: "sensevoice-small-int8-2024-07-17",
     });
@@ -82,13 +82,13 @@ describe("voiceModelSettingsNavigation", () => {
 
   it("跨窗口请求应通过 Tauri 事件桥广播", async () => {
     await broadcastOpenVoiceModelSettingsRequest({
-      source: "smart-input",
+      source: "inputbar",
       reason: "missing-model",
       modelId: "sensevoice-small-int8-2024-07-17",
     });
 
     expect(mockSafeEmit).toHaveBeenCalledWith(OPEN_VOICE_MODEL_SETTINGS_EVENT, {
-      source: "smart-input",
+      source: "inputbar",
       reason: "missing-model",
       modelId: "sensevoice-small-int8-2024-07-17",
     });
@@ -113,7 +113,7 @@ describe("voiceModelSettingsNavigation", () => {
     expect(bridgeHandlers).toHaveLength(1);
     bridgeHandlers[0]?.({
       payload: {
-        source: "smart-input",
+        source: "inputbar",
         reason: "missing-model",
         modelId: "sensevoice-small-int8-2024-07-17",
       },
@@ -124,7 +124,7 @@ describe("voiceModelSettingsNavigation", () => {
       expect.any(Function),
     );
     expect(handler).toHaveBeenCalledWith({
-      source: "smart-input",
+      source: "inputbar",
       reason: "missing-model",
       modelId: "sensevoice-small-int8-2024-07-17",
     });

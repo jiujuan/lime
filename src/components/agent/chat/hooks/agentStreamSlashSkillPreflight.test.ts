@@ -29,6 +29,12 @@ function createPreparedSend(
     syncedSessionModelPreference: null,
     assistantMsgId: "assistant-1",
     userMsgId: "user-1",
+    userMsg: {
+      id: "user-1",
+      role: "user",
+      content: "/legacy_content_post 写一版主稿",
+      timestamp: new Date("2026-04-07T12:00:00.000Z"),
+    },
     assistantMsg: {
       id: "assistant-1",
       role: "assistant",
@@ -57,6 +63,7 @@ function createEnv(): SlashSkillPreflightTestEnv {
     playTypewriterSound: vi.fn(),
     playToolcallSound: vi.fn(),
     onWriteFile: vi.fn(),
+    getRequiredWorkspaceId: vi.fn(() => "workspace-1"),
   };
 }
 
@@ -113,6 +120,53 @@ describe("agentStreamSlashSkillPreflight", () => {
     },
   );
 
+  it("@analysis metadata 应在发送前转入真实 Skill 执行，而不是继续普通 runtime submit", async () => {
+    const env = createEnv();
+    const launch = {
+      skill_name: "analysis",
+      kind: "analysis_request",
+      analysis_request: {
+        raw_text: "@analysis 帮我分析一下今天的国际形势",
+        prompt: "帮我分析一下今天的国际形势",
+        entry_source: "at_analysis_command",
+      },
+    };
+
+    const handled = await maybeHandleSlashSkillBeforeSend({
+      preparedSend: createPreparedSend({
+        content: "@analysis 帮我分析一下今天的国际形势",
+        requestMetadata: {
+          harness: {
+            allow_model_skills: true,
+            analysis_skill_launch: launch,
+          },
+        },
+      }),
+      env,
+    });
+
+    expect(handled).toBe(true);
+    expect(mockParseSkillSlashCommand).not.toHaveBeenCalled();
+    expect(mockTryExecuteSlashSkillCommand).toHaveBeenCalledTimes(1);
+    expect(mockTryExecuteSlashSkillCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: {
+          skillName: "analysis",
+          userInput: "@analysis 帮我分析一下今天的国际形势",
+        },
+        rawContent: "@analysis 帮我分析一下今天的国际形势",
+        requestContext: launch,
+        requestMetadata: expect.objectContaining({
+          harness: expect.objectContaining({
+            analysis_skill_launch: launch,
+          }),
+        }),
+        workspaceId: "workspace-1",
+      }),
+    );
+    expect(env.setActiveStream).toHaveBeenCalledTimes(1);
+  });
+
   it("未携带结构化 scene metadata 时仍应继续尝试旧 slash skill", async () => {
     const env = createEnv();
     const handled = await maybeHandleSlashSkillBeforeSend({
@@ -125,6 +179,11 @@ describe("agentStreamSlashSkillPreflight", () => {
       "/legacy_content_post 写一版主稿",
     );
     expect(mockTryExecuteSlashSkillCommand).toHaveBeenCalledTimes(1);
+    expect(mockTryExecuteSlashSkillCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "workspace-1",
+      }),
+    );
     expect(env.setActiveStream).toHaveBeenCalledTimes(1);
   });
 });

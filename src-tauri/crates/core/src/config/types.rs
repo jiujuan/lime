@@ -895,23 +895,6 @@ fn normalize_navigation_enabled_items(items: &[String]) -> Vec<String> {
 
 // ============ 实验室功能配置类型 ============
 
-/// 截图对话功能配置
-///
-/// 配置截图对话功能的开关和快捷键
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ScreenshotChatConfig {
-    /// 是否启用截图对话功能
-    #[serde(default)]
-    pub enabled: bool,
-    /// 触发截图的全局快捷键
-    #[serde(default = "default_screenshot_shortcut")]
-    pub shortcut: String,
-}
-
-fn default_screenshot_shortcut() -> String {
-    "CommandOrControl+Alt+Q".to_string()
-}
-
 /// 自动更新检查配置
 ///
 /// 配置自动检查更新的行为，符合 macOS/Windows 平台规范
@@ -998,15 +981,6 @@ impl Default for UpdateCheckConfig {
     }
 }
 
-impl Default for ScreenshotChatConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            shortcut: default_screenshot_shortcut(),
-        }
-    }
-}
-
 /// WebMCP 预留配置
 ///
 /// 当前仅作为实验开关预留，不参与实际执行链。
@@ -1022,9 +996,6 @@ pub struct WebMcpConfig {
 /// 管理所有实验性功能的开关和配置
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct ExperimentalFeatures {
-    /// 截图对话功能配置
-    #[serde(default)]
-    pub screenshot_chat: ScreenshotChatConfig,
     /// WebMCP 预留配置
     #[serde(default)]
     pub webmcp: WebMcpConfig,
@@ -1099,9 +1070,6 @@ pub struct VoiceInputConfig {
     /// 是否启用交互音效
     #[serde(default = "default_sound_enabled")]
     pub sound_enabled: bool,
-    /// 翻译模式快捷键（可选）
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub translate_shortcut: Option<String>,
     /// 翻译模式使用的指令 ID
     #[serde(default = "default_translate_instruction_id")]
     pub translate_instruction_id: String,
@@ -1130,7 +1098,6 @@ impl Default for VoiceInputConfig {
             asr_credentials: Vec::new(),
             selected_device_id: None,
             sound_enabled: default_sound_enabled(),
-            translate_shortcut: None,
             translate_instruction_id: default_translate_instruction_id(),
         }
     }
@@ -3360,13 +3327,6 @@ mod unit_tests {
     }
 
     #[test]
-    fn test_screenshot_chat_config_default() {
-        let config = ScreenshotChatConfig::default();
-        assert!(!config.enabled);
-        assert_eq!(config.shortcut, "CommandOrControl+Alt+Q");
-    }
-
-    #[test]
     fn test_webmcp_config_default() {
         let config = WebMcpConfig::default();
         assert!(!config.enabled);
@@ -3375,18 +3335,12 @@ mod unit_tests {
     #[test]
     fn test_experimental_features_default() {
         let config = ExperimentalFeatures::default();
-        assert!(!config.screenshot_chat.enabled);
-        assert_eq!(config.screenshot_chat.shortcut, "CommandOrControl+Alt+Q");
         assert!(!config.webmcp.enabled);
     }
 
     #[test]
     fn test_experimental_features_serialization() {
         let config = ExperimentalFeatures {
-            screenshot_chat: ScreenshotChatConfig {
-                enabled: true,
-                shortcut: "CommandOrControl+Alt+X".to_string(),
-            },
             webmcp: WebMcpConfig { enabled: true },
             ..Default::default()
         };
@@ -3394,7 +3348,7 @@ mod unit_tests {
         let yaml = serde_yaml::to_string(&config).unwrap();
         assert!(yaml.contains("webmcp"));
         assert!(yaml.contains("enabled: true"));
-        assert!(yaml.contains("shortcut: CommandOrControl+Alt+X"));
+        assert!(!yaml.contains("screenshot_chat"));
 
         let parsed: ExperimentalFeatures = serde_yaml::from_str(&yaml).unwrap();
         assert_eq!(parsed, config);
@@ -3434,11 +3388,6 @@ mod unit_tests {
     #[test]
     fn test_config_with_experimental() {
         let config = Config::default();
-        assert!(!config.experimental.screenshot_chat.enabled);
-        assert_eq!(
-            config.experimental.screenshot_chat.shortcut,
-            "CommandOrControl+Alt+Q"
-        );
         assert!(!config.experimental.webmcp.enabled);
         // 语音输入测试
         assert!(!config.experimental.voice_input.enabled);

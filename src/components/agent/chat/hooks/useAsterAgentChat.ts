@@ -15,10 +15,6 @@ import {
   type AgentRuntimeAdapter,
 } from "./agentRuntimeAdapter";
 import { createAgentChatSendMessage } from "./agentChatSendMessage";
-import {
-  DEFAULT_AGENT_MODEL,
-  DEFAULT_AGENT_PROVIDER,
-} from "./agentChatStorage";
 import { useAgentChatStateSnapshotDebug } from "./useAgentChatStateSnapshotDebug";
 import { useAgentContext } from "./useAgentContext";
 import { useAgentRuntimeSyncEffects } from "./useAgentRuntimeSyncEffects";
@@ -108,6 +104,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
   const currentAssistantMsgIdRef = useRef<string | null>(null);
   const currentStreamingSessionIdRef = useRef<string | null>(null);
   const currentStreamingEventNameRef = useRef<string | null>(null);
+  const detachStreamBindingsRef = useRef<(() => void) | null>(null);
   const autoTitleInFlightSessionIdRef = useRef<string | null>(null);
   const autoTitleCompletedSessionIdsRef = useRef<Set<string>>(new Set());
   const sendMessageRef = useRef<SendMessageFn | null>(null);
@@ -143,6 +140,8 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     sessionIdRef,
     currentAssistantMsgIdRef,
     currentStreamingSessionIdRef,
+    currentStreamingEventNameRef,
+    detachStreamBindingsRef,
     resetPendingActions,
     persistSessionModelPreference: context.persistSessionModelPreference,
     loadSessionModelPreference: context.loadSessionModelPreference,
@@ -207,6 +206,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     refreshSessionReadModel: session.refreshSessionReadModel,
     executionRuntime: session.executionRuntime,
   });
+  detachStreamBindingsRef.current = stream.detachStreamBindings;
   const setChatMessages = session.setMessages;
   const clearChatMessages = session.clearMessages;
   const createFreshSession = session.createFreshSession;
@@ -478,12 +478,12 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
 
       const currentProviderType = context.providerTypeRef.current.trim();
       const currentModel = context.modelRef.current.trim();
-      const isUsingFrontendDefaultModel =
-        currentProviderType === DEFAULT_AGENT_PROVIDER &&
-        currentModel === DEFAULT_AGENT_MODEL;
+      const hasPersistedWorkspacePreference = Boolean(
+        currentProviderType && currentModel,
+      );
 
       if (
-        isUsingFrontendDefaultModel &&
+        !hasPersistedWorkspacePreference &&
         status?.provider_configured &&
         (status.provider_selector?.trim() || status.provider_name?.trim()) &&
         status.model_name?.trim()
@@ -496,21 +496,18 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
         return;
       }
 
-      if (status?.provider_configured && !isUsingFrontendDefaultModel) {
+      if (status?.provider_configured && hasPersistedWorkspacePreference) {
         return;
       }
 
       try {
-        const defaultProvider = isUsingFrontendDefaultModel
+        const defaultProvider = !hasPersistedWorkspacePreference
           ? (await getDefaultProvider()).trim()
           : "";
-        const fallbackProviderType = isUsingFrontendDefaultModel
-          ? defaultProvider
-          : currentProviderType;
+        const fallbackProviderType = currentProviderType || defaultProvider;
         const resolvedSelection = await resolveClawWorkspaceProviderSelection({
-          currentProviderType:
-            fallbackProviderType || defaultProvider || undefined,
-          currentModel: isUsingFrontendDefaultModel ? null : currentModel,
+          currentProviderType: fallbackProviderType || undefined,
+          currentModel: currentModel || null,
           theme: "general",
         });
 

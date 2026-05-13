@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 
 const PROTOCOL_GUARD_DIRS = [
   join(process.cwd(), "src/components/agent/chat"),
+] as const;
+const RETIRED_COMPONENT_DIRS = [
   join(process.cwd(), "src/components/smart-input"),
 ] as const;
 const API_PROTOCOL_GUARD_DIR = join(process.cwd(), "src/lib/api");
@@ -64,6 +66,11 @@ const FORBIDDEN_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
 ];
 
 describe("agent chat protocol fact source guard", () => {
+  it("不应重新引入 smart-input 独立浮窗组件目录", () => {
+    const existing = RETIRED_COMPONENT_DIRS.filter((dir) => existsSync(dir));
+    expect(existing).toEqual([]);
+  });
+
   it("不应在聊天工作台代码中重新引入私有协议键名单", () => {
     const files = PROTOCOL_GUARD_DIRS.flatMap((dir) => collectTsFiles(dir));
     const offenders: string[] = [];

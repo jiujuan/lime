@@ -181,6 +181,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
     clearActiveStreamIfMatch,
     replaceStreamListener,
     removeStreamListener,
+    clearStreamBindings,
   } = useAgentStreamController({
     currentAssistantMsgIdRef,
     currentStreamingSessionIdRef,
@@ -459,5 +460,6 @@ export function useAgentStream(options: UseAgentStreamOptions) {
     resumeThread,
     promoteQueuedTurn,
     removeQueuedTurn,
+    detachStreamBindings: clearStreamBindings,
   };
 }

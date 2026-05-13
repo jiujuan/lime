@@ -3,7 +3,6 @@ import { safeInvoke } from "@/lib/dev-bridge";
 import {
   addAsrCredential,
   cancelRecording,
-  closeVoiceWindow,
   deleteAsrCredential,
   deleteVoiceInstruction,
   getAsrCredentials,
@@ -13,8 +12,6 @@ import {
   getVoiceInputConfig,
   getVoiceInstructions,
   listAudioDevices,
-  openInputWithText,
-  openVoiceWindow,
   outputVoiceText,
   polishVoiceText,
   saveVoiceInputConfig,
@@ -122,12 +119,10 @@ describe("asrProvider API", () => {
     await expect(deleteVoiceInstruction("inst-2")).resolves.toBeUndefined();
   });
 
-  it("应代理转写、润色、窗口与录音命令", async () => {
+  it("应代理转写、润色与录音命令", async () => {
     vi.mocked(safeInvoke)
       .mockResolvedValueOnce({ text: "你好", provider: "openai" })
       .mockResolvedValueOnce({ text: "你好，世界", instruction_name: "润色" })
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce({
@@ -158,12 +153,6 @@ describe("asrProvider API", () => {
     await expect(polishVoiceText("你好")).resolves.toEqual(
       expect.objectContaining({ instruction_name: "润色" }),
     );
-    await expect(
-      openVoiceWindow({
-        target: "companion-pet",
-      }),
-    ).resolves.toBeUndefined();
-    await expect(closeVoiceWindow()).resolves.toBeUndefined();
     await expect(outputVoiceText("hello", "type")).resolves.toBeUndefined();
     await expect(startRecording("default")).resolves.toBeUndefined();
     await expect(stopRecording()).resolves.toEqual(
@@ -179,26 +168,19 @@ describe("asrProvider API", () => {
     await expect(getRecordingStatus()).resolves.toEqual(
       expect.objectContaining({ is_recording: false }),
     );
-    await expect(openInputWithText("prefilled")).resolves.toBeUndefined();
 
     expect(safeInvoke).toHaveBeenNthCalledWith(1, "transcribe_audio", {
       audioData: [1, 2, 3],
       sampleRate: 16000,
       credentialId: "cred-1",
     });
-    expect(safeInvoke).toHaveBeenNthCalledWith(3, "open_voice_window", {
-      target: "companion-pet",
-    });
-    expect(safeInvoke).toHaveBeenNthCalledWith(6, "start_recording", {
+    expect(safeInvoke).toHaveBeenNthCalledWith(4, "start_recording", {
       deviceId: "default",
     });
-    expect(safeInvoke).toHaveBeenNthCalledWith(8, "get_recording_snapshot");
-    expect(safeInvoke).toHaveBeenNthCalledWith(9, "get_recording_segment", {
+    expect(safeInvoke).toHaveBeenNthCalledWith(6, "get_recording_snapshot");
+    expect(safeInvoke).toHaveBeenNthCalledWith(7, "get_recording_segment", {
       startSample: 16000,
       maxDurationSecs: 0.8,
-    });
-    expect(safeInvoke).toHaveBeenNthCalledWith(12, "open_input_with_text", {
-      text: "prefilled",
     });
   });
 });

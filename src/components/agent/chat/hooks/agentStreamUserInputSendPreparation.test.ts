@@ -303,6 +303,45 @@ describe("agentStreamUserInputSendPreparation", () => {
     expect(result.runtimeStatusPresentation).toBe("transient");
   });
 
+  it("Skill launch metadata 应标记助手草稿保留内联过程", () => {
+    vi.spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000128")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000129");
+
+    let messages: Message[] = [];
+    const env = {
+      ...createEnv(),
+      setMessages: createStateSetter(
+        () => messages,
+        (value) => {
+          messages = value;
+        },
+      ),
+    };
+
+    const result = prepareAgentStreamUserInputSend({
+      content: "开始执行品牌知识库 Skill",
+      images: [],
+      skipUserMessage: false,
+      options: {
+        requestMetadata: {
+          harness: {
+            service_scene_launch: {
+              kind: "local_service_skill",
+              service_scene_run: {
+                skill_id: "brand-product-knowledge-builder",
+              },
+            },
+          },
+        },
+      },
+      env,
+    });
+
+    expect(result.assistantMsg.inlineProcessRetention).toBe("skill");
+    expect(messages[1]?.inlineProcessRetention).toBe("skill");
+  });
+
   it("恢复态 thread 仍忙时也应直接进入 queue 模式", () => {
     vi.spyOn(crypto, "randomUUID")
       .mockReturnValueOnce("00000000-0000-0000-0000-000000000004")

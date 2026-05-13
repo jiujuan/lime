@@ -1,9 +1,9 @@
 /**
  * @file ShortcutSettings.tsx
- * @description 快捷键设置组件 - 显示当前快捷键、支持录制模式和保存/取消
- * @module components/smart-input/ShortcutSettings
+ * @description 共享快捷键设置组件 - 显示当前快捷键、支持录制模式和保存/取消
+ * @module components/settings-v2/shared/ShortcutSettings
  *
- * 需求: 6.3, 6.4 - 显示当前快捷键和修改按钮，支持快捷键录制模式
+ * 需求: 设置页共享快捷键录制与校验
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";

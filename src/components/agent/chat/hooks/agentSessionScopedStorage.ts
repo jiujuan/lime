@@ -3,8 +3,10 @@ import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";
 import { filterConversationThreadItems } from "../utils/threadTimelineView";
 import {
   compactHistoricalRestoreMessages,
+  mergeHydratedMessagesWithLocalState,
   normalizeHistoryMessages,
 } from "./agentChatHistory";
+import { isRetainedSkillProcessMessage } from "../utils/skillInlineProcessRetention";
 import {
   loadPersisted,
   loadTransient,
@@ -322,6 +324,37 @@ function normalizeCachedSnapshotRecord(
   };
 }
 
+function hasRetainedSkillProcessMessage(messages: Message[]): boolean {
+  return messages.some(
+    (message) =>
+      isRetainedSkillProcessMessage(message) &&
+      (Boolean(message.thinkingContent?.trim()) ||
+        Boolean(
+          message.contentParts?.some(
+            (part) =>
+              part.type === "thinking" && part.text.trim().length > 0,
+          ),
+        )),
+  );
+}
+
+function mergeIncomingSnapshotWithCachedSkillProcess(params: {
+  incoming: AgentSessionCachedSnapshot;
+  cachedRecord: AgentSessionCachedSnapshotRecord | null;
+}): AgentSessionCachedSnapshot {
+  if (!hasRetainedSkillProcessMessage(params.cachedRecord?.messages || [])) {
+    return params.incoming;
+  }
+
+  return {
+    ...params.incoming,
+    messages: mergeHydratedMessagesWithLocalState(
+      params.cachedRecord?.messages || [],
+      params.incoming.messages,
+    ),
+  };
+}
+
 function toCachedSnapshot(
   record: AgentSessionCachedSnapshotRecord,
   storageKind: AgentSessionCachedSnapshotMetadata["storageKind"],
@@ -463,12 +496,28 @@ export function saveAgentSessionCachedSnapshot(
     persistedCacheKey,
     {},
   );
+  const cachedRecord =
+    normalizeCachedSnapshotRecord(
+      currentMap[sessionId],
+      TRANSIENT_SNAPSHOT_POLICY,
+      nowMs,
+    ) ??
+    normalizeCachedSnapshotRecord(
+      persistedMap[sessionId],
+      PERSISTED_SNAPSHOT_POLICY,
+      nowMs,
+    );
+  const snapshotWithRetainedSkillProcess =
+    mergeIncomingSnapshotWithCachedSkillProcess({
+      incoming: snapshot,
+      cachedRecord,
+    });
   const trimmedSnapshot = trimCachedSnapshot(
-    snapshot,
+    snapshotWithRetainedSkillProcess,
     TRANSIENT_SNAPSHOT_LIMITS,
   );
   const persistedSnapshot = trimCachedSnapshot(
-    snapshot,
+    snapshotWithRetainedSkillProcess,
     PERSISTED_SNAPSHOT_LIMITS,
   );
   const sessionUpdatedAt =
@@ -529,6 +578,30 @@ export function saveAgentSessionCachedSnapshot(
 
   saveTransient(cacheKey, Object.fromEntries(prunedTransientEntries));
   savePersisted(persistedCacheKey, Object.fromEntries(prunedPersistedEntries));
+}
+
+export function saveAgentSessionCachedMessagesSnapshot(
+  workspaceId: string,
+  sessionId: string,
+  messages: Message[],
+  options: SaveAgentSessionCachedSnapshotOptions = {},
+): void {
+  const cachedSnapshot = loadAgentSessionCachedSnapshot(workspaceId, sessionId, {
+    nowMs: options.nowMs,
+  });
+
+  saveAgentSessionCachedSnapshot(
+    workspaceId,
+    sessionId,
+    {
+      messages,
+      threadTurns: cachedSnapshot?.threadTurns || [],
+      threadItems: cachedSnapshot?.threadItems || [],
+      currentTurnId: cachedSnapshot?.currentTurnId || null,
+      cacheMetadata: cachedSnapshot?.cacheMetadata,
+    },
+    options,
+  );
 }
 
 export function getAgentSessionScopedKeys(

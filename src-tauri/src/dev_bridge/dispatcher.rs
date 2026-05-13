@@ -492,7 +492,7 @@ mod tests {
             .unwrap();
 
         assert!(status_value["shortcut_registered"].is_boolean());
-        assert!(status_value["translate_shortcut_registered"].is_boolean());
+        assert!(status_value["fn_registered"].is_boolean());
     }
 
     #[tokio::test]

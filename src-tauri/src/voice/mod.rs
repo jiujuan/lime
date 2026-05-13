@@ -9,12 +9,12 @@
 pub mod asr_service;
 pub mod commands;
 pub mod config;
+pub mod events;
 pub mod fn_shortcut;
 pub mod output_service;
 pub mod processor;
 pub mod recording_service;
 pub mod shortcut;
-pub mod window;
 
 use tauri::AppHandle;
 
@@ -44,25 +44,6 @@ pub fn init(app: &AppHandle) -> Result<(), String> {
     shortcut::register(app, &config.shortcut)?;
     register_fn_shortcut_if_supported(app);
 
-    // 注册翻译快捷键（如果配置了）
-    if let Some(translate_shortcut) = &config.translate_shortcut {
-        if !translate_shortcut.is_empty() {
-            match shortcut::register_translate(
-                app,
-                translate_shortcut,
-                &config.translate_instruction_id,
-            ) {
-                Ok(()) => {
-                    tracing::info!("[语音输入] 翻译快捷键已注册: {}", translate_shortcut);
-                }
-                Err(e) => {
-                    tracing::warn!("[语音输入] 翻译快捷键注册失败: {}", e);
-                    // 翻译快捷键注册失败不影响主功能
-                }
-            }
-        }
-    }
-
     tracing::info!("[语音输入] 模块初始化完成");
     Ok(())
 }
@@ -72,14 +53,8 @@ pub fn cleanup(app: &AppHandle) -> Result<(), String> {
     // 注销快捷键
     shortcut::unregister(app)?;
 
-    // 注销翻译快捷键
-    let _ = shortcut::unregister_translate(app);
-
     // 注销 Fn 监听
     let _ = fn_shortcut::unregister();
-
-    // 关闭悬浮窗口
-    window::close_voice_window(app)?;
 
     tracing::info!("[语音输入] 模块已清理");
     Ok(())

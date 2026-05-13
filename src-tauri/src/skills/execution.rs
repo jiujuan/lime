@@ -341,6 +341,7 @@ pub async fn execute_named_skill(
     let execution_id_for_run = execution_id.clone();
     let session_id_for_run = session_id.clone();
     let user_input_for_run = effective_user_input.clone();
+    let user_visible_input_for_run = user_input.clone();
     let skill_images_for_run = skill_images.clone();
     let provider_override_for_run = provider_override.clone();
     let model_override_for_run = model_override.clone();
@@ -398,6 +399,7 @@ pub async fn execute_named_skill(
                     &aster_state,
                     &skill,
                     &user_input_for_run,
+                    Some(user_visible_input_for_run.as_str()),
                     &skill_images_for_run,
                     &execution_id_for_run,
                     &session_id_for_run,
@@ -429,6 +431,7 @@ pub async fn execute_skill_prompt(
     aster_state: &AsterAgentState,
     skill: &LoadedSkillDefinition,
     user_input: &str,
+    user_visible_input: Option<&str>,
     images: &[SkillInputImage],
     execution_id: &str,
     session_id: &str,
@@ -443,6 +446,7 @@ pub async fn execute_skill_prompt(
             aster_state,
             skill,
             user_input,
+            user_visible_input,
             images,
             execution_id,
             session_id,
@@ -467,7 +471,7 @@ pub async fn execute_skill_prompt(
     let finalized = finalize_skill_output(
         app_handle,
         &skill.skill_name,
-        user_input,
+        user_visible_input.unwrap_or(user_input),
         execution_id,
         result.output.as_deref().unwrap_or(""),
     );
@@ -488,6 +492,7 @@ pub async fn execute_skill_workflow(
     aster_state: &AsterAgentState,
     skill: &LoadedSkillDefinition,
     user_input: &str,
+    user_visible_input: Option<&str>,
     images: &[SkillInputImage],
     execution_id: &str,
     session_id: &str,
@@ -499,6 +504,7 @@ pub async fn execute_skill_workflow(
         aster_state,
         skill,
         user_input,
+        user_visible_input,
         images,
         execution_id,
         session_id,
@@ -516,6 +522,7 @@ pub async fn execute_skill_definition(
     aster_state: &AsterAgentState,
     skill: &LoadedSkillDefinition,
     user_input: &str,
+    user_visible_input: Option<&str>,
     images: &[SkillInputImage],
     execution_id: &str,
     session_id: &str,
@@ -528,6 +535,7 @@ pub async fn execute_skill_definition(
             aster_state,
             skill,
             user_input,
+            user_visible_input,
             images,
             execution_id,
             session_id,
@@ -541,6 +549,7 @@ pub async fn execute_skill_definition(
             aster_state,
             skill,
             user_input,
+            user_visible_input,
             images,
             execution_id,
             session_id,

@@ -42,10 +42,6 @@
 - `voice_command_service.rs` - 转写/润色/输出业务流程
 - `voice_recording_service.rs` - 录音状态封装与设备查询
 
-以下截图相关纯逻辑已迁移到 `crates/services/src/`：
-- `screenshot_capture_service.rs` - 跨平台截图与临时文件清理
-- `screenshot_image_service.rs` - 图片读取与 Base64 编码
-
 ## Aster Agent 集成
 
 Aster Agent 集成位于 `src-tauri/src/agent/` 目录：

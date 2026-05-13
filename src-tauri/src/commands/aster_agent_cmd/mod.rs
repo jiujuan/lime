@@ -484,8 +484,8 @@ pub(crate) use form_skill_launch::{
     prepare_form_skill_launch_request_metadata, prune_form_skill_launch_detour_tools_from_registry,
 };
 pub(crate) use image_skill_launch::{
-    append_image_skill_launch_session_permissions, merge_system_prompt_with_image_skill_launch,
-    prepare_image_skill_launch_request_metadata,
+    append_image_skill_launch_session_permissions, build_image_skill_launch_direct_task,
+    merge_system_prompt_with_image_skill_launch, prepare_image_skill_launch_request_metadata,
     prune_image_skill_launch_detour_tools_from_registry,
 };
 pub(crate) use mcp_bridge::{ensure_lime_mcp_servers_running, inject_mcp_extensions};
@@ -597,6 +597,7 @@ pub(crate) use tool_runtime::{
 pub(crate) use tool_runtime::{
     ensure_browser_mcp_tools_registered, ensure_creation_task_tools_registered,
     ensure_runtime_support_tools_registered, ensure_social_image_tool_registered,
+    submit_image_generation_task_value,
 };
 #[cfg(test)]
 #[allow(unused_imports)]

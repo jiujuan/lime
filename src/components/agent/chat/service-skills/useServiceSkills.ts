@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { getAutomationJobs } from "@/lib/api/automation";
 import {
   getSkillCatalog,
@@ -22,6 +23,10 @@ import {
   getServiceSkillRunnerTone,
 } from "./skillPresentation";
 import { shouldExposeServiceSkillHomeItem } from "./homeEntrySkills";
+import {
+  buildServiceSkillHomeCopy,
+  type ServiceSkillHomeCopy,
+} from "./homeCopy";
 import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayIdleTask";
 import { supportsServiceSkillLocalAutomation } from "./automationDraft";
 import {
@@ -35,26 +40,34 @@ import type {
   ServiceSkillCatalogMeta,
   ServiceSkillHomeItem,
 } from "./types";
+import type agentResource from "@/i18n/resources/zh-CN/agent.json";
 
 const SERVICE_SKILLS_IDLE_TIMEOUT_MS = 1_500;
 
-function getSkillBadge(item: SkillCatalogItem, isRecent: boolean): string {
+type AgentI18nKey = keyof typeof agentResource;
+
+function getSkillBadge(
+  item: SkillCatalogItem,
+  isRecent: boolean,
+  copy: ServiceSkillHomeCopy,
+): string {
   if (isRecent) {
-    return "最近使用";
+    return copy.badge.recent;
   }
   if (
     item.defaultExecutorBinding === "browser_assist" ||
     item.execution.kind === "site_adapter"
   ) {
-    return "浏览器继续";
+    return copy.badge.browserAssist;
   }
 
-  return "现成做法";
+  return copy.badge.readyMade;
 }
 
 function buildHomeItems(
   items: SkillCatalogItem[],
   automationStatusMap: Record<string, ServiceSkillAutomationStatus>,
+  copy: ServiceSkillHomeCopy,
 ): ServiceSkillHomeItem[] {
   const usageMap = getServiceSkillUsageMap();
   const mapped: Array<ServiceSkillHomeItem & { _sortIndex: number }> =
@@ -67,7 +80,7 @@ function buildHomeItems(
         ...item,
         groupKey: item.groupKey,
         executionKind: item.execution.kind,
-        badge: getSkillBadge(item, isRecent),
+        badge: getSkillBadge(item, isRecent, copy),
         recentUsedAt,
         isRecent,
         runnerLabel: getServiceSkillRunnerLabel(item),
@@ -96,7 +109,10 @@ function buildHomeItems(
     .map(({ _sortIndex, ...item }) => item);
 }
 
-function buildCatalogMeta(catalog: SkillCatalog): ServiceSkillCatalogMeta {
+function buildCatalogMeta(
+  catalog: SkillCatalog,
+  copy: ServiceSkillHomeCopy,
+): ServiceSkillCatalogMeta {
   const isSeeded = isSeededSkillCatalog(catalog);
 
   return {
@@ -105,7 +121,9 @@ function buildCatalogMeta(catalog: SkillCatalog): ServiceSkillCatalogMeta {
     syncedAt: catalog.syncedAt,
     itemCount: catalog.items.length,
     groupCount: catalog.groups.length,
-    sourceLabel: isSeeded ? "起步做法" : "已同步做法",
+    sourceLabel: isSeeded
+      ? copy.catalogSource.seeded
+      : copy.catalogSource.synced,
     isSeeded,
   };
 }
@@ -129,6 +147,7 @@ interface UseServiceSkillsOptions {
 export function useServiceSkills(
   options: UseServiceSkillsOptions | boolean = true,
 ): UseServiceSkillsResult {
+  const { t } = useTranslation("agent");
   const normalizedOptions =
     typeof options === "boolean" ? { enabled: options } : options;
   const enabled = normalizedOptions.enabled ?? true;
@@ -146,45 +165,60 @@ export function useServiceSkills(
   const [error, setError] = useState<string | null>(null);
   const [usageVersion, setUsageVersion] = useState(0);
   const [automationLinkCount, setAutomationLinkCount] = useState(0);
+  const serviceSkillHomeCopy = useMemo(
+    () =>
+      buildServiceSkillHomeCopy((key) => t(key as AgentI18nKey, {})),
+    [t],
+  );
 
-  const applyCatalogSnapshot = useCallback(async (catalog: SkillCatalog) => {
-    const visibleItems = catalog.items.filter(shouldExposeServiceSkillHomeItem);
-    const visibleGroupKeys = new Set(visibleItems.map((item) => item.groupKey));
-    const visibleGroups = catalog.groups.filter((group) =>
-      visibleGroupKeys.has(group.key),
-    );
-    const automationLinks = listServiceSkillAutomationLinks();
-    let automationStatuses: Record<string, ServiceSkillAutomationStatus> = {};
-    let resolvedAutomationLinkCount = automationLinks.length;
+  const applyCatalogSnapshot = useCallback(
+    async (catalog: SkillCatalog) => {
+      const visibleItems = catalog.items.filter(
+        shouldExposeServiceSkillHomeItem,
+      );
+      const visibleGroupKeys = new Set(
+        visibleItems.map((item) => item.groupKey),
+      );
+      const visibleGroups = catalog.groups.filter((group) =>
+        visibleGroupKeys.has(group.key),
+      );
+      const automationLinks = listServiceSkillAutomationLinks();
+      let automationStatuses: Record<string, ServiceSkillAutomationStatus> = {};
+      let resolvedAutomationLinkCount = automationLinks.length;
 
-    const hasLocalAutomationSkills = visibleItems.some((item) =>
-      supportsServiceSkillLocalAutomation(item),
-    );
+      const hasLocalAutomationSkills = visibleItems.some((item) =>
+        supportsServiceSkillLocalAutomation(item),
+      );
 
-    if (automationLinks.length > 0 || hasLocalAutomationSkills) {
-      try {
-        const automationJobs = await getAutomationJobs();
-        automationStatuses =
-          buildServiceSkillAutomationStatusMap(automationJobs);
-        resolvedAutomationLinkCount =
-          resolveServiceSkillAutomationLinks(automationJobs).length;
-      } catch {
-        automationStatuses = {};
+      if (automationLinks.length > 0 || hasLocalAutomationSkills) {
+        try {
+          const automationJobs = await getAutomationJobs();
+          automationStatuses =
+            buildServiceSkillAutomationStatusMap(automationJobs);
+          resolvedAutomationLinkCount =
+            resolveServiceSkillAutomationLinks(automationJobs).length;
+        } catch {
+          automationStatuses = {};
+        }
       }
-    }
 
-    setItems(visibleItems);
-    setGroups(visibleGroups);
-    setAutomationLinkCount(resolvedAutomationLinkCount);
-    setAutomationStatusMap(automationStatuses);
-    setCatalogMeta(
-      buildCatalogMeta({
-        ...catalog,
-        groups: visibleGroups,
-        items: visibleItems,
-      }),
-    );
-  }, []);
+      setItems(visibleItems);
+      setGroups(visibleGroups);
+      setAutomationLinkCount(resolvedAutomationLinkCount);
+      setAutomationStatusMap(automationStatuses);
+      setCatalogMeta(
+        buildCatalogMeta(
+          {
+            ...catalog,
+            groups: visibleGroups,
+            items: visibleItems,
+          },
+          serviceSkillHomeCopy,
+        ),
+      );
+    },
+    [serviceSkillHomeCopy],
+  );
 
   const loadCurrentCatalog = useCallback(async () => {
     const catalog = await getSkillCatalog();
@@ -303,8 +337,8 @@ export function useServiceSkills(
 
   const skills = useMemo(() => {
     void usageVersion;
-    return buildHomeItems(items, automationStatusMap);
-  }, [items, usageVersion, automationStatusMap]);
+    return buildHomeItems(items, automationStatusMap, serviceSkillHomeCopy);
+  }, [items, usageVersion, automationStatusMap, serviceSkillHomeCopy]);
 
   return {
     skills,

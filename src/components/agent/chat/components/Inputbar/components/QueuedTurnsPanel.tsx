@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Loader2, Play, X } from "lucide-react";
 import type { QueuedTurnSnapshot } from "@/lib/api/agentRuntime";
+import { buildInputbarQueuedTurnsCopy } from "./inputbarQueuedTurnsCopy";
 
 interface QueuedTurnsPanelProps {
   queuedTurns: QueuedTurnSnapshot[];
@@ -13,6 +15,14 @@ export const QueuedTurnsPanel: React.FC<QueuedTurnsPanelProps> = ({
   onPromoteQueuedTurn,
   onRemoveQueuedTurn,
 }) => {
+  const { t } = useTranslation("agent");
+  const copy = useMemo(
+    () =>
+      buildInputbarQueuedTurnsCopy((key, values) =>
+        t(key, values ?? {}),
+      ),
+    [t],
+  );
   const [expandedTurnId, setExpandedTurnId] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<{
     queuedTurnId: string;
@@ -57,14 +67,14 @@ export const QueuedTurnsPanel: React.FC<QueuedTurnsPanelProps> = ({
   return (
     <div className="px-3 pb-2">
       <div className="mb-2 flex items-center justify-between text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-        <span>稍后处理 {queuedTurns.length}</span>
-        <span>会依次开始</span>
+        <span>{copy.queuedCount(queuedTurns.length)}</span>
+        <span>{copy.sequenceHint}</span>
       </div>
       <div className="flex flex-col gap-2">
         {queuedTurns.map((item) => {
           const messageText = item.message_text.trim()
             ? item.message_text
-            : item.message_preview || "空白输入";
+            : item.message_preview || copy.emptyInput;
           const title = item.message_preview.trim()
             ? item.message_preview
             : messageText;
@@ -104,13 +114,13 @@ export const QueuedTurnsPanel: React.FC<QueuedTurnsPanelProps> = ({
                       {title}
                     </div>
                     <span className="shrink-0 text-[11px] font-medium text-muted-foreground">
-                      {isExpanded ? "收起" : "查看"}
+                      {isExpanded ? copy.collapse : copy.expand}
                     </span>
                   </div>
                   <div className="mt-0.5 text-xs text-muted-foreground">
                     {item.image_count > 0
-                      ? `附图 ${item.image_count} 张`
-                      : "纯文本请求"}
+                      ? copy.imageCount(item.image_count)
+                      : copy.textOnly}
                   </div>
                   {isExpanded ? (
                     <div
@@ -130,14 +140,14 @@ export const QueuedTurnsPanel: React.FC<QueuedTurnsPanelProps> = ({
                     void runQueuedAction(item.queued_turn_id, "promote")
                   }
                   disabled={isBusy}
-                  aria-label="插队立即执行"
+                  aria-label={copy.promoteAria}
                 >
                   {isPromoting ? (
                     <Loader2 size={13} className="animate-spin" />
                   ) : (
                     <Play size={13} />
                   )}
-                  <span>{isPromoting ? "切换中" : "立即执行"}</span>
+                  <span>{isPromoting ? copy.promoting : copy.promote}</span>
                 </button>
                 <button
                   type="button"
@@ -146,7 +156,7 @@ export const QueuedTurnsPanel: React.FC<QueuedTurnsPanelProps> = ({
                     void runQueuedAction(item.queued_turn_id, "remove")
                   }
                   disabled={isBusy}
-                  aria-label={isRemoving ? "正在移除排队消息" : "移除排队消息"}
+                  aria-label={isRemoving ? copy.removing : copy.remove}
                 >
                   {isRemoving ? (
                     <Loader2 size={14} className="animate-spin" />
