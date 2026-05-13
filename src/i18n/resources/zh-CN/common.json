@@ -237,5 +237,11 @@
   "common.createProjectDialog.error.staleSchema": "数据库结构过旧，请重启应用以执行迁移",
   "common.createProjectDialog.error.invalidPath": "项目目录无效，请重新选择",
   "common.createProjectDialog.action.creating": "创建中...",
-  "common.createProjectDialog.action.create": "创建"
+  "common.createProjectDialog.action.create": "创建",
+  "common.app.websiteDeepLink.install.success.title": "已安装「{{title}}」",
+  "common.app.websiteDeepLink.install.success.description": "技能已写入 Lime Skills 目录，并已为你打开。",
+  "common.app.websiteDeepLink.install.failed.title": "安装官网技能失败",
+  "common.app.websiteDeepLink.install.failed.description": "{{message}}",
+  "common.app.websiteDeepLink.install.alreadyInstalled.title": "「{{title}}」已安装",
+  "common.app.websiteDeepLink.install.alreadyInstalled.description": "已直接为你打开这个技能。"
 }

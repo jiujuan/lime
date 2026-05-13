@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveWebsiteOpenNavigation } from "./websiteLaunch";
+import {
+  resolveWebsiteInstalledSkillNavigation,
+  resolveWebsiteOpenNavigation,
+} from "./websiteLaunch";
 
 describe("resolveWebsiteOpenNavigation", () => {
   it("应把官网 skill slug 解析成可直接进入 Agent 的服务技能启动参数", () => {
@@ -51,5 +54,31 @@ describe("resolveWebsiteOpenNavigation", () => {
         version: "1",
       }),
     ).toBeNull();
+  });
+
+  it("应把官网 install action 解析成已安装 Skill 输入能力入口", () => {
+    const result = resolveWebsiteInstalledSkillNavigation({
+      kind: "skill",
+      slug: "viral-content-breakdown",
+      source: "website",
+      version: "1",
+      action: "install",
+    });
+
+    expect(result).toMatchObject({
+      page: "agent",
+      params: {
+        agentEntry: "new-task",
+        initialSessionName: "拆解一条爆款内容",
+        initialInputCapability: {
+          capabilityRoute: {
+            kind: "installed_skill",
+            skillKey: "viral-content-breakdown",
+            skillName: "拆解一条爆款内容",
+          },
+          requestKey: expect.any(Number),
+        },
+      },
+    });
   });
 });

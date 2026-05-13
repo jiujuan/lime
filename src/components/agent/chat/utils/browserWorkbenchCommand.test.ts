@@ -41,7 +41,7 @@ describe("parseBrowserWorkbenchCommand", () => {
     });
   });
 
-  it("应兼容 Ribbi 风格的 @Browser Agent 命令", () => {
+  it("应兼容 多词别名风格的 @Browser Agent 命令", () => {
     const result = parseBrowserWorkbenchCommand(
       "@Browser Agent open openai.com/pricing and compare plans",
     );

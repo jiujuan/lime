@@ -9,6 +9,11 @@ import {
   type ImageWorkbenchApplyTarget,
   type SessionImageWorkbenchState,
 } from "./imageWorkbenchHelpers";
+import {
+  buildImageTaskPersonaContext,
+  buildImageTaskPresentationContext,
+  buildImageTaskTasteContext,
+} from "./imageTaskPersona";
 
 export interface ImageWorkbenchSkillRequest {
   images: MessageImage[];
@@ -238,6 +243,20 @@ export function resolveImageWorkbenchSkillRequest(
       size: parsedCommand.size || params.imageWorkbenchSelectedSize,
       aspect_ratio: parsedCommand.aspectRatio,
       usage,
+      persona_context: buildImageTaskPersonaContext(),
+      presentation: buildImageTaskPresentationContext({
+        prompt: effectivePrompt,
+        mode: parsedCommand.mode,
+        modelId: parsedCommand.modelId || params.imageWorkbenchSelectedModelId,
+      }),
+      taste_context: buildImageTaskTasteContext({
+        prompt: effectivePrompt,
+        referenceImageCount: referenceImages.length,
+        entrySource: params.entrySource,
+        targetOutputPrompt: targetOutput?.prompt || null,
+        targetOutputModelName: targetOutput?.modelName || null,
+        applyTargetKind: effectiveApplyTarget?.kind || null,
+      }),
       provider_id:
         parsedCommand.providerId || params.imageWorkbenchSelectedProviderId,
       model: parsedCommand.modelId || params.imageWorkbenchSelectedModelId,

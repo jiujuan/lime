@@ -445,6 +445,11 @@ function buildMockMediaTaskOutput(
             mode: request.mode ?? "generate",
             size: request.size ?? "1024x1024",
             count: request.count ?? 1,
+            persona_context:
+              request.personaContext ?? request.persona_context ?? null,
+            presentation: request.presentation ?? null,
+            taste_context:
+              request.tasteContext ?? request.taste_context ?? null,
             provider_id: request.providerId ?? request.provider_id ?? null,
             model: request.model ?? null,
             session_id: sessionId,
@@ -8142,6 +8147,44 @@ const defaultMocks: Record<string, any> = {
   install_skill_for_app: () => ({ success: true }),
   uninstall_skill_for_app: () => ({ success: true }),
   import_local_skill_for_app: () => ({ directory: "mock-skill" }),
+  install_marketplace_skill_for_app: (args?: { bundle?: { name?: string } }) => ({
+    directory: args?.bundle?.name || "mock-marketplace-skill",
+    inspection: {
+      content: "# Mock Marketplace Skill",
+      metadata: {},
+      allowedTools: [],
+      resourceSummary: {
+        hasScripts: false,
+        hasReferences: false,
+        hasAssets: false,
+      },
+      standardCompliance: {
+        isStandard: true,
+        validationErrors: [],
+        deprecatedFields: [],
+      },
+    },
+  }),
+  install_skill_from_download_url_for_app: (args?: {
+    request?: { skillName?: string };
+  }) => ({
+    directory: args?.request?.skillName || "mock-downloaded-skill",
+    inspection: {
+      content: "# Mock Downloaded Skill",
+      metadata: {},
+      allowedTools: [],
+      resourceSummary: {
+        hasScripts: false,
+        hasReferences: false,
+        hasAssets: false,
+      },
+      standardCompliance: {
+        isStandard: true,
+        validationErrors: [],
+        deprecatedFields: [],
+      },
+    },
+  }),
   enable_skill: () => ({ success: true }),
   disable_skill: () => ({ success: true }),
 

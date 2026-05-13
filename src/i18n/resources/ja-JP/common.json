@@ -237,5 +237,11 @@
   "common.createProjectDialog.error.staleSchema": "データベーススキーマが古くなっています。Lime を再起動してマイグレーションを実行してください。",
   "common.createProjectDialog.error.invalidPath": "プロジェクトフォルダーが無効です。もう一度選択してください。",
   "common.createProjectDialog.action.creating": "作成中...",
-  "common.createProjectDialog.action.create": "作成"
+  "common.createProjectDialog.action.create": "作成",
+  "common.app.websiteDeepLink.install.success.title": "「{{title}}」をインストールしました",
+  "common.app.websiteDeepLink.install.success.description": "Skill を Lime Skills ディレクトリに書き込み、開きました。",
+  "common.app.websiteDeepLink.install.failed.title": "公式サイトの Skill をインストールできませんでした",
+  "common.app.websiteDeepLink.install.failed.description": "{{message}}",
+  "common.app.websiteDeepLink.install.alreadyInstalled.title": "「{{title}}」はインストール済みです",
+  "common.app.websiteDeepLink.install.alreadyInstalled.description": "Skill を直接開きました。"
 }

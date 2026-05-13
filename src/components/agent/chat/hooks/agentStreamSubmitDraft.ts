@@ -2,6 +2,7 @@ import type { Dispatch, SetStateAction } from "react";
 import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
 import type { Message, MessageImage } from "../types";
 import type { AssistantDraftState } from "./agentChatShared";
+import type { InputCapabilitySendRoute } from "../skill-selection/inputCapabilitySelection";
 import {
   buildDiagnosticsRuntimeStatusMetadata,
   buildInitialAgentRuntimeStatus,
@@ -54,6 +55,7 @@ interface PrepareAgentStreamSubmitDraftOptions {
   assistantDraft?: AssistantDraftState;
   requestMetadata?: Record<string, unknown>;
   messagePurpose?: Message["purpose"];
+  capabilityRoute?: InputCapabilitySendRoute;
   effectiveExecutionStrategy: AsterExecutionStrategy;
   webSearch?: boolean;
   thinking?: boolean;
@@ -75,6 +77,7 @@ export function prepareAgentStreamSubmitDraft(
     assistantDraft,
     requestMetadata,
     messagePurpose,
+    capabilityRoute,
     effectiveExecutionStrategy,
     webSearch,
     thinking,
@@ -116,6 +119,7 @@ export function prepareAgentStreamSubmitDraft(
       images: images.length > 0 ? images : undefined,
       timestamp: new Date(),
       purpose: messagePurpose,
+      inputCapabilityRoute: capabilityRoute,
     };
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
   }

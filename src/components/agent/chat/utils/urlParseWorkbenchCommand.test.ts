@@ -67,7 +67,7 @@ describe("parseUrlParseWorkbenchCommand", () => {
     });
   });
 
-  it("应兼容 @Read Webpage 与 @Get Homepage 两个 Ribbi 风格入口", () => {
+  it("应兼容 @Read Webpage 与 @Get Homepage 两个 多词别名风格入口", () => {
     const readResult = parseUrlParseWorkbenchCommand(
       "@Read Webpage https://example.com/post summarize the launch notes",
     );

@@ -237,5 +237,11 @@
   "common.createProjectDialog.error.staleSchema": "데이터베이스 스키마가 오래되었습니다. Lime을 다시 시작해 마이그레이션을 실행하세요.",
   "common.createProjectDialog.error.invalidPath": "프로젝트 폴더가 유효하지 않습니다. 다시 선택하세요.",
   "common.createProjectDialog.action.creating": "생성 중...",
-  "common.createProjectDialog.action.create": "생성"
+  "common.createProjectDialog.action.create": "생성",
+  "common.app.websiteDeepLink.install.success.title": "“{{title}}”을(를) 설치했습니다",
+  "common.app.websiteDeepLink.install.success.description": "Skill을 Lime Skills 디렉터리에 쓰고 열었습니다.",
+  "common.app.websiteDeepLink.install.failed.title": "공식 사이트 Skill 설치 실패",
+  "common.app.websiteDeepLink.install.failed.description": "{{message}}",
+  "common.app.websiteDeepLink.install.alreadyInstalled.title": "“{{title}}”은(는) 이미 설치되어 있습니다",
+  "common.app.websiteDeepLink.install.alreadyInstalled.description": "Skill을 바로 열었습니다."
 }

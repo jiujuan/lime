@@ -100,6 +100,10 @@ import {
   buildTeamMemoryShadowRequestMetadata,
   readTeamMemorySnapshot,
 } from "@/lib/teamMemorySync";
+import {
+  buildHomePendingPreviewMessages,
+  type TaskCenterDraftSendRequest,
+} from "./homePendingPreview";
 
 import type {
   Message,
@@ -122,7 +126,6 @@ import {
 import { isHiddenInternalArtifactPath } from "./utils/internalArtifactVisibility";
 import { buildHarnessRequestMetadata } from "./utils/harnessRequestMetadata";
 import { deriveHarnessSessionState } from "./utils/harnessState";
-import { buildDiagnosticsRuntimeStatusMetadata } from "./utils/agentRuntimeStatus";
 import { resolveWorkflowLayoutBottomSpacing } from "./utils/workflowLayout";
 import {
   alignChatToolPreferencesWithExecutionStrategy,
@@ -404,20 +407,6 @@ interface TaskCenterDraftTab {
   status: TaskCenterTabItem["status"];
 }
 
-interface TaskCenterDraftSendRequest {
-  id: string;
-  draftTabId: string;
-  text: string;
-  images: MessageImage[];
-  sendExecutionStrategy?: "react" | "code_orchestrated" | "auto";
-  sendOptions?: HandleSendOptions;
-  webSearch: boolean;
-  thinking: boolean;
-  submittedAt: number;
-  materializeDraft: boolean;
-  source: "task-center-empty-state" | "empty-state";
-}
-
 type SessionRecentMetadataSyncPriority = "immediate" | "background";
 
 interface SessionRecentMetadataSyncOptions {
@@ -489,47 +478,6 @@ function scheduleAfterNextPaint(callback: () => void): () => void {
       window.cancelAnimationFrame(secondFrameId);
     }
   };
-}
-
-function buildHomePendingPreviewMessages(
-  request: TaskCenterDraftSendRequest,
-  executionStrategy: "react" | "code_orchestrated" | "auto",
-): Message[] {
-  const timestamp = new Date(request.submittedAt);
-  const effectiveExecutionStrategy =
-    request.sendExecutionStrategy || executionStrategy;
-
-  return [
-    {
-      id: `${request.id}:user`,
-      role: "user",
-      content: request.text,
-      images: request.images.length > 0 ? request.images : undefined,
-      timestamp,
-    },
-    {
-      id: `${request.id}:assistant`,
-      role: "assistant",
-      content: "",
-      timestamp,
-      isThinking: true,
-      runtimeStatus: {
-        phase: "preparing",
-        title: "正在进入对话",
-        detail: "已收到输入，正在后台准备会话和执行环境。",
-        checkpoints: [
-          effectiveExecutionStrategy === "code_orchestrated"
-            ? "代码编排待命"
-            : effectiveExecutionStrategy === "react"
-              ? "对话执行待命"
-              : "自动路由待命",
-          request.webSearch ? "联网搜索候选能力待命" : "直接回答优先",
-          request.thinking ? "深度思考待命" : "轻量响应优先",
-        ],
-        metadata: buildDiagnosticsRuntimeStatusMetadata(),
-      },
-    },
-  ];
 }
 
 function mergeSessionRecentMetadataSyncPriority(

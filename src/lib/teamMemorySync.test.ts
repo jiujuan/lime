@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { webcrypto } from "node:crypto";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import {
   buildTeamMemoryShadowRequestMetadata,
@@ -11,6 +12,15 @@ import {
   scanTeamMemorySecrets,
   writeTeamMemorySnapshot,
 } from "./teamMemorySync";
+
+beforeAll(() => {
+  if (!globalThis.crypto?.subtle) {
+    Object.defineProperty(globalThis, "crypto", {
+      configurable: true,
+      value: webcrypto,
+    });
+  }
+});
 
 function createMemoryStorage() {
   const store = new Map<string, string>();

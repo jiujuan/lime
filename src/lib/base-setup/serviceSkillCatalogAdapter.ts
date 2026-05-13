@@ -18,6 +18,7 @@ import { evaluateBaseSetupRollout } from "./rolloutGate";
 import type {
   BaseSetupAutomationProfile,
   BaseSetupAutomationSchedulePreset,
+  BaseSetupCommandIntentConfirmation,
   BaseSetupCommandExecutionKind,
   BaseSetupPackage,
   BaseSetupRenderDetailKind,
@@ -98,6 +99,39 @@ function readStringRecord(
     }
   }
   return Object.keys(output).length > 0 ? output : undefined;
+}
+
+function readCommandIntentConfirmation(
+  record: UnknownRecord,
+): BaseSetupCommandIntentConfirmation | undefined {
+  const value = readValue(record, "intentConfirmation", "intent_confirmation");
+  const source = asRecord(value);
+  if (!source) {
+    return undefined;
+  }
+
+  const id = readString(source, "id");
+  const ruleKey = readString(source, "ruleKey", "rule_key");
+  const confirmationKey = readString(
+    source,
+    "confirmationKey",
+    "confirmation_key",
+  );
+  if (!id || !ruleKey || !confirmationKey) {
+    return undefined;
+  }
+
+  const systemPromptKey = readString(
+    source,
+    "systemPromptKey",
+    "system_prompt_key",
+  );
+  return {
+    id,
+    ruleKey,
+    confirmationKey,
+    ...(systemPromptKey ? { systemPromptKey } : {}),
+  };
 }
 
 function readArray(
@@ -696,14 +730,25 @@ function toCatalogProjection(
       readValue(record, "sceneBinding", "scene_binding"),
     ) as ServiceSkillSceneBinding | undefined,
     commandBinding: commandBindingRecord
-      ? {
-          skillId: readString(commandBindingRecord, "skillId", "skill_id"),
-          executionKind: readString(
+      ? (() => {
+          const requestDefaults = readStringRecord(
             commandBindingRecord,
-            "executionKind",
-            "execution_kind",
-          ) as BaseSetupCommandExecutionKind | undefined,
-        }
+            "requestDefaults",
+            "request_defaults",
+          );
+          const intentConfirmation =
+            readCommandIntentConfirmation(commandBindingRecord);
+          return {
+            skillId: readString(commandBindingRecord, "skillId", "skill_id"),
+            executionKind: readString(
+              commandBindingRecord,
+              "executionKind",
+              "execution_kind",
+            ) as BaseSetupCommandExecutionKind | undefined,
+            ...(requestDefaults ? { requestDefaults } : {}),
+            ...(intentConfirmation ? { intentConfirmation } : {}),
+          };
+        })()
       : undefined,
     commandRenderContract: commandRenderContractRecord
       ? {

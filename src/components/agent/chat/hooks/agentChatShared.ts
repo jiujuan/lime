@@ -12,6 +12,7 @@ import type {
   WriteArtifactContext,
 } from "../types";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
+import type { InputCapabilitySendRoute } from "../skill-selection/inputCapabilitySelection";
 import { normalizeProjectId } from "../utils/topicProjectResolution";
 import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
 import { sanitizeMessageTextForPreview } from "../utils/internalImagePlaceholder";
@@ -89,6 +90,7 @@ export interface SendMessageOptions {
   requestMetadata?: Record<string, unknown>;
   assistantDraft?: AssistantDraftState;
   displayContent?: string;
+  capabilityRoute?: InputCapabilitySendRoute;
   skillRequest?: SlashSkillRequest;
   providerOverride?: string;
   modelOverride?: string;

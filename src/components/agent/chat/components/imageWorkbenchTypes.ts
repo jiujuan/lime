@@ -27,6 +27,8 @@ export interface ImageWorkbenchTaskView {
   prompt: string;
   rawText: string;
   expectedCount: number;
+  assistantIntro?: string | null;
+  caption?: string | null;
   layoutHint?: string | null;
   storyboardSlots?: ImageStoryboardSlot[];
   outputIds: string[];

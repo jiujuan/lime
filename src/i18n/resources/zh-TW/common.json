@@ -237,5 +237,11 @@
   "common.createProjectDialog.error.staleSchema": "資料庫結構過舊，請重新啟動 Lime 以執行遷移",
   "common.createProjectDialog.error.invalidPath": "專案目錄無效，請重新選擇",
   "common.createProjectDialog.action.creating": "建立中...",
-  "common.createProjectDialog.action.create": "建立"
+  "common.createProjectDialog.action.create": "建立",
+  "common.app.websiteDeepLink.install.success.title": "已安裝「{{title}}」",
+  "common.app.websiteDeepLink.install.success.description": "技能已寫入 Lime Skills 目錄，並已為你開啟。",
+  "common.app.websiteDeepLink.install.failed.title": "安裝官網技能失敗",
+  "common.app.websiteDeepLink.install.failed.description": "{{message}}",
+  "common.app.websiteDeepLink.install.alreadyInstalled.title": "「{{title}}」已安裝",
+  "common.app.websiteDeepLink.install.alreadyInstalled.description": "已直接為你開啟這個技能。"
 }

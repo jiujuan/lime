@@ -237,5 +237,11 @@
   "common.createProjectDialog.error.staleSchema": "The database schema is outdated. Restart Lime to run migrations.",
   "common.createProjectDialog.error.invalidPath": "The project folder is invalid. Choose again.",
   "common.createProjectDialog.action.creating": "Creating...",
-  "common.createProjectDialog.action.create": "Create"
+  "common.createProjectDialog.action.create": "Create",
+  "common.app.websiteDeepLink.install.success.title": "Installed “{{title}}”",
+  "common.app.websiteDeepLink.install.success.description": "The skill was written to the Lime Skills directory and opened for you.",
+  "common.app.websiteDeepLink.install.failed.title": "Failed to install website skill",
+  "common.app.websiteDeepLink.install.failed.description": "{{message}}",
+  "common.app.websiteDeepLink.install.alreadyInstalled.title": "“{{title}}” is already installed",
+  "common.app.websiteDeepLink.install.alreadyInstalled.description": "Opened the skill for you directly."
 }

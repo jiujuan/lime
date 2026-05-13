@@ -911,6 +911,67 @@ describe("Inputbar", () => {
     );
   });
 
+  it("选择本地安装技能发送时，应把 local:* key 归一到目录 slash key", async () => {
+    const onSend = vi.fn();
+    const skill = {
+      key: "local:writer",
+      name: "写作助手",
+      description: "用于写作",
+      directory: "writer",
+      installed: true,
+      sourceKind: "other",
+    } as Skill;
+    renderInputbar({
+      input: "整理最近发布计划",
+      onSend,
+      activeTheme: "general",
+      skills: [skill],
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const latestCall =
+      mockCharacterMention.mock.calls[
+        mockCharacterMention.mock.calls.length - 1
+      ]?.[0];
+
+    await act(async () => {
+      latestCall?.onSelectInputCapability?.({
+        kind: "installed_skill",
+        skill,
+      });
+      await Promise.resolve();
+    });
+
+    const sendButton = document.querySelector(
+      '[data-testid="send-btn"]',
+    ) as HTMLButtonElement | null;
+
+    await act(async () => {
+      sendButton?.click();
+      await Promise.resolve();
+    });
+
+    expect(onSend).toHaveBeenCalledWith(
+      undefined,
+      false,
+      false,
+      undefined,
+      "react",
+      undefined,
+      {
+        capabilityRoute: {
+          kind: "installed_skill",
+          skillKey: "writer",
+          skillName: "写作助手",
+        },
+        displayContent: "整理最近发布计划",
+      },
+    );
+  });
+
   it("仅添加路径引用时应允许发送并写入 request metadata", async () => {
     const onSend = vi.fn();
     renderInputbar({
@@ -1036,7 +1097,7 @@ describe("Inputbar", () => {
       initialInputCapability: {
         capabilityRoute: {
           kind: "installed_skill",
-          skillKey: "writer",
+          skillKey: "local:writer",
           skillName: "写作助手",
         },
         requestKey: 20260418,

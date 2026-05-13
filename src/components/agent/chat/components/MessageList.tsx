@@ -124,6 +124,7 @@ import {
   type AgentStreamTextOverlaySnapshot,
   useAgentStreamTextOverlay,
 } from "../hooks/agentStreamTextOverlayStore";
+import { INPUTBAR_BUILTIN_COMMANDS } from "../skill-selection/builtinCommands";
 
 interface MessageListProps {
   sessionId?: string | null;
@@ -666,13 +667,178 @@ const ImageWorkbenchAssistantIntro: React.FC<{ content: string }> = ({
       className="max-w-[680px] space-y-0.5 text-[15px] leading-7 text-slate-950"
     >
       {lines.map((line, index) => (
-        <p key={`${index}:${line}`} className="m-0">
+        <p
+          key={`${index}:${line}`}
+          className={index === 2 ? "m-0 pt-2" : "m-0"}
+        >
           {line}
         </p>
       ))}
     </div>
   );
 };
+
+const ImageWorkbenchAssistantHeader: React.FC<{ label: string }> = ({
+  label,
+}) => (
+  <div
+    data-testid="image-workbench-assistant-header"
+    className="mb-5 flex items-center gap-2.5"
+  >
+    <svg
+      aria-hidden
+      className="h-8 w-8 shrink-0"
+      viewBox="0 0 32 32"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M4.4 18.2C3.6 12.8 7.7 8.4 14.3 7.4c7-1 12.4 2.1 13.3 7.5.8 5.5-3.5 9.8-10.4 10.8C10.4 26.7 5.2 23.5 4.4 18.2Z"
+        fill="#D9F222"
+        stroke="#111111"
+        strokeWidth="1.7"
+      />
+      <path
+        d="M7 12.1c1.9-3.1 6.9-4.8 12-3.8 2.3.4 4.2 1.4 5.6 2.7-2.1 1.2-5.1 1.8-8.2 1.4-3.8-.5-7-1.5-9.4-.3Z"
+        fill="#F0FF63"
+      />
+      <path
+        d="M5.7 18.4c4.5-.6 7.4-2.4 9.2-5.6 1.1 3.5-.3 7-3.6 8.3-2.2.8-4.3.2-5.6-2.7Z"
+        fill="#111111"
+      />
+      <path
+        d="M26.4 15.1c-4.3.4-7.1-.7-9-3.7-.4 3.8 1.8 6.9 5.2 7.4 2.1.4 3.4-.8 3.8-3.7Z"
+        fill="#111111"
+      />
+      <circle cx="11.7" cy="14.6" r="2.2" fill="#E9FF54" />
+      <circle cx="22" cy="13.3" r="2" fill="#E9FF54" />
+      <path
+        d="M12.1 22.1c2.7 1.1 6.2.6 8.4-1.3"
+        stroke="#111111"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+    </svg>
+    <span className="text-[15px] font-semibold leading-6 text-slate-900">
+      {label}
+    </span>
+  </div>
+);
+
+const USER_COMMAND_TAG_CANDIDATES = INPUTBAR_BUILTIN_COMMANDS.map((command) =>
+  command.commandPrefix.trim(),
+)
+  .filter((prefix) => prefix.startsWith("@"))
+  .sort((left, right) => right.length - left.length);
+
+function resolveUserCommandRoutePrefix(
+  route: Message["inputCapabilityRoute"],
+): string | null {
+  if (!route) {
+    return null;
+  }
+  if (route.kind === "builtin_command" || route.kind === "runtime_scene") {
+    const prefix = route.commandPrefix.trim();
+    return prefix.startsWith("@") ? prefix : null;
+  }
+  return null;
+}
+
+function parseLeadingUserCommandTag(
+  content: string,
+  route?: Message["inputCapabilityRoute"],
+): { tag: string; body: string } | null {
+  const trimmed = content.trimStart();
+  if (!trimmed.startsWith("@")) {
+    return null;
+  }
+
+  const routePrefix = resolveUserCommandRoutePrefix(route);
+  const candidates = routePrefix
+    ? [
+        routePrefix,
+        ...USER_COMMAND_TAG_CANDIDATES.filter(
+          (candidate) =>
+            candidate.toLowerCase() !== routePrefix.toLowerCase(),
+        ),
+      ]
+    : USER_COMMAND_TAG_CANDIDATES;
+  const matchedTag = candidates.find((candidate) => {
+    const prefix = trimmed.slice(0, candidate.length);
+    if (prefix.toLowerCase() !== candidate.toLowerCase()) {
+      return false;
+    }
+    const nextChar = trimmed.charAt(candidate.length);
+    return !nextChar || /\s/u.test(nextChar);
+  });
+  if (!matchedTag) {
+    return null;
+  }
+
+  return {
+    tag: matchedTag,
+    body: trimmed.slice(matchedTag.length).trimStart(),
+  };
+}
+
+const UserCommandMessageContent: React.FC<{
+  content: string;
+  route?: Message["inputCapabilityRoute"];
+}> = ({ content, route }) => {
+  const command = parseLeadingUserCommandTag(content, route);
+  if (!command) {
+    return null;
+  }
+
+  return (
+    <div
+      data-testid="message-user-command-content"
+      aria-label={content}
+      className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[15px] leading-7 text-slate-950"
+    >
+      <span
+        data-testid="message-user-command-tag"
+        className="inline-flex items-center rounded-[6px] border border-[#c6dadd] bg-[#dcebed] px-1.5 py-[1px] text-[13px] font-semibold leading-5 text-[#2f6f79]"
+      >
+        {command.tag}
+      </span>
+      {command.body ? (
+        <span className="whitespace-pre-wrap">{command.body}</span>
+      ) : null}
+    </div>
+  );
+};
+
+function resolveInstalledSkillMessageLabel(message: Message): string | null {
+  const route = message.inputCapabilityRoute;
+  if (route?.kind !== "installed_skill") {
+    return null;
+  }
+
+  return route.skillName?.trim() || route.skillKey.trim() || null;
+}
+
+const UserInstalledSkillMessageContent: React.FC<{
+  content: string;
+  label: string;
+}> = ({ content, label }) => (
+  <div
+    data-testid="message-user-skill-content"
+    aria-label={`@ ${label} ${content}`.trim()}
+    className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[15px] leading-7 text-slate-950"
+  >
+    <span
+      data-testid="message-user-skill-tag"
+      className="inline-flex items-center rounded-[6px] border border-sky-200 bg-sky-50 px-1.5 py-[1px] text-[13px] font-semibold leading-5 text-sky-800"
+    >
+      <span className="mr-1 text-sky-500">@</span>
+      {label}
+    </span>
+    {content.trim() ? (
+      <span className="whitespace-pre-wrap">{content}</span>
+    ) : null}
+  </div>
+);
 
 function shouldRenderRuntimeStatusPill(
   status?: AgentRuntimeStatus | null,
@@ -2226,6 +2392,14 @@ const MessageListInner: React.FC<MessageListProps> = ({
         ? activePendingA2UISource.requestId
         : null;
     const actionContent = displayContent.trim();
+    const installedSkillMessageLabel =
+      msg.role === "user" ? resolveInstalledSkillMessageLabel(msg) : null;
+    const isUserCommandMessage =
+      msg.role === "user" &&
+      !installedSkillMessageLabel &&
+      Boolean(
+        parseLeadingUserCommandTag(displayContent, msg.inputCapabilityRoute),
+      );
     const hasVisibleAssistantText = Boolean(actionContent);
     const shouldCollapseLongHistoricalMessage =
       isRestoredHistoryWindow &&
@@ -2302,6 +2476,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
     const canSaveMessageAsSkill = Boolean(
       onSaveMessageAsSkill &&
       msg.role === "assistant" &&
+      !msg.imageWorkbenchPreview &&
       !msg.isThinking &&
       actionContent &&
       actionContent.length >= 24,
@@ -2309,6 +2484,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
     const canSaveMessageAsInspiration = Boolean(
       onSaveMessageAsInspiration &&
       msg.role === "assistant" &&
+      !msg.imageWorkbenchPreview &&
       !msg.isThinking &&
       actionContent &&
       actionContent.length >= 24,
@@ -2322,13 +2498,18 @@ const MessageListInner: React.FC<MessageListProps> = ({
     const canSaveMessageAsKnowledge = Boolean(
       onSaveMessageAsKnowledge &&
       msg.role === "assistant" &&
+      !msg.imageWorkbenchPreview &&
       !msg.isThinking &&
       knowledgeSaveContent &&
       knowledgeSaveContent.length >= 24,
     );
     const showMessageActions =
-      !msg.imageWorkbenchPreview &&
-      ((msg.role === "user" && (canQuoteMessage || canCopyMessage)) ||
+      ((msg.role === "user" &&
+        !isUserCommandMessage &&
+        (canQuoteMessage || canCopyMessage)) ||
+        (msg.role === "assistant" &&
+          Boolean(msg.imageWorkbenchPreview) &&
+          (canQuoteMessage || canCopyMessage)) ||
         canSaveMessageAsSkill ||
         canSaveMessageAsInspiration ||
         canSaveMessageAsKnowledge);
@@ -2407,12 +2588,14 @@ const MessageListInner: React.FC<MessageListProps> = ({
       tailRuntimeStatusLine?.status === "queued";
     const shouldRenderTailRuntimeStatusLine =
       msg.role === "assistant" &&
+      !msg.imageWorkbenchPreview &&
       msg.id === lastAssistantMessageId &&
       isConversationTailAssistant &&
       Boolean(tailRuntimeStatusLine) &&
       !shouldSuppressActiveRuntimeLine;
     const shouldRenderActiveRuntimeFooterIndicator =
       msg.role === "assistant" &&
+      !msg.imageWorkbenchPreview &&
       msg.id === lastAssistantMessageId &&
       isConversationTailAssistant &&
       hasAssistantBodyContent &&
@@ -2421,15 +2604,27 @@ const MessageListInner: React.FC<MessageListProps> = ({
         activeConversationRuntimeStatusLine?.status === "queued") &&
       !shouldPreviewHistoricalAssistantMessage &&
       !shouldDeferHistoricalMarkdownRender;
-    const shouldSuppressAssistantMetaFooter = shouldSuppressImageProcessFlow;
-    const shouldRenderUsageFooter =
+    const shouldRenderImageWorkbenchUsageFooter =
+      msg.role === "assistant" &&
+      Boolean(msg.imageWorkbenchPreview) &&
+      msg.imageWorkbenchPreview?.status === "complete" &&
       isConversationTailAssistant &&
-      !shouldSuppressAssistantMetaFooter &&
-      !shouldRenderTailRuntimeStatusLine &&
-      !shouldRenderActiveRuntimeFooterIndicator &&
       !msg.isThinking &&
       Boolean(msg.usage);
+    const shouldSuppressAssistantMetaFooter =
+      shouldSuppressStandaloneImageWorkbenchProcess ||
+      Boolean(msg.imageWorkbenchPreview && !shouldRenderImageWorkbenchUsageFooter);
+    const shouldRenderUsageFooter =
+      shouldRenderImageWorkbenchUsageFooter ||
+      (!msg.imageWorkbenchPreview &&
+        isConversationTailAssistant &&
+        !shouldSuppressAssistantMetaFooter &&
+        !shouldRenderTailRuntimeStatusLine &&
+        !shouldRenderActiveRuntimeFooterIndicator &&
+        !msg.isThinking &&
+        Boolean(msg.usage));
     const shouldRenderStatusPill =
+      !msg.imageWorkbenchPreview &&
       !shouldSuppressAssistantMetaFooter &&
       !shouldRenderTailRuntimeStatusLine &&
       shouldRenderRuntimeStatusPill(msg.runtimeStatus);
@@ -2554,8 +2749,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
       !hasImages &&
       visibleAssistantArtifacts.length === 0 &&
       !shouldRenderMessageCanvasShortcut &&
-      !msg.taskPreview &&
-      !assistantMetaFooter;
+      !msg.taskPreview;
 
     return (
       <MessageWrapper
@@ -2584,10 +2778,16 @@ const MessageListInner: React.FC<MessageListProps> = ({
             <MessageBubble
               $isUser={msg.role === "user"}
               $bareMedia={shouldRenderImageWorkbenchBareBubble}
+              className={
+                isUserCommandMessage ? "message-bubble-user-command" : undefined
+              }
               aria-label={msg.role === "assistant" ? assistantLabel : undefined}
             >
               {msg.role === "assistant" ? (
                 <>
+                  {msg.imageWorkbenchPreview ? (
+                    <ImageWorkbenchAssistantHeader label={assistantLabel} />
+                  ) : null}
                   {shouldRenderPrimaryTimelineOutsideBubble
                     ? null
                     : primaryTimelineNode}
@@ -2739,7 +2939,17 @@ const MessageListInner: React.FC<MessageListProps> = ({
                   ) : null}
                 </>
               ) : displayContent ? (
-                shouldRenderRuntimePeerCards ? (
+                installedSkillMessageLabel ? (
+                  <UserInstalledSkillMessageContent
+                    content={displayContent}
+                    label={installedSkillMessageLabel}
+                  />
+                ) : isUserCommandMessage ? (
+                  <UserCommandMessageContent
+                    content={displayContent}
+                    route={msg.inputCapabilityRoute}
+                  />
+                ) : shouldRenderRuntimePeerCards ? (
                   <RuntimePeerMessageCards text={rawRuntimePeerContent} />
                 ) : (
                   <MarkdownRenderer
@@ -2802,7 +3012,16 @@ const MessageListInner: React.FC<MessageListProps> = ({
               {assistantMetaFooter}
 
               {showMessageActions ? (
-                <MessageActions className="message-actions">
+                <MessageActions
+                  className={[
+                    "message-actions",
+                    msg.imageWorkbenchPreview
+                      ? "image-workbench-message-actions"
+                      : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                >
                   {canQuoteMessage ? (
                     <Button
                       variant="ghost"

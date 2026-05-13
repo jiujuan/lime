@@ -720,11 +720,11 @@ mod tests {
         assert!(CONTENT_POST_WITH_COVER_WORKFLOW_CONTENT.contains("\"id\": \"research\""));
         assert!(KNOWLEDGE_BUILDER_SKILL_CONTENT.contains("name: knowledge_builder"));
         assert!(KNOWLEDGE_BUILDER_SKILL_CONTENT.contains("license: Apache-2.0"));
-        assert!(KNOWLEDGE_BUILDER_SKILL_CONTENT.contains("agentKnowledge: \">=0.6.0\""));
+        assert!(KNOWLEDGE_BUILDER_SKILL_CONTENT.contains("compatibility: Agent Knowledge >=0.6.0"));
         assert!(
             KNOWLEDGE_BUILDER_SKILL_CONTENT.contains("allowed-tools: list_directory, read_file")
         );
-        assert!(KNOWLEDGE_BUILDER_SKILL_CONTENT.contains("lime_version: 1.2.0"));
+        assert!(KNOWLEDGE_BUILDER_SKILL_CONTENT.contains("lime_version: 1.2.1"));
         assert!(KNOWLEDGE_BUILDER_SKILL_CONTENT.contains("Lime_compat_delegate: \"true\""));
         assert!(KNOWLEDGE_BUILDER_SKILL_CONTENT.contains("不要生成 `compiled/brief.md`"));
         assert!(KNOWLEDGE_BUILDER_SKILL_CONTENT.contains("不要生成 `wiki/`"));
@@ -774,6 +774,64 @@ mod tests {
         assert!(
             BRAND_PRODUCT_KNOWLEDGE_BUILDER_TEMPLATE_CONTENT.contains("# 品牌产品知识库标准模板")
         );
+    }
+
+    #[test]
+    fn bundled_knowledge_builder_skill_manifests_should_be_agent_skills_standard() {
+        for (directory, content) in [
+            (
+                KNOWLEDGE_BUILDER_SKILL_DIRECTORY,
+                KNOWLEDGE_BUILDER_SKILL_CONTENT,
+            ),
+            (
+                PERSONAL_IP_KNOWLEDGE_BUILDER_SKILL_DIRECTORY,
+                PERSONAL_IP_KNOWLEDGE_BUILDER_SKILL_CONTENT,
+            ),
+            (
+                BRAND_PERSONA_KNOWLEDGE_BUILDER_SKILL_DIRECTORY,
+                BRAND_PERSONA_KNOWLEDGE_BUILDER_SKILL_CONTENT,
+            ),
+            (
+                CONTENT_OPERATIONS_KNOWLEDGE_BUILDER_SKILL_DIRECTORY,
+                CONTENT_OPERATIONS_KNOWLEDGE_BUILDER_SKILL_CONTENT,
+            ),
+            (
+                PRIVATE_DOMAIN_OPERATIONS_KNOWLEDGE_BUILDER_SKILL_DIRECTORY,
+                PRIVATE_DOMAIN_OPERATIONS_KNOWLEDGE_BUILDER_SKILL_CONTENT,
+            ),
+            (
+                LIVE_COMMERCE_OPERATIONS_KNOWLEDGE_BUILDER_SKILL_DIRECTORY,
+                LIVE_COMMERCE_OPERATIONS_KNOWLEDGE_BUILDER_SKILL_CONTENT,
+            ),
+            (
+                CAMPAIGN_OPERATIONS_KNOWLEDGE_BUILDER_SKILL_DIRECTORY,
+                CAMPAIGN_OPERATIONS_KNOWLEDGE_BUILDER_SKILL_CONTENT,
+            ),
+            (
+                BRAND_PRODUCT_KNOWLEDGE_BUILDER_SKILL_DIRECTORY,
+                BRAND_PRODUCT_KNOWLEDGE_BUILDER_SKILL_CONTENT,
+            ),
+            (
+                ORGANIZATION_KNOWHOW_KNOWLEDGE_BUILDER_SKILL_DIRECTORY,
+                ORGANIZATION_KNOWHOW_KNOWLEDGE_BUILDER_SKILL_CONTENT,
+            ),
+            (
+                GROWTH_STRATEGY_KNOWLEDGE_BUILDER_SKILL_DIRECTORY,
+                GROWTH_STRATEGY_KNOWLEDGE_BUILDER_SKILL_CONTENT,
+            ),
+        ] {
+            let manifest = parse_skill_manifest_from_content(content)
+                .unwrap_or_else(|error| panic!("{directory} manifest should parse: {error}"));
+            assert!(
+                manifest.compliance.is_standard,
+                "{directory} should be standard: {:?}",
+                manifest.compliance.validation_errors
+            );
+            assert!(
+                manifest.metadata.compatibility.as_deref().is_some(),
+                "{directory} should keep compatibility as scalar frontmatter"
+            );
+        }
     }
 
     #[test]

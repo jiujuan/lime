@@ -40,6 +40,7 @@ const mountedRoots: Array<{ container: HTMLDivElement; root: Root }> = [];
 function createParsedCommand() {
   return {
     rawText: "@配图 生成 城市夜景主视觉",
+    commandKey: "image_generate",
     trigger: "@配图" as const,
     body: "生成 城市夜景主视觉",
     mode: "generate" as const,
@@ -317,6 +318,7 @@ describe("useWorkspaceImageWorkbenchActionRuntime", () => {
       rawText: "@配图 编辑 #img-2 去掉角标，保留主体",
       parsedCommand: {
         rawText: "@配图 编辑 #img-2 去掉角标，保留主体",
+        commandKey: "image_edit",
         trigger: "@配图",
         body: "编辑 #img-2 去掉角标，保留主体",
         mode: "edit",
@@ -371,6 +373,7 @@ describe("useWorkspaceImageWorkbenchActionRuntime", () => {
       rawText: "@配图 生成 柴犬头像暖色插画",
       parsedCommand: {
         rawText: "@配图 生成 柴犬头像暖色插画",
+        commandKey: "image_generate",
         trigger: "@配图",
         body: "生成 柴犬头像暖色插画",
         mode: "generate",

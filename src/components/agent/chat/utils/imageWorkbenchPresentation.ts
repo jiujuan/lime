@@ -1,3 +1,4 @@
+import { getLimeI18n } from "@/i18n/createI18n";
 import type { MessageImageWorkbenchPreview } from "../types";
 
 function titleCaseModelSegment(value: string): string {
@@ -55,93 +56,36 @@ export function resolveImageWorkbenchPreviewModelLabel(
   );
 }
 
-function stripLeadingImageIntent(value: string): string {
-  return value
-    .replace(/^@\S+(?:\s+\S+)?\s*/u, "")
-    .replace(/^(?:请|麻烦你?|帮我|给我)?\s*(?:生成|画|绘制|做|制作|出)\s*/u, "")
-    .trim();
-}
+type ImageWorkbenchPresentationKey =
+  | "agentChat.imageWorkbenchPresentation.process.prepareParameters"
+  | "agentChat.imageWorkbenchPresentation.process.generateNow"
+  | "agentChat.imageWorkbenchPresentation.caption.completeWithSubject"
+  | "agentChat.imageWorkbenchPresentation.caption.completeDefault"
+  | "agentChat.imageWorkbenchPresentation.caption.partialWithCount"
+  | "agentChat.imageWorkbenchPresentation.caption.partialDefault"
+  | "agentChat.imageWorkbenchPresentation.caption.failedWithMessage"
+  | "agentChat.imageWorkbenchPresentation.caption.failedDefault"
+  | "agentChat.imageWorkbenchPresentation.caption.cancelled";
 
-function truncatePromptSnippet(value: string, maxLength = 72): string {
-  const normalized = stripLeadingImageIntent(
-    collapseImageWorkbenchWhitespace(value)
-      .replace(/```[\s\S]*?```/g, " ")
-      .replace(/!\[[^\]]*]\([^)]*\)/g, " "),
-  );
-
-  if (normalized.length <= maxLength) {
-    return normalized;
-  }
-
-  return `${normalized.slice(0, maxLength).trim()}...`;
-}
-
-function resolveGeneratedSubject(params: {
-  prompt: string;
-  expectedImageCount?: number | null;
-  layoutHint?: string | null;
-}): string {
-  const snippet = truncatePromptSnippet(params.prompt);
-  if (!snippet) {
-    return "这张图";
-  }
-
-  if (
-    params.layoutHint === "storyboard_3x3" ||
-    (params.expectedImageCount ?? 0) > 1
-  ) {
-    const groupSnippet = snippet.replace(
-      /^一(?:张|幅|个|颗|只|位|款|片|座|条|枚|束|份|套|辆|间)\s*/u,
-      "",
-    );
-    return /^一组|^这组|^\d+\s*张|^九张|^9张/u.test(snippet)
-      ? snippet
-      : `一组${groupSnippet || snippet}`;
-  }
-
-  return /^一(?:张|幅|组|个|颗|只|位|款|片|座|条|枚|束|份|套|辆|间)|^这张|^这幅|^从/u.test(
-    snippet,
-  )
-    ? snippet
-    : `一张${snippet}`;
-}
-
-function resolveImageActionIntro(params: {
-  prompt: string;
-  mode?: MessageImageWorkbenchPreview["mode"];
-  modelName?: string | null;
-  expectedImageCount?: number | null;
-  layoutHint?: string | null;
-}): string {
-  const modelLabel = resolveImageWorkbenchModelLabel(params.modelName);
-  const modelPrefix = modelLabel ? `用 ${modelLabel} ` : "";
-  const subject = resolveGeneratedSubject({
-    prompt: params.prompt,
-    expectedImageCount: params.expectedImageCount,
-    layoutHint: params.layoutHint,
+function tImageWorkbenchPresentation(
+  key: ImageWorkbenchPresentationKey,
+  options?: Record<string, unknown>,
+): string {
+  return getLimeI18n().t(key, {
+    ns: "agent",
+    ...(options || {}),
   });
-
-  switch (params.mode) {
-    case "edit":
-      return `好嘞，${modelPrefix}按你的要求处理${subject}`;
-    case "variation":
-      return `好嘞，${modelPrefix}按你的要求重绘${subject}`;
-    case "generate":
-    default:
-      return `好嘞，${modelPrefix}给你生成${subject}`;
-  }
 }
 
-export function buildImageWorkbenchAssistantContent(params: {
-  prompt: string;
-  mode?: MessageImageWorkbenchPreview["mode"];
-  modelName?: string | null;
-  expectedImageCount?: number | null;
-  layoutHint?: string | null;
-}): string {
-  return [resolveImageActionIntro(params), "先获取下工具参数", "马上生成"].join(
-    "\n",
-  );
+export function buildImageWorkbenchProcessLines(): string[] {
+  return [
+    tImageWorkbenchPresentation(
+      "agentChat.imageWorkbenchPresentation.process.prepareParameters",
+    ),
+    tImageWorkbenchPresentation(
+      "agentChat.imageWorkbenchPresentation.process.generateNow",
+    ),
+  ];
 }
 
 export function buildImageWorkbenchCaption(params: {
@@ -150,23 +94,33 @@ export function buildImageWorkbenchCaption(params: {
   imageCount?: number | null;
   statusMessage?: string | null;
 }): string | null {
-  const detail = truncatePromptSnippet(params.prompt, 42);
-
   switch (params.status) {
     case "complete":
-      return detail
-        ? `搞定，已生成${resolveGeneratedSubject({ prompt: detail })}。`
-        : "搞定，图片已生成。";
+      return tImageWorkbenchPresentation(
+        "agentChat.imageWorkbenchPresentation.caption.completeDefault",
+      );
     case "partial":
       return params.imageCount && params.imageCount > 0
-        ? `先生成了 ${params.imageCount} 张结果。`
-        : "先生成了部分结果。";
+        ? tImageWorkbenchPresentation(
+            "agentChat.imageWorkbenchPresentation.caption.partialWithCount",
+            { count: params.imageCount },
+          )
+        : tImageWorkbenchPresentation(
+            "agentChat.imageWorkbenchPresentation.caption.partialDefault",
+          );
     case "failed":
       return params.statusMessage?.trim()
-        ? `这次没有生成成功：${params.statusMessage.trim()}`
-        : "这次没有生成成功。";
+        ? tImageWorkbenchPresentation(
+            "agentChat.imageWorkbenchPresentation.caption.failedWithMessage",
+            { message: params.statusMessage.trim() },
+          )
+        : tImageWorkbenchPresentation(
+            "agentChat.imageWorkbenchPresentation.caption.failedDefault",
+          );
     case "cancelled":
-      return "已停止生成。";
+      return tImageWorkbenchPresentation(
+        "agentChat.imageWorkbenchPresentation.caption.cancelled",
+      );
     case "running":
     default:
       return null;

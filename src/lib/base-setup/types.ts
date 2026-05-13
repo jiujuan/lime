@@ -201,6 +201,15 @@ export interface BaseSetupCompositionDeliveryContract {
 export interface BaseSetupCommandBinding {
   skillId?: string;
   executionKind?: BaseSetupCommandExecutionKind;
+  requestDefaults?: Record<string, string>;
+  intentConfirmation?: BaseSetupCommandIntentConfirmation;
+}
+
+export interface BaseSetupCommandIntentConfirmation {
+  id: string;
+  ruleKey: string;
+  confirmationKey: string;
+  systemPromptKey?: string;
 }
 
 export interface BaseSetupRenderContract {

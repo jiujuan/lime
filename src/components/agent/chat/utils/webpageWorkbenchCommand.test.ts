@@ -28,7 +28,7 @@ describe("parseWebpageWorkbenchCommand", () => {
     });
   });
 
-  it("应兼容 Ribbi 风格的网页编排命令", () => {
+  it("应兼容 多词别名风格的网页编排命令", () => {
     const composerResult = parseWebpageWorkbenchCommand(
       "@Web Composer campaign page for spring coffee launch",
     );

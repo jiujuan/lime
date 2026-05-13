@@ -1,12 +1,10 @@
-export type ImageWorkbenchCommandTrigger =
-  | "@配图"
-  | "@Nanobanana Pro"
-  | "@分镜"
-  | "@修图"
-  | "@重绘"
-  | "@Vision 1"
-  | "@image"
-  | "/image";
+import {
+  getSeededSkillCatalog,
+  listSkillCatalogCommandEntries,
+  type SkillCatalogCommandEntry,
+} from "@/lib/api/skillCatalog";
+
+export type ImageWorkbenchCommandTrigger = string;
 
 export type ImageWorkbenchCommandMode = "generate" | "edit" | "variation";
 
@@ -14,8 +12,19 @@ const MAX_IMAGE_WORKBENCH_COUNT = 16;
 const STORYBOARD_3X3_REGEX =
   /(?:\b3\s*[x×*]\s*3\b|九宫格|storyboard)(?:\s*(?:分镜(?:板|版)?|网格图))?/i;
 
+interface ImageWorkbenchCommandDefinition {
+  commandKey: string;
+  trigger: string;
+  mode?: ImageWorkbenchCommandMode;
+  layoutHint?: string;
+  count?: number;
+  providerId?: string;
+  modelId?: string;
+}
+
 export interface ParsedImageWorkbenchCommand {
   rawText: string;
+  commandKey?: string;
   trigger: ImageWorkbenchCommandTrigger;
   body: string;
   mode: ImageWorkbenchCommandMode;
@@ -29,42 +38,112 @@ export interface ParsedImageWorkbenchCommand {
   modelId?: string;
 }
 
-const IMAGE_COMMAND_PREFIX_REGEX =
-  /^\s*(@配图|@Nanobanana Pro|@分镜|@修图|@重绘|@Vision 1|@image|\/image)(?:\s+|$)([\s\S]*)$/i;
 const TARGET_REF_REGEX = /#(img-[a-z0-9_-]+)/i;
 const SIZE_REGEX = /\b(\d{3,4}x\d{3,4})\b/i;
 const ASPECT_RATIO_REGEX = /\b(1:1|16:9|9:16|4:3|3:4|3:2|2:3|21:9|4:5|5:4)\b/i;
 
-function normalizeTrigger(value: string): ImageWorkbenchCommandTrigger {
-  const normalized = value.trim().toLowerCase();
-  if (normalized === "@image") {
-    return "@image";
-  }
-  if (normalized === "/image") {
-    return "/image";
-  }
-  if (normalized === "@vision 1") {
-    return "@Vision 1";
-  }
-  if (normalized === "@nanobanana pro") {
-    return "@Nanobanana Pro";
-  }
-  if (normalized === "@分镜") {
-    return "@分镜";
-  }
-  if (normalized === "@修图") {
-    return "@修图";
-  }
-  if (normalized === "@重绘") {
-    return "@重绘";
-  }
-  return "@配图";
+function isImageWorkbenchCommandEntry(
+  entry: SkillCatalogCommandEntry,
+): boolean {
+  return entry.binding?.requestDefaults?.imageWorkbench === "true";
 }
 
-function isStoryboardCommandTrigger(
-  trigger: ImageWorkbenchCommandTrigger,
-): boolean {
-  return trigger === "@分镜";
+function readCommandRequestDefault(
+  entry: SkillCatalogCommandEntry,
+  ...keys: string[]
+): string | undefined {
+  const defaults = entry.binding?.requestDefaults;
+  if (!defaults) {
+    return undefined;
+  }
+
+  for (const key of keys) {
+    const value = defaults[key]?.trim();
+    if (value) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function buildImageWorkbenchCommandDefinitions(): ImageWorkbenchCommandDefinition[] {
+  const definitions = listSkillCatalogCommandEntries(getSeededSkillCatalog())
+    .filter(isImageWorkbenchCommandEntry)
+    .flatMap((entry) =>
+      entry.triggers.map((trigger) => {
+        const providerId = readCommandRequestDefault(
+          entry,
+          "providerId",
+          "provider_id",
+        );
+        const modelId = readCommandRequestDefault(entry, "model", "modelId");
+        const modeDefault = readCommandRequestDefault(entry, "mode");
+        const mode: ImageWorkbenchCommandMode | undefined =
+          modeDefault === "edit" ||
+          modeDefault === "variation" ||
+          modeDefault === "generate"
+            ? modeDefault
+            : undefined;
+        const layoutHint = readCommandRequestDefault(
+          entry,
+          "layoutHint",
+          "layout_hint",
+        );
+        const count = Number(readCommandRequestDefault(entry, "count")) || 0;
+        const definition: ImageWorkbenchCommandDefinition = {
+          commandKey: entry.commandKey,
+          trigger: trigger.prefix,
+        };
+        if (mode) {
+          definition.mode = mode;
+        }
+        if (layoutHint) {
+          definition.layoutHint = layoutHint;
+        }
+        if (count > 0) {
+          definition.count = count;
+        }
+        if (providerId) {
+          definition.providerId = providerId;
+        }
+        if (modelId) {
+          definition.modelId = modelId;
+        }
+        return definition;
+      }),
+    );
+
+  return definitions.sort(
+    (left, right) => right.trigger.length - left.trigger.length,
+  );
+}
+
+const IMAGE_WORKBENCH_COMMAND_DEFINITIONS =
+  buildImageWorkbenchCommandDefinitions();
+
+function matchImageWorkbenchCommandPrefix(
+  text: string,
+): { definition: ImageWorkbenchCommandDefinition; body: string } | null {
+  const trimmed = text.trimStart();
+  if (!trimmed) {
+    return null;
+  }
+
+  for (const definition of IMAGE_WORKBENCH_COMMAND_DEFINITIONS) {
+    const prefix = trimmed.slice(0, definition.trigger.length);
+    if (prefix.toLowerCase() !== definition.trigger.toLowerCase()) {
+      continue;
+    }
+    const nextChar = trimmed.charAt(definition.trigger.length);
+    if (nextChar && !/\s/u.test(nextChar)) {
+      continue;
+    }
+    return {
+      definition,
+      body: trimmed.slice(definition.trigger.length).trim(),
+    };
+  }
+  return null;
 }
 
 function clampCount(value: number | null | undefined): number {
@@ -92,7 +171,7 @@ function extractExplicitCount(body: string): number | undefined {
 }
 
 function resolveLayoutHint(params: {
-  trigger: ImageWorkbenchCommandTrigger;
+  commandDefinition: ImageWorkbenchCommandDefinition;
   body: string;
   explicitCount?: number;
 }): string | undefined {
@@ -101,21 +180,21 @@ function resolveLayoutHint(params: {
   }
 
   if (
-    isStoryboardCommandTrigger(params.trigger) &&
+    params.commandDefinition.layoutHint &&
     (params.explicitCount == null || params.explicitCount === 9)
   ) {
-    return "storyboard_3x3";
+    return params.commandDefinition.layoutHint;
   }
 
   return undefined;
 }
 
 function extractCount(params: {
-  trigger: ImageWorkbenchCommandTrigger;
+  commandDefinition: ImageWorkbenchCommandDefinition;
   explicitCount?: number;
   layoutHint?: string;
 }): number {
-  const { trigger, explicitCount, layoutHint } = params;
+  const { commandDefinition, explicitCount, layoutHint } = params;
   if (layoutHint === "storyboard_3x3") {
     return 9;
   }
@@ -124,19 +203,16 @@ function extractCount(params: {
     return explicitCount;
   }
 
-  return isStoryboardCommandTrigger(trigger) ? 9 : 1;
+  return clampCount(commandDefinition.count || 1);
 }
 
 function resolveMode(
-  trigger: ImageWorkbenchCommandTrigger,
+  commandDefinition: ImageWorkbenchCommandDefinition,
   normalizedBody: string,
   targetRef?: string,
 ): ImageWorkbenchCommandMode {
-  if (trigger === "@修图") {
-    return "edit";
-  }
-  if (trigger === "@重绘") {
-    return "variation";
+  if (commandDefinition.mode) {
+    return commandDefinition.mode;
   }
   if (/^(编辑|edit|修改)(?:\s|$|[:：])/i.test(normalizedBody)) {
     return "edit";
@@ -148,19 +224,6 @@ function resolveMode(
     return "generate";
   }
   return targetRef ? "variation" : "generate";
-}
-
-function resolveTriggerModelOverride(
-  trigger: ImageWorkbenchCommandTrigger,
-): Pick<ParsedImageWorkbenchCommand, "providerId" | "modelId"> {
-  if (trigger === "@Nanobanana Pro") {
-    return {
-      providerId: "fal",
-      modelId: "fal-ai/nano-banana-pro",
-    };
-  }
-
-  return {};
 }
 
 function stripPromptDecorations(body: string, layoutHint?: string): string {
@@ -222,33 +285,32 @@ function resolveSize(body: string): { size?: string; aspectRatio?: string } {
 export function parseImageWorkbenchCommand(
   text: string,
 ): ParsedImageWorkbenchCommand | null {
-  const matched = text.match(IMAGE_COMMAND_PREFIX_REGEX);
+  const matched = matchImageWorkbenchCommandPrefix(text);
   if (!matched) {
     return null;
   }
 
-  const trigger = normalizeTrigger(matched[1] || "");
-  const body = (matched[2] || "").trim();
+  const { definition, body } = matched;
   const targetRef = body.match(TARGET_REF_REGEX)?.[1];
   const normalizedBody = body.trim();
-  const mode = resolveMode(trigger, normalizedBody, targetRef);
+  const mode = resolveMode(definition, normalizedBody, targetRef);
   const explicitCount = extractExplicitCount(normalizedBody);
   const layoutHint = resolveLayoutHint({
-    trigger,
+    commandDefinition: definition,
     body: normalizedBody,
     explicitCount,
   });
   const { size, aspectRatio } = resolveSize(normalizedBody);
-  const modelOverride = resolveTriggerModelOverride(trigger);
 
   return {
     rawText: text,
-    trigger,
+    commandKey: definition.commandKey,
+    trigger: definition.trigger,
     body,
     mode,
     prompt: stripPromptDecorations(normalizedBody, layoutHint),
     count: extractCount({
-      trigger,
+      commandDefinition: definition,
       explicitCount,
       layoutHint,
     }),
@@ -256,7 +318,8 @@ export function parseImageWorkbenchCommand(
     size,
     aspectRatio,
     targetRef,
-    ...modelOverride,
+    ...(definition.providerId ? { providerId: definition.providerId } : {}),
+    ...(definition.modelId ? { modelId: definition.modelId } : {}),
   };
 }
 
@@ -266,7 +329,6 @@ export function shouldRouteImageWorkbenchCommandToSkill(input: {
 }): boolean {
   const { parsedCommand, attachedImageCount = 0 } = input;
   return (
-    parsedCommand.trigger !== "@修图" &&
     parsedCommand.mode === "generate" &&
     !parsedCommand.targetRef &&
     attachedImageCount === 0

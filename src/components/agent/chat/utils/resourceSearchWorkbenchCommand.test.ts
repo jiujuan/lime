@@ -47,7 +47,7 @@ describe("parseResourceSearchWorkbenchCommand", () => {
     });
   });
 
-  it("应兼容 Ribbi 风格的图片搜索命令，并默认按图片检索", () => {
+  it("应兼容 多词别名风格的图片搜索命令，并默认按图片检索", () => {
     const imageSearchResult = parseResourceSearchWorkbenchCommand(
       "@Image Search coffee shop window light for social cover",
     );

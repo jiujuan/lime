@@ -43,7 +43,7 @@ describe("parseTranslationWorkbenchCommand", () => {
     });
   });
 
-  it("应兼容 Ribbi 风格的 @Write Translate 命令", () => {
+  it("应兼容 多词别名风格的 @Write Translate 命令", () => {
     const result = parseTranslationWorkbenchCommand(
       "@Write Translate 把这段产品说明译成英文，保留品牌语气",
     );

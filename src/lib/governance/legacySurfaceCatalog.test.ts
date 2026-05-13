@@ -134,6 +134,20 @@ describe("legacySurfaceCatalog", () => {
     ]);
   });
 
+  it("应记录已删除的普通视觉 brief 确认旧 helper", () => {
+    const monitor = legacySurfaceCatalogJson.imports.find(
+      (entry) =>
+        entry.id === "agent-chat-plain-visual-brief-confirmation-helper",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead-candidate");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.targets).toEqual([
+      "src/components/agent/chat/utils/plainVisualBriefConfirmation.ts",
+    ]);
+  });
+
   it("应记录已删除的首页空态 SceneApp 旧面板", () => {
     const importMonitor = legacySurfaceCatalogJson.imports.find(
       (entry) => entry.id === "empty-state-legacy-sceneapps-panel-entry",

@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale, getLimeI18n } from "@/i18n/createI18n";
 import type { TeamMemorySnapshot } from "@/lib/teamMemorySync";
 import type { ServiceSkillHomeItem } from "../service-skills/types";
 import type { Message } from "../types";
@@ -27,6 +28,7 @@ const mockGetOrCreateDefaultProject = vi.hoisted(() => vi.fn());
 const mockResolveOemCloudRuntimeContext = vi.hoisted(() => vi.fn());
 const mockGetOemCloudBootstrapSnapshot = vi.hoisted(() => vi.fn());
 const mockUseGlobalMediaGenerationDefaults = vi.hoisted(() => vi.fn());
+const mockInstallSkillFromPromptInstruction = vi.hoisted(() => vi.fn());
 
 vi.mock("../utils/browserAssistPreheat", () => ({
   preheatBrowserAssistInBackground: mockPreheatBrowserAssistInBackground,
@@ -64,6 +66,20 @@ vi.mock("@/hooks/useGlobalMediaGenerationDefaults", () => ({
   useGlobalMediaGenerationDefaults: () =>
     mockUseGlobalMediaGenerationDefaults(),
 }));
+
+vi.mock("@/lib/skills/skillInstallPrompt", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/lib/skills/skillInstallPrompt")>(
+      "@/lib/skills/skillInstallPrompt",
+    );
+
+  return {
+    ...actual,
+    installSkillFromPromptInstruction: (
+      ...args: Parameters<typeof actual.installSkillFromPromptInstruction>
+    ) => mockInstallSkillFromPromptInstruction(...args),
+  };
+});
 
 vi.mock("@/lib/api/project", async () => {
   const actual =
@@ -505,7 +521,8 @@ function mountHook(initialProps?: Partial<HookProps>): HookHarness {
 }
 
 describe("useWorkspaceSendActions", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await changeLimeLocale("zh-CN");
     (
       globalThis as typeof globalThis & {
         IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -527,6 +544,24 @@ describe("useWorkspaceSendActions", () => {
     mockUseGlobalMediaGenerationDefaults.mockReturnValue({
       mediaDefaults: {},
       loading: false,
+    });
+    mockInstallSkillFromPromptInstruction.mockResolvedValue({
+      directory: "viral-content-breakdown",
+      inspection: {
+        content: "",
+        metadata: {},
+        allowedTools: [],
+        resourceSummary: {
+          hasScripts: false,
+          hasReferences: false,
+          hasAssets: false,
+        },
+        standardCompliance: {
+          isStandard: true,
+          validationErrors: [],
+          deprecatedFields: [],
+        },
+      },
     });
     mockOpenRuntimeSceneGate.mockResolvedValue(undefined);
   });
@@ -767,6 +802,10 @@ describe("useWorkspaceSendActions", () => {
         | undefined;
       expect(applyLocalMessages).toBeTypeOf("function");
       const nextMessages = applyLocalMessages?.([]);
+      const confirmationText = getLimeI18n().t(
+        "agentChat.inputIntent.imageGeneration.confirm",
+        { ns: "agent" },
+      );
       expect(nextMessages?.[0]).toMatchObject({
         role: "user",
         content:
@@ -774,12 +813,97 @@ describe("useWorkspaceSendActions", () => {
       });
       expect(nextMessages?.[1]).toMatchObject({
         role: "assistant",
-        content: "这看起来是图片生成需求，要我直接调用画图功能生成吗？",
+        content: confirmationText,
       });
       expect(nextMessages?.[1]?.isThinking).toBeUndefined();
       expect(nextMessages?.[1]?.runtimeStatus).toBeUndefined();
       expect(mockSetInput).toHaveBeenCalledWith("");
       expect(mockFinalizeAfterSendSuccess).toHaveBeenCalledTimes(1);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("粘贴官网 Agent Skill 安装 Prompt 时应本地安装并停止发送给模型", async () => {
+    const harness = mountHook();
+    const prompt = `Download and install a skill. Follow these steps EXACTLY. If any step fails, STOP and report the error.
+SKILL_NAME="viral-content-breakdown"
+DOWNLOAD_URL="https://limeai.run/skill-packages/viral-content-breakdown/latest/viral-content-breakdown.zip"
+1. Download the Skill package.
+2. Extract it into the Agent Skills directory.
+3. Restart or reload the Agent so the Skill becomes available.`;
+
+    try {
+      await act(async () => {
+        const started = await harness
+          .getValue()
+          .handleSend([], false, false, prompt, "react");
+        expect(started).toBe(true);
+      });
+
+      expect(mockInstallSkillFromPromptInstruction).toHaveBeenCalledTimes(1);
+      expect(mockInstallSkillFromPromptInstruction.mock.calls[0]?.[0]).toEqual({
+        skillName: "viral-content-breakdown",
+        downloadUrl:
+          "https://limeai.run/skill-packages/viral-content-breakdown/latest/viral-content-breakdown.zip",
+        source: "assignment_prompt",
+      });
+      expect(mockInstallSkillFromPromptInstruction.mock.calls[0]?.[1]).toBe(
+        "lime",
+      );
+      expect(mockSendMessage).not.toHaveBeenCalled();
+      const applyLocalMessages = mockSetChatMessages.mock.calls[0]?.[0] as
+        | ((previous: Message[]) => Message[])
+        | undefined;
+      const nextMessages = applyLocalMessages?.([]);
+      expect(nextMessages?.[0]).toMatchObject({
+        role: "user",
+        content: prompt,
+      });
+      expect(nextMessages?.[1]).toMatchObject({
+        role: "assistant",
+        content: getLimeI18n().t(
+          "agentChat.skillInstallPrompt.installedConfirmation",
+          {
+            ns: "agent",
+            skill: "viral-content-breakdown",
+          },
+        ),
+      });
+      expect(mockFinalizeAfterSendSuccess).toHaveBeenCalledTimes(1);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("Skill 安装 Prompt 的本地确认应跟随全局语言", async () => {
+    await changeLimeLocale("en-US");
+    const harness = mountHook();
+
+    try {
+      await act(async () => {
+        const started = await harness
+          .getValue()
+          .handleSend(
+            [],
+            false,
+            false,
+            `Download and install a skill.
+SKILL_NAME="viral-content-breakdown"
+DOWNLOAD_URL="https://limeai.run/skill-packages/viral-content-breakdown/latest/viral-content-breakdown.zip"
+Extract it into the Agent Skills directory.`,
+            "react",
+          );
+        expect(started).toBe(true);
+      });
+
+      const applyLocalMessages = mockSetChatMessages.mock.calls[0]?.[0] as
+        | ((previous: Message[]) => Message[])
+        | undefined;
+      const nextMessages = applyLocalMessages?.([]);
+      expect(nextMessages?.[1]?.content).toContain(
+        "Installed Skill: viral-content-breakdown",
+      );
     } finally {
       harness.unmount();
     }
@@ -1373,7 +1497,7 @@ describe("useWorkspaceSendActions", () => {
         },
         assistantDraft: {
           content:
-            "好嘞，给你生成一组春日咖啡馆插画\n先获取下工具参数\n马上生成",
+            "好啊，生成：一张春日咖啡馆插画\n先获取下工具参数\n马上生成",
           preserveContent: true,
           imageWorkbenchPreview: {
             prompt: "一张春日咖啡馆插画",
@@ -1425,7 +1549,7 @@ describe("useWorkspaceSendActions", () => {
       expect(sendOptions).toMatchObject({
         assistantDraft: {
           content:
-            "好嘞，用 Nanobanana Pro 给你生成一张广州塔，从花城汇看过去的春天的照片\n先获取下工具参数\n马上生成",
+            "好啊，用 Nanobanana Pro 生成：一张广州塔，从花城汇看过去的春天的照片\n先获取下工具参数\n马上生成",
           preserveContent: true,
           imageWorkbenchPreview: {
             prompt: "一张广州塔，从花城汇看过去的春天的照片",
@@ -2871,7 +2995,7 @@ describe("useWorkspaceSendActions", () => {
     }
   });
 
-  it("通过 active installed skill route 发送时，应保留原始显示文案并回写 slash skill 最近使用", async () => {
+  it("通过 active installed skill route 发送时，应归一 local:* 并回写 slash skill 最近使用", async () => {
     const harness = mountHook({
       input: "整理最近发布计划",
     });
@@ -2890,7 +3014,7 @@ describe("useWorkspaceSendActions", () => {
             {
               capabilityRoute: {
                 kind: "installed_skill",
-                skillKey: "writer",
+                skillKey: "local:writer",
                 skillName: "写作助手",
               },
               displayContent: "整理最近发布计划",

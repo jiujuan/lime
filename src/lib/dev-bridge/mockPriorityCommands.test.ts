@@ -164,6 +164,14 @@ describe("mockPriorityCommands", () => {
     expect(
       shouldDisallowMockFallbackInBrowser("import_local_skill_for_app"),
     ).toBe(true);
+    expect(
+      shouldDisallowMockFallbackInBrowser("install_marketplace_skill_for_app"),
+    ).toBe(true);
+    expect(
+      shouldDisallowMockFallbackInBrowser(
+        "install_skill_from_download_url_for_app",
+      ),
+    ).toBe(true);
   });
 
   it("运行时真相事件在浏览器模式下禁止静默退回 mock", () => {

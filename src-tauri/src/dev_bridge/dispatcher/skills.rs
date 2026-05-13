@@ -127,6 +127,36 @@ pub(super) async fn try_handle(
                 .map_err(|e| format!("导入本地 Skill 失败: {e}"))?;
             serde_json::to_value(result)?
         }
+        "install_marketplace_skill_for_app" => {
+            let args = args_or_default(args);
+            let app = args
+                .get("app")
+                .and_then(|value| value.as_str())
+                .unwrap_or("lime")
+                .to_string();
+            let bundle = parse_nested_arg::<crate::commands::skill_cmd::MarketplaceSkillBundle>(
+                &args, "bundle",
+            )?;
+            let result = crate::commands::skill_cmd::install_marketplace_skill_for_app(app, bundle)
+                .map_err(|e| format!("安装官方 Skill 失败: {e}"))?;
+            serde_json::to_value(result)?
+        }
+        "install_skill_from_download_url_for_app" => {
+            let args = args_or_default(args);
+            let app = args
+                .get("app")
+                .and_then(|value| value.as_str())
+                .unwrap_or("lime")
+                .to_string();
+            let request = parse_nested_arg::<
+                crate::commands::skill_cmd::SkillDownloadInstallRequest,
+            >(&args, "request")?;
+            let result =
+                crate::commands::skill_cmd::install_skill_from_download_url_for_app(app, request)
+                    .await
+                    .map_err(|e| format!("安装下载 Skill 失败: {e}"))?;
+            serde_json::to_value(result)?
+        }
         "uninstall_skill" | "uninstall_skill_for_app" => {
             let args = args_or_default(args);
             let app = args

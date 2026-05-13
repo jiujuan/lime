@@ -95,6 +95,13 @@ export interface SkillCatalogCommandTrigger {
   prefix: string;
 }
 
+export interface SkillCatalogCommandIntentConfirmation {
+  id: string;
+  ruleKey: string;
+  confirmationKey: string;
+  systemPromptKey?: string;
+}
+
 export interface SkillCatalogSkillEntry {
   id: string;
   kind: "skill";
@@ -127,6 +134,8 @@ export interface SkillCatalogCommandEntry {
       | "task_queue"
       | "server_api"
       | "cli";
+    requestDefaults?: Record<string, string>;
+    intentConfirmation?: SkillCatalogCommandIntentConfirmation;
   };
   renderContract?: SkillCatalogRenderContract;
 }
@@ -366,6 +375,34 @@ function parseCommandBindingExecutionKind(
   return undefined;
 }
 
+function parseCommandIntentConfirmation(
+  value: unknown,
+): SkillCatalogCommandIntentConfirmation | undefined {
+  if (!isPlainRecord(value)) {
+    return undefined;
+  }
+
+  const id = normalizeText(value.id);
+  const ruleKey = normalizeText(value.ruleKey) ?? normalizeText(value.rule_key);
+  const confirmationKey =
+    normalizeText(value.confirmationKey) ??
+    normalizeText(value.confirmation_key);
+  if (!id || !ruleKey || !confirmationKey) {
+    return undefined;
+  }
+
+  const systemPromptKey =
+    normalizeText(value.systemPromptKey) ??
+    normalizeText(value.system_prompt_key);
+
+  return {
+    id,
+    ruleKey,
+    confirmationKey,
+    ...(systemPromptKey ? { systemPromptKey } : {}),
+  };
+}
+
 function parseSceneExecutionKind(
   value: unknown,
 ): SkillCatalogSceneEntry["executionKind"] | undefined {
@@ -393,6 +430,24 @@ function normalizeSearchAliases(value: unknown): string[] | undefined {
     .filter((item): item is string => Boolean(item));
 
   return aliases.length > 0 ? aliases : undefined;
+}
+
+function normalizeStringRecord(
+  value: unknown,
+): Record<string, string> | undefined {
+  if (!isPlainRecord(value)) {
+    return undefined;
+  }
+
+  const result: Record<string, string> = {};
+  for (const [key, item] of Object.entries(value)) {
+    const normalized = normalizeText(item);
+    if (normalized) {
+      result[key] = normalized;
+    }
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
 }
 
 function normalizeSurfaceScopes(
@@ -1080,12 +1135,23 @@ function parseSkillCatalogEntry(value: unknown): SkillCatalogEntry | null {
     }
 
     const binding = isPlainRecord(value.binding)
-      ? {
-          skillId: normalizeText(value.binding.skillId) ?? undefined,
-          executionKind: parseCommandBindingExecutionKind(
-            value.binding.executionKind,
-          ),
-        }
+      ? (() => {
+          const requestDefaults =
+            normalizeStringRecord(value.binding.requestDefaults) ??
+            normalizeStringRecord(value.binding.request_defaults);
+          const intentConfirmation = parseCommandIntentConfirmation(
+            value.binding.intentConfirmation ??
+              value.binding.intent_confirmation,
+          );
+          return {
+            skillId: normalizeText(value.binding.skillId) ?? undefined,
+            executionKind: parseCommandBindingExecutionKind(
+              value.binding.executionKind,
+            ),
+            ...(requestDefaults ? { requestDefaults } : {}),
+            ...(intentConfirmation ? { intentConfirmation } : {}),
+          };
+        })()
       : undefined;
 
     return {

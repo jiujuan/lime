@@ -5058,6 +5058,24 @@ mod tests {
                         "provider_id": "custom-f0181b00-35b6-4731-94e2-24f17fd247c9",
                         "model": "gpt-images-2",
                         "size": "1024x1024",
+                        "persona_context": {
+                            "version": "lime-image-persona-v1",
+                            "persona_id": "lime_image_creator",
+                            "conversation_policy": {
+                                "single_assistant_message": true,
+                                "no_submission_summary": true
+                            }
+                        },
+                        "presentation": {
+                            "version": "lime-image-chat-v1",
+                            "assistant_intro": "好啊，用 GPT Image 2 处理：把这张海报改成更清爽的青柠风格\n先获取下工具参数\n马上生成"
+                        },
+                        "taste_context": {
+                            "version": "lime-image-taste-v1",
+                            "source": "taste_layer",
+                            "memory_sources": ["explicit_prompt", "reference_images"],
+                            "chat_policy": "do_not_explain_taste_sources_in_conversation"
+                        },
                         "reference_images": [
                             "/tmp/lime/turn-inputs/session-1/turn-1/input-1.png"
                         ]
@@ -5106,6 +5124,12 @@ mod tests {
         assert!(merged.contains("每一格都必须提供完整 prompt"));
         assert!(merged.contains("电影、动漫、短视频、广告"));
         assert!(merged.contains("当前任务已经显式进入图片技能主链"));
+        assert!(merged.contains("当前图片生成人设契约(JSON)"));
+        assert!(merged.contains("当前聊天展示契约(JSON)"));
+        assert!(merged.contains("当前品味/记忆规划上下文(JSON)"));
+        assert!(merged.contains("不要在聊天区暴露内部来源或参考站名称"));
+        let reference_site_name = ["ri", "bbi"].concat();
+        assert!(!merged.to_ascii_lowercase().contains(&reference_site_name));
     }
 
     #[test]

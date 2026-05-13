@@ -43,9 +43,9 @@ import {
   type SessionImageWorkbenchState,
 } from "./imageWorkbenchHelpers";
 import {
-  buildImageWorkbenchAssistantContent,
   buildImageWorkbenchCaption,
 } from "../utils/imageWorkbenchPresentation";
+import { buildImageTaskAssistantContent } from "./imageTaskPersona";
 import {
   isImageWorkbenchStatusOnlyText,
   isImageWorkbenchSubmissionTemplateText,
@@ -80,6 +80,9 @@ interface CreationTaskSubmittedPayload {
   mode?: string;
   layout_hint?: string;
   raw_text?: string;
+  persona_context?: Record<string, unknown>;
+  presentation?: Record<string, unknown>;
+  taste_context?: Record<string, unknown>;
   provider?: string;
   provider_id?: string;
   model?: string;
@@ -285,6 +288,86 @@ function readString(
       if (typeof value === "string" && value.trim()) {
         return value.trim();
       }
+    }
+  }
+  return undefined;
+}
+
+function readImageTaskPresentationText(
+  candidates: Array<Record<string, unknown> | null | undefined>,
+): string | undefined {
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+    const presentation = asRecord(candidate.presentation);
+    const value = readString(
+      [presentation, candidate],
+      ["assistant_intro", "assistantIntro"],
+    );
+    if (value) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function readNestedPresentationCaption(
+  presentation: Record<string, unknown> | null | undefined,
+  status: MessageImageWorkbenchPreview["status"],
+): string | undefined {
+  if (!presentation) {
+    return undefined;
+  }
+
+  const resultCaptions = asRecord(presentation.result_captions);
+  const statusSpecificKeys: string[] = (() => {
+    switch (status) {
+      case "complete":
+        return ["completion_caption", "completionCaption", "complete"];
+      case "partial":
+        return ["partial_caption", "partialCaption", "partial"];
+      case "failed":
+        return [
+          "failed_caption",
+          "failedCaption",
+          "failure_caption",
+          "failureCaption",
+          "failed",
+          "failure",
+        ];
+      case "cancelled":
+        return ["cancelled_caption", "cancelledCaption", "cancelled"];
+      case "running":
+      default:
+        return [];
+    }
+  })();
+
+  return readString(
+    [presentation, resultCaptions],
+    [...statusSpecificKeys, "result_caption", "resultCaption"],
+  );
+}
+
+function readImageTaskPresentationCaption(
+  candidates: Array<Record<string, unknown> | null | undefined>,
+  status: MessageImageWorkbenchPreview["status"],
+): string | undefined {
+  if (status === "running") {
+    return undefined;
+  }
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+    const value = readNestedPresentationCaption(
+      asRecord(candidate.presentation) || candidate,
+      status,
+    );
+    if (value) {
+      return value;
     }
   }
   return undefined;
@@ -1467,6 +1550,8 @@ function buildParsedImageTaskSnapshot(params: {
   const currentAttempt = resolveAttemptRecord(params.taskRecord);
   const currentAttemptResult = currentAttempt?.result_snapshot;
   const resultValue = params.taskRecord.result;
+  const resultRecord = asRecord(resultValue);
+  const attemptResultRecord = asRecord(currentAttemptResult);
   const normalizedStatus = normalizeTaskStatus(
     typeof params.taskRecord.normalized_status === "string"
       ? params.taskRecord.normalized_status
@@ -1640,12 +1725,30 @@ function buildParsedImageTaskSnapshot(params: {
     runtimeContract?.model ??
     null;
   const previewPrompt = displayPrompt || prompt || `${taskLabel}进行中`;
-  const previewCaption = buildImageWorkbenchCaption({
-    prompt: previewPrompt,
-    status: previewStatus,
-    imageCount: successCount || undefined,
-    statusMessage: lastError || null,
-  });
+  const presentationText = readImageTaskPresentationText([
+    resultRecord,
+    attemptResultRecord,
+    payload,
+    uiHintsRecord,
+    params.taskRecord,
+  ]);
+  const previewCaption =
+    readImageTaskPresentationCaption(
+      [
+        resultRecord,
+        attemptResultRecord,
+        payload,
+        uiHintsRecord,
+        params.taskRecord,
+      ],
+      previewStatus,
+    ) ||
+    buildImageWorkbenchCaption({
+      prompt: previewPrompt,
+      status: previewStatus,
+      imageCount: successCount || undefined,
+      statusMessage: lastError || null,
+    });
   const preview: MessageImageWorkbenchPreview = {
     taskId: params.taskId,
     prompt: previewPrompt,
@@ -1688,13 +1791,13 @@ function buildParsedImageTaskSnapshot(params: {
     message: {
       id: resolveImageWorkbenchAssistantMessageId(params.taskId),
       role: "assistant",
-      content: buildImageWorkbenchAssistantContent({
-        prompt: previewPrompt,
-        mode: taskMode,
-        modelName: previewModelName,
-        expectedImageCount: expectedCount,
-        layoutHint,
-      }),
+      content:
+        presentationText ||
+        buildImageTaskAssistantContent({
+          prompt: previewPrompt,
+          mode: taskMode,
+          modelName: previewModelName,
+        }),
       timestamp: messageTimestamp,
       imageWorkbenchPreview: preview,
     },
@@ -1704,6 +1807,8 @@ function buildParsedImageTaskSnapshot(params: {
       mode: taskMode,
       status: resolveWorkbenchStatus(normalizedStatus),
       prompt: previewPrompt,
+      assistantIntro: presentationText || null,
+      caption: previewCaption,
       rawText: prompt || previewPrompt,
       expectedCount,
       layoutHint,
@@ -1796,13 +1901,13 @@ function buildPendingImageTaskSnapshot(params: {
       message: {
         id: resolveImageWorkbenchAssistantMessageId(params.taskId),
         role: "assistant",
-        content: buildImageWorkbenchAssistantContent({
-          prompt: previewPrompt,
-          mode: taskMode,
-          modelName: previewModelName,
-          expectedImageCount: expectedCount,
-          layoutHint,
-        }),
+        content:
+          readImageTaskPresentationText([params.payload || null]) ||
+          buildImageTaskAssistantContent({
+            prompt: previewPrompt,
+            mode: taskMode,
+            modelName: previewModelName,
+          }),
         timestamp: startedAt,
         isThinking: false,
         imageWorkbenchPreview: {
@@ -1836,6 +1941,10 @@ function buildPendingImageTaskSnapshot(params: {
         mode: taskMode,
         status: "queued",
         prompt: previewPrompt,
+        assistantIntro: readImageTaskPresentationText([
+          params.payload || null,
+        ]) || null,
+        caption: null,
         rawText: previewPrompt,
         expectedCount,
         layoutHint,
@@ -2231,17 +2340,17 @@ function buildImageWorkbenchMessagePatchFromTask(params: {
   const startedAt = new Date(params.task.createdAt || Date.now());
 
   return {
-    content: buildImageWorkbenchAssistantContent({
-      prompt,
-      mode: params.task.mode,
-      modelName:
-        params.preview.modelName ||
-        params.outputs[0]?.modelName ||
-        params.task.runtimeContract?.model ||
-        null,
-      expectedImageCount: params.task.expectedCount,
-      layoutHint: params.preview.layoutHint ?? params.task.layoutHint ?? null,
-    }),
+    content:
+      params.task.assistantIntro ||
+      buildImageTaskAssistantContent({
+        prompt,
+        mode: params.task.mode,
+        modelName:
+          params.preview.modelName ||
+          params.outputs[0]?.modelName ||
+          params.task.runtimeContract?.model ||
+          null,
+      }),
     timestamp: startedAt,
     isThinking: false,
     toolCalls: undefined,
@@ -2285,12 +2394,14 @@ function buildImageWorkbenchPreviewMessageFromTask(params: {
     expectedImageCount: params.task.expectedCount,
     providerName: previewProviderName,
     modelName: previewModelName,
-    caption: buildImageWorkbenchCaption({
-      prompt: previewPrompt,
-      status: previewStatus,
-      imageCount: outputs.length || undefined,
-      statusMessage: params.task.failureMessage || null,
-    }),
+    caption:
+      params.task.caption ||
+      buildImageWorkbenchCaption({
+        prompt: previewPrompt,
+        status: previewStatus,
+        imageCount: outputs.length || undefined,
+        statusMessage: params.task.failureMessage || null,
+      }),
     layoutHint: params.task.layoutHint ?? null,
     storyboardSlots: params.task.storyboardSlots,
     sourceImageUrl: params.task.sourceImageUrl ?? null,
@@ -2491,6 +2602,9 @@ function mergeImageTaskSnapshot(
       {
         ...snapshot.task,
         sessionId: previousTask?.sessionId || snapshot.task.sessionId,
+        assistantIntro:
+          snapshot.task.assistantIntro ?? previousTask?.assistantIntro ?? null,
+        caption: snapshot.task.caption ?? previousTask?.caption ?? null,
         taskFilePath:
           snapshot.task.taskFilePath ?? previousTask?.taskFilePath ?? null,
         artifactPath:
@@ -2623,12 +2737,15 @@ function patchMessagesWithImageWorkbenchState(params: {
       expectedImageCount: task.expectedCount || preview.expectedImageCount,
       providerName: nextProviderName,
       modelName: nextModelName,
-      caption: buildImageWorkbenchCaption({
-        prompt: preview.prompt || task.prompt,
-        status: nextPreviewStatus,
-        imageCount: outputs.length || preview.imageCount,
-        statusMessage: task.failureMessage || preview.statusMessage || null,
-      }),
+      caption:
+        task.caption ||
+        preview.caption ||
+        buildImageWorkbenchCaption({
+          prompt: preview.prompt || task.prompt,
+          status: nextPreviewStatus,
+          imageCount: outputs.length || preview.imageCount,
+          statusMessage: task.failureMessage || preview.statusMessage || null,
+        }),
       layoutHint: task.layoutHint ?? preview.layoutHint ?? null,
       storyboardSlots: task.storyboardSlots ?? preview.storyboardSlots,
       sourceImageUrl: task.sourceImageUrl ?? preview.sourceImageUrl ?? null,
@@ -3491,6 +3608,9 @@ export function useWorkspaceImageTaskPreviewRuntime({
                 mode: payload.mode,
                 layout_hint: payload.layout_hint,
                 raw_text: payload.raw_text,
+                persona_context: payload.persona_context,
+                presentation: payload.presentation,
+                taste_context: payload.taste_context,
                 provider: payload.provider,
                 provider_id: payload.provider_id,
                 model: payload.model,

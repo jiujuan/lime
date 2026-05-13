@@ -1046,6 +1046,55 @@ function hasRetainableLocalMessageState(message: Message): boolean {
   );
 }
 
+function hasRetainableLocalAssistantProcessState(
+  message: Message | undefined,
+): boolean {
+  if (!message || message.role !== "assistant") {
+    return false;
+  }
+
+  return (
+    Boolean(message.thinkingContent?.trim()) ||
+    (message.contentParts || []).some(contentPartContainsProcess) ||
+    (message.toolCalls?.length || 0) > 0 ||
+    (message.actionRequests?.length || 0) > 0 ||
+    (message.contextTrace?.length || 0) > 0 ||
+    (message.artifacts?.length || 0) > 0 ||
+    Boolean(message.imageWorkbenchPreview) ||
+    Boolean(message.taskPreview) ||
+    Boolean(message.runtimeStatus)
+  );
+}
+
+function isLocalAssistantInMatchedUserTurn(params: {
+  localAssistantMessage?: Message;
+  localMessageIndexById: Map<string, number>;
+  localMessages: Message[];
+  lastMatchedLocalUserMessageIndex: number | null;
+}): boolean {
+  const { localAssistantMessage, lastMatchedLocalUserMessageIndex } = params;
+  if (
+    !localAssistantMessage?.id ||
+    lastMatchedLocalUserMessageIndex === null
+  ) {
+    return false;
+  }
+
+  const assistantIndex = params.localMessageIndexById.get(
+    localAssistantMessage.id,
+  );
+  if (
+    assistantIndex === undefined ||
+    assistantIndex <= lastMatchedLocalUserMessageIndex
+  ) {
+    return false;
+  }
+
+  return !params.localMessages
+    .slice(lastMatchedLocalUserMessageIndex + 1, assistantIndex)
+    .some((message) => message.role === "user");
+}
+
 export const mergeHydratedMessagesWithLocalState = (
   localMessages: Message[],
   hydratedMessages: Message[],
@@ -1180,8 +1229,18 @@ export const mergeHydratedMessagesWithLocalState = (
         return message;
       }
 
+      const shouldPreserveLocalRuntimeSnapshot =
+        isLocalAssistantInMatchedUserTurn({
+          localAssistantMessage,
+          localMessageIndexById,
+          localMessages,
+          lastMatchedLocalUserMessageIndex,
+        }) &&
+        hasRetainableLocalAssistantProcessState(localAssistantMessage) &&
+        !hasRetainableLocalAssistantProcessState(message);
       const shouldRetainLocalProcessState =
-        !hasRenderableAssistantTextContent(message);
+        !hasRenderableAssistantTextContent(message) ||
+        shouldPreserveLocalRuntimeSnapshot;
       const shouldRetainLocalThinkingState =
         shouldRetainLocalProcessState || Boolean(message.thinkingContent);
       const contentParts = shouldRetainLocalProcessState
@@ -1224,6 +1283,8 @@ export const mergeHydratedMessagesWithLocalState = (
           : undefined) ??
         extractThinkingContentFromParts(contentParts);
       const shouldPreserveLocalVisibleOutput =
+        localAssistantMessage?.isThinking === true ||
+        shouldPreserveLocalRuntimeSnapshot ||
         shouldPreserveLocalAssistantVisibleOutput(
           localAssistantMessage,
           message,
@@ -1294,6 +1355,8 @@ export const mergeHydratedMessagesWithLocalState = (
       return {
         ...message,
         id: localMessage.id || message.id,
+        inputCapabilityRoute:
+          message.inputCapabilityRoute ?? localMessage.inputCapabilityRoute,
       };
     }
 
@@ -1301,6 +1364,8 @@ export const mergeHydratedMessagesWithLocalState = (
       ...message,
       id: localMessage.id || message.id,
       images: localMessage.images,
+      inputCapabilityRoute:
+        message.inputCapabilityRoute ?? localMessage.inputCapabilityRoute,
     };
   });
 

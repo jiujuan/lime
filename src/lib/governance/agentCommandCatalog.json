@@ -39,6 +39,8 @@
     "list_executable_skills",
     "get_skill_detail",
     "execute_skill",
+    "install_marketplace_skill_for_app",
+    "install_skill_from_download_url_for_app",
     "agent_runtime_update_session",
     "agent_runtime_delete_session",
     "sceneapp_list_catalog",

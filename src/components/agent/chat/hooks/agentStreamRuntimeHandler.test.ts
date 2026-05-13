@@ -775,7 +775,7 @@ describe("agentStreamRuntimeHandler", () => {
 
   it("图片生成草稿应保留极简文案，不被模型 text_delta 覆盖", () => {
     const preservedContent =
-      "好嘞，用 Nanobanana Pro 给你生成一张广州塔春天照片\n先获取下工具参数\n马上生成";
+      "好啊，用 Nanobanana Pro 生成：一张广州塔春天照片\n先获取下工具参数\n马上生成";
     let messages: Message[] = [
       {
         id: "assistant-image",

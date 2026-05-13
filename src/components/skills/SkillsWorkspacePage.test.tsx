@@ -3,6 +3,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Skill } from "@/lib/api/skills";
 import type {
+  SkillMarketplaceBundle,
+  SkillMarketplaceItem,
+} from "@/lib/api/officialSkillMarketplace";
+import type {
   ServiceSkillGroup,
   ServiceSkillHomeItem,
 } from "@/components/agent/chat/service-skills/types";
@@ -12,15 +16,21 @@ import { SkillsWorkspacePage } from "./SkillsWorkspacePage";
 
 const mocks = vi.hoisted(() => ({
   refreshServiceSkills: vi.fn(),
+  refreshOfficialMarketplace: vi.fn(),
   recordServiceSkillUsage: vi.fn(),
   refreshLocalSkills: vi.fn(),
   uninstallLocalSkill: vi.fn(),
+  installOfficialMarketplaceSkill: vi.fn(),
+  getOfficialSkillMarketplaceBundle: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
   openDialog: vi.fn(),
   createSkillScaffold: vi.fn(),
   importLocalSkill: vi.fn(),
   serviceSkills: [] as ServiceSkillHomeItem[],
+  officialMarketplaceSkills: [] as SkillMarketplaceItem[],
+  officialMarketplaceError: null as string | null,
+  officialMarketplaceLoading: false,
   skillGroups: [] as ServiceSkillGroup[],
   localSkills: [] as Skill[],
 }));
@@ -58,6 +68,15 @@ vi.mock("@/components/agent/chat/service-skills/useServiceSkills", () => ({
   }),
 }));
 
+vi.mock("@/hooks/useOfficialSkillMarketplace", () => ({
+  useOfficialSkillMarketplace: () => ({
+    skills: mocks.officialMarketplaceSkills,
+    isLoading: mocks.officialMarketplaceLoading,
+    error: mocks.officialMarketplaceError,
+    refresh: mocks.refreshOfficialMarketplace,
+  }),
+}));
+
 vi.mock("@/hooks/useSkills", () => ({
   useSkills: () => ({
     skills: mocks.localSkills,
@@ -86,12 +105,15 @@ vi.mock("@/lib/api/skills", async (importOriginal) => {
   };
 });
 
-vi.mock("./SkillScaffoldDialog", () => ({
-  SkillScaffoldDialog: () => null,
+vi.mock("@/lib/api/officialSkillMarketplace", () => ({
+  installOfficialMarketplaceSkill: (...args: unknown[]) =>
+    mocks.installOfficialMarketplaceSkill(...args),
+  getOfficialSkillMarketplaceBundle: (...args: unknown[]) =>
+    mocks.getOfficialSkillMarketplaceBundle(...args),
 }));
 
-vi.mock("@/components/agent/chat/components/CuratedTaskLauncherDialog", () => ({
-  CuratedTaskLauncherDialog: () => null,
+vi.mock("./SkillScaffoldDialog", () => ({
+  SkillScaffoldDialog: () => null,
 }));
 
 vi.mock("@/components/ui/dialog", () => ({
@@ -188,6 +210,62 @@ function createDefaultServiceSkills(): ServiceSkillHomeItem[] {
   ];
 }
 
+function createDefaultMarketplaceSkills(): SkillMarketplaceItem[] {
+  return [
+    {
+      id: "official:analysis",
+      name: "analysis",
+      aliases: ["data-analysis"],
+      title: "数据分析",
+      summary: "整理数据、提炼结论，并输出可继续追问的分析摘要。",
+      category: "数据",
+      outputHint: "分析摘要",
+      version: "2026.05",
+      sort: 10,
+      icon: {
+        kind: "svg",
+        svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="#e0f2fe"/></svg>',
+      },
+      cover: {
+        kind: "svg",
+        svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180"><rect width="320" height="180" rx="20" fill="#f0f9ff"/></svg>',
+      },
+      bundle: {
+        name: "analysis",
+        description: "标准 AgentSkills 数据分析包。",
+        resourceSummary: {
+          hasReferences: true,
+          hasScripts: false,
+          hasAssets: false,
+        },
+        standardCompliance: {
+          isStandard: true,
+          validationErrors: [],
+          deprecatedFields: [],
+        },
+      },
+    },
+  ];
+}
+
+function createDefaultMarketplaceBundle(): SkillMarketplaceBundle {
+  return {
+    manifestVersion: "agentskills.v1",
+    name: "analysis",
+    aliases: ["data-analysis"],
+    version: "2026.05",
+    contentHash: "sha256:bundle",
+    fileCount: 1,
+    files: [
+      {
+        path: "SKILL.md",
+        content:
+          "---\nname: Analysis\n---\n# Deep Research\n\n## Core Purpose\n\nDeliver citation-backed reports.\n\n> CRITICAL - Phase 0 is mandatory.\n\n## Decision Tree\n\n```\nRequest received\n```",
+      },
+    ],
+  };
+}
+
 function createDefaultSkillGroups(): ServiceSkillGroup[] {
   return [
     {
@@ -236,6 +314,20 @@ function findButton(container: HTMLElement, label: string) {
   ) as HTMLButtonElement | undefined;
 }
 
+function findMarketplaceCard(container: HTMLElement, title: string) {
+  return Array.from(
+    container.querySelectorAll('[data-testid="skills-marketplace-card"]'),
+  ).find((card) => card.textContent?.includes(title)) as
+    | HTMLElement
+    | undefined;
+}
+
+function findButtonIn(container: HTMLElement, label: string) {
+  return Array.from(container.querySelectorAll("button")).find((button) =>
+    button.textContent?.trim().includes(label),
+  ) as HTMLButtonElement | undefined;
+}
+
 function getLatestNavigationPayload(onNavigate: ReturnType<typeof vi.fn>) {
   return onNavigate.mock.calls.at(-1)?.[1] as
     | Record<string, unknown>
@@ -252,15 +344,43 @@ describe("SkillsWorkspacePage", () => {
     ).IS_REACT_ACT_ENVIRONMENT = true;
 
     mocks.serviceSkills = createDefaultServiceSkills();
+    mocks.officialMarketplaceSkills = createDefaultMarketplaceSkills();
+    mocks.officialMarketplaceError = null;
+    mocks.officialMarketplaceLoading = false;
     mocks.skillGroups = createDefaultSkillGroups();
     mocks.localSkills = createDefaultLocalSkills();
     mocks.refreshServiceSkills.mockReset();
     mocks.refreshServiceSkills.mockResolvedValue(undefined);
+    mocks.refreshOfficialMarketplace.mockReset();
+    mocks.refreshOfficialMarketplace.mockResolvedValue(undefined);
     mocks.recordServiceSkillUsage.mockReset();
     mocks.refreshLocalSkills.mockReset();
     mocks.refreshLocalSkills.mockResolvedValue(undefined);
     mocks.uninstallLocalSkill.mockReset();
     mocks.uninstallLocalSkill.mockResolvedValue(undefined);
+    mocks.installOfficialMarketplaceSkill.mockReset();
+    mocks.installOfficialMarketplaceSkill.mockResolvedValue({
+      directory: "analysis",
+      inspection: {
+        content: "# Analysis",
+        metadata: {},
+        allowedTools: [],
+        resourceSummary: {
+          hasScripts: false,
+          hasReferences: true,
+          hasAssets: false,
+        },
+        standardCompliance: {
+          isStandard: true,
+          validationErrors: [],
+          deprecatedFields: [],
+        },
+      },
+    });
+    mocks.getOfficialSkillMarketplaceBundle.mockReset();
+    mocks.getOfficialSkillMarketplaceBundle.mockResolvedValue(
+      createDefaultMarketplaceBundle(),
+    );
     mocks.toastSuccess.mockReset();
     mocks.toastError.mockReset();
     mocks.openDialog.mockReset();
@@ -297,9 +417,12 @@ describe("SkillsWorkspacePage", () => {
     ).toBeNull();
     expect(container.textContent).toContain("技能广场");
     expect(container.textContent).toContain("官方精选");
-    expect(container.textContent).toContain("深度研究");
+    expect(container.textContent).toContain("数据分析");
+    expect(container.textContent).not.toContain("深度研究");
     expect(container.textContent).not.toContain("写作助手");
-    expect(container.textContent).not.toContain("卸载");
+    expect(
+      findButtonIn(findMarketplaceCard(container, "数据分析")!, "卸载"),
+    ).toBeUndefined();
 
     act(() => {
       findButton(container, "内置")?.click();
@@ -378,5 +501,143 @@ describe("SkillsWorkspacePage", () => {
 
     expect(mocks.uninstallLocalSkill).toHaveBeenCalledWith("writer");
     expect(onNavigate).not.toHaveBeenCalled();
+  });
+
+  it("技能广场点击未安装官方技能应安装标准包并刷新本地列表", async () => {
+    const { container } = renderPage();
+    const card = findMarketplaceCard(container, "数据分析");
+
+    await act(async () => {
+      findButtonIn(card!, "安装")?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.installOfficialMarketplaceSkill).toHaveBeenCalledWith(
+      "analysis",
+      "lime",
+    );
+    expect(mocks.refreshLocalSkills).toHaveBeenCalled();
+    expect(mocks.toastSuccess).toHaveBeenCalledWith("已安装「数据分析」");
+  });
+
+  it("技能广场点击详情应打开当前技能的 SKILL.md 内容", async () => {
+    const { container } = renderPage();
+    const card = findMarketplaceCard(container, "数据分析");
+
+    expect(
+      container.querySelector('[data-testid="skills-marketplace-detail"]'),
+    ).toBeNull();
+
+    await act(async () => {
+      findButtonIn(card!, "详情")?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const detail = container.querySelector(
+      '[data-testid="skills-marketplace-detail"]',
+    );
+    expect(detail).toBeTruthy();
+    expect(mocks.getOfficialSkillMarketplaceBundle).toHaveBeenCalledWith(
+      "analysis",
+    );
+    expect(detail?.textContent).toContain("数据分析");
+    expect(detail?.textContent).toContain("以下内容来自该技能的 SKILL.md 原文");
+    expect(detail?.textContent).toContain("Deep Research");
+    expect(detail?.textContent).toContain("Core Purpose");
+    expect(detail?.textContent).toContain("Decision Tree");
+  });
+
+  it("已安装的官方技能点击使用应回首页输入框预选本地 Skill", () => {
+    mocks.localSkills = [
+      ...createDefaultLocalSkills(),
+      {
+        key: "local:analysis",
+        name: "数据分析",
+        description: "已安装的数据分析技能",
+        directory: "analysis",
+        installed: true,
+        sourceKind: "other",
+        catalogSource: "user",
+      },
+    ] as Skill[];
+    const { container, onNavigate } = renderPage();
+    const card = findMarketplaceCard(container, "数据分析");
+
+    act(() => {
+      findButtonIn(card!, "使用")?.click();
+    });
+
+    expect(onNavigate).toHaveBeenCalledWith(
+      "agent",
+      expect.objectContaining({
+        agentEntry: "new-task",
+        theme: "general",
+        preferHomeForInitialInputCapability: true,
+        initialInputCapability: {
+          capabilityRoute: {
+            kind: "installed_skill",
+            skillKey: "local:analysis",
+            skillName: "数据分析",
+          },
+          requestKey: expect.any(Number),
+        },
+      }),
+    );
+  });
+
+  it("已安装的官方技能点击卸载应走结构化卸载", async () => {
+    mocks.localSkills = [
+      ...createDefaultLocalSkills(),
+      {
+        key: "local:analysis",
+        name: "数据分析",
+        description: "已安装的数据分析技能",
+        directory: "analysis",
+        installed: true,
+        sourceKind: "other",
+        catalogSource: "user",
+      },
+    ] as Skill[];
+    const { container, onNavigate } = renderPage();
+    const card = findMarketplaceCard(container, "数据分析");
+
+    await act(async () => {
+      findButtonIn(card!, "卸载")?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.uninstallLocalSkill).toHaveBeenCalledWith("analysis");
+    expect(onNavigate).not.toHaveBeenCalled();
+  });
+
+  it("官方技能市场不可用时应回退显示本地可用技能", () => {
+    mocks.officialMarketplaceSkills = [];
+    mocks.officialMarketplaceError = "network unavailable";
+    const { container, onNavigate } = renderPage();
+    const card = findMarketplaceCard(container, "深度研究");
+
+    expect(container.textContent).toContain(
+      "官方技能市场暂时不可用，已先显示本地可用技能。",
+    );
+    expect(card).toBeTruthy();
+
+    act(() => {
+      findButtonIn(card!, "打开")?.click();
+    });
+
+    expect(onNavigate).toHaveBeenCalledWith(
+      "agent",
+      expect.objectContaining({
+        agentEntry: "new-task",
+        theme: "general",
+        initialPendingServiceSkillLaunch: expect.objectContaining({
+          skillId: "service-skill-research",
+          requestKey: expect.any(Number),
+        }),
+      }),
+    );
   });
 });

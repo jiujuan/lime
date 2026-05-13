@@ -936,6 +936,61 @@ describe("agentChatHistory", () => {
     });
   });
 
+  it("刷新会话详情时应保留本地用户消息的输入能力标签", () => {
+    const localMessages = [
+      {
+        id: "local-user-skill",
+        role: "user" as const,
+        content: "请说明 Minimal API 的测试策略",
+        timestamp: new Date("2026-05-13T03:20:00.000Z"),
+        inputCapabilityRoute: {
+          kind: "installed_skill" as const,
+          skillKey: "aspnet-core",
+          skillName: "aspnet-core",
+        },
+      },
+      {
+        id: "local-assistant-skill",
+        role: "assistant" as const,
+        content: "",
+        timestamp: new Date("2026-05-13T03:20:01.000Z"),
+        runtimeStatus: {
+          phase: "preparing" as const,
+          title: "正在准备回复",
+          detail: "正在准备回复",
+        },
+      },
+    ];
+    const hydratedMessages = [
+      {
+        id: "history-user-skill",
+        role: "user" as const,
+        content: "请说明 Minimal API 的测试策略",
+        timestamp: new Date("2026-05-13T03:20:02.000Z"),
+      },
+      {
+        id: "history-assistant-skill",
+        role: "assistant" as const,
+        content: "可以从单元测试和集成测试两层设计。",
+        timestamp: new Date("2026-05-13T03:20:03.000Z"),
+      },
+    ];
+
+    const mergedMessages = mergeHydratedMessagesWithLocalState(
+      localMessages,
+      hydratedMessages,
+    );
+
+    expect(mergedMessages[0]).toMatchObject({
+      id: "local-user-skill",
+      inputCapabilityRoute: {
+        kind: "installed_skill",
+        skillKey: "aspnet-core",
+        skillName: "aspnet-core",
+      },
+    });
+  });
+
   it("远端详情返回更新的 assistant 正文时应替换本地快照", () => {
     const localMessages = [
       {
@@ -1149,8 +1204,29 @@ describe("agentChatHistory", () => {
       hydratedMessages,
     );
 
-    expect(mergedMessages[1]?.thinkingContent).toBeUndefined();
+    expect(mergedMessages[1]?.thinkingContent).toBe(
+      "先打开页面，再抓取正文和图片。",
+    );
     expect(mergedMessages[1]?.contentParts).toEqual([
+      {
+        type: "thinking",
+        text: "先打开页面，再抓取正文和图片。",
+      },
+      {
+        type: "tool_use",
+        toolCall: {
+          id: "tool-site-1",
+          name: "site_run_adapter",
+          arguments: '{"url":"https://x.com/example/article/1"}',
+          status: "completed",
+          startTime: now,
+          endTime: now,
+          result: {
+            success: true,
+            output: "saved: articles/google-cloud-tech.md",
+          },
+        },
+      },
       {
         type: "text",
         text: "内容已保存到项目目录。",
@@ -1160,6 +1236,146 @@ describe("agentChatHistory", () => {
       id: "tool-site-1",
       status: "completed",
     });
+  });
+
+  it("刷新会话详情时不应把当前流式 assistant 输出替换成远端纯正文快照", () => {
+    const localMessages = [
+      {
+        id: "local-user-live",
+        role: "user" as const,
+        content: "整理 Lime 产品知识库",
+        timestamp: new Date("2026-05-13T03:36:00.000Z"),
+      },
+      {
+        id: "local-assistant-live",
+        role: "assistant" as const,
+        content: "这是用户已经看到的流式输出。",
+        timestamp: new Date("2026-05-13T03:36:01.000Z"),
+        isThinking: true,
+        thinkingContent: "先盘点产品资料，再整理知识库。",
+        contentParts: [
+          {
+            type: "thinking" as const,
+            text: "先盘点产品资料，再整理知识库。",
+          },
+          {
+            type: "text" as const,
+            text: "这是用户已经看到的流式输出。",
+          },
+        ],
+      },
+    ];
+    const hydratedMessages = [
+      {
+        id: "history-user-live",
+        role: "user" as const,
+        content: "整理 Lime 产品知识库",
+        timestamp: new Date("2026-05-13T03:36:02.000Z"),
+      },
+      {
+        id: "history-assistant-live",
+        role: "assistant" as const,
+        content: "这是后端水合返回的纯正文快照。",
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "这是后端水合返回的纯正文快照。",
+          },
+        ],
+        timestamp: new Date("2026-05-13T03:36:03.000Z"),
+      },
+    ];
+
+    const mergedMessages = mergeHydratedMessagesWithLocalState(
+      localMessages,
+      hydratedMessages,
+    );
+
+    expect(mergedMessages[1]).toMatchObject({
+      id: "local-assistant-live",
+      content: "这是用户已经看到的流式输出。",
+      thinkingContent: "先盘点产品资料，再整理知识库。",
+    });
+    expect(mergedMessages[1]?.contentParts).toEqual([
+      {
+        type: "thinking",
+        text: "先盘点产品资料，再整理知识库。",
+      },
+      {
+        type: "text",
+        text: "这是用户已经看到的流式输出。",
+      },
+    ]);
+  });
+
+  it("同轮本地 assistant 已带过程时不应被远端纯正文刷新掉已显示结果", () => {
+    const localMessages = [
+      {
+        id: "local-user-skill-output",
+        role: "user" as const,
+        content: "整理 Lime 产品知识库",
+        timestamp: new Date("2026-05-13T03:37:00.000Z"),
+      },
+      {
+        id: "local-assistant-skill-output",
+        role: "assistant" as const,
+        content: "本地流式完成后的产品知识库结果。",
+        timestamp: new Date("2026-05-13T03:37:01.000Z"),
+        isThinking: false,
+        thinkingContent: "先识别产品卖点，再输出知识库。",
+        contentParts: [
+          {
+            type: "thinking" as const,
+            text: "先识别产品卖点，再输出知识库。",
+          },
+          {
+            type: "text" as const,
+            text: "本地流式完成后的产品知识库结果。",
+          },
+        ],
+      },
+    ];
+    const hydratedMessages = [
+      {
+        id: "history-user-skill-output",
+        role: "user" as const,
+        content: "整理 Lime 产品知识库",
+        timestamp: new Date("2026-05-13T03:37:02.000Z"),
+      },
+      {
+        id: "history-assistant-skill-output",
+        role: "assistant" as const,
+        content: "远端会话详情里的纯正文结果。",
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "远端会话详情里的纯正文结果。",
+          },
+        ],
+        timestamp: new Date("2026-05-13T03:37:03.000Z"),
+      },
+    ];
+
+    const mergedMessages = mergeHydratedMessagesWithLocalState(
+      localMessages,
+      hydratedMessages,
+    );
+
+    expect(mergedMessages[1]).toMatchObject({
+      id: "local-assistant-skill-output",
+      content: "本地流式完成后的产品知识库结果。",
+      thinkingContent: "先识别产品卖点，再输出知识库。",
+    });
+    expect(mergedMessages[1]?.contentParts).toEqual([
+      {
+        type: "thinking",
+        text: "先识别产品卖点，再输出知识库。",
+      },
+      {
+        type: "text",
+        text: "本地流式完成后的产品知识库结果。",
+      },
+    ]);
   });
 
   it("hydrate 宽松匹配不应把本地 thinking 兜底到远端纯正文 assistant", () => {

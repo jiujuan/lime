@@ -45,7 +45,12 @@ import {
 } from "./features/resource-manager";
 import type { OpenDeepLinkPayload } from "./hooks/useDeepLink";
 import { buildClawAgentParams } from "./lib/workspace/navigation";
-import { resolveWebsiteOpenNavigation } from "./lib/deepLink/websiteLaunch";
+import {
+  resolveWebsiteInstalledSkillNavigation,
+  resolveWebsiteOpenNavigation,
+  resolveWebsiteSkillTitle,
+} from "./lib/deepLink/websiteLaunch";
+import { installOfficialMarketplaceSkill } from "./lib/api/officialSkillMarketplace";
 import { toast } from "sonner";
 import { SettingsTabs } from "./types/settings";
 import { hasTauriInvokeCapability } from "./lib/tauri-runtime";
@@ -280,7 +285,58 @@ function AppContent() {
   );
 
   const handleOpenWebsiteDeepLink = useCallback(
-    (payload: OpenDeepLinkPayload) => {
+    async (payload: OpenDeepLinkPayload) => {
+      if (payload.kind === "skill" && payload.action === "install") {
+        const installNavigation = resolveWebsiteInstalledSkillNavigation(payload);
+        if (!installNavigation) {
+          toast.error(t("common.app.websiteDeepLink.unsupported.title"), {
+            description: t("common.app.websiteDeepLink.unsupported.description"),
+          });
+          return;
+        }
+
+        const title = resolveWebsiteSkillTitle(payload.slug) ?? payload.slug;
+        try {
+          await installOfficialMarketplaceSkill(payload.slug, "lime");
+          toast.success(
+            t("common.app.websiteDeepLink.install.success.title", { title }),
+            {
+              description: t(
+                "common.app.websiteDeepLink.install.success.description",
+              ),
+            },
+          );
+        } catch (error) {
+          const message =
+            error instanceof Error && error.message.trim()
+              ? error.message.trim()
+              : String(error);
+          if (!/already exists|已存在/i.test(message)) {
+            toast.error(t("common.app.websiteDeepLink.install.failed.title"), {
+              description: t(
+                "common.app.websiteDeepLink.install.failed.description",
+                { message },
+              ),
+            });
+            return;
+          }
+
+          toast.info(
+            t("common.app.websiteDeepLink.install.alreadyInstalled.title", {
+              title,
+            }),
+            {
+              description: t(
+                "common.app.websiteDeepLink.install.alreadyInstalled.description",
+              ),
+            },
+          );
+        }
+
+        handleNavigate(installNavigation.page, installNavigation.params);
+        return;
+      }
+
       const resolved = resolveWebsiteOpenNavigation(payload);
 
       if (!resolved) {

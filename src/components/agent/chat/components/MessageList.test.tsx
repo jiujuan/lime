@@ -2295,7 +2295,13 @@ describe("MessageList", () => {
     expect(previewCard?.textContent).not.toContain("可在右侧继续查看与使用");
     expect(container.textContent).not.toContain("图片生成已完成");
     expect(previewCard?.className).not.toContain("max-w-[620px]");
-    expect(previewCard?.className).toContain("w-full");
+    expect(
+      previewCard
+        ?.querySelector(
+          '[data-testid="image-workbench-message-preview-single-media-task-1"]',
+        )
+        ?.className,
+    ).toContain("w-[358px]");
     expect(previewCard?.querySelector("img")).not.toBeNull();
 
     act(() => {
@@ -2349,11 +2355,23 @@ describe("MessageList", () => {
   it("图片任务消息应在同一条 assistant 回复里呈现自然文案、工具条、图片和结果描述", async () => {
     const messages: Message[] = [
       {
+        id: "msg-user-image-workbench-natural",
+        role: "user",
+        content:
+          "@Nanobanana Pro 生成一张广州塔，从花城汇看过去的春天的照片",
+        timestamp: new Date(),
+      },
+      {
         id: "msg-assistant-image-workbench-natural",
         role: "assistant",
         content:
-          "好嘞，用 Nanobanana Pro 给你生成一张从花城汇看广州塔的春天照片\n先获取下工具参数\n马上生成",
+          "好啊，用 Nanobanana Pro 生成：一张广州塔，从花城汇看过去的春天的照片\n先获取下工具参数\n马上生成",
         timestamp: new Date(),
+        usage: {
+          input_tokens: 31_000,
+          output_tokens: 120,
+          cached_input_tokens: 0,
+        },
         contentParts: [
           { type: "text", text: "我先按你的描述创建异步图片任务" },
           {
@@ -2380,13 +2398,14 @@ describe("MessageList", () => {
         ],
         imageWorkbenchPreview: {
           taskId: "task-natural-image",
-          prompt: "从花城汇看广州塔的春天照片",
+          prompt: "一张广州塔，从花城汇看过去的春天的照片",
           mode: "generate",
           status: "complete",
           imageUrl: "https://example.com/guangzhou-tower.png",
           imageCount: 1,
           modelName: "fal-ai/nano-banana-pro",
-          caption: "搞定，已生成这张图。",
+          caption:
+            "搞定，图已经生成好了\n要调整的话直接说，我继续改",
         },
       },
     ];
@@ -2397,18 +2416,63 @@ describe("MessageList", () => {
       '[data-testid="image-workbench-assistant-intro"]',
     );
 
-    expect(text).toContain("好嘞，用 Nanobanana Pro");
+    expect(text).toContain("好啊，用 Nanobanana Pro");
     expect(text).toContain("先获取下工具参数");
     expect(text).toContain("马上生成");
     expect(text).toContain("Image Generation");
     expect(text).toContain("Nanobanana Pro");
-    expect(text).toContain("搞定，已生成这张图。");
+    expect(text).toContain("Lime");
+    expect(text).toContain("我继续改");
+    expect(
+      container.querySelector('[data-testid="token-usage-display"]'),
+    ).not.toBeNull();
     expect(text).not.toContain("limeCreateImageGenerationTask");
     expect(text).not.toContain("异步图片任务");
-    expect(intro?.textContent).toContain("好嘞，用 Nanobanana Pro");
+    expect(
+      container.querySelector('[data-testid="image-workbench-assistant-header"]')
+        ?.textContent,
+    ).toContain("Lime");
+    expect(
+      container.querySelector('[data-testid="message-user-command-tag"]')
+        ?.textContent,
+    ).toBe("@Nanobanana Pro");
+    expect(
+      container.querySelector('[data-testid="message-user-command-content"]')
+        ?.textContent,
+    ).toContain("广州塔");
+    expect(intro?.textContent).toContain("好啊，用 Nanobanana Pro");
     expect(container.querySelector('[data-testid="streaming-renderer"]')).toBe(
       null,
     );
+  });
+
+  it("用户消息带已安装 Skill route 时应保留 @ Skill 标签展示", async () => {
+    const container = await renderZh([
+      {
+        id: "msg-user-installed-skill",
+        role: "user",
+        content: "帮我写一篇关于三国的故事",
+        timestamp: new Date(),
+        inputCapabilityRoute: {
+          kind: "installed_skill",
+          skillKey: "brand-product-knowledge-builder",
+          skillName: "brand-product-knowledge-builder",
+        },
+      } as Message,
+    ]);
+
+    const skillTag = container.querySelector(
+      '[data-testid="message-user-skill-tag"]',
+    );
+
+    expect(skillTag?.textContent).toContain("@");
+    expect(skillTag?.textContent).toContain(
+      "brand-product-knowledge-builder",
+    );
+    expect(
+      container.querySelector('[data-testid="message-user-command-tag"]'),
+    ).toBeNull();
+    expect(container.textContent).toContain("帮我写一篇关于三国的故事");
   });
 
   it("历史助手消息没有图片轻卡时，也不应继续展示旧图片任务详情模板", async () => {

@@ -9,10 +9,15 @@ use chrono::Utc;
 use lime_core::app_paths;
 use lime_services::skill_service::SkillService;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::fs;
+use std::io::{Cursor, Read};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 use tauri::State;
+use url::Url;
+use zip::ZipArchive;
 
 /// 从指定目录扫描已安装的 Skills
 ///
@@ -535,6 +540,481 @@ pub struct ImportedSkillResult {
     pub directory: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MarketplaceSkillBundleFile {
+    pub path: String,
+    pub content: String,
+    #[serde(default)]
+    pub encoding: Option<String>,
+    #[serde(default)]
+    pub sha256: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MarketplaceSkillBundle {
+    pub manifest_version: String,
+    pub name: String,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub aliases: Vec<String>,
+    #[allow(dead_code)]
+    pub version: String,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub content_hash: String,
+    #[serde(default)]
+    pub file_count: usize,
+    pub files: Vec<MarketplaceSkillBundleFile>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MarketplaceSkillInstallResult {
+    pub directory: String,
+    pub inspection: SkillPackageInspection,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillDownloadInstallRequest {
+    pub skill_name: String,
+    pub download_url: String,
+}
+
+const MAX_SKILL_DOWNLOAD_BYTES: usize = 20 * 1024 * 1024;
+
+fn normalize_bundle_sha256(value: &str) -> String {
+    value
+        .trim()
+        .strip_prefix("sha256:")
+        .unwrap_or_else(|| value.trim())
+        .to_ascii_lowercase()
+}
+
+fn validate_marketplace_file_path(path: &str) -> Result<PathBuf, String> {
+    let path = path.trim();
+    if path.is_empty() {
+        return Err("Marketplace skill file path is required".to_string());
+    }
+
+    if path.contains('\\') || path.starts_with('/') || path.contains("..") {
+        return Err(format!("Invalid marketplace skill file path: {path}"));
+    }
+
+    let mut normalized = PathBuf::new();
+    let mut has_component = false;
+    for component in Path::new(path).components() {
+        match component {
+            Component::Normal(value) => {
+                has_component = true;
+                normalized.push(value);
+            }
+            _ => return Err(format!("Invalid marketplace skill file path: {path}")),
+        }
+    }
+
+    if !has_component {
+        return Err("Marketplace skill file path is required".to_string());
+    }
+
+    Ok(normalized)
+}
+
+fn verify_marketplace_file_checksum(file: &MarketplaceSkillBundleFile) -> Result<(), String> {
+    let Some(expected) = file.sha256.as_deref() else {
+        return Ok(());
+    };
+    let expected = normalize_bundle_sha256(expected);
+    if expected.is_empty() {
+        return Ok(());
+    }
+
+    let actual = hex::encode(Sha256::digest(file.content.as_bytes()));
+    if actual != expected {
+        return Err(format!(
+            "Marketplace skill file checksum mismatch: {}",
+            file.path
+        ));
+    }
+
+    Ok(())
+}
+
+fn validate_skill_download_url(value: &str) -> Result<String, String> {
+    let url =
+        Url::parse(value.trim()).map_err(|error| format!("Invalid skill download URL: {error}"))?;
+    if url.scheme() != "https" {
+        return Err("Skill download URL must use https".to_string());
+    }
+    Ok(url.to_string())
+}
+
+async fn download_skill_package_zip(download_url: &str) -> Result<Vec<u8>, String> {
+    let download_url = validate_skill_download_url(download_url)?;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(60))
+        .build()
+        .map_err(|error| format!("Failed to create skill download client: {error}"))?;
+    let response = client
+        .get(download_url)
+        .send()
+        .await
+        .map_err(|error| format!("Failed to download skill package: {error}"))?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!(
+            "Skill package download failed with status {status}"
+        ));
+    }
+    if let Some(content_length) = response.content_length() {
+        if content_length > MAX_SKILL_DOWNLOAD_BYTES as u64 {
+            return Err("Skill package is too large".to_string());
+        }
+    }
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|error| format!("Failed to read skill package: {error}"))?;
+    if bytes.len() > MAX_SKILL_DOWNLOAD_BYTES {
+        return Err("Skill package is too large".to_string());
+    }
+    Ok(bytes.to_vec())
+}
+
+fn normalize_zip_entry_path(path: &Path) -> Result<PathBuf, String> {
+    let mut normalized = PathBuf::new();
+    let mut has_component = false;
+    for component in path.components() {
+        match component {
+            Component::Normal(value) => {
+                has_component = true;
+                normalized.push(value);
+            }
+            _ => return Err(format!("Invalid skill zip entry path: {}", path.display())),
+        }
+    }
+    if !has_component {
+        return Err("Skill zip entry path is required".to_string());
+    }
+    Ok(normalized)
+}
+
+fn is_ignorable_zip_entry(path: &Path) -> bool {
+    let mut components = path.components();
+    let Some(first) = components.next() else {
+        return true;
+    };
+    let first = first.as_os_str().to_string_lossy();
+    if first == "__MACOSX" {
+        return true;
+    }
+    path.file_name()
+        .map(|value| value.to_string_lossy() == ".DS_Store")
+        .unwrap_or(false)
+}
+
+fn first_zip_component(path: &Path) -> Option<String> {
+    path.components()
+        .next()
+        .and_then(|component| match component {
+            Component::Normal(value) => Some(value.to_string_lossy().to_string()),
+            _ => None,
+        })
+}
+
+fn strip_first_zip_component(path: &Path) -> Result<PathBuf, String> {
+    let mut stripped = PathBuf::new();
+    let mut components = path.components();
+    let _ = components.next();
+    for component in components {
+        match component {
+            Component::Normal(value) => stripped.push(value),
+            _ => return Err(format!("Invalid skill zip entry path: {}", path.display())),
+        }
+    }
+    if stripped.as_os_str().is_empty() {
+        return Err("Skill zip entry path is required".to_string());
+    }
+    Ok(stripped)
+}
+
+fn install_skill_zip_bytes_into_root(
+    skills_root: &Path,
+    skill_name: &str,
+    bytes: &[u8],
+) -> Result<MarketplaceSkillInstallResult, String> {
+    let directory = skill_name.trim();
+    validate_skill_directory(directory)?;
+    if bytes.is_empty() {
+        return Err("Skill package is empty".to_string());
+    }
+
+    let cursor = Cursor::new(bytes);
+    let mut archive =
+        ZipArchive::new(cursor).map_err(|error| format!("Invalid skill zip package: {error}"))?;
+    let mut files: Vec<(PathBuf, Vec<u8>)> = Vec::new();
+    for index in 0..archive.len() {
+        let mut file = archive
+            .by_index(index)
+            .map_err(|error| format!("Failed to read skill zip entry: {error}"))?;
+        if file.is_dir() {
+            continue;
+        }
+        if file.name().contains('\\') {
+            return Err(format!("Invalid skill zip entry path: {}", file.name()));
+        }
+        let enclosed = file
+            .enclosed_name()
+            .ok_or_else(|| format!("Invalid skill zip entry path: {}", file.name()))?;
+        let normalized = normalize_zip_entry_path(enclosed)?;
+        if is_ignorable_zip_entry(&normalized) {
+            continue;
+        }
+        if file.size() > MAX_SKILL_DOWNLOAD_BYTES as u64 {
+            return Err("Skill package file is too large".to_string());
+        }
+        let mut content = Vec::new();
+        file.read_to_end(&mut content)
+            .map_err(|error| format!("Failed to read skill zip entry {}: {error}", file.name()))?;
+        if content.len() > MAX_SKILL_DOWNLOAD_BYTES {
+            return Err("Skill package file is too large".to_string());
+        }
+        files.push((normalized, content));
+    }
+
+    if files.is_empty() {
+        return Err("Skill package contains no files".to_string());
+    }
+
+    let root_skill_md = Path::new("SKILL.md");
+    let has_root_skill_md = files.iter().any(|(path, _)| path == root_skill_md);
+    let shared_zip_root = files
+        .first()
+        .and_then(|(path, _)| first_zip_component(path));
+    let should_strip_directory = shared_zip_root
+        .as_deref()
+        .map(|root| {
+            let nested_skill_md = Path::new(root).join("SKILL.md");
+            !has_root_skill_md
+                && files.iter().any(|(path, _)| path == &nested_skill_md)
+                && files
+                    .iter()
+                    .all(|(path, _)| first_zip_component(path).as_deref() == Some(root))
+        })
+        .unwrap_or(false);
+
+    fs::create_dir_all(skills_root).map_err(|e| {
+        format!(
+            "Failed to create skills root {}: {e}",
+            skills_root.display()
+        )
+    })?;
+    let target_dir = skills_root.join(directory);
+    if target_dir.exists() {
+        return Err(format!("Skill directory already exists: {directory}"));
+    }
+    fs::create_dir_all(&target_dir).map_err(|e| {
+        format!(
+            "Failed to create skill directory {}: {e}",
+            target_dir.display()
+        )
+    })?;
+
+    let mut has_skill_md = false;
+    for (path, content) in files {
+        let relative_path = if should_strip_directory {
+            match strip_first_zip_component(&path) {
+                Ok(value) => value,
+                Err(error) => {
+                    let _ = fs::remove_dir_all(&target_dir);
+                    return Err(error);
+                }
+            }
+        } else {
+            path
+        };
+        let relative_path_text = match relative_path.to_str() {
+            Some(value) => value,
+            None => {
+                let _ = fs::remove_dir_all(&target_dir);
+                return Err("Skill zip entry path must be valid UTF-8".to_string());
+            }
+        };
+        let relative_path = match validate_marketplace_file_path(relative_path_text) {
+            Ok(value) => value,
+            Err(error) => {
+                let _ = fs::remove_dir_all(&target_dir);
+                return Err(error);
+            }
+        };
+        if relative_path == root_skill_md {
+            has_skill_md = true;
+        }
+        let destination = target_dir.join(relative_path);
+        if let Some(parent) = destination.parent() {
+            if let Err(error) = fs::create_dir_all(parent) {
+                let _ = fs::remove_dir_all(&target_dir);
+                return Err(format!(
+                    "Failed to create skill file parent {}: {error}",
+                    parent.display()
+                ));
+            }
+        }
+        if let Err(error) = fs::write(&destination, content) {
+            let _ = fs::remove_dir_all(&target_dir);
+            return Err(format!(
+                "Failed to write skill package file {}: {error}",
+                destination.display()
+            ));
+        }
+    }
+
+    if !has_skill_md {
+        let _ = fs::remove_dir_all(&target_dir);
+        return Err("Skill package missing SKILL.md".to_string());
+    }
+
+    match SkillService::inspect_skill_dir(&target_dir) {
+        Ok(inspection) if inspection.standard_compliance.validation_errors.is_empty() => {
+            Ok(MarketplaceSkillInstallResult {
+                directory: directory.to_string(),
+                inspection,
+            })
+        }
+        Ok(inspection) => {
+            let _ = fs::remove_dir_all(&target_dir);
+            Err(format!(
+                "Downloaded skill is not Agent Skills compliant: {}",
+                inspection.standard_compliance.validation_errors.join("; ")
+            ))
+        }
+        Err(error) => {
+            let _ = fs::remove_dir_all(&target_dir);
+            Err(format!("Downloaded skill failed inspection: {error}"))
+        }
+    }
+}
+
+fn install_marketplace_skill_bundle_into_root(
+    skills_root: &Path,
+    bundle: &MarketplaceSkillBundle,
+) -> Result<MarketplaceSkillInstallResult, String> {
+    let directory = bundle.name.trim();
+    validate_skill_directory(directory)?;
+
+    if !bundle.manifest_version.trim().is_empty()
+        && bundle.manifest_version.trim() != "agentskills.v1"
+    {
+        return Err(format!(
+            "Unsupported marketplace skill manifest version: {}",
+            bundle.manifest_version
+        ));
+    }
+
+    if bundle.files.is_empty() {
+        return Err("Marketplace skill bundle is empty".to_string());
+    }
+
+    if bundle.file_count > 0 && bundle.file_count != bundle.files.len() {
+        return Err("Marketplace skill bundle file count mismatch".to_string());
+    }
+
+    fs::create_dir_all(skills_root).map_err(|e| {
+        format!(
+            "Failed to create skills root {}: {e}",
+            skills_root.display()
+        )
+    })?;
+
+    let target_dir = skills_root.join(directory);
+    if target_dir.exists() {
+        return Err(format!("Skill directory already exists: {directory}"));
+    }
+
+    fs::create_dir_all(&target_dir).map_err(|e| {
+        format!(
+            "Failed to create skill directory {}: {e}",
+            target_dir.display()
+        )
+    })?;
+
+    let mut has_skill_md = false;
+    for file in &bundle.files {
+        let encoding = file
+            .encoding
+            .as_deref()
+            .unwrap_or("utf-8")
+            .trim()
+            .to_ascii_lowercase();
+        if encoding != "utf-8" && encoding != "utf8" {
+            let _ = fs::remove_dir_all(&target_dir);
+            return Err(format!(
+                "Unsupported marketplace skill file encoding: {}",
+                file.path
+            ));
+        }
+
+        if file.path.trim() == "SKILL.md" {
+            has_skill_md = true;
+        }
+        if let Err(error) = verify_marketplace_file_checksum(file) {
+            let _ = fs::remove_dir_all(&target_dir);
+            return Err(error);
+        }
+
+        let relative_path = match validate_marketplace_file_path(&file.path) {
+            Ok(value) => value,
+            Err(error) => {
+                let _ = fs::remove_dir_all(&target_dir);
+                return Err(error);
+            }
+        };
+        let destination = target_dir.join(relative_path);
+        if let Some(parent) = destination.parent() {
+            if let Err(error) = fs::create_dir_all(parent) {
+                let _ = fs::remove_dir_all(&target_dir);
+                return Err(format!(
+                    "Failed to create skill file parent {}: {error}",
+                    parent.display()
+                ));
+            }
+        }
+        if let Err(error) = fs::write(&destination, &file.content) {
+            let _ = fs::remove_dir_all(&target_dir);
+            return Err(format!(
+                "Failed to write marketplace skill file {}: {error}",
+                destination.display()
+            ));
+        }
+    }
+
+    if !has_skill_md {
+        let _ = fs::remove_dir_all(&target_dir);
+        return Err("Marketplace skill bundle missing SKILL.md".to_string());
+    }
+
+    match SkillService::inspect_skill_dir(&target_dir) {
+        Ok(inspection) if inspection.standard_compliance.validation_errors.is_empty() => {
+            Ok(MarketplaceSkillInstallResult {
+                directory: directory.to_string(),
+                inspection,
+            })
+        }
+        Ok(inspection) => {
+            let _ = fs::remove_dir_all(&target_dir);
+            Err(format!(
+                "Marketplace skill is not Agent Skills compliant: {}",
+                inspection.standard_compliance.validation_errors.join("; ")
+            ))
+        }
+        Err(error) => {
+            let _ = fs::remove_dir_all(&target_dir);
+            Err(format!("Marketplace skill failed inspection: {error}"))
+        }
+    }
+}
+
 /// 获取已安装的 Lime Skills 目录列表
 ///
 /// 扫描 Lime 可发现的 provider Skills 根目录，返回包含 SKILL.md 的子目录名列表。
@@ -609,6 +1089,49 @@ pub fn import_local_skill_for_app(
     }
 
     Ok(ImportedSkillResult { directory })
+}
+
+/// 从官方技能市场 bundle 结构化安装 Skill。
+///
+/// bundle 文件必须是 AgentSkills 标准目录内的相对路径，写入后会立刻执行
+/// 标准校验，失败时回滚已写入目录。
+#[tauri::command]
+pub fn install_marketplace_skill_for_app(
+    app: String,
+    bundle: MarketplaceSkillBundle,
+) -> Result<MarketplaceSkillInstallResult, String> {
+    let app_type: AppType = app.parse().map_err(|e: String| e)?;
+    let skills_root = get_skills_dir(&app_type)?;
+    let result = install_marketplace_skill_bundle_into_root(&skills_root, &bundle)?;
+
+    if matches!(app_type, AppType::Lime) {
+        AsterAgentState::reload_lime_skills();
+    }
+
+    Ok(result)
+}
+
+/// 从安装 Prompt 中的下载 URL 安装 Skill。
+///
+/// 该入口服务于官网复制的 Agent 安装 Prompt：下载 ZIP、解压到
+/// Skills 目录、执行 Agent Skills 标准校验，并在 Lime 下刷新 runtime。
+#[tauri::command]
+pub async fn install_skill_from_download_url_for_app(
+    app: String,
+    request: SkillDownloadInstallRequest,
+) -> Result<MarketplaceSkillInstallResult, String> {
+    let app_type: AppType = app.parse().map_err(|e: String| e)?;
+    let skill_name = request.skill_name.trim();
+    validate_skill_directory(skill_name)?;
+    let bytes = download_skill_package_zip(&request.download_url).await?;
+    let skills_root = get_skills_dir(&app_type)?;
+    let result = install_skill_zip_bytes_into_root(&skills_root, skill_name, &bytes)?;
+
+    if matches!(app_type, AppType::Lime) {
+        AsterAgentState::reload_lime_skills();
+    }
+
+    Ok(result)
 }
 
 /// 获取远程 Skill 包的标准检查结果
@@ -877,7 +1400,9 @@ mod tests {
     use super::*;
     use proptest::prelude::*;
     use std::collections::HashSet;
+    use std::io::Write;
     use tempfile::TempDir;
+    use zip::write::FileOptions;
 
     /// 生成有效的 Skill 目录名（字母数字和连字符）
     fn skill_name_strategy() -> impl Strategy<Value = String> {
@@ -1252,5 +1777,204 @@ content"#,
 
         let err = import_local_skill_into_root(&target_root, &source_dir).unwrap_err();
         assert!(err.contains("already exists"));
+    }
+
+    #[test]
+    fn test_install_marketplace_skill_bundle_into_root_writes_standard_package() {
+        let temp_dir = TempDir::new().unwrap();
+        let target_root = temp_dir.path().join("skills");
+        let content = "---\nname: Market Skill\ndescription: install me\n---\n";
+        let checksum = format!("sha256:{}", hex::encode(Sha256::digest(content.as_bytes())));
+
+        let result = install_marketplace_skill_bundle_into_root(
+            &target_root,
+            &MarketplaceSkillBundle {
+                manifest_version: "agentskills.v1".to_string(),
+                name: "market-skill".to_string(),
+                aliases: Vec::new(),
+                version: "1.0.0".to_string(),
+                content_hash: "sha256:bundle".to_string(),
+                file_count: 2,
+                files: vec![
+                    MarketplaceSkillBundleFile {
+                        path: "SKILL.md".to_string(),
+                        content: content.to_string(),
+                        encoding: Some("utf-8".to_string()),
+                        sha256: Some(checksum),
+                    },
+                    MarketplaceSkillBundleFile {
+                        path: "references/guide.md".to_string(),
+                        content: "# Guide".to_string(),
+                        encoding: Some("utf-8".to_string()),
+                        sha256: None,
+                    },
+                ],
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result.directory, "market-skill");
+        assert!(target_root.join("market-skill").join("SKILL.md").is_file());
+        assert!(target_root
+            .join("market-skill")
+            .join("references")
+            .join("guide.md")
+            .is_file());
+        assert!(result.inspection.standard_compliance.is_standard);
+    }
+
+    #[test]
+    fn test_install_marketplace_skill_bundle_into_root_rejects_path_traversal() {
+        let temp_dir = TempDir::new().unwrap();
+        let target_root = temp_dir.path().join("skills");
+
+        let err = install_marketplace_skill_bundle_into_root(
+            &target_root,
+            &MarketplaceSkillBundle {
+                manifest_version: "agentskills.v1".to_string(),
+                name: "market-skill".to_string(),
+                aliases: Vec::new(),
+                version: "1.0.0".to_string(),
+                content_hash: String::new(),
+                file_count: 1,
+                files: vec![MarketplaceSkillBundleFile {
+                    path: "../SKILL.md".to_string(),
+                    content: "---\nname: Bad\ndescription: bad\n---\n".to_string(),
+                    encoding: Some("utf-8".to_string()),
+                    sha256: None,
+                }],
+            },
+        )
+        .unwrap_err();
+
+        assert!(err.contains("Invalid marketplace skill file path"));
+        assert!(!target_root.join("market-skill").exists());
+    }
+
+    #[test]
+    fn test_install_marketplace_skill_bundle_into_root_rejects_checksum_mismatch() {
+        let temp_dir = TempDir::new().unwrap();
+        let target_root = temp_dir.path().join("skills");
+
+        let err = install_marketplace_skill_bundle_into_root(
+            &target_root,
+            &MarketplaceSkillBundle {
+                manifest_version: "agentskills.v1".to_string(),
+                name: "market-skill".to_string(),
+                aliases: Vec::new(),
+                version: "1.0.0".to_string(),
+                content_hash: String::new(),
+                file_count: 1,
+                files: vec![MarketplaceSkillBundleFile {
+                    path: "SKILL.md".to_string(),
+                    content: "---\nname: Bad\ndescription: bad\n---\n".to_string(),
+                    encoding: Some("utf-8".to_string()),
+                    sha256: Some("sha256:0000".to_string()),
+                }],
+            },
+        )
+        .unwrap_err();
+
+        assert!(err.contains("checksum mismatch"));
+        assert!(!target_root.join("market-skill").exists());
+    }
+
+    fn build_skill_zip(entries: &[(&str, &str)]) -> Vec<u8> {
+        let cursor = Cursor::new(Vec::new());
+        let mut writer = zip::ZipWriter::new(cursor);
+        let options = FileOptions::default();
+        for (path, content) in entries {
+            writer.start_file(*path, options).unwrap();
+            writer.write_all(content.as_bytes()).unwrap();
+        }
+        writer.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn test_install_skill_zip_bytes_into_root_strips_matching_root_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let target_root = temp_dir.path().join("skills");
+        let package = build_skill_zip(&[
+            (
+                "viral-content-breakdown/SKILL.md",
+                "---\nname: Viral Content Breakdown\ndescription: install me\n---\n",
+            ),
+            ("viral-content-breakdown/references/guide.md", "# Guide"),
+        ]);
+
+        let result =
+            install_skill_zip_bytes_into_root(&target_root, "viral-content-breakdown", &package)
+                .unwrap();
+
+        assert_eq!(result.directory, "viral-content-breakdown");
+        assert!(target_root
+            .join("viral-content-breakdown")
+            .join("SKILL.md")
+            .is_file());
+        assert!(target_root
+            .join("viral-content-breakdown")
+            .join("references")
+            .join("guide.md")
+            .is_file());
+        assert!(result.inspection.standard_compliance.is_standard);
+    }
+
+    #[test]
+    fn test_install_skill_zip_bytes_into_root_accepts_root_skill_md() {
+        let temp_dir = TempDir::new().unwrap();
+        let target_root = temp_dir.path().join("skills");
+        let package = build_skill_zip(&[(
+            "SKILL.md",
+            "---\nname: Root Skill\ndescription: install me\n---\n",
+        )]);
+
+        let result = install_skill_zip_bytes_into_root(&target_root, "root-skill", &package)
+            .expect("root SKILL.md zip should install");
+
+        assert_eq!(result.directory, "root-skill");
+        assert!(target_root.join("root-skill").join("SKILL.md").is_file());
+    }
+
+    #[test]
+    fn test_install_skill_zip_bytes_into_root_strips_single_nonmatching_root_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let target_root = temp_dir.path().join("skills");
+        let package = build_skill_zip(&[
+            (
+                "skill-export/SKILL.md",
+                "---\nname: Exported Skill\ndescription: install me\n---\n",
+            ),
+            ("skill-export/assets/example.txt", "asset"),
+        ]);
+
+        let result = install_skill_zip_bytes_into_root(&target_root, "exported-skill", &package)
+            .expect("single-root zip should install into requested directory");
+
+        assert_eq!(result.directory, "exported-skill");
+        assert!(target_root
+            .join("exported-skill")
+            .join("SKILL.md")
+            .is_file());
+        assert!(target_root
+            .join("exported-skill")
+            .join("assets")
+            .join("example.txt")
+            .is_file());
+    }
+
+    #[test]
+    fn test_install_skill_zip_bytes_into_root_rejects_zip_path_traversal() {
+        let temp_dir = TempDir::new().unwrap();
+        let target_root = temp_dir.path().join("skills");
+        let package = build_skill_zip(&[(
+            "../SKILL.md",
+            "---\nname: Bad Skill\ndescription: bad\n---\n",
+        )]);
+
+        let err = install_skill_zip_bytes_into_root(&target_root, "bad-skill", &package)
+            .expect_err("path traversal should fail");
+
+        assert!(err.contains("Invalid skill zip entry path"));
+        assert!(!target_root.join("bad-skill").exists());
     }
 }

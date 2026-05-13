@@ -109,6 +109,7 @@ export function prepareAgentStreamUserInputSend(
     resolveAgentRuntimeStatusPresentation(requestMetadata);
   const messagePurpose = sendOptions?.purpose;
   const assistantDraft = sendOptions?.assistantDraft;
+  const capabilityRoute = sendOptions?.capabilityRoute;
   const searchMode = sendOptions?.searchMode;
   const skipSessionRestore = sendOptions?.skipSessionRestore === true;
   const skipSessionStartHooks = sendOptions?.skipSessionStartHooks === true;
@@ -135,6 +136,7 @@ export function prepareAgentStreamUserInputSend(
     assistantDraft,
     requestMetadata,
     messagePurpose,
+    capabilityRoute,
     effectiveExecutionStrategy,
     webSearch,
     thinking,

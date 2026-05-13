@@ -31,10 +31,18 @@ describe("seededCommandPackage", () => {
         expect.objectContaining({
           id: "command:image_generate",
           commandKey: "image_generate",
-          binding: {
+          binding: expect.objectContaining({
             skillId: "image_generate",
             executionKind: "task_queue",
-          },
+            intentConfirmation: {
+              id: "plain_image_generation",
+              ruleKey: "agentChat.inputIntent.imageGeneration.rules",
+              confirmationKey:
+                "agentChat.inputIntent.imageGeneration.confirm",
+              systemPromptKey:
+                "agentChat.inputIntent.imageGeneration.systemPrompt",
+            },
+          }),
           renderContract: expect.objectContaining({
             resultKind: "image_gallery",
             detailKind: "media_detail",
@@ -42,15 +50,17 @@ describe("seededCommandPackage", () => {
           triggers: expect.arrayContaining([
             { mode: "mention", prefix: "@配图" },
             { mode: "mention", prefix: "@Vision 1" },
+            { mode: "mention", prefix: "@image" },
+            { mode: "slash", prefix: "/image" },
           ]),
         }),
         expect.objectContaining({
           id: "command:image_storyboard",
           commandKey: "image_storyboard",
-          binding: {
+          binding: expect.objectContaining({
             skillId: "image_generate",
             executionKind: "task_queue",
-          },
+          }),
           renderContract: expect.objectContaining({
             resultKind: "image_gallery",
             detailKind: "media_detail",
@@ -59,10 +69,14 @@ describe("seededCommandPackage", () => {
         expect.objectContaining({
           id: "command:image_generate_nanobanana_pro",
           commandKey: "image_generate_nanobanana_pro",
-          binding: {
+          binding: expect.objectContaining({
             skillId: "image_generate",
             executionKind: "task_queue",
-          },
+            requestDefaults: expect.objectContaining({
+              providerId: "fal",
+              model: "fal-ai/nano-banana-pro",
+            }),
+          }),
           renderContract: expect.objectContaining({
             resultKind: "image_gallery",
             detailKind: "media_detail",

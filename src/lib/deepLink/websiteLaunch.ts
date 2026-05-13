@@ -7,6 +7,7 @@ export interface WebsiteOpenDeepLinkPayload {
   slug: string;
   source?: string | null;
   version?: string | null;
+  action?: "open" | "install" | null;
 }
 
 type SkillLaunchTarget =
@@ -183,6 +184,15 @@ function buildWebsiteEntryBanner(title: string, source?: string | null) {
   return `已从${sourceLabel}详情页打开“${title}”，可继续补上下文后直接开始。`;
 }
 
+function buildWebsiteInstallBanner(title: string, source?: string | null) {
+  const normalizedSource = source?.trim().toLowerCase();
+  const sourceLabel =
+    !normalizedSource || normalizedSource === "website"
+      ? "官网"
+      : source!.trim();
+  return `已从${sourceLabel}安装并打开“${title}”，可继续补上下文后直接开始。`;
+}
+
 function buildServiceSkillParams(params: {
   skillId: string;
   title: string;
@@ -223,13 +233,48 @@ function buildCuratedTaskParams(params: {
   });
 }
 
+function findWebsiteSkillLaunchEntry(slug: string) {
+  return WEBSITE_SKILL_LAUNCH_ENTRIES.find((item) => item.slug === slug) ?? null;
+}
+
+export function resolveWebsiteSkillTitle(slug: string): string | null {
+  return findWebsiteSkillLaunchEntry(slug)?.title ?? null;
+}
+
+export function resolveWebsiteInstalledSkillNavigation(
+  payload: WebsiteOpenDeepLinkPayload,
+): WebsiteOpenNavigationResult | null {
+  if (payload.kind !== "skill") {
+    return null;
+  }
+
+  const entry = findWebsiteSkillLaunchEntry(payload.slug);
+  if (!entry) {
+    return null;
+  }
+
+  return {
+    page: "agent",
+    params: buildHomeAgentParams({
+      initialInputCapability: {
+        capabilityRoute: {
+          kind: "installed_skill",
+          skillKey: entry.slug,
+          skillName: entry.title,
+        },
+        requestKey: Date.now(),
+      },
+      entryBannerMessage: buildWebsiteInstallBanner(entry.title, payload.source),
+      initialSessionName: entry.title,
+    }),
+  };
+}
+
 export function resolveWebsiteOpenNavigation(
   payload: WebsiteOpenDeepLinkPayload,
 ): WebsiteOpenNavigationResult | null {
   if (payload.kind === "skill") {
-    const entry =
-      WEBSITE_SKILL_LAUNCH_ENTRIES.find((item) => item.slug === payload.slug) ??
-      null;
+    const entry = findWebsiteSkillLaunchEntry(payload.slug);
     if (!entry) {
       return null;
     }

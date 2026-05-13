@@ -224,7 +224,13 @@ describe("workspaceSendHelpers runtime team preview", () => {
 
     const snapshot = createSubmissionPreviewSnapshot({
       key: "submission-preview-1",
-      prompt: "继续处理当前任务",
+      prompt: "/brand-product-knowledge-builder 继续处理当前任务",
+      displayContent: "继续处理当前任务",
+      inputCapabilityRoute: {
+        kind: "installed_skill",
+        skillKey: "brand-product-knowledge-builder",
+        skillName: "产品知识库",
+      },
       images: [],
       executionStrategy: "react",
       webSearch: true,
@@ -233,7 +239,8 @@ describe("workspaceSendHelpers runtime team preview", () => {
 
     expect(snapshot).toMatchObject({
       key: "submission-preview-1",
-      prompt: "继续处理当前任务",
+      prompt: "/brand-product-knowledge-builder 继续处理当前任务",
+      displayContent: "继续处理当前任务",
       createdAt: 1_710_000_000_000,
     });
     expect(snapshot.runtimeStatus).not.toBeNull();
@@ -244,6 +251,11 @@ describe("workspaceSendHelpers runtime team preview", () => {
       id: "submission-preview:submission-preview-1:user",
       role: "user",
       content: "继续处理当前任务",
+      inputCapabilityRoute: {
+        kind: "installed_skill",
+        skillKey: "brand-product-knowledge-builder",
+        skillName: "产品知识库",
+      },
     });
     expect(messages[1]).toMatchObject({
       id: "submission-preview:submission-preview-1:assistant",

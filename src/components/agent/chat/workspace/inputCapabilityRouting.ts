@@ -33,6 +33,37 @@ function normalizeSlashCommandReplayText(
   return trimmed.slice(0, 400).trim();
 }
 
+function normalizeInstalledSkillExecutionKey(skillKey: string): string {
+  const normalized = skillKey.trim();
+  if (!normalized) {
+    return "";
+  }
+
+  return normalized.startsWith("local:")
+    ? normalized.slice("local:".length).trim()
+    : normalized;
+}
+
+function normalizeInputCapabilityRoute(
+  route: InputCapabilitySendRoute | undefined,
+): InputCapabilitySendRoute | undefined {
+  if (route?.kind !== "installed_skill") {
+    return route;
+  }
+
+  const normalizedSkillKey = normalizeInstalledSkillExecutionKey(
+    route.skillKey,
+  );
+  if (!normalizedSkillKey || normalizedSkillKey === route.skillKey) {
+    return route;
+  }
+
+  return {
+    ...route,
+    skillKey: normalizedSkillKey,
+  };
+}
+
 function resolveInstalledSkillReplayText(params: {
   rawText: string;
   skillKey: string;
@@ -81,7 +112,9 @@ function resolveEffectiveInputCapabilityRoute(
   capabilityRoute: InputCapabilitySendRoute | undefined,
   sourceText: string,
 ): InputCapabilitySendRoute | undefined {
-  return capabilityRoute || inferRuntimeSceneCapabilityRoute(sourceText);
+  return normalizeInputCapabilityRoute(
+    capabilityRoute || inferRuntimeSceneCapabilityRoute(sourceText),
+  );
 }
 
 function resolveRoutedSourceText(params: {

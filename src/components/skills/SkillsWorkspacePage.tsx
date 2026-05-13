@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -16,10 +23,15 @@ import type {
   SkillsPageParams,
 } from "@/types/page";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import { CuratedTaskLauncherDialog } from "@/components/agent/chat/components/CuratedTaskLauncherDialog";
 import { resolveServiceSkillEntryDescription } from "@/components/agent/chat/service-skills/entryAdapter";
 import { buildServiceSkillRecommendationBuckets } from "@/components/agent/chat/service-skills/recommendedServiceSkills";
 import {
@@ -28,7 +40,6 @@ import {
 } from "@/components/agent/chat/service-skills/serviceSkillLaunchPrefill";
 import {
   buildServiceSkillCapabilityDescription,
-  getServiceSkillTypeLabel,
   type ServiceSkillPresentationCopy,
 } from "@/components/agent/chat/service-skills/skillPresentation";
 import type {
@@ -49,30 +60,15 @@ import {
   buildSkillScaffoldReplayText,
 } from "./skillScaffoldCreationSeed";
 import {
-  FEATURED_HOME_CURATED_TASK_TEMPLATE_IDS,
-  buildCuratedTaskTemplateCopy,
-  buildCuratedTaskLaunchPrompt,
-  filterCuratedTaskTemplates,
-  getCuratedTaskOutputDestination,
-  listCuratedTaskTemplates,
-  listFeaturedHomeCuratedTaskTemplates,
-  recordCuratedTaskTemplateUsage,
-  subscribeCuratedTaskTemplateUsageChanged,
-  type CuratedTaskInputValues,
-  type CuratedTaskTemplateItem,
-} from "@/components/agent/chat/utils/curatedTaskTemplates";
-import {
-  buildCuratedTaskLaunchRequestMetadata,
-  mergeCuratedTaskReferenceEntries,
-  normalizeCuratedTaskReferenceMemoryIds,
-  type CuratedTaskReferenceEntry,
-  normalizeCuratedTaskLaunchInputValues,
-  type CuratedTaskReferenceSelection,
-} from "@/components/agent/chat/utils/curatedTaskReferenceSelection";
-import { subscribeCuratedTaskRecommendationSignalsChanged } from "@/components/agent/chat/utils/curatedTaskRecommendationSignals";
+  getOfficialSkillMarketplaceBundle,
+  installOfficialMarketplaceSkill,
+  type SkillMarketplaceBundle,
+  type SkillMarketplaceItem,
+  type SkillMarketplaceVisualAsset,
+} from "@/lib/api/officialSkillMarketplace";
+import { useOfficialSkillMarketplace } from "@/hooks/useOfficialSkillMarketplace";
 import { recordSlashEntryUsage } from "@/components/agent/chat/skill-selection/slashEntryUsage";
 import { formatList, formatNumber } from "@/i18n/format";
-import type agentResource from "@/i18n/resources/zh-CN/agent.json";
 
 interface SkillsWorkspacePageProps {
   onNavigate: (page: Page, params?: PageParams) => void;
@@ -81,75 +77,180 @@ interface SkillsWorkspacePageProps {
 
 type SkillsWorkspaceView = "store" | "builtin" | "installed";
 
-type AgentI18nKey = keyof typeof agentResource;
+type SkillStoreItem =
+  | {
+      source: "official";
+      skill: SkillMarketplaceItem;
+      serviceSkill?: never;
+    }
+  | {
+      source: "local_fallback";
+      skill: SkillMarketplaceItem;
+      serviceSkill: ServiceSkillHomeItem;
+    };
 
-function SkillsBannerSvg() {
+type MarketplaceSkillActionState =
+  | "not_installed"
+  | "installing"
+  | "installed"
+  | "builtin"
+  | "uninstalling"
+  | "local_fallback";
+
+type MarketplaceSkillDetailContentState =
+  | {
+      skillName: string;
+      status: "loading";
+    }
+  | {
+      skillName: string;
+      status: "ready";
+      content: string;
+    }
+  | {
+      skillName: string;
+      status: "error";
+      message: string;
+    };
+
+function escapeSvgText(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function buildMarketplaceCoverPlaceholder(
+  title: string,
+  category?: string,
+): SkillMarketplaceVisualAsset {
+  const safeTitle = escapeSvgText(title || "Lime Skill");
+  const safeCategory = escapeSvgText(category || "Official");
+  return {
+    kind: "svg",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180" viewBox="0 0 320 180" role="img" aria-label="${safeTitle}"><rect width="320" height="180" rx="22" fill="#f7f7f5"/><rect x="1" y="1" width="318" height="178" rx="21" fill="none" stroke="#deded8"/><circle cx="264" cy="48" r="28" fill="#ededeb"/><path d="M48 70h118M48 92h186M48 114h142" stroke="#8d8d86" stroke-width="8" stroke-linecap="round"/><text x="48" y="145" font-family="ui-sans-serif,system-ui" font-size="18" font-weight="700" fill="#262626">${safeTitle}</text><text x="48" y="165" font-family="ui-sans-serif,system-ui" font-size="12" fill="#8c8c8c">${safeCategory}</text></svg>`,
+  };
+}
+
+function buildMarketplaceIconPlaceholder(
+  title: string,
+): SkillMarketplaceVisualAsset {
+  const safeTitle = escapeSvgText(title || "Lime");
+  const initial = escapeSvgText([...safeTitle][0] || "L");
+  return {
+    kind: "svg",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-label="${safeTitle}"><rect width="96" height="96" rx="20" fill="#f5f5f5"/><rect x="1" y="1" width="94" height="94" rx="19" fill="none" stroke="#d9d9d9"/><path d="M28 36h40M28 48h32M28 60h24" stroke="#8c8c8c" stroke-width="5" stroke-linecap="round"/><text x="48" y="82" text-anchor="middle" font-family="ui-sans-serif,system-ui" font-size="18" font-weight="700" fill="#595959">${initial}</text></svg>`,
+  };
+}
+
+function svgToDataUri(svg?: string): string | null {
+  const normalized = svg?.trim();
+  if (!normalized || !normalized.startsWith("<svg")) {
+    return null;
+  }
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(normalized)}`;
+}
+
+function resolveVisualAssetSource(
+  asset?: SkillMarketplaceVisualAsset,
+): string | null {
+  const url = asset?.url?.trim();
+  if (url) {
+    return url;
+  }
+  return svgToDataUri(asset?.svg);
+}
+
+function buildFallbackMarketplaceItem(
+  skill: ServiceSkillHomeItem,
+): SkillMarketplaceItem {
+  return {
+    id: `local-fallback:${skill.id}`,
+    name: skill.skillKey || skill.id,
+    aliases: skill.aliases ?? [],
+    title: skill.title,
+    summary: skill.summary || resolveServiceSkillEntryDescription(skill),
+    category: skill.category,
+    outputHint: skill.outputHint,
+    version: skill.version,
+    sort: 0,
+    icon: buildMarketplaceIconPlaceholder(skill.title),
+    cover: buildMarketplaceCoverPlaceholder(skill.title, skill.category),
+    bundle: skill.skillBundle
+      ? {
+          ...skill.skillBundle,
+          resourceSummary: skill.skillBundle.resourceSummary,
+          standardCompliance: skill.skillBundle.standardCompliance,
+        }
+      : undefined,
+  };
+}
+
+function SkillsHeroBannerSvg() {
   return (
     <svg
-      viewBox="0 0 260 150"
+      viewBox="0 0 320 150"
       preserveAspectRatio="xMidYMid meet"
       aria-hidden="true"
       className="h-full w-full"
     >
-      <defs>
-        <linearGradient id="skills-banner-green" x1="0" x2="1" y1="0" y2="1">
-          <stop offset="0%" stopColor="#86efac" />
-          <stop offset="100%" stopColor="#34d399" />
-        </linearGradient>
-      </defs>
-      <circle cx="158" cy="34" r="52" fill="#bbf7d0" opacity="0.55" />
-      <g transform="translate(46 8) rotate(-16)">
+      <circle cx="225" cy="36" r="42" fill="#dff3ff" />
+      <g transform="translate(178 12) rotate(-15)">
         <rect
+          x="0"
+          y="0"
           width="92"
-          height="104"
-          rx="4"
+          height="118"
+          rx="5"
           fill="#fff"
-          stroke="#e5e7eb"
+          stroke="#e8eef2"
           strokeWidth="2"
         />
-        <rect x="12" y="14" width="56" height="8" rx="4" fill="#d1d5db" />
-        <rect x="12" y="30" width="48" height="6" rx="3" fill="#cbd5e1" />
-        <circle cx="44" cy="58" r="18" fill="#f59e0b" />
-        <path
-          d="M38 48h12c7 0 11 4 11 10s-5 10-12 10h-3v13h-8V48Zm10 14c4 0 6-1 6-4s-2-4-6-4h-2v8h2Z"
-          fill="#fff"
-        />
+        <circle cx="30" cy="38" r="15" fill="#4ade80" />
+        <circle cx="50" cy="44" r="15" fill="#fb7185" />
+        <rect x="18" y="72" width="54" height="7" rx="3.5" fill="#cbd5e1" />
+        <rect x="18" y="88" width="42" height="6" rx="3" fill="#e2e8f0" />
       </g>
-      <g transform="translate(106 2) rotate(12)">
+      <g transform="translate(226 2) rotate(13)">
         <rect
-          width="98"
-          height="110"
-          rx="4"
+          x="0"
+          y="0"
+          width="90"
+          height="124"
+          rx="5"
           fill="#fff"
-          stroke="#e5e7eb"
+          stroke="#e8eef2"
           strokeWidth="2"
         />
-        <circle cx="34" cy="42" r="18" fill="url(#skills-banner-green)" />
+        <circle cx="32" cy="38" r="16" fill="#fb923c" />
         <path
-          d="M25 42c5-8 14-8 19 0-5 8-14 8-19 0Z"
-          fill="#064e3b"
-          opacity="0.65"
-        />
-        <rect x="18" y="70" width="58" height="7" rx="3.5" fill="#cbd5e1" />
-        <rect x="18" y="85" width="42" height="7" rx="3.5" fill="#e2e8f0" />
-      </g>
-      <g transform="translate(156 66) rotate(10)">
-        <rect
-          width="78"
-          height="54"
-          rx="4"
-          fill="#fff"
-          stroke="#e5e7eb"
-          strokeWidth="2"
-        />
-        <circle cx="25" cy="27" r="13" fill="#60a5fa" />
-        <path d="M19 27c4-6 9-6 13 0-4 6-9 6-13 0Z" fill="#fff" />
-        <path
-          d="M46 18c12 5 14 19 4 27"
+          d="M51 28c13 4 18 20 9 31"
           fill="none"
-          stroke="#fb7185"
+          stroke="#22c55e"
           strokeLinecap="round"
-          strokeWidth="4"
+          strokeWidth="9"
+        />
+        <rect x="16" y="78" width="54" height="7" rx="3.5" fill="#cbd5e1" />
+        <rect x="16" y="94" width="38" height="6" rx="3" fill="#e2e8f0" />
+      </g>
+      <g transform="translate(262 75) rotate(15)">
+        <rect
+          x="0"
+          y="0"
+          width="74"
+          height="54"
+          rx="5"
+          fill="#fff"
+          stroke="#e8eef2"
+          strokeWidth="2"
+        />
+        <circle cx="24" cy="27" r="13" fill="#38bdf8" />
+        <path
+          d="M45 18c9 5 12 14 6 24"
+          fill="none"
+          stroke="#f43f5e"
+          strokeLinecap="round"
+          strokeWidth="5"
         />
       </g>
     </svg>
@@ -198,6 +299,230 @@ function SkillTileSvg({ tone = "emerald" }: { tone?: ServiceSkillTone }) {
       />
     </svg>
   );
+}
+
+function MarketplaceSkillVisual({
+  asset,
+  title,
+  tone = "emerald",
+  variant = "icon",
+}: {
+  asset?: SkillMarketplaceVisualAsset;
+  title: string;
+  tone?: ServiceSkillTone;
+  variant?: "icon" | "cover";
+}) {
+  const source = resolveVisualAssetSource(asset);
+  if (!source) {
+    return (
+      <div
+        className={cn(
+          "flex shrink-0 items-center justify-center overflow-hidden bg-white",
+          variant === "cover" ? "h-full w-full" : "h-10 w-10 rounded-xl",
+        )}
+      >
+        <SkillTileSvg tone={tone} />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={source}
+      alt={title}
+      className={cn(
+        "shrink-0 object-cover",
+        variant === "cover"
+          ? "h-full w-full"
+          : "h-10 w-10 rounded-xl border border-[#ddd5c8] bg-white",
+      )}
+    />
+  );
+}
+
+function stripSkillFrontmatter(content: string): string {
+  const normalized = content.replace(/^\uFEFF/, "");
+  if (!normalized.startsWith("---")) {
+    return normalized.trim();
+  }
+
+  const end = normalized.indexOf("\n---", 3);
+  if (end === -1) {
+    return normalized.trim();
+  }
+
+  return normalized.slice(end + 4).trim();
+}
+
+function extractSkillMarkdown(bundle: SkillMarketplaceBundle): string {
+  const skillFile =
+    bundle.files.find((file) => file.path === "SKILL.md") ??
+    bundle.files.find((file) => file.path.endsWith("/SKILL.md"));
+  return stripSkillFrontmatter(skillFile?.content ?? "");
+}
+
+function buildFallbackSkillMarkdown(item: SkillStoreItem): string {
+  return [
+    `# ${item.skill.title}`,
+    item.skill.summary || item.skill.bundle?.description,
+    item.skill.outputHint ? `## Output\n${item.skill.outputHint}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function renderSkillMarkdown(content: string) {
+  const nodes: ReactNode[] = [];
+  const lines = stripSkillFrontmatter(content).split(/\r?\n/);
+  let paragraph: string[] = [];
+  let quote: string[] = [];
+  let list: string[] = [];
+  let code: string[] | null = null;
+
+  const flushParagraph = () => {
+    if (paragraph.length === 0) return;
+    nodes.push(
+      <p key={`p-${nodes.length}`} className="my-4 leading-7 text-[#333]">
+        {paragraph.join(" ")}
+      </p>,
+    );
+    paragraph = [];
+  };
+  const flushQuote = () => {
+    if (quote.length === 0) return;
+    nodes.push(
+      <blockquote
+        key={`q-${nodes.length}`}
+        className="my-5 border-l-2 border-emerald-300 pl-5 italic leading-7 text-[#333]"
+      >
+        {quote.join(" ")}
+      </blockquote>,
+    );
+    quote = [];
+  };
+  const flushList = () => {
+    if (list.length === 0) return;
+    nodes.push(
+      <ul
+        key={`ul-${nodes.length}`}
+        className="my-4 list-disc space-y-2 pl-6 leading-7 text-[#333]"
+      >
+        {list.map((item, index) => (
+          <li key={`${index}-${item}`}>{item}</li>
+        ))}
+      </ul>,
+    );
+    list = [];
+  };
+
+  for (const line of lines) {
+    if (line.trim().startsWith("```")) {
+      flushParagraph();
+      flushQuote();
+      flushList();
+      if (code) {
+        nodes.push(
+          <pre
+            key={`code-${nodes.length}`}
+            className="my-5 overflow-auto rounded-lg bg-[#f4f4f4] p-4 font-mono text-sm leading-6 text-[#222]"
+          >
+            {code.join("\n")}
+          </pre>,
+        );
+        code = null;
+      } else {
+        code = [];
+      }
+      continue;
+    }
+    if (code) {
+      code.push(line);
+      continue;
+    }
+
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushParagraph();
+      flushQuote();
+      flushList();
+      continue;
+    }
+    if (trimmed === "---") {
+      flushParagraph();
+      flushQuote();
+      flushList();
+      nodes.push(
+        <hr key={`hr-${nodes.length}`} className="my-8 border-[#ececec]" />,
+      );
+      continue;
+    }
+    if (trimmed.startsWith(">")) {
+      flushParagraph();
+      flushList();
+      quote.push(trimmed.replace(/^>\s?/, ""));
+      continue;
+    }
+    const unorderedItem = /^[-*]\s+(.+)$/.exec(trimmed);
+    if (unorderedItem) {
+      flushParagraph();
+      flushQuote();
+      list.push(unorderedItem[1]);
+      continue;
+    }
+
+    const heading = /^(#{1,3})\s+(.+)$/.exec(trimmed);
+    if (heading) {
+      flushParagraph();
+      flushQuote();
+      flushList();
+      const level = heading[1].length;
+      const text = heading[2];
+      const className =
+        level === 1
+          ? "mb-8 mt-2 text-2xl font-semibold text-[#222]"
+          : level === 2
+            ? "mb-4 mt-10 text-xl font-semibold text-[#222]"
+            : "mb-3 mt-7 text-base font-semibold text-[#222]";
+      if (level === 1) {
+        nodes.push(
+          <h1 key={`h-${nodes.length}`} className={className}>
+            {text}
+          </h1>,
+        );
+      } else if (level === 2) {
+        nodes.push(
+          <h2 key={`h-${nodes.length}`} className={className}>
+            {text}
+          </h2>,
+        );
+      } else {
+        nodes.push(
+          <h3 key={`h-${nodes.length}`} className={className}>
+            {text}
+          </h3>,
+        );
+      }
+      continue;
+    }
+
+    paragraph.push(trimmed);
+  }
+
+  flushParagraph();
+  flushQuote();
+  flushList();
+  if (code) {
+    nodes.push(
+      <pre
+        key={`code-${nodes.length}`}
+        className="my-5 overflow-auto rounded-lg bg-[#f4f4f4] p-4 font-mono text-sm leading-6 text-[#222]"
+      >
+        {code.join("\n")}
+      </pre>,
+    );
+  }
+
+  return nodes;
 }
 
 function normalizeKeyword(value: string): string {
@@ -284,13 +609,6 @@ function isSkillAutoLoadEnabled(
   preferences: SkillAutoLoadPreferences,
 ): boolean {
   return preferences[getSkillAutoLoadPreferenceKey(skill)] ?? true;
-}
-
-function resolveSkillCardTone(skill: ServiceSkillHomeItem): ServiceSkillTone {
-  if (skill.automationStatus?.tone) {
-    return skill.automationStatus.tone;
-  }
-  return skill.runnerTone;
 }
 
 export function SkillsWorkspacePage({
@@ -466,18 +784,17 @@ export function SkillsWorkspacePage({
           }),
       };
     }, [i18n.language, t]);
-  const curatedTaskTemplateCopy = useMemo(
-    () =>
-      buildCuratedTaskTemplateCopy((key, values) =>
-        t(key as AgentI18nKey, values ?? {}),
-      ),
-    [t],
-  );
   const {
     skills: serviceSkills = [],
     error: serviceSkillsError,
     refresh: refreshServiceSkills,
   } = useServiceSkills();
+  const {
+    skills: officialMarketplaceSkills = [],
+    isLoading: officialMarketplaceLoading,
+    error: officialMarketplaceError,
+    refresh: refreshOfficialMarketplace,
+  } = useOfficialSkillMarketplace();
   const {
     skills: localSkills = [],
     error: localSkillsError,
@@ -492,29 +809,16 @@ export function SkillsWorkspacePage({
       ? "installed"
       : "store",
   );
-  const [curatedTaskLauncherTask, setCuratedTaskLauncherTask] =
-    useState<CuratedTaskTemplateItem | null>(null);
-  const [
-    curatedTaskLauncherInitialInputValues,
-    setCuratedTaskLauncherInitialInputValues,
-  ] = useState<CuratedTaskInputValues | null>(null);
-  const [
-    curatedTaskLauncherInitialReferenceMemoryIds,
-    setCuratedTaskLauncherInitialReferenceMemoryIds,
-  ] = useState<string[] | null>(null);
-  const [
-    curatedTaskLauncherInitialReferenceEntries,
-    setCuratedTaskLauncherInitialReferenceEntries,
-  ] = useState<CuratedTaskReferenceEntry[] | null>(null);
-  const [curatedTaskLauncherPrefillHint, setCuratedTaskLauncherPrefillHint] =
-    useState<string | null>(null);
-  const [
-    curatedTaskRecommendationSignalsVersion,
-    setCuratedTaskRecommendationSignalsVersion,
-  ] = useState(0);
-  const [curatedTaskTemplatesVersion, setCuratedTaskTemplatesVersion] =
-    useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [installingMarketplaceSkillName, setInstallingMarketplaceSkillName] =
+    useState<string | null>(null);
+  const [selectedMarketplaceSkillName, setSelectedMarketplaceSkillName] =
+    useState<string | null>(null);
+  const [detailMarketplaceSkillName, setDetailMarketplaceSkillName] = useState<
+    string | null
+  >(null);
+  const [detailContentState, setDetailContentState] =
+    useState<MarketplaceSkillDetailContentState | null>(null);
   const [uninstallingSkillDirectory, setUninstallingSkillDirectory] = useState<
     string | null
   >(null);
@@ -550,6 +854,15 @@ export function SkillsWorkspacePage({
       ),
     ];
   }, [localSkills, optimisticInstalledSkill]);
+  const localSkillByDirectory = useMemo(() => {
+    const result = new Map<string, Skill>();
+    for (const skill of installedLocalSkills) {
+      if (skill.directory) {
+        result.set(skill.directory, skill);
+      }
+    }
+    return result;
+  }, [installedLocalSkills]);
   const serviceSkillRecommendationBuckets = useMemo(
     () =>
       buildServiceSkillRecommendationBuckets(serviceSkills, {
@@ -578,18 +891,6 @@ export function SkillsWorkspacePage({
       },
     ).harness.creation_replay;
   }, [creationProjectId, pageParams?.initialScaffoldDraft]);
-
-  useEffect(() => {
-    return subscribeCuratedTaskTemplateUsageChanged(() => {
-      setCuratedTaskTemplatesVersion((previous) => previous + 1);
-    });
-  }, []);
-
-  useEffect(() => {
-    return subscribeCuratedTaskRecommendationSignalsChanged(() => {
-      setCuratedTaskRecommendationSignalsVersion((previous) => previous + 1);
-    });
-  }, []);
 
   useEffect(() => {
     if (
@@ -678,36 +979,14 @@ export function SkillsWorkspacePage({
     installedSkillPresentationCopy,
     searchQuery,
   ]);
-  const visibleCuratedTaskTemplates = useMemo(() => {
-    void curatedTaskTemplatesVersion;
-    void curatedTaskRecommendationSignalsVersion;
-    return filterCuratedTaskTemplates(
-      searchQuery,
-      listCuratedTaskTemplates(curatedTaskTemplateCopy),
-    );
-  }, [
-    curatedTaskRecommendationSignalsVersion,
-    curatedTaskTemplateCopy,
-    curatedTaskTemplatesVersion,
-    searchQuery,
-  ]);
-  const visibleFeaturedCuratedTaskTemplates = useMemo(
-    () =>
-      listFeaturedHomeCuratedTaskTemplates(visibleCuratedTaskTemplates, {
-        copy: curatedTaskTemplateCopy,
-        projectId: pageParams?.creationProjectId,
-        limit: FEATURED_HOME_CURATED_TASK_TEMPLATE_IDS.length,
-      }),
-    [
-      curatedTaskTemplateCopy,
-      pageParams?.creationProjectId,
-      visibleCuratedTaskTemplates,
-    ],
-  );
   const handleRefreshAll = async () => {
     setRefreshing(true);
     try {
-      await Promise.allSettled([refreshServiceSkills(), refreshLocalSkills()]);
+      await Promise.allSettled([
+        refreshOfficialMarketplace(),
+        refreshServiceSkills(),
+        refreshLocalSkills(),
+      ]);
       toast.success(t("skills.workspace.feedback.refreshSuccess"));
     } catch (error) {
       toast.error(
@@ -720,25 +999,33 @@ export function SkillsWorkspacePage({
     }
   };
 
-  const handleServiceSkillSelect = (skill: ServiceSkillHomeItem) => {
-    const prefill = resolveServiceSkillLaunchPrefill({
-      skill,
-      creationReplay: scaffoldCreationReplay,
-      copy: serviceSkillLaunchPrefillCopy,
-    });
-    onNavigate("agent", {
-      ...buildHomeAgentParams({
-        projectId: creationProjectId,
-      }),
-      initialPendingServiceSkillLaunch: {
-        skillId: skill.id,
-        requestKey: Date.now(),
-        initialSlotValues: prefill?.slotValues,
-        prefillHint: prefill?.hint,
-        launchUserInput: prefill?.launchUserInput,
-      },
-    });
-  };
+  const handleServiceSkillSelect = useCallback(
+    (skill: ServiceSkillHomeItem) => {
+      const prefill = resolveServiceSkillLaunchPrefill({
+        skill,
+        creationReplay: scaffoldCreationReplay,
+        copy: serviceSkillLaunchPrefillCopy,
+      });
+      onNavigate("agent", {
+        ...buildHomeAgentParams({
+          projectId: creationProjectId,
+        }),
+        initialPendingServiceSkillLaunch: {
+          skillId: skill.id,
+          requestKey: Date.now(),
+          initialSlotValues: prefill?.slotValues,
+          prefillHint: prefill?.hint,
+          launchUserInput: prefill?.launchUserInput,
+        },
+      });
+    },
+    [
+      creationProjectId,
+      onNavigate,
+      scaffoldCreationReplay,
+      serviceSkillLaunchPrefillCopy,
+    ],
+  );
 
   const handleInstalledSkillSelect = useCallback(
     (skill: Skill) => {
@@ -806,6 +1093,126 @@ export function SkillsWorkspacePage({
       t,
       uninstallLocalSkill,
     ],
+  );
+
+  const resolveMarketplaceSkillActionState = useCallback(
+    (item: SkillStoreItem): MarketplaceSkillActionState => {
+      if (item.source === "local_fallback") {
+        return "local_fallback";
+      }
+      if (installingMarketplaceSkillName === item.skill.name) {
+        return "installing";
+      }
+
+      const localSkill = localSkillByDirectory.get(item.skill.name);
+      if (!localSkill) {
+        return "not_installed";
+      }
+      if (uninstallingSkillDirectory === localSkill.directory) {
+        return "uninstalling";
+      }
+      if (localSkill.sourceKind === "builtin") {
+        return "builtin";
+      }
+      return "installed";
+    },
+    [
+      installingMarketplaceSkillName,
+      localSkillByDirectory,
+      uninstallingSkillDirectory,
+    ],
+  );
+
+  const getMarketplaceSkillActionLabel = useCallback(
+    (state: MarketplaceSkillActionState) => {
+      switch (state) {
+        case "installing":
+          return t("skills.workspace.marketplace.action.installing");
+        case "installed":
+          return t("skills.workspace.marketplace.action.useInstalled");
+        case "builtin":
+          return t("skills.workspace.marketplace.action.useBuiltin");
+        case "uninstalling":
+          return t("skills.workspace.marketplace.action.uninstalling");
+        case "local_fallback":
+          return t("skills.workspace.marketplace.action.useLocal");
+        default:
+          return t("skills.workspace.marketplace.action.install");
+      }
+    },
+    [t],
+  );
+
+  const handleMarketplaceSkillInstall = useCallback(
+    async (item: SkillStoreItem) => {
+      if (item.source !== "official") {
+        return;
+      }
+      setInstallingMarketplaceSkillName(item.skill.name);
+      try {
+        const result = await installOfficialMarketplaceSkill(
+          item.skill.name,
+          "lime",
+        );
+        await refreshLocalSkills();
+        setHighlightedInstalledSkillDirectory(result.directory);
+        toast.success(
+          t("skills.workspace.marketplace.installSuccess", {
+            title: item.skill.title,
+          }),
+        );
+      } catch (error) {
+        toast.error(
+          t("skills.workspace.marketplace.installFailed", {
+            message: error instanceof Error ? error.message : String(error),
+          }),
+        );
+      } finally {
+        setInstallingMarketplaceSkillName(null);
+      }
+    },
+    [refreshLocalSkills, t],
+  );
+
+  const handleMarketplaceSkillPrimaryAction = useCallback(
+    (item: SkillStoreItem) => {
+      const state = resolveMarketplaceSkillActionState(item);
+      if (item.source === "local_fallback") {
+        handleServiceSkillSelect(item.serviceSkill);
+        return;
+      }
+
+      const localSkill = localSkillByDirectory.get(item.skill.name);
+      if (localSkill && (state === "installed" || state === "builtin")) {
+        handleInstalledSkillSelect(localSkill);
+        return;
+      }
+
+      if (state === "not_installed") {
+        void handleMarketplaceSkillInstall(item);
+      }
+    },
+    [
+      handleInstalledSkillSelect,
+      handleMarketplaceSkillInstall,
+      handleServiceSkillSelect,
+      localSkillByDirectory,
+      resolveMarketplaceSkillActionState,
+    ],
+  );
+
+  const handleMarketplaceSkillUninstall = useCallback(
+    (item: SkillStoreItem) => {
+      if (item.source !== "official") {
+        return;
+      }
+      const localSkill = localSkillByDirectory.get(item.skill.name);
+      if (!localSkill || localSkill.sourceKind === "builtin") {
+        return;
+      }
+      void handleUninstallLocalSkill(localSkill);
+    },
+    [handleUninstallLocalSkill, localSkillByDirectory],
   );
 
   const handleSkillAutoLoadChange = useCallback(
@@ -950,141 +1357,111 @@ export function SkillsWorkspacePage({
       t("skills.workspace.scaffold.defaultTitle"),
     [activeScaffoldDraft, t],
   );
-  const handleCuratedTaskTemplateLauncherRequest = useCallback(
-    (
-      template: CuratedTaskTemplateItem,
-      initialInputValues?: CuratedTaskInputValues | null,
-      initialReferenceMemoryIds?: string[] | null,
-      initialReferenceEntries?: CuratedTaskReferenceEntry[] | null,
-      prefillHint?: string | null,
-    ) => {
-      setCuratedTaskLauncherTask(template);
-      setCuratedTaskLauncherInitialInputValues(initialInputValues ?? null);
-      setCuratedTaskLauncherInitialReferenceMemoryIds(
-        normalizeCuratedTaskReferenceMemoryIds(initialReferenceMemoryIds) ??
-          null,
-      );
-      setCuratedTaskLauncherInitialReferenceEntries(
-        mergeCuratedTaskReferenceEntries(initialReferenceEntries ?? []),
-      );
-      setCuratedTaskLauncherPrefillHint(prefillHint ?? null);
-    },
-    [],
-  );
-
-  const handleCuratedTaskLauncherOpenChange = useCallback((open: boolean) => {
-    if (!open) {
-      setCuratedTaskLauncherTask(null);
-      setCuratedTaskLauncherInitialInputValues(null);
-      setCuratedTaskLauncherInitialReferenceMemoryIds(null);
-      setCuratedTaskLauncherInitialReferenceEntries(null);
-      setCuratedTaskLauncherPrefillHint(null);
+  const skillStoreItems = useMemo<SkillStoreItem[]>(() => {
+    if (officialMarketplaceSkills.length > 0) {
+      return officialMarketplaceSkills.map((skill) => ({
+        source: "official",
+        skill,
+      }));
     }
-  }, []);
-  const handleApplyLauncherReviewSuggestion = useCallback(
-    (
-      template: CuratedTaskTemplateItem,
-      options: {
-        inputValues: CuratedTaskInputValues;
-        referenceSelection: CuratedTaskReferenceSelection;
-      },
-    ) => {
-      handleCuratedTaskTemplateLauncherRequest(
-        template,
-        options.inputValues,
-        options.referenceSelection.referenceMemoryIds,
-        options.referenceSelection.referenceEntries,
-        t("skills.workspace.launcher.reviewPrefillHint"),
-      );
-    },
-    [handleCuratedTaskTemplateLauncherRequest, t],
+
+    return workspaceServiceSkills.slice(0, 12).map((serviceSkill) => ({
+      source: "local_fallback",
+      skill: buildFallbackMarketplaceItem(serviceSkill),
+      serviceSkill,
+    }));
+  }, [officialMarketplaceSkills, workspaceServiceSkills]);
+
+  const visibleStoreItems = useMemo(() => {
+    return skillStoreItems.filter(({ skill, serviceSkill }) =>
+      matchesText(
+        searchQuery,
+        skill.title,
+        skill.summary,
+        skill.category,
+        skill.outputHint,
+        skill.bundle?.description,
+        ...(skill.aliases ?? []),
+        serviceSkill
+          ? buildServiceSkillCapabilityDescription(serviceSkill, {
+              copy: serviceSkillPresentationCopy,
+            })
+          : undefined,
+      ),
+    );
+  }, [searchQuery, serviceSkillPresentationCopy, skillStoreItems]);
+  const featuredStoreItems = useMemo(
+    () => visibleStoreItems.slice(0, 9),
+    [visibleStoreItems],
+  );
+  const otherStoreItems = useMemo(
+    () => visibleStoreItems.slice(9),
+    [visibleStoreItems],
   );
 
-  const handleCuratedTaskTemplateSelect = useCallback(
-    (
-      template: CuratedTaskTemplateItem,
-      inputValues: CuratedTaskInputValues,
-      referenceSelection: CuratedTaskReferenceSelection,
-    ) => {
-      const normalizedLaunchInputValues =
-        normalizeCuratedTaskLaunchInputValues(inputValues);
-      recordCuratedTaskTemplateUsage({
-        templateId: template.id,
-        launchInputValues: inputValues,
-        referenceMemoryIds: referenceSelection.referenceMemoryIds,
-        referenceEntries: referenceSelection.referenceEntries,
-      });
-      setCuratedTaskLauncherTask(null);
-      setCuratedTaskLauncherInitialInputValues(null);
-      setCuratedTaskLauncherInitialReferenceMemoryIds(null);
-      setCuratedTaskLauncherInitialReferenceEntries(null);
-      setCuratedTaskLauncherPrefillHint(null);
-      const resolvedTemplate = template;
-      const requestMetadata = buildCuratedTaskLaunchRequestMetadata({
-        taskId: resolvedTemplate.id,
-        taskTitle: resolvedTemplate.title,
-        inputValues,
-        referenceMemoryIds: referenceSelection.referenceMemoryIds,
-        referenceEntries: referenceSelection.referenceEntries,
-      });
-      onNavigate(
-        "agent",
-        buildHomeAgentParams({
-          projectId: creationProjectId,
-          initialRequestMetadata: requestMetadata,
-          initialInputCapability: {
-            capabilityRoute: {
-              kind: "curated_task",
-              taskId: resolvedTemplate.id,
-              taskTitle: resolvedTemplate.title,
-              prompt: buildCuratedTaskLaunchPrompt({
-                task: resolvedTemplate,
-                inputValues,
-                referenceEntries: referenceSelection.referenceEntries,
-              }),
-              ...(normalizedLaunchInputValues
-                ? {
-                    launchInputValues: normalizedLaunchInputValues,
-                  }
-                : {}),
-              ...(referenceSelection.referenceMemoryIds.length > 0
-                ? {
-                    referenceMemoryIds: referenceSelection.referenceMemoryIds,
-                  }
-                : {}),
-              ...(referenceSelection.referenceEntries.length > 0
-                ? {
-                    referenceEntries: referenceSelection.referenceEntries,
-                  }
-                : {}),
-            },
-            requestKey: Date.now(),
-          },
-          entryBannerMessage: t("skills.workspace.curatedTask.entryBanner", {
-            title: resolvedTemplate.title,
-          }),
-        }),
-      );
-    },
-    [creationProjectId, onNavigate, t],
-  );
+  const selectedStoreItem = useMemo(() => {
+    if (!selectedMarketplaceSkillName) {
+      return null;
+    }
+    return (
+      visibleStoreItems.find(
+        (item) => item.skill.name === selectedMarketplaceSkillName,
+      ) ?? null
+    );
+  }, [selectedMarketplaceSkillName, visibleStoreItems]);
+  const detailStoreItem = useMemo(() => {
+    if (!detailMarketplaceSkillName) {
+      return null;
+    }
+    return (
+      skillStoreItems.find(
+        (item) => item.skill.name === detailMarketplaceSkillName,
+      ) ?? null
+    );
+  }, [detailMarketplaceSkillName, skillStoreItems]);
 
-  const visibleStoreSkills = useMemo(() => {
-    return workspaceServiceSkills
-      .filter((skill) =>
-        matchesText(
-          searchQuery,
-          skill.title,
-          skill.summary,
-          skill.category,
-          skill.outputHint,
-          buildServiceSkillCapabilityDescription(skill, {
-            copy: serviceSkillPresentationCopy,
-          }),
-        ),
-      )
-      .slice(0, 12);
-  }, [searchQuery, serviceSkillPresentationCopy, workspaceServiceSkills]);
+  useEffect(() => {
+    if (!detailStoreItem) {
+      setDetailContentState(null);
+      return;
+    }
+
+    let cancelled = false;
+    const skillName = detailStoreItem.skill.name;
+
+    if (detailStoreItem.source !== "official") {
+      setDetailContentState({
+        skillName,
+        status: "ready",
+        content: buildFallbackSkillMarkdown(detailStoreItem),
+      });
+      return;
+    }
+
+    setDetailContentState({ skillName, status: "loading" });
+    void getOfficialSkillMarketplaceBundle(skillName)
+      .then((bundle) => {
+        if (cancelled) return;
+        const content = extractSkillMarkdown(bundle);
+        setDetailContentState({
+          skillName,
+          status: "ready",
+          content: content || buildFallbackSkillMarkdown(detailStoreItem),
+        });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setDetailContentState({
+          skillName,
+          status: "error",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [detailStoreItem]);
 
   const visibleBuiltinLocalSkills = useMemo(
     () =>
@@ -1102,8 +1479,7 @@ export function SkillsWorkspacePage({
       ),
     [visibleInstalledLocalSkills],
   );
-  const skillStoreCount =
-    visibleCuratedTaskTemplates.length + workspaceServiceSkills.length;
+  const skillStoreCount = skillStoreItems.length;
   const builtinSkillCount = visibleBuiltinLocalSkills.length;
   const installedSkillCount = visibleUserInstalledSkills.length;
   const viewTabs: Array<{
@@ -1113,17 +1489,17 @@ export function SkillsWorkspacePage({
   }> = [
     {
       key: "store",
-      label: t("skills.workspace.view.store", "技能广场"),
+      label: t("skills.workspace.view.store"),
       count: skillStoreCount,
     },
     {
       key: "builtin",
-      label: t("skills.workspace.view.builtin", "内置"),
+      label: t("skills.workspace.view.builtin"),
       count: builtinSkillCount,
     },
     {
       key: "installed",
-      label: t("skills.workspace.view.installed", "用户安装"),
+      label: t("skills.workspace.view.installed"),
       count: installedSkillCount,
     },
   ];
@@ -1135,12 +1511,12 @@ export function SkillsWorkspacePage({
       <div className="flex shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5">
         <div className="hidden min-w-[86px] sm:block">
           <div className="text-[11px] font-semibold leading-4 text-slate-700">
-            {t("skills.workspace.autoLoad.label", "自动加载")}
+            {t("skills.workspace.autoLoad.label")}
           </div>
           <div className="text-[10px] leading-3 text-slate-400">
             {enabled
-              ? t("skills.workspace.autoLoad.on", "已开启")
-              : t("skills.workspace.autoLoad.off", "已关闭")}
+              ? t("skills.workspace.autoLoad.on")
+              : t("skills.workspace.autoLoad.off")}
           </div>
         </div>
         <Switch
@@ -1156,92 +1532,215 @@ export function SkillsWorkspacePage({
     );
   };
 
+  const renderMarketplaceSkillCard = (item: SkillStoreItem, index: number) => {
+    const skill = item.skill;
+    const tone: ServiceSkillTone =
+      index % 4 === 0
+        ? "emerald"
+        : index % 4 === 1
+          ? "sky"
+          : index % 4 === 2
+            ? "amber"
+            : "slate";
+    const actionState = resolveMarketplaceSkillActionState(item);
+    const iconAsset =
+      skill.icon ?? buildMarketplaceIconPlaceholder(skill.title);
+    const isSelected = selectedStoreItem?.skill.name === skill.name;
+    const summary =
+      skill.summary ||
+      skill.bundle?.description ||
+      t("skills.workspace.marketplace.defaultOutputHint");
+    const secondaryText =
+      skill.version ||
+      skill.category ||
+      t("skills.workspace.marketplace.defaultCategory");
+
+    const openDetail = () => {
+      setSelectedMarketplaceSkillName(skill.name);
+      setDetailMarketplaceSkillName(skill.name);
+    };
+    const localSkill =
+      item.source === "official" ? localSkillByDirectory.get(skill.name) : null;
+    const canUninstall =
+      item.source === "official" &&
+      Boolean(localSkill) &&
+      localSkill?.sourceKind !== "builtin";
+    const actionDisabled =
+      actionState === "installing" || actionState === "uninstalling";
+
+    return (
+      <article
+        key={`${item.source}:${skill.name}`}
+        className={cn(
+          "group flex min-h-[132px] flex-col rounded-[10px] border bg-white p-4 text-left shadow-[0_1px_2px_rgba(49,41,28,0.03)] transition hover:border-[#cfc5b4] hover:shadow-[0_6px_20px_rgba(49,41,28,0.07)]",
+          isSelected
+            ? "border-[#b8d8bd] ring-1 ring-[#b8d8bd]"
+            : "border-[#e7e2d9]",
+        )}
+        data-testid="skills-marketplace-card"
+      >
+        <div className="flex items-start gap-3">
+          <MarketplaceSkillVisual
+            asset={iconAsset}
+            title={skill.title}
+            tone={tone}
+          />
+          <div className="min-w-0 flex-1">
+            <h3 className="line-clamp-1 text-[15px] font-semibold leading-5 text-[#2b2b2b]">
+              {skill.title}
+            </h3>
+            <p className="mt-0.5 line-clamp-1 text-[12px] leading-4 text-[#9a9488]">
+              {skill.name}
+            </p>
+          </div>
+        </div>
+        <p className="mt-3 line-clamp-2 flex-1 text-[13px] leading-5 text-[#6b6b63]">
+          {summary}
+        </p>
+        <div className="mt-3 flex items-center justify-between gap-3 text-[12px] leading-4 text-[#9a9488]">
+          <span className="line-clamp-1">
+            {secondaryText}
+          </span>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {canUninstall ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 rounded-full px-2.5 text-[12px] font-semibold text-[#8a5a42] hover:bg-[#f8efe8]"
+                disabled={actionDisabled}
+                onClick={() => handleMarketplaceSkillUninstall(item)}
+              >
+                {t("skills.workspace.marketplace.action.uninstall")}
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 rounded-full px-2.5 text-[12px] font-semibold text-[#6f695f] hover:bg-[#f5efe4]"
+              onClick={openDetail}
+            >
+              {t("skills.workspace.marketplace.action.detail")}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 rounded-full bg-[#232323] px-3 text-[12px] font-semibold text-white shadow-none hover:bg-[#111]"
+              disabled={actionDisabled}
+              onClick={() => handleMarketplaceSkillPrimaryAction(item)}
+            >
+              {getMarketplaceSkillActionLabel(actionState)}
+            </Button>
+          </div>
+        </div>
+      </article>
+    );
+  };
+
+  const renderMarketplaceSkillSection = (
+    title: string,
+    items: SkillStoreItem[],
+    startIndex = 0,
+    meta?: string,
+  ) => {
+    if (items.length === 0) {
+      return null;
+    }
+
+    return (
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-[17px] font-semibold tracking-[-0.01em] text-[#262626]">
+            {title}
+          </h2>
+          {meta ? (
+            <span className="text-[12px] leading-5 text-[#9a9488]">{meta}</span>
+          ) : null}
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {items.map((item, index) =>
+            renderMarketplaceSkillCard(item, startIndex + index),
+          )}
+        </div>
+      </section>
+    );
+  };
+
   return (
     <>
-      <div className="lime-workbench-theme-scope flex h-full min-h-0 flex-col overflow-hidden bg-white">
-        <header className="flex shrink-0 items-center justify-end gap-2 border-b border-slate-100 bg-white px-5 py-2.5">
+      <div className="lime-workbench-theme-scope flex h-full min-h-0 flex-col overflow-hidden bg-[#fbf8f0]">
+        <header className="flex h-16 shrink-0 items-center justify-end gap-3 border-b border-[#e6ddcd] bg-[#fbf8f0] px-5 lg:px-8">
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            className="h-8 w-8 rounded-full p-0 text-slate-500 hover:bg-slate-100"
+            className="h-8 w-8 rounded-full p-0 text-[#838579] hover:bg-[#f2eadc]"
             data-testid="skills-workspace-refresh-button"
             onClick={() => void handleRefreshAll()}
             disabled={refreshing}
             aria-label={t("skills.workspace.header.refresh")}
           >
             <RefreshCw
-              className={cn("h-3.5 w-3.5", refreshing && "animate-spin")}
+              className={cn("h-4 w-4", refreshing && "animate-spin")}
             />
           </Button>
-          <label className="relative hidden w-[220px] sm:block">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+          <label className="relative hidden w-[280px] sm:block">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7f8175]" />
             <Input
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder={t("skills.workspace.search.placeholder", "搜索技能")}
-              className="h-8 rounded-full border-slate-200 bg-white pl-8 pr-3 text-xs shadow-none"
+              placeholder={t("skills.workspace.search.placeholder")}
+              className="h-9 rounded-full border-[#e1d9cb] bg-white pl-10 pr-4 text-sm font-semibold text-[#111827] shadow-none placeholder:text-[#8d8f9a]"
             />
           </label>
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="h-8 rounded-full border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 shadow-none hover:bg-slate-50"
+            className="h-9 rounded-full border-[#e1d9cb] bg-white px-4 text-sm font-semibold text-[#111827] shadow-none hover:bg-[#f8f3ea]"
             onClick={() => {
               setScaffoldDialogDraft(null);
               setScaffoldDialogOpen(true);
             }}
           >
-            {t("skills.workspace.header.createWithLime", "通过 Lime 创建")}
+            {t("skills.workspace.header.createWithLime")}
           </Button>
           <Button
             type="button"
             size="sm"
-            className="h-8 rounded-full bg-slate-950 px-3 text-xs font-semibold text-white hover:bg-slate-800"
+            className="h-9 rounded-full bg-[#111] px-5 text-sm font-semibold text-white shadow-none hover:bg-[#000]"
             disabled={importingLocalSkill}
             onClick={() => void handleImportLocalSkill()}
           >
             {importingLocalSkill
-              ? t("skills.workspace.header.installingSkill", "安装中")
-              : t("skills.workspace.header.installSkill", "安装技能")}
+              ? t("skills.workspace.header.installingSkill")
+              : t("skills.workspace.header.installSkill")}
           </Button>
         </header>
 
-        <main className="min-h-0 flex-1 overflow-auto px-5 pb-10 pt-8 lg:px-10 xl:px-14">
-          <div className="mx-auto w-full max-w-[1180px] space-y-6 2xl:max-w-[1280px]">
-            <section className="space-y-3">
+        <main className="min-h-0 flex-1 overflow-auto bg-white px-5 pb-10 pt-10">
+          <div className="mx-auto w-full max-w-[900px] space-y-8">
+            <section className="space-y-4">
               <div>
-                <h1 className="text-[24px] font-semibold tracking-[-0.02em] text-slate-950">
-                  {t("skills.workspace.header.title", "技能")}
+                <h1 className="text-[28px] font-semibold tracking-[-0.03em] text-[#111827]">
+                  {t("skills.workspace.header.title")}
                 </h1>
-                <p className="mt-1 text-sm leading-6 text-slate-500">
-                  {t(
-                    "skills.workspace.header.subtitle",
-                    "安装和管理技能，需要时带回首页输入框使用。",
-                  )}
+                <p className="mt-2 text-sm leading-6 text-[#a0a0a0]">
+                  {t("skills.workspace.header.subtitle")}
                 </p>
               </div>
-              <div
-                className="relative h-[116px] overflow-hidden rounded-lg lg:h-[132px]"
-                style={{
-                  background:
-                    "linear-gradient(135deg, #f3fbff 0%, #e6f7ff 52%, #dcf3ff 100%)",
-                }}
-              >
-                <div className="pointer-events-none absolute -right-4 top-1/2 hidden h-[128px] w-[222px] -translate-y-1/2 sm:block lg:right-8 lg:h-[148px] lg:w-[256px]">
-                  <SkillsBannerSvg />
-                </div>
-                <div className="absolute left-4 top-1/2 max-w-[420px] -translate-y-1/2 pr-5 lg:left-6">
-                  <div className="text-sm font-semibold text-slate-950">
-                    {t("skills.workspace.hero.title", "为你精选的职场技能")}
+              <div className="relative h-[128px] overflow-hidden rounded-lg bg-[#e9f8ff]">
+                <div className="absolute left-6 top-1/2 -translate-y-1/2">
+                  <div className="text-base font-semibold leading-6 text-[#222]">
+                    {t("skills.workspace.hero.title")}
                   </div>
-                  <p className="mt-1 text-xs leading-5 text-slate-600">
-                    {t(
-                      "skills.workspace.hero.description",
-                      "覆盖写作、效率、设计、数据分析等多种场景，一键安装。",
-                    )}
+                  <p className="mt-2 text-sm leading-5 text-[#6f7780]">
+                    {t("skills.workspace.hero.description")}
                   </p>
+                </div>
+                <div className="pointer-events-none absolute right-2 top-1/2 hidden h-[142px] w-[320px] -translate-y-1/2 sm:block">
+                  <SkillsHeroBannerSvg />
                 </div>
               </div>
             </section>
@@ -1254,7 +1753,7 @@ export function SkillsWorkspacePage({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="min-w-0">
                     <span className="font-semibold">
-                      {t("skills.workspace.activeScaffold.badge", "新技能")}
+                      {t("skills.workspace.activeScaffold.badge")}
                     </span>
                     <span className="ml-2 text-emerald-900">
                       {activeScaffoldTitle}
@@ -1270,10 +1769,7 @@ export function SkillsWorkspacePage({
                       handleBringScaffoldToCreation(activeScaffoldDraft)
                     }
                   >
-                    {t(
-                      "skills.workspace.activeScaffold.backToCreation",
-                      "回去继续完善",
-                    )}
+                    {t("skills.workspace.activeScaffold.backToCreation")}
                   </Button>
                 </div>
               </section>
@@ -1299,9 +1795,9 @@ export function SkillsWorkspacePage({
 
             <nav className="flex flex-wrap items-center justify-between gap-3">
               <div
-                className="flex items-center gap-2 rounded-full bg-slate-100 p-1"
+                className="flex items-center gap-5"
                 role="tablist"
-                aria-label={t("skills.workspace.view.tabsLabel", "技能分页")}
+                aria-label={t("skills.workspace.view.tabsLabel")}
               >
                 {viewTabs.map((tab) => {
                   const active = activeView === tab.key;
@@ -1313,17 +1809,17 @@ export function SkillsWorkspacePage({
                       aria-selected={active}
                       aria-controls={`skills-${tab.key}-view`}
                       className={cn(
-                        "inline-flex h-8 items-center gap-1 rounded-full px-3 text-sm font-semibold transition",
+                        "inline-flex h-8 items-center gap-2 rounded-full text-base font-semibold transition",
                         active
-                          ? "bg-white text-slate-950 shadow-sm shadow-slate-950/5"
-                          : "text-slate-500 hover:text-slate-800",
+                          ? "text-[#222]"
+                          : "text-[#a1a197] hover:text-slate-900",
                       )}
                       onClick={() => setActiveView(tab.key)}
                     >
                       {tab.label}
                       {tab.key === "installed" &&
                       typeof tab.count === "number" ? (
-                        <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
+                        <span className="text-xs text-[#a1a197]">
                           {formatNumber(tab.count, { locale: i18n.language })}
                         </span>
                       ) : null}
@@ -1337,17 +1833,17 @@ export function SkillsWorkspacePage({
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="h-8 rounded-lg border-slate-200 bg-white px-3 text-xs text-slate-600 shadow-none hover:bg-slate-50"
+                    className="h-8 rounded-lg border-[#e5e1d8] bg-white px-3 text-xs font-semibold text-[#5f6058] shadow-none hover:bg-[#faf8f3]"
                   >
-                    {t("skills.workspace.filter.all", "全部")}
+                    {t("skills.workspace.filter.all")}
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="h-8 rounded-lg border-slate-200 bg-white px-3 text-xs text-slate-600 shadow-none hover:bg-slate-50"
+                    className="h-8 rounded-lg border-[#e5e1d8] bg-white px-3 text-xs font-semibold text-[#5f6058] shadow-none hover:bg-[#faf8f3]"
                   >
-                    {t("skills.workspace.sort.hot", "排序：热门")}
+                    {t("skills.workspace.sort.hot")}
                   </Button>
                 </div>
               ) : null}
@@ -1360,110 +1856,40 @@ export function SkillsWorkspacePage({
                 className="space-y-6"
                 data-testid="skills-store-view"
               >
-                <section className="space-y-3">
-                  <h2 className="text-xs font-semibold text-slate-700">
-                    {t("skills.workspace.featured.title", "官方精选")}
-                  </h2>
-                  {visibleFeaturedCuratedTaskTemplates.length > 0 ? (
-                    <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
-                      {visibleFeaturedCuratedTaskTemplates
-                        .slice(0, 9)
-                        .map((featured, index) => {
-                          const template = featured.template;
-                          return (
-                            <button
-                              key={template.id}
-                              type="button"
-                              className="group min-h-[120px] rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
-                              onClick={() =>
-                                handleCuratedTaskTemplateLauncherRequest(
-                                  template,
-                                )
-                              }
-                            >
-                              <div className="flex items-start gap-3">
-                                <SkillTileSvg
-                                  tone={
-                                    index % 3 === 0
-                                      ? "sky"
-                                      : index % 3 === 1
-                                        ? "emerald"
-                                        : "slate"
-                                  }
-                                />
-                                <div className="min-w-0">
-                                  <div className="line-clamp-1 text-sm font-semibold text-slate-900">
-                                    {template.title}
-                                  </div>
-                                  <div className="line-clamp-1 text-xs text-slate-400">
-                                    {t(
-                                      "skills.workspace.store.officialBadge",
-                                      "官方精选",
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                              <p className="mt-3 line-clamp-3 text-xs leading-5 text-slate-500">
-                                {template.summary}
-                              </p>
-                              <div className="mt-3 text-[11px] text-slate-400">
-                                {template.outputHint ||
-                                  getCuratedTaskOutputDestination(template)}
-                              </div>
-                            </button>
-                          );
-                        })}
+                <div className="space-y-5">
+                  {officialMarketplaceError &&
+                  officialMarketplaceSkills.length === 0 ? (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-700">
+                      {t("skills.workspace.marketplace.fallbackNotice")}
                     </div>
+                  ) : null}
+
+                  {visibleStoreItems.length > 0 ? (
+                    <>
+                      {renderMarketplaceSkillSection(
+                        t("skills.workspace.marketplace.featuredTitle"),
+                        featuredStoreItems,
+                        0,
+                        officialMarketplaceLoading
+                          ? t("skills.workspace.marketplace.syncing")
+                          : t("skills.workspace.marketplace.count", {
+                              count: skillStoreCount,
+                            }),
+                      )}
+                      {renderMarketplaceSkillSection(
+                        t("skills.workspace.marketplace.otherTitle", {
+                          count: otherStoreItems.length,
+                        }),
+                        otherStoreItems,
+                        featuredStoreItems.length,
+                      )}
+                    </>
                   ) : (
                     <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                      {t("skills.workspace.empty.resultTemplates.default")}
+                      {t("skills.workspace.marketplace.empty")}
                     </div>
                   )}
-                </section>
-
-                {visibleStoreSkills.length > 0 ? (
-                  <section className="space-y-3">
-                    <h2 className="text-xs font-semibold text-slate-700">
-                      {t("skills.workspace.store.other" as AgentI18nKey, {
-                        count: visibleStoreSkills.length,
-                      })}
-                    </h2>
-                    <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
-                      {visibleStoreSkills.map((skill) => {
-                        const tone = resolveSkillCardTone(skill);
-                        return (
-                          <button
-                            key={skill.id}
-                            type="button"
-                            className="group min-h-[120px] rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
-                            onClick={() => handleServiceSkillSelect(skill)}
-                          >
-                            <div className="flex items-start gap-3">
-                              <SkillTileSvg tone={tone} />
-                              <div className="min-w-0">
-                                <div className="line-clamp-1 text-sm font-semibold text-slate-900">
-                                  {skill.title}
-                                </div>
-                                <div className="line-clamp-1 text-xs text-slate-400">
-                                  {getServiceSkillTypeLabel(skill, {
-                                    copy: serviceSkillPresentationCopy,
-                                  })}
-                                </div>
-                              </div>
-                            </div>
-                            <p className="mt-3 line-clamp-3 text-xs leading-5 text-slate-500">
-                              {skill.summary ||
-                                resolveServiceSkillEntryDescription(skill)}
-                            </p>
-                            <div className="mt-3 text-[11px] text-slate-400">
-                              {skill.outputHint}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </section>
-                ) : null}
+                </div>
               </div>
             ) : null}
 
@@ -1476,13 +1902,10 @@ export function SkillsWorkspacePage({
               >
                 <div>
                   <h2 className="text-xs font-semibold text-slate-700">
-                    {t("skills.workspace.builtin.title", "内置技能")}
+                    {t("skills.workspace.builtin.title")}
                   </h2>
                   <p className="mt-1 text-xs text-slate-500">
-                    {t(
-                      "skills.workspace.builtin.subtitle",
-                      "Lime 自带的技能。开关只控制是否自动匹配，不影响你继续使用 Lime。",
-                    )}
+                    {t("skills.workspace.builtin.subtitle")}
                   </p>
                 </div>
                 {visibleBuiltinLocalSkills.length > 0 ? (
@@ -1505,10 +1928,7 @@ export function SkillsWorkspacePage({
                               )}
                           </p>
                           <p className="mt-0.5 line-clamp-1 text-[11px] leading-4 text-slate-400">
-                            {t(
-                              "skills.workspace.autoLoad.description",
-                              "开启后，Lime 会在相关任务里自动带上；关闭后，不会主动匹配。",
-                            )}
+                            {t("skills.workspace.autoLoad.description")}
                           </p>
                         </div>
                         {renderAutoLoadControl(skill)}
@@ -1517,10 +1937,7 @@ export function SkillsWorkspacePage({
                   </div>
                 ) : (
                   <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                    {t(
-                      "skills.workspace.builtin.empty",
-                      "可以尝试刷新，或换个关键词继续找。",
-                    )}
+                    {t("skills.workspace.builtin.empty")}
                   </div>
                 )}
               </section>
@@ -1535,13 +1952,10 @@ export function SkillsWorkspacePage({
               >
                 <div>
                   <h2 className="text-xs font-semibold text-slate-700">
-                    {t("skills.workspace.installed.title", "用户安装")}
+                    {t("skills.workspace.installed.title")}
                   </h2>
                   <p className="mt-1 text-xs text-slate-500">
-                    {t(
-                      "skills.workspace.installed.subtitle",
-                      "你安装的技能。自动加载、手动使用、卸载是三个独立操作。",
-                    )}
+                    {t("skills.workspace.installed.subtitle")}
                   </p>
                 </div>
                 {visibleUserInstalledSkills.length > 0 ? (
@@ -1572,10 +1986,7 @@ export function SkillsWorkspacePage({
                                 )}
                             </p>
                             <p className="mt-0.5 line-clamp-1 text-[11px] leading-4 text-slate-400">
-                              {t(
-                                "skills.workspace.autoLoad.description",
-                                "开启后，Lime 会在相关任务里自动带上；关闭后，不会主动匹配。",
-                              )}
+                              {t("skills.workspace.autoLoad.description")}
                             </p>
                           </div>
                           <div className="flex shrink-0 items-center gap-2">
@@ -1587,10 +1998,7 @@ export function SkillsWorkspacePage({
                               className="h-8 rounded-full border-slate-200 bg-white px-3 text-xs text-slate-700 shadow-none hover:bg-slate-50"
                               onClick={() => handleInstalledSkillSelect(skill)}
                             >
-                              {t(
-                                "skills.workspace.installedSkill.action.use",
-                                "使用",
-                              )}
+                              {t("skills.workspace.installedSkill.action.use")}
                             </Button>
                             {skill.sourceKind !== "builtin" &&
                             skill.catalogSource !== "project" ? (
@@ -1609,11 +2017,9 @@ export function SkillsWorkspacePage({
                                 {uninstallingSkillDirectory === skill.directory
                                   ? t(
                                       "skills.workspace.installedSkill.action.uninstalling",
-                                      "卸载中",
                                     )
                                   : t(
                                       "skills.workspace.installedSkill.action.uninstall",
-                                      "卸载",
                                     )}
                               </Button>
                             ) : null}
@@ -1649,18 +2055,141 @@ export function SkillsWorkspacePage({
         onBringBackToCreation={handleBringScaffoldToCreation}
       />
 
-      <CuratedTaskLauncherDialog
-        open={Boolean(curatedTaskLauncherTask)}
-        task={curatedTaskLauncherTask}
-        projectId={pageParams?.creationProjectId}
-        initialInputValues={curatedTaskLauncherInitialInputValues}
-        initialReferenceMemoryIds={curatedTaskLauncherInitialReferenceMemoryIds}
-        initialReferenceEntries={curatedTaskLauncherInitialReferenceEntries}
-        prefillHint={curatedTaskLauncherPrefillHint}
-        onOpenChange={handleCuratedTaskLauncherOpenChange}
-        onApplyReviewSuggestion={handleApplyLauncherReviewSuggestion}
-        onConfirm={handleCuratedTaskTemplateSelect}
-      />
+      <Dialog
+        open={Boolean(detailStoreItem)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDetailMarketplaceSkillName(null);
+          }
+        }}
+      >
+        <DialogContent
+          className="overflow-hidden rounded-[18px] border border-[#e5ded2] bg-white p-0"
+          maxWidth="max-w-[920px]"
+        >
+          {detailStoreItem ? (
+            <div
+              className="flex max-h-[calc(100vh-3rem)] min-h-[560px] flex-col bg-white"
+              data-testid="skills-marketplace-detail"
+            >
+              <div className="shrink-0 border-b border-[#eee8dd] px-6 py-5 pr-14">
+                <DialogHeader className="space-y-0 text-left">
+                  <div className="flex items-center gap-3">
+                    <MarketplaceSkillVisual
+                      asset={
+                        detailStoreItem.skill.icon ??
+                        buildMarketplaceIconPlaceholder(
+                          detailStoreItem.skill.title,
+                        )
+                      }
+                      title={detailStoreItem.skill.title}
+                    />
+                    <div className="min-w-0">
+                      <DialogTitle className="line-clamp-1 text-[22px] font-semibold leading-7 tracking-[-0.02em] text-[#222]">
+                        {detailStoreItem.skill.title}
+                      </DialogTitle>
+                      <div className="mt-1 line-clamp-1 text-[13px] leading-5 text-[#8a8376]">
+                        {detailStoreItem.skill.name}
+                      </div>
+                    </div>
+                  </div>
+                </DialogHeader>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+                <div className="mb-5 rounded-lg border border-[#cfe9ff] bg-[#eef8ff] px-4 py-3 text-[13px] leading-5 text-[#2f6280]">
+                  {t("skills.workspace.marketplace.detail.sourceNotice")}
+                </div>
+                <article className="mx-auto max-w-[760px] pb-8 text-left">
+                  {(() => {
+                    const contentState =
+                      detailContentState?.skillName ===
+                      detailStoreItem.skill.name
+                        ? detailContentState
+                        : null;
+
+                    if (!contentState || contentState.status === "loading") {
+                      return (
+                        <div className="rounded-lg border border-[#eee8dd] bg-[#fbfaf7] px-4 py-8 text-center text-sm text-[#8a8376]">
+                          {t(
+                            "skills.workspace.marketplace.detail.loadingSkillContent",
+                          )}
+                        </div>
+                      );
+                    }
+
+                    if (contentState.status === "error") {
+                      return (
+                        <>
+                          <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-700">
+                            {t(
+                              "skills.workspace.marketplace.detail.loadSkillContentFailed",
+                              {
+                                message: contentState.message,
+                              },
+                            )}
+                          </div>
+                          {renderSkillMarkdown(
+                            buildFallbackSkillMarkdown(detailStoreItem),
+                          )}
+                        </>
+                      );
+                    }
+
+                    return renderSkillMarkdown(contentState.content);
+                  })()}
+                </article>
+              </div>
+
+              <div className="flex shrink-0 justify-end border-t border-[#eee8dd] bg-[#fffdf8] px-6 py-4">
+                {(() => {
+                  const actionState =
+                    resolveMarketplaceSkillActionState(detailStoreItem);
+                  const localSkill = localSkillByDirectory.get(
+                    detailStoreItem.skill.name,
+                  );
+                  const canUninstall =
+                    detailStoreItem.source === "official" &&
+                    Boolean(localSkill) &&
+                    localSkill?.sourceKind !== "builtin";
+                  return (
+                    <div className="flex items-center gap-2">
+                      {canUninstall ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-9 rounded-full border-[#e1d9cb] bg-white px-5 text-sm font-semibold text-[#4f4a42] shadow-none hover:bg-[#f8f3ea]"
+                          disabled={actionState === "uninstalling"}
+                          onClick={() =>
+                            handleMarketplaceSkillUninstall(detailStoreItem)
+                          }
+                        >
+                          {t("skills.workspace.marketplace.action.uninstall")}
+                        </Button>
+                      ) : null}
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-9 rounded-full bg-[#1f1f1f] px-5 text-sm font-semibold text-white shadow-none hover:bg-[#111]"
+                        disabled={
+                          actionState === "installing" ||
+                          actionState === "uninstalling"
+                        }
+                        onClick={() =>
+                          handleMarketplaceSkillPrimaryAction(detailStoreItem)
+                        }
+                      >
+                        {getMarketplaceSkillActionLabel(actionState)}
+                      </Button>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

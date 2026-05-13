@@ -124,6 +124,11 @@ describe("agentStreamSubmitDraft", () => {
     prepareAgentStreamSubmitDraft({
       content: "/image_generate 生成 春日咖啡馆插画",
       displayContent: "@配图 生成 春日咖啡馆插画",
+      capabilityRoute: {
+        kind: "installed_skill",
+        skillKey: "image_generate",
+        skillName: "配图",
+      },
       images: [],
       skipUserMessage: false,
       expectingQueue: false,
@@ -149,6 +154,11 @@ describe("agentStreamSubmitDraft", () => {
     expect(messages[0]).toMatchObject({
       id: "user-3",
       content: "@配图 生成 春日咖啡馆插画",
+      inputCapabilityRoute: {
+        kind: "installed_skill",
+        skillKey: "image_generate",
+        skillName: "配图",
+      },
     });
     expect(isSending).toBe(true);
   });
@@ -166,7 +176,7 @@ describe("agentStreamSubmitDraft", () => {
       userMsgId: "user-image",
       assistantDraft: {
         content:
-          "好嘞，用 Nanobanana Pro 给你生成一张广州塔春天照片\n先获取下工具参数\n马上生成",
+          "好啊，用 Nanobanana Pro 生成：一张广州塔春天照片\n先获取下工具参数\n马上生成",
         preserveContent: true,
         imageWorkbenchPreview: {
           taskId: "draft-image-1",
@@ -197,7 +207,7 @@ describe("agentStreamSubmitDraft", () => {
     expect(messages[1]).toMatchObject({
       id: "assistant-image",
       content:
-        "好嘞，用 Nanobanana Pro 给你生成一张广州塔春天照片\n先获取下工具参数\n马上生成",
+        "好啊，用 Nanobanana Pro 生成：一张广州塔春天照片\n先获取下工具参数\n马上生成",
       imageWorkbenchPreview: {
         taskId: "draft-image-1",
         prompt: "一张广州塔春天照片",

@@ -168,6 +168,16 @@ describe("compileCommandCatalogProjection", () => {
       commandBinding: {
         skillId: "image_generate",
         executionKind: "task_queue",
+        requestDefaults: {
+          imageWorkbench: "true",
+        },
+        intentConfirmation: {
+          id: "plain_image_generation",
+          ruleKey: "agentChat.inputIntent.imageGeneration.rules",
+          confirmationKey: "agentChat.inputIntent.imageGeneration.confirm",
+          systemPromptKey:
+            "agentChat.inputIntent.imageGeneration.systemPrompt",
+        },
       },
       commandRenderContract: {
         resultKind: "image_gallery",
@@ -190,6 +200,17 @@ describe("compileCommandCatalogProjection", () => {
         binding: {
           skillId: "image_generate",
           executionKind: "task_queue",
+          requestDefaults: {
+            imageWorkbench: "true",
+          },
+          intentConfirmation: {
+            id: "plain_image_generation",
+            ruleKey: "agentChat.inputIntent.imageGeneration.rules",
+            confirmationKey:
+              "agentChat.inputIntent.imageGeneration.confirm",
+            systemPromptKey:
+              "agentChat.inputIntent.imageGeneration.systemPrompt",
+          },
         },
         renderContract: {
           resultKind: "image_gallery",

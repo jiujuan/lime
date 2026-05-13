@@ -283,6 +283,15 @@
       "allowedPaths": []
     },
     {
+      "id": "agent-chat-plain-visual-brief-confirmation-helper",
+      "classification": "dead-candidate",
+      "description": "已删除的普通视觉 brief 确认旧 helper；普通输入意图确认当前收敛到 catalog + i18n 驱动的 plainInputIntentConfirmation",
+      "targets": [
+        "src/components/agent/chat/utils/plainVisualBriefConfirmation.ts"
+      ],
+      "allowedPaths": []
+    },
+    {
       "id": "tools-page-shell-entry",
       "classification": "dead-candidate",
       "description": "已下线的独立工具箱页面与图像分析工具面，tools/image-analysis 不再保留前端页面入口",

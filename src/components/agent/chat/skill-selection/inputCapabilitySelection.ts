@@ -77,6 +77,62 @@ export type InputCapabilitySendRoute =
       referenceEntries?: CuratedTaskReferenceEntry[];
     };
 
+const SLASH_SKILL_KEY_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+function normalizeSkillRouteCandidate(value: string | null | undefined) {
+  return value?.trim() || "";
+}
+
+function stripLocalSkillKeyPrefix(value: string) {
+  const normalized = value.trim();
+  if (!normalized) {
+    return "";
+  }
+  return normalized.includes(":")
+    ? normalized.split(":").pop()?.trim() || normalized
+    : normalized;
+}
+
+function resolveInstalledSkillExecutionKey(skill: Skill): string {
+  const candidates = [
+    normalizeSkillRouteCandidate(skill.directory),
+    normalizeSkillRouteCandidate(skill.name),
+    stripLocalSkillKeyPrefix(skill.key),
+    normalizeSkillRouteCandidate(skill.key),
+  ].filter(Boolean);
+
+  return (
+    candidates.find((candidate) => SLASH_SKILL_KEY_PATTERN.test(candidate)) ??
+    candidates[0] ??
+    skill.key
+  );
+}
+
+function matchesInstalledSkillRoute(
+  skill: Skill,
+  route: Extract<InputCapabilitySendRoute, { kind: "installed_skill" }>,
+): boolean {
+  const routeKey = route.skillKey.trim();
+  if (!routeKey) {
+    return false;
+  }
+
+  const routeKeyWithoutPrefix = stripLocalSkillKeyPrefix(routeKey);
+  const candidates = [
+    skill.key,
+    skill.directory,
+    skill.name,
+    stripLocalSkillKeyPrefix(skill.key),
+    resolveInstalledSkillExecutionKey(skill),
+  ].map((value) => value.trim());
+
+  return candidates.some(
+    (candidate) =>
+      candidate === routeKey ||
+      (!!routeKeyWithoutPrefix && candidate === routeKeyWithoutPrefix),
+  );
+}
+
 export interface ResolvedInputCapabilityDispatch {
   displayContent?: string;
   capabilityRoute?: InputCapabilitySendRoute;
@@ -100,7 +156,7 @@ export function resolveInputCapabilitySendRoute(
     case "installed_skill":
       return {
         kind: "installed_skill",
-        skillKey: capability.skill.key,
+        skillKey: resolveInstalledSkillExecutionKey(capability.skill),
         skillName: capability.skill.name,
       };
     case "runtime_scene":
@@ -235,7 +291,7 @@ export function resolveInputCapabilitySelectionFromRoute(params: {
 
   if (route.kind === "installed_skill") {
     const skill =
-      skills.find((item) => item.key === route.skillKey) ??
+      skills.find((item) => matchesInstalledSkillRoute(item, route)) ??
       createFallbackInstalledSkill(route);
     return {
       kind: "installed_skill",

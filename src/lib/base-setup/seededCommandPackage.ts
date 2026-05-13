@@ -87,12 +87,22 @@ const SEEDED_COMMAND_PROJECTION_SPECS: SeededCommandProjectionSpec[] = [
     summary: "根据文字描述生成新的图片结果。",
     aliases: ["image", "img", "vision 1", "nanobanana", "图片", "生图"],
     trigger: "@配图",
-    triggerHints: ["@Vision 1"],
+    triggerHints: ["@Vision 1", "@image", "/image"],
     category: "图像生成",
     outputHint: "图片结果集",
     commandBinding: {
       skillId: "image_generate",
       executionKind: "task_queue",
+      requestDefaults: {
+        imageWorkbench: "true",
+      },
+      intentConfirmation: {
+        id: "plain_image_generation",
+        ruleKey: "agentChat.inputIntent.imageGeneration.rules",
+        confirmationKey: "agentChat.inputIntent.imageGeneration.confirm",
+        systemPromptKey:
+          "agentChat.inputIntent.imageGeneration.systemPrompt",
+      },
     },
     commandRenderContract: COMMAND_IMAGE_GALLERY_CONTRACT,
   },
@@ -114,6 +124,11 @@ const SEEDED_COMMAND_PROJECTION_SPECS: SeededCommandProjectionSpec[] = [
     commandBinding: {
       skillId: "image_generate",
       executionKind: "task_queue",
+      requestDefaults: {
+        imageWorkbench: "true",
+        providerId: "fal",
+        model: "fal-ai/nano-banana-pro",
+      },
     },
     commandRenderContract: COMMAND_IMAGE_GALLERY_CONTRACT,
   },
@@ -128,6 +143,11 @@ const SEEDED_COMMAND_PROJECTION_SPECS: SeededCommandProjectionSpec[] = [
     commandBinding: {
       skillId: "image_generate",
       executionKind: "task_queue",
+      requestDefaults: {
+        imageWorkbench: "true",
+        layoutHint: "storyboard_3x3",
+        count: "9",
+      },
     },
     commandRenderContract: COMMAND_IMAGE_GALLERY_CONTRACT,
   },
@@ -171,6 +191,10 @@ const SEEDED_COMMAND_PROJECTION_SPECS: SeededCommandProjectionSpec[] = [
     commandBinding: {
       skillId: "image_generate",
       executionKind: "task_queue",
+      requestDefaults: {
+        imageWorkbench: "true",
+        mode: "edit",
+      },
     },
     commandRenderContract: COMMAND_IMAGE_GALLERY_CONTRACT,
   },
@@ -185,6 +209,10 @@ const SEEDED_COMMAND_PROJECTION_SPECS: SeededCommandProjectionSpec[] = [
     commandBinding: {
       skillId: "image_generate",
       executionKind: "task_queue",
+      requestDefaults: {
+        imageWorkbench: "true",
+        mode: "variation",
+      },
     },
     commandRenderContract: COMMAND_IMAGE_GALLERY_CONTRACT,
   },

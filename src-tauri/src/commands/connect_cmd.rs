@@ -89,6 +89,10 @@ impl From<DeepLinkError> for ConnectError {
                 "INVALID_OPEN_KIND".to_string(),
                 format!("无效的 open kind: {kind}"),
             ),
+            DeepLinkError::InvalidOpenAction(action) => (
+                "INVALID_OPEN_ACTION".to_string(),
+                format!("无效的 open action: {action}"),
+            ),
         };
         ConnectError { code, message }
     }

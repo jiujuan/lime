@@ -183,6 +183,40 @@ describe("useDeepLink", () => {
     });
   });
 
+  it("应把官网 install action 透传给前端安装链路", async () => {
+    const onOpenWebsiteDeepLink = vi.fn();
+    vi.mocked(getCurrent).mockResolvedValue([
+      "lime://open?kind=skill&slug=viral-content-breakdown&source=website&v=1&action=install",
+    ]);
+    vi.mocked(safeInvoke).mockImplementation(async (command) => {
+      if (command === "handle_open_deep_link") {
+        return {
+          payload: {
+            kind: "skill",
+            slug: "viral-content-breakdown",
+            source: "website",
+            version: "1",
+            action: "install",
+          },
+        };
+      }
+
+      return {};
+    });
+
+    await renderHook({
+      onOpenWebsiteDeepLink,
+    });
+
+    expect(onOpenWebsiteDeepLink).toHaveBeenCalledWith({
+      kind: "skill",
+      slug: "viral-content-breakdown",
+      source: "website",
+      version: "1",
+      action: "install",
+    });
+  });
+
   it("应解析支付回跳 deep link 并分发给云端购买状态刷新链路", async () => {
     const received: unknown[] = [];
     const listener = (event: Event) => {

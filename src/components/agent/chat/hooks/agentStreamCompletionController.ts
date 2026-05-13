@@ -187,9 +187,64 @@ export function reconcileAgentStreamFinalContentParts(params: {
     : processParts;
 }
 
+function normalizeCompletionTextSignature(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function mergeVisibleCompletionText(base: string, chunk: string): string {
+  if (!base) return chunk;
+  if (!chunk) return base;
+  if (chunk.startsWith(base)) return chunk;
+  if (base.endsWith(chunk)) return base;
+
+  const maxOverlap = Math.min(base.length, chunk.length);
+  for (let length = maxOverlap; length > 0; length -= 1) {
+    if (base.slice(-length) === chunk.slice(0, length)) {
+      return `${base}${chunk.slice(length)}`;
+    }
+  }
+
+  return `${base}\n\n${chunk}`;
+}
+
+export function resolveAgentStreamCompletedVisibleContent(params: {
+  finalContent: string;
+  previousContent?: string;
+}): string {
+  const previousContent = params.previousContent?.trim() || "";
+  const finalContent = params.finalContent.trim();
+  if (!previousContent) {
+    return finalContent;
+  }
+  if (!finalContent) {
+    return previousContent;
+  }
+
+  const previousSignature = normalizeCompletionTextSignature(previousContent);
+  const finalSignature = normalizeCompletionTextSignature(finalContent);
+  if (!previousSignature) {
+    return finalContent;
+  }
+  if (!finalSignature) {
+    return previousContent;
+  }
+  if (previousSignature === finalSignature) {
+    return finalContent;
+  }
+  if (finalSignature.includes(previousSignature)) {
+    return finalContent;
+  }
+  if (previousSignature.includes(finalSignature)) {
+    return previousContent;
+  }
+
+  return mergeVisibleCompletionText(previousContent, finalContent);
+}
+
 export function buildAgentStreamCompletedAssistantMessagePatch(params: {
   finalContent: string;
   parts: Message["contentParts"];
+  previousContent?: string;
   rawContent: string;
   surfaceThinkingDeltas: boolean;
   thinkingContent?: string;
@@ -200,14 +255,18 @@ export function buildAgentStreamCompletedAssistantMessagePatch(params: {
   const retainedThinkingContent = params.surfaceThinkingDeltas
     ? params.thinkingContent?.trim() || undefined
     : undefined;
+  const finalContent = resolveAgentStreamCompletedVisibleContent({
+    finalContent: params.finalContent,
+    previousContent: params.previousContent,
+  });
 
   return {
     isThinking: false,
-    content: params.finalContent,
+    content: finalContent,
     thinkingContent: retainedThinkingContent,
     contentParts: reconcileAgentStreamFinalContentParts({
       parts: params.parts,
-      finalContent: params.finalContent,
+      finalContent,
       rawContent: params.rawContent,
       surfaceThinkingDeltas: params.surfaceThinkingDeltas,
     }),

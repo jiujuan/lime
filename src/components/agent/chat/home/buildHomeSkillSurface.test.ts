@@ -73,7 +73,7 @@ function createServiceSkill(): ServiceSkillHomeItem {
 }
 
 describe("buildHomeSkillSurface", () => {
-  it("服务端未下发首页展示时使用 Ribbi 式本地兜底入口", () => {
+  it("服务端未下发首页展示时使用 参考站式本地兜底入口", () => {
     const labels = buildHomeStarterChips().map((chip) => chip.label);
 
     expect(labels).toEqual([

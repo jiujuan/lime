@@ -237,6 +237,15 @@ fn truncate_prompt_text(value: String, max_chars: usize) -> String {
     format!("{truncated}...(已截断，原始长度 {total_chars} 字)")
 }
 
+fn truncate_json_value(value: Option<&serde_json::Value>, max_chars: usize) -> Option<String> {
+    value.map(|item| {
+        truncate_prompt_text(
+            serde_json::to_string(item).unwrap_or_else(|_| "{}".to_string()),
+            max_chars,
+        )
+    })
+}
+
 pub(crate) fn prepare_image_skill_launch_request_metadata(
     workspace_root: &Path,
     session_id: &str,
@@ -434,6 +443,9 @@ fn build_image_skill_launch_system_prompt(
         .and_then(serde_json::Value::as_array)
         .cloned()
         .unwrap_or_default();
+    let persona_context_json = truncate_json_value(image_task.get("persona_context"), 2_000);
+    let presentation_json = truncate_json_value(image_task.get("presentation"), 2_000);
+    let taste_context_json = truncate_json_value(image_task.get("taste_context"), 2_000);
     let args_payload = serde_json::json!({
         "user_input": raw_text
             .clone()
@@ -480,7 +492,7 @@ fn build_image_skill_launch_system_prompt(
         "- 不要伪造“图片已生成完成”；在 task file 真正返回结果前，只能让工具轨迹展示任务已提交、排队或执行中，不要额外输出递交模板。".to_string(),
         "- 如果当前回合已经拿到任何图片任务结果，且结果里含 task_id、path，或 status=pending_submit/queued/running/partial/succeeded，说明任务已提交；不要再次调用 Skill(image_generate) 或重复创建第二个图片任务。".to_string(),
         "- 拿到上述任务结果后，不要再输出“任务类型 / 任务 ID / 任务文件 / 状态”这类提交摘要；让同一条 assistant 消息内的工具调用和图片任务轻卡继续展示进度与结果。".to_string(),
-        "- 聊天输出必须保持极简自然：工具前最多一句“好嘞，用 <模型> 给你生成...”，随后只保留“先获取下工具参数”“马上生成”这类短过程；不要输出任务表格、任务 ID、任务文件、排队说明、Image Workbench/图片工作台文案，也不要拆成第二条 assistant 回复。".to_string(),
+        "- 聊天输出必须服从 persona_context 与 presentation：工具前最多保留短确认和短过程，结果态优先使用 presentation.completion_caption / presentation.result_captions；不要输出任务表格、任务 ID、任务文件、排队说明、Image Workbench/图片工作台文案，也不要拆成第二条 assistant 回复。".to_string(),
         format!("- 当前图片任务上下文(JSON)：{image_task_json}"),
         format!("- 当前模式：{mode}。"),
         format!("- 当前入口来源：{entry_source}。"),
@@ -492,6 +504,21 @@ fn build_image_skill_launch_system_prompt(
 
     if let Some(value) = prompt.as_deref() {
         lines.push(format!("- 当前用户目标：{value}"));
+    }
+    if let Some(value) = persona_context_json.as_deref() {
+        lines.push(format!(
+            "- 当前图片生成人设契约(JSON)：{value}。这决定同一条对话里的语气、边界和是否隐藏运行时细节。"
+        ));
+    }
+    if let Some(value) = presentation_json.as_deref() {
+        lines.push(format!(
+            "- 当前聊天展示契约(JSON)：{value}。这只用于同一条对话里的自然展示，不要改写成任务摘要。"
+        ));
+    }
+    if let Some(value) = taste_context_json.as_deref() {
+        lines.push(format!(
+            "- 当前品味/记忆规划上下文(JSON)：{value}。调用图片任务前，用它辅助优化 prompt；不要在聊天区暴露内部来源或参考站名称。"
+        ));
     }
     if let Some(value) = size.as_deref() {
         lines.push(format!("- 当前目标尺寸：{value}。"));

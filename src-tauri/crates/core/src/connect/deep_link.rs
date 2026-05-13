@@ -51,6 +51,7 @@ pub struct OpenDeepLinkPayload {
     pub slug: String,
     pub source: Option<String>,
     pub version: Option<String>,
+    pub action: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -76,6 +77,8 @@ pub enum DeepLinkError {
     MissingSlug,
     /// open 链路里的 kind 无效
     InvalidOpenKind(String),
+    /// open 链路里的 action 无效
+    InvalidOpenAction(String),
 }
 
 impl std::fmt::Display for DeepLinkError {
@@ -88,6 +91,9 @@ impl std::fmt::Display for DeepLinkError {
             DeepLinkError::MissingSlug => write!(f, "缺少必填参数: slug"),
             DeepLinkError::InvalidOpenKind(kind) => {
                 write!(f, "无效的 open kind: {kind}")
+            }
+            DeepLinkError::InvalidOpenAction(action) => {
+                write!(f, "无效的 open action: {action}")
             }
         }
     }
@@ -212,12 +218,22 @@ fn parse_open_payload(parsed: Url) -> Result<OpenDeepLinkPayload, DeepLinkError>
         .filter(|value| !value.is_empty())
         .cloned();
     let version = params.get("v").filter(|value| !value.is_empty()).cloned();
+    let action = params
+        .get("action")
+        .filter(|value| !value.is_empty())
+        .map(|value| value.trim().to_ascii_lowercase());
+    if let Some(action) = action.as_deref() {
+        if action != "open" && action != "install" {
+            return Err(DeepLinkError::InvalidOpenAction(action.to_string()));
+        }
+    }
 
     Ok(OpenDeepLinkPayload {
         kind,
         slug,
         source,
         version,
+        action,
     })
 }
 
@@ -322,6 +338,18 @@ mod tests {
         assert_eq!(result.slug, "daily-trend-briefing");
         assert_eq!(result.source, Some("website".to_string()));
         assert_eq!(result.version, Some("1".to_string()));
+        assert_eq!(result.action, None);
+    }
+
+    #[test]
+    fn test_parse_open_skill_install_action() {
+        let url =
+            "lime://open?kind=skill&slug=viral-content-breakdown&source=website&v=1&action=install";
+        let result = parse_open_deep_link(url).unwrap();
+
+        assert_eq!(result.kind, OpenDeepLinkKind::Skill);
+        assert_eq!(result.slug, "viral-content-breakdown");
+        assert_eq!(result.action, Some("install".to_string()));
     }
 
     #[test]
@@ -350,6 +378,12 @@ mod tests {
     fn test_parse_open_invalid_kind() {
         let result = parse_open_deep_link("lime://open?kind=other&slug=test");
         assert!(matches!(result, Err(DeepLinkError::InvalidOpenKind(_))));
+    }
+
+    #[test]
+    fn test_parse_open_invalid_action() {
+        let result = parse_open_deep_link("lime://open?kind=skill&slug=test&action=run");
+        assert!(matches!(result, Err(DeepLinkError::InvalidOpenAction(_))));
     }
 }
 

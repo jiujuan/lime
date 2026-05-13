@@ -9,6 +9,7 @@ import {
   buildAgentStreamMissingFinalReplyFailureSideEffectPlan,
   isAgentStreamEmptyFinalReplyError,
   reconcileAgentStreamFinalContentParts,
+  resolveAgentStreamCompletedVisibleContent,
   resolveAgentStreamGracefulCompletionContent,
   shouldFailAgentStreamMissingFinalReply,
 } from "./agentStreamCompletionController";
@@ -114,6 +115,33 @@ describe("agentStreamCompletionController", () => {
       thinkingContent: undefined,
       runtimeStatus: undefined,
       usage,
+    });
+  });
+
+  it("完成态最终正文较短时应保留已经显示给用户的前期输出", () => {
+    expect(
+      resolveAgentStreamCompletedVisibleContent({
+        previousContent: "前期已经流式显示的说明。\n\n最终总结。",
+        finalContent: "最终总结。",
+      }),
+    ).toBe("前期已经流式显示的说明。\n\n最终总结。");
+  });
+
+  it("完成态最终正文改写且不包含前期输出时应合并显示内容", () => {
+    expect(
+      buildAgentStreamCompletedAssistantMessagePatch({
+        parts: [{ type: "text", text: "前期输出。" }],
+        previousContent: "前期输出。",
+        finalContent: "最终输出。",
+        rawContent: "最终输出。",
+        surfaceThinkingDeltas: true,
+      }),
+    ).toEqual({
+      isThinking: false,
+      content: "前期输出。\n\n最终输出。",
+      contentParts: [{ type: "text", text: "前期输出。\n\n最终输出。" }],
+      thinkingContent: undefined,
+      runtimeStatus: undefined,
     });
   });
 

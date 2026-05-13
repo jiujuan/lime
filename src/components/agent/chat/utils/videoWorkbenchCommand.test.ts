@@ -30,7 +30,7 @@ describe("parseVideoWorkbenchCommand", () => {
     });
   });
 
-  it("应为后续多词 Ribbi 别名让路，不误吞 @Video Search", () => {
+  it("应为后续多词命令别名让路，不误吞 @Video Search", () => {
     expect(
       parseVideoWorkbenchCommand(
         "@Video Search AI startup keynote clips for 9:16 ads",

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { Dispatch, SetStateAction } from "react";
 import type {
@@ -73,11 +74,7 @@ import {
   type AgentFastResponseRoutingDecision,
   type AgentFastResponseMode,
 } from "../utils/fastResponseRouting";
-import {
-  PLAIN_VISUAL_BRIEF_CONFIRMATION,
-  shouldConfirmPlainVisualBrief,
-} from "../utils/plainVisualBriefConfirmation";
-import { buildImageWorkbenchAssistantContent } from "../utils/imageWorkbenchPresentation";
+import { resolvePlainInputIntentConfirmation } from "../utils/plainInputIntentConfirmation";
 import { detectBrowserTaskRequirement } from "../utils/browserTaskRequirement";
 import { isTeamRuntimeRecommendation } from "../utils/contextualRecommendations";
 import {
@@ -88,6 +85,7 @@ import {
   saveChatToolPreferences,
   type ChatToolPreferences,
 } from "../utils/chatToolPreferences";
+import { buildImageTaskAssistantContent } from "./imageTaskPersona";
 import type { HandleSendOptions } from "../hooks/handleSendTypes";
 import { extractAgentUiPerformanceTraceMetadata } from "../hooks/agentStreamPerformanceMetrics";
 import type { UseRuntimeTeamFormationResult } from "../hooks/useRuntimeTeamFormation";
@@ -164,6 +162,11 @@ import { recordServiceSkillUsage } from "../service-skills/storage";
 import { composeServiceSkillPrompt } from "../service-skills/promptComposer";
 import { recordSlashEntryUsage } from "../skill-selection/slashEntryUsage";
 import { CONTENT_POST_SKILL_KEY } from "../utils/contentPostSkill";
+import {
+  installSkillFromPromptInstruction,
+  parseSkillInstallPromptInstruction,
+  type SkillInstallPromptInstruction,
+} from "@/lib/skills/skillInstallPrompt";
 
 type ExecutionStrategy = "react" | "code_orchestrated" | "auto";
 type SetStringState = (value: string) => void;
@@ -492,6 +495,16 @@ function readPositiveInteger(value: unknown): number | undefined {
     : undefined;
 }
 
+function readImageTaskPresentationText(
+  imageTask: Record<string, unknown>,
+): string | undefined {
+  const presentation = asRecord(imageTask.presentation);
+  return normalizeOptionalText(
+    (presentation?.assistant_intro as string | undefined) ||
+      (presentation?.assistantIntro as string | undefined),
+  );
+}
+
 function normalizeImageWorkbenchMode(
   value: unknown,
 ): MessageImageWorkbenchPreview["mode"] {
@@ -562,13 +575,13 @@ function buildImageWorkbenchAssistantDraft(
   };
 
   return {
-    content: buildImageWorkbenchAssistantContent({
-      prompt,
-      mode,
-      modelName,
-      expectedImageCount,
-      layoutHint,
-    }),
+    content:
+      readImageTaskPresentationText(imageTask) ||
+      buildImageTaskAssistantContent({
+        prompt,
+        mode,
+        modelName,
+      }),
     imageWorkbenchPreview: preview,
     preserveContent: true,
   };
@@ -918,24 +931,9 @@ function resolveMentionCommandUsageLaunchUserInput(
 }
 
 function resolveImageMentionCommandKey(
-  trigger: ParsedImageWorkbenchCommand["trigger"],
+  parsedCommand: ParsedImageWorkbenchCommand,
 ): string | null {
-  if (trigger === "@分镜") {
-    return "image_storyboard";
-  }
-  if (trigger === "@修图") {
-    return "image_edit";
-  }
-  if (trigger === "@重绘") {
-    return "image_variation";
-  }
-  if (trigger === "@Nanobanana Pro") {
-    return "image_generate_nanobanana_pro";
-  }
-  if (trigger === "@配图" || trigger === "@Vision 1" || trigger === "@image") {
-    return "image_generate";
-  }
-  return null;
+  return normalizeOptionalText(parsedCommand.commandKey) ?? null;
 }
 
 const MAX_MENTION_COMMAND_REPLAY_TEXT_LENGTH = 400;
@@ -3180,6 +3178,37 @@ type WorkspaceSendResolution =
       plan: WorkspaceSendPlan;
     };
 
+type AgentWorkspaceTranslator = (
+  key: string,
+  options?: Record<string, unknown>,
+) => string;
+
+async function resolveSkillInstallPromptConfirmation(
+  instruction: SkillInstallPromptInstruction,
+  translate: AgentWorkspaceTranslator,
+): Promise<string> {
+  try {
+    const result = await installSkillFromPromptInstruction(instruction, "lime");
+    return translate("agentChat.skillInstallPrompt.installedConfirmation", {
+      skill: result.directory,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/already exists|已存在/i.test(message)) {
+      return translate(
+        "agentChat.skillInstallPrompt.alreadyInstalledConfirmation",
+        {
+          skill: instruction.skillName,
+        },
+      );
+    }
+    return translate("agentChat.skillInstallPrompt.failedConfirmation", {
+      skill: instruction.skillName,
+      error: message,
+    });
+  }
+}
+
 export type WorkspaceHandleSend = (
   images?: MessageImage[],
   webSearch?: boolean,
@@ -3233,6 +3262,7 @@ export function useWorkspaceSendActions({
   ensureSessionForCommandMetadata,
   resolveImageWorkbenchSkillRequest,
 }: UseWorkspaceSendActionsParams) {
+  const { t } = useTranslation("agent");
   const messagesCount = messages.length;
   const [runtimeTeamDispatchPreview, setRuntimeTeamDispatchPreview] =
     useState<RuntimeTeamDispatchPreviewSnapshot | null>(null);
@@ -3241,6 +3271,16 @@ export function useWorkspaceSendActions({
   const [isPreparingSend, setIsPreparingSend] = useState(false);
   const isPreparingSendRef = useRef(false);
   const { mediaDefaults } = useGlobalMediaGenerationDefaults();
+  const translateAgentWorkspace = useCallback<AgentWorkspaceTranslator>(
+    (key, options) => {
+      const translate = t as unknown as (
+        key: string,
+        options?: Record<string, unknown>,
+      ) => string;
+      return String(translate(key, options));
+    },
+    [t],
+  );
   const { mentionCommandSkillIdMap, mentionCommandPrefixKeyMap } =
     useRuntimeMentionCommandCatalog();
   const clearRuntimeTeamDispatchPreview = useCallback(() => {
@@ -3487,6 +3527,8 @@ export function useWorkspaceSendActions({
           createSubmissionPreviewSnapshot({
             key: submissionPreviewKey,
             prompt: sourceText,
+            displayContent: sendOptions?.displayContent,
+            inputCapabilityRoute: sendOptions?.capabilityRoute,
             images: previewImages,
             executionStrategy: sendExecutionStrategy ?? executionStrategy,
             webSearch: effectiveWebSearch,
@@ -3600,6 +3642,27 @@ export function useWorkspaceSendActions({
         });
       }
 
+      const skillInstallPromptInstruction =
+        !sendOptions?.purpose && !hasBoundSkillLaunch && sourceText.trim()
+          ? parseSkillInstallPromptInstruction(sourceText)
+          : null;
+      if (skillInstallPromptInstruction) {
+        const confirmation = await resolveSkillInstallPromptConfirmation(
+          skillInstallPromptInstruction,
+          translateAgentWorkspace,
+        );
+        return {
+          kind: "local_confirmation",
+          plan: {
+            sourceText,
+            images: effectiveImages,
+            sendBoundary,
+            submissionPreviewKey,
+            confirmation,
+          },
+        };
+      }
+
       const parsedImageWorkbenchCommand =
         !sendOptions?.purpose && !hasBoundSkillLaunch && sourceText.trim()
           ? parseImageWorkbenchCommand(sourceText)
@@ -3637,7 +3700,7 @@ export function useWorkspaceSendActions({
           ),
         };
         const mentionCommandKey = resolveImageMentionCommandKey(
-          parsedImageWorkbenchCommand.trigger,
+          parsedImageWorkbenchCommand,
         );
         if (mentionCommandKey) {
           markCompletedMentionCommand(
@@ -3662,6 +3725,7 @@ export function useWorkspaceSendActions({
           rawText: sourceText,
           parsedCommand: {
             rawText: parsedPosterWorkbenchCommand.rawText,
+            commandKey: "poster_generate",
             trigger: "@配图",
             body: parsedPosterWorkbenchCommand.body,
             mode: "generate",
@@ -3710,11 +3774,11 @@ export function useWorkspaceSendActions({
         hasBoundSkillLaunch = true;
       }
 
-      if (
-        !sendOptions?.purpose &&
-        !hasBoundSkillLaunch &&
-        shouldConfirmPlainVisualBrief(sourceText)
-      ) {
+      const plainInputIntentConfirmation =
+        !sendOptions?.purpose && !hasBoundSkillLaunch
+          ? resolvePlainInputIntentConfirmation(sourceText)
+          : null;
+      if (plainInputIntentConfirmation) {
         return {
           kind: "local_confirmation",
           plan: {
@@ -3722,7 +3786,7 @@ export function useWorkspaceSendActions({
             images: effectiveImages,
             sendBoundary,
             submissionPreviewKey,
-            confirmation: PLAIN_VISUAL_BRIEF_CONFIRMATION,
+            confirmation: plainInputIntentConfirmation.confirmation,
           },
         };
       }
@@ -5516,6 +5580,7 @@ export function useWorkspaceSendActions({
       resolveSendBoundary,
       resourcePromptRewritePreference,
       serviceSkills,
+      translateAgentWorkspace,
       mentionCommandPrefixKeyMap,
       mentionCommandSkillIdMap,
       workspaceRequestMetadataBase,

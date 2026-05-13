@@ -176,6 +176,12 @@ function compileCommandProjectionEntry(params: {
   const { projection, bindingProfile, policyProfile, linkedSkillId } = params;
   const commandKey = projection.skillKey?.trim() || projection.entryKey.trim();
   const executionKind = resolveCommandExecutionKind(bindingProfile, projection);
+  const requestDefaults = projection.commandBinding?.requestDefaults
+    ? { ...projection.commandBinding.requestDefaults }
+    : undefined;
+  const intentConfirmation = projection.commandBinding?.intentConfirmation
+    ? { ...projection.commandBinding.intentConfirmation }
+    : undefined;
 
   return {
     id: `command:${commandKey}`,
@@ -191,6 +197,8 @@ function compileCommandProjectionEntry(params: {
     binding: {
       skillId: linkedSkillId,
       executionKind,
+      ...(requestDefaults ? { requestDefaults } : {}),
+      ...(intentConfirmation ? { intentConfirmation } : {}),
     },
     renderContract: resolveCommandRenderContract(
       executionKind,

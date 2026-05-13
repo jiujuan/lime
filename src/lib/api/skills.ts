@@ -1,4 +1,8 @@
 import { safeInvoke } from "@/lib/dev-bridge";
+import type {
+  SkillMarketplaceBundle,
+  SkillMarketplaceInstallResult,
+} from "./officialSkillMarketplace";
 
 export type SkillSourceKind = "builtin" | "other";
 export type SkillCatalogSource = "project" | "user" | "remote";
@@ -76,6 +80,11 @@ export interface SkillRepo {
 
 export interface ImportedSkillResult {
   directory: string;
+}
+
+export interface SkillDownloadInstallRequest extends Record<string, unknown> {
+  skillName: string;
+  downloadUrl: string;
 }
 
 export type AppType = "claude" | "codex" | "gemini" | "lime";
@@ -235,6 +244,32 @@ export const skillsApi = {
       app,
       source_path: sourcePath,
     });
+  },
+
+  async installMarketplaceBundle(
+    bundle: SkillMarketplaceBundle,
+    app: AppType = "lime",
+  ): Promise<SkillMarketplaceInstallResult> {
+    return safeInvoke<SkillMarketplaceInstallResult>(
+      "install_marketplace_skill_for_app",
+      {
+        app,
+        bundle,
+      },
+    );
+  },
+
+  async installFromDownloadUrl(
+    request: SkillDownloadInstallRequest,
+    app: AppType = "lime",
+  ): Promise<SkillMarketplaceInstallResult> {
+    return safeInvoke<SkillMarketplaceInstallResult>(
+      "install_skill_from_download_url_for_app",
+      {
+        app,
+        request,
+      },
+    );
   },
 
   async inspectRemoteSkill(

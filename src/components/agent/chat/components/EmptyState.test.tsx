@@ -585,6 +585,7 @@ describe("EmptyState", () => {
   });
 
   it("从 Skills 页带回的技能应显示在首页输入框内的 @ 标签", async () => {
+    const onSend = vi.fn();
     const skill = {
       key: "local:writer",
       name: "写作助手",
@@ -595,6 +596,8 @@ describe("EmptyState", () => {
     } as Skill;
     const container = renderEmptyState({
       activeTheme: "general",
+      input: "整理最近发布计划",
+      onSend,
       skills: [skill],
       initialInputCapability: {
         capabilityRoute: {
@@ -615,6 +618,24 @@ describe("EmptyState", () => {
     expect(badge).toBeTruthy();
     expect(badge?.textContent).toContain("@");
     expect(badge?.textContent).toContain("写作助手");
+
+    const sendButton = container.querySelector(
+      'button[aria-label="发送"]',
+    ) as HTMLButtonElement | null;
+    expect(sendButton).toBeTruthy();
+
+    act(() => {
+      sendButton?.click();
+    });
+
+    expect(onSend).toHaveBeenCalledWith("整理最近发布计划", "react", undefined, {
+      capabilityRoute: {
+        kind: "installed_skill",
+        skillKey: "writer",
+        skillName: "写作助手",
+      },
+      displayContent: "整理最近发布计划",
+    });
   });
 
   it("首页添加资料入口应打开输入框资料中枢，而不是预填一段说明", async () => {
@@ -2619,7 +2640,7 @@ describe("EmptyState", () => {
     );
   });
 
-  it("通用对话默认展示 Ribbi 式 Tab 起手建议", async () => {
+  it("通用对话默认展示 参考站式 Tab 起手建议", async () => {
     const container = renderEmptyState({
       activeTheme: "general",
       serviceSkills: [],

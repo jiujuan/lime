@@ -65,7 +65,7 @@ function renderPlaceholder(
     preview.status === "failed" ? preview.statusMessage?.trim() : "";
 
   return (
-    <div className="flex aspect-[16/10] min-h-[168px] items-center justify-center rounded-[18px] bg-slate-50 px-6 text-center">
+    <div className="flex h-full min-h-0 w-full items-center justify-center rounded-[12px] bg-slate-50 px-5 text-center">
       <div className="space-y-1.5">
         {reason === "empty" && preview.status === "running" ? (
           <LoaderCircle className="mx-auto h-5 w-5 animate-spin text-slate-500" />
@@ -127,12 +127,17 @@ function renderPreviewMedia(
 
   if (!isStoryboardGrid && previewImages.length <= 1) {
     return (
-      <RenderableTaskImage
-        src={previewImages[0] || preview.imageUrl}
-        alt={preview.prompt || t("agentChat.imageWorkbenchPreview.media.alt")}
-        className="block h-auto max-h-[560px] max-w-full rounded-[18px] object-contain sm:max-w-[480px]"
-        renderFallback={(reason) => renderPlaceholder(preview, reason, t)}
-      />
+      <div
+        data-testid={`image-workbench-message-preview-single-media-${preview.taskId}`}
+        className="aspect-[16/9] w-[358px] max-w-full overflow-hidden rounded-[12px] bg-slate-50"
+      >
+        <RenderableTaskImage
+          src={previewImages[0] || preview.imageUrl}
+          alt={preview.prompt || t("agentChat.imageWorkbenchPreview.media.alt")}
+          className="h-full w-full object-cover"
+          renderFallback={(reason) => renderPlaceholder(preview, reason, t)}
+        />
+      </div>
     );
   }
 
@@ -221,7 +226,7 @@ export const ImageWorkbenchMessagePreview: React.FC<
     >
       <div
         data-testid={`image-workbench-message-preview-toolbar-${preview.taskId}`}
-        className="mb-3 flex min-h-10 w-full max-w-full items-center gap-2 rounded-[12px] border border-stone-200 bg-stone-100/75 px-3.5 py-2 text-[13px] font-medium leading-5 text-[#435d2e] shadow-[0_8px_24px_-22px_rgba(15,23,42,0.32)]"
+        className="mb-2.5 flex min-h-10 w-full max-w-full items-center gap-2 rounded-[12px] border border-stone-200 bg-stone-100/75 px-3.5 py-2 text-[13px] font-medium leading-5 text-[#435d2e] shadow-[0_8px_24px_-22px_rgba(15,23,42,0.32)]"
       >
         <Leaf className="h-3.5 w-3.5 shrink-0 fill-[#496631]/15 text-[#496631]" />
         <span className="truncate">{toolLabel}</span>
@@ -232,13 +237,13 @@ export const ImageWorkbenchMessagePreview: React.FC<
           </>
         ) : null}
       </div>
-      <div className="relative max-w-full overflow-hidden rounded-[18px] transition">
+      <div className="relative max-w-full transition">
         {renderPreviewMedia(preview, t)}
       </div>
       {caption ? (
         <div
           data-testid={`image-workbench-message-preview-caption-${preview.taskId}`}
-          className="mt-2 max-w-[520px] text-sm leading-6 text-slate-700"
+          className="mt-2 max-w-[800px] whitespace-pre-line text-sm leading-6 text-slate-700"
         >
           {caption}
         </div>

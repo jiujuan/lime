@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import {
   listDirectory,
   readFilePreview,
@@ -248,7 +249,8 @@ function getDocumentCanvasContent(
 }
 
 describe("useWorkspaceImageTaskPreviewRuntime", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await changeLimeLocale("zh-CN");
     (
       globalThis as typeof globalThis & {
         IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -473,7 +475,7 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
           imageUrl: "https://example.com/generated-lime.png",
           imageCount: 1,
           size: "1024x1024",
-          caption: "搞定，已生成一张未来感实验室里的青柠主视觉。",
+          caption: "搞定，图已经生成好了\n要调整的话直接说，我继续改",
         }),
       }),
     ]);
@@ -791,7 +793,7 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
         taskId: "task-image-skill-1",
         status: "complete",
         imageUrl: "https://example.com/skill-preview.png",
-        caption: "搞定，已生成一张春日咖啡馆插画。",
+        caption: "搞定，图已经生成好了\n要调整的话直接说，我继续改",
       }),
     });
   });
@@ -895,6 +897,11 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
             size: "1024x1024",
             thread_id: "thread-image-live-1",
             turn_id: "turn-image-live-1",
+            presentation: {
+              assistant_intro: "好啊，生成：青柠插画\n先获取下工具参数\n马上生成",
+              completion_caption:
+                "青柠插画已经好了\n要调整的话直接说，我继续改",
+            },
           },
           result: {
             images: [{ url: "https://example.com/live-turn-image.png" }],
@@ -910,12 +917,12 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
     expect(getValue().messages).toHaveLength(1);
     expect(getValue().messages[0]).toMatchObject({
       id: "assistant-live-image-1",
-      content: expect.stringContaining("青柠插画"),
+      content: "好啊，生成：青柠插画\n先获取下工具参数\n马上生成",
       imageWorkbenchPreview: expect.objectContaining({
         taskId,
         status: "complete",
         imageUrl: "https://example.com/live-turn-image.png",
-        caption: "搞定，已生成一张青柠插画。",
+        caption: "青柠插画已经好了\n要调整的话直接说，我继续改",
       }),
     });
   });
@@ -1042,7 +1049,7 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
     expect(getValue().messages[0]).toMatchObject({
       id: "assistant-image-nano-old-submit-1",
       content: [
-        "好嘞，用 Nanobanana Pro 给你生成一张广州塔，从花城汇看过去的春天的照片",
+        "好啊，用 Nanobanana Pro 生成：一张广州塔，从花城汇看过去的春天的照片",
         "先获取下工具参数",
         "马上生成",
       ].join("\n"),
@@ -1155,7 +1162,7 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
           phase: "succeeded",
           statusMessage: null,
           imageUrl: "https://example.com/three-kingdoms-collage.png",
-          caption: "搞定，已生成一张三国主要人物聚合图。",
+          caption: "搞定，图已经生成好了\n要调整的话直接说，我继续改",
         }),
       }),
     ]);
@@ -1483,7 +1490,7 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
             mode: "edit",
             status: "complete",
             imageUrl: "https://example.com/edited-lime.png",
-            caption: "搞定，已生成一张把主视觉里的青柠改成玻璃质感。",
+            caption: "搞定，图已经生成好了\n要调整的话直接说，我继续改",
             sourceImageUrl: "https://example.com/source-summary.png",
             sourceImagePrompt: "原始青柠主视觉",
             sourceImageRef: "img-source-1",
@@ -1660,7 +1667,7 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
             id: "assistant-draft-image",
             role: "assistant",
             content:
-              "好嘞，用 Nanobanana Pro 给你生成一张广州塔春天照片\n先获取下工具参数\n马上生成",
+              "好啊，用 Nanobanana Pro 生成：一张广州塔春天照片\n先获取下工具参数\n马上生成",
             timestamp: new Date("2026-04-04T12:00:00Z"),
             isThinking: true,
             imageWorkbenchPreview: {
@@ -2319,7 +2326,7 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
             status: "complete",
             imageUrl: "https://example.com/browser-template-recover-lime.png",
             prompt: "一颗鲜嫩的青柠，水彩插画风格",
-            caption: "搞定，已生成一颗鲜嫩的青柠，水彩插画风格。",
+            caption: "搞定，图已经生成好了\n要调整的话直接说，我继续改",
           }),
         }),
       ]);
@@ -3304,7 +3311,7 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
         imageWorkbenchPreview: expect.objectContaining({
           taskId: "task-image-cancelled-1",
           status: "cancelled",
-          caption: "已停止生成。",
+          caption: "已停止生成",
         }),
       }),
     ]);
@@ -3406,7 +3413,7 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
         imageWorkbenchPreview: expect.objectContaining({
           taskId: "task-image-cancelled-1",
           status: "cancelled",
-          caption: "已停止生成。",
+          caption: "已停止生成",
         }),
       }),
     ]);

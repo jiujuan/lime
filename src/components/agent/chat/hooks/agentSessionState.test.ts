@@ -255,7 +255,7 @@ describe("agentSessionState", () => {
     ]);
   });
 
-  it("同会话 hydrate 时远端已有最终正文应收敛旧 assistant 执行过程到元数据", () => {
+  it("同会话 hydrate 时远端纯正文不应刷新掉本地 assistant 执行过程", () => {
     const now = new Date("2026-04-08T10:00:00.000Z");
     const currentMessages = [
       createMessage({
@@ -341,8 +341,29 @@ describe("agentSessionState", () => {
       topics: [],
     });
 
-    expect(result.snapshot.messages[1]?.thinkingContent).toBeUndefined();
+    expect(result.snapshot.messages[1]?.thinkingContent).toBe(
+      "先抓正文，再下载图片。",
+    );
     expect(result.snapshot.messages[1]?.contentParts).toEqual([
+      {
+        type: "thinking",
+        text: "先抓正文，再下载图片。",
+      },
+      {
+        type: "tool_use",
+        toolCall: {
+          id: "tool-site-1",
+          name: "site_run_adapter",
+          arguments: '{"url":"https://x.com/example/article/1"}',
+          status: "completed",
+          startTime: now,
+          endTime: now,
+          result: {
+            success: true,
+            output: "saved: articles/google-cloud-tech.md",
+          },
+        },
+      },
       {
         type: "text",
         text: "内容已保存到项目目录。",

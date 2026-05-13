@@ -120,7 +120,7 @@ export const MessageBubble = styled.div<{
     $bareMedia || $isUser ? "fit-content" : "100%"};
   max-width: ${({ $isUser, $bareMedia }) =>
     $bareMedia
-      ? "min(100%, 560px)"
+      ? "min(100%, 800px)"
       : $isUser
         ? "min(72%, 560px)"
         : "min(100%, 1040px)"};
@@ -159,6 +159,14 @@ export const MessageBubble = styled.div<{
   .markdown-renderer * {
     color: inherit;
   }
+
+  &.message-bubble-user-command {
+    max-width: min(72%, 560px);
+    border: 1px solid rgba(226, 232, 240, 0.76);
+    border-radius: 12px;
+    background: #f7f7f6;
+    box-shadow: none;
+  }
 `;
 
 export const MessageActions = styled.div`
@@ -179,4 +187,9 @@ export const MessageActions = styled.div`
     margin-top 0.18s ease,
     transform 0.18s ease;
   background-color: transparent;
+
+  &.image-workbench-message-actions {
+    align-self: flex-start;
+    margin-top: 8px;
+  }
 `;

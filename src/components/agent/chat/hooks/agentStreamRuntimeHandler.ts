@@ -1263,6 +1263,7 @@ export function handleTurnStreamEvent({
             ...buildAgentStreamCompletedAssistantMessagePatch({
               parts: msg.contentParts,
               finalContent,
+              previousContent: msg.content,
               rawContent: requestState.accumulatedContent,
               surfaceThinkingDeltas,
               thinkingContent: msg.thinkingContent,
@@ -1330,6 +1331,7 @@ export function handleTurnStreamEvent({
                   ...buildAgentStreamCompletedAssistantMessagePatch({
                     parts: msg.contentParts,
                     finalContent: gracefulContent,
+                    previousContent: msg.content,
                     rawContent: requestState.accumulatedContent,
                     surfaceThinkingDeltas,
                     thinkingContent: msg.thinkingContent,

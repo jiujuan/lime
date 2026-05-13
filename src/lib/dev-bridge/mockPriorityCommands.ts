@@ -147,6 +147,8 @@ const bridgeTruthCommands = new Set<string>([
   "inspect_local_skill_for_app",
   "create_skill_scaffold_for_app",
   "import_local_skill_for_app",
+  "install_marketplace_skill_for_app",
+  "install_skill_from_download_url_for_app",
   "inspect_remote_skill",
   "knowledge_import_source",
   "knowledge_compile_pack",

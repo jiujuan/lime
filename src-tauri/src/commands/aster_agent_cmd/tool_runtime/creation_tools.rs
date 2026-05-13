@@ -597,6 +597,8 @@ fn canonicalize_image_task_alias_fields(record: &mut serde_json::Map<String, ser
         ("anchorSectionTitle", "anchor_section_title"),
         ("anchorText", "anchor_text"),
         ("titleGenerationResult", "title_generation_result"),
+        ("personaContext", "persona_context"),
+        ("tasteContext", "taste_context"),
         ("targetOutputId", "target_output_id"),
         ("targetOutputRefId", "target_output_ref_id"),
         ("referenceImages", "reference_images"),
@@ -644,6 +646,12 @@ struct ImageTaskInput {
     title: Option<String>,
     #[serde(default, alias = "title_generation_result")]
     title_generation_result: Option<serde_json::Value>,
+    #[serde(default, alias = "persona_context")]
+    persona_context: Option<serde_json::Value>,
+    #[serde(default)]
+    presentation: Option<serde_json::Value>,
+    #[serde(default, alias = "taste_context")]
+    taste_context: Option<serde_json::Value>,
     #[serde(default)]
     mode: Option<String>,
     #[serde(default, alias = "raw_text")]
@@ -952,6 +960,16 @@ fn image_task_input_schema() -> serde_json::Value {
         "usage",
         serde_json::json!({ "type": "string", "description": "用途（可选）。" }),
     );
+    let image_context_schema = serde_json::json!({
+        "type": "object",
+        "description": "图片生成人设、展示或品味上下文（由启动链路注入，需原样透传）。",
+        "additionalProperties": true
+    });
+    insert_property("personaContext", image_context_schema.clone());
+    insert_property("persona_context", image_context_schema.clone());
+    insert_property("presentation", image_context_schema.clone());
+    insert_property("tasteContext", image_context_schema.clone());
+    insert_property("taste_context", image_context_schema);
     insert_property(
         "providerId",
         serde_json::json!({ "type": "string", "description": "Provider 标识（可选）。" }),
@@ -1191,6 +1209,9 @@ fn build_image_generation_task_request(
         prompt,
         title,
         title_generation_result,
+        persona_context,
+        presentation,
+        taste_context,
         mode,
         raw_text,
         layout_hint,
@@ -1271,6 +1292,9 @@ fn build_image_generation_task_request(
         prompt,
         title,
         title_generation_result,
+        persona_context,
+        presentation,
+        taste_context,
         mode,
         raw_text,
         layout_hint,
@@ -2112,6 +2136,9 @@ mod tests {
         assert!(properties.contains_key("model"));
         assert!(properties.contains_key("modality_contract_key"));
         assert!(properties.contains_key("required_capabilities"));
+        assert!(properties.contains_key("persona_context"));
+        assert!(properties.contains_key("presentation"));
+        assert!(properties.contains_key("taste_context"));
         assert!(!properties.contains_key("outputPath"));
     }
 
@@ -2150,6 +2177,19 @@ mod tests {
                         "route": "auxiliary.generate_title"
                     },
                     "usedFallback": false
+                })),
+                persona_context: Some(serde_json::json!({
+                    "version": "lime-image-persona-v1",
+                    "persona_id": "lime_image_creator"
+                })),
+                presentation: Some(serde_json::json!({
+                    "version": "lime-image-chat-v1",
+                    "assistant_intro": "好啊，生成：未来感青柠实验室",
+                    "completion_caption": "青柠实验室已生成"
+                })),
+                taste_context: Some(serde_json::json!({
+                    "version": "lime-image-taste-v1",
+                    "source": "taste_layer"
                 })),
                 mode: Some("generate".to_string()),
                 raw_text: Some("@配图 未来感青柠实验室".to_string()),
@@ -2235,6 +2275,14 @@ mod tests {
                 "usedFallback": false
             }))
         );
+        assert_eq!(
+            request
+                .presentation
+                .as_ref()
+                .and_then(|value| value.get("completion_caption"))
+                .and_then(Value::as_str),
+            Some("青柠实验室已生成")
+        );
 
         let output =
             create_image_generation_task_artifact_inner(request).expect("create image artifact");
@@ -2258,6 +2306,33 @@ mod tests {
                 .get("project_id")
                 .and_then(Value::as_str),
             Some("project-image-compat-1")
+        );
+        assert_eq!(
+            output
+                .record
+                .payload
+                .get("persona_context")
+                .and_then(|value| value.get("persona_id"))
+                .and_then(Value::as_str),
+            Some("lime_image_creator")
+        );
+        assert_eq!(
+            output
+                .record
+                .payload
+                .get("presentation")
+                .and_then(|value| value.get("completion_caption"))
+                .and_then(Value::as_str),
+            Some("青柠实验室已生成")
+        );
+        assert_eq!(
+            output
+                .record
+                .payload
+                .get("taste_context")
+                .and_then(|value| value.get("source"))
+                .and_then(Value::as_str),
+            Some("taste_layer")
         );
         assert_eq!(
             output
@@ -2547,6 +2622,10 @@ mod tests {
             "count": "9",
             "titleGenerationResult": { "title": "三国主要人物", "sessionId": "title-camel" },
             "title_generation_result": { "title": "三国主要人物", "sessionId": "title-snake" },
+            "personaContext": { "persona_id": "camel-persona" },
+            "persona_context": { "persona_id": "snake-persona" },
+            "tasteContext": { "source": "camel-taste" },
+            "taste_context": { "source": "snake-taste" },
             "providerId": "custom-provider-camel",
             "provider_id": "custom-provider-snake",
             "model": "gpt-images-2",
@@ -2576,10 +2655,20 @@ mod tests {
             record.get("title_generation_result"),
             Some(&serde_json::json!({ "title": "三国主要人物", "sessionId": "title-snake" }))
         );
+        assert_eq!(
+            record.get("persona_context"),
+            Some(&serde_json::json!({ "persona_id": "snake-persona" }))
+        );
+        assert_eq!(
+            record.get("taste_context"),
+            Some(&serde_json::json!({ "source": "snake-taste" }))
+        );
         assert!(!record.contains_key("providerId"));
         assert!(!record.contains_key("projectId"));
         assert!(!record.contains_key("anchorHint"));
         assert!(!record.contains_key("titleGenerationResult"));
+        assert!(!record.contains_key("personaContext"));
+        assert!(!record.contains_key("tasteContext"));
         assert!(!record.contains_key("referenceImages"));
         assert!(!record.contains_key("skillInputImages"));
 
@@ -2591,6 +2680,22 @@ mod tests {
         assert_eq!(
             input.title_generation_result,
             Some(serde_json::json!({ "title": "三国主要人物", "sessionId": "title-snake" }))
+        );
+        assert_eq!(
+            input
+                .persona_context
+                .as_ref()
+                .and_then(|value| value.get("persona_id"))
+                .and_then(Value::as_str),
+            Some("snake-persona")
+        );
+        assert_eq!(
+            input
+                .taste_context
+                .as_ref()
+                .and_then(|value| value.get("source"))
+                .and_then(Value::as_str),
+            Some("snake-taste")
         );
         assert!(input.reference_images.is_empty());
     }
@@ -2605,6 +2710,9 @@ mod tests {
         for field in [
             "raw_text",
             "title_generation_result",
+            "persona_context",
+            "presentation",
+            "taste_context",
             "layout_hint",
             "aspect_ratio",
             "provider_id",

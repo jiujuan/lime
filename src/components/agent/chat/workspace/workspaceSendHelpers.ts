@@ -17,6 +17,7 @@ import {
 import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
 import type { AssistantDraftState } from "../hooks/agentChatShared";
 import type { HandleSendOptions } from "../hooks/handleSendTypes";
+import type { InputCapabilitySendRoute } from "../skill-selection/inputCapabilitySelection";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
 import type {
   AgentRuntimeStatus,
@@ -108,6 +109,8 @@ export function buildInitialDispatchKey(
 export interface SubmissionPreviewSnapshot {
   key: string;
   prompt: string;
+  displayContent?: string;
+  inputCapabilityRoute?: InputCapabilitySendRoute;
   images: MessageImage[];
   createdAt: number;
   runtimeStatus: NonNullable<Message["runtimeStatus"]>;
@@ -1199,17 +1202,29 @@ interface CreateSubmissionPreviewSnapshotOptions {
   executionStrategy: AsterExecutionStrategy;
   webSearch?: boolean;
   thinking?: boolean;
+  displayContent?: string;
+  inputCapabilityRoute?: InputCapabilitySendRoute;
 }
 
 export function createSubmissionPreviewSnapshot(
   options: CreateSubmissionPreviewSnapshotOptions,
 ): SubmissionPreviewSnapshot {
-  const { key, prompt, images, executionStrategy, webSearch, thinking } =
-    options;
+  const {
+    key,
+    prompt,
+    images,
+    executionStrategy,
+    webSearch,
+    thinking,
+    displayContent,
+    inputCapabilityRoute,
+  } = options;
 
   return {
     key,
     prompt,
+    displayContent,
+    inputCapabilityRoute,
     images,
     createdAt: Date.now(),
     runtimeStatus: buildWaitingAgentRuntimeStatus({
@@ -1229,9 +1244,10 @@ export function buildSubmissionPreviewMessages(
     {
       id: `submission-preview:${snapshot.key}:user`,
       role: "user",
-      content: snapshot.prompt,
+      content: snapshot.displayContent ?? snapshot.prompt,
       images: snapshot.images.length > 0 ? snapshot.images : undefined,
       timestamp,
+      inputCapabilityRoute: snapshot.inputCapabilityRoute,
     },
     {
       id: `submission-preview:${snapshot.key}:assistant`,

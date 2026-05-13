@@ -7,6 +7,7 @@ import type {
 import type { Artifact, ArtifactStatus } from "@/lib/artifact/types";
 import { safeInvoke } from "@/lib/dev-bridge";
 import type { AgentUiProjectionEvent } from "./projection/agentUiEventProjection";
+import type { InputCapabilitySendRoute } from "./skill-selection/inputCapabilitySelection";
 
 export type {
   AgentThreadItem,
@@ -437,6 +438,8 @@ export interface Message {
   runtimeTurnId?: string;
   /** 消息用途（用于跳过特定副作用） */
   purpose?: "content_review" | "text_stylize" | "style_rewrite" | "style_audit";
+  /** 用户发送时显式选择的输入能力，用于历史气泡还原 @ Skill 等标签。 */
+  inputCapabilityRoute?: InputCapabilitySendRoute;
 }
 
 export interface ChatSession {

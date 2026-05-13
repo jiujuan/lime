@@ -158,6 +158,17 @@ function buildBaseSetupPackage() {
         policy_profile_ref: "sceneapp-policy-profile",
         aliases: ["短视频配音", "story-voice"],
         trigger_hints: ["@配音", "/voice-runtime"],
+        command_binding: {
+          request_defaults: {
+            launch_hint: "voice_scene",
+          },
+          intent_confirmation: {
+            id: "plain_voice_request",
+            rule_key: "agentChat.voice.intentRules",
+            confirmation_key: "agentChat.voice.confirmPlainRequest",
+            system_prompt_key: "agentChat.voice.confirmPlainRequestPrompt",
+          },
+        },
       },
     ],
     slot_profiles: [
@@ -490,6 +501,15 @@ describe("skillCatalog", () => {
         binding: {
           skillId: "sceneapp-service",
           executionKind: "agent_turn",
+          requestDefaults: {
+            launch_hint: "voice_scene",
+          },
+          intentConfirmation: {
+            id: "plain_voice_request",
+            ruleKey: "agentChat.voice.intentRules",
+            confirmationKey: "agentChat.voice.confirmPlainRequest",
+            systemPromptKey: "agentChat.voice.confirmPlainRequestPrompt",
+          },
         },
       }),
     );
@@ -595,6 +615,9 @@ describe("skillCatalog", () => {
     const formEntry = listSkillCatalogCommandEntries(seeded).find(
       (entry) => entry.commandKey === "form_generate",
     );
+    const imageEntry = listSkillCatalogCommandEntries(seeded).find(
+      (entry) => entry.commandKey === "image_generate",
+    );
     const posterEntry = listSkillCatalogCommandEntries(seeded).find(
       (entry) => entry.commandKey === "poster_generate",
     );
@@ -684,6 +707,20 @@ describe("skillCatalog", () => {
       detailKind: "json",
       supportsStreaming: true,
       supportsTimeline: true,
+    });
+    expect(imageEntry?.binding).toMatchObject({
+      skillId: "image_generate",
+      executionKind: "task_queue",
+      requestDefaults: {
+        imageWorkbench: "true",
+      },
+      intentConfirmation: {
+        id: "plain_image_generation",
+        ruleKey: "agentChat.inputIntent.imageGeneration.rules",
+        confirmationKey: "agentChat.inputIntent.imageGeneration.confirm",
+        systemPromptKey:
+          "agentChat.inputIntent.imageGeneration.systemPrompt",
+      },
     });
     expect(posterEntry?.binding).toMatchObject({
       skillId: "image_generate",

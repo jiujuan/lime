@@ -39,7 +39,7 @@ describe("parseCodeWorkbenchCommand", () => {
     });
   });
 
-  it("应兼容 Ribbi 风格的 @Code Agent 命令", () => {
+  it("应兼容 多词别名风格的 @Code Agent 命令", () => {
     const result = parseCodeWorkbenchCommand(
       "@Code Agent refactor the runtime mention registry and remove duplicate branches",
     );

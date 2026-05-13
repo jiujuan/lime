@@ -208,6 +208,7 @@ export interface OpenDeepLinkPayload {
   slug: string;
   source?: string | null;
   version?: string | null;
+  action?: "open" | "install" | null;
 }
 
 interface OpenDeepLinkResult {

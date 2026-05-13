@@ -1367,6 +1367,11 @@ export interface CreateImageGenerationTaskArtifactRequest {
   prompt: string;
   title?: string;
   titleGenerationResult?: AgentRuntimeGeneratedTitleResult | null;
+  personaContext?: Record<string, unknown>;
+  persona_context?: Record<string, unknown>;
+  presentation?: Record<string, unknown>;
+  tasteContext?: Record<string, unknown>;
+  taste_context?: Record<string, unknown>;
   mode?: "generate" | "edit" | "variation";
   rawText?: string;
   layoutHint?: string;

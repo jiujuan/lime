@@ -31,7 +31,7 @@ describe("parseTranscriptionWorkbenchCommand", () => {
     });
   });
 
-  it("应兼容 Ribbi 风格的 @Audio Extractor 命令", () => {
+  it("应兼容 多词别名风格的 @Audio Extractor 命令", () => {
     const result = parseTranscriptionWorkbenchCommand(
       "@Audio Extractor https://example.com/demo.mp4 export markdown",
     );

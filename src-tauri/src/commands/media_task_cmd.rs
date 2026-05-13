@@ -103,6 +103,12 @@ pub struct CreateImageGenerationTaskArtifactRequest {
     pub title: Option<String>,
     #[serde(default, alias = "title_generation_result")]
     pub title_generation_result: Option<serde_json::Value>,
+    #[serde(default, alias = "persona_context")]
+    pub persona_context: Option<serde_json::Value>,
+    #[serde(default)]
+    pub presentation: Option<serde_json::Value>,
+    #[serde(default, alias = "taste_context")]
+    pub taste_context: Option<serde_json::Value>,
     #[serde(default)]
     pub mode: Option<String>,
     #[serde(default, alias = "raw_text")]
@@ -4809,6 +4815,9 @@ pub(crate) fn create_image_generation_task_artifact_inner(
     let anchor_text = normalize_optional_string(request.anchor_text.clone());
     let title_generation_result =
         normalize_optional_json_object(request.title_generation_result.clone());
+    let persona_context = normalize_optional_json_object(request.persona_context.clone());
+    let presentation = normalize_optional_json_object(request.presentation.clone());
+    let taste_context = normalize_optional_json_object(request.taste_context.clone());
     let target_output_id = normalize_optional_string(request.target_output_id.clone());
     let target_output_ref_id = normalize_optional_string(request.target_output_ref_id.clone());
     let normalized_reference_images = normalize_reference_images(request.reference_images.clone());
@@ -4863,6 +4872,9 @@ pub(crate) fn create_image_generation_task_artifact_inner(
             "anchor_section_title": anchor_section_title,
             "anchor_text": anchor_text,
             "title_generation_result": title_generation_result,
+            "persona_context": persona_context,
+            "presentation": presentation,
+            "taste_context": taste_context,
             "target_output_id": target_output_id,
             "target_output_ref_id": target_output_ref_id,
             "reference_images": normalized_reference_images,
@@ -5414,6 +5426,9 @@ mod tests {
             prompt: "未来感青柠实验室".to_string(),
             title: Some("青柠主视觉".to_string()),
             title_generation_result: None,
+            persona_context: None,
+            presentation: None,
+            taste_context: None,
             mode: Some("generate".to_string()),
             raw_text: Some("@配图 生成 未来感青柠实验室".to_string()),
             layout_hint: None,
@@ -5737,6 +5752,19 @@ mod tests {
                 "usedFallback": false,
                 "fallbackReason": null
             })),
+            persona_context: Some(json!({
+                "version": "lime-image-persona-v1",
+                "persona_id": "lime_image_creator"
+            })),
+            presentation: Some(json!({
+                "version": "lime-image-chat-v1",
+                "assistant_intro": "好啊，生成：未来感青柠实验室",
+                "completion_caption": "青柠实验室已生成"
+            })),
+            taste_context: Some(json!({
+                "version": "lime-image-taste-v1",
+                "source": "taste_layer"
+            })),
             mode: Some("variation".to_string()),
             raw_text: Some("@配图 变体 #img-1 未来感青柠实验室".to_string()),
             layout_hint: Some("storyboard_3x3".to_string()),
@@ -5802,6 +5830,19 @@ mod tests {
                     },
                     "usedFallback": false,
                     "fallbackReason": null
+                })),
+                persona_context: Some(json!({
+                    "version": "lime-image-persona-v1",
+                    "persona_id": "lime_image_creator"
+                })),
+                presentation: Some(json!({
+                    "version": "lime-image-chat-v1",
+                    "assistant_intro": "好啊，生成：未来感青柠实验室",
+                    "completion_caption": "青柠实验室已生成"
+                })),
+                taste_context: Some(json!({
+                    "version": "lime-image-taste-v1",
+                    "source": "taste_layer"
                 })),
                 mode: Some("variation".to_string()),
                 raw_text: Some("@配图 变体 #img-1 未来感青柠实验室".to_string()),
@@ -5903,6 +5944,36 @@ mod tests {
                 "usedFallback": false,
                 "fallbackReason": null
             }))
+        );
+        assert_eq!(
+            first
+                .record
+                .payload
+                .get("persona_context")
+                .and_then(serde_json::Value::as_object)
+                .and_then(|value| value.get("persona_id"))
+                .and_then(serde_json::Value::as_str),
+            Some("lime_image_creator")
+        );
+        assert_eq!(
+            first
+                .record
+                .payload
+                .get("presentation")
+                .and_then(serde_json::Value::as_object)
+                .and_then(|value| value.get("completion_caption"))
+                .and_then(serde_json::Value::as_str),
+            Some("青柠实验室已生成")
+        );
+        assert_eq!(
+            first
+                .record
+                .payload
+                .get("taste_context")
+                .and_then(serde_json::Value::as_object)
+                .and_then(|value| value.get("source"))
+                .and_then(serde_json::Value::as_str),
+            Some("taste_layer")
         );
         assert_eq!(
             first.record.payload.get("reference_images"),
@@ -7676,6 +7747,9 @@ mod tests {
                 prompt: "用于正文的未来感实验室配图".to_string(),
                 title: Some("正文配图".to_string()),
                 title_generation_result: None,
+                persona_context: None,
+                presentation: None,
+                taste_context: None,
                 mode: Some("generate".to_string()),
                 raw_text: Some("@配图 生成 用于正文的未来感实验室配图".to_string()),
                 layout_hint: None,
@@ -8053,6 +8127,9 @@ mod tests {
                 prompt: "未来感青柠实验室".to_string(),
                 title: Some("青柠主视觉".to_string()),
                 title_generation_result: None,
+                persona_context: None,
+                presentation: None,
+                taste_context: None,
                 mode: Some("generate".to_string()),
                 raw_text: Some("@配图 生成 未来感青柠实验室".to_string()),
                 layout_hint: None,
@@ -8101,6 +8178,9 @@ mod tests {
                 prompt: "未来感青柠实验室".to_string(),
                 title: Some("青柠主视觉".to_string()),
                 title_generation_result: None,
+                persona_context: None,
+                presentation: None,
+                taste_context: None,
                 mode: Some("generate".to_string()),
                 raw_text: Some("@配图 生成 未来感青柠实验室".to_string()),
                 layout_hint: None,
@@ -8152,6 +8232,9 @@ mod tests {
                 prompt: "未来感青柠实验室".to_string(),
                 title: Some("青柠主视觉".to_string()),
                 title_generation_result: None,
+                persona_context: None,
+                presentation: None,
+                taste_context: None,
                 mode: Some("generate".to_string()),
                 raw_text: Some("@配图 生成 未来感青柠实验室".to_string()),
                 layout_hint: None,
@@ -8356,6 +8439,9 @@ mod tests {
                 prompt: "未来感青柠实验室".to_string(),
                 title: Some("青柠主视觉".to_string()),
                 title_generation_result: None,
+                persona_context: None,
+                presentation: None,
+                taste_context: None,
                 mode: Some("generate".to_string()),
                 raw_text: Some("@配图 生成 未来感青柠实验室".to_string()),
                 layout_hint: None,
