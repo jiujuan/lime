@@ -1400,9 +1400,30 @@ mod tests {
     use super::*;
     use proptest::prelude::*;
     use std::collections::HashSet;
+    use std::ffi::OsString;
     use std::io::Write;
     use tempfile::TempDir;
     use zip::write::FileOptions;
+
+    struct EnvVarGuard {
+        key: &'static str,
+        original: Option<OsString>,
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            match &self.original {
+                Some(value) => std::env::set_var(self.key, value),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+
+    fn set_test_env_var(key: &'static str, value: &Path) -> EnvVarGuard {
+        let original = std::env::var_os(key);
+        std::env::set_var(key, value);
+        EnvVarGuard { key, original }
+    }
 
     /// 生成有效的 Skill 目录名（字母数字和连字符）
     fn skill_name_strategy() -> impl Strategy<Value = String> {
@@ -1897,16 +1918,26 @@ content"#,
         const DOWNLOAD_URL: &str =
             "https://limeai.run/skill-packages/viral-content-breakdown/latest/viral-content-breakdown.zip";
 
-        let bytes = download_skill_package_zip(DOWNLOAD_URL)
-            .await
-            .expect("live skill package should download");
-        assert!(!bytes.is_empty());
-        println!("downloaded_bytes={}", bytes.len());
-
         let temp_dir = TempDir::new().unwrap();
-        let target_root = temp_dir.path().join("skills");
-        let result = install_skill_zip_bytes_into_root(&target_root, SKILL_NAME, &bytes)
-            .expect("live skill package should install into a temp skills root");
+        // Isolate app paths so the command path never writes to the developer's real Lime data dir.
+        let _home = set_test_env_var("HOME", &temp_dir.path().join("home"));
+        let _xdg_data = set_test_env_var("XDG_DATA_HOME", &temp_dir.path().join("xdg-data"));
+        let _appdata = set_test_env_var("APPDATA", &temp_dir.path().join("appdata"));
+        let _local_appdata =
+            set_test_env_var("LOCALAPPDATA", &temp_dir.path().join("local-appdata"));
+
+        let result = install_skill_from_download_url_for_app(
+            "lime".to_string(),
+            SkillDownloadInstallRequest {
+                skill_name: SKILL_NAME.to_string(),
+                download_url: DOWNLOAD_URL.to_string(),
+            },
+        )
+        .await
+        .expect("live website prompt package should install through the Lime command path");
+
+        let target_root = app_paths::resolve_skills_dir().expect("temp skills dir should resolve");
+        assert!(target_root.starts_with(temp_dir.path()));
 
         let installed_dir = target_root.join(SKILL_NAME);
         let discovered = scan_installed_skills(&target_root);
