@@ -1890,6 +1890,40 @@ content"#,
         writer.finish().unwrap().into_inner()
     }
 
+    #[tokio::test]
+    #[ignore = "downloads the live limeai.run skill package and verifies local install output"]
+    async fn test_install_live_lime_skill_zip_from_website_prompt() {
+        const SKILL_NAME: &str = "viral-content-breakdown";
+        const DOWNLOAD_URL: &str =
+            "https://limeai.run/skill-packages/viral-content-breakdown/latest/viral-content-breakdown.zip";
+
+        let bytes = download_skill_package_zip(DOWNLOAD_URL)
+            .await
+            .expect("live skill package should download");
+        assert!(!bytes.is_empty());
+        println!("downloaded_bytes={}", bytes.len());
+
+        let temp_dir = TempDir::new().unwrap();
+        let target_root = temp_dir.path().join("skills");
+        let result = install_skill_zip_bytes_into_root(&target_root, SKILL_NAME, &bytes)
+            .expect("live skill package should install into a temp skills root");
+
+        let installed_dir = target_root.join(SKILL_NAME);
+        let discovered = scan_installed_skills(&target_root);
+        println!("installed_dir={}", installed_dir.display());
+        println!("discovered_skills={discovered:?}");
+        assert_eq!(result.directory, SKILL_NAME);
+        assert!(installed_dir.join("SKILL.md").is_file());
+        assert!(!installed_dir.join(SKILL_NAME).join("SKILL.md").exists());
+        assert!(result.inspection.standard_compliance.is_standard);
+        assert!(result
+            .inspection
+            .standard_compliance
+            .validation_errors
+            .is_empty());
+        assert!(discovered.contains(&SKILL_NAME.to_string()));
+    }
+
     #[test]
     fn test_install_skill_zip_bytes_into_root_strips_matching_root_directory() {
         let temp_dir = TempDir::new().unwrap();

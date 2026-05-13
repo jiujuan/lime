@@ -29,6 +29,22 @@ Extract it into the Agent Skills directory.`);
     );
   });
 
+  it("兼容用户从旧详情页复制的完整安装 Prompt", () => {
+    const instruction = parseSkillInstallPromptInstruction(`Download and install a skill. Follow these steps EXACTLY. If any step fails, STOP and report the error.
+SKILL_NAME="viral-content-breakdown"
+DOWNLOAD_URL="https://limeai.run/skills/viral-content-breakdown/"
+1. Download the Skill package.
+2. Extract it into the Agent Skills directory.
+3. Restart or reload the Agent so the Skill becomes available.`);
+
+    expect(instruction).toEqual({
+      skillName: "viral-content-breakdown",
+      downloadUrl:
+        "https://limeai.run/skill-packages/viral-content-breakdown/latest/viral-content-breakdown.zip",
+      source: "assignment_prompt",
+    });
+  });
+
   it("缺少安装语义时不误拦普通消息", () => {
     expect(
       parseSkillInstallPromptInstruction(
