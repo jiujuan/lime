@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { resolveKnowledgeHubState } from "./knowledgeHubState";
 
+const fallbackPackLabel = "项目资料";
+
 describe("resolveKnowledgeHubState", () => {
   it("无资料时应引导添加项目资料", () => {
     const state = resolveKnowledgeHubState({
@@ -9,11 +11,14 @@ describe("resolveKnowledgeHubState", () => {
       hasInputText: false,
       canManageKnowledgePacks: true,
       canStartKnowledgeOrganize: true,
+      fallbackPackLabel,
     });
 
-    expect(state.title).toBe("添加项目资料");
+    expect(state.title.key).toBe("agentChat.inputbar.knowledge.state.add.title");
     expect(state.primaryAction).toBe("organize");
-    expect(state.primaryLabel).toBe("开始添加资料");
+    expect(state.primaryLabel.key).toBe(
+      "agentChat.inputbar.knowledge.action.organize",
+    );
   });
 
   it("无资料但输入框已有内容时应引导沉淀当前输入", () => {
@@ -23,10 +28,13 @@ describe("resolveKnowledgeHubState", () => {
       hasInputText: true,
       canManageKnowledgePacks: true,
       canStartKnowledgeOrganize: true,
+      fallbackPackLabel,
     });
 
     expect(state.primaryAction).toBe("organize");
-    expect(state.primaryLabel).toBe("整理当前输入为资料");
+    expect(state.primaryLabel.key).toBe(
+      "agentChat.inputbar.knowledge.action.organizeWithInput",
+    );
   });
 
   it("有待确认资料且无可用选择时应先确认资料", () => {
@@ -42,11 +50,16 @@ describe("resolveKnowledgeHubState", () => {
       hasInputText: false,
       canManageKnowledgePacks: true,
       canStartKnowledgeOrganize: true,
+      fallbackPackLabel,
     });
 
-    expect(state.title).toBe("有资料待确认");
+    expect(state.title.key).toBe(
+      "agentChat.inputbar.knowledge.state.pendingOnly.title",
+    );
     expect(state.primaryAction).toBe("manage");
-    expect(state.primaryLabel).toBe("去确认资料");
+    expect(state.primaryLabel.key).toBe(
+      "agentChat.inputbar.knowledge.action.review",
+    );
     expect(state.pendingCount).toBe(1);
   });
 
@@ -69,11 +82,16 @@ describe("resolveKnowledgeHubState", () => {
       hasInputText: false,
       canManageKnowledgePacks: true,
       canStartKnowledgeOrganize: true,
+      fallbackPackLabel,
     });
 
-    expect(state.title).toBe("选择项目资料");
+    expect(state.title.key).toBe(
+      "agentChat.inputbar.knowledge.state.select.title",
+    );
     expect(state.primaryAction).toBe("use");
-    expect(state.primaryLabel).toBe("使用这份资料");
+    expect(state.primaryLabel.key).toBe(
+      "agentChat.inputbar.knowledge.action.use",
+    );
   });
 
   it("已启用资料时应引导补充资料", () => {
@@ -95,10 +113,16 @@ describe("resolveKnowledgeHubState", () => {
       hasInputText: true,
       canManageKnowledgePacks: true,
       canStartKnowledgeOrganize: true,
+      fallbackPackLabel,
     });
 
-    expect(state.title).toBe("正在使用：品牌资料");
+    expect(state.title.key).toBe(
+      "agentChat.inputbar.knowledge.state.using.title",
+    );
+    expect(state.title.values).toEqual({ label: "品牌资料" });
     expect(state.primaryAction).toBe("supplement");
-    expect(state.primaryLabel).toBe("把当前输入补充为资料");
+    expect(state.primaryLabel.key).toBe(
+      "agentChat.inputbar.knowledge.action.supplementWithInput",
+    );
   });
 });

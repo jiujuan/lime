@@ -4,6 +4,7 @@ import type {
   CanvasImageInsertAnchorHint,
   CanvasImageTargetType,
 } from "@/lib/canvasImageInsertBus";
+import { getLimeI18n } from "@/i18n/createI18n";
 import {
   normalizeSelectionAnchorText,
   resolveSectionTitleForSelection,
@@ -51,6 +52,7 @@ export interface SessionImageWorkbenchState {
   viewport: ImageWorkbenchViewport;
   tasks: ImageWorkbenchTask[];
   outputs: ImageWorkbenchOutput[];
+  selectedTaskId?: string | null;
   selectedOutputId: string | null;
   nextOutputIndex: number;
 }
@@ -61,6 +63,7 @@ export function createInitialSessionImageWorkbenchState(): SessionImageWorkbench
     viewport: { x: 0, y: 0, scale: 1 },
     tasks: [],
     outputs: [],
+    selectedTaskId: null,
     selectedOutputId: null,
     nextOutputIndex: 1,
   };
@@ -74,6 +77,23 @@ export function resolveImageWorkbenchAssistantMessageId(
 
 export function collapseWhitespace(value: string | null | undefined): string {
   return (value || "").replace(/\s+/g, " ").trim();
+}
+
+type ImageWorkbenchActionCopyKey =
+  | "agentChat.imageWorkbenchAction.apply.defaultLabel"
+  | "agentChat.imageWorkbenchAction.apply.documentLabel"
+  | "agentChat.imageWorkbenchAction.apply.documentDispatch"
+  | "agentChat.imageWorkbenchAction.apply.coverLabel"
+  | "agentChat.imageWorkbenchAction.apply.coverSuccess";
+
+function tImageWorkbenchAction(
+  key: ImageWorkbenchActionCopyKey,
+  options?: Record<string, unknown>,
+): string {
+  return getLimeI18n().t(key, {
+    ns: "agent",
+    ...(options || {}),
+  });
 }
 
 function extractImagePromptSnippet(content: string, maxLength = 120): string {
@@ -183,8 +203,12 @@ export function buildDefaultCanvasImageApplyTarget(params: {
       anchorText: normalizeSelectionAnchorText(params.selectedText),
       projectId: params.projectId ?? null,
       contentId: params.contentId ?? null,
-      actionLabel: "插入文稿",
-      dispatchLabel: "已切回文稿，正在插入图片",
+      actionLabel: tImageWorkbenchAction(
+        "agentChat.imageWorkbenchAction.apply.documentLabel",
+      ),
+      dispatchLabel: tImageWorkbenchAction(
+        "agentChat.imageWorkbenchAction.apply.documentDispatch",
+      ),
     };
   }
 
@@ -209,8 +233,12 @@ export function resolveScopedImageWorkbenchApplyTarget(params: {
       return {
         kind: "document-cover",
         placeholder,
-        actionLabel: "设为封面",
-        successLabel: "已设为封面",
+        actionLabel: tImageWorkbenchAction(
+          "agentChat.imageWorkbenchAction.apply.coverLabel",
+        ),
+        successLabel: tImageWorkbenchAction(
+          "agentChat.imageWorkbenchAction.apply.coverSuccess",
+        ),
       };
     }
   }
@@ -222,7 +250,36 @@ export function resolveImageWorkbenchActionLabel(
   target: ImageWorkbenchApplyTarget | null | undefined,
 ): string {
   if (!target) {
-    return "应用到画布";
+    return tImageWorkbenchAction(
+      "agentChat.imageWorkbenchAction.apply.defaultLabel",
+    );
   }
-  return target.actionLabel;
+  if (target.kind === "document-cover") {
+    return tImageWorkbenchAction(
+      "agentChat.imageWorkbenchAction.apply.coverLabel",
+    );
+  }
+  return tImageWorkbenchAction(
+    "agentChat.imageWorkbenchAction.apply.documentLabel",
+  );
+}
+
+export function resolveImageWorkbenchApplyDispatchLabel(
+  target: Extract<ImageWorkbenchApplyTarget, { kind: "canvas-insert" }>,
+): string {
+  return (
+    tImageWorkbenchAction(
+      "agentChat.imageWorkbenchAction.apply.documentDispatch",
+    ) || target.dispatchLabel
+  );
+}
+
+export function resolveImageWorkbenchCoverSuccessLabel(
+  target: Extract<ImageWorkbenchApplyTarget, { kind: "document-cover" }>,
+): string {
+  return (
+    tImageWorkbenchAction(
+      "agentChat.imageWorkbenchAction.apply.coverSuccess",
+    ) || target.successLabel
+  );
 }

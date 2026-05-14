@@ -21,6 +21,24 @@ export type BundledI18nResources = Record<
   Record<LimeNamespace, I18nNamespaceResource>
 >;
 
+const NAMESPACE_RESOURCE_PARTS = {
+  agent: [
+    "agent",
+    "agentHome",
+    "agentInputbar",
+    "agentMessageList",
+    "agentRuntime",
+    "agentSkills",
+    "agentTeamWorkspace",
+  ],
+} as const satisfies Partial<Record<LimeNamespace, readonly string[]>>;
+
+function hasResourceParts(
+  namespace: LimeNamespace,
+): namespace is keyof typeof NAMESPACE_RESOURCE_PARTS {
+  return namespace in NAMESPACE_RESOURCE_PARTS;
+}
+
 const bundledResourceModules = import.meta.glob<I18nNamespaceResource>(
   "./resources/*/*.json",
   {
@@ -29,8 +47,16 @@ const bundledResourceModules = import.meta.glob<I18nNamespaceResource>(
   },
 );
 
-function resourceModuleKey(locale: SupportedLocale, namespace: LimeNamespace) {
+function resourceModuleKey(locale: SupportedLocale, namespace: string) {
   return `./resources/${locale}/${namespace}.json`;
+}
+
+function resourcePartsForNamespace(
+  namespace: LimeNamespace,
+): readonly string[] {
+  return hasResourceParts(namespace)
+    ? NAMESPACE_RESOURCE_PARTS[namespace]
+    : [namespace];
 }
 
 export function hasBundledNamespace(
@@ -38,8 +64,9 @@ export function hasBundledNamespace(
   namespace: LimeNamespace,
 ): boolean {
   const normalizedLocale = normalizeLocale(locale);
-  return (
-    resourceModuleKey(normalizedLocale, namespace) in bundledResourceModules
+  return resourcePartsForNamespace(namespace).some(
+    (part) =>
+      resourceModuleKey(normalizedLocale, part) in bundledResourceModules,
   );
 }
 
@@ -48,14 +75,19 @@ export function loadNamespaceResource(
   namespace: LimeNamespace,
 ): I18nNamespaceResource {
   const normalizedLocale = normalizeLocale(locale);
-  const resource =
-    bundledResourceModules[resourceModuleKey(normalizedLocale, namespace)];
-  if (resource) {
-    return resource;
-  }
+  return Object.assign(
+    {},
+    ...resourcePartsForNamespace(namespace).map((part) => {
+      const resource =
+        bundledResourceModules[resourceModuleKey(normalizedLocale, part)];
+      if (resource) {
+        return resource;
+      }
 
-  return (
-    bundledResourceModules[resourceModuleKey(FALLBACK_LOCALE, namespace)] ?? {}
+      return (
+        bundledResourceModules[resourceModuleKey(FALLBACK_LOCALE, part)] ?? {}
+      );
+    }),
   );
 }
 

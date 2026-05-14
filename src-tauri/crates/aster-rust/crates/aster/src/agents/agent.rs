@@ -1585,6 +1585,30 @@ where
 }
 
 impl Agent {
+    fn build_user_visible_context_message(
+        user_message: &Message,
+        session_config: &SessionConfig,
+    ) -> Option<Message> {
+        if user_message.is_user_visible() {
+            return None;
+        }
+
+        let visible_text = session_config
+            .turn_context
+            .as_ref()
+            .and_then(|context| context.user_visible_input_text.as_deref())
+            .map(str::trim)
+            .filter(|text| !text.is_empty())?;
+
+        let mut visible_message = Message::user().with_text(visible_text).user_only();
+        for content in &user_message.content {
+            if matches!(content, MessageContent::Image(_)) {
+                visible_message = visible_message.with_content(content.clone());
+            }
+        }
+        Some(visible_message)
+    }
+
     pub fn new() -> Self {
         // Create channels with buffer size 32 (adjust if needed)
         let (confirm_tx, confirm_rx) = mpsc::channel(32);
@@ -3525,6 +3549,12 @@ impl Agent {
                 .await?;
             }
             Ok(None) => {
+                if let Some(visible_message) =
+                    Self::build_user_visible_context_message(&user_message, &session_config)
+                {
+                    self.store_add_message(&session_config.id, &visible_message)
+                        .await?;
+                }
                 self.store_add_message(&session_config.id, &user_message)
                     .await?;
             }
@@ -5112,9 +5142,7 @@ mod tests {
             "thread-1",
             Some("内部结构化执行输入".to_string()),
             Some(TurnContextOverride {
-                user_visible_input_text: Some(
-                    "@analysis 帮我分析一下今天的国际形势".to_string(),
-                ),
+                user_visible_input_text: Some("@analysis 帮我分析一下今天的国际形势".to_string()),
                 ..TurnContextOverride::default()
             }),
         );
@@ -5124,16 +5152,49 @@ mod tests {
             .project_user_input(&turn)
             .expect("user input event");
 
+        let AgentEvent::ItemCompleted { item } = event else {
+            panic!("expected item completed event");
+        };
+        assert_eq!(item.id, "user:turn-skill-visible");
         assert!(matches!(
-            event,
-            AgentEvent::ItemStarted { item }
-                if item.id == "user_input:turn-skill-visible"
-                    && matches!(
-                        item.payload,
-                        ItemRuntimePayload::UserInput { ref text }
-                            if text == "@analysis 帮我分析一下今天的国际形势"
-                    )
+            item.payload,
+            ItemRuntimePayload::UserMessage { ref content }
+                if content == "@analysis 帮我分析一下今天的国际形势"
         ));
+    }
+
+    #[test]
+    fn test_build_user_visible_context_message_keeps_visible_skill_input_only_for_user() {
+        let hidden_user_message = Message::user()
+            .with_text("{\"analysis_request\":{\"content\":\"内部结构化输入\"}}")
+            .with_image("base64-image", "image/png")
+            .agent_only();
+        let session_config = SessionConfig {
+            id: "session-skill-visible".to_string(),
+            turn_context: Some(TurnContextOverride {
+                user_visible_input_text: Some("@analysis 帮我分析一下今天的国际形势".to_string()),
+                ..TurnContextOverride::default()
+            }),
+            ..SessionConfig::default()
+        };
+
+        let visible_message =
+            Agent::build_user_visible_context_message(&hidden_user_message, &session_config)
+                .expect("visible user message");
+
+        assert!(visible_message.is_user_visible());
+        assert!(!visible_message.is_agent_visible());
+        assert_eq!(
+            visible_message.as_concat_text(),
+            "@analysis 帮我分析一下今天的国际形势"
+        );
+        assert!(visible_message
+            .content
+            .iter()
+            .any(|content| matches!(content, MessageContent::Image(_))));
+        assert!(!visible_message
+            .as_concat_text()
+            .contains("analysis_request"));
     }
 
     #[test]

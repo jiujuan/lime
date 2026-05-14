@@ -79,7 +79,7 @@ import {
   type InputCapabilitySelection,
 } from "../skill-selection/inputCapabilitySelection";
 import type { AgentInitialInputCapabilityParams } from "@/types/page";
-import type agentResource from "@/i18n/resources/zh-CN/agent.json";
+import type { AgentI18nResource } from "@/i18n/agentResources";
 import type {
   InputbarKnowledgePackOption,
   InputbarKnowledgePackSelection,
@@ -114,13 +114,14 @@ import {
 } from "../home/buildHomeSkillSurface";
 import { buildHomeSurfaceCopy } from "../home/homeSurfaceCopy";
 import { buildInputbarCoreCopy } from "./Inputbar/components/inputbarCoreCopy";
+import { buildInputbarExecutionStrategyCopy } from "./Inputbar/inputbarWorkflowCopy";
 import type {
   HomeGuideCard,
   HomeSkillSurfaceItem,
   HomeStarterChip,
 } from "../home/homeSurfaceTypes";
 
-type AgentI18nKey = keyof typeof agentResource;
+type AgentI18nKey = keyof AgentI18nResource;
 
 const contentReveal = keyframes`
   from {
@@ -539,6 +540,10 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   );
   const inputbarCoreCopy = useMemo(
     () => buildInputbarCoreCopy(translateAgentCopyKey),
+    [translateAgentCopyKey],
+  );
+  const executionStrategyCopy = useMemo(
+    () => buildInputbarExecutionStrategyCopy(translateAgentCopyKey),
     [translateAgentCopyKey],
   );
   const pageContainerRef = useRef<HTMLDivElement | null>(null);
@@ -1620,6 +1625,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         onManageKnowledgePacks={onManageKnowledgePacks}
         copy={homeSurfaceCopy.composer}
         inputbarCopy={inputbarCoreCopy}
+        executionStrategyCopy={executionStrategyCopy}
         showCreationModeSelector={showCreationModeSelector}
         creationMode={creationMode}
         onCreationModeChange={onCreationModeChange}

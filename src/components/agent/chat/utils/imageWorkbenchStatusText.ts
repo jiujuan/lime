@@ -36,8 +36,12 @@ const IMAGE_WORKBENCH_DETAIL_KEYWORDS = normalizePhrases([
   "Prompt",
   "Provider",
   "参数",
+  "任务类型",
   "任务 ID",
   "任务ID",
+  "task type",
+  "task_type",
+  "tasktype",
   "Task ID",
   "任务摘要",
   "下一步流程",
@@ -63,6 +67,29 @@ function countDetailHits(normalized: string): number {
   return IMAGE_WORKBENCH_DETAIL_KEYWORDS.filter((keyword) =>
     normalized.includes(keyword),
   ).length;
+}
+
+function hasImageWorkbenchSubmissionTemplateShape(normalized: string): boolean {
+  const detailHitCount = countDetailHits(normalized);
+  const hasTemplateHeader =
+    normalized.includes("任务详情") ||
+    normalized.includes("任务摘要") ||
+    normalized.includes("生成详情");
+  const hasTaskIdentity =
+    normalized.includes("任务id") || normalized.includes("taskid");
+  const hasInternalTaskType =
+    normalized.includes("任务类型") ||
+    normalized.includes("tasktype") ||
+    normalized.includes("task_type");
+
+  return (
+    (hasTaskIdentity && hasInternalTaskType) ||
+    (hasTemplateHeader && detailHitCount >= 3) ||
+    (hasTaskIdentity && detailHitCount >= 3) ||
+    (normalized.includes("图片工作台") &&
+      hasTaskIdentity &&
+      detailHitCount >= 2)
+  );
 }
 
 export function isVerboseImageWorkbenchSubmissionText(
@@ -99,6 +126,10 @@ export function shouldSuppressImageWorkbenchStatusText(
   }
 
   if (isVerboseImageWorkbenchSubmissionText(value)) {
+    return true;
+  }
+
+  if (hasImageWorkbenchSubmissionTemplateShape(normalized)) {
     return true;
   }
 
@@ -168,19 +199,5 @@ export function isImageWorkbenchSubmissionTemplateText(
     return true;
   }
 
-  const detailHitCount = countDetailHits(normalized);
-  const hasTemplateHeader =
-    normalized.includes("任务详情") ||
-    normalized.includes("任务摘要") ||
-    normalized.includes("生成详情");
-  const hasTaskIdentity =
-    normalized.includes("任务id") || normalized.includes("taskid");
-
-  return (
-    (hasTemplateHeader && detailHitCount >= 3) ||
-    (hasTaskIdentity && detailHitCount >= 3) ||
-    (normalized.includes("图片工作台") &&
-      hasTaskIdentity &&
-      detailHitCount >= 2)
-  );
+  return hasImageWorkbenchSubmissionTemplateShape(normalized);
 }

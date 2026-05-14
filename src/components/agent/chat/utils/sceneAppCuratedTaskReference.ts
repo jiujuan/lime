@@ -13,7 +13,7 @@ import {
   type CuratedTaskInputValues,
   findCuratedTaskTemplateById,
 } from "./curatedTaskTemplates";
-import agentSourceResource from "@/i18n/resources/zh-CN/agent.json";
+import { agentZhCNResource as agentSourceResource } from "@/i18n/agentResources";
 import type { InputCapabilitySendRoute } from "../skill-selection/inputCapabilitySelection";
 
 type AgentSourceResourceKey = keyof typeof agentSourceResource;

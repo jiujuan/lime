@@ -36,6 +36,12 @@ const latestKnowledgePageProps = vi.hoisted(
       value: null as Record<string, unknown> | null,
     }) as { value: Record<string, unknown> | null },
 );
+const agentAppLabLifecycle = vi.hoisted(
+  () =>
+    ({
+      mounts: 0,
+    }) as { mounts: number },
+);
 const latestSceneAppsPageProps = vi.hoisted(
   () =>
     ({
@@ -74,6 +80,10 @@ vi.mock("./settings-v2", () => ({
   SettingsPageV2: () => <div data-testid="settings-page" />,
 }));
 
+vi.mock("./automation", () => ({
+  AutomationPage: () => <div data-testid="automation-page" />,
+}));
+
 vi.mock("./skills", () => ({
   SkillsWorkspacePage: (props: Record<string, unknown>) => {
     latestSkillsWorkspaceProps.value = props;
@@ -92,6 +102,16 @@ vi.mock("@/features/knowledge", () => ({
   KnowledgePage: (props: Record<string, unknown>) => {
     latestKnowledgePageProps.value = props;
     return <div data-testid="knowledge-page" />;
+  },
+}));
+
+vi.mock("@/features/agent-app", () => ({
+  AgentAppLabPage: () => {
+    useEffect(() => {
+      agentAppLabLifecycle.mounts += 1;
+    }, []);
+
+    return <div data-testid="agent-app-lab-page" />;
   },
 }));
 
@@ -194,6 +214,7 @@ describe("AppPageContent", () => {
     latestSkillsWorkspaceProps.value = null;
     latestMemoryPageProps.value = null;
     latestKnowledgePageProps.value = null;
+    agentAppLabLifecycle.mounts = 0;
     latestSceneAppsPageProps.value = null;
     sceneAppsLifecycle.mounts = 0;
     sceneAppsLifecycle.unmounts = 0;
@@ -713,6 +734,16 @@ describe("AppPageContent", () => {
         search: "短视频",
       },
     });
+  });
+
+  it("agent-app-lab 页面应渲染 P0 只读实验入口", async () => {
+    const { container } = renderContent("agent-app-lab");
+    await flushEffects();
+
+    expect(
+      container.querySelector('[data-testid="agent-app-lab-page"]'),
+    ).not.toBeNull();
+    expect(agentAppLabLifecycle.mounts).toBe(1);
   });
 
   it("sceneapps 页面在持续流程往返后不应重新挂载", async () => {

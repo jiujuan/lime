@@ -2705,5 +2705,13 @@
   "settings.webSearch.mse.priority.placeholder": "google, bing, duckduckgo, brave",
   "settings.webSearch.mse.customTemplate.placeholder": "https://example.com/search?q={query}",
   "settings.webSearch.images.pexels.label": "Pexels API Key",
-  "settings.webSearch.images.pixabay.label": "Pixabay API Key"
+  "settings.webSearch.images.pixabay.label": "Pixabay API Key",
+  "settings.providers.setting.body.models.action.createImageCommand": "建立 @命令",
+  "settings.providers.setting.body.models.imageCommand.bound": "已綁定 {{trigger}}",
+  "settings.providers.setting.body.models.imageCommand.title": "建立圖片 @命令",
+  "settings.providers.setting.body.models.imageCommand.description": "把模型 {{model}} 暴露成聊天裡的圖片模型入口；會進入同一圖片生成會話並建立標準圖片任務。",
+  "settings.providers.setting.body.models.imageCommand.action.save": "儲存命令",
+  "settings.providers.setting.body.models.imageCommand.action.cancel": "取消",
+  "settings.providers.setting.feedback.imageCommand.created": "已建立 {{trigger}}，將使用 {{model}} 作為圖片生成模型。",
+  "settings.providers.setting.feedback.imageCommand.invalid": "請填寫有效的 @命令名稱。"
 }

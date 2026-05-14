@@ -64,6 +64,10 @@ const loadKnowledgePage = () =>
   import("@/features/knowledge").then((module) => ({
     default: module.KnowledgePage,
   }));
+const loadAgentAppLabPage = () =>
+  import("@/features/agent-app").then((module) => ({
+    default: module.AgentAppLabPage,
+  }));
 const loadBrowserRuntimeWorkspace = () =>
   import("@/features/browser-runtime").then((module) => ({
     default: module.BrowserRuntimeWorkspace,
@@ -122,6 +126,7 @@ const ResourcesPage = lazy(loadResourcesPage);
 const MemoryPage = lazy(loadMemoryPage);
 const SkillsWorkspacePage = lazy(loadSkillsWorkspacePage);
 const KnowledgePage = lazy(loadKnowledgePage);
+const AgentAppLabPage = lazy(loadAgentAppLabPage);
 const BrowserRuntimeWorkspace = lazy(loadBrowserRuntimeWorkspace);
 const AgentChatPage = lazy(loadAgentChatPage);
 
@@ -392,6 +397,16 @@ export function AppPageContent({
           onNavigate={onNavigate}
           pageParams={activePageParams as SkillsPageParams}
         />
+      </div>
+    );
+
+    return wrapWithSceneApps(content);
+  }
+
+  if (activePage === "agent-app-lab") {
+    const content = (
+      <div style={columnPageStyle}>
+        <AgentAppLabPage />
       </div>
     );
 

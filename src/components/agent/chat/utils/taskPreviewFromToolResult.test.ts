@@ -124,6 +124,58 @@ describe("buildImageTaskPreviewFromToolResult", () => {
     });
   });
 
+  it("应从纯 JSON 工具输出恢复图片轻卡，而不是依赖额外 metadata", () => {
+    const preview = buildImageTaskPreviewFromToolResult({
+      toolId: "tool-json-1",
+      toolName: "lime_create_image_generation_task",
+      toolArguments: JSON.stringify({
+        prompt: "青柠插画",
+        count: 1,
+        size: "1024x1024",
+      }),
+      toolResult: {
+        success: true,
+        output: JSON.stringify({
+          success: true,
+          task_id: "task-json-image-1",
+          task_type: "image_generate",
+          task_family: "image",
+          status: "pending_submit",
+          normalized_status: "pending",
+          path: ".lime/tasks/image_generate/task-json-image-1.json",
+          absolute_path: "/workspace/.lime/tasks/image_generate/task-json-image-1.json",
+          artifact_path: ".lime/tasks/image_generate/task-json-image-1.json",
+          progress: {
+            phase: "pending_submit",
+            message: "任务已创建，等待进入队列",
+          },
+          record: {
+            payload: {
+              prompt: "青柠插画",
+              count: 1,
+              size: "1024x1024",
+              session_id: "session-json-image-1",
+            },
+          },
+        }),
+      },
+      fallbackPrompt: "@配图 青柠插画",
+    });
+
+    expect(preview).toMatchObject({
+      taskId: "task-json-image-1",
+      prompt: "青柠插画",
+      status: "running",
+      phase: "queued",
+      taskFilePath: "/workspace/.lime/tasks/image_generate/task-json-image-1.json",
+      artifactPath: ".lime/tasks/image_generate/task-json-image-1.json",
+      expectedImageCount: 1,
+      imageCount: 1,
+      size: "1024x1024",
+      statusMessage: "任务已创建，等待进入队列",
+    });
+  });
+
   it("3x3 分镜完成后应输出更贴近布局语义的摘要", () => {
     const preview = buildImageTaskPreviewFromToolResult({
       toolId: "tool-5",

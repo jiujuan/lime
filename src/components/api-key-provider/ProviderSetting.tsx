@@ -34,6 +34,12 @@ import {
   fetchProviderModelsAuto,
   normalizeFetchProviderModelsSource,
 } from "@/lib/api/modelRegistry";
+import {
+  findModelBoundImageCommandEntryForModel,
+  getCurrentSkillCatalogSnapshot,
+  subscribeSkillCatalogChanged,
+  upsertLocalModelBoundImageCommandBinding,
+} from "@/lib/api/skillCatalog";
 import { getProviderModelAutoFetchCapability } from "@/lib/model/providerModelFetchSupport";
 import { getProviderPromptCacheMode } from "@/lib/model/providerPromptCacheSupport";
 import { getProviderAccessHelp } from "@/lib/provider/providerAccessHelp";
@@ -45,6 +51,7 @@ import {
   extractApiModelIds,
   isFalProviderLike,
   isLikelyFalImageModel,
+  isResponsesImageModel,
   isProviderApiKeyRequired,
   type ProviderModelFetchStatusCopy,
 } from "./providerModelFetchHelpers";
@@ -89,6 +96,10 @@ interface InlineStatus {
   message: string;
 }
 
+type ImageModelCommandExecutorMode =
+  | "images_api"
+  | "responses_image_generation";
+
 // ============================================================================
 // 辅助函数
 // ============================================================================
@@ -115,6 +126,71 @@ function hasConfiguredApiKey(provider: ProviderWithKeysDisplay): boolean {
   }
 
   return provider.api_key_count > 0;
+}
+
+function isLikelyImageModelCommandModel(modelId: string): boolean {
+  const normalized = modelId.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return (
+    isResponsesImageModel(normalized) ||
+    isLikelyFalImageModel(normalized) ||
+    /(image|images|nano-banana|banana|flux|seedream|kontext|recraft|ideogram|sdxl|stable-diffusion)/.test(
+      normalized,
+    )
+  );
+}
+
+function titleCaseAsciiWords(value: string): string {
+  return value
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((segment) =>
+      segment.length <= 3
+        ? segment.toUpperCase()
+        : segment[0]!.toUpperCase() + segment.slice(1),
+    )
+    .join(" ");
+}
+
+function buildSuggestedImageCommandTrigger(modelId: string): string {
+  const normalized = modelId.trim();
+  const lower = normalized.toLowerCase();
+  if (lower === "gpt-images-2" || lower === "gpt-image-2") {
+    return "@GPT Images 2";
+  }
+  if (lower.includes("nano-banana-2")) {
+    return "@Nano Banana 2";
+  }
+  if (lower.includes("nano-banana-pro")) {
+    return "@Nanobanana Pro";
+  }
+
+  const visibleModelName = normalized.split("/").pop() || normalized;
+  return `@${titleCaseAsciiWords(visibleModelName) || "Image Model"}`;
+}
+
+function resolveSuggestedImageCommandExecutorMode(
+  provider: ProviderWithKeysDisplay,
+  modelId: string,
+): ImageModelCommandExecutorMode | undefined {
+  if (isResponsesImageModel(modelId)) {
+    return "responses_image_generation";
+  }
+
+  if (isFalProviderLike(provider) || isLikelyFalImageModel(modelId)) {
+    return "images_api";
+  }
+
+  return undefined;
+}
+
+function readCommandTriggerLabel(entry: {
+  triggers?: Array<{ prefix: string }>;
+}): string {
+  return entry.triggers?.[0]?.prefix ?? "@图片模型";
 }
 
 function parseModelDraft(value: string): string[] {
@@ -287,6 +363,13 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
   const [connectionStatus, setConnectionStatus] = useState<InlineStatus | null>(
     null,
   );
+  const [imageCommandDraft, setImageCommandDraft] = useState<{
+    modelId: string;
+    trigger: string;
+  } | null>(null);
+  const [imageCommandStatus, setImageCommandStatus] =
+    useState<InlineStatus | null>(null);
+  const [skillCatalogRevision, setSkillCatalogRevision] = useState(0);
 
   useEffect(() => {
     setModelList(provider?.custom_models ?? []);
@@ -299,7 +382,15 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     setApiKeyDraft("");
     setApiKeyDirty(false);
     setShowApiKey(false);
+    setImageCommandDraft(null);
+    setImageCommandStatus(null);
   }, [provider?.id, provider?.custom_models]);
+
+  useEffect(() => {
+    return subscribeSkillCatalogChanged(() => {
+      setSkillCatalogRevision((revision) => revision + 1);
+    });
+  }, []);
 
   const providerHostLabel = formatProviderHost(provider.api_host);
   const apiKeyMask = getFirstVisibleApiKey(provider);
@@ -346,6 +437,28 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
         : availableApiModels,
     [availableApiModels, normalizedApiModelQuery],
   );
+  const imageModelCommandByModel = useMemo(() => {
+    void skillCatalogRevision;
+    const catalog = getCurrentSkillCatalogSnapshot();
+    const entries = new Map<
+      string,
+      ReturnType<typeof findModelBoundImageCommandEntryForModel>
+    >();
+    for (const modelId of modelList) {
+      if (!isLikelyImageModelCommandModel(modelId)) {
+        continue;
+      }
+      const entry = findModelBoundImageCommandEntryForModel(
+        catalog,
+        provider.id,
+        modelId,
+      );
+      if (entry) {
+        entries.set(modelId, entry);
+      }
+    }
+    return entries;
+  }, [modelList, provider.id, skillCatalogRevision]);
   const canDeleteProvider = Boolean(onDeleteProvider);
   const showExplicitPromptCacheBadge =
     getProviderPromptCacheMode(
@@ -473,6 +586,49 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
     },
     [applyModels, modelList],
   );
+
+  const handleOpenImageCommandDraft = useCallback((modelId: string) => {
+    setImageCommandStatus(null);
+    setImageCommandDraft({
+      modelId,
+      trigger: buildSuggestedImageCommandTrigger(modelId),
+    });
+  }, []);
+
+  const handleSaveImageCommandDraft = useCallback(() => {
+    if (!imageCommandDraft) {
+      return;
+    }
+
+    try {
+      const entry = upsertLocalModelBoundImageCommandBinding({
+        trigger: imageCommandDraft.trigger,
+        providerId: provider.id,
+        modelId: imageCommandDraft.modelId,
+        executorMode: resolveSuggestedImageCommandExecutorMode(
+          provider,
+          imageCommandDraft.modelId,
+        ),
+      });
+      setImageCommandDraft(null);
+      setImageCommandStatus({
+        tone: "success",
+        message: t("settings.providers.setting.feedback.imageCommand.created", {
+          trigger: readCommandTriggerLabel(entry),
+          model: imageCommandDraft.modelId,
+        }),
+      });
+      setSkillCatalogRevision((revision) => revision + 1);
+    } catch {
+      setImageCommandStatus({
+        tone: "error",
+        message: t(
+          "settings.providers.setting.feedback.imageCommand.invalid",
+          "请填写有效的 @命令名称。",
+        ),
+      });
+    }
+  }, [imageCommandDraft, provider, t]);
 
   const handleFetchModelsFromApi = useCallback(async () => {
     if (!modelAutoFetchCapability.supported) {
@@ -1043,56 +1199,92 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
 
                 {modelList.length > 0 ? (
                   <div className="space-y-2">
-                    {modelList.map((modelId, index) => (
-                      <div
-                        key={modelId}
-                        className="flex items-center gap-3 rounded-[16px] bg-white px-3 py-2 text-sm text-slate-800"
-                        data-testid="model-priority-item"
-                      >
-                        <span className="text-slate-400">::</span>
-                        {index === 0 ? (
-                          <Badge className="border border-amber-200 bg-amber-50 px-2 py-0 text-[11px] text-amber-700 hover:bg-amber-50">
-                            {t(
-                              "settings.providers.setting.body.models.primaryBadge",
-                              "主模型",
-                            )}
-                          </Badge>
-                        ) : null}
-                        <span className="min-w-0 flex-1 truncate normal-case">
-                          {modelId}
-                        </span>
-                        {index > 0 ? (
+                    {modelList.map((modelId, index) => {
+                      const imageModelCommand =
+                        imageModelCommandByModel.get(modelId);
+                      const canBindImageCommand =
+                        isLikelyImageModelCommandModel(modelId);
+
+                      return (
+                        <div
+                          key={modelId}
+                          className="flex items-center gap-3 rounded-[16px] bg-white px-3 py-2 text-sm text-slate-800"
+                          data-testid="model-priority-item"
+                        >
+                          <span className="text-slate-400">::</span>
+                          {index === 0 ? (
+                            <Badge className="border border-amber-200 bg-amber-50 px-2 py-0 text-[11px] text-amber-700 hover:bg-amber-50">
+                              {t(
+                                "settings.providers.setting.body.models.primaryBadge",
+                                "主模型",
+                              )}
+                            </Badge>
+                          ) : null}
+                          <span className="min-w-0 flex-1 truncate normal-case">
+                            {modelId}
+                          </span>
+                          {imageModelCommand ? (
+                            <Badge
+                              className="border border-emerald-200 bg-emerald-50 px-2 py-0 text-[11px] text-emerald-700 hover:bg-emerald-50"
+                              data-testid="image-command-bound-badge"
+                            >
+                              {t(
+                                "settings.providers.setting.body.models.imageCommand.bound",
+                                {
+                                  trigger:
+                                    readCommandTriggerLabel(imageModelCommand),
+                                },
+                              )}
+                            </Badge>
+                          ) : canBindImageCommand ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleOpenImageCommandDraft(modelId);
+                              }}
+                              className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700 transition hover:border-sky-300 hover:bg-sky-100"
+                              data-testid="create-image-command-button"
+                            >
+                              <Sparkles className="mr-1 inline h-3 w-3" />
+                              {t(
+                                "settings.providers.setting.body.models.action.createImageCommand",
+                                "创建 @命令",
+                              )}
+                            </button>
+                          ) : null}
+                          {index > 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void handleSetMainModel(modelId);
+                              }}
+                              className="text-xs font-medium text-slate-500 hover:text-slate-900"
+                            >
+                              <Star className="mr-1 inline h-3 w-3" />
+                              {t(
+                                "settings.providers.setting.body.models.action.setPrimary",
+                                "设为主模型",
+                              )}
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             onClick={() => {
-                              void handleSetMainModel(modelId);
+                              void handleRemoveModel(modelId);
                             }}
-                            className="text-xs font-medium text-slate-500 hover:text-slate-900"
-                          >
-                            <Star className="mr-1 inline h-3 w-3" />
-                            {t(
-                              "settings.providers.setting.body.models.action.setPrimary",
-                              "设为主模型",
+                            className="text-slate-400 hover:text-rose-600"
+                            aria-label={t(
+                              "settings.providers.setting.body.models.action.removeAria",
+                              {
+                                model: modelId,
+                              },
                             )}
+                          >
+                            <X className="h-4 w-4" />
                           </button>
-                        ) : null}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            void handleRemoveModel(modelId);
-                          }}
-                          className="text-slate-400 hover:text-rose-600"
-                          aria-label={t(
-                            "settings.providers.setting.body.models.action.removeAria",
-                            {
-                              model: modelId,
-                            },
-                          )}
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ))}
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="rounded-[18px] border border-dashed border-slate-200 bg-white px-4 py-5 text-sm text-slate-500">
@@ -1102,6 +1294,88 @@ const ProviderSettingBody: React.FC<ProviderSettingBodyProps> = ({
                     )}
                   </div>
                 )}
+
+                {imageCommandStatus ? (
+                  <div
+                    className={cn(
+                      "mt-3 flex items-start gap-2 rounded-[16px] border px-3 py-2 text-sm",
+                      buildStatusClass(imageCommandStatus.tone),
+                    )}
+                    data-testid="image-command-status"
+                  >
+                    {getStatusIcon(imageCommandStatus.tone)}
+                    <span className="leading-5">
+                      {imageCommandStatus.message}
+                    </span>
+                  </div>
+                ) : null}
+
+                {imageCommandDraft ? (
+                  <div
+                    className="mt-3 rounded-[18px] border border-sky-200 bg-sky-50 p-3"
+                    data-testid="image-command-binding-panel"
+                  >
+                    <div className="mb-2">
+                      <div className="text-sm font-medium text-slate-800">
+                        {t(
+                          "settings.providers.setting.body.models.imageCommand.title",
+                          "创建图片 @命令",
+                        )}
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-slate-600">
+                        {t(
+                          "settings.providers.setting.body.models.imageCommand.description",
+                          {
+                            model: imageCommandDraft.modelId,
+                          },
+                        )}
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Input
+                        value={imageCommandDraft.trigger}
+                        onChange={(event) =>
+                          setImageCommandDraft((draft) =>
+                            draft
+                              ? { ...draft, trigger: event.target.value }
+                              : draft,
+                          )
+                        }
+                        className="h-10 rounded-[14px] border-sky-200 bg-white px-3 normal-case"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        data-testid="image-command-trigger-input"
+                      />
+                      <Button
+                        type="button"
+                        className="h-10 rounded-[14px] bg-slate-950 px-4 text-white hover:bg-slate-800"
+                        onClick={handleSaveImageCommandDraft}
+                        disabled={!imageCommandDraft.trigger.trim()}
+                        data-testid="image-command-save-button"
+                      >
+                        {t(
+                          "settings.providers.setting.body.models.imageCommand.action.save",
+                          "保存命令",
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-10 rounded-[14px] border-slate-200 bg-white px-4"
+                        onClick={() => {
+                          setImageCommandDraft(null);
+                        }}
+                        data-testid="image-command-cancel-button"
+                      >
+                        {t(
+                          "settings.providers.setting.body.models.imageCommand.action.cancel",
+                          "取消",
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                   <Input

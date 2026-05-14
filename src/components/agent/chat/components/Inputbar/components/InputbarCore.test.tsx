@@ -4,8 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OPEN_VOICE_MODEL_SETTINGS_EVENT } from "@/lib/voiceModelSettingsNavigation";
 import { changeLimeLocale } from "@/i18n/createI18n";
-import agentResource from "@/i18n/resources/zh-CN/agent.json";
-import enAgentResource from "@/i18n/resources/en-US/agent.json";
+import { agentEnUSResource, agentZhCNResource } from "@/i18n/agentResources";
 import { InputbarCore } from "./InputbarCore";
 import {
   buildInputbarCoreCopy,
@@ -125,18 +124,17 @@ function translateResource(
   values?: Record<string, number | string>,
 ) {
   return Object.entries(values ?? {}).reduce(
-    (text, [name, value]) =>
-      text.split(`{{${name}}}`).join(String(value)),
+    (text, [name, value]) => text.split(`{{${name}}}`).join(String(value)),
     resource[key] ?? key,
   );
 }
 
 const TEST_INPUTBAR_CORE_COPY = buildInputbarCoreCopy((key, values) =>
-  translateResource(agentResource, key, values),
+  translateResource(agentZhCNResource, key, values),
 );
 
 const TEST_EN_INPUTBAR_CORE_COPY = buildInputbarCoreCopy((key, values) =>
-  translateResource(enAgentResource, key, values),
+  translateResource(agentEnUSResource, key, values),
 );
 
 beforeEach(async () => {
@@ -164,9 +162,7 @@ afterEach(() => {
 });
 
 const renderInputbarCore = async (
-  props?: Partial<
-    Omit<React.ComponentProps<typeof InputbarCore>, "uiCopy">
-  > & {
+  props?: Partial<Omit<React.ComponentProps<typeof InputbarCore>, "uiCopy">> & {
     uiCopy?: React.ComponentProps<typeof InputbarCore>["uiCopy"];
   },
 ) => {
@@ -272,13 +268,9 @@ describe("InputbarCore", () => {
     expect(
       container.querySelector('button[aria-label="Expand input"]'),
     ).toBeTruthy();
-    expect(
-      container.querySelector('button[aria-label="Send"]'),
-    ).toBeNull();
+    expect(container.querySelector('button[aria-label="Send"]')).toBeNull();
     expect(container.textContent).toContain("Handle later");
-    expect(
-      container.querySelector('button[aria-label="Stop"]'),
-    ).toBeTruthy();
+    expect(container.querySelector('button[aria-label="Stop"]')).toBeTruthy();
   });
 
   it("添加路径引用时应显示 chip 并允许移除", async () => {

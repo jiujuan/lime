@@ -37,6 +37,10 @@ import { InputbarKnowledgeControl } from "../knowledge/InputbarKnowledgeControl"
 import type { InputbarComposerSectionCopy } from "./inputbarComposerSectionCopy";
 import type { InputbarCoreCopy } from "./inputbarCoreCopy";
 import type {
+  InputbarExecutionStrategyCopy,
+  InputbarWorkflowPanelCopy,
+} from "../inputbarWorkflowCopy";
+import type {
   WorkflowGateState,
   WorkflowQuickAction,
   WorkflowStep,
@@ -116,6 +120,8 @@ interface InputbarComposerSectionProps {
   inputCompletionEnabled?: boolean;
   copy: InputbarComposerSectionCopy;
   inputbarCopy: InputbarCoreCopy;
+  executionStrategyCopy: InputbarExecutionStrategyCopy;
+  workflowPanelCopy: InputbarWorkflowPanelCopy;
 }
 
 export const InputbarComposerSection: React.FC<
@@ -183,6 +189,8 @@ export const InputbarComposerSection: React.FC<
   inputCompletionEnabled = true,
   copy,
   inputbarCopy,
+  executionStrategyCopy,
+  workflowPanelCopy,
 }) => {
   const [teamSelectorAutoOpenToken, setTeamSelectorAutoOpenToken] = useState<
     number | null
@@ -369,6 +377,7 @@ export const InputbarComposerSection: React.FC<
             isFullscreen={isFullscreen}
             executionStrategy={executionStrategy}
             setExecutionStrategy={setExecutionStrategy}
+            copy={executionStrategyCopy}
           />
           {shouldShowModelControls ? (
             <InputbarModelExtra
@@ -407,6 +416,7 @@ export const InputbarComposerSection: React.FC<
         renderGeneratingPanel
         onQuickAction={inputAdapter.actions.setText}
         onStop={inputAdapter.actions.stop}
+        copy={workflowPanelCopy}
       />
     );
   }
@@ -426,6 +436,7 @@ export const InputbarComposerSection: React.FC<
         renderGeneratingPanel={false}
         onQuickAction={inputAdapter.actions.setText}
         onStop={inputAdapter.actions.stop}
+        copy={workflowPanelCopy}
       />
       <CharacterMention
         {...mentionSkillProps}

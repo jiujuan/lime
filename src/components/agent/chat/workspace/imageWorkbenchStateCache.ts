@@ -208,6 +208,15 @@ function normalizeSessionImageWorkbenchState(
     : [];
   const outputIds = new Set(outputs.map((output) => output.id));
   const selectedOutputId = readString(record.selectedOutputId);
+  const selectedTaskId = readString(record.selectedTaskId);
+  const normalizedSelectedOutputId =
+    selectedOutputId && outputIds.has(selectedOutputId)
+      ? selectedOutputId
+      : outputs[0]?.id || null;
+  const selectedOutputTaskId = normalizedSelectedOutputId
+    ? (outputs.find((output) => output.id === normalizedSelectedOutputId)
+        ?.taskId ?? null)
+    : null;
 
   return {
     active: record.active === true,
@@ -227,10 +236,11 @@ function normalizeSessionImageWorkbenchState(
       : { x: 0, y: 0, scale: 1 },
     tasks,
     outputs,
-    selectedOutputId:
-      selectedOutputId && outputIds.has(selectedOutputId)
-        ? selectedOutputId
-        : outputs[0]?.id || null,
+    selectedTaskId:
+      selectedTaskId && taskIds.has(selectedTaskId)
+        ? selectedTaskId
+        : selectedOutputTaskId,
+    selectedOutputId: normalizedSelectedOutputId,
     nextOutputIndex:
       readFiniteNumber(record.nextOutputIndex) ??
       Math.max(1, outputs.length + 1),
@@ -350,6 +360,8 @@ export function buildSessionImageWorkbenchStateFromMessages(
 
   if (state.outputs.length > 0) {
     state.selectedOutputId = state.outputs[0]?.id || null;
+    state.selectedTaskId =
+      state.outputs[0]?.taskId || state.tasks[0]?.id || null;
     state.nextOutputIndex = state.outputs.length + 1;
   }
 

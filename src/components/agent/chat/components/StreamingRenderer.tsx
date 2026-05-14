@@ -354,6 +354,7 @@ interface PlanAwareMarkdownOptions {
   showBlockActions?: boolean;
   onQuoteContent?: (content: string) => void;
   markdownRenderMode?: MarkdownRenderMode;
+  readOnlyA2UI?: boolean;
 }
 
 function renderPlanAwareMarkdown(
@@ -370,6 +371,7 @@ function renderPlanAwareMarkdown(
     showBlockActions = false,
     onQuoteContent,
     markdownRenderMode = "standard",
+    readOnlyA2UI = false,
   }: PlanAwareMarkdownOptions,
 ) {
   if (!renderProposedPlanBlocks) {
@@ -390,6 +392,7 @@ function renderPlanAwareMarkdown(
         showBlockActions={showBlockActions}
         onQuoteContent={onQuoteContent}
         renderMode={markdownRenderMode}
+        readOnlyA2UI={readOnlyA2UI}
       />
     );
   }
@@ -419,6 +422,7 @@ function renderPlanAwareMarkdown(
         showBlockActions={showBlockActions}
         onQuoteContent={onQuoteContent}
         renderMode={markdownRenderMode}
+        readOnlyA2UI={readOnlyA2UI}
       />
     ),
   );
@@ -459,6 +463,8 @@ interface StreamingTextProps {
   onQuoteContent?: (content: string) => void;
   /** Markdown 渲染模式；历史恢复可使用 light 降低首帧成本。 */
   markdownRenderMode?: MarkdownRenderMode;
+  /** 历史消息中的 A2UI 只允许回显，不能再次提交。 */
+  readOnlyA2UI?: boolean;
 }
 
 /**
@@ -485,6 +491,7 @@ const StreamingText: React.FC<StreamingTextProps> = memo(
     showBlockActions = false,
     onQuoteContent,
     markdownRenderMode = "standard",
+    readOnlyA2UI = false,
   }) => {
     const initialDisplayText = resolveInitialStreamingDisplayText(
       text,
@@ -647,6 +654,7 @@ const StreamingText: React.FC<StreamingTextProps> = memo(
           showBlockActions,
           onQuoteContent,
           markdownRenderMode,
+          readOnlyA2UI,
         });
       }
 
@@ -661,15 +669,21 @@ const StreamingText: React.FC<StreamingTextProps> = memo(
                 }
                 // 直接渲染 A2UI 表单
                 if (typeof part.content !== "string") {
+                  const response = readOnlyA2UI
+                    ? { ...part.content, submitAction: undefined }
+                    : part.content;
                   return (
                     <A2UITaskCard
                       key={`a2ui-${index}`}
-                      response={part.content}
-                      onSubmit={onA2UISubmit}
+                      response={response}
+                      onSubmit={readOnlyA2UI ? undefined : onA2UISubmit}
                       formId={a2uiFormId}
                       initialFormData={a2uiInitialFormData}
                       onFormChange={onA2UIFormChange}
                       preset={CHAT_A2UI_TASK_CARD_PRESET}
+                      compact={true}
+                      className="max-w-[760px]"
+                      preview={readOnlyA2UI}
                     />
                   );
                 }
@@ -685,6 +699,8 @@ const StreamingText: React.FC<StreamingTextProps> = memo(
                     key={`pending-${index}`}
                     preset={CHAT_A2UI_TASK_CARD_PRESET}
                     subtitle="正在解析结构化问题，请稍等。"
+                    compact={true}
+                    className="max-w-[760px]"
                   />
                 );
 
@@ -705,6 +721,7 @@ const StreamingText: React.FC<StreamingTextProps> = memo(
                   showBlockActions,
                   onQuoteContent,
                   markdownRenderMode,
+                  readOnlyA2UI,
                 });
               }
             }
@@ -1025,6 +1042,10 @@ interface StreamingRendererProps {
   onQuoteContent?: (content: string) => void;
   /** Markdown 渲染模式；历史恢复可使用 light 降低首帧成本。 */
   markdownRenderMode?: MarkdownRenderMode;
+  /** 历史或非活动消息里的 A2UI 只读回显，不能再次提交。 */
+  readOnlyA2UI?: boolean;
+  /** 历史或非活动消息里的 ask/elicitation 只读回显，不能再次提交。 */
+  readOnlyActionRequests?: boolean;
 }
 
 /**
@@ -1066,6 +1087,8 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
     showContentBlockActions = false,
     onQuoteContent,
     markdownRenderMode = "standard",
+    readOnlyA2UI = false,
+    readOnlyActionRequests = false,
   }) => {
     const shouldRenderInlineActionRequest = React.useCallback(
       (request: ActionRequired) =>
@@ -1342,7 +1365,9 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
       (request: ActionRequired) => {
         if (
           isActionRequestA2UICompatible(request) &&
-          (request.status === "submitted" || request.status === "queued")
+          (readOnlyActionRequests ||
+            request.status === "submitted" ||
+            request.status === "queued")
         ) {
           return (
             <ActionRequestA2UIPreviewCard
@@ -1362,7 +1387,11 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
           />
         );
       },
-      [onPermissionResponse, shouldRenderInlineActionRequest],
+      [
+        onPermissionResponse,
+        readOnlyActionRequests,
+        shouldRenderInlineActionRequest,
+      ],
     );
 
     const renderProcessEntry = React.useCallback(
@@ -1455,21 +1484,28 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
         const { parsed, keyPrefix, lastStreamingPartIndex } = params;
         return parsed.parts.map((part, index) => {
           switch (part.type) {
-            case "a2ui":
+            case "a2ui": {
               if (!renderA2UIInline || typeof part.content === "string") {
                 return null;
               }
+              const response = readOnlyA2UI
+                ? { ...part.content, submitAction: undefined }
+                : part.content;
               return (
                 <A2UITaskCard
                   key={`${keyPrefix}-a2ui-${index}`}
-                  response={part.content}
-                  onSubmit={onA2UISubmit}
+                  response={response}
+                  onSubmit={readOnlyA2UI ? undefined : onA2UISubmit}
                   formId={a2uiFormId}
                   initialFormData={a2uiInitialFormData}
                   onFormChange={onA2UIFormChange}
                   preset={CHAT_A2UI_TASK_CARD_PRESET}
+                  compact={true}
+                  className="max-w-[760px]"
+                  preview={readOnlyA2UI}
                 />
               );
+            }
 
             case "write_file":
             case "pending_write_file":
@@ -1486,6 +1522,8 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
                   key={`${keyPrefix}-pending-${index}`}
                   preset={CHAT_A2UI_TASK_CARD_PRESET}
                   subtitle="正在解析结构化问题，请稍等。"
+                  compact={true}
+                  className="max-w-[760px]"
                 />
               );
 
@@ -1517,6 +1555,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
                   showBlockActions={showContentBlockActions}
                   onQuoteContent={onQuoteContent}
                   markdownRenderMode={markdownRenderMode}
+                  readOnlyA2UI={readOnlyA2UI}
                 />
               );
             }
@@ -1536,6 +1575,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
         renderA2UIInline,
         renderProposedPlanBlocks,
         renderWriteFileIndicator,
+        readOnlyA2UI,
         showContentBlockActions,
         shouldCollapseCodeBlock,
         shouldShowCursor,
@@ -1585,6 +1625,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
             showBlockActions={showContentBlockActions}
             onQuoteContent={onQuoteContent}
             markdownRenderMode={markdownRenderMode}
+            readOnlyA2UI={readOnlyA2UI}
           />
         );
       },
@@ -1599,6 +1640,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
         onA2UISubmit,
         onCodeBlockClick,
         onQuoteContent,
+        readOnlyA2UI,
         renderParsedResultParts,
         renderProposedPlanBlocks,
         markdownRenderMode,

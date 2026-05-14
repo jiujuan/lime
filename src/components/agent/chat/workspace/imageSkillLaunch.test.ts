@@ -48,10 +48,23 @@ describe("resolveImageWorkbenchSkillRequest", () => {
         },
         presentation: {
           version: "lime-image-chat-v1",
-          assistant_intro:
-            "好啊，用 Nanobanana Pro 生成：一张广州塔，从花城汇看过去的春天的照片\n先获取下工具参数\n马上生成",
-          completion_caption:
-            "搞定，图已经生成好了\n要调整的话直接说，我继续改",
+          opening_guidance: {
+            source: "model_stream",
+            avoid_fixed_templates: true,
+            avoid_visible_process_lines: true,
+          },
+          assistant_intro_request: {
+            source: "model_generated_before_tool",
+            mode: "generate",
+            prompt_intent: "一张广州塔，从花城汇看过去的春天的照片",
+            avoid_fixed_templates: true,
+          },
+          completion_caption_request: {
+            source: "model_generated_at_tool_call",
+            mode: "generate",
+            prompt_intent: "一张广州塔，从花城汇看过去的春天的照片",
+            avoid_fixed_templates: true,
+          },
         },
         taste_context: {
           version: "lime-image-taste-v1",
@@ -60,7 +73,10 @@ describe("resolveImageWorkbenchSkillRequest", () => {
         },
       },
     });
-    expect(JSON.stringify(skillRequest?.requestContext)).not.toMatch(
+    const serializedContext = JSON.stringify(skillRequest?.requestContext);
+    expect(serializedContext).not.toContain("先获取下工具参数");
+    expect(serializedContext).not.toContain("马上生成");
+    expect(serializedContext).not.toMatch(
       new RegExp(["ri", "bbi"].join(""), "i"),
     );
   });

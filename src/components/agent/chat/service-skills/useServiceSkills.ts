@@ -40,11 +40,11 @@ import type {
   ServiceSkillCatalogMeta,
   ServiceSkillHomeItem,
 } from "./types";
-import type agentResource from "@/i18n/resources/zh-CN/agent.json";
+import type { AgentI18nResource } from "@/i18n/agentResources";
 
 const SERVICE_SKILLS_IDLE_TIMEOUT_MS = 1_500;
 
-type AgentI18nKey = keyof typeof agentResource;
+type AgentI18nKey = keyof AgentI18nResource;
 
 function getSkillBadge(
   item: SkillCatalogItem,
@@ -166,8 +166,7 @@ export function useServiceSkills(
   const [usageVersion, setUsageVersion] = useState(0);
   const [automationLinkCount, setAutomationLinkCount] = useState(0);
   const serviceSkillHomeCopy = useMemo(
-    () =>
-      buildServiceSkillHomeCopy((key) => t(key as AgentI18nKey, {})),
+    () => buildServiceSkillHomeCopy((key) => t(key as AgentI18nKey, {})),
     [t],
   );
 

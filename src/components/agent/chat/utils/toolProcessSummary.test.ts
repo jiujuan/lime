@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import type { AgentToolCallState } from "@/lib/api/agentProtocol";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 import { resolveToolProcessNarrative } from "./toolProcessSummary";
 
@@ -17,6 +18,10 @@ function createToolCall(
 }
 
 describe("toolProcessSummary", () => {
+  beforeEach(async () => {
+    await changeLimeLocale("zh-CN");
+  });
+
   it("应为工作树切换提供明确过程文案", () => {
     const enterNarrative = resolveToolProcessNarrative(
       createToolCall({
@@ -300,5 +305,27 @@ describe("toolProcessSummary", () => {
     expect(narrative.summary).toBe(
       "执行失败：当前联网搜索链路未接通，请检查 Runtime 是否接通 WebSearch，或关闭联网搜索后重试。",
     );
+  });
+
+  it("图片生成任务失败不应把内部协议错误带进过程摘要", () => {
+    const narrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "lime_create_image_generation_task",
+        arguments: JSON.stringify({
+          prompt: "A comic book style illustration of a formal statue",
+        }),
+        status: "failed",
+        result: {
+          success: false,
+          error: "-32603: -32002: lime_create_image_generation_task",
+          output: "",
+        },
+      }),
+    );
+
+    expect(narrative.postSummary).toBe("生成失败");
+    expect(narrative.summary).toBe("生成失败");
+    expect(narrative.summary).not.toContain("-32603");
+    expect(narrative.summary).not.toContain("lime_create_image_generation_task");
   });
 });

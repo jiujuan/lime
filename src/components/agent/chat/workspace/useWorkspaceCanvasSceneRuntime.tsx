@@ -144,6 +144,7 @@ interface WorkspaceCanvasPreviewImageWorkbenchParams {
   active: boolean;
   tasks: ImageWorkbenchCanvasProps["tasks"];
   outputs: ImageWorkbenchCanvasProps["outputs"];
+  selectedTaskId: ImageWorkbenchCanvasProps["selectedTaskId"];
   selectedOutputId: ImageWorkbenchCanvasProps["selectedOutputId"];
   sourceProjectId: ImageWorkbenchCanvasProps["sourceProjectId"];
   sourceContentId: ImageWorkbenchCanvasProps["sourceContentId"];
@@ -1009,6 +1010,7 @@ function useWorkspaceCanvasPreviewRuntime({
     () => ({
       tasks: imageWorkbench.tasks,
       outputs: imageWorkbench.outputs,
+      selectedTaskId: imageWorkbench.selectedTaskId,
       selectedOutputId: imageWorkbench.selectedOutputId,
       sourceProjectId: imageWorkbench.sourceProjectId,
       sourceContentId: imageWorkbench.sourceContentId,
@@ -1055,6 +1057,7 @@ function useWorkspaceCanvasPreviewRuntime({
       imageWorkbench.sourceContentId,
       imageWorkbench.sourceProjectId,
       imageWorkbench.sourceThreadId,
+      imageWorkbench.selectedTaskId,
       imageWorkbench.selectedModelId,
       imageWorkbench.selectedOutputId,
       imageWorkbench.selectedProviderId,
@@ -1718,6 +1721,7 @@ export function useWorkspaceCanvasSceneRuntime({
         active: currentImageWorkbenchState.active,
         tasks: currentImageWorkbenchState.tasks,
         outputs: currentImageWorkbenchState.outputs,
+        selectedTaskId: currentImageWorkbenchState.selectedTaskId,
         selectedOutputId: currentImageWorkbenchState.selectedOutputId,
         sourceProjectId: projectId,
         sourceContentId: contentId,

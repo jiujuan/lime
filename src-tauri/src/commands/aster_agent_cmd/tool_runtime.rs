@@ -343,6 +343,7 @@ pub(crate) async fn apply_workspace_sandbox_permissions(
     execution_profile: TurnExecutionProfile,
     request_tool_policy: &RequestToolPolicy,
     execution_strategy: AsterExecutionStrategy,
+    bypass_workspace_restrictions: bool,
 ) -> Result<WorkspaceSandboxApplyOutcome, String> {
     let workspace_root = workspace_root.trim();
     if workspace_root.is_empty() {
@@ -356,6 +357,8 @@ pub(crate) async fn apply_workspace_sandbox_permissions(
         persisted_policy: Some(&current_config.agent.tool_execution),
         request_metadata,
     };
+    let auto_approve_bash_warnings = bypass_workspace_restrictions
+        || should_auto_approve_tool_warnings("Bash", auto_mode, execution_policy_input);
     let lock_service_skill_launch_to_site_tools =
         should_lock_service_skill_launch_to_site_tools(request_metadata);
     let tool_surface = WorkspaceToolSurface {
@@ -363,12 +366,12 @@ pub(crate) async fn apply_workspace_sandbox_permissions(
         browser_assist: is_browser_assist_enabled(request_metadata),
     };
     let mut sandboxed_bash_tool: Option<WorkspaceSandboxedBashTool> = None;
-    let apply_outcome = if !sandbox_policy.enabled {
+    let apply_outcome = if bypass_workspace_restrictions || !sandbox_policy.enabled {
         WorkspaceSandboxApplyOutcome::DisabledByConfig
     } else {
         match WorkspaceSandboxedBashTool::new(
             workspace_root,
-            should_auto_approve_tool_warnings("Bash", auto_mode, execution_policy_input),
+            auto_approve_bash_warnings,
             app_handle.clone(),
         ) {
             Ok(tool) => {
@@ -395,6 +398,7 @@ pub(crate) async fn apply_workspace_sandbox_permissions(
             surface: tool_surface,
             workspace_root,
             auto_mode,
+            bypass_restrictions: bypass_workspace_restrictions,
             execution_policy_input,
         });
 
@@ -503,7 +507,7 @@ pub(crate) async fn apply_workspace_sandbox_permissions(
     workspace_tools::register_workspace_runtime_tools(
         &mut registry,
         task_manager,
-        should_auto_approve_tool_warnings("Bash", auto_mode, execution_policy_input),
+        auto_approve_bash_warnings,
         app_handle.clone(),
         sandboxed_bash_tool,
     );

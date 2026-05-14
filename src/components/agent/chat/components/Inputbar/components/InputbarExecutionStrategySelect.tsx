@@ -6,6 +6,7 @@ import {
   MetaToggleGlyph,
   MetaToggleLabel,
 } from "../styles";
+import type { InputbarExecutionStrategyCopy } from "../inputbarWorkflowCopy";
 
 interface InputbarExecutionStrategySelectProps {
   isFullscreen?: boolean;
@@ -13,6 +14,7 @@ interface InputbarExecutionStrategySelectProps {
   setExecutionStrategy?: (
     strategy: "react" | "code_orchestrated" | "auto",
   ) => void;
+  copy: InputbarExecutionStrategyCopy;
 }
 
 export const InputbarExecutionStrategySelect: React.FC<
@@ -22,6 +24,7 @@ export const InputbarExecutionStrategySelect: React.FC<
     isFullscreen = false,
     executionStrategy,
     setExecutionStrategy,
+    copy,
   } = props;
 
   if (isFullscreen || !setExecutionStrategy) {
@@ -29,15 +32,16 @@ export const InputbarExecutionStrategySelect: React.FC<
   }
 
   const planEnabled = executionStrategy === "code_orchestrated";
+  const toggleLabel = planEnabled ? copy.disable : copy.enable;
 
   return (
     <MetaToggleButton
       type="button"
       $checked={planEnabled}
-      aria-label={planEnabled ? "关闭计划执行" : "开启计划执行"}
+      aria-label={toggleLabel}
       aria-pressed={planEnabled}
       data-testid="inputbar-plan-toggle"
-      title={planEnabled ? "关闭计划执行" : "开启计划执行"}
+      title={toggleLabel}
       onClick={() =>
         setExecutionStrategy(planEnabled ? "react" : "code_orchestrated")
       }
@@ -46,7 +50,7 @@ export const InputbarExecutionStrategySelect: React.FC<
       <MetaToggleGlyph aria-hidden>
         <ListChecks strokeWidth={1.8} />
       </MetaToggleGlyph>
-      <MetaToggleLabel>计划执行</MetaToggleLabel>
+      <MetaToggleLabel>{copy.label}</MetaToggleLabel>
     </MetaToggleButton>
   );
 };

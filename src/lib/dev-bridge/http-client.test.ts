@@ -486,7 +486,7 @@ describe("http-client", () => {
     expect(resolveBridgeRequestTimeoutMs("gateway_channel_status")).toBe(5000);
     expect(resolveBridgeRequestTimeoutMs("list_executable_skills")).toBe(5000);
     expect(resolveBridgeRequestTimeoutMs("get_skill_detail")).toBe(5000);
-    expect(resolveBridgeRequestTimeoutMs("execute_skill")).toBe(60000);
+    expect(resolveBridgeRequestTimeoutMs("execute_skill")).toBe(300000);
   });
 
   it("图层设计工程落盘命令应使用长请求窗口", async () => {

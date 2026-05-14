@@ -456,7 +456,7 @@ fn build_image_generation_confirmation_guard_prompt() -> String {
         "- 只有当用户显式使用 @配图/@修图/@重绘/@image，或在你询问后明确确认“调用画图/现在生成/开始画”时，才允许进入图片生成主链。",
         "- 如果用户没有 @ 命令但内容明显像配图提示词、海报 brief、封面 brief 或视觉设计 brief，必须先用 1 句简洁确认：是否要调用画图功能生成图片。",
         "- 上述普通视觉 brief 确认回合不要输出 HTML/CSS/SVG/Markdown 草图，不要写完整设计方案，不要生成提示词全文，不要输出任务详情表、排队状态或任务已提交模板。",
-        "- 推荐确认句式：这看起来是图片生成需求，要我直接调用画图功能生成吗？",
+        "- 确认句必须按用户当前语言和上下文自然表达，不要机械复述固定句式。",
     ]
     .join("\n")
 }
@@ -600,6 +600,11 @@ fn build_image_skill_launch_system_prompt(
             "- 当前底层运行合同：modality_contract_key={modality_contract_key}, modality={modality}, routing_slot={routing_slot}；后续创建任务必须原样保留 contract 字段。"
         ),
         "- 先快速归纳用户目标，然后立刻把任务交给 Skill 工具；不要停留在泛泛解释。".to_string(),
+        "- 如果发现人物肖像、相似公众人物、深度伪造、版权、商标、未成年人、裸露、暴力、仇恨、违法等图片安全或合规风险，可以最多用一句自然短句提示风险或建议安全改写；不要展开长篇审查说明。".to_string(),
+        "- 当前已经进入 @配图/@修图/@重绘 -> image_skill_launch 图片主链时，外层 Agent 不得以安全审查、政策不确定或“不能生成”为由拒绝、停止、跳过或延迟图片任务；风险提示不是任务拦截。".to_string(),
+        "- 给出必要风险提示后，仍必须继续调用 Skill(image_generate)，并把原始需求、必要的风险提示或安全替代建议放入 image_task/prompt 上下文；最终是否拒绝、改写或降级由图片生成执行器/图片模型自己的策略决定，外层 Agent 不要自行替图片模型下最终拒绝结论。".to_string(),
+        "- 可见聊天区禁止输出“非常抱歉，我无法完成这个请求”“我无法为此类请求提供帮助”“这些内容违反原则”“禁止生成，所以不能继续”这类拒绝话术；这类话术即使任务卡继续生成，也会被用户理解为外层模型阻止了图片执行。".to_string(),
+        "- 可见风险提示应改写为非阻断句式，例如“这类真人肖像/代言请求可能有合规风险，我会把风险提示一并交给图片模型处理。”随后立即继续工具调用。".to_string(),
         format!("- 第一优先工具调用必须是 Skill，且 skill=\"{skill_name}\"。"),
         "- 调用 Skill 时，args 必须是一个严格 JSON 字符串，不要漏引号、不要写注释、不要只传半截字段。".to_string(),
         format!("- 推荐传给 Skill.args 的 JSON：{args_json}"),
@@ -622,8 +627,8 @@ fn build_image_skill_launch_system_prompt(
         "- Skill 内部调用 lime_create_image_generation_task 时，必须只提交标准 image task 参数；不要传 outputPath，不要把任务写成 markdown 文稿。".to_string(),
         "- 不要伪造“图片已生成完成”；在 task file 真正返回结果前，只能让工具轨迹展示任务已提交、排队或执行中，不要额外输出递交模板。".to_string(),
         "- 如果当前回合已经拿到任何图片任务结果，且结果里含 task_id、path，或 status=pending_submit/queued/running/partial/succeeded，说明任务已提交；不要再次调用 Skill(image_generate) 或重复创建第二个图片任务。".to_string(),
-        "- 拿到上述任务结果后，不要再输出“任务类型 / 任务 ID / 任务文件 / 状态”这类提交摘要；让同一条 assistant 消息内的工具调用和图片任务轻卡继续展示进度与结果。".to_string(),
-        "- 聊天输出必须服从 persona_context 与 presentation：工具前最多保留短确认和短过程，结果态优先使用 presentation.completion_caption / presentation.result_captions；不要输出任务表格、任务 ID、任务文件、排队说明、Image Workbench/图片工作台文案，也不要拆成第二条 assistant 回复。".to_string(),
+        "- 拿到上述任务结果后，不要再输出“任务类型 / 任务 ID / 任务文件 / 状态”这类提交摘要；让同一条 assistant 消息内的工具调用和图片任务轻卡继续展示进度与结果。任务仍在 pending/queued/running 时只保留一句自然承接，不要写递交流程说明。".to_string(),
+        "- 聊天输出必须服从 persona_context 与 presentation：工具前只用贴合上下文的一句自然短承接，然后直接调用 Skill(image_generate)；不要复述固定过程句，也不要把 presentation 当成可见模板。若 presentation 只有 assistant_intro_request/completion_caption_request/result_caption_policy 而没有具体 assistant_intro/completion_caption，应让 Skill 在工具参数里补充按用户目标、当前语言和品味上下文自然生成的 assistant_intro 与 completion_caption；不要在前端或协议里套固定模板。结果态按真实图片结果自然收尾并提示可以继续调整；不要输出任务表格、任务 ID、任务文件、排队说明、Image Workbench/图片工作台文案，也不要拆成第二条 assistant 回复。".to_string(),
         format!("- 当前图片任务上下文(JSON)：{image_task_json}"),
         format!("- 当前模式：{mode}。"),
         format!("- 当前入口来源：{entry_source}。"),
@@ -643,7 +648,7 @@ fn build_image_skill_launch_system_prompt(
     }
     if let Some(value) = presentation_json.as_deref() {
         lines.push(format!(
-            "- 当前聊天展示契约(JSON)：{value}。这只用于同一条对话里的自然展示，不要改写成任务摘要。"
+            "- 当前聊天展示契约(JSON)：{value}。这只提供自然展示约束，不是可见文案模板；不要机械复述其中字段，也不要改写成任务摘要。"
         ));
     }
     if let Some(value) = taste_context_json.as_deref() {

@@ -2705,5 +2705,13 @@
   "settings.webSearch.mse.priority.placeholder": "google, bing, duckduckgo, brave",
   "settings.webSearch.mse.customTemplate.placeholder": "https://example.com/search?q={query}",
   "settings.webSearch.images.pexels.label": "Pexels API Key",
-  "settings.webSearch.images.pixabay.label": "Pixabay API Key"
+  "settings.webSearch.images.pixabay.label": "Pixabay API Key",
+  "settings.providers.setting.body.models.action.createImageCommand": "@명령 만들기",
+  "settings.providers.setting.body.models.imageCommand.bound": "{{trigger}} 연결됨",
+  "settings.providers.setting.body.models.imageCommand.title": "이미지 @명령 만들기",
+  "settings.providers.setting.body.models.imageCommand.description": "{{model}}을 채팅의 이미지 모델 진입점으로 노출합니다. 같은 이미지 생성 턴 안에서 표준 이미지 작업을 만듭니다.",
+  "settings.providers.setting.body.models.imageCommand.action.save": "명령 저장",
+  "settings.providers.setting.body.models.imageCommand.action.cancel": "취소",
+  "settings.providers.setting.feedback.imageCommand.created": "{{trigger}}을 만들었습니다. {{model}}을 이미지 생성 모델로 사용합니다.",
+  "settings.providers.setting.feedback.imageCommand.invalid": "올바른 @명령 이름을 입력하세요."
 }

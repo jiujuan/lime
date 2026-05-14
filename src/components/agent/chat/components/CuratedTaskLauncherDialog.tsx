@@ -47,9 +47,9 @@ import {
   buildSceneAppExecutionReviewPrefillHighlights,
   buildSceneAppExecutionReviewPrefillSnapshot,
 } from "@/components/agent/chat/utils/sceneAppCuratedTaskReference";
-import type agentResource from "@/i18n/resources/zh-CN/agent.json";
+import type { AgentI18nResource } from "@/i18n/agentResources";
 
-type AgentI18nKey = keyof typeof agentResource;
+type AgentI18nKey = keyof AgentI18nResource;
 
 interface CuratedTaskLauncherDialogProps {
   open: boolean;

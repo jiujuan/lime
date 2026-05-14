@@ -29,6 +29,9 @@ function formatTextValue(value: unknown): string {
 
 function containsMarkdownSyntax(value: string): boolean {
   return (
+    /^\s*\|?.+\|.+\n\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/m.test(
+      value,
+    ) ||
     /\n\s*\n/.test(value) ||
     / {2,}\n/.test(value) ||
     /(?:^\s{0,3}(?:#{1,6}\s|[-*+]\s+|\d+[.)]\s+|>\s+)|\[[^\]]+\]\([^)]+\)|\*\*|__|~~|`)/m.test(
@@ -55,7 +58,7 @@ const A2UI_MARKDOWN_COMPONENTS: Components = {
     <h5 className="m-0 text-sm font-medium leading-6">{children}</h5>
   ),
   h6: ({ children }) => (
-    <h6 className="m-0 text-xs font-medium uppercase tracking-[0.04em] text-slate-500">
+    <h6 className="m-0 text-xs font-medium uppercase tracking-[0.04em] text-[color:var(--lime-text-muted)]">
       {children}
     </h6>
   ),
@@ -76,18 +79,18 @@ const A2UI_MARKDOWN_COMPONENTS: Components = {
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="break-all text-primary underline underline-offset-2 transition-opacity hover:opacity-80"
+      className="break-all text-[color:var(--lime-brand-strong)] underline underline-offset-2 transition-opacity hover:opacity-80"
     >
       {children}
     </a>
   ),
   blockquote: ({ children }) => (
-    <blockquote className="m-0 border-l-2 border-slate-300 pl-3 text-slate-600">
+    <blockquote className="m-0 border-l-2 border-[color:var(--lime-surface-border-strong)] pl-3 text-[color:var(--lime-text-muted)]">
       {children}
     </blockquote>
   ),
   pre: ({ children }) => (
-    <pre className="m-0 overflow-x-auto rounded-xl border border-sky-100 bg-[linear-gradient(180deg,rgba(248,255,254,0.98)_0%,rgba(255,255,255,0.98)_55%,rgba(240,249,255,0.96)_100%)] p-3 text-[0.8125rem] text-slate-700 shadow-sm shadow-sky-950/5">
+    <pre className="m-0 overflow-x-auto rounded-xl border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] p-3 text-[0.8125rem] text-[color:var(--lime-text)] shadow-sm shadow-slate-950/5">
       {children}
     </pre>
   ),
@@ -101,7 +104,7 @@ const A2UI_MARKDOWN_COMPONENTS: Components = {
         className={cn(
           isCodeBlock
             ? "font-mono text-inherit"
-            : "rounded bg-slate-100 px-1 py-0.5 font-mono text-[0.85em] text-slate-700",
+            : "rounded bg-[color:var(--lime-surface-muted)] px-1 py-0.5 font-mono text-[0.85em] text-[color:var(--lime-text)]",
           className,
         )}
       >
@@ -109,7 +112,24 @@ const A2UI_MARKDOWN_COMPONENTS: Components = {
       </code>
     );
   },
-  hr: () => <hr className="m-0 border-slate-200" />,
+  table: ({ children }) => (
+    <div className="overflow-x-auto rounded-[14px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)]">
+      <table className="w-full border-separate border-spacing-0 text-[13px]">
+        {children}
+      </table>
+    </div>
+  ),
+  th: ({ children }) => (
+    <th className="border-b border-r border-[color:var(--lime-surface-border)] bg-[color:var(--lime-brand-soft)] px-3 py-2 text-left font-semibold text-[color:var(--lime-brand-strong)] last:border-r-0">
+      {children}
+    </th>
+  ),
+  td: ({ children }) => (
+    <td className="border-b border-r border-[color:var(--lime-surface-border)] px-3 py-2 text-left align-top text-[color:var(--lime-text)] last:border-r-0">
+      {children}
+    </td>
+  ),
+  hr: () => <hr className="m-0 border-[color:var(--lime-surface-border)]" />,
 };
 
 export function TextRenderer({

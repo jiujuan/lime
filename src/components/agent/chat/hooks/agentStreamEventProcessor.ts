@@ -1103,13 +1103,15 @@ export function handleToolEndEvent({
         fallbackPrompt: message.content || "图片任务进行中",
       });
       completedImageTaskId = imageTaskPreview?.taskId || null;
-      const taskPreview = buildTaskPreviewFromToolResult({
-        toolId: data.tool_id,
-        toolName: currentToolCall?.name || "",
-        toolArguments: currentToolArguments,
-        toolResult: normalizedResultRecord,
-        fallbackPrompt: message.content || "任务进行中",
-      });
+      const taskPreview = imageTaskPreview
+        ? null
+        : buildTaskPreviewFromToolResult({
+            toolId: data.tool_id,
+            toolName: currentToolCall?.name || "",
+            toolArguments: currentToolArguments,
+            toolResult: normalizedResultRecord,
+            fallbackPrompt: message.content || "任务进行中",
+          });
 
       return {
         ...message,
@@ -1121,12 +1123,14 @@ export function handleToolEndEvent({
               ...imageTaskPreview,
             }
           : message.imageWorkbenchPreview,
-        taskPreview: taskPreview
-          ? {
-              ...(message.taskPreview || {}),
-              ...taskPreview,
-            }
-          : message.taskPreview,
+        taskPreview: imageTaskPreview
+          ? undefined
+          : taskPreview
+            ? {
+                ...(message.taskPreview || {}),
+                ...taskPreview,
+              }
+            : message.taskPreview,
       };
     });
 

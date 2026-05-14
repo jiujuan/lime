@@ -83,10 +83,32 @@ export const loadPersisted = <T>(key: string, defaultValue: T): T => {
   return defaultValue;
 };
 
+function isStorageQuotaError(error: unknown): boolean {
+  if (!(error instanceof DOMException)) {
+    return false;
+  }
+  return (
+    error.name === "QuotaExceededError" ||
+    error.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+    error.code === 22 ||
+    error.code === 1014
+  );
+}
+
 export const savePersisted = (key: string, value: unknown) => {
+  const serialized = JSON.stringify(value);
   try {
-    localStorage.setItem(key, JSON.stringify(value));
+    localStorage.setItem(key, serialized);
   } catch (e) {
+    if (isStorageQuotaError(e)) {
+      try {
+        localStorage.removeItem(key);
+        localStorage.setItem(key, serialized);
+      } catch {
+        // 存储配额不足不应在用户主路径暴露为控制台错误。
+      }
+      return;
+    }
     console.error(e);
   }
 };
@@ -138,9 +160,19 @@ function isOversizedAgentRestoreState(key: string, stored: string): boolean {
 }
 
 export const saveTransient = (key: string, value: unknown) => {
+  const serialized = JSON.stringify(value);
   try {
-    sessionStorage.setItem(key, JSON.stringify(value));
+    sessionStorage.setItem(key, serialized);
   } catch (e) {
+    if (isStorageQuotaError(e)) {
+      try {
+        sessionStorage.removeItem(key);
+        sessionStorage.setItem(key, serialized);
+      } catch {
+        // 存储配额不足不应在用户主路径暴露为控制台错误。
+      }
+      return;
+    }
     console.error(e);
   }
 };

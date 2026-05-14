@@ -62,8 +62,38 @@ vi.mock("./ArtifactPlaceholder", () => ({
 }));
 
 vi.mock("./A2UITaskCard", () => ({
-  A2UITaskCard: () => <div data-testid="a2ui-task-card" />,
-  A2UITaskLoadingCard: () => <div data-testid="a2ui-task-loading-card" />,
+  A2UITaskCard: ({
+    compact,
+    className,
+    preview,
+    onSubmit,
+  }: {
+    compact?: boolean;
+    className?: string;
+    preview?: boolean;
+    onSubmit?: unknown;
+  }) => (
+    <div
+      data-testid="a2ui-task-card"
+      data-compact={String(compact)}
+      data-preview={String(preview)}
+      data-has-on-submit={onSubmit ? "yes" : "no"}
+      className={className}
+    />
+  ),
+  A2UITaskLoadingCard: ({
+    compact,
+    className,
+  }: {
+    compact?: boolean;
+    className?: string;
+  }) => (
+    <div
+      data-testid="a2ui-task-loading-card"
+      data-compact={String(compact)}
+      className={className}
+    />
+  ),
 }));
 
 vi.mock("@/lib/api/fileSystem", () => ({
@@ -86,6 +116,7 @@ interface RenderOptions {
   shouldCollapseCodeBlock?: (language: string, code: string) => boolean;
   showBlockActions?: boolean;
   onQuoteContent?: (content: string) => void;
+  readOnlyA2UI?: boolean;
 }
 
 const mountedRoots: MountedHarness[] = [];
@@ -121,6 +152,7 @@ function render(
     shouldCollapseCodeBlock,
     showBlockActions = false,
     onQuoteContent,
+    readOnlyA2UI = false,
   }: RenderOptions = {},
 ): HTMLDivElement {
   const container = document.createElement("div");
@@ -137,6 +169,7 @@ function render(
         shouldCollapseCodeBlock={shouldCollapseCodeBlock}
         showBlockActions={showBlockActions}
         onQuoteContent={onQuoteContent}
+        readOnlyA2UI={readOnlyA2UI}
       />,
     );
   });
@@ -154,6 +187,7 @@ function renderHarness(
     shouldCollapseCodeBlock,
     showBlockActions = false,
     onQuoteContent,
+    readOnlyA2UI = false,
   }: RenderOptions = {},
 ) {
   const container = document.createElement("div");
@@ -170,6 +204,7 @@ function renderHarness(
         nextShouldCollapseCodeBlock = shouldCollapseCodeBlock,
       showBlockActions: nextShowBlockActions = showBlockActions,
       onQuoteContent: nextOnQuoteContent = onQuoteContent,
+      readOnlyA2UI: nextReadOnlyA2UI = readOnlyA2UI,
     }: RenderOptions = {},
   ) => {
     act(() => {
@@ -182,6 +217,7 @@ function renderHarness(
           shouldCollapseCodeBlock={nextShouldCollapseCodeBlock}
           showBlockActions={nextShowBlockActions}
           onQuoteContent={nextOnQuoteContent}
+          readOnlyA2UI={nextReadOnlyA2UI}
         />,
       );
     });
@@ -193,6 +229,7 @@ function renderHarness(
     shouldCollapseCodeBlock,
     showBlockActions,
     onQuoteContent,
+    readOnlyA2UI,
   });
 
   mountedRoots.push({ container, root });
@@ -378,6 +415,8 @@ describe("MarkdownRenderer", () => {
 
     expect(tableScroll).not.toBeNull();
     expect(tableScroll?.querySelector("table")).not.toBeNull();
+    expect(document.head.textContent).toContain("--lime-surface-border");
+    expect(document.head.textContent).toContain("--lime-brand-soft");
     expect(container.textContent).toContain("Browser Runtime");
   });
 
@@ -452,6 +491,59 @@ describe("MarkdownRenderer", () => {
     expect(
       container.querySelector('[data-testid="markdown-table-scroll"]'),
     ).not.toBeNull();
+  });
+
+  it("聊天内联 A2UI 应使用紧凑卡片尺寸", () => {
+    const content = [
+      "```a2ui",
+      JSON.stringify({
+        id: "a2ui-demo",
+        root: "root",
+        data: {},
+        components: [
+          {
+            id: "root",
+            component: "Text",
+            text: "请选择开始方式",
+            variant: "body",
+          },
+        ],
+      }),
+      "```",
+    ].join("\n");
+
+    const container = render(content);
+    const card = container.querySelector('[data-testid="a2ui-task-card"]');
+
+    expect(card?.getAttribute("data-compact")).toBe("true");
+    expect(card?.className).toContain("max-w-[760px]");
+  });
+
+  it("历史 Markdown A2UI 代码块应只读回显并移除提交回调", () => {
+    const content = [
+      "```a2ui",
+      JSON.stringify({
+        id: "history-a2ui-demo",
+        root: "root",
+        data: {},
+        components: [
+          {
+            id: "root",
+            component: "Text",
+            text: "历史表单",
+            variant: "body",
+          },
+        ],
+        submitAction: { label: "提交", action: { name: "submit" } },
+      }),
+      "```",
+    ].join("\n");
+
+    const container = render(content, { readOnlyA2UI: true });
+    const card = container.querySelector('[data-testid="a2ui-task-card"]');
+
+    expect(card?.getAttribute("data-preview")).toBe("true");
+    expect(card?.getAttribute("data-has-on-submit")).toBe("no");
   });
 
   it("标题后的正文应保持聊天正文排版，不应缩小变灰", () => {

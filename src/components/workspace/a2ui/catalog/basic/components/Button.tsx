@@ -17,8 +17,9 @@ interface ButtonRendererProps {
 
 const variantClass: Record<string, string> = {
   primary:
-    "border border-emerald-200 bg-[linear-gradient(135deg,#0ea5e9_0%,#14b8a6_52%,#10b981_100%)] text-white shadow-sm shadow-emerald-950/15 hover:opacity-95",
-  borderless: "text-slate-500 hover:bg-slate-100 hover:text-slate-700",
+    "border border-[color:var(--lime-surface-border-strong)] bg-[color:var(--lime-brand)] text-white shadow-sm shadow-slate-950/10 hover:opacity-95",
+  borderless:
+    "text-[color:var(--lime-text-muted)] hover:bg-[color:var(--lime-surface-hover)] hover:text-[color:var(--lime-text-strong)]",
 };
 
 export function ButtonRenderer({
@@ -109,7 +110,7 @@ export function ButtonRenderer({
     <button
       onClick={handleClick}
       className={cn(
-        "inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors",
+        "inline-flex items-center justify-center rounded-full px-3.5 py-2 text-[13px] font-medium transition-colors",
         variantClass[component.variant || "primary"],
       )}
     >

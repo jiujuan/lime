@@ -4,6 +4,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProviderWithKeysDisplay } from "@/lib/api/apiKeyProvider";
 import settingsZhCN from "@/i18n/resources/zh-CN/settings.json";
+import {
+  findModelBoundImageCommandEntryForModel,
+  getCurrentSkillCatalogSnapshot,
+} from "@/lib/api/skillCatalog";
 
 const { mockFetchProviderModelsAuto } = vi.hoisted(() => ({
   mockFetchProviderModelsAuto: vi.fn(),
@@ -152,6 +156,7 @@ beforeEach(() => {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  window.localStorage.clear();
   vi.clearAllMocks();
   mockFetchProviderModelsAuto.mockResolvedValue({
     source: "Api",
@@ -162,6 +167,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.clearAllMocks();
+  window.localStorage.clear();
 
   while (mountedRoots.length > 0) {
     const mounted = mountedRoots.pop();
@@ -423,6 +429,64 @@ describe("ProviderSetting", () => {
     expect(
       container.querySelector('[data-testid="api-model-suggestions"]'),
     ).toBeNull();
+  });
+
+  it("图片模型行应能创建本地 @命令绑定", async () => {
+    const container = renderSetting(
+      createProvider({
+        id: "airgate-openai-images",
+        name: "OpenAI Images",
+        type: "openai",
+        api_host: "https://api.openai.com/v1",
+        custom_models: ["gpt-images-2"],
+      }),
+    );
+    await flushEffects();
+
+    const createButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="create-image-command-button"]',
+    );
+    expect(createButton).not.toBeNull();
+    expect(createButton?.textContent ?? "").toContain("创建 @命令");
+
+    await act(async () => {
+      createButton?.click();
+      await Promise.resolve();
+    });
+
+    const input = container.querySelector<HTMLInputElement>(
+      '[data-testid="image-command-trigger-input"]',
+    );
+    expect(input?.value).toBe("@GPT Images 2");
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="image-command-save-button"]',
+        )
+        ?.click();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent ?? "").toContain("已创建 @GPT Images 2");
+    expect(container.textContent ?? "").toContain("已绑定 @GPT Images 2");
+    expect(
+      findModelBoundImageCommandEntryForModel(
+        getCurrentSkillCatalogSnapshot(),
+        "airgate-openai-images",
+        "gpt-images-2",
+      ),
+    ).toMatchObject({
+      commandKey: "image_model_gpt_images_2",
+      binding: {
+        requestDefaults: expect.objectContaining({
+          modelBoundImageTask: "true",
+          providerId: "airgate-openai-images",
+          model: "gpt-images-2",
+          executorMode: "responses_image_generation",
+        }),
+      },
+    });
   });
 
   it("Fal Provider 不支持 /models 时应保留手动模型并显示确认态", async () => {

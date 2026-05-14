@@ -401,6 +401,75 @@ describe("ToolCallDisplay", () => {
     expect(container.textContent).not.toContain("Ask User Question");
   });
 
+  it("Skill 工具调用应能查看本次执行读取的 SKILL.md 内容", () => {
+    const { container } = renderTool({
+      id: "skill:analysis-run-1",
+      name: "Skill",
+      arguments: JSON.stringify({
+        skill: "analysis",
+        display_name: "analysis",
+        source: "SKILL.md",
+      }),
+      status: "completed",
+      result: {
+        success: true,
+        output: "已从 SKILL.md 读取并执行 Skill：analysis",
+        metadata: {
+          tool_family: "skill",
+          skill_name: "analysis",
+          skill_display_name: "analysis",
+          skill_source: "SKILL.md",
+          agent_skills_standard: true,
+          markdown_content_bytes: 86,
+          skill_markdown_content:
+            "---\nname: analysis\ndescription: 分析任务\n---\n\n# Analysis Skill\n\n必须先确认可见上下文。",
+        },
+      },
+      startTime: new Date("2026-05-14T04:30:00.000Z"),
+      endTime: new Date("2026-05-14T04:30:02.000Z"),
+    });
+
+    expect(container.textContent).toContain("已执行技能 analysis");
+    expect(container.textContent).toContain("SKILL.md");
+    expect(container.textContent).not.toContain("skill_markdown_content");
+
+    act(() => {
+      const skillContentButton = Array.from(
+        container.querySelectorAll("button"),
+      ).find((button) => button.textContent?.includes("SKILL.md"));
+      skillContentButton?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+
+    expect(
+      container.querySelector('[data-testid="tool-call-skill-content-panel"]'),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("执行时读取的 SKILL.md");
+    expect(container.textContent).toContain("随本次执行记录保存");
+    expect(container.textContent).toContain("Agent Skills 标准");
+    expect(container.textContent).toContain("展开 SKILL.md 内容");
+    expect(container.textContent).not.toContain("Analysis Skill");
+
+    act(() => {
+      const expandBodyButton = Array.from(
+        container.querySelectorAll("button"),
+      ).find((button) => button.textContent?.includes("展开 SKILL.md 内容"));
+      expandBodyButton?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+
+    expect(
+      container.querySelector('[data-testid="tool-call-skill-content-body"]'),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("收起 SKILL.md 内容");
+    expect(container.textContent).toContain("Analysis Skill");
+    expect(container.textContent).toContain("必须先确认可见上下文。");
+    expect(container.textContent).not.toContain("tool_family");
+    expect(container.textContent).not.toContain("skill_markdown_content");
+  });
+
   it("站点能力工具结果应展示自动保存结果与脚本来源", () => {
     const { container } = renderTool({
       id: "tool-site-run-1",
@@ -634,8 +703,46 @@ describe("ToolCallDisplay", () => {
     expect(
       document.body
         .querySelector('img[alt="工具结果图片大图"]')
-        ?.getAttribute("src"),
+      ?.getAttribute("src"),
     ).toBe("https://example.com/poster.png");
+  });
+
+  it("图片生成任务失败结果面板不应展示内部协议错误", () => {
+    const { container } = renderTool({
+      id: "tool-image-generate-failed-1",
+      name: "lime_create_image_generation_task",
+      arguments: JSON.stringify({
+        prompt: "A comic book style illustration of a formal statue",
+      }),
+      status: "failed",
+      result: {
+        success: false,
+        error: "-32603: -32002: lime_create_image_generation_task",
+        output: "",
+      },
+      startTime: new Date("2026-05-14T10:22:00.000Z"),
+      endTime: new Date("2026-05-14T10:22:01.000Z"),
+    });
+
+    expect(container.textContent).toContain("生成失败");
+    expect(container.textContent).not.toContain("开始失败");
+    expect(container.textContent).not.toContain(
+      "A comic book style illustration",
+    );
+
+    act(() => {
+      const toggle = container.querySelector(
+        'button[title="查看结果"]',
+      ) as HTMLButtonElement | null;
+      toggle?.click();
+    });
+
+    expect(container.textContent).toContain("生成失败");
+    expect(container.textContent).not.toContain("-32603");
+    expect(container.textContent).not.toContain("-32002");
+    expect(container.textContent).not.toContain(
+      "lime_create_image_generation_task",
+    );
   });
 
   it("ToolSearch 展开后应展示结构化工具摘要，而不是原始 JSON", () => {

@@ -79,6 +79,17 @@ function assertI18nKeyTypes() {
     meta: "2 tool steps",
   });
   i18n.t("agentChat.messageList.actions.saveToKnowledge", { ns: "agent" });
+  i18n.t("agentChat.toolCall.skillContent.action.view", { ns: "agent" });
+  i18n.t("agentChat.toolCall.skillContent.action.expandBody", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.toolCall.skillContent.action.collapseBody", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.toolCall.skillContent.meta.bytes", {
+    ns: "agent",
+    count: 1024,
+  });
   i18n.t("agentChat.messageList.artifact.saveDocument", { ns: "agent" });
   i18n.t("agentChat.messageList.history.windowSummaryRestored", {
     ns: "agent",
@@ -273,6 +284,88 @@ function assertI18nKeyTypes() {
     fileName: "cover.png",
   });
   i18n.t("agentChat.inputbar.imageAttachments.imagePasted", { ns: "agent" });
+  i18n.t("agentChat.inputbar.teamSelector.trigger.default", { ns: "agent" });
+  i18n.t("agentChat.inputbar.teamSelector.trigger.selected", {
+    ns: "agent",
+    label: "Code triage",
+  });
+  i18n.t("agentChat.inputbar.teamSelector.toast.saveProjectSuccess", {
+    ns: "agent",
+    label: "Code triage",
+  });
+  i18n.t("agentChat.inputbar.teamSelector.toast.saveFailed", {
+    ns: "agent",
+    error: "disk full",
+  });
+  i18n.t("agentChat.inputbar.teamSelector.editor.customCloneLabel", {
+    ns: "agent",
+    label: "Code triage",
+  });
+  i18n.t("agentChat.inputbar.teamSelector.editor.roleIndex", {
+    ns: "agent",
+    index: 1,
+  });
+  i18n.t("agentChat.inputbar.teamSelector.editor.recommendedSkills", {
+    ns: "agent",
+    skills: "source-grounding",
+  });
+  i18n.t("agentChat.inputbar.teamSelector.section.system", { ns: "agent" });
+  i18n.t("agentChat.inputbar.knowledge.fallbackPackLabel", { ns: "agent" });
+  i18n.t("agentChat.inputbar.knowledge.toggle.label.enabledWithCompanions", {
+    ns: "agent",
+    count: 1,
+    label: "Brand pack",
+  });
+  i18n.t("agentChat.inputbar.knowledge.state.using.title", {
+    ns: "agent",
+    label: "Brand pack",
+  });
+  i18n.t("agentChat.inputbar.knowledge.pendingNotice", {
+    ns: "agent",
+    count: 1,
+  });
+  i18n.t("agentChat.inputbar.knowledge.action.check", { ns: "agent" });
+  i18n.t("agentChat.inputbar.knowledge.meta.companion", { ns: "agent" });
+  i18n.t("agentChat.inputbar.executionStrategy.label", { ns: "agent" });
+  i18n.t("agentChat.inputbar.executionStrategy.enable", { ns: "agent" });
+  i18n.t("agentChat.inputbar.executionStrategy.disable", { ns: "agent" });
+  i18n.t("agentChat.inputbar.workflow.status.active", { ns: "agent" });
+  i18n.t("agentChat.inputbar.workflow.status.waitingDecision", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.inputbar.workflow.summary.currentProgress", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.inputbar.workflow.summary.activeWithTrailing", {
+    ns: "agent",
+    count: 2,
+  });
+  i18n.t("agentChat.inputbar.workflow.progress.completed", {
+    ns: "agent",
+    completed: 1,
+    total: 4,
+  });
+  i18n.t("agentChat.inputbar.workflow.queue.title", { ns: "agent" });
+  i18n.t("agentChat.inputbar.workflow.queue.hiddenSuffix", {
+    ns: "agent",
+    count: 2,
+    progressLabel: "Completed 1/4",
+  });
+  i18n.t("agentChat.inputbar.workflow.queue.itemMetaWithProgress", {
+    ns: "agent",
+    status: "In progress",
+    completed: 1,
+    total: 4,
+  });
+  i18n.t("agentChat.inputbar.workflow.quickAction.topicOptions.label", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.inputbar.workflow.quickAction.topicOptions.prompt", {
+    ns: "agent",
+  });
+  i18n.t("agentChat.inputbar.workflow.quickAction.nextStep.label", {
+    ns: "agent",
+  });
   i18n.t("agentChat.home.hero.slogan", { ns: "agent" });
   i18n.t("agentChat.home.toast.imageReadFailed", {
     ns: "agent",

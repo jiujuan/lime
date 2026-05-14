@@ -42,9 +42,7 @@ import {
   type ImageWorkbenchTask,
   type SessionImageWorkbenchState,
 } from "./imageWorkbenchHelpers";
-import {
-  buildImageWorkbenchCaption,
-} from "../utils/imageWorkbenchPresentation";
+import { buildImageWorkbenchCaption } from "../utils/imageWorkbenchPresentation";
 import { buildImageTaskAssistantContent } from "./imageTaskPersona";
 import {
   isImageWorkbenchStatusOnlyText,
@@ -349,10 +347,16 @@ function readImageTaskPresentationText(
     if (!candidate) {
       continue;
     }
-    const presentation = asRecord(candidate.presentation);
+    const presentation = asRecord(candidate.presentation) || candidate;
     const value = readString(
-      [presentation, candidate],
-      ["assistant_intro", "assistantIntro"],
+      [presentation],
+      [
+        "assistant_intro",
+        "assistantIntro",
+        "opening_text",
+        "openingText",
+        "intro",
+      ],
     );
     if (value) {
       return value;
@@ -1623,7 +1627,9 @@ function buildParsedImageTaskSnapshot(params: {
     fallbackPrompt: prompt,
   });
   const rawText =
-    sanitizePreviewPrompt(readString([payload], ["raw_text", "rawText"]) || "") ||
+    sanitizePreviewPrompt(
+      readString([payload], ["raw_text", "rawText"]) || "",
+    ) ||
     prompt ||
     displayPrompt;
   const fallbackProviderName = readString(
@@ -1998,9 +2004,8 @@ function buildPendingImageTaskSnapshot(params: {
         mode: taskMode,
         status: "queued",
         prompt: previewPrompt,
-        assistantIntro: readImageTaskPresentationText([
-          params.payload || null,
-        ]) || null,
+        assistantIntro:
+          readImageTaskPresentationText([params.payload || null]) || null,
         caption: null,
         rawText,
         expectedCount,
@@ -2134,6 +2139,23 @@ function previewsReferToSameImageWorkbenchTask(
   );
 }
 
+function isDraftImageWorkbenchPreview(
+  preview?: MessageImageWorkbenchPreview,
+): boolean {
+  return isDraftImageWorkbenchTaskId(preview?.taskId);
+}
+
+function isDraftAndResolvedImageWorkbenchPreviewPair(
+  left?: MessageImageWorkbenchPreview,
+  right?: MessageImageWorkbenchPreview,
+): boolean {
+  if (!left || !right) {
+    return false;
+  }
+
+  return isDraftImageWorkbenchPreview(left) !== isDraftImageWorkbenchPreview(right);
+}
+
 function resolveImageWorkbenchPreviewIdentityKeys(
   preview?: MessageImageWorkbenchPreview,
 ): string[] {
@@ -2168,6 +2190,14 @@ function isImageWorkbenchSubmissionTemplateMessage(message: Message): boolean {
   return isImageWorkbenchSubmissionTemplateText(message.content);
 }
 
+function hasReplaceableImageWorkbenchMessageBody(message: Message): boolean {
+  return (
+    !message.content.trim() ||
+    isImageWorkbenchSubmissionTemplateMessage(message) ||
+    isImageWorkbenchStatusOnlyMessage(message)
+  );
+}
+
 function shouldReplaceImageWorkbenchMessageBody(params: {
   existingMessage: Message;
   nextMessage: Message;
@@ -2182,8 +2212,21 @@ function shouldReplaceImageWorkbenchMessageBody(params: {
     previewsReferToSameImageWorkbenchTask(existingPreview, nextPreview) &&
     isImageWorkbenchSubmissionTemplateMessage(params.existingMessage) &&
     nextPreview.status !== "running";
+  const isActiveRuntimeMessage =
+    Boolean(params.existingMessage.isThinking) &&
+    Boolean(params.existingMessage.runtimeTurnId) &&
+    params.existingMessage.runtimeTurnId === params.nextMessage.runtimeTurnId;
+  if (
+    isActiveRuntimeMessage &&
+    !isImageWorkbenchSubmissionTemplateMessage(params.existingMessage) &&
+    !isImageWorkbenchStatusOnlyMessage(params.existingMessage)
+  ) {
+    return false;
+  }
+
   const shouldUseCanonicalImageMessageBody =
     Boolean(nextPreview) &&
+    hasReplaceableImageWorkbenchMessageBody(params.existingMessage) &&
     (previewsReferToSameImageWorkbenchTask(existingPreview, nextPreview) ||
       (Boolean(params.existingMessage.runtimeTurnId) &&
         params.existingMessage.runtimeTurnId ===
@@ -2192,10 +2235,10 @@ function shouldReplaceImageWorkbenchMessageBody(params: {
   return (
     shouldUseCanonicalImageMessageBody ||
     shouldPromoteTerminalSnapshot ||
-    isImageWorkbenchSubmissionTemplateMessage(params.existingMessage) ||
-    params.existingMessage.id ===
-      resolveImageWorkbenchAssistantMessageId(nextPreview.taskId) ||
-    isImageWorkbenchStatusOnlyMessage(params.existingMessage)
+    (params.existingMessage.id ===
+      resolveImageWorkbenchAssistantMessageId(nextPreview.taskId) &&
+      hasReplaceableImageWorkbenchMessageBody(params.existingMessage)) ||
+    hasReplaceableImageWorkbenchMessageBody(params.existingMessage)
   );
 }
 
@@ -2225,21 +2268,120 @@ function buildImageWorkbenchMessageStateSignature(
   });
 }
 
+function hasImageWorkbenchProcessContentParts(
+  parts: Message["contentParts"] | undefined,
+): boolean {
+  return Boolean(parts?.some(contentPartContainsProcess));
+}
+
+function mergeImageWorkbenchContentParts(params: {
+  existingMessage: Message;
+  nextMessage: Message;
+  replaceBody: boolean;
+}): Message["contentParts"] | undefined {
+  const existingParts = params.existingMessage.contentParts;
+  const nextParts = params.nextMessage.contentParts;
+  if (!existingParts?.length) {
+    return nextParts;
+  }
+  if (!nextParts?.length) {
+    return existingParts;
+  }
+  if (!params.replaceBody) {
+    return existingParts;
+  }
+  if (hasImageWorkbenchProcessContentParts(existingParts)) {
+    return existingParts;
+  }
+  return nextParts;
+}
+
+function mergeImageWorkbenchToolCalls(params: {
+  existingMessage: Message;
+  nextMessage: Message;
+  replaceBody: boolean;
+}): Message["toolCalls"] | undefined {
+  const existingToolCalls = params.existingMessage.toolCalls;
+  const nextToolCalls = params.nextMessage.toolCalls;
+  if (!existingToolCalls?.length) {
+    return nextToolCalls;
+  }
+  if (!nextToolCalls?.length) {
+    return existingToolCalls;
+  }
+  if (!params.replaceBody) {
+    return existingToolCalls;
+  }
+
+  const merged = new Map<string, NonNullable<Message["toolCalls"]>[number]>();
+  for (const toolCall of [...existingToolCalls, ...nextToolCalls]) {
+    merged.set(toolCall.id, toolCall);
+  }
+  return Array.from(merged.values());
+}
+
+function resolveImageWorkbenchPreviewProgressScore(
+  preview?: MessageImageWorkbenchPreview,
+): number {
+  switch (preview?.status) {
+    case "complete":
+    case "failed":
+    case "cancelled":
+      return 3;
+    case "partial":
+      return 2;
+    case "running":
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+function mergeImageWorkbenchPreviewByProgress(
+  existingPreview?: MessageImageWorkbenchPreview,
+  nextPreview?: MessageImageWorkbenchPreview,
+): MessageImageWorkbenchPreview | undefined {
+  if (!existingPreview) {
+    return nextPreview;
+  }
+  if (
+    !nextPreview ||
+    !previewsReferToSameImageWorkbenchTask(existingPreview, nextPreview)
+  ) {
+    if (
+      isDraftAndResolvedImageWorkbenchPreviewPair(existingPreview, nextPreview)
+    ) {
+      return isDraftImageWorkbenchPreview(existingPreview)
+        ? nextPreview
+        : existingPreview;
+    }
+    return nextPreview || existingPreview;
+  }
+
+  const nextIsAtLeastAsFresh =
+    resolveImageWorkbenchPreviewProgressScore(nextPreview) >=
+    resolveImageWorkbenchPreviewProgressScore(existingPreview);
+  return nextIsAtLeastAsFresh
+    ? {
+        ...existingPreview,
+        ...nextPreview,
+      }
+    : {
+        ...nextPreview,
+        ...existingPreview,
+      };
+}
+
 function mergeImageWorkbenchPreviewMessage(params: {
   existingMessage: Message;
   nextMessage: Message;
 }): Message {
   const existingPreview = params.existingMessage.imageWorkbenchPreview;
   const nextPreview = params.nextMessage.imageWorkbenchPreview;
-  const mergedPreview =
-    existingPreview &&
-    nextPreview &&
-    previewsReferToSameImageWorkbenchTask(existingPreview, nextPreview)
-      ? {
-          ...existingPreview,
-          ...nextPreview,
-        }
-      : nextPreview || existingPreview;
+  const mergedPreview = mergeImageWorkbenchPreviewByProgress(
+    existingPreview,
+    nextPreview,
+  );
   const replaceBody = shouldReplaceImageWorkbenchMessageBody(params);
   const mergedMessage: Message = {
     ...params.existingMessage,
@@ -2247,14 +2389,16 @@ function mergeImageWorkbenchPreviewMessage(params: {
       replaceBody || !params.existingMessage.content.trim()
         ? params.nextMessage.content
         : params.existingMessage.content,
-    contentParts:
-      replaceBody || !params.existingMessage.contentParts?.length
-        ? params.nextMessage.contentParts
-        : params.existingMessage.contentParts,
-    toolCalls:
-      replaceBody || !params.existingMessage.toolCalls?.length
-        ? params.nextMessage.toolCalls
-        : params.existingMessage.toolCalls,
+    contentParts: mergeImageWorkbenchContentParts({
+      existingMessage: params.existingMessage,
+      nextMessage: params.nextMessage,
+      replaceBody,
+    }),
+    toolCalls: mergeImageWorkbenchToolCalls({
+      existingMessage: params.existingMessage,
+      nextMessage: params.nextMessage,
+      replaceBody,
+    }),
     timestamp: replaceBody
       ? params.nextMessage.timestamp
       : params.existingMessage.timestamp,
@@ -2334,6 +2478,15 @@ function shouldMergeImageWorkbenchPreviewIntoPreviousMessage(
     return true;
   }
 
+  if (
+    isDraftAndResolvedImageWorkbenchPreviewPair(
+      previous.imageWorkbenchPreview,
+      current.imageWorkbenchPreview,
+    )
+  ) {
+    return true;
+  }
+
   return isImageWorkbenchSubmissionTemplateMessage(previous);
 }
 
@@ -2361,12 +2514,76 @@ function mergeAdjacentImageWorkbenchPreviewMessages(
   return mergedMessages;
 }
 
+function isImageWorkbenchSkillFailureText(value?: string | null): boolean {
+  const normalized = (value || "").trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return (
+    normalized.includes("skill_execute_failed") ||
+    normalized.includes("skill 执行失败") ||
+    (normalized.includes("execute_skill") &&
+      (normalized.includes("failed") || normalized.includes("失败")))
+  );
+}
+
+function normalizeImageWorkbenchRuntimeFailureMessage(
+  message: Message,
+): Message {
+  const preview = message.imageWorkbenchPreview;
+  if (
+    message.role !== "assistant" ||
+    !preview ||
+    preview.status !== "running" ||
+    !isImageWorkbenchSkillFailureText(message.content)
+  ) {
+    return message;
+  }
+
+  const retainedContentParts = (message.contentParts || []).filter(
+    (part) => part.type !== "text",
+  );
+  const nextPreview: MessageImageWorkbenchPreview = {
+    ...preview,
+    status: "failed",
+    phase: "failed",
+    statusMessage: null,
+    caption:
+      preview.caption ??
+      buildImageWorkbenchCaption({
+        prompt: preview.prompt,
+        status: "failed",
+        imageCount: preview.imageCount,
+        statusMessage: null,
+      }),
+    retryable: true,
+  };
+  const nextMessage: Message = {
+    ...message,
+    content: "",
+    contentParts:
+      retainedContentParts.length > 0 ? retainedContentParts : undefined,
+    isThinking: false,
+    runtimeStatus: undefined,
+    imageWorkbenchPreview: nextPreview,
+  };
+
+  return buildImageWorkbenchMessageStateSignature(nextMessage) ===
+    buildImageWorkbenchMessageStateSignature(message)
+    ? message
+    : nextMessage;
+}
+
 function finalizePreviewMessages(
   previousMessages: Message[],
   nextMessages: Message[],
 ): Message[] {
+  const normalizedMessages = nextMessages.map(
+    normalizeImageWorkbenchRuntimeFailureMessage,
+  );
   const dedupedMessages = mergeAdjacentImageWorkbenchPreviewMessages(
-    dedupeImageWorkbenchPreviewMessages(nextMessages),
+    dedupeImageWorkbenchPreviewMessages(normalizedMessages),
   );
   if (
     dedupedMessages.length === previousMessages.length &&
@@ -2400,17 +2617,15 @@ function buildImageWorkbenchMessagePatchFromTask(params: {
   const startedAt = new Date(params.task.createdAt || Date.now());
 
   return {
-    content:
-      params.task.assistantIntro ||
-      buildImageTaskAssistantContent({
-        prompt,
-        mode: params.task.mode,
-        modelName:
-          params.preview.modelName ||
-          params.outputs[0]?.modelName ||
-          params.task.runtimeContract?.model ||
-          null,
-      }),
+    content: buildImageTaskAssistantContent({
+      prompt,
+      mode: params.task.mode,
+      modelName:
+        params.preview.modelName ||
+        params.outputs[0]?.modelName ||
+        params.task.runtimeContract?.model ||
+        null,
+    }),
     timestamp: startedAt,
     isThinking: false,
     toolCalls: undefined,
@@ -2494,17 +2709,88 @@ function buildImageWorkbenchPreviewMessageFromTask(params: {
 function buildImageWorkbenchUserMessageFromTask(
   task: ImageWorkbenchTask,
 ): Message | null {
-  const rawText = (task.rawText || task.prompt || "").trim();
-  if (!rawText) {
+  const fallbackTexts = new Set([
+    "图片任务",
+    `${resolveTaskLabelFromMode(task.mode)}进行中`,
+    `${resolveTaskLabel(task.id, task.mode)}进行中`,
+  ]);
+  const rawText = (task.rawText || "").trim();
+  const promptText = (task.prompt || "").trim();
+  const content = rawText || promptText;
+  if (!content || fallbackTexts.has(content)) {
     return null;
   }
 
   return {
     id: `image-workbench:${task.id}:user`,
     role: "user",
-    content: rawText,
+    content,
     timestamp: new Date(Math.max(0, (task.createdAt || Date.now()) - 1)),
   };
+}
+
+function hasUserMessageForImageWorkbenchTask(params: {
+  messages: Message[];
+  task?: ImageWorkbenchTask;
+  preview: MessageImageWorkbenchPreview;
+}): boolean {
+  const taskTexts = buildImageTaskConversationTextSet({
+    task: params.task,
+    preview: params.preview,
+  });
+  if (taskTexts.size === 0) {
+    return false;
+  }
+
+  return params.messages.some((message) =>
+    userMessageMatchesImageTask(message, taskTexts),
+  );
+}
+
+function hasPrecedingUserMessage(messages: Message[], index: number): boolean {
+  return messages.slice(0, index).some((message) => message.role === "user");
+}
+
+function ensureImageWorkbenchUserMessagesFromState(params: {
+  messages: Message[];
+  imageWorkbenchState?: SessionImageWorkbenchState;
+}): Message[] {
+  const taskById = new Map(
+    (params.imageWorkbenchState?.tasks || []).map((task) => [task.id, task]),
+  );
+  let nextMessages = params.messages;
+
+  for (let index = 0; index < nextMessages.length; index += 1) {
+    const message = nextMessages[index];
+    const preview = message?.imageWorkbenchPreview;
+    if (message?.role !== "assistant" || !preview?.taskId) {
+      continue;
+    }
+
+    const task = taskById.get(preview.taskId);
+    const userMessage = task
+      ? buildImageWorkbenchUserMessageFromTask(task)
+      : null;
+    if (
+      !userMessage ||
+      hasPrecedingUserMessage(nextMessages, index) ||
+      hasUserMessageForImageWorkbenchTask({
+        messages: nextMessages,
+        task,
+        preview,
+      })
+    ) {
+      continue;
+    }
+
+    if (nextMessages === params.messages) {
+      nextMessages = [...params.messages];
+    }
+    nextMessages.splice(index, 0, userMessage);
+    index += 1;
+  }
+
+  return nextMessages;
 }
 
 function buildImageWorkbenchPreviewMessagesFromState(params: {
@@ -2660,6 +2946,11 @@ function mergeImageTaskSnapshot(
       output.id === current.selectedOutputId &&
       output.taskId === snapshot.taskId,
   )?.id;
+  const preservedSelectedOutputUrl = current.outputs.find(
+    (output) =>
+      output.id === current.selectedOutputId &&
+      output.taskId === snapshot.taskId,
+  )?.url;
   const mergedOutputs = snapshot.outputs.map((output) => {
     const previousOutput = previousOutputs.find(
       (candidate) => candidate.url === output.url,
@@ -2671,36 +2962,56 @@ function mergeImageTaskSnapshot(
         }
       : output;
   });
-  const selectedOutputId =
-    preservedSelectedOutputId &&
-    mergedOutputs.some((output) => output.id === preservedSelectedOutputId)
+  const nextTasks = [
+    {
+      ...snapshot.task,
+      sessionId: previousTask?.sessionId || snapshot.task.sessionId,
+      assistantIntro:
+        snapshot.task.assistantIntro ?? previousTask?.assistantIntro ?? null,
+      caption: snapshot.task.caption ?? previousTask?.caption ?? null,
+      taskFilePath:
+        snapshot.task.taskFilePath ?? previousTask?.taskFilePath ?? null,
+      artifactPath:
+        snapshot.task.artifactPath ?? previousTask?.artifactPath ?? null,
+      runtimeContract:
+        snapshot.task.runtimeContract ?? previousTask?.runtimeContract ?? null,
+    },
+    ...current.tasks.filter((task) => task.id !== snapshot.taskId),
+  ];
+  const nextOutputs = [
+    ...mergedOutputs,
+    ...current.outputs.filter((output) => output.taskId !== snapshot.taskId),
+  ];
+  const isSelectedSnapshotTask = current.selectedTaskId === snapshot.taskId;
+  const selectedOutputId = isSelectedSnapshotTask
+    ? preservedSelectedOutputId &&
+      mergedOutputs.some((output) => output.id === preservedSelectedOutputId)
       ? preservedSelectedOutputId
-      : mergedOutputs[0]?.id || current.selectedOutputId;
+      : preservedSelectedOutputUrl
+        ? (mergedOutputs.find(
+            (output) => output.url === preservedSelectedOutputUrl,
+          )?.id ??
+          mergedOutputs[0]?.id ??
+          null)
+        : mergedOutputs[0]?.id || null
+    : current.selectedOutputId &&
+        nextOutputs.some((output) => output.id === current.selectedOutputId)
+      ? current.selectedOutputId
+      : nextOutputs[0]?.id || null;
+  const selectedTaskId =
+    current.selectedTaskId &&
+    nextTasks.some((task) => task.id === current.selectedTaskId)
+      ? current.selectedTaskId
+      : selectedOutputId
+        ? (nextOutputs.find((output) => output.id === selectedOutputId)
+            ?.taskId ?? null)
+        : nextTasks[0]?.id || null;
 
   return {
     ...current,
-    tasks: [
-      {
-        ...snapshot.task,
-        sessionId: previousTask?.sessionId || snapshot.task.sessionId,
-        assistantIntro:
-          snapshot.task.assistantIntro ?? previousTask?.assistantIntro ?? null,
-        caption: snapshot.task.caption ?? previousTask?.caption ?? null,
-        taskFilePath:
-          snapshot.task.taskFilePath ?? previousTask?.taskFilePath ?? null,
-        artifactPath:
-          snapshot.task.artifactPath ?? previousTask?.artifactPath ?? null,
-        runtimeContract:
-          snapshot.task.runtimeContract ??
-          previousTask?.runtimeContract ??
-          null,
-      },
-      ...current.tasks.filter((task) => task.id !== snapshot.taskId),
-    ],
-    outputs: [
-      ...mergedOutputs,
-      ...current.outputs.filter((output) => output.taskId !== snapshot.taskId),
-    ],
+    tasks: nextTasks,
+    outputs: nextOutputs,
+    selectedTaskId,
     selectedOutputId,
   };
 }
@@ -2757,6 +3068,142 @@ function orderTaskOutputs(
     (output) => !ordered.some((item) => item.id === output.id),
   );
   return [...ordered, ...remaining];
+}
+
+function normalizeImageTaskConversationText(value?: string | null): string {
+  return normalizeImageWorkbenchPreviewIdentityText(value).replace(
+    /^@\S+(?:\s+\S+)?\s*/u,
+    "",
+  );
+}
+
+function addImageTaskConversationText(
+  values: Set<string>,
+  value?: string | null,
+) {
+  const normalized = normalizeImageTaskConversationText(value);
+  if (normalized) {
+    values.add(normalized);
+  }
+
+  const parsed = value ? parseImageWorkbenchCommand(value) : null;
+  const parsedPrompt = normalizeImageTaskConversationText(parsed?.prompt);
+  if (parsedPrompt) {
+    values.add(parsedPrompt);
+  }
+}
+
+function buildImageTaskConversationTextSet(params: {
+  task?: ImageWorkbenchTask;
+  preview: MessageImageWorkbenchPreview;
+}): Set<string> {
+  const values = new Set<string>();
+  addImageTaskConversationText(values, params.preview.prompt);
+  addImageTaskConversationText(values, params.task?.prompt);
+  addImageTaskConversationText(values, params.task?.rawText);
+  return values;
+}
+
+function imageTaskConversationTextMatches(
+  left: string,
+  right: string,
+): boolean {
+  if (!left || !right) {
+    return false;
+  }
+  if (left === right) {
+    return true;
+  }
+
+  const minLength = Math.min(left.length, right.length);
+  return minLength >= 4 && (left.includes(right) || right.includes(left));
+}
+
+function userMessageMatchesImageTask(
+  message: Message,
+  taskTexts: Set<string>,
+): boolean {
+  if (message.role !== "user" || taskTexts.size === 0) {
+    return false;
+  }
+
+  const candidates = new Set<string>();
+  addImageTaskConversationText(candidates, message.content);
+  for (const candidate of candidates) {
+    for (const taskText of taskTexts) {
+      if (imageTaskConversationTextMatches(candidate, taskText)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function attachImageWorkbenchPreviewToMatchingTurn(params: {
+  messages: Message[];
+  previewMessage: Message;
+  task?: ImageWorkbenchTask;
+}): { messages: Message[]; attached: boolean } {
+  const preview = params.previewMessage.imageWorkbenchPreview;
+  if (!preview) {
+    return { messages: params.messages, attached: false };
+  }
+
+  const taskTexts = buildImageTaskConversationTextSet({
+    task: params.task,
+    preview,
+  });
+  if (taskTexts.size === 0) {
+    return { messages: params.messages, attached: false };
+  }
+
+  for (let index = 0; index < params.messages.length; index += 1) {
+    const message = params.messages[index];
+    if (!message || !userMessageMatchesImageTask(message, taskTexts)) {
+      continue;
+    }
+
+    let insertIndex = index + 1;
+    for (
+      let candidateIndex = index + 1;
+      candidateIndex < params.messages.length;
+      candidateIndex += 1
+    ) {
+      const candidate = params.messages[candidateIndex];
+      if (!candidate || candidate.role === "user") {
+        break;
+      }
+
+      insertIndex = candidateIndex + 1;
+      if (candidate.role !== "assistant") {
+        continue;
+      }
+
+      if (
+        previewsReferToSameImageWorkbenchTask(
+          candidate.imageWorkbenchPreview,
+          preview,
+        )
+      ) {
+        return { messages: params.messages, attached: true };
+      }
+
+      if (!candidate.imageWorkbenchPreview) {
+        const nextMessages = [...params.messages];
+        nextMessages[candidateIndex] = mergeImageWorkbenchPreviewMessage({
+          existingMessage: candidate,
+          nextMessage: params.previewMessage,
+        });
+        return { messages: nextMessages, attached: true };
+      }
+    }
+
+    const nextMessages = [...params.messages];
+    nextMessages.splice(insertIndex, 0, params.previewMessage);
+    return { messages: nextMessages, attached: true };
+  }
+
+  return { messages: params.messages, attached: false };
 }
 
 function patchMessagesWithImageWorkbenchState(params: {
@@ -2884,8 +3331,11 @@ function syncMessagesWithImageWorkbenchState(params: {
   contentId?: string | null;
   allowAppendCachedPreviewMessages?: boolean;
 }): Message[] {
-  const patchedMessages = patchMessagesWithImageWorkbenchState({
-    messages: params.messages,
+  const patchedMessages = ensureImageWorkbenchUserMessagesFromState({
+    messages: patchMessagesWithImageWorkbenchState({
+      messages: params.messages,
+      imageWorkbenchState: params.imageWorkbenchState,
+    }),
     imageWorkbenchState: params.imageWorkbenchState,
   });
   if (params.allowAppendCachedPreviewMessages !== true) {
@@ -2912,10 +3362,27 @@ function syncMessagesWithImageWorkbenchState(params: {
     return patchedMessages;
   }
 
-  const nextMessages = cachedPreviewMessages.reduce(
-    (next, message) => upsertPreviewMessage(next, message),
-    patchedMessages,
+  const taskById = new Map(
+    (params.imageWorkbenchState?.tasks || []).map((task) => [task.id, task]),
   );
+  let nextMessages = patchedMessages;
+  for (const message of cachedPreviewMessages) {
+    const preview = message.imageWorkbenchPreview;
+    const task = preview?.taskId ? taskById.get(preview.taskId) : undefined;
+    if (patchedMessages.length > 0) {
+      const attached = attachImageWorkbenchPreviewToMatchingTurn({
+        messages: nextMessages,
+        previewMessage: message,
+        task,
+      });
+      if (attached.attached) {
+        nextMessages = attached.messages;
+      }
+      continue;
+    }
+
+    nextMessages = upsertPreviewMessage(nextMessages, message);
+  }
   return finalizePreviewMessages(patchedMessages, nextMessages);
 }
 

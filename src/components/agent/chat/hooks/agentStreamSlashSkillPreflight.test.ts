@@ -120,7 +120,7 @@ describe("agentStreamSlashSkillPreflight", () => {
     },
   );
 
-  it("@analysis metadata 应在发送前转入真实 Skill 执行，而不是继续普通 runtime submit", async () => {
+  it("结构化 model skill metadata 应在发送前转入真实 Skill 执行，而不是继续普通 runtime submit", async () => {
     const env = createEnv();
     const launch = {
       skill_name: "analysis",
@@ -155,7 +155,7 @@ describe("agentStreamSlashSkillPreflight", () => {
           userInput: "@analysis 帮我分析一下今天的国际形势",
         },
         rawContent: "@analysis 帮我分析一下今天的国际形势",
-        requestContext: launch,
+        requestContext: undefined,
         requestMetadata: expect.objectContaining({
           harness: expect.objectContaining({
             analysis_skill_launch: launch,
@@ -165,6 +165,46 @@ describe("agentStreamSlashSkillPreflight", () => {
       }),
     );
     expect(env.setActiveStream).toHaveBeenCalledTimes(1);
+  });
+
+  it("结构化 Skill metadata 不应只 hard code analysis", async () => {
+    const env = createEnv();
+    const launch = {
+      skill_name: "translation",
+      kind: "translation_request",
+      translation_request: {
+        raw_text: "@翻译 内容:hello 目标语言:中文",
+        prompt: "hello",
+        target_language: "中文",
+      },
+    };
+
+    const handled = await maybeHandleSlashSkillBeforeSend({
+      preparedSend: createPreparedSend({
+        content: "@翻译 内容:hello 目标语言:中文",
+        requestMetadata: {
+          harness: {
+            allow_model_skills: true,
+            translation_skill_launch: launch,
+          },
+        },
+      }),
+      env,
+    });
+
+    expect(handled).toBe(true);
+    expect(mockParseSkillSlashCommand).not.toHaveBeenCalled();
+    expect(mockTryExecuteSlashSkillCommand).toHaveBeenCalledTimes(1);
+    expect(mockTryExecuteSlashSkillCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: {
+          skillName: "translation",
+          userInput: "@翻译 内容:hello 目标语言:中文",
+        },
+        rawContent: "@翻译 内容:hello 目标语言:中文",
+        requestContext: undefined,
+      }),
+    );
   });
 
   it("未携带结构化 scene metadata 时仍应继续尝试旧 slash skill", async () => {

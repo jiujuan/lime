@@ -49,7 +49,7 @@ export function ModalRenderer({
           />
         </div>
       </DialogTrigger>
-      <DialogContent className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-xl">
+      <DialogContent className="rounded-[24px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-5 text-[color:var(--lime-text)] shadow-xl shadow-slate-950/10">
         <ComponentRenderer
           component={content}
           components={components}

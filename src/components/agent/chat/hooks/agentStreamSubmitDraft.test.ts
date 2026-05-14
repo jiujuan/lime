@@ -175,9 +175,8 @@ describe("agentStreamSubmitDraft", () => {
       assistantMsgId: "assistant-image",
       userMsgId: "user-image",
       assistantDraft: {
-        content:
-          "好啊，用 Nanobanana Pro 生成：一张广州塔春天照片\n先获取下工具参数\n马上生成",
-        preserveContent: true,
+        content: "",
+        fallbackContent: "",
         imageWorkbenchPreview: {
           taskId: "draft-image-1",
           prompt: "一张广州塔春天照片",
@@ -206,8 +205,7 @@ describe("agentStreamSubmitDraft", () => {
 
     expect(messages[1]).toMatchObject({
       id: "assistant-image",
-      content:
-        "好啊，用 Nanobanana Pro 生成：一张广州塔春天照片\n先获取下工具参数\n马上生成",
+      content: "",
       imageWorkbenchPreview: {
         taskId: "draft-image-1",
         prompt: "一张广州塔春天照片",

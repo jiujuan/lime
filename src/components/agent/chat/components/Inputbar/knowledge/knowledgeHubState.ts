@@ -10,13 +10,49 @@ export type InputbarKnowledgeHubPrimaryAction =
   | "supplement"
   | "none";
 
+export type InputbarKnowledgeHubCopyKey =
+  | "agentChat.inputbar.knowledge.state.pendingReview.title"
+  | "agentChat.inputbar.knowledge.state.pendingReview.description"
+  | "agentChat.inputbar.knowledge.state.using.title"
+  | "agentChat.inputbar.knowledge.state.using.description"
+  | "agentChat.inputbar.knowledge.state.select.title"
+  | "agentChat.inputbar.knowledge.state.select.descriptionWithPending"
+  | "agentChat.inputbar.knowledge.state.select.descriptionReady"
+  | "agentChat.inputbar.knowledge.state.pendingOnly.title"
+  | "agentChat.inputbar.knowledge.state.pendingOnly.description"
+  | "agentChat.inputbar.knowledge.state.add.title"
+  | "agentChat.inputbar.knowledge.state.add.description"
+  | "agentChat.inputbar.knowledge.action.review"
+  | "agentChat.inputbar.knowledge.action.supplement"
+  | "agentChat.inputbar.knowledge.action.supplementWithInput"
+  | "agentChat.inputbar.knowledge.action.use"
+  | "agentChat.inputbar.knowledge.action.organize"
+  | "agentChat.inputbar.knowledge.action.organizeWithInput";
+
+export type InputbarKnowledgeHubCopyValues = Record<
+  string,
+  string | number
+>;
+
+export interface InputbarKnowledgeHubCopyRef {
+  key: InputbarKnowledgeHubCopyKey;
+  values?: InputbarKnowledgeHubCopyValues;
+}
+
 export interface InputbarKnowledgeHubState {
-  title: string;
-  description: string;
+  title: InputbarKnowledgeHubCopyRef;
+  description: InputbarKnowledgeHubCopyRef;
   primaryAction: InputbarKnowledgeHubPrimaryAction;
-  primaryLabel: string;
+  primaryLabel: InputbarKnowledgeHubCopyRef;
   readyCount: number;
   pendingCount: number;
+}
+
+function copyRef(
+  key: InputbarKnowledgeHubCopyKey,
+  values?: InputbarKnowledgeHubCopyValues,
+): InputbarKnowledgeHubCopyRef {
+  return values ? { key, values } : { key };
 }
 
 export function normalizeKnowledgePackOptions({
@@ -62,12 +98,14 @@ export function resolveKnowledgeHubState({
   hasInputText,
   canManageKnowledgePacks,
   canStartKnowledgeOrganize,
+  fallbackPackLabel,
 }: {
   knowledgePackSelection?: InputbarKnowledgePackSelection | null;
   knowledgePackOptions: InputbarKnowledgePackOption[];
   hasInputText: boolean;
   canManageKnowledgePacks: boolean;
   canStartKnowledgeOrganize: boolean;
+  fallbackPackLabel: string;
 }): InputbarKnowledgeHubState {
   const readyCount = knowledgePackOptions.filter((option) =>
     isReadyKnowledgePackStatus(option.status),
@@ -76,17 +114,22 @@ export function resolveKnowledgeHubState({
   const currentLabel =
     knowledgePackSelection?.label ||
     knowledgePackSelection?.packName ||
-    "项目资料";
+    fallbackPackLabel;
   const selectedIsReady = isReadyKnowledgePackStatus(
     knowledgePackSelection?.status,
   );
 
   if (knowledgePackSelection && !selectedIsReady && canManageKnowledgePacks) {
     return {
-      title: "资料待确认",
-      description: `「${currentLabel}」还没有确认。先检查事实、适用场景和风险提示，确认后再用于生成。`,
+      title: copyRef(
+        "agentChat.inputbar.knowledge.state.pendingReview.title",
+      ),
+      description: copyRef(
+        "agentChat.inputbar.knowledge.state.pendingReview.description",
+        { label: currentLabel },
+      ),
       primaryAction: "manage",
-      primaryLabel: "去确认资料",
+      primaryLabel: copyRef("agentChat.inputbar.knowledge.action.review"),
       readyCount,
       pendingCount,
     };
@@ -94,11 +137,18 @@ export function resolveKnowledgeHubState({
 
   if (knowledgePackSelection?.enabled) {
     return {
-      title: `正在使用：${currentLabel}`,
-      description:
-        "本次生成会参考这份项目资料。需要补充新内容时，先把资料贴进输入框，再整理为项目资料。",
+      title: copyRef("agentChat.inputbar.knowledge.state.using.title", {
+        label: currentLabel,
+      }),
+      description: copyRef(
+        "agentChat.inputbar.knowledge.state.using.description",
+      ),
       primaryAction: canStartKnowledgeOrganize ? "supplement" : "none",
-      primaryLabel: hasInputText ? "把当前输入补充为资料" : "补充资料",
+      primaryLabel: copyRef(
+        hasInputText
+          ? "agentChat.inputbar.knowledge.action.supplementWithInput"
+          : "agentChat.inputbar.knowledge.action.supplement",
+      ),
       readyCount,
       pendingCount,
     };
@@ -106,13 +156,19 @@ export function resolveKnowledgeHubState({
 
   if (knowledgePackSelection) {
     return {
-      title: "选择项目资料",
+      title: copyRef("agentChat.inputbar.knowledge.state.select.title"),
       description:
         pendingCount > 0
-          ? `当前可用：${currentLabel}。另有资料需要确认；待确认内容请先检查。`
-          : `当前可用：${currentLabel}。使用后，本次生成会参考其中的事实、语气和边界。`,
+          ? copyRef(
+              "agentChat.inputbar.knowledge.state.select.descriptionWithPending",
+              { label: currentLabel },
+            )
+          : copyRef(
+              "agentChat.inputbar.knowledge.state.select.descriptionReady",
+              { label: currentLabel },
+            ),
       primaryAction: "use",
-      primaryLabel: "使用这份资料",
+      primaryLabel: copyRef("agentChat.inputbar.knowledge.action.use"),
       readyCount,
       pendingCount,
     };
@@ -120,22 +176,26 @@ export function resolveKnowledgeHubState({
 
   if (pendingCount > 0 && canManageKnowledgePacks) {
     return {
-      title: "有资料待确认",
-      description:
-        "先检查事实、适用场景和风险提示，确认后再用于生成，避免把未核对内容写进长期资料。",
+      title: copyRef("agentChat.inputbar.knowledge.state.pendingOnly.title"),
+      description: copyRef(
+        "agentChat.inputbar.knowledge.state.pendingOnly.description",
+      ),
       primaryAction: "manage",
-      primaryLabel: "去确认资料",
+      primaryLabel: copyRef("agentChat.inputbar.knowledge.action.review"),
       readyCount,
       pendingCount,
     };
   }
 
   return {
-    title: "添加项目资料",
-    description:
-      "粘贴访谈稿、产品说明、SOP 或历史文案后，让当前 Agent 整理成可确认的项目资料；之后可在这里一键使用。",
+    title: copyRef("agentChat.inputbar.knowledge.state.add.title"),
+    description: copyRef("agentChat.inputbar.knowledge.state.add.description"),
     primaryAction: canStartKnowledgeOrganize ? "organize" : "none",
-    primaryLabel: hasInputText ? "整理当前输入为资料" : "开始添加资料",
+    primaryLabel: copyRef(
+      hasInputText
+        ? "agentChat.inputbar.knowledge.action.organizeWithInput"
+        : "agentChat.inputbar.knowledge.action.organize",
+    ),
     readyCount,
     pendingCount,
   };

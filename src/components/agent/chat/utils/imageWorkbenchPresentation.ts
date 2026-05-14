@@ -1,6 +1,6 @@
 import { getLimeI18n } from "@/i18n/createI18n";
 import {
-  getSeededSkillCatalog,
+  getCurrentSkillCatalogSnapshot,
   listSkillCatalogCommandEntries,
 } from "@/lib/api/skillCatalog";
 import type { MessageImageWorkbenchPreview } from "../types";
@@ -29,19 +29,20 @@ function resolveImageWorkbenchCatalogModelLabel(modelId: string): string {
     return "";
   }
 
-  const command = listSkillCatalogCommandEntries(getSeededSkillCatalog()).find(
-    (entry) => {
-      const defaults = entry.binding?.requestDefaults;
-      const defaultModel = (
-        defaults?.model ||
-        defaults?.modelId ||
-        ""
-      )
-        .trim()
-        .toLowerCase();
-      return defaultModel === normalizedModelId;
-    },
-  );
+  const command = listSkillCatalogCommandEntries(
+    getCurrentSkillCatalogSnapshot(),
+  ).find((entry) => {
+    const defaults = entry.binding?.requestDefaults;
+    const defaultModel = (
+      defaults?.model ||
+      defaults?.modelId ||
+      defaults?.model_id ||
+      ""
+    )
+      .trim()
+      .toLowerCase();
+    return defaultModel === normalizedModelId;
+  });
   return command?.title?.trim() || "";
 }
 
@@ -77,12 +78,6 @@ export function resolveImageWorkbenchPreviewModelLabel(
 }
 
 type ImageWorkbenchPresentationKey =
-  | "agentChat.imageWorkbenchPresentation.process.prepareParameters"
-  | "agentChat.imageWorkbenchPresentation.process.generateNow"
-  | "agentChat.imageWorkbenchPresentation.caption.completeWithSubject"
-  | "agentChat.imageWorkbenchPresentation.caption.completeDefault"
-  | "agentChat.imageWorkbenchPresentation.caption.partialWithCount"
-  | "agentChat.imageWorkbenchPresentation.caption.partialDefault"
   | "agentChat.imageWorkbenchPresentation.caption.failedWithMessage"
   | "agentChat.imageWorkbenchPresentation.caption.failedDefault"
   | "agentChat.imageWorkbenchPresentation.caption.cancelled";
@@ -97,17 +92,6 @@ function tImageWorkbenchPresentation(
   });
 }
 
-export function buildImageWorkbenchProcessLines(): string[] {
-  return [
-    tImageWorkbenchPresentation(
-      "agentChat.imageWorkbenchPresentation.process.prepareParameters",
-    ),
-    tImageWorkbenchPresentation(
-      "agentChat.imageWorkbenchPresentation.process.generateNow",
-    ),
-  ];
-}
-
 export function buildImageWorkbenchCaption(params: {
   prompt: string;
   status: MessageImageWorkbenchPreview["status"];
@@ -116,27 +100,12 @@ export function buildImageWorkbenchCaption(params: {
 }): string | null {
   switch (params.status) {
     case "complete":
-      return tImageWorkbenchPresentation(
-        "agentChat.imageWorkbenchPresentation.caption.completeDefault",
-      );
     case "partial":
-      return params.imageCount && params.imageCount > 0
-        ? tImageWorkbenchPresentation(
-            "agentChat.imageWorkbenchPresentation.caption.partialWithCount",
-            { count: params.imageCount },
-          )
-        : tImageWorkbenchPresentation(
-            "agentChat.imageWorkbenchPresentation.caption.partialDefault",
-          );
+      return null;
     case "failed":
-      return params.statusMessage?.trim()
-        ? tImageWorkbenchPresentation(
-            "agentChat.imageWorkbenchPresentation.caption.failedWithMessage",
-            { message: params.statusMessage.trim() },
-          )
-        : tImageWorkbenchPresentation(
-            "agentChat.imageWorkbenchPresentation.caption.failedDefault",
-          );
+      return tImageWorkbenchPresentation(
+        "agentChat.imageWorkbenchPresentation.caption.failedDefault",
+      );
     case "cancelled":
       return tImageWorkbenchPresentation(
         "agentChat.imageWorkbenchPresentation.caption.cancelled",

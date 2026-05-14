@@ -92,4 +92,24 @@ describe("protocolResidue", () => {
       "如果你希望我继续深挖某个方向，再告诉我即可。",
     );
   });
+
+  it("应把旧图片任务递交摘要当作内部协议残留清理", () => {
+    const leaked = [
+      "任务类型：image_generate",
+      "任务 ID：task-image-skill-1",
+      "任务文件：.lime/tasks/image_generate/task-image-skill-1.json",
+      "状态：pending_submit",
+    ].join("\n");
+
+    expect(containsAssistantProtocolResidue(leaked)).toBe(true);
+    expect(stripAssistantProtocolResidue(leaked)).toBe("");
+  });
+
+  it("应清理图片生成失败时泄露的内部工具协议错误", () => {
+    const leaked =
+      "好的，马上用漫画风格来生成。-32603: -32002: lime_create_image_generation_task";
+
+    expect(containsAssistantProtocolResidue(leaked)).toBe(true);
+    expect(stripAssistantProtocolResidue(leaked)).toBe("");
+  });
 });

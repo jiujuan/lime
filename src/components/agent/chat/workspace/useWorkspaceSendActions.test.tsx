@@ -14,7 +14,10 @@ import { listServiceSkillUsage } from "../service-skills/storage";
 import { useWorkspaceSendActions } from "./useWorkspaceSendActions";
 import type { TeamWorkspaceRuntimeFormationState } from "../teamWorkspaceRuntime";
 import { listSlashEntryUsage } from "../skill-selection/slashEntryUsage";
-import { saveSkillCatalog } from "@/lib/api/skillCatalog";
+import {
+  saveSkillCatalog,
+  upsertLocalModelBoundImageCommandBinding,
+} from "@/lib/api/skillCatalog";
 import {
   clearAgentUiProjectionEvents,
   conversationProjectionStore,
@@ -68,10 +71,9 @@ vi.mock("@/hooks/useGlobalMediaGenerationDefaults", () => ({
 }));
 
 vi.mock("@/lib/skills/skillInstallPrompt", async () => {
-  const actual =
-    await vi.importActual<typeof import("@/lib/skills/skillInstallPrompt")>(
-      "@/lib/skills/skillInstallPrompt",
-    );
+  const actual = await vi.importActual<
+    typeof import("@/lib/skills/skillInstallPrompt")
+  >("@/lib/skills/skillInstallPrompt");
 
   return {
     ...actual,
@@ -113,6 +115,7 @@ const mockSetChatToolPreferences = vi.fn();
 const mockEnsureBrowserAssistCanvas = vi.fn(async () => true);
 const mockHandleAutoLaunchMatchedSiteSkill = vi.fn(async () => undefined);
 const mockOpenRuntimeSceneGate = vi.fn(async () => undefined);
+const mockCreateImageGenerationTask = vi.fn();
 const mockEnsureSessionForCommandMetadata = vi.fn<
   NonNullable<HookProps["ensureSessionForCommandMetadata"]>
 >(async () => null);
@@ -455,6 +458,7 @@ function mountHook(initialProps?: Partial<HookProps>): HookHarness {
       prepareActiveContextPrompt: async () => "",
     },
     projectId: "project-1",
+    projectRootPath: "/workspace",
     sessionId: "session-1",
     executionStrategy: "react",
     accessMode: "current",
@@ -882,18 +886,16 @@ DOWNLOAD_URL="https://limeai.run/skill-packages/viral-content-breakdown/latest/v
 
     try {
       await act(async () => {
-        const started = await harness
-          .getValue()
-          .handleSend(
-            [],
-            false,
-            false,
-            `Download and install a skill.
+        const started = await harness.getValue().handleSend(
+          [],
+          false,
+          false,
+          `Download and install a skill.
 SKILL_NAME="viral-content-breakdown"
 DOWNLOAD_URL="https://limeai.run/skill-packages/viral-content-breakdown/latest/viral-content-breakdown.zip"
 Extract it into the Agent Skills directory.`,
-            "react",
-          );
+          "react",
+        );
         expect(started).toBe(true);
       });
 
@@ -1496,9 +1498,8 @@ Extract it into the Agent Skills directory.`,
           },
         },
         assistantDraft: {
-          content:
-            "好啊，生成：一张春日咖啡馆插画\n先获取下工具参数\n马上生成",
-          preserveContent: true,
+          content: "",
+          fallbackContent: "",
           imageWorkbenchPreview: {
             prompt: "一张春日咖啡馆插画",
             mode: "generate",
@@ -1548,9 +1549,8 @@ Extract it into the Agent Skills directory.`,
       const sendOptions = mockSendMessage.mock.calls[0]?.[8];
       expect(sendOptions).toMatchObject({
         assistantDraft: {
-          content:
-            "好啊，用 Nanobanana Pro 生成：一张广州塔，从花城汇看过去的春天的照片\n先获取下工具参数\n马上生成",
-          preserveContent: true,
+          content: "",
+          fallbackContent: "",
           imageWorkbenchPreview: {
             prompt: "一张广州塔，从花城汇看过去的春天的照片",
             mode: "generate",
@@ -1574,14 +1574,129 @@ Extract it into the Agent Skills directory.`,
       expect(
         sendOptions?.assistantDraft?.imageWorkbenchPreview?.taskId,
       ).toMatch(/^draft-image-/);
-      expect(sendOptions?.assistantDraft?.content).not.toContain("任务 ID");
-      expect(sendOptions?.assistantDraft?.content).not.toContain(
-        "Image Workbench",
-      );
+      expect(sendOptions?.assistantDraft?.content).toBe("");
+      expect(sendOptions?.assistantDraft?.fallbackContent).toBe("");
+      expect(sendOptions?.assistantDraft?.preserveContent).toBeUndefined();
       expect(listMentionEntryUsage()).toEqual([
         expect.objectContaining({
           kind: "builtin_command",
           entryId: "image_generate_nanobanana_pro",
+          replayText: "一张广州塔，从花城汇看过去的春天的照片",
+        }),
+      ]);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("@Nano Banana 2 应进入 image_skill_launch 同一回合并保留过程", async () => {
+    upsertLocalModelBoundImageCommandBinding({
+      trigger: "@Nano Banana 2",
+      providerId: "fal",
+      modelId: "fal-ai/nano-banana-2",
+      executorMode: "images_api",
+    });
+    mockEnsureSessionForCommandMetadata.mockResolvedValueOnce(
+      "session-direct-1",
+    );
+    mockResolveImageWorkbenchSkillRequest.mockReturnValueOnce({
+      images: [],
+      requestContext: {
+        kind: "image_task",
+        image_task: {
+          mode: "generate",
+          prompt: "一张广州塔，从花城汇看过去的春天的照片",
+          raw_text: "@Nano Banana 2 生成一张广州塔，从花城汇看过去的春天的照片",
+          count: 1,
+          size: "1024x1024",
+          usage: "claw-image-workbench",
+          provider_id: "fal",
+          model: "fal-ai/nano-banana-2",
+          executor_mode: "images_api",
+          project_id: "project-1",
+          entry_source: "at_nano_banana_2_model_command",
+          modality_contract_key: "image_generation",
+          modality: "image",
+          required_capabilities: ["image_generation"],
+          routing_slot: "image_generation_model",
+          runtime_contract: {
+            contract_key: "image_generation",
+            routing_slot: "image_generation_model",
+          },
+        },
+      },
+    });
+    const harness = mountHook({
+      input: "@Nano Banana 2 生成一张广州塔，从花城汇看过去的春天的照片",
+    });
+
+    try {
+      await act(async () => {
+        const started = await harness.getValue().handleSend();
+        expect(started).toBe(true);
+      });
+
+      expect(mockCreateImageGenerationTask).not.toHaveBeenCalled();
+      expect(mockResolveImageWorkbenchSkillRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          rawText: "@Nano Banana 2 生成一张广州塔，从花城汇看过去的春天的照片",
+          parsedCommand: expect.objectContaining({
+            commandKey: "image_model_nano_banana_2",
+            providerId: "fal",
+            modelId: "fal-ai/nano-banana-2",
+            executorMode: "images_api",
+          }),
+          entrySource: "at_nano_banana_2_model_command",
+          sessionIdOverride: undefined,
+        }),
+      );
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+      expect(mockSendMessage.mock.calls[0]?.[0]).toBe(
+        "@Nano Banana 2 生成一张广州塔，从花城汇看过去的春天的照片",
+      );
+      const sendOptions = mockSendMessage.mock.calls[0]?.[8];
+      expect(sendOptions).toMatchObject({
+        assistantDraft: {
+          content: "",
+          fallbackContent: "",
+          imageWorkbenchPreview: {
+            prompt: "一张广州塔，从花城汇看过去的春天的照片",
+            mode: "generate",
+            status: "running",
+            providerName: "fal",
+            modelName: "fal-ai/nano-banana-2",
+            expectedImageCount: 1,
+          },
+        },
+        requestMetadata: {
+          harness: {
+            allow_model_skills: true,
+            image_skill_launch: {
+              skill_name: "image_generate",
+              kind: "image_task",
+              image_task: {
+                provider_id: "fal",
+                model: "fal-ai/nano-banana-2",
+                executor_mode: "images_api",
+                entry_source: "at_nano_banana_2_model_command",
+                runtime_contract: {
+                  contract_key: "image_generation",
+                  routing_slot: "image_generation_model",
+                },
+              },
+            },
+          },
+        },
+      });
+      expect(
+        sendOptions?.assistantDraft?.imageWorkbenchPreview?.taskId,
+      ).toMatch(/^draft-image-/);
+      expect(sendOptions?.assistantDraft?.content).toBe("");
+      expect(sendOptions?.assistantDraft?.fallbackContent).toBe("");
+      expect(listMentionEntryUsage()).toEqual([
+        expect.objectContaining({
+          kind: "builtin_command",
+          entryId: "image_model_nano_banana_2",
           replayText: "一张广州塔，从花城汇看过去的春天的照片",
         }),
       ]);

@@ -3,7 +3,7 @@ import {
   type AgentToolExecutionResult as ToolExecutionResult,
   type AgentEvent,
 } from "@/lib/api/agentProtocol";
-import agentSourceResource from "@/i18n/resources/zh-CN/agent.json";
+import { agentZhCNResource as agentSourceResource } from "@/i18n/agentResources";
 import {
   buildTeamWorkspaceActivityEntryFromThreadItem,
   buildTeamWorkspaceSessionFingerprint,

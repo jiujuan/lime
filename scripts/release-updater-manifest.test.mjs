@@ -27,7 +27,13 @@ describe("release updater manifest", () => {
 
     writeFile(path.join(assetsDir, "aarch64-apple-darwin", "Lime.app.tar.gz"));
     writeFile(
+      path.join(assetsDir, "aarch64-apple-darwin", "Lime_1.20.0_aarch64.dmg"),
+    );
+    writeFile(
       path.join(assetsDir, "x86_64-apple-darwin", "Lime-x64.app.tar.gz"),
+    );
+    writeFile(
+      path.join(assetsDir, "x86_64-apple-darwin", "Lime_1.20.0_x64.dmg"),
     );
     writeFile(path.join(assetsDir, "x86_64-pc-windows-msvc", "Lime.nsis.zip"));
 
@@ -78,7 +84,19 @@ describe("release updater manifest", () => {
     expect(result.manifest.platforms["darwin-aarch64"].url).toBe(
       "https://updates.limecloud.com/lime/stable/v1.20.0/darwin-aarch64/Lime.app.tar.gz",
     );
-    expect(result.r2UploadPlan).toHaveLength(3);
+    expect(result.manifest.platforms["darwin-aarch64"].installer_url).toBe(
+      "https://updates.limecloud.com/lime/stable/v1.20.0/darwin-aarch64/Lime_1.20.0_aarch64.dmg",
+    );
+    expect(result.manifest.platforms["darwin-x86_64"].installer_url).toBe(
+      "https://updates.limecloud.com/lime/stable/v1.20.0/darwin-x86_64/Lime_1.20.0_x64.dmg",
+    );
+    expect(result.r2UploadPlan.map((item) => item.key).sort()).toEqual([
+      "lime/stable/v1.20.0/darwin-aarch64/Lime.app.tar.gz",
+      "lime/stable/v1.20.0/darwin-aarch64/Lime_1.20.0_aarch64.dmg",
+      "lime/stable/v1.20.0/darwin-x86_64/Lime-x64.app.tar.gz",
+      "lime/stable/v1.20.0/darwin-x86_64/Lime_1.20.0_x64.dmg",
+      "lime/stable/v1.20.0/windows-x86_64/Lime.nsis.zip",
+    ]);
 
     const output = writeOutputs(result, path.join(root, "out"), "stable");
     expect(fs.existsSync(output.latestPath)).toBe(true);
@@ -91,6 +109,9 @@ describe("release updater manifest", () => {
     );
     const assetsDir = path.join(root, "release-assets");
     writeFile(path.join(assetsDir, "aarch64-apple-darwin", "Lime.app.tar.gz"));
+    writeFile(
+      path.join(assetsDir, "aarch64-apple-darwin", "Lime_1.20.0_aarch64.dmg"),
+    );
     writeJson(path.join(assetsDir, "aarch64-apple-darwin", "latest.json"), {
       version: "1.20.0",
       platforms: {
@@ -148,8 +169,16 @@ describe("release updater manifest", () => {
       "arm",
     );
     writeFile(
+      path.join(assetsDir, "aarch64-apple-darwin", "Lime_1.20.0_aarch64.dmg"),
+      "arm-dmg",
+    );
+    writeFile(
       path.join(assetsDir, "x86_64-apple-darwin", "Lime.app.tar.gz"),
       "x64",
+    );
+    writeFile(
+      path.join(assetsDir, "x86_64-apple-darwin", "Lime_1.20.0_x64.dmg"),
+      "x64-dmg",
     );
 
     writeJson(path.join(assetsDir, "aarch64-apple-darwin", "latest.json"), {
@@ -185,15 +214,23 @@ describe("release updater manifest", () => {
     expect(result.manifest.platforms["darwin-x86_64"].url).toBe(
       "https://updates.limecloud.com/lime/stable/v1.20.0/darwin-x86_64/Lime.app.tar.gz",
     );
+    expect(result.manifest.platforms["darwin-aarch64"].installer_url).toBe(
+      "https://updates.limecloud.com/lime/stable/v1.20.0/darwin-aarch64/Lime_1.20.0_aarch64.dmg",
+    );
+    expect(result.manifest.platforms["darwin-x86_64"].installer_url).toBe(
+      "https://updates.limecloud.com/lime/stable/v1.20.0/darwin-x86_64/Lime_1.20.0_x64.dmg",
+    );
     expect(result.r2UploadPlan.map((item) => item.key).sort()).toEqual([
       "lime/stable/v1.20.0/darwin-aarch64/Lime.app.tar.gz",
+      "lime/stable/v1.20.0/darwin-aarch64/Lime_1.20.0_aarch64.dmg",
       "lime/stable/v1.20.0/darwin-x86_64/Lime.app.tar.gz",
+      "lime/stable/v1.20.0/darwin-x86_64/Lime_1.20.0_x64.dmg",
     ]);
     expect(
       result.r2UploadPlan
         .map((item) => fs.readFileSync(item.file, "utf8"))
         .sort(),
-    ).toEqual(["arm", "x64"]);
+    ).toEqual(["arm", "arm-dmg", "x64", "x64-dmg"]);
   });
 
   it("没有 latest.json 时应从 Tauri 签名产物生成清单", () => {
@@ -216,10 +253,16 @@ describe("release updater manifest", () => {
       path.join(assetsDir, "aarch64-apple-darwin", "Lime.app.tar.gz.sig"),
       encodedSignature,
     );
+    writeFile(
+      path.join(assetsDir, "aarch64-apple-darwin", "Lime_1.20.0_aarch64.dmg"),
+    );
     writeFile(path.join(assetsDir, "x86_64-apple-darwin", "Lime.app.tar.gz"));
     writeFile(
       path.join(assetsDir, "x86_64-apple-darwin", "Lime.app.tar.gz.sig"),
       rawSignature,
+    );
+    writeFile(
+      path.join(assetsDir, "x86_64-apple-darwin", "Lime_1.20.0_x64.dmg"),
     );
     writeFile(
       path.join(
@@ -257,11 +300,48 @@ describe("release updater manifest", () => {
     expect(result.manifest.platforms["windows-x86_64"].url).toBe(
       "https://updates.limecloud.com/lime/stable/v1.20.0/windows-x86_64/Lime_1.20.0_x64-setup.exe",
     );
+    expect(result.manifest.platforms["darwin-aarch64"].installer_url).toBe(
+      "https://updates.limecloud.com/lime/stable/v1.20.0/darwin-aarch64/Lime_1.20.0_aarch64.dmg",
+    );
+    expect(result.manifest.platforms["darwin-x86_64"].installer_url).toBe(
+      "https://updates.limecloud.com/lime/stable/v1.20.0/darwin-x86_64/Lime_1.20.0_x64.dmg",
+    );
+    expect(result.manifest.platforms["windows-x86_64"].installer_url).toBe(
+      "https://updates.limecloud.com/lime/stable/v1.20.0/windows-x86_64/Lime_1.20.0_x64-setup.exe",
+    );
     expect(result.r2UploadPlan.map((item) => item.key).sort()).toEqual([
       "lime/stable/v1.20.0/darwin-aarch64/Lime.app.tar.gz",
+      "lime/stable/v1.20.0/darwin-aarch64/Lime_1.20.0_aarch64.dmg",
       "lime/stable/v1.20.0/darwin-x86_64/Lime.app.tar.gz",
+      "lime/stable/v1.20.0/darwin-x86_64/Lime_1.20.0_x64.dmg",
       "lime/stable/v1.20.0/windows-x86_64/Lime_1.20.0_x64-setup.exe",
     ]);
+  });
+
+  it("macOS 平台缺少 DMG 时失败，避免官网回退下载 updater 包", () => {
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "lime-release-missing-dmg-"),
+    );
+    const assetsDir = path.join(root, "release-assets");
+    writeFile(path.join(assetsDir, "aarch64-apple-darwin", "Lime.app.tar.gz"));
+    writeJson(path.join(assetsDir, "aarch64-apple-darwin", "latest.json"), {
+      version: "1.20.0",
+      platforms: {
+        "darwin-aarch64": {
+          signature: "sig-arm",
+          url: "https://example.com/Lime.app.tar.gz",
+        },
+      },
+    });
+
+    expect(() =>
+      collectUpdaterManifest({
+        assetsDir,
+        baseUrl: "https://updates.limecloud.com",
+        requiredPlatforms: ["darwin-aarch64"],
+        version: "v1.20.0",
+      }),
+    ).toThrow(/missing installer asset/);
   });
 });
 

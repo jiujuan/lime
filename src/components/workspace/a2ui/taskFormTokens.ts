@@ -1,44 +1,46 @@
 import { cn } from "@/lib/utils";
 
 export const A2UI_FORM_TOKENS = {
-  fieldStack: "a2ui-field-stack space-y-2",
-  fieldLabel: "a2ui-field-label text-sm font-medium text-slate-900",
-  helperText: "a2ui-helper-text text-xs text-muted-foreground",
-  optionList: "a2ui-option-list flex gap-3",
+  fieldStack: "a2ui-field-stack space-y-1.5",
+  fieldLabel:
+    "a2ui-field-label text-[13px] font-medium text-[color:var(--lime-text-strong)]",
+  helperText: "a2ui-helper-text text-xs text-[color:var(--lime-text-muted)]",
+  optionList: "a2ui-option-list flex gap-2.5",
   optionBase:
-    "a2ui-choice-option group rounded-[20px] border px-5 py-4 text-left text-sm transition-all",
+    "a2ui-choice-option group rounded-[16px] border px-3.5 py-3 text-left text-[13px] transition-all",
   optionSelected:
-    "border-primary/70 bg-white text-slate-900 shadow-[0_8px_24px_rgba(37,99,235,0.10)] ring-2 ring-primary/10",
+    "border-[color:var(--lime-surface-border-strong)] bg-[color:var(--lime-surface)] text-[color:var(--lime-text-strong)] shadow-sm shadow-slate-950/5 ring-2 ring-[color:var(--lime-brand-soft)]",
   optionIdle:
-    "border-slate-200 bg-white hover:border-primary/30 hover:bg-slate-50",
+    "border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] hover:border-[color:var(--lime-surface-border-strong)] hover:bg-[color:var(--lime-surface-hover)]",
   optionTitle: "a2ui-choice-option-title flex items-center gap-2 font-medium",
-  optionTitleSelected: "text-slate-900",
-  optionTitleIdle: "text-slate-800",
+  optionTitleSelected: "text-[color:var(--lime-text-strong)]",
+  optionTitleIdle: "text-[color:var(--lime-text)]",
   optionDescription:
-    "a2ui-option-description mt-1.5 text-xs leading-5 text-muted-foreground",
+    "a2ui-option-description mt-1 text-xs leading-5 text-[color:var(--lime-text-muted)]",
   radioIndicatorBase:
-    "mt-0.5 inline-flex h-6 w-6 shrink-0 rounded-full border transition-colors",
+    "mt-0.5 inline-flex h-5 w-5 shrink-0 rounded-full border transition-colors",
   radioIndicatorSelected:
-    "border-primary bg-primary shadow-[inset_0_0_0_5px_white]",
-  radioIndicatorIdle: "border-slate-300 bg-white group-hover:border-primary/60",
+    "border-[color:var(--lime-brand)] bg-[color:var(--lime-brand)] shadow-[inset_0_0_0_4px_var(--lime-surface)]",
+  radioIndicatorIdle:
+    "border-[color:var(--lime-surface-border-strong)] bg-[color:var(--lime-surface)] group-hover:border-[color:var(--lime-brand)]",
   checkboxIndicatorBase:
     "mt-0.5 inline-flex h-5 w-5 shrink-0 rounded-md border transition-colors",
   checkboxIndicatorSelected:
-    "border-primary bg-primary shadow-[inset_0_0_0_4px_white]",
+    "border-[color:var(--lime-brand)] bg-[color:var(--lime-brand)] shadow-[inset_0_0_0_4px_var(--lime-surface)]",
   checkboxIndicatorIdle:
-    "border-slate-300 bg-white group-hover:border-primary/60",
+    "border-[color:var(--lime-surface-border-strong)] bg-[color:var(--lime-surface)] group-hover:border-[color:var(--lime-brand)]",
   textInput:
-    "a2ui-text-input h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm shadow-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/10",
+    "a2ui-text-input h-10 w-full rounded-[16px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 text-[13px] text-[color:var(--lime-text)] shadow-sm outline-none transition placeholder:text-[color:var(--lime-text-muted)] focus:border-[color:var(--lime-brand)] focus:ring-2 focus:ring-[color:var(--lime-brand-soft)]",
   textarea:
-    "a2ui-textarea min-h-[96px] w-full resize-y rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 shadow-sm outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/10",
+    "a2ui-textarea min-h-[84px] w-full resize-y rounded-[16px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-2.5 text-[13px] leading-5 text-[color:var(--lime-text)] shadow-sm outline-none transition placeholder:text-[color:var(--lime-text-muted)] focus:border-[color:var(--lime-brand)] focus:ring-2 focus:ring-[color:var(--lime-brand-soft)]",
   checkboxRow: "flex items-center gap-3 cursor-pointer",
   checkboxInput:
-    "h-4 w-4 rounded border-slate-300 text-primary focus:ring-2 focus:ring-primary/10",
-  checkboxText: "text-sm text-slate-800",
+    "h-4 w-4 rounded border-[color:var(--lime-surface-border-strong)] text-[color:var(--lime-brand)] focus:ring-2 focus:ring-[color:var(--lime-brand-soft)]",
+  checkboxText: "text-[13px] text-[color:var(--lime-text)]",
   sliderRow: "flex items-center justify-between",
-  sliderValue: "text-sm text-muted-foreground",
-  sliderInput: "w-full accent-primary",
-  sliderMarks: "flex justify-between text-xs text-muted-foreground",
+  sliderValue: "text-[13px] text-[color:var(--lime-text-muted)]",
+  sliderInput: "w-full accent-[var(--lime-brand)]",
+  sliderMarks: "flex justify-between text-xs text-[color:var(--lime-text-muted)]",
 } as const;
 
 export function getA2UIChoiceOptionClasses(
@@ -47,7 +49,7 @@ export function getA2UIChoiceOptionClasses(
 ): string {
   return cn(
     A2UI_FORM_TOKENS.optionBase,
-    isWrap ? "min-w-[180px] flex-1" : "w-full",
+    isWrap ? "min-w-[160px] flex-1" : "w-full",
     isSelected ? A2UI_FORM_TOKENS.optionSelected : A2UI_FORM_TOKENS.optionIdle,
   );
 }

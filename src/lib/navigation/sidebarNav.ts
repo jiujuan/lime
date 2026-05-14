@@ -2,6 +2,7 @@ import {
   BrainCircuit,
   Bot,
   BookOpen,
+  FlaskConical,
   MessageCircleMore,
   Plus,
   Settings,
@@ -11,6 +12,8 @@ import {
 } from "lucide-react";
 import { type AgentPageParams, type Page, type PageParams } from "@/types/page";
 import { SettingsTabs } from "@/types/settings";
+import { resolveAgentAppHostFlags } from "@/features/agent-app/featureFlag";
+import type { AgentAppHostFlags } from "@/features/agent-app/types";
 import { buildHomeAgentParams } from "@/lib/workspace/navigation";
 
 export interface SidebarNavItemDefinition {
@@ -46,7 +49,7 @@ function isCompanionSettingsView(currentParams?: PageParams): boolean {
   );
 }
 
-export const MAIN_SIDEBAR_NAV_ITEMS: SidebarNavItemDefinition[] = [
+const BASE_MAIN_SIDEBAR_NAV_ITEMS: SidebarNavItemDefinition[] = [
   {
     id: "home-general",
     label: "新建任务",
@@ -84,6 +87,28 @@ export const MAIN_SIDEBAR_NAV_ITEMS: SidebarNavItemDefinition[] = [
     configurable: false,
   },
 ];
+
+const AGENT_APP_LAB_NAV_ITEM: SidebarNavItemDefinition = {
+  id: "agent-app-lab",
+  label: "Agent App Lab",
+  icon: FlaskConical,
+  page: "agent-app-lab",
+  isActive: (currentPage) => currentPage === "agent-app-lab",
+  configurable: false,
+};
+
+export function buildMainSidebarNavItems(
+  flags: Pick<AgentAppHostFlags, "labEnabled"> = resolveAgentAppHostFlags(),
+): SidebarNavItemDefinition[] {
+  if (!flags.labEnabled) {
+    return BASE_MAIN_SIDEBAR_NAV_ITEMS;
+  }
+
+  return [...BASE_MAIN_SIDEBAR_NAV_ITEMS, AGENT_APP_LAB_NAV_ITEM];
+}
+
+export const MAIN_SIDEBAR_NAV_ITEMS: SidebarNavItemDefinition[] =
+  buildMainSidebarNavItems();
 
 export const FOOTER_SIDEBAR_NAV_ITEMS: SidebarNavItemDefinition[] = [
   {

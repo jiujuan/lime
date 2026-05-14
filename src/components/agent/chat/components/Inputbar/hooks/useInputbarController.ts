@@ -58,6 +58,7 @@ import {
 } from "../../../utils/pathReferences";
 import { toast } from "sonner";
 import { buildInputbarControllerCopy } from "./inputbarControllerCopy";
+import { buildInputbarWorkflowStateCopy } from "../inputbarWorkflowCopy";
 
 interface UseInputbarControllerParams {
   input: string;
@@ -139,6 +140,10 @@ export function useInputbarController({
   const { t } = useTranslation("agent");
   const copy = useMemo(
     () => buildInputbarControllerCopy((key) => t(key)),
+    [t],
+  );
+  const workflowCopy = useMemo(
+    () => buildInputbarWorkflowStateCopy((key, values) => t(key, values ?? {})),
     [t],
   );
   const [activeCapability, setActiveCapability] =
@@ -381,6 +386,7 @@ export function useInputbarController({
     workflowSteps,
     workflowRunState,
     isSending: inputAdapter.state.isSending,
+    copy: workflowCopy,
   });
 
   const [dismissedTeamSuggestionKey, setDismissedTeamSuggestionKey] = useState<

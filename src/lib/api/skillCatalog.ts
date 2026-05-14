@@ -205,6 +205,8 @@ interface NormalizedSkillCatalogInput {
 }
 
 const SKILL_CATALOG_STORAGE_KEY = "lime:skill-catalog:v1";
+const LOCAL_MODEL_BOUND_IMAGE_COMMAND_STORAGE_KEY =
+  "lime:local-direct-image-commands:v1";
 export const SKILL_CATALOG_CHANGED_EVENT = "lime:skill-catalog-changed";
 const SEEDED_SKILL_GROUP_PRESETS = [
   {
@@ -312,6 +314,149 @@ function cloneSkillCatalog(catalog: SkillCatalog): SkillCatalog {
       },
     })),
     entries: (catalog.entries || []).map((entry) => cloneJsonValue(entry)),
+  };
+}
+
+function normalizeCommandTrigger(value: string): string | null {
+  const normalized = value.trim();
+  if (!normalized) {
+    return null;
+  }
+  return normalized.startsWith("@") ? normalized : `@${normalized}`;
+}
+
+function normalizeCommandToken(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function hashCommandText(value: string): string {
+  let hash = 5381;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 33) ^ value.charCodeAt(index);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function slugifyCommandSegment(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^@+/, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function buildModelBoundImageCommandSlug(input: {
+  trigger: string;
+  providerId: string;
+  modelId: string;
+}): string {
+  const triggerSlug = slugifyCommandSegment(input.trigger);
+  if (triggerSlug) {
+    return triggerSlug;
+  }
+
+  const modelSlug = slugifyCommandSegment(input.modelId);
+  if (modelSlug) {
+    return modelSlug;
+  }
+
+  return `command_${hashCommandText(
+    `${input.trigger}:${input.providerId}:${input.modelId}`,
+  )}`;
+}
+
+function buildModelBoundImageCommandEntrySource(slug: string): string {
+  return `at_${slug}_model_command`;
+}
+
+function readCommandRequestDefaults(
+  entry: SkillCatalogCommandEntry,
+): Record<string, string> {
+  return entry.binding?.requestDefaults ?? {};
+}
+
+export function isModelBoundImageCommandEntry(
+  entry: SkillCatalogCommandEntry,
+): boolean {
+  const defaults = readCommandRequestDefaults(entry);
+  return (
+    (defaults.imageWorkbench === "true" ||
+      defaults.image_workbench === "true") &&
+    (defaults.modelBoundImageTask === "true" ||
+      defaults.model_bound_image_task === "true" ||
+      defaults.directImageTask === "true" ||
+      defaults.directTask === "true" ||
+      defaults.direct_task === "true" ||
+      defaults.direct_image_task === "true") &&
+    Boolean((defaults.providerId ?? defaults.provider_id)?.trim()) &&
+    Boolean((defaults.model ?? defaults.modelId ?? defaults.model_id)?.trim())
+  );
+}
+
+export interface ModelBoundImageCommandBindingInput {
+  trigger: string;
+  providerId: string;
+  modelId: string;
+  title?: string;
+  summary?: string;
+  executorMode?: "images_api" | "responses_image_generation";
+}
+
+export function buildModelBoundImageCommandEntry(
+  input: ModelBoundImageCommandBindingInput,
+): SkillCatalogCommandEntry {
+  const trigger = normalizeCommandTrigger(input.trigger);
+  const providerId = input.providerId.trim();
+  const modelId = input.modelId.trim();
+  if (!trigger || !providerId || !modelId) {
+    throw new Error("invalid image model command binding");
+  }
+
+  const slug = buildModelBoundImageCommandSlug({
+    trigger,
+    providerId,
+    modelId,
+  });
+  const requestDefaults: Record<string, string> = {
+    imageWorkbench: "true",
+    modelBoundImageTask: "true",
+    entrySource: buildModelBoundImageCommandEntrySource(slug),
+    providerId,
+    model: modelId,
+    bindingSource: "local_provider_settings",
+    bindingSourceScope: "client_overlay",
+  };
+  if (input.executorMode) {
+    requestDefaults.executorMode = input.executorMode;
+  }
+
+  const title = input.title?.trim() || trigger.replace(/^@+/, "");
+  return {
+    id: `command:image-model:${slug}`,
+    kind: "command",
+    title,
+    summary: input.summary?.trim() || `使用 ${modelId} 创建标准图片任务。`,
+    commandKey: `image_model_${slug}`,
+    aliases: [title, modelId],
+    surfaceScopes: ["mention", "workspace"],
+    triggers: [
+      {
+        mode: "mention",
+        prefix: trigger,
+      },
+    ],
+    binding: {
+      skillId: "image_generate",
+      executionKind: "task_queue",
+      requestDefaults,
+    },
+    renderContract: {
+      resultKind: "image_gallery",
+      detailKind: "media_detail",
+      supportsStreaming: true,
+      supportsTimeline: true,
+    },
   };
 }
 
@@ -472,8 +617,10 @@ function parseRenderContract(
     return undefined;
   }
 
-  const resultKind = normalizeText(value.resultKind);
-  const detailKind = normalizeText(value.detailKind);
+  const resultKind =
+    normalizeText(value.resultKind) ?? normalizeText(value.result_kind);
+  const detailKind =
+    normalizeText(value.detailKind) ?? normalizeText(value.detail_kind);
   if (
     resultKind !== "text" &&
     resultKind !== "tool_timeline" &&
@@ -501,11 +648,15 @@ function parseRenderContract(
     supportsStreaming:
       typeof value.supportsStreaming === "boolean"
         ? value.supportsStreaming
-        : undefined,
+        : typeof value.supports_streaming === "boolean"
+          ? value.supports_streaming
+          : undefined,
     supportsTimeline:
       typeof value.supportsTimeline === "boolean"
         ? value.supportsTimeline
-        : undefined,
+        : typeof value.supports_timeline === "boolean"
+          ? value.supports_timeline
+          : undefined,
   };
 }
 
@@ -597,6 +748,9 @@ function buildCatalogEntryMergeKeys(entry: SkillCatalogEntry): string[] {
 
   if (entry.kind === "command") {
     keys.push(`command:${entry.commandKey.trim().toLowerCase()}`);
+    entry.triggers.forEach((trigger) => {
+      keys.push(`command-trigger:${trigger.prefix.trim().toLowerCase()}`);
+    });
   } else if (entry.kind === "scene") {
     keys.push(`scene:${entry.sceneKey.trim().toLowerCase()}`);
   } else if (entry.kind === "skill") {
@@ -1121,7 +1275,8 @@ function parseSkillCatalogEntry(value: unknown): SkillCatalogEntry | null {
   );
 
   if (kind === "command") {
-    const commandKey = normalizeText(value.commandKey);
+    const commandKey =
+      normalizeText(value.commandKey) ?? normalizeText(value.command_key);
     const triggers = Array.isArray(value.triggers)
       ? value.triggers
           .map((trigger) => parseSkillCatalogCommandTrigger(trigger))
@@ -1144,9 +1299,12 @@ function parseSkillCatalogEntry(value: unknown): SkillCatalogEntry | null {
               value.binding.intent_confirmation,
           );
           return {
-            skillId: normalizeText(value.binding.skillId) ?? undefined,
+            skillId:
+              normalizeText(value.binding.skillId) ??
+              normalizeText(value.binding.skill_id) ??
+              undefined,
             executionKind: parseCommandBindingExecutionKind(
-              value.binding.executionKind,
+              value.binding.executionKind ?? value.binding.execution_kind,
             ),
             ...(requestDefaults ? { requestDefaults } : {}),
             ...(intentConfirmation ? { intentConfirmation } : {}),
@@ -1165,7 +1323,9 @@ function parseSkillCatalogEntry(value: unknown): SkillCatalogEntry | null {
       homePresentation,
       triggers,
       binding,
-      renderContract: parseRenderContract(value.renderContract),
+      renderContract: parseRenderContract(
+        value.renderContract ?? value.render_contract,
+      ),
     };
   }
 
@@ -1222,6 +1382,179 @@ function parseSkillCatalogEntry(value: unknown): SkillCatalogEntry | null {
   }
 
   return null;
+}
+
+function readStoredLocalModelBoundImageCommandEntries(): SkillCatalogCommandEntry[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(
+      LOCAL_MODEL_BOUND_IMAGE_COMMAND_STORAGE_KEY,
+    );
+    if (!raw) {
+      return [];
+    }
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .map((item) => parseSkillCatalogEntry(item))
+      .filter(
+        (entry): entry is SkillCatalogCommandEntry =>
+          entry?.kind === "command" && isModelBoundImageCommandEntry(entry),
+      );
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredLocalModelBoundImageCommandEntries(
+  entries: SkillCatalogCommandEntry[],
+): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      LOCAL_MODEL_BOUND_IMAGE_COMMAND_STORAGE_KEY,
+      JSON.stringify(entries),
+    );
+  } catch {
+    // ignore local overlay persistence errors
+  }
+}
+
+function buildCommandEntryTriggerKeys(
+  entry: SkillCatalogCommandEntry,
+): string[] {
+  return entry.triggers.map((trigger) => normalizeCommandToken(trigger.prefix));
+}
+
+function shouldReplaceCommandEntry(
+  existing: SkillCatalogCommandEntry,
+  incoming: SkillCatalogCommandEntry,
+): boolean {
+  if (existing.id === incoming.id) {
+    return true;
+  }
+  if (
+    normalizeCommandToken(existing.commandKey) ===
+    normalizeCommandToken(incoming.commandKey)
+  ) {
+    return true;
+  }
+
+  const incomingTriggers = new Set(buildCommandEntryTriggerKeys(incoming));
+  if (
+    buildCommandEntryTriggerKeys(existing).some((trigger) =>
+      incomingTriggers.has(trigger),
+    )
+  ) {
+    return true;
+  }
+
+  const existingDefaults = readCommandRequestDefaults(existing);
+  const incomingDefaults = readCommandRequestDefaults(incoming);
+  return (
+    normalizeCommandToken(
+      existingDefaults.providerId ?? existingDefaults.provider_id ?? "",
+    ) ===
+      normalizeCommandToken(
+        incomingDefaults.providerId ?? incomingDefaults.provider_id ?? "",
+      ) &&
+    normalizeCommandToken(
+      existingDefaults.model ??
+        existingDefaults.modelId ??
+        existingDefaults.model_id ??
+        "",
+    ) ===
+      normalizeCommandToken(
+        incomingDefaults.model ??
+          incomingDefaults.modelId ??
+          incomingDefaults.model_id ??
+          "",
+      )
+  );
+}
+
+function mergeLocalModelBoundImageCommandEntries(
+  catalog: SkillCatalog,
+): SkillCatalog {
+  const localEntries = readStoredLocalModelBoundImageCommandEntries();
+  if (localEntries.length === 0) {
+    return catalog;
+  }
+
+  return normalizeSkillCatalog({
+    ...catalog,
+    entries: [
+      ...catalog.entries.filter(
+        (entry) =>
+          entry.kind !== "command" ||
+          !localEntries.some((localEntry) =>
+            shouldReplaceCommandEntry(entry, localEntry),
+          ),
+      ),
+      ...localEntries,
+    ],
+  });
+}
+
+export function listLocalModelBoundImageCommandEntries(): SkillCatalogCommandEntry[] {
+  return readStoredLocalModelBoundImageCommandEntries().map((entry) =>
+    cloneJsonValue(entry),
+  );
+}
+
+export function upsertLocalModelBoundImageCommandBinding(
+  input: ModelBoundImageCommandBindingInput,
+): SkillCatalogCommandEntry {
+  const entry = buildModelBoundImageCommandEntry(input);
+  const nextEntries = [
+    ...readStoredLocalModelBoundImageCommandEntries().filter(
+      (existing) => !shouldReplaceCommandEntry(existing, entry),
+    ),
+    entry,
+  ];
+  writeStoredLocalModelBoundImageCommandEntries(nextEntries);
+  emitSkillCatalogChanged("manual_override");
+  return cloneJsonValue(entry);
+}
+
+export function findModelBoundImageCommandEntryForModel(
+  catalog: SkillCatalog,
+  providerId: string,
+  modelId: string,
+): SkillCatalogCommandEntry | null {
+  const normalizedProviderId = normalizeCommandToken(providerId);
+  const normalizedModelId = normalizeCommandToken(modelId);
+  if (!normalizedProviderId || !normalizedModelId) {
+    return null;
+  }
+
+  return (
+    listSkillCatalogCommandEntries(catalog).find((entry) => {
+      if (!isModelBoundImageCommandEntry(entry)) {
+        return false;
+      }
+
+      const defaults = readCommandRequestDefaults(entry);
+      return (
+        normalizeCommandToken(
+          defaults.providerId ?? defaults.provider_id ?? "",
+        ) === normalizedProviderId &&
+        normalizeCommandToken(
+          defaults.model ?? defaults.modelId ?? defaults.model_id ?? "",
+        ) === normalizedModelId
+      );
+    }) ?? null
+  );
 }
 
 function mergeSeededLocalCustomSkillCatalogItems(
@@ -1523,18 +1856,18 @@ export function getCurrentSkillCatalogSnapshot(): SkillCatalog {
   const cached = readCachedSkillCatalog();
 
   if (!cached) {
-    return seeded;
+    return mergeLocalModelBoundImageCommandEntries(seeded);
   }
 
   if (!isSeededCatalogCompatibleWithActiveTenant(cached)) {
-    return seeded;
+    return mergeLocalModelBoundImageCommandEntries(seeded);
   }
 
   if (shouldRefreshSeededSkillCatalog(cached, seeded)) {
-    return seeded;
+    return mergeLocalModelBoundImageCommandEntries(seeded);
   }
 
-  return cached;
+  return mergeLocalModelBoundImageCommandEntries(cached);
 }
 
 export function listSkillCatalogEntries(
@@ -1594,7 +1927,7 @@ export function saveSkillCatalog(
     } else {
       clearStoredBaseSetupPackageSnapshot();
     }
-    return normalizedInput.catalog;
+    return mergeLocalModelBoundImageCommandEntries(normalizedInput.catalog);
   }
 
   persistSkillCatalog(normalizedInput.catalog);
@@ -1604,7 +1937,7 @@ export function saveSkillCatalog(
     clearStoredBaseSetupPackageSnapshot();
   }
   emitSkillCatalogChanged(source);
-  return normalizedInput.catalog;
+  return mergeLocalModelBoundImageCommandEntries(normalizedInput.catalog);
 }
 
 export function applyServerSyncedSkillCatalog(
@@ -1615,14 +1948,14 @@ export function applyServerSyncedSkillCatalog(
     ? catalog
     : normalizeSkillCatalogInput(catalog);
   if (!normalizedInput) {
-    return getSeededSkillCatalog();
+    return mergeLocalModelBoundImageCommandEntries(getSeededSkillCatalog());
   }
 
   const current = readCachedSkillCatalog();
   if (shouldIgnoreServerSyncedCatalog(current, normalizedInput.catalog)) {
     return current && isSeededCatalogCompatibleWithActiveTenant(current)
-      ? current
-      : getSeededSkillCatalog();
+      ? mergeLocalModelBoundImageCommandEntries(current)
+      : mergeLocalModelBoundImageCommandEntries(getSeededSkillCatalog());
   }
 
   if (current && isSameSkillCatalog(current, normalizedInput.catalog)) {
@@ -1632,7 +1965,7 @@ export function applyServerSyncedSkillCatalog(
     } else {
       clearStoredBaseSetupPackageSnapshot();
     }
-    return normalizedInput.catalog;
+    return mergeLocalModelBoundImageCommandEntries(normalizedInput.catalog);
   }
 
   persistSkillCatalog(normalizedInput.catalog);
@@ -1642,7 +1975,7 @@ export function applyServerSyncedSkillCatalog(
     clearStoredBaseSetupPackageSnapshot();
   }
   emitSkillCatalogChanged(source);
-  return normalizedInput.catalog;
+  return mergeLocalModelBoundImageCommandEntries(normalizedInput.catalog);
 }
 
 export function clearSkillCatalogCache(): void {
@@ -1676,7 +2009,10 @@ export function subscribeSkillCatalogChanged(
   };
 
   const storageHandler = (event: StorageEvent) => {
-    if (event.key !== SKILL_CATALOG_STORAGE_KEY) {
+    if (
+      event.key !== SKILL_CATALOG_STORAGE_KEY &&
+      event.key !== LOCAL_MODEL_BOUND_IMAGE_COMMAND_STORAGE_KEY
+    ) {
       return;
     }
     callback(event.newValue ? "manual_override" : "cache_clear");
@@ -1737,21 +2073,21 @@ export async function getSkillCatalog(): Promise<SkillCatalog> {
   const cached = readCachedSkillCatalog();
   if (cached) {
     if (!isSeededCatalogCompatibleWithActiveTenant(cached)) {
-      return seeded;
+      return mergeLocalModelBoundImageCommandEntries(seeded);
     }
 
     if (shouldRefreshSeededSkillCatalog(cached, seeded)) {
       persistSkillCatalog(seeded);
       clearStoredBaseSetupPackageSnapshot();
-      return seeded;
+      return mergeLocalModelBoundImageCommandEntries(seeded);
     }
 
-    return cached;
+    return mergeLocalModelBoundImageCommandEntries(cached);
   }
 
   persistSkillCatalog(seeded);
   clearStoredBaseSetupPackageSnapshot();
-  return seeded;
+  return mergeLocalModelBoundImageCommandEntries(seeded);
 }
 
 export async function refreshSkillCatalogFromRemote(): Promise<SkillCatalog | null> {

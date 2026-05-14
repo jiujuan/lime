@@ -190,8 +190,8 @@ const MarkdownContainer = styled.div`
 
   th,
   td {
-    border-right: 1px solid rgba(167, 243, 208, 0.42);
-    border-bottom: 1px solid rgba(167, 243, 208, 0.42);
+    border-right: 1px solid var(--lime-surface-border, hsl(var(--border)));
+    border-bottom: 1px solid var(--lime-surface-border, hsl(var(--border)));
     padding: 0.45rem 0.65rem;
     vertical-align: top;
     text-align: left;
@@ -201,10 +201,10 @@ const MarkdownContainer = styled.div`
     font-weight: 600;
     background: linear-gradient(
       180deg,
-      rgba(220, 252, 231, 0.45) 0%,
-      rgba(220, 252, 231, 0.8) 100%
+      var(--lime-brand-soft, hsl(var(--muted))) 0%,
+      var(--lime-surface-soft, hsl(var(--secondary))) 100%
     );
-    color: #14532d;
+    color: var(--lime-brand-strong, hsl(var(--foreground)));
     white-space: nowrap;
   }
 
@@ -217,7 +217,7 @@ const MarkdownContainer = styled.div`
   }
 
   tbody tr:nth-child(even) td {
-    background: rgba(220, 252, 231, 0.15);
+    background: var(--lime-surface-soft, hsl(var(--secondary) / 0.5));
   }
 
   a {
@@ -256,12 +256,13 @@ const MarkdownDivider = styled.hr`
 const MarkdownQuoteCard = styled.blockquote`
   margin: 0 0 0.95em;
   padding: 0;
-  border: 1px solid rgba(167, 243, 208, 0.5);
+  border: 1px solid
+    var(--lime-surface-border-strong, hsl(var(--border)));
   border-radius: 20px;
   background: linear-gradient(
     180deg,
-    hsl(var(--background)) 0%,
-    rgba(220, 252, 231, 0.3) 100%
+    var(--lime-surface, hsl(var(--background))) 0%,
+    var(--lime-surface-soft, hsl(var(--secondary) / 0.5)) 100%
   );
   box-shadow: 0 14px 34px -30px rgba(15, 23, 42, 0.18);
   overflow: hidden;
@@ -447,9 +448,10 @@ const MarkdownBlockActionButton = styled.button`
 const MarkdownTableScroll = styled.div`
   margin: 0 0 0.82em;
   overflow-x: auto;
-  border: 1px solid rgba(167, 243, 208, 0.6);
+  border: 1px solid
+    var(--lime-surface-border-strong, hsl(var(--border)));
   border-radius: 14px;
-  background: hsl(var(--background));
+  background: var(--lime-surface, hsl(var(--background)));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
 `;
 
@@ -492,6 +494,8 @@ interface MarkdownRendererProps {
   onA2UISubmit?: (formData: A2UIFormData) => void;
   /** 是否渲染消息内联 A2UI */
   renderA2UIInline?: boolean;
+  /** 历史消息中的 A2UI 只允许回显，不能再次提交。 */
+  readOnlyA2UI?: boolean;
   /** 是否折叠代码块（当画布打开时） */
   collapseCodeBlocks?: boolean;
   /** 按代码块决定是否折叠 */
@@ -662,6 +666,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
     baseFilePath,
     onA2UISubmit,
     renderA2UIInline = true,
+    readOnlyA2UI = false,
     collapseCodeBlocks = false,
     shouldCollapseCodeBlock,
     onCodeBlockClick,
@@ -1132,12 +1137,18 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
                     const parsed = parseA2UIJson(codeContent);
 
                     if (parsed) {
+                      const response = readOnlyA2UI
+                        ? { ...parsed, submitAction: undefined }
+                        : parsed;
                       // 解析成功，直接渲染 A2UI 组件（不包裹在 pre 中）
                       return (
                         <A2UITaskCard
-                          response={parsed}
-                          onSubmit={onA2UISubmit}
+                          response={response}
+                          onSubmit={readOnlyA2UI ? undefined : onA2UISubmit}
                           preset={CHAT_A2UI_TASK_CARD_PRESET}
+                          compact={true}
+                          className="max-w-[760px]"
+                          preview={readOnlyA2UI}
                         />
                       );
                     } else {
@@ -1146,6 +1157,8 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
                         <A2UITaskLoadingCard
                           preset={CHAT_A2UI_TASK_CARD_PRESET}
                           subtitle="正在解析结构化问题，请稍等。"
+                          compact={true}
+                          className="max-w-[760px]"
                         />
                       );
                     }

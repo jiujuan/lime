@@ -81,6 +81,7 @@ pub struct WorkspaceExecutionPermissionInput<'a> {
     pub surface: WorkspaceToolSurface,
     pub workspace_root: &'a str,
     pub auto_mode: bool,
+    pub bypass_restrictions: bool,
     pub execution_policy_input: ToolExecutionResolverInput<'a>,
 }
 
@@ -203,20 +204,22 @@ pub fn should_auto_approve_tool_warnings(
 pub fn build_workspace_execution_permissions(
     input: WorkspaceExecutionPermissionInput<'_>,
 ) -> Vec<ToolPermission> {
-    let patterns = build_workspace_permission_patterns(input.workspace_root, input.auto_mode);
+    let unrestricted = input.auto_mode || input.bypass_restrictions;
+    let patterns = build_workspace_permission_patterns(input.workspace_root, unrestricted);
     let mut permissions = tool_catalog_entries_for_surface(input.surface)
         .into_iter()
         .filter_map(|entry| {
             build_parameter_restricted_permission(
                 entry.name,
                 input.auto_mode,
+                input.bypass_restrictions,
                 &patterns,
                 input.execution_policy_input,
             )
         })
         .collect::<Vec<_>>();
 
-    if input.auto_mode {
+    if unrestricted {
         permissions.push(ToolPermission {
             tool: "*".to_string(),
             allowed: true,
@@ -224,7 +227,11 @@ pub fn build_workspace_execution_permissions(
             conditions: Vec::new(),
             parameter_restrictions: Vec::new(),
             scope: PermissionScope::Session,
-            reason: Some("Auto 模式：允许所有工具与参数".to_string()),
+            reason: Some(if input.bypass_restrictions {
+                "full-access：允许所有工具与参数".to_string()
+            } else {
+                "Auto 模式：允许所有工具与参数".to_string()
+            }),
             expires_at: None,
             metadata: HashMap::new(),
         });
@@ -493,6 +500,7 @@ fn build_workspace_permission_patterns(
 fn build_parameter_restricted_permission(
     tool_name: &str,
     auto_mode: bool,
+    bypass_restrictions: bool,
     patterns: &WorkspacePermissionPatterns,
     execution_policy_input: ToolExecutionResolverInput<'_>,
 ) -> Option<ToolPermission> {
@@ -502,7 +510,8 @@ fn build_parameter_restricted_permission(
     }
 
     let policy = resolve_tool_execution_policy(tool_name, execution_policy_input);
-    let parameter_restrictions = if auto_mode {
+    let unrestricted = auto_mode || bypass_restrictions;
+    let parameter_restrictions = if unrestricted {
         Vec::new()
     } else {
         build_parameter_restrictions(tool_name, policy.restriction_profile, patterns)
@@ -519,6 +528,7 @@ fn build_parameter_restricted_permission(
             tool_name,
             policy.restriction_profile,
             auto_mode,
+            bypass_restrictions,
         )),
         expires_at: None,
         metadata: HashMap::new(),
@@ -627,7 +637,30 @@ fn permission_reason(
     tool_name: &str,
     profile: ToolExecutionRestrictionProfile,
     auto_mode: bool,
+    bypass_restrictions: bool,
 ) -> String {
+    if bypass_restrictions {
+        return match profile {
+            ToolExecutionRestrictionProfile::WorkspaceShellCommand => {
+                format!("full-access：允许 {tool_name} 执行任意命令")
+            }
+            ToolExecutionRestrictionProfile::SafeHttpsUrlRequired => {
+                format!("full-access：允许 {tool_name} 访问任意 URL")
+            }
+            ToolExecutionRestrictionProfile::AnalyzeImageInput => {
+                format!("full-access：允许 {tool_name} 分析任意图片路径或 base64")
+            }
+            ToolExecutionRestrictionProfile::WorkspaceAbsolutePathRequired => {
+                format!("full-access：允许 {tool_name} 访问任意绝对路径")
+            }
+            ToolExecutionRestrictionProfile::WorkspacePathRequired
+            | ToolExecutionRestrictionProfile::WorkspacePathOptional => {
+                format!("full-access：允许 {tool_name} 访问任意路径")
+            }
+            ToolExecutionRestrictionProfile::None => format!("full-access：允许工具 {tool_name}"),
+        };
+    }
+
     if auto_mode {
         return match profile {
             ToolExecutionRestrictionProfile::WorkspaceShellCommand => {
@@ -685,6 +718,26 @@ mod tests {
     };
     use serde_json::json;
 
+    fn assert_bash_allows_restricted_command(permissions: Vec<ToolPermission>) {
+        let mut manager = aster::permission::ToolPermissionManager::new(None);
+        for permission in permissions {
+            manager.add_permission(permission, PermissionScope::Session);
+        }
+        let params = HashMap::from([(
+            "command".to_string(),
+            json!("test -f .baoyu-skills/baoyu-xhs-images/EXTEND.md"),
+        )]);
+        let context = aster::permission::PermissionContext {
+            working_directory: std::path::PathBuf::from("/tmp/workspace"),
+            session_id: "session-full-access".to_string(),
+            timestamp: chrono::Utc::now().timestamp(),
+            user: None,
+            environment: HashMap::new(),
+            metadata: HashMap::new(),
+        };
+        assert!(manager.is_allowed("Bash", &params, &context).allowed);
+    }
+
     #[test]
     fn test_tool_execution_policy_marks_bash_as_sandboxed_shell_risk() {
         let policy = tool_execution_policy("Bash");
@@ -709,6 +762,7 @@ mod tests {
                 surface: WorkspaceToolSurface::core(),
                 workspace_root: "/tmp/workspace",
                 auto_mode: false,
+                bypass_restrictions: false,
                 execution_policy_input: ToolExecutionResolverInput::default(),
             });
 
@@ -744,6 +798,7 @@ mod tests {
                 surface: WorkspaceToolSurface::core(),
                 workspace_root: "/tmp/workspace",
                 auto_mode: true,
+                bypass_restrictions: false,
                 execution_policy_input: ToolExecutionResolverInput::default(),
             });
 
@@ -755,6 +810,31 @@ mod tests {
         assert!(permissions
             .iter()
             .any(|permission| permission.tool == "*" && permission.allowed));
+
+        assert_bash_allows_restricted_command(permissions);
+    }
+
+    #[test]
+    fn test_build_workspace_execution_permissions_full_access_bypasses_shell_restrictions() {
+        let permissions =
+            build_workspace_execution_permissions(WorkspaceExecutionPermissionInput {
+                surface: WorkspaceToolSurface::core(),
+                workspace_root: "/tmp/workspace",
+                auto_mode: false,
+                bypass_restrictions: true,
+                execution_policy_input: ToolExecutionResolverInput::default(),
+            });
+
+        let bash = permissions
+            .iter()
+            .find(|permission| permission.tool == "Bash")
+            .expect("Bash permission should exist");
+        assert!(bash.parameter_restrictions.is_empty());
+        assert!(permissions
+            .iter()
+            .any(|permission| permission.tool == "*" && permission.allowed));
+
+        assert_bash_allows_restricted_command(permissions);
     }
 
     #[test]
@@ -933,6 +1013,7 @@ mod tests {
                 surface: WorkspaceToolSurface::core(),
                 workspace_root: "/tmp/workspace",
                 auto_mode: false,
+                bypass_restrictions: false,
                 execution_policy_input: ToolExecutionResolverInput {
                     persisted_policy: None,
                     request_metadata: Some(&request_metadata),

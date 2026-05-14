@@ -1,7 +1,7 @@
 import type { SkillCatalogSceneEntry } from "@/lib/api/skillCatalog";
 import type { Project } from "@/lib/api/project";
 import type { A2UIFormData, A2UIResponse } from "@/lib/workspace/a2ui";
-import agentSourceResource from "@/i18n/resources/zh-CN/agent.json";
+import { agentZhCNResource as agentSourceResource } from "@/i18n/agentResources";
 import type {
   ServiceSkillItem,
   ServiceSkillSlotDefinition,

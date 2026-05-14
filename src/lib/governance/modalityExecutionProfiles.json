@@ -6,18 +6,29 @@
     {
       "profile_key": "image_generation_profile",
       "lifecycle": "current",
-      "supported_contracts": ["image_generation"],
-      "model_role_slots": ["image_generation_model"],
+      "supported_contracts": [
+        "image_generation"
+      ],
+      "model_role_slots": [
+        "image_generation_model"
+      ],
       "permission_profile_keys": [
         "write_artifacts",
         "media_upload",
         "ask_user_question"
       ],
-      "executor_adapter_keys": ["skill:image_generate"],
+      "executor_adapter_keys": [
+        "skill:image_generate"
+      ],
       "artifact_policy": {
         "write_mode": "domain_task_artifact",
-        "artifact_kinds": ["image_task", "image_output"],
-        "viewer_surfaces": ["image_workbench"]
+        "artifact_kinds": [
+          "image_task",
+          "image_output"
+        ],
+        "viewer_surfaces": [
+          "image_workbench"
+        ]
       },
       "limecore_policy_refs": [
         "model_catalog",
@@ -46,25 +57,39 @@
         "executor_kind",
         "artifact_kind"
       ],
-      "notes": "图片生成 profile 只允许写 image_task/image_output，入口不得直接写 artifact 或退回 legacy CLI。"
+      "notes": "图片生成 profile 只允许写 image_task/image_output；通用 @配图 与 catalog / Lime Cloud 声明的图片模型 @命令都必须先进入 harness.image_skill_launch -> Skill(image_generate) 主链，再由工具创建标准 task artifact。未注册入口不得直接写 artifact 或退回 legacy CLI。"
     },
     {
       "profile_key": "browser_control_profile",
       "lifecycle": "current",
-      "supported_contracts": ["browser_control"],
-      "model_role_slots": ["browser_reasoning_model"],
+      "supported_contracts": [
+        "browser_control"
+      ],
+      "model_role_slots": [
+        "browser_reasoning_model"
+      ],
       "permission_profile_keys": [
         "browser_control",
         "web_search",
         "ask_user_question"
       ],
-      "executor_adapter_keys": ["browser:browser_assist"],
+      "executor_adapter_keys": [
+        "browser:browser_assist"
+      ],
       "artifact_policy": {
         "write_mode": "runtime_observation_trace",
-        "artifact_kinds": ["browser_session", "browser_snapshot"],
-        "viewer_surfaces": ["browser_replay_viewer"]
+        "artifact_kinds": [
+          "browser_session",
+          "browser_snapshot"
+        ],
+        "viewer_surfaces": [
+          "browser_replay_viewer"
+        ]
       },
-      "limecore_policy_refs": ["tenant_feature_flags", "gateway_policy"],
+      "limecore_policy_refs": [
+        "tenant_feature_flags",
+        "gateway_policy"
+      ],
       "user_lock_policy": "honor_explicit_model_lock_with_capability_check",
       "fallback_behavior": [
         "ask_user_on_browser_permission_denied",
@@ -93,20 +118,33 @@
     {
       "profile_key": "pdf_extract_profile",
       "lifecycle": "current",
-      "supported_contracts": ["pdf_extract"],
-      "model_role_slots": ["base_model"],
+      "supported_contracts": [
+        "pdf_extract"
+      ],
+      "model_role_slots": [
+        "base_model"
+      ],
       "permission_profile_keys": [
         "read_files",
         "write_artifacts",
         "ask_user_question"
       ],
-      "executor_adapter_keys": ["skill:pdf_read"],
+      "executor_adapter_keys": [
+        "skill:pdf_read"
+      ],
       "artifact_policy": {
         "write_mode": "domain_document_artifact",
-        "artifact_kinds": ["pdf_extract", "report_document"],
-        "viewer_surfaces": ["document_viewer"]
+        "artifact_kinds": [
+          "pdf_extract",
+          "report_document"
+        ],
+        "viewer_surfaces": [
+          "document_viewer"
+        ]
       },
-      "limecore_policy_refs": ["tenant_feature_flags"],
+      "limecore_policy_refs": [
+        "tenant_feature_flags"
+      ],
       "user_lock_policy": "honor_explicit_model_lock_with_capability_check",
       "fallback_behavior": [
         "ask_user_on_file_permission_denied",
@@ -133,19 +171,30 @@
     {
       "profile_key": "voice_generation_profile",
       "lifecycle": "current",
-      "supported_contracts": ["voice_generation"],
-      "model_role_slots": ["voice_generation_model"],
+      "supported_contracts": [
+        "voice_generation"
+      ],
+      "model_role_slots": [
+        "voice_generation_model"
+      ],
       "permission_profile_keys": [
         "write_artifacts",
         "media_upload",
         "service_api_call",
         "ask_user_question"
       ],
-      "executor_adapter_keys": ["service_skill:voice_runtime"],
+      "executor_adapter_keys": [
+        "service_skill:voice_runtime"
+      ],
       "artifact_policy": {
         "write_mode": "domain_task_artifact",
-        "artifact_kinds": ["audio_task", "audio_output"],
-        "viewer_surfaces": ["audio_player"]
+        "artifact_kinds": [
+          "audio_task",
+          "audio_output"
+        ],
+        "viewer_surfaces": [
+          "audio_player"
+        ]
       },
       "limecore_policy_refs": [
         "client_scenes",
@@ -179,8 +228,12 @@
     {
       "profile_key": "audio_transcription_profile",
       "lifecycle": "current",
-      "supported_contracts": ["audio_transcription"],
-      "model_role_slots": ["audio_transcription_model"],
+      "supported_contracts": [
+        "audio_transcription"
+      ],
+      "model_role_slots": [
+        "audio_transcription_model"
+      ],
       "permission_profile_keys": [
         "read_files",
         "write_artifacts",
@@ -188,11 +241,18 @@
         "service_api_call",
         "ask_user_question"
       ],
-      "executor_adapter_keys": ["skill:transcription_generate"],
+      "executor_adapter_keys": [
+        "skill:transcription_generate"
+      ],
       "artifact_policy": {
         "write_mode": "domain_task_artifact",
-        "artifact_kinds": ["transcript"],
-        "viewer_surfaces": ["transcript_viewer", "document_viewer"]
+        "artifact_kinds": [
+          "transcript"
+        ],
+        "viewer_surfaces": [
+          "transcript_viewer",
+          "document_viewer"
+        ]
       },
       "limecore_policy_refs": [
         "model_catalog",
@@ -227,18 +287,31 @@
     {
       "profile_key": "web_research_profile",
       "lifecycle": "current",
-      "supported_contracts": ["web_research"],
-      "model_role_slots": ["report_generation_model"],
+      "supported_contracts": [
+        "web_research"
+      ],
+      "model_role_slots": [
+        "report_generation_model"
+      ],
       "permission_profile_keys": [
         "web_search",
         "write_artifacts",
         "ask_user_question"
       ],
-      "executor_adapter_keys": ["skill:research"],
+      "executor_adapter_keys": [
+        "skill:research"
+      ],
       "artifact_policy": {
         "write_mode": "timeline_backed_document_artifact",
-        "artifact_kinds": ["report_document", "webpage_artifact"],
-        "viewer_surfaces": ["document_viewer", "report_viewer", "webpage_viewer"]
+        "artifact_kinds": [
+          "report_document",
+          "webpage_artifact"
+        ],
+        "viewer_surfaces": [
+          "document_viewer",
+          "report_viewer",
+          "webpage_viewer"
+        ]
       },
       "limecore_policy_refs": [
         "gateway_policy",
@@ -271,20 +344,35 @@
     {
       "profile_key": "text_transform_profile",
       "lifecycle": "current",
-      "supported_contracts": ["text_transform"],
-      "model_role_slots": ["base_model"],
+      "supported_contracts": [
+        "text_transform"
+      ],
+      "model_role_slots": [
+        "base_model"
+      ],
       "permission_profile_keys": [
         "read_files",
         "write_artifacts",
         "ask_user_question"
       ],
-      "executor_adapter_keys": ["skill:text_transform"],
+      "executor_adapter_keys": [
+        "skill:text_transform"
+      ],
       "artifact_policy": {
         "write_mode": "document_or_compat_file_artifact",
-        "artifact_kinds": ["report_document", "generic_file"],
-        "viewer_surfaces": ["document_viewer", "generic_file_viewer"]
+        "artifact_kinds": [
+          "report_document",
+          "generic_file"
+        ],
+        "viewer_surfaces": [
+          "document_viewer",
+          "generic_file_viewer"
+        ]
       },
-      "limecore_policy_refs": ["tenant_feature_flags", "model_catalog"],
+      "limecore_policy_refs": [
+        "tenant_feature_flags",
+        "model_catalog"
+      ],
       "user_lock_policy": "honor_explicit_model_lock_with_capability_check",
       "fallback_behavior": [
         "surface_file_unavailable",
@@ -314,24 +402,35 @@
       "lifecycle": "current",
       "executor_kind": "skill",
       "binding_key": "image_generate",
-      "supported_contracts": ["image_generation"],
+      "supported_contracts": [
+        "image_generation"
+      ],
       "supports_progress": true,
       "supports_cancel": true,
       "supports_resume": false,
       "supports_artifact": true,
-      "artifact_output_kinds": ["image_task", "image_output"],
+      "artifact_output_kinds": [
+        "image_task",
+        "image_output"
+      ],
       "permission_requirements": [
         "write_artifacts",
         "media_upload",
         "ask_user_question"
       ],
-      "credential_requirements": ["provider_offer", "model_catalog"],
+      "credential_requirements": [
+        "provider_offer",
+        "model_catalog"
+      ],
       "failure_mapping": [
         "permission_denied",
         "capability_gap",
         "executor_error"
       ],
-      "evidence_events": ["executor_invoked", "artifact_written"],
+      "evidence_events": [
+        "executor_invoked",
+        "artifact_written"
+      ],
       "notes": "Image Skill 负责写标准 image task/output artifact，不支持 resume。"
     },
     {
@@ -339,12 +438,17 @@
       "lifecycle": "current",
       "executor_kind": "browser",
       "binding_key": "browser_assist",
-      "supported_contracts": ["browser_control"],
+      "supported_contracts": [
+        "browser_control"
+      ],
       "supports_progress": true,
       "supports_cancel": true,
       "supports_resume": true,
       "supports_artifact": true,
-      "artifact_output_kinds": ["browser_session", "browser_snapshot"],
+      "artifact_output_kinds": [
+        "browser_session",
+        "browser_snapshot"
+      ],
       "permission_requirements": [
         "browser_control",
         "web_search",
@@ -369,12 +473,17 @@
       "lifecycle": "current",
       "executor_kind": "skill",
       "binding_key": "pdf_read",
-      "supported_contracts": ["pdf_extract"],
+      "supported_contracts": [
+        "pdf_extract"
+      ],
       "supports_progress": true,
       "supports_cancel": true,
       "supports_resume": false,
       "supports_artifact": true,
-      "artifact_output_kinds": ["pdf_extract", "report_document"],
+      "artifact_output_kinds": [
+        "pdf_extract",
+        "report_document"
+      ],
       "permission_requirements": [
         "read_files",
         "write_artifacts",
@@ -399,25 +508,35 @@
       "lifecycle": "current",
       "executor_kind": "service_skill",
       "binding_key": "voice_runtime",
-      "supported_contracts": ["voice_generation"],
+      "supported_contracts": [
+        "voice_generation"
+      ],
       "supports_progress": true,
       "supports_cancel": true,
       "supports_resume": false,
       "supports_artifact": true,
-      "artifact_output_kinds": ["audio_task", "audio_output"],
+      "artifact_output_kinds": [
+        "audio_task",
+        "audio_output"
+      ],
       "permission_requirements": [
         "write_artifacts",
         "media_upload",
         "service_api_call",
         "ask_user_question"
       ],
-      "credential_requirements": ["provider_offer"],
+      "credential_requirements": [
+        "provider_offer"
+      ],
       "failure_mapping": [
         "permission_denied",
         "capability_gap",
         "executor_error"
       ],
-      "evidence_events": ["executor_invoked", "artifact_written"],
+      "evidence_events": [
+        "executor_invoked",
+        "artifact_written"
+      ],
       "notes": "Voice runtime 通过本地 ServiceSkill/worker 写 audio_task/audio_output，不默认云执行。"
     },
     {
@@ -425,12 +544,16 @@
       "lifecycle": "current",
       "executor_kind": "skill",
       "binding_key": "transcription_generate",
-      "supported_contracts": ["audio_transcription"],
+      "supported_contracts": [
+        "audio_transcription"
+      ],
       "supports_progress": true,
       "supports_cancel": true,
       "supports_resume": false,
       "supports_artifact": true,
-      "artifact_output_kinds": ["transcript"],
+      "artifact_output_kinds": [
+        "transcript"
+      ],
       "permission_requirements": [
         "read_files",
         "write_artifacts",
@@ -438,7 +561,10 @@
         "service_api_call",
         "ask_user_question"
       ],
-      "credential_requirements": ["provider_offer", "model_catalog"],
+      "credential_requirements": [
+        "provider_offer",
+        "model_catalog"
+      ],
       "failure_mapping": [
         "permission_denied",
         "capability_gap",
@@ -457,18 +583,26 @@
       "lifecycle": "current",
       "executor_kind": "skill",
       "binding_key": "research",
-      "supported_contracts": ["web_research"],
+      "supported_contracts": [
+        "web_research"
+      ],
       "supports_progress": true,
       "supports_cancel": true,
       "supports_resume": true,
       "supports_artifact": true,
-      "artifact_output_kinds": ["report_document", "webpage_artifact"],
+      "artifact_output_kinds": [
+        "report_document",
+        "webpage_artifact"
+      ],
       "permission_requirements": [
         "web_search",
         "write_artifacts",
         "ask_user_question"
       ],
-      "credential_requirements": ["gateway_policy", "model_catalog"],
+      "credential_requirements": [
+        "gateway_policy",
+        "model_catalog"
+      ],
       "failure_mapping": [
         "permission_denied",
         "capability_gap",
@@ -487,18 +621,25 @@
       "lifecycle": "current",
       "executor_kind": "skill",
       "binding_key": "text_transform",
-      "supported_contracts": ["text_transform"],
+      "supported_contracts": [
+        "text_transform"
+      ],
       "supports_progress": true,
       "supports_cancel": true,
       "supports_resume": false,
       "supports_artifact": true,
-      "artifact_output_kinds": ["report_document", "generic_file"],
+      "artifact_output_kinds": [
+        "report_document",
+        "generic_file"
+      ],
       "permission_requirements": [
         "read_files",
         "write_artifacts",
         "ask_user_question"
       ],
-      "credential_requirements": ["model_catalog"],
+      "credential_requirements": [
+        "model_catalog"
+      ],
       "failure_mapping": [
         "permission_denied",
         "capability_gap",

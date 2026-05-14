@@ -207,6 +207,151 @@ describe("agentChatHistory", () => {
     });
   });
 
+  it("后端 detail.messages 有正文时仍应从 timeline 恢复 Skill、思考与用户输入", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-skill-timeline-process",
+      created_at: 1,
+      updated_at: 2,
+      history_limit: 40,
+      messages: [
+        {
+          role: "user",
+          timestamp: 1778730438,
+          content: [
+            {
+              type: "text",
+              text: "@analysis 请只用一句话分析：E2E_SKILL_TRACE_1778730404446。",
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          timestamp: 1778730447,
+          content: [
+            {
+              type: "text",
+              text: "该跟踪ID无上下文，无法判断具体含义。",
+            },
+          ],
+        },
+      ],
+      turns: [
+        {
+          id: "turn-skill-process",
+          thread_id: "session-skill-timeline-process",
+          prompt_text:
+            "@analysis 请只用一句话分析：E2E_SKILL_TRACE_1778730404446。",
+          status: "completed",
+          started_at: "2026-05-14T03:47:19.000Z",
+          completed_at: "2026-05-14T03:47:27.000Z",
+          created_at: "2026-05-14T03:47:19.000Z",
+          updated_at: "2026-05-14T03:47:27.000Z",
+        },
+      ],
+      items: [
+        {
+          id: "user:turn-skill-process",
+          thread_id: "session-skill-timeline-process",
+          turn_id: "turn-skill-process",
+          sequence: 1,
+          type: "user_message",
+          content:
+            "@analysis 请只用一句话分析：E2E_SKILL_TRACE_1778730404446。",
+          status: "completed",
+          started_at: "2026-05-14T03:47:19.000Z",
+          completed_at: "2026-05-14T03:47:19.000Z",
+          updated_at: "2026-05-14T03:47:19.000Z",
+        } as never,
+        {
+          id: "skill:turn-skill-process",
+          thread_id: "session-skill-timeline-process",
+          turn_id: "turn-skill-process",
+          sequence: 2,
+          type: "tool_call",
+          tool_name: "Skill",
+          arguments: {
+            skill: "analysis",
+            source: "SKILL.md",
+            version: "1.0.1",
+          },
+          output: "已从 SKILL.md 读取并执行 Skill：analysis",
+          success: true,
+          metadata: {
+            tool_family: "skill",
+            skill_source: "SKILL.md",
+            markdown_content_bytes: 1633,
+            skill_markdown_content:
+              "---\nname: analysis\n---\n\n# Analysis Skill\n\n执行前必须读取本文件。",
+          },
+          status: "completed",
+          started_at: "2026-05-14T03:47:19.100Z",
+          completed_at: "2026-05-14T03:47:27.000Z",
+          updated_at: "2026-05-14T03:47:27.000Z",
+        } as never,
+        {
+          id: "reasoning:turn-skill-process",
+          thread_id: "session-skill-timeline-process",
+          turn_id: "turn-skill-process",
+          sequence: 3,
+          type: "reasoning",
+          text: "先确认 Skill 指令，再基于可见上下文回答。",
+          summary: ["先确认 Skill 指令，再基于可见上下文回答。"],
+          status: "completed",
+          started_at: "2026-05-14T03:47:20.000Z",
+          completed_at: "2026-05-14T03:47:27.000Z",
+          updated_at: "2026-05-14T03:47:27.000Z",
+        } as never,
+        {
+          id: "assistant:turn-skill-process",
+          thread_id: "session-skill-timeline-process",
+          turn_id: "turn-skill-process",
+          sequence: 4,
+          type: "agent_message",
+          text: "该跟踪ID无上下文，无法判断具体含义。",
+          status: "completed",
+          started_at: "2026-05-14T03:47:27.000Z",
+          completed_at: "2026-05-14T03:47:27.000Z",
+          updated_at: "2026-05-14T03:47:27.000Z",
+        } as never,
+      ],
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-skill-timeline-process",
+      { compactCompletedHistory: true },
+    );
+
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+    ]);
+    expect(messages[0]?.content).toBe(
+      "@analysis 请只用一句话分析：E2E_SKILL_TRACE_1778730404446。",
+    );
+    expect(messages[1]).toMatchObject({
+      role: "assistant",
+      content: "该跟踪ID无上下文，无法判断具体含义。",
+      inlineProcessRetention: "skill",
+      thinkingContent: "先确认 Skill 指令，再基于可见上下文回答。",
+    });
+    expect(messages[1]?.contentParts?.map((part) => part.type)).toEqual([
+      "tool_use",
+      "thinking",
+      "text",
+    ]);
+    expect(messages[1]?.toolCalls?.[0]).toMatchObject({
+      name: "Skill",
+      status: "completed",
+      result: expect.objectContaining({
+        output: "已从 SKILL.md 读取并执行 Skill：analysis",
+        metadata: expect.objectContaining({
+          skill_markdown_content: expect.stringContaining("Analysis Skill"),
+        }),
+      }),
+    });
+  });
+
   it("后端 detail.messages 和 timeline 消息都为空时应从真实 turn 恢复用户请求", () => {
     const detail: AsterSessionDetail = {
       id: "session-turn-only",
@@ -310,8 +455,7 @@ describe("agentChatHistory", () => {
         {
           id: "turn-image-history-user-fallback",
           thread_id: "session-image-history-user-fallback",
-          prompt_text:
-            "@配图 画一张三国主要人物的群像海报，电影感，国风，高清",
+          prompt_text: "@配图 画一张三国主要人物的群像海报，电影感，国风，高清",
           status: "completed",
           started_at: "2026-05-06T10:00:00.000Z",
           completed_at: "2026-05-06T10:00:05.000Z",
@@ -815,6 +959,118 @@ describe("agentChatHistory", () => {
     ]);
   });
 
+  it("压缩水合时应从历史纯 JSON 图片工具输出恢复轻卡并清理提交摘要", () => {
+    const imageTaskOutput = JSON.stringify({
+      success: true,
+      task_id: "task-history-json-image-1",
+      task_type: "image_generate",
+      task_family: "image",
+      status: "pending_submit",
+      normalized_status: "pending",
+      path: ".lime/tasks/image_generate/task-history-json-image-1.json",
+      absolute_path:
+        "/workspace/.lime/tasks/image_generate/task-history-json-image-1.json",
+      artifact_path: ".lime/tasks/image_generate/task-history-json-image-1.json",
+      progress: {
+        phase: "pending_submit",
+        message: "任务已创建，等待进入队列",
+      },
+      record: {
+        payload: {
+          prompt: "青柠插画",
+          count: 1,
+          size: "1024x1024",
+          session_id: "session-history-json-image",
+        },
+      },
+    });
+    const detail: AsterSessionDetail = {
+      id: "session-history-json-image",
+      created_at: 1,
+      updated_at: 2,
+      history_limit: 80,
+      messages: [
+        {
+          role: "user",
+          timestamp: 1710000300,
+          content: [{ type: "text", text: "@配图 青柠插画" } as never],
+        },
+        {
+          role: "assistant",
+          timestamp: 1710000301,
+          content: [
+            {
+              type: "tool_request",
+              id: "tool-image-json-1",
+              tool_name: "lime_create_image_generation_task",
+              arguments: {
+                prompt: "青柠插画",
+                count: 1,
+                size: "1024x1024",
+              },
+            } as never,
+          ],
+        },
+        {
+          role: "user",
+          timestamp: 1710000302,
+          content: [
+            {
+              type: "tool_response",
+              id: "tool-image-json-1",
+              output: imageTaskOutput,
+              success: true,
+            } as never,
+          ],
+        },
+        {
+          role: "assistant",
+          timestamp: 1710000303,
+          content: [
+            {
+              type: "output_text",
+              text: [
+                "青柠插画配图任务已提交！",
+                "任务类型：image_generate",
+                "任务 ID：task-history-json-image-1",
+                "任务文件：.lime/tasks/image_generate/task-history-json-image-1.json",
+                "状态：pending_submit",
+              ].join("\n"),
+            } as never,
+          ],
+        },
+      ],
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-history-json-image",
+      { compactCompletedHistory: true },
+    );
+    const assistant = messages.find(
+      (message) => message.role === "assistant",
+    );
+
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+    ]);
+    expect(messages[0]).toMatchObject({
+      role: "user",
+      content: "@配图 青柠插画",
+    });
+    expect(assistant?.content).not.toContain("任务 ID");
+    expect(assistant?.content).not.toContain("pending_submit");
+    expect(assistant?.imageWorkbenchPreview).toMatchObject({
+      taskId: "task-history-json-image-1",
+      prompt: "青柠插画",
+      status: "running",
+      taskFilePath:
+        "/workspace/.lime/tasks/image_generate/task-history-json-image-1.json",
+      artifactPath: ".lime/tasks/image_generate/task-history-json-image-1.json",
+    });
+  });
+
   it("应从历史 assistant 消息恢复 token usage", () => {
     const detail: AsterSessionDetail = {
       id: "session-usage",
@@ -1275,6 +1531,79 @@ describe("agentChatHistory", () => {
         skillName: "aspnet-core",
       },
     });
+  });
+
+  it("远端只返回助手正文时仍应保留本地用户输入与 Skill 思考过程", () => {
+    const localMessages = [
+      {
+        id: "local-analysis-user",
+        role: "user" as const,
+        content: "@analysis 帮我分析一下今天的国际形势",
+        timestamp: new Date("2026-05-13T17:51:40.000Z"),
+      },
+      {
+        id: "local-analysis-assistant",
+        role: "assistant" as const,
+        content: "# 分析结果\n\n## 结论\n国际形势分析结果。",
+        timestamp: new Date("2026-05-13T17:51:42.000Z"),
+        runtimeTurnId: "skill-exec-local-analysis-assistant",
+        inlineProcessRetention: "skill" as const,
+        thinkingContent: "先识别 analysis Skill，再组织结论。",
+        contentParts: [
+          {
+            type: "thinking" as const,
+            text: "先识别 analysis Skill，再组织结论。",
+          },
+          {
+            type: "text" as const,
+            text: "# 分析结果\n\n## 结论\n国际形势分析结果。",
+          },
+        ],
+      },
+    ];
+    const hydratedMessages = [
+      {
+        id: "history-analysis-assistant",
+        role: "assistant" as const,
+        content: "# 分析结果\n\n## 结论\n国际形势分析结果。",
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "# 分析结果\n\n## 结论\n国际形势分析结果。",
+          },
+        ],
+        timestamp: new Date("2026-05-13T17:51:45.000Z"),
+      },
+    ];
+
+    const mergedMessages = mergeHydratedMessagesWithLocalState(
+      localMessages,
+      hydratedMessages,
+    );
+
+    expect(mergedMessages).toHaveLength(2);
+    expect(mergedMessages[0]).toMatchObject({
+      id: "local-analysis-user",
+      role: "user",
+      content: "@analysis 帮我分析一下今天的国际形势",
+    });
+    expect(mergedMessages[1]).toMatchObject({
+      id: "local-analysis-assistant",
+      role: "assistant",
+      runtimeTurnId: "skill-exec-local-analysis-assistant",
+      inlineProcessRetention: "skill",
+      thinkingContent: "先识别 analysis Skill，再组织结论。",
+    });
+    expect(mergedMessages[1]?.contentParts).toEqual([
+      {
+        type: "thinking",
+        text: "先识别 analysis Skill，再组织结论。",
+      },
+      {
+        type: "text",
+        text: "# 分析结果\n\n## 结论\n国际形势分析结果。",
+      },
+    ]);
   });
 
   it("远端详情返回更新的 assistant 正文时应替换本地快照", () => {

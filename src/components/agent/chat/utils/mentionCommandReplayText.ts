@@ -1022,16 +1022,21 @@ function buildPublishLikeReplayText(
   ]);
 }
 
+function isImageMentionCommandKey(commandKey?: string): boolean {
+  return (
+    commandKey === "image_generate" ||
+    commandKey?.startsWith("image_model_") === true ||
+    commandKey === "image_generate_nanobanana_pro" ||
+    commandKey === "image_storyboard" ||
+    commandKey === "image_edit" ||
+    commandKey === "image_variation"
+  );
+}
+
 export function buildMentionCommandReplayText(
   input: BuildMentionCommandReplayTextInput,
 ): string | undefined {
-  if (
-    input.commandKey === "image_generate" ||
-    input.commandKey === "image_generate_nanobanana_pro" ||
-    input.commandKey === "image_storyboard" ||
-    input.commandKey === "image_edit" ||
-    input.commandKey === "image_variation"
-  ) {
+  if (isImageMentionCommandKey(input.commandKey)) {
     return buildImageReplayText(
       input.parsedCommand as ParsedImageWorkbenchCommand,
     );
@@ -1239,13 +1244,7 @@ function buildMentionCommandReplayTextFromSlotValues(params: {
     return undefined;
   }
 
-  if (
-    commandKey === "image_generate" ||
-    commandKey === "image_generate_nanobanana_pro" ||
-    commandKey === "image_storyboard" ||
-    commandKey === "image_edit" ||
-    commandKey === "image_variation"
-  ) {
+  if (isImageMentionCommandKey(commandKey)) {
     return buildImageReplayText({
       body: "",
       prompt: slotValues.prompt,

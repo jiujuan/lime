@@ -1,75 +1,130 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { changeLimeLocale, limeI18nResources } from "@/i18n/createI18n";
+import { SUPPORTED_LOCALES } from "@/i18n/locales";
+import {
+  clearSkillCatalogCache,
+  upsertLocalModelBoundImageCommandBinding,
+} from "@/lib/api/skillCatalog";
+import type { MessageImageWorkbenchPreview } from "../types";
 import {
   buildImageTaskAssistantContent,
   buildImageTaskPresentationContext,
 } from "../workspace/imageTaskPersona";
 import {
   buildImageWorkbenchCaption,
-  buildImageWorkbenchProcessLines,
+  resolveImageWorkbenchPreviewModelLabel,
 } from "./imageWorkbenchPresentation";
 
 describe("imageWorkbenchPresentation", () => {
   beforeEach(async () => {
+    window.localStorage.clear();
     await changeLimeLocale("zh-CN");
   });
 
-  it("图片生成人设层只清理命令标签，不重写用户语义", () => {
-    expect(
-      buildImageTaskAssistantContent({
-        prompt: "一张广州塔，从花城汇看过去的春天的照片",
-        mode: "generate",
-        modelName: "fal-ai/nano-banana-pro",
-      }),
-    ).toBe(
-      "好啊，用 Nanobanana Pro 生成：一张广州塔，从花城汇看过去的春天的照片\n先获取下工具参数\n马上生成",
-    );
+  afterEach(() => {
+    window.localStorage.clear();
+    clearSkillCatalogCache();
+  });
 
-    const shanghaiIntro = buildImageTaskAssistantContent({
-      prompt: "一张外滩，从陆家嘴看过去的夜景的照片",
+  it("图片生成人设不再提供可见固定铺垫，正常聊天正文应来自模型流式输出", () => {
+    const fallback = buildImageTaskAssistantContent({
+      prompt: "一张广州塔，从花城汇看过去的春天的照片",
       mode: "generate",
       modelName: "fal-ai/nano-banana-pro",
     });
-    expect(shanghaiIntro).toContain("一张外滩，从陆家嘴看过去的夜景的照片");
-    expect(shanghaiIntro).not.toContain("一张从陆家嘴看外滩的夜景照片");
+
+    expect(fallback).toBe("");
+    expect(fallback).not.toContain("先获取下工具参数");
+    expect(fallback).not.toContain("马上生成");
+    expect(fallback).not.toContain("Nanobanana Pro");
   });
 
-  it("展示层过程和完成描述只做本地化收口，不把品味或画面细节硬编码进聊天展示层", () => {
-    expect(buildImageWorkbenchProcessLines()).toEqual([
-      "先获取下工具参数",
-      "马上生成",
-    ]);
+  it("展示层不再为成功结果注入固定收尾模板，收尾文案由模型写入 task presentation", () => {
     expect(
       buildImageWorkbenchCaption({
         prompt: "一张广州塔，从花城汇看过去的春天的照片",
         status: "complete",
         imageCount: 1,
       }),
-    ).toBe(
-      "搞定，图已经生成好了\n要调整的话直接说，我继续改",
-    );
+    ).toBeNull();
 
-    expect(
-      buildImageTaskPresentationContext({
-        prompt: "一张广州塔，从花城汇看过去的春天的照片",
+    const presentation = buildImageTaskPresentationContext({
+      prompt: "一张广州塔，从花城汇看过去的春天的照片",
+      mode: "generate",
+      modelId: "fal-ai/nano-banana-pro",
+    });
+
+    expect(presentation).toMatchObject({
+      opening_guidance: {
+        source: "model_stream",
+        avoid_fixed_templates: true,
+        avoid_visible_process_lines: true,
+      },
+      message_contract: {
+        preserve_intro_during_stream: false,
+        prefer_model_stream_text: true,
+      },
+      assistant_intro_request: {
+        source: "model_generated_before_tool",
         mode: "generate",
-        modelId: "fal-ai/nano-banana-pro",
-      }),
-    ).toMatchObject({
-      completion_caption:
-        "搞定，图已经生成好了\n要调整的话直接说，我继续改",
-      result_captions: {
-        complete:
-          "搞定，图已经生成好了\n要调整的话直接说，我继续改",
+        prompt_intent: "一张广州塔，从花城汇看过去的春天的照片",
+        avoid_fixed_templates: true,
+      },
+      completion_caption_request: {
+        source: "model_generated_at_tool_call",
+        mode: "generate",
+        prompt_intent: "一张广州塔，从花城汇看过去的春天的照片",
+        avoid_fixed_templates: true,
       },
     });
+    expect(presentation).not.toHaveProperty("assistant_intro");
+    expect(presentation).not.toHaveProperty("completion_caption");
+    expect(presentation).not.toHaveProperty("result_captions");
+    expect(presentation).not.toHaveProperty("process_lines");
   });
 
-  it("图片生成人设文案覆盖英文 locale 资源，不污染全局语言", () => {
+  it("失败说明不把底层服务错误直接展示到聊天结果里", () => {
     expect(
-      limeI18nResources["en-US"]?.agent?.[
-        "agentChat.imageTaskPersona.intro.generateWithModel"
-      ],
-    ).toBe("Sure — generating with {{model}}: {{target}}");
+      buildImageWorkbenchCaption({
+        prompt: "一张青柠极简插画",
+        status: "failed",
+        statusMessage:
+          'Fal HTTP 403: {"detail":"User is locked. Reason: Exhausted balance."}',
+      }),
+    ).toBe("这次没有生成成功");
+  });
+
+  it("模型绑定 @命令的轻卡名称应沿用当前目录标题，而不是只看内置目录或模型 ID", () => {
+    upsertLocalModelBoundImageCommandBinding({
+      trigger: "@GPT Images 2",
+      providerId: "yunwu.ai",
+      modelId: "gpt-image-2",
+      executorMode: "responses_image_generation",
+    });
+
+    expect(
+      resolveImageWorkbenchPreviewModelLabel({
+        taskId: "task-image-1",
+        mode: "generate",
+        prompt: "虞美人霸王别姬",
+        status: "running",
+        modelName: "gpt-image-2",
+      } satisfies MessageImageWorkbenchPreview),
+    ).toBe("GPT Images 2");
+  });
+
+  it("旧固定寒暄与成功收尾资源不再作为展示事实源", () => {
+    for (const locale of SUPPORTED_LOCALES) {
+      const agent = limeI18nResources[locale]?.agent || {};
+      expect(agent).not.toHaveProperty(
+        "agentChat.imageTaskPersona.fallback.generate",
+      );
+      expect(agent).not.toHaveProperty(
+        "agentChat.imageWorkbenchPresentation.caption.completeDefault",
+      );
+      expect(agent).not.toHaveProperty(
+        "agentChat.imageWorkbenchPresentation.caption.partialDefault",
+      );
+    }
   });
 });

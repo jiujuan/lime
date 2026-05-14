@@ -35,6 +35,8 @@ type PendingA2UIResolution =
 
 interface UseWorkspaceA2UIRuntimeParams {
   messages: Message[];
+  /** 历史消息只允许在正文里只读回显，不再提升到底部可提交表单。 */
+  readOnlyInteractiveMessageIds?: ReadonlySet<string>;
 }
 
 interface PendingA2UIProgressState {
@@ -91,8 +93,16 @@ function isSamePendingA2UIResolution(
   );
 }
 
+function isReadOnlyInteractiveMessage(
+  message: Message,
+  readOnlyInteractiveMessageIds?: ReadonlySet<string>,
+): boolean {
+  return Boolean(readOnlyInteractiveMessageIds?.has(message.id));
+}
+
 export function useWorkspaceA2UIRuntime({
   messages,
+  readOnlyInteractiveMessageIds,
 }: UseWorkspaceA2UIRuntimeParams): {
   a2uiSubmissionNotice: A2UISubmissionNotice | null;
   pendingA2UIForm: A2UIResponse | null;
@@ -112,6 +122,7 @@ export function useWorkspaceA2UIRuntime({
     const latestPendingMessage = [...currentAssistantTail]
       .reverse()
       .find((message) =>
+        !isReadOnlyInteractiveMessage(message, readOnlyInteractiveMessageIds) &&
         message.actionRequests?.some((request) => request.status === "pending"),
       );
 
@@ -125,11 +136,15 @@ export function useWorkspaceA2UIRuntime({
         .find((request) => request.status === "pending") || null;
 
     return pendingRequest ? governActionRequest(pendingRequest) : null;
-  }, [currentAssistantTail]);
+  }, [currentAssistantTail, readOnlyInteractiveMessageIds]);
 
   const pendingMessageA2UI = useMemo<PendingA2UIResolution | null>(() => {
     for (let i = currentAssistantTail.length - 1; i >= 0; i -= 1) {
       const message = currentAssistantTail[i];
+
+      if (isReadOnlyInteractiveMessage(message, readOnlyInteractiveMessageIds)) {
+        continue;
+      }
 
       if (!message.content) {
         continue;
@@ -159,7 +174,7 @@ export function useWorkspaceA2UIRuntime({
     }
 
     return null;
-  }, [currentAssistantTail]);
+  }, [currentAssistantTail, readOnlyInteractiveMessageIds]);
   const pendingMessageA2UIForm = pendingMessageA2UI?.form ?? null;
 
   const pendingPromotedA2UIActionRequest =
@@ -170,6 +185,12 @@ export function useWorkspaceA2UIRuntime({
 
       for (let i = currentAssistantTail.length - 1; i >= 0; i -= 1) {
         const message = currentAssistantTail[i];
+        if (
+          isReadOnlyInteractiveMessage(message, readOnlyInteractiveMessageIds)
+        ) {
+          continue;
+        }
+
         const pendingRequest = [...(message.actionRequests || [])]
           .reverse()
           .find(
@@ -184,7 +205,11 @@ export function useWorkspaceA2UIRuntime({
       }
 
       return null;
-    }, [currentAssistantTail, pendingMessageA2UIForm]);
+    }, [
+      currentAssistantTail,
+      pendingMessageA2UIForm,
+      readOnlyInteractiveMessageIds,
+    ]);
 
   const resolvedPendingA2UI = useMemo<PendingA2UIResolution | null>(() => {
     if (pendingMessageA2UI) {
@@ -251,19 +276,28 @@ export function useWorkspaceA2UIRuntime({
       const source = previous.source;
       if (source.kind === "action_request") {
         const requestStillExists = currentAssistantTail.some((message) =>
-          (message.actionRequests || []).some(
-            (request) => request.requestId === source.requestId,
-          ),
+          isReadOnlyInteractiveMessage(message, readOnlyInteractiveMessageIds)
+            ? false
+            : (message.actionRequests || []).some(
+                (request) => request.requestId === source.requestId,
+              ),
         );
         return requestStillExists ? previous : null;
       }
 
       const sourceMessageStillExists = currentAssistantTail.some(
-        (message) => message.id === source.messageId,
+        (message) =>
+          message.id === source.messageId &&
+          !isReadOnlyInteractiveMessage(message, readOnlyInteractiveMessageIds),
       );
       return sourceMessageStillExists ? previous : null;
     });
-  }, [currentAssistantTail, hasRecentA2UISubmission, resolvedPendingA2UI]);
+  }, [
+    currentAssistantTail,
+    hasRecentA2UISubmission,
+    readOnlyInteractiveMessageIds,
+    resolvedPendingA2UI,
+  ]);
 
   const visiblePendingA2UI = resolvedPendingA2UI ?? retainedPendingA2UI ?? null;
   const [pendingA2UIProgressState, setPendingA2UIProgressState] =

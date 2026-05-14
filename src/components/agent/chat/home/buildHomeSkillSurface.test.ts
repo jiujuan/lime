@@ -7,8 +7,7 @@ import type {
 import type { ServiceSkillHomeItem } from "../service-skills/types";
 import type { ServiceSkillHomeCopy } from "../service-skills/homeCopy";
 import type { CuratedTaskTemplateItem } from "../utils/curatedTaskTemplates";
-import agentResource from "@/i18n/resources/zh-CN/agent.json";
-import enAgentResource from "@/i18n/resources/en-US/agent.json";
+import { agentEnUSResource, agentZhCNResource } from "@/i18n/agentResources";
 import {
   buildHomeGalleryItems,
   buildHomeGuideCards,
@@ -19,13 +18,13 @@ import {
 } from "./buildHomeSkillSurface";
 import { buildHomeSurfaceCopy } from "./homeSurfaceCopy";
 
-type AgentResourceKey = keyof typeof agentResource;
+type AgentResourceKey = keyof typeof agentZhCNResource;
 
 const TEST_HOME_SURFACE_COPY = buildHomeSurfaceCopy(
-  (key) => agentResource[key as AgentResourceKey],
+  (key) => agentZhCNResource[key as AgentResourceKey],
 );
 const TEST_HOME_SURFACE_EN_COPY = buildHomeSurfaceCopy((key, values) =>
-  enAgentResource[key as AgentResourceKey].replace(
+  agentEnUSResource[key as AgentResourceKey].replace(
     "{{example}}",
     String(values?.example ?? ""),
   ),

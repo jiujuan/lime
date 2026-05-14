@@ -109,6 +109,7 @@ fn build_skill_workspace_permissions(
             surface: WorkspaceToolSurface::workbench(),
             workspace_root,
             auto_mode: false,
+            bypass_restrictions: false,
             execution_policy_input: ToolExecutionResolverInput {
                 persisted_policy: Some(&config.agent.tool_execution),
                 request_metadata: metadata.as_ref(),

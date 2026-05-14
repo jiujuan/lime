@@ -1121,6 +1121,265 @@ describe("useAsterAgentChat 任务快照", () => {
     }
   });
 
+  it("自动恢复当前会话时应优先回放 session 快照里的用户输入与 Skill 思考", async () => {
+    const workspaceId = "ws-auto-restore-skill-snapshot";
+    const sessionId = "session-auto-restore-skill-snapshot";
+    const now = Date.now();
+    const deferredDetail = createDeferred<{
+      id: string;
+      created_at: number;
+      updated_at: number;
+      messages_count: number;
+      messages: Array<{
+        role: "assistant" | "user";
+        timestamp: number;
+        content: Array<{ type: "text"; text: string }>;
+      }>;
+      turns: [];
+      items: [];
+      queued_turns: [];
+    }>();
+
+    sessionStorage.setItem(
+      `aster_curr_sessionId_${workspaceId}`,
+      JSON.stringify(sessionId),
+    );
+    seedSessionSnapshots(workspaceId, {
+      [sessionId]: {
+        messages: [
+          {
+            id: "cached-analysis-user",
+            role: "user",
+            content: "@analysis 帮我分析一下今天的国际形势",
+            timestamp: "2026-05-13T17:51:40.000Z",
+          },
+          {
+            id: "cached-analysis-assistant",
+            role: "assistant",
+            content: "# 分析结果\n\n## 结论\n国际形势分析结果。",
+            timestamp: "2026-05-13T17:51:42.000Z",
+            runtimeTurnId: "skill-exec-cached-analysis-assistant",
+            inlineProcessRetention: "skill",
+            thinkingContent: "先识别 analysis Skill，再组织结论。",
+            contentParts: [
+              {
+                type: "thinking",
+                text: "先识别 analysis Skill，再组织结论。",
+              },
+              {
+                type: "text",
+                text: "# 分析结果\n\n## 结论\n国际形势分析结果。",
+              },
+            ],
+          },
+        ],
+        threadTurns: [],
+        threadItems: [],
+        currentTurnId: null,
+        updatedAt: now,
+        lastAccessedAt: now,
+        expiresAt: now + 60_000,
+        staleUntil: now + 120_000,
+        sessionUpdatedAt: now,
+        messagesCount: 2,
+        historyTruncated: false,
+      },
+    });
+    mockListAgentRuntimeSessions.mockResolvedValue([
+      {
+        id: sessionId,
+        name: "Skill 快照恢复",
+        created_at: 1700000100,
+        updated_at: Math.floor(now / 1000),
+        messages_count: 2,
+      },
+    ]);
+    mockGetAgentRuntimeSession.mockReturnValue(deferredDetail.promise);
+
+    const harness = mountHook(workspaceId);
+
+    try {
+      await flushEffects();
+      await flushEffects();
+
+      expect(harness.getValue().sessionId).toBe(sessionId);
+      expect(harness.getValue().messages[0]).toMatchObject({
+        id: "cached-analysis-user",
+        role: "user",
+        content: "@analysis 帮我分析一下今天的国际形势",
+      });
+      expect(harness.getValue().messages[1]).toMatchObject({
+        id: "cached-analysis-assistant",
+        role: "assistant",
+        thinkingContent: "先识别 analysis Skill，再组织结论。",
+      });
+
+      await act(async () => {
+        deferredDetail.resolve({
+          id: sessionId,
+          created_at: 1700000100,
+          updated_at: Math.floor(now / 1000),
+          messages_count: 1,
+          messages: [
+            {
+              role: "assistant",
+              timestamp: Math.floor(
+                new Date("2026-05-13T17:51:45.000Z").getTime() / 1000,
+              ),
+              content: [
+                {
+                  type: "text",
+                  text: "# 分析结果\n\n## 结论\n国际形势分析结果。",
+                },
+              ],
+            },
+          ],
+          turns: [],
+          items: [],
+          queued_turns: [],
+        });
+        await deferredDetail.promise;
+      });
+      await flushEffects();
+
+      expect(harness.getValue().messages).toHaveLength(2);
+      expect(harness.getValue().messages[0]).toMatchObject({
+        id: "cached-analysis-user",
+        role: "user",
+        content: "@analysis 帮我分析一下今天的国际形势",
+      });
+      expect(harness.getValue().messages[1]).toMatchObject({
+        id: "cached-analysis-assistant",
+        role: "assistant",
+        runtimeTurnId: "skill-exec-cached-analysis-assistant",
+        inlineProcessRetention: "skill",
+        thinkingContent: "先识别 analysis Skill，再组织结论。",
+      });
+      expect(harness.getValue().messages[1]?.contentParts?.[0]).toMatchObject({
+        type: "thinking",
+        text: "先识别 analysis Skill，再组织结论。",
+      });
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("自动恢复当前会话时 scoped 消息缺用户输入，应从 session 快照合并 Skill 输入与思考", async () => {
+    const workspaceId = "ws-skill-scoped-cache-merge";
+    const sessionId = "session-skill-scoped-cache-merge";
+    const now = Date.now();
+    const deferredDetail = createDeferred<{
+      id: string;
+      created_at: number;
+      updated_at: number;
+      messages_count: number;
+      messages: Array<{
+        role: "assistant" | "user";
+        timestamp: number;
+        content: Array<{ type: "text"; text: string }>;
+      }>;
+      turns: [];
+      items: [];
+      queued_turns: [];
+    }>();
+
+    sessionStorage.setItem(
+      `aster_curr_sessionId_${workspaceId}`,
+      JSON.stringify(sessionId),
+    );
+    sessionStorage.setItem(
+      `aster_messages_${workspaceId}`,
+      JSON.stringify([
+        {
+          id: "scoped-analysis-assistant",
+          role: "assistant",
+          content: "# 分析结果\n\n## 结论\n国际形势分析结果。",
+          timestamp: "2026-05-13T17:51:45.000Z",
+          contentParts: [
+            {
+              type: "text",
+              text: "# 分析结果\n\n## 结论\n国际形势分析结果。",
+            },
+          ],
+        },
+      ]),
+    );
+    seedSessionSnapshots(workspaceId, {
+      [sessionId]: {
+        messages: [
+          {
+            id: "cached-analysis-user-for-scoped",
+            role: "user",
+            content: "@analysis 帮我分析一下今天的国际形势",
+            timestamp: "2026-05-13T17:51:40.000Z",
+          },
+          {
+            id: "cached-analysis-assistant-for-scoped",
+            role: "assistant",
+            content: "# 分析结果\n\n## 结论\n国际形势分析结果。",
+            timestamp: "2026-05-13T17:51:42.000Z",
+            runtimeTurnId: "skill-exec-cached-analysis-assistant-for-scoped",
+            inlineProcessRetention: "skill",
+            thinkingContent: "先识别 analysis Skill，再组织结论。",
+            contentParts: [
+              {
+                type: "thinking",
+                text: "先识别 analysis Skill，再组织结论。",
+              },
+              {
+                type: "text",
+                text: "# 分析结果\n\n## 结论\n国际形势分析结果。",
+              },
+            ],
+          },
+        ],
+        threadTurns: [],
+        threadItems: [],
+        currentTurnId: null,
+        updatedAt: now,
+        lastAccessedAt: now,
+        expiresAt: now + 60_000,
+        staleUntil: now + 120_000,
+        sessionUpdatedAt: now,
+        messagesCount: 2,
+        historyTruncated: false,
+      },
+    });
+    mockListAgentRuntimeSessions.mockResolvedValue([
+      {
+        id: sessionId,
+        name: "Skill scoped 快照恢复",
+        created_at: 1700000100,
+        updated_at: Math.floor(now / 1000),
+        messages_count: 2,
+      },
+    ]);
+    mockGetAgentRuntimeSession.mockReturnValue(deferredDetail.promise);
+
+    const harness = mountHook(workspaceId);
+
+    try {
+      await flushEffects();
+      await flushEffects();
+
+      expect(harness.getValue().messages).toHaveLength(2);
+      expect(harness.getValue().messages[0]).toMatchObject({
+        id: "cached-analysis-user-for-scoped",
+        role: "user",
+        content: "@analysis 帮我分析一下今天的国际形势",
+      });
+      expect(harness.getValue().messages[1]).toMatchObject({
+        id: "cached-analysis-assistant-for-scoped",
+        role: "assistant",
+        runtimeTurnId: "skill-exec-cached-analysis-assistant-for-scoped",
+        inlineProcessRetention: "skill",
+        thinkingContent: "先识别 analysis Skill，再组织结论。",
+      });
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("恢复会话时远端暂未返回最新 assistant 消息也应保留本地执行过程", async () => {
     const workspaceId = "ws-hydrate-missing-assistant-tail";
     const sessionId = "session-hydrate-missing-assistant-tail";

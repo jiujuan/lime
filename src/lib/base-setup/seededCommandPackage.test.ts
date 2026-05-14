@@ -10,7 +10,7 @@ describe("seededCommandPackage", () => {
 
     expect(pkg.id).toBe("lime-seeded-command-catalog");
     expect(pkg.version).toBe(SEEDED_SERVICE_SKILL_CATALOG_VERSION);
-    expect(pkg.catalogProjections).toHaveLength(40);
+    expect(pkg.catalogProjections).toHaveLength(41);
     expect(pkg.bindingProfiles.map((profile) => profile.id)).toEqual(
       expect.arrayContaining(["agent-turn-instant", "native-skill-instant"]),
     );
@@ -25,7 +25,7 @@ describe("seededCommandPackage", () => {
       getSeededServiceSkillCatalog().items,
     );
 
-    expect(entries).toHaveLength(40);
+    expect(entries).toHaveLength(41);
     expect(entries).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -83,6 +83,25 @@ describe("seededCommandPackage", () => {
           }),
           triggers: expect.arrayContaining([
             { mode: "mention", prefix: "@Nanobanana Pro" },
+          ]),
+        }),
+        expect.objectContaining({
+          id: "command:image_generate_gpt_images_2",
+          commandKey: "image_generate_gpt_images_2",
+          binding: expect.objectContaining({
+            skillId: "image_generate",
+            executionKind: "task_queue",
+            requestDefaults: expect.objectContaining({
+              model: "gpt-images-2",
+              executorMode: "responses_image_generation",
+            }),
+          }),
+          renderContract: expect.objectContaining({
+            resultKind: "image_gallery",
+            detailKind: "media_detail",
+          }),
+          triggers: expect.arrayContaining([
+            { mode: "mention", prefix: "@GPT Images 2" },
           ]),
         }),
         expect.objectContaining({

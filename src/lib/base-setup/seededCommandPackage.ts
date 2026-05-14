@@ -133,6 +133,32 @@ const SEEDED_COMMAND_PROJECTION_SPECS: SeededCommandProjectionSpec[] = [
     commandRenderContract: COMMAND_IMAGE_GALLERY_CONTRACT,
   },
   {
+    commandKey: "image_generate_gpt_images_2",
+    title: "GPT Images 2",
+    summary: "使用 GPT Images 2 生成新的图片结果。",
+    aliases: [
+      "gpt images",
+      "gpt-images-2",
+      "gpt image",
+      "openai image",
+      "图片",
+      "生图",
+    ],
+    trigger: "@GPT Images 2",
+    category: "图像生成",
+    outputHint: "GPT Images 2 图片结果集",
+    commandBinding: {
+      skillId: "image_generate",
+      executionKind: "task_queue",
+      requestDefaults: {
+        imageWorkbench: "true",
+        model: "gpt-images-2",
+        executorMode: "responses_image_generation",
+      },
+    },
+    commandRenderContract: COMMAND_IMAGE_GALLERY_CONTRACT,
+  },
+  {
     commandKey: "image_storyboard",
     title: "分镜",
     summary: "根据主题一次生成多张分镜画面，适合九宫格与镜头草图场景。",

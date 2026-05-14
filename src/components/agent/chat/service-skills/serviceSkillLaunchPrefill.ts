@@ -5,7 +5,7 @@ import {
 import { resolveSiteSceneSlotValues } from "../workspace/serviceSkillSceneLaunch";
 import type { CreationReplayMetadata } from "../utils/creationReplayMetadata";
 import { formatNumber } from "@/i18n/format";
-import agentSourceResource from "@/i18n/resources/zh-CN/agent.json";
+import { agentZhCNResource as agentSourceResource } from "@/i18n/agentResources";
 import {
   buildCreationReplaySlotPrefill,
   resolveCreationReplaySlotPrefillCopy,

@@ -26,6 +26,7 @@ import {
   settleLiveArtifactAfterStreamStops,
   useArtifactDisplayState,
 } from "./hooks/useArtifactDisplayState";
+import { clearAgentSessionCachedSnapshot } from "./hooks/agentSessionScopedStorage";
 import type { TopicBranchStatus } from "./hooks/useTopicBranchBoard";
 import { useSessionFiles } from "./hooks/useSessionFiles";
 import { useContentSync } from "./hooks/useContentSync";
@@ -237,6 +238,7 @@ import {
   subscribeTaskCenterDraftTaskRequests,
   subscribeTaskCenterTaskPrefetchRequests,
   subscribeTaskCenterTaskOpenRequests,
+  type TaskCenterTaskEventSource,
 } from "./taskCenterDraftTaskEvents";
 import type { GeneralWorkbenchFollowUpActionPayload } from "./components/generalWorkbenchSidebarContract";
 import { RuntimeReviewDecisionDialog } from "./components/RuntimeReviewDecisionDialog";
@@ -289,6 +291,9 @@ import {
   loadSessionImageWorkbenchCachedState,
   saveSessionImageWorkbenchCachedState,
 } from "./workspace/imageWorkbenchStateCache";
+import { resolveImageWorkbenchStateForPreviewSelection } from "./workspace/imageWorkbenchPreviewSelection";
+import { buildImageWorkbenchPreviewResourceManagerInput } from "./workspace/imageWorkbenchResourceManager";
+import { openResourceManager } from "@/features/resource-manager";
 import {
   SOCIAL_ARTICLE_SKILL_KEY,
   GENERAL_WORKBENCH_HISTORY_PAGE_SIZE,
@@ -383,6 +388,16 @@ const TASK_CENTER_DRAFT_TAB_PREFIX = "task-draft";
 const TASK_CENTER_DRAFT_SESSION_WARMUP_DELAY_MS = 120;
 const NOOP_SET_CHAT_MESSAGES: Dispatch<SetStateAction<Message[]>> = () =>
   undefined;
+
+function shouldForceRefreshTaskOpenSource(
+  source?: TaskCenterTaskEventSource,
+): boolean {
+  return (
+    source === "sidebar" ||
+    source === "sidebar_search" ||
+    source === "conversation_shelf"
+  );
+}
 
 function loadFileManagerSidebarOpen(): boolean {
   return false;
@@ -2341,6 +2356,67 @@ export function AgentChatWorkspace({
       : undefined,
     getSyncedSessionRecentPreferences,
   });
+  const activeSessionKey = sessionId?.trim() || null;
+  const restoredInteractiveMessageSnapshotRef = useRef<{
+    sessionId: string | null;
+    ids: Set<string>;
+    capturedInitial: boolean;
+    pendingRestoreCapture: boolean;
+  }>({
+    sessionId: null,
+    ids: new Set<string>(),
+    capturedInitial: false,
+    pendingRestoreCapture: false,
+  });
+  const readOnlyInteractiveMessageIds = useMemo<ReadonlySet<string>>(() => {
+    const snapshot = restoredInteractiveMessageSnapshotRef.current;
+    if (!activeSessionKey) {
+      snapshot.sessionId = null;
+      snapshot.ids = new Set<string>();
+      snapshot.capturedInitial = false;
+      snapshot.pendingRestoreCapture = false;
+      return snapshot.ids;
+    }
+
+    if (snapshot.sessionId !== activeSessionKey) {
+      snapshot.sessionId = activeSessionKey;
+      snapshot.ids = new Set<string>();
+      snapshot.capturedInitial = false;
+      snapshot.pendingRestoreCapture = false;
+    }
+
+    if (isAutoRestoringSession || isSessionHydrating) {
+      snapshot.pendingRestoreCapture = true;
+    }
+
+    const shouldCaptureInitialSessionMessages =
+      normalizedInitialSessionId === activeSessionKey &&
+      !snapshot.capturedInitial &&
+      messages.length > 0;
+    const shouldCaptureRestoredMessages =
+      snapshot.pendingRestoreCapture ||
+      shouldCaptureInitialSessionMessages ||
+      sessionHistoryWindow?.isLoadingFull === true;
+    let didCaptureRestoredMessages = false;
+
+    if (shouldCaptureRestoredMessages && messages.length > 0) {
+      for (const message of messages) {
+        snapshot.ids.add(message.id);
+      }
+      snapshot.capturedInitial = true;
+      snapshot.pendingRestoreCapture = false;
+      didCaptureRestoredMessages = true;
+    }
+
+    return didCaptureRestoredMessages ? new Set(snapshot.ids) : snapshot.ids;
+  }, [
+    activeSessionKey,
+    isAutoRestoringSession,
+    isSessionHydrating,
+    messages,
+    normalizedInitialSessionId,
+    sessionHistoryWindow?.isLoadingFull,
+  ]);
   const topicById = useMemo(
     () => new Map(topics.map((topic) => [topic.id, topic])),
     [topics],
@@ -3237,6 +3313,7 @@ export function AgentChatWorkspace({
     resolvePendingA2UISubmit,
   } = useWorkspaceA2UIRuntime({
     messages,
+    readOnlyInteractiveMessageIds,
   });
   const pendingServiceSkillLaunchForm =
     workspaceServiceSkillEntryActions.pendingServiceSkillLaunchForm;
@@ -3867,7 +3944,7 @@ export function AgentChatWorkspace({
       const topic = topicById.get(topicId);
       return {
         allowDetachedSession: true,
-        forceRefresh: topic?.statusReason === "workspace_error",
+        forceRefresh: true,
         ...(shouldResumeTaskSession(topic)
           ? { resumeSessionStartHooks: true }
           : {}),
@@ -3931,6 +4008,7 @@ export function AgentChatWorkspace({
   const taskCenterDraftMaterializedSessionIdsRef = useRef<Map<string, string>>(
     new Map(),
   );
+  const taskCenterDraftSurfaceActiveRef = useRef(false);
   const homePendingPreviewPaintedRequestIdsRef = useRef<Set<string>>(new Set());
   const [taskCenterLocalSessionOverride, setTaskCenterLocalSessionOverride] =
     useState<{
@@ -3976,6 +4054,7 @@ export function AgentChatWorkspace({
 
   useEffect(() => {
     if (agentEntry !== "claw") {
+      taskCenterDraftSurfaceActiveRef.current = false;
       setTaskCenterTransitionTopicId(null);
       return;
     }
@@ -3996,6 +4075,7 @@ export function AgentChatWorkspace({
       );
       setTaskCenterDraftTabs((current) => (current.length > 0 ? [] : current));
       setActiveTaskCenterDraftTabId(null);
+      taskCenterDraftSurfaceActiveRef.current = false;
       if (agentEntry !== "new-task") {
         setTaskCenterDraftSendRequest(null);
         setHomePendingPreviewRequest(null);
@@ -4227,6 +4307,7 @@ export function AgentChatWorkspace({
       prepareActiveContextPrompt: contextWorkspace.prepareActiveContextPrompt,
     },
     projectId,
+    projectRootPath: project?.rootPath || null,
     sessionId,
     executionStrategy,
     accessMode,
@@ -4738,6 +4819,7 @@ export function AgentChatWorkspace({
       status: "draft",
     };
 
+    taskCenterDraftSurfaceActiveRef.current = true;
     resetLocalImageWorkbenchSessionScope();
     clearMessages({ showToast: false });
     startTransition(() => {
@@ -4780,6 +4862,7 @@ export function AgentChatWorkspace({
       newSessionId: string,
       options?: { preserveInput?: boolean },
     ) => {
+      taskCenterDraftSurfaceActiveRef.current = false;
       startTransition(() => {
         setTaskCenterDraftTabs((current) =>
           current.filter((tab) => tab.id !== draftTabId),
@@ -5012,11 +5095,17 @@ export function AgentChatWorkspace({
         );
       };
 
+      taskCenterDraftSurfaceActiveRef.current = false;
       resetLocalImageWorkbenchSessionScope();
       setTaskCenterTransitionTopicId(topicId);
       setTaskCenterDetachedTopicId(null);
       setActiveTaskCenterDraftTabId(null);
       clearEntryPendingA2UI();
+      setChatMessages([]);
+      const targetSnapshotWorkspaceId = topicWorkspaceId ?? taskCenterWorkspaceId;
+      if (targetSnapshotWorkspaceId) {
+        clearAgentSessionCachedSnapshot(targetSnapshotWorkspaceId, topicId);
+      }
       if (options?.replaceOpenTabs === true) {
         replaceTaskCenterOpenTabs(topicId, topicWorkspaceId);
       } else if (shouldMaintainTaskCenterTab) {
@@ -5064,6 +5153,7 @@ export function AgentChatWorkspace({
       replaceTaskCenterOpenTabs,
       resetLocalImageWorkbenchSessionScope,
       setActiveTaskCenterDraftTabId,
+      setChatMessages,
       switchTopic,
       taskCenterWorkspaceId,
       setTaskCenterDetachedTopicId,
@@ -5075,11 +5165,16 @@ export function AgentChatWorkspace({
 
   const handleOpenArchivedTaskTopic = useCallback(
     async (topicId: string) => {
+      taskCenterDraftSurfaceActiveRef.current = false;
       resetLocalImageWorkbenchSessionScope();
       setActiveTaskCenterDraftTabId(null);
       setTaskCenterDetachedTopicId(topicId);
       setTaskCenterTransitionTopicId(topicId);
       clearEntryPendingA2UI();
+      setChatMessages([]);
+      if (taskCenterWorkspaceId) {
+        clearAgentSessionCachedSnapshot(taskCenterWorkspaceId, topicId);
+      }
       markTaskCenterLocalSessionOverride(topicId);
       rememberInitialSessionNavigationStart(topicId);
       const switchResult = await switchTopic(topicId, {
@@ -5103,7 +5198,9 @@ export function AgentChatWorkspace({
       clearEntryPendingA2UI,
       markTaskCenterLocalSessionOverride,
       resetLocalImageWorkbenchSessionScope,
+      setChatMessages,
       switchTopic,
+      taskCenterWorkspaceId,
     ],
   );
 
@@ -5116,6 +5213,7 @@ export function AgentChatWorkspace({
         return;
       }
 
+      taskCenterDraftSurfaceActiveRef.current = true;
       resetLocalImageWorkbenchSessionScope();
       clearMessages({ showToast: false });
       startTransition(() => {
@@ -5154,7 +5252,7 @@ export function AgentChatWorkspace({
 
   const handleOpenSidebarTaskTopic = useCallback(
     async (topicId: string) => {
-      await handleOpenTaskTopic(topicId);
+      await handleOpenTaskTopic(topicId, { forceRefresh: true });
     },
     [handleOpenTaskTopic],
   );
@@ -5301,8 +5399,10 @@ export function AgentChatWorkspace({
     }
 
     return subscribeTaskCenterTaskOpenRequests(
-      ({ sessionId: requestedSessionId, workspaceId }) => {
+      ({ sessionId: requestedSessionId, source, workspaceId }) => {
         const requestedWorkspaceId = normalizeProjectId(workspaceId);
+        const shouldForceRefresh =
+          shouldForceRefreshTaskOpenSource(source);
         if (
           requestedWorkspaceId &&
           requestedWorkspaceId !== normalizeProjectId(taskCenterWorkspaceId)
@@ -5312,11 +5412,18 @@ export function AgentChatWorkspace({
           setActiveTaskCenterDraftTabId(null);
           markTaskCenterLocalSessionOverride(requestedSessionId);
           upsertTaskCenterOpenTab(requestedSessionId, requestedWorkspaceId);
-          deferTopicSwitch(requestedSessionId, requestedWorkspaceId);
+          deferTopicSwitch(
+            requestedSessionId,
+            requestedWorkspaceId,
+            shouldForceRefresh ? { forceRefresh: true } : undefined,
+          );
           return;
         }
 
-        void handleOpenTaskTopic(requestedSessionId);
+        void handleOpenTaskTopic(
+          requestedSessionId,
+          shouldForceRefresh ? { forceRefresh: true } : undefined,
+        );
       },
     );
   }, [
@@ -5469,6 +5576,8 @@ export function AgentChatWorkspace({
       !taskCenterWorkspaceId ||
       isAutoRestoringSession ||
       isSessionHydrating ||
+      taskCenterDraftSurfaceActiveRef.current ||
+      isTaskCenterDraftTabActive ||
       initialPendingServiceSkillLaunchSignature
     ) {
       return;
@@ -5543,6 +5652,7 @@ export function AgentChatWorkspace({
     initialPendingServiceSkillLaunchSignature,
     isAutoRestoringSession,
     isSessionHydrating,
+    isTaskCenterDraftTabActive,
     normalizedInitialSessionId,
     sessionId,
     shouldHideDetachedTaskCenterTabs,
@@ -5855,15 +5965,27 @@ export function AgentChatWorkspace({
   const handleOpenMessagePreview = useCallback(
     (target: MessagePreviewTarget, message: Message) => {
       if (target.kind === "image_workbench") {
-        updateCurrentImageWorkbenchState((current) => {
-          if (current.active) {
-            return current;
-          }
-          return {
-            ...current,
-            active: true,
-          };
-        });
+        const resourceManagerInput =
+          buildImageWorkbenchPreviewResourceManagerInput({
+            message,
+            preview: target.preview,
+            selection: target.selection,
+            threadId: sessionId ?? null,
+          });
+
+        if (resourceManagerInput) {
+          void openResourceManager(resourceManagerInput);
+          return;
+        }
+
+        updateCurrentImageWorkbenchState((current) =>
+          resolveImageWorkbenchStateForPreviewSelection({
+            current,
+            messages,
+            preview: target.preview,
+            selection: target.selection,
+          }),
+        );
         openCanvasForReason("user_open_message_preview", setLayoutMode);
         return;
       }
@@ -5917,6 +6039,8 @@ export function AgentChatWorkspace({
     [
       handleWorkspaceArtifactClick,
       handleWorkspaceFileClick,
+      messages,
+      sessionId,
       setCanvasState,
       setLayoutMode,
       taskFiles,
@@ -7801,7 +7925,11 @@ export function AgentChatWorkspace({
       sendOptions?: HandleSendOptions,
     ) => {
       const normalizedText = text.trim();
-      const activeDraftTabId = activeTaskCenterDraftTabIdRef.current;
+      const activeDraftTabId =
+        activeTaskCenterDraftTabIdRef.current ||
+        (agentEntry === "claw" && shouldRenderTaskCenterEmbeddedHome
+          ? openTaskCenterDraftTab()
+          : null);
       if (agentEntry === "claw" && activeDraftTabId) {
         const submittedAt = Date.now();
         const requestId = createTaskCenterDraftSendRequestId();
@@ -7923,7 +8051,9 @@ export function AgentChatWorkspace({
       effectiveThreadItems.length,
       handleSend,
       hasDisplayMessages,
+      openTaskCenterDraftTab,
       sessionId,
+      shouldRenderTaskCenterEmbeddedHome,
       taskCenterWorkspaceId,
       turns.length,
     ],

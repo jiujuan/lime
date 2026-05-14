@@ -343,6 +343,10 @@ function mergeImageTaskPreviewIntoAssistantMessage(params: {
               ...(message.imageWorkbenchPreview || {}),
               ...params.preview,
             },
+            taskPreview:
+              message.taskPreview?.taskId === params.preview.taskId
+                ? undefined
+                : message.taskPreview,
           }
         : message,
     );
@@ -694,13 +698,15 @@ export async function tryExecuteSlashSkillCommand(
                   toolResult: normalizedResultRecord,
                   fallbackPrompt: command.userInput || rawContent,
                 });
-                taskPreview = buildTaskPreviewFromToolResult({
-                  toolId: streamEvent.tool_id,
-                  toolName: currentToolCall?.name || "",
-                  toolArguments: currentToolArguments,
-                  toolResult: normalizedResultRecord,
-                  fallbackPrompt: command.userInput || rawContent,
-                });
+                taskPreview = imageTaskPreview
+                  ? null
+                  : buildTaskPreviewFromToolResult({
+                      toolId: streamEvent.tool_id,
+                      toolName: currentToolCall?.name || "",
+                      toolArguments: currentToolArguments,
+                      toolResult: normalizedResultRecord,
+                      fallbackPrompt: command.userInput || rawContent,
+                    });
                 const toolResultArtifact =
                   buildToolResultArtifactFromToolResult({
                     toolId: streamEvent.tool_id,
@@ -791,7 +797,7 @@ export async function tryExecuteSlashSkillCommand(
                 });
               }
 
-              if (taskPreview) {
+              if (taskPreview && !imageTaskPreview) {
                 nextMessages = mergeTaskPreviewIntoAssistantMessage({
                   messages: nextMessages,
                   assistantMsgId,

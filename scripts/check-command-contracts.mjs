@@ -312,8 +312,66 @@ function collectDefaultMockCommands() {
   for (const match of objectBody.matchAll(/^  ([A-Za-z0-9_]+)\s*:/gm)) {
     mockCommands.add(match[1]);
   }
+  for (const spreadMatch of objectBody.matchAll(
+    /^  \.\.\.([A-Za-z0-9_]+),/gm,
+  )) {
+    const registryName = spreadMatch[1];
+    for (const command of collectSpreadMockRegistryCommands(
+      sourceCode,
+      registryName,
+    )) {
+      mockCommands.add(command);
+    }
+  }
 
   return mockCommands;
+}
+
+function collectSpreadMockRegistryCommands(sourceCode, registryName) {
+  const importPattern =
+    /import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+["'`]([^"'`]+)["'`]/g;
+  let importSource;
+  for (const importMatch of sourceCode.matchAll(importPattern)) {
+    const namedImports = importMatch[1];
+    if (new RegExp(`\\b${registryName}\\b`).test(namedImports)) {
+      importSource = importMatch[2];
+      break;
+    }
+  }
+  if (!importSource?.startsWith("./")) {
+    return [];
+  }
+
+  const registrySourcePath = path.resolve(
+    repoRoot,
+    "src/lib/tauri-mock",
+    `${importSource.replace(/^\.\//, "")}.ts`,
+  );
+  if (!fs.existsSync(registrySourcePath)) {
+    throw new Error(`未找到 spread mock registry 文件: ${registrySourcePath}`);
+  }
+
+  const registrySourceCode = fs.readFileSync(registrySourcePath, "utf8");
+  const markerPattern = new RegExp(
+    `export\\s+const\\s+${registryName}\\b[\\s\\S]*?=\\s*\\{`,
+  );
+  const markerMatch = markerPattern.exec(registrySourceCode);
+  if (!markerMatch) {
+    throw new Error(`未找到 spread mock registry 定义: ${registryName}`);
+  }
+
+  const braceStart = markerMatch.index + markerMatch[0].length - 1;
+  const registryBody = extractBalancedBlock(
+    registrySourceCode,
+    braceStart,
+    "{",
+    "}",
+  );
+  const commands = [];
+  for (const match of registryBody.matchAll(/^  ([A-Za-z0-9_]+)\s*:/gm)) {
+    commands.push(match[1]);
+  }
+  return commands;
 }
 
 function readAgentCommandCatalog() {

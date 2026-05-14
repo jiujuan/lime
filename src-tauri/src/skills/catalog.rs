@@ -534,4 +534,31 @@ Invalid content
         assert!(!skill.disable_model_invocation);
         assert!(skill.standard_compliance.is_standard);
     }
+
+    #[test]
+    fn test_bundled_analysis_skill_loads_full_instruction_body() {
+        let skill_file = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources/default-skills/analysis/SKILL.md");
+
+        assert!(skill_file.exists());
+        let skill = load_skill_from_file("analysis", &skill_file).unwrap();
+
+        assert_eq!(skill.display_name, "analysis");
+        assert_eq!(skill.execution_mode, "prompt");
+        assert_eq!(
+            skill.allowed_tools,
+            Some(vec!["list_directory".to_string(), "read_file".to_string()])
+        );
+        assert_eq!(
+            skill.metadata.get("lime_version").map(String::as_str),
+            Some("1.0.1")
+        );
+        assert!(skill.markdown_content.contains("你是 Lime 的分析助手"));
+        assert!(skill
+            .markdown_content
+            .contains("不要仅因没有外部材料就输出“无法分析”"));
+        assert!(skill.markdown_content.contains("## 输出格式（固定）"));
+        assert!(!skill.markdown_content.contains("lime_execution_mode"));
+        assert!(skill.standard_compliance.is_standard);
+    }
 }

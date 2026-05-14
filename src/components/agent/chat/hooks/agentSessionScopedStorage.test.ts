@@ -143,6 +143,28 @@ function createServiceSceneSkillAssistantMessage(): Message {
   };
 }
 
+function createLegacyCommandSkillAssistantMessage(): Message {
+  const timestamp = new Date("2026-04-24T00:00:04.000Z");
+
+  return {
+    id: "message-legacy-command-skill-assistant",
+    role: "assistant",
+    content: "历史 Skill 回复",
+    timestamp,
+    thinkingContent: "先读取 Skill，再生成回复。",
+    contentParts: [
+      {
+        type: "thinking",
+        text: "先读取 Skill，再生成回复。",
+      },
+      {
+        type: "text",
+        text: "历史 Skill 回复",
+      },
+    ],
+  };
+}
+
 function createStandaloneSkillUserMessage(): Message {
   return {
     id: "message-skill-user",
@@ -241,6 +263,48 @@ describe("agentSessionScopedStorage", () => {
       {
         type: "text",
         text: "最终 Skill 回复",
+      },
+    ]);
+  });
+
+  it("旧版 @ 命令 Skill 快照缺少 retention 标记时也应保留本地思考", () => {
+    const workspaceId = "ws-session-snapshot-legacy-command-skill";
+    const sessionId = "topic-legacy-command-skill";
+
+    saveAgentSessionCachedSnapshot(workspaceId, sessionId, {
+      messages: [
+        {
+          id: "message-legacy-command-user",
+          role: "user",
+          content: "@analysis 帮我分析一下今天的国际形势",
+          timestamp: new Date("2026-04-24T00:00:03.000Z"),
+        },
+        createLegacyCommandSkillAssistantMessage(),
+      ],
+      threadTurns: [],
+      threadItems: [],
+      currentTurnId: null,
+    });
+
+    const restored = loadAgentSessionCachedSnapshot(workspaceId, sessionId);
+    const restoredAssistant = restored?.messages.find(
+      (message) => message.id === "message-legacy-command-skill-assistant",
+    );
+
+    expect(restoredAssistant).toMatchObject({
+      role: "assistant",
+      content: "历史 Skill 回复",
+      inlineProcessRetention: "skill",
+      thinkingContent: "先读取 Skill，再生成回复。",
+    });
+    expect(restoredAssistant?.contentParts).toEqual([
+      {
+        type: "thinking",
+        text: "先读取 Skill，再生成回复。",
+      },
+      {
+        type: "text",
+        text: "历史 Skill 回复",
       },
     ]);
   });

@@ -1,4 +1,5 @@
 import { act } from "react";
+import type { ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
@@ -8,13 +9,18 @@ import { ImageWorkbenchMessagePreview } from "./ImageWorkbenchMessagePreview";
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 const IMAGE_WORKBENCH_TASK_ACTION_EVENT = "lime:image-workbench-task-action";
 
-function renderPreview(preview: MessageImageWorkbenchPreview) {
+function renderPreview(
+  preview: MessageImageWorkbenchPreview,
+  props?: Partial<
+    Omit<ComponentProps<typeof ImageWorkbenchMessagePreview>, "preview">
+  >,
+) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
 
   act(() => {
-    root.render(<ImageWorkbenchMessagePreview preview={preview} />);
+    root.render(<ImageWorkbenchMessagePreview preview={preview} {...props} />);
   });
 
   mountedRoots.push({ root, container });
@@ -130,15 +136,16 @@ describe("ImageWorkbenchMessagePreview", () => {
     };
     window.addEventListener(IMAGE_WORKBENCH_TASK_ACTION_EVENT, handleAction);
 
-    const openButton = container.querySelector(
+    const openCard = container.querySelector(
       '[data-testid="image-workbench-message-preview-image-preview-failed"]',
-    ) as HTMLButtonElement | null;
+    ) as HTMLDivElement | null;
     const retryButton = container.querySelector(
       '[data-testid="image-workbench-message-preview-action-image-preview-failed-retry"]',
     ) as HTMLButtonElement | null;
 
-    expect(openButton?.getAttribute("aria-label")).toBe("Open image result");
+    expect(openCard).not.toBeNull();
     expect(retryButton?.textContent).toContain("Retry");
+    expect(container.textContent).not.toContain("Provider timeout");
 
     act(() => {
       retryButton?.click();
@@ -151,9 +158,44 @@ describe("ImageWorkbenchMessagePreview", () => {
       contentId: "content-1",
     });
 
-    window.removeEventListener(
-      IMAGE_WORKBENCH_TASK_ACTION_EVENT,
-      handleAction,
+    window.removeEventListener(IMAGE_WORKBENCH_TASK_ACTION_EVENT, handleAction);
+  });
+
+  it("passes the clicked grid image so the viewer does not fall back to the first output", () => {
+    const onOpen = vi.fn();
+    const { container } = renderPreview(
+      {
+        taskId: "image-preview-storyboard",
+        prompt: "九张章节配图",
+        mode: "generate",
+        status: "complete",
+        imageUrl: "https://example.com/chapter-1.png",
+        previewImages: [
+          "https://example.com/chapter-1.png",
+          "https://example.com/chapter-2.png",
+          "https://example.com/chapter-3.png",
+        ],
+        imageCount: 3,
+      },
+      { onOpen },
+    );
+
+    const secondImageButton = container.querySelector(
+      '[data-testid="image-workbench-message-preview-media-image-preview-storyboard-2"]',
+    ) as HTMLButtonElement | null;
+
+    act(() => {
+      secondImageButton?.click();
+    });
+
+    expect(onOpen).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: "image-preview-storyboard",
+      }),
+      {
+        imageUrl: "https://example.com/chapter-2.png",
+        imageIndex: 1,
+      },
     );
   });
 });

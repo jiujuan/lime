@@ -24,7 +24,7 @@ export function VideoRenderer({
     <video
       src={url}
       controls
-      className="w-full overflow-hidden rounded-[24px] border border-slate-200 bg-black shadow-sm"
+      className="w-full overflow-hidden rounded-[20px] border border-[color:var(--lime-surface-border)] bg-black shadow-sm shadow-slate-950/5"
     />
   );
 }

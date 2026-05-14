@@ -102,6 +102,11 @@ export interface MessageImageWorkbenchPreview {
   runtimeContract?: ImageRuntimeContractSnapshot | null;
 }
 
+export interface MessageImageWorkbenchPreviewSelection {
+  imageUrl?: string | null;
+  imageIndex?: number | null;
+}
+
 export type MessageTaskPreviewStatus = MessageImageWorkbenchPreview["status"];
 
 export interface MessageVideoTaskPreview {
@@ -192,6 +197,7 @@ export type MessagePreviewTarget =
   | {
       kind: "image_workbench";
       preview: MessageImageWorkbenchPreview;
+      selection?: MessageImageWorkbenchPreviewSelection;
     }
   | {
       kind: "task";

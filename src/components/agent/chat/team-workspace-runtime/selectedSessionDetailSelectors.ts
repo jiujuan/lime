@@ -1,6 +1,6 @@
 import type { AsterSubagentSkillInfo } from "@/lib/api/agentRuntime";
 import { formatNumber } from "@/i18n/format";
-import agentSourceResource from "@/i18n/resources/zh-CN/agent.json";
+import { agentZhCNResource as agentSourceResource } from "@/i18n/agentResources";
 import { buildTeamWorkspaceSkillDisplayName } from "../utils/teamWorkspaceCopy";
 import type { TeamWorkspaceRuntimeStatus } from "../teamWorkspaceRuntime";
 import {

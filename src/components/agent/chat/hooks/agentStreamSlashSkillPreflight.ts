@@ -33,6 +33,13 @@ interface ResolvedSkillPreflightLaunch {
   requestContext?: Record<string, unknown>;
 }
 
+const STRUCTURED_SERVICE_LAUNCH_KEYS = new Set([
+  "service_scene_launch",
+  "serviceSceneLaunch",
+  "service_skill_launch",
+  "serviceSkillLaunch",
+]);
+
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return undefined;
@@ -62,7 +69,69 @@ function hasStructuredSlashLaunchMetadata(
   return Boolean(launch && Object.keys(launch).length > 0);
 }
 
-function resolveAnalysisSkillLaunch(
+function isStructuredModelSkillLaunchKey(key: string): boolean {
+  if (STRUCTURED_SERVICE_LAUNCH_KEYS.has(key)) {
+    return false;
+  }
+
+  return key.endsWith("_skill_launch") || key.endsWith("SkillLaunch");
+}
+
+function resolveLaunchScopedContext(
+  launch: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const explicitRequestContext =
+    asRecord(launch.request_context) ?? asRecord(launch.requestContext);
+  if (explicitRequestContext) {
+    return explicitRequestContext;
+  }
+
+  const kind = readTrimmedString(launch.kind);
+  if (kind) {
+    const kindScopedContext = asRecord(launch[kind]);
+    if (kindScopedContext) {
+      return kindScopedContext;
+    }
+  }
+
+  for (const [key, value] of Object.entries(launch)) {
+    if (
+      key.endsWith("_request") ||
+      key.endsWith("_task") ||
+      key.endsWith("Request") ||
+      key.endsWith("Task")
+    ) {
+      const scopedContext = asRecord(value);
+      if (scopedContext) {
+        return scopedContext;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function resolveLaunchUserInput(
+  launch: Record<string, unknown>,
+  scopedContext?: Record<string, unknown>,
+): string {
+  return (
+    readTrimmedString(scopedContext?.raw_text) ??
+    readTrimmedString(scopedContext?.rawText) ??
+    readTrimmedString(scopedContext?.user_input) ??
+    readTrimmedString(scopedContext?.userInput) ??
+    readTrimmedString(scopedContext?.prompt) ??
+    readTrimmedString(scopedContext?.content) ??
+    readTrimmedString(launch.raw_text) ??
+    readTrimmedString(launch.rawText) ??
+    readTrimmedString(launch.user_input) ??
+    readTrimmedString(launch.userInput) ??
+    readTrimmedString(launch.prompt) ??
+    ""
+  );
+}
+
+function resolveStructuredModelSkillLaunch(
   requestMetadata: Record<string, unknown> | undefined,
 ): ResolvedSkillPreflightLaunch | undefined {
   const harness = extractExistingHarnessMetadata(requestMetadata);
@@ -70,41 +139,35 @@ function resolveAnalysisSkillLaunch(
     return undefined;
   }
 
-  const launch =
-    asRecord(harness.analysis_skill_launch) ??
-    asRecord(harness.analysisSkillLaunch);
-  if (!launch) {
-    return undefined;
+  for (const [key, value] of Object.entries(harness)) {
+    if (!isStructuredModelSkillLaunchKey(key)) {
+      continue;
+    }
+
+    const launch = asRecord(value);
+    if (!launch) {
+      continue;
+    }
+
+    const skillName =
+      readTrimmedString(launch.skill_name) ??
+      readTrimmedString(launch.skillName);
+    if (!skillName) {
+      continue;
+    }
+
+    const explicitRequestContext =
+      asRecord(launch.request_context) ?? asRecord(launch.requestContext);
+    const scopedContext = resolveLaunchScopedContext(launch);
+
+    return {
+      skillName,
+      userInput: resolveLaunchUserInput(launch, scopedContext),
+      requestContext: explicitRequestContext,
+    };
   }
 
-  const kind = readTrimmedString(launch.kind) ?? "analysis_request";
-  if (kind !== "analysis_request") {
-    return undefined;
-  }
-
-  const skillName =
-    readTrimmedString(launch.skill_name) ??
-    readTrimmedString(launch.skillName) ??
-    "analysis";
-  if (skillName !== "analysis") {
-    return undefined;
-  }
-
-  const analysisRequest =
-    asRecord(launch.analysis_request) ?? asRecord(launch.analysisRequest);
-  if (!analysisRequest) {
-    return undefined;
-  }
-
-  return {
-    skillName,
-    userInput:
-      readTrimmedString(analysisRequest.raw_text) ??
-      readTrimmedString(analysisRequest.rawText) ??
-      readTrimmedString(analysisRequest.prompt) ??
-      "",
-    requestContext: launch,
-  };
+  return undefined;
 }
 
 async function executeResolvedSkillPreflight(
@@ -206,14 +269,14 @@ export async function maybeHandleSlashSkillBeforeSend(
     return false;
   }
 
-  const analysisSkillLaunch = resolveAnalysisSkillLaunch(
+  const structuredSkillLaunch = resolveStructuredModelSkillLaunch(
     preparedSend.requestMetadata,
   );
-  if (analysisSkillLaunch) {
+  if (structuredSkillLaunch) {
     return executeResolvedSkillPreflight(
       preparedSend,
       env,
-      analysisSkillLaunch,
+      structuredSkillLaunch,
     );
   }
 

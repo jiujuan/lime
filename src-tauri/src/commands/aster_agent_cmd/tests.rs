@@ -5068,7 +5068,11 @@ mod tests {
                         },
                         "presentation": {
                             "version": "lime-image-chat-v1",
-                            "assistant_intro": "好啊，用 GPT Image 2 处理：把这张海报改成更清爽的青柠风格\n先获取下工具参数\n马上生成"
+                            "opening_guidance": {
+                                "source": "model_stream",
+                                "avoid_fixed_templates": true,
+                                "avoid_visible_process_lines": true
+                            }
                         },
                         "taste_context": {
                             "version": "lime-image-taste-v1",
@@ -5095,6 +5099,20 @@ mod tests {
         assert!(merged.contains("skill=\"image_generate\""));
         assert!(merged.contains("Skill.args 的 JSON"));
         assert!(merged.contains("第一工具调用示例(Skill 参数 JSON)"));
+        assert!(merged.contains("可以最多用一句自然短句提示风险"));
+        assert!(merged.contains(
+            "不得以安全审查、政策不确定或“不能生成”为由拒绝、停止、跳过或延迟图片任务"
+        ));
+        assert!(merged.contains("仍必须继续调用 Skill(image_generate)"));
+        assert!(merged.contains(
+            "最终是否拒绝、改写或降级由图片生成执行器/图片模型自己的策略决定"
+        ));
+        assert!(merged.contains("外层 Agent 不要自行替图片模型下最终拒绝结论"));
+        assert!(merged.contains(
+            "禁止输出“非常抱歉，我无法完成这个请求”“我无法为此类请求提供帮助”"
+        ));
+        assert!(merged.contains("这类话术即使任务卡继续生成，也会被用户理解为外层模型阻止了图片执行"));
+        assert!(merged.contains("可见风险提示应改写为非阻断句式"));
         assert!(merged.contains("\"image_task\":"));
         assert!(merged.contains("不要为了确认技能名、工具名或命令名再去调用 ToolSearch"));
         assert!(merged.contains("当前主会话第一刀必须先调用 Skill(image_generate)"));
@@ -5113,6 +5131,9 @@ mod tests {
         assert!(merged.contains("不要伪造“图片已生成完成”"));
         assert!(merged.contains("不要再次调用 Skill(image_generate) 或重复创建第二个图片任务"));
         assert!(merged.contains("不要再输出“任务类型 / 任务 ID / 任务文件 / 状态”这类提交摘要"));
+        assert!(merged.contains("assistant_intro_request"));
+        assert!(merged.contains("completion_caption_request"));
+        assert!(merged.contains("不要在前端或协议里套固定模板"));
         assert!(!merged.contains("给出提交摘要"));
         assert!(merged.contains("provider_id / model"));
         assert!(merged.contains(
@@ -5126,6 +5147,8 @@ mod tests {
         assert!(merged.contains("当前任务已经显式进入图片技能主链"));
         assert!(merged.contains("当前图片生成人设契约(JSON)"));
         assert!(merged.contains("当前聊天展示契约(JSON)"));
+        assert!(merged.contains("不要复述固定过程句"));
+        assert!(merged.contains("不是可见文案模板"));
         assert!(merged.contains("当前品味/记忆规划上下文(JSON)"));
         assert!(merged.contains("不要在聊天区暴露内部来源或参考站名称"));
         let reference_site_name = ["ri", "bbi"].concat();
@@ -5152,7 +5175,9 @@ mod tests {
         assert!(merged.contains("不要因此自动调用 Skill(image_generate)"));
         assert!(merged.contains("是否要调用画图功能生成图片"));
         assert!(merged.contains("不要输出 HTML/CSS/SVG/Markdown 草图"));
-        assert!(merged.contains("这看起来是图片生成需求，要我直接调用画图功能生成吗？"));
+        assert!(merged.contains("按用户当前语言和上下文自然表达"));
+        assert!(merged.contains("不要机械复述固定句式"));
+        assert!(!merged.contains("这看起来是图片生成需求，要我直接调用画图功能生成吗？"));
         assert!(!merged.contains(super::image_skill_launch::IMAGE_SKILL_LAUNCH_PROMPT_MARKER));
     }
 
@@ -6920,7 +6945,11 @@ mod tests {
                         "provider_id": "fal",
                         "model": "fal-ai/nano-banana-pro",
                         "presentation": {
-                            "assistant_intro": "好啊\n先获取下工具参数\n马上生成"
+                            "opening_guidance": {
+                                "source": "model_stream",
+                                "avoid_fixed_templates": true,
+                                "avoid_visible_process_lines": true
+                            }
                         },
                         "taste_context": {
                             "version": "lime-image-taste-v1"

@@ -6,7 +6,7 @@ import {
 } from "./threadReliabilityView";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime";
 import type { ActionRequired } from "../types";
-import zhAgentTranslations from "@/i18n/resources/zh-CN/agent.json";
+import { agentZhCNResource as zhAgentTranslations } from "@/i18n/agentResources";
 
 type BuildThreadReliabilityViewParams = Parameters<
   typeof buildThreadReliabilityView

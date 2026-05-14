@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styled from "styled-components";
 import {
   BookOpen,
@@ -16,7 +17,9 @@ import {
   MetaToggleGlyph,
   MetaToggleLabel,
 } from "../styles";
+import { formatList } from "@/i18n/format";
 import {
+  type InputbarKnowledgeHubCopyRef,
   isReadyKnowledgePackStatus,
   normalizeKnowledgePackOptions,
   resolveKnowledgeHubState,
@@ -195,7 +198,11 @@ export function InputbarKnowledgeControl({
   onStartKnowledgeOrganize?: () => void;
   onManageKnowledgePacks?: () => void;
 }) {
+  const { t, i18n } = useTranslation("agent");
   const [showKnowledgeHub, setShowKnowledgeHub] = useState(false);
+  const fallbackPackLabel = t(
+    "agentChat.inputbar.knowledge.fallbackPackLabel",
+  );
   const shouldShowKnowledgePackToggle = Boolean(
     knowledgePackSelection?.packName && knowledgePackSelection?.workingDir,
   );
@@ -239,7 +246,7 @@ export function InputbarKnowledgeControl({
   const currentKnowledgePackLabel =
     knowledgePackSelection?.label ||
     knowledgePackSelection?.packName ||
-    "项目资料";
+    fallbackPackLabel;
   const effectiveKnowledgeEnabled = Boolean(
     knowledgePackSelection?.enabled &&
     isReadyKnowledgePackStatus(knowledgePackSelection.status),
@@ -250,7 +257,10 @@ export function InputbarKnowledgeControl({
     hasInputText: Boolean(inputText.trim()),
     canManageKnowledgePacks: Boolean(onManageKnowledgePacks),
     canStartKnowledgeOrganize: Boolean(onStartKnowledgeOrganize),
+    fallbackPackLabel,
   });
+  const renderHubCopy = (copy: InputbarKnowledgeHubCopyRef) =>
+    t(copy.key, copy.values ?? {});
   const shouldShowSecondaryManageAction = Boolean(
     onManageKnowledgePacks &&
     hubState.primaryAction !== "manage" &&
@@ -261,17 +271,27 @@ export function InputbarKnowledgeControl({
     hubState.primaryAction !== "organize" &&
     hubState.primaryAction !== "supplement",
   );
-  const secondaryOrganizeLabel = inputText.trim()
-    ? "整理当前输入"
-    : "添加新资料";
+  const secondaryOrganizeLabel = t(
+    inputText.trim()
+      ? "agentChat.inputbar.knowledge.action.organizeSecondaryWithInput"
+      : "agentChat.inputbar.knowledge.action.organizeSecondary",
+  );
   const companionCount = companionPacks.length;
+  const implicitCompanionList = formatList(implicitCompanionLabels, {
+    locale: i18n.language,
+  });
   const knowledgeToggleLabel = effectiveKnowledgeEnabled
-    ? `资料：${currentKnowledgePackLabel}${companionCount ? ` +${companionCount}` : ""}`
+    ? t(
+        companionCount
+          ? "agentChat.inputbar.knowledge.toggle.label.enabledWithCompanions"
+          : "agentChat.inputbar.knowledge.toggle.label.enabled",
+        { count: companionCount, label: currentKnowledgePackLabel },
+      )
     : shouldShowKnowledgePackToggle
       ? isReadyKnowledgePackStatus(knowledgePackSelection?.status)
-        ? "资料可用"
-        : "资料待确认"
-      : "添加资料";
+        ? t("agentChat.inputbar.knowledge.toggle.label.ready")
+        : t("agentChat.inputbar.knowledge.toggle.label.pending")
+      : t("agentChat.inputbar.knowledge.toggle.label.add");
 
   useEffect(() => {
     if (!openKnowledgeHubRequestKey) {
@@ -321,14 +341,18 @@ export function InputbarKnowledgeControl({
       <MetaToggleButton
         type="button"
         $checked={effectiveKnowledgeEnabled || showKnowledgeHub}
-        aria-label="打开项目资料"
+        aria-label={t("agentChat.inputbar.knowledge.toggle.aria")}
         aria-expanded={showKnowledgeHub}
         title={
           effectiveKnowledgeEnabled
-            ? `正在使用项目资料：${currentKnowledgePackLabel}`
+            ? t("agentChat.inputbar.knowledge.toggle.title.enabled", {
+                label: currentKnowledgePackLabel,
+              })
             : shouldShowKnowledgePackToggle
-              ? `已有可用项目资料：${currentKnowledgePackLabel}。点击选择、添加或使用。`
-              : "查看、添加或使用项目资料"
+              ? t("agentChat.inputbar.knowledge.toggle.title.available", {
+                  label: currentKnowledgePackLabel,
+                })
+              : t("agentChat.inputbar.knowledge.toggle.title.organize")
         }
         data-testid={
           shouldShowKnowledgePackToggle
@@ -351,14 +375,16 @@ export function InputbarKnowledgeControl({
         <KnowledgeHubCard data-testid="inputbar-knowledge-hub">
           <KnowledgeHubTitle>
             <BookOpen className="h-4 w-4 text-emerald-600" />
-            {hubState.title}
+            {renderHubCopy(hubState.title)}
           </KnowledgeHubTitle>
           <KnowledgeHubDescription>
-            {hubState.description}
+            {renderHubCopy(hubState.description)}
           </KnowledgeHubDescription>
           {readyOptions.length > 0 ? (
             <>
-              <KnowledgePackSectionTitle>主资料</KnowledgePackSectionTitle>
+              <KnowledgePackSectionTitle>
+                {t("agentChat.inputbar.knowledge.section.main")}
+              </KnowledgePackSectionTitle>
               <KnowledgePackMenu
                 role="menu"
                 data-testid="inputbar-knowledge-pack-menu"
@@ -381,11 +407,13 @@ export function InputbarKnowledgeControl({
                       <KnowledgePackMenuItemTitle>
                         <span>{label}</span>
                         {option.defaultForWorkspace ? (
-                          <KnowledgePackMenuBadge>默认</KnowledgePackMenuBadge>
+                          <KnowledgePackMenuBadge>
+                            {t("agentChat.inputbar.knowledge.badge.default")}
+                          </KnowledgePackMenuBadge>
                         ) : null}
                       </KnowledgePackMenuItemTitle>
                       <KnowledgePackMenuItemMeta>
-                        已确认，可用于生成
+                        {t("agentChat.inputbar.knowledge.meta.ready")}
                       </KnowledgePackMenuItemMeta>
                     </KnowledgePackMenuItem>
                   );
@@ -395,13 +423,15 @@ export function InputbarKnowledgeControl({
           ) : null}
           {implicitCompanionLabels.length > 0 ? (
             <KnowledgeHubDescription data-testid="inputbar-knowledge-implicit-companions">
-              已自动搭配人设资料：{implicitCompanionLabels.join("、")}。
+              {t("agentChat.inputbar.knowledge.implicitCompanions", {
+                labels: implicitCompanionList,
+              })}
             </KnowledgeHubDescription>
           ) : null}
           {companionCandidates.length > 0 && onToggleKnowledgeCompanionPack ? (
             <>
               <KnowledgePackSectionTitle>
-                协同资料（可多选）
+                {t("agentChat.inputbar.knowledge.section.companion")}
               </KnowledgePackSectionTitle>
               <KnowledgePackMenu data-testid="inputbar-knowledge-companion-menu">
                 {companionCandidates.map((option) => {
@@ -428,11 +458,15 @@ export function InputbarKnowledgeControl({
                       <KnowledgePackMenuItemTitle>
                         <span>{label}</span>
                         <KnowledgePackMenuBadge>
-                          {isSelected ? "已协同" : "可协同"}
+                          {t(
+                            isSelected
+                              ? "agentChat.inputbar.knowledge.badge.companionSelected"
+                              : "agentChat.inputbar.knowledge.badge.companionAvailable",
+                          )}
                         </KnowledgePackMenuBadge>
                       </KnowledgePackMenuItemTitle>
                       <KnowledgePackMenuItemMeta>
-                        和主资料一起进入上下文，用于补充运营事实和执行边界
+                        {t("agentChat.inputbar.knowledge.meta.companion")}
                       </KnowledgePackMenuItemMeta>
                     </KnowledgePackMenuItem>
                   );
@@ -442,8 +476,9 @@ export function InputbarKnowledgeControl({
           ) : null}
           {hiddenPendingCount > 0 ? (
             <KnowledgeHubDescription>
-              还有 {hiddenPendingCount}{" "}
-              份资料待确认，确认后才会出现在可用列表里。
+              {t("agentChat.inputbar.knowledge.pendingNotice", {
+                count: hiddenPendingCount,
+              })}
             </KnowledgeHubDescription>
           ) : null}
           <KnowledgeHubActions>
@@ -455,7 +490,7 @@ export function InputbarKnowledgeControl({
                   setShowKnowledgeHub(false);
                 }}
               >
-                关闭资料
+                {t("agentChat.inputbar.knowledge.action.close")}
               </KnowledgeHubAction>
             ) : null}
             {shouldShowSecondaryOrganizeAction ? (
@@ -479,7 +514,7 @@ export function InputbarKnowledgeControl({
                 }}
               >
                 <SlidersHorizontal className="h-3.5 w-3.5" />
-                检查资料
+                {t("agentChat.inputbar.knowledge.action.check")}
               </KnowledgeHubAction>
             ) : null}
             {hubState.primaryAction !== "none" ? (
@@ -489,7 +524,7 @@ export function InputbarKnowledgeControl({
                 onClick={handlePrimaryAction}
               >
                 <MessageSquareText className="h-3.5 w-3.5" />
-                {hubState.primaryLabel}
+                {renderHubCopy(hubState.primaryLabel)}
               </KnowledgeHubAction>
             ) : null}
           </KnowledgeHubActions>

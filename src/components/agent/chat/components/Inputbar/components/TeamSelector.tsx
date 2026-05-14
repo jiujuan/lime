@@ -1,10 +1,12 @@
 import React, { Suspense, lazy, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Users } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { WorkspaceSettings } from "@/types/workspace";
 import type { TeamDefinition } from "../../../utils/teamDefinitions";
 import { useIdleModulePreload } from "../../../skill-selection/useIdleModulePreload";
+import { buildInputbarTeamSelectorCopy } from "./inputbarTeamSelectorCopy";
 
 const preloadTeamSelectorPanel = () => import("./TeamSelectorPanel");
 
@@ -32,6 +34,11 @@ export const TeamSelector: React.FC<TeamSelectorProps> = ({
   workspaceSettings,
   onPersistCustomTeams,
 }) => {
+  const { t } = useTranslation("agent");
+  const copy = React.useMemo(
+    () => buildInputbarTeamSelectorCopy((key, values) => t(key, values ?? {})),
+    [t],
+  );
   const [open, setOpen] = useState(false);
 
   useIdleModulePreload(() => {
@@ -46,8 +53,8 @@ export const TeamSelector: React.FC<TeamSelectorProps> = ({
   }, [autoOpenToken]);
 
   const resolvedLabel = selectedTeam?.label?.trim()
-    ? `分工 · ${selectedTeam.label.trim()}`
-    : "配置分工";
+    ? copy.triggerSelected(selectedTeam.label.trim())
+    : copy.triggerDefault;
 
   const selectedRoleCount = selectedTeam?.roles.length || 0;
 
@@ -81,7 +88,7 @@ export const TeamSelector: React.FC<TeamSelectorProps> = ({
             <Suspense
               fallback={
                 <div className="px-4 py-7 text-center text-sm text-slate-500">
-                  加载中...
+                  {copy.loading}
                 </div>
               }
             >

@@ -5,6 +5,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { CanvasStateUnion } from "@/lib/workspace/workbenchCanvas";
 import type {
@@ -26,7 +27,9 @@ import {
 import { buildImageTaskLookupRequest } from "./imageTaskLocator";
 import {
   collapseWhitespace,
+  resolveImageWorkbenchApplyDispatchLabel,
   resolveImageWorkbenchActionLabel,
+  resolveImageWorkbenchCoverSuccessLabel,
   type ImageWorkbenchApplyTarget,
   type SessionImageWorkbenchState,
 } from "./imageWorkbenchHelpers";
@@ -260,6 +263,24 @@ function resolveReplayTarget(
     : "generate";
 }
 
+function resolveTrackedTaskReplayTarget(
+  task: SessionImageWorkbenchState["tasks"][number] | undefined,
+): CreateImageGenerationTaskArtifactRequest["requestedTarget"] {
+  return task?.applyTarget?.kind === "document-cover" ? "cover" : "generate";
+}
+
+function resolveTrackedTaskReplayUsage(
+  task: SessionImageWorkbenchState["tasks"][number] | undefined,
+): CreateImageGenerationTaskArtifactRequest["usage"] {
+  if (task?.applyTarget?.kind === "document-cover") {
+    return "cover";
+  }
+  if (task?.applyTarget?.kind === "canvas-insert") {
+    return "document-inline";
+  }
+  return "claw-image-workbench";
+}
+
 function resolvePendingImageTaskId(
   tasks: SessionImageWorkbenchState["tasks"],
 ): string | null {
@@ -327,6 +348,7 @@ export function useWorkspaceImageWorkbenchActionRuntime({
   setInput,
   updateCurrentImageWorkbenchState,
 }: UseWorkspaceImageWorkbenchActionRuntimeParams) {
+  const { t } = useTranslation("agent");
   const imageWorkbenchRequestProviderId = useMemo(() => {
     const selectedProviderId = imageWorkbenchSelectedProviderId?.trim();
     if (selectedProviderId) {
@@ -398,11 +420,17 @@ export function useWorkspaceImageWorkbenchActionRuntime({
 
   const handleSelectImageWorkbenchOutput = useCallback(
     (outputId: string) => {
-      updateCurrentImageWorkbenchState((current) => ({
-        ...current,
-        active: true,
-        selectedOutputId: outputId,
-      }));
+      updateCurrentImageWorkbenchState((current) => {
+        const selectedOutput =
+          current.outputs.find((output) => output.id === outputId) ?? null;
+        return {
+          ...current,
+          active: true,
+          selectedTaskId:
+            selectedOutput?.taskId ?? current.selectedTaskId ?? null,
+          selectedOutputId: outputId,
+        };
+      });
     },
     [updateCurrentImageWorkbenchState],
   );
@@ -410,28 +438,88 @@ export function useWorkspaceImageWorkbenchActionRuntime({
   const handleSeedImageWorkbenchFollowUp = useCallback(
     (command: string) => {
       setInput(command);
-      toast.info("已在输入框填入图片命令");
+      toast.info(t("agentChat.imageWorkbenchAction.toast.seedCommand"));
     },
-    [setInput],
+    [setInput, t],
   );
 
   const handleRetryImageWorkbenchTask = useCallback(
     async (taskId: string) => {
       const normalizedTaskId = taskId.trim();
       const normalizedProjectRootPath = projectRootPath?.trim();
+      const trackedTask = currentImageWorkbenchState.tasks.find(
+        (task) => task.id === normalizedTaskId,
+      );
+      const replayTrackedTaskDirectly = async () => {
+        const prompt =
+          trackedTask?.prompt.trim() || trackedTask?.rawText.trim() || "";
+        if (!prompt) {
+          toast.error(
+            t("agentChat.imageWorkbenchAction.toast.retry.missingPrompt"),
+          );
+          return false;
+        }
+
+        await createImageGenerationTask({
+          projectRootPath: normalizedProjectRootPath!,
+          prompt,
+          title: prompt,
+          titleGenerationResult: undefined,
+          mode: resolveReplayMode(trackedTask?.mode),
+          rawText: trackedTask?.rawText.trim() || prompt,
+          layoutHint: trackedTask?.layoutHint || undefined,
+          size: imageWorkbenchSelectedSize,
+          aspectRatio: undefined,
+          count: trackedTask?.expectedCount || 1,
+          usage: resolveTrackedTaskReplayUsage(trackedTask),
+          slotId: undefined,
+          anchorHint:
+            trackedTask?.applyTarget?.kind === "canvas-insert"
+              ? trackedTask.applyTarget.anchorHint
+              : undefined,
+          anchorSectionTitle:
+            trackedTask?.applyTarget?.kind === "canvas-insert"
+              ? trackedTask.applyTarget.sectionTitle || undefined
+              : undefined,
+          anchorText:
+            trackedTask?.applyTarget?.kind === "canvas-insert"
+              ? trackedTask.applyTarget.anchorText || undefined
+              : undefined,
+          style: undefined,
+          providerId:
+            imageWorkbenchSelectedProviderId ||
+            trackedTask?.runtimeContract?.providerId ||
+            undefined,
+          model:
+            imageWorkbenchSelectedModelId ||
+            trackedTask?.runtimeContract?.model ||
+            undefined,
+          sessionId: imageWorkbenchSessionKey,
+          projectId: projectId || undefined,
+          contentId: contentId || undefined,
+          entrySource: "image_workbench_retry",
+          requestedTarget: resolveTrackedTaskReplayTarget(trackedTask),
+          targetOutputId: trackedTask?.targetOutputId || undefined,
+          targetOutputRefId: trackedTask?.targetOutputRefId || undefined,
+          referenceImages: [],
+        });
+        toast.success(t("agentChat.imageWorkbenchAction.toast.retry.success"));
+        return true;
+      };
       if (!normalizedTaskId) {
-        toast.error("缺少图片任务 ID，暂时无法重新生成");
+        toast.error(
+          t("agentChat.imageWorkbenchAction.toast.retry.missingTaskId"),
+        );
         return false;
       }
       if (!normalizedProjectRootPath) {
-        toast.error("当前项目目录未就绪，暂时无法重新生成");
+        toast.error(
+          t("agentChat.imageWorkbenchAction.toast.retry.projectNotReady"),
+        );
         return false;
       }
 
       try {
-        const trackedTask = currentImageWorkbenchState.tasks.find(
-          (task) => task.id === normalizedTaskId,
-        );
         const originalTaskLookup = buildImageTaskLookupRequest({
           taskId: normalizedTaskId,
           taskFilePath: trackedTask?.taskFilePath,
@@ -439,10 +527,21 @@ export function useWorkspaceImageWorkbenchActionRuntime({
           projectRootPath: normalizedProjectRootPath,
         });
         if (!originalTaskLookup) {
-          throw new Error("未找到原任务文件，暂时无法重新生成");
+          toast.error(
+            t("agentChat.imageWorkbenchAction.toast.retry.missingTaskFile"),
+          );
+          return false;
         }
 
-        const originalTask = await getImageTask(originalTaskLookup);
+        let originalTask: Awaited<ReturnType<typeof getImageTask>>;
+        try {
+          originalTask = await getImageTask(originalTaskLookup);
+        } catch (error) {
+          if (!trackedTask?.taskFilePath && !trackedTask?.artifactPath) {
+            return await replayTrackedTaskDirectly();
+          }
+          throw error;
+        }
         const payload =
           originalTask.record?.payload &&
           typeof originalTask.record.payload === "object" &&
@@ -450,12 +549,18 @@ export function useWorkspaceImageWorkbenchActionRuntime({
             ? (originalTask.record.payload as Record<string, unknown>)
             : null;
         if (!payload) {
-          throw new Error("未找到原任务上下文，暂时无法重新生成");
+          toast.error(
+            t("agentChat.imageWorkbenchAction.toast.retry.missingTaskContext"),
+          );
+          return false;
         }
         const prompt =
           readTaskPayloadString(payload, ["prompt"]) || trackedTask?.prompt;
         if (!prompt?.trim()) {
-          throw new Error("原任务缺少提示词，暂时无法重新生成");
+          toast.error(
+            t("agentChat.imageWorkbenchAction.toast.retry.missingPrompt"),
+          );
+          return false;
         }
 
         const requestedTarget = resolveReplayTarget(
@@ -539,12 +644,10 @@ export function useWorkspaceImageWorkbenchActionRuntime({
             "referenceImages",
           ]),
         });
-        toast.success("已重新创建图片任务");
+        toast.success(t("agentChat.imageWorkbenchAction.toast.retry.success"));
         return true;
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "重新提交图片任务失败",
-        );
+      } catch {
+        toast.error(t("agentChat.imageWorkbenchAction.toast.retry.failed"));
         return false;
       }
     },
@@ -559,6 +662,7 @@ export function useWorkspaceImageWorkbenchActionRuntime({
       imageWorkbenchSessionKey,
       projectId,
       projectRootPath,
+      t,
     ],
   );
 
@@ -567,11 +671,15 @@ export function useWorkspaceImageWorkbenchActionRuntime({
       const normalizedTaskId = taskId.trim();
       const normalizedProjectRootPath = projectRootPath?.trim();
       if (!normalizedTaskId) {
-        toast.error("缺少图片任务 ID，暂时无法取消");
+        toast.error(
+          t("agentChat.imageWorkbenchAction.toast.cancel.missingTaskId"),
+        );
         return false;
       }
       if (!normalizedProjectRootPath) {
-        toast.error("当前项目目录未就绪，暂时无法取消图片任务");
+        toast.error(
+          t("agentChat.imageWorkbenchAction.toast.cancel.projectNotReady"),
+        );
         return false;
       }
 
@@ -586,20 +694,21 @@ export function useWorkspaceImageWorkbenchActionRuntime({
           projectRootPath: normalizedProjectRootPath,
         });
         if (!cancelRequest) {
-          throw new Error("未找到图片任务文件，暂时无法取消");
+          toast.error(
+            t("agentChat.imageWorkbenchAction.toast.cancel.missingTaskFile"),
+          );
+          return false;
         }
 
         await cancelImageTask(cancelRequest);
-        toast.success("已提交取消请求");
+        toast.success(t("agentChat.imageWorkbenchAction.toast.cancel.success"));
         return true;
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "取消图片任务失败",
-        );
+      } catch {
+        toast.error(t("agentChat.imageWorkbenchAction.toast.cancel.failed"));
         return false;
       }
     },
-    [cancelImageTask, currentImageWorkbenchState.tasks, projectRootPath],
+    [cancelImageTask, currentImageWorkbenchState.tasks, projectRootPath, t],
   );
 
   const handleStopImageWorkbenchGeneration = useCallback(async () => {
@@ -607,12 +716,12 @@ export function useWorkspaceImageWorkbenchActionRuntime({
       currentImageWorkbenchState.tasks,
     );
     if (!pendingTaskId) {
-      toast.info("当前没有可取消的图片任务");
+      toast.info(t("agentChat.imageWorkbenchAction.toast.cancel.none"));
       return false;
     }
 
     return handleCancelImageWorkbenchTask(pendingTaskId);
-  }, [currentImageWorkbenchState.tasks, handleCancelImageWorkbenchTask]);
+  }, [currentImageWorkbenchState.tasks, handleCancelImageWorkbenchTask, t]);
 
   useEffect(() => {
     return onImageWorkbenchTaskAction((detail) => {
@@ -646,11 +755,13 @@ export function useWorkspaceImageWorkbenchActionRuntime({
       (item) => item.id === currentImageWorkbenchState.selectedOutputId,
     );
     if (!selectedOutput) {
-      toast.info("请先选择一张图片");
+      toast.info(t("agentChat.imageWorkbenchAction.toast.output.selectImage"));
       return;
     }
     if (!projectId) {
-      toast.error("请先选择项目后再保存到素材库");
+      toast.error(
+        t("agentChat.imageWorkbenchAction.toast.resource.missingProject"),
+      );
       return;
     }
 
@@ -667,21 +778,22 @@ export function useWorkspaceImageWorkbenchActionRuntime({
             : item,
         ),
       }));
-      toast.success("已保存到素材库");
+      toast.success(t("agentChat.imageWorkbenchAction.toast.resource.success"));
       return;
     }
 
     if (result.skipped > 0) {
-      toast.info("该图片已在当前素材库中");
+      toast.info(t("agentChat.imageWorkbenchAction.toast.resource.duplicate"));
       return;
     }
 
-    toast.error(result.errors[0] || "保存到素材库失败");
+    toast.error(t("agentChat.imageWorkbenchAction.toast.resource.failed"));
   }, [
     currentImageWorkbenchState.outputs,
     currentImageWorkbenchState.selectedOutputId,
     projectId,
     saveImageWorkbenchImagesToResource,
+    t,
     updateCurrentImageWorkbenchState,
   ]);
 
@@ -690,13 +802,13 @@ export function useWorkspaceImageWorkbenchActionRuntime({
       (item) => item.id === currentImageWorkbenchState.selectedOutputId,
     );
     if (!selectedOutput) {
-      toast.info("请先选择一张图片");
+      toast.info(t("agentChat.imageWorkbenchAction.toast.output.selectImage"));
       return;
     }
 
     const applyTarget = selectedOutput.applyTarget;
     if (!applyTarget) {
-      toast.info("当前结果还没有绑定落位目标");
+      toast.info(t("agentChat.imageWorkbenchAction.toast.apply.missingTarget"));
       return;
     }
 
@@ -722,7 +834,11 @@ export function useWorkspaceImageWorkbenchActionRuntime({
       });
 
       if (!replaced) {
-        toast.error("未找到待替换的封面占位");
+        toast.error(
+          t(
+            "agentChat.imageWorkbenchAction.toast.apply.coverPlaceholderMissing",
+          ),
+        );
         return;
       }
 
@@ -730,7 +846,7 @@ export function useWorkspaceImageWorkbenchActionRuntime({
         ...current,
         active: false,
       }));
-      toast.success(applyTarget.successLabel);
+      toast.success(resolveImageWorkbenchCoverSuccessLabel(applyTarget));
       return;
     }
 
@@ -754,13 +870,14 @@ export function useWorkspaceImageWorkbenchActionRuntime({
       ...current,
       active: false,
     }));
-    toast.info(applyTarget.dispatchLabel);
+    toast.info(resolveImageWorkbenchApplyDispatchLabel(applyTarget));
   }, [
     contentId,
     currentImageWorkbenchState.outputs,
     currentImageWorkbenchState.selectedOutputId,
     projectId,
     setCanvasState,
+    t,
     updateCurrentImageWorkbenchState,
   ]);
 
@@ -782,11 +899,15 @@ export function useWorkspaceImageWorkbenchActionRuntime({
       applyTarget?: ImageWorkbenchApplyTarget | null;
     }): Promise<boolean> => {
       if (!projectId) {
-        toast.error("请先选择项目后再开始配图");
+        toast.error(
+          t("agentChat.imageWorkbenchAction.toast.command.missingProject"),
+        );
         return false;
       }
       if (!projectRootPath?.trim()) {
-        toast.error("当前项目目录未就绪，暂时无法创建图片任务");
+        toast.error(
+          t("agentChat.imageWorkbenchAction.toast.command.projectNotReady"),
+        );
         return false;
       }
 
@@ -794,9 +915,11 @@ export function useWorkspaceImageWorkbenchActionRuntime({
         params.parsedCommand.prompt.trim() ||
         (params.parsedCommand.mode === "generate"
           ? ""
-          : "请基于参考图继续优化画面表现");
+          : t("agentChat.imageWorkbenchAction.prompt.referenceRefinement"));
       if (!effectivePrompt) {
-        toast.error("请补充清晰的配图描述后再提交");
+        toast.error(
+          t("agentChat.imageWorkbenchAction.toast.command.missingPrompt"),
+        );
         return false;
       }
 
@@ -804,7 +927,13 @@ export function useWorkspaceImageWorkbenchActionRuntime({
       const titlePreviewText =
         params.parsedCommand.mode === "generate"
           ? effectivePrompt
-          : `${params.parsedCommand.mode === "edit" ? "修图" : "重绘"}：${effectivePrompt}`;
+          : t("agentChat.imageWorkbenchAction.title.modePrefix", {
+              mode:
+                params.parsedCommand.mode === "edit"
+                  ? t("agentChat.imageWorkbenchAction.title.edit")
+                  : t("agentChat.imageWorkbenchAction.title.variation"),
+              prompt: effectivePrompt,
+            });
       const titleGenerationResult = await generateAgentRuntimeTitleResult({
         sessionId:
           resolvedSessionKey &&
@@ -863,6 +992,7 @@ export function useWorkspaceImageWorkbenchActionRuntime({
       projectRootPath,
       resolveImageWorkbenchSessionKey,
       submitImageWorkbenchAgentCommand,
+      t,
     ],
   );
 

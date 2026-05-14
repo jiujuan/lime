@@ -2192,7 +2192,11 @@ mod tests {
                 })),
                 presentation: Some(serde_json::json!({
                     "version": "lime-image-chat-v1",
-                    "assistant_intro": "好啊，生成：未来感青柠实验室",
+                    "opening_guidance": {
+                        "source": "model_stream",
+                        "avoid_fixed_templates": true,
+                        "avoid_visible_process_lines": true
+                    },
                     "completion_caption": "青柠实验室已生成"
                 })),
                 taste_context: Some(serde_json::json!({

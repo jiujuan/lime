@@ -32,6 +32,10 @@ import type {
 } from "./types";
 import { buildInputbarComposerSectionCopy } from "./components/inputbarComposerSectionCopy";
 import { buildInputbarCoreCopy } from "./components/inputbarCoreCopy";
+import {
+  buildInputbarExecutionStrategyCopy,
+  buildInputbarWorkflowPanelCopy,
+} from "./inputbarWorkflowCopy";
 
 const SecondaryControlsRow = styled.div`
   position: absolute;
@@ -216,6 +220,20 @@ export const Inputbar: React.FC<InputbarProps> = ({
       ),
     [t],
   );
+  const executionStrategyCopy = React.useMemo(
+    () =>
+      buildInputbarExecutionStrategyCopy((key, values) =>
+        t(key, values ?? {}),
+      ),
+    [t],
+  );
+  const workflowPanelCopy = React.useMemo(
+    () =>
+      buildInputbarWorkflowPanelCopy((key, values) =>
+        t(key, values ?? {}),
+      ),
+    [t],
+  );
   const {
     textareaRef,
     isWorkspaceVariant,
@@ -389,6 +407,8 @@ export const Inputbar: React.FC<InputbarProps> = ({
         inputCompletionEnabled={inputCompletionEnabled}
         copy={inputbarComposerCopy}
         inputbarCopy={inputbarCopy}
+        executionStrategyCopy={executionStrategyCopy}
+        workflowPanelCopy={workflowPanelCopy}
       />
       {dialogLayer}
     </InputbarSurface>

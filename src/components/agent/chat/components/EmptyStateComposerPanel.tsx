@@ -66,6 +66,7 @@ import type {
   InputbarKnowledgePackSelection,
 } from "./Inputbar/types";
 import type { InputbarCoreCopy } from "./Inputbar/components/inputbarCoreCopy";
+import type { InputbarExecutionStrategyCopy } from "./Inputbar/inputbarWorkflowCopy";
 
 interface EmptyStateComposerPanelProps {
   input: string;
@@ -108,6 +109,7 @@ interface EmptyStateComposerPanelProps {
   onManageKnowledgePacks?: () => void;
   copy: HomeSurfaceComposerCopy;
   inputbarCopy: InputbarCoreCopy;
+  executionStrategyCopy: InputbarExecutionStrategyCopy;
   showCreationModeSelector: boolean;
   creationMode: CreationMode;
   onCreationModeChange?: (mode: CreationMode) => void;
@@ -234,6 +236,7 @@ export function EmptyStateComposerPanel({
   onManageKnowledgePacks,
   copy,
   inputbarCopy,
+  executionStrategyCopy,
   showCreationModeSelector,
   creationMode,
   onCreationModeChange,
@@ -629,6 +632,7 @@ export function EmptyStateComposerPanel({
           <InputbarExecutionStrategySelect
             executionStrategy={executionStrategy}
             setExecutionStrategy={setExecutionStrategy}
+            copy={executionStrategyCopy}
           />
 
           <InputbarModelExtra

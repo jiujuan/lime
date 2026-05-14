@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   FOOTER_SIDEBAR_NAV_ITEMS,
   MAIN_SIDEBAR_NAV_ITEMS,
+  buildMainSidebarNavItems,
   resolveEnabledSidebarNavItems,
 } from "./sidebarNav";
 
@@ -41,5 +42,14 @@ describe("sidebarNav", () => {
   it("没有显式设置时不应默认恢复任何可选入口", () => {
     expect(resolveEnabledSidebarNavItems()).toEqual([]);
     expect(resolveEnabledSidebarNavItems(["skills", "resources"])).toEqual([]);
+  });
+
+  it("Agent App Lab 只在实验开关开启时进入左侧栏", () => {
+    expect(
+      buildMainSidebarNavItems({ labEnabled: true }).map((item) => item.id),
+    ).toContain("agent-app-lab");
+    expect(
+      buildMainSidebarNavItems({ labEnabled: false }).map((item) => item.id),
+    ).not.toContain("agent-app-lab");
   });
 });

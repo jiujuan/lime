@@ -1,0 +1,197 @@
+import type {
+  AgentAppProjection,
+  AgentAppProvenance,
+  CapabilityDeclaredBy,
+  CapabilityRequirement,
+  NormalizedAppManifest,
+  PackageIdentity,
+  ProjectedEntry,
+} from "../types";
+
+function createProvenance(
+  identity: PackageIdentity,
+  entryKey?: string,
+): AgentAppProvenance {
+  return {
+    sourceKind: "agent_app",
+    appId: identity.appId,
+    appVersion: identity.appVersion,
+    packageHash: identity.packageHash,
+    manifestHash: identity.manifestHash,
+    entryKey,
+  };
+}
+
+function capabilityKey(capability: string, entryKey?: string): string {
+  return `${capability}::${entryKey ?? "app"}`;
+}
+
+function upsertRequirement(
+  requirements: Map<string, CapabilityRequirement>,
+  params: {
+    capability: string;
+    requestedRange?: string;
+    required?: boolean;
+    declaredBy: CapabilityDeclaredBy;
+    entryKey?: string;
+  },
+): void {
+  const key = capabilityKey(params.capability, params.entryKey);
+  const existing = requirements.get(key);
+  if (!existing) {
+    requirements.set(key, {
+      capability: params.capability,
+      requestedRange: params.requestedRange ?? "*",
+      required: params.required ?? true,
+      declaredBy: [params.declaredBy],
+      entryKey: params.entryKey,
+    });
+    return;
+  }
+
+  if (!existing.declaredBy.includes(params.declaredBy)) {
+    existing.declaredBy.push(params.declaredBy);
+  }
+  existing.required = existing.required || (params.required ?? true);
+}
+
+function collectGlobalRequirements(
+  manifest: NormalizedAppManifest,
+): CapabilityRequirement[] {
+  const requirements = new Map<string, CapabilityRequirement>();
+
+  Object.entries(manifest.requires.capabilities).forEach(([capability, range]) => {
+    upsertRequirement(requirements, {
+      capability,
+      requestedRange: range,
+      declaredBy: "requires",
+    });
+  });
+
+  if (manifest.storage) {
+    upsertRequirement(requirements, {
+      capability: "lime.storage",
+      requestedRange: manifest.requires.capabilities["lime.storage"] ?? "*",
+      declaredBy: "storage",
+    });
+  }
+
+  if (manifest.runtimePackage.ui) {
+    upsertRequirement(requirements, {
+      capability: "lime.ui",
+      requestedRange: manifest.requires.capabilities["lime.ui"] ?? "*",
+      declaredBy: "runtimePackage",
+      required: false,
+    });
+  }
+
+  if (manifest.runtimePackage.worker) {
+    upsertRequirement(requirements, {
+      capability: "lime.workflow",
+      requestedRange: manifest.requires.capabilities["lime.workflow"] ?? "*",
+      declaredBy: "runtimePackage",
+      required: false,
+    });
+  }
+
+  return Array.from(requirements.values()).sort((left, right) =>
+    left.capability.localeCompare(right.capability),
+  );
+}
+
+function collectEntryRequirements(
+  manifest: NormalizedAppManifest,
+  entryKey: string,
+  entryCapabilities: string[],
+): CapabilityRequirement[] {
+  const requirements = new Map<string, CapabilityRequirement>();
+
+  entryCapabilities.forEach((capability) => {
+    upsertRequirement(requirements, {
+      capability,
+      requestedRange: manifest.requires.capabilities[capability] ?? "*",
+      declaredBy: "entry",
+      entryKey,
+    });
+  });
+
+  return Array.from(requirements.values()).sort((left, right) =>
+    left.capability.localeCompare(right.capability),
+  );
+}
+
+export function projectApp(params: {
+  manifest: NormalizedAppManifest;
+  identity: PackageIdentity;
+}): AgentAppProjection {
+  const { manifest, identity } = params;
+  const appProvenance = createProvenance(identity);
+  const requiredCapabilities = collectGlobalRequirements(manifest);
+  const entries: ProjectedEntry[] = manifest.entries.map((entry) => ({
+    appId: manifest.appId,
+    key: entry.key,
+    kind: entry.kind,
+    title: entry.title,
+    description: entry.description,
+    presentation: "lab-only",
+    readiness: "unknown",
+    requiredCapabilities: collectEntryRequirements(
+      manifest,
+      entry.key,
+      entry.requiredCapabilities,
+    ),
+    provenance: createProvenance(identity, entry.key),
+  }));
+
+  return {
+    app: {
+      appId: manifest.appId,
+      displayName: manifest.displayName,
+      version: manifest.version,
+      status: manifest.status,
+      appType: manifest.appType,
+      description: manifest.description,
+    },
+    package: identity,
+    entries,
+    requiredCapabilities,
+    runtimePackage: {
+      hasUiBundle: Boolean(manifest.runtimePackage.ui),
+      hasWorkerBundle: Boolean(manifest.runtimePackage.worker),
+      uiPath: manifest.runtimePackage.ui?.path,
+      workerPath: manifest.runtimePackage.worker?.path,
+    },
+    storage: manifest.storage
+      ? {
+          namespace: manifest.storage.namespace,
+          schema: manifest.storage.schema,
+          migrations: manifest.storage.migrations,
+          retention: manifest.storage.retention,
+        }
+      : undefined,
+    knowledgeBindings: manifest.knowledgeTemplates.map((template) => ({
+      key: template.key,
+      standard: template.standard,
+      type: template.type,
+      required: template.required ?? false,
+    })),
+    artifactTypes: manifest.artifacts.map((artifact) => ({
+      key: artifact.key,
+      title: artifact.title,
+      type: artifact.type,
+    })),
+    policies: manifest.policies.map((policy) => ({
+      key: policy.key,
+      title: policy.title,
+      required: policy.required ?? false,
+    })),
+    readinessHints: [
+      {
+        code: "LAB_ONLY",
+        message: "P0 projection is lab-only and must not be registered into the main product path.",
+        severity: "info",
+      },
+    ],
+    provenance: appProvenance,
+  };
+}

@@ -43,6 +43,23 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
+function parseJsonRecordString(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim();
+  if (!normalized.startsWith("{")) {
+    return null;
+  }
+
+  try {
+    return asRecord(JSON.parse(normalized));
+  } catch {
+    return null;
+  }
+}
+
 function readMetadataString(
   candidates: Array<Record<string, unknown> | null | undefined>,
   keys: string[],
@@ -1207,8 +1224,15 @@ export function buildImageTaskPreviewFromToolResult(
 ): MessageImageWorkbenchPreview | null {
   const resultRecord = asRecord(params.toolResult);
   const metadata = asRecord(resultRecord?.metadata);
-  const taskId = readMetadataString([metadata], ["task_id", "taskId"]);
-  const taskType = readMetadataString([metadata], ["task_type", "taskType"]);
+  const outputRecord = parseJsonRecordString(resultRecord?.output);
+  const taskRecord = asRecord(outputRecord?.record);
+  const payloadRecord =
+    asRecord(taskRecord?.payload) || asRecord(outputRecord?.payload);
+  const progressRecord =
+    asRecord(outputRecord?.progress) || asRecord(taskRecord?.progress);
+  const candidates = [metadata, outputRecord, taskRecord, payloadRecord];
+  const taskId = readMetadataString(candidates, ["task_id", "taskId"]);
+  const taskType = readMetadataString(candidates, ["task_type", "taskType"]);
   if (!taskId || !taskType) {
     return null;
   }
@@ -1225,12 +1249,16 @@ export function buildImageTaskPreviewFromToolResult(
     params.toolName,
     params.toolArguments,
   );
-  const status = readMetadataString([metadata], ["status"]);
+  const status = readMetadataString(candidates, [
+    "status",
+    "normalized_status",
+    "normalizedStatus",
+  ]);
   const previewStatus = resolveTaskPreviewStatus(status);
   const requestedCount =
     parsedArguments.imageCount ||
     readMetadataPositiveNumber(
-      [metadata],
+      candidates,
       [
         "requested_count",
         "requestedCount",
@@ -1240,15 +1268,15 @@ export function buildImageTaskPreviewFromToolResult(
       ],
     );
   const receivedCount = readMetadataPositiveNumber(
-    [metadata],
+    candidates,
     ["received_count", "receivedCount"],
   );
   const layoutHint =
     parsedArguments.layoutHint ||
-    readMetadataString([metadata], ["layout_hint", "layoutHint"]) ||
+    readMetadataString(candidates, ["layout_hint", "layoutHint"]) ||
     null;
   const storyboardSlots = readImageStoryboardSlots(
-    [metadata],
+    candidates,
     ["storyboard_slots", "storyboardSlots"],
   );
   const expectedImageCount = Math.max(
@@ -1259,8 +1287,12 @@ export function buildImageTaskPreviewFromToolResult(
     previewStatus === "running"
       ? expectedImageCount || requestedCount
       : receivedCount || expectedImageCount || requestedCount;
+  const progressStatusMessage = readMetadataString([progressRecord], [
+    "message",
+  ]);
   const statusMessage =
-    previewStatus === "complete"
+    progressStatusMessage ||
+    (previewStatus === "complete"
       ? layoutHint === "storyboard_3x3"
         ? "3x3 分镜生成完成。"
         : "图片生成完成。"
@@ -1272,34 +1304,41 @@ export function buildImageTaskPreviewFromToolResult(
           ? "图片生成失败。"
           : previewStatus === "cancelled"
             ? "图片生成已取消。"
-            : "正在生成图片。";
+            : "正在生成图片。");
 
   return {
     taskId,
     prompt:
       parsedArguments.prompt ||
-      readMetadataString([metadata], ["prompt"]) ||
+      readMetadataString(candidates, ["prompt", "summary", "title"]) ||
       params.fallbackPrompt.trim() ||
       "图片任务进行中",
     status: previewStatus,
     projectId:
-      readMetadataString([metadata], ["project_id", "projectId"]) || null,
+      readMetadataString(candidates, ["project_id", "projectId"]) || null,
     contentId:
-      readMetadataString([metadata], ["content_id", "contentId"]) || null,
+      readMetadataString(candidates, ["content_id", "contentId"]) || null,
     taskFilePath:
       readMetadataString(
-        [metadata],
-        ["path", "absolute_path", "absolutePath"],
+        candidates,
+        [
+          "absolute_path",
+          "absolutePath",
+          "task_file_path",
+          "taskFilePath",
+          "path",
+        ],
       ) || null,
     artifactPath:
-      readMetadataString([metadata], ["artifact_path", "artifactPath"]) || null,
+      readMetadataString(candidates, ["artifact_path", "artifactPath", "path"]) ||
+      null,
     imageCount: resolvedImageCount,
     expectedImageCount: expectedImageCount || requestedCount,
     layoutHint,
     storyboardSlots: storyboardSlots.length > 0 ? storyboardSlots : undefined,
     size:
       parsedArguments.size ||
-      readMetadataString([metadata], ["size", "resolution"]),
+      readMetadataString(candidates, ["size", "resolution"]),
     phase: resolveTaskPreviewPhase(status),
     statusMessage,
   };

@@ -1,13 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   clearSkillCatalogCache,
+  findModelBoundImageCommandEntryForModel,
   getSeededSkillCatalog,
   getSkillCatalog,
   listSkillCatalogCommandEntries,
+  listLocalModelBoundImageCommandEntries,
   listSkillCatalogSceneEntries,
   listSkillCatalogSkillEntries,
   parseSkillCatalog,
   saveSkillCatalog,
+  upsertLocalModelBoundImageCommandBinding,
   type SkillCatalog,
 } from "./skillCatalog";
 
@@ -718,8 +721,7 @@ describe("skillCatalog", () => {
         id: "plain_image_generation",
         ruleKey: "agentChat.inputIntent.imageGeneration.rules",
         confirmationKey: "agentChat.inputIntent.imageGeneration.confirm",
-        systemPromptKey:
-          "agentChat.inputIntent.imageGeneration.systemPrompt",
+        systemPromptKey: "agentChat.inputIntent.imageGeneration.systemPrompt",
       },
     });
     expect(posterEntry?.binding).toMatchObject({
@@ -910,6 +912,124 @@ describe("skillCatalog", () => {
           prompt: "请帮我规划新品发布内容。",
         },
       ],
+    });
+  });
+
+  it("应把本地图片模型 @命令绑定合并进当前目录", async () => {
+    const entry = upsertLocalModelBoundImageCommandBinding({
+      trigger: "@GPT Images 2",
+      providerId: "yunwu.ai",
+      modelId: "gpt-image-2",
+      executorMode: "responses_image_generation",
+    });
+
+    expect(entry).toMatchObject({
+      commandKey: "image_model_gpt_images_2",
+      binding: {
+        requestDefaults: expect.objectContaining({
+          imageWorkbench: "true",
+          modelBoundImageTask: "true",
+          entrySource: "at_gpt_images_2_model_command",
+          providerId: "yunwu.ai",
+          model: "gpt-image-2",
+          executorMode: "responses_image_generation",
+          bindingSource: "local_provider_settings",
+        }),
+      },
+    });
+    expect(listLocalModelBoundImageCommandEntries()).toHaveLength(1);
+
+    const catalog = await getSkillCatalog();
+    const mergedEntry = findModelBoundImageCommandEntryForModel(
+      catalog,
+      "yunwu.ai",
+      "gpt-image-2",
+    );
+
+    expect(mergedEntry).toMatchObject({
+      commandKey: "image_model_gpt_images_2",
+      triggers: [expect.objectContaining({ prefix: "@GPT Images 2" })],
+      binding: {
+        requestDefaults: expect.objectContaining({
+          providerId: "yunwu.ai",
+          model: "gpt-image-2",
+          executorMode: "responses_image_generation",
+        }),
+      },
+    });
+    expect(
+      listSkillCatalogCommandEntries(catalog).filter((catalogEntry) =>
+        catalogEntry.triggers.some(
+          (trigger) => trigger.prefix === "@GPT Images 2",
+        ),
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        commandKey: "image_model_gpt_images_2",
+      }),
+    ]);
+  });
+
+  it("服务端 Lime Cloud 下发的图片模型命令应保持为标准图片命令入口", () => {
+    const seeded = getSeededSkillCatalog();
+    const catalog = saveSkillCatalog(
+      {
+        ...seeded,
+        version: "cloud-image-command-2026-05-14",
+        tenantId: "tenant-cloud",
+        syncedAt: "2026-05-14T00:00:00.000Z",
+        entries: [
+          ...seeded.entries,
+          {
+            id: "command:image-model:nano_banana_2_cloud",
+            kind: "command",
+            title: "Nano Banana 2 Cloud",
+            summary: "云端目录声明的图片模型入口。",
+            command_key: "image_model_nano_banana_2_cloud",
+            triggers: [{ mode: "mention", prefix: "@Nano Banana Cloud" }],
+            binding: {
+              skill_id: "image_generate",
+              execution_kind: "task_queue",
+              request_defaults: {
+                image_workbench: "true",
+                model_bound_image_task: "true",
+                provider_id: "fal",
+                model_id: "fal-ai/nano-banana-2",
+                bindingSource: "lime_cloud",
+              },
+            },
+            render_contract: {
+              result_kind: "image_gallery",
+              detail_kind: "media_detail",
+              supports_streaming: true,
+              supports_timeline: true,
+            },
+          },
+        ],
+      },
+      "bootstrap_sync",
+    );
+
+    expect(
+      listSkillCatalogCommandEntries(catalog).find(
+        (entry) => entry.commandKey === "image_model_nano_banana_2_cloud",
+      ),
+    ).toMatchObject({
+      commandKey: "image_model_nano_banana_2_cloud",
+      binding: {
+        requestDefaults: expect.objectContaining({
+          bindingSource: "lime_cloud",
+        }),
+      },
+    });
+    expect(
+      findModelBoundImageCommandEntryForModel(
+        catalog,
+        "fal",
+        "fal-ai/nano-banana-2",
+      ),
+    ).toMatchObject({
+      commandKey: "image_model_nano_banana_2_cloud",
     });
   });
 });

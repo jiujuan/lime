@@ -13,6 +13,7 @@ interface ImportMetaEnv {
   readonly VITE_OEM_DESKTOP_CLIENT_ID?: string;
   readonly VITE_OEM_DESKTOP_OAUTH_REDIRECT_URL?: string;
   readonly VITE_OEM_DESKTOP_OAUTH_NEXT_PATH?: string;
+  readonly VITE_LIME_AGENT_APP_LAB?: string;
 }
 
 // SVG 模块声明 - 支持 ?react 后缀导入为 React 组件

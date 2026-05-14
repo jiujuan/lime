@@ -1,6 +1,7 @@
 import type { MediaTaskModalityRuntimeContractIndexEntry } from "@/lib/api/mediaTasks";
+import { getLimeI18n } from "@/i18n/createI18n";
 
-const LIMECORE_POLICY_META_PREFIX = "LimeCore 策略输入";
+const LIMECORE_POLICY_META_PREFIX = "LimeCore";
 const MAX_VISIBLE_REFS = 3;
 
 export interface LimeCorePolicyEvaluationMetaInput {
@@ -35,6 +36,8 @@ function formatRefs(refs: string[]): string {
 export function buildLimeCorePolicyEvaluationMetaItem(
   input: LimeCorePolicyEvaluationMetaInput,
 ): string | null {
+  const i18n = getLimeI18n();
+  const t = i18n.t.bind(i18n);
   const status = input.evaluationStatus?.trim().toLowerCase();
   const decision = input.evaluationDecision?.trim().toLowerCase();
 
@@ -51,26 +54,35 @@ export function buildLimeCorePolicyEvaluationMetaItem(
   );
   if (status === "input_gap") {
     return pendingRefs.length > 0
-      ? `${LIMECORE_POLICY_META_PREFIX}待命中: ${pendingRefs.length}`
-      : `${LIMECORE_POLICY_META_PREFIX}待命中`;
+      ? t("agentChat.mediaTaskPolicy.inputGapWithCount", {
+          ns: "agent",
+          count: pendingRefs.length,
+        })
+      : t("agentChat.mediaTaskPolicy.inputGap", { ns: "agent" });
   }
 
   const blockingRefs = normalizeRefs(input.blockingRefs);
   if (decision === "deny" || blockingRefs.length > 0) {
     return blockingRefs.length > 0
-      ? `${LIMECORE_POLICY_META_PREFIX}阻断: ${formatRefs(blockingRefs)}`
-      : `${LIMECORE_POLICY_META_PREFIX}阻断`;
+      ? t("agentChat.mediaTaskPolicy.blockedWithRefs", {
+          ns: "agent",
+          refs: formatRefs(blockingRefs),
+        })
+      : t("agentChat.mediaTaskPolicy.blocked", { ns: "agent" });
   }
 
   const askRefs = normalizeRefs(input.askRefs);
   if (decision === "ask" || askRefs.length > 0) {
     return askRefs.length > 0
-      ? `${LIMECORE_POLICY_META_PREFIX}需确认: ${formatRefs(askRefs)}`
-      : `${LIMECORE_POLICY_META_PREFIX}需确认`;
+      ? t("agentChat.mediaTaskPolicy.askWithRefs", {
+          ns: "agent",
+          refs: formatRefs(askRefs),
+        })
+      : t("agentChat.mediaTaskPolicy.ask", { ns: "agent" });
   }
 
   if (status === "evaluated" && decision === "allow") {
-    return `${LIMECORE_POLICY_META_PREFIX}已评估: allow`;
+    return t("agentChat.mediaTaskPolicy.allow", { ns: "agent" });
   }
 
   return null;

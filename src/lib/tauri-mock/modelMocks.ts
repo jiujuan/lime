@@ -1,0 +1,17 @@
+export const modelMocks: Record<string, (args?: any) => any> = {
+  get_model_registry: () => [],
+  get_model_registry_provider_ids: () => [],
+  refresh_model_registry: () => ({ success: true }),
+  search_models: () => [],
+  get_all_provider_models: () => ({}),
+  get_model_preferences: () => [],
+  toggle_model_favorite: () => ({ success: true }),
+  hide_model: () => ({ success: true }),
+  record_model_usage: () => ({}),
+  get_model_sync_state: () => ({ syncing: false, last_sync_at: null }),
+  get_models_for_provider: () => [],
+  get_models_by_tier: () => [],
+  get_provider_alias_config: () => ({ alias: {} }),
+  get_all_alias_configs: () => ({}),
+  sync_tray_model_shortcuts: () => ({}),
+};

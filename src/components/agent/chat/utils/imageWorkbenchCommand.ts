@@ -1,5 +1,5 @@
 import {
-  getSeededSkillCatalog,
+  getCurrentSkillCatalogSnapshot,
   listSkillCatalogCommandEntries,
   type SkillCatalogCommandEntry,
 } from "@/lib/api/skillCatalog";
@@ -20,6 +20,9 @@ interface ImageWorkbenchCommandDefinition {
   count?: number;
   providerId?: string;
   modelId?: string;
+  entrySource?: string;
+  executorMode?: "images_api" | "responses_image_generation";
+  priority?: number;
 }
 
 export interface ParsedImageWorkbenchCommand {
@@ -36,6 +39,8 @@ export interface ParsedImageWorkbenchCommand {
   targetRef?: string;
   providerId?: string;
   modelId?: string;
+  entrySource?: string;
+  executorMode?: "images_api" | "responses_image_generation";
 }
 
 const TARGET_REF_REGEX = /#(img-[a-z0-9_-]+)/i;
@@ -45,7 +50,10 @@ const ASPECT_RATIO_REGEX = /\b(1:1|16:9|9:16|4:3|3:4|3:2|2:3|21:9|4:5|5:4)\b/i;
 function isImageWorkbenchCommandEntry(
   entry: SkillCatalogCommandEntry,
 ): boolean {
-  return entry.binding?.requestDefaults?.imageWorkbench === "true";
+  return (
+    entry.binding?.requestDefaults?.imageWorkbench === "true" ||
+    entry.binding?.requestDefaults?.image_workbench === "true"
+  );
 }
 
 function readCommandRequestDefault(
@@ -66,8 +74,23 @@ function readCommandRequestDefault(
   return undefined;
 }
 
+function readCommandExecutorMode(
+  entry: SkillCatalogCommandEntry,
+): ImageWorkbenchCommandDefinition["executorMode"] {
+  const value = readCommandRequestDefault(
+    entry,
+    "executorMode",
+    "executor_mode",
+  );
+  return value === "images_api" || value === "responses_image_generation"
+    ? value
+    : undefined;
+}
+
 function buildImageWorkbenchCommandDefinitions(): ImageWorkbenchCommandDefinition[] {
-  const definitions = listSkillCatalogCommandEntries(getSeededSkillCatalog())
+  const definitions = listSkillCatalogCommandEntries(
+    getCurrentSkillCatalogSnapshot(),
+  )
     .filter(isImageWorkbenchCommandEntry)
     .flatMap((entry) =>
       entry.triggers.map((trigger) => {
@@ -76,7 +99,12 @@ function buildImageWorkbenchCommandDefinitions(): ImageWorkbenchCommandDefinitio
           "providerId",
           "provider_id",
         );
-        const modelId = readCommandRequestDefault(entry, "model", "modelId");
+        const modelId = readCommandRequestDefault(
+          entry,
+          "model",
+          "modelId",
+          "model_id",
+        );
         const modeDefault = readCommandRequestDefault(entry, "mode");
         const mode: ImageWorkbenchCommandMode | undefined =
           modeDefault === "edit" ||
@@ -89,10 +117,23 @@ function buildImageWorkbenchCommandDefinitions(): ImageWorkbenchCommandDefinitio
           "layoutHint",
           "layout_hint",
         );
+        const entrySource = readCommandRequestDefault(
+          entry,
+          "entrySource",
+          "entry_source",
+        );
+        const executorMode = readCommandExecutorMode(entry);
         const count = Number(readCommandRequestDefault(entry, "count")) || 0;
         const definition: ImageWorkbenchCommandDefinition = {
           commandKey: entry.commandKey,
           trigger: trigger.prefix,
+          priority: entry.commandKey.startsWith("image_model_")
+            ? 3
+            : providerId
+              ? 2
+              : modelId
+                ? 1
+                : 0,
         };
         if (mode) {
           definition.mode = mode;
@@ -109,17 +150,22 @@ function buildImageWorkbenchCommandDefinitions(): ImageWorkbenchCommandDefinitio
         if (modelId) {
           definition.modelId = modelId;
         }
+        if (entrySource) {
+          definition.entrySource = entrySource;
+        }
+        if (executorMode) {
+          definition.executorMode = executorMode;
+        }
         return definition;
       }),
     );
 
   return definitions.sort(
-    (left, right) => right.trigger.length - left.trigger.length,
+    (left, right) =>
+      right.trigger.length - left.trigger.length ||
+      (right.priority ?? 0) - (left.priority ?? 0),
   );
 }
-
-const IMAGE_WORKBENCH_COMMAND_DEFINITIONS =
-  buildImageWorkbenchCommandDefinitions();
 
 function matchImageWorkbenchCommandPrefix(
   text: string,
@@ -129,7 +175,7 @@ function matchImageWorkbenchCommandPrefix(
     return null;
   }
 
-  for (const definition of IMAGE_WORKBENCH_COMMAND_DEFINITIONS) {
+  for (const definition of buildImageWorkbenchCommandDefinitions()) {
     const prefix = trimmed.slice(0, definition.trigger.length);
     if (prefix.toLowerCase() !== definition.trigger.toLowerCase()) {
       continue;
@@ -320,6 +366,10 @@ export function parseImageWorkbenchCommand(
     targetRef,
     ...(definition.providerId ? { providerId: definition.providerId } : {}),
     ...(definition.modelId ? { modelId: definition.modelId } : {}),
+    ...(definition.entrySource ? { entrySource: definition.entrySource } : {}),
+    ...(definition.executorMode
+      ? { executorMode: definition.executorMode }
+      : {}),
   };
 }
 

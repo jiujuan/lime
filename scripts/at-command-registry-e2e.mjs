@@ -202,6 +202,17 @@ function readImageLaunch(metadata) {
   return { launch, imageTask };
 }
 
+function isImageGenerateSkillExecution(invoke) {
+  return (
+    invoke?.cmd === "execute_skill" &&
+    invoke.args?.skillName === "image_generate"
+  );
+}
+
+function isLegacyImageRuntimeSubmit(invoke) {
+  return invoke?.cmd === "agent_runtime_submit_turn";
+}
+
 function parseInvokeRequest(request, invokeUrl) {
   const requestUrl = request.url();
   const normalizedInvokeUrl = invokeUrl.replace(/\/$/, "");
@@ -507,59 +518,110 @@ async function main() {
     });
 
     const submitInvoke = await waitForCondition(
-      "等待 @配图 提交 agent_runtime_submit_turn",
+      "等待 @配图 提交 image_generate 执行请求",
       () =>
         invokes
           .slice(submitStart)
-          .find((item) => item.cmd === "agent_runtime_submit_turn") || null,
+          .find(
+            (item) =>
+              isImageGenerateSkillExecution(item) ||
+              isLegacyImageRuntimeSubmit(item),
+          ) || null,
       options.timeoutMs,
       options.intervalMs,
     );
-    const request = submitInvoke.args?.request || {};
-    const turnConfig = request.turn_config || {};
-    const metadata = turnConfig.metadata || {};
-    const { launch, imageTask } = readImageLaunch(metadata);
-    const runtimeContract = readNestedObject(imageTask, [
-      "runtime_contract",
-      "runtimeContract",
-    ]);
-    const contractKey =
-      imageTask?.modality_contract_key ||
-      imageTask?.modalityContractKey ||
-      runtimeContract?.contract_key ||
-      runtimeContract?.contractKey;
 
-    assert(launch, "@配图 提交缺少 harness.image_skill_launch");
-    assert(imageTask, "@配图 提交缺少 image_task");
-    assert(
-      String(imageTask.prompt || "").includes(IMAGE_PROMPT),
-      "@配图 image_task.prompt 未保留用户输入",
-    );
-    assert(
-      contractKey === "image_generation",
-      `@配图 image_task 合同应为 image_generation，实际为 ${String(contractKey)}`,
-    );
-    assert(
-      turnConfig.provider_preference == null,
-      "@配图 不应把当前聊天 provider 提交为 request provider_preference",
-    );
-    assert(
-      turnConfig.model_preference == null,
-      "@配图 不应把当前聊天 model 提交为 request model_preference",
-    );
+    if (isImageGenerateSkillExecution(submitInvoke)) {
+      const args = submitInvoke.args || {};
+      const userInput = String(args.userInput || "");
+      assert(
+        userInput.includes("@配图"),
+        "@配图 execute_skill.userInput 应保留命令标签",
+      );
+      assert(
+        userInput.includes(IMAGE_PROMPT),
+        "@配图 execute_skill.userInput 未保留用户输入",
+      );
+      assert(
+        typeof args.executionId === "string" && args.executionId.trim(),
+        "@配图 execute_skill 缺少 executionId",
+      );
+      assert(
+        typeof args.sessionId === "string" && args.sessionId.trim(),
+        "@配图 execute_skill 缺少 sessionId",
+      );
 
-    summary.assertions.imageSkillLaunchSubmitted = true;
-    summary.assertions.imageGenerationContractPreserved = true;
-    summary.assertions.chatModelPreferenceSuppressed = true;
-    summary.submitRequest = {
-      message: request.message,
-      sessionId: request.session_id || null,
-      turnId: request.turn_id || null,
-      providerPreference: turnConfig.provider_preference ?? null,
-      modelPreference: turnConfig.model_preference ?? null,
-      contractKey,
-      imagePrompt: imageTask.prompt,
-    };
+      await page
+        .getByText("先执行技能 image_generate", { exact: false })
+        .first()
+        .waitFor({ state: "visible", timeout: options.timeoutMs });
+      await page
+        .getByText("图片生成", { exact: false })
+        .first()
+        .waitFor({ state: "visible", timeout: options.timeoutMs });
+
+      summary.assertions.imageSkillExecutionSubmitted = true;
+      summary.assertions.imageCommandTagPreserved = true;
+      summary.assertions.imagePromptPreserved = true;
+      summary.assertions.imageGenerateProcessVisible = true;
+      summary.submitRequest = {
+        routeMode: "skill_execution",
+        command: submitInvoke.cmd,
+        skillName: args.skillName,
+        userInput,
+        sessionId: args.sessionId || null,
+        executionId: args.executionId || null,
+        providerOverride: args.providerOverride ?? null,
+        modelOverride: args.modelOverride ?? null,
+      };
+    } else {
+      const request = submitInvoke.args?.request || {};
+      const turnConfig = request.turn_config || {};
+      const metadata = turnConfig.metadata || {};
+      const { launch, imageTask } = readImageLaunch(metadata);
+      const runtimeContract = readNestedObject(imageTask, [
+        "runtime_contract",
+        "runtimeContract",
+      ]);
+      const contractKey =
+        imageTask?.modality_contract_key ||
+        imageTask?.modalityContractKey ||
+        runtimeContract?.contract_key ||
+        runtimeContract?.contractKey;
+
+      assert(launch, "@配图 提交缺少 harness.image_skill_launch");
+      assert(imageTask, "@配图 提交缺少 image_task");
+      assert(
+        String(imageTask.prompt || "").includes(IMAGE_PROMPT),
+        "@配图 image_task.prompt 未保留用户输入",
+      );
+      assert(
+        contractKey === "image_generation",
+        `@配图 image_task 合同应为 image_generation，实际为 ${String(contractKey)}`,
+      );
+      assert(
+        turnConfig.provider_preference == null,
+        "@配图 不应把当前聊天 provider 提交为 request provider_preference",
+      );
+      assert(
+        turnConfig.model_preference == null,
+        "@配图 不应把当前聊天 model 提交为 request model_preference",
+      );
+
+      summary.assertions.imageSkillLaunchSubmitted = true;
+      summary.assertions.imageGenerationContractPreserved = true;
+      summary.assertions.chatModelPreferenceSuppressed = true;
+      summary.submitRequest = {
+        routeMode: "agent_runtime_submit_turn",
+        message: request.message,
+        sessionId: request.session_id || null,
+        turnId: request.turn_id || null,
+        providerPreference: turnConfig.provider_preference ?? null,
+        modelPreference: turnConfig.model_preference ?? null,
+        contractKey,
+        imagePrompt: imageTask.prompt,
+      };
+    }
 
     await page.screenshot({
       path: path.join(
@@ -569,7 +631,17 @@ async function main() {
       fullPage: true,
     });
 
-    summary.cleanup = await interruptSubmittedTurn(options, request);
+    if (summary.submitRequest?.routeMode === "agent_runtime_submit_turn") {
+      summary.cleanup = await interruptSubmittedTurn(
+        options,
+        submitInvoke.args?.request || {},
+      );
+    } else {
+      summary.cleanup = {
+        attempted: false,
+        reason: "skill-execution-route",
+      };
+    }
 
     const summaryPath = path.join(
       options.evidenceDir,

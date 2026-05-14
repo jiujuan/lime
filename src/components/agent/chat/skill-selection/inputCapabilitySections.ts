@@ -624,7 +624,9 @@ function resolveInputCommandSectionMeta(
   command: Pick<BuiltinInputCommand, "key">,
   copy: InputCapabilitySectionsCopy,
 ): InputCommandSectionMeta {
-  const groupKey = INPUT_COMMAND_GROUP_BY_KEY[command.key] ?? "other";
+  const groupKey = command.key.startsWith("image_model_")
+    ? "generate_expression"
+    : (INPUT_COMMAND_GROUP_BY_KEY[command.key] ?? "other");
   const meta = INPUT_COMMAND_SECTION_META[groupKey];
   const metaCopy = copy.inputCommandGroups[groupKey];
 

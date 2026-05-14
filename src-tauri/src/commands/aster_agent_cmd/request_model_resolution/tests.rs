@@ -2415,6 +2415,26 @@ fn runtime_task_profile_maps_fast_response_to_responsive_chat_slot() {
 }
 
 #[test]
+fn fast_response_fallback_preference_reads_workspace_selection() {
+    let metadata = serde_json::json!({
+        "harness": {
+            "fast_response_routing": {
+                "service_model_slot": "responsive_chat",
+                "routing_slot": "responsive_chat_model",
+                "fallback_provider_preference": "deepseek",
+                "fallback_model_preference": "deepseek-v4-pro"
+            }
+        }
+    });
+
+    let preference =
+        extract_fast_response_fallback_preference(Some(&metadata)).expect("fallback preference");
+
+    assert_eq!(preference.provider_selector, "deepseek");
+    assert_eq!(preference.model_name, "deepseek-v4-pro");
+}
+
+#[test]
 fn runtime_task_profile_marks_oem_runtime_from_harness_oem_routing() {
     let request = AsterChatRequest {
         message: "继续处理".to_string(),

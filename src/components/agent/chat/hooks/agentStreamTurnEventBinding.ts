@@ -78,6 +78,7 @@ interface RegisterAgentStreamTurnEventBindingOptions {
   pendingItemKey: string;
   effectiveWaitingRuntimeStatus: NonNullable<Message["runtimeStatus"]>;
   preserveAssistantContent?: string | null;
+  assistantFallbackContent?: string | null;
   warnedKeysRef: MutableRefObject<Set<string>>;
   actionLoggedKeys: Set<string>;
   toolLogIdByToolId: Map<string, string>;
@@ -147,6 +148,7 @@ export async function registerAgentStreamTurnEventBinding(
     pendingItemKey,
     effectiveWaitingRuntimeStatus,
     preserveAssistantContent,
+    assistantFallbackContent,
     warnedKeysRef,
     actionLoggedKeys,
     toolLogIdByToolId,
@@ -356,6 +358,7 @@ export async function registerAgentStreamTurnEventBinding(
       effectiveExecutionStrategy,
       surfaceThinkingDeltas,
       preserveAssistantContent,
+      assistantFallbackContent,
       content,
       runtime,
       webSearch,
@@ -540,6 +543,7 @@ export async function registerAgentStreamTurnEventBinding(
         effectiveExecutionStrategy,
         surfaceThinkingDeltas,
         preserveAssistantContent,
+        assistantFallbackContent,
         content,
         runtime,
         webSearch,

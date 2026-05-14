@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
-import type agentResource from "@/i18n/resources/zh-CN/agent.json";
+import type { AgentI18nResource } from "@/i18n/agentResources";
 import {
   getClientSceneSkillPreferences,
   updateClientSceneSkillPreferences,
@@ -282,7 +282,7 @@ interface DraftScene {
   templatePrompt: string;
 }
 
-type AgentI18nKey = keyof typeof agentResource;
+type AgentI18nKey = keyof AgentI18nResource;
 
 interface SceneManagerCopy {
   defaultTemplateTitle: string;

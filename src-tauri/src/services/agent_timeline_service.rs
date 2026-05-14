@@ -144,6 +144,40 @@ impl AgentTimelineRecorder {
         })
     }
 
+    pub fn from_started_turn(db: DbConnection, turn: AgentThreadTurn) -> Result<Self, String> {
+        let mut sequence_counter = 0;
+        let mut item_sequences = HashMap::new();
+        let mut item_statuses = HashMap::new();
+        let mut plan_text = None;
+
+        {
+            let conn = lock_db(&db)?;
+            AgentTimelineDao::upsert_turn(&conn, &turn)
+                .map_err(|e| format!("同步 turn 启动态失败: {e}"))?;
+            let items = AgentTimelineDao::list_items_by_thread(&conn, &turn.thread_id)
+                .map_err(|e| format!("读取 turn item 失败: {e}"))?;
+            for item in items.into_iter().filter(|item| item.turn_id == turn.id) {
+                sequence_counter = sequence_counter.max(item.sequence);
+                item_sequences.insert(item.id.clone(), item.sequence);
+                item_statuses.insert(item.id.clone(), item.status.clone());
+                if let AgentThreadItemPayload::Plan { text } = item.payload {
+                    plan_text = Some(text);
+                }
+            }
+        }
+
+        Ok(Self {
+            db,
+            thread_id: turn.thread_id.clone(),
+            turn_id: turn.id.clone(),
+            turn,
+            sequence_counter,
+            item_sequences,
+            item_statuses,
+            plan_text,
+        })
+    }
+
     pub fn thread_id(&self) -> &str {
         &self.thread_id
     }
@@ -394,6 +428,37 @@ impl AgentTimelineRecorder {
         Ok(events)
     }
 
+    pub fn record_synthetic_item(
+        &mut self,
+        app: &AppHandle,
+        event_name: &str,
+        id: String,
+        status: AgentThreadItemStatus,
+        completed_at: Option<String>,
+        payload: AgentThreadItemPayload,
+    ) -> Result<AgentThreadItem, String> {
+        let event = self.record_synthetic_item_event(id, status, completed_at, payload)?;
+        let item = match &event {
+            RuntimeAgentEvent::ItemStarted { item }
+            | RuntimeAgentEvent::ItemUpdated { item }
+            | RuntimeAgentEvent::ItemCompleted { item } => item.clone(),
+            _ => return Err("synthetic item 写入后产生了非 item 事件".to_string()),
+        };
+        emit_event(app, event_name, &event);
+        Ok(item)
+    }
+
+    pub fn record_synthetic_item_event(
+        &mut self,
+        id: String,
+        status: AgentThreadItemStatus,
+        completed_at: Option<String>,
+        payload: AgentThreadItemPayload,
+    ) -> Result<RuntimeAgentEvent, String> {
+        let item = self.build_item(id, status, completed_at, payload);
+        self.persist_item_and_build_event(item)
+    }
+
     fn complete_projection_items(
         &mut self,
         status: AgentThreadItemStatus,
@@ -496,9 +561,22 @@ impl AgentTimelineRecorder {
         &mut self,
         app: &AppHandle,
         event_name: &str,
-        item: AgentThreadItem,
+        mut item: AgentThreadItem,
         event: RuntimeAgentEvent,
     ) -> Result<(), String> {
+        self.normalize_runtime_item_sequence(&mut item);
+        let event = match event {
+            RuntimeAgentEvent::ItemStarted { .. } => {
+                RuntimeAgentEvent::ItemStarted { item: item.clone() }
+            }
+            RuntimeAgentEvent::ItemUpdated { .. } => {
+                RuntimeAgentEvent::ItemUpdated { item: item.clone() }
+            }
+            RuntimeAgentEvent::ItemCompleted { .. } => {
+                RuntimeAgentEvent::ItemCompleted { item: item.clone() }
+            }
+            other => other,
+        };
         self.sync_runtime_item_state(&item);
         {
             let conn = lock_db(&self.db)?;
@@ -507,6 +585,41 @@ impl AgentTimelineRecorder {
         }
         emit_event(app, event_name, &event);
         Ok(())
+    }
+
+    fn normalize_runtime_item_sequence(&mut self, item: &mut AgentThreadItem) {
+        if let Some(existing_sequence) = self.item_sequences.get(&item.id) {
+            item.sequence = *existing_sequence;
+            return;
+        }
+
+        self.sequence_counter = self.sequence_counter.max(item.sequence);
+        if !self.sequence_is_used_by_other_item(&item.id, item.sequence) {
+            return;
+        }
+
+        item.sequence = self.next_available_sequence();
+    }
+
+    fn sequence_is_used_by_other_item(&self, item_id: &str, sequence: i64) -> bool {
+        self.item_sequences
+            .iter()
+            .any(|(existing_id, existing_sequence)| {
+                existing_id != item_id && *existing_sequence == sequence
+            })
+    }
+
+    fn next_available_sequence(&mut self) -> i64 {
+        loop {
+            self.sequence_counter += 1;
+            if !self
+                .item_sequences
+                .values()
+                .any(|sequence| *sequence == self.sequence_counter)
+            {
+                return self.sequence_counter;
+            }
+        }
     }
 
     fn sync_runtime_item_state(&mut self, item: &AgentThreadItem) {
@@ -532,6 +645,7 @@ mod tests {
     };
     use lime_core::database::schema::create_tables;
     use rusqlite::Connection;
+    use serde_json::json;
     use std::sync::{Arc, Mutex};
 
     fn setup_db() -> DbConnection {
@@ -548,6 +662,253 @@ mod tests {
         )
         .expect("创建测试 session");
         Arc::new(Mutex::new(conn))
+    }
+
+    fn running_turn(id: &str) -> AgentThreadTurn {
+        AgentThreadTurn {
+            id: id.to_string(),
+            thread_id: "thread-1".to_string(),
+            prompt_text: "@analysis 帮我分析一下今天的国际形势".to_string(),
+            status: AgentThreadTurnStatus::Running,
+            started_at: "2026-03-13T00:00:00Z".to_string(),
+            completed_at: None,
+            error_message: None,
+            created_at: "2026-03-13T00:00:00Z".to_string(),
+            updated_at: "2026-03-13T00:00:00Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn from_started_turn_should_upsert_turn_and_seed_existing_items() {
+        let db = setup_db();
+        {
+            let conn = lock_db(&db).expect("获取数据库锁");
+            AgentTimelineDao::upsert_turn(&conn, &running_turn("turn-skill-1"))
+                .expect("写入测试 turn");
+            AgentTimelineDao::upsert_item(
+                &conn,
+                &AgentThreadItem {
+                    id: "reasoning:assistant-1".to_string(),
+                    thread_id: "thread-1".to_string(),
+                    turn_id: "turn-skill-1".to_string(),
+                    sequence: 3,
+                    status: AgentThreadItemStatus::InProgress,
+                    started_at: "2026-03-13T00:00:01Z".to_string(),
+                    completed_at: None,
+                    updated_at: "2026-03-13T00:00:01Z".to_string(),
+                    payload: AgentThreadItemPayload::Reasoning {
+                        text: "先确认可用范围".to_string(),
+                        summary: Some(vec!["先确认可用范围".to_string()]),
+                    },
+                },
+            )
+            .expect("写入测试 item");
+        }
+
+        let recorder =
+            AgentTimelineRecorder::from_started_turn(db.clone(), running_turn("turn-skill-1"))
+                .expect("应从 turn_started 创建 recorder");
+
+        assert_eq!(recorder.thread_id(), "thread-1");
+        assert_eq!(recorder.turn_id(), "turn-skill-1");
+
+        let conn = lock_db(&db).expect("获取数据库锁");
+        let turns = AgentTimelineDao::list_turns_by_thread(&conn, "thread-1").expect("读取 turn");
+        assert_eq!(turns.len(), 1);
+        assert_eq!(turns[0].id, "turn-skill-1");
+        assert_eq!(turns[0].status, AgentThreadTurnStatus::Running);
+    }
+
+    #[test]
+    fn synthetic_skill_item_should_keep_recorder_sequence_and_payload() {
+        let db = setup_db();
+        {
+            let conn = lock_db(&db).expect("获取数据库锁");
+            AgentTimelineDao::upsert_turn(&conn, &running_turn("turn-skill-1"))
+                .expect("写入测试 turn");
+            AgentTimelineDao::upsert_item(
+                &conn,
+                &AgentThreadItem {
+                    id: "reasoning:assistant-1".to_string(),
+                    thread_id: "thread-1".to_string(),
+                    turn_id: "turn-skill-1".to_string(),
+                    sequence: 3,
+                    status: AgentThreadItemStatus::Completed,
+                    started_at: "2026-03-13T00:00:01Z".to_string(),
+                    completed_at: Some("2026-03-13T00:00:02Z".to_string()),
+                    updated_at: "2026-03-13T00:00:02Z".to_string(),
+                    payload: AgentThreadItemPayload::Reasoning {
+                        text: "已完成思考".to_string(),
+                        summary: Some(vec!["已完成思考".to_string()]),
+                    },
+                },
+            )
+            .expect("写入测试 item");
+        }
+
+        let mut recorder =
+            AgentTimelineRecorder::from_started_turn(db.clone(), running_turn("turn-skill-1"))
+                .expect("应从 turn_started 创建 recorder");
+        let item_id = "skill:exec-1".to_string();
+        let start_event = recorder
+            .record_synthetic_item_event(
+                item_id.clone(),
+                AgentThreadItemStatus::InProgress,
+                None,
+                AgentThreadItemPayload::ToolCall {
+                    tool_name: "Skill".to_string(),
+                    arguments: Some(json!({
+                        "skill": "analysis",
+                        "source": "SKILL.md"
+                    })),
+                    output: Some("正在从 SKILL.md 读取并执行 Skill：Analysis".to_string()),
+                    success: None,
+                    error: None,
+                    metadata: Some(json!({
+                        "tool_family": "skill",
+                        "skill_source": "SKILL.md",
+                        "markdown_content_bytes": 1024
+                    })),
+                },
+            )
+            .expect("应记录 synthetic Skill item");
+
+        let RuntimeAgentEvent::ItemStarted { item } = start_event else {
+            panic!("首次 synthetic item 应发出 ItemStarted");
+        };
+        assert_eq!(item.sequence, 4);
+        assert!(matches!(item.status, AgentThreadItemStatus::InProgress));
+        match &item.payload {
+            AgentThreadItemPayload::ToolCall {
+                tool_name,
+                arguments,
+                metadata,
+                ..
+            } => {
+                assert_eq!(tool_name, "Skill");
+                assert_eq!(
+                    arguments
+                        .as_ref()
+                        .and_then(|v| v.get("source"))
+                        .and_then(serde_json::Value::as_str),
+                    Some("SKILL.md")
+                );
+                assert_eq!(
+                    metadata
+                        .as_ref()
+                        .and_then(|v| v.get("markdown_content_bytes"))
+                        .and_then(serde_json::Value::as_u64),
+                    Some(1024)
+                );
+            }
+            _ => panic!("Skill invocation 应保存为 tool_call item"),
+        }
+
+        let completed_event = recorder
+            .record_synthetic_item_event(
+                item_id,
+                AgentThreadItemStatus::Completed,
+                Some("2026-03-13T00:00:03Z".to_string()),
+                AgentThreadItemPayload::ToolCall {
+                    tool_name: "Skill".to_string(),
+                    arguments: Some(json!({
+                        "skill": "analysis",
+                        "source": "SKILL.md"
+                    })),
+                    output: Some("已从 SKILL.md 读取并执行 Skill：Analysis".to_string()),
+                    success: Some(true),
+                    error: None,
+                    metadata: Some(json!({
+                        "tool_family": "skill",
+                        "skill_source": "SKILL.md",
+                        "markdown_content_bytes": 1024
+                    })),
+                },
+            )
+            .expect("应完成 synthetic Skill item");
+
+        let RuntimeAgentEvent::ItemCompleted { item } = completed_event else {
+            panic!("完成 synthetic item 应发出 ItemCompleted");
+        };
+        assert_eq!(item.sequence, 4);
+        assert_eq!(item.completed_at.as_deref(), Some("2026-03-13T00:00:03Z"));
+        assert!(matches!(item.status, AgentThreadItemStatus::Completed));
+    }
+
+    #[test]
+    fn runtime_items_after_synthetic_skill_should_not_reuse_sequence() {
+        let db = setup_db();
+        {
+            let conn = lock_db(&db).expect("获取数据库锁");
+            AgentTimelineDao::upsert_turn(&conn, &running_turn("turn-skill-1"))
+                .expect("写入测试 turn");
+            AgentTimelineDao::upsert_item(
+                &conn,
+                &AgentThreadItem {
+                    id: "user:1".to_string(),
+                    thread_id: "thread-1".to_string(),
+                    turn_id: "turn-skill-1".to_string(),
+                    sequence: 1,
+                    status: AgentThreadItemStatus::Completed,
+                    started_at: "2026-03-13T00:00:01Z".to_string(),
+                    completed_at: Some("2026-03-13T00:00:01Z".to_string()),
+                    updated_at: "2026-03-13T00:00:01Z".to_string(),
+                    payload: AgentThreadItemPayload::UserMessage {
+                        content: "@analysis 请分析".to_string(),
+                    },
+                },
+            )
+            .expect("写入测试 user item");
+        }
+
+        let mut recorder =
+            AgentTimelineRecorder::from_started_turn(db.clone(), running_turn("turn-skill-1"))
+                .expect("应从 turn_started 创建 recorder");
+        recorder
+            .record_synthetic_item_event(
+                "skill:exec-1".to_string(),
+                AgentThreadItemStatus::InProgress,
+                None,
+                AgentThreadItemPayload::ToolCall {
+                    tool_name: "Skill".to_string(),
+                    arguments: Some(json!({
+                        "skill": "analysis",
+                        "source": "SKILL.md"
+                    })),
+                    output: Some("正在从 SKILL.md 读取并执行 Skill：analysis".to_string()),
+                    success: None,
+                    error: None,
+                    metadata: Some(json!({
+                        "tool_family": "skill",
+                        "skill_source": "SKILL.md",
+                        "markdown_content_bytes": 1024
+                    })),
+                },
+            )
+            .expect("应记录 synthetic Skill item");
+
+        let mut reasoning_item = AgentThreadItem {
+            id: "reasoning:1".to_string(),
+            thread_id: "thread-1".to_string(),
+            turn_id: "turn-skill-1".to_string(),
+            sequence: 2,
+            status: AgentThreadItemStatus::InProgress,
+            started_at: "2026-03-13T00:00:02Z".to_string(),
+            completed_at: None,
+            updated_at: "2026-03-13T00:00:02Z".to_string(),
+            payload: AgentThreadItemPayload::Reasoning {
+                text: "先读取 Skill".to_string(),
+                summary: Some(vec!["先读取 Skill".to_string()]),
+            },
+        };
+
+        recorder.normalize_runtime_item_sequence(&mut reasoning_item);
+
+        assert_eq!(reasoning_item.sequence, 3);
+        let conn = lock_db(&db).expect("获取数据库锁");
+        let items = AgentTimelineDao::list_items_by_thread(&conn, "thread-1").expect("读取 item");
+        let skill_item = items.iter().find(|item| item.id == "skill:exec-1").unwrap();
+        assert_eq!(skill_item.sequence, 2);
     }
 
     #[test]

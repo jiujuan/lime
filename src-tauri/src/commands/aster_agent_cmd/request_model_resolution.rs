@@ -5,8 +5,8 @@ use crate::config::GlobalConfigManagerState;
 mod fast_response;
 mod responsive_chat;
 use fast_response::{
-    extract_fast_response_routing, extract_fast_response_routing_slot,
-    extract_fast_response_service_model_slot,
+    extract_fast_response_fallback_preference, extract_fast_response_routing,
+    extract_fast_response_routing_slot, extract_fast_response_service_model_slot,
 };
 use lime_core::database::dao::api_key_provider::{ApiProviderType, ProviderGroup};
 use lime_core::models::model_registry::{
@@ -2990,6 +2990,7 @@ enum RequestPreferenceSource {
     ServiceSceneLaunch,
     Session,
     ServiceModelSetting,
+    FastResponseFallback,
     ResponsiveChatAuto,
 }
 
@@ -3927,6 +3928,99 @@ pub(super) async fn resolve_runtime_request_provider_resolution(
                 oem_policy: oem_policy.clone(),
                 runtime_summary,
             });
+        }
+    }
+
+    if request_targets_responsive_chat {
+        if let Some(fallback_preference) =
+            extract_fast_response_fallback_preference(request.metadata.as_ref())
+        {
+            match build_runtime_request_provider_config_from_preference(
+                app,
+                db,
+                api_key_provider_service,
+                request,
+                &task_profile,
+                &fallback_preference.provider_selector,
+                &fallback_preference.model_name,
+                RequestPreferenceSource::FastResponseFallback,
+                true,
+            )
+            .await
+            {
+                Ok(selection) => {
+                    tracing::info!(
+                        "[AsterAgent] 快速响应后端候选不可用，回退当前工作区 provider/model: session={}, provider={}, model={}",
+                        request.session_id,
+                        fallback_preference.provider_selector,
+                        fallback_preference.model_name
+                    );
+                    let mut notes = vec![
+                        "快速响应后端候选不可用，已回退到当前工作区 provider/model。".to_string(),
+                    ];
+                    if let Some(note) = fallback_note.clone() {
+                        notes.push(note);
+                    }
+                    let limit_state = build_limit_state(
+                        runtime_limit_status_for_selection(&selection),
+                        selection.candidate_count,
+                        true,
+                        false,
+                        oem_locked,
+                        selection.capability_gap.clone(),
+                        notes,
+                    );
+                    let routing_decision = build_routing_decision(
+                        &task_profile,
+                        "fast_response_fallback",
+                        compose_routing_decision_reason(
+                            "当前回合命中快速响应路由，但后端服务模型或自动候选不可用；运行时回退到前端当前工作区模型。",
+                            Some(&selection),
+                            oem_locked,
+                            fallback_note.as_deref(),
+                        ),
+                        Some(&selection),
+                        Some(fallback_preference.provider_selector),
+                        Some(fallback_preference.model_name),
+                        Some("fast_response_routing.fallback".to_string()),
+                    );
+                    let cost_state = build_cost_state(Some(&selection), None, "estimated");
+                    let runtime_summary = build_runtime_summary(
+                        &routing_decision,
+                        &limit_state,
+                        &cost_state,
+                        &permission_state,
+                        oem_limit_event.as_ref(),
+                    );
+
+                    return Ok(RuntimeRequestProviderResolution {
+                        provider_config: Some(selection.provider_config),
+                        task_profile,
+                        routing_decision,
+                        limit_state,
+                        cost_state,
+                        permission_state: permission_state.clone(),
+                        limit_event: oem_limit_event,
+                        oem_policy: oem_policy.clone(),
+                        runtime_summary,
+                    });
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        "[AsterAgent] 快速响应 fallback provider/model 不可用，继续回退会话默认: session={}, provider={}, model={}, error={}",
+                        request.session_id,
+                        fallback_preference.provider_selector,
+                        fallback_preference.model_name,
+                        error
+                    );
+                    if fallback_note.is_none() {
+                        fallback_note = Some(
+                            "快速响应 fallback provider/model 不可用，已继续回退会话默认。"
+                                .to_string(),
+                        );
+                    }
+                }
+            }
         }
     }
 

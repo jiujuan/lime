@@ -51,8 +51,10 @@ describe("A2UI 表单控件", () => {
     );
 
     const optionButton = clickButtonByText(container, "新写一篇内容");
-    expect(optionButton?.className).toContain("rounded-[20px]");
-    expect(optionButton?.className).toContain("border-slate-200");
+    expect(optionButton?.className).toContain("rounded-[16px]");
+    expect(optionButton?.className).toContain(
+      "border-[color:var(--lime-surface-border)]",
+    );
     expect(onFormChange).toHaveBeenCalledWith("start_mode", ["new_post"]);
   });
 

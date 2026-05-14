@@ -123,6 +123,69 @@ describe("useWorkspaceA2UIRuntime", () => {
     expect(getValue().a2uiSubmissionNotice).toBeNull();
   });
 
+  it("历史 A2UI 消息不应提升到底部可提交表单", async () => {
+    const historyA2UIMessage = createAssistantMessage(
+      "assistant-history-a2ui",
+      [
+        "```a2ui",
+        '{"type":"form","title":"历史表单","fields":[{"id":"answer","type":"text","label":"你的回答"}],"submitLabel":"继续处理"}',
+        "```",
+      ].join("\n"),
+    );
+    const { render, getValue } = renderHook({
+      messages: [historyA2UIMessage],
+      readOnlyInteractiveMessageIds: new Set(["assistant-history-a2ui"]),
+    });
+
+    await render({
+      messages: [historyA2UIMessage],
+      readOnlyInteractiveMessageIds: new Set(["assistant-history-a2ui"]),
+    });
+
+    expect(getValue().pendingA2UIForm).toBeNull();
+    expect(getValue().pendingA2UISource).toBeNull();
+    expect(getValue().pendingActionRequest).toBeNull();
+    expect(getValue().pendingPromotedA2UIActionRequest).toBeNull();
+  });
+
+  it("历史 action_required 不应提升到底部可提交 A2UI 表单", async () => {
+    const historyPendingMessage: Message = {
+      id: "assistant-history-action",
+      role: "assistant",
+      content: "请补充执行偏好。",
+      timestamp: new Date("2026-03-27T10:01:00.000Z"),
+      actionRequests: [
+        {
+          requestId: "req-history-a2ui",
+          actionType: "ask_user",
+          prompt: "请选择执行模式",
+          questions: [
+            {
+              question: "你希望如何执行？",
+              header: "执行模式",
+              options: [{ label: "自动执行" }, { label: "手动确认" }],
+            },
+          ],
+          status: "pending",
+        },
+      ],
+    };
+    const { render, getValue } = renderHook({
+      messages: [historyPendingMessage],
+      readOnlyInteractiveMessageIds: new Set(["assistant-history-action"]),
+    });
+
+    await render({
+      messages: [historyPendingMessage],
+      readOnlyInteractiveMessageIds: new Set(["assistant-history-action"]),
+    });
+
+    expect(getValue().pendingA2UIForm).toBeNull();
+    expect(getValue().pendingA2UISource).toBeNull();
+    expect(getValue().pendingActionRequest).toBeNull();
+    expect(getValue().pendingPromotedA2UIActionRequest).toBeNull();
+  });
+
   it("历史问卷正文不应再生成 pending A2UI 表单", async () => {
     const legacyQuestionnaireMessage = createAssistantMessage(
       "assistant-legacy-questionnaire",

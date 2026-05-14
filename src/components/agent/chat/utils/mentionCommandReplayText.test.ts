@@ -1,4 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  clearSkillCatalogCache,
+  upsertLocalModelBoundImageCommandBinding,
+} from "@/lib/api/skillCatalog";
 import { parseAnalysisWorkbenchCommand } from "./analysisWorkbenchCommand";
 import { parseBroadcastWorkbenchCommand } from "./broadcastWorkbenchCommand";
 import { parseBrowserWorkbenchCommand } from "./browserWorkbenchCommand";
@@ -36,6 +40,15 @@ import { parseVoiceWorkbenchCommand } from "./voiceWorkbenchCommand";
 import { parseWebpageWorkbenchCommand } from "./webpageWorkbenchCommand";
 
 describe("buildMentionCommandReplayText", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    window.localStorage.clear();
+    clearSkillCatalogCache();
+  });
+
   it("应把自然语句的 @搜索 回放整理成字段骨架", () => {
     const parsedCommand = parseSearchWorkbenchCommand(
       "@搜索 GitHub 最近一周 openai agents sdk issue 讨论",
@@ -87,6 +100,25 @@ describe("buildMentionCommandReplayText", () => {
     expect(
       buildMentionCommandReplayText({
         commandKey: "image_generate_nanobanana_pro",
+        parsedCommand: parsedCommand!,
+      }),
+    ).toBe("一张广州塔，从花城汇看过去的春天的照片");
+  });
+
+  it("应把 @Nano Banana 2 回放成 image_generate 同构参数", () => {
+    upsertLocalModelBoundImageCommandBinding({
+      trigger: "@Nano Banana 2",
+      providerId: "fal",
+      modelId: "fal-ai/nano-banana-2",
+      executorMode: "images_api",
+    });
+    const parsedCommand = parseImageWorkbenchCommand(
+      "@Nano Banana 2 生成一张广州塔，从花城汇看过去的春天的照片",
+    );
+
+    expect(
+      buildMentionCommandReplayText({
+        commandKey: "image_model_nano_banana_2",
         parsedCommand: parsedCommand!,
       }),
     ).toBe("一张广州塔，从花城汇看过去的春天的照片");

@@ -33,9 +33,9 @@ import {
 } from "./inputCapabilitySections";
 import { buildCuratedTaskTemplateCopy } from "../utils/curatedTaskTemplates";
 import type { CuratedTaskReferenceEntry } from "../utils/curatedTaskReferenceSelection";
-import type agentResource from "@/i18n/resources/zh-CN/agent.json";
+import type { AgentI18nResource } from "@/i18n/agentResources";
 
-type AgentI18nKey = keyof typeof agentResource;
+type AgentI18nKey = keyof AgentI18nResource;
 
 interface CharacterMentionPanelProps {
   mode: "mention" | "slash";

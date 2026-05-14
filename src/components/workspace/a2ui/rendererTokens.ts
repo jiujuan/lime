@@ -1,22 +1,23 @@
 export const A2UI_RENDERER_TOKENS = {
-  container: "a2ui-container space-y-4",
-  thinkingText: "text-sm text-muted-foreground italic",
-  errorText: "text-red-500",
+  container: "a2ui-container space-y-3",
+  thinkingText: "text-[13px] text-[color:var(--lime-text-muted)] italic",
+  errorText: "text-rose-600",
   submitRow: "flex justify-end",
   submitButton:
-    "inline-flex h-11 items-center justify-center rounded-full border border-emerald-200 bg-[linear-gradient(135deg,#0ea5e9_0%,#14b8a6_52%,#10b981_100%)] px-5 text-sm font-medium text-white shadow-sm shadow-emerald-950/15 transition-colors hover:opacity-95 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-200 disabled:text-slate-400 disabled:hover:bg-slate-200",
+    "inline-flex h-10 items-center justify-center rounded-full border border-[color:var(--lime-surface-border-strong)] bg-[color:var(--lime-brand)] px-4 text-[13px] font-medium text-white shadow-sm shadow-slate-950/10 transition-colors hover:opacity-95 disabled:cursor-not-allowed disabled:border-[color:var(--lime-surface-border)] disabled:bg-[color:var(--lime-surface-muted)] disabled:text-[color:var(--lime-text-muted)] disabled:hover:bg-[color:var(--lime-surface-muted)]",
   textVariants: {
-    h1: "text-2xl font-bold",
-    h2: "text-xl font-semibold",
-    h3: "text-lg font-semibold",
-    h4: "text-base font-medium",
-    h5: "text-sm font-medium",
-    body: "text-sm",
-    caption: "text-xs text-muted-foreground",
+    h1: "text-xl font-bold text-[color:var(--lime-text-strong)]",
+    h2: "text-lg font-semibold text-[color:var(--lime-text-strong)]",
+    h3: "text-base font-semibold text-[color:var(--lime-text-strong)]",
+    h4: "text-sm font-medium text-[color:var(--lime-text-strong)]",
+    h5: "text-[13px] font-medium text-[color:var(--lime-text-strong)]",
+    body: "text-[13px] text-[color:var(--lime-text)]",
+    caption: "text-xs text-[color:var(--lime-text-muted)]",
   },
-  imageBase: "block border border-slate-200 bg-slate-100 object-cover",
+  imageBase:
+    "block border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] object-cover",
   imagePlaceholder:
-    "flex items-center justify-center border border-dashed border-slate-300 bg-slate-50 text-xs text-slate-500",
+    "flex items-center justify-center border border-dashed border-[color:var(--lime-surface-border-strong)] bg-[color:var(--lime-surface-soft)] text-xs text-[color:var(--lime-text-muted)]",
   imageFit: {
     contain: "object-contain",
     cover: "object-cover",
@@ -34,7 +35,7 @@ export const A2UI_RENDERER_TOKENS = {
     header: "w-full h-48 rounded-[24px]",
   },
   iconShell:
-    "inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 shadow-sm",
+    "inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] text-[color:var(--lime-text-muted)] shadow-sm",
   iconFallback: "text-[10px] font-medium uppercase tracking-[0.08em]",
 } as const;
 

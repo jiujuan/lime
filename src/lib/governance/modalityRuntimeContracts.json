@@ -65,11 +65,14 @@
         "block_on_no_image_generation_model"
       ],
       "detour_policy": {
-        "allowed": ["ask_user_question"],
+        "allowed": [
+          "ask_user_question",
+          "catalog_declared_model_bound_image_skill_launch"
+        ],
         "denied": [
           "free_bash",
           "web_search_before_skill",
-          "frontend_direct_task_creation"
+          "unregistered_frontend_direct_task_creation"
         ]
       },
       "owner_surface": "agent_runtime",
@@ -154,6 +157,24 @@
           "entry_visibility_policy": [
             "skill_catalog_visible",
             "profile_allows_image_generation"
+          ]
+        },
+        {
+          "entry_key": "at_model_bound_image_command",
+          "entry_kind": "command",
+          "display_name": "用户或 Lime Cloud 目录声明的图片模型 @命令",
+          "launch_metadata_path": "harness.image_skill_launch.image_task",
+          "entry_source": "at_model_bound_image_command",
+          "default_input_mapping": [
+            "user_text",
+            "provider_id",
+            "model",
+            "executor_mode"
+          ],
+          "entry_visibility_policy": [
+            "skill_catalog_visible",
+            "modelBoundImageTask_true",
+            "provider_model_configured"
           ]
         },
         {
@@ -516,10 +537,7 @@
         "text_prompt",
         "workspace_context"
       ],
-      "required_capabilities": [
-        "text_generation",
-        "audio_transcription"
-      ],
+      "required_capabilities": ["text_generation", "audio_transcription"],
       "permission_profile_keys": [
         "read_files",
         "write_artifacts",
@@ -794,10 +812,7 @@
         "block_on_file_unavailable"
       ],
       "detour_policy": {
-        "allowed": [
-          "ask_user_question",
-          "local_file_read_when_explicit_path"
-        ],
+        "allowed": ["ask_user_question", "local_file_read_when_explicit_path"],
         "denied": [
           "frontend_direct_text_transform",
           "tool_search_before_text_transform_skill",
@@ -845,11 +860,7 @@
           "display_name": "@翻译 / @translate",
           "launch_metadata_path": "harness.translation_skill_launch.translation_request",
           "entry_source": "at_translation_command",
-          "default_input_mapping": [
-            "user_text",
-            "content",
-            "target_language"
-          ],
+          "default_input_mapping": ["user_text", "content", "target_language"],
           "entry_visibility_policy": [
             "skill_catalog_visible",
             "profile_allows_text_transform"
@@ -861,11 +872,7 @@
           "display_name": "@分析 / @analysis",
           "launch_metadata_path": "harness.analysis_skill_launch.analysis_request",
           "entry_source": "at_analysis_command",
-          "default_input_mapping": [
-            "user_text",
-            "content",
-            "analysis_focus"
-          ],
+          "default_input_mapping": ["user_text", "content", "analysis_focus"],
           "entry_visibility_policy": [
             "skill_catalog_visible",
             "profile_allows_text_transform"
@@ -877,11 +884,7 @@
           "display_name": "@发布合规 / @publish_compliance",
           "launch_metadata_path": "harness.analysis_skill_launch.analysis_request",
           "entry_source": "at_publish_compliance_command",
-          "default_input_mapping": [
-            "user_text",
-            "content",
-            "compliance_focus"
-          ],
+          "default_input_mapping": ["user_text", "content", "compliance_focus"],
           "entry_visibility_policy": [
             "skill_catalog_visible",
             "profile_allows_text_transform",

@@ -642,6 +642,72 @@ describe("agentSessionState", () => {
     );
   });
 
+  it("本地快照首轮用户指令与远端不一致时应丢弃快照，避免历史会话串线", () => {
+    const detail = {
+      id: "topic-image-lemonade",
+      created_at: 1700000000,
+      updated_at: 1700000001,
+      messages: [],
+      turns: [
+        createTurn({
+          id: "turn-lemonade",
+          thread_id: "topic-image-lemonade",
+          prompt_text: "@配图 生成一张极简线稿风的柠檬水杯配图，1:1",
+          started_at: "2026-05-14T05:20:00.000Z",
+          completed_at: "2026-05-14T05:20:01.000Z",
+          created_at: "2026-05-14T05:20:00.000Z",
+          updated_at: "2026-05-14T05:20:01.000Z",
+        }),
+      ],
+      items: [],
+      queued_turns: [],
+    } satisfies AsterSessionDetail;
+
+    const result = buildHydratedAgentSessionSnapshot({
+      topicId: "topic-image-lemonade",
+      detail,
+      currentSessionId: "topic-image-lemonade",
+      currentMessages: [
+        createMessage({
+          id: "topic-image-lemonade-0",
+          role: "user",
+          content: "@配图 生成三张章节配图",
+          timestamp: new Date("2026-05-14T05:33:22.000Z"),
+        }),
+        createMessage({
+          id: "topic-image-lemonade-1",
+          role: "assistant",
+          content: "我按三个章节分别生成，方便你逐张查看。",
+          timestamp: new Date("2026-05-14T05:33:23.000Z"),
+          thinkingContent: "拆成三个章节画面，保持同一视觉风格。",
+          contentParts: [
+            {
+              type: "thinking",
+              text: "拆成三个章节画面，保持同一视觉风格。",
+            },
+            {
+              type: "text",
+              text: "我按三个章节分别生成，方便你逐张查看。",
+            },
+          ],
+        }),
+      ],
+      currentThreadTurns: [],
+      currentThreadItems: [],
+      currentExecutionRuntime: null,
+      currentExecutionStrategy: "react",
+      topics: [],
+      syncSessionId: true,
+    });
+
+    expect(result.snapshot.sessionId).toBe("topic-image-lemonade");
+    expect(result.snapshot.messages).toHaveLength(1);
+    expect(result.snapshot.messages[0]?.content).toBe(
+      "@配图 生成一张极简线稿风的柠檬水杯配图，1:1",
+    );
+    expect(result.snapshot.messages[0]?.content).not.toContain("章节配图");
+  });
+
   it("切回直执 Skill 历史会话时不应被远端纯正文刷新掉本地思考", () => {
     const now = new Date("2026-04-08T10:00:02.000Z");
     const detail = {

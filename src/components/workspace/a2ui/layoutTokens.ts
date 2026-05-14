@@ -5,8 +5,8 @@ export const A2UI_LAYOUT_TOKENS = {
   rowDirection: "flex-row",
   columnDirection: "flex-col",
   cardShell:
-    "a2ui-card-shell rounded-[20px] border border-slate-200 bg-white p-4 shadow-sm",
-  dividerBase: "bg-border",
+    "a2ui-card-shell rounded-[16px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-3 shadow-sm shadow-slate-950/5",
+  dividerBase: "bg-[color:var(--lime-surface-border)]",
   dividerHorizontal: "h-px w-full",
   dividerVertical: "w-px h-full min-h-[20px]",
 } as const;

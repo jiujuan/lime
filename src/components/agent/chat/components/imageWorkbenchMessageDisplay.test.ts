@@ -1,0 +1,143 @@
+import { describe, expect, it } from "vitest";
+import type { Message } from "../types";
+import {
+  resolveImageWorkbenchMessageDisplayState,
+  resolveImageWorkbenchProcessDisplayState,
+  resolveImageWorkbenchRendererProcessState,
+} from "./imageWorkbenchMessageDisplay";
+
+function createImageMessage(overrides: Partial<Message> = {}): Message {
+  return {
+    id: "assistant-image-message",
+    role: "assistant",
+    content: "图片任务已提交，正在生成。",
+    timestamp: new Date("2026-05-14T08:00:00.000Z"),
+    imageWorkbenchPreview: {
+      taskId: "task-image-1",
+      prompt: "青柠插画",
+      status: "running",
+    },
+    ...overrides,
+  };
+}
+
+describe("imageWorkbenchMessageDisplay", () => {
+  it("图片任务协议正文应被移出可见正文，但执行过程应折叠保留", () => {
+    const message = createImageMessage({
+      contentParts: [
+        { type: "thinking", text: "先确认青柠插画风格。" },
+        { type: "text", text: "图片任务已提交，正在生成。" },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-image-1",
+            name: "lime_create_image_generation_task",
+            arguments: JSON.stringify({ prompt: "青柠插画" }),
+            status: "completed",
+            startTime: new Date("2026-05-14T08:00:01.000Z"),
+            endTime: new Date("2026-05-14T08:00:02.000Z"),
+          },
+        },
+      ],
+      toolCalls: [
+        {
+          id: "tool-image-1",
+          name: "lime_create_image_generation_task",
+          arguments: JSON.stringify({ prompt: "青柠插画" }),
+          status: "completed",
+          startTime: new Date("2026-05-14T08:00:01.000Z"),
+          endTime: new Date("2026-05-14T08:00:02.000Z"),
+        },
+      ],
+    });
+
+    const displayState = resolveImageWorkbenchMessageDisplayState({
+      message,
+      rawDisplayContent: message.content,
+      thinkingContent: "先确认青柠插画风格。",
+    });
+    const processState = resolveImageWorkbenchProcessDisplayState({
+      message,
+      sanitizedContentParts: message.contentParts,
+      shouldDeferMessageDetails: false,
+      shouldSuppressImageProcessFlow: displayState.shouldSuppressProcessFlow,
+    });
+    const rendererState = resolveImageWorkbenchRendererProcessState({
+      actionContent: "",
+      imageWorkbenchThinkingContent: displayState.thinkingContent,
+      message,
+      rendererActionRequests: undefined,
+      rendererContentParts: processState.displayContentParts,
+      rendererThinkingContent: undefined,
+      rendererToolCalls: message.toolCalls,
+      shouldSuppressRendererProcessFlow:
+        processState.shouldSuppressRendererProcessFlow,
+    });
+
+    expect(displayState.visibleRawDisplayContent).toBe("");
+    expect(processState.shouldFoldSuppressedProcessFlow).toBe(true);
+    expect(processState.shouldSuppressRendererProcessFlow).toBe(false);
+    expect(processState.displayContentParts?.map((part) => part.type)).toEqual([
+      "thinking",
+      "tool_use",
+    ]);
+    expect(rendererState.shouldRenderInlineProcess).toBe(true);
+    expect(rendererState.thinkingContent).toBe("先确认青柠插画风格。");
+    expect(rendererState.toolCalls?.[0]?.id).toBe("tool-image-1");
+  });
+
+  it("只有旧提交摘要且没有过程时，应只保留图片轻卡入口", () => {
+    const message = createImageMessage();
+    const displayState = resolveImageWorkbenchMessageDisplayState({
+      message,
+      rawDisplayContent: message.content,
+    });
+    const processState = resolveImageWorkbenchProcessDisplayState({
+      message,
+      sanitizedContentParts: undefined,
+      shouldDeferMessageDetails: false,
+      shouldSuppressImageProcessFlow: displayState.shouldSuppressProcessFlow,
+    });
+    const rendererState = resolveImageWorkbenchRendererProcessState({
+      actionContent: "",
+      imageWorkbenchThinkingContent: displayState.thinkingContent,
+      message,
+      rendererContentParts: processState.displayContentParts,
+      shouldSuppressRendererProcessFlow:
+        processState.shouldSuppressRendererProcessFlow,
+    });
+
+    expect(displayState.visibleRawDisplayContent).toBe("");
+    expect(processState.shouldFoldSuppressedProcessFlow).toBe(false);
+    expect(processState.shouldSuppressRendererProcessFlow).toBe(true);
+    expect(rendererState.shouldRenderInlineProcess).toBe(false);
+  });
+
+  it("图片任务失败时应隐藏模型生成的协议错误解释正文", () => {
+    const message = createImageMessage({
+      content: [
+        "好的，马上用漫画风格来生成！",
+        "",
+        "看来这个请求没有完成。",
+        "-32603: -32002: lime_create_image_generation_task",
+      ].join("\n"),
+      imageWorkbenchPreview: {
+        taskId: "task-image-failed-1",
+        prompt: "漫画风格人物",
+        status: "failed",
+      },
+    });
+
+    const displayState = resolveImageWorkbenchMessageDisplayState({
+      message,
+      rawDisplayContent: message.content,
+      thinkingContent: "先按用户描述准备画面。",
+    });
+
+    expect(displayState.visibleRawDisplayContent).toBe("");
+    expect(displayState.hasLeadContent).toBe(true);
+    expect(displayState.thinkingContent).toBe("先按用户描述准备画面。");
+    expect(displayState.shouldSuppressAssistantText).toBe(true);
+  });
+
+});

@@ -18,6 +18,26 @@ export interface WorkflowSummaryOptions<TStep> {
   leadingStep: TStep | null;
   remainingCount: number;
   emptyLabel?: string;
+  copy?: WorkflowPresentationCopy;
+}
+
+export interface WorkflowPresentationCopy {
+  summary: {
+    completed: string;
+    waitingDecision: string;
+    running: string;
+    arranging: string;
+    errorWithTrailing: (count: number) => string;
+    errorLast: string;
+    pendingWithTrailing: (count: number) => string;
+    pendingLast: string;
+    activeWithTrailing: (count: number) => string;
+    activeLast: string;
+  };
+  progress: {
+    waitingStart: string;
+    completed: (completed: number, total: number) => string;
+  };
 }
 
 const WORKFLOW_STEP_STATUS_PRIORITY: Record<StepStatus, number> = {
@@ -75,22 +95,40 @@ export function buildWorkflowStepSnapshot<TStep extends WorkflowStepLike>(
 export function buildWorkflowSummaryText<TStep extends WorkflowStepLike>({
   leadingStep,
   remainingCount,
-  emptyLabel = "当前流程已完成",
+  emptyLabel,
+  copy,
 }: WorkflowSummaryOptions<TStep>): string {
+  const fallbackEmptyLabel =
+    emptyLabel ?? copy?.summary.completed ?? "当前流程已完成";
   if (!leadingStep) {
-    return emptyLabel;
+    return fallbackEmptyLabel;
   }
 
   const trailingCount = Math.max(remainingCount - 1, 0);
   if (leadingStep.status === "error") {
+    if (copy) {
+      return trailingCount > 0
+        ? copy.summary.errorWithTrailing(trailingCount)
+        : copy.summary.errorLast;
+    }
     return trailingCount > 0
       ? `当前步骤异常，另有 ${trailingCount} 项待处理`
       : "当前步骤异常，请先处理";
   }
   if (leadingStep.status === "pending") {
+    if (copy) {
+      return trailingCount > 0
+        ? copy.summary.pendingWithTrailing(trailingCount)
+        : copy.summary.pendingLast;
+    }
     return trailingCount > 0
       ? `等待启动，后续还有 ${trailingCount} 项待处理`
       : "等待启动";
+  }
+  if (copy) {
+    return trailingCount > 0
+      ? copy.summary.activeWithTrailing(trailingCount)
+      : copy.summary.activeLast;
   }
   return trailingCount > 0
     ? `正在推进，后续还有 ${trailingCount} 项待处理`
@@ -100,12 +138,16 @@ export function buildWorkflowSummaryText<TStep extends WorkflowStepLike>({
 export function formatWorkflowProgressLabel(params: {
   completedCount: number;
   totalCount: number;
+  copy?: WorkflowPresentationCopy;
 }): string {
-  const { completedCount, totalCount } = params;
+  const { completedCount, totalCount, copy } = params;
   if (totalCount <= 0) {
-    return "等待开始";
+    return copy?.progress.waitingStart ?? "等待开始";
   }
-  return `已完成 ${completedCount}/${totalCount}`;
+  return (
+    copy?.progress.completed(completedCount, totalCount) ??
+    `已完成 ${completedCount}/${totalCount}`
+  );
 }
 
 export function getWorkflowStatusLabel(status: StepStatus): string {

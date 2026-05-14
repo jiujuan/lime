@@ -7,8 +7,7 @@ import {
   createSkillSelectionProps,
   type SkillSelectionProps,
 } from "../skill-selection/skillSelectionBindings";
-import agentResource from "@/i18n/resources/zh-CN/agent.json";
-import enAgentResource from "@/i18n/resources/en-US/agent.json";
+import { agentEnUSResource, agentZhCNResource } from "@/i18n/agentResources";
 import {
   buildHomeSurfaceCopy,
   type HomeSurfaceCopyKey,
@@ -17,6 +16,10 @@ import {
   buildInputbarCoreCopy,
   type InputbarCoreCopyKey,
 } from "./Inputbar/components/inputbarCoreCopy";
+import {
+  buildInputbarExecutionStrategyCopy,
+  type InputbarWorkflowCopyKey,
+} from "./Inputbar/inputbarWorkflowCopy";
 import { changeLimeLocale } from "@/i18n/createI18n";
 
 vi.mock("./ChatModelSelector", () => ({
@@ -57,31 +60,43 @@ vi.mock("./Inputbar/components/TeamSelector", () => ({
 }));
 
 function translateResource(
-  resource: Partial<Record<HomeSurfaceCopyKey | InputbarCoreCopyKey, string>>,
-  key: HomeSurfaceCopyKey | InputbarCoreCopyKey,
+  resource: Partial<
+    Record<
+      HomeSurfaceCopyKey | InputbarCoreCopyKey | InputbarWorkflowCopyKey,
+      string
+    >
+  >,
+  key: HomeSurfaceCopyKey | InputbarCoreCopyKey | InputbarWorkflowCopyKey,
   values?: Record<string, number | string>,
 ) {
   return Object.entries(values ?? {}).reduce(
-    (text, [name, value]) =>
-      text.split(`{{${name}}}`).join(String(value)),
+    (text, [name, value]) => text.split(`{{${name}}}`).join(String(value)),
     resource[key] ?? key,
   );
 }
 
 const TEST_COMPOSER_COPY = buildHomeSurfaceCopy((key, values) =>
-  translateResource(agentResource, key, values),
+  translateResource(agentZhCNResource, key, values),
 ).composer;
 
 const TEST_EN_COMPOSER_COPY = buildHomeSurfaceCopy((key, values) =>
-  translateResource(enAgentResource, key, values),
+  translateResource(agentEnUSResource, key, values),
 ).composer;
 
 const TEST_INPUTBAR_CORE_COPY = buildInputbarCoreCopy((key, values) =>
-  translateResource(agentResource, key, values),
+  translateResource(agentZhCNResource, key, values),
 );
 
 const TEST_EN_INPUTBAR_CORE_COPY = buildInputbarCoreCopy((key, values) =>
-  translateResource(enAgentResource, key, values),
+  translateResource(agentEnUSResource, key, values),
+);
+
+const TEST_EXECUTION_STRATEGY_COPY = buildInputbarExecutionStrategyCopy(
+  (key, values) => translateResource(agentZhCNResource, key, values),
+);
+
+const TEST_EN_EXECUTION_STRATEGY_COPY = buildInputbarExecutionStrategyCopy(
+  (key, values) => translateResource(agentEnUSResource, key, values),
 );
 
 const mockSelectedTeam = {
@@ -204,6 +219,7 @@ function renderPanel(
     skillSelection: createSkillSelection(),
     copy: TEST_COMPOSER_COPY,
     inputbarCopy: TEST_INPUTBAR_CORE_COPY,
+    executionStrategyCopy: TEST_EXECUTION_STRATEGY_COPY,
     showCreationModeSelector: false,
     creationMode: "guided",
     onCreationModeChange: vi.fn(),
@@ -262,6 +278,7 @@ function renderStatefulPanel(
         skillSelection={createSkillSelection()}
         copy={TEST_COMPOSER_COPY}
         inputbarCopy={TEST_INPUTBAR_CORE_COPY}
+        executionStrategyCopy={TEST_EXECUTION_STRATEGY_COPY}
         showCreationModeSelector={false}
         creationMode="guided"
         onCreationModeChange={vi.fn()}
@@ -408,6 +425,7 @@ describe("EmptyStateComposerPanel", () => {
     const container = renderPanel({
       copy: TEST_EN_COMPOSER_COPY,
       inputbarCopy: TEST_EN_INPUTBAR_CORE_COPY,
+      executionStrategyCopy: TEST_EN_EXECUTION_STRATEGY_COPY,
       isGeneralTheme: true,
       guideHelpActive: true,
       onClearGuideHelp: vi.fn(),

@@ -2680,7 +2680,6 @@ describe("Inputbar", () => {
     expect(planToggle).toBeTruthy();
     expect(accessSelect).toBeTruthy();
     expect(planToggle?.textContent).toContain("计划执行");
-    expect(planToggle?.textContent).not.toContain("Plan");
     expect(planToggle?.getAttribute("aria-label")).toBe("开启计划执行");
     expect(planToggle?.getAttribute("title")).toBe("开启计划执行");
     expect(container.querySelector('select[aria-label="执行模式"]')).toBeNull();
@@ -2693,6 +2692,37 @@ describe("Inputbar", () => {
 
     expect(setExecutionStrategy).toHaveBeenCalledWith("code_orchestrated");
     expect(setAccessMode).toHaveBeenCalledWith("full-access");
+  });
+
+  it("高级设置计划执行开关文案应跟随 en-US 资源", async () => {
+    await changeLimeLocale("en-US");
+    const setExecutionStrategy = vi.fn();
+    const { container } = renderInputbar({
+      executionStrategy: "react",
+      setExecutionStrategy,
+      accessMode: "current",
+      setAccessMode: vi.fn(),
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expandAdvancedControls(container);
+
+    const planToggle = container.querySelector(
+      '[data-testid="inputbar-plan-toggle"]',
+    ) as HTMLButtonElement | null;
+
+    expect(planToggle).toBeTruthy();
+    expect(planToggle?.textContent).toContain("Plan");
+    expect(planToggle?.textContent).not.toContain("计划执行");
+    expect(planToggle?.getAttribute("aria-label")).toBe(
+      "Turn on planned execution",
+    );
+    expect(planToggle?.getAttribute("title")).toBe(
+      "Turn on planned execution",
+    );
   });
 
   it("受控模式下点击联网搜索应透传状态变更", async () => {
@@ -3086,6 +3116,83 @@ describe("Inputbar", () => {
     expect(toggle?.textContent).toContain("资料可用");
     expect(toggle?.getAttribute("title")).toContain("已有可用项目资料");
     expect(container.textContent).not.toContain("知识包");
+  });
+
+  it("项目资料控件应在英文界面读取 agent namespace 文案", async () => {
+    await changeLimeLocale("en-US");
+
+    const { container } = renderInputbar({
+      knowledgePackSelection: {
+        enabled: true,
+        packName: "brand-product-demo",
+        workingDir: "/tmp/lime-project",
+        label: "Brand knowledge",
+        status: "ready",
+        companionPacks: [
+          {
+            name: "founder-persona",
+            activation: "implicit",
+          },
+        ],
+      },
+      knowledgePackOptions: [
+        {
+          packName: "brand-product-demo",
+          label: "Brand knowledge",
+          status: "ready",
+          defaultForWorkspace: true,
+          runtimeMode: "data",
+        },
+        {
+          packName: "founder-persona",
+          label: "Founder persona",
+          status: "ready",
+          runtimeMode: "persona",
+        },
+        {
+          packName: "campaign-plan",
+          label: "Campaign plan",
+          status: "ready",
+          runtimeMode: "data",
+        },
+      ],
+      onToggleKnowledgeCompanionPack: vi.fn(),
+      onStartKnowledgeOrganize: vi.fn(),
+      onManageKnowledgePacks: vi.fn(),
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const toggle = container.querySelector(
+      '[data-testid="inputbar-knowledge-pack-toggle"]',
+    ) as HTMLButtonElement | null;
+    expect(toggle?.textContent).toContain("Knowledge: Brand knowledge +1");
+    expect(toggle?.getAttribute("aria-label")).toBe("Open project knowledge");
+    expect(toggle?.getAttribute("title")).toContain(
+      "Using project knowledge: Brand knowledge",
+    );
+
+    act(() => {
+      toggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const hub = container.querySelector(
+      '[data-testid="inputbar-knowledge-hub"]',
+    );
+    expect(hub?.textContent).toContain("Using: Brand knowledge");
+    expect(hub?.textContent).toContain("Main knowledge");
+    expect(hub?.textContent).toContain("Default");
+    expect(hub?.textContent).toContain("Reviewed and ready for generation");
+    expect(hub?.textContent).toContain(
+      "Persona knowledge added automatically: Founder persona.",
+    );
+    expect(hub?.textContent).toContain("Companion knowledge (multi-select)");
+    expect(hub?.textContent).toContain("Available");
+    expect(hub?.textContent).toContain("Close knowledge");
+    expect(hub?.textContent).toContain("Add to knowledge");
+    expect(hub?.textContent).toContain("Check knowledge");
   });
 
   it("待确认资料即使残留启用状态也不应显示为正在使用", async () => {
@@ -3849,6 +3956,46 @@ describe("Inputbar", () => {
       stopButton?.click();
     });
     expect(onStop).toHaveBeenCalledTimes(1);
+  });
+
+  it("工作区工作流面板 chrome 文案应跟随 en-US 资源", async () => {
+    await changeLimeLocale("en-US");
+    const onStop = vi.fn();
+    const { container } = renderInputbar({
+      variant: "workspace",
+      isLoading: true,
+      onStop,
+      workflowSteps: [
+        { id: "research", title: "Review project material", status: "active" },
+        { id: "write", title: "Write body draft", status: "pending" },
+      ],
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("Current progress");
+    expect(container.textContent).toContain("Task queue");
+    expect(container.textContent).toContain("In progress · 0/2");
+    expect(container.textContent).toContain(
+      "Moving forward; 1 item(s) remain",
+    );
+    expect(container.textContent).not.toContain("当前进展");
+    expect(container.textContent).not.toContain("任务队列");
+
+    const stopButton = container.querySelector(
+      '[data-testid="workflow-stop"]',
+    ) as HTMLButtonElement | null;
+    expect(stopButton?.getAttribute("aria-label")).toBe("Stop generation");
+
+    const collapseButton = Array.from(
+      container.querySelectorAll("button"),
+    ).find(
+      (button) => button.getAttribute("aria-label") === "Collapse task queue",
+    );
+    expect(collapseButton).toBeTruthy();
   });
 
   it("工作区工作流生成中应支持折叠与展开待办列表", async () => {

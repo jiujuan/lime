@@ -277,6 +277,7 @@ export function buildAgentStreamCompletedAssistantMessagePatch(params: {
 
 export function buildAgentStreamFinalDonePlan(params: {
   accumulatedContent: string;
+  fallbackContent?: string | null;
   hasMeaningfulCompletionSignal?: boolean;
   queuedTurnId?: string | null;
   toolCallCount: number;
@@ -299,6 +300,7 @@ export function buildAgentStreamFinalDonePlan(params: {
     type: "complete",
     finalContent: resolveAgentStreamGracefulCompletionContent({
       accumulatedContent: params.accumulatedContent,
+      fallbackContent: params.fallbackContent || undefined,
     }),
     queuedTurnIds: resolveQueuedTurnIds(params.queuedTurnId),
     requestLogPayload: {
@@ -312,6 +314,7 @@ export function buildAgentStreamFinalDonePlan(params: {
 export function buildAgentStreamEmptyFinalErrorPlan(params: {
   errorMessage: string;
   accumulatedContent: string;
+  fallbackContent?: string | null;
   hasMeaningfulCompletionSignal?: boolean;
   queuedTurnId?: string | null;
 }): AgentStreamEmptyFinalErrorPlan {
@@ -326,6 +329,7 @@ export function buildAgentStreamEmptyFinalErrorPlan(params: {
     type: "complete",
     finalContent: resolveAgentStreamGracefulCompletionContent({
       accumulatedContent: params.accumulatedContent,
+      fallbackContent: params.fallbackContent || undefined,
     }),
     queuedTurnIds: resolveQueuedTurnIds(params.queuedTurnId),
     requestLogPayload: {

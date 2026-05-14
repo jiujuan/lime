@@ -4,7 +4,7 @@ import {
   formatNumber,
   formatRelativeTime as formatRelativeTimeUnit,
 } from "@/i18n/format";
-import agentSourceResource from "@/i18n/resources/zh-CN/agent.json";
+import { agentZhCNResource as agentSourceResource } from "@/i18n/agentResources";
 import type { TeamRoleDefinition } from "../utils/teamDefinitions";
 import { normalizeTeamWorkspaceDisplayValue } from "../utils/teamWorkspaceDisplay";
 import { getTeamPresetOption } from "../utils/teamPresets";

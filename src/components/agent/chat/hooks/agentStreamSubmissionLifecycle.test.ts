@@ -276,7 +276,7 @@ describe("agentStreamSubmissionLifecycle", () => {
     const assistantMsg: Message = {
       id: "assistant-image",
       role: "assistant",
-      content: "好啊，用 Nanobanana Pro 生成：一张城市春日照片\n先获取下工具参数\n马上生成",
+      content: "",
       timestamp: new Date("2026-03-27T01:00:01.000Z"),
       isThinking: true,
       contentParts: [],

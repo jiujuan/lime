@@ -17,6 +17,28 @@ const PLATFORM_BY_TARGET_TRIPLE = {
   "x86_64-pc-windows-msvc": "windows-x86_64",
 };
 
+const TARGET_TRIPLE_BY_PLATFORM = Object.fromEntries(
+  Object.entries(PLATFORM_BY_TARGET_TRIPLE).map(([targetTriple, platform]) => [
+    platform,
+    targetTriple,
+  ]),
+);
+
+const INSTALLER_ASSET_BY_PLATFORM = {
+  "darwin-aarch64": {
+    required: true,
+    assetName: (version) => `Lime_${version}_aarch64.dmg`,
+  },
+  "darwin-x86_64": {
+    required: true,
+    assetName: (version) => `Lime_${version}_x64.dmg`,
+  },
+  "windows-x86_64": {
+    required: false,
+    assetName: (version) => `Lime_${version}_x64-setup.exe`,
+  },
+};
+
 function parseArgs(argv) {
   const args = {};
   for (let index = 0; index < argv.length; index += 1) {
@@ -176,6 +198,86 @@ function platformKeyFromAssetFile(assetsDir, assetFile) {
   return PLATFORM_BY_TARGET_TRIPLE[targetTriple] || "";
 }
 
+function targetTripleFromAssetFile(assetsDir, assetFile) {
+  const relativeDir = path.relative(assetsDir, path.dirname(assetFile));
+  return relativeDir.split(path.sep).find(Boolean) || "";
+}
+
+function resolveInstallerAssetFile({
+  assetsDir,
+  filesByBasename,
+  platformKey,
+  referenceFile,
+  version,
+}) {
+  const spec = INSTALLER_ASSET_BY_PLATFORM[platformKey];
+  if (!spec) {
+    return null;
+  }
+
+  const assetName = spec.assetName(version);
+  const candidates = filesByBasename.get(assetName) || [];
+  if (candidates.length === 0) {
+    if (spec.required) {
+      throw new Error(
+        `platform ${platformKey} is missing installer asset: ${assetName}`,
+      );
+    }
+    return null;
+  }
+
+  const expectedTargetTriple = TARGET_TRIPLE_BY_PLATFORM[platformKey];
+  return (
+    (referenceFile &&
+      candidates.find(
+        (candidate) => path.dirname(candidate) === path.dirname(referenceFile),
+      )) ||
+    candidates.find(
+      (candidate) =>
+        targetTripleFromAssetFile(assetsDir, candidate) === expectedTargetTriple,
+    ) ||
+    candidates[0]
+  );
+}
+
+function addReferencedFile(referencedFiles, item) {
+  referencedFiles.set(item.targetPath, item);
+}
+
+function addInstallerUrlIfAvailable({
+  assetsDir,
+  baseUrl,
+  channel,
+  filesByBasename,
+  platform,
+  platformKey,
+  referenceFile,
+  referencedFiles,
+  version,
+  versionTag,
+}) {
+  const installerFile = resolveInstallerAssetFile({
+    assetsDir,
+    filesByBasename,
+    platformKey,
+    referenceFile,
+    version,
+  });
+  if (!installerFile) {
+    return;
+  }
+
+  const installerName = path.basename(installerFile);
+  const installerAssetPath = buildPlatformAssetPath(platformKey, installerName);
+  platform.installer_url = `${baseUrl}/lime/${channel}/${versionTag}/${installerAssetPath}`;
+  addReferencedFile(referencedFiles, {
+    assetName: installerName,
+    file: installerFile,
+    platformKey,
+    targetPath: installerAssetPath,
+  });
+}
+
 function collectSignedUpdaterArtifacts(files, assetsDir) {
   const fileSet = new Set(files);
   return files
@@ -277,11 +379,23 @@ function collectUpdaterManifest(options) {
           signature,
           url: targetUrl,
         };
-        referencedFiles.set(platformAssetPath, {
+        addReferencedFile(referencedFiles, {
           assetName,
           file: assetFile,
           platformKey,
           targetPath: platformAssetPath,
+        });
+        addInstallerUrlIfAvailable({
+          assetsDir,
+          baseUrl,
+          channel,
+          filesByBasename,
+          platform: platforms[platformKey],
+          platformKey,
+          referenceFile: manifestFile,
+          referencedFiles,
+          version,
+          versionTag,
         });
       }
     }
@@ -306,11 +420,22 @@ function collectUpdaterManifest(options) {
         signature: artifact.signature,
         url: targetUrl,
       };
-      referencedFiles.set(platformAssetPath, {
+      addReferencedFile(referencedFiles, {
         assetName: artifact.assetName,
         file: artifact.assetFile,
         platformKey: artifact.platformKey,
         targetPath: platformAssetPath,
+      });
+      addInstallerUrlIfAvailable({
+        assetsDir,
+        baseUrl,
+        channel,
+        filesByBasename,
+        platform: platforms[artifact.platformKey],
+        platformKey: artifact.platformKey,
+        referencedFiles,
+        version,
+        versionTag,
       });
     }
   }

@@ -6,7 +6,10 @@ import {
   mergeHydratedMessagesWithLocalState,
   normalizeHistoryMessages,
 } from "./agentChatHistory";
-import { isRetainedSkillProcessMessage } from "../utils/skillInlineProcessRetention";
+import {
+  isRetainedSkillProcessMessage,
+  SKILL_INLINE_PROCESS_RETENTION,
+} from "../utils/skillInlineProcessRetention";
 import {
   loadPersisted,
   loadTransient,
@@ -130,7 +133,9 @@ function trimCachedSnapshot(
   const shouldCompactMessages =
     !(snapshot.threadTurns || []).some((turn) => turn.status === "running") &&
     !(snapshot.threadItems || []).some((item) => item.status === "in_progress");
-  const rawMessages = snapshot.messages.slice(-limits.maxMessages);
+  const rawMessages = markLegacyCommandSkillProcessMessages(
+    snapshot.messages.slice(-limits.maxMessages),
+  );
   const messages = shouldCompactMessages
     ? compactHistoricalRestoreMessages(rawMessages)
     : normalizeHistoryMessages(rawMessages);
@@ -206,7 +211,64 @@ function normalizeCachedMessages(value: unknown, limit: number): Message[] {
     })
     .filter((message): message is Message => message !== null);
 
-  return normalizeHistoryMessages(normalized);
+  return normalizeHistoryMessages(
+    markLegacyCommandSkillProcessMessages(normalized),
+  );
+}
+
+function isCommandStyleUserMessage(message: Message): boolean {
+  if (message.role !== "user") {
+    return false;
+  }
+
+  const route = message.inputCapabilityRoute;
+  if (
+    route?.kind === "installed_skill" ||
+    route?.kind === "builtin_command" ||
+    route?.kind === "runtime_scene"
+  ) {
+    return true;
+  }
+
+  const trimmed = message.content.trim();
+  return /^[@/][^\s/]/u.test(trimmed);
+}
+
+function hasLocalThinkingSnapshot(message: Message): boolean {
+  return Boolean(
+    message.thinkingContent?.trim() ||
+      message.contentParts?.some(
+        (part) => part.type === "thinking" && part.text.trim().length > 0,
+      ),
+  );
+}
+
+function markLegacyCommandSkillProcessMessages(messages: Message[]): Message[] {
+  let pendingCommandUser = false;
+
+  return messages.map((message) => {
+    if (message.role === "user") {
+      pendingCommandUser = isCommandStyleUserMessage(message);
+      return message;
+    }
+
+    if (message.role !== "assistant") {
+      return message;
+    }
+
+    const shouldMarkAsSkillProcess =
+      pendingCommandUser &&
+      hasLocalThinkingSnapshot(message) &&
+      !isRetainedSkillProcessMessage(message);
+
+    pendingCommandUser = false;
+    return shouldMarkAsSkillProcess
+      ? {
+          ...message,
+          inlineProcessRetention: SKILL_INLINE_PROCESS_RETENTION,
+        }
+      : message;
+  });
 }
 
 function normalizeCachedThreadTurns(
@@ -477,6 +539,30 @@ export function loadAgentSessionCachedSnapshot(
   );
 
   return null;
+}
+
+export function clearAgentSessionCachedSnapshot(
+  workspaceId: string,
+  sessionId: string,
+): void {
+  const cacheKey = getScopedStorageKey(workspaceId, "aster_session_snapshots");
+  removeCachedSnapshotRecord(
+    cacheKey,
+    loadTransient<Record<string, unknown>>(cacheKey, {}),
+    sessionId,
+    "transient",
+  );
+
+  const persistedCacheKey = getScopedStorageKey(
+    workspaceId,
+    "aster_session_snapshots_persisted",
+  );
+  removeCachedSnapshotRecord(
+    persistedCacheKey,
+    loadPersisted<Record<string, unknown>>(persistedCacheKey, {}),
+    sessionId,
+    "persisted",
+  );
 }
 
 export function saveAgentSessionCachedSnapshot(

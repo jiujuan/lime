@@ -58,8 +58,38 @@ vi.mock("./MarkdownRenderer", () => ({
 }));
 
 vi.mock("./A2UITaskCard", () => ({
-  A2UITaskCard: () => <div data-testid="a2ui-card" />,
-  A2UITaskLoadingCard: () => <div data-testid="a2ui-loading-card" />,
+  A2UITaskCard: ({
+    compact,
+    className,
+    preview,
+    onSubmit,
+  }: {
+    compact?: boolean;
+    className?: string;
+    preview?: boolean;
+    onSubmit?: unknown;
+  }) => (
+    <div
+      data-testid="a2ui-card"
+      data-compact={String(compact)}
+      data-preview={String(preview)}
+      data-has-on-submit={onSubmit ? "yes" : "no"}
+      className={className}
+    />
+  ),
+  A2UITaskLoadingCard: ({
+    compact,
+    className,
+  }: {
+    compact?: boolean;
+    className?: string;
+  }) => (
+    <div
+      data-testid="a2ui-loading-card"
+      data-compact={String(compact)}
+      className={className}
+    />
+  ),
 }));
 
 vi.mock("./DecisionPanel", () => ({
@@ -141,6 +171,8 @@ function renderHarness(props: {
   showContentBlockActions?: boolean;
   onQuoteContent?: (content: string) => void;
   markdownRenderMode?: "standard" | "light";
+  readOnlyA2UI?: boolean;
+  readOnlyActionRequests?: boolean;
 }) {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -690,6 +722,81 @@ describe("StreamingRenderer", () => {
 
     expect(container.querySelector('[data-testid="a2ui-card"]')).toBeNull();
     expect(container.textContent).toContain("请先补充以下信息：");
+  });
+
+  it("聊天流内联 A2UI 应使用紧凑尺寸", () => {
+    parseAIResponseMock.mockReturnValue({
+      parts: [
+        { type: "text", content: "请先补充以下信息：" },
+        { type: "a2ui", content: { type: "form", children: [] } },
+      ],
+      hasA2UI: true,
+      hasWriteFile: false,
+      hasPending: false,
+    });
+
+    const { container } = renderHarness({
+      content: "```a2ui\n{}\n```",
+      renderA2UIInline: true,
+    });
+
+    const card = container.querySelector('[data-testid="a2ui-card"]');
+    expect(card?.getAttribute("data-compact")).toBe("true");
+    expect(card?.className).toContain("max-w-[760px]");
+  });
+
+  it("历史内联 A2UI 应只读回显并移除提交回调", () => {
+    parseAIResponseMock.mockReturnValue({
+      parts: [
+        {
+          type: "a2ui",
+          content: {
+            id: "history-a2ui",
+            root: "root",
+            components: [{ id: "root", component: "Text", text: "旧表单" }],
+            submitAction: { label: "提交", action: { name: "submit" } },
+          },
+        },
+      ],
+      hasA2UI: true,
+      hasWriteFile: false,
+      hasPending: false,
+    });
+
+    const { container } = renderHarness({
+      content: "```a2ui\n{}\n```",
+      renderA2UIInline: true,
+      readOnlyA2UI: true,
+    });
+
+    const card = container.querySelector('[data-testid="a2ui-card"]');
+    expect(card?.getAttribute("data-preview")).toBe("true");
+    expect(card?.getAttribute("data-has-on-submit")).toBe("no");
+  });
+
+  it("历史 pending ask_user 应渲染只读 A2UI 回显而不是可提交 DecisionPanel", () => {
+    const { container } = renderHarness({
+      content: "",
+      actionRequests: [
+        {
+          requestId: "req-history-pending",
+          actionType: "ask_user",
+          status: "pending",
+          prompt: "请选择执行方式",
+          questions: [
+            {
+              question: "请选择执行方式",
+              options: [{ label: "直接执行" }, { label: "稍后处理" }],
+            },
+          ],
+        },
+      ],
+      readOnlyActionRequests: true,
+      onPermissionResponse: vi.fn(),
+    });
+
+    expect(container.querySelector('[data-testid="a2ui-card"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="decision-panel"]')).toBeNull();
   });
 
   it("pending_write_file 应触发流式 onWriteFile 回调", () => {

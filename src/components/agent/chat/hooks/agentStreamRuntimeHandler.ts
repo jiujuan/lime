@@ -240,6 +240,7 @@ interface HandleTurnStreamEventOptions {
   effectiveExecutionStrategy: AsterExecutionStrategy;
   surfaceThinkingDeltas?: boolean;
   preserveAssistantContent?: string | null;
+  assistantFallbackContent?: string | null;
   content: string;
   runtime: AgentRuntimeAdapter;
   webSearch?: boolean;
@@ -336,6 +337,7 @@ export function handleTurnStreamEvent({
   effectiveExecutionStrategy,
   surfaceThinkingDeltas = true,
   preserveAssistantContent,
+  assistantFallbackContent,
   content,
   runtime,
   webSearch,
@@ -527,6 +529,25 @@ export function handleTurnStreamEvent({
 
   const clearStreamingTextOverlay = () => {
     clearAgentStreamTextOverlay(assistantMsgId);
+  };
+
+  const upsertFallbackTextOverlayIfSilent = (boundary: string) => {
+    const fallbackContent = assistantFallbackContent?.trim();
+    if (
+      !fallbackContent ||
+      requestState.accumulatedContent.trim() ||
+      requestState.renderedContent?.trim()
+    ) {
+      return;
+    }
+
+    upsertAgentStreamTextOverlay({
+      messageId: assistantMsgId,
+      eventName,
+      content: fallbackContent,
+      boundary,
+      updatedAt: Date.now(),
+    });
   };
 
   const persistRetainedSkillProcessSnapshot = (messages: Message[]) => {
@@ -1122,6 +1143,7 @@ export function handleTurnStreamEvent({
     case "tool_start":
       activateStream();
       clearOptimisticItem();
+      upsertFallbackTextOverlayIfSilent("tool_start_fallback");
       playToolcallSound();
       handleToolStartEvent({
         data,
@@ -1280,6 +1302,7 @@ export function handleTurnStreamEvent({
       clearOptimisticTurn();
       const finalDonePlan = buildAgentStreamFinalDonePlan({
         accumulatedContent: requestState.accumulatedContent,
+        fallbackContent: assistantFallbackContent,
         hasMeaningfulCompletionSignal:
           requestState.hasMeaningfulCompletionSignal,
         queuedTurnId: requestState.queuedTurnId,
@@ -1359,6 +1382,7 @@ export function handleTurnStreamEvent({
         const emptyFinalErrorPlan = buildAgentStreamEmptyFinalErrorPlan({
           errorMessage: data.message,
           accumulatedContent: requestState.accumulatedContent,
+          fallbackContent: assistantFallbackContent,
           hasMeaningfulCompletionSignal:
             requestState.hasMeaningfulCompletionSignal,
           queuedTurnId: requestState.queuedTurnId,

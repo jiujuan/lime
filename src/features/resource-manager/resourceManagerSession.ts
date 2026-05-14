@@ -64,6 +64,19 @@ function getStorage(): Storage | null {
   }
 }
 
+function isStorageQuotaError(error: unknown): boolean {
+  if (!(error instanceof DOMException)) {
+    return false;
+  }
+
+  return (
+    error.name === "QuotaExceededError" ||
+    error.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+    error.code === 22 ||
+    error.code === 1014
+  );
+}
+
 function now(): number {
   return Date.now();
 }
@@ -253,11 +266,26 @@ export function writeResourceManagerSession(
   if (!storage) return;
 
   cleanupExpiredResourceManagerSessions(storage);
-  storage.setItem(
-    getResourceManagerSessionStorageKey(session.id),
-    JSON.stringify(session),
-  );
-  storage.setItem(RESOURCE_MANAGER_ACTIVE_SESSION_KEY, session.id);
+  const sessionKey = getResourceManagerSessionStorageKey(session.id);
+  const serializedSession = JSON.stringify(session);
+
+  try {
+    storage.setItem(sessionKey, serializedSession);
+    storage.setItem(RESOURCE_MANAGER_ACTIVE_SESSION_KEY, session.id);
+  } catch (error) {
+    if (!isStorageQuotaError(error)) {
+      throw error;
+    }
+
+    // 资源查看会话是可重建的临时态，配额不足时优先清理旧查看会话。
+    cleanupAllResourceManagerSessions(storage);
+    try {
+      storage.setItem(sessionKey, serializedSession);
+      storage.setItem(RESOURCE_MANAGER_ACTIVE_SESSION_KEY, session.id);
+    } catch {
+      // 若单条会话仍超过配额，放弃持久化，避免打断聊天主路径。
+    }
+  }
 }
 
 function normalizeStoredResourceManagerSession(
@@ -349,4 +377,17 @@ function cleanupExpiredResourceManagerSessions(storage = getStorage()): void {
       storage.removeItem(key);
     }
   });
+}
+
+function cleanupAllResourceManagerSessions(storage = getStorage()): void {
+  if (!storage) return;
+
+  const keys = Array.from({ length: storage.length }, (_, index) =>
+    storage.key(index),
+  ).filter((key): key is string =>
+    Boolean(key?.startsWith(RESOURCE_MANAGER_STORAGE_PREFIX)),
+  );
+
+  keys.forEach((key) => storage.removeItem(key));
+  storage.removeItem(RESOURCE_MANAGER_ACTIVE_SESSION_KEY);
 }

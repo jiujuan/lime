@@ -45,8 +45,8 @@ vi.mock("sonner", () => ({
 }));
 
 vi.mock("react-i18next", async () => {
-  const agentZhCN = (await import("@/i18n/resources/zh-CN/agent.json"))
-    .default as Record<string, string>;
+  const { agentZhCNResource } = await import("@/i18n/agentResources");
+  const agentZhCN = agentZhCNResource as Record<string, string>;
 
   const interpolate = (template: string, values: Record<string, unknown>) =>
     template.replace(/{{\s*([^}]+?)\s*}}/g, (_, name: string) => {

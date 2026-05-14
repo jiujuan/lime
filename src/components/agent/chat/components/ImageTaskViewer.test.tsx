@@ -2,6 +2,7 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 
 const { mockOpenResourceManager } = vi.hoisted(() => ({
   mockOpenResourceManager: vi.fn(),
@@ -49,6 +50,7 @@ function createProps(
         createdAt: 2,
       },
     ],
+    selectedTaskId: "task-1",
     selectedOutputId: "output-1",
     viewport: { x: 0, y: 0, scale: 1 },
     preferenceSummary: null,
@@ -89,7 +91,8 @@ function renderComponent(
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  await changeLimeLocale("zh-CN");
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -146,7 +149,7 @@ describe("ImageTaskViewer", () => {
 
     expect(mockOpenResourceManager).toHaveBeenCalledWith(
       expect.objectContaining({
-        sourceLabel: "Image Generation",
+        sourceLabel: "图片生成",
         sourceContext: expect.objectContaining({
           kind: "image_task",
           projectId: "project-1",
@@ -262,6 +265,64 @@ describe("ImageTaskViewer", () => {
     expect(outputGrid?.textContent).toContain("2");
   });
 
+  it("多图结果应按任务 outputIds 计算选中位次，而不是按缓存数组顺序", () => {
+    const { container } = renderComponent({
+      tasks: [
+        {
+          id: "task-ordered",
+          mode: "generate",
+          status: "complete",
+          prompt: "三张章节配图",
+          rawText: "@配图 生成三张章节配图",
+          expectedCount: 3,
+          outputIds: ["output-1", "output-2", "output-3"],
+          createdAt: 1,
+        },
+      ],
+      outputs: [
+        {
+          id: "output-3",
+          refId: "img-3",
+          taskId: "task-ordered",
+          url: "https://example.com/image-3.png",
+          prompt: "第三张",
+          createdAt: 3,
+        },
+        {
+          id: "output-2",
+          refId: "img-2",
+          taskId: "task-ordered",
+          url: "https://example.com/image-2.png",
+          prompt: "第二张",
+          createdAt: 2,
+        },
+        {
+          id: "output-1",
+          refId: "img-1",
+          taskId: "task-ordered",
+          url: "https://example.com/image-1.png",
+          prompt: "第一张",
+          createdAt: 1,
+        },
+      ],
+      selectedTaskId: "task-ordered",
+      selectedOutputId: "output-3",
+    });
+
+    const outputGrid = container.querySelector(
+      '[data-testid="image-task-viewer-output-grid"]',
+    );
+    const selectedThumb = Array.from(
+      outputGrid?.querySelectorAll("button") || [],
+    ).find((button) =>
+      button.querySelector('img[src="https://example.com/image-3.png"]'),
+    );
+
+    expect(container.textContent).toContain("已选第 3 张");
+    expect(selectedThumb?.textContent).toContain("3");
+    expect(selectedThumb?.textContent).toContain("当前选中");
+  });
+
   it("任务 viewer 应展示已按多模态运行合同路由的状态", () => {
     const { container } = renderComponent({
       tasks: [
@@ -348,6 +409,56 @@ describe("ImageTaskViewer", () => {
     expect(container.textContent).toContain(
       "模型能力来自 model_registry · 不支持图片生成",
     );
+  });
+
+  it("选中无结果的失败任务时不回退展示上一张成功图", () => {
+    const { container } = renderComponent({
+      tasks: [
+        {
+          id: "task-failed-2",
+          mode: "generate",
+          status: "error",
+          prompt: "青柠极简插画",
+          rawText: "@配图 青柠极简插画",
+          expectedCount: 1,
+          outputIds: [],
+          createdAt: 2,
+          failureMessage:
+            '默认图片服务调用失败: Fal HTTP 403: {"detail":"User is locked."}',
+        },
+        {
+          id: "task-success-1",
+          mode: "generate",
+          status: "complete",
+          prompt: "广州塔春天照片",
+          rawText: "@配图 广州塔春天照片",
+          expectedCount: 1,
+          outputIds: ["output-success-1"],
+          createdAt: 1,
+        },
+      ],
+      outputs: [
+        {
+          id: "output-success-1",
+          refId: "img-success-1",
+          taskId: "task-success-1",
+          url: "https://example.com/success.png",
+          prompt: "广州塔春天照片",
+          createdAt: 1,
+        },
+      ],
+      selectedTaskId: "task-failed-2",
+      selectedOutputId: null,
+    });
+
+    expect(container.textContent).toContain("青柠极简插画");
+    expect(container.textContent).toContain("生成失败");
+    expect(container.textContent).toContain("这次生成没有拿到可用图片结果。");
+    expect(container.textContent).not.toContain("广州塔春天照片");
+    expect(container.textContent).not.toContain("Fal HTTP 403");
+    expect(
+      container.querySelector('[data-testid="image-task-viewer-open-image"]'),
+    ).toBeNull();
   });
 
   it("3x3 分镜任务应使用九宫格缩略布局并展示编号", () => {
@@ -576,7 +687,7 @@ describe("ImageTaskViewer", () => {
     const sourcePanel = container.querySelector(
       '[data-testid="image-task-viewer-source"]',
     );
-    expect(container.textContent).toContain("Image Editing");
+    expect(container.textContent).toContain("图片编辑");
     expect(container.textContent).toContain("已修图");
     expect(sourcePanel?.textContent).toContain("来源图");
     expect(sourcePanel?.textContent).toContain("原始海报");
@@ -701,7 +812,7 @@ describe("ImageTaskViewer", () => {
     const sourcePanel = container.querySelector(
       '[data-testid="image-task-viewer-source"]',
     );
-    expect(container.textContent).toContain("Image Redraw");
+    expect(container.textContent).toContain("图片重绘");
     expect(container.textContent).toContain("已重绘");
     expect(sourcePanel?.textContent).toContain("参考图");
     expect(sourcePanel?.textContent).toContain("原始海报");

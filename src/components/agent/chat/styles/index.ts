@@ -125,30 +125,25 @@ export const MessageBubble = styled.div<{
         ? "min(72%, 560px)"
         : "min(100%, 1040px)"};
   padding: ${({ $isUser, $bareMedia }) =>
-    $bareMedia ? "0" : $isUser ? "12px 16px" : "15px 17px"};
+    $isUser ? "12px 16px" : $bareMedia ? "0" : "0 4px"};
   display: flex;
   flex-direction: column;
   gap: ${({ $isUser, $bareMedia }) =>
-    $bareMedia ? "0" : $isUser ? "8px" : "12px"};
-  border-radius: ${({ $bareMedia }) => ($bareMedia ? "0" : "18px")};
+    $isUser ? "8px" : $bareMedia ? "0" : "10px"};
+  border-radius: ${({ $isUser, $bareMedia }) =>
+    $bareMedia || !$isUser ? "0" : "18px"};
   border: ${({ $isUser, $bareMedia }) =>
-    $bareMedia
-      ? "0"
-      : $isUser
+    $isUser && !$bareMedia
         ? "1px solid var(--lime-surface-border-strong, rgba(187, 247, 208, 0.72))"
-        : "1px solid var(--lime-surface-border, rgba(226, 240, 226, 0.58))"};
+        : "0"};
   background: ${({ $isUser, $bareMedia }) =>
-    $bareMedia
-      ? "transparent"
-      : $isUser
+    $isUser && !$bareMedia
         ? "linear-gradient(180deg, var(--lime-surface, #ffffff) 0%, var(--lime-brand-soft, #ecfdf5) 100%)"
-        : "linear-gradient(180deg, var(--lime-surface, #ffffff) 0%, var(--lime-surface-subtle, #fcfff9) 100%)"};
+        : "transparent"};
   box-shadow: ${({ $isUser, $bareMedia }) =>
-    $bareMedia
-      ? "none"
-      : $isUser
+    $isUser && !$bareMedia
         ? "0 16px 36px -30px rgba(15, 23, 42, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.74)"
-        : "0 14px 34px -30px rgba(15, 23, 42, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.78)"};
+        : "none"};
   color: ${({ $isUser }) =>
     $isUser ? "rgb(30, 41, 59)" : "var(--foreground)"};
   font-size: 15px;

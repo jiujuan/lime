@@ -4,7 +4,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import { MessageList } from "./MessageList";
-import type { AgentThreadItem, AgentThreadTurn, Message } from "../types";
+import type {
+  AgentThreadItem,
+  AgentThreadTurn,
+  Message,
+  MessagePreviewTarget,
+} from "../types";
 import {
   clearAgentUiPerformanceMetrics,
   getAgentUiPerformanceMetrics,
@@ -112,6 +117,8 @@ const mockStreamingRenderer = vi.fn(
     showContentBlockActions,
     onQuoteContent,
     markdownRenderMode,
+    readOnlyA2UI,
+    readOnlyActionRequests,
   }: {
     content: string;
     contentParts?: unknown[];
@@ -125,6 +132,8 @@ const mockStreamingRenderer = vi.fn(
     showContentBlockActions?: boolean;
     onQuoteContent?: (content: string) => void;
     markdownRenderMode?: string;
+    readOnlyA2UI?: boolean;
+    readOnlyActionRequests?: boolean;
     onOpenSavedSiteContent?: (target: {
       projectId: string;
       contentId: string;
@@ -143,6 +152,8 @@ const mockStreamingRenderer = vi.fn(
       data-show-content-block-actions={showContentBlockActions ? "yes" : "no"}
       data-has-on-quote-content={onQuoteContent ? "yes" : "no"}
       data-markdown-render-mode={markdownRenderMode || "standard"}
+      data-read-only-a2ui={readOnlyA2UI ? "yes" : "no"}
+      data-read-only-action-requests={readOnlyActionRequests ? "yes" : "no"}
     >
       {content || "<empty-assistant>"}
     </div>
@@ -181,6 +192,8 @@ vi.mock("./StreamingRenderer", () => ({
     renderA2UIInline?: boolean;
     suppressedActionRequestId?: string | null;
     markdownRenderMode?: string;
+    readOnlyA2UI?: boolean;
+    readOnlyActionRequests?: boolean;
   }) => mockStreamingRenderer(props),
 }));
 
@@ -561,7 +574,9 @@ describe("MessageList", () => {
     expect(container.textContent).toContain("消息 40");
     expect(container.textContent).toContain("消息 31");
     expect(container.textContent).not.toContain("消息 30");
-    expect(container.textContent).toContain("30 earlier messages can be expanded");
+    expect(container.textContent).toContain(
+      "30 earlier messages can be expanded",
+    );
 
     act(() => {
       vi.advanceTimersByTime(2_000);
@@ -783,7 +798,9 @@ describe("MessageList", () => {
       '[data-testid="message-list-historical-timeline-preview:leading"]',
     );
     expect(deferredPreview).not.toBeNull();
-    expect(deferredPreview?.textContent).toContain("Expand to load execution details");
+    expect(deferredPreview?.textContent).toContain(
+      "Expand to load execution details",
+    );
     const idleCommit = getAgentUiPerformanceMetrics()
       .filter((entry) => entry.phase === "messageList.commit")
       .find(
@@ -1324,9 +1341,15 @@ describe("MessageList", () => {
     expect(container.textContent).toContain(
       "When there are no chats yet, start from “New chat”. Results, materials, and intermediate steps will stay here later.",
     );
-    expect(container.textContent).toContain("Chats to continue appear on the left first");
-    expect(container.textContent).toContain("Recent chats and archives are organized by time");
-    expect(container.textContent).toContain("Restoring sessions return here automatically");
+    expect(container.textContent).toContain(
+      "Chats to continue appear on the left first",
+    );
+    expect(container.textContent).toContain(
+      "Recent chats and archives are organized by time",
+    );
+    expect(container.textContent).toContain(
+      "Restoring sessions return here automatically",
+    );
     expect(container.textContent).not.toContain("Start a new conversation");
   });
 
@@ -2288,7 +2311,7 @@ describe("MessageList", () => {
     const container = await renderZh(messages);
     const previewCard = container.querySelector(
       '[data-testid="image-workbench-message-preview-task-1"]',
-    ) as HTMLButtonElement | null;
+    ) as HTMLDivElement | null;
 
     expect(previewCard?.textContent).toContain("图片生成");
     expect(previewCard?.textContent).not.toContain("一颗戴耳机的青柠");
@@ -2297,11 +2320,9 @@ describe("MessageList", () => {
     expect(container.textContent).not.toContain("图片生成已完成");
     expect(previewCard?.className).not.toContain("max-w-[620px]");
     expect(
-      previewCard
-        ?.querySelector(
-          '[data-testid="image-workbench-message-preview-single-media-task-1"]',
-        )
-        ?.className,
+      previewCard?.querySelector(
+        '[data-testid="image-workbench-message-preview-single-media-task-1"]',
+      )?.className,
     ).toContain("w-[358px]");
     expect(previewCard?.querySelector("img")).not.toBeNull();
 
@@ -2358,15 +2379,13 @@ describe("MessageList", () => {
       {
         id: "msg-user-image-workbench-natural",
         role: "user",
-        content:
-          "@Nanobanana Pro 生成一张广州塔，从花城汇看过去的春天的照片",
+        content: "@Nanobanana Pro 生成一张广州塔，从花城汇看过去的春天的照片",
         timestamp: new Date(),
       },
       {
         id: "msg-assistant-image-workbench-natural",
         role: "assistant",
-        content:
-          "好啊，用 Nanobanana Pro 生成：一张广州塔，从花城汇看过去的春天的照片\n先获取下工具参数\n马上生成",
+        content: "收到，我按花城汇视角来生成广州塔的春天照片。",
         timestamp: new Date(),
         usage: {
           input_tokens: 31_000,
@@ -2405,34 +2424,44 @@ describe("MessageList", () => {
           imageUrl: "https://example.com/guangzhou-tower.png",
           imageCount: 1,
           modelName: "fal-ai/nano-banana-pro",
-          caption:
-            "搞定，图已经生成好了\n要调整的话直接说，我继续改",
+          caption: null,
         },
       },
     ];
 
     const container = await renderZh(messages);
     const text = container.textContent || "";
-    const intro = container.querySelector(
-      '[data-testid="image-workbench-assistant-intro"]',
+    const leadRenderer = container.querySelector(
+      '[data-testid="streaming-renderer"]',
     );
 
-    expect(text).toContain("好啊，用 Nanobanana Pro");
-    expect(text).toContain("先获取下工具参数");
-    expect(text).toContain("马上生成");
+    expect(text).toContain("收到，我按花城汇视角来生成广州塔的春天照片。");
+    expect(text).not.toContain("先获取下工具参数");
+    expect(text).not.toContain("马上生成");
     expect(text).toContain("图片生成");
     expect(text).toContain("Nanobanana Pro");
-    expect(text).toContain("我继续改");
+    expect(text).not.toContain("我继续改");
     expect(
       container.querySelector('[data-testid="token-usage-display"]'),
     ).not.toBeNull();
     expect(text).not.toContain("limeCreateImageGenerationTask");
     expect(text).not.toContain("异步图片任务");
     expect(
-      container.querySelector('[data-testid="image-workbench-assistant-header"]'),
+      container.querySelector(
+        '[data-testid="image-workbench-assistant-header"]',
+      ),
     ).toBeNull();
-    expect(intro).not.toBeNull();
-    expect(intro?.textContent).toContain("先获取下工具参数");
+    expect(leadRenderer).not.toBeNull();
+    expect(mockStreamingRenderer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: "收到，我按花城汇视角来生成广州塔的春天照片。",
+        suppressProcessFlow: false,
+        toolCalls: expect.arrayContaining([
+          expect.objectContaining({ id: "tool-image-natural" }),
+        ]),
+        contentParts: undefined,
+      }),
+    );
     expect(
       container.querySelector('[data-testid="message-user-command-tag"]')
         ?.textContent,
@@ -2441,9 +2470,7 @@ describe("MessageList", () => {
       container.querySelector('[data-testid="message-user-command-content"]')
         ?.textContent,
     ).toContain("广州塔");
-    expect(container.querySelector('[data-testid="streaming-renderer"]')).toBe(
-      null,
-    );
+    expect(leadRenderer).not.toBeNull();
   });
 
   it("同一会话连续两次图片生成应分别保留用户指令、自然铺垫和对应轻卡", async () => {
@@ -2458,14 +2485,14 @@ describe("MessageList", () => {
       {
         id: "msg-assistant-image-turn-1",
         role: "assistant",
-        content: "好啊，先生成广州塔春天照片\n先获取下工具参数\n马上生成",
+        content: "我先生成广州塔春天照片，保留春天的光线和城市视角。",
         timestamp: new Date(now.getTime() + 1_000),
         thinkingContent: "先判断广州塔照片的季节和视角。",
         contentParts: [
           { type: "thinking", text: "先判断广州塔照片的季节和视角。" },
           {
             type: "text",
-            text: "好啊，先生成广州塔春天照片\n先获取下工具参数\n马上生成",
+            text: "我先生成广州塔春天照片，保留春天的光线和城市视角。",
           },
         ],
         imageWorkbenchPreview: {
@@ -2488,14 +2515,14 @@ describe("MessageList", () => {
       {
         id: "msg-assistant-image-turn-2",
         role: "assistant",
-        content: "好啊，再生成青柠极简插画\n先获取下工具参数\n马上生成",
+        content: "这次换成青柠极简插画，我会把画面压得更干净。",
         timestamp: new Date(now.getTime() + 3_000),
         thinkingContent: "再判断青柠插画的极简构图。",
         contentParts: [
           { type: "thinking", text: "再判断青柠插画的极简构图。" },
           {
             type: "text",
-            text: "好啊，再生成青柠极简插画\n先获取下工具参数\n马上生成",
+            text: "这次换成青柠极简插画，我会把画面压得更干净。",
           },
         ],
         imageWorkbenchPreview: {
@@ -2515,22 +2542,18 @@ describe("MessageList", () => {
     const commandTags = Array.from(
       container.querySelectorAll('[data-testid="message-user-command-tag"]'),
     ).map((node) => node.textContent);
-    const intros = Array.from(
-      container.querySelectorAll('[data-testid="image-workbench-assistant-intro"]'),
-    ).map((node) => node.textContent || "");
+    const leadTexts = mockStreamingRenderer.mock.calls
+      .map((call) => call[0].content as string | undefined)
+      .filter((content): content is string => Boolean(content));
 
     expect(commandTags).toEqual(["@配图", "@配图"]);
-    expect(intros).toHaveLength(2);
-    expect(intros[0]).toContain("广州塔春天照片");
-    expect(intros[0]).not.toContain("青柠极简插画");
-    expect(intros[1]).toContain("青柠极简插画");
-    expect(intros[1]).not.toContain("广州塔春天照片");
+    expect(leadTexts).toEqual([
+      "我先生成广州塔春天照片，保留春天的光线和城市视角。",
+      "这次换成青柠极简插画，我会把画面压得更干净。",
+    ]);
     expect(
       mockStreamingRenderer.mock.calls.map((call) => call[0].thinkingContent),
-    ).toEqual([
-      "先判断广州塔照片的季节和视角。",
-      "再判断青柠插画的极简构图。",
-    ]);
+    ).toEqual(["先判断广州塔照片的季节和视角。", "再判断青柠插画的极简构图。"]);
     expect(
       mockStreamingRenderer.mock.calls.every(
         (call) => !call[0].toolCalls && !call[0].contentParts,
@@ -2570,9 +2593,7 @@ describe("MessageList", () => {
     );
 
     expect(skillTag?.textContent).toContain("@");
-    expect(skillTag?.textContent).toContain(
-      "brand-product-knowledge-builder",
-    );
+    expect(skillTag?.textContent).toContain("brand-product-knowledge-builder");
     expect(
       container.querySelector('[data-testid="message-user-command-tag"]'),
     ).toBeNull();
@@ -2666,7 +2687,7 @@ describe("MessageList", () => {
     );
   });
 
-  it("图片任务消息应保留思考但收起内部工具 process flow", () => {
+  it("图片任务消息应保留思考并把内部工具过程折叠到同一回复里", () => {
     const container = render(
       [
         {
@@ -2747,9 +2768,12 @@ describe("MessageList", () => {
     expect(rendererProps).toMatchObject({
       content: "",
       thinkingContent: "先执行图片技能。",
+      suppressProcessFlow: false,
     });
     expect(rendererProps?.contentParts).toBeUndefined();
-    expect(rendererProps?.toolCalls).toBeUndefined();
+    expect(rendererProps?.toolCalls).toEqual([
+      expect.objectContaining({ id: "tool-image-skill" }),
+    ]);
     expect(
       container.querySelector(
         '[data-testid="image-workbench-message-preview-task-image-process-flow"]',
@@ -2760,7 +2784,7 @@ describe("MessageList", () => {
     ).toBeNull();
   });
 
-  it("旧图片提交过程消息没有轻卡时也应整体隐藏", () => {
+  it("旧图片提交过程消息没有轻卡时应隐藏协议正文并折叠保留过程", () => {
     const container = render(
       [
         {
@@ -2821,7 +2845,27 @@ describe("MessageList", () => {
 
     expect(container.textContent).not.toContain("图片生成任务已提交");
     expect(container.textContent).not.toContain("工具输入");
-    expect(mockStreamingRenderer).not.toHaveBeenCalled();
+    expect(mockStreamingRenderer).toHaveBeenCalledTimes(1);
+    const rendererProps = mockStreamingRenderer.mock.calls[0]?.[0] as
+      | {
+          content?: string;
+          contentParts?: unknown[];
+          rawContent?: string;
+          suppressProcessFlow?: boolean;
+          toolCalls?: unknown[];
+        }
+      | undefined;
+    expect(rendererProps).toMatchObject({
+      content: "",
+      rawContent: "",
+      suppressProcessFlow: false,
+    });
+    expect(rendererProps?.contentParts).toEqual([
+      { type: "thinking", text: "开始中 广州塔春天照片" },
+    ]);
+    expect(rendererProps?.toolCalls).toEqual([
+      expect.objectContaining({ id: "tool-image-generate" }),
+    ]);
     expect(
       container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
     ).toBeNull();
@@ -3509,7 +3553,7 @@ describe("MessageList", () => {
     ).toBeNull();
   });
 
-  it("失败的图片任务卡应保留错误文案，即使原状态标记不可重试也提供单独重试入口", async () => {
+  it("失败的图片任务卡不暴露底层错误，即使原状态标记不可重试也提供单独重试入口", async () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -3535,7 +3579,7 @@ describe("MessageList", () => {
     );
 
     expect(previewCard?.textContent).toContain("生成失败");
-    expect(previewCard?.textContent).toContain(
+    expect(previewCard?.textContent).not.toContain(
       "FAL 请求参数无效，请先调整配置。",
     );
     expect(previewCard?.textContent).not.toContain("不可重试");
@@ -3608,7 +3652,7 @@ describe("MessageList", () => {
     const container = render(messages);
     const previewCard = container.querySelector(
       '[data-testid="image-workbench-message-preview-task-open-1"]',
-    ) as HTMLButtonElement | null;
+    ) as HTMLDivElement | null;
 
     act(() => {
       previewCard?.click();
@@ -3689,6 +3733,59 @@ describe("MessageList", () => {
     expect(grid?.textContent).not.toContain("9");
   });
 
+  it("点击九宫格后面的图片时应把具体图片选择传给工作台", async () => {
+    const now = new Date();
+    const onOpenMessagePreview = vi.fn();
+    const messages: Message[] = [
+      {
+        id: "msg-assistant-image-workbench-storyboard-select",
+        role: "assistant",
+        content: "已生成章节配图。",
+        timestamp: now,
+        imageWorkbenchPreview: {
+          taskId: "task-storyboard-select",
+          prompt: "章节配图",
+          status: "complete",
+          imageCount: 3,
+          imageUrl: "https://example.com/chapter-1.png",
+          previewImages: [
+            "https://example.com/chapter-1.png",
+            "https://example.com/chapter-2.png",
+            "https://example.com/chapter-3.png",
+          ],
+          layoutHint: "storyboard_3x3",
+          projectId: "project-1",
+          contentId: "content-1",
+        },
+      },
+    ];
+
+    const container = await renderZh(messages, { onOpenMessagePreview });
+    const secondImageButton = container.querySelector(
+      '[data-testid="image-workbench-message-preview-media-task-storyboard-select-2"]',
+    ) as HTMLButtonElement | null;
+
+    act(() => {
+      secondImageButton?.click();
+    });
+
+    const [target, message] = onOpenMessagePreview.mock.calls[0] as [
+      MessagePreviewTarget,
+      Message,
+    ];
+    expect(message.id).toBe("msg-assistant-image-workbench-storyboard-select");
+    expect(target).toEqual({
+      kind: "image_workbench",
+      preview: expect.objectContaining({
+        taskId: "task-storyboard-select",
+      }),
+      selection: {
+        imageUrl: "https://example.com/chapter-2.png",
+        imageIndex: 1,
+      },
+    });
+  });
+
   it("当前由聊天区底部承载的 assistant A2UI 不应继续在正文里内联渲染", () => {
     const now = new Date();
     const messages: Message[] = [
@@ -3741,6 +3838,81 @@ describe("MessageList", () => {
 
     expect(mockStreamingRenderer).toHaveBeenCalledWith(
       expect.objectContaining({ suppressedActionRequestId: "req-action-1" }),
+    );
+  });
+
+  it("非活动历史 assistant A2UI 与 action_request 应只读回显，不能再次提交", () => {
+    const now = new Date();
+    const messages: Message[] = [
+      {
+        id: "msg-assistant-history-a2ui",
+        role: "assistant",
+        content: "```a2ui\n{}\n```",
+        timestamp: now,
+        actionRequests: [
+          {
+            requestId: "req-history-ask",
+            actionType: "ask_user",
+            status: "pending",
+            prompt: "请选择执行方式",
+            questions: [
+              {
+                question: "请选择执行方式",
+                options: [{ label: "直接执行" }, { label: "稍后处理" }],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+
+    render(messages);
+
+    expect(mockStreamingRenderer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        readOnlyA2UI: true,
+        readOnlyActionRequests: true,
+      }),
+    );
+  });
+
+  it("当前活动 assistant action_request 仍保持可提交，不降级为历史只读", () => {
+    const now = new Date();
+    const messages: Message[] = [
+      {
+        id: "msg-assistant-current-action",
+        role: "assistant",
+        content: "请先确认执行方式。",
+        timestamp: now,
+        actionRequests: [
+          {
+            requestId: "req-current-ask",
+            actionType: "ask_user",
+            status: "pending",
+            prompt: "请选择执行方式",
+            questions: [{ question: "请选择执行方式" }],
+          },
+        ],
+      },
+    ];
+
+    render(messages, {
+      pendingActions: [
+        {
+          requestId: "req-current-ask",
+          actionType: "ask_user",
+          status: "pending",
+          prompt: "请选择执行方式",
+          questions: [{ question: "请选择执行方式" }],
+        },
+      ],
+    });
+
+    expect(mockStreamingRenderer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        readOnlyA2UI: false,
+        readOnlyActionRequests: false,
+      }),
     );
   });
 

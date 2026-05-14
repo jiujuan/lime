@@ -71,6 +71,8 @@ docs/roadmap/*
 !docs/roadmap/ai-layered-design/*.md
 !docs/roadmap/i18n/
 !docs/roadmap/i18n/*.md
+!docs/roadmap/agentapp/
+!docs/roadmap/agentapp/*.md
 docs/gongzonghao/
 docs/bussniss/
 docs/oem/
@@ -136,3 +138,5 @@ governance/
 !src/lib/governance/*.test.ts
 
 src-tauri/crates/aster-rust/target/
+
+playwright*

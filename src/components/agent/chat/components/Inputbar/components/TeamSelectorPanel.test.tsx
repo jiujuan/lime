@@ -2,6 +2,7 @@ import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { WorkspaceSettings } from "@/types/workspace";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { TeamSelectorPanel } from "./TeamSelectorPanel";
 import {
   createTeamDefinitionFromPreset,
@@ -70,12 +71,13 @@ function setInputValue(
 }
 
 describe("TeamSelectorPanel", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     (
       globalThis as typeof globalThis & {
         IS_REACT_ACT_ENVIRONMENT?: boolean;
       }
     ).IS_REACT_ACT_ENVIRONMENT = true;
+    await changeLimeLocale("zh-CN");
     localStorage.clear();
   });
 
@@ -101,6 +103,60 @@ describe("TeamSelectorPanel", () => {
     await flushEffects();
 
     expect(container.textContent).not.toContain("模型生成分工");
+  });
+
+  it("TeamSelectorPanel chrome 文案应跟随 en-US 资源", async () => {
+    await changeLimeLocale("en-US");
+    const selectedTeam = createTeamDefinitionFromPreset(
+      "code-triage-team",
+    ) as TeamDefinition;
+    const { container } = renderPanel({
+      activeTheme: "general",
+      selectedTeam,
+      input:
+        "请帮我分析这个前端问题，给出实现方案，完成修复，补测试并最终汇总结论。",
+    });
+
+    await flushEffects();
+
+    expect(container.textContent).toContain("Task team setup");
+    expect(container.textContent).toContain("Selected team");
+    expect(container.textContent).toContain("Create custom team");
+    expect(container.textContent).toContain("Recommended team");
+    expect(container.textContent).toContain("My teams");
+    expect(container.textContent).toContain("System templates");
+    expect(container.textContent).toContain("Team overview");
+    expect(container.textContent).toContain("Role split");
+    expect(container.textContent).toContain("Roles:");
+    expect(container.textContent).not.toContain("任务分工配置");
+
+    const createButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Create custom team"),
+    );
+
+    expect(createButton).toBeTruthy();
+
+    act(() => {
+      createButton?.click();
+    });
+
+    await flushEffects();
+
+    expect(container.textContent).toContain("Create custom team");
+    expect(container.textContent).toContain("Team name");
+    expect(container.textContent).toContain("Add role");
+    expect(container.textContent).toContain("Save team");
+    expect(
+      container.querySelector<HTMLInputElement>(
+        'input[placeholder="Example: Frontend integration team"]',
+      ),
+    ).toBeTruthy();
+    expect(
+      container.querySelector<HTMLTextAreaElement>(
+        'textarea[placeholder="Describe which tasks this team is best for."]',
+      ),
+    ).toBeTruthy();
+    expect(mockToast.success).not.toHaveBeenCalled();
   });
 
   it("应保存自定义分工的 profileId、roleKey 与 skillIds", async () => {

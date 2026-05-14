@@ -1,3 +1,6 @@
+import { shouldSuppressImageWorkbenchStatusText } from "./imageWorkbenchStatusText";
+import { isImageGenerationProtocolFailureResidue } from "./limeTaskProtocolNoise";
+
 const TOOL_PROTOCOL_BLOCK_RE =
   /<tool_(call|result)\b[^>]*>[\s\S]*?<\/tool_\1>/gi;
 const TOOL_PROTOCOL_TAG_RE = /<\/?tool_(?:call|result)\b[^>]*\/?>/gi;
@@ -273,7 +276,9 @@ function stripProviderTraceResidue(text: string): string {
 export function containsAssistantProtocolResidue(text: string): boolean {
   if (
     TOOL_PROTOCOL_DETECT_RE.test(text) ||
-    containsProviderTraceResidue(text)
+    containsProviderTraceResidue(text) ||
+    shouldSuppressImageWorkbenchStatusText(text) ||
+    isImageGenerationProtocolFailureResidue(text)
   ) {
     return true;
   }
@@ -307,13 +312,21 @@ export function stripAssistantProtocolResidue(text: string): string {
     .map((paragraph) =>
       paragraph
         .split(/\r?\n/)
-        .filter((line) => !isAssistantProtocolResidueLine(line))
+        .filter(
+          (line) =>
+            !isAssistantProtocolResidueLine(line) &&
+            !shouldSuppressImageWorkbenchStatusText(line) &&
+            !isImageGenerationProtocolFailureResidue(line),
+        )
         .join("\n")
         .trim(),
     )
     .filter(
       (paragraph) =>
-        paragraph && !isAssistantProtocolResidueParagraph(paragraph),
+        paragraph &&
+        !isAssistantProtocolResidueParagraph(paragraph) &&
+        !shouldSuppressImageWorkbenchStatusText(paragraph) &&
+        !isImageGenerationProtocolFailureResidue(paragraph),
     );
 
   return normalizeProtocolStripWhitespace(sanitizedParagraphs.join("\n\n"));

@@ -321,6 +321,46 @@ function hasImageGenerationLaunchRouting(
   );
 }
 
+function withFastResponseFallbackPreference(
+  requestMetadata: Record<string, unknown> | undefined,
+  providerType: string,
+  model: string,
+): Record<string, unknown> | undefined {
+  const providerValue = providerType.trim();
+  const modelValue = model.trim();
+  if (!requestMetadata || !providerValue || !modelValue) {
+    return requestMetadata;
+  }
+
+  const nestedHarness = requestMetadata.harness;
+  const usesNestedHarness = isPlainRecord(nestedHarness);
+  const harness = usesNestedHarness
+    ? { ...(nestedHarness as Record<string, unknown>) }
+    : { ...requestMetadata };
+  const routingKey = HARNESS_FAST_RESPONSE_ROUTING_KEYS.find((key) =>
+    isPlainRecord(harness[key]),
+  );
+  if (!routingKey) {
+    return requestMetadata;
+  }
+
+  const routing = {
+    ...(harness[routingKey] as Record<string, unknown>),
+    fallback_provider_preference: providerValue,
+    fallback_model_preference: modelValue,
+  };
+  harness[routingKey] = routing;
+
+  if (!usesNestedHarness) {
+    return harness;
+  }
+
+  return {
+    ...requestMetadata,
+    harness,
+  };
+}
+
 function omitHarnessFieldsFromRequestMetadata(
   requestMetadata: Record<string, unknown> | undefined,
   keys: readonly string[],
@@ -800,6 +840,14 @@ export function buildSubmitOpRuntimeCompaction(
     metadata = omitHarnessFieldsFromRequestMetadata(
       metadata,
       HARNESS_RUN_TITLE_KEYS,
+    );
+  }
+
+  if (hasFastResponseRouting) {
+    metadata = withFastResponseFallbackPreference(
+      metadata,
+      effectiveProviderType,
+      effectiveModel,
     );
   }
 

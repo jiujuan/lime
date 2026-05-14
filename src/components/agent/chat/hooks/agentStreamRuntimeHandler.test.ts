@@ -887,14 +887,12 @@ describe("agentStreamRuntimeHandler", () => {
     expect(getAgentStreamTextOverlay("assistant-1")?.content).toBe("123");
   });
 
-  it("图片生成草稿应保留极简文案，不被模型 text_delta 覆盖", () => {
-    const preservedContent =
-      "好啊，用 Nanobanana Pro 生成：一张广州塔春天照片\n先获取下工具参数\n马上生成";
+  it("图片生成轻卡应接纳模型自然 text_delta，并保留同一条消息里的预览", () => {
     let messages: Message[] = [
       {
         id: "assistant-image",
         role: "assistant",
-        content: preservedContent,
+        content: "",
         timestamp: new Date("2026-05-12T10:00:00.000Z"),
         isThinking: true,
         contentParts: [],
@@ -943,7 +941,7 @@ describe("agentStreamRuntimeHandler", () => {
       activeSessionId: "session-1",
       resolvedWorkspaceId: "workspace-1",
       effectiveExecutionStrategy: "react" as const,
-      preserveAssistantContent: preservedContent,
+      assistantFallbackContent: "",
       content: "@Nanobanana Pro 生成广州塔春天照片",
       runtime: {} as never,
       warnedKeysRef: { current: new Set<string>() },
@@ -963,22 +961,36 @@ describe("agentStreamRuntimeHandler", () => {
     handleTurnStreamEvent({
       ...baseOptions,
       data: {
+        type: "tool_start",
+        tool_name: "Skill",
+        tool_id: "tool-image-generate",
+        arguments: JSON.stringify({ skill: "image_generate" }),
+      } as AgentEvent,
+    });
+
+    expect(requestState.accumulatedContent).toBe("");
+    expect(getAgentStreamTextOverlay("assistant-image")).toBeNull();
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
         type: "text_delta",
         text: "我来为你生成这张照片。",
       } as AgentEvent,
     });
 
-    expect(requestState.accumulatedContent).toBe(preservedContent);
-    expect(messages[0]?.content).toBe(preservedContent);
-    expect(getAgentStreamTextOverlay("assistant-image")).toBeNull();
+    expect(requestState.accumulatedContent).toBe("我来为你生成这张照片。");
+    expect(getAgentStreamTextOverlay("assistant-image")?.content).toBe(
+      "我来为你生成这张照片。",
+    );
 
     handleTurnStreamEvent({
       ...baseOptions,
       data: { type: "final_done" } as AgentEvent,
     });
 
-    expect(messages[0]?.content).toBe(preservedContent);
-    expect(messages[0]?.content).not.toContain("我来为你生成");
+    expect(messages[0]?.content).toBe("我来为你生成这张照片。");
+    expect(messages[0]?.content).not.toContain("先获取下工具参数");
     expect(messages[0]?.imageWorkbenchPreview?.taskId).toBe("draft-image-1");
     expect(messages[0]?.isThinking).toBe(false);
   });

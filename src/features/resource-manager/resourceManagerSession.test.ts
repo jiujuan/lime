@@ -140,6 +140,61 @@ describe("resourceManagerSession", () => {
     );
   });
 
+  it("存储配额不足时应清理旧资源会话并避免打断打开流程", () => {
+    const oldKey = getResourceManagerSessionStorageKey("old-session");
+    localStorage.setItem(
+      oldKey,
+      JSON.stringify({
+        id: "old-session",
+        items: [
+          { id: "old-item", kind: "image", src: "https://old.test/a.png" },
+        ],
+        initialIndex: 0,
+        createdAt: Date.now(),
+      }),
+    );
+    const originalSetItem = Storage.prototype.setItem;
+    let callCount = 0;
+    const setItemSpy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(function (this: Storage, key: string, value: string) {
+        callCount += 1;
+        if (callCount === 1) {
+          throw new DOMException("quota", "QuotaExceededError");
+        }
+        return originalSetItem.call(this, key, value);
+      });
+    const session = buildResourceManagerSession({
+      items: [{ src: "https://example.com/recovered.png", kind: "image" }],
+    });
+
+    expect(() => writeResourceManagerSession(session!)).not.toThrow();
+    expect(localStorage.getItem(oldKey)).toBeNull();
+    expect(localStorage.getItem(RESOURCE_MANAGER_ACTIVE_SESSION_KEY)).toBe(
+      session!.id,
+    );
+
+    setItemSpy.mockRestore();
+  });
+
+  it("单条资源会话仍超过配额时应安静放弃持久化", () => {
+    const setItemSpy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new DOMException("quota", "QuotaExceededError");
+      });
+    const session = buildResourceManagerSession({
+      items: [{ src: "https://example.com/too-large.png", kind: "image" }],
+    });
+
+    expect(() => writeResourceManagerSession(session!)).not.toThrow();
+    expect(
+      localStorage.getItem(RESOURCE_MANAGER_ACTIVE_SESSION_KEY),
+    ).toBeNull();
+
+    setItemSpy.mockRestore();
+  });
+
   it("应归一化业务来源上下文并允许资源项覆盖会话上下文", () => {
     expect(
       normalizeResourceManagerSourceContext({

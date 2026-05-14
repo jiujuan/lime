@@ -14,6 +14,7 @@ import {
   buildImageTaskPresentationContext,
   buildImageTaskTasteContext,
 } from "./imageTaskPersona";
+export { buildImageSkillLaunchRequestMetadata } from "./modelSkillLaunchDescriptors";
 
 export interface ImageWorkbenchSkillRequest {
   images: MessageImage[];
@@ -37,47 +38,6 @@ interface ResolveImageWorkbenchSkillRequestParams {
   contentId?: string | null;
   applyTarget?: ImageWorkbenchApplyTarget | null;
   entrySource?: string;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return undefined;
-  }
-  return value as Record<string, unknown>;
-}
-
-function buildModelSkillLaunchRequestMetadata(params: {
-  existingMetadata: Record<string, unknown> | undefined;
-  requestContext: Record<string, unknown>;
-  launchKey: "image_skill_launch";
-  requestContextKey: "image_task";
-  defaultKind: "image_task";
-  skillName: "image_generate";
-}): Record<string, unknown> {
-  const scopedRequestContext = asRecord(
-    params.requestContext[params.requestContextKey],
-  );
-  const existingHarness = asRecord(params.existingMetadata?.harness);
-
-  return {
-    ...(params.existingMetadata || {}),
-    harness: {
-      ...(existingHarness || {}),
-      allow_model_skills: true,
-      [params.launchKey]: {
-        skill_name: params.skillName,
-        kind:
-          typeof params.requestContext.kind === "string"
-            ? params.requestContext.kind
-            : params.defaultKind,
-        ...(scopedRequestContext
-          ? {
-              [params.requestContextKey]: scopedRequestContext,
-            }
-          : { request_context: params.requestContext }),
-      },
-    },
-  };
 }
 
 function createSkillInputImageRef(index: number): string {
@@ -116,20 +76,6 @@ export function buildImageWorkbenchSessionTitle(
 
 function createDocumentImageTaskSlotId(): string {
   return `document-image-slot-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-export function buildImageSkillLaunchRequestMetadata(
-  existingMetadata: Record<string, unknown> | undefined,
-  requestContext: Record<string, unknown>,
-): Record<string, unknown> {
-  return buildModelSkillLaunchRequestMetadata({
-    existingMetadata,
-    requestContext,
-    launchKey: "image_skill_launch",
-    requestContextKey: "image_task",
-    defaultKind: "image_task",
-    skillName: "image_generate",
-  });
 }
 
 export function resolveImageWorkbenchSkillRequest(
@@ -260,6 +206,7 @@ export function resolveImageWorkbenchSkillRequest(
       provider_id:
         parsedCommand.providerId || params.imageWorkbenchSelectedProviderId,
       model: parsedCommand.modelId || params.imageWorkbenchSelectedModelId,
+      executor_mode: parsedCommand.executorMode,
       session_id: resolvedSessionId || undefined,
       project_id: params.projectId,
       content_id: params.contentId || undefined,

@@ -36,6 +36,7 @@ import {
 } from "./agentProjectStorage";
 import {
   hydrateSessionDetailMessages,
+  mergeHydratedMessagesWithLocalState,
   normalizeHistoryMessages,
   shouldCompactCompletedSessionHistory,
 } from "./agentChatHistory";
@@ -923,18 +924,62 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       scopedKeys.currentTurnKey,
       null,
     );
+    const cachedScopedSnapshot = scopedSessionCandidate
+      ? loadAgentSessionCachedSnapshot(workspaceId.trim(), scopedSessionCandidate)
+      : null;
+    const shouldUseCachedSnapshot =
+      scopedMessages.length === 0 && Boolean(cachedScopedSnapshot);
+    const shouldMergeCachedSnapshot =
+      scopedMessages.length > 0 && Boolean(cachedScopedSnapshot);
+    const mergedScopedMessages =
+      shouldMergeCachedSnapshot && cachedScopedSnapshot
+        ? mergeHydratedMessagesWithLocalState(
+            cachedScopedSnapshot.messages,
+            scopedMessages,
+          )
+        : scopedMessages;
+    const restoreMessages = shouldUseCachedSnapshot
+      ? cachedScopedSnapshot?.messages || []
+      : mergedScopedMessages;
+    const restoreThreadTurns = shouldUseCachedSnapshot
+      ? cachedScopedSnapshot?.threadTurns || []
+      : scopedTurns.length > 0
+        ? scopedTurns
+        : cachedScopedSnapshot?.threadTurns || [];
+    const restoreThreadItems = shouldUseCachedSnapshot
+      ? cachedScopedSnapshot?.threadItems || []
+      : scopedItems.length > 0
+        ? filterConversationThreadItems(normalizeLegacyThreadItems(scopedItems))
+        : cachedScopedSnapshot?.threadItems || [];
+    const restoreCurrentTurnId = shouldUseCachedSnapshot
+      ? cachedScopedSnapshot?.currentTurnId || null
+      : scopedCurrentTurnId || cachedScopedSnapshot?.currentTurnId || null;
+    const cachedTotalMessages =
+      cachedScopedSnapshot?.cacheMetadata?.messagesCount ??
+      cachedScopedSnapshot?.messages.length ??
+      0;
 
     restoreCandidateSessionIdRef.current = scopedSessionCandidate;
     applySessionSnapshot({
       ...createEmptyAgentSessionSnapshot(),
       sessionId: scopedSessionCandidate,
-      messages: scopedMessages,
-      threadTurns: scopedTurns,
-      threadItems: filterConversationThreadItems(
-        normalizeLegacyThreadItems(scopedItems),
-      ),
-      currentTurnId: scopedCurrentTurnId,
+      messages: restoreMessages,
+      threadTurns: restoreThreadTurns,
+      threadItems: restoreThreadItems,
+      currentTurnId: restoreCurrentTurnId,
     });
+    setSessionHistoryWindow(
+      shouldUseCachedSnapshot &&
+        (cachedScopedSnapshot?.cacheMetadata?.historyTruncated === true ||
+          cachedTotalMessages > restoreMessages.length)
+        ? {
+            loadedMessages: restoreMessages.length,
+            totalMessages: Math.max(cachedTotalMessages, restoreMessages.length),
+            isLoadingFull: false,
+            error: null,
+          }
+        : null,
+    );
     resetPendingActions();
     resetStreamingRefs();
     restoredWorkspaceRef.current = null;
@@ -2107,15 +2152,17 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       try {
         const startedAt = Date.now();
         const selectedTopic = topics.find((topic) => topic.id === topicId);
-        const cachedTargetSnapshot = shouldLoadCachedTopicSnapshot({
-          currentSessionId,
-          topicId,
-        })
-          ? loadAgentSessionCachedSnapshot(workspaceId, topicId, {
-              topicUpdatedAt: selectedTopic?.updatedAt ?? null,
-              messagesCount: selectedTopic?.messagesCount ?? null,
-            })
-          : null;
+        const cachedTargetSnapshot =
+          options?.forceRefresh === true ||
+          !shouldLoadCachedTopicSnapshot({
+            currentSessionId,
+            topicId,
+          })
+            ? null
+            : loadAgentSessionCachedSnapshot(workspaceId, topicId, {
+                topicUpdatedAt: selectedTopic?.updatedAt ?? null,
+                messagesCount: selectedTopic?.messagesCount ?? null,
+              });
         const cachedSnapshotMetadata = cachedTargetSnapshot?.cacheMetadata;
         const shouldRefreshCachedSnapshotImmediately =
           resolveShouldRefreshCachedSnapshotImmediately({

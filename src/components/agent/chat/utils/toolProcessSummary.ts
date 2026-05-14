@@ -23,6 +23,10 @@ import {
   normalizeToolSearchResultSummary,
   resolveUserFacingToolSearchItemLabel,
 } from "./toolSearchResultSummary";
+import {
+  isImageGenerationProtocolFailure,
+  resolveImageGenerationFailureDisplayText,
+} from "./limeTaskProtocolNoise";
 
 type ToolProcessStatus =
   | ToolCallState["status"]
@@ -195,6 +199,10 @@ export function resolveToolErrorSummaryText(
     return shorten(WEB_SEARCH_RUNTIME_UNAVAILABLE_MESSAGE, maxLength);
   }
 
+  if (isImageGenerationProtocolFailure({ toolName, text: normalized })) {
+    return shorten(resolveImageGenerationFailureDisplayText(), maxLength);
+  }
+
   return normalizePlainResultLine(value, maxLength);
 }
 
@@ -208,6 +216,10 @@ export function resolveToolErrorDetailText(
   }
 
   if (!isLikelyWebSearchRuntimeUnavailable(toolName, normalized)) {
+    if (isImageGenerationProtocolFailure({ toolName, text: normalized })) {
+      return resolveImageGenerationFailureDisplayText();
+    }
+
     return normalized;
   }
 
@@ -959,6 +971,14 @@ function buildNarrative(input: ToolProcessInput): ToolProcessNarrative {
       ? resolveToolErrorSummaryText(input.toolName, resultOutput, 96) ||
         plainOutput
       : plainOutput;
+  const imageGenerationFailureSummary =
+    input.status === "failed" &&
+    isImageGenerationProtocolFailure({
+      toolName: input.toolName,
+      text: input.error || resultOutput,
+    })
+      ? resolveImageGenerationFailureDisplayText()
+      : null;
   const args = normalizeArgumentsRecord(input.argumentsValue);
   const metadata = asRecord(input.metadata);
   const subject = resolveToolSubject(input.toolName, input.argumentsValue);
@@ -967,10 +987,15 @@ function buildNarrative(input: ToolProcessInput): ToolProcessNarrative {
   let postSource: ToolProcessNarrativeSource = "none";
 
   if (input.status === "failed") {
-    postSummary =
-      plainError ||
-      (failedOutputSummary ? `执行失败：${failedOutputSummary}` : null);
-    if (postSummary) {
+    if (imageGenerationFailureSummary) {
+      postSummary = imageGenerationFailureSummary;
+      postSource = "error";
+    } else {
+      postSummary =
+        plainError ||
+        (failedOutputSummary ? `执行失败：${failedOutputSummary}` : null);
+    }
+    if (postSummary && !imageGenerationFailureSummary) {
       if (!postSummary.startsWith("执行失败：")) {
         postSummary = `执行失败：${postSummary}`;
       }

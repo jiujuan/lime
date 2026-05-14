@@ -182,6 +182,7 @@ const SIDEBAR_CONVERSATION_NAVIGATION_DEFER_MS =
   SIDEBAR_SESSION_ENTRY_REFRESH_DEFER_MS;
 const SIDEBAR_SEARCH_HOVER_PREFETCH_DELAY_MS = 900;
 const SIDEBAR_NAV_LABEL_KEYS: Record<string, string> = {
+  "agent-app-lab": "navigation.sidebar.items.agentAppLab",
   automation: "navigation.sidebar.items.automation",
   channels: "navigation.sidebar.items.channels",
   companion: "navigation.sidebar.items.companion",

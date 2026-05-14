@@ -1874,6 +1874,10 @@ async fn prepare_runtime_turn_submit_bootstrap(
         .set_provider_continuation(provider_continuation_state);
 
     let request_metadata = request.metadata.clone();
+    let bypass_workspace_restrictions = matches!(
+        resolve_runtime_access_mode_from_request(request),
+        Some(lime_agent::SessionExecutionRuntimeAccessMode::FullAccess)
+    );
     let sandbox_outcome = apply_workspace_sandbox_permissions(
         state,
         config_manager,
@@ -1890,6 +1894,7 @@ async fn prepare_runtime_turn_submit_bootstrap(
         execution_profile,
         request_tool_policy,
         requested_strategy,
+        bypass_workspace_restrictions,
     )
     .await
     .map_err(|error| format!("注入 workspace 安全策略失败: {error}"))?;

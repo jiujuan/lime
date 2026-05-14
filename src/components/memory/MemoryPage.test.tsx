@@ -11,7 +11,7 @@ import {
   CURATED_TASK_RECOMMENDATION_SIGNAL_EVENT,
   recordCuratedTaskRecommendationSignalFromReviewDecision,
 } from "@/components/agent/chat/utils/curatedTaskRecommendationSignals";
-import agentZhCN from "@/i18n/resources/zh-CN/agent.json";
+import { agentZhCNResource as agentZhCN } from "@/i18n/agentResources";
 import { recordRuntimeMemoryPrefetchHistory } from "@/lib/runtimeMemoryPrefetchHistory";
 import { MemoryPage } from "./MemoryPage";
 

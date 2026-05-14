@@ -248,6 +248,33 @@ function getDocumentCanvasContent(
   return canvasState.content;
 }
 
+function getImageAssistantMessages(messages: Message[]): Message[] {
+  return messages.filter(
+    (message) => message.role === "assistant" && message.imageWorkbenchPreview,
+  );
+}
+
+function expectSingleImageAssistantMessage(
+  messages: Message[],
+  expected: Partial<Message>,
+) {
+  const assistantMessages = getImageAssistantMessages(messages);
+  expect(assistantMessages).toHaveLength(1);
+  expect(assistantMessages[0]).toMatchObject(expected);
+}
+
+function expectImageUserMessage(
+  messages: Message[],
+  expected: Partial<Message>,
+) {
+  expect(messages).toContainEqual(
+    expect.objectContaining({
+      role: "user",
+      ...expected,
+    }),
+  );
+}
+
 describe("useWorkspaceImageTaskPreviewRuntime", () => {
   beforeEach(async () => {
     await changeLimeLocale("zh-CN");
@@ -357,6 +384,86 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
     expect(getValue().imageWorkbenchState.tasks).toHaveLength(1);
   });
 
+  it("真实图片任务回流时，应合并发送前草稿轻卡而不是显示两张生成卡", async () => {
+    let listener: CreationTaskListener | null = null;
+    vi.mocked(safeListen).mockImplementationOnce(async (_event, handler) => {
+      listener = handler;
+      return vi.fn();
+    });
+    vi.mocked(readFilePreview).mockRejectedValueOnce(
+      new Error("task file not ready"),
+    );
+
+    const { render, getValue } = renderHook(
+      {
+        restoreFromWorkspace: false,
+      },
+      {
+        initialMessages: [
+          {
+            id: "user-image-1",
+            role: "user",
+            content:
+              "@配图 E2E 主链验证，请生成一张青柠叶片和小青柠的清爽插画，扁平插画风格",
+            timestamp: new Date("2026-05-14T08:00:00.000Z"),
+          },
+          {
+            id: "assistant-draft-image-1",
+            role: "assistant",
+            content: "",
+            timestamp: new Date("2026-05-14T08:00:01.000Z"),
+            imageWorkbenchPreview: {
+              taskId: "draft-image-1",
+              prompt: "青柠叶片和小青柠的清爽插画，扁平插画风格",
+              mode: "generate",
+              status: "running",
+              projectId: DEFAULT_PROJECT_ID,
+              contentId: DEFAULT_CONTENT_ID,
+              imageCount: 1,
+              expectedImageCount: 1,
+            },
+          },
+        ],
+      },
+    );
+
+    await render();
+
+    await act(async () => {
+      listener?.({
+        payload: withDefaultTaskContext({
+          task_id: "task-image-real-1",
+          task_type: "image_generate",
+          task_family: "image",
+          status: "pending_submit",
+          prompt:
+            "A fresh clean flat illustration of lime leaves and small limes",
+          raw_text:
+            "@配图 E2E 主链验证，请生成一张青柠叶片和小青柠的清爽插画，扁平插画风格",
+          path: ".lime/tasks/image_generate/task-image-real-1.json",
+          turn_id: "turn-image-1",
+          model: "gpt-images-2",
+          count: 1,
+        }),
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const imageMessages = getImageAssistantMessages(getValue().messages);
+    expect(imageMessages).toHaveLength(1);
+    expect(imageMessages[0]?.imageWorkbenchPreview).toMatchObject({
+      taskId: "task-image-real-1",
+      status: "running",
+      modelName: "gpt-images-2",
+    });
+    expect(
+      imageMessages.some((message) =>
+        message.imageWorkbenchPreview?.taskId.startsWith("draft-image-"),
+      ),
+    ).toBe(false);
+  });
+
   it("应先插入运行中占位卡，再根据 task file 回填图片与工作台状态", async () => {
     let listener: CreationTaskListener | null = null;
     vi.mocked(safeListen).mockImplementationOnce(async (event, handler) => {
@@ -424,8 +531,7 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
     expect(getValue().messages).toEqual([
       expect.objectContaining({
         id: "image-workbench:task-image-1:assistant",
-        content: expect.stringContaining("先获取下工具参数"),
-        isThinking: false,
+        content: "",
         toolCalls: undefined,
         contentParts: undefined,
         runtimeStatus: undefined,
@@ -482,48 +588,50 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       await Promise.resolve();
     });
 
-    expect(getValue().messages).toEqual([
-      expect.objectContaining({
-        content: expect.stringContaining("未来感实验室里的青柠主视觉"),
-        toolCalls: undefined,
-        contentParts: undefined,
-        runtimeStatus: undefined,
-        imageWorkbenchPreview: expect.objectContaining({
-          taskId: "task-image-1",
-          status: "running",
-          prompt: "未来感实验室里的青柠主视觉",
-          imageCount: 1,
-          size: "1024x1024",
-          phase: "running",
-          statusMessage: "正在绘制第一版构图",
-          attemptCount: 1,
-        }),
+    expectImageUserMessage(getValue().messages, {
+      content: "未来感实验室里的青柠主视觉",
+    });
+    expectSingleImageAssistantMessage(getValue().messages, {
+      content: "",
+      toolCalls: undefined,
+      contentParts: undefined,
+      runtimeStatus: undefined,
+      imageWorkbenchPreview: expect.objectContaining({
+        taskId: "task-image-1",
+        status: "running",
+        prompt: "未来感实验室里的青柠主视觉",
+        imageCount: 1,
+        size: "1024x1024",
+        phase: "running",
+        statusMessage: "正在绘制第一版构图",
+        attemptCount: 1,
       }),
-    ]);
+    });
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1500);
       await Promise.resolve();
     });
 
-    expect(getValue().messages).toEqual([
-      expect.objectContaining({
-        content: expect.stringContaining("未来感实验室里的青柠主视觉"),
-        isThinking: false,
-        toolCalls: undefined,
-        contentParts: undefined,
-        runtimeStatus: undefined,
-        imageWorkbenchPreview: expect.objectContaining({
-          taskId: "task-image-1",
-          status: "complete",
-          prompt: "未来感实验室里的青柠主视觉",
-          imageUrl: "https://example.com/generated-lime.png",
-          imageCount: 1,
-          size: "1024x1024",
-          caption: "搞定，图已经生成好了\n要调整的话直接说，我继续改",
-        }),
+    expectImageUserMessage(getValue().messages, {
+      content: "未来感实验室里的青柠主视觉",
+    });
+    expectSingleImageAssistantMessage(getValue().messages, {
+      content: "",
+      isThinking: false,
+      toolCalls: undefined,
+      contentParts: undefined,
+      runtimeStatus: undefined,
+      imageWorkbenchPreview: expect.objectContaining({
+        taskId: "task-image-1",
+        status: "complete",
+        prompt: "未来感实验室里的青柠主视觉",
+        imageUrl: "https://example.com/generated-lime.png",
+        imageCount: 1,
+        size: "1024x1024",
+        caption: null,
       }),
-    ]);
+    });
     expect(getValue().imageWorkbenchState.tasks).toEqual([
       expect.objectContaining({
         id: "task-image-1",
@@ -617,17 +725,18 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       projectRootPath: DEFAULT_PROJECT_ROOT_PATH,
       taskRef: `/workspace/project-image-1/.lime/tasks/image_generate/${taskId}.json`,
     });
-    expect(getValue().messages).toEqual([
-      expect.objectContaining({
-        id: `image-workbench:${taskId}:assistant`,
-        imageWorkbenchPreview: expect.objectContaining({
-          taskId,
-          status: "complete",
-          imageUrl: dataUrl,
-          prompt: "高保真青柠品牌主视觉",
-        }),
+    expectImageUserMessage(getValue().messages, {
+      content: "高保真青柠品牌主视觉",
+    });
+    expectSingleImageAssistantMessage(getValue().messages, {
+      id: `image-workbench:${taskId}:assistant`,
+      imageWorkbenchPreview: expect.objectContaining({
+        taskId,
+        status: "complete",
+        imageUrl: dataUrl,
+        prompt: "高保真青柠品牌主视觉",
       }),
-    ]);
+    });
     expect(getValue().imageWorkbenchState.outputs).toEqual([
       expect.objectContaining({
         taskId,
@@ -726,17 +835,18 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       projectRootPath: DEFAULT_PROJECT_ROOT_PATH,
       taskRef: taskPath,
     });
-    expect(getValue().messages).toEqual([
-      expect.objectContaining({
-        id: `image-workbench:${taskId}:assistant`,
-        imageWorkbenchPreview: expect.objectContaining({
-          taskId,
-          status: "complete",
-          imageUrl: "https://example.com/prefer-artifact-api.png",
-          prompt: "珠江夜景主视觉",
-        }),
+    expectImageUserMessage(getValue().messages, {
+      content: "珠江夜景主视觉",
+    });
+    expectSingleImageAssistantMessage(getValue().messages, {
+      id: `image-workbench:${taskId}:assistant`,
+      imageWorkbenchPreview: expect.objectContaining({
+        taskId,
+        status: "complete",
+        imageUrl: "https://example.com/prefer-artifact-api.png",
+        prompt: "珠江夜景主视觉",
       }),
-    ]);
+    });
   });
 
   it("已存在同 taskId 的 skill 消息时，应把 task 预览合并回原消息而不是再插一条伪造消息", async () => {
@@ -829,16 +939,23 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       await Promise.resolve();
     });
 
-    expect(getValue().messages).toHaveLength(1);
-    expect(getValue().messages[0]).toMatchObject({
+    expectImageUserMessage(getValue().messages, {
+      content: "春日咖啡馆插画",
+    });
+    expectSingleImageAssistantMessage(getValue().messages, {
       id: "assistant-skill-image-1",
-      content: expect.stringContaining("春日咖啡馆插画"),
-      toolCalls: undefined,
+      content: "",
+      toolCalls: [
+        expect.objectContaining({
+          id: "tool-image-1",
+          name: "Bash",
+        }),
+      ],
       imageWorkbenchPreview: expect.objectContaining({
         taskId: "task-image-skill-1",
         status: "complete",
         imageUrl: "https://example.com/skill-preview.png",
-        caption: "搞定，图已经生成好了\n要调整的话直接说，我继续改",
+        caption: null,
       }),
     });
   });
@@ -906,8 +1023,10 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       await Promise.resolve();
     });
 
-    expect(getValue().messages).toHaveLength(1);
-    expect(getValue().messages[0]).toMatchObject({
+    expectImageUserMessage(getValue().messages, {
+      content: "青柠插画",
+    });
+    expectSingleImageAssistantMessage(getValue().messages, {
       id: "assistant-live-image-1",
       content: expect.stringContaining("青柠插画"),
       runtimeTurnId: "turn-image-live-1",
@@ -921,8 +1040,10 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       runtimeStatus: undefined,
     });
     expect(
-      getValue().messages.some((message) =>
-        message.id.startsWith("image-workbench:"),
+      getValue().messages.some(
+        (message) =>
+          message.role === "assistant" &&
+          message.id.startsWith("image-workbench:"),
       ),
     ).toBe(false);
 
@@ -943,7 +1064,7 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
             thread_id: "thread-image-live-1",
             turn_id: "turn-image-live-1",
             presentation: {
-              assistant_intro: "好啊，生成：青柠插画\n先获取下工具参数\n马上生成",
+              opening_guidance: { source: "model_stream" },
               completion_caption:
                 "青柠插画已经好了\n要调整的话直接说，我继续改",
             },
@@ -959,10 +1080,12 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       await Promise.resolve();
     });
 
-    expect(getValue().messages).toHaveLength(1);
-    expect(getValue().messages[0]).toMatchObject({
+    expectImageUserMessage(getValue().messages, {
+      content: "青柠插画",
+    });
+    expectSingleImageAssistantMessage(getValue().messages, {
       id: "assistant-live-image-1",
-      content: "好啊，生成：青柠插画\n先获取下工具参数\n马上生成",
+      content: "我来直接生成这张青柠插画。",
       imageWorkbenchPreview: expect.objectContaining({
         taskId,
         status: "complete",
@@ -1015,8 +1138,10 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       await Promise.resolve();
     });
 
-    expect(getValue().messages).toHaveLength(1);
-    expect(getValue().messages[0]).toMatchObject({
+    expectImageUserMessage(getValue().messages, {
+      content: "三国主要人物群像海报",
+    });
+    expectSingleImageAssistantMessage(getValue().messages, {
       id: "assistant-live-image-verbose-1",
       runtimeTurnId: "turn-image-live-verbose-1",
       imageWorkbenchPreview: expect.objectContaining({
@@ -1025,10 +1150,11 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
         prompt: "三国主要人物群像海报",
       }),
     });
-    expect(getValue().messages[0]?.content).not.toContain("任务已创建成功");
-    expect(getValue().messages[0]?.content).not.toContain("这里是生成详情");
-    expect(getValue().messages[0]?.content).not.toContain("模型");
-    expect(getValue().messages[0]?.content).not.toContain("稍等一下");
+    const verboseAssistant = getImageAssistantMessages(getValue().messages)[0];
+    expect(verboseAssistant?.content).not.toContain("任务已创建成功");
+    expect(verboseAssistant?.content).not.toContain("这里是生成详情");
+    expect(verboseAssistant?.content).not.toContain("模型");
+    expect(verboseAssistant?.content).not.toContain("稍等一下");
   });
 
   it("图片任务事件缺少 turn_id 时，也应合并相邻旧提交文案并使用原始 @Nanobanana Pro 提示词", async () => {
@@ -1090,17 +1216,16 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       await Promise.resolve();
     });
 
-    expect(getValue().messages).toHaveLength(1);
-    expect(getValue().messages[0]).toMatchObject({
+    expectImageUserMessage(getValue().messages, {
+      content: "@Nanobanana Pro 生成一张广州塔，从花城汇看过去的春天的照片",
+    });
+    expectSingleImageAssistantMessage(getValue().messages, {
       id: "assistant-image-nano-old-submit-1",
-      content: [
-        "好啊，用 Nanobanana Pro 生成：一张广州塔，从花城汇看过去的春天的照片",
-        "先获取下工具参数",
-        "马上生成",
-      ].join("\n"),
-      isThinking: false,
+      content: "",
       thinkingContent: "开始中 广州塔春天照片",
-      contentParts: undefined,
+      contentParts: expect.arrayContaining([
+        { type: "thinking", text: "开始中 广州塔春天照片" },
+      ]),
       toolCalls: undefined,
       runtimeStatus: undefined,
       imageWorkbenchPreview: expect.objectContaining({
@@ -1111,8 +1236,9 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
         modelName: "fal-ai/nano-banana-pro",
       }),
     });
-    expect(getValue().messages[0]?.content).not.toContain("图片生成任务已提交");
-    expect(getValue().messages[0]?.content).not.toContain("粉色紫荆花");
+    const nanoAssistant = getImageAssistantMessages(getValue().messages)[0];
+    expect(nanoAssistant?.content).not.toContain("图片生成任务已提交");
+    expect(nanoAssistant?.content).not.toContain("粉色紫荆花");
   });
 
   it("同 taskId 的状态占位消息应被终态快照幂等覆盖，而不是一直停留在排队文案", async () => {
@@ -1194,24 +1320,25 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       await Promise.resolve();
     });
 
-    expect(getValue().messages).toEqual([
-      expect.objectContaining({
-        id: "assistant-image-status-only-1",
-        content: expect.stringContaining("三国主要人物聚合图"),
-        isThinking: false,
-        runtimeStatus: undefined,
-        toolCalls: undefined,
-        contentParts: undefined,
-        imageWorkbenchPreview: expect.objectContaining({
-          taskId: "task-image-status-only-1",
-          status: "complete",
-          phase: "succeeded",
-          statusMessage: null,
-          imageUrl: "https://example.com/three-kingdoms-collage.png",
-          caption: "搞定，图已经生成好了\n要调整的话直接说，我继续改",
-        }),
+    expectImageUserMessage(getValue().messages, {
+      content: "三国主要人物聚合图",
+    });
+    expectSingleImageAssistantMessage(getValue().messages, {
+      id: "assistant-image-status-only-1",
+      content: "",
+      isThinking: false,
+      runtimeStatus: undefined,
+      toolCalls: undefined,
+      contentParts: undefined,
+      imageWorkbenchPreview: expect.objectContaining({
+        taskId: "task-image-status-only-1",
+        status: "complete",
+        phase: "succeeded",
+        statusMessage: null,
+        imageUrl: "https://example.com/three-kingdoms-collage.png",
+        caption: null,
       }),
-    ]);
+    });
   });
 
   it("同 taskId 的重复图片任务卡应折叠回第一张消息，而不是越刷越多", async () => {
@@ -1290,8 +1417,10 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       await Promise.resolve();
     });
 
-    expect(getValue().messages).toHaveLength(1);
-    expect(getValue().messages[0]).toMatchObject({
+    expectImageUserMessage(getValue().messages, {
+      content: "mock image task",
+    });
+    expectSingleImageAssistantMessage(getValue().messages, {
       id: "assistant-image-duplicate-1",
       imageWorkbenchPreview: expect.objectContaining({
         taskId,
@@ -1375,7 +1504,7 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
     });
   });
 
-  it("失败的 task file 应透传重试语义与结构化错误文案", async () => {
+  it("失败的 task file 应保留重试语义，但聊天卡不直接展示底层错误", async () => {
     let listener: CreationTaskListener | null = null;
     vi.mocked(safeListen).mockImplementationOnce(async (_event, handler) => {
       listener = handler;
@@ -1433,24 +1562,25 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
     });
 
     await vi.waitFor(() => {
-      expect(getValue().messages).toEqual([
-        expect.objectContaining({
-          id: "image-workbench:task-image-failed-1:assistant",
-          content: expect.stringContaining("青柠品牌 KV"),
-          isThinking: false,
-          runtimeStatus: undefined,
-          toolCalls: undefined,
-          contentParts: undefined,
-          imageWorkbenchPreview: expect.objectContaining({
-            taskId: "task-image-failed-1",
-            status: "failed",
-            statusMessage: "FAL 请求参数无效，请先调整配置。",
-            caption: "这次没有生成成功：FAL 请求参数无效，请先调整配置。",
-            retryable: false,
-            attemptCount: 1,
-          }),
+      expectImageUserMessage(getValue().messages, {
+        content: "青柠品牌 KV",
+      });
+      expectSingleImageAssistantMessage(getValue().messages, {
+        id: "image-workbench:task-image-failed-1:assistant",
+        content: "",
+        isThinking: false,
+        runtimeStatus: undefined,
+        toolCalls: undefined,
+        contentParts: undefined,
+        imageWorkbenchPreview: expect.objectContaining({
+          taskId: "task-image-failed-1",
+          status: "failed",
+          statusMessage: "FAL 请求参数无效，请先调整配置。",
+          caption: "这次没有生成成功",
+          retryable: false,
+          attemptCount: 1,
         }),
-      ]);
+      });
     });
   });
 
@@ -1524,26 +1654,27 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
     });
 
     await vi.waitFor(() => {
-      expect(getValue().messages).toEqual([
-        expect.objectContaining({
-          id: "image-workbench:task-image-edit-source-1:assistant",
-          content: expect.stringContaining("玻璃质感"),
-          toolCalls: undefined,
-          contentParts: undefined,
-          runtimeStatus: undefined,
-          imageWorkbenchPreview: expect.objectContaining({
-            taskId: "task-image-edit-source-1",
-            mode: "edit",
-            status: "complete",
-            imageUrl: "https://example.com/edited-lime.png",
-            caption: "搞定，图已经生成好了\n要调整的话直接说，我继续改",
-            sourceImageUrl: "https://example.com/source-summary.png",
-            sourceImagePrompt: "原始青柠主视觉",
-            sourceImageRef: "img-source-1",
-            sourceImageCount: 2,
-          }),
+      expectImageUserMessage(getValue().messages, {
+        content: "把主视觉里的青柠改成玻璃质感",
+      });
+      expectSingleImageAssistantMessage(getValue().messages, {
+        id: "image-workbench:task-image-edit-source-1:assistant",
+        content: "",
+        toolCalls: undefined,
+        contentParts: undefined,
+        runtimeStatus: undefined,
+        imageWorkbenchPreview: expect.objectContaining({
+          taskId: "task-image-edit-source-1",
+          mode: "edit",
+          status: "complete",
+          imageUrl: "https://example.com/edited-lime.png",
+          caption: null,
+          sourceImageUrl: "https://example.com/source-summary.png",
+          sourceImagePrompt: "原始青柠主视觉",
+          sourceImageRef: "img-source-1",
+          sourceImageCount: 2,
         }),
-      ]);
+      });
     });
 
     expect(getValue().imageWorkbenchState.tasks).toEqual([
@@ -1609,16 +1740,17 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
     await render();
 
     await vi.waitFor(() => {
-      expect(getValue().messages).toEqual([
-        expect.objectContaining({
-          id: `image-workbench:${taskId}:assistant`,
-          imageWorkbenchPreview: expect.objectContaining({
-            taskId,
-            imageUrl: "https://example.com/restored-api-lime.png",
-            prompt: "通过 API 恢复的青柠主视觉",
-          }),
+      expectImageUserMessage(getValue().messages, {
+        content: "通过 API 恢复的青柠主视觉",
+      });
+      expectSingleImageAssistantMessage(getValue().messages, {
+        id: `image-workbench:${taskId}:assistant`,
+        imageWorkbenchPreview: expect.objectContaining({
+          taskId,
+          imageUrl: "https://example.com/restored-api-lime.png",
+          prompt: "通过 API 恢复的青柠主视觉",
         }),
-      ]);
+      });
     });
 
     expect(listMediaTaskArtifacts).toHaveBeenCalledWith({
@@ -1688,17 +1820,18 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       taskRef: taskId,
     });
     expect(listMediaTaskArtifacts).not.toHaveBeenCalled();
-    expect(getValue().messages).toEqual([
-      expect.objectContaining({
-        id: `image-workbench:${taskId}:assistant`,
-        imageWorkbenchPreview: expect.objectContaining({
-          taskId,
-          status: "complete",
-          imageUrl: "https://example.com/history-direct-restore.png",
-          prompt: "历史直恢广州春日主视觉",
-        }),
+    expectImageUserMessage(getValue().messages, {
+      content: "历史直恢广州春日主视觉",
+    });
+    expectSingleImageAssistantMessage(getValue().messages, {
+      id: `image-workbench:${taskId}:assistant`,
+      imageWorkbenchPreview: expect.objectContaining({
+        taskId,
+        status: "complete",
+        imageUrl: "https://example.com/history-direct-restore.png",
+        prompt: "历史直恢广州春日主视觉",
       }),
-    ]);
+    });
   });
 
   it("发送中的草稿图片轻卡不应按真实 taskId 查询 artifact", async () => {
@@ -1712,8 +1845,7 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
           {
             id: "assistant-draft-image",
             role: "assistant",
-            content:
-              "好啊，用 Nanobanana Pro 生成：一张广州塔春天照片\n先获取下工具参数\n马上生成",
+            content: "",
             timestamp: new Date("2026-04-04T12:00:00Z"),
             isThinking: true,
             imageWorkbenchPreview: {
@@ -1740,6 +1872,69 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
     expect(getValue().messages[0]?.imageWorkbenchPreview?.taskId).toBe(
       "draft-image-local-only",
     );
+  });
+
+  it("图片 skill 启动失败时应把草稿轻卡收敛为失败态并隐藏桥接原始错误", async () => {
+    const { render, getValue } = renderHook(
+      {},
+      {
+        initialMessages: [
+          {
+            id: "assistant-draft-image-failed",
+            role: "assistant",
+            content:
+              'Skill 执行失败（skill_execute_failed）：[DevBridge] 浏览器模式无法连接后端桥接，命令 "execute_skill" 执行失败。原始错误: Failed to fetch',
+            timestamp: new Date("2026-04-04T12:00:00Z"),
+            isThinking: true,
+            contentParts: [
+              {
+                type: "thinking",
+                text: "先确认这是正文配图，再调用图片生成能力。",
+              },
+              {
+                type: "text",
+                text: 'Skill 执行失败（skill_execute_failed）：命令 "execute_skill" 执行失败。',
+              },
+            ],
+            imageWorkbenchPreview: {
+              taskId: "draft-image-failed",
+              prompt: "一张极简线稿风的柠檬水杯配图",
+              status: "running",
+              phase: "preparing",
+              modelName: "gpt-images-2",
+            },
+          },
+        ],
+      },
+    );
+    await render();
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const message = getValue().messages[0];
+    expect(message?.content).toBe("");
+    expect(message?.contentParts).toEqual([
+      {
+        type: "thinking",
+        text: "先确认这是正文配图，再调用图片生成能力。",
+      },
+    ]);
+    expect(message?.isThinking).toBe(false);
+    expect(message?.runtimeStatus).toBeUndefined();
+    expect(message?.imageWorkbenchPreview).toEqual(
+      expect.objectContaining({
+        taskId: "draft-image-failed",
+        status: "failed",
+        phase: "failed",
+        caption: "这次没有生成成功",
+        retryable: true,
+      }),
+    );
+    expect(JSON.stringify(message)).not.toContain("execute_skill");
+    expect(JSON.stringify(message)).not.toContain("DevBridge");
   });
 
   it("应从 task artifact 恢复多模态合同路由阻止状态", async () => {
@@ -1892,26 +2087,27 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
         }),
       }),
     ]);
-    expect(getValue().messages).toEqual([
-      expect.objectContaining({
-        imageWorkbenchPreview: expect.objectContaining({
-          taskId,
-          status: "failed",
-          runtimeContract: expect.objectContaining({
-            routingOutcome: "blocked",
-            failureCode: "image_generation_model_capability_gap",
-            modelCapabilityAssessmentSource: "model_registry",
-            limecorePolicyEvaluationStatus: "input_gap",
-            limecorePolicyEvaluationDecision: "ask",
-            limecorePolicyEvaluationPendingRefs: [
-              "model_catalog",
-              "provider_offer",
-              "tenant_feature_flags",
-            ],
-          }),
+    expectImageUserMessage(getValue().messages, {
+      content: "合同阻止的青柠主视觉",
+    });
+    expectSingleImageAssistantMessage(getValue().messages, {
+      imageWorkbenchPreview: expect.objectContaining({
+        taskId,
+        status: "failed",
+        runtimeContract: expect.objectContaining({
+          routingOutcome: "blocked",
+          failureCode: "image_generation_model_capability_gap",
+          modelCapabilityAssessmentSource: "model_registry",
+          limecorePolicyEvaluationStatus: "input_gap",
+          limecorePolicyEvaluationDecision: "ask",
+          limecorePolicyEvaluationPendingRefs: [
+            "model_catalog",
+            "provider_offer",
+            "tenant_feature_flags",
+          ],
         }),
       }),
-    ]);
+    });
   });
 
   it("历史消息里的陈旧非终态图片任务不应恢复为轮询任务", async () => {
@@ -2054,18 +2250,19 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       projectRootPath: "/Users/youmin",
       taskRef: taskFilePath,
     });
-    expect(getValue().messages).toEqual([
-      expect.objectContaining({
-        id: `image-workbench:${taskId}:assistant`,
-        imageWorkbenchPreview: expect.objectContaining({
-          taskId,
-          status: "complete",
-          imageUrl: "https://example.com/history-absolute.png",
-          taskFilePath,
-          artifactPath,
-        }),
+    expectImageUserMessage(getValue().messages, {
+      content: "跨根目录恢复的三国群像",
+    });
+    expectSingleImageAssistantMessage(getValue().messages, {
+      id: `image-workbench:${taskId}:assistant`,
+      imageWorkbenchPreview: expect.objectContaining({
+        taskId,
+        status: "complete",
+        imageUrl: "https://example.com/history-absolute.png",
+        taskFilePath,
+        artifactPath,
       }),
-    ]);
+    });
   });
 
   it("收到工作区外绝对 task file 事件时，应继续按绝对路径轮询 artifact API", async () => {
@@ -2136,18 +2333,19 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
     });
 
     await vi.waitFor(() => {
-      expect(getValue().messages).toEqual([
-        expect.objectContaining({
-          id: `image-workbench:${taskId}:assistant`,
-          imageWorkbenchPreview: expect.objectContaining({
-            taskId,
-            status: "complete",
-            imageUrl: "https://example.com/external-live.png",
-            taskFilePath,
-            artifactPath,
-          }),
+      expectImageUserMessage(getValue().messages, {
+        content: "工作区外完成的三国主视觉",
+      });
+      expectSingleImageAssistantMessage(getValue().messages, {
+        id: `image-workbench:${taskId}:assistant`,
+        imageWorkbenchPreview: expect.objectContaining({
+          taskId,
+          status: "complete",
+          imageUrl: "https://example.com/external-live.png",
+          taskFilePath,
+          artifactPath,
         }),
-      ]);
+      });
     });
   });
 
@@ -2366,13 +2564,13 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
         }),
         expect.objectContaining({
           id: "assistant-image-browser-template-recover-1",
-          content: expect.stringContaining("一颗鲜嫩的青柠"),
+          content: "",
           imageWorkbenchPreview: expect.objectContaining({
             taskId: "task-image-browser-template-recover-1",
             status: "complete",
             imageUrl: "https://example.com/browser-template-recover-lime.png",
             prompt: "一颗鲜嫩的青柠，水彩插画风格",
-            caption: "搞定，图已经生成好了\n要调整的话直接说，我继续改",
+            caption: null,
           }),
         }),
       ]);
@@ -2446,24 +2644,25 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       await Promise.resolve();
     });
 
-    expect(getValue().messages).toEqual([
-      expect.objectContaining({
-        id: `image-workbench:${taskId}:assistant`,
-        content: expect.stringContaining("已缓存的广州主视觉"),
-        isThinking: false,
-        runtimeStatus: undefined,
-        toolCalls: undefined,
-        contentParts: undefined,
-        imageWorkbenchPreview: expect.objectContaining({
-          taskId,
-          status: "complete",
-          imageUrl: "https://example.com/history-cached.png",
-          size: "1024x1024",
-          phase: "succeeded",
-          statusMessage: null,
-        }),
+    expectImageUserMessage(getValue().messages, {
+      content: "已缓存的广州主视觉",
+    });
+    expectSingleImageAssistantMessage(getValue().messages, {
+      id: `image-workbench:${taskId}:assistant`,
+      content: "",
+      isThinking: false,
+      runtimeStatus: undefined,
+      toolCalls: undefined,
+      contentParts: undefined,
+      imageWorkbenchPreview: expect.objectContaining({
+        taskId,
+        status: "complete",
+        imageUrl: "https://example.com/history-cached.png",
+        size: "1024x1024",
+        phase: "succeeded",
+        statusMessage: null,
       }),
-    ]);
+    });
   });
 
   it("进入会话时只有缓存工作台状态也应立即补出图片预览卡", async () => {
@@ -2524,7 +2723,7 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       }),
       expect.objectContaining({
         id: `image-workbench:${taskId}:assistant`,
-        content: expect.stringContaining("三国人物插画"),
+        content: "",
         isThinking: false,
         toolCalls: undefined,
         contentParts: undefined,
@@ -2609,8 +2808,13 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
 
     expect(getValue().messages).toEqual([
       expect.objectContaining({
+        id: `image-workbench:${taskId}:user`,
+        role: "user",
+        content: "@配图 生成 三国主要人物聚合图",
+      }),
+      expect.objectContaining({
         id: "assistant-rich-image-history-1",
-        content: expect.stringContaining("三国主要人物聚合图"),
+        content: "",
         isThinking: false,
         runtimeStatus: undefined,
         toolCalls: undefined,
@@ -2700,7 +2904,7 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       }),
       expect.objectContaining({
         id: `image-workbench:${taskId}:assistant`,
-        content: expect.stringContaining("已缓存的三国群像"),
+        content: "",
         isThinking: false,
         runtimeStatus: undefined,
         toolCalls: undefined,
@@ -2788,21 +2992,21 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       await Promise.resolve();
     });
 
-    expect(getValue().messages).toEqual([
-      expect.objectContaining({
-        imageWorkbenchPreview: expect.objectContaining({
-          taskId,
-          status: "complete",
-          layoutHint: "storyboard_3x3",
-          imageUrl: "https://example.com/storyboard-cache-1.png",
-          previewImages: Array.from(
-            { length: 9 },
-            (_, index) =>
-              `https://example.com/storyboard-cache-${index + 1}.png`,
-          ),
-        }),
+    expectImageUserMessage(getValue().messages, {
+      content: "@分镜 生成 三国主要人物九宫格分镜",
+    });
+    expectSingleImageAssistantMessage(getValue().messages, {
+      imageWorkbenchPreview: expect.objectContaining({
+        taskId,
+        status: "complete",
+        layoutHint: "storyboard_3x3",
+        imageUrl: "https://example.com/storyboard-cache-1.png",
+        previewImages: Array.from(
+          { length: 9 },
+          (_, index) => `https://example.com/storyboard-cache-${index + 1}.png`,
+        ),
       }),
-    ]);
+    });
   });
 
   it("应在进入会话时从 task file 恢复最近的图片任务", async () => {
@@ -2879,20 +3083,21 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       "/workspace/project-image-1/.lime/tasks/image_generate/task-image-restored.json",
       256 * 1024,
     );
-    expect(getValue().messages).toEqual([
-      expect.objectContaining({
-        id: "image-workbench:task-image-restored:assistant",
-        content: expect.stringContaining("恢复出来的青柠主视觉"),
-        toolCalls: undefined,
-        contentParts: undefined,
-        runtimeStatus: undefined,
-        imageWorkbenchPreview: expect.objectContaining({
-          taskId: "task-image-restored",
-          status: "complete",
-          imageUrl: "https://example.com/restored-lime.png",
-        }),
+    expectImageUserMessage(getValue().messages, {
+      content: "恢复出来的青柠主视觉",
+    });
+    expectSingleImageAssistantMessage(getValue().messages, {
+      id: "image-workbench:task-image-restored:assistant",
+      content: "",
+      toolCalls: undefined,
+      contentParts: undefined,
+      runtimeStatus: undefined,
+      imageWorkbenchPreview: expect.objectContaining({
+        taskId: "task-image-restored",
+        status: "complete",
+        imageUrl: "https://example.com/restored-lime.png",
       }),
-    ]);
+    });
     expect(getValue().imageWorkbenchState.tasks).toEqual([
       expect.objectContaining({
         id: "task-image-restored",
@@ -3357,20 +3562,21 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       await Promise.resolve();
     });
 
-    expect(getValue().messages).toEqual([
-      expect.objectContaining({
-        content: expect.stringContaining("坐在键盘前的青柠"),
-        isThinking: false,
-        runtimeStatus: undefined,
-        toolCalls: undefined,
-        contentParts: undefined,
-        imageWorkbenchPreview: expect.objectContaining({
-          taskId: "task-image-cancelled-1",
-          status: "cancelled",
-          caption: "已停止生成",
-        }),
+    expectImageUserMessage(getValue().messages, {
+      content: "一只坐在键盘前的青柠",
+    });
+    expectSingleImageAssistantMessage(getValue().messages, {
+      content: "",
+      isThinking: false,
+      runtimeStatus: undefined,
+      toolCalls: undefined,
+      contentParts: undefined,
+      imageWorkbenchPreview: expect.objectContaining({
+        taskId: "task-image-cancelled-1",
+        status: "cancelled",
+        caption: "已停止生成",
       }),
-    ]);
+    });
     expect(getValue().imageWorkbenchState.tasks).toEqual([
       expect.objectContaining({
         id: "task-image-cancelled-1",
@@ -3462,17 +3668,18 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       await Promise.resolve();
     });
 
-    expect(getValue().messages).toEqual([
-      expect.objectContaining({
-        id: "image-workbench:task-image-cancelled-1:assistant",
-        content: expect.stringContaining("青柠实验室主视觉"),
-        imageWorkbenchPreview: expect.objectContaining({
-          taskId: "task-image-cancelled-1",
-          status: "cancelled",
-          caption: "已停止生成",
-        }),
+    expectImageUserMessage(getValue().messages, {
+      content: "青柠实验室主视觉",
+    });
+    expectSingleImageAssistantMessage(getValue().messages, {
+      id: "image-workbench:task-image-cancelled-1:assistant",
+      content: "",
+      imageWorkbenchPreview: expect.objectContaining({
+        taskId: "task-image-cancelled-1",
+        status: "cancelled",
+        caption: "已停止生成",
       }),
-    ]);
+    });
 
     await act(async () => {
       listener?.({
@@ -3491,10 +3698,13 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       await Promise.resolve();
     });
 
-    expect(getValue().messages).toEqual([
+    expectImageUserMessage(getValue().messages, {
+      content: "青柠实验室主视觉",
+    });
+    expect(getImageAssistantMessages(getValue().messages)).toEqual([
       expect.objectContaining({
         id: "image-workbench:task-image-cancelled-1:assistant",
-        content: expect.stringContaining("青柠实验室主视觉"),
+        content: "",
         imageWorkbenchPreview: expect.objectContaining({
           taskId: "task-image-cancelled-1",
           status: "cancelled",
@@ -3502,8 +3712,7 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       }),
       expect.objectContaining({
         id: "image-workbench:task-image-new-1:assistant",
-        content: expect.stringContaining("青柠实验室主视觉"),
-        isThinking: false,
+        content: "",
         toolCalls: undefined,
         contentParts: undefined,
         runtimeStatus: undefined,

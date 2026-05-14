@@ -204,6 +204,8 @@ describe("submitOpRuntimeCompaction", () => {
           service_model_slot: "responsive_chat",
           routing_slot: "responsive_chat_model",
           resolver: "backend_service_model",
+          fallback_provider_preference: "deepseek",
+          fallback_model_preference: "deepseek-v4-pro",
         },
         browser_assist: {
           enabled: true,

@@ -70,6 +70,45 @@ function firstUserMessageText(messages: Message[]): string {
   );
 }
 
+function userMessageTexts(messages: Message[]): string[] {
+  return messages
+    .filter((message) => message.role === "user")
+    .map((message) => normalizeConversationText(message.content || ""));
+}
+
+function areConversationTextsCompatible(left: string, right: string): boolean {
+  if (!left || !right) {
+    return true;
+  }
+
+  return left === right || left.includes(right) || right.includes(left);
+}
+
+function isLocalTimelineCompatibleWithHydratedMessages(params: {
+  hydratedMessages: Message[];
+  localMessages: Message[];
+}): boolean {
+  const hydratedUserTexts = userMessageTexts(params.hydratedMessages);
+  const localUserTexts = userMessageTexts(params.localMessages);
+  if (hydratedUserTexts.length === 0 || localUserTexts.length === 0) {
+    return true;
+  }
+
+  const compareCount = Math.min(hydratedUserTexts.length, localUserTexts.length);
+  for (let index = 0; index < compareCount; index += 1) {
+    if (
+      !areConversationTextsCompatible(
+        localUserTexts[index] || "",
+        hydratedUserTexts[index] || "",
+      )
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function hasAssistantProcessSnapshot(messages: Message[]): boolean {
   return messages.some(
     (message) =>
@@ -236,19 +275,40 @@ export function buildHydratedAgentSessionSnapshot(
     localSnapshotOverride?.threadTurns ?? currentThreadTurns;
   const effectiveCurrentThreadItems =
     localSnapshotOverride?.threadItems ?? currentThreadItems;
-  const shouldPreserveExistingTimelineBySession =
+  const mayPreserveExistingTimelineBySession =
     effectiveCurrentSessionId === topicId ||
     (effectiveCurrentSessionId === null &&
       syncSessionId &&
       (effectiveCurrentMessages.length > 0 ||
         effectiveCurrentThreadTurns.length > 0 ||
         effectiveCurrentThreadItems.length > 0));
-  const hydratedMessages = hydrateSessionDetailMessages(detail, topicId, {
-    compactCompletedHistory: shouldCompactCompletedSessionHistory(detail),
-    includeTimelineFallback:
-      !shouldPreserveExistingTimelineBySession ||
-      effectiveCurrentMessages.length === 0,
-  });
+  const hydratedMessagesForCurrentMode = hydrateSessionDetailMessages(
+    detail,
+    topicId,
+    {
+      compactCompletedHistory: shouldCompactCompletedSessionHistory(detail),
+      includeTimelineFallback:
+        !mayPreserveExistingTimelineBySession ||
+        effectiveCurrentMessages.length === 0,
+    },
+  );
+  const hydratedMessagesForCompatibility =
+    mayPreserveExistingTimelineBySession &&
+    effectiveCurrentMessages.length > 0
+      ? hydrateSessionDetailMessages(detail, topicId, {
+          compactCompletedHistory: shouldCompactCompletedSessionHistory(detail),
+          includeTimelineFallback: true,
+        })
+      : hydratedMessagesForCurrentMode;
+  const shouldPreserveExistingTimelineBySession =
+    mayPreserveExistingTimelineBySession &&
+    isLocalTimelineCompatibleWithHydratedMessages({
+      hydratedMessages: hydratedMessagesForCompatibility,
+      localMessages: effectiveCurrentMessages,
+    });
+  const hydratedMessages = shouldPreserveExistingTimelineBySession
+    ? hydratedMessagesForCurrentMode
+    : hydratedMessagesForCompatibility;
   const shouldPreserveExistingTimeline =
     shouldPreserveExistingTimelineBySession ||
     shouldPreserveDetachedLocalSnapshot({

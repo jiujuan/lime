@@ -2,6 +2,7 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { emitImageWorkbenchTaskAction } from "@/lib/imageWorkbenchEvents";
 import { createInitialSessionImageWorkbenchState } from "./imageWorkbenchHelpers";
 import { useWorkspaceImageWorkbenchActionRuntime } from "./useWorkspaceImageWorkbenchActionRuntime";
@@ -160,12 +161,13 @@ function renderHook(props?: Partial<HookProps>) {
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
 
   mockGenerateAgentRuntimeTitle.mockReset();
   mockGenerateAgentRuntimeTitle.mockResolvedValue({
@@ -186,7 +188,7 @@ beforeEach(() => {
   toast.warning.mockReset();
 });
 
-afterEach(() => {
+afterEach(async () => {
   while (mountedRoots.length > 0) {
     const mounted = mountedRoots.pop();
     if (!mounted) {
@@ -197,6 +199,7 @@ afterEach(() => {
     });
     mounted.container.remove();
   }
+  await changeLimeLocale("zh-CN");
 });
 
 describe("useWorkspaceImageWorkbenchActionRuntime", () => {
@@ -586,6 +589,88 @@ describe("useWorkspaceImageWorkbenchActionRuntime", () => {
     });
   });
 
+  it("草稿图片任务失败后应允许从轻卡单独重试", async () => {
+    const getImageTask = vi.fn().mockRejectedValue(new Error("not found"));
+    const createImageGenerationTask = vi.fn().mockResolvedValue({
+      task_id: "task-image-retry-from-draft",
+      task_type: "image_generate",
+      status: "pending_submit",
+    });
+    const currentImageWorkbenchState: HookProps["currentImageWorkbenchState"] =
+      {
+        ...createInitialSessionImageWorkbenchState(),
+        tasks: [
+          {
+            id: "draft-image-failed-1",
+            sessionId: "draft-image-failed-1",
+            mode: "generate",
+            status: "error",
+            prompt: "极简线稿风的柠檬水杯配图",
+            rawText: "@配图 生成一张极简线稿风的柠檬水杯配图，1:1",
+            expectedCount: 1,
+            outputIds: [],
+            targetOutputId: null,
+            createdAt: 100,
+            hookImageIds: [],
+            applyTarget: null,
+            taskFilePath: null,
+            artifactPath: null,
+          },
+        ],
+      };
+    const { render } = renderHook({
+      currentImageWorkbenchState,
+      createImageGenerationTask,
+      getImageTask,
+    });
+
+    await render();
+
+    await act(async () => {
+      emitImageWorkbenchTaskAction({
+        action: "retry",
+        taskId: "draft-image-failed-1",
+        projectId: "project-1",
+        contentId: null,
+      });
+      await Promise.resolve();
+    });
+
+    expect(getImageTask).toHaveBeenCalledWith({
+      projectRootPath: "/workspace/project-1",
+      taskRef: "draft-image-failed-1",
+    });
+    expect(createImageGenerationTask).toHaveBeenCalledWith({
+      projectRootPath: "/workspace/project-1",
+      prompt: "极简线稿风的柠檬水杯配图",
+      title: "极简线稿风的柠檬水杯配图",
+      titleGenerationResult: undefined,
+      mode: "generate",
+      rawText: "@配图 生成一张极简线稿风的柠檬水杯配图，1:1",
+      layoutHint: undefined,
+      size: "1024x1024",
+      aspectRatio: undefined,
+      count: 1,
+      usage: "claw-image-workbench",
+      slotId: undefined,
+      anchorHint: undefined,
+      anchorSectionTitle: undefined,
+      anchorText: undefined,
+      style: undefined,
+      providerId: "fal",
+      model: "fal-ai/nano-banana-pro",
+      sessionId: "session-1",
+      projectId: "project-1",
+      contentId: undefined,
+      entrySource: "image_workbench_retry",
+      requestedTarget: "generate",
+      targetOutputId: undefined,
+      targetOutputRefId: undefined,
+      referenceImages: [],
+    });
+    expect(toast.success).toHaveBeenCalledWith("已重新创建图片任务");
+  });
+
   it("跨根目录图片任务应优先使用 task file 进行重试与取消", async () => {
     const externalTaskPath =
       "/Users/youmin/.lime/tasks/image_generate/task-image-external-1.json";
@@ -801,5 +886,22 @@ describe("useWorkspaceImageWorkbenchActionRuntime", () => {
 
     expect(setInput).toHaveBeenCalledWith("@修图 #img-2 去掉角标");
     expect(toast.info).toHaveBeenCalledWith("已在输入框填入图片命令");
+  });
+
+  it("图片动作提示应跟随当前语言资源，而不是组件内硬编码中文", async () => {
+    await changeLimeLocale("en-US");
+    const setInput = vi.fn();
+    const { render, getValue } = renderHook({
+      setInput,
+    });
+
+    await render();
+
+    act(() => {
+      getValue().handleSeedImageWorkbenchFollowUp("@edit #img-2 remove logo");
+    });
+
+    expect(setInput).toHaveBeenCalledWith("@edit #img-2 remove logo");
+    expect(toast.info).toHaveBeenCalledWith("Image command added to the input");
   });
 });

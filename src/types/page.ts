@@ -21,6 +21,7 @@ export type WorkspaceTheme = "general";
 export type Page =
   | "agent"
   | "skills"
+  | "agent-app-lab"
   | "knowledge"
   | "sceneapps"
   | "automation"
@@ -165,6 +166,10 @@ export interface SkillsPageParams {
   initialView?: "store" | "builtin" | "installed" | "discover" | "manage";
 }
 
+export interface AgentAppLabPageParams {
+  source?: "fixture";
+}
+
 export interface KnowledgePageParams {
   workingDir?: string;
   selectedPackName?: string;
@@ -235,6 +240,7 @@ export type PageParams =
   | ResourcesPageParams
   | SettingsPageParams
   | SkillsPageParams
+  | AgentAppLabPageParams
   | KnowledgePageParams
   | SceneAppsPageParams
   | MemoryPageParams

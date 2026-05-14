@@ -169,9 +169,8 @@ fn build_skill_turn_context(
         .allowed_tools
         .as_ref()
         .filter(|tools| !tools.is_empty());
-    let user_visible_input_text = user_visible_input.and_then(|input| {
-        (!input.trim().is_empty()).then(|| input.trim().to_string())
-    });
+    let user_visible_input_text = user_visible_input
+        .and_then(|input| (!input.trim().is_empty()).then(|| input.trim().to_string()));
 
     if allowed_tools.is_none() && user_visible_input_text.is_none() {
         return None;
@@ -192,6 +191,40 @@ fn build_skill_turn_context(
         metadata,
         ..TurnContextOverride::default()
     })
+}
+
+fn build_prompt_session_config(
+    session_id: &str,
+    skill: &LoadedSkillDefinition,
+    user_visible_input: Option<&str>,
+    memory_prompt: Option<&str>,
+) -> SessionConfig {
+    let mut session_config_builder = SessionConfigBuilder::new(session_id)
+        .system_prompt(build_prompt_system_prompt(
+            &skill.markdown_content,
+            memory_prompt,
+        ))
+        .system_prompt_override(true)
+        .include_context_trace(true);
+    if let Some(turn_context) = build_skill_turn_context(skill, user_visible_input) {
+        session_config_builder = session_config_builder.turn_context(turn_context);
+    }
+    session_config_builder.build()
+}
+
+fn build_step_session_config(
+    step_session_id: &str,
+    step_system_prompt: String,
+    skill_turn_context: Option<TurnContextOverride>,
+) -> SessionConfig {
+    let mut session_config_builder = SessionConfigBuilder::new(step_session_id)
+        .system_prompt(step_system_prompt)
+        .system_prompt_override(true)
+        .include_context_trace(true);
+    if let Some(turn_context) = skill_turn_context {
+        session_config_builder = session_config_builder.turn_context(turn_context);
+    }
+    session_config_builder.build()
 }
 
 async fn stream_skill_session(
@@ -310,13 +343,11 @@ pub async fn execute_skill_workflow(
             memory_prompt,
         );
         let step_session_id = format!("{session_id}-step-{}", step.id);
-        let mut session_config_builder = SessionConfigBuilder::new(&step_session_id)
-            .system_prompt(step_system_prompt)
-            .include_context_trace(true);
-        if let Some(turn_context) = skill_turn_context.clone() {
-            session_config_builder = session_config_builder.turn_context(turn_context);
-        }
-        let session_config = session_config_builder.build();
+        let session_config = build_step_session_config(
+            &step_session_id,
+            step_system_prompt,
+            skill_turn_context.clone(),
+        );
         let step_input = build_step_input(user_input, &accumulated_context, idx == 0);
         let user_message = build_user_message(&step_input, user_visible_input, images);
 
@@ -407,16 +438,8 @@ pub async fn execute_skill_prompt(
         emitter,
     } = request;
     let event_name = format!("skill-exec-{execution_id}");
-    let mut session_config_builder = SessionConfigBuilder::new(session_id)
-        .system_prompt(build_prompt_system_prompt(
-            &skill.markdown_content,
-            memory_prompt,
-        ))
-        .include_context_trace(true);
-    if let Some(turn_context) = build_skill_turn_context(skill, user_visible_input) {
-        session_config_builder = session_config_builder.turn_context(turn_context);
-    }
-    let session_config = session_config_builder.build();
+    let session_config =
+        build_prompt_session_config(session_id, skill, user_visible_input, memory_prompt);
     let user_message = build_user_message(user_input, user_visible_input, images);
     let reply = stream_skill_session(
         aster_state,
@@ -461,7 +484,10 @@ pub async fn execute_skill_prompt(
 
 #[cfg(test)]
 mod tests {
-    use super::{build_skill_turn_context, build_user_message};
+    use super::{
+        build_prompt_session_config, build_skill_turn_context, build_step_session_config,
+        build_step_system_prompt, build_user_message,
+    };
     use lime_skills::LoadedSkillDefinition;
     use std::collections::HashMap;
 
@@ -523,9 +549,8 @@ mod tests {
     fn build_skill_turn_context_keeps_user_visible_input_without_allowed_tools() {
         let skill = build_loaded_skill(None);
 
-        let turn_context =
-            build_skill_turn_context(&skill, Some("  @analysis 帮我分析一下  "))
-                .expect("turn context");
+        let turn_context = build_skill_turn_context(&skill, Some("  @analysis 帮我分析一下  "))
+            .expect("turn context");
 
         assert_eq!(
             turn_context.user_visible_input_text.as_deref(),
@@ -552,5 +577,65 @@ mod tests {
 
         assert!(message.is_user_visible());
         assert!(message.is_agent_visible());
+    }
+
+    #[test]
+    fn prompt_skill_session_uses_skill_markdown_as_full_system_prompt() {
+        let mut skill = build_loaded_skill(Some(vec!["read_file"]));
+        skill.skill_name = "analysis".to_string();
+        skill.markdown_content =
+            "你是 Lime 的分析助手。\n\n## 输出格式（固定）\n# 分析结果".to_string();
+
+        let session_config = build_prompt_session_config(
+            "skill-session",
+            &skill,
+            Some("@analysis 帮我分析一下今天的国际形势"),
+            Some("记忆补充"),
+        );
+
+        assert_eq!(session_config.system_prompt_override, Some(true));
+        assert_eq!(session_config.include_context_trace, Some(true));
+        let system_prompt = session_config.system_prompt.expect("system prompt");
+        assert!(system_prompt.contains("你是 Lime 的分析助手"));
+        assert!(system_prompt.contains("## 输出格式（固定）"));
+        assert!(system_prompt.contains("记忆补充"));
+        assert_eq!(
+            session_config
+                .turn_context
+                .as_ref()
+                .and_then(|context| context.user_visible_input_text.as_deref()),
+            Some("@analysis 帮我分析一下今天的国际形势")
+        );
+        assert_eq!(
+            session_config
+                .turn_context
+                .as_ref()
+                .and_then(|context| context.metadata.get("subagent"))
+                .and_then(|metadata| metadata.get("allowed_tools")),
+            Some(&serde_json::json!(["read_file"]))
+        );
+    }
+
+    #[test]
+    fn workflow_step_session_uses_step_skill_prompt_as_full_system_prompt() {
+        let mut skill = build_loaded_skill(None);
+        skill.markdown_content = "Skill 主体指令".to_string();
+        let step_prompt = build_step_system_prompt(
+            &skill.markdown_content,
+            "分析",
+            1,
+            2,
+            "执行当前分析步骤",
+            None,
+        );
+
+        let session_config = build_step_session_config("skill-step", step_prompt, None);
+
+        assert_eq!(session_config.system_prompt_override, Some(true));
+        assert_eq!(session_config.include_context_trace, Some(true));
+        let system_prompt = session_config.system_prompt.expect("system prompt");
+        assert!(system_prompt.contains("Skill 主体指令"));
+        assert!(system_prompt.contains("## 当前步骤: 分析 (1/2)"));
+        assert!(system_prompt.contains("执行当前分析步骤"));
     }
 }

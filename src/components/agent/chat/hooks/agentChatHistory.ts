@@ -31,7 +31,10 @@ import {
   sanitizeContentPartsForDisplay,
   sanitizeMessageTextForDisplay,
 } from "../utils/internalImagePlaceholder";
-import { isRetainedSkillProcessMessage } from "../utils/skillInlineProcessRetention";
+import {
+  isRetainedSkillProcessMessage,
+  SKILL_INLINE_PROCESS_RETENTION,
+} from "../utils/skillInlineProcessRetention";
 
 export const normalizeHistoryPartType = (value: unknown): string => {
   if (typeof value !== "string") return "";
@@ -464,13 +467,232 @@ function hydrateSessionDetailMessagesFromThreadItems(
   detail: AsterSessionDetail,
   topicId: string,
 ): Message[] {
-  const messages = (detail.items || [])
-    .map((item) => buildMessageFromThreadItem(item, topicId))
-    .filter((message): message is Message => message !== null);
+  const turnOrder = new Map<string, number>();
+  (detail.turns || [])
+    .filter((turn) => !isAuxiliaryHistoryTurn(turn))
+    .forEach((turn, index) => {
+      turnOrder.set(turn.id, index);
+    });
+
+  const sortedItems = [...(detail.items || [])].sort((left, right) => {
+    const leftTurnOrder =
+      turnOrder.get(left.turn_id) ?? Number.MAX_SAFE_INTEGER;
+    const rightTurnOrder =
+      turnOrder.get(right.turn_id) ?? Number.MAX_SAFE_INTEGER;
+    if (leftTurnOrder !== rightTurnOrder) {
+      return leftTurnOrder - rightTurnOrder;
+    }
+    if (left.sequence !== right.sequence) {
+      return left.sequence - right.sequence;
+    }
+    const leftTimestamp = parseHistoryTimestamp(
+      left.started_at || left.updated_at,
+    ).getTime();
+    const rightTimestamp = parseHistoryTimestamp(
+      right.started_at || right.updated_at,
+    ).getTime();
+    if (leftTimestamp !== rightTimestamp) {
+      return leftTimestamp - rightTimestamp;
+    }
+    return left.id.localeCompare(right.id);
+  });
+
+  const messages: Message[] = [];
+  let assistantDraft: Message | null = null;
+
+  const flushAssistantDraft = () => {
+    if (!assistantDraft) {
+      return;
+    }
+    const sanitizedParts =
+      sanitizeContentPartsForDisplay(assistantDraft.contentParts || [], {
+        role: "assistant",
+        hasImages: Boolean(assistantDraft.images?.length),
+      }) || [];
+    messages.push({
+      ...assistantDraft,
+      contentParts: sanitizedParts.length > 0 ? sanitizedParts : undefined,
+      thinkingContent: extractThinkingContentFromParts(sanitizedParts),
+    });
+    assistantDraft = null;
+  };
+
+  const ensureAssistantDraft = (item: AgentThreadItem): Message => {
+    if (assistantDraft?.runtimeTurnId === item.turn_id) {
+      return assistantDraft;
+    }
+    flushAssistantDraft();
+    const timestamp = parseHistoryTimestamp(
+      item.started_at || item.updated_at || item.completed_at,
+    );
+    assistantDraft = {
+      id:
+        item.type === "agent_message"
+          ? `${topicId}-timeline-${item.id}`
+          : `${topicId}-timeline-assistant-${item.turn_id}`,
+      role: "assistant",
+      content: "",
+      contentParts: [],
+      timestamp,
+      isThinking: false,
+      runtimeTurnId: item.turn_id,
+    };
+    return assistantDraft;
+  };
+
+  const appendAssistantText = (draft: Message, text: string) => {
+    const sanitizedText = sanitizeMessageTextForDisplay(text, {
+      role: "assistant",
+      hasImages: false,
+    });
+    if (!sanitizedText) {
+      return;
+    }
+    draft.content = [draft.content.trim(), sanitizedText]
+      .filter(Boolean)
+      .join("\n\n");
+    draft.contentParts = appendTextToParts(
+      draft.contentParts || [],
+      sanitizedText,
+    );
+  };
+
+  for (const item of sortedItems) {
+    if (item.type === "user_message" || item.type === "agent_message") {
+      const message = buildMessageFromThreadItem(item, topicId);
+      if (!message) {
+        continue;
+      }
+      if (item.type === "user_message") {
+        flushAssistantDraft();
+        messages.push(message);
+        continue;
+      }
+
+      const draft = ensureAssistantDraft(item);
+      appendAssistantText(draft, message.content);
+      draft.timestamp = message.timestamp;
+      continue;
+    }
+
+    if (item.type === "reasoning") {
+      const draft = ensureAssistantDraft(item);
+      draft.contentParts = appendThinkingToHistoryParts(
+        draft.contentParts || [],
+        item.text,
+      );
+      draft.timestamp = parseHistoryTimestamp(
+        item.completed_at || item.updated_at || item.started_at,
+      );
+      continue;
+    }
+
+    if (item.type === "tool_call") {
+      const draft = ensureAssistantDraft(item);
+      const status =
+        item.status === "failed"
+          ? ("failed" as const)
+          : item.status === "completed"
+            ? ("completed" as const)
+            : ("running" as const);
+      const toolArguments = stringifyToolArguments(item.arguments);
+      const normalizedResult =
+        status === "running"
+          ? undefined
+          : {
+              success: item.success !== false && status !== "failed",
+              output: item.output || "",
+              error: item.error || undefined,
+              images: undefined,
+              metadata: normalizeToolResultMetadata(
+                item.metadata,
+                item.output || "",
+                item.error || "",
+              ),
+            };
+      const toolCall = {
+        id: item.id,
+        name: item.tool_name,
+        arguments: toolArguments,
+        status,
+        startTime: parseHistoryTimestamp(item.started_at),
+        endTime:
+          status === "running"
+            ? undefined
+            : parseHistoryTimestamp(item.completed_at || item.updated_at),
+        result: normalizedResult,
+      };
+      draft.toolCalls = mergeByKey(
+        draft.toolCalls,
+        [toolCall],
+        (tool) => tool.id,
+      );
+      draft.contentParts = [
+        ...(draft.contentParts || []),
+        { type: "tool_use", toolCall },
+      ];
+      const normalizedResultRecord =
+        normalizedResult &&
+        typeof normalizedResult === "object" &&
+        !Array.isArray(normalizedResult)
+          ? (normalizedResult as Record<string, unknown>)
+          : undefined;
+      const imageWorkbenchPreviewFromTool = buildImageTaskPreviewFromToolResult({
+        toolId: item.id,
+        toolName: item.tool_name,
+        toolArguments,
+        toolResult: normalizedResultRecord,
+        fallbackPrompt: draft.content,
+      });
+      draft.imageWorkbenchPreview = mergeImageWorkbenchPreview(
+        draft.imageWorkbenchPreview,
+        imageWorkbenchPreviewFromTool || undefined,
+      );
+      draft.taskPreview = imageWorkbenchPreviewFromTool
+        ? undefined
+        : mergeTaskPreview(
+            draft.taskPreview,
+            buildTaskPreviewFromToolResult({
+              toolId: item.id,
+              toolName: item.tool_name,
+              toolArguments,
+              toolResult: normalizedResultRecord,
+              fallbackPrompt: draft.content,
+            }) || undefined,
+          );
+      draft.timestamp = parseHistoryTimestamp(
+        item.completed_at || item.updated_at || item.started_at,
+      );
+      const metadata = normalizedResult?.metadata as
+        | Record<string, unknown>
+        | undefined;
+      if (
+        item.tool_name === "Skill" ||
+        metadata?.tool_family === "skill" ||
+        metadata?.skill_source === "SKILL.md"
+      ) {
+        draft.inlineProcessRetention = SKILL_INLINE_PROCESS_RETENTION;
+      }
+    }
+  }
+  flushAssistantDraft();
 
   return mergeAdjacentAssistantMessages(
     dedupeAdjacentHistoryMessages(messages),
   );
+}
+
+function shouldMergeTimelineProcessMessages(
+  timelineMessages: Message[],
+  compactCompletedHistory: boolean,
+): boolean {
+  if (!hasHistoryAssistantProcessGap(timelineMessages)) {
+    return false;
+  }
+  if (!compactCompletedHistory) {
+    return true;
+  }
+  return timelineMessages.some(isRetainedSkillProcessMessage);
 }
 
 const AUXILIARY_HISTORY_TURN_ID_PREFIX = "auxiliary-runtime-projection-";
@@ -600,7 +822,9 @@ function mergeMissingUserMessagesFromTimeline(
     let fallbackUserIndex = 0;
     for (const message of messages) {
       if (fallbackUserIndex < uniqueFallbackUserMessages.length) {
-        interleavedMessages.push(uniqueFallbackUserMessages[fallbackUserIndex]!);
+        interleavedMessages.push(
+          uniqueFallbackUserMessages[fallbackUserIndex]!,
+        );
         fallbackUserIndex += 1;
       }
       interleavedMessages.push(message);
@@ -1004,7 +1228,8 @@ function shouldMergeAdjacentAssistantMessages(
   if (
     previous.imageWorkbenchPreview?.taskId &&
     current.imageWorkbenchPreview?.taskId &&
-    previous.imageWorkbenchPreview.taskId !== current.imageWorkbenchPreview.taskId
+    previous.imageWorkbenchPreview.taskId !==
+      current.imageWorkbenchPreview.taskId
   ) {
     return false;
   }
@@ -1236,10 +1461,7 @@ function isLocalAssistantInMatchedUserTurn(params: {
   lastMatchedLocalUserMessageIndex: number | null;
 }): boolean {
   const { localAssistantMessage, lastMatchedLocalUserMessageIndex } = params;
-  if (
-    !localAssistantMessage?.id ||
-    lastMatchedLocalUserMessageIndex === null
-  ) {
+  if (!localAssistantMessage?.id || lastMatchedLocalUserMessageIndex === null) {
     return false;
   }
 
@@ -1256,6 +1478,126 @@ function isLocalAssistantInMatchedUserTurn(params: {
   return !params.localMessages
     .slice(lastMatchedLocalUserMessageIndex + 1, assistantIndex)
     .some((message) => message.role === "user");
+}
+
+function findPreviousLocalUserInSameTurn(params: {
+  localAssistantMessage?: Message;
+  localMessageIndexById: Map<string, number>;
+  localMessages: Message[];
+}): Message | null {
+  const { localAssistantMessage } = params;
+  if (!localAssistantMessage?.id) {
+    return null;
+  }
+
+  const assistantIndex = params.localMessageIndexById.get(
+    localAssistantMessage.id,
+  );
+  if (assistantIndex === undefined || assistantIndex <= 0) {
+    return null;
+  }
+
+  for (let index = assistantIndex - 1; index >= 0; index -= 1) {
+    const candidate = params.localMessages[index];
+    if (!candidate) {
+      continue;
+    }
+
+    if (candidate.role === "user") {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function hasRecoverableLocalUserBeforeAssistant(params: {
+  localAssistantMessage?: Message;
+  localMessageIndexById: Map<string, number>;
+  localMessages: Message[];
+  matchedLocalMessageIds: Set<string>;
+}): boolean {
+  const userMessage = findPreviousLocalUserInSameTurn(params);
+  return Boolean(
+    userMessage &&
+    (!userMessage.id || !params.matchedLocalMessageIds.has(userMessage.id)) &&
+    hasRetainableLocalMessageState(userMessage),
+  );
+}
+
+function insertRecoverableLocalUsersForMatchedAssistantTurns(params: {
+  mergedMessages: Message[];
+  localMessageIndexById: Map<string, number>;
+  localMessages: Message[];
+  matchedLocalMessageIds: Set<string>;
+}): Message[] {
+  const existingUserSignatures = new Set(
+    params.mergedMessages
+      .filter((message) => message.role === "user")
+      .map((message) =>
+        [
+          normalizeSignatureText(message.content || ""),
+          messageImageSignature(message.images),
+        ].join("::"),
+      ),
+  );
+  let inserted = false;
+  const nextMessages: Message[] = [];
+
+  for (const message of params.mergedMessages) {
+    if (message.role !== "assistant") {
+      nextMessages.push(message);
+      continue;
+    }
+
+    const hasMergedUserInCurrentTurn = (() => {
+      for (let index = nextMessages.length - 1; index >= 0; index -= 1) {
+        const candidate = nextMessages[index];
+        if (candidate?.role === "user") {
+          return true;
+        }
+        if (candidate?.role === "assistant") {
+          return false;
+        }
+      }
+      return false;
+    })();
+    if (hasMergedUserInCurrentTurn) {
+      nextMessages.push(message);
+      continue;
+    }
+
+    const localAssistantMessage =
+      message.id && params.localMessageIndexById.has(message.id)
+        ? params.localMessages[params.localMessageIndexById.get(message.id)!]
+        : undefined;
+    const userMessage = findPreviousLocalUserInSameTurn({
+      localAssistantMessage,
+      localMessageIndexById: params.localMessageIndexById,
+      localMessages: params.localMessages,
+    });
+    if (userMessage && hasRetainableLocalMessageState(userMessage)) {
+      const signature = [
+        normalizeSignatureText(userMessage.content || ""),
+        messageImageSignature(userMessage.images),
+      ].join("::");
+      const isAlreadyMatched = Boolean(
+        userMessage.id && params.matchedLocalMessageIds.has(userMessage.id),
+      );
+      if (!isAlreadyMatched && !existingUserSignatures.has(signature)) {
+        nextMessages.push(userMessage);
+        existingUserSignatures.add(signature);
+        if (userMessage.id) {
+          params.matchedLocalMessageIds.add(userMessage.id);
+        }
+        inserted = true;
+      }
+    }
+
+    nextMessages.push(message);
+  }
+
+  return inserted ? nextMessages : params.mergedMessages;
 }
 
 export const mergeHydratedMessagesWithLocalState = (
@@ -1337,6 +1679,7 @@ export const mergeHydratedMessagesWithLocalState = (
   let localUserCursor = 0;
   let localAssistantCursor = 0;
   let lastMatchedLocalUserMessageIndex: number | null = null;
+  let hasHydratedUserInCurrentTurn = false;
   const matchedLocalMessageIds = new Set<string>();
 
   const mergedMessages = hydratedMessages.map((message) => {
@@ -1392,13 +1735,22 @@ export const mergeHydratedMessagesWithLocalState = (
         return message;
       }
 
-      const shouldPreserveLocalRuntimeSnapshot =
-        isLocalAssistantInMatchedUserTurn({
+      const hasMatchedUserTurn = isLocalAssistantInMatchedUserTurn({
+        localAssistantMessage,
+        localMessageIndexById,
+        localMessages,
+        lastMatchedLocalUserMessageIndex,
+      });
+      const hasRecoverableLocalUserTurn =
+        !hasHydratedUserInCurrentTurn &&
+        hasRecoverableLocalUserBeforeAssistant({
           localAssistantMessage,
           localMessageIndexById,
           localMessages,
-          lastMatchedLocalUserMessageIndex,
-        }) &&
+          matchedLocalMessageIds,
+        });
+      const shouldPreserveLocalRuntimeSnapshot =
+        (hasMatchedUserTurn || hasRecoverableLocalUserTurn) &&
         hasRetainableLocalAssistantProcessState(localAssistantMessage) &&
         !hasRetainableLocalAssistantProcessState(message);
       const shouldRetainLocalProcessState =
@@ -1490,6 +1842,7 @@ export const mergeHydratedMessagesWithLocalState = (
       return message;
     }
 
+    hasHydratedUserInCurrentTurn = true;
     const matchedIndexById = message.id
       ? (localUserMessageIndexById.get(message.id) ?? -1)
       : -1;
@@ -1555,6 +1908,14 @@ export const mergeHydratedMessagesWithLocalState = (
   );
   const lastMatchedLocalMessage =
     lastMatchedLocalIndex >= 0 ? localMessages[lastMatchedLocalIndex] : null;
+  const mergedMessagesWithRecoveredLocalUsers =
+    insertRecoverableLocalUsersForMatchedAssistantTurns({
+      mergedMessages,
+      localMessageIndexById,
+      localMessages,
+      matchedLocalMessageIds,
+    });
+
   const retainedLocalTail = localMessages.filter((message, index) => {
     if (hydratedMessageIds.has(message.id)) {
       return false;
@@ -1586,8 +1947,8 @@ export const mergeHydratedMessagesWithLocalState = (
   });
 
   return retainedLocalTail.length > 0
-    ? [...mergedMessages, ...retainedLocalTail]
-    : mergedMessages;
+    ? [...mergedMessagesWithRecoveredLocalUsers, ...retainedLocalTail]
+    : mergedMessagesWithRecoveredLocalUsers;
 };
 
 const messageImageSignature = (images?: MessageImage[]): string => {
@@ -1815,8 +2176,7 @@ export const hydrateSessionDetailMessages = (
           compactCompletedHistory &&
           (partType === "thinking" ||
             partType === "reasoning" ||
-            partType === "tool_request" ||
-            partType === "tool_response")
+            partType === "tool_request")
         ) {
           continue;
         }
@@ -1922,6 +2282,21 @@ export const hydrateSessionDetailMessages = (
               ? (normalizedResult as Record<string, unknown>)
               : undefined;
           const toolArguments = historyToolArgumentsById.get(part.id);
+          const imageWorkbenchPreviewFromTool =
+            buildImageTaskPreviewFromToolResult({
+              toolId: part.id,
+              toolName,
+              toolArguments,
+              toolResult: normalizedResultRecord,
+              fallbackPrompt: textParts.join("\n").trim(),
+            });
+          if (compactCompletedHistory) {
+            imageWorkbenchPreview = mergeImageWorkbenchPreview(
+              imageWorkbenchPreview,
+              imageWorkbenchPreviewFromTool || undefined,
+            );
+            continue;
+          }
           const toolCall = {
             id: part.id,
             name: toolName,
@@ -1937,24 +2312,20 @@ export const hydrateSessionDetailMessages = (
           contentParts.push({ type: "tool_use", toolCall });
           imageWorkbenchPreview = mergeImageWorkbenchPreview(
             imageWorkbenchPreview,
-            buildImageTaskPreviewFromToolResult({
-              toolId: part.id,
-              toolName,
-              toolArguments,
-              toolResult: normalizedResultRecord,
-              fallbackPrompt: textParts.join("\n").trim(),
-            }) || undefined,
+            imageWorkbenchPreviewFromTool || undefined,
           );
-          taskPreview = mergeTaskPreview(
-            taskPreview,
-            buildTaskPreviewFromToolResult({
-              toolId: part.id,
-              toolName,
-              toolArguments,
-              toolResult: normalizedResultRecord,
-              fallbackPrompt: textParts.join("\n").trim(),
-            }) || undefined,
-          );
+          taskPreview = imageWorkbenchPreviewFromTool
+            ? undefined
+            : mergeTaskPreview(
+                taskPreview,
+                buildTaskPreviewFromToolResult({
+                  toolId: part.id,
+                  toolName,
+                  toolArguments,
+                  toolResult: normalizedResultRecord,
+                  fallbackPrompt: textParts.join("\n").trim(),
+                }) || undefined,
+              );
           continue;
         }
 
@@ -1994,9 +2365,11 @@ export const hydrateSessionDetailMessages = (
       const hasToolMetadata =
         toolCalls.length > 0 ||
         sanitizedContentParts.some((part) => part.type === "tool_use");
+      const hasProcessPreview =
+        Boolean(imageWorkbenchPreview) || Boolean(taskPreview);
 
       if (normalizedRole === "user" && !content && images.length === 0) {
-        if (hasToolMetadata) {
+        if (hasToolMetadata || hasProcessPreview) {
           normalizedRole = "assistant";
         } else {
           return [];
@@ -2007,7 +2380,9 @@ export const hydrateSessionDetailMessages = (
         !content &&
         images.length === 0 &&
         sanitizedContentParts.length === 0 &&
-        toolCalls.length === 0
+        toolCalls.length === 0 &&
+        !hasProcessPreview &&
+        !(normalizedRole === "assistant" && usage)
       ) {
         return [];
       }
@@ -2038,10 +2413,20 @@ export const hydrateSessionDetailMessages = (
   const hydratedMessages = mergeAdjacentAssistantMessages(
     dedupeAdjacentHistoryMessages(loadedMessages),
   );
+  const timelineMessages =
+    options.includeTimelineFallback === false
+      ? []
+      : hydrateSessionDetailMessagesFromThreadItems(detail, topicId);
 
   if (hydratedMessages.length > 0) {
+    const hydratedWithTimelineProcess = shouldMergeTimelineProcessMessages(
+      timelineMessages,
+      compactCompletedHistory,
+    )
+      ? mergeHydratedMessagesWithLocalState(timelineMessages, hydratedMessages)
+      : hydratedMessages;
     return mergeMissingUserMessagesFromTimeline(
-      hydratedMessages,
+      hydratedWithTimelineProcess,
       detail,
       topicId,
     );
@@ -2052,10 +2437,6 @@ export const hydrateSessionDetailMessages = (
   }
 
   if (options.includeTimelineFallback !== false) {
-    const timelineMessages = hydrateSessionDetailMessagesFromThreadItems(
-      detail,
-      topicId,
-    );
     if (timelineMessages.length > 0) {
       return timelineMessages;
     }

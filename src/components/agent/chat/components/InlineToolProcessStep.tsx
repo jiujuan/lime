@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { open as openExternal } from "@tauri-apps/plugin-shell";
 import { ChevronDown, ExternalLink, FileText, Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
+import { skillsApi } from "@/lib/api/skills";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { SearchResultPreviewList } from "./SearchResultPreviewList";
 import { ToolSearchSummaryPanel } from "./ToolSearchSummaryPanel";
@@ -38,6 +40,7 @@ import {
   resolveToolErrorDetailText,
   resolveToolProcessNarrative,
 } from "../utils/toolProcessSummary";
+import { isImageGenerationProtocolFailure } from "../utils/limeTaskProtocolNoise";
 
 interface InlineToolProcessStepProps {
   toolCall: ToolCallState;
@@ -66,6 +69,38 @@ function readString(
     const value = record[key];
     if (typeof value === "string" && value.trim()) {
       return value.trim();
+    }
+  }
+  return null;
+}
+
+function readNumber(
+  record: Record<string, unknown> | null,
+  keys: string[],
+): number | null {
+  if (!record) {
+    return null;
+  }
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function readBoolean(
+  record: Record<string, unknown> | null,
+  keys: string[],
+): boolean | null {
+  if (!record) {
+    return null;
+  }
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "boolean") {
+      return value;
     }
   }
   return null;
@@ -182,12 +217,24 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
   onFileClick,
   onOpenSavedSiteContent,
 }) => {
+  const { t } = useTranslation("agent");
   const [expanded, setExpanded] = useState(false);
+  const [skillContentExpanded, setSkillContentExpanded] = useState(false);
+  const [fetchedSkillContent, setFetchedSkillContent] = useState<string | null>(
+    null,
+  );
+  const [skillContentLoading, setSkillContentLoading] = useState(false);
+  const [skillContentError, setSkillContentError] = useState<string | null>(
+    null,
+  );
+  const [skillMarkdownBodyExpanded, setSkillMarkdownBodyExpanded] =
+    useState(false);
 
   const parsedArgs = useMemo(
     () => parseToolCallArguments(toolCall.arguments),
     [toolCall.arguments],
   );
+  const argsRecord = useMemo(() => asRecord(parsedArgs), [parsedArgs]);
   const toolDisplay = useMemo(
     () => getToolDisplayInfo(toolCall.name, toolCall.status),
     [toolCall.name, toolCall.status],
@@ -206,19 +253,30 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     () => resolveToolPrimarySubject(toolCall.name, parsedArgs, filePath),
     [filePath, parsedArgs, toolCall.name],
   );
-  const headline = useMemo(
-    () =>
-      buildToolHeadline({
-        toolDisplay,
-        subject,
-        toolName: toolCall.name,
-      }),
-    [subject, toolCall.name, toolDisplay],
-  );
   const rawResultText = useMemo(() => {
     const rawText = toolCall.result?.error || toolCall.result?.output || "";
     return extractLimeToolMetadataBlock(rawText).text.trim();
   }, [toolCall.result?.error, toolCall.result?.output]);
+  const isImageGenerationFailureProcess = useMemo(
+    () =>
+      toolCall.status === "failed" &&
+      isImageGenerationProtocolFailure({
+        toolName: toolCall.name,
+        text: rawResultText,
+      }),
+    [rawResultText, toolCall.name, toolCall.status],
+  );
+  const headline = useMemo(
+    () =>
+      isImageGenerationFailureProcess
+        ? t("agentChat.imageWorkbenchPreview.placeholder.failed")
+        : buildToolHeadline({
+            toolDisplay,
+            subject,
+            toolName: toolCall.name,
+          }),
+    [isImageGenerationFailureProcess, subject, t, toolCall.name, toolDisplay],
+  );
   const resultText = useMemo(() => {
     if (toolCall.status !== "failed") {
       return rawResultText;
@@ -285,11 +343,50 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     [toolCall],
   );
   const skillTitle =
-    readString(asRecord(parsedArgs), ["skill_title", "skillTitle"]) ||
+    readString(argsRecord, ["skill_title", "skillTitle"]) ||
     readString(metadata, ["skill_title", "skillTitle"]);
   const isPreload =
     metadata?.execution_origin === "preload" || metadata?.preload === true;
   const hasOpenableFile = Boolean(filePath && onFileClick);
+  const skillSource =
+    readString(metadata, ["skill_source", "skillSource"]) ||
+    readString(argsRecord, ["source"]);
+  const isSkillInvocation =
+    toolDisplay.family === "skill" ||
+    metadata?.tool_family === "skill" ||
+    skillSource === "SKILL.md";
+  const skillName =
+    readString(metadata, ["skill_name", "skillName"]) ||
+    readString(argsRecord, ["skill", "name"]);
+  const skillDisplayName =
+    readString(metadata, ["skill_display_name", "skillDisplayName"]) ||
+    readString(argsRecord, ["display_name", "displayName"]) ||
+    skillName;
+  const skillSnapshotContent = readString(metadata, [
+    "skill_markdown_content",
+    "skillMarkdownContent",
+    "markdown_content",
+    "markdownContent",
+  ]);
+  const skillMarkdownContentBytes = readNumber(metadata, [
+    "markdown_content_bytes",
+    "markdownContentBytes",
+  ]);
+  const isStandardSkillSnapshot = readBoolean(metadata, [
+    "agent_skills_standard",
+    "agentSkillsStandard",
+  ]);
+  const hasSkillContentAccess =
+    isSkillInvocation &&
+    Boolean(skillSnapshotContent || fetchedSkillContent || skillName);
+  const resolvedSkillContent =
+    skillSnapshotContent || fetchedSkillContent || "";
+  const skillContentSourceLabel = skillSnapshotContent
+    ? t("agentChat.toolCall.skillContent.source.snapshot")
+    : t("agentChat.toolCall.skillContent.source.current");
+  const skillContentTitle = skillSnapshotContent
+    ? t("agentChat.toolCall.skillContent.title.snapshot")
+    : t("agentChat.toolCall.skillContent.title.current");
   const processSummary = useMemo(() => {
     const streamingOutputSummary =
       toolCall.status === "running" && structuredResultPreview
@@ -354,6 +451,61 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
     siteNoticeLines.length,
     toolCall.status,
     toolSearchSummary,
+  ]);
+
+  useEffect(() => {
+    setSkillContentExpanded(false);
+    setFetchedSkillContent(null);
+    setSkillContentLoading(false);
+    setSkillContentError(null);
+    setSkillMarkdownBodyExpanded(false);
+  }, [toolCall.id]);
+
+  const handleToggleSkillContent = useCallback(async () => {
+    if (skillContentExpanded) {
+      setSkillContentExpanded(false);
+      setSkillMarkdownBodyExpanded(false);
+      return;
+    }
+
+    setSkillContentExpanded(true);
+    setSkillMarkdownBodyExpanded(false);
+    if (skillSnapshotContent || fetchedSkillContent) {
+      return;
+    }
+
+    const normalizedSkillName = skillName?.trim();
+    if (!normalizedSkillName) {
+      setSkillContentError(
+        t("agentChat.toolCall.skillContent.error.unavailable"),
+      );
+      return;
+    }
+
+    setSkillContentLoading(true);
+    setSkillContentError(null);
+    try {
+      const inspection = await skillsApi.inspectLocalSkill(normalizedSkillName);
+      setFetchedSkillContent(inspection.content || "");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+            ? error
+            : t("agentChat.toolCall.skillContent.error.unknown");
+      setSkillContentError(
+        t("agentChat.toolCall.skillContent.error.loadFailed", { message }),
+      );
+    } finally {
+      setSkillContentLoading(false);
+    }
+  }, [
+    fetchedSkillContent,
+    skillContentExpanded,
+    skillName,
+    skillSnapshotContent,
+    t,
   ]);
 
   const detailBadges = [
@@ -429,6 +581,33 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
             </button>
 
             <div className="flex shrink-0 items-center gap-1 pt-0.5">
+              {hasSkillContentAccess ? (
+                <button
+                  type="button"
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors",
+                    skillContentExpanded
+                      ? "bg-emerald-50 text-emerald-800"
+                      : "text-slate-500 hover:bg-slate-100 hover:text-slate-800",
+                  )}
+                  title={
+                    skillContentExpanded
+                      ? t("agentChat.toolCall.skillContent.action.hide")
+                      : t("agentChat.toolCall.skillContent.action.view")
+                  }
+                  aria-label={
+                    skillContentExpanded
+                      ? t("agentChat.toolCall.skillContent.action.hide")
+                      : t("agentChat.toolCall.skillContent.action.view")
+                  }
+                  onClick={handleToggleSkillContent}
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  <span>
+                    {t("agentChat.toolCall.skillContent.action.viewShort")}
+                  </span>
+                </button>
+              ) : null}
               {hasOpenableFile ? (
                 <button
                   type="button"
@@ -461,6 +640,79 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
               ) : null}
             </div>
           </div>
+
+          {skillContentExpanded ? (
+            <div
+              className="ml-1 mt-2 rounded-[14px] border border-emerald-100 bg-emerald-50/60 p-3"
+              data-testid="inline-tool-skill-content-panel"
+            >
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-900">
+                <FileText className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{skillContentTitle}</span>
+              </div>
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-emerald-700">
+                <span>{skillContentSourceLabel}</span>
+                {skillDisplayName ? <span>{skillDisplayName}</span> : null}
+                {skillMarkdownContentBytes !== null ? (
+                  <span>
+                    {t("agentChat.toolCall.skillContent.meta.bytes", {
+                      count: skillMarkdownContentBytes,
+                    })}
+                  </span>
+                ) : null}
+                {isStandardSkillSnapshot === true ? (
+                  <span>
+                    {t("agentChat.toolCall.skillContent.meta.standard")}
+                  </span>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                className="mt-3 flex w-full items-center justify-between rounded-[12px] border border-emerald-100 bg-white px-3 py-2 text-left text-xs font-medium text-emerald-900 transition-colors hover:border-emerald-200 hover:bg-emerald-50/60"
+                aria-expanded={skillMarkdownBodyExpanded}
+                aria-controls={`inline-skill-content-body-${toolCall.id}`}
+                onClick={() =>
+                  setSkillMarkdownBodyExpanded((current) => !current)
+                }
+              >
+                <span>
+                  {skillMarkdownBodyExpanded
+                    ? t("agentChat.toolCall.skillContent.action.collapseBody")
+                    : t("agentChat.toolCall.skillContent.action.expandBody")}
+                </span>
+                <ChevronDown
+                  className={cn(
+                    "h-3.5 w-3.5 shrink-0 transition-transform",
+                    skillMarkdownBodyExpanded && "rotate-180",
+                  )}
+                />
+              </button>
+              {skillMarkdownBodyExpanded ? (
+                <div
+                  id={`inline-skill-content-body-${toolCall.id}`}
+                  className="mt-2 max-h-80 overflow-y-auto rounded-[12px] border border-slate-200 bg-white p-3"
+                  data-testid="inline-tool-skill-content-body"
+                >
+                  {skillContentLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      {t("agentChat.toolCall.skillContent.loading")}
+                    </div>
+                  ) : skillContentError ? (
+                    <div className="text-sm text-rose-700">
+                      {skillContentError}
+                    </div>
+                  ) : resolvedSkillContent.trim() ? (
+                    <MarkdownRenderer content={resolvedSkillContent} />
+                  ) : (
+                    <div className="text-sm text-slate-500">
+                      {t("agentChat.toolCall.skillContent.empty")}
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           {expanded && hasDetails ? (
             <div className="ml-1 mt-2 space-y-2 border-l border-slate-200 pl-3">

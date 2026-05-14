@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Check,
   ChevronDown,
@@ -24,7 +25,6 @@ import {
   getBuiltinTeamSkillOption,
 } from "../../../utils/teamPresets";
 import {
-  buildTeamDefinitionSummary,
   cloneTeamDefinitionAsCustom,
   createTeamDefinitionFromPreset,
   listBuiltinTeamDefinitions,
@@ -37,6 +37,10 @@ import {
   resolveCustomTeams,
   saveCustomTeams,
 } from "../../../utils/teamStorage";
+import {
+  buildInputbarTeamSelectorCopy,
+  type InputbarTeamSelectorCopy,
+} from "./inputbarTeamSelectorCopy";
 
 interface TeamSelectorPanelProps {
   activeTheme?: string;
@@ -60,7 +64,10 @@ interface TeamDraft {
   roles: TeamRoleDefinition[];
 }
 
-function createBlankDraft(theme?: string): TeamDraft {
+function createBlankDraft(
+  copy: InputbarTeamSelectorCopy,
+  theme?: string,
+): TeamDraft {
   return {
     label: "",
     description: "",
@@ -69,16 +76,35 @@ function createBlankDraft(theme?: string): TeamDraft {
     roles: [
       {
         id: "planner",
-        label: "分析",
-        summary: "负责拆解任务、澄清边界与输出第一轮事实。",
+        label: copy.defaultRole.plannerLabel,
+        summary: copy.defaultRole.plannerSummary,
       },
       {
         id: "executor",
-        label: "执行",
-        summary: "负责在明确范围内推进实现或产出草稿。",
+        label: copy.defaultRole.executorLabel,
+        summary: copy.defaultRole.executorSummary,
       },
     ],
   };
+}
+
+function formatTeamDefinitionSummary(
+  team: TeamDefinition | null | undefined,
+  copy: InputbarTeamSelectorCopy,
+): string {
+  if (!team) {
+    return "";
+  }
+
+  const roleSummary = team.roles
+    .map((role) => `${role.label}: ${role.summary}`)
+    .join(copy.summary.roleSeparator);
+  const description = team.description.trim();
+
+  if (description && roleSummary) {
+    return `${description} ${copy.summary.rolesPrefix}${roleSummary}`;
+  }
+  return description || roleSummary;
 }
 
 function buildDraftFromTeam(team: TeamDefinition): TeamDraft {
@@ -138,6 +164,7 @@ function TeamCard({
   onCopy,
   onEdit,
   onDelete,
+  copy,
 }: {
   team: TeamDefinition;
   selected: boolean;
@@ -149,6 +176,7 @@ function TeamCard({
   onCopy?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  copy: InputbarTeamSelectorCopy;
 }) {
   return (
     <div
@@ -178,7 +206,7 @@ function TeamCard({
             {selected ? (
               <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-white px-2 py-0.5 text-[11px] font-medium text-sky-700">
                 <Check className="h-3.5 w-3.5" />
-                {selectedLabel || "当前选择"}
+                {selectedLabel || copy.card.selected}
               </span>
             ) : null}
           </div>
@@ -197,9 +225,11 @@ function TeamCard({
           </div>
           {expanded ? (
             <div className="mt-3 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-xs leading-5 text-slate-600">
-              <div className="font-medium text-slate-800">详细分工</div>
+              <div className="font-medium text-slate-800">
+                {copy.card.detailTitle}
+              </div>
               <div className="mt-1 break-words whitespace-normal">
-                {buildTeamDefinitionSummary(team)}
+                {formatTeamDefinitionSummary(team, copy)}
               </div>
               <div className="mt-2 space-y-1.5">
                 {team.roles.map((role) => (
@@ -212,7 +242,7 @@ function TeamCard({
                       <div className="mt-1 flex flex-wrap gap-1.5">
                         {role.profileId ? (
                           <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-500">
-                            画像 ·{" "}
+                            {copy.card.profilePrefix} ·{" "}
                             {getBuiltinTeamProfileOption(role.profileId)
                               ?.label || role.profileId}
                           </span>
@@ -227,7 +257,7 @@ function TeamCard({
                             key={`${team.id}-${role.id}-${skillId}`}
                             className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-500"
                           >
-                            技能 ·{" "}
+                            {copy.card.skillPrefix} ·{" "}
                             {getBuiltinTeamSkillOption(skillId)?.label ||
                               skillId}
                           </span>
@@ -246,8 +276,10 @@ function TeamCard({
               type="button"
               className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
               onClick={onToggleDetail}
-              title={expanded ? "收起详情" : "查看详情"}
-              aria-label={expanded ? "收起详情" : "查看详情"}
+              title={expanded ? copy.card.collapseDetail : copy.card.viewDetail}
+              aria-label={
+                expanded ? copy.card.collapseDetail : copy.card.viewDetail
+              }
             >
               {expanded ? (
                 <ChevronUp className="h-4 w-4" />
@@ -261,8 +293,8 @@ function TeamCard({
               type="button"
               className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
               onClick={onCopy}
-              title="复制为自定义分工"
-              aria-label="复制为自定义分工"
+              title={copy.card.copyCustom}
+              aria-label={copy.card.copyCustom}
             >
               <Copy className="h-4 w-4" />
             </button>
@@ -272,8 +304,8 @@ function TeamCard({
               type="button"
               className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
               onClick={onEdit}
-              title="编辑分工"
-              aria-label="编辑分工"
+              title={copy.card.edit}
+              aria-label={copy.card.edit}
             >
               <Pencil className="h-4 w-4" />
             </button>
@@ -283,8 +315,8 @@ function TeamCard({
               type="button"
               className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
               onClick={onDelete}
-              title="删除分工"
-              aria-label="删除分工"
+              title={copy.card.delete}
+              aria-label={copy.card.delete}
             >
               <Trash2 className="h-4 w-4" />
             </button>
@@ -304,6 +336,11 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
   onPersistCustomTeams,
   onClose,
 }) => {
+  const { t } = useTranslation("agent");
+  const copy = useMemo(
+    () => buildInputbarTeamSelectorCopy((key, values) => t(key, values ?? {})),
+    [t],
+  );
   const [query, setQuery] = useState("");
   const [customTeams, setCustomTeams] = useState<TeamDefinition[]>([]);
   const [draft, setDraft] = useState<TeamDraft | null>(null);
@@ -347,7 +384,10 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
     [customTeams, query],
   );
 
-  const currentSelectionSummary = buildTeamDefinitionSummary(selectedTeam);
+  const currentSelectionSummary = formatTeamDefinitionSummary(
+    selectedTeam,
+    copy,
+  );
 
   const updateDraftRole = (
     roleIndex: number,
@@ -382,8 +422,15 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
   const handleStartCreate = (base?: TeamDefinition | null) => {
     setDraft(
       base
-        ? buildDraftFromTeam(cloneTeamDefinitionAsCustom(base))
-        : createBlankDraft(activeTheme),
+        ? buildDraftFromTeam(
+            cloneTeamDefinitionAsCustom(base, {
+              label:
+                base.source === "builtin"
+                  ? copy.editor.customCloneLabel(base.label)
+                  : base.label,
+            }),
+          )
+        : createBlankDraft(copy, activeTheme),
     );
   };
 
@@ -415,7 +462,7 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
     });
 
     if (!normalized) {
-      toast.error("请至少填写分工名称和 1 个角色");
+      toast.error(copy.toast.invalidDraft);
       return;
     }
 
@@ -440,12 +487,14 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
       onClose?.();
       toast.success(
         isProjectScopedCustomTeam
-          ? `已将分工「${nextTeam.label}」保存到当前项目`
-          : `已保存分工「${nextTeam.label}」`,
+          ? copy.toast.saveProjectSuccess(nextTeam.label)
+          : copy.toast.saveLocalSuccess(nextTeam.label),
       );
     } catch (error) {
       toast.error(
-        `保存分工失败：${error instanceof Error ? error.message : String(error)}`,
+        copy.toast.saveFailed(
+          error instanceof Error ? error.message : String(error),
+        ),
       );
     }
   };
@@ -464,12 +513,14 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
       }
       toast.success(
         isProjectScopedCustomTeam
-          ? `已从当前项目删除分工「${team.label}」`
-          : `已删除分工「${team.label}」`,
+          ? copy.toast.deleteProjectSuccess(team.label)
+          : copy.toast.deleteLocalSuccess(team.label),
       );
     } catch (error) {
       toast.error(
-        `删除分工失败：${error instanceof Error ? error.message : String(error)}`,
+        copy.toast.deleteFailed(
+          error instanceof Error ? error.message : String(error),
+        ),
       );
     }
   };
@@ -526,8 +577,7 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
     if (!inspectorTeam) {
       return (
         <div className="rounded-3xl border border-dashed border-slate-200 bg-white px-5 py-6 text-sm text-slate-500">
-          还没有可预览的分工。你可以从左侧模板中查看详情，或新建一个自定义
-          分工。
+          {copy.emptyInspector}
         </div>
       );
     }
@@ -536,10 +586,10 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
     const isCustom = inspectorTeam.source === "custom";
     const badgeLabel =
       inspectorTeam.id === recommendedTeam?.id
-        ? "按任务推荐"
+        ? copy.badge.recommended
         : isCustom
-          ? "自定义"
-          : "系统模板";
+          ? copy.badge.custom
+          : copy.badge.systemTemplate;
 
     return (
       <div
@@ -558,13 +608,12 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
               {isCurrent ? (
                 <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700">
                   <Check className="h-3.5 w-3.5" />
-                  当前选择
+                  {copy.inspector.current}
                 </span>
               ) : null}
             </div>
             <div className="mt-2 text-sm leading-6 text-slate-600">
-              {inspectorTeam.description ||
-                "这套分工会作为主代理拆分子任务时的分工参考。"}
+              {inspectorTeam.description || copy.inspector.defaultDescription}
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -574,7 +623,7 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
                 className={TEAM_SELECTOR_PRIMARY_BUTTON_CLASSNAME}
                 onClick={() => handleSelect(inspectorTeam)}
               >
-                采用这套分工
+                {copy.inspector.select}
               </Button>
             ) : null}
             <Button
@@ -584,7 +633,7 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
               onClick={() => handleStartCreate(inspectorTeam)}
             >
               <Copy className="mr-1.5 h-4 w-4" />
-              复制为自定义
+              {copy.inspector.copyCustom}
             </Button>
             {isCustom ? (
               <Button
@@ -594,7 +643,7 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
                 onClick={() => handleStartEdit(inspectorTeam)}
               >
                 <Pencil className="mr-1.5 h-4 w-4" />
-                编辑
+                {copy.inspector.edit}
               </Button>
             ) : null}
           </div>
@@ -602,16 +651,16 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
 
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
           <div className="text-xs font-semibold tracking-[0.08em] text-slate-500">
-            分工概览
+            {copy.inspector.summaryTitle}
           </div>
           <div className="mt-2 text-sm leading-6 text-slate-700">
-            {buildTeamDefinitionSummary(inspectorTeam)}
+            {formatTeamDefinitionSummary(inspectorTeam, copy)}
           </div>
         </div>
 
         <div className="space-y-3">
           <div className="text-xs font-semibold tracking-[0.08em] text-slate-500">
-            角色分工
+            {copy.inspector.rolesTitle}
           </div>
           <div className="grid gap-3 xl:grid-cols-2">
             {inspectorTeam.roles.map((role) => (
@@ -625,7 +674,7 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
                   </span>
                   {role.profileId ? (
                     <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500">
-                      画像 ·{" "}
+                      {copy.card.profilePrefix} ·{" "}
                       {getBuiltinTeamProfileOption(role.profileId)?.label ||
                         role.profileId}
                     </span>
@@ -646,7 +695,7 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
                         key={`${inspectorTeam.id}-${role.id}-${skillId}`}
                         className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500"
                       >
-                        技能 ·{" "}
+                        {copy.card.skillPrefix} ·{" "}
                         {getBuiltinTeamSkillOption(skillId)?.label || skillId}
                       </span>
                     ))}
@@ -668,7 +717,7 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
               }}
             >
               <Trash2 className="mr-1.5 h-4 w-4" />
-              删除这套分工
+              {copy.inspector.delete}
             </Button>
           </div>
         ) : null}
@@ -689,17 +738,17 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-base font-semibold text-slate-900">
-              {draft.id ? "编辑自定义分工" : "新建自定义分工"}
+              {draft.id ? copy.editor.editTitle : copy.editor.createTitle}
             </div>
             <div className="mt-1 text-sm text-slate-500">
-              在右侧完整配置分工角色、画像和技能，左侧列表用于浏览与切换模板。
+              {copy.editor.description}
             </div>
           </div>
           <button
             type="button"
             className="inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
             onClick={() => setDraft(null)}
-            aria-label="关闭编辑器"
+            aria-label={copy.editor.close}
           >
             <X className="h-4 w-4" />
           </button>
@@ -708,7 +757,7 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
         <div className="grid gap-3 md:grid-cols-2">
           <div className="grid gap-2">
             <label className="text-xs font-medium text-slate-600">
-              分工名称
+              {copy.editor.teamName}
             </label>
             <Input
               value={draft.label}
@@ -722,14 +771,14 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
                     : current,
                 )
               }
-              placeholder="例如：前端联调团队"
+              placeholder={copy.editor.teamNamePlaceholder}
               className="border-slate-200 bg-white"
             />
           </div>
 
           <div className="grid gap-2 md:col-span-2">
             <label className="text-xs font-medium text-slate-600">
-              分工说明
+              {copy.editor.teamDescription}
             </label>
             <Textarea
               value={draft.description}
@@ -743,7 +792,7 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
                     : current,
                 )
               }
-              placeholder="说明这套分工适合什么类型任务。"
+              placeholder={copy.editor.teamDescriptionPlaceholder}
               className="min-h-[88px] border-slate-200 bg-white"
             />
           </div>
@@ -752,7 +801,7 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
             <label className="text-xs font-medium text-slate-600">
-              角色分工
+              {copy.editor.rolesTitle}
             </label>
             <Button
               type="button"
@@ -779,7 +828,7 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
               }
             >
               <Plus className="mr-1.5 h-3.5 w-3.5" />
-              添加角色
+              {copy.editor.addRole}
             </Button>
           </div>
 
@@ -800,7 +849,7 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
                     <>
                       <div className="mb-3 flex items-center justify-between gap-3">
                         <div className="text-xs font-medium text-slate-500">
-                          角色 {index + 1}
+                          {copy.editor.roleIndex(index + 1)}
                         </div>
                         <button
                           type="button"
@@ -817,7 +866,7 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
                                 : current,
                             )
                           }
-                          aria-label={`移除角色 ${index + 1}`}
+                          aria-label={copy.editor.removeRole(index + 1)}
                         >
                           <X className="h-4 w-4" />
                         </button>
@@ -831,7 +880,7 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
                               label: event.target.value,
                             }))
                           }
-                          placeholder="角色名称，例如：分析"
+                          placeholder={copy.editor.roleNamePlaceholder}
                           className="border-slate-200 bg-white"
                         />
                         <Textarea
@@ -842,13 +891,13 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
                               summary: event.target.value,
                             }))
                           }
-                          placeholder="说明这个角色负责什么。"
+                          placeholder={copy.editor.roleSummaryPlaceholder}
                           className="min-h-[84px] border-slate-200 bg-white"
                         />
                         <div className="grid gap-3 xl:grid-cols-2">
                           <div className="grid gap-2">
                             <label className="text-xs font-medium text-slate-600">
-                              内置画像
+                              {copy.editor.profileLabel}
                             </label>
                             <select
                               value={role.profileId || ""}
@@ -875,7 +924,9 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
                               data-testid={`team-role-profile-select-${index}`}
                               className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-slate-300"
                             >
-                              <option value="">不指定内置画像</option>
+                              <option value="">
+                                {copy.editor.profileNone}
+                              </option>
                               {BUILTIN_TEAM_PROFILE_OPTIONS.map((option) => (
                                 <option key={option.id} value={option.id}>
                                   {option.label} · {option.id}
@@ -891,7 +942,7 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
                                   <span> · {selectedProfile.description}</span>
                                 </>
                               ) : (
-                                "可选内置 subagent profile，用于对齐 Codex 风格的角色画像。"
+                                copy.editor.profileHelp
                               )}
                             </div>
                           </div>
@@ -909,11 +960,11 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
                                 }))
                               }
                               data-testid={`team-role-role-key-input-${index}`}
-                              placeholder="例如：explorer / executor / reviewer"
+                              placeholder={copy.editor.roleKeyPlaceholder}
                               className="border-slate-200 bg-white"
                             />
                             <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] leading-5 text-slate-500">
-                              用于运行时和工作台标记角色职责；建议与所选画像保持一致。
+                              {copy.editor.roleKeyHelp}
                             </div>
                           </div>
                         </div>
@@ -959,14 +1010,18 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
                               }))
                             }
                             data-testid={`team-role-skill-ids-input-${index}`}
-                            placeholder="多个 skill id 用逗号分隔，例如：source-grounding, structured-writing"
+                            placeholder={copy.editor.skillIdsPlaceholder}
                             className="border-slate-200 bg-white"
                           />
                           <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] leading-5 text-slate-500">
                             {selectedProfile && suggestedSkillIds.length > 0 ? (
-                              <>推荐技能：{suggestedSkillIds.join("、")}</>
+                              <>
+                                {copy.editor.recommendedSkills(
+                                  suggestedSkillIds.join(", "),
+                                )}
+                              </>
                             ) : (
-                              "skillIds 会透传给运行时，用于约束子任务可用的技能集。"
+                              copy.editor.skillIdsHelp
                             )}
                           </div>
                         </div>
@@ -986,7 +1041,7 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
             className="border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
             onClick={() => setDraft(null)}
           >
-            取消
+            {copy.editor.cancel}
           </Button>
           <Button
             type="button"
@@ -995,7 +1050,7 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
               void handleSaveDraft();
             }}
           >
-            保存分工
+            {copy.editor.save}
           </Button>
         </div>
       </section>
@@ -1011,15 +1066,15 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-[11px] font-semibold tracking-[0.08em] text-slate-500">
-              任务分工配置
+              {copy.header.eyebrow}
             </div>
             <div className="mt-1 text-sm text-slate-700">
-              只在当前任务适合拆分推进时，为当前任务提供任务分工结构参考。
+              {copy.header.description}
             </div>
             <div className="mt-2 text-xs text-slate-500">
               {isProjectScopedCustomTeam
-                ? "自定义分工会保存到当前项目，便于项目级复用与评审。"
-                : "自定义分工当前保存在本地设备，用于快速测试与个人偏好。"}
+                ? copy.header.projectScope
+                : copy.header.localScope}
             </div>
           </div>
           {selectedTeam ? (
@@ -1027,8 +1082,8 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
               type="button"
               className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
               onClick={handleClearSelection}
-              title="清除分工选择"
-              aria-label="清除分工选择"
+              title={copy.header.clear}
+              aria-label={copy.header.clear}
             >
               <X className="h-4 w-4" />
             </button>
@@ -1041,7 +1096,7 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
           >
             <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
               <Users className="h-3.5 w-3.5" />
-              当前已选分工
+              {copy.currentTitle}
             </div>
             <div className="mt-1 text-sm font-semibold text-slate-900">
               {selectedTeam.label}
@@ -1061,7 +1116,7 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索分工、角色或职责"
+              placeholder={copy.searchPlaceholder}
               className="border-slate-200 bg-white"
             />
             <div className="flex flex-wrap gap-2">
@@ -1075,7 +1130,7 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
                 }
               >
                 <Plus className="mr-1.5 h-4 w-4" />
-                新建自定义分工
+                {copy.createCustom}
               </Button>
               {selectedTeam ? (
                 <Button
@@ -1084,7 +1139,7 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
                   className="border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                   onClick={handleClearSelection}
                 >
-                  清除当前选择
+                  {copy.clearCurrent}
                 </Button>
               ) : null}
             </div>
@@ -1093,14 +1148,15 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
               <section className="space-y-2">
                 <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.08em] text-slate-500">
                   <Sparkles className="h-3.5 w-3.5" />
-                  推荐分工
+                  {copy.recommendedSection}
                 </div>
                 <TeamCard
                   team={recommendedTeam}
                   selected={recommendedSelected}
                   expanded={expandedTeamId === recommendedTeam.id}
-                  selectedLabel="已采用推荐"
-                  badgeLabel="按任务推荐"
+                  selectedLabel={copy.recommendedSelected}
+                  badgeLabel={copy.badge.recommended}
+                  copy={copy}
                   onSelect={() => handleSelect(recommendedTeam)}
                   onToggleDetail={() =>
                     setExpandedTeamId((currentId) =>
@@ -1117,7 +1173,9 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
             <section className="space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <div className="text-[11px] font-semibold tracking-[0.08em] text-slate-500">
-                  {isProjectScopedCustomTeam ? "当前项目分工" : "我的分工"}
+                  {isProjectScopedCustomTeam
+                    ? copy.customSectionProject
+                    : copy.customSectionLocal}
                 </div>
                 <Button
                   type="button"
@@ -1134,7 +1192,7 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
                   }
                 >
                   <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  新建自定义
+                  {copy.createShort}
                 </Button>
               </div>
               {filteredCustomTeams.length > 0 ? (
@@ -1145,7 +1203,8 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
                       team={team}
                       selected={selectedTeam?.id === team.id}
                       expanded={expandedTeamId === team.id}
-                      badgeLabel="自定义"
+                      badgeLabel={copy.badge.custom}
+                      copy={copy}
                       onSelect={() => handleSelect(team)}
                       onToggleDetail={() =>
                         setExpandedTeamId((currentId) =>
@@ -1164,8 +1223,8 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-500">
                   <div>
                     {isProjectScopedCustomTeam
-                      ? "当前项目还没有自定义分工。可以从推荐方案或系统模板复制一份后再改。"
-                      : "还没有自定义分工。可以从推荐方案或系统模板复制一份后再改。"}
+                      ? copy.emptyCustomProject
+                      : copy.emptyCustomLocal}
                   </div>
                   <Button
                     type="button"
@@ -1182,7 +1241,7 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
                     }
                   >
                     <Plus className="mr-1.5 h-3.5 w-3.5" />
-                    立即创建
+                    {copy.createNow}
                   </Button>
                 </div>
               )}
@@ -1190,7 +1249,7 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
 
             <section className="space-y-2">
               <div className="text-[11px] font-semibold tracking-[0.08em] text-slate-500">
-                系统模板
+                {copy.systemSection}
               </div>
               <div className="space-y-2">
                 {builtinTeams.map((team) => (
@@ -1199,7 +1258,8 @@ export const TeamSelectorPanel: React.FC<TeamSelectorPanelProps> = ({
                     team={team}
                     selected={selectedTeam?.id === team.id}
                     expanded={expandedTeamId === team.id}
-                    badgeLabel="系统"
+                    badgeLabel={copy.badge.system}
+                    copy={copy}
                     onSelect={() => handleSelect(team)}
                     onToggleDetail={() =>
                       setExpandedTeamId((currentId) =>

@@ -61,9 +61,11 @@ function getRendererClassName(
   surface: A2UITaskCardSurface,
 ): string {
   return cn(
-    compact ? "space-y-3" : "space-y-4",
+    compact
+      ? "space-y-2.5 text-[13px] leading-5"
+      : "space-y-3 text-sm leading-6",
     surface === "embedded" &&
-      "space-y-2.5 text-[13px] leading-5 [&_.a2ui-text-h3]:text-[15px] [&_.a2ui-text-h3]:leading-6 [&_.a2ui-text-h3]:font-semibold [&_.a2ui-text-h4]:text-[13px] [&_.a2ui-text-h4]:leading-5 [&_.a2ui-text-h4]:font-medium [&_.a2ui-text-body]:text-[13px] [&_.a2ui-text-body]:leading-5 [&_.a2ui-text-body]:text-slate-700 [&_.a2ui-field-stack]:space-y-1.5 [&_.a2ui-field-label]:text-[12px] [&_.a2ui-field-label]:leading-5 [&_.a2ui-helper-text]:text-[11px] [&_.a2ui-helper-text]:leading-4 [&_.a2ui-option-list]:gap-2.5 [&_.a2ui-choice-option]:rounded-[16px] [&_.a2ui-choice-option]:px-3.5 [&_.a2ui-choice-option]:py-3 [&_.a2ui-choice-option]:text-[13px] [&_.a2ui-choice-option-title]:text-[13px] [&_.a2ui-choice-option-title]:leading-5 [&_.a2ui-option-description]:mt-1 [&_.a2ui-option-description]:text-[11px] [&_.a2ui-option-description]:leading-4 [&_.a2ui-text-input]:h-10 [&_.a2ui-text-input]:rounded-[16px] [&_.a2ui-text-input]:px-3 [&_.a2ui-text-input]:text-[13px] [&_.a2ui-textarea]:min-h-[84px] [&_.a2ui-textarea]:rounded-[16px] [&_.a2ui-textarea]:px-3 [&_.a2ui-textarea]:py-2.5 [&_.a2ui-textarea]:text-[13px] [&_.a2ui-textarea]:leading-5 [&_.a2ui-card-shell]:rounded-[16px] [&_.a2ui-card-shell]:border-slate-200/90 [&_.a2ui-card-shell]:bg-white [&_.a2ui-card-shell]:p-3 [&_.a2ui-card-shell]:shadow-none",
+      "space-y-2.5 text-[13px] leading-5 [&_.a2ui-text-h3]:text-[15px] [&_.a2ui-text-h3]:leading-6 [&_.a2ui-text-h3]:font-semibold [&_.a2ui-text-h4]:text-[13px] [&_.a2ui-text-h4]:leading-5 [&_.a2ui-text-h4]:font-medium [&_.a2ui-text-body]:text-[13px] [&_.a2ui-text-body]:leading-5 [&_.a2ui-field-stack]:space-y-1.5 [&_.a2ui-field-label]:text-[12px] [&_.a2ui-field-label]:leading-5 [&_.a2ui-helper-text]:text-[11px] [&_.a2ui-helper-text]:leading-4 [&_.a2ui-option-list]:gap-2 [&_.a2ui-choice-option]:rounded-[14px] [&_.a2ui-choice-option]:px-3 [&_.a2ui-choice-option]:py-2.5 [&_.a2ui-choice-option]:text-[13px] [&_.a2ui-choice-option-title]:text-[13px] [&_.a2ui-choice-option-title]:leading-5 [&_.a2ui-option-description]:mt-1 [&_.a2ui-option-description]:text-[11px] [&_.a2ui-option-description]:leading-4 [&_.a2ui-text-input]:h-9 [&_.a2ui-text-input]:rounded-[14px] [&_.a2ui-text-input]:px-3 [&_.a2ui-text-input]:text-[13px] [&_.a2ui-textarea]:min-h-[76px] [&_.a2ui-textarea]:rounded-[14px] [&_.a2ui-textarea]:px-3 [&_.a2ui-textarea]:py-2.5 [&_.a2ui-textarea]:text-[13px] [&_.a2ui-textarea]:leading-5 [&_.a2ui-card-shell]:rounded-[14px] [&_.a2ui-card-shell]:p-2.5 [&_.a2ui-card-shell]:shadow-none",
   );
 }
 
@@ -124,7 +126,9 @@ export function A2UITaskCard({
       </A2UITaskCardBody>
 
       {footerText ? (
-        <div className="mt-3 text-xs text-slate-500">{footerText}</div>
+        <div className="mt-2.5 text-xs text-[color:var(--lime-text-muted)]">
+          {footerText}
+        </div>
       ) : null}
     </A2UITaskCardShell>
   );

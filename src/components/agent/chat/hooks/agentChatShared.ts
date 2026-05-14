@@ -73,6 +73,7 @@ export interface SendMessageObserver {
 
 export interface AssistantDraftState {
   content?: string;
+  fallbackContent?: string;
   initialRuntimeStatus?: AgentRuntimeStatus;
   waitingRuntimeStatus?: AgentRuntimeStatus;
   imageWorkbenchPreview?: MessageImageWorkbenchPreview;

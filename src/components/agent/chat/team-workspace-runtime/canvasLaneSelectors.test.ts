@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import enAgentResource from "@/i18n/resources/en-US/agent.json";
+import { agentEnUSResource } from "@/i18n/agentResources";
 import {
   buildTeamWorkspaceCanvasLaneCopy,
   buildTeamWorkspaceCanvasLanes,
   type TeamWorkspaceCanvasLaneTranslate,
 } from "./canvasLaneSelectors";
 
-type EnAgentResourceKey = keyof typeof enAgentResource;
+type EnAgentResourceKey = keyof typeof agentEnUSResource;
 
 function interpolateResourceTemplate(
   template: string,
@@ -21,7 +21,7 @@ function interpolateResourceTemplate(
 function buildEnglishCanvasLaneCopy() {
   const translate: TeamWorkspaceCanvasLaneTranslate = (key, options) =>
     interpolateResourceTemplate(
-      enAgentResource[key as EnAgentResourceKey],
+      agentEnUSResource[key as EnAgentResourceKey],
       options,
     );
 

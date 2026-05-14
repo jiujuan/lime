@@ -13,9 +13,9 @@ import {
 import { recordMentionEntryUsage } from "./mentionEntryUsage";
 import { recordSlashEntryUsage } from "./slashEntryUsage";
 import { buildCuratedTaskTemplateCopy } from "../utils/curatedTaskTemplates";
-import agentResource from "@/i18n/resources/zh-CN/agent.json";
+import { agentZhCNResource } from "@/i18n/agentResources";
 
-type AgentResourceKey = keyof typeof agentResource;
+type AgentResourceKey = keyof typeof agentZhCNResource;
 
 function interpolateTemplate(
   template: string,
@@ -32,7 +32,7 @@ function translateAgentResource(
   values?: Record<string, number | string>,
 ): string {
   return interpolateTemplate(
-    agentResource[key as AgentResourceKey] ?? key,
+    agentZhCNResource[key as AgentResourceKey] ?? key,
     values,
   );
 }

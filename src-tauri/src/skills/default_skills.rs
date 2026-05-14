@@ -846,18 +846,23 @@ mod tests {
             .contains("必须直接调用 `lime_create_cover_generation_task` 创建真实封面任务记录"));
         assert!(MODAL_RESOURCE_SEARCH_SKILL_CONTENT.contains("name: modal_resource_search"));
         assert!(IMAGE_GENERATE_SKILL_CONTENT.contains("name: image_generate"));
+        assert!(IMAGE_GENERATE_SKILL_CONTENT.contains("lime_version: 1.3.5"));
         assert!(IMAGE_GENERATE_SKILL_CONTENT
             .contains("allowed-tools: lime_create_image_generation_task"));
         assert!(IMAGE_GENERATE_SKILL_CONTENT
             .contains("必须直接调用 `lime_create_image_generation_task` 创建真实图片任务"));
         assert!(IMAGE_GENERATE_SKILL_CONTENT
             .contains("必须直接传扁平任务对象参数；不要包成 `{\"image_task\": ...}`"));
+        assert!(IMAGE_GENERATE_SKILL_CONTENT.contains("assistant_intro_request"));
+        assert!(IMAGE_GENERATE_SKILL_CONTENT.contains("completion_caption_request"));
         assert!(IMAGE_GENERATE_SKILL_CONTENT.contains("runtime_contract.layered_design"));
         assert!(
             IMAGE_GENERATE_SKILL_CONTENT.contains("不要改写成 `poster_generate`、`canvas:poster`")
         );
         assert!(IMAGE_GENERATE_SKILL_CONTENT
             .contains("不要通过 `Bash` 拼接 `lime media image generate --json`"));
+        assert!(!IMAGE_GENERATE_SKILL_CONTENT.contains("任务 ID：{task_id}"));
+        assert!(!IMAGE_GENERATE_SKILL_CONTENT.contains("任务文件：{path}"));
         assert!(!IMAGE_GENERATE_SKILL_CONTENT
             .contains("allowed-tools: Bash, lime_create_image_generation_task"));
         assert!(!IMAGE_GENERATE_SKILL_CONTENT
@@ -875,6 +880,10 @@ mod tests {
         assert!(FORM_GENERATE_SKILL_CONTENT.contains("```a2ui"));
         assert!(SUMMARY_SKILL_CONTENT.contains("name: summary"));
         assert!(SUMMARY_SKILL_CONTENT.contains("allowed-tools: list_directory, read_file"));
+        assert!(ANALYSIS_SKILL_CONTENT.contains("name: analysis"));
+        assert!(ANALYSIS_SKILL_CONTENT.contains("lime_version: 1.0.1"));
+        assert!(ANALYSIS_SKILL_CONTENT.contains("不要仅因没有外部材料就输出“无法分析”"));
+        assert!(ANALYSIS_SKILL_CONTENT.contains("实时信息边界"));
         assert!(SITE_SEARCH_ADAPTER_CATALOG_CONTENT.contains("`github/search`"));
         assert!(SITE_SEARCH_ADAPTER_CATALOG_CONTENT.contains("`zhihu/hot`"));
         assert!(TYPESETTING_SKILL_CONTENT.contains("name: typesetting"));

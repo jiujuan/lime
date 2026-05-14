@@ -204,6 +204,7 @@ export async function executeAgentStreamSubmit(
     assistantDraft?.preserveContent === true
       ? assistantDraft.content?.trim() || null
       : null;
+  const assistantFallbackContent = assistantDraft?.fallbackContent?.trim() || null;
 
   const unlisten = await registerAgentStreamTurnEventBinding({
     runtime,
@@ -227,6 +228,7 @@ export async function executeAgentStreamSubmit(
     pendingItemKey,
     effectiveWaitingRuntimeStatus,
     preserveAssistantContent,
+    assistantFallbackContent,
     warnedKeysRef,
     actionLoggedKeys,
     toolLogIdByToolId,

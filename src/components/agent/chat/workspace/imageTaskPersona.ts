@@ -1,11 +1,5 @@
-import { getLimeI18n } from "@/i18n/createI18n";
 import type { MessageImageWorkbenchPreview } from "../types";
-import {
-  buildImageWorkbenchCaption,
-  buildImageWorkbenchProcessLines,
-  collapseImageWorkbenchWhitespace,
-  resolveImageWorkbenchModelLabel,
-} from "../utils/imageWorkbenchPresentation";
+import { collapseImageWorkbenchWhitespace } from "../utils/imageWorkbenchPresentation";
 
 type ImageTaskMode = NonNullable<MessageImageWorkbenchPreview["mode"]>;
 
@@ -13,25 +7,6 @@ const IMAGE_TASK_PERSONA_ID = "lime_image_creator";
 const IMAGE_TASK_PERSONA_VERSION = "lime-image-persona-v1";
 const IMAGE_TASK_PRESENTATION_VERSION = "lime-image-chat-v1";
 const IMAGE_TASK_TASTE_VERSION = "lime-image-taste-v1";
-
-type ImageTaskPersonaKey =
-  | "agentChat.imageTaskPersona.subject.fallback"
-  | "agentChat.imageTaskPersona.intro.generateWithModel"
-  | "agentChat.imageTaskPersona.intro.generate"
-  | "agentChat.imageTaskPersona.intro.editWithModel"
-  | "agentChat.imageTaskPersona.intro.edit"
-  | "agentChat.imageTaskPersona.intro.variationWithModel"
-  | "agentChat.imageTaskPersona.intro.variation";
-
-function tImageTaskPersona(
-  key: ImageTaskPersonaKey,
-  options?: Record<string, unknown>,
-): string {
-  return getLimeI18n().t(key, {
-    ns: "agent",
-    ...(options || {}),
-  });
-}
 
 function uniqueCompactStrings(values: Array<string | null | undefined>) {
   const seen = new Set<string>();
@@ -60,68 +35,13 @@ function normalizeImageTaskDisplayTarget(value: string): string {
   return `${normalized.slice(0, 72).trim()}...`;
 }
 
-function resolveImageTaskDisplayTarget(prompt: string): string {
-  return (
-    normalizeImageTaskDisplayTarget(prompt) ||
-    tImageTaskPersona("agentChat.imageTaskPersona.subject.fallback")
-  );
-}
-
 export function buildImageTaskAssistantContent(params: {
   prompt: string;
   mode?: ImageTaskMode;
   modelName?: string | null;
 }): string {
-  const modelLabel = resolveImageWorkbenchModelLabel(params.modelName);
-  const target = resolveImageTaskDisplayTarget(params.prompt);
-
-  const introKey: ImageTaskPersonaKey = (() => {
-    if (params.mode === "edit") {
-      return modelLabel
-        ? "agentChat.imageTaskPersona.intro.editWithModel"
-        : "agentChat.imageTaskPersona.intro.edit";
-    }
-    if (params.mode === "variation") {
-      return modelLabel
-        ? "agentChat.imageTaskPersona.intro.variationWithModel"
-        : "agentChat.imageTaskPersona.intro.variation";
-    }
-    return modelLabel
-      ? "agentChat.imageTaskPersona.intro.generateWithModel"
-      : "agentChat.imageTaskPersona.intro.generate";
-  })();
-
-  return [
-    tImageTaskPersona(introKey, { model: modelLabel, target }),
-    ...buildImageWorkbenchProcessLines(),
-  ].join("\n");
-}
-
-function buildImageTaskResultCaptions(prompt: string): Record<string, string> {
-  return {
-    complete:
-      buildImageWorkbenchCaption({
-        prompt,
-        status: "complete",
-        imageCount: 1,
-      }) || "",
-    partial:
-      buildImageWorkbenchCaption({
-        prompt,
-        status: "partial",
-        imageCount: 1,
-      }) || "",
-    failed:
-      buildImageWorkbenchCaption({
-        prompt,
-        status: "failed",
-      }) || "",
-    cancelled:
-      buildImageWorkbenchCaption({
-        prompt,
-        status: "cancelled",
-      }) || "",
-  };
+  void params;
+  return "";
 }
 
 export function buildImageTaskPersonaContext(): Record<string, unknown> {
@@ -139,9 +59,11 @@ export function buildImageTaskPersonaContext(): Record<string, unknown> {
       no_internal_tool_names_in_chat: true,
     },
     opening_policy: {
-      style: "short_ack_then_action",
-      max_lines_before_tool: 3,
-      use_presentation_contract_first: true,
+      style: "natural_contextual_ack_then_action",
+      max_lines_before_tool: 2,
+      use_model_stream_first: true,
+      avoid_fixed_templates: true,
+      no_visible_process_lines: true,
     },
     result_policy: {
       complete_caption_max_lines: 2,
@@ -156,26 +78,40 @@ export function buildImageTaskPresentationContext(params: {
   mode: ImageTaskMode;
   modelId?: string;
 }): Record<string, unknown> {
-  const resultCaptions = buildImageTaskResultCaptions(params.prompt);
+  const promptIntent = normalizeImageTaskDisplayTarget(params.prompt);
   return {
     version: IMAGE_TASK_PRESENTATION_VERSION,
     surface: "conversation",
     assistant_label: "Lime",
     persona_id: IMAGE_TASK_PERSONA_ID,
-    assistant_intro: buildImageTaskAssistantContent({
-      prompt: params.prompt,
+    opening_guidance: {
+      source: "model_stream",
+      tone: "natural_minimal",
+      max_lines_before_tool: 2,
+      avoid_fixed_templates: true,
+      avoid_visible_process_lines: true,
+    },
+    assistant_intro_request: {
+      source: "model_generated_before_tool",
       mode: params.mode,
-      modelName: params.modelId || null,
-    }),
-    process_lines: buildImageWorkbenchProcessLines(),
-    completion_caption: resultCaptions.complete,
-    partial_caption: resultCaptions.partial,
-    failed_caption: resultCaptions.failed,
-    cancelled_caption: resultCaptions.cancelled,
-    result_captions: resultCaptions,
+      prompt_intent: promptIntent,
+      max_lines: 2,
+      avoid_fixed_templates: true,
+      avoid_runtime_details: true,
+    },
+    completion_caption_request: {
+      source: "model_generated_at_tool_call",
+      mode: params.mode,
+      prompt_intent: promptIntent,
+      max_lines: 2,
+      invite_iteration: true,
+      avoid_fixed_templates: true,
+      avoid_runtime_details: true,
+    },
     message_contract: {
       single_assistant_message: true,
-      preserve_intro_during_stream: true,
+      preserve_intro_during_stream: false,
+      prefer_model_stream_text: true,
       hide_runtime_details: true,
     },
     completion_caption_policy: {

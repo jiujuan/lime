@@ -1,47 +1,65 @@
 import { useMemo } from "react";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import { LoaderCircle, Sparkles, X } from "lucide-react";
 import { openResourceManager } from "@/features/resource-manager";
-import type { ResourceManagerSourceContext } from "@/features/resource-manager";
 import { cn } from "@/lib/utils";
 import { RenderableTaskImage } from "./RenderableTaskImage";
 import type { ImageTaskViewerProps } from "./imageWorkbenchTypes";
 import type { ImageRuntimeContractSnapshot } from "../types";
 import { buildLimeCorePolicyEvaluationMetaItem } from "../workspace/mediaTaskPolicyEvaluation";
+import { buildImageTaskResourceSourceContext } from "../workspace/imageWorkbenchResourceManager";
 
 const IMAGE_TASK_PRIMARY_BUTTON_CLASSNAME =
   "inline-flex items-center justify-center rounded-full border border-emerald-200 bg-[linear-gradient(135deg,#0ea5e9_0%,#14b8a6_52%,#10b981_100%)] px-4 py-2 text-sm font-medium text-white shadow-sm shadow-emerald-950/15 transition hover:opacity-95";
 
-function resolveModeEyebrow(mode?: string): string {
+type AgentTranslate = TFunction<"agent", undefined>;
+
+function resolveModeEyebrow(
+  mode: string | undefined,
+  t: AgentTranslate,
+): string {
   switch ((mode || "").trim().toLowerCase()) {
     case "edit":
-      return "Image Editing";
+      return t("agentChat.imageWorkbenchPreview.tool.editing");
     case "variation":
-      return "Image Redraw";
+      return t("agentChat.imageWorkbenchPreview.tool.redraw");
     case "generate":
     default:
-      return "Image Generation";
+      return t("agentChat.imageWorkbenchPreview.tool.generation");
   }
 }
 
-function resolveSourceLabel(mode?: string): string {
+function resolveSourceLabel(
+  mode: string | undefined,
+  t: AgentTranslate,
+): string {
   return (mode || "").trim().toLowerCase() === "variation"
-    ? "参考图"
-    : "来源图";
+    ? t("agentChat.imageTaskViewer.source.reference")
+    : t("agentChat.imageTaskViewer.source.source");
 }
 
-function resolveFollowUpLabel(mode?: string): string {
+function resolveFollowUpLabel(
+  mode: string | undefined,
+  t: AgentTranslate,
+): string {
   const normalizedMode = (mode || "").trim().toLowerCase();
   if (normalizedMode === "edit") {
-    return "继续修图";
+    return t("agentChat.imageTaskViewer.action.continueEdit");
   }
   if (normalizedMode === "variation") {
-    return "继续重绘";
+    return t("agentChat.imageTaskViewer.action.continueVariation");
   }
-  return "基于此图重绘";
+  return t("agentChat.imageTaskViewer.action.redrawFromImage");
 }
 
-function resolveLayoutLabel(layoutHint?: string | null): string | null {
-  return layoutHint === "storyboard_3x3" ? "3x3 分镜" : null;
+function resolveLayoutLabel(
+  layoutHint: string | null | undefined,
+  t: AgentTranslate,
+): string | null {
+  return layoutHint === "storyboard_3x3"
+    ? t("agentChat.imageTaskViewer.layout.storyboard3x3")
+    : null;
 }
 
 function resolveOutputGridClassName(params: {
@@ -68,14 +86,19 @@ function resolveSelectedOutputLabel(params: {
   selectedIndex: number;
   outputCount: number;
   layoutHint?: string | null;
+  t: AgentTranslate;
 }): string | null {
   if (params.selectedIndex < 0 || params.outputCount <= 1) {
     return null;
   }
 
   return params.layoutHint === "storyboard_3x3"
-    ? `已选第 ${params.selectedIndex + 1} 格`
-    : `已选第 ${params.selectedIndex + 1} 张`;
+    ? params.t("agentChat.imageTaskViewer.selected.storyboardSlot", {
+        index: params.selectedIndex + 1,
+      })
+    : params.t("agentChat.imageTaskViewer.selected.image", {
+        index: params.selectedIndex + 1,
+      });
 }
 
 function resolveOutputDisplayIndex(
@@ -91,6 +114,7 @@ function resolveStoryboardSlotLabel(params: {
   slotIndex?: number | null;
   slotLabel?: string | null;
   taskSlotLabel?: string | null;
+  t: AgentTranslate;
 }): string | null {
   if (params.layoutHint !== "storyboard_3x3") {
     return null;
@@ -99,7 +123,9 @@ function resolveStoryboardSlotLabel(params: {
   return (
     params.slotLabel?.trim() ||
     params.taskSlotLabel?.trim() ||
-    `第 ${resolveOutputDisplayIndex(params.outputIndex, params.slotIndex)} 格`
+    params.t("agentChat.imageTaskViewer.storyboard.slotFallback", {
+      index: resolveOutputDisplayIndex(params.outputIndex, params.slotIndex),
+    })
   );
 }
 
@@ -127,48 +153,52 @@ function buildFollowUpCommand(params: {
   return `@重绘 ${referenceToken} `;
 }
 
-function resolveStatusLabel(status?: string, mode?: string): string {
+function resolveStatusLabel(
+  status: string | undefined,
+  mode: string | undefined,
+  t: AgentTranslate,
+): string {
   const normalizedMode = (mode || "").trim().toLowerCase();
   switch ((status || "").trim().toLowerCase()) {
     case "complete":
       switch (normalizedMode) {
         case "edit":
-          return "已修图";
+          return t("agentChat.imageTaskViewer.status.complete.edit");
         case "variation":
-          return "已重绘";
+          return t("agentChat.imageTaskViewer.status.complete.variation");
         case "generate":
         default:
-          return "已生成";
+          return t("agentChat.imageTaskViewer.status.complete.generate");
       }
     case "partial":
-      return "部分完成";
+      return t("agentChat.imageTaskViewer.status.partial");
     case "cancelled":
-      return "已取消";
+      return t("agentChat.imageTaskViewer.status.cancelled");
     case "error":
       switch (normalizedMode) {
         case "edit":
-          return "修图失败";
+          return t("agentChat.imageTaskViewer.status.error.edit");
         case "variation":
-          return "重绘失败";
+          return t("agentChat.imageTaskViewer.status.error.variation");
         case "generate":
         default:
-          return "生成失败";
+          return t("agentChat.imageTaskViewer.status.error.generate");
       }
     case "queued":
-      return "等待队列";
+      return t("agentChat.imageTaskViewer.status.queued");
     case "running":
     case "routing":
       switch (normalizedMode) {
         case "edit":
-          return "修图中";
+          return t("agentChat.imageTaskViewer.status.running.edit");
         case "variation":
-          return "重绘中";
+          return t("agentChat.imageTaskViewer.status.running.variation");
         case "generate":
         default:
-          return "生成中";
+          return t("agentChat.imageTaskViewer.status.running.generate");
       }
     default:
-      return "准备中";
+      return t("agentChat.imageTaskViewer.status.preparing");
   }
 }
 
@@ -192,7 +222,8 @@ function resolveStatusTone(status?: string): string {
 }
 
 function resolveRuntimeContractBadge(
-  runtimeContract?: ImageRuntimeContractSnapshot | null,
+  runtimeContract: ImageRuntimeContractSnapshot | null | undefined,
+  t: AgentTranslate,
 ): { label: string; tone: string } | null {
   if (!runtimeContract) {
     return null;
@@ -202,40 +233,43 @@ function resolveRuntimeContractBadge(
   const outcome = (runtimeContract.routingOutcome || "").trim().toLowerCase();
   if (outcome === "blocked") {
     return {
-      label: `运行合同阻止 · ${
-        runtimeContract.failureCode?.trim() || contractKey
-      }`,
+      label: t("agentChat.imageTaskViewer.runtimeContract.blocked", {
+        reason: runtimeContract.failureCode?.trim() || contractKey,
+      }),
       tone: "border-amber-200 bg-amber-50 text-amber-800",
     };
   }
   if (outcome === "failed") {
     return {
-      label: `运行合同失败 · ${
-        runtimeContract.failureCode?.trim() || contractKey
-      }`,
+      label: t("agentChat.imageTaskViewer.runtimeContract.failed", {
+        reason: runtimeContract.failureCode?.trim() || contractKey,
+      }),
       tone: "border-rose-200 bg-rose-50 text-rose-700",
     };
   }
 
   return {
-    label: `运行合同 · 已按 ${contractKey} 路由`,
+    label: t("agentChat.imageTaskViewer.runtimeContract.accepted", {
+      contractKey,
+    }),
     tone: "border-emerald-200 bg-emerald-50 text-emerald-700",
   };
 }
 
 function resolveRuntimeContractRegistryLabel(
-  runtimeContract?: ImageRuntimeContractSnapshot | null,
+  runtimeContract: ImageRuntimeContractSnapshot | null | undefined,
+  t: AgentTranslate,
 ): string | null {
   if (runtimeContract?.modelCapabilityAssessmentSource !== "model_registry") {
     return null;
   }
   if (runtimeContract.modelSupportsImageGeneration === false) {
-    return "模型能力来自 model_registry · 不支持图片生成";
+    return t("agentChat.imageTaskViewer.runtimeContract.registry.unsupported");
   }
   if (runtimeContract.modelSupportsImageGeneration === true) {
-    return "模型能力来自 model_registry · 支持图片生成";
+    return t("agentChat.imageTaskViewer.runtimeContract.registry.supported");
   }
-  return "模型能力来自 model_registry";
+  return t("agentChat.imageTaskViewer.runtimeContract.registry.unknown");
 }
 
 function resolveRuntimeContractPolicyLabel(
@@ -257,100 +291,105 @@ function resolveRuntimeContractPolicyLabel(
 }
 
 function resolveEmptyStateDescription(
-  status?: string,
-  failureMessage?: string,
-  mode?: string,
+  status: string | undefined,
+  _failureMessage: string | undefined,
+  mode: string | undefined,
+  t: AgentTranslate,
 ): string {
-  if (failureMessage?.trim()) {
-    return failureMessage.trim();
-  }
-
   switch ((status || "").trim().toLowerCase()) {
     case "cancelled":
-      return "这次任务已经取消，当前不会继续生成新的图片结果。";
+      return t("agentChat.imageTaskViewer.empty.cancelled");
     case "error":
-      return "这次生成没有拿到可用图片结果。";
+      return t("agentChat.imageTaskViewer.empty.error");
     case "queued":
-      return "图片任务已经提交，正在等待服务分配执行槽位。";
+      return t("agentChat.imageTaskViewer.empty.queued");
     case "running":
     case "routing":
       switch ((mode || "").trim().toLowerCase()) {
         case "edit":
-          return "图片编辑中，完成后会直接在这里展示修图结果。";
+          return t("agentChat.imageTaskViewer.empty.running.edit");
         case "variation":
-          return "图片重绘中，完成后会直接在这里展示结果。";
+          return t("agentChat.imageTaskViewer.empty.running.variation");
         case "generate":
         default:
-          return "图片生成中，完成后会直接在这里展示结果。";
+          return t("agentChat.imageTaskViewer.empty.running.generate");
       }
     default:
-      return "图片任务已创建，结果准备好后会展示在这里。";
+      return t("agentChat.imageTaskViewer.empty.preparing");
   }
 }
 
-function resolveImageUnavailableTitle(status?: string): string {
+function resolveImageUnavailableTitle(
+  status: string | undefined,
+  mode: string | undefined,
+  t: AgentTranslate,
+): string {
   switch ((status || "").trim().toLowerCase()) {
     case "complete":
     case "partial":
-      return "图片暂时无法显示";
+      return t("agentChat.imageTaskViewer.unavailable.title");
     default:
-      return resolveStatusLabel(status);
+      return resolveStatusLabel(status, mode, t);
   }
 }
 
-function resolveImageUnavailableDescription(mode?: string): string {
+function resolveImageUnavailableDescription(
+  mode: string | undefined,
+  t: AgentTranslate,
+): string {
   switch ((mode || "").trim().toLowerCase()) {
     case "edit":
-      return "修图结果已经返回，但当前预览地址暂时无法加载。";
+      return t("agentChat.imageTaskViewer.unavailable.edit");
     case "variation":
-      return "重绘结果已经返回，但当前预览地址暂时无法加载。";
+      return t("agentChat.imageTaskViewer.unavailable.variation");
     case "generate":
     default:
-      return "图片结果已经返回，但当前预览地址暂时无法加载。";
+      return t("agentChat.imageTaskViewer.unavailable.generate");
   }
 }
 
 function resolveSourcePlaceholderLabel(
-  mode?: string,
-  reason?: "empty" | "error",
+  mode: string | undefined,
+  reason: "empty" | "error",
+  t: AgentTranslate,
 ) {
   if (reason === "error") {
     return (mode || "").trim().toLowerCase() === "variation"
-      ? "参考图暂时无法显示"
-      : "来源图暂时无法显示";
+      ? t("agentChat.imageTaskViewer.source.referenceUnavailable")
+      : t("agentChat.imageTaskViewer.source.sourceUnavailable");
   }
 
   return (mode || "").trim().toLowerCase() === "variation"
-    ? "参考图待同步"
-    : "来源图待同步";
+    ? t("agentChat.imageTaskViewer.source.referencePending")
+    : t("agentChat.imageTaskViewer.source.sourcePending");
 }
 
-function normalizeSourceContextText(value?: string | null): string | null {
-  const normalized = value?.trim();
-  return normalized ? normalized : null;
-}
+function orderTaskOutputsByTaskOutputIds(
+  task: ImageTaskViewerProps["tasks"][number] | null,
+  outputs: ImageTaskViewerProps["outputs"],
+): ImageTaskViewerProps["outputs"] {
+  if (!task?.outputIds?.length) {
+    return outputs;
+  }
 
-function buildImageTaskResourceSourceContext(params: {
-  taskId?: string | null;
-  outputId?: string | null;
-  projectId?: string | null;
-  contentId?: string | null;
-  threadId?: string | null;
-}): ResourceManagerSourceContext {
-  return {
-    kind: "image_task",
-    projectId: normalizeSourceContextText(params.projectId),
-    contentId: normalizeSourceContextText(params.contentId),
-    taskId: normalizeSourceContextText(params.taskId),
-    outputId: normalizeSourceContextText(params.outputId),
-    threadId: normalizeSourceContextText(params.threadId),
-    sourcePage: "image-task-viewer",
-  };
+  const outputById = new Map(outputs.map((output) => [output.id, output]));
+  const ordered = task.outputIds
+    .map((outputId) => outputById.get(outputId))
+    .filter((output): output is ImageTaskViewerProps["outputs"][number] =>
+      Boolean(output),
+    );
+  const orderedIds = new Set(ordered.map((output) => output.id));
+
+  return [
+    ...ordered,
+    ...outputs.filter((output) => !orderedIds.has(output.id)),
+  ];
 }
 
 export function ImageTaskViewer({
   tasks,
   outputs,
+  selectedTaskId,
   selectedOutputId,
   sourceProjectId,
   sourceContentId,
@@ -363,16 +402,32 @@ export function ImageTaskViewer({
   onSelectOutput,
   onClose,
 }: ImageTaskViewerProps) {
+  const { t } = useTranslation("agent");
+  const selectedTaskById = selectedTaskId
+    ? (tasks.find((item) => item.id === selectedTaskId) ?? null)
+    : null;
+  const selectedOutputById = selectedOutputId
+    ? (outputs.find((item) => item.id === selectedOutputId) ?? null)
+    : null;
   const selectedOutput =
-    outputs.find((item) => item.id === selectedOutputId) ?? outputs[0] ?? null;
+    selectedOutputById &&
+    (!selectedTaskById || selectedOutputById.taskId === selectedTaskById.id)
+      ? selectedOutputById
+      : selectedTaskById
+        ? (outputs.find((item) => item.taskId === selectedTaskById.id) ?? null)
+        : (selectedOutputById ?? outputs[0] ?? null);
   const selectedTask =
+    selectedTaskById ??
     (selectedOutput
       ? tasks.find((item) => item.id === selectedOutput.taskId)
       : null) ??
     tasks[0] ??
     null;
   const selectedTaskOutputs = selectedTask
-    ? outputs.filter((item) => item.taskId === selectedTask.id)
+    ? orderTaskOutputsByTaskOutputIds(
+        selectedTask,
+        outputs.filter((item) => item.taskId === selectedTask.id),
+      )
     : outputs;
   const expectedOutputCount = Math.max(
     selectedTask?.expectedCount ?? 0,
@@ -404,6 +459,7 @@ export function ImageTaskViewer({
         slotIndex: selectedSlotIndex,
         slotLabel: selectedOutput?.slotLabel,
         taskSlotLabel: taskSlot?.label,
+        t,
       }),
       prompt: selectedOutput?.slotPrompt || taskSlot?.prompt || null,
     };
@@ -413,30 +469,35 @@ export function ImageTaskViewer({
     selectedOutput?.slotPrompt,
     selectedOutputIndex,
     selectedTask,
+    t,
   ]);
   const statusLabel = resolveStatusLabel(
     selectedTask?.status,
     selectedTask?.mode,
+    t,
   );
   const runtimeContractBadge = resolveRuntimeContractBadge(
     selectedTask?.runtimeContract,
+    t,
   );
   const runtimeContractRegistryLabel = resolveRuntimeContractRegistryLabel(
     selectedTask?.runtimeContract,
+    t,
   );
   const runtimeContractPolicyLabel = resolveRuntimeContractPolicyLabel(
     selectedTask?.runtimeContract,
   );
-  const layoutLabel = resolveLayoutLabel(selectedTask?.layoutHint);
+  const layoutLabel = resolveLayoutLabel(selectedTask?.layoutHint, t);
   const selectedOutputLabel = resolveSelectedOutputLabel({
     selectedIndex: selectedOutputIndex,
     outputCount: expectedOutputCount,
     layoutHint: selectedTask?.layoutHint,
+    t,
   });
   const prompt =
     selectedOutput?.prompt?.trim() ||
     selectedTask?.prompt?.trim() ||
-    "当前图片任务未提供提示词。";
+    t("agentChat.imageTaskViewer.promptFallback");
   const sourceOutputId =
     selectedTask?.targetOutputId ?? selectedOutput?.parentOutputId ?? null;
   const sourceOutput = sourceOutputId
@@ -463,10 +524,12 @@ export function ImageTaskViewer({
   const sourceSummary = sourceImagePrompt
     ? sourceImagePrompt
     : sourceImageRef
-      ? `已引用 ${sourceImageRef}`
+      ? t("agentChat.imageTaskViewer.source.refSummary", {
+          ref: sourceImageRef,
+        })
       : selectedTask?.mode === "variation"
-        ? "当前任务会基于参考图继续生成新的重绘结果。"
-        : "当前任务会基于已有图片结果继续完成修图。";
+        ? t("agentChat.imageTaskViewer.source.variationSummary")
+        : t("agentChat.imageTaskViewer.source.editSummary");
   const followUpCommand = buildFollowUpCommand({
     mode: selectedTask?.mode,
     outputRef: selectedOutput?.refId,
@@ -479,13 +542,14 @@ export function ImageTaskViewer({
     }
 
     void openResourceManager({
-      sourceLabel: resolveModeEyebrow(selectedTask?.mode),
+      sourceLabel: resolveModeEyebrow(selectedTask?.mode, t),
       sourceContext: buildImageTaskResourceSourceContext({
         taskId: selectedTask?.id ?? selectedOutput.taskId,
         outputId: selectedOutput.id,
         projectId: sourceProjectId,
         contentId: sourceContentId,
         threadId: sourceThreadId,
+        sourcePage: "image-task-viewer",
       }),
       initialIndex: selectedOutputIndex >= 0 ? selectedOutputIndex : 0,
       items: selectedTaskOutputs.map((output, index) => {
@@ -500,6 +564,7 @@ export function ImageTaskViewer({
           slotIndex: output.slotIndex,
           slotLabel: output.slotLabel,
           taskSlotLabel,
+          t,
         });
 
         return {
@@ -521,6 +586,7 @@ export function ImageTaskViewer({
             projectId: sourceProjectId,
             contentId: sourceContentId,
             threadId: sourceThreadId,
+            sourcePage: "image-task-viewer",
           }),
         };
       }),
@@ -533,7 +599,7 @@ export function ImageTaskViewer({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-              {resolveModeEyebrow(selectedTask?.mode)}
+              {resolveModeEyebrow(selectedTask?.mode, t)}
             </div>
             <div className="mt-2 line-clamp-2 text-sm font-semibold leading-6 text-slate-900">
               {prompt}
@@ -560,7 +626,7 @@ export function ImageTaskViewer({
                 type="button"
                 onClick={onClose}
                 className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 transition hover:border-slate-300 hover:text-slate-700"
-                aria-label="关闭图片查看"
+                aria-label={t("agentChat.imageTaskViewer.action.close")}
                 data-testid="image-task-viewer-close"
               >
                 <X className="h-4 w-4" />
@@ -579,7 +645,10 @@ export function ImageTaskViewer({
             {selectedOutput ? (
               <RenderableTaskImage
                 src={selectedOutput.url}
-                alt={selectedOutput.prompt || "图片任务结果"}
+                alt={
+                  selectedOutput.prompt ||
+                  t("agentChat.imageTaskViewer.media.resultAlt")
+                }
                 className="h-full w-full object-contain"
                 renderImage={(imageProps) => (
                   <button
@@ -597,7 +666,8 @@ export function ImageTaskViewer({
                     />
                     <span className="pointer-events-none absolute inset-x-4 bottom-4 rounded-[14px] bg-slate-950/66 px-3 py-2 text-left text-xs leading-5 text-white backdrop-blur-[1px]">
                       <span className="font-medium">
-                        {selectedStoryboardSlot?.label || "点击逐张预览"}
+                        {selectedStoryboardSlot?.label ||
+                          t("agentChat.imageTaskViewer.media.openSingle")}
                       </span>
                       {selectedStoryboardSlot?.prompt ? (
                         <span className="mt-0.5 line-clamp-2 block text-white/80">
@@ -620,18 +690,24 @@ export function ImageTaskViewer({
                       )}
                       <div className="text-sm font-semibold text-slate-900">
                         {reason === "error"
-                          ? resolveImageUnavailableTitle(selectedTask?.status)
+                          ? resolveImageUnavailableTitle(
+                              selectedTask?.status,
+                              selectedTask?.mode,
+                              t,
+                            )
                           : statusLabel}
                       </div>
                       <div className="text-sm leading-6 text-slate-500">
                         {reason === "error"
                           ? resolveImageUnavailableDescription(
                               selectedTask?.mode,
+                              t,
                             )
                           : resolveEmptyStateDescription(
                               selectedTask?.status,
                               selectedTask?.failureMessage,
                               selectedTask?.mode,
+                              t,
                             )}
                       </div>
                     </div>
@@ -656,6 +732,7 @@ export function ImageTaskViewer({
                       selectedTask?.status,
                       selectedTask?.failureMessage,
                       selectedTask?.mode,
+                      t,
                     )}
                   </div>
                 </div>
@@ -670,7 +747,7 @@ export function ImageTaskViewer({
             className="mt-4 rounded-[20px] border border-slate-200 bg-slate-50 p-4"
           >
             <div className="text-[11px] font-medium text-slate-500">
-              {resolveSourceLabel(selectedTask?.mode)}
+              {resolveSourceLabel(selectedTask?.mode, t)}
             </div>
             <div className="mt-3 flex items-center gap-3">
               <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-[18px] border border-slate-200 bg-white">
@@ -678,7 +755,8 @@ export function ImageTaskViewer({
                   src={sourceImageUrl}
                   data-testid="image-task-viewer-source-image"
                   alt={
-                    sourceImagePrompt || resolveSourceLabel(selectedTask?.mode)
+                    sourceImagePrompt ||
+                    resolveSourceLabel(selectedTask?.mode, t)
                   }
                   className="h-full w-full object-cover"
                   renderFallback={(reason) => (
@@ -686,6 +764,7 @@ export function ImageTaskViewer({
                       {resolveSourcePlaceholderLabel(
                         selectedTask?.mode,
                         reason,
+                        t,
                       )}
                     </span>
                   )}
@@ -703,7 +782,9 @@ export function ImageTaskViewer({
                   ) : null}
                   {sourceImageCount && sourceImageCount > 0 ? (
                     <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">
-                      {sourceImageCount} 张
+                      {t("agentChat.imageTaskViewer.source.imageCount", {
+                        count: sourceImageCount,
+                      })}
                     </span>
                   ) : null}
                 </div>
@@ -773,8 +854,13 @@ export function ImageTaskViewer({
           {expectedOutputCount > 0 ? (
             <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
               {expectedOutputCount > selectedTaskOutputs.length
-                ? `${selectedTaskOutputs.length} / ${expectedOutputCount} 张结果`
-                : `${selectedTaskOutputs.length} 张结果`}
+                ? t("agentChat.imageTaskViewer.resultCount.partial", {
+                    current: selectedTaskOutputs.length,
+                    total: expectedOutputCount,
+                  })
+                : t("agentChat.imageTaskViewer.resultCount.complete", {
+                    count: selectedTaskOutputs.length,
+                  })}
             </span>
           ) : null}
         </div>
@@ -795,7 +881,7 @@ export function ImageTaskViewer({
                 }}
                 className={IMAGE_TASK_PRIMARY_BUTTON_CLASSNAME}
               >
-                {resolveFollowUpLabel(selectedTask?.mode)}
+                {resolveFollowUpLabel(selectedTask?.mode, t)}
               </button>
             ) : null}
             {selectedOutput && onSaveSelectedToLibrary ? (
@@ -820,8 +906,8 @@ export function ImageTaskViewer({
                   <LoaderCircle className="h-4 w-4 animate-spin" />
                 ) : null}
                 {selectedOutput?.resourceSaved
-                  ? "已保存到素材库"
-                  : "保存到素材库"}
+                  ? t("agentChat.imageTaskViewer.action.savedToLibrary")
+                  : t("agentChat.imageTaskViewer.action.saveToLibrary")}
               </button>
             ) : null}
             {selectedOutput &&
@@ -863,6 +949,7 @@ export function ImageTaskViewer({
                 slotIndex: output?.slotIndex,
                 slotLabel: output?.slotLabel,
                 taskSlotLabel,
+                t,
               });
               return (
                 <button
@@ -888,7 +975,10 @@ export function ImageTaskViewer({
                     {output ? (
                       <RenderableTaskImage
                         src={output.url}
-                        alt={output.prompt || "图片结果缩略图"}
+                        alt={
+                          output.prompt ||
+                          t("agentChat.imageTaskViewer.media.thumbAlt")
+                        }
                         className={cn(
                           "w-full object-cover",
                           resolveOutputTileAspectClass(
@@ -904,7 +994,7 @@ export function ImageTaskViewer({
                               ),
                             )}
                           >
-                            预览失败
+                            {t("agentChat.imageTaskViewer.media.previewFailed")}
                           </div>
                         )}
                       />
@@ -926,10 +1016,10 @@ export function ImageTaskViewer({
                         )}
                         <span className="text-[11px] font-medium text-slate-400">
                           {selectedTask?.status === "error"
-                            ? "本格失败"
+                            ? t("agentChat.imageTaskViewer.slot.failed")
                             : selectedTask?.status === "cancelled"
-                              ? "已取消"
-                              : "等待生成"}
+                              ? t("agentChat.imageTaskViewer.slot.cancelled")
+                              : t("agentChat.imageTaskViewer.slot.pending")}
                         </span>
                       </div>
                     )}
@@ -952,7 +1042,7 @@ export function ImageTaskViewer({
                     ) : null}
                     {active && output ? (
                       <span className="absolute right-2 top-2 rounded-full bg-slate-950/68 px-2.5 py-1 text-[11px] font-medium text-white">
-                        当前选中
+                        {t("agentChat.imageTaskViewer.selected.current")}
                       </span>
                     ) : null}
                   </div>

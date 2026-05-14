@@ -6,6 +6,7 @@ import type {
   WorkflowQuickAction,
   WorkflowStep,
 } from "../../../utils/workflowInputState";
+import type { InputbarWorkflowPanelCopy } from "../inputbarWorkflowCopy";
 
 interface InputbarWorkflowStatusPanelProps {
   gate?: WorkflowGateState | null;
@@ -20,6 +21,7 @@ interface InputbarWorkflowStatusPanelProps {
   renderGeneratingPanel: boolean;
   onQuickAction: (prompt: string) => void;
   onStop?: () => void;
+  copy: InputbarWorkflowPanelCopy;
 }
 
 type WorkflowTone = "active" | "pending" | "error";
@@ -302,14 +304,17 @@ function resolveWorkflowTone(
   return "active";
 }
 
-function getStatusLabel(tone: WorkflowTone): string {
+function getStatusLabel(
+  tone: WorkflowTone,
+  copy: InputbarWorkflowPanelCopy,
+): string {
   if (tone === "error") {
-    return "异常";
+    return copy.status.error;
   }
   if (tone === "pending") {
-    return "待处理";
+    return copy.status.pending;
   }
-  return "进行中";
+  return copy.status.active;
 }
 
 function renderToneIcon(tone: WorkflowTone) {
@@ -335,6 +340,7 @@ export function InputbarWorkflowStatusPanel({
   renderGeneratingPanel,
   onQuickAction,
   onStop,
+  copy,
 }: InputbarWorkflowStatusPanelProps) {
   const [queueCollapsed, setQueueCollapsed] = useState(false);
 
@@ -346,12 +352,12 @@ export function InputbarWorkflowStatusPanel({
     ? resolveWorkflowTone(activeItem?.status)
     : resolveWorkflowTone(gate?.status);
   const summaryTitle = renderGeneratingPanel
-    ? activeItem?.title || "正在编排任务节点"
-    : gate?.title || "等待继续";
+    ? activeItem?.title || copy.summary.defaultActiveTitle
+    : gate?.title || copy.summary.defaultGateTitle;
   const queueHiddenCount = Math.max(queueTotalCount - queueItems.length, 0);
   const queueHintLabel =
     queueHiddenCount > 0
-      ? `${progressLabel} · 另有 ${queueHiddenCount} 项收纳`
+      ? copy.queue.hiddenSuffix(progressLabel, queueHiddenCount)
       : progressLabel;
 
   return (
@@ -362,7 +368,7 @@ export function InputbarWorkflowStatusPanel({
             {renderToneIcon(summaryTone)}
           </SummaryIcon>
           <SummaryBody>
-            <SummaryEyebrow>当前进展</SummaryEyebrow>
+            <SummaryEyebrow>{copy.summary.currentProgress}</SummaryEyebrow>
             <SummaryTitle data-testid="workflow-current-title">
               {summaryTitle}
             </SummaryTitle>
@@ -371,19 +377,19 @@ export function InputbarWorkflowStatusPanel({
           <SummaryAside>
             <SummaryStatus $tone={summaryTone}>
               {renderGeneratingPanel
-                ? getStatusLabel(summaryTone)
+                ? getStatusLabel(summaryTone, copy)
                 : gate?.status === "waiting"
-                  ? "等待决策"
+                  ? copy.status.waitingDecision
                   : gate?.status === "running"
-                    ? "自动执行中"
-                    : "待启动"}
+                    ? copy.status.autoRunning
+                    : copy.status.ready}
             </SummaryStatus>
             {renderGeneratingPanel ? (
               <StopButton
                 type="button"
                 data-testid="workflow-stop"
                 onClick={() => onStop?.()}
-                aria-label="停止生成"
+                aria-label={copy.action.stopGeneration}
               >
                 <StopGlyph />
               </StopButton>
@@ -396,9 +402,11 @@ export function InputbarWorkflowStatusPanel({
             <QueueToggleButton
               type="button"
               onClick={() => setQueueCollapsed((previous) => !previous)}
-              aria-label={queueCollapsed ? "展开任务队列" : "折叠任务队列"}
+              aria-label={
+                queueCollapsed ? copy.queue.expand : copy.queue.collapse
+              }
             >
-              <QueueToggleLabel>任务队列</QueueToggleLabel>
+              <QueueToggleLabel>{copy.queue.title}</QueueToggleLabel>
               <QueueCount>{queueTotalCount}</QueueCount>
               <QueueHint>{queueHintLabel}</QueueHint>
               <QueueChevron $collapsed={queueCollapsed}>
@@ -413,8 +421,8 @@ export function InputbarWorkflowStatusPanel({
                       <Loader2 size={13} className="animate-spin" />
                     </TaskIcon>
                     <TaskBody>
-                      <TaskTitle>正在编排任务节点...</TaskTitle>
-                      <TaskMeta>进行中</TaskMeta>
+                      <TaskTitle>{copy.queue.placeholderTitle}</TaskTitle>
+                      <TaskMeta>{copy.status.active}</TaskMeta>
                     </TaskBody>
                   </TaskRow>
                 ) : (
@@ -430,10 +438,13 @@ export function InputbarWorkflowStatusPanel({
                         <TaskBody>
                           <TaskTitle>{item.title}</TaskTitle>
                           <TaskMeta>
-                            {getStatusLabel(tone)}
                             {totalCount > 0
-                              ? ` · ${completedCount}/${totalCount}`
-                              : ""}
+                              ? copy.queue.itemMetaWithProgress(
+                                  getStatusLabel(tone, copy),
+                                  completedCount,
+                                  totalCount,
+                                )
+                              : getStatusLabel(tone, copy)}
                           </TaskMeta>
                         </TaskBody>
                       </TaskRow>

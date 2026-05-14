@@ -8,6 +8,7 @@ import {
   type ListMediaTaskArtifactsOutput,
   type MediaTaskArtifactOutput,
 } from "@/lib/api/mediaTasks";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import { readFilePreview } from "@/lib/api/fileBrowser";
 import { safeListen } from "@/lib/dev-bridge";
 import type { Message } from "../types";
@@ -406,7 +407,8 @@ function renderHook(props?: Partial<HookProps>) {
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  await changeLimeLocale("zh-CN");
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;

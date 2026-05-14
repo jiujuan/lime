@@ -64,6 +64,7 @@ export interface ImageWorkbenchOutputView {
 export interface ImageTaskViewerProps {
   tasks: ImageWorkbenchTaskView[];
   outputs: ImageWorkbenchOutputView[];
+  selectedTaskId?: string | null;
   selectedOutputId: string | null;
   sourceProjectId?: string | null;
   sourceContentId?: string | null;

@@ -1409,6 +1409,37 @@ afterEach(() => {
 });
 
 describe("AgentChatPage 任务中心初始会话标签", () => {
+  it("路由初始会话恢复应强制刷新，避免旧缓存串到目标会话", async () => {
+    const state: Record<string, unknown> = createMockAgentChatUnifiedState({
+      sessionId: null,
+      topics: [
+        {
+          id: "topic-target",
+          title: "目标历史会话",
+          updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
+          workspaceId: "workspace-test",
+        },
+      ],
+    });
+    const switchTopic = vi.fn(async (topicId: string) => {
+      state.sessionId = topicId;
+    });
+    state.switchTopic = switchTopic;
+    installMockAgentChatUnifiedState(state);
+
+    mountPage({
+      agentEntry: "claw",
+      initialSessionId: "topic-target",
+      projectId: "workspace-test",
+    });
+    await flushEffects();
+
+    expect(switchTopic).toHaveBeenCalledWith("topic-target", {
+      allowDetachedSession: true,
+      forceRefresh: true,
+    });
+  });
+
   it("点击顶部加号应在任务中心新标签内嵌首页起手页", async () => {
     const onNavigate = vi.fn();
     vi.mocked(buildHomeAgentParams).mockClear();
@@ -1532,6 +1563,69 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
       container.querySelector('[data-testid="empty-state"]'),
     ).not.toBeNull();
     expect(container.querySelector('[data-testid="message-list"]')).toBeNull();
+  });
+
+  it("新建草稿时即使本地仍有旧标签，也不应自动恢复旧会话", async () => {
+    localStorage.setItem(
+      TASK_CENTER_OPEN_TAB_IDS_STORAGE_KEY,
+      JSON.stringify({
+        "workspace-test": ["topic-current"],
+      }),
+    );
+    const switchTopic = vi.fn(async () => "success");
+    const state: Record<string, unknown> = createMockAgentChatUnifiedState({
+      sessionId: "topic-current",
+      messages: [
+        {
+          id: "old-user",
+          role: "user",
+          content: "@配图 旧标签里的图片提示词",
+          timestamp: new Date(FIXED_TOPIC_UPDATED_AT),
+        },
+        {
+          id: "old-assistant",
+          role: "assistant",
+          content: "旧标签里的图片回复",
+          timestamp: new Date(FIXED_TOPIC_UPDATED_AT + 1_000),
+        },
+      ],
+      topics: [
+        {
+          id: "topic-current",
+          title: "旧图片会话",
+          updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
+          workspaceId: "workspace-test",
+        },
+      ],
+      switchTopic,
+    });
+    state.clearMessages = vi.fn(() => {
+      state.sessionId = null;
+      state.messages = [];
+    });
+    installMockAgentChatUnifiedState(state);
+
+    const mounted = mountPage({
+      agentEntry: "claw",
+      initialSessionId: "topic-current",
+      projectId: "workspace-test",
+    });
+    await flushEffects();
+    switchTopic.mockClear();
+
+    clickButton(mounted.container, "task-center-tab-create-button");
+    await flushEffects(10);
+    mounted.rerender();
+    await flushEffects();
+
+    expect(switchTopic).not.toHaveBeenCalled();
+    expect(mounted.container.textContent).not.toContain("旧标签里的图片提示词");
+    expect(mounted.container.textContent).not.toContain("旧标签里的图片回复");
+    expect(
+      mounted.container.querySelector(
+        '[data-testid^="task-center-tab-task-draft-"][data-active="true"]',
+      ),
+    ).not.toBeNull();
   });
 
   it("打开旧会话后草稿预热创建新对话时不应继承旧消息快照", async () => {
@@ -2183,7 +2277,9 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     mounted.rerender();
     await flushEffects();
 
-    expect(switchTopic).toHaveBeenCalledWith("topic-a");
+    expect(switchTopic).toHaveBeenCalledWith("topic-a", {
+      forceRefresh: true,
+    });
     expect(
       mounted.container
         .querySelector('[data-testid="task-center-tab-topic-a"]')
@@ -2242,7 +2338,9 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     });
     await flushEffects();
 
-    expect(switchTopic).toHaveBeenCalledWith("topic-a");
+    expect(switchTopic).toHaveBeenCalledWith("topic-a", {
+      forceRefresh: true,
+    });
     expect(
       mounted.container
         .querySelector('[data-testid="task-center-tab-topic-a"]')
@@ -2299,7 +2397,9 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
       }),
     ).toBe(true);
     await flushEffects();
-    expect(switchTopic).toHaveBeenCalledWith("topic-next");
+    expect(switchTopic).toHaveBeenCalledWith("topic-next", {
+      forceRefresh: true,
+    });
 
     mounted.rerender({
       initialSessionId: "topic-next",
@@ -2361,7 +2461,9 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     mounted.rerender();
     await flushEffects();
 
-    expect(switchTopic).toHaveBeenCalledWith("topic-next");
+    expect(switchTopic).toHaveBeenCalledWith("topic-next", {
+      forceRefresh: true,
+    });
     expect(
       mounted.container
         .querySelector('[data-testid="task-center-tab-topic-next"]')
@@ -2519,7 +2621,9 @@ describe("AgentChatPage 话题切换项目恢复", () => {
 
     const switchTopicMock = mockUseAgentChatUnified.mock.results[0]?.value
       ?.switchTopic as ReturnType<typeof vi.fn>;
-    expect(switchTopicMock).toHaveBeenCalledWith("topic-a");
+    expect(switchTopicMock).toHaveBeenCalledWith("topic-a", {
+      forceRefresh: true,
+    });
 
     const workspaceHookOrder = getHookCallOrderForWorkspace("project-topic");
     const switchTopicOrder = switchTopicMock.mock.invocationCallOrder[0];
@@ -2572,7 +2676,9 @@ describe("AgentChatPage 话题切换项目恢复", () => {
     expect(mockToast.info).toHaveBeenCalledWith(
       "未找到可用项目，已自动创建默认项目",
     );
-    expect(switchTopicMock).toHaveBeenCalledWith("topic-a");
+    expect(switchTopicMock).toHaveBeenCalledWith("topic-a", {
+      forceRefresh: true,
+    });
 
     const workspaceHookOrder = getHookCallOrderForWorkspace("default-new");
     const switchTopicOrder = switchTopicMock.mock.invocationCallOrder[0];

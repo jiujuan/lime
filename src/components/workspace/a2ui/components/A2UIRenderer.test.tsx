@@ -60,7 +60,7 @@ describe("A2UIRenderer", () => {
     const root = container.querySelector(
       ".a2ui-container",
     ) as HTMLDivElement | null;
-    expect(root?.className).toContain("space-y-4");
+    expect(root?.className).toContain("space-y-3");
     expect(container.textContent).toContain("这是推理提示");
     const submitButton = clickButtonByText(container, "开始处理");
     expect(submitButton?.className).toBe(A2UI_RENDERER_TOKENS.submitButton);
@@ -277,7 +277,35 @@ describe("TextRenderer", () => {
     expect(container.querySelector("br")).not.toBeNull();
     expect(container.textContent).not.toContain("**重点**");
     const codeBlock = container.querySelector("pre");
-    expect(codeBlock?.className).toContain("border-sky-100");
+    expect(codeBlock?.className).toContain(
+      "border-[color:var(--lime-surface-border)]",
+    );
     expect(codeBlock?.textContent).toContain("const answer = 42;");
+  });
+
+  it("markdown 表格应跟随 Lime 主题变量", () => {
+    const { container } = mountHarness(
+      TextRenderer,
+      {
+        component: {
+          id: "markdown-table",
+          component: "Text",
+          text: ["| 项目 | 状态 |", "| --- | --- |", "| A2UI | 已适配 |"].join(
+            "\n",
+          ),
+          variant: "body",
+        },
+        data: {},
+      },
+      mountedRoots,
+    );
+
+    const tableShell = container.querySelector("table")?.parentElement;
+    const header = container.querySelector("th");
+    expect(tableShell?.className).toContain(
+      "border-[color:var(--lime-surface-border)]",
+    );
+    expect(header?.className).toContain("bg-[color:var(--lime-brand-soft)]");
+    expect(container.textContent).toContain("已适配");
   });
 });

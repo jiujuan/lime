@@ -124,10 +124,13 @@ import type {
   ServiceSkillHomeItem,
   ServiceSkillSlotValues,
 } from "../service-skills/types";
+import type { ImageWorkbenchSkillRequest } from "./imageSkillLaunch";
 import {
-  buildImageSkillLaunchRequestMetadata,
-  type ImageWorkbenchSkillRequest,
-} from "./imageSkillLaunch";
+  buildModelSkillLaunchRequestMetadataFor,
+  MODEL_SKILL_LAUNCH_DESCRIPTORS,
+  SESSION_BOUND_MODEL_SKILL_LAUNCHES,
+  type SessionBoundRequestContextKey,
+} from "./modelSkillLaunchDescriptors";
 import { buildBrowserControlLaunchRequestMetadata } from "./browserControlLaunch";
 import {
   PDF_EXTRACT_DEFAULT_ENTRY_SOURCE,
@@ -495,16 +498,6 @@ function readPositiveInteger(value: unknown): number | undefined {
     : undefined;
 }
 
-function readImageTaskPresentationText(
-  imageTask: Record<string, unknown>,
-): string | undefined {
-  const presentation = asRecord(imageTask.presentation);
-  return normalizeOptionalText(
-    (presentation?.assistant_intro as string | undefined) ||
-      (presentation?.assistantIntro as string | undefined),
-  );
-}
-
 function normalizeImageWorkbenchMode(
   value: unknown,
 ): MessageImageWorkbenchPreview["mode"] {
@@ -575,15 +568,13 @@ function buildImageWorkbenchAssistantDraft(
   };
 
   return {
-    content:
-      readImageTaskPresentationText(imageTask) ||
-      buildImageTaskAssistantContent({
-        prompt,
-        mode,
-        modelName,
-      }),
+    content: "",
+    fallbackContent: buildImageTaskAssistantContent({
+      prompt,
+      mode,
+      modelName,
+    }),
     imageWorkbenchPreview: preview,
-    preserveContent: true,
   };
 }
 
@@ -730,85 +721,6 @@ const MENTION_USAGE_REQUEST_FIELDS: Readonly<
   ],
 };
 
-const MENTION_USAGE_MODEL_SKILL_LAUNCHES = [
-  {
-    launchKey: "image_skill_launch",
-    requestContextKey: "image_task",
-  },
-  {
-    launchKey: "cover_skill_launch",
-    requestContextKey: "cover_task",
-  },
-  {
-    launchKey: "video_skill_launch",
-    requestContextKey: "video_task",
-  },
-  {
-    launchKey: "broadcast_skill_launch",
-    requestContextKey: "broadcast_task",
-  },
-  {
-    launchKey: "resource_search_skill_launch",
-    requestContextKey: "resource_search_task",
-  },
-  {
-    launchKey: "research_skill_launch",
-    requestContextKey: "research_request",
-  },
-  {
-    launchKey: "report_skill_launch",
-    requestContextKey: "report_request",
-  },
-  {
-    launchKey: "deep_search_skill_launch",
-    requestContextKey: "deep_search_request",
-  },
-  {
-    launchKey: "site_search_skill_launch",
-    requestContextKey: "site_search_request",
-  },
-  {
-    launchKey: "pdf_read_skill_launch",
-    requestContextKey: "pdf_read_request",
-  },
-  {
-    launchKey: "summary_skill_launch",
-    requestContextKey: "summary_request",
-  },
-  {
-    launchKey: "translation_skill_launch",
-    requestContextKey: "translation_request",
-  },
-  {
-    launchKey: "analysis_skill_launch",
-    requestContextKey: "analysis_request",
-  },
-  {
-    launchKey: "transcription_skill_launch",
-    requestContextKey: "transcription_task",
-  },
-  {
-    launchKey: "url_parse_skill_launch",
-    requestContextKey: "url_parse_task",
-  },
-  {
-    launchKey: "typesetting_skill_launch",
-    requestContextKey: "typesetting_task",
-  },
-  {
-    launchKey: "presentation_skill_launch",
-    requestContextKey: "presentation_request",
-  },
-  {
-    launchKey: "form_skill_launch",
-    requestContextKey: "form_request",
-  },
-  {
-    launchKey: "webpage_skill_launch",
-    requestContextKey: "webpage_request",
-  },
-] as const;
-
 function pickUsageSlotValues(
   record: Record<string, unknown>,
   fieldKeys: readonly string[],
@@ -861,7 +773,7 @@ function resolveMentionCommandUsageSlotValues(
     );
   }
 
-  for (const launch of MENTION_USAGE_MODEL_SKILL_LAUNCHES) {
+  for (const launch of MODEL_SKILL_LAUNCH_DESCRIPTORS) {
     const launchMetadata = asRecord(harness[launch.launchKey]);
     if (!launchMetadata) {
       continue;
@@ -906,7 +818,7 @@ function resolveMentionCommandUsageLaunchUserInput(
     );
   }
 
-  for (const launch of MENTION_USAGE_MODEL_SKILL_LAUNCHES) {
+  for (const launch of MODEL_SKILL_LAUNCH_DESCRIPTORS) {
     const launchMetadata = asRecord(harness[launch.launchKey]);
     if (!launchMetadata) {
       continue;
@@ -1586,16 +1498,6 @@ function resolveMentionCommandUsage(params: {
   };
 }
 
-type SessionBoundRequestContextKey =
-  | "image_task"
-  | "cover_task"
-  | "video_task"
-  | "broadcast_task"
-  | "resource_search_task"
-  | "transcription_task"
-  | "url_parse_task"
-  | "typesetting_task";
-
 type PendingCommandSessionBinding =
   | {
       kind: "request_context";
@@ -1639,52 +1541,6 @@ function attachSessionIdToScopedRequestContext(
   delete scopedRequestContext.session_id;
 }
 
-const SESSION_BOUND_MODEL_SKILL_LAUNCHES: ReadonlyArray<{
-  launchKey:
-    | "image_skill_launch"
-    | "cover_skill_launch"
-    | "video_skill_launch"
-    | "broadcast_skill_launch"
-    | "resource_search_skill_launch"
-    | "transcription_skill_launch"
-    | "url_parse_skill_launch"
-    | "typesetting_skill_launch";
-  requestContextKey: SessionBoundRequestContextKey;
-}> = [
-  {
-    launchKey: "image_skill_launch",
-    requestContextKey: "image_task",
-  },
-  {
-    launchKey: "cover_skill_launch",
-    requestContextKey: "cover_task",
-  },
-  {
-    launchKey: "video_skill_launch",
-    requestContextKey: "video_task",
-  },
-  {
-    launchKey: "broadcast_skill_launch",
-    requestContextKey: "broadcast_task",
-  },
-  {
-    launchKey: "resource_search_skill_launch",
-    requestContextKey: "resource_search_task",
-  },
-  {
-    launchKey: "transcription_skill_launch",
-    requestContextKey: "transcription_task",
-  },
-  {
-    launchKey: "url_parse_skill_launch",
-    requestContextKey: "url_parse_task",
-  },
-  {
-    launchKey: "typesetting_skill_launch",
-    requestContextKey: "typesetting_task",
-  },
-];
-
 function extractBoundSessionRequestContext(
   requestMetadata: Record<string, unknown> | undefined,
 ): PendingCommandSessionBinding | null {
@@ -1717,253 +1573,16 @@ function extractBoundSessionRequestContext(
   return null;
 }
 
-function buildModelSkillLaunchRequestMetadata(params: {
-  existingMetadata: Record<string, unknown> | undefined;
-  requestContext: Record<string, unknown>;
-  launchKey:
-    | "image_skill_launch"
-    | "cover_skill_launch"
-    | "video_skill_launch"
-    | "broadcast_skill_launch"
-    | "resource_search_skill_launch"
-    | "research_skill_launch"
-    | "report_skill_launch"
-    | "deep_search_skill_launch"
-    | "site_search_skill_launch"
-    | "pdf_read_skill_launch"
-    | "summary_skill_launch"
-    | "translation_skill_launch"
-    | "analysis_skill_launch"
-    | "transcription_skill_launch"
-    | "url_parse_skill_launch"
-    | "typesetting_skill_launch"
-    | "presentation_skill_launch"
-    | "form_skill_launch"
-    | "webpage_skill_launch";
-  requestContextKey:
-    | "image_task"
-    | "cover_task"
-    | "video_task"
-    | "broadcast_task"
-    | "resource_search_task"
-    | "research_request"
-    | "report_request"
-    | "deep_search_request"
-    | "site_search_request"
-    | "pdf_read_request"
-    | "summary_request"
-    | "translation_request"
-    | "analysis_request"
-    | "transcription_task"
-    | "url_parse_task"
-    | "typesetting_task"
-    | "presentation_request"
-    | "form_request"
-    | "webpage_request";
-  defaultKind:
-    | "image_task"
-    | "cover_task"
-    | "video_task"
-    | "broadcast_task"
-    | "resource_search_task"
-    | "research_request"
-    | "report_request"
-    | "deep_search_request"
-    | "site_search_request"
-    | "pdf_read_request"
-    | "summary_request"
-    | "translation_request"
-    | "analysis_request"
-    | "transcription_task"
-    | "url_parse_task"
-    | "typesetting_task"
-    | "presentation_request"
-    | "form_request"
-    | "webpage_request";
-  skillName:
-    | "image_generate"
-    | "cover_generate"
-    | "video_generate"
-    | "broadcast_generate"
-    | "modal_resource_search"
-    | "research"
-    | "report_generate"
-    | "site_search"
-    | "pdf_read"
-    | "summary"
-    | "translation"
-    | "analysis"
-    | "transcription_generate"
-    | "url_parse"
-    | "typesetting"
-    | "presentation_generate"
-    | "form_generate"
-    | "webpage_generate";
-}): Record<string, unknown> {
-  const scopedRequestContext = asRecord(
-    params.requestContext[params.requestContextKey],
+function buildSkillLaunchRequestMetadata(
+  launchId: Parameters<typeof buildModelSkillLaunchRequestMetadataFor>[0],
+  existingMetadata: Record<string, unknown> | undefined,
+  requestContext: Record<string, unknown>,
+): Record<string, unknown> {
+  return buildModelSkillLaunchRequestMetadataFor(
+    launchId,
+    existingMetadata,
+    requestContext,
   );
-  const existingHarness = asRecord(params.existingMetadata?.harness);
-
-  return {
-    ...(params.existingMetadata || {}),
-    harness: {
-      ...(existingHarness || {}),
-      allow_model_skills: true,
-      [params.launchKey]: {
-        skill_name: params.skillName,
-        kind:
-          typeof params.requestContext.kind === "string"
-            ? params.requestContext.kind
-            : params.defaultKind,
-        ...(scopedRequestContext
-          ? {
-              [params.requestContextKey]: scopedRequestContext,
-            }
-          : { request_context: params.requestContext }),
-      },
-    },
-  };
-}
-
-function buildCoverSkillLaunchRequestMetadata(
-  existingMetadata: Record<string, unknown> | undefined,
-  requestContext: Record<string, unknown>,
-): Record<string, unknown> {
-  return buildModelSkillLaunchRequestMetadata({
-    existingMetadata,
-    requestContext,
-    launchKey: "cover_skill_launch",
-    requestContextKey: "cover_task",
-    defaultKind: "cover_task",
-    skillName: "cover_generate",
-  });
-}
-
-function buildVideoSkillLaunchRequestMetadata(
-  existingMetadata: Record<string, unknown> | undefined,
-  requestContext: Record<string, unknown>,
-): Record<string, unknown> {
-  return buildModelSkillLaunchRequestMetadata({
-    existingMetadata,
-    requestContext,
-    launchKey: "video_skill_launch",
-    requestContextKey: "video_task",
-    defaultKind: "video_task",
-    skillName: "video_generate",
-  });
-}
-
-function buildBroadcastSkillLaunchRequestMetadata(
-  existingMetadata: Record<string, unknown> | undefined,
-  requestContext: Record<string, unknown>,
-): Record<string, unknown> {
-  return buildModelSkillLaunchRequestMetadata({
-    existingMetadata,
-    requestContext,
-    launchKey: "broadcast_skill_launch",
-    requestContextKey: "broadcast_task",
-    defaultKind: "broadcast_task",
-    skillName: "broadcast_generate",
-  });
-}
-
-function buildResourceSearchSkillLaunchRequestMetadata(
-  existingMetadata: Record<string, unknown> | undefined,
-  requestContext: Record<string, unknown>,
-): Record<string, unknown> {
-  return buildModelSkillLaunchRequestMetadata({
-    existingMetadata,
-    requestContext,
-    launchKey: "resource_search_skill_launch",
-    requestContextKey: "resource_search_task",
-    defaultKind: "resource_search_task",
-    skillName: "modal_resource_search",
-  });
-}
-
-function buildResearchSkillLaunchRequestMetadata(
-  existingMetadata: Record<string, unknown> | undefined,
-  requestContext: Record<string, unknown>,
-): Record<string, unknown> {
-  return buildModelSkillLaunchRequestMetadata({
-    existingMetadata,
-    requestContext,
-    launchKey: "research_skill_launch",
-    requestContextKey: "research_request",
-    defaultKind: "research_request",
-    skillName: "research",
-  });
-}
-
-function buildDeepSearchSkillLaunchRequestMetadata(
-  existingMetadata: Record<string, unknown> | undefined,
-  requestContext: Record<string, unknown>,
-): Record<string, unknown> {
-  return buildModelSkillLaunchRequestMetadata({
-    existingMetadata,
-    requestContext,
-    launchKey: "deep_search_skill_launch",
-    requestContextKey: "deep_search_request",
-    defaultKind: "deep_search_request",
-    skillName: "research",
-  });
-}
-
-function buildReportSkillLaunchRequestMetadata(
-  existingMetadata: Record<string, unknown> | undefined,
-  requestContext: Record<string, unknown>,
-): Record<string, unknown> {
-  return buildModelSkillLaunchRequestMetadata({
-    existingMetadata,
-    requestContext,
-    launchKey: "report_skill_launch",
-    requestContextKey: "report_request",
-    defaultKind: "report_request",
-    skillName: "report_generate",
-  });
-}
-
-function buildSiteSearchSkillLaunchRequestMetadata(
-  existingMetadata: Record<string, unknown> | undefined,
-  requestContext: Record<string, unknown>,
-): Record<string, unknown> {
-  return buildModelSkillLaunchRequestMetadata({
-    existingMetadata,
-    requestContext,
-    launchKey: "site_search_skill_launch",
-    requestContextKey: "site_search_request",
-    defaultKind: "site_search_request",
-    skillName: "site_search",
-  });
-}
-
-function buildPdfReadSkillLaunchRequestMetadata(
-  existingMetadata: Record<string, unknown> | undefined,
-  requestContext: Record<string, unknown>,
-): Record<string, unknown> {
-  return buildModelSkillLaunchRequestMetadata({
-    existingMetadata,
-    requestContext,
-    launchKey: "pdf_read_skill_launch",
-    requestContextKey: "pdf_read_request",
-    defaultKind: "pdf_read_request",
-    skillName: "pdf_read",
-  });
-}
-
-function buildSummarySkillLaunchRequestMetadata(
-  existingMetadata: Record<string, unknown> | undefined,
-  requestContext: Record<string, unknown>,
-): Record<string, unknown> {
-  return buildModelSkillLaunchRequestMetadata({
-    existingMetadata,
-    requestContext,
-    launchKey: "summary_skill_launch",
-    requestContextKey: "summary_request",
-    defaultKind: "summary_request",
-    skillName: "summary",
-  });
 }
 
 function buildFileReadSkillLaunchRequestContext(params: {
@@ -2008,118 +1627,6 @@ function buildFileReadSkillLaunchRequestContext(params: {
       runtime_contract: runtimeContract.runtimeContract,
     },
   };
-}
-
-function buildTranslationSkillLaunchRequestMetadata(
-  existingMetadata: Record<string, unknown> | undefined,
-  requestContext: Record<string, unknown>,
-): Record<string, unknown> {
-  return buildModelSkillLaunchRequestMetadata({
-    existingMetadata,
-    requestContext,
-    launchKey: "translation_skill_launch",
-    requestContextKey: "translation_request",
-    defaultKind: "translation_request",
-    skillName: "translation",
-  });
-}
-
-function buildAnalysisSkillLaunchRequestMetadata(
-  existingMetadata: Record<string, unknown> | undefined,
-  requestContext: Record<string, unknown>,
-): Record<string, unknown> {
-  return buildModelSkillLaunchRequestMetadata({
-    existingMetadata,
-    requestContext,
-    launchKey: "analysis_skill_launch",
-    requestContextKey: "analysis_request",
-    defaultKind: "analysis_request",
-    skillName: "analysis",
-  });
-}
-
-function buildTranscriptionSkillLaunchRequestMetadata(
-  existingMetadata: Record<string, unknown> | undefined,
-  requestContext: Record<string, unknown>,
-): Record<string, unknown> {
-  return buildModelSkillLaunchRequestMetadata({
-    existingMetadata,
-    requestContext,
-    launchKey: "transcription_skill_launch",
-    requestContextKey: "transcription_task",
-    defaultKind: "transcription_task",
-    skillName: "transcription_generate",
-  });
-}
-
-function buildUrlParseSkillLaunchRequestMetadata(
-  existingMetadata: Record<string, unknown> | undefined,
-  requestContext: Record<string, unknown>,
-): Record<string, unknown> {
-  return buildModelSkillLaunchRequestMetadata({
-    existingMetadata,
-    requestContext,
-    launchKey: "url_parse_skill_launch",
-    requestContextKey: "url_parse_task",
-    defaultKind: "url_parse_task",
-    skillName: "url_parse",
-  });
-}
-
-function buildTypesettingSkillLaunchRequestMetadata(
-  existingMetadata: Record<string, unknown> | undefined,
-  requestContext: Record<string, unknown>,
-): Record<string, unknown> {
-  return buildModelSkillLaunchRequestMetadata({
-    existingMetadata,
-    requestContext,
-    launchKey: "typesetting_skill_launch",
-    requestContextKey: "typesetting_task",
-    defaultKind: "typesetting_task",
-    skillName: "typesetting",
-  });
-}
-
-function buildPresentationSkillLaunchRequestMetadata(
-  existingMetadata: Record<string, unknown> | undefined,
-  requestContext: Record<string, unknown>,
-): Record<string, unknown> {
-  return buildModelSkillLaunchRequestMetadata({
-    existingMetadata,
-    requestContext,
-    launchKey: "presentation_skill_launch",
-    requestContextKey: "presentation_request",
-    defaultKind: "presentation_request",
-    skillName: "presentation_generate",
-  });
-}
-
-function buildWebpageSkillLaunchRequestMetadata(
-  existingMetadata: Record<string, unknown> | undefined,
-  requestContext: Record<string, unknown>,
-): Record<string, unknown> {
-  return buildModelSkillLaunchRequestMetadata({
-    existingMetadata,
-    requestContext,
-    launchKey: "webpage_skill_launch",
-    requestContextKey: "webpage_request",
-    defaultKind: "webpage_request",
-    skillName: "webpage_generate",
-  });
-}
-
-function buildFormSkillLaunchRequestMetadata(
-  existingMetadata: Record<string, unknown> | undefined,
-  requestContext: Record<string, unknown>,
-): Record<string, unknown> {
-  return buildModelSkillLaunchRequestMetadata({
-    existingMetadata,
-    requestContext,
-    launchKey: "form_skill_launch",
-    requestContextKey: "form_request",
-    defaultKind: "form_request",
-    skillName: "form_generate",
-  });
 }
 
 function buildVideoSkillLaunchRequestContext(params: {
@@ -3076,6 +2583,7 @@ interface UseWorkspaceSendActionsParams {
   isThemeWorkbench: boolean;
   contextWorkspace: ContextWorkspaceSummary;
   projectId?: string | null;
+  projectRootPath?: string | null;
   sessionId?: string | null;
   executionStrategy: ExecutionStrategy;
   accessMode?: AgentAccessMode;
@@ -3673,6 +3181,7 @@ export function useWorkspaceSendActions({
           parsedCommand: parsedImageWorkbenchCommand,
           images: effectiveImages,
           sessionIdOverride: commandSessionId,
+          entrySource: parsedImageWorkbenchCommand.entrySource,
         });
         if (!skillRequest) {
           clearSubmissionPreview();
@@ -3682,6 +3191,9 @@ export function useWorkspaceSendActions({
           skillRequest.images.length > 0
             ? skillRequest.images
             : effectiveImages;
+        const mentionCommandKey = resolveImageMentionCommandKey(
+          parsedImageWorkbenchCommand,
+        );
         pendingCommandSessionBinding = {
           kind: "request_context",
           requestContext: skillRequest.requestContext,
@@ -3694,14 +3206,12 @@ export function useWorkspaceSendActions({
         ).catch(() => undefined);
         sendOptions = {
           ...(sendOptions || {}),
-          requestMetadata: buildImageSkillLaunchRequestMetadata(
+          requestMetadata: buildSkillLaunchRequestMetadata(
+            "image",
             sendOptions?.requestMetadata,
             skillRequest.requestContext,
           ),
         };
-        const mentionCommandKey = resolveImageMentionCommandKey(
-          parsedImageWorkbenchCommand,
-        );
         if (mentionCommandKey) {
           markCompletedMentionCommand(
             mentionCommandKey,
@@ -3759,7 +3269,8 @@ export function useWorkspaceSendActions({
         ).catch(() => undefined);
         sendOptions = {
           ...(sendOptions || {}),
-          requestMetadata: buildImageSkillLaunchRequestMetadata(
+          requestMetadata: buildSkillLaunchRequestMetadata(
+            "image",
             sendOptions?.requestMetadata,
             skillRequest.requestContext,
           ),
@@ -3821,7 +3332,8 @@ export function useWorkspaceSendActions({
         ).catch(() => undefined);
         sendOptions = {
           ...(sendOptions || {}),
-          requestMetadata: buildCoverSkillLaunchRequestMetadata(
+          requestMetadata: buildSkillLaunchRequestMetadata(
+            "cover",
             sendOptions?.requestMetadata,
             requestContext,
           ),
@@ -3866,7 +3378,8 @@ export function useWorkspaceSendActions({
         ).catch(() => undefined);
         sendOptions = {
           ...(sendOptions || {}),
-          requestMetadata: buildVideoSkillLaunchRequestMetadata(
+          requestMetadata: buildSkillLaunchRequestMetadata(
+            "video",
             sendOptions?.requestMetadata,
             requestContext,
           ),
@@ -3908,7 +3421,8 @@ export function useWorkspaceSendActions({
         ).catch(() => undefined);
         sendOptions = {
           ...(sendOptions || {}),
-          requestMetadata: buildBroadcastSkillLaunchRequestMetadata(
+          requestMetadata: buildSkillLaunchRequestMetadata(
+            "broadcast",
             sendOptions?.requestMetadata,
             requestContext,
           ),
@@ -3959,7 +3473,8 @@ export function useWorkspaceSendActions({
         ).catch(() => undefined);
         sendOptions = {
           ...(sendOptions || {}),
-          requestMetadata: buildResourceSearchSkillLaunchRequestMetadata(
+          requestMetadata: buildSkillLaunchRequestMetadata(
+            "resourceSearch",
             sendOptions?.requestMetadata,
             requestContext,
           ),
@@ -4003,7 +3518,8 @@ export function useWorkspaceSendActions({
         ).catch(() => undefined);
         sendOptions = {
           ...(sendOptions || {}),
-          requestMetadata: buildTranscriptionSkillLaunchRequestMetadata(
+          requestMetadata: buildSkillLaunchRequestMetadata(
+            "transcription",
             sendOptions?.requestMetadata,
             requestContext,
           ),
@@ -4049,7 +3565,8 @@ export function useWorkspaceSendActions({
         }
         sendOptions = {
           ...(sendOptions || {}),
-          requestMetadata: buildResearchSkillLaunchRequestMetadata(
+          requestMetadata: buildSkillLaunchRequestMetadata(
+            "research",
             sendOptions?.requestMetadata,
             requestContext,
           ),
@@ -4096,7 +3613,8 @@ export function useWorkspaceSendActions({
         }
         sendOptions = {
           ...(sendOptions || {}),
-          requestMetadata: buildReportSkillLaunchRequestMetadata(
+          requestMetadata: buildSkillLaunchRequestMetadata(
+            "report",
             sendOptions?.requestMetadata,
             requestContext,
           ),
@@ -4145,7 +3663,8 @@ export function useWorkspaceSendActions({
         }
         sendOptions = {
           ...(sendOptions || {}),
-          requestMetadata: buildReportSkillLaunchRequestMetadata(
+          requestMetadata: buildSkillLaunchRequestMetadata(
+            "report",
             sendOptions?.requestMetadata,
             requestContext,
           ),
@@ -4195,7 +3714,8 @@ export function useWorkspaceSendActions({
         }
         sendOptions = {
           ...(sendOptions || {}),
-          requestMetadata: buildDeepSearchSkillLaunchRequestMetadata(
+          requestMetadata: buildSkillLaunchRequestMetadata(
+            "deepSearch",
             sendOptions?.requestMetadata,
             requestContext,
           ),
@@ -4251,7 +3771,8 @@ export function useWorkspaceSendActions({
         sendOptions = {
           ...(sendOptions || {}),
           toolPreferencesOverride: effectiveToolPreferences,
-          requestMetadata: buildSiteSearchSkillLaunchRequestMetadata(
+          requestMetadata: buildSkillLaunchRequestMetadata(
+            "siteSearch",
             sendOptions?.requestMetadata,
             requestContext,
           ),
@@ -4301,7 +3822,8 @@ export function useWorkspaceSendActions({
         }
         sendOptions = {
           ...(sendOptions || {}),
-          requestMetadata: buildPdfReadSkillLaunchRequestMetadata(
+          requestMetadata: buildSkillLaunchRequestMetadata(
+            "pdfRead",
             sendOptions?.requestMetadata,
             requestContext,
           ),
@@ -4354,7 +3876,8 @@ export function useWorkspaceSendActions({
         }
         sendOptions = {
           ...(sendOptions || {}),
-          requestMetadata: buildSummarySkillLaunchRequestMetadata(
+          requestMetadata: buildSkillLaunchRequestMetadata(
+            "summary",
             sendOptions?.requestMetadata,
             requestContext,
           ),
@@ -4401,7 +3924,8 @@ export function useWorkspaceSendActions({
         });
         sendOptions = {
           ...(sendOptions || {}),
-          requestMetadata: buildSummarySkillLaunchRequestMetadata(
+          requestMetadata: buildSkillLaunchRequestMetadata(
+            "summary",
             sendOptions?.requestMetadata,
             requestContext,
           ),
@@ -4445,7 +3969,8 @@ export function useWorkspaceSendActions({
         });
         sendOptions = {
           ...(sendOptions || {}),
-          requestMetadata: buildTranslationSkillLaunchRequestMetadata(
+          requestMetadata: buildSkillLaunchRequestMetadata(
+            "translation",
             sendOptions?.requestMetadata,
             requestContext,
           ),
@@ -4497,7 +4022,8 @@ export function useWorkspaceSendActions({
         });
         sendOptions = {
           ...(sendOptions || {}),
-          requestMetadata: buildAnalysisSkillLaunchRequestMetadata(
+          requestMetadata: buildSkillLaunchRequestMetadata(
+            "analysis",
             sendOptions?.requestMetadata,
             requestContext,
           ),
@@ -4551,7 +4077,8 @@ export function useWorkspaceSendActions({
         });
         sendOptions = {
           ...(sendOptions || {}),
-          requestMetadata: buildAnalysisSkillLaunchRequestMetadata(
+          requestMetadata: buildSkillLaunchRequestMetadata(
+            "analysis",
             sendOptions?.requestMetadata,
             requestContext,
           ),
@@ -4601,7 +4128,8 @@ export function useWorkspaceSendActions({
         });
         sendOptions = {
           ...(sendOptions || {}),
-          requestMetadata: buildAnalysisSkillLaunchRequestMetadata(
+          requestMetadata: buildSkillLaunchRequestMetadata(
+            "analysis",
             sendOptions?.requestMetadata,
             requestContext,
           ),
@@ -4648,7 +4176,8 @@ export function useWorkspaceSendActions({
         void primeCommandSessionId().catch(() => undefined);
         sendOptions = {
           ...(sendOptions || {}),
-          requestMetadata: buildUrlParseSkillLaunchRequestMetadata(
+          requestMetadata: buildSkillLaunchRequestMetadata(
+            "urlParse",
             sendOptions?.requestMetadata,
             requestContext,
           ),
@@ -4712,7 +4241,8 @@ export function useWorkspaceSendActions({
         void primeCommandSessionId().catch(() => undefined);
         sendOptions = {
           ...(sendOptions || {}),
-          requestMetadata: buildTypesettingSkillLaunchRequestMetadata(
+          requestMetadata: buildSkillLaunchRequestMetadata(
+            "typesetting",
             sendOptions?.requestMetadata,
             requestContext,
           ),
@@ -4767,7 +4297,8 @@ export function useWorkspaceSendActions({
         ensureSubmissionPreview();
         sendOptions = {
           ...(sendOptions || {}),
-          requestMetadata: buildPresentationSkillLaunchRequestMetadata(
+          requestMetadata: buildSkillLaunchRequestMetadata(
+            "presentation",
             sendOptions?.requestMetadata,
             requestContext,
           ),
@@ -4819,7 +4350,8 @@ export function useWorkspaceSendActions({
         ensureSubmissionPreview();
         sendOptions = {
           ...(sendOptions || {}),
-          requestMetadata: buildFormSkillLaunchRequestMetadata(
+          requestMetadata: buildSkillLaunchRequestMetadata(
+            "form",
             sendOptions?.requestMetadata,
             requestContext,
           ),
@@ -4872,7 +4404,8 @@ export function useWorkspaceSendActions({
         ensureSubmissionPreview();
         sendOptions = {
           ...(sendOptions || {}),
-          requestMetadata: buildWebpageSkillLaunchRequestMetadata(
+          requestMetadata: buildSkillLaunchRequestMetadata(
+            "webpage",
             sendOptions?.requestMetadata,
             requestContext,
           ),
@@ -5910,7 +5443,11 @@ export function useWorkspaceSendActions({
         setIsPreparingSend(false);
       }
     },
-    [executeLocalConfirmationPlan, executeSendPlan, resolveSendExecutionPlan],
+    [
+      executeLocalConfirmationPlan,
+      executeSendPlan,
+      resolveSendExecutionPlan,
+    ],
   );
 
   const handleRecommendationClick = useCallback(
