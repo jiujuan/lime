@@ -1,6 +1,6 @@
 # Agent App 客户端 Capability SDK 方案
 
-更新时间：2026-05-14
+更新时间：2026-05-15
 
 ## 一句话目标
 
@@ -127,11 +127,11 @@ app-package/
 ```yaml
 requires:
   lime:
-    appRuntime: ">=0.2.0 <1.0.0"
+    appRuntime: ">=0.3.0 <1.0.0"
   capabilities:
-    lime.ui: "^0.1.0"
-    lime.storage: "^0.1.0"
-    lime.agent: "^0.1.0"
+    lime.ui: "^0.3.0"
+    lime.storage: "^0.3.0"
+    lime.agent: "^0.3.0"
 runtimePackage:
   ui:
     path: ./dist/ui
@@ -154,7 +154,7 @@ entries:
 
 | 交付物 | 说明 | 验收 |
 |---|---|---|
-| App manifest v0.2 parser | 支持 `requires`、`runtimePackage`、`storage`、`entries`。 | 示例 App 可 validate / project。 |
+| App manifest v0.3 parser | 支持 `requires`、`runtimePackage`、`storage`、`entries`。 | 示例 App 可 validate / project。 |
 | Capability SDK 类型草案 | TypeScript types + mock host。 | App 示例可以用 mock 运行单测。 |
 | Desktop Installer 方案 | 安装、hash、projection、readiness、权限。 | 能生成 projection，不运行代码。 |
 | Storage namespace 方案 | schema、migration、保留/删除策略。 | 卸载时可选择保留数据。 |
@@ -166,7 +166,7 @@ entries:
 
 ### P0：单机 App Host 骨架
 
-- 完成 Agent App v0.2 标准对齐。
+- 完成 Agent App v0.3 标准对齐。
 - 设计 `@lime/app-sdk` 最小 API surface 和 mock host。
 - Desktop 支持安装本地 package、projection、readiness。
 - 支持 page / expert-chat / workflow 三类 entry。
@@ -175,7 +175,7 @@ entries:
 
 ### P1：真实垂直 App 验证
 
-- 用 AI 内容工程化 App 验证 UI、storage、workflow、worker、Agent task、Artifact。
+- 用 APP 内容工厂验证 UI、storage、workflow、worker、Agent task、Artifact。
 - 支持文件选择、文档解析、Knowledge binding、批量生成和去 AI 味 eval。
 - App 所有业务 UI 不进 Lime Core。
 

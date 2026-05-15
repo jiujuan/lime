@@ -1,21 +1,21 @@
-# AI 内容工程化 Agent App PRD
+# APP 内容工厂 PRD
 
-更新时间：2026-05-14
+更新时间：2026-05-15
 
 ## 一句话目标
 
-基于 Lime Agent App 平台开发一个独立垂直产品：`AI 内容工程化 App`。它不是“内容专家聊天框”，而是有自己 UI、storage、worker、workflow、Knowledge 绑定、Artifact 和数据复盘闭环的完整业务应用，安装到 Lime Desktop 后本地运行。
+基于 Lime Agent App 平台开发一个独立垂直产品：`APP 内容工厂`。它不是“内容专家聊天框”，而是有自己 UI、storage、worker、workflow、Knowledge 绑定、Artifact 和数据复盘闭环的完整业务应用，安装到 Lime Desktop 后本地运行。
 
 ## 关键校准
 
 这份需求不能用 `APP.md + prompt` 解决。功能背后必须有完整实现：
 
 ```text
-AI 内容工程化 App
-├── UI：项目首页 / 三层知识库 / 场景穷尽 / 内容工厂 / 策略报告 / 数据复盘
-├── Storage：项目、知识条目、场景、内容资产、复盘数据、洞察
+APP 内容工厂
+├── UI：项目首页 / 三层知识库 / 内容场景规划 / 内容工厂 / 策略报告 / 数据复盘
+├── Storage：项目、知识条目、内容场景、内容资产、复盘数据、洞察
 ├── Worker：文件解析、知识结构化、批量生成、去 AI 味评分、PPT / 报告生成
-├── Workflow：建项目、知识库构建、场景穷尽、内容生产、策略交付、数据复盘
+├── Workflow：建项目、知识库构建、内容场景规划、内容生产、策略交付、数据复盘
 ├── Agent Entries：内容策略专家、知识库整理专家、文案优化专家
 ├── Skills / Tools / Knowledge：复用生态能力，不重复造底座
 └── Artifacts / Evidence / Evals：内容表、脚本、报告、PPT、复盘和质量记录
@@ -25,13 +25,13 @@ AI 内容工程化 App
 
 ## 背景
 
-来自深澜智能内容工程化方案的真实需求：团队希望把个人 IP、项目事实、内容方法论、素材资产和运营复盘沉淀成可复用系统，而不是每次在 Claude、豆包、Gemini、图片工具、PPT 工具之间复制粘贴。
+来自行业内容团队的真实需求：团队希望把个人 IP、项目事实、内容方法论、素材资产和运营复盘沉淀成可复用系统，而不是每次在 Claude、豆包、Gemini、图片工具、PPT 工具之间复制粘贴。
 
 核心链路：
 
 ```text
 三层知识库
-→ 场景穷尽
+→ 内容场景规划
 → 批量内容生产
 → 脚本 / 图片提示词 / 策略报告 / PPT
 → 数据复盘
@@ -52,7 +52,7 @@ AI 内容工程化 App
 
 ## 非目标
 
-- 不把深澜内容系统写进 Lime Core。
+- 不把行业内容系统写进 Lime Core。
 - 不把客户真实资料、私有 SOP、品牌语气、投放数据打进官方 App 包。
 - 不在 Lime Cloud 增加默认云端 Agent Runtime。
 - P0 不做完整 SaaS：不做账号体系、计费、复杂审核、公开 marketplace。
@@ -63,13 +63,13 @@ AI 内容工程化 App
 ### 主导航
 
 ```text
-AI 内容工程化 App
+APP 内容工厂
 ├── 项目首页
 ├── 知识库
 │   ├── IP 知识库
 │   ├── 项目知识库
 │   └── 素材库
-├── 场景穷尽
+├── 内容场景规划
 ├── 内容工厂
 │   ├── 批量文案
 │   ├── 短视频脚本
@@ -96,7 +96,7 @@ AI 内容工程化 App
 ## App Package 草案
 
 ```text
-shenlan-content-engineering/
+content-factory-app/
 ├── APP.md
 ├── dist/
 │   ├── ui/
@@ -107,7 +107,7 @@ shenlan-content-engineering/
 ├── workflows/
 │   ├── create-project.workflow.md
 │   ├── build-knowledge.workflow.md
-│   ├── exhaust-scenes.workflow.md
+│   ├── content-scenarios.workflow.md
 │   ├── batch-copy.workflow.md
 │   ├── strategy-report.workflow.md
 │   └── data-review.workflow.md
@@ -125,27 +125,27 @@ shenlan-content-engineering/
 ## Manifest 草案
 
 ```yaml
-manifestVersion: 0.2.0
-name: shenlan-content-engineering
-version: 0.1.0
+manifestVersion: 0.3.0
+name: content-factory-app
+version: 0.3.0
 status: draft
 appType: domain-app
-description: AI 内容工程化 App，用于知识库构建、场景穷尽、批量内容生产和数据复盘。
+description: APP 内容工厂，用于知识库构建、内容场景规划、批量内容生产和数据复盘。
 runtimeTargets:
   - local
 requires:
   lime:
-    appRuntime: ">=0.2.0 <1.0.0"
+    appRuntime: ">=0.3.0 <1.0.0"
   capabilities:
-    lime.ui: "^0.1.0"
-    lime.storage: "^0.1.0"
-    lime.files: "^0.1.0"
-    lime.agent: "^0.1.0"
-    lime.knowledge: "^0.1.0"
-    lime.tools: "^0.1.0"
-    lime.artifacts: "^0.1.0"
-    lime.workflow: "^0.1.0"
-    lime.evidence: "^0.1.0"
+    lime.ui: "^0.3.0"
+    lime.storage: "^0.3.0"
+    lime.files: "^0.3.0"
+    lime.agent: "^0.3.0"
+    lime.knowledge: "^0.3.0"
+    lime.tools: "^0.3.0"
+    lime.artifacts: "^0.3.0"
+    lime.workflow: "^0.3.0"
+    lime.evidence: "^0.3.0"
 runtimePackage:
   ui:
     path: ./dist/ui
@@ -155,7 +155,7 @@ runtimePackage:
     schema: ./storage/schema.json
     migrations: ./storage/migrations
 storage:
-  namespace: shenlan-content-engineering
+  namespace: content-factory-app
   schema: ./storage/schema.json
   migrations: ./storage/migrations
 entries:
@@ -167,10 +167,10 @@ entries:
     kind: page
     title: 三层知识库
     route: /knowledge
-  - key: scene_exhaustion
+  - key: content_scenario_planning
     kind: workflow
-    title: 场景穷尽
-    workflow: ./workflows/exhaust-scenes.workflow.md
+    title: 内容场景规划
+    workflow: ./workflows/content-scenarios.workflow.md
   - key: content_factory
     kind: page
     title: 内容工厂
@@ -201,7 +201,7 @@ knowledgeTemplates:
 | `projects` | 项目、行业、平台、是否需要 IP、默认模型和状态。 |
 | `knowledge_spaces` | IP / project / material 三层知识库空间、版本和健康度。 |
 | `knowledge_items` | 分区知识条目、来源、证据、字数、版本。 |
-| `scenes` | 场景穷尽结果：维度、痛点、解决方案、决策阶段、标签。 |
+| `content_scenarios` | 内容场景规划结果：维度、痛点、解决方案、决策阶段、标签。 |
 | `content_assets` | 文案、脚本、图片提示词、报告等内容资产。 |
 | `review_imports` | CSV / Excel 数据导入批次。 |
 | `metrics` | 完播率、搜索占比、转化、素材复用率等指标。 |
@@ -226,7 +226,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  Select[选择项目 / 场景 / 平台 / 数量] --> Retrieve[lime.knowledge 检索]
+  Select[选择项目 / 内容场景 / 平台 / 数量] --> Retrieve[lime.knowledge 检索]
   Retrieve --> Generate[lime.agent 批量生成]
   Generate --> Score[去 AI 味 + 事实支撑 Eval]
   Score --> Grade[A/B/C 分级]
@@ -241,7 +241,7 @@ flowchart TD
   Import[导入运营数据] --> Normalize[字段映射 / 清洗]
   Normalize --> Analyze[归因分析]
   Analyze --> Insight[生成洞察和动作]
-  Insight --> Update[更新选题库 / 场景权重]
+  Insight --> Update[更新选题库 / 内容场景权重]
   Update --> Report[复盘 Artifact]
 ```
 
@@ -267,7 +267,7 @@ P0 只做最小闭环：
 → 上传资料
 → 生成三层知识库草稿
 → 人工确认
-→ 生成 120 个场景
+→ 生成 120 个内容场景
 → 批量生成 20 条文案 / 脚本
 → 去 AI 味评分
 → A/B/C 分级
@@ -278,7 +278,7 @@ P0 页面：
 
 1. 项目首页。
 2. 三层知识库。
-3. 场景穷尽。
+3. 内容场景规划。
 4. 内容工厂。
 5. 交付物列表。
 
@@ -295,7 +295,7 @@ P0 不做：
 | 阶段 | 目标 | 验收 |
 |---|---|---|
 | P0 App Host 验证 | 用 mock SDK 跑通 App UI + storage + workflow + artifact。 | 不修改 Lime Core 业务代码即可打开 App 页面和保存数据。 |
-| P1 内容生产 MVP | 跑通知识库构建、场景穷尽、批量文案 / 脚本。 | 30 秒内输出 20 条，评分和分级可见，Artifact 可追溯。 |
+| P1 内容生产 MVP | 跑通知识库构建、内容场景规划、批量文案 / 脚本。 | 30 秒内输出 20 条，评分和分级可见，Artifact 可追溯。 |
 | P2 策略交付 | 策略分析、报告、PPT 大纲或 pptx 导出。 | 输入项目与竞品资料，10 分钟内生成可编辑交付物。 |
 | P3 数据飞轮 | 运营数据导入、自动归因、选题库迭代。 | 导入一周数据后自动生成复盘 Artifact。 |
 | P4 企业启用 | Cloud catalog、tenant enablement、overlay、secrets。 | 租户可启用 App，客户数据不进入官方包。 |
@@ -328,8 +328,8 @@ P0 不做：
 | US-01 | 作为运营，我可以创建一个内容项目，并选择行业、目标平台和是否需要 IP 库。 | `projects` 写入 App storage namespace；不新增 Lime Core 业务表。 |
 | US-02 | 作为运营，我可以上传产品资料，系统生成三层知识库草稿。 | 文件通过 `lime.files` 授权读取；结构化结果进入 `knowledge_items`。 |
 | US-03 | 作为负责人，我可以逐条确认、裁剪和版本化知识条目。 | 知识库健康度显示字数、分区、来源和版本。 |
-| US-04 | 作为内容同学，我可以基于确认后的项目知识库生成 120+ 场景。 | `scenes` 表保存应用场景、用户痛点、解决方案、决策阶段。 |
-| US-05 | 作为内容同学，我可以选择场景和平台批量生成 20 条文案或脚本。 | 生成结果进入 `content_assets`，带 A/B/C 分级和去 AI 味评分。 |
+| US-04 | 作为内容同学，我可以基于确认后的项目知识库生成 120+ 场景。 | `content_scenarios` 表保存应用场景、用户痛点、解决方案、决策阶段。 |
+| US-05 | 作为内容同学，我可以选择内容场景和平台批量生成 20 条文案或脚本。 | 生成结果进入 `content_assets`，带 A/B/C 分级和去 AI 味评分。 |
 | US-06 | 作为交付顾问，我可以把内容批次保存为 Artifact 并追溯来源。 | Artifact 带 app / knowledge / skill / tool / eval provenance。 |
 | US-07 | 作为管理员，我可以看到缺失能力或缺失知识绑定的 readiness 提示。 | 缺少 `project_knowledge`、`lime.files` 或 writer skill 时不能静默运行。 |
 
@@ -346,7 +346,7 @@ P0 不做：
 ### 用例 2：内容工厂批量生产
 
 ```text
-输入：项目、场景、平台、数量、人群画像
+输入：项目、内容场景、平台、数量、人群画像
 过程：知识检索 → 技能编排 → 批量生成 → 去 AI 味评分 → A/B/C 分级
 输出：内容表 Artifact、可编辑内容资产、Eval 记录
 ```
@@ -378,8 +378,8 @@ P0 不做：
 |---|---|---|
 | 项目首页 | 项目列表、知识健康度、最近 Artifact、快捷操作。 | `lime.storage`、`lime.artifacts` |
 | 三层知识库 | IP / 项目 / 素材 tabs、分区表、字数警告、来源查看。 | `lime.files`、`lime.storage`、`lime.knowledge` |
-| 场景穷尽 | 场景表、维度筛选、人工编辑、批量保存。 | `lime.agent`、`lime.storage` |
-| 内容工厂 | 平台选择、数量、场景选择、批量结果、评分与分级。 | `lime.agent`、`lime.artifacts`、`lime.evidence` |
+| 内容场景规划 | 内容场景表、维度筛选、人工编辑、批量保存。 | `lime.agent`、`lime.storage` |
+| 内容工厂 | 平台选择、数量、内容场景选择、批量结果、评分与分级。 | `lime.agent`、`lime.artifacts`、`lime.evidence` |
 | 交付物 | 内容表、报告、导出、版本历史。 | `lime.artifacts`、`lime.evidence` |
 
 ## 暂缓项
@@ -395,10 +395,10 @@ P0 不做：
 
 ## 下一刀
 
-先做 App Host 与 SDK 的垂直切片，而不是先做内容系统全部功能：
+当前客户端已完成 App Host、SDK、UI Host、内容工厂最小闭环和受控 workflow runtime 的实验岛切片。下一刀不扩成完整内容系统，先补真实 worker sandbox 前置边界、package hash 校验与 Cloud bootstrap：
 
 ```text
-App manifest → projection → readiness → mock SDK → storage namespace → 一个页面 → 一个 workflow → 一个 Artifact
+真实 worker sandbox policy → package hash 校验 → Cloud bootstrap payload 适配 → 断网可用性验证
 ```
 
-只有这条链路跑通后，再进入内容工程化的知识库和批量生成业务实现。
+只有 runtime policy、cleanup 和 Cloud 控制面边界稳定后，再进入真实文件解析、批量生成、质量评分和外部平台数据复盘。
