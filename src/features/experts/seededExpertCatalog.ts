@@ -1,0 +1,212 @@
+import type { ExpertCatalog } from "./types";
+
+export const SEEDED_EXPERT_CATALOG_VERSION =
+  "client-seed-2026-05-15-experts-p0";
+export const SEEDED_EXPERT_CATALOG_TENANT_ID = "local-seeded";
+export const SEEDED_EXPERT_CATALOG_SYNCED_AT = "2026-05-15T00:00:00.000Z";
+
+export const SEEDED_EXPERT_CATALOG: ExpertCatalog = {
+  version: SEEDED_EXPERT_CATALOG_VERSION,
+  tenantId: SEEDED_EXPERT_CATALOG_TENANT_ID,
+  syncedAt: SEEDED_EXPERT_CATALOG_SYNCED_AT,
+  categories: [
+    { key: "all", title: "全部", sort: 0 },
+    { key: "marketing", title: "营销部", sort: 10 },
+    { key: "office", title: "办公协同部", sort: 20 },
+    { key: "engineering", title: "工程部", sort: 30 },
+    { key: "legal", title: "法务部", sort: 40 },
+    { key: "analytics", title: "数据分析", sort: 50 },
+  ],
+  rankings: [
+    {
+      key: "personal_picks",
+      title: "为你推荐",
+      summary: "适合多数 Lime 用户先添加的专家。",
+      items: ["marketing-strategist", "knowledge-organizer", "code-literature"],
+      generatedAt: SEEDED_EXPERT_CATALOG_SYNCED_AT,
+    },
+    {
+      key: "popular_now",
+      title: "热门精选",
+      summary: "本地种子目录中的高频专家。",
+      items: ["short-video-scriptwriter", "data-analyst", "contract-reviewer"],
+      generatedAt: SEEDED_EXPERT_CATALOG_SYNCED_AT,
+    },
+    {
+      key: "fresh_releases",
+      title: "最近上新",
+      summary: "用于验证上新榜和详情展示。",
+      items: ["data-analyst", "contract-reviewer", "code-literature"],
+      generatedAt: SEEDED_EXPERT_CATALOG_SYNCED_AT,
+    },
+  ],
+  items: [
+    {
+      id: "marketing-strategist",
+      slug: "marketing-strategist",
+      title: "营销策略专家",
+      summary: "拆趋势、定卖点、写行动方案，适合品牌和增长团队。",
+      avatar: { kind: "emoji", value: "📈" },
+      category: "marketing",
+      tags: ["growth", "campaign", "positioning"],
+      source: "seeded_fallback",
+      stats: {
+        usageCount: 9700,
+        likeCount: 461,
+        hotScore: 0.91,
+        freshReleasedAt: "2026-05-01T00:00:00.000Z",
+      },
+      release: {
+        releaseId: "rel-marketing-strategist-20260515",
+        version: "1.0.0",
+        personaRef: "expert-persona:marketing-strategist@1.0.0",
+        personaHash: "sha256:seeded-marketing-strategist",
+        memoryTemplateRef: "memory-template:marketing-strategist@1.0.0",
+        skillRefs: ["service-skill:daily-trend-briefing"],
+        workflowRefs: ["workflow:campaign-growth-loop"],
+        readiness: { requiresModel: true, requiresProject: true },
+        releasedAt: "2026-05-15T00:00:00.000Z",
+      },
+      promptStarters: ["帮我拆一个新品上市的增长策略", "分析最近一周行业热点"],
+      showcase: [
+        {
+          title: "趋势机会卡",
+          body: "输出趋势信号、可借势角度、内容钩子和下一步实验。",
+        },
+      ],
+    },
+    {
+      id: "knowledge-organizer",
+      slug: "knowledge-organizer",
+      title: "资料整理大师",
+      summary: "把散乱资料整理成结构化知识、引用和行动清单。",
+      avatar: { kind: "emoji", value: "🗂️" },
+      category: "office",
+      tags: ["knowledge", "research", "summary"],
+      source: "seeded_fallback",
+      stats: { usageCount: 8300, likeCount: 392, hotScore: 0.86 },
+      release: {
+        releaseId: "rel-knowledge-organizer-20260515",
+        version: "1.0.0",
+        personaRef: "expert-persona:knowledge-organizer@1.0.0",
+        personaHash: "sha256:seeded-knowledge-organizer",
+        memoryTemplateRef: "memory-template:knowledge-organizer@1.0.0",
+        skillRefs: ["service-skill:personal-ip-knowledge-builder"],
+        workflowRefs: ["workflow:knowledge-cleanup"],
+        readiness: { requiresModel: true, requiresProject: true },
+      },
+      promptStarters: ["帮我把这批资料整理成知识库", "提炼这些访谈记录的主题"],
+      showcase: [
+        { title: "资料结构", body: "按主题、证据、待确认问题和引用来源整理。" },
+      ],
+    },
+    {
+      id: "code-literature",
+      slug: "code-literature",
+      title: "代码文学家",
+      summary: "帮你读写代码，也负责让别人看得懂你的代码。",
+      avatar: { kind: "emoji", value: "🧾" },
+      category: "engineering",
+      tags: ["code", "review", "docs"],
+      source: "seeded_fallback",
+      stats: { usageCount: 55000, likeCount: 6700, hotScore: 0.94 },
+      release: {
+        releaseId: "rel-code-literature-20260515",
+        version: "1.0.0",
+        personaRef: "expert-persona:code-literature@1.0.0",
+        personaHash: "sha256:seeded-code-literature",
+        skillRefs: ["skill:code-review"],
+        workflowRefs: ["workflow:code-explain-review"],
+        readiness: { requiresModel: true, requiresProject: true },
+      },
+      promptStarters: ["帮我解释这个模块", "把这段实现改得更容易维护"],
+      showcase: [
+        { title: "代码说明", body: "生成结构化解释、风险点和最小修改建议。" },
+      ],
+    },
+    {
+      id: "short-video-scriptwriter",
+      slug: "short-video-scriptwriter",
+      title: "短视频脚本专家",
+      summary: "拆解爆款结构，产出可继续打磨的短视频脚本。",
+      avatar: { kind: "emoji", value: "🎬" },
+      category: "marketing",
+      tags: ["video", "script", "douyin"],
+      source: "seeded_fallback",
+      stats: { usageCount: 22000, likeCount: 1700, hotScore: 0.9 },
+      release: {
+        releaseId: "rel-short-video-scriptwriter-20260515",
+        version: "1.0.0",
+        personaRef: "expert-persona:short-video-scriptwriter@1.0.0",
+        personaHash: "sha256:seeded-short-video-scriptwriter",
+        skillRefs: ["service-skill:short-video-script-replication"],
+        workflowRefs: ["workflow:short-video-script-loop"],
+        readiness: { requiresModel: true, requiresProject: true },
+      },
+      promptStarters: ["复刻这个短视频脚本结构", "给我写一条 30 秒口播脚本"],
+      showcase: [
+        { title: "脚本初稿", body: "输出开场钩子、镜头节奏、口播和结尾行动。" },
+      ],
+    },
+    {
+      id: "contract-reviewer",
+      slug: "contract-reviewer",
+      title: "合同审查专家",
+      summary: "快速指出合同风险、缺失条款和谈判建议。",
+      avatar: { kind: "emoji", value: "⚖️" },
+      category: "legal",
+      tags: ["contract", "risk", "legal"],
+      source: "seeded_fallback",
+      stats: { usageCount: 4100, likeCount: 287, hotScore: 0.78 },
+      release: {
+        releaseId: "rel-contract-reviewer-20260515",
+        version: "1.0.0",
+        personaRef: "expert-persona:contract-reviewer@1.0.0",
+        personaHash: "sha256:seeded-contract-reviewer",
+        skillRefs: ["skill:document-review"],
+        workflowRefs: ["workflow:contract-risk-review"],
+        readiness: { requiresModel: true, requiresProject: true },
+      },
+      promptStarters: ["帮我审这份合作协议", "列出这份合同的高风险条款"],
+      showcase: [
+        { title: "风险清单", body: "按风险等级、原文位置、建议改法输出。" },
+      ],
+    },
+    {
+      id: "data-analyst",
+      slug: "data-analyst",
+      title: "数据分析师",
+      summary: "把表格和指标变成可执行结论。",
+      avatar: { kind: "emoji", value: "📊" },
+      category: "analytics",
+      tags: ["data", "report", "insight"],
+      source: "seeded_fallback",
+      stats: {
+        usageCount: 64000,
+        likeCount: 5400,
+        hotScore: 0.92,
+        freshReleasedAt: "2026-05-10T00:00:00.000Z",
+      },
+      release: {
+        releaseId: "rel-data-analyst-20260515",
+        version: "1.0.0",
+        personaRef: "expert-persona:data-analyst@1.0.0",
+        personaHash: "sha256:seeded-data-analyst",
+        skillRefs: ["service-skill:account-performance-tracking"],
+        workflowRefs: ["workflow:data-insight-report"],
+        readiness: { requiresModel: true, requiresProject: true },
+      },
+      promptStarters: ["分析这份运营数据", "帮我找出这个月的异常指标"],
+      showcase: [
+        {
+          title: "数据复盘",
+          body: "输出关键变化、原因假设、验证办法和下一步动作。",
+        },
+      ],
+    },
+  ],
+};
+
+export function getSeededExpertCatalog(): ExpertCatalog {
+  return JSON.parse(JSON.stringify(SEEDED_EXPERT_CATALOG)) as ExpertCatalog;
+}

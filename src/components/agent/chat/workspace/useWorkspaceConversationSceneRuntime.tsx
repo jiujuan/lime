@@ -354,17 +354,10 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   handleRefreshSkills: ConversationScenePresentationParams["scene"]["onRefreshSkills"];
   handleOpenBrowserAssistInCanvas: ConversationScenePresentationParams["scene"]["onLaunchBrowserAssist"];
   browserAssistLaunching: ConversationScenePresentationParams["scene"]["browserAssistLoading"];
-  featuredSceneApps: ConversationScenePresentationParams["scene"]["featuredSceneApps"];
-  sceneAppsLoading: ConversationScenePresentationParams["scene"]["sceneAppsLoading"];
-  sceneAppLaunchingId: ConversationScenePresentationParams["scene"]["sceneAppLaunchingId"];
-  handleLaunchSceneApp?: ConversationScenePresentationParams["scene"]["onLaunchSceneApp"];
-  canResumeRecentSceneApp?: ConversationScenePresentationParams["scene"]["canResumeRecentSceneApp"];
-  handleResumeRecentSceneApp?: ConversationScenePresentationParams["scene"]["onResumeRecentSceneApp"];
   recentSessionTitle?: ConversationScenePresentationParams["scene"]["recentSessionTitle"];
   recentSessionSummary?: ConversationScenePresentationParams["scene"]["recentSessionSummary"];
   recentSessionActionLabel?: ConversationScenePresentationParams["scene"]["recentSessionActionLabel"];
   handleResumeRecentSession?: ConversationScenePresentationParams["scene"]["onResumeRecentSession"];
-  handleOpenSceneAppsDirectory?: ConversationScenePresentationParams["scene"]["onOpenSceneAppsDirectory"];
   projectId: string | null;
   deferWorkspaceListLoad?: ConversationScenePresentationParams["scene"]["deferWorkspaceListLoad"];
   workspaceHintMessage?: ConversationScenePresentationParams["scene"]["workspaceHintMessage"];
@@ -518,17 +511,10 @@ export function useWorkspaceConversationSceneRuntime({
   handleRefreshSkills,
   handleOpenBrowserAssistInCanvas,
   browserAssistLaunching,
-  featuredSceneApps,
-  sceneAppsLoading,
-  sceneAppLaunchingId,
-  handleLaunchSceneApp,
-  canResumeRecentSceneApp,
-  handleResumeRecentSceneApp,
   recentSessionTitle,
   recentSessionSummary,
   recentSessionActionLabel,
   handleResumeRecentSession,
-  handleOpenSceneAppsDirectory,
   projectId,
   deferWorkspaceListLoad,
   workspaceHintMessage,
@@ -1091,12 +1077,6 @@ export function useWorkspaceConversationSceneRuntime({
       onRefreshSkills: handleRefreshSkills,
       onLaunchBrowserAssist: handleOpenBrowserAssistInCanvas,
       browserAssistLoading: browserAssistLaunching,
-      featuredSceneApps,
-      sceneAppsLoading,
-      sceneAppLaunchingId,
-      onLaunchSceneApp: handleLaunchSceneApp,
-      canResumeRecentSceneApp,
-      onResumeRecentSceneApp: handleResumeRecentSceneApp,
       recentSessionTitle:
         messageListEmptyStateVariant === "task-center"
           ? undefined
@@ -1113,7 +1093,6 @@ export function useWorkspaceConversationSceneRuntime({
         messageListEmptyStateVariant === "task-center"
           ? undefined
           : handleResumeRecentSession,
-      onOpenSceneAppsDirectory: handleOpenSceneAppsDirectory,
       projectId,
       deferWorkspaceListLoad,
       workspaceHintMessage,

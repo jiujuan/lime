@@ -2,6 +2,7 @@
 //!
 //! 将 HTTP 请求路由到现有的 Tauri 命令函数。
 
+mod agent_apps;
 mod agent_sessions;
 mod app_runtime;
 mod automation;
@@ -21,7 +22,6 @@ mod models;
 mod project_resources;
 mod providers;
 mod runtime_queries;
-mod sceneapp;
 mod skills;
 mod tray;
 mod voice;
@@ -149,15 +149,15 @@ pub async fn handle_command(
         return Ok(result);
     }
 
-    if let Some(result) = sceneapp::try_handle(state, cmd, args.as_ref()).await? {
-        return Ok(result);
-    }
-
     if let Some(result) = memory_runtime::try_handle(state, cmd, args.as_ref()).await? {
         return Ok(result);
     }
 
     if let Some(result) = agent_sessions::try_handle(state, cmd, args.as_ref()).await? {
+        return Ok(result);
+    }
+
+    if let Some(result) = agent_apps::try_handle(state, cmd, args.as_ref()).await? {
         return Ok(result);
     }
 
@@ -1020,182 +1020,6 @@ mod tests {
         assert!(error
             .to_string()
             .contains("Provider 不存在: missing-provider"));
-    }
-
-    #[tokio::test]
-    async fn sceneapp_list_catalog_is_bridged() {
-        let state = make_test_state();
-
-        let value = handle_command(&state, "sceneapp_list_catalog", None)
-            .await
-            .unwrap();
-
-        assert!(value["items"].is_array());
-        assert!(value["version"].is_string());
-    }
-
-    #[tokio::test]
-    async fn sceneapp_get_descriptor_is_bridged() {
-        let state = make_test_state();
-
-        let value = handle_command(
-            &state,
-            "sceneapp_get_descriptor",
-            Some(serde_json::json!({
-                "id": "story-video-suite"
-            })),
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(value["id"], "story-video-suite");
-        assert_eq!(value["deliveryContract"], "project_pack");
-    }
-
-    #[tokio::test]
-    async fn sceneapp_plan_launch_is_bridged() {
-        let state = make_test_state();
-
-        let value = handle_command(
-            &state,
-            "sceneapp_plan_launch",
-            Some(serde_json::json!({
-                "intent": {
-                    "sceneappId": "story-video-suite",
-                    "entrySource": "sceneapp_detail_preview",
-                    "workspaceId": "workspace-default",
-                    "projectId": "project-devbridge",
-                    "userInput": "继续整理成 30 秒新品短视频方案",
-                    "referenceMemoryIds": [],
-                    "slots": {}
-                }
-            })),
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(value["descriptor"]["id"], "story-video-suite");
-        assert!(value["contextOverlay"].is_object());
-        assert!(value["projectPackPlan"].is_object());
-    }
-
-    #[tokio::test]
-    async fn sceneapp_save_context_baseline_is_bridged() {
-        let state = make_test_state();
-        let temp_dir = TempDir::new().unwrap();
-        let root_path = temp_dir.path().join("sceneapp-context-workspace");
-
-        let workspace_value = handle_command(
-            &state,
-            "workspace_create",
-            Some(serde_json::json!({
-                "request": {
-                    "name": "SceneApp Context Workspace",
-                    "rootPath": root_path.to_string_lossy().to_string(),
-                    "workspaceType": "general"
-                }
-            })),
-        )
-        .await
-        .unwrap();
-        let workspace_id = workspace_value["id"].as_str().unwrap().to_string();
-
-        let value = handle_command(
-            &state,
-            "sceneapp_save_context_baseline",
-            Some(serde_json::json!({
-                "intent": {
-                    "sceneappId": "story-video-suite",
-                    "entrySource": "sceneapp_detail_save_context_baseline",
-                    "workspaceId": workspace_id.clone(),
-                    "projectId": workspace_id,
-                    "userInput": "继续整理成 30 秒新品短视频方案",
-                    "referenceMemoryIds": [],
-                    "slots": {}
-                }
-            })),
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(value["descriptor"]["id"], "story-video-suite");
-        assert!(value["contextOverlay"]["snapshot"]["referenceItems"].is_array());
-        assert!(value["contextOverlay"]["compilerPlan"]["notes"]
-            .as_array()
-            .is_some_and(|notes| notes.iter().any(|note| {
-                note.as_str()
-                    .is_some_and(|value| value.contains("已写入项目级 Context Snapshot"))
-            })));
-    }
-
-    #[tokio::test]
-    async fn sceneapp_list_runs_is_bridged() {
-        let state = make_test_state();
-
-        let error = handle_command(
-            &state,
-            "sceneapp_list_runs",
-            Some(serde_json::json!({
-                "sceneappId": "story-video-suite"
-            })),
-        )
-        .await
-        .expect_err("missing app handle should fail after bridge routing");
-
-        assert!(error.to_string().contains("Dev Bridge 未持有 AppHandle"));
-    }
-
-    #[tokio::test]
-    async fn sceneapp_get_run_summary_is_bridged() {
-        let state = make_test_state();
-
-        let value = handle_command(
-            &state,
-            "sceneapp_get_run_summary",
-            Some(serde_json::json!({
-                "runId": "sceneapp-run-story-video-seed"
-            })),
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(value["runId"], "sceneapp-run-story-video-seed");
-        assert_eq!(value["sceneappId"], "story-video-suite");
-    }
-
-    #[tokio::test]
-    async fn sceneapp_prepare_run_governance_artifact_is_bridged() {
-        let state = make_test_state();
-
-        let value = handle_command(
-            &state,
-            "sceneapp_prepare_run_governance_artifact",
-            Some(serde_json::json!({
-                "runId": "sceneapp-run-story-video-seed",
-                "kind": "review_decision_json"
-            })),
-        )
-        .await
-        .unwrap();
-
-        assert!(value.is_null());
-    }
-
-    #[tokio::test]
-    async fn sceneapp_get_scorecard_is_bridged() {
-        let state = make_test_state();
-
-        let error = handle_command(
-            &state,
-            "sceneapp_get_scorecard",
-            Some(serde_json::json!({
-                "sceneappId": "story-video-suite"
-            })),
-        )
-        .await
-        .expect_err("missing app handle should fail after bridge routing");
-
-        assert!(error.to_string().contains("Dev Bridge 未持有 AppHandle"));
     }
 
     #[tokio::test]

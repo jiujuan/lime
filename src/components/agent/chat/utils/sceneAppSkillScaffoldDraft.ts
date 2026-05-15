@@ -1,7 +1,7 @@
 import type {
   SceneAppExecutionSummaryViewModel,
   SceneAppRunDetailViewModel,
-} from "@/lib/sceneapp/product";
+} from "@/lib/agent/legacySceneAppExecutionSummary";
 import type { SkillsPageParams } from "@/types/page";
 import type { CuratedTaskRecommendationSignal } from "./curatedTaskRecommendationSignals";
 
@@ -46,7 +46,7 @@ function dedupeItems(
 
 function buildDirectorySlug(
   summary: SceneAppExecutionSummaryViewModel,
-  detailView: SceneAppRunDetailViewModel,
+  detailView?: SceneAppRunDetailViewModel | null,
 ): string {
   const titleSeed = summary.title
     .normalize("NFKD")
@@ -55,7 +55,11 @@ function buildDirectorySlug(
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 24);
-  const runSeed = detailView.runId
+  const runSeed = (
+    detailView?.runId ||
+    summary.runtimeBackflow?.runId ||
+    summary.sceneappId
+  )
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "")
     .slice(-8);
@@ -84,31 +88,59 @@ function buildReviewDecisionSnippet(
 
 export function buildSkillsPageParamsFromSceneAppExecution(
   summary?: SceneAppExecutionSummaryViewModel | null,
-  detailView?: SceneAppRunDetailViewModel | null,
+  detailOrOptions?:
+    | SceneAppRunDetailViewModel
+    | BuildSkillsPageParamsFromSceneAppExecutionOptions
+    | null,
   options: BuildSkillsPageParamsFromSceneAppExecutionOptions = {},
 ): SkillsPageParams | null {
-  if (!summary || !detailView) {
+  if (!summary) {
     return null;
   }
 
-  const projectId = normalizeOptionalText(options.projectId);
-  const reviewSnippet = buildReviewDecisionSnippet(options.reviewSignal);
+  const detailView =
+    detailOrOptions && "runId" in detailOrOptions ? detailOrOptions : null;
+  const resolvedOptions =
+    detailOrOptions && !("runId" in detailOrOptions)
+      ? detailOrOptions
+      : options;
+  const projectId = normalizeOptionalText(resolvedOptions.projectId);
+  const reviewSnippet = buildReviewDecisionSnippet(
+    resolvedOptions.reviewSignal,
+  );
   const summarySnippet = truncate(summary.summary, 72);
-  const deliverySnippet = truncate(detailView.deliverySummary, 72);
-  const nextActionSnippet = truncate(detailView.nextAction, 72);
+  const deliverySnippet = truncate(
+    detailView?.deliverySummary ||
+      summary.runtimeBackflow?.deliveryCompletionLabel ||
+      summary.projectPackPlan?.completionStrategyLabel ||
+      summary.deliveryContractLabel,
+    72,
+  );
+  const nextActionSnippet = truncate(
+    detailView?.nextAction ||
+      summary.runtimeBackflow?.nextAction ||
+      summary.scorecardAggregate?.nextAction ||
+      summary.planningSummary,
+    72,
+  );
   const tasteSnippet = normalizeOptionalText(summary.tasteSummary);
   const feedbackSnippet =
-    normalizeOptionalText(detailView.contextBaseline?.feedbackSummary) ||
+    normalizeOptionalText(detailView?.contextBaseline?.feedbackSummary) ||
     normalizeOptionalText(summary.feedbackSummary);
-  const missingPartsLabel = detailView.deliveryMissingParts
+  const missingPartsLabel = (
+    detailView?.deliveryMissingParts ??
+    summary.runtimeBackflow?.deliveryMissingParts ??
+    []
+  )
     .map((item) => normalizeOptionalText(item.label))
     .filter((item): item is string => Boolean(item))
     .join("、");
   const failureSignalLabel = normalizeOptionalText(
-    detailView.failureSignalLabel,
+    detailView?.failureSignalLabel ||
+      summary.runtimeBackflow?.topFailureSignalLabel,
   );
   const reviewSignalSummary = normalizeOptionalText(
-    options.reviewSignal?.summary,
+    resolvedOptions.reviewSignal?.summary,
   );
 
   const name = truncate(`${summary.title}复用做法`, 24);
@@ -182,7 +214,9 @@ export function buildSkillsPageParamsFromSceneAppExecution(
           ? `如果最近人工判断提出新的约束，优先按“${truncate(reviewSignalSummary, 72)}”处理后再继续复用。`
           : "如果结果再次偏离目标，先重新确认受众、平台与参考约束，再决定是否沿用整套做法。",
       ]),
-      sourceMessageId: `sceneapp-run-${detailView.runId}`,
+      sourceMessageId: `sceneapp-run-${
+        detailView?.runId || summary.runtimeBackflow?.runId || summary.sceneappId
+      }`,
       sourceExcerpt,
     },
     initialScaffoldRequestKey: Date.now(),

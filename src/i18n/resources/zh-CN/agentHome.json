@@ -109,7 +109,6 @@
   "agentChat.home.scrollCue.label": "向下滑，看看 Lime 可以帮你做什么",
   "agentChat.home.secondScreen.label": "Lime 可执行任务示例",
   "agentChat.home.supplemental.recentSession.defaultAction": "继续最近会话",
-  "agentChat.home.supplemental.recentSceneApp.label": "继续最近做法",
   "agentChat.home.sceneManager.defaultTemplateTitle": "开始",
   "agentChat.home.sceneManager.customSceneSummaryFallback": "自定义场景",
   "agentChat.home.sceneManager.error.syncSignInRequired": "需要登录云端账号后，才能同步场景 Skills 管理结果。",

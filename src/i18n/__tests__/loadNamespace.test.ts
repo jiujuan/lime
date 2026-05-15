@@ -181,7 +181,6 @@ describe("i18n namespace loader", () => {
         "agentChat.home.guideCards.label",
         "agentChat.home.gallery.title",
         "agentChat.home.category.recent",
-        "agentChat.home.supplemental.recentSceneApp.label",
         "agentChat.home.sceneManager.title.list",
         "agentChat.home.sceneManager.action.addScene",
         "agentChat.home.sceneManager.error.syncSignInRequired",
@@ -1314,19 +1313,10 @@ describe("i18n namespace loader", () => {
         "settings.automation.details.legacy.message",
       );
       expect(resources[locale].settings).toHaveProperty(
-        "settings.automation.details.sceneApp.toast.returnUnsupported",
+        "settings.automation.details.sceneApp.retired.title",
       );
       expect(resources[locale].settings).toHaveProperty(
-        "settings.automation.details.sceneApp.toast.selectedBaselineMissing",
-      );
-      expect(resources[locale].settings).toHaveProperty(
-        "settings.automation.details.sceneApp.file.bannerMessage",
-      );
-      expect(resources[locale].settings).toHaveProperty(
-        "settings.automation.details.sceneApp.file.followUpMissingPath",
-      );
-      expect(resources[locale].settings).toHaveProperty(
-        "settings.automation.details.sceneApp.entry.missingContext",
+        "settings.automation.details.sceneApp.retired.description",
       );
       expect(resources[locale].settings).toHaveProperty(
         "settings.automation.details.schedule.hours",

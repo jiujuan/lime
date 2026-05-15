@@ -29,6 +29,7 @@ const NAMESPACE_RESOURCE_PARTS = {
     "agentMessageList",
     "agentRuntime",
     "agentSkills",
+    "agentExperts",
     "agentTeamWorkspace",
   ],
 } as const satisfies Partial<Record<LimeNamespace, readonly string[]>>;

@@ -170,6 +170,11 @@ export const voiceMocks: Record<string, (args?: any) => any> = {
     },
   ],
   start_recording: () => ({}),
+  stop_recording: () => ({
+    audio_data: [1, 2, 3, 4],
+    sample_rate: 16000,
+    duration: 1.2,
+  }),
   get_recording_snapshot: () => ({
     audio_data: [1, 2, 3, 4],
     sample_rate: 16000,
@@ -188,5 +193,13 @@ export const voiceMocks: Record<string, (args?: any) => any> = {
     is_recording: false,
     volume: 0,
     duration: 0,
+  }),
+  transcribe_audio: () => ({
+    text: "这是一段浏览器模式语音输入测试文本。",
+    provider: "mock",
+  }),
+  polish_voice_text: (args?: { text?: string }) => ({
+    text: args?.text || "这是一段浏览器模式语音输入测试文本。",
+    instruction_name: "默认润色",
   }),
 };

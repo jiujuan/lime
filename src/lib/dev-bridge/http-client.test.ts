@@ -482,7 +482,6 @@ describe("http-client", () => {
     expect(
       resolveBridgeRequestTimeoutMs("workspace_ensure_default_ready"),
     ).toBe(30000);
-    expect(resolveBridgeRequestTimeoutMs("sceneapp_list_catalog")).toBe(30000);
     expect(resolveBridgeRequestTimeoutMs("gateway_channel_status")).toBe(5000);
     expect(resolveBridgeRequestTimeoutMs("list_executable_skills")).toBe(5000);
     expect(resolveBridgeRequestTimeoutMs("get_skill_detail")).toBe(5000);

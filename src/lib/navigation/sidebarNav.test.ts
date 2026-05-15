@@ -10,13 +10,15 @@ describe("sidebarNav", () => {
   it("应把主导航与底部系统入口收口为一级列表", () => {
     expect(MAIN_SIDEBAR_NAV_ITEMS.map((item) => item.label)).toEqual([
       "新建任务",
+      "专家",
       "Skills",
-      "灵感",
       "项目资料",
     ]);
 
     expect(FOOTER_SIDEBAR_NAV_ITEMS.map((item) => item.label)).toEqual([
       "设置",
+      "Agent Apps",
+      "灵感",
       "持续流程",
       "消息渠道",
       "桌宠",
@@ -45,6 +47,9 @@ describe("sidebarNav", () => {
   });
 
   it("Agent App Lab 只在实验开关开启时进入左侧栏", () => {
+    expect(
+      buildMainSidebarNavItems({ labEnabled: false }).map((item) => item.id),
+    ).not.toContain("agent-apps");
     expect(
       buildMainSidebarNavItems({ labEnabled: true }).map((item) => item.id),
     ).toContain("agent-app-lab");

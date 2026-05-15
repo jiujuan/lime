@@ -11,14 +11,12 @@ export type HomeSkillSourceKind =
   | "curated_task"
   | "service_skill"
   | "installed_skill"
-  | "scene_app"
   | "skill_catalog_scene";
 
 export type HomeSkillLaunchKind =
   | "curated_task_launcher"
   | "service_skill"
   | "installed_skill"
-  | "scene_app"
   | "skill_catalog_scene"
   | "prefill_prompt"
   | "open_knowledge_hub"
@@ -26,8 +24,7 @@ export type HomeSkillLaunchKind =
   | "open_drawer"
   | "open_manager"
   | "launch_browser"
-  | "resume_recent_session"
-  | "resume_recent_scene_app";
+  | "resume_recent_session";
 
 export interface HomeSkillSurfaceItem {
   id: string;

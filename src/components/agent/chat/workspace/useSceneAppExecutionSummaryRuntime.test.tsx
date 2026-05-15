@@ -1,18 +1,9 @@
 import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { useSceneAppExecutionSummaryRuntime } from "./useSceneAppExecutionSummaryRuntime";
-import type { SceneAppExecutionSummaryViewModel } from "@/lib/sceneapp/product";
-
-const listSceneAppRunsMock = vi.fn();
-const getSceneAppScorecardMock = vi.fn();
-
-vi.mock("@/lib/api/sceneapp", () => ({
-  listSceneAppRuns: (...args: unknown[]) => listSceneAppRunsMock(...args),
-  getSceneAppScorecard: (...args: unknown[]) =>
-    getSceneAppScorecardMock(...args),
-}));
+import type { SceneAppExecutionSummaryViewModel } from "@/lib/agent/legacySceneAppExecutionSummary";
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
@@ -59,7 +50,22 @@ function createInitialSummary(): SceneAppExecutionSummaryViewModel {
         primaryPart: "brief",
       },
     },
-    runtimeBackflow: null,
+    runtimeBackflow: {
+      runId: "run-archived-1",
+      statusLabel: "成功",
+      statusTone: "success",
+      summary: "历史结果已经写入摘要 payload。",
+      nextAction: "继续把这轮运行沉淀到判断与选品基线。",
+      sourceLabel: "人工试跑",
+      startedAtLabel: "2026-04-16 12:00",
+      finishedAtLabel: "2026-04-16 12:03",
+      deliveryCompletionLabel: "已交付 2/2 个部件",
+      evidenceSourceLabel: "当前已接入会话证据",
+      deliveryCompletedParts: [],
+      deliveryMissingParts: [],
+      observedFailureSignals: [],
+      governanceArtifacts: [],
+    },
   };
 }
 
@@ -89,16 +95,12 @@ function renderHook(props: HookProbeProps) {
   mountedRoots.push({ root, container });
   return {
     getValue: () => latestValue,
+    rerender: (nextProps: HookProbeProps) => {
+      act(() => {
+        root.render(<Probe {...nextProps} />);
+      });
+    },
   };
-}
-
-async function flushEffects() {
-  await act(async () => {
-    await Promise.resolve();
-  });
-  await act(async () => {
-    await Promise.resolve();
-  });
 }
 
 beforeEach(() => {
@@ -107,8 +109,6 @@ beforeEach(() => {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
-  listSceneAppRunsMock.mockReset();
-  getSceneAppScorecardMock.mockReset();
 });
 
 afterEach(() => {
@@ -125,305 +125,60 @@ afterEach(() => {
 });
 
 describe("useSceneAppExecutionSummaryRuntime", () => {
-  it("应把当前 session 对应的运行回流补进执行摘要", async () => {
-    listSceneAppRunsMock.mockResolvedValue([
-      {
-        runId: "run-1",
-        sceneappId: "story-video-suite",
-        status: "success",
-        source: "chat",
-        sourceRef: "source-1",
-        sessionId: "session-1",
-        startedAt: "2026-04-17T12:00:00.000Z",
-        finishedAt: "2026-04-17T12:03:00.000Z",
-        artifactCount: 2,
-        deliveryRequiredParts: ["brief", "storyboard"],
-        deliveryCompletedParts: ["brief"],
-        deliveryMissingParts: ["storyboard"],
-        deliveryPartCoverageKnown: true,
-        failureSignal: "pack_incomplete",
-        runtimeEvidenceUsed: true,
-        evidenceKnownGaps: [],
-        verificationFailureOutcomes: [],
-        requestTelemetryAvailable: true,
-        requestTelemetryMatchedCount: 1,
-        artifactValidatorApplicable: true,
-        artifactValidatorIssueCount: 0,
-        artifactValidatorRecoveredCount: 0,
-        governanceArtifactRefs: [
-          {
-            kind: "evidence_summary",
-            label: "证据摘要",
-            relativePath:
-              ".lime/harness/sessions/session-1/evidence/summary.md",
-            absolutePath: "/tmp/summary.md",
-            projectId: "project-1",
-            workspaceId: "project-1",
-            source: "session_governance",
-          },
-        ],
-        deliveryArtifactRefs: [
-          {
-            partKey: "brief",
-            relativePath: "packs/run-1/brief.md",
-            absolutePath: "/tmp/packs/run-1/brief.md",
-            projectId: "project-1",
-            source: "runtime_evidence",
-          },
-        ],
-      },
-    ]);
-    getSceneAppScorecardMock.mockResolvedValue({
-      sceneappId: "story-video-suite",
-      updatedAt: "2026-04-17T12:04:00.000Z",
-      summary: "当前建议继续优化缺失部件后再放量。",
-      metrics: [],
-      recommendedAction: "optimize",
-      observedFailureSignals: ["pack_incomplete"],
-      topFailureSignal: "pack_incomplete",
-    });
-
+  it("应只保留初始摘要中的历史只读信息", () => {
     const summary = createInitialSummary();
     const { getValue } = renderHook({
       initialSummary: summary,
-      sessionId: "session-1",
-      isSending: false,
-    });
-
-    await flushEffects();
-
-    expect(listSceneAppRunsMock).toHaveBeenCalledWith("story-video-suite");
-    expect(getSceneAppScorecardMock).toHaveBeenCalledWith("story-video-suite");
-    expect(getValue()?.summary?.runtimeBackflow).toEqual(
-      expect.objectContaining({
-        runId: "run-1",
-        statusLabel: "成功",
-        statusTone: "watch",
-        deliveryCompletionLabel: "已交付 1/2 个部件",
-        evidenceSourceLabel: "当前已接入会话证据",
-        sourceLabel: "人工试跑",
-        scorecardActionLabel: "建议继续优化",
-        topFailureSignalLabel: "整包不完整",
-      }),
-    );
-    expect(getValue()?.latestPackResultDetailView).toEqual(
-      expect.objectContaining({
-        runId: "run-1",
-        deliveryCompletionLabel: "已交付 1/2 个部件",
-      }),
-    );
-    expect(getValue()?.latestPackResultUsesFallback).toBe(false);
-    expect(getValue()?.reviewTargetRunSummary).toEqual(
-      expect.objectContaining({
-        runId: "run-1",
-        sessionId: "session-1",
-      }),
-    );
-  });
-
-  it("找不到当前 session 对应运行时应保留启动摘要", async () => {
-    listSceneAppRunsMock.mockResolvedValue([
-      {
-        runId: "run-other",
-        sceneappId: "story-video-suite",
-        status: "success",
-        source: "chat",
-        sourceRef: "source-other",
-        sessionId: "other-session",
-        startedAt: "2026-04-17T12:00:00.000Z",
-        finishedAt: "2026-04-17T12:03:00.000Z",
-        artifactCount: 1,
-        runtimeEvidenceUsed: false,
-      },
-    ]);
-    getSceneAppScorecardMock.mockResolvedValue({
-      sceneappId: "story-video-suite",
-      updatedAt: "2026-04-17T12:04:00.000Z",
-      summary: "当前还没有足够样本。",
-      metrics: [],
-      recommendedAction: "launch",
-      observedFailureSignals: [],
-      topFailureSignal: null,
-    });
-
-    const summary = createInitialSummary();
-    const { getValue } = renderHook({
-      initialSummary: summary,
-      sessionId: "session-1",
-      isSending: false,
-    });
-
-    await flushEffects();
-
-    expect(getValue()?.summary?.runtimeBackflow).toBeNull();
-    expect(getValue()?.summary?.planningSummary).toBe(summary.planningSummary);
-    expect(getValue()?.latestPackResultDetailView).toBeNull();
-    expect(getValue()?.reviewTargetRunSummary).toBeNull();
-  });
-
-  it("当前 session 结果还没回流文件时应回退到最近可消费样本", async () => {
-    listSceneAppRunsMock.mockResolvedValue([
-      {
-        runId: "run-current",
-        sceneappId: "story-video-suite",
-        status: "running",
-        source: "chat",
-        sourceRef: "source-current",
-        sessionId: "session-1",
-        startedAt: "2026-04-17T12:10:00.000Z",
-        finishedAt: null,
-        artifactCount: 0,
-        deliveryRequiredParts: ["brief", "storyboard"],
-        deliveryCompletedParts: [],
-        deliveryMissingParts: ["brief", "storyboard"],
-        deliveryPartCoverageKnown: true,
-        runtimeEvidenceUsed: true,
-        deliveryArtifactRefs: [],
-      },
-      {
-        runId: "run-fallback",
-        sceneappId: "story-video-suite",
-        status: "success",
-        source: "chat",
-        sourceRef: "source-fallback",
-        sessionId: "older-session",
-        startedAt: "2026-04-16T12:00:00.000Z",
-        finishedAt: "2026-04-16T12:03:00.000Z",
-        artifactCount: 2,
-        deliveryRequiredParts: ["brief", "storyboard"],
-        deliveryCompletedParts: ["brief", "storyboard"],
-        deliveryMissingParts: [],
-        deliveryPartCoverageKnown: true,
-        runtimeEvidenceUsed: true,
-        deliveryArtifactRefs: [
-          {
-            partKey: "brief",
-            relativePath: "packs/run-fallback/brief.md",
-            absolutePath: "/tmp/packs/run-fallback/brief.md",
-            projectId: "project-1",
-            source: "runtime_evidence",
-          },
-        ],
-      },
-    ]);
-    getSceneAppScorecardMock.mockResolvedValue({
-      sceneappId: "story-video-suite",
-      updatedAt: "2026-04-17T12:04:00.000Z",
-      summary: "当前还在等待主运行写回结果。",
-      metrics: [],
-      recommendedAction: "keep",
-      observedFailureSignals: [],
-      topFailureSignal: null,
-    });
-
-    const { getValue } = renderHook({
-      initialSummary: createInitialSummary(),
       sessionId: "session-1",
       isSending: true,
     });
 
-    await flushEffects();
-
+    expect(getValue()?.summary).toBe(summary);
     expect(getValue()?.summary?.runtimeBackflow).toEqual(
       expect.objectContaining({
-        runId: "run-current",
-        statusLabel: "执行中",
+        runId: "run-archived-1",
+        statusLabel: "成功",
       }),
     );
-    expect(getValue()?.latestPackResultDetailView).toEqual(
-      expect.objectContaining({
-        runId: "run-fallback",
-        deliveryArtifactEntries: [
-          expect.objectContaining({
-            label: "主稿 · 任务简报",
-            pathLabel: "packs/run-fallback/brief.md",
-          }),
-        ],
-      }),
-    );
-    expect(getValue()?.latestPackResultUsesFallback).toBe(true);
-    expect(getValue()?.reviewTargetRunSummary).toEqual(
-      expect.objectContaining({
-        runId: "run-fallback",
-        sessionId: "older-session",
-      }),
-    );
+    expect(getValue()?.loading).toBe(false);
+    expect(getValue()?.latestPackResultDetailView).toBeNull();
+    expect(getValue()?.latestPackResultUsesFallback).toBe(false);
+    expect(getValue()?.reviewTargetRunSummary).toBeNull();
   });
 
-  it("请求刷新时应重新拉取最新运行摘要与 scorecard", async () => {
-    listSceneAppRunsMock.mockResolvedValue([
-      {
-        runId: "run-1",
-        sceneappId: "story-video-suite",
-        status: "success",
-        source: "chat",
-        sourceRef: "source-1",
-        sessionId: "session-1",
-        startedAt: "2026-04-17T12:00:00.000Z",
-        finishedAt: "2026-04-17T12:03:00.000Z",
-        artifactCount: 2,
-        deliveryRequiredParts: ["brief", "storyboard"],
-        deliveryCompletedParts: ["brief", "storyboard"],
-        deliveryMissingParts: [],
-        deliveryPartCoverageKnown: true,
-        runtimeEvidenceUsed: true,
-        deliveryArtifactRefs: [
-          {
-            partKey: "brief",
-            relativePath: "packs/run-1/brief.md",
-            absolutePath: "/tmp/packs/run-1/brief.md",
-            projectId: "project-1",
-            source: "runtime_evidence",
-          },
-        ],
-      },
-    ]);
-    getSceneAppScorecardMock.mockResolvedValueOnce({
-      sceneappId: "story-video-suite",
-      updatedAt: "2026-04-17T12:04:00.000Z",
-      summary: "当前建议继续保留，先观察下一轮样本。",
-      metrics: [],
-      recommendedAction: "keep",
-      observedFailureSignals: [],
-      topFailureSignal: null,
+  it("缺少初始摘要时不再尝试恢复旧 SceneApp 运行态", () => {
+    const { getValue } = renderHook({
+      initialSummary: null,
+      sessionId: "session-1",
+      isSending: true,
     });
 
-    const { getValue } = renderHook({
-      initialSummary: createInitialSummary(),
+    expect(getValue()?.summary).toBeNull();
+    expect(getValue()?.loading).toBe(false);
+    expect(getValue()?.latestPackResultDetailView).toBeNull();
+    expect(getValue()?.reviewTargetRunSummary).toBeNull();
+  });
+
+  it("请求刷新是 no-op，不再触发旧 SceneApp API 轮询", () => {
+    const summary = createInitialSummary();
+    const { getValue, rerender } = renderHook({
+      initialSummary: summary,
       sessionId: "session-1",
       isSending: false,
     });
+    const firstRefresh = getValue()?.requestRefresh;
 
-    await flushEffects();
-
-    expect(getValue()?.summary?.runtimeBackflow).toEqual(
-      expect.objectContaining({
-        scorecardActionLabel: "建议维持现状",
-      }),
-    );
-
-    getSceneAppScorecardMock.mockResolvedValueOnce({
-      sceneappId: "story-video-suite",
-      updatedAt: "2026-04-17T12:08:00.000Z",
-      summary: "当前建议继续优化后再放量。",
-      metrics: [],
-      recommendedAction: "optimize",
-      observedFailureSignals: ["artifact_validation_issue"],
-      topFailureSignal: "artifact_validation_issue",
-    });
-
-    await act(async () => {
+    act(() => {
       getValue()?.requestRefresh();
     });
-    await flushEffects();
+    rerender({
+      initialSummary: summary,
+      sessionId: "session-1",
+      isSending: true,
+    });
 
-    expect(listSceneAppRunsMock).toHaveBeenCalledTimes(2);
-    expect(getSceneAppScorecardMock).toHaveBeenCalledTimes(2);
-    expect(getValue()?.summary?.runtimeBackflow).toEqual(
-      expect.objectContaining({
-        scorecardActionLabel: "建议继续优化",
-        topFailureSignalLabel: "结果结构校验问题",
-      }),
-    );
+    expect(getValue()?.summary).toBe(summary);
+    expect(getValue()?.requestRefresh).toBe(firstRefresh);
+    expect(getValue()?.loading).toBe(false);
   });
 });

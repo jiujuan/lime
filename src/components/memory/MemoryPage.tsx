@@ -1550,13 +1550,24 @@ export function MemoryPage({ onNavigate, pageParams }: MemoryPageProps) {
       ? buildScenePrefillFromInspiration(projectedEntry)
       : `围绕这条灵感继续创作：${entry.title}`;
 
-    onNavigate("sceneapps", {
-      view: "catalog",
-      projectId: projectId || undefined,
-      referenceMemoryIds: [entry.id],
-      search: entry.title,
-      prefillIntent,
-    });
+    onNavigate(
+      "agent",
+      buildHomeAgentParams({
+        projectId: projectId || undefined,
+        entryBannerMessage: "SceneApp 独立页已下线，已改从 Agent App 主链继续。",
+        initialUserPrompt: prefillIntent,
+        initialRequestMetadata:
+          buildMemoryEntryCreationReplayRequestMetadata({
+            id: entry.id,
+            projectId: projectId || undefined,
+            category: entry.category,
+            title: entry.title,
+            summary: entry.summary,
+            content: entry.content,
+            tags: entry.tags,
+          }),
+      }),
+    );
   }
 
   const handleSelectDurableMemory = useCallback((memoryId: string) => {

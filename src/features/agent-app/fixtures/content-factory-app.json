@@ -1,0 +1,210 @@
+{
+  "manifestVersion": "0.3.0",
+  "name": "content-factory-app",
+  "displayName": "内容工厂",
+  "version": "0.3.0",
+  "status": "draft",
+  "appType": "domain-app",
+  "description": "内容工厂，用三层知识库驱动批量内容生产、脚本工厂、策略报告、PPT 交付和数据复盘。",
+  "runtimeTargets": [
+    "local"
+  ],
+  "requires": {
+    "lime": {
+      "appRuntime": ">=0.3.0 <1.0.0"
+    },
+    "sdk": "@lime/app-sdk@^0.3.0",
+    "capabilities": {
+      "lime.ui": "^0.3.0",
+      "lime.storage": "^0.3.0",
+      "lime.files": "^0.3.0",
+      "lime.agent": "^0.3.0",
+      "lime.knowledge": "^0.3.0",
+      "lime.tools": "^0.3.0",
+      "lime.artifacts": "^0.3.0",
+      "lime.workflow": "^0.3.0",
+      "lime.evidence": "^0.3.0"
+    }
+  },
+  "runtimePackage": {
+    "ui": {
+      "path": "./dist/ui"
+    },
+    "worker": {
+      "path": "./dist/worker"
+    },
+    "storage": {
+      "schema": "./storage/schema.json",
+      "migrations": "./storage/migrations"
+    }
+  },
+  "storage": {
+    "namespace": "content-factory-app",
+    "schema": "./storage/schema.json",
+    "migrations": "./storage/migrations",
+    "retention": "ask"
+  },
+  "entries": [
+    {
+      "key": "dashboard",
+      "kind": "page",
+      "title": "项目首页",
+      "description": "查看项目、知识库健康度和内容生产状态。",
+      "route": "/dashboard"
+    },
+    {
+      "key": "knowledge",
+      "kind": "page",
+      "title": "三层知识库",
+      "description": "管理 IP 知识库、项目知识库和素材库。",
+      "route": "/knowledge"
+    },
+    {
+      "key": "content_scenario_planning",
+      "kind": "workflow",
+      "title": "内容场景规划",
+      "description": "基于知识库规划用户场景、痛点、解决方案和内容切入点。",
+      "workflow": "./workflows/content-scenarios.workflow.md",
+      "requiredCapabilities": [
+        "lime.agent",
+        "lime.knowledge",
+        "lime.storage"
+      ]
+    },
+    {
+      "key": "content_factory",
+      "kind": "page",
+      "title": "内容工厂",
+      "description": "批量生成文案、短视频脚本和图片提示词。",
+      "route": "/content-factory"
+    },
+    {
+      "key": "content_strategist",
+      "kind": "expert-chat",
+      "title": "内容策略专家",
+      "description": "围绕定位、场景、选题和复盘给出策略建议。",
+      "persona": "./agents/content-strategist.md"
+    }
+  ],
+  "knowledgeTemplates": [
+    {
+      "key": "ip_knowledge",
+      "standard": "agentknowledge",
+      "type": "personal-profile",
+      "required": false
+    },
+    {
+      "key": "project_knowledge",
+      "standard": "agentknowledge",
+      "type": "brand-product",
+      "required": true
+    },
+    {
+      "key": "material_library",
+      "standard": "agentknowledge",
+      "type": "content-operations",
+      "required": false
+    }
+  ],
+  "artifacts": [
+    {
+      "key": "content_table",
+      "title": "内容表",
+      "type": "table",
+      "required": true
+    }
+  ],
+  "policies": [
+    {
+      "key": "lab_only",
+      "title": "P4-R 实验岛",
+      "required": true
+    }
+  ],
+  "services": [
+    {
+      "key": "content_worker",
+      "kind": "worker",
+      "path": "./dist/worker/index.js",
+      "required": true
+    }
+  ],
+  "workflows": [
+    {
+      "key": "content_scenario_planning",
+      "path": "./workflows/content-scenarios.workflow.md",
+      "humanReview": true,
+      "required": true
+    }
+  ],
+  "skillRefs": [
+    {
+      "id": "article-writer",
+      "standard": "agentskills",
+      "activation": "entry",
+      "required": true
+    }
+  ],
+  "toolRefs": [
+    {
+      "key": "document_parser",
+      "provider": "lime.tools",
+      "required": true
+    },
+    {
+      "key": "competitor_research",
+      "provider": "lime.tools",
+      "required": false
+    }
+  ],
+  "evals": [
+    {
+      "key": "fact_grounding",
+      "kind": "quality",
+      "evidenceRequired": true,
+      "required": true
+    }
+  ],
+  "events": [
+    {
+      "key": "content_factory.completed",
+      "direction": "publish",
+      "required": false
+    }
+  ],
+  "secrets": [
+    {
+      "key": "publishing_workspace_token",
+      "provider": "lime.secrets",
+      "scope": "workspace",
+      "required": false
+    }
+  ],
+  "overlayTemplates": [
+    {
+      "key": "workspace_content_rules",
+      "scope": "workspace",
+      "required": false
+    }
+  ],
+  "ui": {
+    "routes": [
+      {
+        "entry": "dashboard",
+        "path": "/dashboard"
+      },
+      {
+        "entry": "content_factory",
+        "path": "/content-factory"
+      }
+    ]
+  },
+  "lifecycle": {
+    "install": {
+      "reviewRequired": true
+    },
+    "uninstall": {
+      "policy": "ask"
+    }
+  }
+}

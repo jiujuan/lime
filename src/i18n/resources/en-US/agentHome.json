@@ -109,7 +109,6 @@
   "agentChat.home.scrollCue.label": "Scroll down to see what Lime can help you do",
   "agentChat.home.secondScreen.label": "Lime executable task examples",
   "agentChat.home.supplemental.recentSession.defaultAction": "Continue recent session",
-  "agentChat.home.supplemental.recentSceneApp.label": "Continue recent method",
   "agentChat.home.sceneManager.defaultTemplateTitle": "Start",
   "agentChat.home.sceneManager.customSceneSummaryFallback": "Custom scene",
   "agentChat.home.sceneManager.error.syncSignInRequired": "Sign in to your cloud account before syncing Scene Skills management changes.",

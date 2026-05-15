@@ -236,25 +236,6 @@ fn collect_artifact_validator_summary(
     summary
 }
 
-pub(crate) fn extract_verification_failure_outcomes(
-    verification: &RuntimeEvidenceVerificationSummary,
-) -> Vec<String> {
-    build_observability_verification_summary_json(verification)
-        .and_then(|summary| {
-            summary
-                .get("focusVerificationFailureOutcomes")
-                .and_then(Value::as_array)
-                .map(|values| {
-                    values
-                        .iter()
-                        .filter_map(Value::as_str)
-                        .map(ToString::to_string)
-                        .collect::<Vec<_>>()
-                })
-        })
-        .unwrap_or_default()
-}
-
 fn collect_browser_evidence(detail: &SessionDetail) -> Vec<Value> {
     let mut evidence = Vec::new();
 

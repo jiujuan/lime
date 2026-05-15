@@ -1,14 +1,14 @@
 import { normalizeManifest } from "../manifest/normalizeManifest";
 import type { AppManifest, PackageIdentity, PackageSourceKind } from "../types";
 
-function stableStringify(value: unknown): string {
+export function stableStringifyAgentAppValue(value: unknown): string {
   if (Array.isArray(value)) {
-    return `[${value.map(stableStringify).join(",")}]`;
+    return `[${value.map(stableStringifyAgentAppValue).join(",")}]`;
   }
   if (value && typeof value === "object") {
     return `{${Object.entries(value as Record<string, unknown>)
       .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, entry]) => `${JSON.stringify(key)}:${stableStringify(entry)}`)
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stableStringifyAgentAppValue(entry)}`)
       .join(",")}}`;
   }
   return JSON.stringify(value);
@@ -30,18 +30,35 @@ export function buildPackageIdentity(params: {
   loadedAt?: string;
 }): PackageIdentity {
   const normalized = normalizeManifest(params.manifest);
-  const manifestHash = `manifest-fnv1a-${fnv1a(stableStringify(params.manifest))}`;
-  const packageHash = `package-fnv1a-${fnv1a(
-    stableStringify({ manifest: params.manifest, sourceUri: params.sourceUri ?? "fixture" }),
-  )}`;
+  const manifestHash = buildAgentAppManifestHash(params.manifest);
+  const packageHash = buildAgentAppPackageHash({
+    manifest: params.manifest,
+    sourceUri: params.sourceUri ?? "fixture",
+  });
 
   return {
     sourceKind: params.sourceKind ?? "fixture",
-    sourceUri: params.sourceUri ?? "fixture:content-engineering-app",
+    sourceUri: params.sourceUri ?? "fixture:content-factory-app",
     appId: normalized.appId,
     appVersion: normalized.version,
     packageHash,
     manifestHash,
     loadedAt: params.loadedAt ?? new Date().toISOString(),
   };
+}
+
+export function buildAgentAppManifestHash(manifest: unknown): string {
+  return `manifest-fnv1a-${fnv1a(stableStringifyAgentAppValue(manifest))}`;
+}
+
+export function buildAgentAppPackageHash(params: {
+  manifest: unknown;
+  sourceUri?: string;
+}): string {
+  return `package-fnv1a-${fnv1a(
+    stableStringifyAgentAppValue({
+      manifest: params.manifest,
+      sourceUri: params.sourceUri ?? "fixture",
+    }),
+  )}`;
 }

@@ -8,6 +8,7 @@ import {
   createClientDesktopAuthSession,
   claimClientReferral,
   getClientActiveAccessToken,
+  getClientAgentApps,
   getClientCloudActivation,
   getClientCreditTopupOrder,
   getClientOrder,
@@ -24,8 +25,14 @@ import {
   listClientTopupPackages,
   pollClientDesktopAuthSession,
   rotateClientAccessToken,
+  submitClientAgentAppRegistrationCode,
   updateClientSceneSkillPreferences,
 } from "./oemCloudControlPlane";
+
+const AGENT_APP_PACKAGE_HASH =
+  "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const AGENT_APP_MANIFEST_HASH =
+  "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
 describe("oemCloudControlPlane desktop auth", () => {
   beforeEach(() => {
@@ -251,6 +258,44 @@ describe("oemCloudControlPlane desktop auth", () => {
           features: {
             referralEnabled: true,
           },
+          agentAppCatalog: {
+            schemaVersion: "agent-app-cloud-bootstrap/v1",
+            tenantId: "tenant-0001",
+            generatedAt: "2026-05-15T00:00:00.000Z",
+            apps: [
+              {
+                appId: "content-factory-app",
+                displayName: "内容工厂",
+                version: "0.3.0",
+                releaseId: "release-001",
+                tenantId: "tenant-0001",
+                tenantEnablementRef: "enablement-001",
+                channel: "stable",
+                signatureRef: "sigstore:content-factory-app@0.3.0",
+                licenseState: "active",
+                enabled: true,
+                packageUrl:
+                  "https://packages.limecloud.example/apps/content-factory-app-0.3.0.lapp",
+                packageHash: AGENT_APP_PACKAGE_HASH,
+                manifestHash: AGENT_APP_MANIFEST_HASH,
+                capabilityRequirements: {
+                  "lime.ui": "^0.3.0",
+                  "lime.storage": "^0.3.0",
+                },
+                defaultEntries: ["dashboard"],
+                policyDefaults: {
+                  allowServerAssisted: false,
+                },
+                toolAvailability: [
+                  {
+                    key: "document_parser",
+                    status: "available",
+                    required: true,
+                  },
+                ],
+              },
+            ],
+          },
           referral: {
             code: {
               id: "refcode-001",
@@ -302,6 +347,152 @@ describe("oemCloudControlPlane desktop auth", () => {
       brandName: "Lime",
       code: "LIME-2026",
       downloadUrl: "https://limeai.run",
+    });
+    expect(bootstrap.agentAppCatalog?.apps[0]).toMatchObject({
+      appId: "content-factory-app",
+      releaseId: "release-001",
+      packageHash: AGENT_APP_PACKAGE_HASH,
+      manifestHash: AGENT_APP_MANIFEST_HASH,
+      enabled: true,
+    });
+  });
+
+  it("应通过正式 client/agent-apps 接口读取 Agent App 云目录", async () => {
+    window.__LIME_SESSION_TOKEN__ = "session-token-001";
+
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        code: 200,
+        message: "success",
+        data: {
+          schemaVersion: "agent-app-cloud-bootstrap/v1",
+          tenantId: "tenant-0001",
+          generatedAt: "2026-05-15T00:00:00.000Z",
+          fetchedAt: "2026-05-15T00:00:01.000Z",
+          apps: [
+            {
+              appId: "content-factory-app",
+              displayName: "内容工厂",
+              version: "0.3.0",
+              releaseId: "release-001",
+              tenantId: "tenant-0001",
+              tenantEnablementRef: "enablement-001",
+              channel: "stable",
+              signatureRef: "sigstore:content-factory-app@0.3.0",
+              licenseState: "revoked",
+              enabled: false,
+              disabledReason: "license revoked",
+              packageUrl:
+                "https://packages.limecloud.example/apps/content-factory-app-0.3.0.lapp",
+              packageHash: AGENT_APP_PACKAGE_HASH,
+              manifestHash: AGENT_APP_MANIFEST_HASH,
+              capabilityRequirements: {
+                "lime.ui": "^0.3.0",
+                "lime.storage": "^0.3.0",
+              },
+              defaultEntries: ["dashboard"],
+              policyDefaults: {
+                allowServerAssisted: false,
+              },
+              toolAvailability: [
+                {
+                  key: "document_parser",
+                  status: "available",
+                  required: true,
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const catalog = await getClientAgentApps("tenant-0001");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://user.limeai.run/api/v1/public/tenants/tenant-0001/client/agent-apps",
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({
+          Accept: "application/json",
+          Authorization: "Bearer session-token-001",
+        }),
+      }),
+    );
+    expect(catalog).toMatchObject({
+      schemaVersion: "agent-app-cloud-bootstrap/v1",
+      tenantId: "tenant-0001",
+      apps: [
+        {
+          appId: "content-factory-app",
+          licenseState: "revoked",
+          enabled: false,
+          disabledReason: "license revoked",
+        },
+      ],
+    });
+  });
+
+  it("应提交 Agent App 注册码并解析刷新后的云目录", async () => {
+    window.__LIME_SESSION_TOKEN__ = "session-token-001";
+
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        code: 200,
+        message: "success",
+        data: {
+          schemaVersion: "agent-app-cloud-bootstrap/v1",
+          tenantId: "tenant-0001",
+          generatedAt: "2026-05-15T00:02:00.000Z",
+          apps: [
+            {
+              appId: "content-factory-app",
+              displayName: "内容工厂",
+              version: "0.3.0",
+              registrationRequired: true,
+              registrationState: "active",
+              enabled: true,
+              packageUrl:
+                "https://packages.limecloud.example/apps/content-factory-app-0.3.0.lapp",
+              packageHash: AGENT_APP_PACKAGE_HASH,
+              manifestHash: AGENT_APP_MANIFEST_HASH,
+              capabilityRequirements: {},
+              defaultEntries: ["dashboard"],
+              policyDefaults: {},
+              toolAvailability: [],
+            },
+          ],
+        },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const catalog = await submitClientAgentAppRegistrationCode(
+      "tenant-0001",
+      "content-factory-app",
+      { code: "CF-REG-2026" },
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://user.limeai.run/api/v1/public/tenants/tenant-0001/client/agent-apps/content-factory-app/registration",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ code: "CF-REG-2026" }),
+        headers: expect.objectContaining({
+          Authorization: "Bearer session-token-001",
+        }),
+      }),
+    );
+    expect(catalog.apps[0]).toMatchObject({
+      appId: "content-factory-app",
+      registrationRequired: true,
+      registrationState: "active",
+      packageHash: AGENT_APP_PACKAGE_HASH,
     });
   });
 

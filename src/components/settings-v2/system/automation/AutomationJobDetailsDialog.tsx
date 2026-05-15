@@ -6,19 +6,10 @@ import type {
   AutomationPayload,
 } from "@/lib/api/automation";
 import type { AgentRun } from "@/lib/api/executionRun";
-import type {
-  SceneAppAutomationWorkspaceCardViewModel,
-  SceneAppRunDetailViewModel,
-} from "@/lib/sceneapp";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/i18n/format";
 import { WorkbenchInfoTip } from "@/components/media/WorkbenchInfoTip";
-import { SceneAppRunDetailPanel } from "@/components/sceneapps/SceneAppRunDetailPanel";
-import {
-  buildSceneAppExecutionFollowupDestinations,
-  type SceneAppExecutionFollowupDestination,
-} from "@/components/sceneapps/sceneAppExecutionFollowupDestinations";
 import {
   Dialog,
   DialogContent,
@@ -486,28 +477,7 @@ interface AutomationJobDetailsDialogProps {
   serviceSkillContext: AutomationServiceSkillContext | null;
   jobRuns: AgentRun[];
   historyLoading: boolean;
-  sceneAppSummaryCard?: SceneAppAutomationWorkspaceCardViewModel | null;
-  sceneAppRunDetailView?: SceneAppRunDetailViewModel | null;
-  sceneAppLoading?: boolean;
-  sceneAppError?: string | null;
-  onOpenSceneAppDetail?: () => void;
-  onOpenSceneAppGovernance?: () => void;
-  onReviewCurrentProject?: () => void;
-  sceneAppSavedAsInspiration?: boolean;
-  onSaveSceneAppAsInspiration?: () => void;
-  onOpenInspirationLibrary?: () => void;
-  onSceneAppDeliveryArtifactAction?: (
-    action: SceneAppRunDetailViewModel["deliveryArtifactEntries"][number],
-  ) => void;
-  onSceneAppGovernanceAction?: (
-    action: SceneAppRunDetailViewModel["governanceActionEntries"][number],
-  ) => void;
-  onSceneAppGovernanceArtifactAction?: (
-    action: SceneAppRunDetailViewModel["governanceArtifactEntries"][number],
-  ) => void;
-  onSceneAppEntryAction?: (
-    action: NonNullable<SceneAppRunDetailViewModel["entryAction"]>,
-  ) => void;
+  retiredSceneAppMessage?: string | null;
   onRefreshHistory: (jobId: string) => Promise<void> | void;
 }
 
@@ -519,20 +489,7 @@ export function AutomationJobDetailsDialog({
   serviceSkillContext,
   jobRuns,
   historyLoading,
-  sceneAppSummaryCard = null,
-  sceneAppRunDetailView = null,
-  sceneAppLoading = false,
-  sceneAppError = null,
-  onOpenSceneAppDetail,
-  onOpenSceneAppGovernance,
-  onReviewCurrentProject,
-  sceneAppSavedAsInspiration = false,
-  onSaveSceneAppAsInspiration,
-  onOpenInspirationLibrary,
-  onSceneAppDeliveryArtifactAction,
-  onSceneAppGovernanceAction,
-  onSceneAppGovernanceArtifactAction,
-  onSceneAppEntryAction,
+  retiredSceneAppMessage = null,
   onRefreshHistory,
 }: AutomationJobDetailsDialogProps) {
   const { i18n, t } = useTranslation("settings");
@@ -545,57 +502,6 @@ export function AutomationJobDetailsDialog({
     t,
     "settings.automation.details.serviceSkill.executionCompatNote",
   );
-  const followupDestinations = sceneAppRunDetailView
-    ? buildSceneAppExecutionFollowupDestinations(sceneAppRunDetailView)
-    : [];
-  const resolveFollowupDestinationAction = (
-    destination: SceneAppExecutionFollowupDestination,
-  ): { label: string; onClick: () => void } | null => {
-    const action = destination.action;
-    if (!action) {
-      return null;
-    }
-
-    switch (action.kind) {
-      case "review_current_project":
-        return onReviewCurrentProject
-          ? {
-              label: action.label,
-              onClick: onReviewCurrentProject,
-            }
-          : null;
-      case "governance_action":
-        return onSceneAppGovernanceAction
-          ? {
-              label: action.label,
-              onClick: () => onSceneAppGovernanceAction(action.entry),
-            }
-          : null;
-      case "governance_artifact":
-        return onSceneAppGovernanceArtifactAction
-          ? {
-              label: action.label,
-              onClick: () => onSceneAppGovernanceArtifactAction(action.entry),
-            }
-          : null;
-      case "entry_action":
-        return onSceneAppEntryAction
-          ? {
-              label: action.label,
-              onClick: () => onSceneAppEntryAction(action.entry),
-            }
-          : null;
-      case "delivery_artifact":
-        return onSceneAppDeliveryArtifactAction
-          ? {
-              label: action.label,
-              onClick: () => onSceneAppDeliveryArtifactAction(action.entry),
-            }
-          : null;
-      default:
-        return null;
-    }
-  };
 
   return (
     <Dialog open={open && Boolean(job)} onOpenChange={onOpenChange}>
@@ -874,245 +780,17 @@ export function AutomationJobDetailsDialog({
                   </div>
                 ) : null}
 
-                {sceneAppSummaryCard ||
-                sceneAppRunDetailView ||
-                sceneAppLoading ||
-                sceneAppError ? (
-                  <div className="space-y-4">
-                    <div className="rounded-[22px] border border-lime-200/80 bg-lime-50/70 px-4 py-4">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <div className="text-sm font-medium text-slate-900">
-                            {detailsText(
-                              t,
-                              "settings.automation.details.sceneApp.title",
-                            )}
-                          </div>
-                          <div className="mt-1 text-sm leading-6 text-slate-600">
-                            {detailsText(
-                              t,
-                              "settings.automation.details.sceneApp.description",
-                            )}
-                          </div>
-                        </div>
-                        {sceneAppSummaryCard ? (
-                          <Badge variant="secondary">
-                            {sceneAppSummaryCard.statusLabel}
-                          </Badge>
-                        ) : null}
-                      </div>
-
-                      {sceneAppLoading && !sceneAppSummaryCard ? (
-                        <div className="mt-4 rounded-[18px] border border-dashed border-lime-200 bg-white/80 px-4 py-4 text-sm text-slate-600">
-                          {detailsText(
-                            t,
-                            "settings.automation.details.sceneApp.loading",
-                          )}
-                        </div>
-                      ) : null}
-
-                      {sceneAppSummaryCard ? (
-                        <>
-                          <div className="mt-4 flex flex-wrap gap-2">
-                            <span className="rounded-full border border-white bg-white px-3 py-1 text-xs font-medium text-slate-700">
-                              {sceneAppSummaryCard.title}
-                            </span>
-                          </div>
-
-                          <div className="mt-4 rounded-[18px] border border-white bg-white/90 px-4 py-4">
-                            <div className="text-sm leading-7 text-slate-800">
-                              {sceneAppSummaryCard.summary}
-                            </div>
-                            <div className="mt-2 text-sm leading-6 text-slate-600">
-                              {detailsText(
-                                t,
-                                "settings.automation.details.sceneApp.nextAction",
-                                { action: sceneAppSummaryCard.nextAction },
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="mt-4 grid gap-3 md:grid-cols-2">
-                            <div className="rounded-[18px] border border-white bg-white/90 px-4 py-3">
-                              <div className="text-xs font-medium text-slate-500">
-                                {detailsText(
-                                  t,
-                                  "settings.automation.details.sceneApp.overview",
-                                )}
-                              </div>
-                              <div className="mt-2 text-sm font-medium text-slate-900">
-                                {sceneAppSummaryCard.automationSummary}
-                              </div>
-                            </div>
-                            <div className="rounded-[18px] border border-white bg-white/90 px-4 py-3">
-                              <div className="text-xs font-medium text-slate-500">
-                                {detailsText(
-                                  t,
-                                  "settings.automation.details.sceneApp.recentResult",
-                                )}
-                              </div>
-                              <div className="mt-2 text-sm font-medium text-slate-900">
-                                {sceneAppSummaryCard.latestAutomationLabel}
-                              </div>
-                            </div>
-                          </div>
-
-                          {sceneAppSummaryCard.scorecardAggregate ? (
-                            <div
-                              className="mt-4 rounded-[18px] border border-white bg-white/90 px-4 py-4"
-                              data-testid="automation-sceneapp-scorecard-aggregate"
-                            >
-                              <div className="flex flex-wrap items-center gap-2">
-                                <div className="text-xs font-medium text-slate-500">
-                                  {detailsText(
-                                    t,
-                                    "settings.automation.details.sceneApp.scorecard",
-                                  )}
-                                </div>
-                                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
-                                  {
-                                    sceneAppSummaryCard.scorecardAggregate
-                                      .statusLabel
-                                  }
-                                </span>
-                                {sceneAppSummaryCard.scorecardAggregate
-                                  .actionLabel ? (
-                                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-                                    {
-                                      sceneAppSummaryCard.scorecardAggregate
-                                        .actionLabel
-                                    }
-                                  </span>
-                                ) : null}
-                                {sceneAppSummaryCard.scorecardAggregate
-                                  .topFailureSignalLabel ? (
-                                  <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
-                                    {
-                                      sceneAppSummaryCard.scorecardAggregate
-                                        .topFailureSignalLabel
-                                    }
-                                  </span>
-                                ) : null}
-                              </div>
-                              <div className="mt-3 text-sm leading-6 text-slate-800">
-                                {sceneAppSummaryCard.scorecardAggregate.summary}
-                              </div>
-                              <div className="mt-2 text-sm leading-6 text-slate-600">
-                                {detailsText(
-                                  t,
-                                  "settings.automation.details.sceneApp.nextAction",
-                                  {
-                                    action:
-                                      sceneAppSummaryCard.scorecardAggregate
-                                        .nextAction,
-                                  },
-                                )}
-                              </div>
-                              {followupDestinations.length ? (
-                                <div
-                                  className="mt-4 grid gap-3 md:grid-cols-2"
-                                  data-testid="automation-sceneapp-destination-actions"
-                                >
-                                  {followupDestinations.map((destination) => {
-                                    const destinationAction =
-                                      resolveFollowupDestinationAction(
-                                        destination,
-                                      );
-
-                                    return (
-                                      <article
-                                        key={destination.key}
-                                        className="rounded-[16px] border border-slate-200/80 bg-slate-50/70 px-3 py-3"
-                                      >
-                                        <div className="text-sm font-medium text-slate-900">
-                                          {destination.label}
-                                        </div>
-                                        <div className="mt-2 text-xs leading-5 text-slate-600">
-                                          {destination.description}
-                                        </div>
-                                        {destinationAction ? (
-                                          <div className="mt-3">
-                                            <Button
-                                              type="button"
-                                              size="sm"
-                                              variant="outline"
-                                              data-testid={`automation-sceneapp-destination-action-${destination.key}`}
-                                              onClick={
-                                                destinationAction.onClick
-                                              }
-                                            >
-                                              {destinationAction.label}
-                                            </Button>
-                                          </div>
-                                        ) : destination.key ===
-                                          "automation-job" ? (
-                                          <div className="mt-3 text-xs leading-5 text-slate-500">
-                                            {detailsText(
-                                              t,
-                                              "settings.automation.details.sceneApp.currentJobHint",
-                                            )}
-                                          </div>
-                                        ) : null}
-                                      </article>
-                                    );
-                                  })}
-                                </div>
-                              ) : null}
-                            </div>
-                          ) : null}
-
-                          <div className="mt-4 flex flex-wrap gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={onOpenSceneAppDetail}
-                            >
-                              {detailsText(
-                                t,
-                                "settings.automation.details.sceneApp.action.openDetail",
-                              )}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={onOpenSceneAppGovernance}
-                            >
-                              {detailsText(
-                                t,
-                                "settings.automation.details.sceneApp.action.openGovernance",
-                              )}
-                            </Button>
-                          </div>
-                        </>
-                      ) : null}
-
-                      {sceneAppError && !sceneAppRunDetailView ? (
-                        <div className="mt-4 rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-700">
-                          {sceneAppError}
-                        </div>
-                      ) : null}
+                {retiredSceneAppMessage ? (
+                  <div className="rounded-[22px] border border-lime-200/80 bg-lime-50/70 px-4 py-4">
+                    <div className="text-sm font-medium text-slate-900">
+                      {detailsText(
+                        t,
+                        "settings.automation.details.sceneApp.retired.title",
+                      )}
                     </div>
-
-                    <SceneAppRunDetailPanel
-                      hasSelectedSceneApp={
-                        Boolean(sceneAppSummaryCard) ||
-                        sceneAppLoading ||
-                        Boolean(sceneAppError)
-                      }
-                      runDetailView={sceneAppRunDetailView}
-                      loading={sceneAppLoading}
-                      error={sceneAppError}
-                      savedAsInspiration={sceneAppSavedAsInspiration}
-                      onSaveAsInspiration={onSaveSceneAppAsInspiration}
-                      onOpenInspirationLibrary={onOpenInspirationLibrary}
-                      onDeliveryArtifactAction={
-                        onSceneAppDeliveryArtifactAction
-                      }
-                      onGovernanceAction={onSceneAppGovernanceAction}
-                      onGovernanceArtifactAction={
-                        onSceneAppGovernanceArtifactAction
-                      }
-                    />
+                    <div className="mt-1 text-sm leading-6 text-slate-600">
+                      {retiredSceneAppMessage}
+                    </div>
                   </div>
                 ) : null}
 

@@ -120,20 +120,16 @@ describe("useAppNavigation", () => {
     expect(latestNavigation?.pageParams).toEqual({});
   });
 
-  it("sceneapps 跳转应保留目录页参数", async () => {
+  it("agent-app-lab 跳转应保留页面参数", async () => {
     await renderProbe();
 
     await act(async () => {
-      latestNavigation?.handleNavigate("sceneapps", {
-        sceneappId: "story-video-suite",
-        projectId: "project-sceneapps",
-      });
+      latestNavigation?.handleNavigate("agent-app-lab", { source: "fixture" });
     });
 
-    expect(latestNavigation?.currentPage).toBe("sceneapps");
+    expect(latestNavigation?.currentPage).toBe("agent-app-lab");
     expect(latestNavigation?.pageParams).toEqual({
-      sceneappId: "story-video-suite",
-      projectId: "project-sceneapps",
+      source: "fixture",
     });
   });
 
@@ -141,28 +137,21 @@ describe("useAppNavigation", () => {
     await renderProbe();
 
     await act(async () => {
-      latestNavigation?.handleNavigate("sceneapps", {
-        sceneappId: "story-video-suite",
-        projectId: "project-sceneapps",
-      });
+      latestNavigation?.handleNavigate("agent-app-lab", { source: "fixture" });
     });
     await flushEffects();
 
     const readyCallsAfterFirstNavigation = readyCallCount;
 
     await act(async () => {
-      latestNavigation?.handleNavigate("sceneapps", {
-        sceneappId: "story-video-suite",
-        projectId: "project-sceneapps",
-      });
+      latestNavigation?.handleNavigate("agent-app-lab", { source: "fixture" });
     });
     await flushEffects();
 
     expect(readyCallCount).toBe(readyCallsAfterFirstNavigation);
-    expect(latestNavigation?.currentPage).toBe("sceneapps");
+    expect(latestNavigation?.currentPage).toBe("agent-app-lab");
     expect(latestNavigation?.pageParams).toEqual({
-      sceneappId: "story-video-suite",
-      projectId: "project-sceneapps",
+      source: "fixture",
     });
   });
 
@@ -171,25 +160,17 @@ describe("useAppNavigation", () => {
 
     await act(async () => {
       latestNavigation?.handleNavigate("automation");
-      latestNavigation?.handleNavigate("sceneapps", {
-        sceneappId: "story-video-suite",
-        projectId: "project-sceneapps",
-        runId: "scene-run-2",
-      });
+      latestNavigation?.handleNavigate("agent-app-lab", { source: "fixture" });
     });
     await flushEffects();
 
-    expect(latestNavigation?.currentPage).toBe("sceneapps");
-    expect(latestNavigation?.requestedPage).toBe("sceneapps");
+    expect(latestNavigation?.currentPage).toBe("agent-app-lab");
+    expect(latestNavigation?.requestedPage).toBe("agent-app-lab");
     expect(latestNavigation?.pageParams).toEqual({
-      sceneappId: "story-video-suite",
-      projectId: "project-sceneapps",
-      runId: "scene-run-2",
+      source: "fixture",
     });
     expect(latestNavigation?.requestedPageParams).toEqual({
-      sceneappId: "story-video-suite",
-      projectId: "project-sceneapps",
-      runId: "scene-run-2",
+      source: "fixture",
     });
     expect(latestNavigation?.navigationRequestId).toBe(2);
     expect(latestNavigation?.isNavigating).toBe(false);

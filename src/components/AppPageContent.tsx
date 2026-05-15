@@ -4,14 +4,12 @@
  * 负责根据当前页面类型渲染对应主内容，避免主入口继续膨胀。
  */
 
-import { lazy, useEffect, useState, type ReactNode } from "react";
+import { lazy } from "react";
 import styled from "styled-components";
-import {
-  normalizeSceneAppsPageParams,
-  serializeSceneAppsPageParams,
-} from "@/lib/sceneapp";
 import type {
   AgentPageParams,
+  AgentAppPageParams,
+  AgentAppsPageParams,
   AutomationPageParams,
   BrowserRuntimePageParams,
   KnowledgePageParams,
@@ -19,13 +17,11 @@ import type {
   Page,
   PageParams,
   ResourcesPageParams,
-  SceneAppsPageParams,
   SettingsPageParams,
   SkillsPageParams,
 } from "@/types/page";
 import { AutomationPage } from "./automation";
 import { ImConfigPage } from "./channels/ImConfigPage";
-import { SceneAppsPage } from "./sceneapps";
 import { SettingsPageV2 } from "./settings-v2";
 
 const PageWrapper = styled.div<{ $isActive: boolean }>`
@@ -33,12 +29,6 @@ const PageWrapper = styled.div<{ $isActive: boolean }>`
   padding: 24px;
   overflow: auto;
   display: ${(props) => (props.$isActive ? "block" : "none")};
-`;
-
-const KeepAliveColumnPage = styled.div<{ $isActive: boolean }>`
-  flex: 1;
-  min-height: 0;
-  display: ${(props) => (props.$isActive ? "flex" : "none")};
 `;
 
 const columnPageStyle = {
@@ -67,6 +57,19 @@ const loadKnowledgePage = () =>
 const loadAgentAppLabPage = () =>
   import("@/features/agent-app").then((module) => ({
     default: module.AgentAppLabPage,
+  }));
+const loadAgentAppsPage = () =>
+  import("@/features/agent-app").then((module) => ({
+    default: module.AgentAppsPage,
+  }));
+
+const loadAgentAppRuntimePage = () =>
+  import("@/features/agent-app").then((module) => ({
+    default: module.AgentAppRuntimePage,
+  }));
+const loadExpertPlazaPage = () =>
+  import("./experts").then((module) => ({
+    default: module.ExpertPlazaPage,
   }));
 const loadBrowserRuntimeWorkspace = () =>
   import("@/features/browser-runtime").then((module) => ({
@@ -127,6 +130,9 @@ const MemoryPage = lazy(loadMemoryPage);
 const SkillsWorkspacePage = lazy(loadSkillsWorkspacePage);
 const KnowledgePage = lazy(loadKnowledgePage);
 const AgentAppLabPage = lazy(loadAgentAppLabPage);
+const AgentAppsPage = lazy(loadAgentAppsPage);
+const AgentAppRuntimePage = lazy(loadAgentAppRuntimePage);
+const ExpertPlazaPage = lazy(loadExpertPlazaPage);
 const BrowserRuntimeWorkspace = lazy(loadBrowserRuntimeWorkspace);
 const AgentChatPage = lazy(loadAgentChatPage);
 
@@ -178,6 +184,19 @@ function serializeInitialKnowledgePackSelectionKey(
   });
 }
 
+function serializeExpertAgentLaunchKey(params: AgentPageParams): string {
+  const launch = params.expertAgentLaunch;
+  if (!launch) {
+    return "";
+  }
+  return [
+    launch.agentInstanceKey,
+    launch.launchMode,
+    launch.expertId,
+    launch.releaseId,
+  ].join(":");
+}
+
 interface AppPageContentProps {
   currentPage: Page;
   pageParams: PageParams;
@@ -193,67 +212,14 @@ export function AppPageContent({
   pageParams,
   requestedPage,
   requestedPageParams,
-  navigationRequestId = 0,
   onNavigate,
   onAgentHasMessagesChange,
 }: AppPageContentProps) {
   const activePage = requestedPage ?? currentPage;
   const activePageParams = requestedPageParams ?? pageParams;
-  const activeSceneAppsPageParams =
-    activePage === "sceneapps"
-      ? normalizeSceneAppsPageParams(activePageParams as SceneAppsPageParams)
-      : null;
-  const activeSceneAppsPageParamsKey = serializeSceneAppsPageParams(
-    activeSceneAppsPageParams ?? {},
-  );
-  const [hasVisitedSceneApps, setHasVisitedSceneApps] = useState(
-    activePage === "sceneapps",
-  );
-  const [cachedSceneAppsPageParams, setCachedSceneAppsPageParams] =
-    useState<SceneAppsPageParams>(() => activeSceneAppsPageParams ?? {});
-
-  useEffect(() => {
-    if (activePage !== "sceneapps" || !activeSceneAppsPageParams) {
-      return;
-    }
-
-    setHasVisitedSceneApps(true);
-    setCachedSceneAppsPageParams((current) =>
-      serializeSceneAppsPageParams(current) === activeSceneAppsPageParamsKey
-        ? current
-        : activeSceneAppsPageParams,
-    );
-  }, [activeSceneAppsPageParams, activeSceneAppsPageParamsKey, activePage]);
-
-  const shouldRenderSceneApps =
-    hasVisitedSceneApps || activePage === "sceneapps";
-  const sceneAppsContent = shouldRenderSceneApps ? (
-    <KeepAliveColumnPage $isActive={activePage === "sceneapps"}>
-      <SceneAppsPage
-        isActive={activePage === "sceneapps"}
-        isNavigationTargetOwner={activePage === "sceneapps"}
-        navigationRequestId={navigationRequestId}
-        onNavigate={onNavigate}
-        pageParams={activeSceneAppsPageParams ?? cachedSceneAppsPageParams}
-      />
-    </KeepAliveColumnPage>
-  ) : null;
-  const wrapWithSceneApps = (content: ReactNode) =>
-    sceneAppsContent ? (
-      <>
-        {sceneAppsContent}
-        {content}
-      </>
-    ) : (
-      content
-    );
-
-  if (activePage === "sceneapps") {
-    return wrapWithSceneApps(null);
-  }
 
   if (activePage === "automation") {
-    const content = (
+    return (
       <div style={columnPageStyle}>
         <AutomationPage
           onNavigate={onNavigate}
@@ -261,12 +227,10 @@ export function AppPageContent({
         />
       </div>
     );
-
-    return wrapWithSceneApps(content);
   }
 
   if (activePage === "channels") {
-    const content = (
+    return (
       <div style={columnPageStyle}>
         <div className="flex-1 overflow-auto px-6 py-6">
           <div className="mx-auto w-full max-w-[1440px]">
@@ -275,17 +239,15 @@ export function AppPageContent({
         </div>
       </div>
     );
-
-    return wrapWithSceneApps(content);
   }
 
   if (activePage === "agent") {
     const agentPageParams = activePageParams as AgentPageParams;
 
-    const content = (
+    return (
       <div style={columnPageStyle}>
         <AgentChatPage
-          key={`${agentPageParams.projectId || ""}:${agentPageParams.contentId || ""}:${agentPageParams.theme || ""}:${agentPageParams.lockTheme ? "1" : "0"}:${agentPageParams.agentEntry || "claw"}:${agentPageParams.immersiveHome ? "immersive" : "standard"}:${agentPageParams.preferHomeForInitialInputCapability ? "home-input" : "workspace-input"}:${agentPageParams.newChatAt ?? 0}:${agentPageParams.initialPendingServiceSkillLaunch?.skillId || ""}:${agentPageParams.initialPendingServiceSkillLaunch?.requestKey ?? 0}:${serializeInitialInputCapabilityKey(agentPageParams)}:${serializeInitialKnowledgePackSelectionKey(agentPageParams)}:${agentPageParams.initialProjectFileOpenTarget?.relativePath || ""}:${agentPageParams.initialProjectFileOpenTarget?.requestKey ?? 0}`}
+          key={`${agentPageParams.projectId || ""}:${agentPageParams.contentId || ""}:${agentPageParams.theme || ""}:${agentPageParams.lockTheme ? "1" : "0"}:${agentPageParams.agentEntry || "claw"}:${agentPageParams.immersiveHome ? "immersive" : "standard"}:${agentPageParams.preferHomeForInitialInputCapability ? "home-input" : "workspace-input"}:${agentPageParams.newChatAt ?? 0}:${agentPageParams.initialPendingServiceSkillLaunch?.skillId || ""}:${agentPageParams.initialPendingServiceSkillLaunch?.requestKey ?? 0}:${serializeInitialInputCapabilityKey(agentPageParams)}:${serializeInitialKnowledgePackSelectionKey(agentPageParams)}:${agentPageParams.initialProjectFileOpenTarget?.relativePath || ""}:${agentPageParams.initialProjectFileOpenTarget?.requestKey ?? 0}:${serializeExpertAgentLaunchKey(agentPageParams)}`}
           onNavigate={onNavigate}
           projectId={agentPageParams.projectId}
           contentId={agentPageParams.contentId}
@@ -296,6 +258,9 @@ export function AppPageContent({
           initialRequestMetadata={agentPageParams.initialRequestMetadata}
           initialAutoSendRequestMetadata={
             agentPageParams.initialAutoSendRequestMetadata
+          }
+          autoRunInitialPromptOnMount={
+            agentPageParams.autoRunInitialPromptOnMount
           }
           initialUserPrompt={agentPageParams.initialUserPrompt}
           initialUserImages={agentPageParams.initialUserImages}
@@ -327,16 +292,15 @@ export function AppPageContent({
             !agentPageParams.immersiveHome
           }
           newChatAt={agentPageParams.newChatAt}
+          expertAgentLaunch={agentPageParams.expertAgentLaunch}
           onHasMessagesChange={onAgentHasMessagesChange}
         />
       </div>
     );
-
-    return wrapWithSceneApps(content);
   }
 
   if (activePage === "resources") {
-    const content = (
+    return (
       <div style={columnPageStyle}>
         <ResourcesPage
           onNavigate={onNavigate}
@@ -344,14 +308,12 @@ export function AppPageContent({
         />
       </div>
     );
-
-    return wrapWithSceneApps(content);
   }
 
   if (activePage === "browser-runtime") {
     const browserRuntimeParams = activePageParams as BrowserRuntimePageParams;
 
-    const content = (
+    return (
       <PageWrapper $isActive={true}>
         <BrowserRuntimeWorkspace
           active={true}
@@ -371,12 +333,10 @@ export function AppPageContent({
         />
       </PageWrapper>
     );
-
-    return wrapWithSceneApps(content);
   }
 
   if (activePage === "memory") {
-    const content = (
+    return (
       <div style={columnPageStyle}>
         <div className="flex-1 min-h-0 overflow-auto">
           <MemoryPage
@@ -386,12 +346,10 @@ export function AppPageContent({
         </div>
       </div>
     );
-
-    return wrapWithSceneApps(content);
   }
 
   if (activePage === "skills") {
-    const content = (
+    return (
       <div style={columnPageStyle}>
         <SkillsWorkspacePage
           onNavigate={onNavigate}
@@ -399,22 +357,45 @@ export function AppPageContent({
         />
       </div>
     );
-
-    return wrapWithSceneApps(content);
   }
 
   if (activePage === "agent-app-lab") {
-    const content = (
+    return (
       <div style={columnPageStyle}>
         <AgentAppLabPage />
       </div>
     );
+  }
 
-    return wrapWithSceneApps(content);
+  if (activePage === "agent-app") {
+    return (
+      <div style={columnPageStyle}>
+        <AgentAppRuntimePage pageParams={activePageParams as AgentAppPageParams} />
+      </div>
+    );
+  }
+
+  if (activePage === "agent-apps") {
+    return (
+      <div style={columnPageStyle}>
+        <AgentAppsPage
+          onNavigate={onNavigate}
+          pageParams={activePageParams as AgentAppsPageParams}
+        />
+      </div>
+    );
+  }
+
+  if (activePage === "experts") {
+    return (
+      <div style={columnPageStyle}>
+        <ExpertPlazaPage onNavigate={onNavigate} />
+      </div>
+    );
   }
 
   if (activePage === "knowledge") {
-    const content = (
+    return (
       <div style={{ ...columnPageStyle, overflow: "hidden" }}>
         <KnowledgePage
           onNavigate={onNavigate}
@@ -422,12 +403,10 @@ export function AppPageContent({
         />
       </div>
     );
-
-    return wrapWithSceneApps(content);
   }
 
   if (activePage === "settings") {
-    const content = (
+    return (
       <div style={columnPageStyle}>
         <SettingsPageV2
           onNavigate={onNavigate}
@@ -438,8 +417,6 @@ export function AppPageContent({
         />
       </div>
     );
-
-    return wrapWithSceneApps(content);
   }
 
   return null;

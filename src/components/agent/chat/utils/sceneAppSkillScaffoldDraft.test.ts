@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   SceneAppExecutionSummaryViewModel,
   SceneAppRunDetailViewModel,
-} from "@/lib/sceneapp/product";
+} from "@/lib/agent/legacySceneAppExecutionSummary";
 import { buildSkillsPageParamsFromSceneAppExecution } from "./sceneAppSkillScaffoldDraft";
 
 function createSummary(): SceneAppExecutionSummaryViewModel {
@@ -180,12 +180,30 @@ describe("buildSkillsPageParamsFromSceneAppExecution", () => {
     );
   });
 
-  it("缺少结果明细时不应生成技能草稿", () => {
+  it("缺少结果明细时应基于历史摘要生成技能草稿", () => {
+    vi.spyOn(Date, "now").mockReturnValue(22334455);
+
     const result = buildSkillsPageParamsFromSceneAppExecution(
       createSummary(),
-      null,
+      {
+        projectId: "project-summary-only",
+      },
     );
 
-    expect(result).toBeNull();
+    expect(result).toMatchObject({
+      creationProjectId: "project-summary-only",
+      initialScaffoldRequestKey: 22334455,
+      initialScaffoldDraft: {
+        target: "project",
+        name: "短视频编排复用做法",
+        sourceMessageId: "sceneapp-run-story-video-suite",
+      },
+    });
+    expect(result?.initialScaffoldDraft?.outputs).toEqual(
+      expect.arrayContaining([
+        "结果状态参考：按必含部件判断整包完成度",
+        "后续建议：当前已经带入 2 条参考与 1 条风格偏好，可直接进入生成。",
+      ]),
+    );
   });
 });

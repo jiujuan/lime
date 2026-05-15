@@ -16,11 +16,14 @@ function slugifyAppId(value: string): string {
   return normalized || "agent-app";
 }
 
-function normalizeManifestVersion(version: string): "0.2" {
-  if (!version.startsWith("0.2")) {
-    throw new Error(`Unsupported Agent App manifest version: ${version}`);
+function normalizeManifestVersion(version: string): "0.2" | "0.3" {
+  if (version.startsWith("0.3")) {
+    return "0.3";
   }
-  return "0.2";
+  if (version.startsWith("0.2")) {
+    return "0.2";
+  }
+  throw new Error(`Unsupported Agent App manifest version: ${version}`);
 }
 
 function normalizeCapabilities(
@@ -61,7 +64,13 @@ function normalizeEntry(entry: AppEntry): NormalizedAppEntry {
 export function normalizeManifest(manifest: AppManifest): NormalizedAppManifest {
   const appId = slugifyAppId(manifest.name);
   const requiresCapabilities = normalizeCapabilities(manifest.requires?.capabilities);
-  const topLevelCapabilities = normalizeCapabilities(manifest.capabilities);
+  const topLevelCapabilities = Object.fromEntries(
+    Object.entries(normalizeCapabilities(manifest.capabilities)).filter(([capability]) =>
+      capability.startsWith("lime."),
+    ),
+  );
+  const storageRetention =
+    manifest.storage?.retention ?? manifest.storage?.uninstallPolicy ?? "ask";
 
   return {
     manifestVersion: normalizeManifestVersion(manifest.manifestVersion),
@@ -75,8 +84,8 @@ export function normalizeManifest(manifest: AppManifest): NormalizedAppManifest 
       ? manifest.runtimeTargets
       : (["local"] satisfies RuntimeTarget[]),
     requires: {
-      appRuntime: manifest.requires?.lime?.appRuntime ?? ">=0.2.0 <1.0.0",
-      sdk: manifest.requires?.lime?.sdk,
+      appRuntime: manifest.requires?.lime?.appRuntime ?? ">=0.3.0 <1.0.0",
+      sdk: manifest.requires?.sdk ?? manifest.requires?.lime?.sdk,
       capabilities: {
         ...topLevelCapabilities,
         ...requiresCapabilities,
@@ -90,11 +99,21 @@ export function normalizeManifest(manifest: AppManifest): NormalizedAppManifest 
           namespace: manifest.storage.namespace ?? appId,
           schema: manifest.storage.schema,
           migrations: manifest.storage.migrations,
-          retention: manifest.storage.retention ?? "ask",
+          retention: storageRetention,
         }
       : undefined,
     knowledgeTemplates: manifest.knowledgeTemplates ?? [],
-    artifacts: manifest.artifacts ?? [],
+    artifacts: manifest.artifactTypes ?? manifest.artifacts ?? [],
     policies: manifest.policies ?? [],
+    services: manifest.services ?? [],
+    workflows: manifest.workflows ?? [],
+    skillRefs: manifest.skillRefs ?? [],
+    toolRefs: manifest.toolRefs ?? [],
+    evals: manifest.evals ?? [],
+    events: manifest.events ?? [],
+    secrets: manifest.secrets ?? [],
+    overlayTemplates: manifest.overlayTemplates ?? [],
+    ui: manifest.ui,
+    lifecycle: manifest.lifecycle ?? {},
   };
 }

@@ -10,20 +10,19 @@
 import type { SettingsTabs } from "./settings";
 import type { SkillScaffoldTarget } from "@/lib/api/skills";
 import type { MemoryCategory } from "@/lib/api/unifiedMemory";
-import type { SceneAppsPageParams } from "@/lib/sceneapp/navigation";
-import type { SceneAppExecutionSummaryViewModel } from "@/lib/sceneapp/product";
+import type { SceneAppExecutionSummaryViewModel } from "@/lib/agent/legacySceneAppExecutionSummary";
 import type { InputCapabilitySendRoute } from "@/components/agent/chat/skill-selection/inputCapabilitySelection";
-
-export type { SceneAppsPageParams } from "@/lib/sceneapp/navigation";
 
 export type WorkspaceTheme = "general";
 
 export type Page =
   | "agent"
+  | "experts"
   | "skills"
+  | "agent-app"
+  | "agent-apps"
   | "agent-app-lab"
   | "knowledge"
-  | "sceneapps"
   | "automation"
   | "channels"
   | "resources"
@@ -110,6 +109,22 @@ export interface AgentPageParams {
   initialProjectFileOpenTarget?: AgentProjectFileOpenTarget;
   /** 首页点击触发的新会话标记（时间戳） */
   newChatAt?: number;
+  /** 专家 Agent 入口身份，用于恢复或创建该专家的稳定会话 */
+  expertAgentLaunch?: ExpertAgentLaunchParams;
+}
+
+export type ExpertAgentLaunchMode = "resume_or_create" | "new_thread";
+
+export interface ExpertAgentLaunchParams {
+  tenantId: string;
+  expertId: string;
+  releaseId: string;
+  agentInstanceKey: string;
+  launchMode: ExpertAgentLaunchMode;
+  catalogVersion?: string;
+  title?: string;
+  latestSessionId?: string;
+  skillRefsOverride?: string[];
 }
 
 /**
@@ -168,6 +183,18 @@ export interface SkillsPageParams {
 
 export interface AgentAppLabPageParams {
   source?: "fixture";
+}
+
+export interface AgentAppsPageParams {
+  selectedAgentAppId?: string;
+  launchAgentAppEntryKey?: string;
+  launchRequestKey?: number;
+}
+
+export interface AgentAppPageParams {
+  appId?: string;
+  entryKey?: string;
+  launchRequestKey?: number;
 }
 
 export interface KnowledgePageParams {
@@ -240,8 +267,9 @@ export type PageParams =
   | ResourcesPageParams
   | SettingsPageParams
   | SkillsPageParams
+  | AgentAppPageParams
   | AgentAppLabPageParams
+  | AgentAppsPageParams
   | KnowledgePageParams
-  | SceneAppsPageParams
   | MemoryPageParams
   | Record<string, unknown>;

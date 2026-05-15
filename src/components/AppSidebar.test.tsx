@@ -24,6 +24,7 @@ const {
   mockSaveConfig,
   mockSubscribeAppConfigChanged,
   mockListAgentRuntimeSessions,
+  mockListInstalledAgentApps,
   mockUpdateAgentRuntimeSession,
   mockDeleteAgentRuntimeSession,
   mockSetI18nLanguage,
@@ -45,6 +46,7 @@ const {
   mockSaveConfig: vi.fn(),
   mockSubscribeAppConfigChanged: vi.fn(),
   mockListAgentRuntimeSessions: vi.fn(),
+  mockListInstalledAgentApps: vi.fn(),
   mockUpdateAgentRuntimeSession: vi.fn(),
   mockDeleteAgentRuntimeSession: vi.fn(),
   mockSetI18nLanguage: vi.fn(),
@@ -85,6 +87,11 @@ vi.mock("@/lib/api/agentRuntime", () => ({
   deleteAgentRuntimeSession: mockDeleteAgentRuntimeSession,
   listAgentRuntimeSessions: mockListAgentRuntimeSessions,
   updateAgentRuntimeSession: mockUpdateAgentRuntimeSession,
+}));
+
+vi.mock("@/lib/api/agentApps", () => ({
+  AGENT_APPS_CHANGED_EVENT: "lime:agent-apps-changed",
+  listInstalledAgentApps: mockListInstalledAgentApps,
 }));
 
 vi.mock("@/lib/api/oemCloudControlPlane", () => ({
@@ -313,6 +320,7 @@ describe("AppSidebar", () => {
     mockGetConfig.mockResolvedValue({});
     mockSaveConfig.mockResolvedValue(undefined);
     mockListAgentRuntimeSessions.mockResolvedValue([]);
+    mockListInstalledAgentApps.mockResolvedValue({ states: [], issues: [] });
     mockUpdateAgentRuntimeSession.mockResolvedValue(undefined);
     mockDeleteAgentRuntimeSession.mockResolvedValue(undefined);
     mockLogoutClient.mockResolvedValue(undefined);
@@ -395,6 +403,73 @@ describe("AppSidebar", () => {
     expect(localStorage.getItem(APP_SIDEBAR_COLLAPSED_STORAGE_KEY)).toBe(
       "false",
     );
+  });
+
+  it("已安装 Agent App 应作为动态导航项显示并直达默认入口", async () => {
+    mockListInstalledAgentApps.mockResolvedValue({
+      states: [
+        {
+          appId: "content-factory-app",
+          disabled: false,
+          manifest: {
+            displayName: "内容工厂",
+          },
+          projection: {
+            app: {
+              appId: "content-factory-app",
+              displayName: "内容工厂",
+            },
+            entries: [
+              {
+                key: "dashboard",
+                kind: "page",
+                title: "项目首页",
+              },
+            ],
+          },
+        },
+      ],
+      issues: [],
+    });
+    const onNavigate = vi.fn();
+    const container = mountSidebarContainer({ onNavigate });
+    await flushEffects(2);
+
+    expect(container.textContent).toContain("内容工厂");
+    expect(
+      Array.from(
+        container.querySelectorAll('[data-testid="app-sidebar-main-nav"] button'),
+      ).map((button) => button.getAttribute("aria-label")),
+    ).toEqual([
+      "新建任务",
+      "专家",
+      "Skills",
+      "内容工厂",
+      "项目资料",
+    ]);
+
+    const appButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("内容工厂"),
+    ) as HTMLButtonElement | undefined;
+    act(() => {
+      appButton?.click();
+    });
+
+    expect(onNavigate).toHaveBeenCalledWith(
+      "agent-app",
+      expect.objectContaining({
+        appId: "content-factory-app",
+        entryKey: "dashboard",
+        launchRequestKey: expect.any(Number),
+      }),
+    );
+
+    await openAccountMenu(container);
+    const accountMenu = container.querySelector(
+      '[data-testid="app-sidebar-account-menu"]',
+    );
+    expect(accountMenu?.textContent).toContain("Agent Apps");
+    expect(accountMenu?.textContent).not.toContain("内容工厂");
   });
 
   it("新建任务页应自动展开导航栏", async () => {
@@ -510,8 +585,10 @@ describe("AppSidebar", () => {
     expect(container.textContent).toContain("新建任务");
     expect(container.textContent).not.toContain("工作台");
     expect(container.textContent).not.toContain("生成");
+    expect(container.textContent).toContain("专家");
     expect(container.textContent).toContain("Skills");
-    expect(container.textContent).toContain("灵感");
+    expect(container.textContent).not.toContain("Agent Apps");
+    expect(container.textContent).not.toContain("灵感");
     expect(container.textContent).toContain("项目资料");
     expect(container.textContent).not.toContain("设置");
     expect(container.textContent).not.toContain("持续流程");
@@ -529,7 +606,12 @@ describe("AppSidebar", () => {
       '[data-testid="app-sidebar-footer-area"]',
     );
 
-    expect(mainNavButtons).toEqual(["新建任务", "Skills", "灵感", "项目资料"]);
+    expect(mainNavButtons).toEqual([
+      "新建任务",
+      "专家",
+      "Skills",
+      "项目资料",
+    ]);
     expect(
       container.querySelector('[data-testid="app-sidebar-footer-nav"]'),
     ).toBeNull();
@@ -549,6 +631,8 @@ describe("AppSidebar", () => {
       '[data-testid="app-sidebar-account-menu"]',
     );
     expect(accountMenu?.textContent).toContain("设置");
+    expect(accountMenu?.textContent).toContain("Agent Apps");
+    expect(accountMenu?.textContent).toContain("灵感");
     expect(accountMenu?.textContent).toContain("持续流程");
     expect(accountMenu?.textContent).toContain("消息渠道");
   });
@@ -589,7 +673,7 @@ describe("AppSidebar", () => {
         mainNav &&
         (header.compareDocumentPosition(mainNav) &
           Node.DOCUMENT_POSITION_FOLLOWING) !==
-          0,
+        0,
       ),
     ).toBe(true);
 
@@ -1224,6 +1308,12 @@ describe("AppSidebar", () => {
     expect(onNavigate).toHaveBeenLastCalledWith("settings", {
       tab: SettingsTabs.Home,
     });
+
+    await clickAccountMenuItem(container, "Agent Apps");
+    expect(onNavigate).toHaveBeenLastCalledWith("agent-apps", undefined);
+
+    await clickAccountMenuItem(container, "灵感");
+    expect(onNavigate).toHaveBeenLastCalledWith("memory", undefined);
 
     await clickAccountMenuItem(container, "持续流程");
     expect(onNavigate).toHaveBeenLastCalledWith("automation", undefined);
@@ -2090,25 +2180,25 @@ describe("AppSidebar", () => {
       }) =>
         options?.archivedOnly
           ? [
-              {
-                id: "session-archived",
-                name: "归档会话",
-                created_at: 1713000000,
-                updated_at: 1713000600,
-                archived_at: 1713003600,
-                workspace_id: "project-1",
-              },
-            ]
+            {
+              id: "session-archived",
+              name: "归档会话",
+              created_at: 1713000000,
+              updated_at: 1713000600,
+              archived_at: 1713003600,
+              workspace_id: "project-1",
+            },
+          ]
           : [
-              {
-                id: "session-recent",
-                name: "最近会话",
-                created_at: 1714000000,
-                updated_at: 1714000600,
-                archived_at: null,
-                workspace_id: "project-1",
-              },
-            ],
+            {
+              id: "session-recent",
+              name: "最近会话",
+              created_at: 1714000000,
+              updated_at: 1714000600,
+              archived_at: null,
+              workspace_id: "project-1",
+            },
+          ],
     );
 
     const container = mountSidebarContainer({
@@ -2160,7 +2250,7 @@ describe("AppSidebar", () => {
         conversationShelf &&
         (mainNav.compareDocumentPosition(conversationShelf) &
           Node.DOCUMENT_POSITION_FOLLOWING) !==
-          0,
+        0,
       ),
     ).toBe(true);
 
@@ -2451,15 +2541,15 @@ describe("AppSidebar", () => {
       }) =>
         options?.archivedOnly
           ? [
-              {
-                id: "session-archived",
-                name: "归档会话",
-                created_at: 1713000000,
-                updated_at: 1713000600,
-                archived_at: 1713003600,
-                workspace_id: "project-1",
-              },
-            ]
+            {
+              id: "session-archived",
+              name: "归档会话",
+              created_at: 1713000000,
+              updated_at: 1713000600,
+              archived_at: 1713003600,
+              workspace_id: "project-1",
+            },
+          ]
           : [],
     );
 
@@ -2710,19 +2800,6 @@ describe("AppSidebar", () => {
       '[data-testid="app-sidebar-account-menu"]',
     );
     expect(accountMenu?.textContent).toContain("桌宠");
-  });
-
-  it("sceneapps 页面不应再在侧栏展示独立主入口", async () => {
-    const container = mountSidebarContainer({
-      currentPage: "sceneapps",
-      currentPageParams: {
-        sceneappId: "story-video-suite",
-        projectId: "project-9",
-      },
-    });
-    await flushEffects(2);
-
-    expect(container.querySelector('button[aria-label="创作场景"]')).toBeNull();
   });
 
   it("点击当前已激活的Skills入口时不应重复导航", async () => {

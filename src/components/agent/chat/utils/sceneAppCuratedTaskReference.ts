@@ -1,7 +1,7 @@
 import type {
   SceneAppExecutionSummaryViewModel,
   SceneAppRunDetailViewModel,
-} from "@/lib/sceneapp/product";
+} from "@/lib/agent/legacySceneAppExecutionSummary";
 import {
   buildCuratedTaskLaunchInputPrefillFromReferenceEntries,
   extractCuratedTaskReferenceMemoryIds,

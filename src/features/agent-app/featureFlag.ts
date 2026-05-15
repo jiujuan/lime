@@ -1,6 +1,7 @@
 import type { AgentAppHostFlags } from "./types";
 
 export const AGENT_APP_LAB_STORAGE_KEY = "lime.agentAppHost.labEnabled";
+export const AGENT_APP_HOST_FLAGS_STORAGE_KEY = "lime.agentAppHost.flags";
 
 export const defaultAgentAppHostFlags: AgentAppHostFlags = {
   labEnabled: false,
@@ -20,7 +21,9 @@ function readBooleanFlag(value: string | undefined | null): boolean {
   return value === "1" || value === "true" || value === "yes" || value === "on";
 }
 
-function readOptionalBooleanFlag(value: string | undefined | null): boolean | undefined {
+function readOptionalBooleanFlag(
+  value: string | undefined | null,
+): boolean | undefined {
   if (value == null || value.trim() === "") {
     return undefined;
   }
@@ -33,19 +36,72 @@ function readLocalStorageFlag(): boolean {
   }
 
   try {
-    return readBooleanFlag(window.localStorage.getItem(AGENT_APP_LAB_STORAGE_KEY));
+    return readBooleanFlag(
+      window.localStorage.getItem(AGENT_APP_LAB_STORAGE_KEY),
+    );
   } catch {
     return false;
+  }
+}
+
+function readLocalStorageHostFlag(key: keyof AgentAppHostFlags): boolean | undefined {
+  if (typeof window === "undefined") {
+    return undefined;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(AGENT_APP_HOST_FLAGS_STORAGE_KEY);
+    if (!raw) {
+      return undefined;
+    }
+    const parsed = JSON.parse(raw) as Partial<Record<keyof AgentAppHostFlags, unknown>>;
+    const value = parsed[key];
+    return typeof value === "boolean" ? value : readOptionalBooleanFlag(String(value ?? ""));
+  } catch {
+    return undefined;
   }
 }
 
 export function resolveAgentAppHostFlags(
   overrides: Partial<AgentAppHostFlags> = {},
 ): AgentAppHostFlags {
-  const labEnabled =
+  const mockSdkEnabled =
+    overrides.mockSdkEnabled ??
+    readOptionalBooleanFlag(import.meta.env.VITE_LIME_AGENT_APP_MOCK_SDK) ??
+    readLocalStorageHostFlag("mockSdkEnabled") ??
+    false;
+  const realAdapterEnabled =
+    overrides.realAdapterEnabled ??
+    readOptionalBooleanFlag(import.meta.env.VITE_LIME_AGENT_APP_REAL_ADAPTER) ??
+    readLocalStorageHostFlag("realAdapterEnabled") ??
+    false;
+  const uiRuntimeEnabled =
+    overrides.uiRuntimeEnabled ??
+    readOptionalBooleanFlag(import.meta.env.VITE_LIME_AGENT_APP_UI_RUNTIME) ??
+    readLocalStorageHostFlag("uiRuntimeEnabled") ??
+    false;
+  const workerRuntimeEnabled =
+    overrides.workerRuntimeEnabled ??
+    readOptionalBooleanFlag(import.meta.env.VITE_LIME_AGENT_APP_WORKFLOW_RUNTIME) ??
+    readLocalStorageHostFlag("workerRuntimeEnabled") ??
+    false;
+  const cloudBootstrapEnabled =
+    overrides.cloudBootstrapEnabled ??
+    readOptionalBooleanFlag(import.meta.env.VITE_LIME_AGENT_APP_CLOUD_BOOTSTRAP) ??
+    readLocalStorageHostFlag("cloudBootstrapEnabled") ??
+    false;
+  const explicitLabEnabled =
     overrides.labEnabled ??
     readOptionalBooleanFlag(import.meta.env.VITE_LIME_AGENT_APP_LAB) ??
+    readLocalStorageHostFlag("labEnabled") ??
     readLocalStorageFlag();
+  const labEnabled =
+    explicitLabEnabled ||
+    mockSdkEnabled ||
+    realAdapterEnabled ||
+    uiRuntimeEnabled ||
+    workerRuntimeEnabled ||
+    cloudBootstrapEnabled;
 
   return {
     ...defaultAgentAppHostFlags,
@@ -55,6 +111,12 @@ export function resolveAgentAppHostFlags(
     projectionEnabled: overrides.projectionEnabled ?? labEnabled,
     readinessEnabled: overrides.readinessEnabled ?? labEnabled,
     cleanupDryRunEnabled: overrides.cleanupDryRunEnabled ?? labEnabled,
+    localStorageEnabled: overrides.localStorageEnabled ?? realAdapterEnabled,
+    mockSdkEnabled,
+    realAdapterEnabled,
+    uiRuntimeEnabled,
+    workerRuntimeEnabled,
+    cloudBootstrapEnabled,
   };
 }
 

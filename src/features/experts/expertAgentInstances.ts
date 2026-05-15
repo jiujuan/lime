@@ -1,0 +1,369 @@
+import {
+  hasOemCloudSession,
+  resolveOemCloudRuntimeContext,
+} from "@/lib/api/oemCloudRuntime";
+
+const EXPERT_AGENT_INSTANCES_STORAGE_KEY = "lime:expert-agent-instances:v1";
+const MAX_EXPERT_AGENT_INSTANCES = 100;
+
+export type ExpertAgentInstanceStatus = "active" | "archived";
+
+export interface ExpertAgentInstanceIdentity {
+  tenantId: string;
+  expertId: string;
+  releaseId: string;
+}
+
+export interface ExpertAgentInstanceRecord extends ExpertAgentInstanceIdentity {
+  agentInstanceId: string;
+  agentInstanceKey: string;
+  catalogVersion?: string;
+  latestSessionId?: string;
+  skillRefsOverride?: string[];
+  status: ExpertAgentInstanceStatus;
+  createdAt: number;
+  updatedAt: number;
+  lastStartedAt: number;
+}
+
+interface CloudExpertAgentInstanceEnvelope {
+  code?: number;
+  message?: string;
+  data?: unknown;
+}
+
+interface CloudExpertAgentInstanceListPayload {
+  items?: unknown[];
+}
+
+function normalizeText(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim();
+  return normalized ? normalized : null;
+}
+
+function normalizeStringList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const result = value
+    .map((item) => normalizeText(item))
+    .filter((item): item is string => Boolean(item));
+  return result.length > 0 ? Array.from(new Set(result)) : undefined;
+}
+
+function normalizeTimestamp(value: unknown): number | null {
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+  return Math.max(0, Math.trunc(value));
+}
+
+export function buildExpertAgentInstanceKey(
+  identity: ExpertAgentInstanceIdentity,
+): string {
+  return [identity.tenantId, identity.expertId, identity.releaseId]
+    .map((item) => item.trim())
+    .join(":");
+}
+
+export function buildExpertAgentInstanceId(
+  identity: ExpertAgentInstanceIdentity,
+): string {
+  return `expert:${buildExpertAgentInstanceKey(identity)}`;
+}
+
+function normalizeExpertAgentInstanceRecord(
+  value: unknown,
+): ExpertAgentInstanceRecord | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const tenantId = normalizeText(record.tenantId);
+  const expertId = normalizeText(record.expertId);
+  const releaseId = normalizeText(record.releaseId);
+  if (!tenantId || !expertId || !releaseId) {
+    return null;
+  }
+  const identity = { tenantId, expertId, releaseId };
+  const agentInstanceKey = buildExpertAgentInstanceKey(identity);
+  const now = Date.now();
+  const createdAt = normalizeTimestamp(record.createdAt) ?? now;
+  const updatedAt = normalizeTimestamp(record.updatedAt) ?? createdAt;
+  return {
+    ...identity,
+    agentInstanceId:
+      normalizeText(record.agentInstanceId) ?? buildExpertAgentInstanceId(identity),
+    agentInstanceKey,
+    catalogVersion: normalizeText(record.catalogVersion) ?? undefined,
+    latestSessionId: normalizeText(record.latestSessionId) ?? undefined,
+    skillRefsOverride: normalizeStringList(record.skillRefsOverride),
+    status:
+      record.status === "archived" || record.status === "active"
+        ? record.status
+        : "active",
+    createdAt,
+    updatedAt,
+    lastStartedAt: normalizeTimestamp(record.lastStartedAt) ?? updatedAt,
+  };
+}
+
+export function readExpertAgentInstances(): ExpertAgentInstanceRecord[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+  try {
+    const raw = window.localStorage.getItem(EXPERT_AGENT_INSTANCES_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed
+      .map(normalizeExpertAgentInstanceRecord)
+      .filter((item): item is ExpertAgentInstanceRecord => Boolean(item))
+      .sort((left, right) => right.lastStartedAt - left.lastStartedAt)
+      .slice(0, MAX_EXPERT_AGENT_INSTANCES);
+  } catch {
+    return [];
+  }
+}
+
+export function saveExpertAgentInstances(
+  records: ExpertAgentInstanceRecord[],
+): ExpertAgentInstanceRecord[] {
+  const normalized = records
+    .map(normalizeExpertAgentInstanceRecord)
+    .filter((item): item is ExpertAgentInstanceRecord => Boolean(item))
+    .sort((left, right) => right.lastStartedAt - left.lastStartedAt)
+    .slice(0, MAX_EXPERT_AGENT_INSTANCES);
+
+  if (typeof window !== "undefined") {
+    if (normalized.length === 0) {
+      window.localStorage.removeItem(EXPERT_AGENT_INSTANCES_STORAGE_KEY);
+    } else {
+      window.localStorage.setItem(
+        EXPERT_AGENT_INSTANCES_STORAGE_KEY,
+        JSON.stringify(normalized),
+      );
+    }
+  }
+  return normalized;
+}
+
+export function findExpertAgentInstance(
+  identity: ExpertAgentInstanceIdentity,
+): ExpertAgentInstanceRecord | null {
+  const key = buildExpertAgentInstanceKey(identity);
+  return (
+    readExpertAgentInstances().find(
+      (item) => item.agentInstanceKey === key && item.status === "active",
+    ) ?? null
+  );
+}
+
+export function upsertExpertAgentInstance(
+  identity: ExpertAgentInstanceIdentity & {
+    catalogVersion?: string;
+    latestSessionId?: string | null;
+    skillRefsOverride?: string[] | null;
+    now?: number;
+  },
+): ExpertAgentInstanceRecord {
+  const now = identity.now ?? Date.now();
+  const key = buildExpertAgentInstanceKey(identity);
+  const current = readExpertAgentInstances();
+  const existing = current.find((item) => item.agentInstanceKey === key);
+  const record: ExpertAgentInstanceRecord = {
+    ...(existing ?? {
+      tenantId: identity.tenantId.trim(),
+      expertId: identity.expertId.trim(),
+      releaseId: identity.releaseId.trim(),
+      agentInstanceId: buildExpertAgentInstanceId(identity),
+      agentInstanceKey: key,
+      status: "active" as const,
+      createdAt: now,
+    }),
+    catalogVersion: normalizeText(identity.catalogVersion) ?? existing?.catalogVersion,
+    latestSessionId:
+      normalizeText(identity.latestSessionId) ?? existing?.latestSessionId,
+    skillRefsOverride:
+      normalizeStringList(identity.skillRefsOverride) ??
+      existing?.skillRefsOverride,
+    status: "active",
+    updatedAt: now,
+    lastStartedAt: now,
+  };
+
+  saveExpertAgentInstances([
+    record,
+    ...current.filter((item) => item.agentInstanceKey !== key),
+  ]);
+  return record;
+}
+
+export function updateExpertAgentInstanceSession(
+  identity: ExpertAgentInstanceIdentity & {
+    catalogVersion?: string;
+    latestSessionId: string;
+    skillRefsOverride?: string[] | null;
+  },
+): ExpertAgentInstanceRecord | null {
+  const latestSessionId = normalizeText(identity.latestSessionId);
+  if (!latestSessionId) {
+    return null;
+  }
+  return upsertExpertAgentInstance({
+    ...identity,
+    latestSessionId,
+    skillRefsOverride: identity.skillRefsOverride,
+  });
+}
+
+export function updateExpertAgentInstanceSkillRefs(
+  identity: ExpertAgentInstanceIdentity & {
+    catalogVersion?: string;
+    skillRefsOverride: string[];
+  },
+): ExpertAgentInstanceRecord {
+  return upsertExpertAgentInstance({
+    ...identity,
+    skillRefsOverride: identity.skillRefsOverride,
+  });
+}
+
+function normalizeCloudExpertAgentInstance(
+  value: unknown,
+  tenantId: string,
+): ExpertAgentInstanceRecord | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  return normalizeExpertAgentInstanceRecord({
+    tenantId,
+    expertId: record.expertId,
+    releaseId: record.releaseId,
+    agentInstanceId: record.id,
+    catalogVersion: record.catalogVersion,
+    latestSessionId: record.latestSessionId,
+    skillRefsOverride: record.skillRefsOverride,
+    status: record.status,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    lastStartedAt: record.lastStartedAt,
+  });
+}
+
+function mergeCloudExpertAgentInstances(
+  tenantId: string,
+  cloudRecords: ExpertAgentInstanceRecord[],
+): ExpertAgentInstanceRecord[] {
+  const cloudKeys = new Set(
+    cloudRecords.map((record) => record.agentInstanceKey),
+  );
+  const localOnlyRecords = readExpertAgentInstances().filter((record) => {
+    if (record.tenantId !== tenantId) {
+      return true;
+    }
+    return !cloudKeys.has(record.agentInstanceKey);
+  });
+  return saveExpertAgentInstances([...cloudRecords, ...localOnlyRecords]);
+}
+
+export async function refreshExpertAgentInstancesFromCloud(): Promise<
+  ExpertAgentInstanceRecord[]
+> {
+  const runtime = resolveOemCloudRuntimeContext();
+  if (!hasOemCloudSession(runtime)) {
+    return readExpertAgentInstances();
+  }
+
+  const response = await fetch(
+    `${runtime.controlPlaneBaseUrl}/v1/public/tenants/${encodeURIComponent(runtime.tenantId)}/client/expert-agent-instances?status=active`,
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${runtime.sessionToken}`,
+      },
+    },
+  );
+
+  let payload: CloudExpertAgentInstanceEnvelope | null = null;
+  try {
+    payload = (await response.json()) as CloudExpertAgentInstanceEnvelope;
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      payload?.message?.trim() ||
+        `专家 Agent 实例拉取失败 (${response.status})`,
+    );
+  }
+
+  const data = (payload?.data ?? {}) as CloudExpertAgentInstanceListPayload;
+  const cloudRecords = (Array.isArray(data.items) ? data.items : [])
+    .map((item) => normalizeCloudExpertAgentInstance(item, runtime.tenantId))
+    .filter((item): item is ExpertAgentInstanceRecord => Boolean(item));
+  return mergeCloudExpertAgentInstances(runtime.tenantId, cloudRecords);
+}
+
+export async function syncExpertAgentInstanceToCloud(
+  record: ExpertAgentInstanceRecord,
+): Promise<void> {
+  const runtime = resolveOemCloudRuntimeContext();
+  if (!hasOemCloudSession(runtime)) {
+    return;
+  }
+  if (runtime.tenantId !== record.tenantId) {
+    return;
+  }
+
+  const response = await fetch(
+    `${runtime.controlPlaneBaseUrl}/v1/public/tenants/${encodeURIComponent(runtime.tenantId)}/client/expert-agent-instances`,
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${runtime.sessionToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        expertId: record.expertId,
+        releaseId: record.releaseId,
+        catalogVersion: record.catalogVersion,
+        latestSessionId: record.latestSessionId,
+        skillRefsOverride: record.skillRefsOverride,
+      }),
+    },
+  );
+  if (response.ok) {
+    return;
+  }
+
+  let payload: CloudExpertAgentInstanceEnvelope | null = null;
+  try {
+    payload = (await response.json()) as CloudExpertAgentInstanceEnvelope;
+  } catch {
+    payload = null;
+  }
+  throw new Error(
+    payload?.message?.trim() || `专家 Agent 实例同步失败 (${response.status})`,
+  );
+}
+
+export const expertAgentInstanceStorageKeys = {
+  instances: EXPERT_AGENT_INSTANCES_STORAGE_KEY,
+} as const;

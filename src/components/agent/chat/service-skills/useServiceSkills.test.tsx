@@ -7,14 +7,65 @@ import {
   saveSkillCatalog,
   type SkillCatalog,
 } from "@/lib/api/skillCatalog";
+import {
+  getAutomationJobs,
+  type AutomationJobRecord,
+} from "@/lib/api/automation";
 import { changeLimeLocale } from "@/i18n/createI18n";
 import { recordServiceSkillAutomationLink } from "./automationLinkStorage";
 import { recordServiceSkillUsage } from "./storage";
 import { useServiceSkills } from "./useServiceSkills";
 
+vi.mock("@/lib/api/automation", () => ({
+  getAutomationJobs: vi.fn(),
+}));
+
 interface HookHarness {
   getValue: () => ReturnType<typeof useServiceSkills>;
   unmount: () => void;
+}
+
+function buildAutomationJob(
+  overrides: Partial<AutomationJobRecord> = {},
+): AutomationJobRecord {
+  const timestamp = "2026-03-29T12:00:00.000Z";
+
+  return {
+    id: "automation-job-daily-brief",
+    name: "每日线索巡检",
+    description: null,
+    enabled: true,
+    workspace_id: "workspace-default",
+    execution_mode: "skill",
+    schedule: { kind: "every", every_secs: 86_400 },
+    payload: {
+      kind: "agent_turn",
+      prompt: "巡检今日可复用的增长线索",
+      web_search: false,
+      request_metadata: null,
+    },
+    delivery: {
+      mode: "none",
+      best_effort: true,
+      output_schema: "text",
+      output_format: "text",
+    },
+    timeout_secs: null,
+    max_retries: 0,
+    next_run_at: "2026-03-30T12:00:00.000Z",
+    last_status: "success",
+    last_error: null,
+    last_run_at: timestamp,
+    last_finished_at: timestamp,
+    running_started_at: null,
+    consecutive_failures: 0,
+    last_retry_count: 0,
+    auto_disabled_until: null,
+    last_delivery: null,
+    created_at: timestamp,
+    updated_at: timestamp,
+    ...overrides,
+  };
 }
 
 function buildRemoteCatalog(): SkillCatalog {
@@ -210,6 +261,7 @@ describe("useServiceSkills", () => {
         IS_REACT_ACT_ENVIRONMENT?: boolean;
       }
     ).IS_REACT_ACT_ENVIRONMENT = true;
+    vi.mocked(getAutomationJobs).mockResolvedValue([]);
     window.localStorage.clear();
   });
 
@@ -223,6 +275,8 @@ describe("useServiceSkills", () => {
   });
 
   it("目录更新事件后应刷新技能列表并保留分组元数据", async () => {
+    vi.mocked(getAutomationJobs).mockResolvedValue([buildAutomationJob()]);
+
     const harness = mountHook();
 
     try {

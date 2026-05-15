@@ -1427,11 +1427,16 @@ describe("AgentChatPage 任务中心初始会话标签", () => {
     state.switchTopic = switchTopic;
     installMockAgentChatUnifiedState(state);
 
-    mountPage({
+    const { container } = mountPage({
       agentEntry: "claw",
       initialSessionId: "topic-target",
       projectId: "workspace-test",
     });
+    await waitForElement(
+      container,
+      '[data-testid="workspace-shell-scene"]',
+      80,
+    );
     await flushEffects();
 
     expect(switchTopic).toHaveBeenCalledWith("topic-target", {
@@ -5128,6 +5133,77 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
       },
     });
     expect(onHasMessagesChange).toHaveBeenCalled();
+  });
+
+  it("自动首条专家入口在尚无会话时也应创建发送计划", async () => {
+    installMockAgentChatUnifiedState(
+      createMockAgentChatUnifiedState({
+        sessionId: null,
+        topics: [],
+      }),
+    );
+
+    const prompt = "请以营销策略专家身份帮我拆解增长方案";
+    mockGetOrCreateDefaultProject.mockResolvedValue(
+      createProject("project-expert-default"),
+    );
+    const container = renderPage({
+      agentEntry: "claw",
+      projectId: "default",
+      theme: "general",
+      lockTheme: true,
+      newChatAt: 1234567890,
+      initialUserPrompt: prompt,
+      autoRunInitialPromptOnMount: true,
+      initialAutoSendRequestMetadata: {
+        expert: {
+          expertId: "marketing-strategist",
+        },
+        harness: {
+          expert: {
+            expert_id: "marketing-strategist",
+          },
+        },
+      },
+    });
+    await waitForElement(
+      container,
+      '[data-testid="workspace-shell-scene"]',
+      80,
+    );
+    await flushEffects(12);
+
+    const expertPanel = container.querySelector(
+      '[data-testid="expert-info-panel"]',
+    );
+    expect(expertPanel).not.toBeNull();
+    expect(expertPanel?.textContent).toMatch(/专家信息|Expert Info/);
+    expect(expertPanel?.textContent).toContain("营销策略专家");
+    expect(
+      expertPanel?.querySelector('[data-testid="expert-info-section-memory"]'),
+    ).not.toBeNull();
+    expect(
+      expertPanel?.querySelector('[data-testid="expert-info-skills"]'),
+    ).not.toBeNull();
+    expect(
+      expertPanel?.querySelector('[data-testid="expert-info-workflow"]'),
+    ).not.toBeNull();
+
+    expect(sharedSendMessageMock).toHaveBeenCalledTimes(1);
+    expect(sharedSendMessageMock.mock.calls[0]?.[0]).toBe(prompt);
+    expect(sharedSendMessageMock.mock.calls[0]?.[8]).toMatchObject({
+      requestMetadata: {
+        expert: {
+          expertId: "marketing-strategist",
+        },
+        harness: {
+          expert: {
+            expert_id: "marketing-strategist",
+          },
+        },
+      },
+      skipSessionRestore: true,
+    });
   });
 
   it("强浏览器任务直发时不应注入继续执行确认消息", async () => {

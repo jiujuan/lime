@@ -1,7 +1,7 @@
 # Lime AgentRuntime Profile 架构蓝图
 
 > 状态：implementation-audited
-> 更新时间：2026-05-12
+> 更新时间：2026-05-16
 > 作用：定义 AgentRuntime Profile 在 Lime current 主链中的分层、owner、事实源和接口边界。
 
 ## 1. 架构目标
@@ -18,7 +18,8 @@
 
 | 层 | 角色 | 输入 | 输出 | Owner |
 | --- | --- | --- | --- | --- |
-| Product Input | 收集用户意图与 workspace 状态 | 用户输入、设置、文件上下文 | submit request | GUI / frontend gateway |
+| Product Surface | 收集用户意图与业务状态 | Chat 输入、Claw `@` 命令、Agent App 表单、Automation job | surface request | Chat / Claw / Agent App / Automation |
+| Runtime Surface Adapter | 把 surface intent 适配为统一 runtime request | taskKind、capabilityId、app provenance、request metadata | AgentRuntime submit request | frontend gateway / Rust surface facade |
 | Runtime Control Plane | 接收、排队、中断、恢复 | submit/interrupt/resume/respond/export | accepted turn、queued turn、actions | Rust runtime command |
 | Execution Loop | 执行 agent turn | input snapshot、model config、tool inventory | model/tool/action events | Query Loop / runtime_turn |
 | Orchestration Facts | 记录 task、routing、permission、sandbox、process、subagent | execution loop 内部状态 | RuntimeEvent stream | AgentRuntime Profile |
@@ -51,6 +52,33 @@ runtime control plane
 2. analysis/review 重新拼 observability summary。
 3. replay 不复用 evidence pack。
 4. dashboard 用本地 heuristics 推断 task completion。
+5. Agent App 用模型 API、App 本地 mock 或嵌入通用 Chat 作为完整 Agent 能力边界。
+6. Claw `@` 能力被复制成 Agent App 专用 skill launch。
+
+## 3.2 Surface 边界
+
+Chat、Claw、Agent App、Automation 都是 AgentRuntime 的调用面，不是新的运行事实 owner：
+
+```text
+Surface input
+  -> AgentRuntime Surface Adapter
+  -> Runtime Control Plane
+  -> RuntimeEvent / ThreadReadModel / TaskSnapshot / EvidencePack
+  -> Surface-specific projection
+```
+
+Surface adapter 只允许做：
+
+1. 把 UI / App / job 输入转换为 `taskKind`、`capabilityId`、`inputRef`、`expectedOutput`、`eventSink`。
+2. 附加 `appId`、`entryKey`、`workflowRunId`、`artifactPolicyRef`、`evidencePolicyRef` 等 provenance。
+3. 选择事件投影目标，例如 conversation stream、AgentAppTaskStreamEvent、automation job event。
+
+Surface adapter 不允许做：
+
+1. 自己执行模型或工具。
+2. 自己判断 task completed / failed / evidence pass。
+3. 复制 `runtime_turn.rs`、`tool_runtime.rs` 或 `*_skill_launch.rs` 的执行准备逻辑。
+4. 让 App 业务组件直接决定 allowed tools / denied tools。
 
 ## 3.1 全球本地化边界
 
@@ -146,6 +174,10 @@ GUI 与恢复入口。必须表达：
 | Profile 能力 | 当前或建议 Lime 落点 |
 | --- | --- |
 | submit turn | `agent_runtime_submit_turn` |
+| surface facade | 后续 `agent_runtime_surface_service`，供 Chat / Claw / Agent App / Automation 共用 |
+| Agent App task | 后续 `agent_app_runtime_cmd` + `agent_app_runtime_service`，只作为 App runtime facade |
+| Agent App lifecycle | `agent_app_cmd.rs`，仅负责 package、installed state、UI runtime、scoped env 注入 |
+| Claw capability catalog | 后续 `agent_runtime_capability_catalog_service`，复用现有 `*_skill_launch.rs` 主链 |
 | runtime turn | `runtime_turn.rs` / Query Loop 主链 |
 | model routing | `request_model_resolution.rs`、`docs/roadmap/task/` |
 | thread read | `AgentRuntimeThreadReadModel` |
@@ -156,6 +188,8 @@ GUI 与恢复入口。必须表达：
 | policy owner refs | runtime permission/action/sandbox metadata，后续收敛为 `permission.*` / `action.*` facts |
 | GUI projection | Workspace / Harness current read model |
 | command contract | frontend gateway、Rust `generate_handler!`、catalog、mock |
+
+`agent_app_cmd.rs` 当前属于 Agent App 生命周期 owner，不是完整 AgentRuntime owner。`LIME_GATEWAY_*` / `OPENAI_BASE_URL` 注入只能视为低阶模型 executor 或开发期 fallback；完整 `lime.agent` / `lime.workflow` 必须进入 AgentRuntime Surface。
 
 ## 7. 接口设计原则
 
@@ -235,3 +269,4 @@ legacy state -> new parallel truth -> UI/evidence
 3. 新增 `task_center_status` 与 `TaskSnapshot.status` 不一致。
 4. tool/process/action 只写入文本消息，不写 runtime event。
 5. rate limit / quota / cost 只进日志，不进 runtime facts。
+6. Agent App 新增平行 runtime facts、工具权限系统或垂直专用 Agent command。

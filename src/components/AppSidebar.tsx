@@ -20,6 +20,7 @@ import {
   ChevronRight,
   Check,
   Cloud,
+  Boxes,
   Copy,
   ExternalLink,
   Gift,
@@ -66,6 +67,12 @@ import {
   updateAgentRuntimeSession,
   type AsterSessionInfo,
 } from "@/lib/api/agentRuntime";
+import {
+  AGENT_APPS_CHANGED_EVENT,
+  listInstalledAgentApps,
+} from "@/lib/api/agentApps";
+import type { InstalledAgentAppState } from "@/features/agent-app/types";
+import { resolveInstalledAgentAppDisplayName } from "@/features/agent-app/ui/agentAppDisplay";
 import { isAuxiliaryAgentSessionId } from "@/lib/api/agentRuntime/sessionIdentity";
 import {
   DEFAULT_ENABLED_SIDEBAR_NAV_ITEM_IDS,
@@ -182,10 +189,12 @@ const SIDEBAR_CONVERSATION_NAVIGATION_DEFER_MS =
   SIDEBAR_SESSION_ENTRY_REFRESH_DEFER_MS;
 const SIDEBAR_SEARCH_HOVER_PREFETCH_DELAY_MS = 900;
 const SIDEBAR_NAV_LABEL_KEYS: Record<string, string> = {
+  "agent-apps": "navigation.sidebar.items.agentApps",
   "agent-app-lab": "navigation.sidebar.items.agentAppLab",
   automation: "navigation.sidebar.items.automation",
   channels: "navigation.sidebar.items.channels",
   companion: "navigation.sidebar.items.companion",
+  experts: "navigation.sidebar.items.experts",
   "home-general": "navigation.sidebar.items.homeGeneral",
   knowledge: "navigation.sidebar.items.knowledge",
   memory: "navigation.sidebar.items.memory",
@@ -279,6 +288,16 @@ function isSameSidebarNavigationTarget(
   return (
     target.page === page &&
     target.paramsKey === serializeNavigationParams(params)
+  );
+}
+
+function resolveAgentAppSidebarEntryKey(
+  state: InstalledAgentAppState,
+): string | undefined {
+  return (
+    state.projection.entries.find((entry) =>
+      ["page", "panel", "settings"].includes(entry.kind),
+    )?.key ?? state.projection.entries[0]?.key
   );
 }
 
@@ -1663,6 +1682,9 @@ const AccountMenuPopover = styled.div<{ $collapsed?: boolean }>`
   z-index: 80;
   width: ${({ $collapsed }) => ($collapsed ? "284px" : "304px")};
   max-width: min(304px, calc(100vw - 24px));
+  max-height: min(760px, calc(100vh - 24px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border-radius: 18px;
   border: 1px solid var(--lime-card-subtle-border, rgba(226, 240, 226, 0.92));
   background: var(--lime-card-subtle, var(--lime-surface, #ffffff));
@@ -2487,6 +2509,9 @@ export function AppSidebar({
   const [enabledNavItems, setEnabledNavItems] = useState<string[]>(
     DEFAULT_ENABLED_SIDEBAR_NAV_ITEM_IDS,
   );
+  const [installedAgentAppNavStates, setInstalledAgentAppNavStates] = useState<
+    InstalledAgentAppState[]
+  >([]);
   const sidebarSessionsRef = useRef<AsterSessionInfo[]>([]);
   const archivedSidebarSessionsRef = useRef<AsterSessionInfo[]>([]);
   const [sidebarSessions, setSidebarSessions] = useState<AsterSessionInfo[]>(
@@ -2633,6 +2658,33 @@ export function AppSidebar({
     });
   }, []);
 
+  const loadInstalledAgentAppNavStates = useCallback(async () => {
+    try {
+      const result = await listInstalledAgentApps();
+      setInstalledAgentAppNavStates(result.states);
+    } catch (error) {
+      console.error("加载 Agent App 导航失败:", error);
+      setInstalledAgentAppNavStates([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadInstalledAgentAppNavStates();
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const reload = () => {
+      void loadInstalledAgentAppNavStates();
+    };
+    window.addEventListener(AGENT_APPS_CHANGED_EVENT, reload);
+    window.addEventListener("focus", reload);
+    return () => {
+      window.removeEventListener(AGENT_APPS_CHANGED_EVENT, reload);
+      window.removeEventListener("focus", reload);
+    };
+  }, [loadInstalledAgentAppNavStates]);
+
   const localizeSidebarNavItem = useCallback(
     (item: SidebarNavItem): SidebarNavItem => {
       const key = SIDEBAR_NAV_LABEL_KEYS[item.id];
@@ -2648,12 +2700,54 @@ export function AppSidebar({
     [t],
   );
 
+  const agentAppNavItems = useMemo<SidebarNavItem[]>(() => {
+    return installedAgentAppNavStates
+      .filter(
+        (state) => !state.disabled && resolveAgentAppSidebarEntryKey(state),
+      )
+      .map<SidebarNavItem>((state) => {
+        const entryKey = resolveAgentAppSidebarEntryKey(state);
+        return {
+          id: `agent-app:${state.appId}`,
+          label: resolveInstalledAgentAppDisplayName(state),
+          icon: Boxes,
+          page: "agent-app",
+          params: {
+            appId: state.appId,
+            entryKey,
+          },
+          resolveParams: (params) => ({
+            ...(params ?? {}),
+            launchRequestKey: Date.now(),
+          }),
+          isActive: (currentPage, currentParams) =>
+            currentPage === "agent-app" &&
+            (currentParams as { appId?: string } | undefined)?.appId ===
+              state.appId,
+          configurable: false,
+        };
+      });
+  }, [installedAgentAppNavStates]);
+
   const filteredMainNavItems = useMemo<SidebarNavItem[]>(() => {
-    return MAIN_SIDEBAR_NAV_ITEMS.filter(
+    const baseItems = MAIN_SIDEBAR_NAV_ITEMS.filter(
       (item) =>
         item.configurable === false || enabledNavItems.includes(item.id),
     ).map(localizeSidebarNavItem);
-  }, [enabledNavItems, localizeSidebarNavItem]);
+
+    if (agentAppNavItems.length === 0) {
+      return baseItems;
+    }
+    const skillsIndex = baseItems.findIndex((item) => item.id === "skills");
+    if (skillsIndex < 0) {
+      return [...baseItems, ...agentAppNavItems];
+    }
+    return [
+      ...baseItems.slice(0, skillsIndex + 1),
+      ...agentAppNavItems,
+      ...baseItems.slice(skillsIndex + 1),
+    ];
+  }, [agentAppNavItems, enabledNavItems, localizeSidebarNavItem]);
 
   const filteredFooterNavItems = useMemo<SidebarNavItem[]>(() => {
     return FOOTER_SIDEBAR_NAV_ITEMS.filter(

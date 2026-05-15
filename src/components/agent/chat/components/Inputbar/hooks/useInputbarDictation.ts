@@ -42,6 +42,8 @@ type InputbarDictationState =
   | "transcribing"
   | "polishing";
 
+const MIN_RECORDING_DURATION_SECONDS = 0.5;
+
 interface UseInputbarDictationArgs {
   text: string;
   setText: (value: string) => void;
@@ -136,6 +138,8 @@ export function useInputbarDictation({
   const dictationSelectionRef = useRef<TranscriptSelection | null>(null);
   const lastLiveTranscriptRef = useRef("");
   const lastLiveTranscribedSampleRef = useRef(0);
+  const recordingStatusRef = useRef<RecordingStatus | null>(null);
+  const recordingStartedAtRef = useRef<number | null>(null);
   const { playStartSound, playStopSound } = useVoiceSound(soundEnabled);
 
   const updateDictationState = useCallback(
@@ -175,11 +179,16 @@ export function useInputbarDictation({
   }, [text]);
 
   useEffect(() => {
+    recordingStatusRef.current = recordingStatus;
+  }, [recordingStatus]);
+
+  useEffect(() => {
     dictationStateRef.current = dictationState;
     if (dictationState !== "listening") {
       setRecordingStatus(null);
       if (dictationState === "idle") {
         setLiveTranscript("");
+        recordingStartedAtRef.current = null;
       }
     }
   }, [dictationState]);
@@ -216,6 +225,7 @@ export function useInputbarDictation({
         const status = await getRecordingStatus();
         if (!disposed) {
           setRecordingStatus(status);
+          recordingStatusRef.current = status;
         }
       } catch (error) {
         console.error("[输入栏] 获取录音状态失败:", error);
@@ -355,7 +365,8 @@ export function useInputbarDictation({
       console.error("[输入栏] 检查本地语音模型失败:", error);
     }
 
-      updateDictationState("listening");
+    recordingStartedAtRef.current = Date.now();
+    updateDictationState("listening");
     setLiveTranscript("");
     lastLiveTranscriptRef.current = "";
     lastLiveTranscribedSampleRef.current = 0;
@@ -365,25 +376,31 @@ export function useInputbarDictation({
       start: textarea?.selectionStart ?? textRef.current.length,
       end: textarea?.selectionEnd ?? textRef.current.length,
     };
-    setRecordingStatus({
+    const initialRecordingStatus = {
       is_recording: true,
       volume: 0,
       duration: 0,
-    });
+    };
+    setRecordingStatus(initialRecordingStatus);
+    recordingStatusRef.current = initialRecordingStatus;
     playStartSound();
 
     try {
       await cancelRecording().catch(() => undefined);
       await startRecording(config.selected_device_id);
-      setRecordingStatus({
+      const startedRecordingStatus = {
         is_recording: true,
         volume: 0,
         duration: 0,
-      });
+      };
+      setRecordingStatus(startedRecordingStatus);
+      recordingStatusRef.current = startedRecordingStatus;
     } catch (error: unknown) {
       console.error("[输入栏] 开始录音失败:", error);
       toast.error(getRuntimeErrorMessage(error, copy.startFailed));
       setRecordingStatus(null);
+      recordingStatusRef.current = null;
+      recordingStartedAtRef.current = null;
       updateDictationState("idle");
     }
   }, [
@@ -400,15 +417,38 @@ export function useInputbarDictation({
       return;
     }
 
+    const startedAt = recordingStartedAtRef.current;
+    const elapsedDuration =
+      startedAt !== null ? Math.max(0, (Date.now() - startedAt) / 1_000) : 0;
+    const knownDuration = Math.max(
+      recordingStatusRef.current?.duration ?? 0,
+      elapsedDuration,
+    );
+    if (
+      knownDuration < MIN_RECORDING_DURATION_SECONDS &&
+      !lastLiveTranscriptRef.current
+    ) {
+      await cancelRecording().catch(() => undefined);
+      toast.info(copy.tooShort);
+      setRecordingStatus(null);
+      recordingStatusRef.current = null;
+      recordingStartedAtRef.current = null;
+      updateDictationState("idle");
+      return;
+    }
+
     playStopSound();
     setRecordingStatus(null);
+    recordingStatusRef.current = null;
     updateDictationState("transcribing");
 
     try {
       const result = await stopRecording();
-      if (result.duration < 0.5) {
+      if (result.duration < MIN_RECORDING_DURATION_SECONDS) {
         toast.info(copy.tooShort);
         setRecordingStatus(null);
+        recordingStatusRef.current = null;
+        recordingStartedAtRef.current = null;
         updateDictationState("idle");
         return;
       }
@@ -422,6 +462,8 @@ export function useInputbarDictation({
         if (!lastLiveTranscriptRef.current) {
           toast.info(copy.emptyTranscript);
           setRecordingStatus(null);
+          recordingStatusRef.current = null;
+          recordingStartedAtRef.current = null;
           updateDictationState("idle");
           return;
         }
@@ -443,11 +485,15 @@ export function useInputbarDictation({
 
       applyTranscriptToDictationBase(finalText, true);
       setRecordingStatus(null);
+      recordingStatusRef.current = null;
+      recordingStartedAtRef.current = null;
       updateDictationState("idle");
     } catch (error: unknown) {
       console.error("[输入栏] 完成语音输入失败:", error);
       toast.error(getRuntimeErrorMessage(error, copy.recognitionFailed));
       setRecordingStatus(null);
+      recordingStatusRef.current = null;
+      recordingStartedAtRef.current = null;
       updateDictationState("idle");
     }
   }, [

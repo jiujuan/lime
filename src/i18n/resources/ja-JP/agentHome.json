@@ -109,7 +109,6 @@
   "agentChat.home.scrollCue.label": "下にスクロールして Lime でできることを見る",
   "agentChat.home.secondScreen.label": "Lime が実行できるタスク例",
   "agentChat.home.supplemental.recentSession.defaultAction": "最近のセッションを続ける",
-  "agentChat.home.supplemental.recentSceneApp.label": "最近の方法を続ける",
   "agentChat.home.sceneManager.defaultTemplateTitle": "開始",
   "agentChat.home.sceneManager.customSceneSummaryFallback": "カスタムシーン",
   "agentChat.home.sceneManager.error.syncSignInRequired": "Scene Skills の管理結果を同期するには、クラウドアカウントにサインインしてください。",

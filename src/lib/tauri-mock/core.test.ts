@@ -79,6 +79,52 @@ describe("tauri-mock/core invoke", () => {
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });
 
+  it("Agent App uninstall mock 只返回演练结果，不移除 installed state", async () => {
+    const before = await invokeMockOnly<{
+      states: Array<{ appId: string }>;
+    }>("agent_app_list_installed");
+    const appId = before.states[0]?.appId ?? "content-factory-app";
+
+    const result = await invokeMockOnly<{
+      removedTargetCount: number;
+      missingTargetCount: number;
+      list: { states: Array<{ appId: string }> };
+    }>("agent_app_uninstall", {
+      request: {
+        appId,
+        mode: "delete-data",
+      },
+    });
+
+    expect(result.removedTargetCount).toBe(0);
+    expect(result.missingTargetCount).toBe(0);
+    expect(result.list.states.some((state) => state.appId === appId)).toBe(true);
+
+    const after = await invokeMockOnly<{
+      states: Array<{ appId: string }>;
+    }>("agent_app_list_installed");
+    expect(after.states.some((state) => state.appId === appId)).toBe(true);
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
+  });
+
+  it("通用工作台执行状态 mock 应返回空闲态", async () => {
+    await expect(
+      invokeMockOnly("execution_run_get_general_workbench_state", {
+        sessionId: "session-mock",
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        run_state: "idle",
+        current_gate_key: "idle",
+        queue_items: [],
+        latest_terminal: null,
+        recent_terminals: [],
+      }),
+    );
+
+    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
+  });
+
   it("图层设计工程目录 mock 应支持保存与读取闭环", async () => {
     const designJson = JSON.stringify({
       schemaVersion: "2026-05-05.p1",
@@ -1021,306 +1067,6 @@ describe("tauri-mock/core invoke", () => {
     ).resolves.toEqual(
       expect.objectContaining({
         defaultPackName: "brand-product-demo",
-      }),
-    );
-
-    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
-  });
-
-  it("SceneApp 自动化命令在浏览器模式下应返回结构化结果", async () => {
-    vi.mocked(shouldPreferMockInBrowser).mockReturnValueOnce(true);
-
-    await expect(
-      invoke("sceneapp_create_automation_job", {
-        intent: {
-          launchIntent: {
-            sceneappId: "daily-trend-briefing",
-            workspaceId: "workspace-default",
-            userInput: "关注 AI Agent 趋势",
-          },
-          runNow: true,
-        },
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        sceneappId: "daily-trend-briefing",
-        jobId: expect.any(String),
-        runNowResult: expect.objectContaining({
-          success_count: 1,
-        }),
-      }),
-    );
-
-    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
-  });
-
-  it("SceneApp 运行前规划应返回 adapter plan 草稿", async () => {
-    vi.mocked(shouldPreferMockInBrowser).mockReturnValueOnce(true);
-
-    await expect(
-      invoke("sceneapp_plan_launch", {
-        intent: {
-          sceneappId: "x-article-export",
-          workspaceId: "workspace-default",
-          projectId: "project-research",
-          slots: {
-            article_url: "https://x.com/openai/article/123",
-            target_language: "中文",
-          },
-          runtimeContext: {
-            browserSessionAttached: true,
-          },
-        },
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        contextOverlay: expect.objectContaining({
-          compilerPlan: expect.objectContaining({
-            referenceCount: 2,
-          }),
-        }),
-        projectPackPlan: expect.objectContaining({
-          completionStrategy: "required_parts_complete",
-          requiredParts: ["index.md", "meta.json"],
-        }),
-        plan: expect.objectContaining({
-          adapterPlan: expect.objectContaining({
-            runtimeAction: "launch_browser_assist",
-            targetRef: "x/article-export",
-            preferredProfileKey: "general_browser_assist",
-            launchPayload: expect.objectContaining({
-              adapter_name: "x/article-export",
-            }),
-          }),
-        }),
-      }),
-    );
-
-    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
-  });
-
-  it("SceneApp preview 规划不应自动写入 context snapshot", async () => {
-    vi.mocked(shouldPreferMockInBrowser).mockReturnValue(true);
-
-    const firstPlan = await invoke("sceneapp_plan_launch", {
-      intent: {
-        sceneappId: "story-video-suite",
-        workspaceId: "workspace-default",
-        projectId: "project-video",
-        userInput: "根据发布会亮点生成 30 秒短视频草稿",
-        runtimeContext: {
-          directorySessionReadyCompat: true,
-        },
-      },
-    });
-
-    const secondPlan = await invoke("sceneapp_plan_launch", {
-      intent: {
-        sceneappId: "story-video-suite",
-        workspaceId: "workspace-default",
-        projectId: "project-video",
-        runtimeContext: {
-          directorySessionReadyCompat: true,
-        },
-      },
-    });
-
-    expect(firstPlan).toEqual(
-      expect.objectContaining({
-        contextOverlay: expect.objectContaining({
-          compilerPlan: expect.objectContaining({
-            referenceCount: 1,
-          }),
-        }),
-      }),
-    );
-    expect(secondPlan).toEqual(
-      expect.objectContaining({
-        contextOverlay: expect.objectContaining({
-          compilerPlan: expect.objectContaining({
-            notes: expect.not.arrayContaining([
-              expect.stringContaining("已从项目上下文恢复"),
-              expect.stringContaining(
-                "当前 planning 直接复用了 1 条项目级参考",
-              ),
-            ]),
-          }),
-        }),
-      }),
-    );
-
-    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
-  });
-
-  it("SceneApp mock 应在同一项目内复用上一次 context snapshot", async () => {
-    vi.mocked(shouldPreferMockInBrowser).mockReturnValue(true);
-
-    await expect(
-      invoke("sceneapp_save_context_baseline", {
-        intent: {
-          sceneappId: "story-video-suite",
-          workspaceId: "workspace-default",
-          projectId: "project-video",
-          userInput: "根据发布会亮点生成 30 秒短视频草稿",
-          runtimeContext: {
-            directorySessionReadyCompat: true,
-          },
-        },
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        contextOverlay: expect.objectContaining({
-          compilerPlan: expect.objectContaining({
-            referenceCount: 1,
-            notes: expect.arrayContaining([
-              expect.stringContaining("已写入项目级 Context Snapshot"),
-            ]),
-          }),
-          snapshot: expect.objectContaining({
-            referenceItems: expect.arrayContaining([
-              expect.objectContaining({
-                usageCount: 1,
-              }),
-            ]),
-          }),
-        }),
-      }),
-    );
-
-    await expect(
-      invoke("sceneapp_plan_launch", {
-        intent: {
-          sceneappId: "story-video-suite",
-          workspaceId: "workspace-default",
-          projectId: "project-video",
-          runtimeContext: {
-            directorySessionReadyCompat: true,
-          },
-        },
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        contextOverlay: expect.objectContaining({
-          compilerPlan: expect.objectContaining({
-            referenceCount: 1,
-            notes: expect.arrayContaining([
-              expect.stringContaining("已从项目上下文恢复 1 条历史参考"),
-              expect.stringContaining(
-                "当前 planning 直接复用了 1 条项目级参考",
-              ),
-              expect.stringContaining("当前已复用项目级 TasteProfile"),
-            ]),
-          }),
-          snapshot: expect.objectContaining({
-            tasteProfile: expect.objectContaining({
-              summary:
-                "当前 TasteProfile 已在项目沉淀基础上，结合 1 条参考输入更新启发式摘要。",
-            }),
-          }),
-        }),
-      }),
-    );
-
-    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
-  });
-
-  it("legacy cloudSessionReady 输入也应继续产出 current service_scene planner", async () => {
-    vi.mocked(shouldPreferMockInBrowser).mockReturnValueOnce(true);
-
-    await expect(
-      invoke("sceneapp_plan_launch", {
-        intent: {
-          sceneappId: "story-video-suite",
-          workspaceId: "workspace-default",
-          projectId: "project-video",
-          runtimeContext: {
-            cloudSessionReady: true,
-          },
-        },
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        plan: expect.objectContaining({
-          bindingFamily: "agent_turn",
-          adapterPlan: expect.objectContaining({
-            adapterKind: "agent_turn",
-            runtimeAction: "open_service_scene_session",
-            requestMetadata: expect.objectContaining({
-              harness: expect.objectContaining({
-                service_scene_launch: expect.objectContaining({
-                  kind: "local_service_skill",
-                }),
-              }),
-            }),
-          }),
-        }),
-      }),
-    );
-
-    expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
-  });
-
-  it("SceneApp mock 应把 referenceMemoryIds 编译成正式参考对象并透传到 adapter 合同", async () => {
-    vi.mocked(shouldPreferMockInBrowser).mockReturnValueOnce(true);
-
-    await expect(
-      invoke("sceneapp_plan_launch", {
-        intent: {
-          sceneappId: "story-video-suite",
-          workspaceId: "workspace-default",
-          projectId: "project-video",
-          userInput: "把这次新品卖点整理成 30 秒短视频方案",
-          referenceMemoryIds: ["memory-1", "memory-2"],
-          runtimeContext: {
-            directorySessionReadyCompat: true,
-          },
-        },
-      }),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        contextOverlay: expect.objectContaining({
-          compilerPlan: expect.objectContaining({
-            referenceCount: 3,
-            notes: expect.arrayContaining([
-              expect.stringContaining("显式带入 2 条灵感对象"),
-            ]),
-          }),
-          snapshot: expect.objectContaining({
-            referenceItems: expect.arrayContaining([
-              expect.objectContaining({
-                id: "memory:memory-1",
-                label: "夏日短视频语气",
-                sourceKind: "reference_library",
-              }),
-              expect.objectContaining({
-                id: "memory:memory-2",
-                label: "爆款封面参考",
-                sourceKind: "reference_library",
-              }),
-            ]),
-            tasteProfile: expect.objectContaining({
-              keywords: expect.arrayContaining([
-                "夏日短视频语气",
-                "爆款封面参考",
-              ]),
-            }),
-          }),
-        }),
-        plan: expect.objectContaining({
-          adapterPlan: expect.objectContaining({
-            launchPayload: expect.objectContaining({
-              reference_memory_ids: ["memory-1", "memory-2"],
-            }),
-            requestMetadata: expect.objectContaining({
-              sceneapp_reference_memory_ids: ["memory-1", "memory-2"],
-              harness: expect.objectContaining({
-                sceneapp_launch: expect.objectContaining({
-                  reference_memory_ids: ["memory-1", "memory-2"],
-                }),
-              }),
-            }),
-          }),
-        }),
       }),
     );
 

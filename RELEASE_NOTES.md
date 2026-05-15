@@ -1,49 +1,48 @@
-## Lime v1.39.0
+## Lime v1.40.0
 
-发布日期：`2026-05-15`
-递交范围：当前完整 worktree，包含 tracked、deleted 与新增文件；本次按发布要求完成版本号、release note、核心质量校验与发布提交，不包含 tag / push / 正式分发。
+发布日期：`2026-05-16`
+递交范围：当前完整 worktree，包含 tracked、deleted 与新增文件；本次按发布要求完成版本号、release note、Rust / 前端核心质量校验、命令契约与 GUI smoke，不包含 tag / push / 正式分发。
 
-> 发布说明：上一版 release tag 为 `v1.38.0`。本版升级到 `v1.39.0`，并继续清理旧 `RELEASE_NOTES.md` 历史堆叠内容，只保留当前版本说明；旧 v1.38.0 发布说明不再作为当前 release note 事实源保留。
+> 发布说明：上一版 release tag 为 `v1.39.0`。本版升级到 `v1.40.0`，并继续清理旧 `RELEASE_NOTES.md` 历史堆叠内容，只保留当前版本说明；旧 v1.39.0 发布说明不再作为当前 release note 事实源保留。
 
 ### 发布概览
 
-- 应用版本从 `1.38.0` 升级到 `1.39.0`，同步 `package.json`、`package-lock.json`、`packages/lime-cli-npm/package.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`、`src-tauri/tauri.conf.json` 与 `src-tauri/tauri.conf.headless.json`。
-- Agent Chat / Workbench 主路径继续拆分巨型渲染面，`MessageList`、输入栏、历史水合、滚动控制、任务轻卡、图片预览和 Team Workspace 选择器收敛到更小的组件、selector 与 hook。
-- i18n 资源按 Agent 子域拆包，新增并同步 `agentHome`、`agentInputbar`、`agentMessageList`、`agentRuntime`、`agentSkills`、`agentTeamWorkspace` 五语言资源，原 `agent.json` 大幅瘦身。
-- Tauri mock / DevBridge mock 从单体 `core.ts` 拆分为多个域模块，命令契约检查支持识别 `defaultMocks` 的 spread registry，避免 mock 拆分后契约扫描失真。
-- Release updater manifest 强化 macOS DMG / Windows installer URL 处理，缺失 macOS DMG 时阻断错误清单，避免官网下载页错误回退到 updater 包。
-- Agent App 方向新增路线图与技术设计文档，明确 capability SDK、AI 内容工程和 P0 技术闭环的后续主线。
+- 应用版本从 `1.39.0` 升级到 `1.40.0`，同步 `package.json`、`package-lock.json`、`packages/lime-cli-npm/package.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`、`src-tauri/tauri.conf.json` 与 `src-tauri/tauri.conf.headless.json`。
+- Agent App 从 Lab / 草案能力推进到正式主入口：新增 `Agent Apps` 管理页、已安装 App 侧栏入口、运行页与内容工厂样板，支持安装预览、启动入口、运行状态和任务提交闭环。
+- Agent App Host Bridge / Runtime 面补齐前后端命令：新增 app inspect / install / uninstall / state / runtime task 命令、DevBridge dispatcher、浏览器 mock、治理目录册和前端 API 网关，保持命令契约同源。
+- Agent App 安装链路补齐 cloud bootstrap、package cache、setup state store、lifecycle action、cleanup rehearsal / residual audit 和 package identity，减少“已安装但不可启动”的假入口。
+- 专家广场进入主导航：新增专家目录、详情面板、安装覆盖层、运行绑定、analytics 投影和 Agent 对话内专家启动参数，支持从专家入口恢复或创建专属对话。
+- 旧 SceneApp GUI / Rust 命令 / DevBridge / lib API 主体清退，保留必要 legacy summary / follow-up 兼容投影，避免 current Agent App 主线继续与旧入口双轨并存。
 
 ### 用户可见更新
 
-- 聊天消息区在历史恢复、运行中消息、图片 / 音频 / 转写任务卡和 artifact 入口上更稳定，避免新草稿、历史水合或旧会话恢复时串入上一轮轻卡状态。
-- 输入栏与 Team 选择体验继续收敛：Team selector、工作流状态、技能选择、图片附件和多模态提示补齐五语言文案与回归断言。
-- 图片、音频、转写等媒体任务轻卡继续以统一 media task index 为事实源，LimeCore policy 输入缺口、阻断和 allow 状态展示进入本地化资源。
-- Skill Forge / Service Skill 入口链路继续补齐挂起参数、A2UI 表单、runtime binding 和显式 session enable 证据，减少“已注册”与“已可自动执行”之间的误解。
-- GUI smoke 覆盖 workspace ready、browser runtime、site adapter、runtime tool surface、`@` 命令注册、Claw streaming、知识库 GUI 和设计画布主路径。
+- 左侧导航新增 `专家` 与 `Agent Apps`，并可根据已安装 Agent App 动态展示可启动入口；原 `场景应用` 独立页面不再作为当前主入口。
+- Agent App 管理页支持查看安装状态、来源、入口、能力就绪度、卸载排练与运行启动结果；内容工厂样板可作为默认演示 App 跑通入口体验。
+- Agent App 运行页可基于 entry runtime guard 检查权限、能力与入口状态，并把任务提交到 Agent runtime，避免 UI 只展示静态预览。
+- 专家广场提供种子专家目录、专家详情、安装提示和对话启动入口；Agent 对话区可展示专家信息面板并携带专家启动上下文。
+- 自动化、记忆、Agent Home、工作区和设置页同步移除 SceneApp 旧文案 / 入口残留，五语言资源补齐 `agentExperts`、Agent App 与导航相关文案。
 
 ### 开发者与治理更新
 
-- `src/lib/tauri-mock/` 拆出 agent runtime、browser、knowledge、media task、memory、provider、skill forge、update、voice、workspace 等 mock registry，降低单文件复杂度。
-- `scripts/check-command-contracts.mjs` 适配拆分后的 mock 事实源，继续检查前端命令、Rust 注册、mock priority 与 default mock 的一致性。
-- `scripts/release-updater-manifest.mjs` 和对应测试覆盖 installer_url、macOS DMG 缺失、Windows 安装包与 updater manifest 组合边界。
-- Rust runtime、Skill 执行与 timeline 服务补充 sequence 归一化、synthetic item、fast response model routing、workspace skill runtime enable 等定向测试。
-- 删除旧 Playwright 调试 JSON 快照，并通过 `.gitignore` 收敛临时调试产物，避免 release 提交继续携带一次性浏览器状态文件。
+- 新增 `src/features/agent-app/runtime/`、`src/features/agent-app/sdk/`、`src/features/agent-app/adapters/` 与 schema gate，明确 Host Capability、CapabilityHost、runtime package loader、workflow runtime host 与 UI extension host 的边界。
+- 新增 `src-tauri/src/commands/agent_app_cmd.rs`、`src-tauri/src/commands/agent_app_runtime_cmd.rs`、`src-tauri/src/dev_bridge/dispatcher/agent_apps.rs` 与 `src-tauri/crates/core/src/agent_app_runtime_token.rs`，让 Agent App state / runtime token / task 命令进入 Rust current 主路径。
+- `src/lib/api/agentApps.ts` 与 `src/lib/api/agentAppRuntime.ts` 成为前端 Agent App 命令事实源，并与 `src/lib/tauri-mock/agentAppMocks.ts`、`mockPriorityCommands`、`agentCommandCatalog` 同步。
+- `docs/roadmap/agentapp/` 扩展 P5-P17 执行计划，补齐 cloud bootstrap、schema gate、setup resolver、package cache、runtime loader、entry guard、正式入口、生命周期清理和 GUI smoke 演练路线。
+- `.gitignore` 放行 `docs/roadmap/zuanjia/*.md`，专家方向文档与 Agent App 路线图一并进入版本化事实源。
+- 测试修复覆盖 Inputbar 语音录制最短时长、AgentThreadMemoryPrefetchPreview locale、manifest / content factory fixture、ExpertInfoPanel hook 依赖与 schema / analytics lint 边界。
 
 ### 校验状态
 
 - `cargo fmt --manifest-path "src-tauri/Cargo.toml" --all`：通过。
-- `npm run verify:app-version`：通过，目标版本 `1.39.0`。
-- `CARGO_TARGET_DIR="$HOME/.cache/lime-cargo-target-v139" cargo test --manifest-path "src-tauri/Cargo.toml"`：通过，主库 `1347 passed; 0 failed; 1 ignored`，集成测试通过；真实联网测试保持 ignored。
-- `CARGO_TARGET_DIR="$HOME/.cache/lime-cargo-target-v139" cargo clippy --manifest-path "src-tauri/Cargo.toml" --workspace --all-targets -- -D warnings`：通过。
+- `npm run verify:app-version`：通过，目标版本 `1.40.0`。
+- `CARGO_TARGET_DIR="$HOME/.cache/lime-cargo-target-v140" cargo test --manifest-path "src-tauri/Cargo.toml"`：通过，主库 `1320 passed; 0 failed; 1 ignored`，集成测试通过；真实联网测试保持 ignored。
+- `CARGO_TARGET_DIR="$HOME/.cache/lime-cargo-target-v140" cargo clippy --manifest-path "src-tauri/Cargo.toml" --workspace --all-targets -- -D warnings`：通过。
 - `npm run lint`：通过。
-- `npm run typecheck`：通过。
-- `npm test`：通过，`56/56` 批次通过。
-- `npm run test -- "src/components/agent/chat/workspace/useWorkspaceAudioTaskPreviewRuntime.test.tsx" "src/components/agent/chat/workspace/useWorkspaceTranscriptionTaskPreviewRuntime.test.tsx"`：通过，用于锁定媒体任务 policy meta 本地化回归。
+- `npm test`：通过，`57/57` 批次通过。
 - `npm run test:contracts`：通过；命令契约、Harness 契约、modality contracts 与 cleanup report contract 均通过。
-- `npm run verify:gui-smoke`：通过；复用 headless Tauri / DevBridge，覆盖 workspace、browser runtime、site adapters、Skill Forge、runtime tool surface、`@` 命令、Claw streaming、knowledge GUI 与 design canvas。
+- `npm run verify:gui-smoke`：通过；覆盖 DevBridge、workspace ready、browser runtime、site adapters、Skill Forge / Service Skill、runtime tool surface、`@` 命令注册、Claw streaming、knowledge GUI 与 design canvas。
 - `git diff --check`：通过。
 
 ---
 
-**完整变更**: `v1.38.0` -> `v1.39.0`
+**完整变更**: `v1.39.0` -> `v1.40.0`

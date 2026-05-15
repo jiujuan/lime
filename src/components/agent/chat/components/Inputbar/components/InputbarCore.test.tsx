@@ -193,6 +193,9 @@ const renderInputbarCore = async (
   return container;
 };
 
+const waitForMinimumDictationDuration = () =>
+  new Promise((resolve) => window.setTimeout(resolve, 650));
+
 describe("InputbarCore", () => {
   it("挂载时不应主动预取语音配置", async () => {
     await renderInputbarCore({
@@ -557,13 +560,21 @@ describe("InputbarCore", () => {
       micButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
       await Promise.resolve();
+      await waitForMinimumDictationDuration();
+    });
+    await vi.waitFor(() => {
+      expect(mockGetRecordingStatus).toHaveBeenCalled();
     });
 
-    const stopDictationButton = Array.from(
-      container.querySelectorAll("button"),
-    ).find((button) =>
-      button.getAttribute("aria-label")?.startsWith("录音中"),
-    ) as HTMLButtonElement | undefined;
+    let stopDictationButton: HTMLButtonElement | undefined;
+    await vi.waitFor(() => {
+      stopDictationButton = Array.from(
+        container.querySelectorAll("button"),
+      ).find((button) =>
+        button.getAttribute("aria-label")?.startsWith("录音中"),
+      ) as HTMLButtonElement | undefined;
+      expect(stopDictationButton).toBeTruthy();
+    });
 
     await act(async () => {
       stopDictationButton?.dispatchEvent(
@@ -573,7 +584,9 @@ describe("InputbarCore", () => {
       await Promise.resolve();
     });
 
-    expect(mockPolishVoiceText).toHaveBeenCalledWith("原始识别文本");
+    await vi.waitFor(() => {
+      expect(mockPolishVoiceText).toHaveBeenCalledWith("原始识别文本");
+    });
     expect(setText).toHaveBeenCalledWith("原始识别文本");
     expect(mockToastError).not.toHaveBeenCalled();
   });
@@ -693,9 +706,13 @@ describe("InputbarCore", () => {
       await startHandler?.();
       await Promise.resolve();
       await Promise.resolve();
+      await waitForMinimumDictationDuration();
     });
 
     expect(mockStartRecording).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => {
+      expect(mockGetRecordingStatus).toHaveBeenCalled();
+    });
 
     await act(async () => {
       await stopHandler?.();
@@ -706,8 +723,10 @@ describe("InputbarCore", () => {
 
     expect(mockStopRecording).toHaveBeenCalledTimes(1);
     expect(mockTranscribeAudio).toHaveBeenCalled();
-    expect(mockPolishVoiceText).toHaveBeenCalledWith("原始识别文本");
-    expect(setText).toHaveBeenLastCalledWith("润色后的文本");
+    await vi.waitFor(() => {
+      expect(mockPolishVoiceText).toHaveBeenCalledWith("原始识别文本");
+      expect(setText).toHaveBeenLastCalledWith("润色后的文本");
+    });
   });
 
   it("未启用快捷键监听时不应注册语音快捷键事件", async () => {

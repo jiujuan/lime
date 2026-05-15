@@ -2,7 +2,6 @@ import type { Skill } from "@/lib/api/skills";
 import type { SkillCatalogSceneEntry } from "@/lib/api/skillCatalog";
 import type { ServiceSkillHomeItem } from "../service-skills/types";
 import type { ServiceSkillHomeCopy } from "../service-skills/homeCopy";
-import type { SceneAppEntryCardItem } from "../sceneappEntryTypes";
 import type { CuratedTaskTemplateItem } from "../utils/curatedTaskTemplates";
 import type { SlashEntryUsageRecord } from "../skill-selection/slashEntryUsage";
 import type {
@@ -184,27 +183,6 @@ export function fromInstalledSkill(
     usedAt: usage?.usedAt ?? null,
     testId: `entry-installed-skill-${skill.key}`,
     badge: usage ? copy.badge.recent : copy.badge.installed,
-  };
-}
-
-export function fromSceneAppEntry(
-  item: SceneAppEntryCardItem,
-  usage: SlashEntryUsageRecord | undefined,
-  copy: ServiceSkillHomeCopy,
-): HomeSkillSurfaceItem {
-  return {
-    id: item.id,
-    title: item.title,
-    summary: usage?.replayText?.trim() || item.summary,
-    category: "other",
-    sourceKind: "scene_app",
-    launchKind: "scene_app",
-    coverToken: buildCoverToken(item.executionTone, "scene"),
-    isRecent: Boolean(usage),
-    isRecommended: false,
-    usedAt: usage?.usedAt ?? null,
-    testId: `entry-sceneapp-${item.id}`,
-    badge: usage ? copy.badge.recent : item.businessLabel,
   };
 }
 

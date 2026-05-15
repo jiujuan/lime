@@ -74,7 +74,6 @@ const DEV_BRIDGE_STARTUP_TRUTH_COMMANDS = new Set([
   "aster_agent_init",
   "workspace_ensure_ready",
   "workspace_ensure_default_ready",
-  "sceneapp_list_catalog",
 ]);
 
 export interface InvokeRequest {

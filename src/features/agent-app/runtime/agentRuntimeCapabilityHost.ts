@@ -1,0 +1,551 @@
+import {
+  cancelAgentAppRuntimeTask,
+  getAgentAppRuntimeTask,
+  startAgentAppRuntimeTask,
+  submitAgentAppRuntimeHostResponse,
+  type AgentAppRuntimeCancelTaskRequest,
+  type AgentAppRuntimeCancelTaskResult,
+  type AgentAppRuntimeGetTaskRequest,
+  type AgentAppRuntimeStartTaskRequest,
+  type AgentAppRuntimeStartTaskResult,
+  type AgentAppRuntimeSubmitHostResponseRequest,
+  type AgentAppRuntimeSubmitHostResponseResult,
+  type AgentAppRuntimeTaskEvent,
+  type AgentAppRuntimeTaskSnapshot,
+} from "@/lib/api/agentAppRuntime";
+import type { AgentRuntimeRespondActionRequest } from "@/lib/api/agentRuntime/types";
+import { getOrCreateDefaultProject } from "@/lib/api/project";
+import type {
+  CapabilityHost,
+  LimeAgentCapability,
+  LimeAppSdk,
+} from "../sdk/CapabilityHost";
+import type {
+  AgentAppArtifactRecord,
+  AgentAppEvidenceRecord,
+  AgentAppProvenanceQuery,
+  AgentAppRunResult,
+  AgentAppStorageEntry,
+  AgentAppTaskEventType,
+  AgentAppTaskHostResponseRequest,
+  AgentAppTaskHostResponseResult,
+  AgentAppTaskRecord,
+  AgentAppTaskRequest,
+  AgentAppTaskStatus,
+  AgentAppTaskStreamEvent,
+  AgentAppUninstallResult,
+  AppCleanupPlan,
+} from "../types";
+
+export interface AgentAppRuntimeCapabilityApi {
+  startTask(
+    request: AgentAppRuntimeStartTaskRequest,
+  ): Promise<AgentAppRuntimeStartTaskResult>;
+  getTask(
+    request: AgentAppRuntimeGetTaskRequest,
+  ): Promise<AgentAppRuntimeTaskSnapshot>;
+  cancelTask(
+    request: AgentAppRuntimeCancelTaskRequest,
+  ): Promise<AgentAppRuntimeCancelTaskResult>;
+  submitHostResponse(
+    request: AgentAppRuntimeSubmitHostResponseRequest,
+  ): Promise<AgentAppRuntimeSubmitHostResponseResult>;
+}
+
+export interface AgentRuntimeCapabilityHostOptions {
+  delegate: CapabilityHost;
+  appId: string;
+  appVersion?: string;
+  packageHash?: string;
+  manifestHash?: string;
+  workspaceId?: string;
+  workspaceIdResolver?: () => Promise<string>;
+  api?: AgentAppRuntimeCapabilityApi;
+  now?: () => string;
+}
+
+interface RuntimeTaskState {
+  appId: string;
+  appVersion: string;
+  packageHash: string;
+  manifestHash: string;
+  entryKey?: string;
+  taskId: string;
+  traceId: string;
+  sessionId: string;
+  turnId: string;
+  workspaceId: string;
+  taskKind: string;
+  startedAt: string;
+  request: AgentAppTaskRequest;
+  retryOfTaskId?: string;
+  retryAttempt?: number;
+}
+
+type RuntimeAgentTaskRequest = AgentAppTaskRequest & {
+  requiredCapabilities?: string[];
+  capabilityHints?: string[];
+  metadata?: Record<string, unknown>;
+  sessionId?: string;
+  workspaceId?: string;
+};
+
+const defaultRuntimeApi: AgentAppRuntimeCapabilityApi = {
+  startTask: startAgentAppRuntimeTask,
+  getTask: getAgentAppRuntimeTask,
+  cancelTask: cancelAgentAppRuntimeTask,
+  submitHostResponse: submitAgentAppRuntimeHostResponse,
+};
+
+function normalizeString(value: string | undefined): string | undefined {
+  const normalized = value?.trim();
+  return normalized ? normalized : undefined;
+}
+
+function normalizeList(values: string[] | undefined): string[] {
+  return (values ?? []).map((value) => value.trim()).filter(Boolean);
+}
+
+function mapRuntimeTaskStatus(status: string | undefined): AgentAppTaskStatus {
+  const normalized = status?.trim().toLowerCase();
+  if (!normalized) {
+    return "running";
+  }
+  if (
+    normalized === "succeeded" ||
+    normalized === "success" ||
+    normalized === "completed" ||
+    normalized === "complete"
+  ) {
+    return "succeeded";
+  }
+  if (normalized === "cancelled" || normalized === "canceled") {
+    return "cancelled";
+  }
+  if (
+    normalized === "failed" ||
+    normalized === "failure" ||
+    normalized === "error" ||
+    normalized === "timeout"
+  ) {
+    return "failed";
+  }
+  return "running";
+}
+
+function mapRuntimeEventType(eventType: string): AgentAppTaskEventType {
+  if (
+    eventType === "task:queued" ||
+    eventType === "task:status" ||
+    eventType === "task:progress" ||
+    eventType === "task:toolCall" ||
+    eventType === "task:citation" ||
+    eventType === "task:partialArtifact" ||
+    eventType === "task:blocked" ||
+    eventType === "task:missingContextRequested" ||
+    eventType === "task:reviewRequested" ||
+    eventType === "task:error" ||
+    eventType === "task:cancelled" ||
+    eventType === "task:completed" ||
+    eventType === "task:incident" ||
+    eventType === "evidence:recorded" ||
+    eventType === "evidence:verified"
+  ) {
+    return eventType;
+  }
+  return "task:progress";
+}
+
+function buildStartEvent(state: RuntimeTaskState): AgentAppTaskStreamEvent {
+  return {
+    eventId: `${state.taskId}:accepted`,
+    taskId: state.taskId,
+    traceId: state.traceId,
+    type: "task:queued",
+    status: "running",
+    at: state.startedAt,
+    message: "Lime AgentRuntime 已接收 Agent App 任务。",
+    payload: {
+      sessionId: state.sessionId,
+      turnId: state.turnId,
+    },
+  };
+}
+
+function mapRuntimeEvent(
+  state: RuntimeTaskState,
+  event: AgentAppRuntimeTaskEvent,
+  index: number,
+): AgentAppTaskStreamEvent {
+  const streamEvent: AgentAppTaskStreamEvent = {
+    eventId: event.id || `${state.taskId}:runtime:${index + 1}`,
+    taskId: state.taskId,
+    traceId: state.traceId,
+    type: mapRuntimeEventType(event.eventType),
+    status: mapRuntimeTaskStatus(event.status),
+    at: event.occurredAt ?? state.startedAt,
+    message: event.message,
+    payload: event.payload ?? {
+      runtimeEvent: event,
+    },
+  };
+  if (event.evidenceRef) {
+    streamEvent.refs = [event.evidenceRef];
+  }
+  return streamEvent;
+}
+
+function buildTaskRecord(
+  state: RuntimeTaskState,
+  snapshot?: AgentAppRuntimeTaskSnapshot,
+): AgentAppTaskRecord {
+  const events = snapshot?.taskEvents.length
+    ? snapshot.taskEvents.map((event, index) =>
+        mapRuntimeEvent(state, event, index),
+      )
+    : [buildStartEvent(state)];
+  const status = snapshot
+    ? mapRuntimeTaskStatus(snapshot.taskStatus)
+    : "running";
+  const finishedAt =
+    status === "succeeded" || status === "failed" || status === "cancelled"
+      ? events[events.length - 1]?.at
+      : undefined;
+
+  return {
+    taskId: state.taskId,
+    traceId: state.traceId,
+    appId: state.appId,
+    entryKey: state.entryKey,
+    retryOfTaskId: state.retryOfTaskId,
+    retryAttempt: state.retryAttempt,
+    title: normalizeString(state.request.title) ?? "Agent App 任务",
+    prompt:
+      normalizeString(state.request.prompt) ??
+      normalizeString(state.request.title) ??
+      "Agent App 任务",
+    taskKind: state.taskKind,
+    idempotencyKey:
+      normalizeString(state.request.idempotencyKey) ??
+      `${state.entryKey ?? state.appId}:${state.taskKind}`,
+    input: state.request.input,
+    expectedOutput: state.request.expectedOutput,
+    knowledge: [...(state.request.knowledge ?? [])],
+    tools: normalizeList(state.request.tools),
+    files: normalizeList(state.request.files),
+    secrets: normalizeList(state.request.secrets),
+    humanReview: state.request.humanReview ?? false,
+    status,
+    startedAt: state.startedAt,
+    finishedAt,
+    cancelledAt: status === "cancelled" ? finishedAt : undefined,
+    result: snapshot?.threadRead,
+    trace: events
+      .filter((event) => event.message)
+      .map((event) => ({
+        at: event.at,
+        message: event.message ?? "",
+      })),
+    events,
+    provenance: {
+      sourceKind: "agent_app",
+      appId: state.appId,
+      appVersion: state.appVersion,
+      packageHash: state.packageHash,
+      manifestHash: state.manifestHash,
+      entryKey: state.entryKey,
+      workspaceId: state.workspaceId,
+      taskId: state.taskId,
+    },
+  };
+}
+
+function readRuntimeRequest(input: AgentAppTaskRequest): RuntimeAgentTaskRequest {
+  return input as RuntimeAgentTaskRequest;
+}
+
+function buildRetryRequest(
+  source: RuntimeTaskState,
+  retryAttempt: number,
+): AgentAppTaskRequest {
+  return {
+    ...source.request,
+    idempotencyKey: `${
+      normalizeString(source.request.idempotencyKey) ??
+      `${source.entryKey ?? source.appId}:${source.taskKind}`
+    }:retry:${retryAttempt}`,
+  };
+}
+
+export class AgentRuntimeCapabilityHost implements CapabilityHost {
+  private readonly delegate: CapabilityHost;
+  private readonly appId: string;
+  private readonly appVersion: string;
+  private readonly packageHash: string;
+  private readonly manifestHash: string;
+  private readonly workspaceId?: string;
+  private readonly workspaceIdResolver: () => Promise<string>;
+  private readonly api: AgentAppRuntimeCapabilityApi;
+  private readonly now: () => string;
+  private readonly tasks = new Map<string, RuntimeTaskState>();
+
+  constructor(options: AgentRuntimeCapabilityHostOptions) {
+    this.delegate = options.delegate;
+    this.appId = options.appId;
+    this.appVersion = options.appVersion ?? "";
+    this.packageHash = options.packageHash ?? "";
+    this.manifestHash = options.manifestHash ?? "";
+    this.workspaceId = options.workspaceId;
+    this.workspaceIdResolver =
+      options.workspaceIdResolver ??
+      (async () => (await getOrCreateDefaultProject()).id);
+    this.api = options.api ?? defaultRuntimeApi;
+    this.now = options.now ?? (() => new Date().toISOString());
+  }
+
+  createSdkContext(entryKey: string, runId?: string): LimeAppSdk {
+    const sdk = this.delegate.createSdkContext(entryKey, runId);
+    return {
+      ...sdk,
+      agent: this.createAgentCapability(entryKey),
+    };
+  }
+
+  runEntry(entryKey: string): Promise<AgentAppRunResult> {
+    return this.delegate.runEntry(entryKey);
+  }
+
+  getArtifacts(query?: AgentAppProvenanceQuery): AgentAppArtifactRecord[] {
+    return this.delegate.getArtifacts(query);
+  }
+
+  getEvidence(query?: AgentAppProvenanceQuery): AgentAppEvidenceRecord[] {
+    return this.delegate.getEvidence(query);
+  }
+
+  getStorageEntries(query?: AgentAppProvenanceQuery): AgentAppStorageEntry[] {
+    return this.delegate.getStorageEntries(query);
+  }
+
+  getTasks(query?: AgentAppProvenanceQuery): AgentAppTaskRecord[] {
+    const runtimeTasks = Array.from(this.tasks.values())
+      .filter((task) => !query?.appId || task.appId === query.appId)
+      .map((task) => buildTaskRecord(task));
+    return [...this.delegate.getTasks(query), ...runtimeTasks];
+  }
+
+  uninstall(params: {
+    cleanupPlan: AppCleanupPlan;
+    deleteData: boolean;
+  }): Promise<AgentAppUninstallResult> {
+    return this.delegate.uninstall(params);
+  }
+
+  private createAgentCapability(entryKey: string): LimeAgentCapability {
+    return {
+      startTask: (input) => this.startRuntimeTask(entryKey, input),
+      streamTask: async (taskId) => {
+        const task = await this.getRuntimeTask(taskId);
+        return task?.events ?? [];
+      },
+      getTask: (taskId) => this.getRuntimeTask(taskId),
+      cancelTask: (taskId) => this.cancelRuntimeTask(taskId),
+      retryTask: (taskId) => this.retryRuntimeTask(entryKey, taskId),
+      submitHostResponse: (input) => this.submitRuntimeHostResponse(input),
+      listTasks: async () => this.getTasks({ appId: this.appId }),
+    };
+  }
+
+  private async resolveWorkspaceId(
+    request: RuntimeAgentTaskRequest,
+  ): Promise<string> {
+    return (
+      normalizeString(request.workspaceId) ??
+      normalizeString(this.workspaceId) ??
+      (await this.workspaceIdResolver())
+    );
+  }
+
+  private async startRuntimeTask(
+    entryKey: string,
+    input: AgentAppTaskRequest,
+    retry?: { retryOfTaskId: string; retryAttempt: number; sessionId?: string },
+  ): Promise<AgentAppTaskRecord> {
+    const runtimeRequest = readRuntimeRequest(input);
+    const taskKind = normalizeString(runtimeRequest.taskKind) ?? "agent_app.task";
+    const workspaceId = await this.resolveWorkspaceId(runtimeRequest);
+    const requiredCapabilities = normalizeList(
+      runtimeRequest.requiredCapabilities,
+    );
+    const capabilityHints = normalizeList([
+      ...(runtimeRequest.capabilityHints ?? []),
+      ...(runtimeRequest.tools ?? []),
+    ]);
+    const result = await this.api.startTask({
+      appId: this.appId,
+      entryKey,
+      workspaceId,
+      sessionId: normalizeString(runtimeRequest.sessionId) ?? retry?.sessionId,
+      taskKind,
+      idempotencyKey: runtimeRequest.idempotencyKey,
+      title: runtimeRequest.title,
+      prompt: runtimeRequest.prompt,
+      input: runtimeRequest.input,
+      expectedOutput: runtimeRequest.expectedOutput,
+      requiredCapabilities,
+      capabilityHints,
+      knowledgeBindings: runtimeRequest.knowledge,
+      humanReview: runtimeRequest.humanReview,
+      metadata: {
+        ...(runtimeRequest.metadata ?? {}),
+        agent_app_host_bridge: {
+          source: "agent_app_runtime_page",
+          retryOfTaskId: retry?.retryOfTaskId,
+          retryAttempt: retry?.retryAttempt,
+        },
+      },
+    });
+    const state: RuntimeTaskState = {
+      appId: result.appId,
+      appVersion: this.appVersion,
+      packageHash: this.packageHash,
+      manifestHash: this.manifestHash,
+      entryKey: result.entryKey ?? entryKey,
+      taskId: result.taskId,
+      traceId: result.traceId,
+      sessionId: result.sessionId,
+      turnId: result.turnId,
+      workspaceId,
+      taskKind: result.taskKind,
+      startedAt: result.submittedAt || this.now(),
+      request: {
+        ...input,
+        taskKind,
+        input: runtimeRequest.input,
+      },
+      retryOfTaskId: retry?.retryOfTaskId,
+      retryAttempt: retry?.retryAttempt,
+    };
+    this.tasks.set(state.taskId, state);
+    return buildTaskRecord(state);
+  }
+
+  private async getRuntimeTask(
+    taskId: string,
+  ): Promise<AgentAppTaskRecord | null> {
+    const state = this.tasks.get(taskId);
+    if (!state) {
+      return null;
+    }
+    const snapshot = await this.api.getTask({
+      appId: state.appId,
+      taskId: state.taskId,
+      sessionId: state.sessionId,
+    });
+    return buildTaskRecord(state, snapshot);
+  }
+
+  private async cancelRuntimeTask(taskId: string): Promise<AgentAppTaskRecord> {
+    const state = this.requireTask(taskId);
+    await this.api.cancelTask({
+      appId: state.appId,
+      taskId: state.taskId,
+      sessionId: state.sessionId,
+      turnId: state.turnId,
+    });
+    const cancelled: AgentAppRuntimeTaskSnapshot = {
+      appId: state.appId,
+      taskId: state.taskId,
+      sessionId: state.sessionId,
+      status: "thread_read_available",
+      taskStatus: "cancelled",
+      taskEvents: [
+        {
+          id: `${taskId}:cancelled`,
+          eventType: "task:cancelled",
+          status: "cancelled",
+          message: "已向 Lime AgentRuntime 请求取消任务。",
+          occurredAt: this.now(),
+        },
+      ],
+      threadRead: null,
+    };
+    return buildTaskRecord(state, cancelled);
+  }
+
+  private async retryRuntimeTask(
+    entryKey: string,
+    taskId: string,
+  ): Promise<AgentAppTaskRecord> {
+    const source = this.requireTask(taskId);
+    const retryAttempt = (source.retryAttempt ?? 0) + 1;
+    return this.startRuntimeTask(
+      entryKey,
+      buildRetryRequest(source, retryAttempt),
+      {
+        retryOfTaskId: source.taskId,
+        retryAttempt,
+        sessionId: source.sessionId,
+      },
+    );
+  }
+
+  private async submitRuntimeHostResponse(
+    input: AgentAppTaskHostResponseRequest,
+  ): Promise<AgentAppTaskHostResponseResult> {
+    const state = this.requireTask(input.taskId);
+    const actionScope: NonNullable<
+      AgentRuntimeRespondActionRequest["action_scope"]
+    > = {
+      session_id: input.actionScope?.sessionId ?? state.sessionId,
+    };
+    if (input.actionScope?.threadId) {
+      actionScope.thread_id = input.actionScope.threadId;
+    }
+    if (input.actionScope?.turnId || state.turnId) {
+      actionScope.turn_id = input.actionScope?.turnId ?? state.turnId;
+    }
+    const runtimeRequest: AgentRuntimeRespondActionRequest = {
+      session_id: state.sessionId,
+      request_id: input.requestId,
+      action_type: input.actionType,
+      confirmed: input.confirmed ?? true,
+      metadata: {
+        ...(input.metadata ?? {}),
+        agent_app_runtime: {
+          app_id: state.appId,
+          entry_key: state.entryKey,
+          task_id: state.taskId,
+          source: "agent_app_host_bridge",
+        },
+      },
+      event_name: `agent_app_runtime:${state.appId}:${state.taskId}:host_response`,
+      action_scope: actionScope,
+    };
+    if (input.response !== undefined) {
+      runtimeRequest.response = input.response;
+    }
+    if (input.userData !== undefined) {
+      runtimeRequest.user_data = input.userData;
+    }
+    await this.api.submitHostResponse({
+      appId: state.appId,
+      taskId: state.taskId,
+      runtimeRequest,
+    });
+    return {
+      taskId: state.taskId,
+      requestId: input.requestId,
+      status: "submitted",
+      submittedAt: this.now(),
+    };
+  }
+
+  private requireTask(taskId: string): RuntimeTaskState {
+    const state = this.tasks.get(taskId);
+    if (state) {
+      return state;
+    }
+    throw new Error(`未找到 Agent App runtime task：${taskId}`);
+  }
+}

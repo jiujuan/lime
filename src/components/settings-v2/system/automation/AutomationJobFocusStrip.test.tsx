@@ -43,24 +43,7 @@ async function renderStrip(
     root.render(
       <AutomationJobFocusStrip
         jobId="job-sceneapp-1"
-        summaryCard={
-          {
-            title: "Story video kit",
-            businessLabel: "Multimodal bundle",
-            statusLabel: "Collect result materials first",
-            summary: "This ongoing flow already has results worth continuing.",
-            scorecardAggregate: {
-              summary: "This run is close to reusable.",
-              nextAction: "Complete the structured result pack first.",
-            },
-          } as any
-        }
-        runDetailView={
-          {
-            statusLabel: "Succeeded",
-            deliveryCompletionLabel: "Full result pack generated",
-          } as any
-        }
+        retiredMessage="This ongoing flow uses a retired practice."
         {...props}
       />,
     );
@@ -70,62 +53,23 @@ async function renderStrip(
 }
 
 describe("AutomationJobFocusStrip", () => {
-  it("应展示当前经营焦点摘要", async () => {
+  it("旧 SceneApp 持续流程只展示下线提示", async () => {
     await renderStrip();
 
     const text = document.body.textContent ?? "";
     expect(text).toContain("Continue this one first");
-    expect(text).toContain("Story video kit");
-    expect(text).not.toContain("Multimodal bundle");
-    expect(text).toContain("This run: This run is close to reusable.");
-    expect(text).toContain(
-      "Recent result: Succeeded · Full result pack generated",
-    );
-    expect(text).toContain(
-      "Do first: Complete the structured result pack first.",
-    );
+    expect(text).toContain("This ongoing flow uses a retired practice.");
+    expect(text).not.toContain("Story video kit");
     expect(text).not.toContain("现在先继续这条");
     expect(text).not.toContain("settings.automation.focus");
   });
 
-  it("应支持继续看结果与打开最近结果动作", async () => {
-    const onReviewCurrentProject = vi.fn();
-    const onOpenSceneAppGovernance = vi.fn();
-
+  it("没有下线提示时不渲染旧运行详情占位", async () => {
     await renderStrip({
-      onReviewCurrentProject,
-      onOpenSceneAppGovernance,
+      retiredMessage: null,
     });
 
-    const reviewButton = document.body.querySelector(
-      "[data-testid='automation-job-focus-review-job-sceneapp-1']",
-    ) as HTMLButtonElement | null;
-    const governanceButton = document.body.querySelector(
-      "[data-testid='automation-job-focus-governance-job-sceneapp-1']",
-    ) as HTMLButtonElement | null;
-
-    expect(reviewButton?.textContent).toContain("Review result");
-    expect(governanceButton?.textContent).toContain("View recent results");
-
-    await act(async () => {
-      reviewButton?.click();
-      governanceButton?.click();
-      await Promise.resolve();
-    });
-
-    expect(onReviewCurrentProject).toHaveBeenCalledTimes(1);
-    expect(onOpenSceneAppGovernance).toHaveBeenCalledTimes(1);
-  });
-
-  it("加载中且缺少摘要时应展示轻量占位", async () => {
-    await renderStrip({
-      summaryCard: null,
-      runDetailView: null,
-      loading: true,
-    });
-
-    expect(document.body.textContent).toContain(
-      "Organizing the latest result and next step for this practice",
-    );
+    expect(document.body.textContent).toContain("Continue this one first");
+    expect(document.body.textContent).not.toContain("retired practice");
   });
 });

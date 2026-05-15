@@ -18,6 +18,7 @@ interface WorkspaceShellSceneProps {
   fileManagerNode?: ReactNode;
   fileManagerToggleNode?: ReactNode;
   mainAreaNode: ReactNode;
+  rightRailNode?: ReactNode;
   sidebarContextVariant?: ComponentProps<typeof ChatSidebar>["contextVariant"];
   currentTopicId: ComponentProps<typeof ChatSidebar>["currentTopicId"];
   topics: ComponentProps<typeof ChatSidebar>["topics"];
@@ -68,6 +69,7 @@ export function WorkspaceShellScene({
   fileManagerNode,
   fileManagerToggleNode,
   mainAreaNode,
+  rightRailNode,
   sidebarContextVariant = "default",
   currentTopicId,
   topics,
@@ -147,6 +149,7 @@ export function WorkspaceShellScene({
       {fileManagerToggleNode}
 
       {mainAreaNode}
+      {rightRailNode}
     </PageContainer>
   );
 }

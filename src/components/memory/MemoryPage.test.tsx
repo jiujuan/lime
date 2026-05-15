@@ -1041,15 +1041,18 @@ describe("MemoryPage", () => {
       await Promise.resolve();
     });
 
-    expect(onNavigate).toHaveBeenCalledWith("sceneapps", {
-      view: "catalog",
-      projectId: "project-42",
-      referenceMemoryIds: ["memory-1"],
-      search: "夏日短视频语气",
-      prefillIntent: expect.stringContaining(
-        "围绕这条风格灵感继续创作：夏日短视频语气",
-      ),
-    });
+    expect(onNavigate).toHaveBeenCalledWith(
+      "agent",
+      expect.objectContaining({
+        agentEntry: "new-task",
+        projectId: "project-42",
+        entryBannerMessage:
+          "SceneApp 独立页已下线，已改从 Agent App 主链继续。",
+        initialUserPrompt: expect.stringContaining(
+          "围绕这条风格灵感继续创作：夏日短视频语气",
+        ),
+      }),
+    );
   });
 
   it("应支持落到成果分区并对准当前续接的灵感条目", async () => {

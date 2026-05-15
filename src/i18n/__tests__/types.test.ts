@@ -105,6 +105,19 @@ function assertI18nKeyTypes() {
   i18n.t("agentChat.serviceSkills.badge.customScene", { ns: "agent" });
   i18n.t("agentChat.serviceSkills.catalogSource.seeded", { ns: "agent" });
   i18n.t("agentChat.serviceSkills.catalogSource.synced", { ns: "agent" });
+  i18n.t("agentExperts.title", { ns: "agent" });
+  i18n.t("agentExperts.info.sections.workflow", { ns: "agent" });
+  i18n.t("agentExperts.chat.banner", { ns: "agent", title: "合同审阅" });
+  i18n.t("agentExperts.chat.runtimePrompt", {
+    ns: "agent",
+    title: "合同审阅",
+    summary: "审查合同风险",
+    personaRef: "expert-persona:contract-reviewer@1.0.0",
+    memoryTemplateRef: "memory-template:contract-reviewer@1.0.0",
+    skillRefs: "skill:document-review",
+    workflowRefs: "workflow:contract-risk-review",
+    starter: "帮我审这份协议",
+  });
   i18n.t("agentChat.home.composer.placeholder", { ns: "agent" });
   i18n.t("agentChat.home.composer.autoLaunchExample", {
     ns: "agent",
@@ -399,7 +412,6 @@ function assertI18nKeyTypes() {
   i18n.t("agentChat.home.guideCards.label", { ns: "agent" });
   i18n.t("agentChat.home.gallery.title", { ns: "agent" });
   i18n.t("agentChat.home.category.recent", { ns: "agent" });
-  i18n.t("agentChat.home.supplemental.recentSceneApp.label", { ns: "agent" });
   i18n.t("agentChat.home.sceneManager.title.list", { ns: "agent" });
   i18n.t("agentChat.home.sceneManager.action.addScene", { ns: "agent" });
   i18n.t("agentChat.home.sceneManager.error.syncSignInRequired", {
@@ -1309,22 +1321,10 @@ function assertI18nKeyTypes() {
     workspace: "Default Workspace",
   });
   i18n.t("settings.automation.details.legacy.message", { ns: "settings" });
-  i18n.t("settings.automation.details.sceneApp.toast.returnUnsupported", {
+  i18n.t("settings.automation.details.sceneApp.retired.title", {
     ns: "settings",
   });
-  i18n.t("settings.automation.details.sceneApp.toast.selectedBaselineMissing", {
-    ns: "settings",
-  });
-  i18n.t("settings.automation.details.sceneApp.file.bannerMessage", {
-    ns: "settings",
-    prefix: "Opened",
-    label: "brief.md",
-  });
-  i18n.t("settings.automation.details.sceneApp.file.followUpMissingPath", {
-    ns: "settings",
-    label: "review.md",
-  });
-  i18n.t("settings.automation.details.sceneApp.entry.missingContext", {
+  i18n.t("settings.automation.details.sceneApp.retired.description", {
     ns: "settings",
   });
   i18n.t("settings.automation.details.schedule.hours", {

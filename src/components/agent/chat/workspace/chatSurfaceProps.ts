@@ -153,18 +153,6 @@ interface BuildWorkspaceEmptyStatePropsParams {
     typeof EmptyState
   >["onLaunchBrowserAssist"];
   browserAssistLoading: boolean;
-  featuredSceneApps: NonNullable<
-    ComponentProps<typeof EmptyState>["featuredSceneApps"]
-  >;
-  sceneAppsLoading: boolean;
-  sceneAppLaunchingId: ComponentProps<typeof EmptyState>["sceneAppLaunchingId"];
-  onLaunchSceneApp?: ComponentProps<typeof EmptyState>["onLaunchSceneApp"];
-  canResumeRecentSceneApp?: ComponentProps<
-    typeof EmptyState
-  >["canResumeRecentSceneApp"];
-  onResumeRecentSceneApp?: ComponentProps<
-    typeof EmptyState
-  >["onResumeRecentSceneApp"];
   recentSessionTitle?: ComponentProps<typeof EmptyState>["recentSessionTitle"];
   recentSessionSummary?: ComponentProps<
     typeof EmptyState
@@ -175,9 +163,6 @@ interface BuildWorkspaceEmptyStatePropsParams {
   onResumeRecentSession?: ComponentProps<
     typeof EmptyState
   >["onResumeRecentSession"];
-  onOpenSceneAppsDirectory?: ComponentProps<
-    typeof EmptyState
-  >["onOpenSceneAppsDirectory"];
   projectId: string | null;
   sessionId?: string | null;
   runtimeToolAvailability?: ComponentProps<
@@ -278,17 +263,10 @@ export function buildWorkspaceEmptyStateProps({
   onRefreshSkills,
   onLaunchBrowserAssist,
   browserAssistLoading,
-  featuredSceneApps,
-  sceneAppsLoading,
-  sceneAppLaunchingId,
-  onLaunchSceneApp,
-  canResumeRecentSceneApp,
-  onResumeRecentSceneApp,
   recentSessionTitle,
   recentSessionSummary,
   recentSessionActionLabel,
   onResumeRecentSession,
-  onOpenSceneAppsDirectory,
   projectId,
   sessionId,
   runtimeToolAvailability,
@@ -364,17 +342,10 @@ export function buildWorkspaceEmptyStateProps({
     onRefreshSkills,
     onLaunchBrowserAssist,
     browserAssistLoading,
-    featuredSceneApps,
-    sceneAppsLoading,
-    sceneAppLaunchingId,
-    onLaunchSceneApp,
-    canResumeRecentSceneApp,
-    onResumeRecentSceneApp,
     recentSessionTitle,
     recentSessionSummary,
     recentSessionActionLabel,
     onResumeRecentSession,
-    onOpenSceneAppsDirectory,
     projectId,
     sessionId,
     runtimeToolAvailability,

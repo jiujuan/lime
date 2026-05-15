@@ -1,10 +1,10 @@
-# Agent App P4 APP 内容工厂最小闭环
+# Agent App P4 内容工厂最小闭环
 
 更新时间：2026-05-15
 
 ## 一句话目标
 
-P4.1 用 APP 内容工厂验证 Agent App 不是专家聊天框，也不是 Markdown 声明，而是可以通过 Capability SDK 跑通自己的业务流程：创建项目、绑定知识、规划内容场景、生成内容资产、保存内容表 Artifact、记录 Evidence，并在卸载 delete-data 时可清理。
+P4.1 用 内容工厂验证 Agent App 不是专家聊天框，也不是 Markdown 声明，而是可以通过 Capability SDK 跑通自己的业务流程：创建项目、绑定知识、规划内容场景、生成内容资产、保存内容表 Artifact、记录 Evidence，并在卸载 delete-data 时可清理。
 
 ## 范围
 
@@ -82,7 +82,7 @@ src/features/agent-app/
 
 ## P4.1 不变量
 
-1. APP 内容工厂只是 Agent App 平台验证样板，不进入 Lime Core 垂直功能。
+1. 内容工厂只是 Agent App 平台验证样板，不进入 Lime Core 垂直功能。
 2. 业务状态必须写入 App namespace，不新增全局业务表。
 3. 所有产物必须带 `sourceKind: agent_app` provenance。
 4. cleanup / uninstall 必须覆盖 P4 demo 写入的数据。

@@ -109,7 +109,6 @@
   "agentChat.home.scrollCue.label": "아래로 스크롤해 Lime이 무엇을 도와줄 수 있는지 보세요",
   "agentChat.home.secondScreen.label": "Lime 실행 가능한 작업 예시",
   "agentChat.home.supplemental.recentSession.defaultAction": "최근 세션 계속하기",
-  "agentChat.home.supplemental.recentSceneApp.label": "최근 방법 계속하기",
   "agentChat.home.sceneManager.defaultTemplateTitle": "시작",
   "agentChat.home.sceneManager.customSceneSummaryFallback": "사용자 지정 장면",
   "agentChat.home.sceneManager.error.syncSignInRequired": "Scene Skills 관리 결과를 동기화하려면 클라우드 계정에 로그인해야 합니다.",

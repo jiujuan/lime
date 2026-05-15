@@ -1,17 +1,19 @@
-# APP 内容工厂 PRD
+# 内容工厂 PRD
 
-更新时间：2026-05-15
+更新时间：2026-05-16
 
 ## 一句话目标
 
-基于 Lime Agent App 平台开发一个独立垂直产品：`APP 内容工厂`。它不是“内容专家聊天框”，而是有自己 UI、storage、worker、workflow、Knowledge 绑定、Artifact 和数据复盘闭环的完整业务应用，安装到 Lime Desktop 后本地运行。
+基于 Lime Agent App 平台开发一个独立垂直产品：`内容工厂`。它不是“内容专家聊天框”，而是有自己 UI、storage、worker、workflow、Knowledge 绑定、Artifact 和数据复盘闭环的完整业务应用，安装到 Lime Desktop 后本地运行。
+
+验收心智：运营用户应在内容工厂内完成资料整理、场景规划、批量生产、交付和复盘；Lime Agent 在背后作为 `lime.agent` / `lime.workflow` 能力执行任务。用户不应为了关键步骤跳回 Lime 通用 Chat，也不允许内容工厂自建一套模型、凭证、权限、证据和工具底座来绕过 Lime。
 
 ## 关键校准
 
 这份需求不能用 `APP.md + prompt` 解决。功能背后必须有完整实现：
 
 ```text
-APP 内容工厂
+内容工厂
 ├── UI：项目首页 / 三层知识库 / 内容场景规划 / 内容工厂 / 策略报告 / 数据复盘
 ├── Storage：项目、知识条目、内容场景、内容资产、复盘数据、洞察
 ├── Worker：文件解析、知识结构化、批量生成、去 AI 味评分、PPT / 报告生成
@@ -22,6 +24,12 @@ APP 内容工厂
 ```
 
 `APP.md` 只声明这些能力和入口；真实功能在 runtime package 中实现，并通过 `@lime/app-sdk` 调用 Lime 能力。
+
+内容工厂内的 Expert 只是协作者入口：它可以读取当前项目、资料版本、内容批次和复盘指标，也可以触发 App workflow；但它不能成为“用户把结果从聊天框复制回内容表”的旁路。
+
+后端事实源：内容工厂的 AI 任务必须通过 `docs/roadmap/agentruntime/app-surface-runtime.md` 定义的 Agent App Runtime Surface 进入 AgentRuntime 主链。`LIME_GATEWAY_*` / 模型 API 只能作为低阶 executor 或降级能力，不能替代 Lime Agent 的工具、知识、权限、证据和 artifact 治理。
+
+当前实现进展：Lime Host 的 `AgentAppRuntimePage` 已把 iframe Host Bridge 里的 `lime.agent.startTask / streamTask / getTask / cancelTask / retryTask / submitHostResponse` 接入 `agent_app_runtime_*` facade，并由后端复用 `AgentRuntimeThreadReadModel` 投影 `taskStatus / taskEvents`。这意味着内容工厂页面内发起“生成文案 / 场景规划”等 Agent task 时，第一跳已经进入完整 Lime AgentRuntime 主链；当 runtime 追问上下文、等待确认或要求工具授权时，App 也能在页面内回传响应，而不是跳回通用 Chat。当前仍未完成实时 stream、artifact-created 专用投影、storage / artifact / evidence 的后端持久写回与跨刷新 task/session 恢复。
 
 ## 背景
 
@@ -63,7 +71,7 @@ APP 内容工厂
 ### 主导航
 
 ```text
-APP 内容工厂
+内容工厂
 ├── 项目首页
 ├── 知识库
 │   ├── IP 知识库
@@ -130,7 +138,7 @@ name: content-factory-app
 version: 0.3.0
 status: draft
 appType: domain-app
-description: APP 内容工厂，用于知识库构建、内容场景规划、批量内容生产和数据复盘。
+description: 内容工厂，用于知识库构建、内容场景规划、批量内容生产和数据复盘。
 runtimeTargets:
   - local
 requires:
@@ -257,6 +265,95 @@ flowchart TD
 | 事实来源、版本、评估 | `lime.evidence`、Evals |
 | 外部调研、飞书同步 | `lime.tools`、`lime.secrets` |
 | 权限、成本、风险 | `lime.policy` |
+
+## App 内 Agent 任务闭环
+
+内容工厂的 Agent 能力必须作为业务任务嵌入 App，而不是跳转到通用 Chat：
+
+| 业务任务 | App 输入 | Lime Agent / Capability | App 内写回 |
+|---|---|---|---|
+| 资料整理 | 用户授权文件、资料类型、项目目标。 | `lime.files` / `lime.tools` 解析，`lime.agent.startTask` 结构化抽取，`lime.evidence` 记录来源。 | `knowledge_items` 草稿、资料健康度、人工确认状态。 |
+| 场景规划 | 已确认知识库、目标平台、人群和数量。 | `lime.knowledge.search` 检索，`lime.agent.startTask` 生成结构化场景。 | `content_scenarios` 表、场景 Artifact、引用证据。 |
+| 批量文案 / 脚本 | 场景、平台规则、数量、风格约束。 | `lime.agent.startTask` + writer skills，Eval 检查事实支撑和去 AI 味。 | `content_assets` / `script_batches`、A/B/C 分级、质量记录。 |
+| 策略交付 | 内容批次、项目事实、竞品资料。 | `lime.agent.startTask` 生成报告结构，`lime.artifacts` 持久化交付物。 | 策略报告、PPT 大纲、交付状态。 |
+| 数据复盘 | CSV / Excel 指标、历史内容资产。 | `lime.tools` 归一化，`lime.agent.startTask` 归因分析。 | `review_reports`、下轮动作、选题权重更新。 |
+
+每个任务都必须在内容工厂页面内展示进度、引用、工具调用、失败原因、重试和人工确认；最终结果以结构化对象写回 App storage，再生成 Artifact / Evidence。
+
+当前 App Host 第一刀已具备：Host Bridge 的 `lime.agent` 调用会经 `AgentRuntimeCapabilityHost` 转入 `agent_app_runtime_start_task`，`streamTask / getTask` 先消费 `agent_app_runtime_get_task` 的 snapshot events，`cancelTask` 委托 `agent_app_runtime_cancel_task`，`retryTask` 复用同一 runtime session 重新提交 App task，`submitHostResponse` 委托 `agent_app_runtime_submit_host_response`。前端本地 adapter 继续只作为 storage / artifact / evidence / knowledge 的样板实现，不能再被用来证明内容工厂已经具备完整 Agent 能力。
+
+### 写文案页面 Runtime 主链
+
+“本轮任务”面板里的“生成文案和配套素材”和“只重写文案”是 App-scoped Agent task，不是普通表单 API：
+
+```text
+写文案表单状态
+  -> lime.agent.startTask / lime.workflow.start
+  -> Agent App Runtime Surface
+  -> AgentRuntime session / turn / task
+  -> Claw capability / Skill / Tool
+  -> AgentAppTaskStreamEvent
+  -> App 内 review
+  -> storage / artifact / evidence write-back
+```
+
+最小 task 输入：
+
+| 字段 | 来源 |
+|---|---|
+| `taskKind` | `content_factory.copy.generate` 或 `content_factory.copy.rewrite` |
+| `task` | “今天要完成什么”输入框 |
+| `category` | 品类输入框 |
+| `platform` | 平台选择 |
+| `audience` | 目标人群 |
+| `coreWords` | 核心词 |
+| `materialVersion` | 生产前检查中的资料版本 |
+| `selectedScenarios` | 优先场景或自动补齐场景 |
+| `scriptRefs` | 现有脚本 / 视频口播引用 |
+| `expectedOutput` | 文案、素材 brief、脚本片段、交付包 |
+| `humanReview` | 默认 `true` |
+
+最小事件投影：
+
+| 事件 | 页面反馈 |
+|---|---|
+| `task:started` | 本轮任务开始，锁定输入快照。 |
+| `task:contextChecked` | 更新“生产前检查”卡片，不再只显示静态数字。 |
+| `task:missingContextRequested` | 在 App 内补资料、补场景或追问用户。 |
+| `task:toolCall` | 显示知识检索、搜索、图片、报告、PDF / 总结等工具进度。 |
+| `task:citation` | 显示资料版本、场景、网页或文件引用。 |
+| `task:partialArtifact` | 展示草稿文案、素材 brief、脚本片段。 |
+| `task:reviewRequested` | 用户在当前页面确认、编辑、拒绝或重试。 |
+| `task:completed` | 写回内容资产并生成交付物。 |
+| `artifact:created` / `evidence:recorded` | 交付物和证据已落库。 |
+
+“只重写文案”必须限制 artifact policy：只允许改写当前文案资产，不允许重写资料、场景或脚本来源。“生成文案和配套素材”可以触发资料检查、场景补齐、素材 brief 和配图能力，但所有副作用都必须带 App provenance。
+
+### 复用 Claw 能力
+
+内容工厂不得复制 Claw 已有能力，首批复用关系见 `docs/roadmap/agentruntime/claw-capability-sharing.md`：
+
+| 内容工厂需求 | 复用 capability | 后端主链 |
+|---|---|---|
+| 生产前资料补齐 | `lime.capability.research.search` / `lime.capability.summary.generate` | `research_skill_launch` / `summary_skill_launch` |
+| 竞品和策略分析 | `lime.capability.report.generate` | `report_skill_launch` |
+| PDF / 资料读取 | `lime.capability.pdf.read` | `pdf_read_skill_launch` |
+| 配套素材 / 海报 brief | `lime.capability.image.generate` / `lime.capability.cover.generate` | `image_skill_launch` / `cover_skill_launch` |
+| 交付 PPT / 报告 | `lime.capability.presentation.generate` / `lime.capability.webpage.generate` | `presentation_skill_launch` / `webpage_skill_launch` |
+
+## Host Bridge 要求
+
+内容工厂是第一个正式样板 App，不能使用私有 iframe 协议。它的 UI runtime 必须接入 Agent App 标准 Host Bridge：
+
+| 场景 | Bridge 事件 | 验收 |
+|---|---|---|
+| 跟随 Lime 主题 / 配色 | `host:snapshot`、`theme:update` | 主 App 切换主题后，内容工厂 iframe 内字体、颜色、背景和选中态同步变化。 |
+| 非技术提示 | `host:toast` | App 内操作结果用 Lime Host 提示，不暴露 Gateway、Artifact、RAG 等技术词。 |
+| 页面跳转 | `host:navigate` | 从项目中心进入资料、写文案、做脚本等入口时仍由 Host 校验 entry / route。 |
+| 下载交付物 | `host:download` | 只允许下载同源 runtime 产物或 Host 已授权 Artifact。 |
+| 后续能力调用 | `capability:invoke` | 资料解析、模型生成、Artifact 写入继续经过 readiness / permission / policy，不返回 mock 成功。 |
+
+内容工厂 App 内部只保留主题 fallback，方便脱离 Lime Host 做本地预览；真实嵌入 Lime 时，主题、语言、入口上下文和 Host actions 都以 `lime.agentApp.bridge` 快照为准。
 
 ## MVP 范围
 
@@ -395,10 +492,29 @@ P0 不做：
 
 ## 下一刀
 
-当前客户端已完成 App Host、SDK、UI Host、内容工厂最小闭环和受控 workflow runtime 的实验岛切片。下一刀不扩成完整内容系统，先补真实 worker sandbox 前置边界、package hash 校验与 Cloud bootstrap：
+当前客户端已完成 App Host、SDK、UI Host、内容工厂最小闭环、受控 workflow runtime、Cloud bootstrap、schema coverage、setup resolver、setup state store、installed state snapshot、local persistence adapter、package cache / verify / rollback、runtime package loader、P14 Entry Runtime Guard、P15 Lab Install / Launch Flow、P15-H Agent App Lab 专用 GUI smoke、P16 最小 Agent App Manager、P17 Gate 审计、P17.0、P17.1、P17.2.1-P17.2.5、P17.3 lifecycle / cleanup contract，以及 P17.4.1-P17.4.5 Host Bridge / App 内 task / structured write-back / bootstrap 样板 / GUI smoke。下一刀不扩成完整内容系统，进入 P17.5 formal entry GUI smoke：
 
 ```text
-真实 worker sandbox policy → package hash 校验 → Cloud bootstrap payload 适配 → 断网可用性验证
+repository-backed multi-app list（已完成）
+→ selected app launcher（已完成）
+→ persisted enable / disable（已完成）
+→ cleanup evidence export（已完成）
+→ residual audit（已完成）
+→ Agent App Lab GUI smoke + flag-off regression（已完成）
+→ P17 Gate 审计（已完成）
+→ P17.0 Formal Entry Contract（已完成计划收口）
+→ P17.1 Formal route / nav / copy hardening（已完成最小实现）
+→ P17.2.1 Source state model（已完成）
+→ P17.2.2 Install review descriptor（已完成）
+→ P17.2.3 Registration hardening（已完成）
+→ P17.2.4a Cloud release descriptor / verification gate（已完成）
+→ P17.2.4b-1 acquisition seam / verified cache source（已完成）
+→ P17.2.4b-2 packageUrl fetch / staging（已完成）
+→ P17.2.5 Schema / reference CLI cross-check（已完成）
+→ P17.3 Lifecycle / cleanup contract hardening（已完成）
+→ P17.4 Host Bridge / App 内 task / structured write-back / bootstrap 样板（P17.4.1-P17.4.4 已完成）
+→ P17.4.5 Security / smoke（已完成，完整 GUI smoke 通过）
+→ P17.5 Formal entry GUI smoke（下一刀）
 ```
 
-只有 runtime policy、cleanup 和 Cloud 控制面边界稳定后，再进入真实文件解析、批量生成、质量评分和外部平台数据复盘。
+只有多 App 管理面、entry runtime guard、permission prompt、cleanup evidence、policy gate、Host Bridge 和正式 runtime smoke 稳定后，再进入真实文件解析、批量生成、质量评分和外部平台数据复盘。

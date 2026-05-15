@@ -98,8 +98,8 @@
     },
     {
       "id": "sceneapp-runtime-context-compat-barrel",
-      "classification": "dead-candidate",
-      "description": "已删除的 SceneApp runtime context 历史转发壳；SceneApp 类型事实源统一收敛到 src/lib/sceneapp/types.ts",
+      "classification": "dead",
+      "description": "已删除的 SceneApp runtime context 历史转发壳；历史 sceneapp_execution_summary 只读类型收敛到 src/lib/agent/legacySceneAppExecutionSummary.ts",
       "targets": [
         "src/lib/sceneapp/types-runtime-context.ts"
       ],
@@ -111,6 +111,68 @@
       "description": "已删除的 SceneApps 独立工作流 rail；现役页面流程统一收敛到 SceneAppsPage 顶部状态条、view tabs 与 workflowShortcut",
       "targets": [
         "src/components/sceneapps/SceneAppsWorkflowRail.tsx"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "sceneapp-active-launch-surface",
+      "classification": "dead",
+      "description": "已删除的 SceneApp 首页卡片、Workspace 启动 Hook 与 launch draft 运行链；Agent App current 后不得恢复独立 SceneApp 启动入口",
+      "targets": [
+        "src/components/agent/chat/sceneappEntryTypes.ts",
+        "src/components/agent/chat/workspace/useWorkspaceSceneAppEntryActions.ts",
+        "src/components/agent/chat/workspace/sceneAppLaunch.ts",
+        "src/lib/sceneapp/launch.ts",
+        "src/lib/sceneapp/launchBridge.ts",
+        "src/lib/sceneapp/launcher.ts"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "sceneapp-catalog-projection-surface",
+      "classification": "dead",
+      "description": "已删除的 SceneApp catalog 编译 / 存储投影；应用目录事实源已切到 Agent App，不允许恢复独立 SceneApp catalog 入口",
+      "targets": [
+        "src/lib/sceneapp/catalog.ts"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "sceneapp-automation-detail-runtime-surface",
+      "classification": "dead",
+      "description": "已删除的设置页 SceneApp 自动化详情运行面、运行详情面板和旧 sceneapps barrel；旧自动化任务只显示下线提示，不得恢复独立 SceneApp 复盘/治理入口",
+      "targets": [
+        "src/components/settings-v2/system/automation/useAutomationSceneAppRuntime.ts",
+        "src/components/sceneapps/SceneAppRunDetailPanel.tsx",
+        "src/components/sceneapps/SceneAppReviewFeedbackBanner.tsx",
+        "src/components/sceneapps/index.ts"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "sceneapp-api-runtime-polling-surface",
+      "classification": "dead",
+      "description": "已删除的 SceneApp 前端 API 网关与执行摘要旧运行轮询侧链；历史 sceneapp_execution_summary 只保留 payload 内只读摘要，不得再拉取 SceneApp runs/scorecard 或动态准备治理 artifact",
+      "targets": [
+        "src/lib/api/sceneapp.ts"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "sceneapp-library-directory-surface",
+      "classification": "dead",
+      "description": "已删除的 src/lib/sceneapp 目录；历史 sceneapp_execution_summary 只保留只读 payload 类型，不得恢复旧 SceneApp library、runtime helper 或产品投影",
+      "targets": [
+        "src/lib/sceneapp/automation.ts",
+        "src/lib/sceneapp/error.ts",
+        "src/lib/sceneapp/executionPromptActions.ts",
+        "src/lib/sceneapp/index.ts",
+        "src/lib/sceneapp/presentation.ts",
+        "src/lib/sceneapp/product.ts",
+        "src/lib/sceneapp/reviewDecision.ts",
+        "src/lib/sceneapp/runEntryNavigation.ts",
+        "src/lib/sceneapp/runtimeResults.ts",
+        "src/lib/sceneapp/types.ts"
       ],
       "allowedPaths": []
     },
@@ -2074,6 +2136,21 @@
         "scripts/build-plugin.sh"
       ],
       "allowedPaths": []
+    },
+    {
+      "id": "sceneapps-independent-page-surface",
+      "classification": "dead",
+      "description": "已下线的 SceneApps 独立页面、目录页运行时与最近访问入口；Agent App 是 current 应用主链，不允许恢复 sceneapps 页面路由",
+      "targets": [
+        "src/components/sceneapps/SceneAppsPage.tsx",
+        "src/components/sceneapps/useSceneAppsPageRuntime.ts",
+        "src/components/sceneapps/SceneAppsCatalogPanel.tsx",
+        "src/components/sceneapps/SceneAppsRecentPanel.tsx",
+        "src/lib/sceneapp/navigation.ts",
+        "src/lib/sceneapp/entry.ts",
+        "src/lib/sceneapp/storage.ts"
+      ],
+      "allowedPaths": []
     }
   ],
   "commands": [
@@ -2500,6 +2577,23 @@
         "get_screenshot_shortcut_runtime_status",
         "start_screenshot",
         "read_image_as_base64"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "sceneapp-tauri-command-surface",
+      "classification": "dead",
+      "description": "SceneApp 独立 Tauri 命令已随 Agent App current 主链下线，不得恢复前端网关、Rust 注册、DevBridge 或 mock",
+      "commands": [
+        "sceneapp_list_catalog",
+        "sceneapp_get_descriptor",
+        "sceneapp_plan_launch",
+        "sceneapp_save_context_baseline",
+        "sceneapp_create_automation_job",
+        "sceneapp_list_runs",
+        "sceneapp_get_run_summary",
+        "sceneapp_prepare_run_governance_artifact",
+        "sceneapp_get_scorecard"
       ],
       "allowedPaths": []
     }
@@ -3623,6 +3717,132 @@
       "allowedPaths": []
     },
     {
+      "id": "sceneapp-active-launch-frontend-surface",
+      "classification": "dead",
+      "description": "前端不得恢复 SceneApp 首页推荐卡片、最近 SceneApp 恢复入口、Workspace 启动 Hook 或 launch bridge；Agent App Lab / service skill scene 是 current",
+      "patterns": [
+        "useWorkspaceSceneAppEntryActions",
+        "useSceneAppLaunchRuntime",
+        "sceneAppLaunch",
+        "resolveSceneAppLaunchAction",
+        "executeSceneAppLaunchAction",
+        "buildSceneAppEntryCard",
+        "FEATURED_SCENEAPP_IDS",
+        "SceneAppEntryCardItem",
+        "featuredSceneApps",
+        "onLaunchSceneApp",
+        "canResumeRecentSceneApp",
+        "entry-sceneapp-",
+        "sceneapps-home-directory"
+      ],
+      "includePathPrefixes": [
+        "src/components/agent/chat",
+        "src/lib/sceneapp"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "sceneapp-catalog-product-frontend-surface",
+      "classification": "dead",
+      "description": "前端不得恢复 SceneApp 独立 catalog 投影、目录统计卡或目录卡片 view model；应用目录继续收敛到 Agent App current",
+      "patterns": [
+        "compileSceneAppCatalogFromPackage",
+        "compileSceneAppCatalogFromSnapshot",
+        "readStoredSceneAppCatalog",
+        "listSceneAppCatalog",
+        "normalizeSceneAppCatalogProjection",
+        "SceneAppCatalog",
+        "SceneAppCompatCatalogInput",
+        "buildSceneAppWorkbenchStatItems",
+        "SceneAppWorkbenchStatItem",
+        "buildSceneAppCatalogCardViewModel",
+        "SceneAppCatalogCardViewModel"
+      ],
+      "includePathPrefixes": [
+        "src/lib/api",
+        "src/lib/sceneapp"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "sceneapp-automation-detail-frontend-surface",
+      "classification": "dead",
+      "description": "前端不得恢复 Settings Automation 中的旧 SceneApp 自动化详情运行面、复盘动作、治理 artifact 动作或对应旧文案；旧自动化任务只显示下线提示",
+      "patterns": [
+        "useAutomationSceneAppRuntime",
+        "SceneAppRunDetailPanel",
+        "SceneAppReviewFeedbackBanner",
+        "buildSceneAppAutomationWorkspaceCardViewModel",
+        "SceneAppAutomationWorkspaceCardViewModel",
+        "sceneAppSummaryCard",
+        "sceneAppRunDetailView",
+        "onSceneAppDeliveryArtifactAction",
+        "sceneapp-run-detail-save-as-inspiration",
+        "automation-sceneapp-destination-action",
+        "settings.automation.details.sceneApp.action.openDetail",
+        "settings.automation.details.sceneApp.action.openGovernance",
+        "settings.automation.details.sceneApp.currentJobHint",
+        "settings.automation.details.sceneApp.description",
+        "settings.automation.details.sceneApp.loading",
+        "settings.automation.details.sceneApp.nextAction",
+        "settings.automation.details.sceneApp.overview",
+        "settings.automation.details.sceneApp.recentResult",
+        "settings.automation.details.sceneApp.scorecard",
+        "settings.automation.details.sceneApp.title",
+        "settings.automation.details.sceneApp.toast.",
+        "settings.automation.details.sceneApp.file.",
+        "settings.automation.details.sceneApp.entry."
+      ],
+      "includePathPrefixes": [
+        "src/components/settings-v2/system/automation",
+        "src/components/sceneapps",
+        "src/lib/sceneapp",
+        "src/i18n"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "sceneapp-execution-summary-live-api-frontend-surface",
+      "classification": "dead",
+      "description": "Agent Chat 历史 sceneapp_execution_summary 不得恢复对旧 SceneApp API 的实时轮询、scorecard 拉取或治理 artifact 动态准备；只允许展示随入口传入的历史摘要 payload",
+      "patterns": [
+        "@/lib/api/sceneapp",
+        "listSceneAppRuns",
+        "getSceneAppScorecard",
+        "prepareSceneAppRunGovernanceArtifact",
+        "prepareSceneAppRunGovernanceArtifacts",
+        "SCENEAPP_RUNTIME_POLL_INTERVAL_MS",
+        "loadSceneAppExecutionRuntimeSnapshot"
+      ],
+      "includePathPrefixes": [
+        "src/components/agent/chat",
+        "src/lib/api"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "sceneapp-execution-summary-run-detail-helper-surface",
+      "classification": "dead",
+      "description": "Agent Chat 历史 sceneapp_execution_summary 不得恢复旧运行详情样本筛选或 run detail 动态构造；历史摘要只消费入口 payload 内已存在的只读字段",
+      "patterns": [
+        "buildSceneAppExecutionSummaryRunDetailViewModel",
+        "buildSceneAppExecutionPromptActions",
+        "buildSceneAppExecutionPromptActionPayload",
+        "findLatestSceneAppPackResultRun",
+        "hasSceneAppRunDeliveryArtifacts",
+        "resolveSceneAppRunEntryNavigationTarget",
+        "resolveSceneAppRuntimeArtifactOpenTarget",
+        "SceneAppProjectPackRuntimePanel",
+        "sceneAppExecutionFollowupDestinations",
+        "sceneAppExecutionPromptContinuation"
+      ],
+      "includePathPrefixes": [
+        "src/components/agent/chat",
+        "src/lib/sceneapp"
+      ],
+      "allowedPaths": []
+    },
+    {
       "id": "entry-recommended-solutions-legacy-runtime",
       "classification": "dead-candidate",
       "description": "不允许恢复旧 entryRecommendedSolutions 本地推荐运行时；首页推荐任务只从 curatedTaskTemplates/home skill surface 收敛",
@@ -3692,6 +3912,24 @@
         "listPublicOAuthProviders(",
         "OemCloudPublicOAuthProvider",
         "/oauth/providers"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "sceneapps-page-route-frontend-surface",
+      "classification": "dead",
+      "description": "前端不得恢复 sceneapps 独立页面路由或页面参数工具；应用目录后续只允许收敛到 Agent App current 主链",
+      "patterns": [
+        "\"sceneapps\"",
+        "'sceneapps'",
+        "SceneAppsPageParams",
+        "resolveSceneAppsPageEntryParams",
+        "normalizeSceneAppsPageParams",
+        "serializeSceneAppsPageParams",
+        "SceneAppsPage"
+      ],
+      "includePathPrefixes": [
+        "src"
       ],
       "allowedPaths": []
     }
@@ -5553,6 +5791,22 @@
       "patterns": [
         "commands::channels_cmd::",
         "pub mod channels_cmd;"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "rust-sceneapp-command-module-surface",
+      "classification": "dead",
+      "description": "Rust 不得恢复 SceneApp 命令模块、应用服务或 DevBridge dispatcher；执行与目录能力回到 Agent App / agent_runtime current 主链",
+      "patterns": [
+        "commands::sceneapp_cmd::",
+        "pub mod sceneapp",
+        "mod sceneapp;",
+        "dispatcher/sceneapp.rs",
+        "crate::sceneapp::"
+      ],
+      "includePathPrefixes": [
+        "src-tauri/src"
       ],
       "allowedPaths": []
     }

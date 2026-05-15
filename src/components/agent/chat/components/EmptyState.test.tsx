@@ -7,7 +7,6 @@ import type { Character } from "@/lib/api/memory";
 import type { Skill } from "@/lib/api/skills";
 import type { UnifiedMemory } from "@/lib/api/unifiedMemory";
 import type { ServiceSkillHomeItem } from "../service-skills/types";
-import type { SceneAppEntryCardItem } from "../sceneappEntryTypes";
 import type { InputCapabilitySelection } from "../skill-selection/inputCapabilitySelection";
 import { recordSlashEntryUsage } from "../skill-selection/slashEntryUsage";
 import {
@@ -491,24 +490,6 @@ function createSceneBoundServiceSkill(): ServiceSkillHomeItem {
       title: "项目线索整理",
       summary: "围绕当前项目整理线索和下一步动作。",
     },
-  };
-}
-
-function createSceneAppEntry(): SceneAppEntryCardItem {
-  return {
-    id: "story-video-suite",
-    title: "短视频编排",
-    summary: "把文本、线框图、配乐和短视频草稿串成结果链。",
-    businessLabel: "多模态组合",
-    valueStatement: "从一句主题串起脚本、线框图、配乐方向和短视频草稿。",
-    deliveryLabel: "短视频结果包",
-    executionLabel: "当前会话继续",
-    executionTone: "sky",
-    patternSummary: "步骤链 · 结果生成",
-    infraSummary: "组合蓝图 · 项目沉淀 · 云端编排",
-    sourceLabel: "将基于当前输入启动",
-    sourcePreview: "做一条新品发布短视频",
-    actionLabel: "进入生成",
   };
 }
 
@@ -3137,94 +3118,6 @@ describe("EmptyState", () => {
     expect(launchButton).toBeNull();
 
     expect(onLaunchBrowserAssist).not.toHaveBeenCalled();
-  });
-
-  it("通用主题应把 SceneApp 放到第二屏任务库而不是首屏补充入口", async () => {
-    const onLaunchSceneApp = vi.fn();
-    const container = renderEmptyState({
-      activeTheme: "general",
-      featuredSceneApps: [createSceneAppEntry()],
-      onLaunchSceneApp,
-    });
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(container.textContent).toContain("短视频编排");
-    expect(
-      container.querySelector('[data-testid="home-supplemental-actions"]'),
-    ).toBeNull();
-    expect(
-      container.querySelector('[data-testid="sceneapps-home-directory"]'),
-    ).toBeNull();
-
-    const launchButton = container.querySelector(
-      '[data-testid="home-gallery-entry-sceneapp-story-video-suite"]',
-    ) as HTMLButtonElement | null;
-    expect(launchButton).toBeTruthy();
-
-    act(() => {
-      launchButton?.click();
-    });
-
-    expect(onLaunchSceneApp).toHaveBeenCalledWith("story-video-suite");
-  });
-
-  it("通用主题不应把 SceneApp 目录页入口提前放到首屏", async () => {
-    const onOpenSceneAppsDirectory = vi.fn();
-    const container = renderEmptyState({
-      activeTheme: "general",
-      featuredSceneApps: [createSceneAppEntry()],
-      onOpenSceneAppsDirectory,
-    });
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    const browseButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("查看全部 Skills"),
-    );
-    expect(browseButton).toBeFalsy();
-
-    expect(onOpenSceneAppsDirectory).not.toHaveBeenCalled();
-  });
-
-  it("仅有目录入口但没有可直接收益时，不应默认渲染更多起手方式", async () => {
-    const container = renderEmptyState({
-      activeTheme: "general",
-      onOpenSceneAppsDirectory: vi.fn(),
-    });
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(container.textContent).not.toContain("更多起手方式");
-    expect(
-      container.querySelector('[data-testid="sceneapps-home-directory"]'),
-    ).toBeNull();
-  });
-
-  it("存在最近 SceneApp 时，即使没有推荐做法也应提供继续最近做法入口", async () => {
-    const onResumeRecentSceneApp = vi.fn();
-    const container = renderEmptyState({
-      activeTheme: "general",
-      canResumeRecentSceneApp: true,
-      onResumeRecentSceneApp,
-    });
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    const resumeButton = container.querySelector(
-      '[data-testid="entry-sceneapp-resume"]',
-    ) as HTMLButtonElement | null;
-    expect(resumeButton).toBeTruthy();
-
-    act(() => {
-      resumeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    expect(onResumeRecentSceneApp).toHaveBeenCalledTimes(1);
   });
 
   it("存在最近会话时应提供继续最近会话入口", async () => {

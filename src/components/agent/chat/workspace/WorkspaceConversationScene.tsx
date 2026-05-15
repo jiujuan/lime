@@ -337,18 +337,6 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
     typeof EmptyState
   >["onLaunchBrowserAssist"];
   browserAssistLoading: boolean;
-  featuredSceneApps: NonNullable<
-    ComponentProps<typeof EmptyState>["featuredSceneApps"]
-  >;
-  sceneAppsLoading: boolean;
-  sceneAppLaunchingId: ComponentProps<typeof EmptyState>["sceneAppLaunchingId"];
-  onLaunchSceneApp?: ComponentProps<typeof EmptyState>["onLaunchSceneApp"];
-  canResumeRecentSceneApp?: ComponentProps<
-    typeof EmptyState
-  >["canResumeRecentSceneApp"];
-  onResumeRecentSceneApp?: ComponentProps<
-    typeof EmptyState
-  >["onResumeRecentSceneApp"];
   recentSessionTitle?: ComponentProps<typeof EmptyState>["recentSessionTitle"];
   recentSessionSummary?: ComponentProps<
     typeof EmptyState
@@ -359,9 +347,6 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   onResumeRecentSession?: ComponentProps<
     typeof EmptyState
   >["onResumeRecentSession"];
-  onOpenSceneAppsDirectory?: ComponentProps<
-    typeof EmptyState
-  >["onOpenSceneAppsDirectory"];
   projectId: string | null;
   sessionId?: ComponentProps<typeof EmptyState>["sessionId"];
   onProjectChange?: ComponentProps<typeof ChatNavbar>["onProjectChange"];
@@ -525,17 +510,10 @@ export function WorkspaceConversationScene({
   onRefreshSkills,
   onLaunchBrowserAssist,
   browserAssistLoading,
-  featuredSceneApps,
-  sceneAppsLoading,
-  sceneAppLaunchingId,
-  onLaunchSceneApp,
-  canResumeRecentSceneApp,
-  onResumeRecentSceneApp,
   recentSessionTitle,
   recentSessionSummary,
   recentSessionActionLabel,
   onResumeRecentSession,
-  onOpenSceneAppsDirectory,
   projectId,
   sessionId,
   onProjectChange,
@@ -636,17 +614,10 @@ export function WorkspaceConversationScene({
     onRefreshSkills,
     onLaunchBrowserAssist,
     browserAssistLoading,
-    featuredSceneApps,
-    sceneAppsLoading,
-    sceneAppLaunchingId,
-    onLaunchSceneApp,
-    canResumeRecentSceneApp,
-    onResumeRecentSceneApp,
     recentSessionTitle,
     recentSessionSummary,
     recentSessionActionLabel,
     onResumeRecentSession,
-    onOpenSceneAppsDirectory,
     projectId,
     sessionId,
     runtimeToolAvailability,

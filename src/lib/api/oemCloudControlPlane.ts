@@ -1,5 +1,7 @@
 import { resolveOemCloudRuntimeContext } from "./oemCloudRuntime";
+import { parseCloudBootstrapPayload } from "@/features/agent-app/install/cloudBootstrap";
 import type { OemCloudCurrentSessionLike } from "@/lib/oemCloudSession";
+import type { CloudBootstrapPayload } from "@/features/agent-app/types";
 import type {
   ModelAliasSource,
   ModelDeploymentSource,
@@ -232,6 +234,7 @@ export interface OemCloudBootstrapResponse {
   skillCatalog?: unknown;
   serviceSkillCatalog?: unknown;
   siteAdapterCatalog?: unknown;
+  agentAppCatalog?: CloudBootstrapPayload;
   sceneCatalog?: Array<{ id: string }>;
   features: OemCloudFeatureFlags;
   gateway?: OemCloudGatewayConfig;
@@ -1637,6 +1640,10 @@ function parseBootstrap(value: unknown): OemCloudBootstrapResponse {
     skillCatalog: value.skillCatalog,
     serviceSkillCatalog: value.serviceSkillCatalog,
     siteAdapterCatalog: value.siteAdapterCatalog ?? value.site_adapter_catalog,
+    agentAppCatalog:
+      value.agentAppCatalog == null
+        ? undefined
+        : parseCloudBootstrapPayload(value.agentAppCatalog),
     sceneCatalog: Array.isArray(value.sceneCatalog)
       ? value.sceneCatalog
           .filter((item) => isRecord(item) && normalizeText(item.id))
@@ -2635,6 +2642,36 @@ export async function getClientBootstrap(
       `/v1/public/tenants/${encodeURIComponent(tenantId)}/client/bootstrap`,
       {
         auth: true,
+      },
+    ),
+  );
+}
+
+export async function getClientAgentApps(
+  tenantId: string,
+): Promise<CloudBootstrapPayload> {
+  return parseCloudBootstrapPayload(
+    await requestControlPlane<unknown>(
+      `/v1/public/tenants/${encodeURIComponent(tenantId)}/client/agent-apps`,
+      {
+        auth: true,
+      },
+    ),
+  );
+}
+
+export async function submitClientAgentAppRegistrationCode(
+  tenantId: string,
+  appId: string,
+  payload: { code: string },
+): Promise<CloudBootstrapPayload> {
+  return parseCloudBootstrapPayload(
+    await requestControlPlane<unknown>(
+      `/v1/public/tenants/${encodeURIComponent(tenantId)}/client/agent-apps/${encodeURIComponent(appId)}/registration`,
+      {
+        method: "POST",
+        auth: true,
+        payload,
       },
     ),
   );

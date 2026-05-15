@@ -54,6 +54,21 @@ flowchart TD
 - `buildUiRuntimeCapabilityProfile` 只把 `lime.ui` 变成 native；其他能力仍来自 mock / adapter。
 - `AgentAppLabPage` 只显示 P3 实验入口，不把 App entry 写入主产品路由。
 
+## Host Bridge 补充
+
+P3 的原始目标是证明 App 可以拥有受控 UI surface；它只输出 sandbox policy 和 injected SDK bridge descriptor。进入正式 `agent-apps` runtime 后，必须补上 Host Bridge v1，否则 App UI 会变成孤立 iframe，无法跟随 Lime 主题，也无法把导航、提示、下载和 capability 调用纳入 Host policy。
+
+当前补充口径：
+
+| 项目 | P3 原始边界 | P17.4-H Host Bridge 边界 |
+|---|---|---|
+| Theme / locale | 只声明可获得 theme / locale。 | 通过 `host:snapshot` 和 `theme:update` 实时推送 token。 |
+| SDK bridge | 只展示 allowed / blocked capability。 | 通过 `capability:invoke` 承载请求，继续走 readiness / permission / policy。 |
+| Host action | 不定义导航、toast、download。 | 统一 `host:navigate`、`host:toast`、`host:openExternal`、`host:download`。 |
+| 安全校验 | sandbox policy 为主。 | 追加 `event.source`、`event.origin`、`protocol`、`version` 校验。 |
+
+Host Bridge 不是新的 App 类型，也不是 `scene` 概念复活；它是 UI Host 与 Capability SDK 之间的标准 transport。
+
 ## 运行时序
 
 ```mermaid

@@ -12,6 +12,7 @@ import { browserMocks } from "./browserMocks";
 import { configSystemMocks } from "./configSystemMocks";
 import { clearCompanionMocks, companionMocks } from "./companionMocks";
 import { agentRuntimeMocks } from "./agentRuntimeMocks";
+import { agentAppMocks } from "./agentAppMocks";
 import { fileSystemMocks } from "./fileSystemMocks";
 import { clearKnowledgeMocks, knowledgeMocks } from "./knowledgeMocks";
 import {
@@ -25,10 +26,6 @@ import { memoryMocks } from "./memoryMocks";
 import { modelMocks } from "./modelMocks";
 import { providerMocks } from "./providerMocks";
 import { sessionFileMocks } from "./sessionFileMocks";
-import {
-  clearSceneAppAutomationMocks,
-  sceneAppAutomationMocks,
-} from "./sceneAppAutomationMocks";
 import { skillManagementMocks } from "./skillManagementMocks";
 import { clearSkillForgeMocks, skillForgeMocks } from "./skillForgeMocks";
 import { runtimeToolInventoryMocks } from "./runtimeToolInventoryMocks";
@@ -49,6 +46,15 @@ function logMockInfo(...args: Parameters<typeof console.log>) {
 
 // 默认 mock 数据
 const defaultMocks: Record<string, any> = {
+  execution_run_get_general_workbench_state: () => ({
+    run_state: "idle",
+    current_gate_key: "idle",
+    queue_items: [],
+    latest_terminal: null,
+    recent_terminals: [],
+    updated_at: new Date(0).toISOString(),
+  }),
+
   ...companionMocks,
   ...knowledgeMocks,
   ...skillForgeMocks,
@@ -56,6 +62,7 @@ const defaultMocks: Record<string, any> = {
   ...browserMocks,
 
   ...agentRuntimeMocks,
+  ...agentAppMocks,
   ...runtimeToolInventoryMocks,
 
   ...skillManagementMocks,
@@ -72,8 +79,6 @@ const defaultMocks: Record<string, any> = {
 
   ...voiceMocks,
   ...updateMocks,
-
-  ...sceneAppAutomationMocks,
 
   ...workspaceMocks,
 };
@@ -155,7 +160,6 @@ export function mockCommand(cmd: string, handler: (...args: any[]) => any) {
 export function clearMocks() {
   mockCommands.clear();
   clearCompanionMocks();
-  clearSceneAppAutomationMocks();
   clearKnowledgeMocks();
   clearSkillForgeMocks();
   clearLayeredDesignMocks();

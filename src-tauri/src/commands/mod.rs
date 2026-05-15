@@ -1,4 +1,6 @@
 pub mod a2ui_form_cmd;
+pub mod agent_app_cmd;
+pub mod agent_app_runtime_cmd;
 pub mod agent_cmd;
 pub mod api_key_provider_cmd;
 pub mod asr_cmd;
@@ -43,7 +45,6 @@ pub mod model_registry_cmd;
 pub mod models_cmd;
 pub mod persona_cmd;
 pub mod prompt_cmd;
-pub mod sceneapp_cmd;
 pub mod security_perf_cmd;
 pub mod session_files_cmd;
 pub mod site_capability_cmd;

@@ -31,9 +31,7 @@ pub use crate::services::runtime_evidence_pack_output_service::{
 use crate::services::runtime_evidence_request_telemetry_service::collect_request_telemetry;
 #[cfg(test)]
 use crate::services::runtime_evidence_verification_service::collect_requested_fix_execution_results;
-use crate::services::runtime_evidence_verification_service::{
-    collect_runtime_verification, extract_verification_failure_outcomes,
-};
+use crate::services::runtime_evidence_verification_service::collect_runtime_verification;
 use crate::services::runtime_file_checkpoint_service::list_file_checkpoints;
 use crate::services::workspace_health_service::ensure_workspace_ready_with_auto_relocate;
 use crate::workspace::WorkspaceManager;
@@ -65,19 +63,6 @@ pub struct RuntimeEvidencePackExportResult {
     pub observability_summary: Value,
     pub completion_audit_summary: Value,
     pub artifacts: Vec<RuntimeEvidenceArtifact>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub(crate) struct RuntimeEvidenceSceneAppSnapshot {
-    pub recent_artifact_paths: Vec<String>,
-    pub workspace_root: Option<String>,
-    pub known_gaps: Vec<String>,
-    pub verification_failure_outcomes: Vec<String>,
-    pub request_telemetry_available: bool,
-    pub request_telemetry_matched_count: usize,
-    pub artifact_validator_applicable: bool,
-    pub artifact_validator_issue_count: usize,
-    pub artifact_validator_recovered_count: usize,
 }
 
 pub fn export_runtime_evidence_pack(
@@ -310,66 +295,6 @@ pub(crate) fn resolve_runtime_export_workspace_root(
     }
 
     Err("当前会话缺少 workspace / working_dir，无法导出运行时制品".to_string())
-}
-
-pub(crate) fn build_runtime_evidence_sceneapp_snapshot(
-    detail: &SessionDetail,
-    thread_read: &AgentRuntimeThreadReadModel,
-    workspace_root: Option<&Path>,
-) -> RuntimeEvidenceSceneAppSnapshot {
-    let recent_artifacts = collect_recent_artifacts(detail);
-    let request_telemetry = workspace_root
-        .map(|root| collect_request_telemetry(detail, root))
-        .unwrap_or_default();
-    let auxiliary_runtime = collect_auxiliary_runtime_snapshots(workspace_root, &recent_artifacts);
-    let modality_runtime_contracts =
-        collect_modality_runtime_contract_snapshots(detail, workspace_root, &recent_artifacts);
-    let verification = collect_runtime_verification(detail, workspace_root, &recent_artifacts);
-    let signal_coverage = build_signal_coverage(
-        thread_read,
-        &recent_artifacts,
-        &request_telemetry,
-        &auxiliary_runtime,
-        &modality_runtime_contracts,
-        &verification,
-    );
-    let known_gaps = build_known_gaps(&recent_artifacts, &signal_coverage, thread_read);
-
-    RuntimeEvidenceSceneAppSnapshot {
-        recent_artifact_paths: recent_artifacts
-            .into_iter()
-            .map(|artifact| artifact.path)
-            .collect(),
-        workspace_root: workspace_root.map(|path| path.to_string_lossy().to_string()),
-        known_gaps,
-        verification_failure_outcomes: extract_verification_failure_outcomes(&verification),
-        request_telemetry_available: !request_telemetry.searched_roots.is_empty(),
-        request_telemetry_matched_count: request_telemetry.matched_request_count,
-        artifact_validator_applicable: verification.artifact_validator.applicable,
-        artifact_validator_issue_count: verification
-            .artifact_validator
-            .records
-            .iter()
-            .map(|record| {
-                record
-                    .get("issues")
-                    .and_then(Value::as_array)
-                    .map(|issues| issues.len())
-                    .unwrap_or(0)
-            })
-            .sum(),
-        artifact_validator_recovered_count: verification
-            .artifact_validator
-            .records
-            .iter()
-            .filter(|record| {
-                record
-                    .get("repaired")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false)
-            })
-            .count(),
-    }
 }
 
 #[cfg(test)]

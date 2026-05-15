@@ -3,19 +3,9 @@ import type {
   SceneAppContextReferenceItemViewModel,
   SceneAppDeliveryPartViewModel,
   SceneAppExecutionSummaryViewModel,
-  SceneAppRunDetailViewModel,
-} from "@/lib/sceneapp/product";
+  SceneAppQuickReviewAction,
+} from "@/lib/agent/legacySceneAppExecutionSummary";
 import { Button } from "@/components/ui/button";
-import { SceneAppProjectPackRuntimePanel } from "@/components/sceneapps/SceneAppProjectPackRuntimePanel";
-import {
-  buildSceneAppExecutionFollowupDestinations,
-  type SceneAppExecutionFollowupDestination,
-} from "@/components/sceneapps/sceneAppExecutionFollowupDestinations";
-import {
-  buildSceneAppExecutionPromptActions,
-  type SceneAppExecutionPromptAction,
-  type SceneAppQuickReviewAction,
-} from "@/lib/sceneapp";
 import type { SceneAppExecutionContentPostEntry } from "./sceneAppExecutionContentPosts";
 import {
   buildReviewFeedbackProjectionCopy,
@@ -27,9 +17,6 @@ import type { CuratedTaskRecommendationSignal } from "../utils/curatedTaskRecomm
 
 interface SceneAppExecutionSummaryCardProps {
   summary?: SceneAppExecutionSummaryViewModel | null;
-  latestPackResultDetailView?: SceneAppRunDetailViewModel | null;
-  latestPackResultLoading?: boolean;
-  latestPackResultUsesFallback?: boolean;
   latestReviewFeedbackSignal?: CuratedTaskRecommendationSignal | null;
   onContinueReviewFeedback?: (taskId: string) => void;
   onReviewCurrentProject?: () => void;
@@ -45,22 +32,8 @@ interface SceneAppExecutionSummaryCardProps {
   quickReviewPending?: boolean;
   onOpenHumanReview?: () => void;
   onApplyQuickReview?: (actionKey: SceneAppQuickReviewAction["key"]) => void;
-  onDeliveryArtifactAction?: (
-    action: SceneAppRunDetailViewModel["deliveryArtifactEntries"][number],
-  ) => void;
-  onGovernanceAction?: (
-    action: SceneAppRunDetailViewModel["governanceActionEntries"][number],
-  ) => void;
-  onGovernanceArtifactAction?: (
-    action: SceneAppRunDetailViewModel["governanceArtifactEntries"][number],
-  ) => void;
-  onEntryAction?: (
-    action: NonNullable<SceneAppRunDetailViewModel["entryAction"]>,
-  ) => void;
   contentPostEntries?: SceneAppExecutionContentPostEntry[];
   onContentPostAction?: (entry: SceneAppExecutionContentPostEntry) => void;
-  promptActionPending?: boolean;
-  onPromptAction?: (action: SceneAppExecutionPromptAction) => void;
 }
 
 function ReviewFeedbackProjectionBanner({
@@ -199,25 +172,6 @@ function resolveAggregateToneClass(
   }
 }
 
-function resolvePromptActionToneClass(
-  tone: SceneAppExecutionPromptAction["tone"],
-  disabled: boolean,
-): string {
-  if (disabled) {
-    return "border-slate-200 bg-slate-100 text-slate-400";
-  }
-
-  switch (tone) {
-    case "positive":
-      return "border-lime-200 bg-lime-50/80 text-slate-900 hover:border-lime-300 hover:bg-white";
-    case "warning":
-      return "border-amber-200 bg-amber-50/80 text-slate-900 hover:border-amber-300 hover:bg-white";
-    case "neutral":
-    default:
-      return "border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:bg-slate-50";
-  }
-}
-
 function resolveContentPostReadinessToneClass(
   tone: SceneAppExecutionContentPostEntry["readinessTone"],
 ): string {
@@ -234,9 +188,6 @@ function resolveContentPostReadinessToneClass(
 
 export function SceneAppExecutionSummaryCard({
   summary,
-  latestPackResultDetailView = null,
-  latestPackResultLoading = false,
-  latestPackResultUsesFallback = false,
   latestReviewFeedbackSignal = null,
   onContinueReviewFeedback,
   onReviewCurrentProject,
@@ -252,14 +203,8 @@ export function SceneAppExecutionSummaryCard({
   quickReviewPending = false,
   onOpenHumanReview,
   onApplyQuickReview,
-  onDeliveryArtifactAction,
-  onGovernanceAction,
-  onGovernanceArtifactAction,
-  onEntryAction,
   contentPostEntries = [],
   onContentPostAction,
-  promptActionPending = false,
-  onPromptAction,
 }: SceneAppExecutionSummaryCardProps) {
   const { t } = useTranslation("agent");
 
@@ -272,12 +217,6 @@ export function SceneAppExecutionSummaryCard({
     signal: latestReviewFeedbackSignal,
   });
 
-  const followupDestinations = latestPackResultDetailView
-    ? buildSceneAppExecutionFollowupDestinations(latestPackResultDetailView)
-    : [];
-  const promptActions = latestPackResultDetailView
-    ? buildSceneAppExecutionPromptActions(latestPackResultDetailView)
-    : [];
   const deliveryContractLabel =
     summary.projectPackPlan?.packKindLabel ?? summary.deliveryContractLabel;
   const deliveryDestinationLabel =
@@ -300,56 +239,8 @@ export function SceneAppExecutionSummaryCard({
     onOpenSceneAppGovernance ||
     humanReviewAvailable ||
     quickReviewActions.length ||
-    latestPackResultDetailView,
+    contentPostEntries.length,
   );
-  const resolveFollowupDestinationAction = (
-    destination: SceneAppExecutionFollowupDestination,
-  ): { label: string; onClick: () => void } | null => {
-    const action = destination.action;
-    if (!action) {
-      return null;
-    }
-
-    switch (action.kind) {
-      case "review_current_project":
-        return onReviewCurrentProject
-          ? {
-              label: action.label,
-              onClick: onReviewCurrentProject,
-            }
-          : null;
-      case "governance_action":
-        return onGovernanceAction
-          ? {
-              label: action.label,
-              onClick: () => onGovernanceAction(action.entry),
-            }
-          : null;
-      case "governance_artifact":
-        return onGovernanceArtifactAction
-          ? {
-              label: action.label,
-              onClick: () => onGovernanceArtifactAction(action.entry),
-            }
-          : null;
-      case "entry_action":
-        return onEntryAction
-          ? {
-              label: action.label,
-              onClick: () => onEntryAction(action.entry),
-            }
-          : null;
-      case "delivery_artifact":
-        return onDeliveryArtifactAction
-          ? {
-              label: action.label,
-              onClick: () => onDeliveryArtifactAction(action.entry),
-            }
-          : null;
-      default:
-        return null;
-    }
-  };
 
   return (
     <section
@@ -744,18 +635,6 @@ export function SceneAppExecutionSummaryCard({
           </section>
         </div>
 
-        <SceneAppProjectPackRuntimePanel
-          title={t("sceneAppExecutionSummary.runtimePack.title")}
-          description={t("sceneAppExecutionSummary.runtimePack.description")}
-          emptyMessage={t("sceneAppExecutionSummary.runtimePack.empty")}
-          testIdPrefix="sceneapp-execution-summary"
-          className="border-slate-200 bg-slate-50/70"
-          runDetailView={latestPackResultDetailView}
-          loading={latestPackResultLoading}
-          usesFallbackRun={latestPackResultUsesFallback}
-          onDeliveryArtifactAction={onDeliveryArtifactAction}
-        />
-
         {hasFollowupSection ? (
           <section
             className="rounded-[18px] border border-slate-200 bg-white px-4 py-4"
@@ -869,11 +748,6 @@ export function SceneAppExecutionSummaryCard({
                 ) : null}
               </div>
             ) : null}
-            {latestPackResultUsesFallback ? (
-              <p className="mt-3 text-xs leading-5 text-slate-500">
-                {t("sceneAppExecutionSummary.followup.fallbackNotice")}
-              </p>
-            ) : null}
             {humanReviewAvailable && quickReviewActions.length ? (
               <div className="mt-4">
                 <div className="text-xs font-medium text-slate-500">
@@ -896,247 +770,62 @@ export function SceneAppExecutionSummaryCard({
               </div>
             ) : null}
 
-            {latestPackResultDetailView &&
-            (followupDestinations.length ||
-              promptActions.length ||
-              latestPackResultDetailView.governanceActionEntries.length ||
-              latestPackResultDetailView.governanceArtifactEntries.length ||
-              latestPackResultDetailView.entryAction) ? (
+            {contentPostEntries.length ? (
               <div
-                className="mt-4 rounded-[18px] border border-slate-200 bg-slate-50/70 p-4"
-                data-testid="sceneapp-execution-summary-orchestration"
+                className="mt-4"
+                data-testid="sceneapp-execution-summary-content-posts"
               >
                 <div className="text-xs font-medium text-slate-500">
-                  {t("sceneAppExecutionSummary.orchestration.title")}
+                  {t("sceneAppExecutionSummary.contentPosts.title")}
                 </div>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  {t("sceneAppExecutionSummary.orchestration.description")}
+                  {t("sceneAppExecutionSummary.contentPosts.description")}
                 </p>
-
-                {followupDestinations.length ? (
-                  <div className="mt-3 grid gap-3 xl:grid-cols-2">
-                    {followupDestinations.map((item) => {
-                      const destinationAction =
-                        resolveFollowupDestinationAction(item);
-
-                      return (
-                        <article
-                          key={item.key}
-                          className="rounded-[18px] border border-white bg-white px-3 py-3"
+                <div className="mt-3 grid gap-3 xl:grid-cols-3">
+                  {contentPostEntries.map((entry) => (
+                    <button
+                      key={entry.key}
+                      type="button"
+                      data-testid={`sceneapp-execution-summary-content-post-${entry.key}`}
+                      className="rounded-[18px] border border-slate-200 bg-white p-3 text-left transition-colors hover:border-slate-300 hover:bg-slate-50"
+                      onClick={() => onContentPostAction?.(entry)}
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-medium text-slate-900">
+                          {entry.label}
+                        </span>
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em] ${resolveContentPostReadinessToneClass(entry.readinessTone)}`}
                         >
-                          <div className="text-sm font-medium text-slate-900">
-                            {item.label}
-                          </div>
-                          <div className="mt-2 text-xs leading-5 text-slate-600">
-                            {item.description}
-                          </div>
-                          {destinationAction ? (
-                            <div className="mt-3">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                data-testid={`sceneapp-execution-summary-destination-action-${item.key}`}
-                                onClick={destinationAction.onClick}
-                              >
-                                {destinationAction.label}
-                              </Button>
-                            </div>
-                          ) : null}
-                        </article>
-                      );
-                    })}
-                  </div>
-                ) : null}
-
-                {latestPackResultDetailView.governanceActionEntries.length ||
-                promptActions.length ||
-                latestPackResultDetailView.entryAction ? (
-                  <div className="mt-4">
-                    <div className="text-xs font-medium text-slate-500">
-                      {t("sceneAppExecutionSummary.orchestration.recommended")}
-                    </div>
-                    <div className="mt-2 grid gap-3 xl:grid-cols-2">
-                      {latestPackResultDetailView.governanceActionEntries.map(
-                        (entry) => (
-                          <button
-                            key={entry.key}
-                            type="button"
-                            data-testid={`sceneapp-execution-summary-governance-action-${entry.key}`}
-                            className="rounded-[18px] border border-lime-200 bg-lime-50/80 p-3 text-left transition-colors hover:border-lime-300 hover:bg-white"
-                            onClick={() => onGovernanceAction?.(entry)}
-                          >
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-sm font-medium text-slate-900">
-                                {entry.label}
-                              </span>
-                              <span className="rounded-full border border-lime-200 bg-white px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em] text-lime-700">
-                                {t(
-                                  "sceneAppExecutionSummary.orchestration.openArtifact",
-                                  { label: entry.primaryArtifactLabel },
-                                )}
-                              </span>
-                            </div>
-                            <div className="mt-2 text-xs leading-5 text-slate-600">
-                              {entry.helperText}
-                            </div>
-                          </button>
-                        ),
-                      )}
-
-                      {latestPackResultDetailView.entryAction ? (
-                        <button
-                          type="button"
-                          data-testid="sceneapp-execution-summary-entry-action"
-                          className="rounded-[18px] border border-slate-200 bg-white p-3 text-left transition-colors hover:border-slate-300 hover:bg-slate-50"
-                          onClick={() =>
-                            onEntryAction?.(
-                              latestPackResultDetailView.entryAction!,
-                            )
-                          }
-                        >
-                          <div className="text-sm font-medium text-slate-900">
-                            {latestPackResultDetailView.entryAction.label}
-                          </div>
-                          <div className="mt-2 text-xs leading-5 text-slate-500">
-                            {latestPackResultDetailView.entryAction.helperText}
-                          </div>
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
-
-                {promptActions.length ? (
-                  <div className="mt-4">
-                    <div className="text-xs font-medium text-slate-500">
-                      {t("sceneAppExecutionSummary.orchestration.chat")}
-                    </div>
-                    <div className="mt-2 grid gap-3 xl:grid-cols-2">
-                      {promptActions.map((action) => {
-                        const disabled =
-                          promptActionPending || Boolean(action.disabledReason);
-
-                        return (
-                          <button
-                            key={action.key}
-                            type="button"
-                            data-testid={`sceneapp-execution-summary-prompt-action-${action.key}`}
-                            disabled={disabled}
-                            className={`rounded-[18px] border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:hover:border-slate-200 disabled:hover:bg-slate-100 ${resolvePromptActionToneClass(action.tone, disabled)}`}
-                            onClick={() => onPromptAction?.(action)}
-                          >
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-sm font-medium">
-                                {action.label}
-                              </span>
-                              {action.disabledReason ? (
-                                <span className="rounded-full border border-amber-200 bg-white px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em] text-amber-700">
-                                  {t(
-                                    "sceneAppExecutionSummary.orchestration.blockedBadge",
-                                  )}
-                                </span>
-                              ) : null}
-                            </div>
-                            <div className="mt-2 text-xs leading-5 text-slate-600">
-                              {action.helperText}
-                            </div>
-                            {action.disabledReason ? (
-                              <div className="mt-2 text-[11px] leading-5 text-amber-700">
-                                {t(
-                                  "sceneAppExecutionSummary.orchestration.blockedReason",
-                                  { reason: action.disabledReason },
-                                )}
-                              </div>
-                            ) : null}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : null}
-
-                {contentPostEntries.length ? (
-                  <div
-                    className="mt-4"
-                    data-testid="sceneapp-execution-summary-content-posts"
-                  >
-                    <div className="text-xs font-medium text-slate-500">
-                      {t("sceneAppExecutionSummary.contentPosts.title")}
-                    </div>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      {t("sceneAppExecutionSummary.contentPosts.description")}
-                    </p>
-                    <div className="mt-3 grid gap-3 xl:grid-cols-3">
-                      {contentPostEntries.map((entry) => (
-                        <button
-                          key={entry.key}
-                          type="button"
-                          data-testid={`sceneapp-execution-summary-content-post-${entry.key}`}
-                          className="rounded-[18px] border border-slate-200 bg-white p-3 text-left transition-colors hover:border-slate-300 hover:bg-slate-50"
-                          onClick={() => onContentPostAction?.(entry)}
-                        >
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-sm font-medium text-slate-900">
-                              {entry.label}
-                            </span>
+                          {entry.readinessLabel}
+                        </span>
+                        {entry.platformLabel ? (
+                          <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em] text-sky-700">
+                            {entry.platformLabel}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-2 text-xs leading-5 text-slate-600">
+                        {entry.helperText}
+                      </div>
+                      {entry.companionEntries.length ? (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {entry.companionEntries.map((companion) => (
                             <span
-                              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em] ${resolveContentPostReadinessToneClass(entry.readinessTone)}`}
+                              key={companion.key}
+                              className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600"
                             >
-                              {entry.readinessLabel}
+                              {companion.label}
                             </span>
-                            {entry.platformLabel ? (
-                              <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em] text-sky-700">
-                                {entry.platformLabel}
-                              </span>
-                            ) : null}
-                          </div>
-                          <div className="mt-2 text-xs leading-5 text-slate-600">
-                            {entry.helperText}
-                          </div>
-                          {entry.companionEntries.length ? (
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {entry.companionEntries.map((companion) => (
-                                <span
-                                  key={companion.key}
-                                  className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600"
-                                >
-                                  {companion.label}
-                                </span>
-                              ))}
-                            </div>
-                          ) : null}
-                          <div className="mt-2 truncate text-[11px] leading-5 text-slate-500">
-                            {entry.pathLabel}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                {latestPackResultDetailView.governanceArtifactEntries.length ? (
-                  <div className="mt-4">
-                    <div className="text-xs font-medium text-slate-500">
-                      {t("sceneAppExecutionSummary.orchestration.artifacts")}
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {latestPackResultDetailView.governanceArtifactEntries.map(
-                        (entry) => (
-                          <button
-                            key={entry.key}
-                            type="button"
-                            data-testid={`sceneapp-execution-summary-governance-artifact-${entry.key}`}
-                            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
-                            onClick={() => onGovernanceArtifactAction?.(entry)}
-                          >
-                            {entry.label}
-                          </button>
-                        ),
-                      )}
-                    </div>
-                  </div>
-                ) : null}
+                          ))}
+                        </div>
+                      ) : null}
+                      <div className="mt-2 truncate text-[11px] leading-5 text-slate-500">
+                        {entry.pathLabel}
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : null}
           </section>

@@ -94,7 +94,6 @@ import {
 } from "../service-skills/siteSkillExamplePrompts";
 import { buildServiceSkillHomeCopy } from "../service-skills/homeCopy";
 import { listFeaturedHomeServiceSkills } from "../service-skills/homeEntrySkills";
-import type { SceneAppEntryCardItem } from "../sceneappEntryTypes";
 import type { RuntimeToolAvailability } from "../utils/runtimeToolAvailability";
 import type { AgentTaskRuntimeCardModel } from "../utils/agentTaskRuntime";
 import type { HandleSendOptions } from "../hooks/handleSendTypes";
@@ -364,18 +363,6 @@ interface EmptyStateProps extends SkillSelectionSourceProps {
   onLaunchBrowserAssist?: () => void | Promise<void>;
   /** 浏览器协助启动中 */
   browserAssistLoading?: boolean;
-  /** 首页推荐的 SceneApp 入口 */
-  featuredSceneApps?: SceneAppEntryCardItem[];
-  /** SceneApp 入口加载中 */
-  sceneAppsLoading?: boolean;
-  /** 当前正在启动的 SceneApp */
-  sceneAppLaunchingId?: string | null;
-  /** 启动 SceneApp */
-  onLaunchSceneApp?: (sceneappId: string) => void | Promise<void>;
-  /** 是否存在可恢复的最近 SceneApp */
-  canResumeRecentSceneApp?: boolean;
-  /** 恢复最近一次 SceneApp 上下文 */
-  onResumeRecentSceneApp?: () => void;
   /** 最近会话标题 */
   recentSessionTitle?: string | null;
   /** 最近会话摘要 */
@@ -384,8 +371,6 @@ interface EmptyStateProps extends SkillSelectionSourceProps {
   recentSessionActionLabel?: string;
   /** 恢复最近一次会话上下文 */
   onResumeRecentSession?: () => void;
-  /** 打开 SceneApp 目录页 */
-  onOpenSceneAppsDirectory?: () => void;
   /** 当前项目 ID */
   projectId?: string | null;
   /** 当前会话 ID */
@@ -488,15 +473,10 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   onImportSkill,
   onRefreshSkills,
   onLaunchBrowserAssist,
-  featuredSceneApps = [],
-  onLaunchSceneApp,
-  canResumeRecentSceneApp = false,
-  onResumeRecentSceneApp,
   recentSessionTitle = null,
   recentSessionSummary = null,
   recentSessionActionLabel,
   onResumeRecentSession,
-  onOpenSceneAppsDirectory,
   projectId = null,
   sessionId = null,
   isLoading = false,
@@ -1307,12 +1287,10 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       catalogSceneEntries: homeCatalogSceneEntries,
       serviceSkills: homeServiceSkillItems,
       installedSkills: skillSelection.skills ?? [],
-      sceneApps: featuredSceneApps,
       slashEntryUsage: listSlashEntryUsage(),
     });
   }, [
     curatedTaskTemplates,
-    featuredSceneApps,
     homeCatalogSceneEntries,
     homeServiceSkillItems,
     serviceSkillHomeCopy,
@@ -1375,11 +1353,6 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
         return;
       }
 
-      if (item.launchKind === "scene_app") {
-        void onLaunchSceneApp?.(item.id);
-        return;
-      }
-
       if (item.launchKind === "skill_catalog_scene") {
         const launchPrompt =
           item.launchPrompt?.trim() ||
@@ -1405,7 +1378,6 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       handleCuratedTaskLauncherRequest,
       handleSelectInputCapability,
       homeServiceSkillItems,
-      onLaunchSceneApp,
       serviceSkills,
       setInput,
       skillSelection.skills,
@@ -1414,10 +1386,6 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
 
   const handleSelectHomeStarterChip = useCallback(
     (chip: HomeStarterChip) => {
-      if (chip.launchKind === "open_manager") {
-        onOpenSceneAppsDirectory?.();
-        return;
-      }
       if (chip.launchKind === "prefill_prompt") {
         setGuideHelpActive(false);
         const prompt = chip.prompt?.trim();
@@ -1478,7 +1446,6 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       homeSkillItems,
       knowledgePackSelection,
       onManageKnowledgePacks,
-      onOpenSceneAppsDirectory,
       onStartKnowledgeOrganize,
       setInput,
     ],
@@ -1531,20 +1498,8 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       });
     }
 
-    if (canResumeRecentSceneApp && onResumeRecentSceneApp) {
-      actions.push({
-        id: "recent-sceneapp",
-        label: homeSurfaceCopy.chrome.recentSceneAppActionLabel,
-        testId: "entry-sceneapp-resume",
-        onSelect: onResumeRecentSceneApp,
-      });
-    }
-
     return actions;
   }, [
-    canResumeRecentSceneApp,
-    homeSurfaceCopy.chrome.recentSceneAppActionLabel,
-    onResumeRecentSceneApp,
     onResumeRecentSession,
     recentSessionLinkLabel,
     recentSessionLinkTitle,

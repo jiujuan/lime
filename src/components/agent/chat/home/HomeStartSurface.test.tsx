@@ -40,7 +40,6 @@ const TEST_CHROME_COPY: HomeSurfaceChromeCopy = {
   scrollCueLabel: "向下滑，看看 Lime 可以帮你做什么",
   secondScreenLabel: "Lime 可执行任务示例",
   recentSessionDefaultActionLabel: "继续最近会话",
-  recentSceneAppActionLabel: "继续最近做法",
 };
 
 function createItem(): HomeSkillSurfaceItem {

@@ -1,7 +1,7 @@
 # Lime AgentRuntime Profile 路线图
 
 > 状态：implementation-audited
-> 更新时间：2026-05-12
+> 更新时间：2026-05-16
 > 目标：把 Lime 已有的运行时、任务、模型路由、权限、证据、GUI read model 与 AgentRuntime 标准收敛成一条可执行、可测试、可回放的 current 主链。
 > 上游标准草案：`/Users/coso/Documents/dev/ai/limecloud/agentruntime`，当前对齐 `Agent Runtime v0.4.0` 与 `Lime AgentRuntime Profile`。
 
@@ -20,6 +20,9 @@
 - [./prd.md](./prd.md)：背景、目标、收益、用户故事、范围、验收口径
 - [./architecture.md](./architecture.md)：分层、事实源、接口与 profile 映射
 - [./adjacent-protocols.md](./adjacent-protocols.md)：`agentcontext`、`agentevidence`、`agentpolicy`、`agentui` 的 owner 边界与连接合同
+- [./app-surface-runtime.md](./app-surface-runtime.md)：Agent App 如何作为业务 surface 复用 AgentRuntime / Claw 主链
+- [./claw-capability-sharing.md](./claw-capability-sharing.md)：Claw `@` 能力如何抽象为 Chat、Agent App、Automation 可共享 capability
+- [./backend-surface-facade-plan.md](./backend-surface-facade-plan.md)：Agent App runtime command 与共享后端 surface facade 计划
 - [./diagrams.md](./diagrams.md)：架构图、流程图、时序图
 - [./implementation-plan.md](./implementation-plan.md)：分阶段落地计划、风险和测试策略
 - [./test-cases.md](./test-cases.md)：结构测试、契约测试、回放测试、证据一致性和 GUI smoke 用例
@@ -58,6 +61,12 @@ Lime 当前最大问题不是功能不足，而是功能已经很多，却缺少
 6. **全球本地化不进入运行事实源。**
    `type/status/taskKind/source/failureCategory/reasonCode` 等 profile 字段必须是稳定协议值，不能按语言环境变化；用户可见标题、说明、错误提示、按钮和空态只能在 AgentUI / GUI projection 层通过 key-based i18n 渲染。Runtime 可以携带 `message` 作为诊断事实，但不能把中文或英文展示文案当成状态机、测试断言或跨模块 join 条件。
 
+7. **Chat、Claw、Agent App、Automation 都只是 runtime surface。**
+   完整 AI 能力只能向 AgentRuntime facts 收敛；内容工厂这类 App 不能把 `LIME_GATEWAY_*`、模型 API 或嵌入通用 Chat 当成 Agent 能力边界。App 内 `lime.agent` / `lime.workflow` 必须通过 Agent App Runtime Surface 复用 Aster / Claw / Skills / Tools / Evidence 主链，详见 [./app-surface-runtime.md](./app-surface-runtime.md)。
+
+8. **Claw 能力要 catalog 化复用，不复制实现。**
+   `@配图`、`@搜索`、`@研报`、`@读PDF` 等已实现能力要从 Chat 入口抽象为 typed capability；Chat `@命令` 和 Agent App task 只是不同行为入口，不能为 App 复制一套 `*_skill_launch.rs`。
+
 ## 3. 固定主链
 
 后续所有实现必须收敛到下面这条链：
@@ -95,6 +104,8 @@ Objective / User Input
 3. `agent_runtime_export_evidence_pack` 及其 replay / analysis / review 派生物。
 4. `TaskProfile / RoutingDecision / LimitState` 已接入的模型路由事实。
 5. Workspace / Harness GUI 对 runtime read model 的只读投影。
+6. Agent App Runtime Surface 作为新调用面，委托 AgentRuntime 主链执行 App-scoped task；`AgentAppRuntimePage` 的 Host Bridge `lime.agent` 已接入 `agent_app_runtime_*` facade，并支持 App 内响应 ask / elicitation / tool confirmation。
+7. Claw Capability Catalog 作为已实现 `@` 能力的复用索引，后续供 Chat、Agent App、Automation 共用。
 
 ### compat
 
@@ -103,6 +114,8 @@ Objective / User Input
 1. 旧字段映射为 AgentRuntime profile ids。
 2. 旧 GUI 状态卡读取新 read model 后继续展示。
 3. 旧 evidence/replay 命令通过 `agent_runtime_export_*` 导出。
+4. `agent_app_cmd.rs` 继续负责 package / installed state / UI runtime / scoped model env 注入，但不能扩展为完整 AgentRuntime owner。
+5. 前端 `CapabilityHost` / `WorkflowRuntimeHost` 可暂时作为 mock 或 adapter，但生产 AI 任务必须迁向后端 Agent App Runtime Surface。
 
 退出条件：一旦调用方能直接读取 profile read model 或 evidence pack，就删除 compat 映射。
 
@@ -114,6 +127,9 @@ Objective / User Input
 2. analysis/review 各自重建 observability summary。
 3. 子代理、automation job、task center 各自维护完成真相。
 4. 只靠文本消息推断 tool success、permission denial 或 completion。
+5. Agent App 直接使用模型 token / OpenAI-compatible API 完成主流程。
+6. Agent App 通过嵌入通用 Chat 让用户手动复制结果。
+7. 为内容工厂等垂直 App 增加专用 Agent Tauri command。
 
 ### dead
 
@@ -123,6 +139,8 @@ Objective / User Input
 2. `objective_runtime` 作为第四类 runtime taxonomy。
 3. `evidence_summary_builder_v2` 作为 evidence pack 平行导出链。
 4. 没有 `session/thread/turn` 关联键的 request telemetry 被当作会话级证据。
+5. 新建第二套 `agent_app_agent_runtime` 执行事实源。
+6. 为 Agent App 复制 Claw `*_skill_launch.rs` 或单独工具权限系统。
 
 ## 5. 先读顺序
 
@@ -130,10 +148,13 @@ Objective / User Input
 2. [./architecture.md](./architecture.md)
 3. [./diagrams.md](./diagrams.md)
 4. [./adjacent-protocols.md](./adjacent-protocols.md)
-5. [./implementation-plan.md](./implementation-plan.md)
-6. [./test-cases.md](./test-cases.md)
-7. `docs/aiprompts/harness-engine-governance.md`
-8. `docs/roadmap/task/README.md`
+5. [./app-surface-runtime.md](./app-surface-runtime.md)
+6. [./claw-capability-sharing.md](./claw-capability-sharing.md)
+7. [./backend-surface-facade-plan.md](./backend-surface-facade-plan.md)
+8. [./implementation-plan.md](./implementation-plan.md)
+9. [./test-cases.md](./test-cases.md)
+10. `docs/aiprompts/harness-engine-governance.md`
+11. `docs/roadmap/task/README.md`
 
 ## 6. 完成判定
 

@@ -1,9 +1,7 @@
 use super::*;
 use crate::commands::aster_agent_cmd::dto::AgentRuntimeSessionHistoryCursor;
 use crate::database::lock_db;
-use crate::sceneapp::application::SceneAppService;
 use crate::services::agent_timeline_service::abort_running_turn_by_id;
-use crate::services::execution_tracker_service::ExecutionTracker;
 use crate::services::runtime_analysis_handoff_service::{
     export_runtime_analysis_handoff_with_locale, RuntimeAnalysisHandoffExportResult,
 };
@@ -1013,19 +1011,6 @@ pub async fn agent_runtime_save_review_decision(
         },
         Some(export_locale.as_str()),
     )?;
-
-    let tracker = ExecutionTracker::new(runtime.db().clone());
-    if let Err(error) = SceneAppService::sync_review_decision_feedback_for_session(
-        &tracker,
-        &session_id,
-        &saved.decision,
-    ) {
-        tracing::warn!(
-            "[AsterAgent] 保存 review decision 后同步 SceneApp feedback 失败: session_id={}, error={}",
-            session_id,
-            error
-        );
-    }
 
     Ok(saved)
 }

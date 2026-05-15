@@ -5,14 +5,12 @@ import type {
 } from "@/lib/api/skillCatalog";
 import type { ServiceSkillHomeItem } from "../service-skills/types";
 import type { ServiceSkillHomeCopy } from "../service-skills/homeCopy";
-import type { SceneAppEntryCardItem } from "../sceneappEntryTypes";
 import type { CuratedTaskTemplateItem } from "../utils/curatedTaskTemplates";
 import type { SlashEntryUsageRecord } from "../skill-selection/slashEntryUsage";
 import { HOME_CATEGORY_ORDER, type HomeSurfaceCopy } from "./homeSurfaceCopy";
 import {
   fromCuratedTaskTemplate,
   fromInstalledSkill,
-  fromSceneAppEntry,
   fromServiceSkill,
   fromSkillCatalogSceneEntry,
 } from "./homeSkillSurfaceAdapters";
@@ -31,7 +29,6 @@ interface BuildHomeSkillSurfaceInput {
   serviceSkills?: ServiceSkillHomeItem[];
   catalogSceneEntries?: SkillCatalogSceneEntry[];
   installedSkills?: Skill[];
-  sceneApps?: SceneAppEntryCardItem[];
   slashEntryUsage?: SlashEntryUsageRecord[];
 }
 
@@ -84,7 +81,6 @@ export function buildHomeSkillItems({
   serviceSkills = [],
   catalogSceneEntries = [],
   installedSkills = [],
-  sceneApps = [],
   slashEntryUsage = [],
 }: BuildHomeSkillSurfaceInput): HomeSkillSurfaceItem[] {
   const installedUsage = getUsageByKind(slashEntryUsage, "skill");
@@ -113,9 +109,6 @@ export function buildHomeSkillItems({
         installedUsage.get(skill.key),
         serviceSkillHomeCopy,
       ),
-    ),
-    ...sceneApps.map((item) =>
-      fromSceneAppEntry(item, sceneUsage.get(item.id), serviceSkillHomeCopy),
     ),
   ]).sort(compareHomeItems);
 }

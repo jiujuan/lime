@@ -498,7 +498,7 @@ P0 UI 不出现“运行 App”“打开 App 页面”“启用 App 到主导航
   "version": "0.3.0",
   "status": "draft",
   "appType": "domain-app",
-  "description": "APP 内容工厂 fixture",
+  "description": "内容工厂 fixture",
   "runtimeTargets": ["local"],
   "requires": {
     "lime": {

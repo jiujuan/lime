@@ -5,7 +5,7 @@ import type {
 import type {
   SceneAppExecutionSummaryViewModel,
   SceneAppRunDetailViewModel,
-} from "@/lib/sceneapp/product";
+} from "@/lib/agent/legacySceneAppExecutionSummary";
 import type { MemoryPageSection } from "@/types/page";
 
 interface SceneAppExecutionInspirationDraft {
@@ -59,9 +59,12 @@ function dedupeItems(
 
 function buildTitle(
   summary: SceneAppExecutionSummaryViewModel,
-  detailView: SceneAppRunDetailViewModel,
+  detailView?: SceneAppRunDetailViewModel | null,
 ): string {
-  const failureLabel = normalizeOptionalText(detailView.failureSignalLabel);
+  const failureLabel = normalizeOptionalText(
+    detailView?.failureSignalLabel ||
+      summary.runtimeBackflow?.topFailureSignalLabel,
+  );
   if (failureLabel) {
     return truncate(`${summary.title} · ${failureLabel}`, 28);
   }
@@ -71,13 +74,13 @@ function buildTitle(
 
 function buildSummary(
   summary: SceneAppExecutionSummaryViewModel,
-  detailView: SceneAppRunDetailViewModel,
+  detailView?: SceneAppRunDetailViewModel | null,
 ): string {
   const summaryText =
     dedupeItems(
       [
-        detailView.deliverySummary,
-        detailView.nextAction ? `下一步：${detailView.nextAction}` : null,
+        detailView?.deliverySummary,
+        detailView?.nextAction ? `下一步：${detailView.nextAction}` : null,
         summary.scorecardAggregate?.summary,
         summary.runtimeBackflow?.summary,
         summary.summary,
@@ -90,31 +93,47 @@ function buildSummary(
 
 function buildContent(
   summary: SceneAppExecutionSummaryViewModel,
-  detailView: SceneAppRunDetailViewModel,
+  detailView?: SceneAppRunDetailViewModel | null,
 ): string {
   const lines = dedupeItems(
     [
       `场景：${summary.title}`,
       `业务类型：${summary.businessLabel} / ${summary.typeLabel}`,
       `结果摘要：${summary.summary}`,
-      `当前交付：${detailView.deliverySummary}`,
-      `建议下一步：${detailView.nextAction}`,
-      detailView.deliveryMissingParts.length > 0
+      detailView?.deliverySummary
+        ? `当前交付：${detailView.deliverySummary}`
+        : summary.runtimeBackflow?.deliveryCompletionLabel
+          ? `当前交付：${summary.runtimeBackflow.deliveryCompletionLabel}`
+          : null,
+      detailView?.nextAction
+        ? `建议下一步：${detailView.nextAction}`
+        : summary.runtimeBackflow?.nextAction
+          ? `建议下一步：${summary.runtimeBackflow.nextAction}`
+          : summary.scorecardAggregate?.nextAction
+            ? `建议下一步：${summary.scorecardAggregate.nextAction}`
+            : null,
+      detailView?.deliveryMissingParts.length
         ? `待补部件：${detailView.deliveryMissingParts
             .map((item) => item.label)
             .join("、")}`
-        : null,
-      detailView.failureSignalLabel
+        : summary.runtimeBackflow?.deliveryMissingParts.length
+          ? `待补部件：${summary.runtimeBackflow.deliveryMissingParts
+              .map((item) => item.label)
+              .join("、")}`
+          : null,
+      detailView?.failureSignalLabel
         ? `当前信号：${detailView.failureSignalLabel}`
-        : null,
+        : summary.runtimeBackflow?.topFailureSignalLabel
+          ? `当前信号：${summary.runtimeBackflow.topFailureSignalLabel}`
+          : null,
       `执行主链：${summary.executionChainLabel}`,
       summary.referenceCount > 0
         ? `当前带入：${summary.referenceCount} 条参考对象`
         : "当前带入：本轮主要依赖当前输入与项目上下文",
       summary.tasteSummary ? `风格摘要：${summary.tasteSummary}` : null,
-      detailView.contextBaseline?.feedbackSummary || summary.feedbackSummary
+      detailView?.contextBaseline?.feedbackSummary || summary.feedbackSummary
         ? `最近反馈：${
-            detailView.contextBaseline?.feedbackSummary ||
+            detailView?.contextBaseline?.feedbackSummary ||
             summary.feedbackSummary
           }`
         : null,
@@ -133,13 +152,13 @@ function buildContent(
 
 function buildTags(
   summary: SceneAppExecutionSummaryViewModel,
-  detailView: SceneAppRunDetailViewModel,
+  detailView?: SceneAppRunDetailViewModel | null,
 ): string[] {
   return dedupeItems([
     summary.businessLabel,
     summary.typeLabel,
     summary.deliveryContractLabel,
-    detailView.failureSignalLabel,
+    detailView?.failureSignalLabel,
     summary.runtimeBackflow?.topFailureSignalLabel,
     summary.scorecardAggregate?.statusLabel,
   ]);
@@ -150,7 +169,7 @@ export function buildSceneAppExecutionInspirationDraft(
   detailView?: SceneAppRunDetailViewModel | null,
   options: BuildSceneAppExecutionInspirationDraftOptions = {},
 ): SceneAppExecutionInspirationDraft | null {
-  if (!summary || !detailView) {
+  if (!summary) {
     return null;
   }
 
@@ -165,7 +184,8 @@ export function buildSceneAppExecutionInspirationDraft(
     request: {
       session_id:
         normalizeOptionalText(options.sessionId) ||
-        normalizeOptionalText(detailView.runId) ||
+        normalizeOptionalText(detailView?.runId) ||
+        normalizeOptionalText(summary.runtimeBackflow?.runId) ||
         normalizeOptionalText(summary.sceneappId) ||
         title,
       title,

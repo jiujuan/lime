@@ -117,7 +117,7 @@ AI 图层化设计扁平图 OCR 分析同样继续走 current `LayeredDesignDocu
 - 若服务端下发的 `renderContract` 超出 Lime 当前支持范围，优先由服务端回退到已支持类型，客户端也必须退化到通用 timeline / artifact 展示
 - `scene` 的展示命名、推荐文案和补参标题应继续围绕创作生产语义收敛；`@发布合规` 只是发布前风控检查，不应被产品文案扩写成独立“法务场景”，也不要在目录里长出“建立”这类脱离创作目标的泛入口
 
-`SceneApp` 的统一目录与运行前规划命令同样只允许走单一网关。当前前端主入口为 `src/lib/api/sceneapp.ts`，统一承接：
+`SceneApp` 独立应用面已经下线，Agent App 是应用目录与运行时装配的 current 事实源。以下旧命令统一判为 `dead`，不得重新接回前端网关、Rust `generate_handler!`、DevBridge、mock 或启动关键真相命令：
 
 - `sceneapp_list_catalog`
 - `sceneapp_get_descriptor`
@@ -126,15 +126,40 @@ AI 图层化设计扁平图 OCR 分析同样继续走 current `LayeredDesignDocu
 - `sceneapp_create_automation_job`
 - `sceneapp_list_runs`
 - `sceneapp_get_run_summary`
+- `sceneapp_prepare_run_governance_artifact`
 - `sceneapp_get_scorecard`
 
 固定约束：
 
-- `SceneApp` 命令当前属于目录查询、运行前规划与治理摘要主链，不应在页面组件里直接裸 `invoke`
-- `sceneapp_plan_launch` 只负责 preview 当前 planning，并读取已有项目级 Context Snapshot；不要再把它当成自动落盘命令
-- 显式把当前灵感对象、输入摘要与风格基线写回项目目录时，只能走 `sceneapp_save_context_baseline`
-- 新的 SceneApp UI 先消费 `SceneAppDescriptor / SceneAppPlanResult / SceneAppScorecard`，不要重新从 `serviceSkills.ts`、`skillCatalog.ts`、卡片配置和 selector 里各自拼语义
-- 真正的执行仍应通过 runtime adapter 继续挂回现有本地主链，例如 `agent turn / browser_assist / automation_job / native_skill`；历史 `cloud_scene` 只允许按 compat binding family 理解，不再代表 current 执行面；`sceneapp_*` 不用于重新发明第二套 runtime taxonomy
+- 不再恢复 `sceneapps` 独立页面、`SceneAppsPageParams`、最近访问恢复或目录页运行时；应用入口继续收敛到 `agent-app-lab` / Agent App 主链
+- 不再恢复 `src/lib/sceneapp/catalog.ts`、`listSceneAppCatalog`、`SceneAppCatalog`、目录统计卡或目录卡片 view model；应用目录与运行装配继续由 Agent App current 协议承接
+- 历史 `sceneapp_execution_summary` 只允许作为 Agent Chat / Automation 的只读结果摘要与灵感沉淀上下文保留，不能再触发新的 SceneApp 运行前规划、自动化创建、runs/scorecard 轮询或治理 artifact 动态准备
+- 若后续需要应用级目录、安装、运行、复盘或治理摘要，应扩展 Agent App current 协议，而不是复活 `sceneapp_*` 命令族
+
+Agent App current 安装 / package / runtime 主链不得在页面或 feature island 里直接 `safeInvoke` / `invoke`。安装、package、UI runtime 生命周期统一经由 `src/lib/api/agentApps.ts`；完整 Agent task facade 统一经由 `src/lib/api/agentAppRuntime.ts`：
+
+- `agent_app_inspect_local_package`
+- `agent_app_fetch_cloud_package`
+- `agent_app_save_installed_state`
+- `agent_app_list_installed`
+- `agent_app_set_disabled`
+- `agent_app_uninstall_rehearsal`
+- `agent_app_uninstall`
+- `agent_app_start_ui_runtime`
+- `agent_app_get_ui_runtime_status`
+- `agent_app_stop_ui_runtime`
+- `agent_app_runtime_start_task`
+- `agent_app_runtime_cancel_task`
+- `agent_app_runtime_get_task`
+- `agent_app_runtime_submit_host_response`
+
+`agent_app_fetch_cloud_package` 只负责 `packageUrl -> staging/cache -> APP.md manifest extraction -> sha256 package / manifest verification`，不生成 projection、不写 installed state、不绕过 P17.2 install review；Cloud / LimeCore 仍只提供 release metadata。
+
+`agent_app_start_ui_runtime` 启动 App UI 子进程时只能注入 Lime 本机 Gateway 的短期 Agent App scoped token；不得把上游 Provider API Key 或全局 `server.api_key` 原样下发给 App。当前 token scope 固定为 `model-generation`，只允许 App 侧通过 `LIME_GATEWAY_BASE / LIME_ACCESS_TOKEN` 调 Lime Gateway 标准 `/v1/chat/completions` 或 `/v1/messages` 生成端点；图片、count tokens、Gemini 原生和其他控制面端点仍只接受全局 Gateway key。
+
+`agent_app_runtime_*` 是 Agent App 进入 AgentRuntime 主链的 current facade：它只把 App-scoped task / host response 适配到 `agent_runtime_submit_turn`、`agent_runtime_interrupt_turn`、`agent_runtime_get_thread_read` 和 `agent_runtime_respond_action`，不得复制 Claw `*_skill_launch.rs`、不得新增垂直 `content_factory_*` Agent 命令，也不得把 `LIME_GATEWAY_*` 直接模型调用宣称为完整 Agent 能力。
+
+P17.3 之前禁止真实删除 Agent App 本地数据：`agent_app_uninstall_rehearsal` 只生成 keep-data / delete-data 演练，`agent_app_uninstall` 只能返回同一演练摘要和未删除的 installed list，不得执行 `remove_file` / `remove_dir_all` 或移除 installed state。真实 delete-data 必须等后续路线图单独打开并补齐 evidence / residual audit / confirmation gate。
 
 技能脚手架创建同样只允许走当前命令网关主链：
 

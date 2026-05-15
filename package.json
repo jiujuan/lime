@@ -1,7 +1,7 @@
 {
   "name": "lime",
   "private": true,
-  "version": "1.39.0",
+  "version": "1.40.0",
   "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
   "keywords": [
     "ai",
@@ -130,7 +130,9 @@
     "agent-qc:gui-owner-check": "node scripts/agent-qc-gui-owner-check.mjs",
     "agent-qc:process-owner-check": "node scripts/agent-qc-process-owner-check.mjs",
     "agent-qc:secret-scan": "node scripts/agent-qc-secret-scan.mjs",
-    "agent-qc:objective-checklist": "node scripts/agent-qc-objective-checklist.mjs"
+    "agent-qc:objective-checklist": "node scripts/agent-qc-objective-checklist.mjs",
+    "smoke:agent-apps": "node scripts/agent-apps-smoke.mjs",
+    "smoke:agent-app-lab": "node scripts/agent-app-lab-smoke.mjs"
   },
   "dependencies": {
     "@babel/standalone": "^7.29.0",

@@ -3,7 +3,7 @@ import { createUnifiedMemory } from "@/lib/api/unifiedMemory";
 import type {
   SceneAppExecutionSummaryViewModel,
   SceneAppRunDetailViewModel,
-} from "@/lib/sceneapp/product";
+} from "@/lib/agent/legacySceneAppExecutionSummary";
 import type { MemoryPageParams } from "@/types/page";
 import {
   listCuratedTaskRecommendationSignals,

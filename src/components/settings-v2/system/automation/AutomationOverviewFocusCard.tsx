@@ -1,9 +1,4 @@
 import type { AutomationJobRecord } from "@/lib/api/automation";
-import type {
-  SceneAppAutomationWorkspaceCardViewModel,
-  SceneAppRunDetailViewModel,
-} from "@/lib/sceneapp";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useTranslation } from "react-i18next";
@@ -11,45 +6,17 @@ import { useTranslation } from "react-i18next";
 interface AutomationOverviewFocusCardProps {
   job: AutomationJobRecord | null;
   workspaceName: string | null;
-  summaryCard?: SceneAppAutomationWorkspaceCardViewModel | null;
-  runDetailView?: SceneAppRunDetailViewModel | null;
-  loading?: boolean;
-  error?: string | null;
+  retiredMessage?: string | null;
   onOpenJobDetails?: () => void;
-  onOpenSceneAppDetail?: () => void;
-  onOpenSceneAppGovernance?: () => void;
-  onReviewCurrentProject?: () => void;
 }
 
 export function AutomationOverviewFocusCard({
   job,
   workspaceName: _workspaceName,
-  summaryCard = null,
-  runDetailView = null,
-  loading = false,
-  error = null,
+  retiredMessage = null,
   onOpenJobDetails,
-  onOpenSceneAppDetail,
-  onOpenSceneAppGovernance,
-  onReviewCurrentProject,
 }: AutomationOverviewFocusCardProps) {
   const { t } = useTranslation("settings");
-  const focusSummary =
-    summaryCard?.scorecardAggregate?.summary ??
-    summaryCard?.summary ??
-    runDetailView?.summary ??
-    null;
-  const focusNextAction =
-    summaryCard?.scorecardAggregate?.nextAction ??
-    runDetailView?.nextAction ??
-    summaryCard?.nextAction ??
-    null;
-  const focusActionLabel =
-    summaryCard?.scorecardAggregate?.actionLabel ??
-    summaryCard?.statusLabel ??
-    null;
-  const focusSignalLabel =
-    summaryCard?.scorecardAggregate?.topFailureSignalLabel ?? null;
 
   return (
     <Card
@@ -66,9 +33,6 @@ export function AutomationOverviewFocusCard({
               {t("settings.automation.focus.description")}
             </p>
           </div>
-          {summaryCard ? (
-            <Badge variant="secondary">{summaryCard.statusLabel}</Badge>
-          ) : null}
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -78,104 +42,21 @@ export function AutomationOverviewFocusCard({
           </div>
         ) : null}
 
-        {job && loading && !summaryCard ? (
-          <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/60 p-6 text-sm leading-6 text-slate-500">
-            {t("settings.automation.focus.loading")}
-          </div>
-        ) : null}
-
         {job ? (
           <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/70 p-4">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full border border-white bg-white px-3 py-1 text-xs font-medium text-slate-700">
                 {job.name}
               </span>
-              {summaryCard ? (
-                <>
-                  <span className="rounded-full border border-white bg-white px-3 py-1 text-xs font-medium text-slate-700">
-                    {summaryCard.title}
-                  </span>
-                </>
-              ) : null}
-              {focusActionLabel ? (
-                <span className="rounded-full border border-white bg-white px-3 py-1 text-xs font-medium text-slate-700">
-                  {focusActionLabel}
-                </span>
-              ) : null}
-              {focusSignalLabel ? (
-                <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
-                  {focusSignalLabel}
-                </span>
-              ) : null}
             </div>
 
-            {focusSummary || focusNextAction ? (
-              <div className="mt-4 rounded-[18px] border border-white bg-white px-4 py-4">
-                {focusSummary ? (
-                  <div className="text-sm leading-7 text-slate-800">
-                    {focusSummary}
-                  </div>
-                ) : null}
-                {focusNextAction ? (
-                  <div className="mt-2 text-sm leading-6 text-slate-600">
-                    {t("settings.automation.focus.nextAction", {
-                      action: focusNextAction,
-                    })}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
-            {runDetailView ? (
-              <div className="mt-4 rounded-[18px] border border-white bg-white px-4 py-3">
-                <div className="text-xs font-medium text-slate-500">
-                  {t("settings.automation.focus.recentResult")}
-                </div>
-                <div className="mt-2 text-sm font-medium text-slate-900">
-                  {runDetailView.statusLabel} ·{" "}
-                  {runDetailView.deliveryCompletionLabel}
-                </div>
-                {runDetailView.summary ? (
-                  <div className="mt-2 text-sm leading-6 text-slate-600">
-                    {runDetailView.summary}
-                  </div>
-                ) : null}
+            {retiredMessage ? (
+              <div className="mt-4 rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-700">
+                {retiredMessage}
               </div>
             ) : null}
 
             <div className="mt-4 flex flex-wrap gap-2">
-              {onReviewCurrentProject ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  data-testid="automation-overview-review-current-project"
-                  onClick={onReviewCurrentProject}
-                >
-                  {t("settings.automation.focus.action.review")}
-                </Button>
-              ) : null}
-              {onOpenSceneAppGovernance ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  data-testid="automation-overview-open-governance"
-                  onClick={onOpenSceneAppGovernance}
-                >
-                  {t("settings.automation.focus.action.openGovernance")}
-                </Button>
-              ) : null}
-              {onOpenSceneAppDetail ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  data-testid="automation-overview-open-detail"
-                  onClick={onOpenSceneAppDetail}
-                >
-                  {t("settings.automation.focus.action.openDetail")}
-                </Button>
-              ) : null}
               {onOpenJobDetails ? (
                 <Button
                   type="button"
@@ -188,12 +69,6 @@ export function AutomationOverviewFocusCard({
                 </Button>
               ) : null}
             </div>
-          </div>
-        ) : null}
-
-        {error ? (
-          <div className="rounded-[18px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-700">
-            {error}
           </div>
         ) : null}
       </CardContent>

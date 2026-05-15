@@ -1,0 +1,305 @@
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ExpertPlazaPage } from "./ExpertPlazaPage";
+import { changeLimeLocale } from "@/i18n/createI18n";
+import {
+  expertAnalyticsStorageKeys,
+  getSeededExpertCatalog,
+  saveCachedExpertCatalog,
+  upsertExpertAgentInstance,
+} from "@/features/experts";
+
+interface MountedContent {
+  container: HTMLDivElement;
+  root: Root;
+}
+
+const mountedContents: MountedContent[] = [];
+
+function renderPage(onNavigate = vi.fn()) {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+
+  act(() => {
+    root.render(<ExpertPlazaPage onNavigate={onNavigate} />);
+  });
+
+  mountedContents.push({ container, root });
+  return { container, onNavigate };
+}
+
+async function flushEffects(times = 4) {
+  await act(async () => {
+    for (let index = 0; index < times; index += 1) {
+      await Promise.resolve();
+    }
+  });
+}
+
+function readQueuedExpertEvents() {
+  return JSON.parse(
+    window.localStorage.getItem(expertAnalyticsStorageKeys.queue) || "[]",
+  ) as Array<{ expertId: string; eventName: string; metadata?: unknown }>;
+}
+
+function cacheCloudExpertCatalog() {
+  const catalog = getSeededExpertCatalog();
+  saveCachedExpertCatalog({
+    ...catalog,
+    tenantId: "tenant-0001",
+    version: "tenant-0001:test",
+    items: catalog.items.map((item, index) => ({
+      ...item,
+      source: "cloud_catalog" as const,
+      release: {
+        ...item.release,
+        releaseId: `expert-release-${String(index + 1).padStart(4, "0")}`,
+      },
+    })),
+  });
+  window.__LIME_OEM_CLOUD__ = {
+    enabled: true,
+    baseUrl: "https://lime.example.com",
+    tenantId: "tenant-0001",
+  };
+}
+
+describe("ExpertPlazaPage", () => {
+  beforeEach(async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    await changeLimeLocale("zh-CN");
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    while (mountedContents.length > 0) {
+      const mounted = mountedContents.pop();
+      if (!mounted) {
+        continue;
+      }
+      act(() => {
+        mounted.root.unmount();
+      });
+      mounted.container.remove();
+    }
+    vi.clearAllMocks();
+    vi.unstubAllGlobals();
+    delete window.__LIME_OEM_CLOUD__;
+  });
+
+  it("应渲染 seeded 专家广场卡片与榜单", async () => {
+    const { container } = renderPage();
+    await flushEffects();
+
+    expect(
+      container.querySelector('[data-testid="expert-plaza-page"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="expert-card-marketing-strategist"]',
+      ),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("营销策略专家");
+    expect(container.textContent).toContain("热门精选");
+  });
+
+  it("点击开始对话应进入 Agent 并携带专家 request metadata", async () => {
+    const onNavigate = vi.fn();
+    const { container } = renderPage(onNavigate);
+    await flushEffects();
+
+    const startButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="expert-start-marketing-strategist"]',
+    );
+    expect(startButton).not.toBeNull();
+
+    act(() => {
+      startButton?.click();
+    });
+
+    expect(onNavigate).toHaveBeenCalledWith(
+      "agent",
+      expect.objectContaining({
+        agentEntry: "claw",
+        projectId: "default",
+        initialSessionName: "营销策略专家",
+        initialUserPrompt:
+          expect.stringContaining("请以「营销策略专家」专家身份工作"),
+        autoRunInitialPromptOnMount: true,
+        newChatAt: expect.any(Number),
+        expertAgentLaunch: expect.objectContaining({
+          tenantId: "local-seeded",
+          expertId: "marketing-strategist",
+          releaseId: "rel-marketing-strategist-20260515",
+          launchMode: "resume_or_create",
+          agentInstanceKey:
+            "local-seeded:marketing-strategist:rel-marketing-strategist-20260515",
+        }),
+        initialRequestMetadata: {
+          expert: expect.objectContaining({
+            expertId: "marketing-strategist",
+            personaRef: "expert-persona:marketing-strategist@1.0.0",
+          }),
+          harness: {
+            expert: expect.objectContaining({
+              expert_id: "marketing-strategist",
+              persona_ref: "expert-persona:marketing-strategist@1.0.0",
+            }),
+          },
+        },
+        initialAutoSendRequestMetadata: {
+          expert: expect.objectContaining({
+            expertId: "marketing-strategist",
+          }),
+          harness: {
+            expert: expect.objectContaining({
+              expert_id: "marketing-strategist",
+            }),
+          },
+        },
+      }),
+    );
+  });
+
+  it("再次点击已有专家 Agent 时应恢复最近会话且不重复自动发送", async () => {
+    upsertExpertAgentInstance({
+      tenantId: "local-seeded",
+      expertId: "marketing-strategist",
+      releaseId: "rel-marketing-strategist-20260515",
+      latestSessionId: "session-expert-1",
+      skillRefsOverride: ["service-skill:daily-trend-briefing", "skill:docx"],
+      now: 1,
+    });
+    const onNavigate = vi.fn();
+    const { container } = renderPage(onNavigate);
+    await flushEffects();
+
+    const startButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="expert-start-marketing-strategist"]',
+    );
+    expect(startButton?.textContent).toContain("继续对话");
+
+    act(() => {
+      startButton?.click();
+    });
+
+    expect(onNavigate).toHaveBeenCalledWith(
+      "agent",
+      expect.objectContaining({
+        initialSessionId: "session-expert-1",
+        autoRunInitialPromptOnMount: false,
+        expertAgentLaunch: expect.objectContaining({
+          latestSessionId: "session-expert-1",
+          skillRefsOverride: [
+            "service-skill:daily-trend-briefing",
+            "skill:docx",
+          ],
+        }),
+        initialRequestMetadata: expect.objectContaining({
+          expert: expect.objectContaining({
+            skillRefs: ["service-skill:daily-trend-briefing", "skill:docx"],
+          }),
+        }),
+      }),
+    );
+    const [, params] = onNavigate.mock.calls[0] || [];
+    expect(params).not.toHaveProperty("initialUserPrompt");
+    expect(params).not.toHaveProperty("newChatAt");
+  });
+
+  it("点击添加应把专家写入本地 overlay", async () => {
+    cacheCloudExpertCatalog();
+    const { container } = renderPage();
+    await flushEffects();
+
+    const addButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="expert-add-data-analyst"]',
+    );
+    expect(addButton).not.toBeNull();
+
+    act(() => {
+      addButton?.click();
+    });
+
+    const raw = window.localStorage.getItem("lime:expert-install-overlay:v1");
+    expect(raw).toContain("data-analyst");
+    expect(readQueuedExpertEvents()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          expertId: "data-analyst",
+          eventName: "expert_installed",
+        }),
+      ]),
+    );
+  });
+
+  it("打开详情应记录非内容型运营事件", async () => {
+    cacheCloudExpertCatalog();
+    const { container } = renderPage();
+    await flushEffects();
+
+    const expertCardHead = container.querySelector<HTMLButtonElement>(
+      '[data-testid="expert-card-marketing-strategist"] button',
+    );
+    expect(expertCardHead).not.toBeNull();
+
+    act(() => {
+      expertCardHead?.click();
+    });
+
+    expect(readQueuedExpertEvents()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          expertId: "marketing-strategist",
+          eventName: "expert_detail_opened",
+        }),
+      ]),
+    );
+  });
+
+  it("详情操作区应并列保留主对话与新对话入口", async () => {
+    const onNavigate = vi.fn();
+    const { container } = renderPage(onNavigate);
+    await flushEffects();
+
+    const expertCardHead = container.querySelector<HTMLButtonElement>(
+      '[data-testid="expert-card-code-literature"] button',
+    );
+    expect(expertCardHead).not.toBeNull();
+
+    act(() => {
+      expertCardHead?.click();
+    });
+
+    const detailActions = container.querySelector(
+      '[data-testid="expert-detail-actions-code-literature"]',
+    );
+    expect(detailActions?.textContent).toContain("开始对话");
+    expect(detailActions?.textContent).toContain("新对话");
+
+    const newThreadButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="expert-new-thread-code-literature"]',
+    );
+    expect(newThreadButton).not.toBeNull();
+
+    act(() => {
+      newThreadButton?.click();
+    });
+
+    expect(onNavigate).toHaveBeenCalledWith(
+      "agent",
+      expect.objectContaining({
+        initialSessionName: "代码文学家",
+        autoRunInitialPromptOnMount: true,
+        newChatAt: expect.any(Number),
+        expertAgentLaunch: expect.objectContaining({
+          expertId: "code-literature",
+          releaseId: "rel-code-literature-20260515",
+          launchMode: "new_thread",
+        }),
+      }),
+    );
+  });
+});

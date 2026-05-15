@@ -11,6 +11,14 @@ interface UseVoiceSoundReturn {
   playStopSound: () => void;
 }
 
+function playAudioSafely(audio: HTMLAudioElement): void {
+  audio.currentTime = 0;
+  audio.play().catch((error) => {
+    // 浏览器会在无用户手势时拒绝播放音效；这不影响语音输入主流程。
+    console.debug("[语音音效] 播放被浏览器拦截，已跳过。", error);
+  });
+}
+
 function tryPreloadAudio(audio: HTMLAudioElement): void {
   if (typeof audio.load !== "function") {
     return;
@@ -55,14 +63,12 @@ export function useVoiceSound(enabled: boolean): UseVoiceSoundReturn {
 
   const playStartSound = useCallback(() => {
     if (!enabled || !startAudioRef.current) return;
-    startAudioRef.current.currentTime = 0;
-    startAudioRef.current.play().catch(console.error);
+    playAudioSafely(startAudioRef.current);
   }, [enabled]);
 
   const playStopSound = useCallback(() => {
     if (!enabled || !stopAudioRef.current) return;
-    stopAudioRef.current.currentTime = 0;
-    stopAudioRef.current.play().catch(console.error);
+    playAudioSafely(stopAudioRef.current);
   }, [enabled]);
 
   return {

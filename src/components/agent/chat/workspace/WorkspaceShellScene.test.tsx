@@ -83,4 +83,21 @@ describe("WorkspaceShellScene", () => {
       shell?.querySelector('[data-testid="workspace-main"]'),
     ).not.toBeNull();
   });
+
+  it("应在主工作区右侧渲染可选信息栏节点", () => {
+    const container = renderShell({
+      rightRailNode: <aside data-testid="workspace-right-rail">专家信息</aside>,
+    });
+
+    const shell = container.querySelector(
+      '[data-testid="workspace-shell-scene"]',
+    );
+
+    expect(
+      shell?.querySelector('[data-testid="workspace-main"]'),
+    ).not.toBeNull();
+    expect(
+      shell?.querySelector('[data-testid="workspace-right-rail"]')?.textContent,
+    ).toContain("专家信息");
+  });
 });

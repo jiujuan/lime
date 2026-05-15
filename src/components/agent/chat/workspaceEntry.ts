@@ -6,7 +6,7 @@ import type {
   AgentProjectFileOpenTarget,
   AgentSiteSkillLaunchParams,
 } from "@/types/page";
-import type { SceneAppExecutionSummaryViewModel } from "@/lib/sceneapp/product";
+import type { SceneAppExecutionSummaryViewModel } from "@/lib/agent/legacySceneAppExecutionSummary";
 import type { CreationMode } from "./components/types";
 import type { MessageImage } from "./types";
 import type { ChatToolPreferences } from "./utils/chatToolPreferences";

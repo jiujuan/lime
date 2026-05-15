@@ -82,7 +82,7 @@ describe("legacySurfaceCatalog", () => {
     );
 
     expect(monitor).toBeTruthy();
-    expect(monitor?.classification).toBe("dead-candidate");
+    expect(monitor?.classification).toBe("dead");
     expect(monitor?.allowedPaths).toEqual([]);
     expect(monitor?.targets).toEqual([
       "src/lib/sceneapp/types-runtime-context.ts",
@@ -100,6 +100,243 @@ describe("legacySurfaceCatalog", () => {
     expect(monitor?.targets).toEqual([
       "src/components/sceneapps/SceneAppsWorkflowRail.tsx",
     ]);
+  });
+
+  it("应将 SceneApp 首页卡片与 Workspace 启动链标记为 dead surface", () => {
+    const importMonitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "sceneapp-active-launch-surface",
+    );
+    const frontendMonitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) => entry.id === "sceneapp-active-launch-frontend-surface",
+    );
+
+    expect(importMonitor).toBeTruthy();
+    expect(importMonitor?.classification).toBe("dead");
+    expect(importMonitor?.allowedPaths).toEqual([]);
+    expect(importMonitor?.targets).toEqual(
+      expect.arrayContaining([
+        "src/components/agent/chat/workspace/useWorkspaceSceneAppEntryActions.ts",
+        "src/components/agent/chat/workspace/sceneAppLaunch.ts",
+        "src/lib/sceneapp/launchBridge.ts",
+        "src/lib/sceneapp/launcher.ts",
+      ]),
+    );
+
+    expect(frontendMonitor).toBeTruthy();
+    expect(frontendMonitor?.classification).toBe("dead");
+    expect(frontendMonitor?.allowedPaths).toEqual([]);
+    expect(frontendMonitor?.patterns).toEqual(
+      expect.arrayContaining([
+        "useWorkspaceSceneAppEntryActions",
+        "useSceneAppLaunchRuntime",
+        "featuredSceneApps",
+        "entry-sceneapp-",
+      ]),
+    );
+  });
+
+  it("应将 SceneApp 独立 catalog 投影与目录产品卡片标记为 dead surface", () => {
+    const importMonitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "sceneapp-catalog-projection-surface",
+    );
+    const frontendMonitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) => entry.id === "sceneapp-catalog-product-frontend-surface",
+    );
+
+    expect(importMonitor).toBeTruthy();
+    expect(importMonitor?.classification).toBe("dead");
+    expect(importMonitor?.allowedPaths).toEqual([]);
+    expect(importMonitor?.targets).toEqual(["src/lib/sceneapp/catalog.ts"]);
+
+    expect(frontendMonitor).toBeTruthy();
+    expect(frontendMonitor?.classification).toBe("dead");
+    expect(frontendMonitor?.allowedPaths).toEqual([]);
+    expect(frontendMonitor?.includePathPrefixes).toEqual([
+      "src/lib/api",
+      "src/lib/sceneapp",
+    ]);
+    expect(frontendMonitor?.patterns).toEqual(
+      expect.arrayContaining([
+        "compileSceneAppCatalogFromPackage",
+        "listSceneAppCatalog",
+        "SceneAppCatalog",
+        "buildSceneAppCatalogCardViewModel",
+      ]),
+    );
+  });
+
+  it("应将 SceneApp 自动化详情运行面标记为 dead surface", () => {
+    const importMonitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "sceneapp-automation-detail-runtime-surface",
+    );
+    const frontendMonitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) => entry.id === "sceneapp-automation-detail-frontend-surface",
+    );
+
+    expect(importMonitor).toBeTruthy();
+    expect(importMonitor?.classification).toBe("dead");
+    expect(importMonitor?.allowedPaths).toEqual([]);
+    expect(importMonitor?.targets).toEqual(
+      expect.arrayContaining([
+        "src/components/settings-v2/system/automation/useAutomationSceneAppRuntime.ts",
+        "src/components/sceneapps/SceneAppRunDetailPanel.tsx",
+        "src/components/sceneapps/SceneAppReviewFeedbackBanner.tsx",
+        "src/components/sceneapps/index.ts",
+      ]),
+    );
+
+    expect(frontendMonitor).toBeTruthy();
+    expect(frontendMonitor?.classification).toBe("dead");
+    expect(frontendMonitor?.allowedPaths).toEqual([]);
+    expect(frontendMonitor?.includePathPrefixes).toEqual([
+      "src/components/settings-v2/system/automation",
+      "src/components/sceneapps",
+      "src/lib/sceneapp",
+      "src/i18n",
+    ]);
+    expect(frontendMonitor?.patterns).toEqual(
+      expect.arrayContaining([
+        "useAutomationSceneAppRuntime",
+        "SceneAppRunDetailPanel",
+        "sceneapp-run-detail-save-as-inspiration",
+        "settings.automation.details.sceneApp.action.openDetail",
+        "settings.automation.details.sceneApp.toast.",
+      ]),
+    );
+  });
+
+  it("应将 SceneApp 执行摘要实时 API 轮询链标记为 dead surface", () => {
+    const importMonitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "sceneapp-api-runtime-polling-surface",
+    );
+    const frontendMonitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) =>
+        entry.id === "sceneapp-execution-summary-live-api-frontend-surface",
+    );
+
+    expect(importMonitor).toBeTruthy();
+    expect(importMonitor?.classification).toBe("dead");
+    expect(importMonitor?.allowedPaths).toEqual([]);
+    expect(importMonitor?.targets).toEqual(["src/lib/api/sceneapp.ts"]);
+
+    expect(frontendMonitor).toBeTruthy();
+    expect(frontendMonitor?.classification).toBe("dead");
+    expect(frontendMonitor?.allowedPaths).toEqual([]);
+    expect(frontendMonitor?.includePathPrefixes).toEqual([
+      "src/components/agent/chat",
+      "src/lib/api",
+    ]);
+    expect(frontendMonitor?.patterns).toEqual(
+      expect.arrayContaining([
+        "@/lib/api/sceneapp",
+        "listSceneAppRuns",
+        "prepareSceneAppRunGovernanceArtifact",
+        "SCENEAPP_RUNTIME_POLL_INTERVAL_MS",
+      ]),
+    );
+  });
+
+  it("应将 src/lib/sceneapp 目录标记为 dead surface", () => {
+    const monitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "sceneapp-library-directory-surface",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.targets).toEqual(
+      expect.arrayContaining([
+        "src/lib/sceneapp/index.ts",
+        "src/lib/sceneapp/types.ts",
+        "src/lib/sceneapp/product.ts",
+        "src/lib/sceneapp/automation.ts",
+        "src/lib/sceneapp/executionPromptActions.ts",
+        "src/lib/sceneapp/runEntryNavigation.ts",
+      ]),
+    );
+  });
+
+  it("应将 SceneApp 执行摘要运行详情构造侧链标记为 dead surface", () => {
+    const monitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) =>
+        entry.id === "sceneapp-execution-summary-run-detail-helper-surface",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.includePathPrefixes).toEqual([
+      "src/components/agent/chat",
+      "src/lib/sceneapp",
+    ]);
+    expect(monitor?.patterns).toEqual(
+      expect.arrayContaining([
+        "buildSceneAppExecutionSummaryRunDetailViewModel",
+        "buildSceneAppExecutionPromptActions",
+        "buildSceneAppExecutionPromptActionPayload",
+        "findLatestSceneAppPackResultRun",
+        "hasSceneAppRunDeliveryArtifacts",
+        "resolveSceneAppRunEntryNavigationTarget",
+        "SceneAppProjectPackRuntimePanel",
+        "sceneAppExecutionPromptContinuation",
+      ]),
+    );
+  });
+
+  it("应将 SceneApps 独立页面与 sceneapp 命令面标记为 dead surface", () => {
+    const importMonitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "sceneapps-independent-page-surface",
+    );
+    const commandMonitor = legacySurfaceCatalogJson.commands.find(
+      (entry) => entry.id === "sceneapp-tauri-command-surface",
+    );
+    const frontendMonitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) => entry.id === "sceneapps-page-route-frontend-surface",
+    );
+    const rustMonitor = legacySurfaceCatalogJson.rustText.find(
+      (entry) => entry.id === "rust-sceneapp-command-module-surface",
+    );
+
+    expect(importMonitor).toBeTruthy();
+    expect(importMonitor?.classification).toBe("dead");
+    expect(importMonitor?.allowedPaths).toEqual([]);
+    expect(importMonitor?.targets).toEqual(
+      expect.arrayContaining([
+        "src/components/sceneapps/SceneAppsPage.tsx",
+        "src/components/sceneapps/useSceneAppsPageRuntime.ts",
+        "src/lib/sceneapp/navigation.ts",
+      ]),
+    );
+
+    expect(commandMonitor).toBeTruthy();
+    expect(commandMonitor?.classification).toBe("dead");
+    expect(commandMonitor?.allowedPaths).toEqual([]);
+    expect(commandMonitor?.commands).toEqual(
+      expect.arrayContaining([
+        "sceneapp_list_catalog",
+        "sceneapp_plan_launch",
+        "sceneapp_create_automation_job",
+      ]),
+    );
+
+    expect(frontendMonitor).toBeTruthy();
+    expect(frontendMonitor?.classification).toBe("dead");
+    expect(frontendMonitor?.patterns).toEqual(
+      expect.arrayContaining([
+        '"sceneapps"',
+        "SceneAppsPageParams",
+        "resolveSceneAppsPageEntryParams",
+      ]),
+    );
+
+    expect(rustMonitor).toBeTruthy();
+    expect(rustMonitor?.classification).toBe("dead");
+    expect(rustMonitor?.patterns).toEqual(
+      expect.arrayContaining([
+        "commands::sceneapp_cmd::",
+        "crate::sceneapp::",
+      ]),
+    );
   });
 
   it("应记录已删除的旧 ASR 凭证管理 UI", () => {

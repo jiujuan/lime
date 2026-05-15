@@ -23,6 +23,8 @@ describe("mockPriorityCommands", () => {
       false,
     );
     expect(shouldPreferMockInBrowser("close_webview_panel")).toBe(true);
+    expect(shouldPreferMockInBrowser("agent_app_start_ui_runtime")).toBe(true);
+    expect(shouldPreferMockInBrowser("agent_app_stop_ui_runtime")).toBe(true);
   });
 
   it("图层设计工程目录命令在浏览器模式必须走真实桥接", () => {
@@ -60,6 +62,20 @@ describe("mockPriorityCommands", () => {
       shouldDisallowMockFallbackInBrowser("agent_runtime_submit_turn"),
     ).toBe(true);
     expect(
+      shouldDisallowMockFallbackInBrowser("agent_app_runtime_start_task"),
+    ).toBe(true);
+    expect(
+      shouldDisallowMockFallbackInBrowser("agent_app_runtime_cancel_task"),
+    ).toBe(true);
+    expect(
+      shouldDisallowMockFallbackInBrowser("agent_app_runtime_get_task"),
+    ).toBe(true);
+    expect(
+      shouldDisallowMockFallbackInBrowser(
+        "agent_app_runtime_submit_host_response",
+      ),
+    ).toBe(true);
+    expect(
       shouldDisallowMockFallbackInBrowser(
         "agent_runtime_list_file_checkpoints",
       ),
@@ -81,9 +97,6 @@ describe("mockPriorityCommands", () => {
     );
     expect(shouldDisallowMockFallbackInBrowser("get_skill_detail")).toBe(true);
     expect(shouldDisallowMockFallbackInBrowser("execute_skill")).toBe(true);
-    expect(
-      shouldDisallowMockFallbackInBrowser("sceneapp_create_automation_job"),
-    ).toBe(true);
     expect(shouldDisallowMockFallbackInBrowser("gateway_channel_status")).toBe(
       true,
     );

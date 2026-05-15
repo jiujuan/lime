@@ -5,11 +5,12 @@ import type { Page, PageParams } from "@/types/page";
 import type {
   AgentInitialInputCapabilityParams,
   AgentInitialKnowledgePackSelectionParams,
+  ExpertAgentLaunchParams,
   AgentPendingServiceSkillLaunchParams,
   AgentProjectFileOpenTarget,
   AgentSiteSkillLaunchParams,
 } from "@/types/page";
-import type { SceneAppExecutionSummaryViewModel } from "@/lib/sceneapp/product";
+import type { SceneAppExecutionSummaryViewModel } from "@/lib/agent/legacySceneAppExecutionSummary";
 
 export interface WorkflowProgressSnapshot {
   steps: Array<{
@@ -50,6 +51,7 @@ export interface AgentChatWorkspaceProps {
   entryBannerMessage?: string;
   onInitialUserPromptConsumed?: () => void;
   newChatAt?: number;
+  expertAgentLaunch?: ExpertAgentLaunchParams;
   onRecommendationClick?: (shortLabel: string, fullPrompt: string) => void;
   onHasMessagesChange?: (hasMessages: boolean) => void;
   onSessionChange?: (sessionId: string | null) => void;

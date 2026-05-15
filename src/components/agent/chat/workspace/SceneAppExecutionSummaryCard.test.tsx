@@ -6,107 +6,6 @@ import { SceneAppExecutionSummaryCard } from "./SceneAppExecutionSummaryCard";
 import { changeLimeLocale } from "@/i18n/createI18n";
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
-type SceneAppExecutionDetailView = NonNullable<
-  React.ComponentProps<
-    typeof SceneAppExecutionSummaryCard
-  >["latestPackResultDetailView"]
->;
-
-function createLatestPackResultDetailView(
-  overrides: Partial<SceneAppExecutionDetailView> = {},
-): SceneAppExecutionDetailView {
-  return {
-    runId: "run-fallback",
-    status: "success",
-    statusLabel: "成功",
-    stageLabel: "结果已交付",
-    summary: "最近一轮样本已经回流了可继续消费的结果文件。",
-    nextAction: "继续进入编辑或发布。",
-    sourceLabel: "人工试跑",
-    artifactCount: 2,
-    deliveryCompletionLabel: "整包已交齐 2/2 个部件",
-    deliverySummary: "当前结果包已完整回流。",
-    deliveryRequiredParts: [
-      { key: "brief", label: "任务简报" },
-      { key: "storyboard", label: "分镜 / 线框图" },
-    ],
-    deliveryCompletedParts: [
-      { key: "brief", label: "任务简报" },
-      { key: "storyboard", label: "分镜 / 线框图" },
-    ],
-    deliveryMissingParts: [],
-    deliveryPartCoverageKnown: true,
-    deliveryViewerLabel: "结果包查看",
-    packCompletionStrategyLabel: "按必含部件判断整包完成度",
-    packViewerLabel: "结果包查看",
-    plannedDeliveryRequiredParts: [
-      { key: "brief", label: "任务简报" },
-      { key: "storyboard", label: "分镜 / 线框图" },
-    ],
-    packPlanNotes: ["继续沿当前样本复用。"],
-    contextBaseline: null,
-    deliveryArtifactEntries: [
-      {
-        key: "brief-0",
-        label: "主稿 · 任务简报",
-        pathLabel: "packs/run-fallback/brief.md",
-        helperText: "直接打开这次运行已回流的结果文件。",
-        isPrimary: true,
-        artifactRef: {
-          partKey: "brief",
-          relativePath: "packs/run-fallback/brief.md",
-          absolutePath: "/tmp/packs/run-fallback/brief.md",
-          projectId: "project-1",
-          source: "runtime_evidence",
-        },
-      },
-    ],
-    governanceActionEntries: [
-      {
-        key: "weekly-review-pack",
-        label: "补结果材料",
-        helperText: "把证据摘要和人工复核记录一起带回来回看业务结果。",
-        primaryArtifactKind: "review_decision_markdown",
-        primaryArtifactLabel: "人工复核记录",
-        artifactKinds: ["evidence_summary", "review_decision_markdown"],
-      },
-    ],
-    governanceArtifactEntries: [
-      {
-        key: "evidence_summary:.lime/harness/sessions/session-1/evidence/summary.md",
-        label: "证据摘要",
-        pathLabel: ".lime/harness/sessions/session-1/evidence/summary.md",
-        helperText: "查看当前运行对应的证据摘要。",
-        artifactRef: {
-          kind: "evidence_summary",
-          label: "证据摘要",
-          relativePath: ".lime/harness/sessions/session-1/evidence/summary.md",
-          absolutePath: "/tmp/summary.md",
-          projectId: "project-1",
-          workspaceId: "project-1",
-          source: "session_governance",
-        },
-      },
-    ],
-    failureSignalLabel: undefined,
-    evidenceSourceLabel: "当前已接入会话证据",
-    requestTelemetryLabel: "已关联请求遥测。",
-    artifactValidatorLabel: "Artifact 校验没有发现阻塞问题。",
-    evidenceKnownGaps: [],
-    verificationFailureOutcomes: [],
-    startedAtLabel: "2026-04-16 12:00",
-    finishedAtLabel: "2026-04-16 12:03",
-    durationLabel: "3 分钟",
-    entryAction: {
-      kind: "open_agent_session",
-      label: "恢复对应 Agent 会话",
-      helperText: "回到底层执行会话继续看完整上下文。",
-      sessionId: "session-1",
-    },
-    ...overrides,
-  };
-}
-
 function renderCard(
   props: Partial<
     React.ComponentProps<typeof SceneAppExecutionSummaryCard>
@@ -378,8 +277,7 @@ describe("SceneAppExecutionSummaryCard", () => {
     );
   });
 
-  it("应在生成里展示最近可消费结果并支持打开文件", () => {
-    const onDeliveryArtifactAction = vi.fn();
+  it("应只展示历史摘要、继续动作和当前发布产物", () => {
     const onReviewCurrentProject = vi.fn();
     const onSaveAsInspiration = vi.fn();
     const onSaveAsSkill = vi.fn();
@@ -387,14 +285,8 @@ describe("SceneAppExecutionSummaryCard", () => {
     const onOpenSceneAppGovernance = vi.fn();
     const onOpenHumanReview = vi.fn();
     const onApplyQuickReview = vi.fn();
-    const onGovernanceAction = vi.fn();
-    const onGovernanceArtifactAction = vi.fn();
-    const onEntryAction = vi.fn();
     const onContentPostAction = vi.fn();
-    const onPromptAction = vi.fn();
     const container = renderCard({
-      latestPackResultDetailView: createLatestPackResultDetailView(),
-      latestPackResultUsesFallback: true,
       onReviewCurrentProject,
       onSaveAsInspiration,
       onSaveAsSkill,
@@ -411,10 +303,6 @@ describe("SceneAppExecutionSummaryCard", () => {
           tone: "positive",
         },
       ],
-      onDeliveryArtifactAction,
-      onGovernanceAction,
-      onGovernanceArtifactAction,
-      onEntryAction,
       contentPostEntries: [
         {
           key: "publish",
@@ -478,27 +366,25 @@ describe("SceneAppExecutionSummaryCard", () => {
         },
       ],
       onContentPostAction,
-      onPromptAction,
     });
 
     expect(
       container.querySelector(
         '[data-testid="sceneapp-execution-summary-runtime-pack"]',
-      )?.textContent,
-    ).toContain("最近可消费结果");
-    expect(container.textContent).toContain("最近一轮已交付样本");
+      ),
+    ).toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="sceneapp-execution-summary-orchestration"]',
+      ),
+    ).toBeNull();
+    expect(container.textContent).not.toContain("最近可消费结果");
+    expect(container.textContent).not.toContain("同聊推进");
     expect(
       container.querySelector(
         '[data-testid="sceneapp-execution-summary-followup-actions"]',
       )?.textContent,
     ).toContain("继续动作");
-    expect(
-      container.querySelector(
-        '[data-testid="sceneapp-execution-summary-orchestration"]',
-      )?.textContent,
-    ).toContain("结果后的下一步");
-    expect(container.textContent).toContain("看结果");
-    expect(container.textContent).toContain("同聊推进");
     expect(
       container.querySelector(
         '[data-testid="sceneapp-execution-summary-content-posts"]',
@@ -511,12 +397,6 @@ describe("SceneAppExecutionSummaryCard", () => {
     expect(container.textContent).toContain("封面信息");
     expect(container.textContent).toContain("发布包");
 
-    const button = container.querySelector(
-      '[data-testid="sceneapp-execution-summary-artifact-entry-brief-0"]',
-    );
-    const detailButton = container.querySelector(
-      '[data-testid="sceneapp-execution-summary-open-detail"]',
-    );
     const reviewCurrentProjectButton = container.querySelector(
       '[data-testid="sceneapp-execution-summary-review-current-project"]',
     );
@@ -525,6 +405,9 @@ describe("SceneAppExecutionSummaryCard", () => {
     );
     const saveAsSkillButton = container.querySelector(
       '[data-testid="sceneapp-execution-summary-save-as-skill"]',
+    );
+    const detailButton = container.querySelector(
+      '[data-testid="sceneapp-execution-summary-open-detail"]',
     );
     const governanceButton = container.querySelector(
       '[data-testid="sceneapp-execution-summary-open-governance"]',
@@ -535,34 +418,13 @@ describe("SceneAppExecutionSummaryCard", () => {
     const quickReviewButton = container.querySelector(
       '[data-testid="sceneapp-execution-summary-quick-review-accepted"]',
     );
-    const governanceActionButton = container.querySelector(
-      '[data-testid="sceneapp-execution-summary-governance-action-weekly-review-pack"]',
-    );
-    const governanceArtifactButton = container.querySelector(
-      '[data-testid="sceneapp-execution-summary-governance-artifact-evidence_summary:.lime/harness/sessions/session-1/evidence/summary.md"]',
-    );
-    const entryActionButton = container.querySelector(
-      '[data-testid="sceneapp-execution-summary-entry-action"]',
-    );
     const publishArtifactButton = container.querySelector(
       '[data-testid="sceneapp-execution-summary-content-post-publish"]',
     );
     const previewArtifactButton = container.querySelector(
       '[data-testid="sceneapp-execution-summary-content-post-preview"]',
     );
-    const publishCheckButton = container.querySelector(
-      '[data-testid="sceneapp-execution-summary-prompt-action-publish_check"]',
-    );
-    const publishPrepareButton = container.querySelector(
-      '[data-testid="sceneapp-execution-summary-prompt-action-publish_prepare"]',
-    );
-    const channelPreviewButton = container.querySelector(
-      '[data-testid="sceneapp-execution-summary-prompt-action-channel_preview"]',
-    );
-    const uploadPrepareButton = container.querySelector(
-      '[data-testid="sceneapp-execution-summary-prompt-action-upload_prepare"]',
-    );
-    expect(button).not.toBeNull();
+
     expect(reviewCurrentProjectButton).not.toBeNull();
     expect(saveAsInspirationButton).not.toBeNull();
     expect(saveAsSkillButton).not.toBeNull();
@@ -570,18 +432,10 @@ describe("SceneAppExecutionSummaryCard", () => {
     expect(governanceButton).not.toBeNull();
     expect(humanReviewButton).not.toBeNull();
     expect(quickReviewButton).not.toBeNull();
-    expect(governanceActionButton).not.toBeNull();
-    expect(governanceArtifactButton).not.toBeNull();
-    expect(entryActionButton).not.toBeNull();
     expect(publishArtifactButton).not.toBeNull();
     expect(previewArtifactButton).not.toBeNull();
-    expect(publishCheckButton).not.toBeNull();
-    expect(publishPrepareButton).not.toBeNull();
-    expect(channelPreviewButton).not.toBeNull();
-    expect(uploadPrepareButton).not.toBeNull();
 
     act(() => {
-      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       reviewCurrentProjectButton?.dispatchEvent(
         new MouseEvent("click", { bubbles: true }),
       );
@@ -601,40 +455,14 @@ describe("SceneAppExecutionSummaryCard", () => {
       quickReviewButton?.dispatchEvent(
         new MouseEvent("click", { bubbles: true }),
       );
-      governanceActionButton?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-      governanceArtifactButton?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-      entryActionButton?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
       publishArtifactButton?.dispatchEvent(
         new MouseEvent("click", { bubbles: true }),
       );
       previewArtifactButton?.dispatchEvent(
         new MouseEvent("click", { bubbles: true }),
       );
-      publishCheckButton?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-      publishPrepareButton?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-      channelPreviewButton?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-      uploadPrepareButton?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
     });
 
-    expect(onDeliveryArtifactAction).toHaveBeenCalledWith(
-      expect.objectContaining({
-        key: "brief-0",
-      }),
-    );
     expect(onReviewCurrentProject).toHaveBeenCalledTimes(1);
     expect(onSaveAsInspiration).toHaveBeenCalledTimes(1);
     expect(onSaveAsSkill).toHaveBeenCalledTimes(1);
@@ -642,62 +470,18 @@ describe("SceneAppExecutionSummaryCard", () => {
     expect(onOpenSceneAppGovernance).toHaveBeenCalledTimes(1);
     expect(onOpenHumanReview).toHaveBeenCalledTimes(1);
     expect(onApplyQuickReview).toHaveBeenCalledWith("accepted");
-    expect(onGovernanceAction).toHaveBeenCalledWith(
-      expect.objectContaining({
-        key: "weekly-review-pack",
-      }),
-    );
-    expect(onGovernanceArtifactAction).toHaveBeenCalledWith(
-      expect.objectContaining({
-        label: "证据摘要",
-      }),
-    );
-    expect(onEntryAction).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: "open_agent_session",
-      }),
-    );
     expect(onContentPostAction).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({
-        key: "publish",
-      }),
+      expect.objectContaining({ key: "publish" }),
     );
     expect(onContentPostAction).toHaveBeenNthCalledWith(
       2,
-      expect.objectContaining({
-        key: "preview",
-      }),
-    );
-    expect(onPromptAction).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        key: "publish_check",
-      }),
-    );
-    expect(onPromptAction).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        key: "publish_prepare",
-      }),
-    );
-    expect(onPromptAction).toHaveBeenNthCalledWith(
-      3,
-      expect.objectContaining({
-        key: "channel_preview",
-      }),
-    );
-    expect(onPromptAction).toHaveBeenNthCalledWith(
-      4,
-      expect.objectContaining({
-        key: "upload_prepare",
-      }),
+      expect.objectContaining({ key: "preview" }),
     );
   });
 
   it("结果已沉淀后应把灵感按钮切成已保存状态", () => {
     const container = renderCard({
-      latestPackResultDetailView: createLatestPackResultDetailView(),
       savedAsInspiration: true,
       onSaveAsInspiration: vi.fn(),
     });
@@ -717,7 +501,6 @@ describe("SceneAppExecutionSummaryCard", () => {
   it("结果已沉淀后应支持直接去灵感库继续", () => {
     const onOpenInspirationLibrary = vi.fn();
     const container = renderCard({
-      latestPackResultDetailView: createLatestPackResultDetailView(),
       savedAsInspiration: true,
       onSaveAsInspiration: vi.fn(),
       onOpenInspirationLibrary,
@@ -735,190 +518,32 @@ describe("SceneAppExecutionSummaryCard", () => {
     expect(onOpenInspirationLibrary).toHaveBeenCalledTimes(1);
   });
 
-  it("缺件时应在同聊推进里禁用进入发布整理并提示阻塞原因", () => {
-    const onPromptAction = vi.fn();
+  it("不应恢复旧运行详情编排入口", () => {
     const container = renderCard({
-      latestPackResultDetailView: createLatestPackResultDetailView({
-        deliveryMissingParts: [{ key: "cover", label: "封面图" }],
-        deliveryCompletedParts: [{ key: "brief", label: "任务简报" }],
-        deliveryCompletionLabel: "整包已交付 1/2 个部件",
-        deliverySummary: "当前结果包还缺封面图。",
-      }),
-      onPromptAction,
+      onReviewCurrentProject: vi.fn(),
+      onSaveAsInspiration: vi.fn(),
     });
 
-    const fillMissingPartsButton = container.querySelector(
-      '[data-testid="sceneapp-execution-summary-prompt-action-fill_missing_parts"]',
-    ) as HTMLButtonElement | null;
-    const publishPrepareButton = container.querySelector(
-      '[data-testid="sceneapp-execution-summary-prompt-action-publish_prepare"]',
-    ) as HTMLButtonElement | null;
-    const channelPreviewButton = container.querySelector(
-      '[data-testid="sceneapp-execution-summary-prompt-action-channel_preview"]',
-    ) as HTMLButtonElement | null;
-    const uploadPrepareButton = container.querySelector(
-      '[data-testid="sceneapp-execution-summary-prompt-action-upload_prepare"]',
-    ) as HTMLButtonElement | null;
-
-    expect(fillMissingPartsButton).not.toBeNull();
-    expect(fillMissingPartsButton?.disabled).toBe(false);
-    expect(publishPrepareButton).not.toBeNull();
-    expect(publishPrepareButton?.disabled).toBe(true);
-    expect(channelPreviewButton).not.toBeNull();
-    expect(channelPreviewButton?.disabled).toBe(true);
-    expect(uploadPrepareButton).not.toBeNull();
-    expect(uploadPrepareButton?.disabled).toBe(true);
-    expect(container.textContent).toContain("当前阻塞：当前还缺 封面图");
-
-    act(() => {
-      fillMissingPartsButton?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-    });
-
-    expect(onPromptAction).toHaveBeenCalledWith(
-      expect.objectContaining({
-        key: "fill_missing_parts",
-      }),
-    );
-  });
-
-  it("结果去向卡应支持直接续接到看结果、生成、持续流程和主结果", () => {
-    const onReviewCurrentProject = vi.fn();
-    const onGovernanceAction = vi.fn();
-    const onEntryAction = vi.fn();
-    const onDeliveryArtifactAction = vi.fn();
-    const container = renderCard({
-      onReviewCurrentProject,
-      onGovernanceAction,
-      onEntryAction,
-      onDeliveryArtifactAction,
-      latestPackResultDetailView: createLatestPackResultDetailView({
-        governanceActionEntries: [
-          {
-            key: "weekly-review-pack",
-            label: "补结果材料",
-            helperText: "把证据摘要和人工复核记录一起带回来回看业务结果。",
-            primaryArtifactKind: "review_decision_markdown",
-            primaryArtifactLabel: "人工复核记录",
-            artifactKinds: ["evidence_summary", "review_decision_markdown"],
-          },
-          {
-            key: "structured-governance-pack",
-            label: "补结果记录",
-            helperText: "把结果记录带回生成继续推进下一步。",
-            primaryArtifactKind: "review_decision_json",
-            primaryArtifactLabel: "复核 JSON",
-            artifactKinds: ["review_decision_json"],
-          },
-        ],
-        governanceArtifactEntries: [
-          {
-            key: "evidence_summary:.lime/harness/sessions/session-1/evidence/summary.md",
-            label: "证据摘要",
-            pathLabel: ".lime/harness/sessions/session-1/evidence/summary.md",
-            helperText: "查看当前运行对应的证据摘要。",
-            artifactRef: {
-              kind: "evidence_summary",
-              label: "证据摘要",
-              relativePath:
-                ".lime/harness/sessions/session-1/evidence/summary.md",
-              absolutePath: "/tmp/summary.md",
-              projectId: "project-1",
-              workspaceId: "project-1",
-              source: "session_governance",
-            },
-          },
-          {
-            key: "review_decision_markdown:.lime/harness/sessions/session-1/review/decision.md",
-            label: "人工复核记录",
-            pathLabel: ".lime/harness/sessions/session-1/review/decision.md",
-            helperText: "查看人工复核记录。",
-            artifactRef: {
-              kind: "review_decision_markdown",
-              label: "人工复核记录",
-              relativePath:
-                ".lime/harness/sessions/session-1/review/decision.md",
-              absolutePath: "/tmp/decision.md",
-              projectId: "project-1",
-              workspaceId: "project-1",
-              source: "session_governance",
-            },
-          },
-          {
-            key: "review_decision_json:.lime/harness/sessions/session-1/review/decision.json",
-            label: "复核 JSON",
-            pathLabel: ".lime/harness/sessions/session-1/review/decision.json",
-            helperText: "查看结构化复盘记录。",
-            artifactRef: {
-              kind: "review_decision_json",
-              label: "复核 JSON",
-              relativePath:
-                ".lime/harness/sessions/session-1/review/decision.json",
-              absolutePath: "/tmp/decision.json",
-              projectId: "project-1",
-              workspaceId: "project-1",
-              source: "session_governance",
-            },
-          },
-        ],
-        entryAction: {
-          kind: "open_automation_job",
-          label: "查看持续流程",
-          helperText: "跳到当前持续任务查看调度与结果。",
-          jobId: "automation-job-1",
-        },
-      }),
-    });
-
-    const weeklyReviewButton = container.querySelector(
-      '[data-testid="sceneapp-execution-summary-destination-action-weekly-review"]',
-    );
-    const taskCenterButton = container.querySelector(
-      '[data-testid="sceneapp-execution-summary-destination-action-task-center"]',
-    );
-    const automationButton = container.querySelector(
-      '[data-testid="sceneapp-execution-summary-destination-action-automation-job"]',
-    );
-    const deliveryButton = container.querySelector(
-      '[data-testid="sceneapp-execution-summary-destination-action-delivery-editing"]',
-    );
-
-    expect(weeklyReviewButton).not.toBeNull();
-    expect(taskCenterButton).not.toBeNull();
-    expect(automationButton).not.toBeNull();
-    expect(deliveryButton).not.toBeNull();
-
-    act(() => {
-      weeklyReviewButton?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-      taskCenterButton?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-      automationButton?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true }),
-      );
-      deliveryButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    expect(onGovernanceAction).toHaveBeenCalledWith(
-      expect.objectContaining({
-        key: "weekly-review-pack",
-      }),
-    );
-    expect(onReviewCurrentProject).toHaveBeenCalledTimes(1);
-    expect(onEntryAction).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: "open_automation_job",
-        jobId: "automation-job-1",
-      }),
-    );
-    expect(onDeliveryArtifactAction).toHaveBeenCalledWith(
-      expect.objectContaining({
-        key: "brief-0",
-      }),
-    );
+    expect(
+      container.querySelector(
+        '[data-testid="sceneapp-execution-summary-runtime-pack"]',
+      ),
+    ).toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="sceneapp-execution-summary-orchestration"]',
+      ),
+    ).toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid^="sceneapp-execution-summary-prompt-action-"]',
+      ),
+    ).toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid^="sceneapp-execution-summary-destination-action-"]',
+      ),
+    ).toBeNull();
   });
 
   it("没有摘要时不应渲染卡片", () => {

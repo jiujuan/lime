@@ -80,10 +80,6 @@ import {
 } from "@/lib/api/agentRuntime";
 import type { AgentRuntimeUpdateSessionRequest } from "@/lib/api/agentRuntime/types";
 import {
-  prepareSceneAppRunGovernanceArtifact,
-  prepareSceneAppRunGovernanceArtifacts,
-} from "@/lib/api/sceneapp";
-import {
   getProjectMemory,
   type ProjectMemory,
   type Character,
@@ -220,7 +216,6 @@ import { useWorkspaceGeneralWorkbenchRuntime } from "./workspace/useWorkspaceGen
 import { useWorkspaceTeamSessionRuntime } from "./workspace/useWorkspaceTeamSessionRuntime";
 import { useWorkspaceGeneralWorkbenchDocumentPersistenceRuntime } from "./workspace/useWorkspaceGeneralWorkbenchDocumentPersistenceRuntime";
 import { useWorkspaceServiceSkillEntryActions } from "./workspace/useWorkspaceServiceSkillEntryActions";
-import { useWorkspaceSceneAppEntryActions } from "./workspace/useWorkspaceSceneAppEntryActions";
 import { useWorkspaceArtifactViewModeControl } from "./workspace/useWorkspaceArtifactViewModeControl";
 import {
   rememberInitialSessionNavigationStart,
@@ -229,6 +224,12 @@ import {
 import { WorkspaceGeneralWorkbenchSidebar } from "./workspace/WorkspaceGeneralWorkbenchSidebar";
 import { GeneralWorkbenchHarnessDialogSection } from "./workspace/WorkspaceHarnessDialogs";
 import { WorkspaceShellScene } from "./workspace/WorkspaceShellScene";
+import { ExpertInfoPanel } from "./experts/ExpertInfoPanel";
+import {
+  syncExpertAgentInstanceToCloud,
+  updateExpertAgentInstanceSession,
+  updateExpertAgentInstanceSkillRefs,
+} from "@/features/experts";
 import { FileManagerSidebar } from "./components/FileManager/FileManagerSidebar";
 import {
   TaskCenterTabStrip,
@@ -339,23 +340,15 @@ import {
   hasSavedSceneAppExecutionAsInspiration,
   saveSceneAppExecutionAsInspiration,
 } from "./utils/saveSceneAppExecutionAsInspiration";
-import { buildSceneAppExecutionPromptActionPayload } from "./utils/sceneAppExecutionPromptContinuation";
 import { buildSkillsPageParamsFromSceneAppExecution } from "./utils/sceneAppSkillScaffoldDraft";
 import { buildSkillsPageParamsFromMessage } from "./utils/skillScaffoldDraft";
 import { AutomationJobDialog } from "@/components/settings-v2/system/automation/AutomationJobDialog";
 import { shouldAutoSelectGeneralArtifact } from "./workspace/generalArtifactAutoSelection";
 import {
-  buildSceneAppExecutionSummaryRunDetailViewModel,
-  type SceneAppExecutionPromptAction,
   buildSceneAppQuickReviewDecisionRequest,
   formatSceneAppErrorMessage,
-  hasSceneAppRecentVisit,
-  resolveSceneAppRunEntryNavigationTarget,
-  resolveSceneAppRuntimeArtifactOpenTarget,
-  resolveSceneAppsPageEntryParams,
   SCENEAPP_QUICK_REVIEW_ACTIONS,
-  subscribeSceneAppRecentVisits,
-} from "@/lib/sceneapp";
+} from "@/lib/agent/legacySceneAppExecutionSummary";
 
 const GENERAL_BROWSER_ASSIST_PROFILE_KEY = "general_browser_assist";
 const BLANK_HOME_DEFERRED_LOAD_MS = 18_000;
@@ -367,6 +360,46 @@ const SESSION_RECENT_METADATA_NAVIGATION_DEFER_MS = 45_000;
 const SESSION_RECENT_METADATA_BACKGROUND_SYNC_IDLE_TIMEOUT_MS = 20_000;
 const BROWSER_WORKSPACE_HOME_HINT_STORAGE_KEY =
   "lime.agent.browser-workspace-home-hint-shown";
+
+function areStringArraysEqual(left: string[] | null, right: string[]): boolean {
+  if (!left || left.length !== right.length) {
+    return false;
+  }
+  return left.every((item, index) => item === right[index]);
+}
+
+function mergeExpertSkillRefsIntoRequestMetadata(
+  metadata: Record<string, unknown> | null | undefined,
+  skillRefs: string[] | null,
+): Record<string, unknown> | null {
+  if (!metadata || !skillRefs) {
+    return metadata ?? null;
+  }
+
+  const root: Record<string, unknown> = { ...metadata };
+  const expert = asRecord(root.expert);
+  const harness = asRecord(root.harness);
+  const harnessExpert = asRecord(harness?.expert);
+
+  if (expert) {
+    root.expert = {
+      ...expert,
+      skillRefs: [...skillRefs],
+    };
+  }
+
+  if (harness || harnessExpert) {
+    root.harness = {
+      ...(harness ?? {}),
+      expert: {
+        ...(harnessExpert ?? {}),
+        skill_refs: [...skillRefs],
+      },
+    };
+  }
+
+  return root;
+}
 
 function isTransientWorkspaceBridgeError(message: string): boolean {
   const normalized = message.toLowerCase();
@@ -667,6 +700,7 @@ export function AgentChatWorkspace({
   initialProjectFileOpenTarget,
   onInitialUserPromptConsumed,
   newChatAt,
+  expertAgentLaunch,
   onRecommendationClick: _onRecommendationClick,
   onHasMessagesChange,
   onSessionChange,
@@ -1591,6 +1625,48 @@ export function AgentChatWorkspace({
 
     toast.error(`加载技能目录失败：${serviceSkillsError}`);
   }, [activeTheme, serviceSkillsError]);
+
+  const expertPanelRequestMetadata = useMemo(
+    () => initialAutoSendRequestMetadata ?? initialRequestMetadata ?? null,
+    [initialAutoSendRequestMetadata, initialRequestMetadata],
+  );
+  const [expertSkillRefsOverride, setExpertSkillRefsOverride] = useState<
+    string[] | null
+  >(null);
+  useEffect(() => {
+    setExpertSkillRefsOverride(null);
+  }, [expertPanelRequestMetadata]);
+  const handleExpertSkillRefsChange = useCallback(
+    (skillRefs: string[]) => {
+      setExpertSkillRefsOverride((current) =>
+        areStringArraysEqual(current, skillRefs) ? current : [...skillRefs],
+      );
+      if (!expertAgentLaunch) {
+        return;
+      }
+      const record = updateExpertAgentInstanceSkillRefs({
+        tenantId: expertAgentLaunch.tenantId,
+        expertId: expertAgentLaunch.expertId,
+        releaseId: expertAgentLaunch.releaseId,
+        catalogVersion: expertAgentLaunch.catalogVersion,
+        skillRefsOverride: skillRefs,
+      });
+      void syncExpertAgentInstanceToCloud(record).catch(() => undefined);
+    },
+    [expertAgentLaunch],
+  );
+  const workspaceRequestMetadataWithExpertSkills = useMemo(
+    () =>
+      mergeExpertSkillRefsIntoRequestMetadata(
+        initialRequestMetadata ?? initialAutoSendRequestMetadata ?? null,
+        expertSkillRefsOverride,
+      ),
+    [
+      expertSkillRefsOverride,
+      initialAutoSendRequestMetadata,
+      initialRequestMetadata,
+    ],
+  );
   const initialPendingServiceSkillLaunchSignature = useMemo(() => {
     const skillId = initialPendingServiceSkillLaunch?.skillId?.trim();
     const skillKey = initialPendingServiceSkillLaunch?.skillKey?.trim();
@@ -1729,60 +1805,12 @@ export function AgentChatWorkspace({
     string | null
   >(null);
   const [timelineFocusRequestKey, setTimelineFocusRequestKey] = useState(0);
-  const [canResumeRecentSceneApp, setCanResumeRecentSceneApp] =
-    useState<boolean>(() => hasSceneAppRecentVisit());
   const autoCollapsedTopicSidebarRef = useRef(false);
-
-  useEffect(() => {
-    setCanResumeRecentSceneApp(hasSceneAppRecentVisit());
-
-    return subscribeSceneAppRecentVisits((records) => {
-      setCanResumeRecentSceneApp(records.length > 0);
-    });
-  }, []);
 
   // 跳转到技能主页面
   const handleNavigateToSkillSettings = useCallback(() => {
     _onNavigate?.("skills");
   }, [_onNavigate]);
-  const handleOpenSceneAppsDirectory = useCallback(() => {
-    if (!_onNavigate) {
-      toast.error("当前入口暂不支持跳转到全部 Skills");
-      return;
-    }
-
-    _onNavigate(
-      "sceneapps",
-      resolveSceneAppsPageEntryParams(
-        {
-          projectId: projectId || undefined,
-          prefillIntent: input.trim() || undefined,
-        },
-        {
-          mode: "browse",
-        },
-      ),
-    );
-  }, [_onNavigate, input, projectId]);
-  const handleResumeRecentSceneApp = useCallback(() => {
-    if (!_onNavigate) {
-      toast.error("当前入口暂不支持跳转到全部 Skills");
-      return;
-    }
-
-    _onNavigate(
-      "sceneapps",
-      resolveSceneAppsPageEntryParams(
-        {
-          projectId: projectId || undefined,
-          prefillIntent: input.trim() || undefined,
-        },
-        {
-          mode: "resume_latest",
-        },
-      ),
-    );
-  }, [_onNavigate, input, projectId]);
   const handleRefreshSkills = useCallback(async () => {
     await loadSkills(true);
   }, [loadSkills]);
@@ -2356,6 +2384,24 @@ export function AgentChatWorkspace({
       : undefined,
     getSyncedSessionRecentPreferences,
   });
+  useEffect(() => {
+    const normalizedSessionId = sessionId?.trim();
+    if (!expertAgentLaunch || !normalizedSessionId) {
+      return;
+    }
+    const record = updateExpertAgentInstanceSession({
+      tenantId: expertAgentLaunch.tenantId,
+      expertId: expertAgentLaunch.expertId,
+      releaseId: expertAgentLaunch.releaseId,
+      catalogVersion: expertAgentLaunch.catalogVersion,
+      latestSessionId: normalizedSessionId,
+      skillRefsOverride:
+        expertSkillRefsOverride ?? expertAgentLaunch.skillRefsOverride,
+    });
+    if (record) {
+      void syncExpertAgentInstanceToCloud(record).catch(() => undefined);
+    }
+  }, [expertAgentLaunch, expertSkillRefsOverride, sessionId]);
   const activeSessionKey = sessionId?.trim() || null;
   const restoredInteractiveMessageSnapshotRef = useRef<{
     sessionId: string | null;
@@ -3218,19 +3264,6 @@ export function AgentChatWorkspace({
       onNavigate: _onNavigate,
       recordServiceSkillUsage,
     });
-  const workspaceSceneAppEntryActions = useWorkspaceSceneAppEntryActions({
-    activeTheme,
-    creationMode,
-    projectId,
-    input,
-    selectedText,
-    defaultToolPreferences: effectiveChatToolPreferences,
-    onNavigate: _onNavigate,
-    catalogLoadMode: shouldDeferWorkspaceAuxiliaryLoads
-      ? "deferred"
-      : "immediate",
-    catalogDeferredDelayMs: deferredWorkspaceAuxiliaryLoadMs,
-  });
   const handlePendingServiceSkillLaunchSubmit =
     workspaceServiceSkillEntryActions.handlePendingServiceSkillLaunchSubmit;
   const clearPendingServiceSkillLaunch =
@@ -4322,7 +4355,8 @@ export function AgentChatWorkspace({
     browserAssistProfileKey: browserAssistRequestProfileKey,
     browserAssistPreferredBackend: browserAssistRequestPreferredBackend,
     browserAssistAutoLaunch: browserAssistRequestAutoLaunch,
-    workspaceRequestMetadataBase: initialRequestMetadata,
+    workspaceRequestMetadataBase:
+      workspaceRequestMetadataWithExpertSkills ?? undefined,
     serviceModels,
     messages,
     setChatMessages,
@@ -5102,7 +5136,8 @@ export function AgentChatWorkspace({
       setActiveTaskCenterDraftTabId(null);
       clearEntryPendingA2UI();
       setChatMessages([]);
-      const targetSnapshotWorkspaceId = topicWorkspaceId ?? taskCenterWorkspaceId;
+      const targetSnapshotWorkspaceId =
+        topicWorkspaceId ?? taskCenterWorkspaceId;
       if (targetSnapshotWorkspaceId) {
         clearAgentSessionCachedSnapshot(targetSnapshotWorkspaceId, topicId);
       }
@@ -5401,8 +5436,7 @@ export function AgentChatWorkspace({
     return subscribeTaskCenterTaskOpenRequests(
       ({ sessionId: requestedSessionId, source, workspaceId }) => {
         const requestedWorkspaceId = normalizeProjectId(workspaceId);
-        const shouldForceRefresh =
-          shouldForceRefreshTaskOpenSource(source);
+        const shouldForceRefresh = shouldForceRefreshTaskOpenSource(source);
         if (
           requestedWorkspaceId &&
           requestedWorkspaceId !== normalizeProjectId(taskCenterWorkspaceId)
@@ -6239,13 +6273,8 @@ export function AgentChatWorkspace({
     () =>
       buildCuratedTaskReferenceEntryFromSceneAppExecution({
         summary: sceneAppExecutionSummaryState?.summary,
-        latestRunDetailView:
-          sceneAppExecutionSummaryState?.latestPackResultDetailView,
       }),
-    [
-      sceneAppExecutionSummaryState?.latestPackResultDetailView,
-      sceneAppExecutionSummaryState?.summary,
-    ],
+    [sceneAppExecutionSummaryState?.summary],
   );
   const defaultCuratedTaskReferenceEntries = useMemo(
     () =>
@@ -6329,8 +6358,6 @@ export function AgentChatWorkspace({
       ),
     );
   const sceneAppExecutionFailureSignal =
-    sceneAppExecutionSummaryState?.latestPackResultDetailView
-      ?.failureSignalLabel ??
     sceneAppExecutionSummaryState?.summary?.runtimeBackflow
       ?.topFailureSignalLabel;
   const resolveSceneAppExecutionReviewDecisionTemplate =
@@ -6465,280 +6492,19 @@ export function AgentChatWorkspace({
     ],
   );
   const handleOpenSceneAppExecutionDetail = useCallback(() => {
-    const sceneappId =
-      sceneAppExecutionSummaryState?.summary?.sceneappId?.trim();
-    if (!_onNavigate || !sceneappId) {
+    if (!_onNavigate) {
       return;
     }
 
-    _onNavigate(
-      "sceneapps",
-      resolveSceneAppsPageEntryParams(
-        {
-          view: "detail",
-          sceneappId,
-          projectId: projectId || undefined,
-        },
-        {
-          mode: "browse",
-        },
-      ),
-    );
-  }, [
-    _onNavigate,
-    projectId,
-    sceneAppExecutionSummaryState?.summary?.sceneappId,
-  ]);
+    _onNavigate("agent-app-lab");
+  }, [_onNavigate]);
   const handleOpenSceneAppExecutionGovernance = useCallback(() => {
-    const sceneappId =
-      sceneAppExecutionSummaryState?.summary?.sceneappId?.trim();
-    if (!_onNavigate || !sceneappId) {
+    if (!_onNavigate) {
       return;
     }
 
-    _onNavigate(
-      "sceneapps",
-      resolveSceneAppsPageEntryParams(
-        {
-          view: "governance",
-          sceneappId,
-          runId:
-            sceneAppExecutionSummaryState?.latestPackResultDetailView?.runId ||
-            sceneAppExecutionSummaryState?.summary?.runtimeBackflow?.runId ||
-            undefined,
-          projectId: projectId || undefined,
-        },
-        {
-          mode: "browse",
-        },
-      ),
-    );
-  }, [
-    _onNavigate,
-    projectId,
-    sceneAppExecutionSummaryState?.latestPackResultDetailView?.runId,
-    sceneAppExecutionSummaryState?.summary?.runtimeBackflow?.runId,
-    sceneAppExecutionSummaryState?.summary?.sceneappId,
-  ]);
-  const handleOpenSceneAppExecutionDeliveryArtifact = useCallback(
-    (
-      artifactEntry?: NonNullable<
-        NonNullable<
-          typeof sceneAppExecutionSummaryState
-        >["latestPackResultDetailView"]
-      >["deliveryArtifactEntries"][number],
-    ) => {
-      if (!_onNavigate) {
-        return;
-      }
-
-      const target = resolveSceneAppRuntimeArtifactOpenTarget({
-        entry: artifactEntry,
-        fallbackProjectId: projectId,
-        bannerPrefix: "已从生成打开结果文件",
-      });
-      if (!target) {
-        toast.error("当前这次运行还没有可打开的结果文件路径。");
-        return;
-      }
-
-      _onNavigate("agent", {
-        agentEntry: "claw",
-        projectId: target.projectId,
-        initialProjectFileOpenTarget: {
-          relativePath: target.openTargetPath,
-          requestKey: Date.now(),
-        },
-        entryBannerMessage: target.bannerMessage,
-      });
-    },
-    [_onNavigate, projectId],
-  );
-  const handleOpenSceneAppExecutionGovernanceArtifact = useCallback(
-    (
-      artifactEntry?: NonNullable<
-        NonNullable<
-          typeof sceneAppExecutionSummaryState
-        >["latestPackResultDetailView"]
-      >["governanceArtifactEntries"][number],
-    ) => {
-      if (!_onNavigate || !artifactEntry) {
-        return;
-      }
-
-      const runId =
-        sceneAppExecutionSummaryState?.latestPackResultDetailView?.runId?.trim() ||
-        sceneAppReviewTargetRunSummary?.runId?.trim() ||
-        "";
-
-      void (async () => {
-        let resolvedEntry = artifactEntry;
-        if (runId && sceneAppExecutionSummaryState?.summary) {
-          try {
-            const refreshed = await prepareSceneAppRunGovernanceArtifact(
-              runId,
-              artifactEntry.artifactRef.kind,
-            );
-            if (!refreshed) {
-              toast.error("当前运行已不存在，无法继续准备结果材料。");
-              return;
-            }
-
-            const refreshedDetailView =
-              buildSceneAppExecutionSummaryRunDetailViewModel({
-                summary: sceneAppExecutionSummaryState.summary,
-                run: refreshed,
-              });
-            resolvedEntry =
-              refreshedDetailView.governanceArtifactEntries.find(
-                (entry) =>
-                  entry.artifactRef.kind === artifactEntry.artifactRef.kind,
-              ) ?? artifactEntry;
-          } catch (error) {
-            toast.error(formatSceneAppErrorMessage(error));
-            return;
-          }
-        }
-
-        const target = resolveSceneAppRuntimeArtifactOpenTarget({
-          entry: resolvedEntry,
-          fallbackProjectId: projectId,
-          bannerPrefix: "已从生成打开结果材料",
-        });
-        if (!target) {
-          toast.error("当前这次运行还没有可打开的证据或复核文件。");
-          return;
-        }
-
-        _onNavigate("agent", {
-          agentEntry: "claw",
-          projectId: target.projectId,
-          initialProjectFileOpenTarget: {
-            relativePath: target.openTargetPath,
-            requestKey: Date.now(),
-          },
-          entryBannerMessage: target.bannerMessage,
-        });
-      })();
-    },
-    [
-      _onNavigate,
-      projectId,
-      sceneAppExecutionSummaryState?.latestPackResultDetailView?.runId,
-      sceneAppExecutionSummaryState?.summary,
-      sceneAppReviewTargetRunSummary?.runId,
-    ],
-  );
-  const handleRunSceneAppExecutionGovernanceAction = useCallback(
-    (
-      action?: NonNullable<
-        NonNullable<
-          typeof sceneAppExecutionSummaryState
-        >["latestPackResultDetailView"]
-      >["governanceActionEntries"][number],
-    ) => {
-      if (!_onNavigate || !action || !sceneAppExecutionSummaryState?.summary) {
-        return;
-      }
-
-      const runId =
-        sceneAppExecutionSummaryState.latestPackResultDetailView?.runId?.trim() ||
-        sceneAppReviewTargetRunSummary?.runId?.trim() ||
-        "";
-      if (!runId) {
-        toast.error("当前还没有可用于后续动作的运行样本。");
-        return;
-      }
-
-      const sceneAppExecutionSummary = sceneAppExecutionSummaryState.summary;
-
-      void (async () => {
-        try {
-          const refreshed = await prepareSceneAppRunGovernanceArtifacts(
-            runId,
-            action.artifactKinds,
-          );
-          if (!refreshed) {
-            toast.error("当前运行已不存在，无法继续准备后续动作。");
-            return;
-          }
-
-          const refreshedDetailView =
-            buildSceneAppExecutionSummaryRunDetailViewModel({
-              summary: sceneAppExecutionSummary,
-              run: refreshed,
-            });
-          const targetEntry =
-            refreshedDetailView.governanceArtifactEntries.find(
-              (entry) => entry.artifactRef.kind === action.primaryArtifactKind,
-            );
-          const target = resolveSceneAppRuntimeArtifactOpenTarget({
-            entry: targetEntry,
-            fallbackProjectId: projectId,
-            bannerPrefix: "已从生成打开后续动作",
-          });
-          if (!target) {
-            toast.error(
-              `后续动作已准备完成，但当前没有可打开的${action.primaryArtifactLabel}路径。`,
-            );
-            return;
-          }
-
-          _onNavigate("agent", {
-            agentEntry: "claw",
-            projectId: target.projectId,
-            initialProjectFileOpenTarget: {
-              relativePath: target.openTargetPath,
-              requestKey: Date.now(),
-            },
-            entryBannerMessage: target.bannerMessage,
-          });
-        } catch (error) {
-          toast.error(formatSceneAppErrorMessage(error));
-        }
-      })();
-    },
-    [
-      _onNavigate,
-      projectId,
-      sceneAppExecutionSummaryState,
-      sceneAppReviewTargetRunSummary?.runId,
-    ],
-  );
-  const handleOpenSceneAppExecutionEntryAction = useCallback(
-    (
-      action?: NonNullable<
-        NonNullable<
-          typeof sceneAppExecutionSummaryState
-        >["latestPackResultDetailView"]
-      >["entryAction"],
-    ) => {
-      if (!_onNavigate || !action || !sceneAppExecutionSummaryState?.summary) {
-        return;
-      }
-
-      const target = resolveSceneAppRunEntryNavigationTarget({
-        action,
-        sceneappId: sceneAppExecutionSummaryState.summary.sceneappId,
-        sceneTitle: sceneAppExecutionSummaryState.summary.title,
-        sourceLabel: "生成",
-        projectId,
-        linkedServiceSkillId:
-          sceneAppExecutionSummaryState.summary.descriptorSnapshot
-            ?.linkedServiceSkillId,
-        linkedSceneKey:
-          sceneAppExecutionSummaryState.summary.descriptorSnapshot
-            ?.linkedSceneKey,
-      });
-      if (!target) {
-        toast.error("当前运行缺少可恢复的入口上下文。");
-        return;
-      }
-
-      _onNavigate(target.page, target.params);
-    },
-    [_onNavigate, projectId, sceneAppExecutionSummaryState?.summary],
-  );
+    _onNavigate("agent-app-lab");
+  }, [_onNavigate]);
   const handleOpenSceneAppExecutionContentPost = useCallback(
     (entry: SceneAppExecutionContentPostEntry) => {
       if (entry.source.kind === "task_file") {
@@ -6803,46 +6569,6 @@ export function AgentChatWorkspace({
       taskFiles,
     ],
   );
-  const handleRunSceneAppExecutionPromptAction = useCallback(
-    async (action: SceneAppExecutionPromptAction) => {
-      const followUpAction = buildSceneAppExecutionPromptActionPayload({
-        action,
-        summary: sceneAppExecutionSummaryState?.summary,
-        detailView: sceneAppExecutionSummaryState?.latestPackResultDetailView,
-      });
-      if (!followUpAction) {
-        toast.error("当前动作缺少可发送内容。");
-        return;
-      }
-
-      if (isSending || queuedTurns.length > 0) {
-        toast.info("当前会话还有执行中的内容，请稍后再继续推进。");
-        return;
-      }
-
-      if (followUpAction.capabilityRoute) {
-        applyWorkbenchFollowUpActionPayload(followUpAction);
-        return;
-      }
-
-      await handleSendRef.current(
-        [],
-        webSearchPreferenceRef.current,
-        effectiveChatToolPreferences.thinking,
-        followUpAction.prompt,
-      );
-    },
-    [
-      applyWorkbenchFollowUpActionPayload,
-      effectiveChatToolPreferences.thinking,
-      handleSendRef,
-      isSending,
-      queuedTurns.length,
-      sceneAppExecutionSummaryState?.latestPackResultDetailView,
-      sceneAppExecutionSummaryState?.summary,
-      webSearchPreferenceRef,
-    ],
-  );
   const handleSaveSceneAppExecutionAsSkill = useCallback(() => {
     if (!_onNavigate) {
       toast.error("当前入口暂不支持直接跳转到 Skill 页面");
@@ -6859,7 +6585,6 @@ export function AgentChatWorkspace({
 
     const nextPageParams = buildSkillsPageParamsFromSceneAppExecution(
       sceneAppExecutionSummaryState?.summary,
-      sceneAppExecutionSummaryState?.latestPackResultDetailView,
       {
         projectId,
         reviewSignal: latestReviewSignal,
@@ -6875,7 +6600,6 @@ export function AgentChatWorkspace({
   }, [
     _onNavigate,
     projectId,
-    sceneAppExecutionSummaryState?.latestPackResultDetailView,
     sceneAppExecutionSummaryState?.summary,
     sessionId,
   ]);
@@ -6891,16 +6615,10 @@ export function AgentChatWorkspace({
   const handleSaveSceneAppExecutionAsInspiration = useCallback(() => {
     void saveSceneAppExecutionAsInspiration({
       summary: sceneAppExecutionSummaryState?.summary,
-      detailView: sceneAppExecutionSummaryState?.latestPackResultDetailView,
       projectId,
       sessionId,
     });
-  }, [
-    projectId,
-    sceneAppExecutionSummaryState?.latestPackResultDetailView,
-    sceneAppExecutionSummaryState?.summary,
-    sessionId,
-  ]);
+  }, [projectId, sceneAppExecutionSummaryState?.summary, sessionId]);
   const handleOpenInspirationLibrary = useCallback(() => {
     if (!_onNavigate) {
       toast.error("当前入口暂不支持直接打开灵感库");
@@ -6911,26 +6629,19 @@ export function AgentChatWorkspace({
       "memory",
       buildSceneAppExecutionInspirationLibraryPageParams({
         summary: sceneAppExecutionSummaryState?.summary,
-        detailView: sceneAppExecutionSummaryState?.latestPackResultDetailView,
       }),
     );
-  }, [
-    _onNavigate,
-    sceneAppExecutionSummaryState?.latestPackResultDetailView,
-    sceneAppExecutionSummaryState?.summary,
-  ]);
+  }, [_onNavigate, sceneAppExecutionSummaryState?.summary]);
   const sceneAppExecutionSavedAsInspiration = useMemo(() => {
     void curatedTaskRecommendationSignalsVersion;
     return hasSavedSceneAppExecutionAsInspiration({
       summary: sceneAppExecutionSummaryState?.summary,
-      detailView: sceneAppExecutionSummaryState?.latestPackResultDetailView,
       projectId,
       sessionId,
     });
   }, [
     curatedTaskRecommendationSignalsVersion,
     projectId,
-    sceneAppExecutionSummaryState?.latestPackResultDetailView,
     sceneAppExecutionSummaryState?.summary,
     sessionId,
   ]);
@@ -6946,13 +6657,6 @@ export function AgentChatWorkspace({
       sceneAppExecutionSummaryState?.summary ? (
         <SceneAppExecutionSummaryCard
           summary={sceneAppExecutionSummaryState.summary}
-          latestPackResultDetailView={
-            sceneAppExecutionSummaryState.latestPackResultDetailView
-          }
-          latestPackResultLoading={sceneAppExecutionSummaryState.loading}
-          latestPackResultUsesFallback={
-            sceneAppExecutionSummaryState.latestPackResultUsesFallback
-          }
           latestReviewFeedbackSignal={latestReviewFeedbackSignal}
           onContinueReviewFeedback={handleContinueSceneAppReviewFeedback}
           onReviewCurrentProject={handleReviewCurrentSceneAppExecution}
@@ -6970,16 +6674,8 @@ export function AgentChatWorkspace({
           }
           onOpenHumanReview={handleOpenSceneAppExecutionHumanReview}
           onApplyQuickReview={handleApplySceneAppExecutionQuickReview}
-          onDeliveryArtifactAction={handleOpenSceneAppExecutionDeliveryArtifact}
-          onGovernanceAction={handleRunSceneAppExecutionGovernanceAction}
-          onGovernanceArtifactAction={
-            handleOpenSceneAppExecutionGovernanceArtifact
-          }
-          onEntryAction={handleOpenSceneAppExecutionEntryAction}
           contentPostEntries={sceneAppExecutionContentPostEntries}
           onContentPostAction={handleOpenSceneAppExecutionContentPost}
-          promptActionPending={isSending || queuedTurns.length > 0}
-          onPromptAction={handleRunSceneAppExecutionPromptAction}
         />
       ) : null,
     [
@@ -6991,17 +6687,10 @@ export function AgentChatWorkspace({
       handleOpenSceneAppExecutionHumanReview,
       handleOpenSceneAppExecutionGovernance,
       handleOpenInspirationLibrary,
-      handleOpenSceneAppExecutionDeliveryArtifact,
-      handleOpenSceneAppExecutionEntryAction,
-      handleOpenSceneAppExecutionGovernanceArtifact,
       handleReviewCurrentSceneAppExecution,
       handleSaveSceneAppExecutionAsInspiration,
       handleSaveSceneAppExecutionAsSkill,
-      handleRunSceneAppExecutionPromptAction,
-      handleRunSceneAppExecutionGovernanceAction,
-      isSending,
       latestReviewFeedbackSignal,
-      queuedTurns.length,
       sceneAppExecutionSavedAsInspiration,
       sceneAppReviewDecisionLoading,
       sceneAppReviewDecisionSaving,
@@ -7181,7 +6870,7 @@ export function AgentChatWorkspace({
       return;
     }
 
-    if (!sessionId) {
+    if (!projectId) {
       return;
     }
 
@@ -7196,11 +6885,12 @@ export function AgentChatWorkspace({
         pendingInitialPrompt,
         undefined,
         undefined,
-        initialAutoSendRequestMetadata
-          ? {
-              requestMetadata: initialAutoSendRequestMetadata,
-            }
-          : undefined,
+        {
+          ...(initialAutoSendRequestMetadata
+            ? { requestMetadata: initialAutoSendRequestMetadata }
+            : {}),
+          skipSessionRestore: true,
+        },
       );
       if (disposed) {
         return;
@@ -7226,6 +6916,7 @@ export function AgentChatWorkspace({
     isSending,
     messages.length,
     onInitialUserPromptConsumed,
+    projectId,
     sessionId,
     setInput,
     shouldUseCompactGeneralWorkbench,
@@ -8349,17 +8040,10 @@ export function AgentChatWorkspace({
     handleRefreshSkills,
     handleOpenBrowserAssistInCanvas: handleOpenBrowserRuntimeForBrowserAssist,
     browserAssistLaunching,
-    featuredSceneApps: workspaceSceneAppEntryActions.featuredSceneApps,
-    sceneAppsLoading: workspaceSceneAppEntryActions.sceneAppsLoading,
-    sceneAppLaunchingId: workspaceSceneAppEntryActions.sceneAppLaunchingId,
-    handleLaunchSceneApp: workspaceSceneAppEntryActions.handleLaunchSceneApp,
-    canResumeRecentSceneApp,
-    handleResumeRecentSceneApp,
     recentSessionTitle: recentSessionTopic?.title ?? null,
     recentSessionSummary: recentSessionTopic?.lastPreview ?? null,
     recentSessionActionLabel,
     handleResumeRecentSession,
-    handleOpenSceneAppsDirectory,
     taskCenterTabsNode: shouldRenderTaskCenterTabStrip
       ? taskCenterTabsNode
       : browserWorkspaceHomeTabsNode,
@@ -8471,6 +8155,15 @@ export function AgentChatWorkspace({
         initialDirectory={project?.rootPath || null}
       />
     ) : null;
+  const expertInfoPanelNode = (
+    <ExpertInfoPanel
+      requestMetadata={expertPanelRequestMetadata}
+      localSkills={skills}
+      serviceSkills={serviceSkills}
+      skillsLoading={combinedSkillsLoading}
+      onSkillRefsChange={handleExpertSkillRefsChange}
+    />
+  );
 
   return (
     <>
@@ -8489,6 +8182,7 @@ export function AgentChatWorkspace({
         onExpandGeneralWorkbenchSidebar={handleExpandGeneralWorkbenchSidebar}
         fileManagerNode={fileManagerNode}
         mainAreaNode={conversationSceneRuntime.mainAreaNode}
+        rightRailNode={expertInfoPanelNode}
         currentTopicId={activeTaskCenterDraftTabId ?? sessionId ?? null}
         topics={topics}
         onNewChat={shellHandleBackHome}
@@ -8526,19 +8220,6 @@ export function AgentChatWorkspace({
         onSubmit={
           workspaceServiceSkillEntryActions.handleAutomationDialogSubmit
         }
-      />
-      <AutomationJobDialog
-        open={workspaceSceneAppEntryActions.automationDialogOpen}
-        mode="create"
-        workspaces={workspaceSceneAppEntryActions.automationWorkspaces}
-        initialValues={
-          workspaceSceneAppEntryActions.automationDialogInitialValues
-        }
-        saving={workspaceSceneAppEntryActions.automationJobSaving}
-        onOpenChange={
-          workspaceSceneAppEntryActions.handleAutomationDialogOpenChange
-        }
-        onSubmit={workspaceSceneAppEntryActions.handleAutomationDialogSubmit}
       />
       <RuntimeReviewDecisionDialog
         open={sceneAppReviewDecisionDialogOpen}

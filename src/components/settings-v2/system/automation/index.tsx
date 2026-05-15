@@ -45,10 +45,6 @@ import {
   updateAutomationJob,
   updateAutomationSchedulerConfig,
 } from "@/lib/api/automation";
-import {
-  prepareSceneAppRunGovernanceArtifact,
-  prepareSceneAppRunGovernanceArtifacts,
-} from "@/lib/api/sceneapp";
 import type { Project } from "@/lib/api/project";
 import { listProjects } from "@/lib/api/project";
 import type { AgentRun } from "@/lib/api/executionRun";
@@ -87,35 +83,8 @@ import {
   statusVariant,
 } from "./automationPresentation";
 import type { AutomationAccessModeCopy } from "./automationAccessMode";
-import { useAutomationSceneAppRuntime } from "./useAutomationSceneAppRuntime";
-import {
-  backfillSceneAppExecutionSummaryViewModel,
-  buildSceneAppAutomationWorkspaceCardViewModel,
-  buildSceneAppExecutionSummaryViewModel,
-  buildSceneAppRunDetailViewModel,
-  formatSceneAppErrorMessage,
-  normalizeSceneAppsPageParams,
-  resolveSceneAppAutomationContext,
-  resolveSceneAppRunEntryNavigationTarget,
-} from "@/lib/sceneapp";
-import type { SceneAppRunDetailViewModel } from "@/lib/sceneapp";
-import { subscribeCuratedTaskRecommendationSignalsChanged } from "@/components/agent/chat/utils/curatedTaskRecommendationSignals";
-import {
-  buildCuratedTaskReferenceEntryFromSceneAppExecution,
-  buildSceneAppExecutionCuratedTaskFollowUpAction,
-} from "@/components/agent/chat/utils/sceneAppCuratedTaskReference";
-import { buildRuntimeInitialInputCapabilityFromFollowUpAction } from "@/components/agent/chat/utils/inputCapabilityBootstrap";
-import {
-  buildSceneAppExecutionInspirationLibraryPageParams,
-  hasSavedSceneAppExecutionAsInspiration,
-  saveSceneAppExecutionAsInspiration,
-} from "@/components/agent/chat/utils/saveSceneAppExecutionAsInspiration";
-import type {
-  AutomationWorkspaceTab,
-  Page,
-  PageParams,
-  SceneAppsPageParams,
-} from "@/types/page";
+import { resolveLegacySceneAppAutomationContext } from "./legacySceneAppContext";
+import type { AutomationWorkspaceTab } from "@/types/page";
 
 const AUTOMATION_CORE_LOAD_TIMEOUT_MS = 8000;
 const AUTOMATION_AUXILIARY_LOAD_TIMEOUT_MS = 5000;
@@ -315,38 +284,6 @@ function resolveAutomationJobSortTime(job: AutomationJobRecord): number {
   return 0;
 }
 
-function buildAutomationSceneAppPageParams(params: {
-  job: AutomationJobRecord | null;
-  runtime: Pick<
-    ReturnType<typeof useAutomationSceneAppRuntime>,
-    "sceneAppContext" | "linkedRun"
-  >;
-  view?: SceneAppsPageParams["view"];
-}): SceneAppsPageParams | null {
-  if (!params.job || !params.runtime.sceneAppContext) {
-    return null;
-  }
-
-  const resolvedView =
-    params.view === "governance" && params.runtime.linkedRun
-      ? "governance"
-      : "detail";
-
-  return normalizeSceneAppsPageParams({
-    view: resolvedView,
-    sceneappId: params.runtime.sceneAppContext.sceneappId,
-    runId:
-      resolvedView === "governance"
-        ? params.runtime.linkedRun?.runId
-        : undefined,
-    projectId:
-      params.runtime.sceneAppContext.projectId ??
-      params.runtime.sceneAppContext.workspaceId ??
-      params.job.workspace_id,
-    referenceMemoryIds: params.runtime.sceneAppContext.referenceMemoryIds,
-  });
-}
-
 type AutomationWorkspaceTemplate = {
   id: string;
   tag: string;
@@ -439,7 +376,6 @@ interface AutomationSettingsProps {
   initialWorkspaceTab?: AutomationWorkspaceTab;
   onOpenSettings?: () => void;
   onOpenWorkspace?: () => void;
-  onNavigate?: (page: Page, params?: PageParams) => void;
 }
 
 function resolveAutomationLoadErrorMessage(
@@ -477,7 +413,6 @@ export function AutomationSettings({
   initialWorkspaceTab,
   onOpenSettings,
   onOpenWorkspace,
-  onNavigate,
 }: AutomationSettingsProps) {
   const { i18n, t } = useTranslation("settings");
   const serviceSkillContextCopy = useMemo(
@@ -522,10 +457,6 @@ export function AutomationSettings({
     initialWorkspaceTab ?? "tasks",
   );
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
-  const [
-    curatedTaskRecommendationSignalsVersion,
-    setCuratedTaskRecommendationSignalsVersion,
-  ] = useState(0);
   const autoOpenedInitialJobIdRef = useRef<string | null>(null);
   const isMountedRef = useRef(true);
   const refreshRequestIdRef = useRef(0);
@@ -542,12 +473,6 @@ export function AutomationSettings({
       refreshRequestIdRef.current += 1;
       historyRequestIdRef.current += 1;
     };
-  }, []);
-
-  useEffect(() => {
-    return subscribeCuratedTaskRecommendationSignalsChanged(() => {
-      setCuratedTaskRecommendationSignalsVersion((previous) => previous + 1);
-    });
   }, []);
 
   useEffect(() => {
@@ -598,10 +523,10 @@ export function AutomationSettings({
   const sceneAppAutomationContextByJobId = useMemo(() => {
     const mapping = new Map<
       string,
-      NonNullable<ReturnType<typeof resolveSceneAppAutomationContext>>
+      NonNullable<ReturnType<typeof resolveLegacySceneAppAutomationContext>>
     >();
     jobs.forEach((job) => {
-      const context = resolveSceneAppAutomationContext(job.payload);
+      const context = resolveLegacySceneAppAutomationContext(job.payload);
       if (context) {
         mapping.set(job.id, context);
       }
@@ -637,30 +562,17 @@ export function AutomationSettings({
       })[0] ?? null
     );
   }, [jobs, riskyJobMessageMap, sceneAppAutomationContextByJobId, selectedJob]);
-  const shouldLoadOverviewSceneAppRuntime =
-    showWorkspacePanels &&
-    Boolean(overviewFocusJob) &&
-    (workspaceTab === "overview" || workspaceTab === "tasks");
-  const shouldReuseSelectedSceneAppRuntimeForOverview =
-    detailDialogOpen &&
-    Boolean(selectedJob?.id) &&
-    overviewFocusJob?.id === selectedJob?.id;
-  const selectedSceneAppRuntime = useAutomationSceneAppRuntime({
-    job: selectedJob,
-    jobRuns,
-    enabled: showWorkspacePanels && detailDialogOpen,
-  });
-  const overviewSceneAppRuntime = useAutomationSceneAppRuntime({
-    job: overviewFocusJob,
-    jobRuns: [],
-    enabled:
-      shouldLoadOverviewSceneAppRuntime &&
-      !shouldReuseSelectedSceneAppRuntimeForOverview,
-  });
-  const effectiveOverviewSceneAppRuntime =
-    shouldReuseSelectedSceneAppRuntimeForOverview
-      ? selectedSceneAppRuntime
-      : overviewSceneAppRuntime;
+  const retiredSceneAppAutomationMessage = t(
+    "settings.automation.details.sceneApp.retired.description",
+  );
+  const selectedRetiredSceneAppMessage =
+    selectedJob && sceneAppAutomationContextByJobId.has(selectedJob.id)
+      ? retiredSceneAppAutomationMessage
+      : null;
+  const overviewRetiredSceneAppMessage =
+    overviewFocusJob && sceneAppAutomationContextByJobId.has(overviewFocusJob.id)
+      ? retiredSceneAppAutomationMessage
+      : null;
   const legacyBrowserJobCount = useMemo(
     () => jobs.filter((job) => isLegacyBrowserAutomation(job)).length,
     [jobs],
@@ -673,201 +585,6 @@ export function AutomationSettings({
     });
     return mapping;
   }, [workspaces]);
-  const selectedJobRiskyCount = useMemo(() => {
-    if (!selectedJob) {
-      return 0;
-    }
-
-    return isAutomationJobAtRisk(selectedJob, riskyJobMessageMap) ? 1 : 0;
-  }, [riskyJobMessageMap, selectedJob]);
-  const selectedSceneAppSummaryCard = useMemo(() => {
-    if (!selectedJob || !selectedSceneAppRuntime.descriptor) {
-      return null;
-    }
-
-    return buildSceneAppAutomationWorkspaceCardViewModel({
-      descriptor: selectedSceneAppRuntime.descriptor,
-      scorecard: selectedSceneAppRuntime.scorecard,
-      run: selectedSceneAppRuntime.linkedRun,
-      jobCount: 1,
-      enabledJobCount: selectedJob.enabled ? 1 : 0,
-      riskyJobCount: selectedJobRiskyCount,
-      latestJobName: selectedJob.name,
-      latestJobStatusLabel: statusLabel(
-        selectedJob.last_status,
-        automationPresentationCopy,
-      ),
-    });
-  }, [
-    automationPresentationCopy,
-    selectedJob,
-    selectedJobRiskyCount,
-    selectedSceneAppRuntime.descriptor,
-    selectedSceneAppRuntime.linkedRun,
-    selectedSceneAppRuntime.scorecard,
-  ]);
-  const selectedSceneAppRunDetailView = useMemo(() => {
-    if (
-      !selectedSceneAppRuntime.descriptor ||
-      !selectedSceneAppRuntime.linkedRun
-    ) {
-      return null;
-    }
-
-    return {
-      ...buildSceneAppRunDetailViewModel({
-        descriptor: selectedSceneAppRuntime.descriptor,
-        run: selectedSceneAppRuntime.linkedRun,
-        planResult: selectedSceneAppRuntime.planResult,
-      }),
-      entryAction: null,
-    };
-  }, [
-    selectedSceneAppRuntime.descriptor,
-    selectedSceneAppRuntime.linkedRun,
-    selectedSceneAppRuntime.planResult,
-  ]);
-  const selectedSceneAppExecutionSummary = useMemo(() => {
-    if (
-      !selectedSceneAppRuntime.descriptor ||
-      !selectedSceneAppRuntime.planResult
-    ) {
-      return null;
-    }
-
-    return backfillSceneAppExecutionSummaryViewModel({
-      summary: buildSceneAppExecutionSummaryViewModel({
-        descriptor: selectedSceneAppRuntime.descriptor,
-        planResult: selectedSceneAppRuntime.planResult,
-      }),
-      run: selectedSceneAppRuntime.linkedRun,
-      scorecard: selectedSceneAppRuntime.scorecard,
-    });
-  }, [
-    selectedSceneAppRuntime.descriptor,
-    selectedSceneAppRuntime.linkedRun,
-    selectedSceneAppRuntime.planResult,
-    selectedSceneAppRuntime.scorecard,
-  ]);
-  const selectedSceneAppExecutionReferenceEntry = useMemo(
-    () =>
-      buildCuratedTaskReferenceEntryFromSceneAppExecution({
-        summary: selectedSceneAppExecutionSummary,
-        latestRunDetailView: selectedSceneAppRunDetailView,
-      }),
-    [selectedSceneAppExecutionSummary, selectedSceneAppRunDetailView],
-  );
-  const selectedSceneAppSavedAsInspiration = useMemo(() => {
-    void curatedTaskRecommendationSignalsVersion;
-    return hasSavedSceneAppExecutionAsInspiration({
-      summary: selectedSceneAppExecutionSummary,
-      detailView: selectedSceneAppRunDetailView,
-      projectId: selectedSceneAppRuntime.sceneAppContext?.projectId,
-      sessionId: selectedSceneAppRuntime.linkedRun?.sessionId,
-    });
-  }, [
-    curatedTaskRecommendationSignalsVersion,
-    selectedSceneAppExecutionSummary,
-    selectedSceneAppRunDetailView,
-    selectedSceneAppRuntime.linkedRun?.sessionId,
-    selectedSceneAppRuntime.sceneAppContext?.projectId,
-  ]);
-  const handleOpenInspirationLibrary = useCallback(() => {
-    if (!onNavigate) {
-      return;
-    }
-    onNavigate(
-      "memory",
-      buildSceneAppExecutionInspirationLibraryPageParams({
-        summary: selectedSceneAppExecutionSummary,
-        detailView: selectedSceneAppRunDetailView,
-      }),
-    );
-  }, [
-    onNavigate,
-    selectedSceneAppExecutionSummary,
-    selectedSceneAppRunDetailView,
-  ]);
-  const overviewSceneAppSummaryCard = useMemo(() => {
-    if (!overviewFocusJob || !effectiveOverviewSceneAppRuntime.descriptor) {
-      return null;
-    }
-
-    return buildSceneAppAutomationWorkspaceCardViewModel({
-      descriptor: effectiveOverviewSceneAppRuntime.descriptor,
-      scorecard: effectiveOverviewSceneAppRuntime.scorecard,
-      run: effectiveOverviewSceneAppRuntime.linkedRun,
-      jobCount: 1,
-      enabledJobCount: overviewFocusJob.enabled ? 1 : 0,
-      riskyJobCount: isAutomationJobAtRisk(overviewFocusJob, riskyJobMessageMap)
-        ? 1
-        : 0,
-      latestJobName: overviewFocusJob.name,
-      latestJobStatusLabel: statusLabel(
-        overviewFocusJob.last_status,
-        automationPresentationCopy,
-      ),
-    });
-  }, [
-    automationPresentationCopy,
-    effectiveOverviewSceneAppRuntime.descriptor,
-    effectiveOverviewSceneAppRuntime.linkedRun,
-    effectiveOverviewSceneAppRuntime.scorecard,
-    overviewFocusJob,
-    riskyJobMessageMap,
-  ]);
-  const overviewSceneAppRunDetailView = useMemo(() => {
-    if (
-      !effectiveOverviewSceneAppRuntime.descriptor ||
-      !effectiveOverviewSceneAppRuntime.linkedRun
-    ) {
-      return null;
-    }
-
-    return {
-      ...buildSceneAppRunDetailViewModel({
-        descriptor: effectiveOverviewSceneAppRuntime.descriptor,
-        run: effectiveOverviewSceneAppRuntime.linkedRun,
-        planResult: effectiveOverviewSceneAppRuntime.planResult,
-      }),
-      entryAction: null,
-    };
-  }, [
-    effectiveOverviewSceneAppRuntime.descriptor,
-    effectiveOverviewSceneAppRuntime.linkedRun,
-    effectiveOverviewSceneAppRuntime.planResult,
-  ]);
-  const overviewSceneAppExecutionSummary = useMemo(() => {
-    if (
-      !effectiveOverviewSceneAppRuntime.descriptor ||
-      !effectiveOverviewSceneAppRuntime.planResult
-    ) {
-      return null;
-    }
-
-    return backfillSceneAppExecutionSummaryViewModel({
-      summary: buildSceneAppExecutionSummaryViewModel({
-        descriptor: effectiveOverviewSceneAppRuntime.descriptor,
-        planResult: effectiveOverviewSceneAppRuntime.planResult,
-      }),
-      run: effectiveOverviewSceneAppRuntime.linkedRun,
-      scorecard: effectiveOverviewSceneAppRuntime.scorecard,
-    });
-  }, [
-    effectiveOverviewSceneAppRuntime.descriptor,
-    effectiveOverviewSceneAppRuntime.linkedRun,
-    effectiveOverviewSceneAppRuntime.planResult,
-    effectiveOverviewSceneAppRuntime.scorecard,
-  ]);
-  const overviewSceneAppExecutionReferenceEntry = useMemo(
-    () =>
-      buildCuratedTaskReferenceEntryFromSceneAppExecution({
-        summary: overviewSceneAppExecutionSummary,
-        latestRunDetailView: overviewSceneAppRunDetailView,
-      }),
-    [overviewSceneAppExecutionSummary, overviewSceneAppRunDetailView],
-  );
-
   const refreshAll = useCallback(
     async (silent: boolean = false) => {
       const requestId = refreshRequestIdRef.current + 1;
@@ -1350,459 +1067,6 @@ export function AutomationSettings({
       setDialogInitialValues(null);
     }
   }
-
-  const handleOpenSelectedJobSceneApp = useCallback(
-    (view: SceneAppsPageParams["view"] = "detail") => {
-      if (!onNavigate) {
-        return;
-      }
-
-      const params = buildAutomationSceneAppPageParams({
-        job: selectedJob,
-        runtime: selectedSceneAppRuntime,
-        view,
-      });
-      if (!params) {
-        return;
-      }
-
-      onNavigate("sceneapps", params);
-    },
-    [onNavigate, selectedJob, selectedSceneAppRuntime],
-  );
-
-  const handleContinueSelectedSceneAppReview = useCallback(
-    (taskId: string) => {
-      if (!onNavigate) {
-        toast.error(
-          t("settings.automation.details.sceneApp.toast.returnUnsupported"),
-        );
-        return;
-      }
-      if (!selectedSceneAppExecutionReferenceEntry) {
-        toast.error(
-          t(
-            "settings.automation.details.sceneApp.toast.selectedBaselineMissing",
-          ),
-        );
-        return;
-      }
-
-      const followUpAction = buildSceneAppExecutionCuratedTaskFollowUpAction({
-        referenceEntries: [selectedSceneAppExecutionReferenceEntry],
-        taskId,
-      });
-      if (!followUpAction) {
-        toast.error(
-          t(
-            "settings.automation.details.sceneApp.toast.selectedFollowUpMissing",
-          ),
-        );
-        return;
-      }
-
-      const initialInputCapability =
-        buildRuntimeInitialInputCapabilityFromFollowUpAction({
-          payload: followUpAction,
-          requestKey: Date.now(),
-        });
-      if (!initialInputCapability) {
-        toast.error(
-          t(
-            "settings.automation.details.sceneApp.toast.inputCapabilityMissing",
-          ),
-        );
-        return;
-      }
-
-      onNavigate("agent", {
-        agentEntry: "claw",
-        projectId:
-          selectedSceneAppRuntime.sceneAppContext?.projectId ??
-          selectedSceneAppRuntime.sceneAppContext?.workspaceId ??
-          selectedJob?.workspace_id ??
-          undefined,
-        initialInputCapability,
-        entryBannerMessage: followUpAction.bannerMessage,
-        ...(selectedSceneAppExecutionSummary
-          ? {
-              initialSceneAppExecutionSummary: selectedSceneAppExecutionSummary,
-            }
-          : {}),
-      });
-    },
-    [
-      onNavigate,
-      selectedJob?.workspace_id,
-      selectedSceneAppExecutionReferenceEntry,
-      selectedSceneAppExecutionSummary,
-      selectedSceneAppRuntime.sceneAppContext,
-      t,
-    ],
-  );
-  const handleSaveSelectedSceneAppAsInspiration = useCallback(() => {
-    void saveSceneAppExecutionAsInspiration({
-      summary: selectedSceneAppExecutionSummary,
-      detailView: selectedSceneAppRunDetailView,
-      projectId: selectedSceneAppRuntime.sceneAppContext?.projectId,
-      sessionId: selectedSceneAppRuntime.linkedRun?.sessionId,
-    });
-  }, [
-    selectedSceneAppExecutionSummary,
-    selectedSceneAppRunDetailView,
-    selectedSceneAppRuntime.linkedRun?.sessionId,
-    selectedSceneAppRuntime.sceneAppContext?.projectId,
-  ]);
-
-  const handleOpenOverviewSceneApp = useCallback(
-    (view: SceneAppsPageParams["view"] = "detail") => {
-      if (!onNavigate) {
-        return;
-      }
-
-      const params = buildAutomationSceneAppPageParams({
-        job: overviewFocusJob,
-        runtime: effectiveOverviewSceneAppRuntime,
-        view,
-      });
-      if (!params) {
-        return;
-      }
-
-      onNavigate("sceneapps", params);
-    },
-    [effectiveOverviewSceneAppRuntime, onNavigate, overviewFocusJob],
-  );
-
-  const handleContinueOverviewSceneAppReview = useCallback(
-    (taskId: string) => {
-      if (!onNavigate) {
-        toast.error(
-          t("settings.automation.details.sceneApp.toast.returnUnsupported"),
-        );
-        return;
-      }
-      if (!overviewSceneAppExecutionReferenceEntry) {
-        toast.error(
-          t(
-            "settings.automation.details.sceneApp.toast.overviewBaselineMissing",
-          ),
-        );
-        return;
-      }
-
-      const followUpAction = buildSceneAppExecutionCuratedTaskFollowUpAction({
-        referenceEntries: [overviewSceneAppExecutionReferenceEntry],
-        taskId,
-      });
-      if (!followUpAction) {
-        toast.error(
-          t(
-            "settings.automation.details.sceneApp.toast.overviewFollowUpMissing",
-          ),
-        );
-        return;
-      }
-
-      const initialInputCapability =
-        buildRuntimeInitialInputCapabilityFromFollowUpAction({
-          payload: followUpAction,
-          requestKey: Date.now(),
-        });
-      if (!initialInputCapability) {
-        toast.error(
-          t(
-            "settings.automation.details.sceneApp.toast.inputCapabilityMissing",
-          ),
-        );
-        return;
-      }
-
-      onNavigate("agent", {
-        agentEntry: "claw",
-        projectId:
-          effectiveOverviewSceneAppRuntime.sceneAppContext?.projectId ??
-          effectiveOverviewSceneAppRuntime.sceneAppContext?.workspaceId ??
-          overviewFocusJob?.workspace_id ??
-          undefined,
-        initialInputCapability,
-        entryBannerMessage: followUpAction.bannerMessage,
-        ...(overviewSceneAppExecutionSummary
-          ? {
-              initialSceneAppExecutionSummary: overviewSceneAppExecutionSummary,
-            }
-          : {}),
-      });
-    },
-    [
-      onNavigate,
-      effectiveOverviewSceneAppRuntime.sceneAppContext,
-      overviewFocusJob?.workspace_id,
-      overviewSceneAppExecutionReferenceEntry,
-      overviewSceneAppExecutionSummary,
-      t,
-    ],
-  );
-
-  const openSelectedSceneAppFileEntry = useCallback(
-    (
-      entry:
-        | {
-            label: string;
-            artifactRef: {
-              relativePath?: string | null;
-              absolutePath?: string | null;
-              projectId?: string | null;
-            };
-          }
-        | undefined,
-      options: {
-        missingPathMessage: string;
-        bannerPrefix: string;
-      },
-    ) => {
-      if (!entry) {
-        return;
-      }
-      if (!onNavigate) {
-        toast.error(
-          t("settings.automation.details.sceneApp.file.openUnsupported"),
-        );
-        return;
-      }
-
-      const relativePath = entry.artifactRef.relativePath?.trim();
-      const absolutePath = entry.artifactRef.absolutePath?.trim();
-      const projectId =
-        entry.artifactRef.projectId?.trim() ||
-        selectedSceneAppRuntime.sceneAppContext?.projectId ||
-        selectedSceneAppRuntime.sceneAppContext?.workspaceId ||
-        selectedJob?.workspace_id ||
-        undefined;
-      const openTargetPath = projectId
-        ? relativePath || absolutePath
-        : absolutePath || relativePath;
-
-      if (!openTargetPath) {
-        toast.error(options.missingPathMessage);
-        return;
-      }
-
-      onNavigate("agent", {
-        agentEntry: "claw",
-        projectId,
-        initialProjectFileOpenTarget: {
-          relativePath: openTargetPath,
-          requestKey: Date.now(),
-        },
-        entryBannerMessage: t(
-          "settings.automation.details.sceneApp.file.bannerMessage",
-          {
-            prefix: options.bannerPrefix,
-            label: entry.label,
-          },
-        ),
-      });
-    },
-    [
-      onNavigate,
-      selectedJob?.workspace_id,
-      selectedSceneAppRuntime.sceneAppContext,
-      t,
-    ],
-  );
-
-  const handleOpenSelectedSceneAppDeliveryArtifact = useCallback(
-    (
-      artifactEntry?: NonNullable<
-        NonNullable<
-          typeof selectedSceneAppRunDetailView
-        >["deliveryArtifactEntries"][number]
-      >,
-    ) => {
-      openSelectedSceneAppFileEntry(artifactEntry, {
-        missingPathMessage: t(
-          "settings.automation.details.sceneApp.file.deliveryMissingPath",
-        ),
-        bannerPrefix: t(
-          "settings.automation.details.sceneApp.file.deliveryBannerPrefix",
-        ),
-      });
-    },
-    [openSelectedSceneAppFileEntry, t],
-  );
-
-  const handleOpenSelectedSceneAppGovernanceArtifact = useCallback(
-    (
-      artifactEntry?: NonNullable<
-        NonNullable<
-          typeof selectedSceneAppRunDetailView
-        >["governanceArtifactEntries"][number]
-      >,
-    ) => {
-      const runId = selectedSceneAppRuntime.linkedRun?.runId?.trim();
-      const descriptor = selectedSceneAppRuntime.descriptor;
-      if (!artifactEntry || !descriptor) {
-        return;
-      }
-
-      void (async () => {
-        if (runId) {
-          try {
-            const refreshed = await prepareSceneAppRunGovernanceArtifact(
-              runId,
-              artifactEntry.artifactRef.kind,
-            );
-            if (!refreshed) {
-              toast.error(
-                t(
-                  "settings.automation.details.sceneApp.file.governanceRunMissing",
-                ),
-              );
-              return;
-            }
-            selectedSceneAppRuntime.setLinkedRun(refreshed);
-            const refreshedDetailView = buildSceneAppRunDetailViewModel({
-              descriptor,
-              run: refreshed,
-              planResult: selectedSceneAppRuntime.planResult,
-            });
-            const targetEntry =
-              refreshedDetailView.governanceArtifactEntries.find(
-                (entry) =>
-                  entry.artifactRef.kind === artifactEntry.artifactRef.kind,
-              );
-            openSelectedSceneAppFileEntry(targetEntry, {
-              missingPathMessage: t(
-                "settings.automation.details.sceneApp.file.governanceMissingPath",
-              ),
-              bannerPrefix: t(
-                "settings.automation.details.sceneApp.file.governanceBannerPrefix",
-              ),
-            });
-            return;
-          } catch (error) {
-            toast.error(formatSceneAppErrorMessage(error));
-            return;
-          }
-        }
-
-        openSelectedSceneAppFileEntry(artifactEntry, {
-          missingPathMessage: t(
-            "settings.automation.details.sceneApp.file.governanceMissingPath",
-          ),
-          bannerPrefix: t(
-            "settings.automation.details.sceneApp.file.governanceBannerPrefix",
-          ),
-        });
-      })();
-    },
-    [openSelectedSceneAppFileEntry, selectedSceneAppRuntime, t],
-  );
-
-  const handleRunSelectedSceneAppGovernanceAction = useCallback(
-    (
-      action?: NonNullable<
-        NonNullable<
-          typeof selectedSceneAppRunDetailView
-        >["governanceActionEntries"][number]
-      >,
-    ) => {
-      const runId = selectedSceneAppRuntime.linkedRun?.runId?.trim();
-      const descriptor = selectedSceneAppRuntime.descriptor;
-      if (!action || !runId || !descriptor || !selectedSceneAppRunDetailView) {
-        return;
-      }
-
-      void (async () => {
-        try {
-          const refreshed = await prepareSceneAppRunGovernanceArtifacts(
-            runId,
-            action.artifactKinds,
-          );
-          if (!refreshed) {
-            toast.error(
-              t("settings.automation.details.sceneApp.file.followUpRunMissing"),
-            );
-            return;
-          }
-
-          selectedSceneAppRuntime.setLinkedRun(refreshed);
-          const refreshedDetailView = buildSceneAppRunDetailViewModel({
-            descriptor,
-            run: refreshed,
-            planResult: selectedSceneAppRuntime.planResult,
-          });
-          const targetEntry =
-            refreshedDetailView.governanceArtifactEntries.find(
-              (entry) => entry.artifactRef.kind === action.primaryArtifactKind,
-            );
-          openSelectedSceneAppFileEntry(targetEntry, {
-            missingPathMessage: t(
-              "settings.automation.details.sceneApp.file.followUpMissingPath",
-              {
-                label: action.primaryArtifactLabel,
-              },
-            ),
-            bannerPrefix: t(
-              "settings.automation.details.sceneApp.file.followUpBannerPrefix",
-            ),
-          });
-        } catch (error) {
-          toast.error(formatSceneAppErrorMessage(error));
-        }
-      })();
-    },
-    [
-      openSelectedSceneAppFileEntry,
-      selectedSceneAppRunDetailView,
-      selectedSceneAppRuntime,
-      t,
-    ],
-  );
-
-  const handleOpenSelectedSceneAppEntryAction = useCallback(
-    (action: NonNullable<SceneAppRunDetailViewModel["entryAction"]>) => {
-      if (!onNavigate) {
-        return;
-      }
-
-      const target = resolveSceneAppRunEntryNavigationTarget({
-        action,
-        sceneappId:
-          selectedSceneAppRuntime.linkedRun?.sceneappId ??
-          selectedSceneAppRuntime.descriptor?.id ??
-          "",
-        sceneTitle: selectedSceneAppRuntime.descriptor?.title,
-        sourceLabel: t(
-          "settings.automation.details.sceneApp.entry.sourceLabel",
-        ),
-        projectId:
-          selectedSceneAppRuntime.sceneAppContext?.projectId ??
-          selectedSceneAppRuntime.sceneAppContext?.workspaceId ??
-          selectedJob?.workspace_id,
-        linkedServiceSkillId:
-          selectedSceneAppRuntime.descriptor?.linkedServiceSkillId,
-        linkedSceneKey: selectedSceneAppRuntime.descriptor?.linkedSceneKey,
-      });
-      if (!target) {
-        toast.error(
-          t("settings.automation.details.sceneApp.entry.missingContext"),
-        );
-        return;
-      }
-
-      onNavigate(target.page, target.params);
-    },
-    [
-      onNavigate,
-      selectedJob?.workspace_id,
-      selectedSceneAppRuntime.descriptor,
-      selectedSceneAppRuntime.linkedRun?.sceneappId,
-      selectedSceneAppRuntime.sceneAppContext,
-      t,
-    ],
-  );
 
   const heroTitle = settingsOnly
     ? t("settings.automation.main.hero.title.settings")
@@ -2344,23 +1608,8 @@ export function AutomationSettings({
                                   {isOverviewFocusRow ? (
                                     <AutomationJobFocusStrip
                                       jobId={job.id}
-                                      summaryCard={overviewSceneAppSummaryCard}
-                                      runDetailView={
-                                        overviewSceneAppRunDetailView
-                                      }
-                                      loading={
-                                        effectiveOverviewSceneAppRuntime.loading
-                                      }
-                                      error={
-                                        effectiveOverviewSceneAppRuntime.error
-                                      }
-                                      onReviewCurrentProject={() =>
-                                        handleContinueOverviewSceneAppReview(
-                                          "account-project-review",
-                                        )
-                                      }
-                                      onOpenSceneAppGovernance={() =>
-                                        handleOpenOverviewSceneApp("governance")
+                                      retiredMessage={
+                                        overviewRetiredSceneAppMessage
                                       }
                                     />
                                   ) : null}
@@ -2628,21 +1877,11 @@ export function AutomationSettings({
                     null)
                   : null
               }
-              summaryCard={overviewSceneAppSummaryCard}
-              runDetailView={overviewSceneAppRunDetailView}
-              loading={effectiveOverviewSceneAppRuntime.loading}
-              error={effectiveOverviewSceneAppRuntime.error}
+              retiredMessage={overviewRetiredSceneAppMessage}
               onOpenJobDetails={
                 overviewFocusJob
                   ? () => openJobDetails(overviewFocusJob.id)
                   : undefined
-              }
-              onOpenSceneAppDetail={() => handleOpenOverviewSceneApp("detail")}
-              onOpenSceneAppGovernance={() =>
-                handleOpenOverviewSceneApp("governance")
-              }
-              onReviewCurrentProject={() =>
-                handleContinueOverviewSceneAppReview("account-project-review")
               }
             />
 
@@ -2673,28 +1912,7 @@ export function AutomationSettings({
         serviceSkillContext={selectedServiceSkillContext}
         jobRuns={jobRuns}
         historyLoading={historyLoading}
-        sceneAppSummaryCard={selectedSceneAppSummaryCard}
-        sceneAppRunDetailView={selectedSceneAppRunDetailView}
-        sceneAppLoading={selectedSceneAppRuntime.loading}
-        sceneAppError={selectedSceneAppRuntime.error}
-        onOpenSceneAppDetail={() => handleOpenSelectedJobSceneApp("detail")}
-        onOpenSceneAppGovernance={() =>
-          handleOpenSelectedJobSceneApp("governance")
-        }
-        onReviewCurrentProject={() =>
-          handleContinueSelectedSceneAppReview("account-project-review")
-        }
-        sceneAppSavedAsInspiration={selectedSceneAppSavedAsInspiration}
-        onSaveSceneAppAsInspiration={handleSaveSelectedSceneAppAsInspiration}
-        onOpenInspirationLibrary={handleOpenInspirationLibrary}
-        onSceneAppDeliveryArtifactAction={
-          handleOpenSelectedSceneAppDeliveryArtifact
-        }
-        onSceneAppGovernanceArtifactAction={
-          handleOpenSelectedSceneAppGovernanceArtifact
-        }
-        onSceneAppGovernanceAction={handleRunSelectedSceneAppGovernanceAction}
-        onSceneAppEntryAction={handleOpenSelectedSceneAppEntryAction}
+        retiredSceneAppMessage={selectedRetiredSceneAppMessage}
         onRefreshHistory={refreshHistory}
       />
     </div>

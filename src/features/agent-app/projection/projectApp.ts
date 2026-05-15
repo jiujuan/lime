@@ -133,6 +133,7 @@ export function projectApp(params: {
     kind: entry.kind,
     title: entry.title,
     description: entry.description,
+    route: entry.route,
     presentation: "lab-only",
     readiness: "unknown",
     requiredCapabilities: collectEntryRequirements(
@@ -179,12 +180,60 @@ export function projectApp(params: {
       key: artifact.key,
       title: artifact.title,
       type: artifact.type,
+      required: artifact.required ?? false,
     })),
     policies: manifest.policies.map((policy) => ({
       key: policy.key,
       title: policy.title,
       required: policy.required ?? false,
     })),
+    services: manifest.services.map((service) => ({
+      key: service.key,
+      kind: service.kind,
+      path: service.path,
+      required: service.required ?? false,
+    })),
+    workflows: manifest.workflows.map((workflow) => ({
+      key: workflow.key,
+      path: workflow.path,
+      humanReview: workflow.humanReview ?? false,
+      required: workflow.required ?? false,
+    })),
+    skillRequirements: manifest.skillRefs.map((skill) => ({
+      id: skill.id,
+      standard: skill.standard,
+      activation: skill.activation,
+      required: skill.required ?? false,
+    })),
+    toolRequirements: manifest.toolRefs.map((tool) => ({
+      key: tool.key,
+      provider: tool.provider,
+      required: tool.required ?? false,
+    })),
+    evals: manifest.evals.map((evalRule) => ({
+      key: evalRule.key,
+      kind: evalRule.kind,
+      evidenceRequired: evalRule.evidenceRequired ?? false,
+      required: evalRule.required ?? false,
+    })),
+    events: manifest.events.map((event) => ({
+      key: event.key,
+      direction: event.direction ?? "both",
+      required: event.required ?? false,
+    })),
+    secrets: manifest.secrets.map((secret) => ({
+      key: secret.key,
+      provider: secret.provider,
+      scope: secret.scope,
+      required: secret.required ?? false,
+    })),
+    overlayTemplates: manifest.overlayTemplates.map((overlay) => ({
+      key: overlay.key,
+      scope: overlay.scope,
+      required: overlay.required ?? false,
+    })),
+    ui: manifest.ui,
+    lifecycle: manifest.lifecycle,
     readinessHints: [
       {
         code: "LAB_ONLY",

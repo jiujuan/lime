@@ -459,6 +459,98 @@ async function clickPageControl(page, { text, ariaLabel, index = 0 }) {
   }
 }
 
+async function waitForInputbarKnowledgePackToggle(page, label, timeoutMs) {
+  const locator = page.locator('[data-testid="inputbar-knowledge-pack-toggle"]');
+
+  try {
+    await locator.first().waitFor({ state: "visible", timeout: timeoutMs });
+  } catch (error) {
+    const pageText = await page
+      .locator("body")
+      .innerText()
+      .catch(() => "");
+    const knowledgeControls = await page
+      .locator("[data-testid^='inputbar-knowledge-']")
+      .evaluateAll((items) =>
+        items.slice(0, 40).map((item) => ({
+          testId: item.getAttribute("data-testid"),
+          text: (item.textContent || "").trim().replace(/\s+/g, " "),
+          aria: item.getAttribute("aria-label"),
+          title: item.getAttribute("title"),
+        })),
+      )
+      .catch(() => []);
+    throw new Error(
+      `[smoke:knowledge-gui] ${label} 等待默认项目资料控件失败 ${JSON.stringify({
+        knowledgeControls,
+      })}，页面文本预览: ${pageText.slice(0, 2_000)}`,
+      { cause: error },
+    );
+  }
+}
+
+async function clickTestId(page, { testId, label }) {
+  const locator = page.locator(`[data-testid="${testId}"]`).first();
+
+  try {
+    await locator.click({ timeout: DEFAULT_ACTION_TIMEOUT_MS });
+  } catch (error) {
+    const pageText = await page
+      .locator("body")
+      .innerText()
+      .catch(() => "");
+    const candidates = await page
+      .locator("[data-testid]")
+      .evaluateAll((items) =>
+        items.slice(0, 100).map((item) => ({
+          testId: item.getAttribute("data-testid"),
+          text: (item.textContent || "").trim().replace(/\s+/g, " "),
+          aria: item.getAttribute("aria-label"),
+          title: item.getAttribute("title"),
+        })),
+      )
+      .catch(() => []);
+    throw new Error(
+      `[smoke:knowledge-gui] ${label} 点击失败 ${JSON.stringify({
+        testId,
+        candidates,
+      })}，页面文本预览: ${pageText.slice(0, 2_000)}`,
+      { cause: error },
+    );
+  }
+}
+
+async function waitForInputbarKnowledgeHub(page, label, timeoutMs) {
+  try {
+    await page
+      .locator('[data-testid="inputbar-knowledge-hub"]')
+      .first()
+      .waitFor({ state: "visible", timeout: timeoutMs });
+  } catch (error) {
+    const pageText = await page
+      .locator("body")
+      .innerText()
+      .catch(() => "");
+    const knowledgeControls = await page
+      .locator("[data-testid^='inputbar-knowledge-']")
+      .evaluateAll((items) =>
+        items.slice(0, 40).map((item) => ({
+          testId: item.getAttribute("data-testid"),
+          text: (item.textContent || "").trim().replace(/\s+/g, " "),
+          aria: item.getAttribute("aria-label"),
+          title: item.getAttribute("title"),
+        })),
+      )
+      .catch(() => []);
+    throw new Error(
+      `[smoke:knowledge-gui] ${label} 等待项目资料浮层失败 ${JSON.stringify({
+        knowledgeControls,
+      })}，页面文本预览: ${pageText.slice(0, 2_000)}`,
+      { cause: error },
+    );
+  }
+}
+
 async function closeFileManagerIfOpen(page) {
   const closeButton = page
     .getByRole("button", { name: "关闭文件管理器" })
@@ -793,8 +885,22 @@ async function openKnowledgePageFromMainNav(page, options) {
 
   throw new Error(
     `[smoke:knowledge-gui] 项目资料导航失败: ${
-      lastError instanceof Error ? lastError.message : String(lastError)
+    lastError instanceof Error ? lastError.message : String(lastError)
     }`,
+  );
+}
+
+async function openHomeFromMainNav(page, options, label) {
+  await syncSmokeProjectStorage(page, options);
+  await clickScopedButton(page, {
+    scope: '[data-testid="app-sidebar-main-nav"]',
+    ariaLabel: "新建任务",
+  });
+  await waitForPageText(
+    page,
+    `${label} 新建任务页加载`,
+    ["青柠一下，灵感即来"],
+    options.timeoutMs,
   );
 }
 
@@ -960,7 +1066,20 @@ async function runPlaywrightGuiFlow(options) {
     );
 
     logStage("open-home-knowledge-hub");
-    await clickPageControl(page, { text: "添加资料" });
+    await waitForInputbarKnowledgePackToggle(
+      page,
+      "首页默认项目资料控件加载",
+      options.timeoutMs,
+    );
+    await clickTestId(page, {
+      testId: "entry-home-knowledge-import",
+      label: "首页添加资料入口",
+    });
+    await waitForInputbarKnowledgeHub(
+      page,
+      "首页添加资料入口打开浮层",
+      options.timeoutMs,
+    );
 
     logStage("wait-home-knowledge-hub");
     await waitForPageText(
@@ -1037,16 +1156,7 @@ async function runPlaywrightGuiFlow(options) {
       options.timeoutMs,
     );
     await assertNoUserFacingInternalText(page, "项目资料状态说明页");
-    await clickScopedButton(page, {
-      scope: '[data-testid="app-sidebar-main-nav"]',
-      ariaLabel: "灵感",
-    });
-    await waitForPageText(
-      page,
-      "灵感页加载",
-      ["收藏过的想法"],
-      options.timeoutMs,
-    );
+    await openHomeFromMainNav(page, options, "状态说明后返回");
     await openKnowledgePageFromMainNav(page, options);
     await waitForPageText(
       page,
@@ -1133,11 +1243,7 @@ async function runPlaywrightGuiFlow(options) {
     );
 
     logStage("return-knowledge-overview");
-    await clickScopedButton(page, {
-      scope: '[data-testid="app-sidebar-main-nav"]',
-      ariaLabel: "灵感",
-    });
-    await waitForPageText(page, "灵感页加载", ["灵感"], options.timeoutMs);
+    await openHomeFromMainNav(page, options, "Agent 保存后返回");
     await openKnowledgePageFromMainNav(page, options);
 
     logStage("wait-captured-agent-result");

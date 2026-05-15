@@ -789,31 +789,6 @@ pub(crate) fn get_memory_by_id(
     }
 }
 
-pub(crate) fn load_unified_memories_by_ids(
-    conn: &rusqlite::Connection,
-    ids: &[String],
-) -> Result<Vec<UnifiedMemory>, String> {
-    let normalized_ids = ids
-        .iter()
-        .map(|id| id.trim())
-        .filter(|id| !id.is_empty())
-        .fold(Vec::<String>::new(), |mut acc, id| {
-            if !acc.iter().any(|existing| existing == id) {
-                acc.push(id.to_string());
-            }
-            acc
-        });
-
-    let mut memories = Vec::new();
-    for id in normalized_ids {
-        if let Some(memory) = get_memory_by_id(conn, id.as_str())? {
-            memories.push(memory);
-        }
-    }
-
-    Ok(memories)
-}
-
 fn insert_unified_memory(
     conn: &rusqlite::Connection,
     memory: &UnifiedMemory,

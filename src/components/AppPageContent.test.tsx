@@ -36,26 +36,36 @@ const latestKnowledgePageProps = vi.hoisted(
       value: null as Record<string, unknown> | null,
     }) as { value: Record<string, unknown> | null },
 );
+const latestAgentAppsProps = vi.hoisted(
+  () =>
+    ({
+      value: null as Record<string, unknown> | null,
+    }) as { value: Record<string, unknown> | null },
+);
+const latestExpertPlazaProps = vi.hoisted(
+  () =>
+    ({
+      value: null as Record<string, unknown> | null,
+    }) as { value: Record<string, unknown> | null },
+);
 const agentAppLabLifecycle = vi.hoisted(
   () =>
     ({
       mounts: 0,
     }) as { mounts: number },
 );
-const latestSceneAppsPageProps = vi.hoisted(
-  () =>
-    ({
-      value: null as Record<string, unknown> | null,
-    }) as { value: Record<string, unknown> | null },
-);
-const sceneAppsLifecycle = vi.hoisted(
+const agentAppsLifecycle = vi.hoisted(
   () =>
     ({
       mounts: 0,
-      unmounts: 0,
-    }) as { mounts: number; unmounts: number },
+    }) as { mounts: number },
 );
-
+const agentAppRuntimeLifecycle = vi.hoisted(
+  () =>
+    ({
+      mounts: 0,
+    }) as { mounts: number },
+);
 vi.mock("./agent/chat", () => ({
   AgentChatPage: (props: Record<string, unknown>) => {
     latestAgentChatProps.value = props;
@@ -106,6 +116,21 @@ vi.mock("@/features/knowledge", () => ({
 }));
 
 vi.mock("@/features/agent-app", () => ({
+  AgentAppRuntimePage: () => {
+    useEffect(() => {
+      agentAppRuntimeLifecycle.mounts += 1;
+    }, []);
+
+    return <div data-testid="agent-app-runtime-page" />;
+  },
+  AgentAppsPage: (props: Record<string, unknown>) => {
+    latestAgentAppsProps.value = props;
+    useEffect(() => {
+      agentAppsLifecycle.mounts += 1;
+    }, []);
+
+    return <div data-testid="agent-apps-page" />;
+  },
   AgentAppLabPage: () => {
     useEffect(() => {
       agentAppLabLifecycle.mounts += 1;
@@ -115,19 +140,10 @@ vi.mock("@/features/agent-app", () => ({
   },
 }));
 
-vi.mock("./sceneapps", () => ({
-  SceneAppsPage: (props: Record<string, unknown>) => {
-    latestSceneAppsPageProps.value = props;
-
-    useEffect(() => {
-      sceneAppsLifecycle.mounts += 1;
-
-      return () => {
-        sceneAppsLifecycle.unmounts += 1;
-      };
-    }, []);
-
-    return <div data-testid="sceneapps-page" />;
+vi.mock("./experts", () => ({
+  ExpertPlazaPage: (props: Record<string, unknown>) => {
+    latestExpertPlazaProps.value = props;
+    return <div data-testid="expert-plaza-page" />;
   },
 }));
 
@@ -214,10 +230,9 @@ describe("AppPageContent", () => {
     latestSkillsWorkspaceProps.value = null;
     latestMemoryPageProps.value = null;
     latestKnowledgePageProps.value = null;
+    latestExpertPlazaProps.value = null;
     agentAppLabLifecycle.mounts = 0;
-    latestSceneAppsPageProps.value = null;
-    sceneAppsLifecycle.mounts = 0;
-    sceneAppsLifecycle.unmounts = 0;
+    agentAppsLifecycle.mounts = 0;
   });
 
   afterEach(() => {
@@ -305,6 +320,44 @@ describe("AppPageContent", () => {
         requestKey: 20260408,
       },
     });
+  });
+
+  it("agent 页面应透传专家 Agent 身份，重复恢复同一专家不触发新 key", async () => {
+    const pageParams: AgentPageParams = {
+      agentEntry: "claw",
+      projectId: "default",
+      theme: "general",
+      initialSessionId: "session-expert-1",
+      expertAgentLaunch: {
+        tenantId: "tenant-0001",
+        expertId: "marketing-strategist",
+        releaseId: "expert-release-0001",
+        agentInstanceKey:
+          "tenant-0001:marketing-strategist:expert-release-0001",
+        launchMode: "resume_or_create",
+        latestSessionId: "session-expert-1",
+      },
+    };
+
+    const mounted = renderContentWithNavigationState({
+      currentPage: "agent",
+      pageParams,
+    });
+    await flushEffects();
+    expect(agentChatLifecycle.mounts).toBe(1);
+    expect(latestAgentChatProps.value).toMatchObject({
+      initialSessionId: "session-expert-1",
+      expertAgentLaunch: pageParams.expertAgentLaunch,
+    });
+
+    mounted.rerender({
+      currentPage: "agent",
+      pageParams: { ...pageParams },
+    });
+    await flushEffects();
+
+    expect(agentChatLifecycle.mounts).toBe(1);
+    expect(agentChatLifecycle.unmounts).toBe(0);
   });
 
   it("agent 页面应把 initialSessionId 透传给 AgentChatPage", async () => {
@@ -711,29 +764,16 @@ describe("AppPageContent", () => {
     });
   });
 
-  it("sceneapps 页面应把目录页参数透传给 SceneAppsPage", async () => {
-    const { container } = renderContent("sceneapps", {
-      sceneappId: "story-video-suite",
-      runId: "story-video-suite-run-1",
-      projectId: "project-sceneapp",
-      prefillIntent: "生成一个短视频方案",
-      search: "短视频",
-    });
+  it("experts 页面应挂载专家广场并透传导航", async () => {
+    const { container } = renderContent("experts");
     await flushEffects();
 
     expect(
-      container.querySelector('[data-testid="sceneapps-page"]'),
+      container.querySelector('[data-testid="expert-plaza-page"]'),
     ).not.toBeNull();
-    expect(latestSceneAppsPageProps.value).toMatchObject({
-      isActive: true,
-      pageParams: {
-        sceneappId: "story-video-suite",
-        runId: "story-video-suite-run-1",
-        projectId: "project-sceneapp",
-        prefillIntent: "生成一个短视频方案",
-        search: "短视频",
-      },
-    });
+    expect(latestExpertPlazaProps.value?.onNavigate).toEqual(
+      expect.any(Function),
+    );
   });
 
   it("agent-app-lab 页面应渲染 P0 只读实验入口", async () => {
@@ -746,97 +786,34 @@ describe("AppPageContent", () => {
     expect(agentAppLabLifecycle.mounts).toBe(1);
   });
 
-  it("sceneapps 页面在持续流程往返后不应重新挂载", async () => {
-    const { rerender } = renderContent("sceneapps", {
-      sceneappId: "story-video-suite",
-      runId: "story-video-suite-run-1",
-      projectId: "project-sceneapp",
-      search: "短视频",
-    });
-    await flushEffects();
-
-    const mountsAfterInitialRender = sceneAppsLifecycle.mounts;
-
-    expect(mountsAfterInitialRender).toBeGreaterThan(0);
-    expect(sceneAppsLifecycle.unmounts).toBe(0);
-    expect(latestSceneAppsPageProps.value).toMatchObject({
-      pageParams: {
-        sceneappId: "story-video-suite",
-        runId: "story-video-suite-run-1",
-        projectId: "project-sceneapp",
-        search: "短视频",
-      },
-    });
-
-    rerender("automation", {
-      selectedJobId: "automation-job-1",
-      workspaceTab: "tasks",
-    });
-    await flushEffects();
-
-    expect(sceneAppsLifecycle.mounts).toBe(mountsAfterInitialRender);
-    expect(sceneAppsLifecycle.unmounts).toBe(0);
-    expect(latestSceneAppsPageProps.value).toMatchObject({
-      pageParams: {
-        sceneappId: "story-video-suite",
-        runId: "story-video-suite-run-1",
-        projectId: "project-sceneapp",
-        search: "短视频",
-      },
-    });
-
-    rerender("sceneapps", {
-      sceneappId: "story-video-suite",
-      runId: "story-video-suite-run-2",
-      projectId: "project-sceneapp",
-      search: "复盘",
-    });
-    await flushEffects();
-
-    expect(sceneAppsLifecycle.mounts).toBe(mountsAfterInitialRender);
-    expect(sceneAppsLifecycle.unmounts).toBe(0);
-    expect(latestSceneAppsPageProps.value).toMatchObject({
-      isActive: true,
-      pageParams: {
-        sceneappId: "story-video-suite",
-        runId: "story-video-suite-run-2",
-        projectId: "project-sceneapp",
-        search: "复盘",
-      },
-    });
-  });
-
-  it("requested 页面已切回 sceneapps 时应优先渲染最新请求目标", async () => {
-    const { container } = renderContentWithNavigationState({
-      currentPage: "automation",
-      pageParams: {
-        selectedJobId: "automation-job-1",
-        workspaceTab: "tasks",
-      },
-      requestedPage: "sceneapps",
-      requestedPageParams: {
-        sceneappId: "story-video-suite",
-        runId: "story-video-suite-run-2",
-        projectId: "project-sceneapp",
-        search: "复盘",
-      },
-      navigationRequestId: 9,
+  it("agent-apps 页面应渲染正式 Agent Apps 管理入口", async () => {
+    const { container } = renderContent("agent-apps", {
+      selectedAgentAppId: "content-factory-app",
     });
     await flushEffects();
 
     expect(
-      container.querySelector('[data-testid="sceneapps-page"]'),
+      container.querySelector('[data-testid="agent-apps-page"]'),
     ).not.toBeNull();
-    expect(latestSceneAppsPageProps.value).toMatchObject({
-      isActive: true,
-      isNavigationTargetOwner: true,
-      navigationRequestId: 9,
+    expect(agentAppsLifecycle.mounts).toBe(1);
+    expect(latestAgentAppsProps.value).toMatchObject({
       pageParams: {
-        sceneappId: "story-video-suite",
-        runId: "story-video-suite-run-2",
-        projectId: "project-sceneapp",
-        search: "复盘",
+        selectedAgentAppId: "content-factory-app",
       },
     });
+    expect(latestAgentAppsProps.value?.onNavigate).toEqual(expect.any(Function));
+  });
+
+  it("agent-app 页面应渲染已安装 App 的独立使用入口", async () => {
+    const { container } = renderContent("agent-app", {
+      appId: "content-factory-app",
+      entryKey: "dashboard",
+    });
+    await flushEffects();
+
+    expect(
+      container.querySelector('[data-testid="agent-app-runtime-page"]'),
+    ).not.toBeNull();
+    expect(agentAppRuntimeLifecycle.mounts).toBe(1);
   });
 });

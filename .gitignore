@@ -73,6 +73,8 @@ docs/roadmap/*
 !docs/roadmap/i18n/*.md
 !docs/roadmap/agentapp/
 !docs/roadmap/agentapp/*.md
+!docs/roadmap/zuanjia/
+!docs/roadmap/zuanjia/*.md
 docs/gongzonghao/
 docs/bussniss/
 docs/oem/

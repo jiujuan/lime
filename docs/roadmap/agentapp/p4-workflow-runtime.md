@@ -8,7 +8,7 @@ P4.2 把 P4.1 的“内置 demo 编排”推进为可执行的受控 workflow ru
 
 ## 背景
 
-P4.1 已证明 APP 内容工厂可以作为 Product-level Agent App 跑通项目、知识、内容场景、内容资产、Artifact 和 Evidence；但它仍像一段内置 TypeScript 编排。下一步如果直接执行 App package 里的 worker，会过早暴露安全、资源、权限和清理风险。
+P4.1 已证明 内容工厂可以作为 Product-level Agent App 跑通项目、知识、内容场景、内容资产、Artifact 和 Evidence；但它仍像一段内置 TypeScript 编排。下一步如果直接执行 App package 里的 worker，会过早暴露安全、资源、权限和清理风险。
 
 因此 P4.2 先做“受控 workflow DSL runner”：
 
@@ -51,7 +51,7 @@ flowchart TD
   SDK --> Artifact[lime.artifacts]
   SDK --> Evidence[lime.evidence]
   Runtime --> Trace[Workflow Trace]
-  Runtime --> Result[P4 Content Demo Result]
+  Runtime --> Result[P4 Content Factory Demo Result]
 ```
 
 ## 时序图
@@ -60,7 +60,7 @@ flowchart TD
 sequenceDiagram
   participant User as 用户
   participant Lab as Agent App Lab
-  participant Demo as Content Demo
+  participant Demo as Content Factory Demo
   participant Runtime as WorkflowRuntimeHost
   participant SDK as LimeAppSdk
   participant Host as AdapterCapabilityHost

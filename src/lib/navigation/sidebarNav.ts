@@ -1,7 +1,9 @@
 import {
+  BadgeCheck,
   BrainCircuit,
   Bot,
   BookOpen,
+  Boxes,
   FlaskConical,
   MessageCircleMore,
   Plus,
@@ -63,19 +65,19 @@ const BASE_MAIN_SIDEBAR_NAV_ITEMS: SidebarNavItemDefinition[] = [
     configurable: false,
   },
   {
+    id: "experts",
+    label: "专家",
+    icon: BadgeCheck,
+    page: "experts",
+    isActive: (currentPage) => currentPage === "experts",
+    configurable: false,
+  },
+  {
     id: "skills",
     label: "Skills",
     icon: Sparkles,
     page: "skills",
     isActive: (currentPage) => currentPage === "skills",
-    configurable: false,
-  },
-  {
-    id: "memory",
-    label: "灵感",
-    icon: BrainCircuit,
-    page: "memory",
-    isActive: (currentPage) => currentPage === "memory",
     configurable: false,
   },
   {
@@ -121,6 +123,22 @@ export const FOOTER_SIDEBAR_NAV_ITEMS: SidebarNavItemDefinition[] = [
     },
     isActive: (currentPage, currentParams) =>
       currentPage === "settings" && !isCompanionSettingsView(currentParams),
+    configurable: false,
+  },
+  {
+    id: "agent-apps",
+    label: "Agent Apps",
+    icon: Boxes,
+    page: "agent-apps",
+    isActive: (currentPage) => currentPage === "agent-apps",
+    configurable: false,
+  },
+  {
+    id: "memory",
+    label: "灵感",
+    icon: BrainCircuit,
+    page: "memory",
+    isActive: (currentPage) => currentPage === "memory",
     configurable: false,
   },
   {

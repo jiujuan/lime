@@ -41,7 +41,6 @@ pub use lime_mcp as mcp;
 pub mod agent;
 pub mod agent_tools;
 pub mod app;
-pub mod sceneapp;
 pub mod services;
 pub mod skills;
 pub mod tray;

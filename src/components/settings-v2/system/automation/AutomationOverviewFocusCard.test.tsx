@@ -50,57 +50,7 @@ async function renderCard(
           } as any
         }
         workspaceName="Default workspace"
-        summaryCard={
-          {
-            sceneappId: "story-video-suite",
-            title: "Story video kit",
-            businessLabel: "Multimodal bundle",
-            typeLabel: "Workflow pattern",
-            patternSummary: "Step chain",
-            status: "watch",
-            statusLabel: "Collect result materials first",
-            summary: "This ongoing flow already has results worth continuing.",
-            nextAction: "Archive this run before scaling it.",
-            destinations: [
-              {
-                key: "task-center",
-                label: "Generate",
-                description: "Return to generation with materials.",
-              },
-            ],
-            scorecardAggregate: {
-              status: "watch",
-              statusLabel: "Collect result materials first",
-              summary: "This run is close to reusable.",
-              nextAction: "Complete the structured result pack first.",
-              actionLabel: "Keep improving",
-              topFailureSignalLabel: "Incomplete result materials",
-              metricKeys: [],
-              failureSignals: [],
-              observedFailureSignals: [],
-              destinations: [
-                {
-                  key: "task-center",
-                  label: "Generate",
-                  description: "Return to generation with materials.",
-                },
-              ],
-            },
-            automationSummary: "1 always-on flow · 1 enabled · no active risks",
-            latestAutomationLabel: "Latest run: short video campaign · success",
-          } as any
-        }
-        runDetailView={
-          {
-            runId: "run-sceneapp-overview-1",
-            status: "success",
-            statusLabel: "Succeeded",
-            stageLabel: "Results synced",
-            summary: "The latest run synced back with result materials.",
-            nextAction: "Review this run.",
-            deliveryCompletionLabel: "Full result pack generated",
-          } as any
-        }
+        retiredMessage="This ongoing flow uses a retired practice."
         {...props}
       />,
     );
@@ -110,64 +60,45 @@ async function renderCard(
 }
 
 describe("AutomationOverviewFocusCard", () => {
-  it("应展示当前经营焦点摘要", async () => {
+  it("旧 SceneApp 焦点任务只展示下线提示", async () => {
     await renderCard();
 
     const text = document.body.textContent ?? "";
     expect(text).toContain("Continue this one first");
     expect(text).toContain("Short video always-on campaign");
-    expect(text).toContain("Story video kit");
-    expect(text).toContain("This run is close to reusable.");
-    expect(text).toContain(
-      "Do first: Complete the structured result pack first.",
-    );
-    expect(text).toContain("Recent result");
+    expect(text).toContain("This ongoing flow uses a retired practice.");
+    expect(text).not.toContain("Story video kit");
+    expect(text).not.toContain("Recent result");
     expect(text).not.toContain("现在先继续这条");
     expect(text).not.toContain("settings.automation.focus");
   });
 
-  it("应支持继续复盘与打开详情动作", async () => {
-    const onReviewCurrentProject = vi.fn();
-    const onOpenSceneAppGovernance = vi.fn();
-    const onOpenSceneAppDetail = vi.fn();
+  it("只保留自动化任务详情动作", async () => {
     const onOpenJobDetails = vi.fn();
 
     await renderCard({
-      onReviewCurrentProject,
-      onOpenSceneAppGovernance,
-      onOpenSceneAppDetail,
       onOpenJobDetails,
     });
 
-    const reviewButton = document.body.querySelector(
-      "[data-testid='automation-overview-review-current-project']",
-    ) as HTMLButtonElement | null;
-    const governanceButton = document.body.querySelector(
-      "[data-testid='automation-overview-open-governance']",
-    ) as HTMLButtonElement | null;
-    const detailButton = document.body.querySelector(
-      "[data-testid='automation-overview-open-detail']",
-    ) as HTMLButtonElement | null;
     const jobDetailsButton = document.body.querySelector(
       "[data-testid='automation-overview-open-job-details']",
     ) as HTMLButtonElement | null;
 
-    expect(reviewButton?.textContent).toContain("Review this run");
-    expect(governanceButton?.textContent).toContain("View recent results");
-    expect(detailButton?.textContent).toContain("Fill in this run");
+    expect(
+      document.body.querySelector(
+        "[data-testid='automation-overview-review-current-project']",
+      ),
+    ).toBeNull();
+    expect(
+      document.body.querySelector("[data-testid='automation-overview-open-detail']"),
+    ).toBeNull();
     expect(jobDetailsButton?.textContent).toContain("View details");
 
     await act(async () => {
-      reviewButton?.click();
-      governanceButton?.click();
-      detailButton?.click();
       jobDetailsButton?.click();
       await Promise.resolve();
     });
 
-    expect(onReviewCurrentProject).toHaveBeenCalledTimes(1);
-    expect(onOpenSceneAppGovernance).toHaveBeenCalledTimes(1);
-    expect(onOpenSceneAppDetail).toHaveBeenCalledTimes(1);
     expect(onOpenJobDetails).toHaveBeenCalledTimes(1);
   });
 
@@ -175,8 +106,7 @@ describe("AutomationOverviewFocusCard", () => {
     await renderCard({
       job: null,
       workspaceName: null,
-      summaryCard: null,
-      runDetailView: null,
+      retiredMessage: null,
     });
 
     expect(document.body.textContent).toContain(
