@@ -556,16 +556,24 @@ describe("AgentAppHostBridge", () => {
         requestId: "req-1",
         payload: expect.objectContaining({
           ok: true,
-          value: {
+          value: expect.objectContaining({
             taskId: "task-1",
             traceId: "trace-1",
             status: "running",
-          },
-          result: {
+            process: expect.objectContaining({
+              terminal: false,
+              collapsedByDefault: false,
+            }),
+          }),
+          result: expect.objectContaining({
             taskId: "task-1",
             traceId: "trace-1",
             status: "running",
-          },
+            runtimeProcess: expect.objectContaining({
+              terminal: false,
+              collapsedByDefault: false,
+            }),
+          }),
         }),
       }),
       runtimeOrigin,
@@ -642,6 +650,13 @@ describe("AgentAppHostBridge", () => {
             taskId: "task-1",
             bridgeAction: "contentFactoryProduction",
             events: [{ eventType: "task:progress", message: "任务正在执行" }],
+            process: expect.objectContaining({
+              terminal: false,
+              collapsedByDefault: false,
+              timeline: expect.arrayContaining([
+                expect.objectContaining({ message: "任务正在执行" }),
+              ]),
+            }),
           }),
         }),
         runtimeOrigin,
@@ -734,6 +749,8 @@ describe("AgentAppHostBridge", () => {
           type: "task:progress",
           status: "running",
           message: "后端 runtime event 已到达",
+          streamKind: "thinking_delta",
+          delta: "先判断任务边界。",
         },
       });
 
@@ -752,6 +769,12 @@ describe("AgentAppHostBridge", () => {
                 message: "后端 runtime event 已到达",
               }),
             ],
+            process: expect.objectContaining({
+              thinkingText: "先判断任务边界。",
+              timeline: expect.arrayContaining([
+                expect.objectContaining({ title: "思考过程" }),
+              ]),
+            }),
           }),
         }),
         runtimeOrigin,
@@ -773,6 +796,114 @@ describe("AgentAppHostBridge", () => {
       vi.useRealTimers();
     }
   });
+
+  it("Host 已封装 runtimeProcess 时应优先转发 canonical 过程而不是从事件重建", async () => {
+    vi.useFakeTimers();
+    const { frame, postMessage } = buildFrame();
+    let runtimeHandler:
+      | ((event: { payload: unknown }) => void)
+      | undefined;
+    const listenRuntimeEventMock = vi.fn(
+      async (
+        _eventName: string,
+        handler: (event: { payload: unknown }) => void,
+      ) => {
+        runtimeHandler = handler;
+        return vi.fn();
+      },
+    );
+    const listenRuntimeEvent =
+      listenRuntimeEventMock as unknown as typeof import("@/lib/dev-bridge").safeListen;
+    const dispatchCapability = vi.fn().mockResolvedValue({
+      taskId: "task-1",
+      taskStatus: "running",
+      taskEvents: [{ eventType: "task:progress", message: "已有订阅事件" }],
+    });
+    const bridge = new AgentAppHostBridge({
+      frame,
+      appId,
+      entryKey,
+      displayName: "内容工厂",
+      entryRoute: "/dashboard",
+      entryUrl,
+      dispatchCapability,
+      listenRuntimeEvent,
+      now: () => "2026-05-16T00:00:00.000Z",
+    });
+    const cleanup = bridge.start();
+
+    try {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: buildAppMessage("capability:subscribe", {
+            capability: "lime.agent",
+            topic: "task",
+            input: { taskId: "task-1", bridgeAction: "contentFactoryProduction" },
+            pollIntervalMs: 250,
+          }),
+          origin: runtimeOrigin,
+          source: frame.contentWindow,
+        }),
+      );
+      await flushBridgeTasks();
+
+      runtimeHandler?.({
+        payload: {
+          eventType: "task:runtimeEvent",
+          message: "底层事件只是增量",
+          runtimeProcess: {
+            timeline: [
+              {
+                kind: "output",
+                title: "Host canonical 过程",
+                statusText: "流式输出",
+                message: "后端封装全文",
+              },
+            ],
+            streamText: "后端封装全文",
+            thinkingText: "后端思考",
+            executionText: "后端执行",
+            skillNames: ["article-writer"],
+            invokedSkillNames: ["article-writer"],
+            model: { provider: "openai", model: "gpt-4.1", label: "openai/gpt-4.1" },
+            usage: { inputTokens: 12, outputTokens: 8, totalTokens: 20 },
+            cost: { estimatedTotalCost: 0.0002, currency: "USD" },
+            terminal: false,
+            collapsedByDefault: false,
+            routingCount: 1,
+            executionCount: 1,
+            artifactCount: 0,
+          },
+        },
+      });
+
+      expect(postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "capability:event",
+          payload: expect.objectContaining({
+            eventType: "task:runtimeEvent",
+            process: expect.objectContaining({
+              streamText: "后端封装全文",
+              thinkingText: "后端思考",
+              executionText: "后端执行",
+              usage: { inputTokens: 12, outputTokens: 8, totalTokens: 20 },
+              timeline: [
+                expect.objectContaining({
+                  title: "Host canonical 过程",
+                  message: "后端封装全文",
+                }),
+              ],
+            }),
+          }),
+        }),
+        runtimeOrigin,
+      );
+    } finally {
+      cleanup();
+      vi.useRealTimers();
+    }
+  });
+
 
   it("成功终态未带 artifact 时应继续短轮询直到最终 patch replay", async () => {
     vi.useFakeTimers();

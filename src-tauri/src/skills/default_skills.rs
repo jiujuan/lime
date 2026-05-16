@@ -10,6 +10,9 @@ use lime_core::models::{
     ANALYSIS_SKILL_DIRECTORY, BRAND_PERSONA_KNOWLEDGE_BUILDER_SKILL_DIRECTORY,
     BRAND_PRODUCT_KNOWLEDGE_BUILDER_SKILL_DIRECTORY, BROADCAST_GENERATE_SKILL_DIRECTORY,
     CAMPAIGN_OPERATIONS_KNOWLEDGE_BUILDER_SKILL_DIRECTORY,
+    CONTENT_FACTORY_ARTICLE_WRITER_SKILL_DIRECTORY,
+    CONTENT_FACTORY_CONTENT_REVIEWER_SKILL_DIRECTORY,
+    CONTENT_FACTORY_KNOWLEDGE_BUILDER_SKILL_DIRECTORY,
     CONTENT_OPERATIONS_KNOWLEDGE_BUILDER_SKILL_DIRECTORY, CONTENT_POST_WITH_COVER_SKILL_DIRECTORY,
     COVER_GENERATE_SKILL_DIRECTORY, FORM_GENERATE_SKILL_DIRECTORY,
     GROWTH_STRATEGY_KNOWLEDGE_BUILDER_SKILL_DIRECTORY, IMAGE_GENERATE_SKILL_DIRECTORY,
@@ -92,6 +95,15 @@ const CONTENT_POST_WITH_COVER_SKILL_CONTENT: &str =
 
 const CONTENT_POST_WITH_COVER_WORKFLOW_CONTENT: &str =
     include_str!("../../resources/default-skills/content_post_with_cover/references/workflow.json");
+
+const CONTENT_FACTORY_KNOWLEDGE_BUILDER_SKILL_CONTENT: &str =
+    include_str!("../../resources/default-skills/knowledge-builder/SKILL.md");
+
+const CONTENT_FACTORY_ARTICLE_WRITER_SKILL_CONTENT: &str =
+    include_str!("../../resources/default-skills/article-writer/SKILL.md");
+
+const CONTENT_FACTORY_CONTENT_REVIEWER_SKILL_CONTENT: &str =
+    include_str!("../../resources/default-skills/content-reviewer/SKILL.md");
 
 const KNOWLEDGE_BUILDER_SKILL_CONTENT: &str =
     include_str!("../../resources/default-skills/knowledge_builder/SKILL.md");
@@ -391,7 +403,7 @@ const GROWTH_STRATEGY_KNOWLEDGE_BUILDER_EXTRA_FILES: &[BundledSkillFile] = &[
     },
 ];
 
-fn default_skills() -> [BundledSkillDefinition; 30] {
+fn default_skills() -> [BundledSkillDefinition; 33] {
     [
         BundledSkillDefinition {
             directory: VIDEO_GENERATE_SKILL_DIRECTORY,
@@ -492,6 +504,21 @@ fn default_skills() -> [BundledSkillDefinition; 30] {
             directory: CONTENT_POST_WITH_COVER_SKILL_DIRECTORY,
             skill_content: CONTENT_POST_WITH_COVER_SKILL_CONTENT,
             extra_files: CONTENT_POST_WITH_COVER_EXTRA_FILES,
+        },
+        BundledSkillDefinition {
+            directory: CONTENT_FACTORY_KNOWLEDGE_BUILDER_SKILL_DIRECTORY,
+            skill_content: CONTENT_FACTORY_KNOWLEDGE_BUILDER_SKILL_CONTENT,
+            extra_files: &[],
+        },
+        BundledSkillDefinition {
+            directory: CONTENT_FACTORY_ARTICLE_WRITER_SKILL_DIRECTORY,
+            skill_content: CONTENT_FACTORY_ARTICLE_WRITER_SKILL_CONTENT,
+            extra_files: &[],
+        },
+        BundledSkillDefinition {
+            directory: CONTENT_FACTORY_CONTENT_REVIEWER_SKILL_DIRECTORY,
+            skill_content: CONTENT_FACTORY_CONTENT_REVIEWER_SKILL_CONTENT,
+            extra_files: &[],
         },
         BundledSkillDefinition {
             directory: KNOWLEDGE_BUILDER_SKILL_DIRECTORY,

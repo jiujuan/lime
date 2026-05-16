@@ -123,6 +123,39 @@ describe("Agent App readiness P0", () => {
     expect(readiness.blockers).toHaveLength(0);
   });
 
+  it("应接受 v0.7 manifest 作为当前 Host 标准，不再按运行时版本阻断", () => {
+    const rawManifest = parseManifest({
+      manifestVersion: "0.7.0",
+      name: "content-factory-app",
+      version: "0.7.0",
+      requires: {
+        sdk: "@lime/app-sdk@^0.7.0",
+        capabilities: ["lime.capabilities"],
+      },
+      entries: [{ key: "dashboard", kind: "page" }],
+      requirements: {
+        requirements: [{ id: "CF-R001", text: "生成内容草稿" }],
+      },
+      boundary: {
+        boundaries: [
+          {
+            requirementId: "CF-R001",
+            planes: { host: { requires: ["lime.agent"] } },
+          },
+        ],
+      },
+    });
+    const manifest = normalizeManifest(rawManifest);
+    const identity = buildPackageIdentity({ manifest: rawManifest });
+    const projection = projectApp({ manifest, identity });
+    const readiness = checkReadiness({ manifest, projection });
+
+    expect(manifest.manifestVersion).toBe("0.7");
+    expect(readiness.blockers.map((issue) => issue.code)).not.toContain(
+      "MANIFEST_VERSION_UNSUPPORTED",
+    );
+  });
+
   it("package verification mismatch 应产生 blocker，不能只作为 warning 继续启用", () => {
     const { manifest, projection } = buildProjection();
     const profile: HostCapabilityProfile = {

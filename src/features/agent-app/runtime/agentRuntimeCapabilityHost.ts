@@ -36,6 +36,7 @@ import type {
   AgentAppUninstallResult,
   AppCleanupPlan,
 } from "../types";
+import { buildAgentRuntimeProcessView } from "./agentRuntimeProcess";
 
 export interface AgentAppRuntimeCapabilityApi {
   startTask(
@@ -80,6 +81,7 @@ interface RuntimeTaskState {
   request: AgentAppTaskRequest;
   retryOfTaskId?: string;
   retryAttempt?: number;
+  latestSnapshot?: AgentAppRuntimeTaskSnapshot;
 }
 
 const RUNTIME_TASK_STORAGE_PREFIX = "agent-runtime/tasks/";
@@ -254,6 +256,96 @@ function readThreadReadArtifacts(threadRead: unknown): Record<string, unknown>[]
   return threadRead.artifacts.filter(isRecord);
 }
 
+function parseJsonObjectFromMarkdown(value: string): Record<string, unknown> | null {
+  const trimmed = value.trim();
+  const candidate = trimmed.startsWith("```")
+    ? trimmed
+        .split("\n")
+        .slice(1)
+        .join("\n")
+        .replace(/```\s*$/m, "")
+        .trim()
+    : trimmed;
+  try {
+    const parsed = JSON.parse(candidate);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    const start = candidate.indexOf("{");
+    const end = candidate.lastIndexOf("}");
+    if (start < 0 || end <= start) {
+      return null;
+    }
+    try {
+      const parsed = JSON.parse(candidate.slice(start, end + 1));
+      return isRecord(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+}
+
+function hasContentFactoryWorkspacePatchFields(value: Record<string, unknown>): boolean {
+  return [
+    "workspace",
+    "project",
+    "sceneTable",
+    "contentBatch",
+    "scripts",
+    "imagePrompts",
+    "assetPack",
+    "projectKnowledge",
+  ].some((key) => isRecord(value[key]) || Array.isArray(value[key]));
+}
+
+function extractContentFactoryWorkspacePatch(
+  value: unknown,
+): Record<string, unknown> | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  for (const key of ["contentFactoryWorkspacePatch", "workspacePatch"]) {
+    const patch = value[key];
+    if (isRecord(patch)) {
+      return patch;
+    }
+  }
+  const kind = readRecordString(value, "kind") ?? readRecordString(value, "artifactKind");
+  if (
+    kind === "content_factory.workspace_patch" ||
+    kind === "contentFactoryWorkspacePatch" ||
+    kind === "workspacePatch" ||
+    hasContentFactoryWorkspacePatchFields(value)
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
+function extractWorkspacePatchFromArtifactDocument(
+  artifactDocument: unknown,
+): Record<string, unknown> | undefined {
+  if (!isRecord(artifactDocument) || !Array.isArray(artifactDocument.blocks)) {
+    return undefined;
+  }
+  for (const block of artifactDocument.blocks) {
+    if (!isRecord(block)) {
+      continue;
+    }
+    const content =
+      typeof block.content === "string"
+        ? block.content
+        : typeof block.markdown === "string"
+          ? block.markdown
+          : "";
+    const parsed = content ? parseJsonObjectFromMarkdown(content) : null;
+    const patch = extractContentFactoryWorkspacePatch(parsed);
+    if (patch) {
+      return patch;
+    }
+  }
+  return undefined;
+}
+
 function buildRuntimeArtifactReplayEvents(
   state: RuntimeTaskState,
   threadRead: unknown,
@@ -283,29 +375,50 @@ function buildRuntimeArtifactReplayEvents(
     const workspacePatch =
       isRecord(metadata.workspacePatch) || isRecord(metadata.contentFactoryWorkspacePatch)
         ? metadata.workspacePatch ?? metadata.contentFactoryWorkspacePatch
-        : undefined;
+        : extractWorkspacePatchFromArtifactDocument(artifactDocument);
+    const at =
+      readRecordString(artifact, "completed_at") ??
+      readRecordString(artifact, "updated_at") ??
+      readRecordString(artifact, "created_at") ??
+      state.startedAt;
+    const artifactEvent: AgentAppTaskStreamEvent = {
+      eventId: `${state.taskId}:artifact:${artifactRef}`,
+      taskId: state.taskId,
+      traceId: state.traceId,
+      type: "artifact:created",
+      status: "succeeded",
+      at,
+      message:
+        readRecordString(artifact, "title") ??
+        readRecordString(artifact, "artifact_type") ??
+        "Artifact 已创建",
+      refs: [artifactRef],
+      payload: {
+        artifact,
+        artifactDocument,
+        workspacePatch,
+        contentFactoryWorkspacePatch: workspacePatch,
+      },
+    };
+    if (!workspacePatch) {
+      return [artifactEvent];
+    }
     return [
+      artifactEvent,
       {
-        eventId: `${state.taskId}:artifact:${artifactRef}`,
+        eventId: `${state.taskId}:evidence:${artifactRef}`,
         taskId: state.taskId,
         traceId: state.traceId,
-        type: "artifact:created" as const,
-        status: "succeeded" as const,
-        at:
-          readRecordString(artifact, "completed_at") ??
-          readRecordString(artifact, "updated_at") ??
-          readRecordString(artifact, "created_at") ??
-          state.startedAt,
-        message:
-          readRecordString(artifact, "title") ??
-          readRecordString(artifact, "artifact_type") ??
-          "Artifact 已创建",
-        refs: [artifactRef],
+        type: "evidence:recorded",
+        status: "succeeded",
+        at,
+        message: "内容工厂 workspace patch evidence 已记录",
+        refs: [`evidence:${artifactRef}`],
         payload: {
-          artifact,
-          artifactDocument,
+          artifactRef,
           workspacePatch,
           contentFactoryWorkspacePatch: workspacePatch,
+          source: "agent_runtime_artifact_replay",
         },
       },
     ];
@@ -316,28 +429,41 @@ function buildTaskRecord(
   state: RuntimeTaskState,
   snapshot?: AgentAppRuntimeTaskSnapshot,
 ): AgentAppTaskRecord {
-  const runtimeEvents = snapshot?.taskEvents.length
-    ? snapshot.taskEvents.map((event, index) =>
+  const effectiveSnapshot = snapshot ?? state.latestSnapshot;
+  const runtimeEvents = effectiveSnapshot?.taskEvents.length
+    ? effectiveSnapshot.taskEvents.map((event, index) =>
         mapRuntimeEvent(state, event, index),
       )
     : [buildStartEvent(state)];
-  const events = snapshot
+  const events = effectiveSnapshot
     ? [
         ...runtimeEvents,
         ...buildRuntimeArtifactReplayEvents(
           state,
-          snapshot.threadRead,
+          effectiveSnapshot.threadRead,
           runtimeEvents,
         ),
       ]
     : runtimeEvents;
-  const status = snapshot
-    ? mapRuntimeTaskStatus(snapshot.taskStatus)
+  const status = effectiveSnapshot
+    ? mapRuntimeTaskStatus(effectiveSnapshot.taskStatus)
     : "running";
   const finishedAt =
     status === "succeeded" || status === "failed" || status === "cancelled"
       ? events[events.length - 1]?.at
       : undefined;
+  const runtimeProcess = buildAgentRuntimeProcessView({
+    events,
+    task: {
+      status,
+      taskStatus: effectiveSnapshot?.taskStatus,
+      input: state.request.input,
+      expectedOutput: state.request.expectedOutput,
+    },
+    snapshot: effectiveSnapshot,
+    expectedOutput: state.request.expectedOutput,
+    lastInput: state.request.input,
+  });
 
   return {
     taskId: state.taskId,
@@ -366,7 +492,7 @@ function buildTaskRecord(
     startedAt: state.startedAt,
     finishedAt,
     cancelledAt: status === "cancelled" ? finishedAt : undefined,
-    result: snapshot?.threadRead,
+    result: effectiveSnapshot?.threadRead,
     trace: events
       .filter((event) => event.message)
       .map((event) => ({
@@ -374,6 +500,8 @@ function buildTaskRecord(
         message: event.message ?? "",
       })),
     events,
+    runtimeProcess,
+    process: runtimeProcess,
     provenance: {
       sourceKind: "agent_app",
       appId: state.appId,
@@ -583,6 +711,8 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
       taskId: state.taskId,
       sessionId: state.sessionId,
     });
+    state.latestSnapshot = snapshot;
+    this.tasks.set(state.taskId, state);
     return buildTaskRecord(state, snapshot);
   }
 

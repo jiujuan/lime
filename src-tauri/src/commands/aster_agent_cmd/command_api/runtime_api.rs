@@ -29,13 +29,14 @@ use lime_core::database::dao::agent_run::{AgentRun, AgentRunDao};
 use lime_core::database::dao::agent_timeline::{AgentThreadItemStatus, AgentThreadTurnStatus};
 use serde_json::{json, Value};
 use std::path::PathBuf;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tauri::Manager;
 
 const RUNTIME_INTERRUPT_MESSAGE: &str = "用户已停止当前执行";
 
 const RUNTIME_SESSION_OPEN_HISTORY_LIMIT: usize = 40;
 const RUNTIME_SESSION_MAX_HISTORY_LIMIT: usize = 2_000;
+const TOOL_INVENTORY_AUX_TIMEOUT: Duration = Duration::from_secs(3);
 
 fn normalize_runtime_session_history_limit(history_limit: Option<usize>) -> Option<usize> {
     match history_limit {
@@ -1422,17 +1423,6 @@ pub async fn agent_runtime_get_tool_inventory(
     mcp_manager: State<'_, McpManagerState>,
     request: Option<AgentRuntimeToolInventoryRequest>,
 ) -> Result<crate::agent_tools::inventory::AgentToolInventorySnapshot, String> {
-    if state.is_initialized().await {
-        ensure_runtime_support_tools_registered(
-            &app,
-            state.inner(),
-            db.inner(),
-            api_key_provider_service.inner(),
-            mcp_manager.inner(),
-        )
-        .await?;
-    }
-
     let request = request.unwrap_or_default();
     let caller = lime_core::tool_calling::normalize_tool_caller(request.caller.as_deref())
         .unwrap_or_else(|| "assistant".to_string());
@@ -1442,35 +1432,84 @@ pub async fn agent_runtime_get_tool_inventory(
         (false, true) => WorkspaceToolSurface::browser_assist(),
         (false, false) => WorkspaceToolSurface::core(),
     };
-
     let mut warnings = Vec::new();
+
+    if state.is_initialized().await {
+        match tokio::time::timeout(
+            TOOL_INVENTORY_AUX_TIMEOUT,
+            ensure_runtime_support_tools_registered(
+                &app,
+                state.inner(),
+                db.inner(),
+                api_key_provider_service.inner(),
+                mcp_manager.inner(),
+            ),
+        )
+        .await
+        {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => warnings.push(format!("同步 runtime support tools 失败: {error}")),
+            Err(_) => warnings
+                .push("同步 runtime support tools 超时，已使用当前 registry 快照".to_string()),
+        }
+    }
 
     let (mcp_server_names, mcp_tools) = {
         let manager = mcp_manager.lock().await;
-        let server_names = manager.get_running_servers().await;
-        let tools = match manager.list_tools().await {
-            Ok(tools) => tools,
-            Err(error) => {
-                warnings.push(format!("读取 MCP 工具列表失败: {error}"));
-                Vec::new()
-            }
-        };
+        let server_names =
+            match tokio::time::timeout(TOOL_INVENTORY_AUX_TIMEOUT, manager.get_running_servers())
+                .await
+            {
+                Ok(server_names) => server_names,
+                Err(_) => {
+                    warnings.push("读取 MCP 服务列表超时，已跳过 MCP 服务快照".to_string());
+                    Vec::new()
+                }
+            };
+        let tools =
+            match tokio::time::timeout(TOOL_INVENTORY_AUX_TIMEOUT, manager.list_tools()).await {
+                Ok(Ok(tools)) => tools,
+                Ok(Err(error)) => {
+                    warnings.push(format!("读取 MCP 工具列表失败: {error}"));
+                    Vec::new()
+                }
+                Err(_) => {
+                    warnings.push("读取 MCP 工具列表超时，已跳过 MCP 工具快照".to_string());
+                    Vec::new()
+                }
+            };
         (server_names, tools)
     };
 
     let agent_arc = state.get_agent_arc();
-    let guard = agent_arc.read().await;
+    let guard = match tokio::time::timeout(TOOL_INVENTORY_AUX_TIMEOUT, agent_arc.read()).await {
+        Ok(guard) => guard,
+        Err(_) => {
+            warnings.push("读取 Aster Agent 状态超时，runtime registry 快照为空".to_string());
+            return Ok(build_tool_inventory(AgentToolInventoryBuildInput {
+                surface,
+                caller,
+                agent_initialized: false,
+                warnings,
+                persisted_execution_policy: Some(config_manager.config().agent.tool_execution),
+                request_metadata: request.metadata.clone(),
+                mcp_server_names,
+                mcp_tools,
+                registry_definitions: Vec::new(),
+                current_surface_tool_names: Vec::new(),
+                extension_configs: Vec::new(),
+                visible_extension_tools: Vec::new(),
+                searchable_extension_tools: Vec::new(),
+            }));
+        }
+    };
     let Some(agent) = guard.as_ref() else {
+        warnings.push("Aster Agent 尚未初始化，runtime registry / extension 快照为空".to_string());
         return Ok(build_tool_inventory(AgentToolInventoryBuildInput {
             surface,
             caller,
             agent_initialized: false,
-            warnings: {
-                warnings.push(
-                    "Aster Agent 尚未初始化，runtime registry / extension 快照为空".to_string(),
-                );
-                warnings
-            },
+            warnings,
             persisted_execution_policy: Some(config_manager.config().agent.tool_execution),
             request_metadata: request.metadata.clone(),
             mcp_server_names,
@@ -1484,7 +1523,28 @@ pub async fn agent_runtime_get_tool_inventory(
     };
 
     let registry_arc = agent.tool_registry().clone();
-    let registry = registry_arc.read().await;
+    let registry = match tokio::time::timeout(TOOL_INVENTORY_AUX_TIMEOUT, registry_arc.read()).await
+    {
+        Ok(registry) => registry,
+        Err(_) => {
+            warnings.push("读取 runtime registry 超时，已返回空 registry 快照".to_string());
+            return Ok(build_tool_inventory(AgentToolInventoryBuildInput {
+                surface,
+                caller,
+                agent_initialized: true,
+                warnings,
+                persisted_execution_policy: Some(config_manager.config().agent.tool_execution),
+                request_metadata: request.metadata.clone(),
+                mcp_server_names,
+                mcp_tools,
+                registry_definitions: Vec::new(),
+                current_surface_tool_names: Vec::new(),
+                extension_configs: Vec::new(),
+                visible_extension_tools: Vec::new(),
+                searchable_extension_tools: Vec::new(),
+            }));
+        }
+    };
     let mut registry_definitions = registry.get_definitions();
     drop(registry);
 
@@ -1506,33 +1566,50 @@ pub async fn agent_runtime_get_tool_inventory(
 
     let extension_configs = agent.get_extension_configs().await;
     let extension_manager = agent.extension_manager.clone();
-    let visible_extension_tools = match extension_manager.get_prefixed_tools(None).await {
-        Ok(tools) => tools
+    let visible_extension_tools = match tokio::time::timeout(
+        TOOL_INVENTORY_AUX_TIMEOUT,
+        extension_manager.get_prefixed_tools(None),
+    )
+    .await
+    {
+        Ok(Ok(tools)) => tools
             .into_iter()
             .map(|tool| ExtensionToolInventorySeed {
                 name: tool.name.to_string(),
                 description: tool.description.clone().unwrap_or_default().to_string(),
             })
             .collect(),
-        Err(error) => {
+        Ok(Err(error)) => {
             warnings.push(format!("读取已加载 extension tools 失败: {error}"));
             Vec::new()
         }
+        Err(_) => {
+            warnings.push("读取已加载 extension tools 超时，已跳过 extension 工具快照".to_string());
+            Vec::new()
+        }
     };
-    let searchable_extension_tools =
-        match extension_manager.get_prefixed_tools_for_search(None).await {
-            Ok(tools) => tools
-                .into_iter()
-                .map(|tool| ExtensionToolInventorySeed {
-                    name: tool.name.to_string(),
-                    description: tool.description.clone().unwrap_or_default().to_string(),
-                })
-                .collect(),
-            Err(error) => {
-                warnings.push(format!("读取 extension 搜索工具面失败: {error}"));
-                Vec::new()
-            }
-        };
+    let searchable_extension_tools = match tokio::time::timeout(
+        TOOL_INVENTORY_AUX_TIMEOUT,
+        extension_manager.get_prefixed_tools_for_search(None),
+    )
+    .await
+    {
+        Ok(Ok(tools)) => tools
+            .into_iter()
+            .map(|tool| ExtensionToolInventorySeed {
+                name: tool.name.to_string(),
+                description: tool.description.clone().unwrap_or_default().to_string(),
+            })
+            .collect(),
+        Ok(Err(error)) => {
+            warnings.push(format!("读取 extension 搜索工具面失败: {error}"));
+            Vec::new()
+        }
+        Err(_) => {
+            warnings.push("读取 extension 搜索工具面超时，已跳过 extension 搜索快照".to_string());
+            Vec::new()
+        }
+    };
 
     Ok(build_tool_inventory(AgentToolInventoryBuildInput {
         surface,

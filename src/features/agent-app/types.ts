@@ -205,6 +205,11 @@ export interface AppManifest {
   overlayTemplates?: OverlayTemplateDeclaration[];
   ui?: UiDeclaration;
   lifecycle?: LifecycleDeclaration;
+  agentRuntime?: unknown;
+  requirements?: unknown;
+  boundary?: unknown;
+  integrations?: unknown;
+  operations?: unknown;
 }
 
 export interface NormalizedRequires {
@@ -250,7 +255,7 @@ export interface NormalizedAppEntry {
 }
 
 export interface NormalizedAppManifest {
-  manifestVersion: "0.2" | "0.3";
+  manifestVersion: "0.2" | "0.3" | "0.5" | "0.6" | "0.7";
   appId: string;
   displayName: string;
   version: string;
@@ -276,6 +281,11 @@ export interface NormalizedAppManifest {
   overlayTemplates: OverlayTemplateDeclaration[];
   ui?: UiDeclaration;
   lifecycle: LifecycleDeclaration;
+  agentRuntime?: unknown;
+  requirements?: unknown;
+  boundary?: unknown;
+  integrations?: unknown;
+  operations?: unknown;
 }
 
 export interface PackageIdentity {
@@ -734,6 +744,10 @@ export interface AgentAppHostFlags {
 
 export interface HostCapabilityProfile {
   appRuntimeVersion: string;
+  standardVersions?: {
+    current: string;
+    compatible: string[];
+  };
   runtimeTargets: RuntimeTarget[];
   capabilities: Record<
     string,
@@ -743,6 +757,7 @@ export interface HostCapabilityProfile {
       implementation: CapabilityImplementation;
     }
   >;
+  agentRuntime?: unknown;
   featureFlags: AgentAppHostFlags;
 }
 
@@ -912,6 +927,69 @@ export interface AgentAppTaskStreamEvent {
   refs?: string[];
 }
 
+export type AgentAppRuntimeProcessTimelineKind =
+  | "progress"
+  | "thinking"
+  | "output"
+  | "execution"
+  | "routing"
+  | "metrics"
+  | "skill"
+  | "tool"
+  | "artifact"
+  | "blocked"
+  | "warning"
+  | "completed";
+
+export interface AgentAppRuntimeProcessTimelineItem {
+  kind: AgentAppRuntimeProcessTimelineKind;
+  title: string;
+  statusText: string;
+  message: string;
+  detail?: string;
+  meta?: string;
+  collapseKey?: string;
+}
+
+export interface AgentAppRuntimeProcessModel {
+  provider: string;
+  model: string;
+  label: string;
+}
+
+export interface AgentAppRuntimeProcessUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cachedInputTokens?: number;
+  cacheCreationInputTokens?: number;
+  [key: string]: unknown;
+}
+
+export interface AgentAppRuntimeProcessCost {
+  estimatedTotalCost?: number;
+  estimatedCostClass?: string;
+  currency?: string;
+  [key: string]: unknown;
+}
+
+export interface AgentAppRuntimeProcessView {
+  timeline: AgentAppRuntimeProcessTimelineItem[];
+  streamText: string;
+  thinkingText: string;
+  executionText: string;
+  skillNames: string[];
+  invokedSkillNames: string[];
+  model: AgentAppRuntimeProcessModel;
+  usage: AgentAppRuntimeProcessUsage | null;
+  cost: AgentAppRuntimeProcessCost | null;
+  terminal: boolean;
+  collapsedByDefault: boolean;
+  routingCount: number;
+  executionCount: number;
+  artifactCount: number;
+}
+
 export interface AgentAppTaskKnowledgeBinding {
   key: string;
   mode?: "retrieval" | "data";
@@ -989,6 +1067,8 @@ export interface AgentAppTaskRecord {
   result?: unknown;
   trace: AgentAppTaskTraceEvent[];
   events: AgentAppTaskStreamEvent[];
+  runtimeProcess?: AgentAppRuntimeProcessView;
+  process?: AgentAppRuntimeProcessView;
   provenance: AgentAppProvenance;
 }
 

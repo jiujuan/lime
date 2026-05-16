@@ -1,23 +1,34 @@
 import { describe, expect, it } from "vitest";
 import type { AgentAppTaskRecord } from "../types";
+import { buildAdapterCapabilityProfile } from "../adapters/adapterCapabilityProfile";
+import { p0HostCapabilityProfile } from "../readiness/hostCapabilityProfile";
 import {
   AgentAppCapabilityError,
   normalizeLimeCapabilityErrorCode,
   toLimeCapabilityError,
 } from "./capabilityErrors";
 import {
+  LIME_CAPABILITY_DEFINITIONS,
+  LIME_CAPABILITY_NAMES,
+  buildLimeCapabilityProfileEntriesForMode,
+  listEnabledLimeCapabilityNamesForMode,
+} from "./capabilityCatalog";
+import {
   buildLimeCapabilityInvokeProvenance,
   buildLimeCapabilityInvokeRequest,
   createLimeCapabilityInvoker,
   createMockLimeCapabilityTransport,
 } from "./capabilityContract";
+import { buildMockCapabilityProfile } from "./mockCapabilityProfile";
 
 const provenance = buildLimeCapabilityInvokeProvenance({
   sourceKind: "agent_app",
   appId: "content-factory-app",
   appVersion: "1.0.0",
-  packageHash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  manifestHash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  packageHash:
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  manifestHash:
+    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   entryKey: "dashboard",
   workflowRunId: "run-1",
   workspaceId: "workspace-1",
@@ -57,6 +68,72 @@ function buildTaskRecord(input: { title: string }): AgentAppTaskRecord {
 }
 
 describe("P18 typed Capability SDK contract", () => {
+  it("应把 Lime 全量能力目录作为 SDK / readiness / profile 的单一事实源", () => {
+    const catalogNames = LIME_CAPABILITY_DEFINITIONS.map(
+      (definition) => definition.name,
+    );
+
+    expect(new Set(catalogNames).size).toBe(catalogNames.length);
+    expect(LIME_CAPABILITY_NAMES).toEqual(catalogNames);
+    expect(catalogNames).toEqual(
+      expect.arrayContaining([
+        "lime.ui",
+        "lime.storage",
+        "lime.files",
+        "lime.agent",
+        "lime.knowledge",
+        "lime.tools",
+        "lime.artifacts",
+        "lime.workflow",
+        "lime.policy",
+        "lime.secrets",
+        "lime.evidence",
+        "lime.events",
+        "lime.capabilities",
+        "lime.models",
+        "lime.usage",
+        "lime.memory",
+        "lime.skills",
+        "lime.mcp",
+        "lime.browser",
+        "lime.search",
+        "lime.documents",
+        "lime.media",
+        "lime.terminal",
+        "lime.tasks",
+        "lime.settings",
+        "lime.workspace",
+        "lime.context",
+        "lime.connectors",
+        "lime.automation",
+        "lime.review",
+      ]),
+    );
+    expect(Object.keys(p0HostCapabilityProfile.capabilities).sort()).toEqual(
+      [...catalogNames].sort(),
+    );
+    expect(p0HostCapabilityProfile.capabilities["lime.policy"]).toMatchObject({
+      enabled: false,
+      implementation: "none",
+    });
+    expect(p0HostCapabilityProfile.capabilities["lime.secrets"]).toMatchObject({
+      enabled: false,
+      implementation: "none",
+    });
+    expect(buildLimeCapabilityProfileEntriesForMode("base")).toEqual(
+      p0HostCapabilityProfile.capabilities,
+    );
+    expect(
+      Object.keys(buildMockCapabilityProfile().capabilities).sort(),
+    ).toEqual([...catalogNames].sort());
+    expect(
+      Object.keys(buildAdapterCapabilityProfile().capabilities).sort(),
+    ).toEqual([...catalogNames].sort());
+    expect(listEnabledLimeCapabilityNamesForMode("adapter")).toEqual(
+      expect.arrayContaining(["lime.agent", "lime.storage", "lime.evidence"]),
+    );
+  });
+
   it("应构造带 app provenance 的 typed capability invoke envelope", () => {
     const request = buildLimeCapabilityInvokeRequest({
       capability: "lime.agent",

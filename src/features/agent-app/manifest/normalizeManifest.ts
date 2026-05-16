@@ -16,7 +16,18 @@ function slugifyAppId(value: string): string {
   return normalized || "agent-app";
 }
 
-function normalizeManifestVersion(version: string): "0.2" | "0.3" {
+function normalizeManifestVersion(
+  version: string,
+): "0.2" | "0.3" | "0.5" | "0.6" | "0.7" {
+  if (version.startsWith("0.7")) {
+    return "0.7";
+  }
+  if (version.startsWith("0.6")) {
+    return "0.6";
+  }
+  if (version.startsWith("0.5")) {
+    return "0.5";
+  }
   if (version.startsWith("0.3")) {
     return "0.3";
   }
@@ -34,17 +45,24 @@ function normalizeCapabilities(
   }
 
   if (Array.isArray(capabilities)) {
-    return Object.fromEntries(capabilities.map((capability) => [capability, "*"]));
+    return Object.fromEntries(
+      capabilities.map((capability) => [capability, "*"]),
+    );
   }
 
   return Object.fromEntries(
-    Object.entries(capabilities).filter(([capability]) => capability.trim().length > 0),
+    Object.entries(capabilities).filter(
+      ([capability]) => capability.trim().length > 0,
+    ),
   );
 }
 
 function normalizeEntry(entry: AppEntry): NormalizedAppEntry {
   const requiredCapabilities = Array.from(
-    new Set([...(entry.requiredCapabilities ?? []), ...(entry.capabilities ?? [])]),
+    new Set([
+      ...(entry.requiredCapabilities ?? []),
+      ...(entry.capabilities ?? []),
+    ]),
   );
 
   return {
@@ -61,12 +79,16 @@ function normalizeEntry(entry: AppEntry): NormalizedAppEntry {
   };
 }
 
-export function normalizeManifest(manifest: AppManifest): NormalizedAppManifest {
+export function normalizeManifest(
+  manifest: AppManifest,
+): NormalizedAppManifest {
   const appId = slugifyAppId(manifest.name);
-  const requiresCapabilities = normalizeCapabilities(manifest.requires?.capabilities);
+  const requiresCapabilities = normalizeCapabilities(
+    manifest.requires?.capabilities,
+  );
   const topLevelCapabilities = Object.fromEntries(
-    Object.entries(normalizeCapabilities(manifest.capabilities)).filter(([capability]) =>
-      capability.startsWith("lime."),
+    Object.entries(normalizeCapabilities(manifest.capabilities)).filter(
+      ([capability]) => capability.startsWith("lime."),
     ),
   );
   const storageRetention =
@@ -115,5 +137,10 @@ export function normalizeManifest(manifest: AppManifest): NormalizedAppManifest 
     overlayTemplates: manifest.overlayTemplates ?? [],
     ui: manifest.ui,
     lifecycle: manifest.lifecycle ?? {},
+    agentRuntime: manifest.agentRuntime,
+    requirements: manifest.requirements,
+    boundary: manifest.boundary,
+    integrations: manifest.integrations,
+    operations: manifest.operations,
   };
 }

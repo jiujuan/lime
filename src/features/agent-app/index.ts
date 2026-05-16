@@ -113,7 +113,27 @@ export type {
   LimeCapabilityErrorContext,
 } from "./sdk/capabilityErrors";
 export {
+  LIME_CAPABILITY_DEFINITIONS,
+  LIME_CAPABILITY_GROUPS,
   LIME_CAPABILITY_NAMES,
+  buildLimeCapabilityProfileEntries,
+  buildLimeCapabilityProfileEntriesForMode,
+  getLimeCapabilityAdapterKey,
+  getLimeCapabilityDefinition,
+  listEnabledLimeCapabilityNamesForMode,
+} from "./sdk/capabilityCatalog";
+export type {
+  LimeCapabilityDefinition,
+  LimeCapabilityAdapterKey,
+  LimeCapabilityDefinitionRecord,
+  LimeCapabilityGroup,
+  LimeCapabilityMethodName,
+  LimeCapabilityOwner,
+  LimeCapabilityProfileEntry,
+  LimeCapabilityStage,
+} from "./sdk/capabilityCatalog";
+
+export {
   buildLimeCapabilityInvokeProvenance,
   buildLimeCapabilityInvokeRequest,
   createLimeCapabilityErrorResponse,
@@ -146,13 +166,37 @@ export type {
   CreateLimeCoreCapabilityAdaptersOptions,
   LimeAgentCapabilityAdapter,
   LimeArtifactsCapabilityAdapter,
+  LimeAutomationCapabilityAdapter,
+  LimeBrowserCapabilityAdapter,
+  LimeCapabilitiesCapabilityAdapter,
   LimeCapabilityAdapterCallOptions,
+  LimeCapabilityAdapter,
+  LimeConnectorsCapabilityAdapter,
+  LimeContextCapabilityAdapter,
   LimeCoreCapabilityAdapters,
+  LimeDocumentsCapabilityAdapter,
   LimeEvidenceCapabilityAdapter,
+  LimeEventsCapabilityAdapter,
+  LimeFilesCapabilityAdapter,
   LimeKnowledgeCapabilityAdapter,
+  LimeMcpCapabilityAdapter,
+  LimeMediaCapabilityAdapter,
+  LimeMemoryCapabilityAdapter,
+  LimeModelsCapabilityAdapter,
+  LimePolicyCapabilityAdapter,
+  LimeReviewCapabilityAdapter,
+  LimeSearchCapabilityAdapter,
+  LimeSecretsCapabilityAdapter,
+  LimeSettingsCapabilityAdapter,
+  LimeSkillsCapabilityAdapter,
   LimeStorageCapabilityAdapter,
+  LimeTasksCapabilityAdapter,
+  LimeTerminalCapabilityAdapter,
   LimeToolsCapabilityAdapter,
   LimeUiCapabilityAdapter,
+  LimeUsageCapabilityAdapter,
+  LimeWorkflowCapabilityAdapter,
+  LimeWorkspaceCapabilityAdapter,
 } from "./sdk/capabilityAdapters";
 export {
   LIME_AGENT_APP_BRIDGE_PROTOCOL,
@@ -199,9 +243,7 @@ export type {
   AgentAppRuntimePackagePolicyEvidence,
   AgentAppUiBundleDescriptor,
 } from "./runtime/runtimePackageLoader";
-export {
-  evaluateAgentAppEntryRuntimeGuard,
-} from "./runtime/entryRuntimeGuard";
+export { evaluateAgentAppEntryRuntimeGuard } from "./runtime/entryRuntimeGuard";
 export type {
   AgentAppEntryRuntimeGuardIssue,
   AgentAppEntryRuntimeLifecycleState,

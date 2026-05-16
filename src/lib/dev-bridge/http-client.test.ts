@@ -443,6 +443,39 @@ describe("http-client", () => {
     });
   });
 
+  it("Agent App UI runtime 启动命令应覆盖后端冷启动等待窗口", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockImplementationOnce(createAbortablePendingFetch());
+    vi.stubGlobal("fetch", fetchMock);
+
+    let settled = false;
+    const invokePromise = invokeViaHttp("agent_app_start_ui_runtime", {
+      request: {
+        appId: "content-factory-app",
+        entryKey: "dashboard",
+      },
+    }).then(
+      () => ({ ok: true as const }),
+      (error) => ({ ok: false as const, error }),
+    );
+    invokePromise.finally(() => {
+      settled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(145000);
+    await expect(invokePromise).resolves.toMatchObject({
+      ok: false,
+      error: expect.objectContaining({
+        message: expect.stringContaining("timeout after 150000ms"),
+      }),
+    });
+  });
+
   it("bridge 真相命令应使用 5000ms 的请求超时窗口", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
@@ -482,6 +515,12 @@ describe("http-client", () => {
     expect(
       resolveBridgeRequestTimeoutMs("workspace_ensure_default_ready"),
     ).toBe(30000);
+    expect(resolveBridgeRequestTimeoutMs("agent_app_start_ui_runtime")).toBe(
+      150000,
+    );
+    expect(
+      resolveBridgeRequestTimeoutMs("agent_app_get_ui_runtime_status"),
+    ).toBe(5000);
     expect(resolveBridgeRequestTimeoutMs("gateway_channel_status")).toBe(5000);
     expect(resolveBridgeRequestTimeoutMs("list_executable_skills")).toBe(5000);
     expect(resolveBridgeRequestTimeoutMs("get_skill_detail")).toBe(5000);

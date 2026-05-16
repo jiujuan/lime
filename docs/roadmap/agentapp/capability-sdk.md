@@ -40,22 +40,64 @@
 10. **Agent 不出 Lime 治理**：模型、工具、知识、文件、凭证、Artifact、Evidence、成本和权限都必须通过 `lime.*` capability。
 11. **完整 Agent 能力不等于模型 API**：`LIME_GATEWAY_*` / `OPENAI_BASE_URL` 只能是低阶模型 executor 或 degraded fallback；`lime.agent` / `lime.workflow` 的生产事实源必须回到 `docs/roadmap/agentruntime/app-surface-runtime.md` 定义的 AgentRuntime Surface。
 
-## 能力地图
+## Lime 全功能能力化地图
 
-| Capability | P0 范围 | 典型 API |
-|---|---|---|
-| `lime.ui` | 注册 page、panel、command、settings、artifact viewer。 | `registerRoute`、`openPanel`、`openArtifact` |
-| `lime.storage` | App namespace、CRUD、schema、migration。 | `namespace`、`table`、`migrate` |
-| `lime.files` | 用户选中文件、读取 file ref、基础解析。 | `pick`、`read`、`parse` |
-| `lime.agent` | 本地 Agent task、stream、cancel、retry、trace。 | `startTask`、`streamTask`、`cancelTask` |
-| `lime.knowledge` | Knowledge binding、search、export、version。 | `bind`、`search`、`export` |
-| `lime.tools` | Tool Broker 调用、权限、长任务状态。 | `invoke`、`getProgress` |
-| `lime.artifacts` | 创建、读取、打开、导出 Artifact。 | `create`、`open`、`export` |
-| `lime.workflow` | workflow state、human review、background task。 | `start`、`checkpoint`、`awaitHuman` |
-| `lime.policy` | 权限、风险、成本、企业策略。 | `requestPermission`、`check` |
-| `lime.evidence` | provenance、tool call、knowledge citation、eval。 | `record`、`linkArtifact` |
-| `lime.secrets` | OAuth、API key、外部凭证槽位。 | `requestSecret`、`getHandle` |
-| `lime.events` | App 内外事件，UI/worker 解耦。 | `emit`、`subscribe` |
+详细执行路线图见 [P18.7 Full Lime Capability Surface](./p18-7-full-lime-capability-surface.md)。本文保留 SDK / Host Bridge 方案和能力地图摘要；后续代码实施顺序、v0.6 标准兼容和完成审计以 P18.7 文档为准。
+
+代码事实源：`src/features/agent-app/sdk/capabilityCatalog.ts`。后续新增、迁移或下线 Lime 能力时，必须先更新该 catalog，再由 `capabilityContract.ts`、`hostCapabilityProfile.ts`、`mockCapabilityProfile.ts`、`adapterCapabilityProfile.ts` 和 SDK public surface 派生；禁止在业务 App、mock、adapter 或文档里再维护第二份能力清单。
+
+这张表回答“所有 Lime 功能如何被 App 使用”：App 负责业务形态、状态递进和结果验收；Lime 主 App 负责 AgentRuntime、模型、工具、凭证、策略、证据、成本和平台资源。`current` 代表 SDK 名称和 profile 已进入单一事实源；`preview` 代表先占住统一抽象和边界，底层实现不得在业务 App 内私造。
+
+| 分组          | Capability          | 阶段    | Lime owner              | App 做什么                                    | Lime 主 App 做什么                                         |
+| ------------- | ------------------- | ------- | ----------------------- | --------------------------------------------- | ---------------------------------------------------------- |
+| App surface   | `lime.ui`           | current | Desktop Host            | 决定业务页面、提示和导航触发时机。            | 主题、语言、受控导航、下载、入口校验。                     |
+| App surface   | `lime.events`       | preview | Desktop Host            | 订阅业务事件，不写私有 bridge。               | 事件路由、namespace 隔离、订阅生命周期。                   |
+| App surface   | `lime.workspace`    | preview | Desktop Host            | 围绕当前 workspace 展示业务状态。             | workspace 身份、路径 ref、跨平台路径封装。                 |
+| Data          | `lime.storage`      | current | Desktop Host            | 定义业务对象、schema、写回时机。              | namespace 隔离、持久化、provenance。                       |
+| Data          | `lime.files`        | current | Desktop Host            | 声明文件类型，把解析结果转为业务草稿。        | 文件授权、file ref、解析器、安全边界。                     |
+| Data          | `lime.knowledge`    | current | Knowledge Runtime       | 选择知识空间并消费检索结果。                  | 知识索引、binding、版本、引用 provenance。                 |
+| Data          | `lime.artifacts`    | current | Artifact Runtime        | 定义产物类型、内容结构和业务状态联动。        | 产物持久化、viewer/export、来源记录。                      |
+| Data          | `lime.documents`    | preview | Tool Runtime            | 定义 PDF / Word / Markdown / PPT 的业务落点。 | 文档解析、格式转换、权限和 evidence。                      |
+| Agent runtime | `lime.agent`        | current | AgentRuntime            | 组装业务任务输入、期望产物、人工确认。        | session/thread/turn/task、Skills、Tools、模型、Evidence。  |
+| Agent runtime | `lime.workflow`     | current | AgentRuntime            | 定义业务步骤、checkpoint 和人工介入点。       | workflow 状态、恢复、Host response、权限。                 |
+| Agent runtime | `lime.tools`        | current | Tool Runtime            | 声明工具需求并消费结构化结果。                | Tool Broker、权限、进度、超时、审计。                      |
+| Agent runtime | `lime.models`       | preview | AgentRuntime            | 表达任务偏好、质量/成本约束。                 | 模型事实源、Provider 能力、路由和成本估算。                |
+| Agent runtime | `lime.memory`       | preview | AgentRuntime            | 声明可读/可写记忆意图。                       | `memory_runtime_*` / `unified_memory_*`、上下文压缩。      |
+| Agent runtime | `lime.skills`       | preview | AgentRuntime            | 声明必需 Skill 和业务场景。                   | Skill catalog、workspace binding、runtime gate、调用证据。 |
+| Agent runtime | `lime.context`      | preview | AgentRuntime            | 显式提交当前业务选择和资源上下文。            | session/thread/turn context、压缩和恢复边界。              |
+| Agent runtime | `lime.automation`   | preview | AgentRuntime            | 定义业务触发、输入和终止条件。                | automation job runtime、队列、权限、证据。                 |
+| Integration   | `lime.mcp`          | preview | Tool Runtime            | 声明需要的 MCP capability。                   | MCP bridge、inventory、命名、权限和审计。                  |
+| Integration   | `lime.browser`      | preview | Tool Runtime            | 表达网页采集目标和用户授权。                  | 浏览器 profile、自动化、截图、回放证据。                   |
+| Integration   | `lime.search`       | preview | Tool Runtime            | 给出业务检索问题和筛选规则。                  | 搜索/深搜 provider、来源去重、引用、成本。                 |
+| Integration   | `lime.media`        | preview | Tool Runtime            | 给出图片/音频/视频 brief 和交付约束。         | 媒体 runtime、文件产物、安全策略、成本。                   |
+| Integration   | `lime.terminal`     | preview | Tool Runtime            | 说明命令目的和输入。                          | sandbox、approval、日志、危险操作拦截。                    |
+| Integration   | `lime.connectors`   | preview | Cloud Overlay / Desktop | 声明外部系统连接需求。                        | OAuth、secret、tenant policy、连接器审计。                 |
+| Governance    | `lime.policy`       | current | Policy Runtime          | 说明能力用途并处理拒绝/降级。                 | 权限、风险、成本、企业策略和授权。                         |
+| Governance    | `lime.secrets`      | current | Policy Runtime          | 只保存 secret ref，不读取明文。               | 凭证托管、授权、轮换、最小权限访问。                       |
+| Governance    | `lime.settings`     | preview | Desktop Host            | 读/改自己的配置域。                           | schema、workspace overlay、tenant 默认值、迁移。           |
+| Governance    | `lime.review`       | preview | Policy Runtime          | 把审核嵌入业务 UI。                           | 审核证据、权限、发布门禁和决策记录。                       |
+| Governance    | `lime.capabilities` | preview | Desktop Host            | 根据 profile 做降级，不猜测底层实现。         | 发布能力目录、版本、readiness 和可用性。                   |
+| Observability | `lime.evidence`     | current | Artifact Runtime        | 声明证据类型并挂到产物/任务。                 | evidence 持久化、导出、审计。                              |
+| Observability | `lime.usage`        | preview | AgentRuntime            | 展示业务任务成本并响应预算拦截。              | Token、费用、预算、request telemetry 归因。                |
+| Observability | `lime.tasks`        | preview | AgentRuntime            | 展示本 App 相关后台任务。                     | 任务中心、队列、恢复、事件订阅、审计。                     |
+
+### 可用性口径
+
+| 层                         | current 事实源                                            | 说明                                                                           |
+| -------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| 名称 / 分组 / owner / 阶段 | `capabilityCatalog.ts`                                    | 唯一允许新增 `lime.*` 名称的地方。                                             |
+| TypeScript 调用契约        | `capabilityContract.ts`                                   | 所有 capability 必须有 typed method；未实现也要返回 stable unavailable error。 |
+| SDK facade                 | `capabilityAdapters.ts`                                   | `createLimeCoreCapabilityAdapters()` 按 catalog 自动生成全部 adapter key。     |
+| Host readiness profile     | `hostCapabilityProfile.ts`                                | 基础 profile 覆盖所有 capability，默认 `enabled=false / implementation=none`。 |
+| Mock / adapter profile     | `mockCapabilityProfile.ts`、`adapterCapabilityProfile.ts` | 只从 catalog 标注的能力派生，不再各自维护数组。                                |
+| 真实执行                   | AgentRuntime / ToolRuntime / Desktop Host                 | 业务 App 不拥有执行事实源；preview 能力未接入时必须显式不可用。                |
+
+### 边界结论
+
+1. 业务 App 可以拥有多个页面、多个工作流、多个业务对象，但不能拥有第二套模型、工具、Skill、凭证、成本、证据或运行过程事实源。
+2. `lime.agent` 只是完整 Agent 能力入口之一；模型选择、Skill、MCP、浏览器、搜索、媒体、终端、记忆、用量和审计都必须继续向对应 `lime.*` capability 收敛。
+3. Claw 已有能力不能复制到 App 内；Chat `@命令`、Agent App task、Automation job 都应成为同一 AgentRuntime / capability catalog 的 surface adapter。
+4. preview capability 不是假入口：profile 默认关闭，调用必须返回 stable unavailable / policy error；只有 Host 真正接线后才可标记 `mock`、`adapter` 或 `native`。
 
 ## 架构图
 
@@ -93,12 +135,12 @@ Agent App
 
 边界固定如下：
 
-| 层 | 做什么 | 不做什么 |
-|---|---|---|
-| `@lime/app-sdk` | 暴露 `lime.storage`、`lime.agent`、`lime.workflow` 等稳定 facade。 | 不暴露 Lime internal path，不执行模型和工具。 |
-| Host Bridge | 安全传输、主题、语言、capability invoke、Host action。 | 不保存执行事实，不判断任务完成。 |
-| Agent App Runtime Surface | 把 App task / workflow 映射成 AgentRuntime request，并附加 app provenance。 | 不复制 Claw skill launch，不新建第二套 runtime。 |
-| AgentRuntime | 维护 session/thread/turn/task/event/read model/evidence。 | 不决定垂直 App UI 形态。 |
+| 层                                                        | 做什么                                                                                                                                                  | 不做什么                                                                               |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `@lime/app-sdk`                                           | 暴露 `lime.storage`、`lime.agent`、`lime.workflow` 等稳定 facade。                                                                                      | 不暴露 Lime internal path，不执行模型和工具。                                          |
+| Host Bridge                                               | 安全传输、主题、语言、capability invoke、Host action。                                                                                                  | 不保存执行事实，不判断任务完成。                                                       |
+| Agent App Runtime Surface                                 | 把 App task / workflow 映射成 AgentRuntime request，并附加 app provenance。                                                                             | 不复制 Claw skill launch，不新建第二套 runtime。                                       |
+| AgentRuntime                                              | 维护 session/thread/turn/task/event/read model/evidence。                                                                                               | 不决定垂直 App UI 形态。                                                               |
 | AgentRuntime Capability Catalog / Claw Capability Catalog | 把现有 `@配图`、`@搜索`、`@研报` 等能力注册为可复用 capability；Chat `@命令`、Agent App `lime.agent.startTask`、Automation job 都只是 surface adapter。 | 不再让能力只绑定 Chat/Inputbar，也不把 capability catalog owner 下放给 Agent App SDK。 |
 
 生产期 `lime.agent.startTask` / `lime.workflow.start` 必须通过后端 AgentRuntime Surface；前端 `CapabilityHost` / `WorkflowRuntimeHost` 只能作为 adapter、mock 或本地预览，不得成为生产执行事实源。详细设计见：
@@ -136,15 +178,15 @@ interface LimeAgentAppBridgeMessage {
 
 首版 Host Bridge 覆盖：
 
-| 方向 | 事件 | 说明 |
-|---|---|---|
-| Host -> App | `host:snapshot` / `theme:update` | 同步主题、语言、入口上下文、capability 摘要。 |
-| Host -> App | `host:response` / `host:error` | 按 `requestId` 返回 SDK / Host action 结果。 |
-| Host -> App | `host:visibility` | 页面可见性变化，供 App 暂停或恢复轻量同步。 |
-| App -> Host | `app:ready` / `host:getSnapshot` | App 初始化和快照补偿。 |
-| App -> Host | `host:toast` / `host:navigate` | 非技术提示和受控导航。 |
-| App -> Host | `host:openExternal` / `host:download` | 受控外链和同源产物下载。 |
-| App -> Host | `capability:invoke` | SDK capability 调用统一入口。 |
+| 方向        | 事件                                  | 说明                                          |
+| ----------- | ------------------------------------- | --------------------------------------------- |
+| Host -> App | `host:snapshot` / `theme:update`      | 同步主题、语言、入口上下文、capability 摘要。 |
+| Host -> App | `host:response` / `host:error`        | 按 `requestId` 返回 SDK / Host action 结果。  |
+| Host -> App | `host:visibility`                     | 页面可见性变化，供 App 暂停或恢复轻量同步。   |
+| App -> Host | `app:ready` / `host:getSnapshot`      | App 初始化和快照补偿。                        |
+| App -> Host | `host:toast` / `host:navigate`        | 非技术提示和受控导航。                        |
+| App -> Host | `host:openExternal` / `host:download` | 受控外链和同源产物下载。                      |
+| App -> Host | `capability:invoke`                   | SDK capability 调用统一入口。                 |
 
 安全规则：
 
@@ -196,14 +238,14 @@ await lime.agent.startTask({
 
 客户端当前实现位置：
 
-| 对象 | 作用 |
-|---|---|
-| `src/features/agent-app/sdk/hostBridgeClient.ts` | 把 typed SDK request 转成 Host Bridge v1 `capability:invoke` message，处理 `app:ready`、`host:getSnapshot`、`host:toast`、`host:navigate`、`host:openExternal`、`host:download`、`host:snapshot`、`theme:update`、`host:visibility`、`host:response` / `host:error`、trusted origin、timeout、pending cleanup，以及 `capability:subscribe / unsubscribe / event`。 |
-| `src/features/agent-app/sdk/index.ts` | SDK-only public surface，只导出 capability facade、stable error、Host Bridge client、mock host 和 App package 需要的 task / storage / artifact / evidence 类型；不导出 UI、installer、repository 或 runtime host 内部实现。 |
-| `src/features/agent-app/index.ts` | 当前 Lime repo public feature entry 已导出 `createLimeCoreCapabilityAdapters`、`createLimeHostBridgeCapabilityInvoker`、`LIME_AGENT_APP_BRIDGE_PROTOCOL` 与 `LIME_AGENT_APP_BRIDGE_VERSION`，作为后续正式 SDK package / package-local shim 的事实源。 |
-| `src/features/agent-app/sdk/hostBridgeClient.test.ts` | 覆盖 ready / snapshot / theme / visibility / toast / navigate / openExternal / download、envelope、stable error、timeout cleanup、capability subscription 事件分发，以及内容工厂 task / storage / artifact / evidence 主链。 |
-| `src/features/agent-app/sdk/publicSdkSurface.test.ts` | 固定 SDK-only public surface，确保后续正式 `@lime/app-sdk` 或 package-local shim 可以从窄导出清单取能力；同时从运行时 namespace 和源码 export 来源两侧禁止导出 UI、安装器、repository、runtime host、adapter、schema 或 dispatcher 内部对象。 |
-| `src/features/agent-app/index.test.ts` | 固定 public feature entry 的 SDK export seam，防止后续 App 只能依赖 Lime 内部深路径。 |
+| 对象                                                  | 作用                                                                                                                                                                                                                                                                                                                                                               |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/features/agent-app/sdk/hostBridgeClient.ts`      | 把 typed SDK request 转成 Host Bridge v1 `capability:invoke` message，处理 `app:ready`、`host:getSnapshot`、`host:toast`、`host:navigate`、`host:openExternal`、`host:download`、`host:snapshot`、`theme:update`、`host:visibility`、`host:response` / `host:error`、trusted origin、timeout、pending cleanup，以及 `capability:subscribe / unsubscribe / event`。 |
+| `src/features/agent-app/sdk/index.ts`                 | SDK-only public surface，只导出 capability facade、stable error、Host Bridge client、mock host 和 App package 需要的 task / storage / artifact / evidence 类型；不导出 UI、installer、repository 或 runtime host 内部实现。                                                                                                                                        |
+| `src/features/agent-app/index.ts`                     | 当前 Lime repo public feature entry 已导出 `createLimeCoreCapabilityAdapters`、`createLimeHostBridgeCapabilityInvoker`、`LIME_AGENT_APP_BRIDGE_PROTOCOL` 与 `LIME_AGENT_APP_BRIDGE_VERSION`，作为后续正式 SDK package / package-local shim 的事实源。                                                                                                              |
+| `src/features/agent-app/sdk/hostBridgeClient.test.ts` | 覆盖 ready / snapshot / theme / visibility / toast / navigate / openExternal / download、envelope、stable error、timeout cleanup、capability subscription 事件分发，以及内容工厂 task / storage / artifact / evidence 主链。                                                                                                                                       |
+| `src/features/agent-app/sdk/publicSdkSurface.test.ts` | 固定 SDK-only public surface，确保后续正式 `@lime/app-sdk` 或 package-local shim 可以从窄导出清单取能力；同时从运行时 namespace 和源码 export 来源两侧禁止导出 UI、安装器、repository、runtime host、adapter、schema 或 dispatcher 内部对象。                                                                                                                      |
+| `src/features/agent-app/index.test.ts`                | 固定 public feature entry 的 SDK export seam，防止后续 App 只能依赖 Lime 内部深路径。                                                                                                                                                                                                                                                                              |
 
 发布状态与退出条件：正式 `@lime/app-sdk` package 尚未从 Lime repo 独立发布；外部 App 仍不得 import `src/features/agent-app/*` 或其它 Lime internal path。P18.5.3 如果需要 package-local shim，只能镜像本节 public API，并在正式 SDK package 可安装后退出。
 
@@ -245,12 +287,12 @@ interface LimeAgentTaskRequest {
 
 最小运行语义：
 
-| 阶段 | App 责任 | Lime Host / Agent 责任 |
-|---|---|---|
-| Start | 从当前页面 / workflow 组装业务输入、期望结构和幂等键。 | 校验 manifest、entry readiness、permission、policy、cost。 |
-| Stream | 在 App 内显示进度、引用、工具调用、错误和可取消状态。 | 发送 `taskId`、`traceId`、status、tool call、citation、partial artifact、blocked error。 |
-| Review | 让用户编辑、确认、拒绝或重试结果。 | 保留 trace，确保重试和取消可审计。 |
-| Write-back | 通过 `lime.storage` 写业务对象，通过 `lime.artifacts` / `lime.evidence` 写交付物和依据。 | 自动附加 appId、entryKey、package provenance、workspace / tenant 上下文。 |
+| 阶段       | App 责任                                                                                 | Lime Host / Agent 责任                                                                   |
+| ---------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Start      | 从当前页面 / workflow 组装业务输入、期望结构和幂等键。                                   | 校验 manifest、entry readiness、permission、policy、cost。                               |
+| Stream     | 在 App 内显示进度、引用、工具调用、错误和可取消状态。                                    | 发送 `taskId`、`traceId`、status、tool call、citation、partial artifact、blocked error。 |
+| Review     | 让用户编辑、确认、拒绝或重试结果。                                                       | 保留 trace，确保重试和取消可审计。                                                       |
+| Write-back | 通过 `lime.storage` 写业务对象，通过 `lime.artifacts` / `lime.evidence` 写交付物和依据。 | 自动附加 appId、entryKey、package provenance、workspace / tenant 上下文。                |
 
 验收口径：内容工厂的资料整理、场景生成、批量文案、交付和复盘都应在 App 页面内启动、观察、确认和写回；Expert Chat 只能作为嵌入式协作者读取同一上下文，不允许成为手工复制结果的旁路。
 
@@ -335,15 +377,15 @@ entries:
 
 ## P0 交付物
 
-| 交付物 | 说明 | 验收 |
-|---|---|---|
+| 交付物                   | 说明                                                      | 验收                             |
+| ------------------------ | --------------------------------------------------------- | -------------------------------- |
 | App manifest v0.3 parser | 支持 `requires`、`runtimePackage`、`storage`、`entries`。 | 示例 App 可 validate / project。 |
-| Capability SDK 类型草案 | TypeScript types + mock host。 | App 示例可以用 mock 运行单测。 |
-| Desktop Installer 方案 | 安装、hash、projection、readiness、权限。 | 能生成 projection，不运行代码。 |
-| Storage namespace 方案 | schema、migration、保留/删除策略。 | 卸载时可选择保留数据。 |
-| UI extension slot 方案 | page / panel / settings / artifact viewer。 | App 页面不需要写进 Core。 |
-| Worker runtime 方案 | long task、cancel、trace、policy。 | 能执行受控后台任务。 |
-| Evidence 串联 | task/tool/knowledge/artifact/eval provenance。 | 产物能追溯 App 和知识版本。 |
+| Capability SDK 类型草案  | TypeScript types + mock host。                            | App 示例可以用 mock 运行单测。   |
+| Desktop Installer 方案   | 安装、hash、projection、readiness、权限。                 | 能生成 projection，不运行代码。  |
+| Storage namespace 方案   | schema、migration、保留/删除策略。                        | 卸载时可选择保留数据。           |
+| UI extension slot 方案   | page / panel / settings / artifact viewer。               | App 页面不需要写进 Core。        |
+| Worker runtime 方案      | long task、cancel、trace、policy。                        | 能执行受控后台任务。             |
+| Evidence 串联            | task/tool/knowledge/artifact/eval provenance。            | 产物能追溯 App 和知识版本。      |
 
 ## 分期计划
 
@@ -377,11 +419,11 @@ entries:
 
 ## 风险与应对
 
-| 风险 | 影响 | 应对 |
-|---|---|---|
-| SDK 过厚 | 变成第二套 Lime 内部 API。 | 只暴露 capability facade，不暴露 store/internal path。 |
-| SDK 过薄 | App 重复造轮子。 | P0 优先封装高频底座：storage、files、agent、artifact、knowledge、tools。 |
-| UI 安全 | App UI 诱导授权或越权访问。 | Host 控制容器 + runtime permission bridge 双拦截。 |
-| Migration 破坏数据 | App 升级损坏用户数据。 | migration plan、dry-run、backup、保留数据策略。 |
-| Cloud 变 Runtime | 破坏 Lime 本地运行定位。 | server-assisted 必须显式声明并受 policy 控制。 |
+| 风险                 | 影响                                    | 应对                                                                                                |
+| -------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| SDK 过厚             | 变成第二套 Lime 内部 API。              | 只暴露 capability facade，不暴露 store/internal path。                                              |
+| SDK 过薄             | App 重复造轮子。                        | P0 优先封装高频底座：storage、files、agent、artifact、knowledge、tools。                            |
+| UI 安全              | App UI 诱导授权或越权访问。             | Host 控制容器 + runtime permission bridge 双拦截。                                                  |
+| Migration 破坏数据   | App 升级损坏用户数据。                  | migration plan、dry-run、backup、保留数据策略。                                                     |
+| Cloud 变 Runtime     | 破坏 Lime 本地运行定位。                | server-assisted 必须显式声明并受 policy 控制。                                                      |
 | Agent 能力退化为 API | App 绕过 Claw / Aster / Evidence 主链。 | `lime.agent` / `lime.workflow` 必须进入 AgentRuntime Surface，模型 token 仅作 executor / fallback。 |

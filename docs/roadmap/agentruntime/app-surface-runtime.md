@@ -37,21 +37,58 @@ Content Factory / Agent App
 
 ## 3. Surface 边界
 
-| 层 | current 责任 | 禁止事项 |
-| --- | --- | --- |
-| Agent App UI | 业务形态、表单、资料版本、场景、文案、素材、交付和复盘 | 直接访问 Tauri / Node / 宿主 DOM，绕过 Host Bridge |
-| Agent App Workflow | 从 App 状态组装 task input、expected output、review/write-back 目标 | 自己维护第二套 Agent task runtime |
-| Host Bridge | iframe sandbox、主题、语言、导航、capability transport、安全校验 | 承载业务 Agent 逻辑 |
-| Agent App Runtime Surface | 把 App task 映射到 AgentRuntime control plane，附加 app provenance | 复制 Claw skill launch 或绕过 `agent_runtime_*` 主链 |
-| AgentRuntime | session/thread/turn/task、queue、event、tool、policy、evidence facts | 决定垂直业务 UI 长什么样 |
-| Claw Capability Catalog | 把 `@配图`、`@搜索`、`@研报` 等能力变成可复用 capability | 继续把能力绑定死在 Chat/Inputbar 字符串分支 |
-| Artifact / Evidence | 产物、引用、工具调用、知识版本、人工确认和验证记录 | 让最终结果只停留在聊天文本 |
+| 层                        | current 责任                                                         | 禁止事项                                             |
+| ------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------- |
+| Agent App UI              | 业务形态、表单、资料版本、场景、文案、素材、交付和复盘               | 直接访问 Tauri / Node / 宿主 DOM，绕过 Host Bridge   |
+| Agent App Workflow        | 从 App 状态组装 task input、expected output、review/write-back 目标  | 自己维护第二套 Agent task runtime                    |
+| Host Bridge               | iframe sandbox、主题、语言、导航、capability transport、安全校验     | 承载业务 Agent 逻辑                                  |
+| Agent App Runtime Surface | 把 App task 映射到 AgentRuntime control plane，附加 app provenance   | 复制 Claw skill launch 或绕过 `agent_runtime_*` 主链 |
+| AgentRuntime              | session/thread/turn/task、queue、event、tool、policy、evidence facts | 决定垂直业务 UI 长什么样                             |
+| Claw Capability Catalog   | 把 `@配图`、`@搜索`、`@研报` 等能力变成可复用 capability             | 继续把能力绑定死在 Chat/Inputbar 字符串分支          |
+| Artifact / Evidence       | 产物、引用、工具调用、知识版本、人工确认和验证记录                   | 让最终结果只停留在聊天文本                           |
+
+### 运行过程封装边界
+
+`thinking / text delta / tool input-output / Skill / routing / cost / usage / artifact / evidence / blocked / completed` 这类 Claw 式运行过程属于 Lime 主 App 的 runtime projection，不属于垂直业务 App。Agent App 只允许消费 Host Bridge 下发的 `runtimeProcess` / `process` 标准视图，并用它做业务展示：
+
+- `runtimeProcess.timeline`：可折叠的运行现场，运行中展开，终态默认折叠但不丢失。
+- `runtimeProcess.streamText / thinkingText / executionText`：正文、思考和执行片段。
+- `runtimeProcess.model / usage / cost`：模型路由、Token 和费用事实。
+- `runtimeProcess.skillNames / invokedSkillNames`：本轮 required Skills 与真实调用情况。
+- `runtimeProcess.terminal / collapsedByDefault`：由主 App 判断运行生命周期，App 不再自己推断底层状态。
+
+因此内容工厂、未来销售助手或交付助手都不应该复制一份 `agent-runtime-process` 解析器；它们只处理业务表单、业务产物、人工确认和工作流递进。若某个 App 发现 process 信息缺失，应该回报 Host / Runtime projection 缺口，而不是在 App 内补第二套底层归一化。
 
 事实源声明：
 
 ```text
 Agent App 的完整 AI 能力只允许向 AgentRuntime Surface + AgentRuntime facts 收敛。
+Agent App 的运行过程 UI 事实只允许向 AgentRuntimeCapabilityHost + HostBridge runtimeProcess 收敛。
 ```
+
+## 3.1 全量 `lime.*` 能力与 AgentRuntime 的关系
+
+Agent App 侧全量能力路线图见 [`../agentapp/p18-7-full-lime-capability-surface.md`](../agentapp/p18-7-full-lime-capability-surface.md)。本文只固定 AgentRuntime owner 边界：凡涉及 AI 执行、模型、Skill、工具、记忆、用量、证据的能力，生产事实必须继续向 AgentRuntime / ToolRuntime / Desktop Host 收敛。
+
+Agent App 不再只抽象 `lime.agent / lime.workflow` 两个入口。完整 Lime AI 能力必须拆成三类，并统一登记在 `src/features/agent-app/sdk/capabilityCatalog.ts`：
+
+| 类型       | Capability                                                                                                                     | AgentRuntime 关系                                                                             | App 边界                                                                |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| 执行主链   | `lime.agent`、`lime.workflow`、`lime.automation`、`lime.tasks`                                                                 | 进入 AgentRuntime session/thread/turn/task/queue。                                            | App 只定义业务输入、状态递进和结果写回。                                |
+| 智能体资源 | `lime.models`、`lime.skills`、`lime.memory`、`lime.context`、`lime.usage`                                                      | 从 AgentRuntime request metadata、runtime facts、read model、telemetry 投影。                 | App 不保存 provider key，不复制 Skill runtime，不自建 token/cost 统计。 |
+| 工具与集成 | `lime.tools`、`lime.mcp`、`lime.browser`、`lime.search`、`lime.documents`、`lime.media`、`lime.terminal`、`lime.connectors`    | 经 ToolRuntime / MCP bridge / Browser / Media / Document runtime 接入 AgentRuntime evidence。 | App 声明需求和消费结构化结果，不直连底层服务。                          |
+| 数据与证据 | `lime.storage`、`lime.files`、`lime.knowledge`、`lime.artifacts`、`lime.evidence`                                              | 与 AgentRuntime task provenance、artifact refs、knowledge refs 关联。                         | App 定义业务对象和产物类型，Lime 负责命名空间、引用和审计。             |
+| 治理与宿主 | `lime.ui`、`lime.events`、`lime.workspace`、`lime.policy`、`lime.secrets`、`lime.settings`、`lime.review`、`lime.capabilities` | 作为 Host / policy / readiness projection 约束 runtime 调用。                                 | App 做展示和降级，不绕过 Host Bridge。                                  |
+
+事实源声明补强：
+
+```text
+所有可给 Agent App 使用的 Lime 功能，名称和边界先进入 lime.* capability catalog。
+所有涉及 AI 执行、模型、Skill、工具、记忆、用量、证据的能力，生产事实必须继续向 AgentRuntime / ToolRuntime / Desktop Host 收敛。
+业务 App 只消费 SDK facade 与 runtimeProcess projection，不拥有底层执行事实源。
+```
+
+这解决内容工厂当前暴露出来的问题：如果 App 需要完整 Lime AI 能力，不是把 Claw UI 嵌进去，也不是让 App 调模型 API，而是把 Claw 已有的图片、搜索、研报、PDF、总结、PPT、浏览器、发布等能力拆成 `lime.skills / lime.tools / lime.search / lime.media / lime.documents / lime.browser / lime.artifacts / lime.evidence` 等能力，再由 `lime.agent.startTask` 或 `lime.workflow.start` 编排。缺失的能力只允许在 catalog/profile 中显示为 unavailable，不允许由业务 App 临时 mock 成成功。
 
 ## 4. current / compat / deprecated / dead
 
@@ -122,17 +159,17 @@ humanReview = true
 
 最小事件：
 
-| 事件 | App 内展示 |
-| --- | --- |
-| `task:started` | 本轮任务已启动 |
-| `task:contextChecked` | 资料、场景、脚本和知识绑定检查结果 |
-| `task:missingContextRequested` | 在当前表单或侧栏追问缺口 |
-| `task:toolCall` | 搜索、知识检索、图片、报告、PDF 等工具进度 |
-| `task:citation` | 资料、场景、网页、文件引用 |
-| `task:partialArtifact` | 草稿文案、素材 brief、脚本片段 |
-| `task:reviewRequested` | 用户确认、编辑、拒绝或重试 |
-| `task:completed` | 写回完成，可导出交付物 |
-| `artifact:created` / `evidence:recorded` | 交付物和证据已落库 |
+| 事件                                     | App 内展示                                 |
+| ---------------------------------------- | ------------------------------------------ |
+| `task:started`                           | 本轮任务已启动                             |
+| `task:contextChecked`                    | 资料、场景、脚本和知识绑定检查结果         |
+| `task:missingContextRequested`           | 在当前表单或侧栏追问缺口                   |
+| `task:toolCall`                          | 搜索、知识检索、图片、报告、PDF 等工具进度 |
+| `task:citation`                          | 资料、场景、网页、文件引用                 |
+| `task:partialArtifact`                   | 草稿文案、素材 brief、脚本片段             |
+| `task:reviewRequested`                   | 用户确认、编辑、拒绝或重试                 |
+| `task:completed`                         | 写回完成，可导出交付物                     |
+| `artifact:created` / `evidence:recorded` | 交付物和证据已落库                         |
 
 当前已落地第一刀：`agent_app_runtime_get_task` 会从 `AgentRuntimeThreadReadModel` 投影 `taskStatus` 与 `taskEvents`，先覆盖 queued / progress / missing context / review request / tool call / artifact created / evidence recorded / evidence verified / completed / cancelled / error / incident。AgentRuntime profile event 生成处也会主动 emit `agent_app_runtime:profileProjection`，把 `turn.* / tool.* / action.* / routing.* / model.*` 投影成 App canonical `taskEvents`；高价值 `RuntimeAgentEvent` 会主动 emit `agent_app_runtime:runtimeEventProjection`，其中 `ArtifactSnapshot / FileArtifact` 可直接携带 `workspacePatch / contentFactoryWorkspacePatch`，显式写入 runtime event / timeline metadata 的 `evidenceRefs / verificationOutcomes` 也会通过 `runtime_evidence_projection_service` 投影为 `evidence:recorded / evidence:verified`。`AgentAppRuntimePage` 已消费这组 snapshot / profile / runtime projection 事件并转成 App 可见的 `AgentAppTaskStreamEvent`；App 也可以通过 `lime.agent.submitHostResponse` 把 ask_user / elicitation / tool_confirmation 响应回 `agent_app_runtime_submit_host_response`。`AgentRuntimeCapabilityHost` 已把 `taskId / sessionId / turnId / request / provenance` 持久化到 Agent App storage，刷新或重建 Host 后可以继续 `getTask / listTasks / submitHostResponse`，并能从 `threadRead.artifacts` 补投 `artifact:created` payload。Host Bridge 已支持 `capability:subscribe / capability:unsubscribe / capability:event`：订阅时会通过 `safeListen` 监听 `agent_app_runtime:{appId}:{taskId}` Tauri / DevBridge runtime event，并把后端 runtime event 和 projection 推给 iframe；同时保留 Host 侧 `getTask` 轮询作为 snapshot / artifact replay fallback。成功终态如果暂未带 workspace patch，会继续短轮询最多 4 次等待最终 artifact replay，已经能让 App 留在当前页面持续收到 task update、runtime event 和最终 artifact patch。Harness export projection 也已接入同一 event bus：Evidence Pack / analysis / review / save review 导出成功后，会把导出 root、制品列表和 completion audit completed 事实投影为 App task events。
 

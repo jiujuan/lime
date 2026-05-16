@@ -23,8 +23,11 @@ describe("mockPriorityCommands", () => {
       false,
     );
     expect(shouldPreferMockInBrowser("close_webview_panel")).toBe(true);
-    expect(shouldPreferMockInBrowser("agent_app_start_ui_runtime")).toBe(true);
-    expect(shouldPreferMockInBrowser("agent_app_stop_ui_runtime")).toBe(true);
+    expect(shouldPreferMockInBrowser("agent_app_start_ui_runtime")).toBe(false);
+    expect(shouldPreferMockInBrowser("agent_app_get_ui_runtime_status")).toBe(
+      false,
+    );
+    expect(shouldPreferMockInBrowser("agent_app_stop_ui_runtime")).toBe(false);
   });
 
   it("图层设计工程目录命令在浏览器模式必须走真实桥接", () => {
@@ -63,6 +66,15 @@ describe("mockPriorityCommands", () => {
     ).toBe(true);
     expect(
       shouldDisallowMockFallbackInBrowser("agent_app_runtime_start_task"),
+    ).toBe(true);
+    expect(
+      shouldDisallowMockFallbackInBrowser("agent_app_start_ui_runtime"),
+    ).toBe(true);
+    expect(
+      shouldDisallowMockFallbackInBrowser("agent_app_get_ui_runtime_status"),
+    ).toBe(true);
+    expect(
+      shouldDisallowMockFallbackInBrowser("agent_app_stop_ui_runtime"),
     ).toBe(true);
     expect(
       shouldDisallowMockFallbackInBrowser("agent_app_runtime_cancel_task"),

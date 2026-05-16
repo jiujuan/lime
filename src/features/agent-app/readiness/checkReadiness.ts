@@ -13,24 +13,41 @@ import type {
   ReadinessResult,
   ReadinessStatus,
 } from "../types";
-import { p0HostCapabilityProfile } from "./hostCapabilityProfile";
+import {
+  compatibleAgentAppStandardVersions,
+  p0HostCapabilityProfile,
+} from "./hostCapabilityProfile";
 
 function supportsManifestRuntime(manifest: NormalizedAppManifest): boolean {
-  return manifest.manifestVersion === "0.2" || manifest.manifestVersion === "0.3";
+  return (
+    manifest.manifestVersion === "0.2" ||
+    manifest.manifestVersion === "0.3" ||
+    compatibleAgentAppStandardVersions.includes(manifest.manifestVersion)
+  );
 }
 
 function isRuntimeTargetSupported(
   manifest: NormalizedAppManifest,
   profile: HostCapabilityProfile,
 ): boolean {
-  return manifest.runtimeTargets.some((target) => profile.runtimeTargets.includes(target));
+  return manifest.runtimeTargets.some((target) =>
+    profile.runtimeTargets.includes(target),
+  );
 }
 
 function normalizeRange(range: string): string {
-  return range.trim() || "*";
+  const normalized = range.trim();
+  if (!normalized) {
+    return "*";
+  }
+  const sdkRange = normalized.match(/^@lime\/app-sdk@(.+)$/);
+  return sdkRange?.[1] ?? normalized;
 }
 
-function supportsRequestedRange(hostVersion: string, requestedRange: string): boolean {
+function supportsRequestedRange(
+  hostVersion: string,
+  requestedRange: string,
+): boolean {
   const normalized = normalizeRange(requestedRange);
   if (normalized === "*") {
     return true;
@@ -40,16 +57,21 @@ function supportsRequestedRange(hostVersion: string, requestedRange: string): bo
     const hostMinor = hostVersion.match(/^(\d+)\.(\d+)/);
     return Boolean(
       requestedMinor &&
-        hostMinor &&
-        requestedMinor[1] === hostMinor[1] &&
-        requestedMinor[2] === hostMinor[2],
+      hostMinor &&
+      requestedMinor[1] === hostMinor[1] &&
+      requestedMinor[2] === hostMinor[2],
     );
   }
   if (normalized.includes(hostVersion)) {
     return true;
   }
   if (normalized.includes(">=0.3.0") && normalized.includes("<1.0.0")) {
-    return hostVersion.startsWith("0.3.");
+    return (
+      hostVersion.startsWith("0.3.") ||
+      hostVersion.startsWith("0.5.") ||
+      hostVersion.startsWith("0.6.") ||
+      hostVersion.startsWith("0.7.")
+    );
   }
   if (normalized.includes(">=0.2.0") && normalized.includes("<1.0.0")) {
     return hostVersion.startsWith("0.2.") || hostVersion.startsWith("0.3.");
@@ -91,7 +113,9 @@ function issueForCapability(
 ): ReadinessIssue | null {
   if (!support.supported) {
     return {
-      code: support.hostVersion ? "CAPABILITY_VERSION_UNSUPPORTED" : "CAPABILITY_MISSING",
+      code: support.hostVersion
+        ? "CAPABILITY_VERSION_UNSUPPORTED"
+        : "CAPABILITY_MISSING",
       severity: requirement.required ? "blocker" : "warning",
       message: `${requirement.capability} is not available for ${requirement.requestedRange}.`,
       capability: requirement.capability,
@@ -125,7 +149,9 @@ function entryStatus(issues: ReadinessIssue[]): ReadinessStatus {
   return "ready";
 }
 
-function issueFromCloudTool(tool: CloudBootstrapToolAvailability): ReadinessIssue | null {
+function issueFromCloudTool(
+  tool: CloudBootstrapToolAvailability,
+): ReadinessIssue | null {
   if (tool.status === "available") {
     return null;
   }
@@ -174,7 +200,10 @@ function collectCloudReadinessIssues(cloud?: CloudBootstrapApp): {
       severity: "blocker",
       message: `Cloud license state is ${cloud.licenseState}.`,
     });
-  } else if (cloud.licenseState === "trial" || cloud.licenseState === "unknown") {
+  } else if (
+    cloud.licenseState === "trial" ||
+    cloud.licenseState === "unknown"
+  ) {
     warnings.push({
       code: "CLOUD_LICENSE_UNAVAILABLE",
       severity: "warning",
@@ -198,7 +227,8 @@ function collectCloudReadinessIssues(cloud?: CloudBootstrapApp): {
     blockers.push({
       code: "CLOUD_POLICY_UNSUPPORTED",
       severity: "blocker",
-      message: "Cloud policy defaults cannot enable server-assisted runtime locally.",
+      message:
+        "Cloud policy defaults cannot enable server-assisted runtime locally.",
     });
   }
 
@@ -264,7 +294,10 @@ function collectProjectionSetupIssues(
   blockers: ReadinessIssue[];
   warnings: ReadinessIssue[];
 } {
-  const result = { blockers: [] as ReadinessIssue[], warnings: [] as ReadinessIssue[] };
+  const result = {
+    blockers: [] as ReadinessIssue[],
+    warnings: [] as ReadinessIssue[],
+  };
 
   projection.knowledgeBindings.forEach((binding) => {
     pushSetupIssueWhenMissing(result, {
@@ -377,7 +410,10 @@ function collectProjectionSetupIssues(
   return result;
 }
 
-function cloudEntryIssue(entryKey: string, cloud?: CloudBootstrapApp): ReadinessIssue | null {
+function cloudEntryIssue(
+  entryKey: string,
+  cloud?: CloudBootstrapApp,
+): ReadinessIssue | null {
   if (!cloud) {
     return null;
   }
@@ -389,7 +425,10 @@ function cloudEntryIssue(entryKey: string, cloud?: CloudBootstrapApp): Readiness
       entryKey,
     };
   }
-  if (cloud.defaultEntries.length > 0 && !cloud.defaultEntries.includes(entryKey)) {
+  if (
+    cloud.defaultEntries.length > 0 &&
+    !cloud.defaultEntries.includes(entryKey)
+  ) {
     return {
       code: "CLOUD_ENTRY_NOT_ENABLED",
       severity: "warning",
@@ -433,7 +472,10 @@ export function checkReadiness(params: {
   const blockers: ReadinessIssue[] = [];
   const warnings: ReadinessIssue[] = [];
   const cloudIssues = collectCloudReadinessIssues(params.cloud);
-  const setupIssues = collectProjectionSetupIssues(params.projection, params.setup);
+  const setupIssues = collectProjectionSetupIssues(
+    params.projection,
+    params.setup,
+  );
   blockers.push(...cloudIssues.blockers);
   warnings.push(...cloudIssues.warnings);
   blockers.push(...setupIssues.blockers);
@@ -464,11 +506,15 @@ export function checkReadiness(params: {
     warnings.push({
       code: "STORAGE_DECLARED_BUT_DISABLED",
       severity: "warning",
-      message: "Storage namespace is declared, but P0 does not create local App storage.",
+      message:
+        "Storage namespace is declared, but P0 does not create local App storage.",
     });
   }
 
-  if (params.projection.runtimePackage.hasUiBundle && !profile.featureFlags.uiRuntimeEnabled) {
+  if (
+    params.projection.runtimePackage.hasUiBundle &&
+    !profile.featureFlags.uiRuntimeEnabled
+  ) {
     warnings.push({
       code: "UI_RUNTIME_DISABLED",
       severity: "warning",
@@ -483,16 +529,20 @@ export function checkReadiness(params: {
     warnings.push({
       code: "WORKER_RUNTIME_DISABLED",
       severity: "warning",
-      message: "Worker bundle is declared, but P0 keeps worker runtime disabled.",
+      message:
+        "Worker bundle is declared, but P0 keeps worker runtime disabled.",
     });
   }
 
-  const capabilitySupports = params.projection.requiredCapabilities.map((requirement) =>
-    capabilitySupport(requirement, profile),
+  const capabilitySupports = params.projection.requiredCapabilities.map(
+    (requirement) => capabilitySupport(requirement, profile),
   );
 
   capabilitySupports.forEach((support, index) => {
-    const issue = issueForCapability(params.projection.requiredCapabilities[index], support);
+    const issue = issueForCapability(
+      params.projection.requiredCapabilities[index],
+      support,
+    );
     if (!issue) {
       return;
     }
@@ -503,21 +553,28 @@ export function checkReadiness(params: {
     }
   });
 
-  const entryReadiness: EntryReadiness[] = params.projection.entries.map((entry) => {
-    const entryIssues = entry.requiredCapabilities
-      .map((requirement) => issueForCapability(requirement, capabilitySupport(requirement, profile)))
-      .filter((issue): issue is ReadinessIssue => Boolean(issue));
-    const cloudIssue = cloudEntryIssue(entry.key, params.cloud);
-    if (cloudIssue) {
-      entryIssues.push(cloudIssue);
-    }
+  const entryReadiness: EntryReadiness[] = params.projection.entries.map(
+    (entry) => {
+      const entryIssues = entry.requiredCapabilities
+        .map((requirement) =>
+          issueForCapability(
+            requirement,
+            capabilitySupport(requirement, profile),
+          ),
+        )
+        .filter((issue): issue is ReadinessIssue => Boolean(issue));
+      const cloudIssue = cloudEntryIssue(entry.key, params.cloud);
+      if (cloudIssue) {
+        entryIssues.push(cloudIssue);
+      }
 
-    return {
-      entryKey: entry.key,
-      status: entryStatus(entryIssues),
-      issues: entryIssues,
-    };
-  });
+      return {
+        entryKey: entry.key,
+        status: entryStatus(entryIssues),
+        issues: entryIssues,
+      };
+    },
+  );
 
   const status: ReadinessStatus = blockers.length
     ? "blocked"
@@ -534,10 +591,12 @@ export function checkReadiness(params: {
     blockers,
     warnings,
     supportedCapabilities: capabilitySupports,
-    missingCapabilities: params.projection.requiredCapabilities.filter((requirement, index) => {
-      const support = capabilitySupports[index];
-      return !support.supported || !support.enabled;
-    }),
+    missingCapabilities: params.projection.requiredCapabilities.filter(
+      (requirement, index) => {
+        const support = capabilitySupports[index];
+        return !support.supported || !support.enabled;
+      },
+    ),
     entryReadiness,
   };
 }

@@ -16,12 +16,14 @@ use lime_core::database::dao::api_key_provider::{
 use lime_services::api_key_provider_service::ApiKeyProviderService;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Cursor};
 use std::net::TcpListener;
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
@@ -31,8 +33,21 @@ use zip::ZipArchive;
 
 const AGENT_APP_DATA_DIR: &str = "agent-apps";
 const INSTALLED_STATE_SCHEMA_VERSION: u32 = 1;
-const AGENT_APP_UI_RUNTIME_STARTUP_TIMEOUT_SECS: u64 = 10;
+const AGENT_APP_UI_RUNTIME_STARTUP_TIMEOUT_SECS: u64 = 120;
 const AGENT_APP_UI_RUNTIME_TOKEN_TTL_SECS: u64 = 12 * 60 * 60;
+const AGENT_APP_ARRAY_LAYER_FILES: &[(&str, &str)] = &[
+    ("app.entries.yaml", "entries"),
+    ("app.permissions.yaml", "permissions"),
+];
+const AGENT_APP_VALUE_LAYER_FILES: &[(&str, &str, &str)] = &[
+    ("app.capabilities.yaml", "capabilities", "capabilityConfig"),
+    ("app.errors.yaml", "errors", "errors"),
+    ("app.i18n.yaml", "i18n", "i18n"),
+    ("app.signature.yaml", "signature", "signature"),
+    ("app.runtime.yaml", "agentRuntime", "agentRuntime"),
+    ("evals/readiness.yaml", "readiness", "readiness"),
+    ("evals/health.yaml", "health", "health"),
+];
 
 static AGENT_APP_UI_RUNTIMES: Lazy<Mutex<HashMap<String, AgentAppUiRuntimeProcess>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
@@ -269,7 +284,7 @@ pub async fn agent_app_inspect_local_package(
     let app_markdown_path = app_dir_path.join("APP.md");
     let app_markdown = fs::read_to_string(&app_markdown_path)
         .map_err(|error| format!("读取 Agent App APP.md 失败: {error}"))?;
-    let manifest = parse_app_markdown_frontmatter(&app_markdown)?;
+    let manifest = resolve_agent_app_manifest(&app_dir_path, &app_markdown)?;
     let inspected_at = now_iso();
     let manifest_hash = sha256_json_value(&manifest)?;
     let package_hash = sha256_package(&app_dir_path, &manifest)?;
@@ -343,7 +358,7 @@ pub async fn agent_app_fetch_cloud_package(
     }
     let app_markdown = String::from_utf8(app_markdown_bytes)
         .map_err(|error| format!("Agent App APP.md 必须是 UTF-8: {error}"))?;
-    let manifest = parse_app_markdown_frontmatter(&app_markdown)?;
+    let manifest = resolve_agent_app_manifest(&extracted_root, &app_markdown)?;
     ensure_manifest_matches_cloud_release(&manifest, &descriptor)?;
 
     if cache_dir.exists() {
@@ -525,7 +540,7 @@ async fn start_agent_app_ui_runtime_with_env(
     ensure_agent_app_runtime_folder(&app_dir)?;
     let entry = resolve_ui_runtime_entry(&state, request.entry_key.as_deref())?;
 
-    if let Some(status) = running_runtime_status(&request.app_id, Some(&entry))? {
+    if let Some(status) = running_runtime_status(&request.app_id, Some(&entry)).await? {
         return Ok(status);
     }
 
@@ -564,7 +579,7 @@ pub async fn agent_app_get_ui_runtime_status(
     request: AgentAppUiRuntimeStatusRequest,
 ) -> Result<AgentAppUiRuntimeStatus, String> {
     validate_safe_app_id(&request.app_id)?;
-    if let Some(status) = running_runtime_status(&request.app_id, None)? {
+    if let Some(status) = running_runtime_status(&request.app_id, None).await? {
         return Ok(status);
     }
     Ok(AgentAppUiRuntimeStatus {
@@ -602,8 +617,7 @@ pub async fn agent_app_stop_ui_runtime(
     drop(registry);
 
     let pid = process.child.id();
-    let _ = process.child.kill();
-    let _ = process.child.wait();
+    terminate_agent_app_ui_process(&mut process.child);
 
     Ok(AgentAppUiRuntimeStatus {
         app_id: request.app_id,
@@ -984,7 +998,7 @@ fn ensure_agent_app_dir_matches_state(app_dir: &Path, state: &Value) -> Result<(
             manifest_path.display()
         )
     })?;
-    let manifest = parse_app_markdown_frontmatter(&app_markdown)?;
+    let manifest = resolve_agent_app_manifest(&app_dir, &app_markdown)?;
     let manifest_app_id =
         read_string(&manifest, &["name"]).or_else(|| read_string(&manifest, &["appId"]));
     if manifest_app_id.as_deref() != Some(app_id.as_str()) {
@@ -1278,6 +1292,10 @@ fn spawn_agent_app_ui_process(
             .args(["run", "dev", "--silent"])
             .current_dir(app_dir)
             .env("PORT", port.to_string());
+        #[cfg(unix)]
+        {
+            command.process_group(0);
+        }
         for key in inherited_agent_app_secret_env_keys() {
             command.env_remove(key);
         }
@@ -1296,6 +1314,45 @@ fn spawn_agent_app_ui_process(
         "启动 Agent App UI runtime 失败，请确认已安装 Node.js/npm: {}",
         last_error.unwrap_or_else(|| "npm 不可用".to_string())
     ))
+}
+
+fn terminate_agent_app_ui_process(child: &mut Child) {
+    terminate_agent_app_process_tree(child.id(), AgentAppProcessSignal::Terminate);
+    let deadline = Instant::now() + Duration::from_millis(900);
+    while Instant::now() < deadline {
+        if matches!(child.try_wait(), Ok(Some(_))) {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    terminate_agent_app_process_tree(child.id(), AgentAppProcessSignal::Kill);
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+enum AgentAppProcessSignal {
+    Terminate,
+    Kill,
+}
+
+#[cfg(unix)]
+fn terminate_agent_app_process_tree(pid: u32, signal: AgentAppProcessSignal) {
+    let signal_name = match signal {
+        AgentAppProcessSignal::Terminate => "-TERM",
+        AgentAppProcessSignal::Kill => "-KILL",
+    };
+    let process_group = format!("-{pid}");
+    let _ = Command::new("kill")
+        .arg(signal_name)
+        .arg(process_group)
+        .status();
+}
+
+#[cfg(windows)]
+fn terminate_agent_app_process_tree(pid: u32, _signal: AgentAppProcessSignal) {
+    let _ = Command::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/T", "/F"])
+        .status();
 }
 
 fn inherited_agent_app_secret_env_keys() -> &'static [&'static str] {
@@ -1322,11 +1379,8 @@ async fn wait_for_agent_app_ui_runtime_ready(
     child: &mut Child,
     base_url: &str,
 ) -> Result<(), String> {
-    let health_url = format!("{base_url}/api/bootstrap");
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_millis(800))
-        .build()
-        .unwrap_or_else(|_| reqwest::Client::new());
+    let health_url = agent_app_ui_runtime_health_url(base_url);
+    let client = build_agent_app_ui_runtime_probe_client();
     let deadline = Instant::now() + Duration::from_secs(AGENT_APP_UI_RUNTIME_STARTUP_TIMEOUT_SECS);
     loop {
         match child.try_wait() {
@@ -1339,15 +1393,12 @@ async fn wait_for_agent_app_ui_runtime_ready(
             }
         }
 
-        if let Ok(response) = client.get(&health_url).send().await {
-            if response.status().is_success() {
-                return Ok(());
-            }
+        if probe_agent_app_ui_runtime_ready_with_client(&client, &health_url).await {
+            return Ok(());
         }
 
         if Instant::now() >= deadline {
-            let _ = child.kill();
-            let _ = child.wait();
+            terminate_agent_app_ui_process(child);
             return Err(format!(
                 "Agent App UI runtime 未在 {} 秒内就绪: {health_url}",
                 AGENT_APP_UI_RUNTIME_STARTUP_TIMEOUT_SECS
@@ -1357,7 +1408,52 @@ async fn wait_for_agent_app_ui_runtime_ready(
     }
 }
 
-fn running_runtime_status(
+fn build_agent_app_ui_runtime_probe_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_millis(800))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new())
+}
+
+fn agent_app_ui_runtime_health_url(base_url: &str) -> String {
+    format!("{base_url}/api/bootstrap")
+}
+
+async fn probe_agent_app_ui_runtime_ready_with_client(
+    client: &reqwest::Client,
+    health_url: &str,
+) -> bool {
+    match client.get(health_url).send().await {
+        Ok(response) => response.status().is_success(),
+        Err(_) => false,
+    }
+}
+
+async fn running_runtime_status(
+    app_id: &str,
+    entry: Option<&AgentAppUiRuntimeEntry>,
+) -> Result<Option<AgentAppUiRuntimeStatus>, String> {
+    let Some(status) = running_runtime_status_by_process(app_id, entry)? else {
+        return Ok(None);
+    };
+    if status.status != "running" {
+        return Ok(Some(status));
+    }
+    let Some(base_url) = status.base_url.as_deref() else {
+        return Ok(Some(status));
+    };
+    let health_url = agent_app_ui_runtime_health_url(base_url);
+    let client = build_agent_app_ui_runtime_probe_client();
+    if probe_agent_app_ui_runtime_ready_with_client(&client, &health_url).await {
+        return Ok(Some(status));
+    }
+
+    remove_unready_agent_app_ui_runtime(app_id, status.pid);
+    Ok(None)
+}
+
+fn running_runtime_status_by_process(
     app_id: &str,
     entry: Option<&AgentAppUiRuntimeEntry>,
 ) -> Result<Option<AgentAppUiRuntimeStatus>, String> {
@@ -1426,6 +1522,23 @@ fn running_runtime_status(
     Ok(Some(status))
 }
 
+fn remove_unready_agent_app_ui_runtime(app_id: &str, expected_pid: Option<u32>) {
+    let Ok(mut registry) = runtime_registry() else {
+        return;
+    };
+    let Some(process) = registry.get(app_id) else {
+        return;
+    };
+    if expected_pid.is_some_and(|pid| pid != process.child.id()) {
+        return;
+    }
+    let Some(mut process) = registry.remove(app_id) else {
+        return;
+    };
+    drop(registry);
+    terminate_agent_app_ui_process(&mut process.child);
+}
+
 fn runtime_registry(
 ) -> Result<std::sync::MutexGuard<'static, HashMap<String, AgentAppUiRuntimeProcess>>, String> {
     AGENT_APP_UI_RUNTIMES
@@ -1469,6 +1582,126 @@ fn parse_app_markdown_frontmatter(markdown: &str) -> Result<Value, String> {
         .map_err(|error| format!("转换 Agent App manifest 失败: {error}"))
 }
 
+fn resolve_agent_app_manifest(app_dir: &Path, markdown: &str) -> Result<Value, String> {
+    let mut manifest = parse_app_markdown_frontmatter(markdown)?;
+    apply_layered_manifest_files(app_dir, &mut manifest)?;
+    Ok(manifest)
+}
+
+fn apply_layered_manifest_files(app_dir: &Path, manifest: &mut Value) -> Result<(), String> {
+    for (relative_path, field) in AGENT_APP_ARRAY_LAYER_FILES {
+        apply_named_array_layer(app_dir, manifest, relative_path, field)?;
+    }
+    for (relative_path, source_field, target_field) in AGENT_APP_VALUE_LAYER_FILES {
+        apply_value_layer(app_dir, manifest, relative_path, source_field, target_field)?;
+    }
+    Ok(())
+}
+
+fn read_layered_yaml(app_dir: &Path, relative_path: &str) -> Result<Option<Value>, String> {
+    let path = app_dir.join(relative_path);
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let content = fs::read_to_string(&path).map_err(|error| {
+        format!(
+            "读取 Agent App 分层 manifest 文件失败 {}: {error}",
+            path.display()
+        )
+    })?;
+    let yaml_value: serde_yaml::Value = serde_yaml::from_str(&content).map_err(|error| {
+        format!(
+            "解析 Agent App 分层 manifest 文件失败 {}: {error}",
+            path.display()
+        )
+    })?;
+    serde_json::to_value(yaml_value)
+        .map(Some)
+        .map_err(|error| format!("转换 Agent App 分层 manifest 文件失败: {error}"))
+}
+
+fn apply_value_layer(
+    app_dir: &Path,
+    manifest: &mut Value,
+    relative_path: &str,
+    source_field: &str,
+    target_field: &str,
+) -> Result<(), String> {
+    let Some(layer) = read_layered_yaml(app_dir, relative_path)? else {
+        return Ok(());
+    };
+    let Some(value) = layer.get(source_field).cloned() else {
+        return Ok(());
+    };
+    manifest_object_mut(manifest)?.insert(target_field.to_string(), value);
+    Ok(())
+}
+
+fn apply_named_array_layer(
+    app_dir: &Path,
+    manifest: &mut Value,
+    relative_path: &str,
+    field: &str,
+) -> Result<(), String> {
+    let Some(layer) = read_layered_yaml(app_dir, relative_path)? else {
+        return Ok(());
+    };
+    let Some(layer_items) = layer.get(field).and_then(Value::as_array) else {
+        return Ok(());
+    };
+    let mut merged = manifest
+        .get(field)
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    for layer_item in layer_items {
+        let Some(layer_key) = layered_item_key(layer_item) else {
+            merged.push(layer_item.clone());
+            continue;
+        };
+        if let Some(existing) = merged
+            .iter_mut()
+            .find(|item| layered_item_key(item).as_deref() == Some(layer_key.as_str()))
+        {
+            merge_json_object(existing, layer_item.clone())?;
+        } else {
+            merged.push(layer_item.clone());
+        }
+    }
+
+    manifest_object_mut(manifest)?.insert(field.to_string(), Value::Array(merged));
+    Ok(())
+}
+
+fn layered_item_key(value: &Value) -> Option<String> {
+    value
+        .get("key")
+        .or_else(|| value.get("id"))
+        .and_then(Value::as_str)
+        .map(ToString::to_string)
+}
+
+fn merge_json_object(target: &mut Value, overlay: Value) -> Result<(), String> {
+    match (target.as_object_mut(), overlay) {
+        (Some(target_object), Value::Object(overlay_object)) => {
+            for (key, value) in overlay_object {
+                target_object.insert(key, value);
+            }
+        }
+        (_, value) => {
+            *target = value;
+        }
+    }
+    Ok(())
+}
+
+fn manifest_object_mut(manifest: &mut Value) -> Result<&mut Map<String, Value>, String> {
+    manifest
+        .as_object_mut()
+        .ok_or_else(|| "Agent App manifest 必须是对象。".to_string())
+}
+
 fn sha256_json_value(value: &Value) -> Result<String, String> {
     let bytes =
         serde_json::to_vec(value).map_err(|error| format!("序列化 manifest 失败: {error}"))?;
@@ -1480,15 +1713,57 @@ fn sha256_package(app_dir: &Path, manifest: &Value) -> Result<String, String> {
     hasher.update(
         serde_json::to_vec(manifest).map_err(|error| format!("序列化 manifest 失败: {error}"))?,
     );
-    let app_markdown_path = app_dir.join("APP.md");
-    if let Ok(bytes) = fs::read(&app_markdown_path) {
-        hasher.update(bytes);
-    }
-    let package_json_path = app_dir.join("package.json");
-    if let Ok(bytes) = fs::read(&package_json_path) {
-        hasher.update(bytes);
+    for file in list_agent_app_package_files(app_dir)? {
+        let relative = file.strip_prefix(app_dir).map_err(|error| {
+            format!(
+                "计算 Agent App package hash 时无法生成相对路径 {}: {error}",
+                file.display()
+            )
+        })?;
+        hasher.update(relative.to_string_lossy().as_bytes());
+        hasher.update([0]);
+        hasher.update(fs::read(&file).map_err(|error| {
+            format!(
+                "读取 Agent App package 文件失败 {}: {error}",
+                file.display()
+            )
+        })?);
+        hasher.update([0]);
     }
     Ok(format!("sha256:{}", hex::encode(hasher.finalize())))
+}
+
+fn list_agent_app_package_files(app_dir: &Path) -> Result<Vec<PathBuf>, String> {
+    let mut result = Vec::new();
+    collect_agent_app_package_files(app_dir, &mut result)?;
+    result.sort();
+    Ok(result)
+}
+
+fn collect_agent_app_package_files(path: &Path, result: &mut Vec<PathBuf>) -> Result<(), String> {
+    let entries =
+        fs::read_dir(path).map_err(|error| format!("读取 Agent App package 目录失败: {error}"))?;
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("读取 Agent App package 条目失败: {error}"))?;
+        let entry_path = entry.path();
+        let file_name = entry.file_name();
+        let file_name = file_name.to_string_lossy();
+        if matches!(
+            file_name.as_ref(),
+            ".git" | "node_modules" | ".local" | ".lime"
+        ) {
+            continue;
+        }
+        let metadata = entry
+            .metadata()
+            .map_err(|error| format!("读取 Agent App package 元数据失败: {error}"))?;
+        if metadata.is_dir() {
+            collect_agent_app_package_files(&entry_path, result)?;
+        } else if metadata.is_file() {
+            result.push(entry_path);
+        }
+    }
+    Ok(())
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
@@ -1826,5 +2101,78 @@ mod tests {
 
         assert_eq!(sha256_prefixed(app_markdown.as_bytes()), manifest_hash);
         ensure_manifest_matches_cloud_release(&manifest, &descriptor).unwrap();
+    }
+
+    #[test]
+    fn resolves_layered_manifest_files() {
+        let temp = tempdir().unwrap();
+        let app_dir = temp.path();
+        fs::write(app_dir.join("APP.md"), sample_app_markdown()).unwrap();
+        fs::write(
+            app_dir.join("app.entries.yaml"),
+            "entries:\n  - key: dashboard\n    title: 项目组合\n    route: /dashboard\n  - key: settings\n    kind: settings\n    title: 设置\n    route: /settings\n",
+        )
+        .unwrap();
+        fs::write(
+            app_dir.join("app.permissions.yaml"),
+            "permissions:\n  - key: read_selected_files\n    scope: filesystem\n    access: read\n    required: true\n",
+        )
+        .unwrap();
+        fs::write(
+            app_dir.join("app.i18n.yaml"),
+            "i18n:\n  defaultLocale: zh-CN\n  supportedLocales:\n    - zh-CN\n    - en-US\n",
+        )
+        .unwrap();
+        fs::write(
+            app_dir.join("app.runtime.yaml"),
+            "agentRuntime:\n  agentTask:\n    eventSchema: lime.agent-task-event.v1\n",
+        )
+        .unwrap();
+        fs::create_dir_all(app_dir.join("evals")).unwrap();
+        fs::write(
+            app_dir.join("evals/readiness.yaml"),
+            "readiness:\n  required:\n    - check: sdk_version\n      expect: \">=0.6.0\"\n",
+        )
+        .unwrap();
+
+        let manifest = resolve_agent_app_manifest(app_dir, sample_app_markdown()).unwrap();
+        let entries = manifest["entries"].as_array().unwrap();
+
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0]["key"], "dashboard");
+        assert_eq!(entries[0]["title"], "项目组合");
+        assert_eq!(entries[0]["route"], "/dashboard");
+        assert_eq!(entries[1]["key"], "settings");
+        assert_eq!(manifest["permissions"][0]["key"], "read_selected_files");
+        assert_eq!(manifest["i18n"]["defaultLocale"], "zh-CN");
+        assert_eq!(
+            manifest["agentRuntime"]["agentTask"]["eventSchema"],
+            "lime.agent-task-event.v1"
+        );
+        assert_eq!(manifest["readiness"]["required"][0]["check"], "sdk_version");
+    }
+
+    #[test]
+    fn local_package_hash_includes_layered_files_but_ignores_local_state() {
+        let temp = tempdir().unwrap();
+        let app_dir = temp.path();
+        fs::write(app_dir.join("APP.md"), sample_app_markdown()).unwrap();
+        fs::write(app_dir.join("app.entries.yaml"), "entries: []\n").unwrap();
+        fs::create_dir_all(app_dir.join(".local")).unwrap();
+        fs::write(app_dir.join(".local/runtime.json"), "{}").unwrap();
+
+        let manifest = resolve_agent_app_manifest(app_dir, sample_app_markdown()).unwrap();
+        let first_hash = sha256_package(app_dir, &manifest).unwrap();
+        fs::write(app_dir.join(".local/runtime.json"), "{\"changed\":true}").unwrap();
+        let ignored_local_hash = sha256_package(app_dir, &manifest).unwrap();
+        fs::write(
+            app_dir.join("app.entries.yaml"),
+            "entries:\n  - key: dashboard\n    title: 新标题\n",
+        )
+        .unwrap();
+        let changed_package_hash = sha256_package(app_dir, &manifest).unwrap();
+
+        assert_eq!(first_hash, ignored_local_hash);
+        assert_ne!(first_hash, changed_package_hash);
     }
 }

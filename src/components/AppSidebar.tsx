@@ -179,6 +179,7 @@ type SidebarNavItem = SidebarNavItemDefinition;
 
 const APP_SIDEBAR_COLLAPSED_STORAGE_KEY = "lime.app-sidebar.collapsed";
 const APP_SIDEBAR_COLLAPSE_EVENT = "lime:app-sidebar-collapse";
+const AGENT_APP_RUNTIME_SIDEBAR_COLLAPSE_SOURCE = "agent-app-runtime";
 const SIDEBAR_RECENT_SESSION_PAGE_SIZE = 10;
 const SIDEBAR_ARCHIVED_SESSION_PAGE_SIZE = 8;
 const SIDEBAR_SEARCH_RESULT_LIMIT = 8;
@@ -2395,6 +2396,7 @@ export function AppSidebar({
     ?.agentEntry;
   const activeAgentPageParams = activePageParams as AgentPageParams | undefined;
   const isAgentWorkspace = activePage === "agent";
+  const isAgentAppRuntime = activePage === "agent-app";
   const isClawTaskCenter = isAgentWorkspace && agentEntry === "claw";
   const isNewTaskHome = activePage === "agent" && agentEntry === "new-task";
   const [rememberedProjectId, setRememberedProjectId] = useState<string | null>(
@@ -2418,6 +2420,7 @@ export function AppSidebar({
   });
   const collapsedRef = useRef(collapsed);
   const collapseRestoreBySourceRef = useRef<Record<string, boolean>>({});
+  const agentAppRuntimeSidebarManualOverrideRef = useRef(false);
   useEffect(() => {
     collapsedRef.current = collapsed;
   }, [collapsed]);
@@ -3084,6 +3087,34 @@ export function AppSidebar({
 
     setCollapsed(false);
   }, [isClawTaskCenter, isNewTaskHome]);
+
+  useEffect(() => {
+    const source = AGENT_APP_RUNTIME_SIDEBAR_COLLAPSE_SOURCE;
+    if (isAgentAppRuntime) {
+      if (!(source in collapseRestoreBySourceRef.current)) {
+        collapseRestoreBySourceRef.current[source] = collapsedRef.current;
+        agentAppRuntimeSidebarManualOverrideRef.current = false;
+      }
+      if (!agentAppRuntimeSidebarManualOverrideRef.current) {
+        setCollapsed(true);
+      }
+      return;
+    }
+
+    agentAppRuntimeSidebarManualOverrideRef.current = false;
+    const previous = collapseRestoreBySourceRef.current[source];
+    delete collapseRestoreBySourceRef.current[source];
+    if (typeof previous === "boolean") {
+      setCollapsed(previous);
+    }
+  }, [isAgentAppRuntime]);
+
+  const toggleSidebarCollapsed = useCallback(() => {
+    if (isAgentAppRuntime) {
+      agentAppRuntimeSidebarManualOverrideRef.current = true;
+    }
+    setCollapsed((value) => !value);
+  }, [isAgentAppRuntime]);
 
   const shouldShowConversationList =
     !collapsed &&
@@ -4735,6 +4766,7 @@ export function AppSidebar({
         $themeMode={themeState.effectiveThemeMode}
         $reserveWindowControls={reserveWindowControls}
         data-testid="app-sidebar"
+        data-collapsed={String(collapsed)}
         data-lime-window-drag-region
         data-window-controls-reserved={String(reserveWindowControls)}
         onMouseDown={onStartWindowDrag}
@@ -4785,7 +4817,7 @@ export function AppSidebar({
 
             {maybeWrapWithTooltip(
               <IconActionButton
-                onClick={() => setCollapsed((value) => !value)}
+                onClick={toggleSidebarCollapsed}
                 title={navigationToggleLabel}
                 aria-label={navigationToggleLabel}
               >

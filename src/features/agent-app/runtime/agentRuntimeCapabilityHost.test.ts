@@ -123,6 +123,9 @@ describe("AgentRuntimeCapabilityHost", () => {
       runStartHooks: false,
     });
     const snapshot = await sdk.agent.getTask(started.taskId);
+    const listedAfterSnapshot = host
+      .getTasks({ appId: "content-factory-app" })
+      .find((task) => task.taskId === started.taskId);
     const stream = await sdk.agent.streamTask(started.taskId);
     const hostResponse = await sdk.agent.submitHostResponse({
       taskId: started.taskId,
@@ -183,6 +186,22 @@ describe("AgentRuntimeCapabilityHost", () => {
           }),
         }),
       ]),
+    });
+    expect(listedAfterSnapshot?.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "evidence:recorded",
+          refs: ["evidence-1"],
+        }),
+        expect.objectContaining({
+          type: "artifact:created",
+          refs: [".lime/artifacts/content-batch.json"],
+        }),
+      ]),
+    );
+    expect(listedAfterSnapshot?.runtimeProcess?.usage).toMatchObject({
+      estimated: true,
+      source: "agent_app_runtime_process_estimate",
     });
     expect(stream).toEqual(
       expect.arrayContaining([
@@ -374,6 +393,171 @@ describe("AgentRuntimeCapabilityHost", () => {
     });
   });
 
+  it("在主 App 侧封装 Claw 式运行过程，包含模型、Token、费用和 Skill", async () => {
+    const api = {
+      startTask: vi.fn(async (request) => ({
+        appId: request.appId,
+        entryKey: request.entryKey,
+        taskId: "agent-app-task-process",
+        traceId: "agent-app-trace-process",
+        taskKind: request.taskKind,
+        sessionId: "session-process",
+        turnId: "turn-process",
+        eventName: `agent_app_runtime:${request.appId}:agent-app-task-process`,
+        status: "accepted" as const,
+        submittedAt: "2026-05-15T00:00:00.000Z",
+      })),
+      getTask: vi.fn(async (request) => ({
+        appId: request.appId,
+        taskId: request.taskId,
+        sessionId: request.sessionId,
+        status: "thread_read_available" as const,
+        taskStatus: "completed",
+        taskEvents: [
+          {
+            id: "runtime:routing:decision",
+            eventType: "task:progress",
+            status: "routing",
+            message: "模型路由已确定：openai/gpt-4.1",
+            payload: {
+              runtimeEvent: {
+                type: "routing_decision_made",
+                routing_decision: {
+                  candidate_count: 2,
+                  selected_provider: "openai",
+                  selected_model: "gpt-4.1",
+                },
+              },
+            },
+          },
+          {
+            id: "runtime:thinking",
+            eventType: "task:progress",
+            status: "thinking",
+            message: "先分析内容目标",
+            payload: {
+              streamKind: "thinking_delta",
+              delta: "先分析内容目标",
+              runtimeEvent: { type: "thinking_delta", text: "先分析内容目标" },
+            },
+          },
+          {
+            id: "runtime:text",
+            eventType: "task:partialArtifact",
+            status: "streaming",
+            message: "第一段输出",
+            payload: {
+              streamKind: "assistant_text_delta",
+              delta: "第一段输出",
+              runtimeEvent: { type: "text_delta", text: "第一段输出" },
+            },
+          },
+          {
+            id: "runtime:skill",
+            eventType: "task:toolCall",
+            status: "completed",
+            message: "工具 Skill completed",
+            toolName: "Skill",
+            payload: {
+              runtimeEvent: {
+                type: "tool_end",
+                result: { output: "完成", metadata: { command_name: "knowledge-builder" } },
+              },
+            },
+          },
+          {
+            id: "runtime:cost",
+            eventType: "task:runtimeEvent",
+            status: "recorded",
+            message: "消耗已记录",
+            payload: {
+              runtimeEvent: {
+                type: "cost_recorded",
+                cost_state: {
+                  estimated_total_cost: 0.0032,
+                  currency: "USD",
+                },
+              },
+            },
+          },
+          {
+            id: "runtime:done",
+            eventType: "task:completed",
+            status: "completed",
+            message: "AgentRuntime 本轮输出已结束",
+            payload: {
+              runtimeEvent: {
+                type: "final_done",
+                usage: { input_tokens: 1200, output_tokens: 340 },
+              },
+            },
+          },
+        ],
+        threadRead: {
+          session_id: request.sessionId,
+          profile_status: "completed",
+        },
+      })),
+      cancelTask: vi.fn(async (request) => ({
+        appId: request.appId,
+        taskId: request.taskId,
+        sessionId: request.sessionId,
+        cancelled: true,
+        status: "cancelled" as const,
+      })),
+      submitHostResponse: vi.fn(async (request) => ({
+        appId: request.appId,
+        taskId: request.taskId,
+        status: "submitted" as const,
+      })),
+    };
+    const host = new AgentRuntimeCapabilityHost({
+      delegate: buildDelegateHost(),
+      appId: "content-factory-app",
+      appVersion: "0.3.0",
+      packageHash: "package-hash-1",
+      manifestHash: "manifest-hash-1",
+      workspaceIdResolver: async () => "workspace-1",
+      api,
+      now: () => "2026-05-15T00:00:04.000Z",
+    });
+    const sdk = host.createSdkContext("dashboard");
+    const started = await sdk.agent.startTask({
+      title: "生成内容批次",
+      taskKind: "content.copy.generate",
+      input: { projectId: "project-1" },
+      expectedOutput: {
+        artifactKind: "content_batch",
+        requiredSkills: [
+          { skill: "knowledge-builder", required: true },
+          { skill: "content-reviewer", required: true },
+        ],
+      },
+    });
+
+    const snapshot = await sdk.agent.getTask(started.taskId);
+
+    expect(snapshot?.runtimeProcess).toMatchObject({
+      terminal: true,
+      collapsedByDefault: true,
+      model: { provider: "openai", model: "gpt-4.1", label: "openai/gpt-4.1" },
+      usage: { inputTokens: 1200, outputTokens: 340, totalTokens: 1540 },
+      cost: { estimatedTotalCost: 0.0032, currency: "USD" },
+      skillNames: expect.arrayContaining(["knowledge-builder", "content-reviewer"]),
+      invokedSkillNames: ["knowledge-builder"],
+      streamText: "第一段输出",
+      thinkingText: "先分析内容目标",
+    });
+    expect(snapshot?.process).toBe(snapshot?.runtimeProcess);
+    expect(snapshot?.runtimeProcess?.timeline).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "routing", title: "模型路由" }),
+        expect.objectContaining({ kind: "skill", title: "Skill · knowledge-builder" }),
+        expect.objectContaining({ kind: "metrics", title: "消耗统计" }),
+      ]),
+    );
+  });
+
   it("从 threadRead artifacts 补投 artifact:created payload，保证 Host Bridge 可 replay 最终产物", async () => {
     const api = {
       startTask: vi.fn(async (request) => ({
@@ -469,6 +653,13 @@ describe("AgentRuntimeCapabilityHost", () => {
             artifactDocument: expect.objectContaining({
               blocks: expect.any(Array),
             }),
+          }),
+        }),
+        expect.objectContaining({
+          type: "evidence:recorded",
+          refs: ["evidence:.lime/artifacts/content-batch.json"],
+          payload: expect.objectContaining({
+            source: "agent_runtime_artifact_replay",
           }),
         }),
       ]),

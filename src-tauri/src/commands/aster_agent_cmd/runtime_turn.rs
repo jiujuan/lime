@@ -35,7 +35,8 @@ use lime_core::database::dao::agent_timeline::{AgentThreadItemPayload, AgentThre
 use lime_core::workspace::WorkspaceSettings;
 use regex::Regex;
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::{hash_map::DefaultHasher, HashMap, HashSet};
+use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -324,6 +325,43 @@ fn build_runtime_projection_task_event(
     task_event
 }
 
+fn runtime_projection_stream_event_id(prefix: &str, text: &str) -> String {
+    let mut hasher = DefaultHasher::new();
+    prefix.hash(&mut hasher);
+    text.hash(&mut hasher);
+    chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .unwrap_or_default()
+        .hash(&mut hasher);
+    format!("{prefix}:{:x}", hasher.finish())
+}
+
+fn build_runtime_projection_stream_task_event(
+    id_prefix: &'static str,
+    event_type: &'static str,
+    stream_kind: &'static str,
+    status: &'static str,
+    text: &str,
+    runtime_event: Value,
+) -> Option<Value> {
+    if text.is_empty() {
+        return None;
+    }
+    let mut payload = serde_json::Map::new();
+    payload.insert("streamKind".to_string(), json!(stream_kind));
+    payload.insert("delta".to_string(), json!(text));
+    payload.insert("runtimeEvent".to_string(), runtime_event);
+    let mut task_event = build_runtime_projection_task_event(
+        runtime_projection_stream_event_id(id_prefix, text),
+        event_type,
+        status,
+        text,
+        Value::Object(payload),
+    );
+    task_event.insert("streamKind".to_string(), json!(stream_kind));
+    Some(Value::Object(task_event))
+}
+
 fn build_runtime_projection_artifact_task_event(
     id: String,
     status: impl Into<String>,
@@ -431,6 +469,136 @@ fn build_agent_app_runtime_event_primary_task_event(
     runtime_event: Value,
 ) -> Option<Value> {
     match event {
+        RuntimeAgentEvent::TextDelta { text } => build_runtime_projection_stream_task_event(
+            "runtime:text",
+            "task:partialArtifact",
+            "assistant_text_delta",
+            "streaming",
+            text,
+            runtime_event,
+        ),
+        RuntimeAgentEvent::TextDeltaBatch { text, .. } => {
+            build_runtime_projection_stream_task_event(
+                "runtime:text-batch",
+                "task:partialArtifact",
+                "assistant_text_batch",
+                "streaming",
+                text,
+                runtime_event,
+            )
+        }
+        RuntimeAgentEvent::ThinkingDelta { text } => build_runtime_projection_stream_task_event(
+            "runtime:thinking",
+            "task:progress",
+            "thinking_delta",
+            "thinking",
+            text,
+            runtime_event,
+        ),
+        RuntimeAgentEvent::ToolInputDelta {
+            tool_id,
+            tool_name,
+            delta,
+            ..
+        } => {
+            let mut event = build_runtime_projection_stream_task_event(
+                "runtime:tool-input",
+                "task:toolCall",
+                "tool_input_delta",
+                "streaming",
+                delta,
+                runtime_event,
+            )?;
+            if let Some(task_event) = event.as_object_mut() {
+                task_event.insert("toolId".to_string(), json!(tool_id));
+                if let Some(tool_name) = tool_name {
+                    task_event.insert("toolName".to_string(), json!(tool_name));
+                }
+            }
+            Some(event)
+        }
+        RuntimeAgentEvent::ToolOutputDelta {
+            tool_id,
+            delta,
+            output_kind,
+            ..
+        } => {
+            let mut event = build_runtime_projection_stream_task_event(
+                "runtime:tool-output",
+                "task:toolCall",
+                "tool_output_delta",
+                "streaming",
+                delta,
+                runtime_event,
+            )?;
+            if let Some(task_event) = event.as_object_mut() {
+                task_event.insert("toolId".to_string(), json!(tool_id));
+                if let Some(output_kind) = output_kind {
+                    task_event.insert("toolName".to_string(), json!(output_kind));
+                }
+            }
+            Some(event)
+        }
+        RuntimeAgentEvent::TaskProfileResolved { task_profile } => {
+            Some(Value::Object(build_runtime_projection_task_event(
+                format!("runtime:task-profile:{}", task_profile.kind),
+                "task:progress",
+                "routing",
+                format!("已识别任务类型：{}", task_profile.kind),
+                runtime_event,
+            )))
+        }
+        RuntimeAgentEvent::CandidateSetResolved { routing_decision } => {
+            Some(Value::Object(build_runtime_projection_task_event(
+                "runtime:routing:candidates".to_string(),
+                "task:progress",
+                "routing",
+                format!("已找到 {} 个候选模型", routing_decision.candidate_count),
+                runtime_event,
+            )))
+        }
+        RuntimeAgentEvent::RoutingDecisionMade { routing_decision } => {
+            let selected = routing_decision
+                .selected_provider
+                .as_deref()
+                .zip(routing_decision.selected_model.as_deref())
+                .map(|(provider, model)| format!("{provider}/{model}"))
+                .or_else(|| routing_decision.selected_model.clone())
+                .or_else(|| routing_decision.selected_provider.clone())
+                .unwrap_or_else(|| "自动选择".to_string());
+            Some(Value::Object(build_runtime_projection_task_event(
+                "runtime:routing:decision".to_string(),
+                "task:progress",
+                "routing",
+                format!("模型路由已确定：{selected}"),
+                runtime_event,
+            )))
+        }
+        RuntimeAgentEvent::RoutingFallbackApplied { routing_decision } => {
+            let selected = routing_decision
+                .selected_model
+                .clone()
+                .or_else(|| routing_decision.selected_provider.clone())
+                .unwrap_or_else(|| "备用模型".to_string());
+            Some(Value::Object(build_runtime_projection_task_event(
+                "runtime:routing:fallback".to_string(),
+                "task:incident",
+                "warning",
+                format!("模型路由已回退到：{selected}"),
+                runtime_event,
+            )))
+        }
+        RuntimeAgentEvent::RoutingNotPossible { routing_decision } => {
+            let mut task_event = build_runtime_projection_task_event(
+                "runtime:routing:not-possible".to_string(),
+                "task:error",
+                "failed",
+                routing_decision.decision_reason.clone(),
+                runtime_event,
+            );
+            task_event.insert("severity".to_string(), json!("error"));
+            Some(Value::Object(task_event))
+        }
         RuntimeAgentEvent::RuntimeStatus { status } => {
             Some(Value::Object(build_runtime_projection_task_event(
                 format!("runtime:status:{}", status.phase),
@@ -2074,6 +2242,7 @@ struct RuntimeTurnSubmitBootstrap {
     provider_continuation_capability: ProviderContinuationCapability,
     tracker: ExecutionTracker,
     model_skill_tool_enabled: bool,
+    model_skill_tool_allowed_skill_names: Option<Vec<String>>,
     model_skill_tool_allowed_skill_sources:
         Option<Vec<lime_agent::tools::SkillToolSessionSkillSource>>,
 }
@@ -2474,6 +2643,82 @@ impl RuntimeTurnSubmitPreparation {
             .model_skill_tool_allowed_skill_sources
             .clone()
     }
+
+    fn model_skill_tool_allowed_skill_names(&self) -> Option<Vec<String>> {
+        self.submit_bootstrap
+            .model_skill_tool_allowed_skill_names
+            .clone()
+    }
+}
+
+fn collect_required_skill_names_from_contract_object(
+    contract: &serde_json::Map<String, serde_json::Value>,
+) -> Vec<String> {
+    let mut names = Vec::new();
+    let mut seen = HashSet::new();
+
+    for key in [
+        "required_skills",
+        "requiredSkills",
+        "skill_refs",
+        "skillRefs",
+        "skills",
+    ] {
+        let Some(items) = contract.get(key).and_then(serde_json::Value::as_array) else {
+            continue;
+        };
+        for item in items {
+            let required = item
+                .as_object()
+                .and_then(|object| object.get("required"))
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(true);
+            if !required {
+                continue;
+            }
+            let name = item
+                .as_str()
+                .map(str::to_string)
+                .or_else(|| {
+                    item.as_object().and_then(|object| {
+                        ["skill", "id", "name"]
+                            .iter()
+                            .filter_map(|key| object.get(*key))
+                            .find_map(serde_json::Value::as_str)
+                            .map(str::to_string)
+                    })
+                })
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty());
+            let Some(name) = name else {
+                continue;
+            };
+            if seen.insert(name.to_ascii_lowercase()) {
+                names.push(name);
+            }
+        }
+    }
+
+    names
+}
+
+fn resolve_agent_app_required_skill_tool_allowlist(
+    request_metadata: Option<&serde_json::Value>,
+) -> Option<Vec<String>> {
+    for key in [
+        "content_factory_skill_contract",
+        "agent_app_runtime_skill_contract",
+    ] {
+        let Some(contract) = extract_harness_nested_object(request_metadata, &[key]) else {
+            continue;
+        };
+        let names = collect_required_skill_names_from_contract_object(contract);
+        if !names.is_empty() {
+            return Some(names);
+        }
+    }
+
+    None
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2627,6 +2872,8 @@ async fn prepare_runtime_turn_submit_bootstrap(
             request_metadata.as_ref(),
             workspace_root,
         )?;
+    let agent_app_required_skill_names =
+        resolve_agent_app_required_skill_tool_allowlist(request_metadata.as_ref());
     let model_skill_tool_allowed_skill_sources =
         workspace_skill_runtime_enable.as_ref().map(|projection| {
             projection
@@ -2659,7 +2906,9 @@ async fn prepare_runtime_turn_submit_bootstrap(
     Ok(RuntimeTurnSubmitBootstrap {
         model_skill_tool_enabled: matches!(execution_profile, TurnExecutionProfile::FullRuntime)
             && (should_enable_model_skill_tool(request_metadata.as_ref())
-                || workspace_skill_runtime_enable.is_some()),
+                || workspace_skill_runtime_enable.is_some()
+                || agent_app_required_skill_names.is_some()),
+        model_skill_tool_allowed_skill_names: agent_app_required_skill_names,
         model_skill_tool_allowed_skill_sources,
         request_metadata,
         runtime_memory_config: runtime_config.memory.clone(),
@@ -3740,12 +3989,15 @@ async fn execute_runtime_turn_with_session_scope(
     submit_preparation: RuntimeTurnSubmitPreparation,
 ) -> Result<(), String> {
     let model_skill_tool_enabled = submit_preparation.model_skill_tool_enabled();
+    let model_skill_tool_allowed_skill_names =
+        submit_preparation.model_skill_tool_allowed_skill_names();
     let model_skill_tool_allowed_skill_sources =
         submit_preparation.model_skill_tool_allowed_skill_sources();
     with_runtime_turn_session_scope(
         state,
         session_id,
         model_skill_tool_enabled,
+        model_skill_tool_allowed_skill_names,
         model_skill_tool_allowed_skill_sources,
         move |cancel_token| async move {
             execute_runtime_turn_submit(
@@ -7390,6 +7642,7 @@ async fn with_runtime_turn_session_scope<F, Fut>(
     state: &AsterAgentState,
     session_id: &str,
     skill_tool_access_enabled: bool,
+    skill_tool_allowed_skill_names: Option<Vec<String>>,
     skill_tool_allowed_skill_sources: Option<Vec<lime_agent::tools::SkillToolSessionSkillSource>>,
     run: F,
 ) -> Result<(), String>
@@ -7403,6 +7656,8 @@ where
             session_id,
             allowed_skill_sources,
         );
+    } else if let Some(allowed_skill_names) = skill_tool_allowed_skill_names {
+        lime_agent::tools::set_skill_tool_session_allowed_skills(session_id, allowed_skill_names);
     } else {
         lime_agent::tools::set_skill_tool_session_access(session_id, skill_tool_access_enabled);
     }
@@ -9056,16 +9311,39 @@ mod tests {
     }
 
     #[test]
-    fn agent_app_runtime_runtime_event_projection_skips_low_value_text_delta() {
+    fn agent_app_runtime_runtime_event_projection_builds_stream_text_task_event() {
         let event = RuntimeAgentEvent::TextDelta {
-            text: "partial".to_string(),
+            text: "第一段真实输出".to_string(),
         };
 
-        assert!(build_agent_app_runtime_event_projection_payload(
+        let payload = build_agent_app_runtime_event_projection_payload(
             "agent_app_runtime:content-factory-app:task-1",
             &event,
         )
-        .is_none());
+        .expect("runtime stream projection payload");
+        let task_event = payload
+            .get("taskEvents")
+            .and_then(Value::as_array)
+            .and_then(|events| events.first())
+            .and_then(Value::as_object)
+            .expect("stream task event");
+
+        assert_eq!(
+            task_event.get("eventType"),
+            Some(&json!("task:partialArtifact"))
+        );
+        assert_eq!(task_event.get("status"), Some(&json!("streaming")));
+        assert_eq!(task_event.get("message"), Some(&json!("第一段真实输出")));
+        assert_eq!(
+            task_event.get("streamKind"),
+            Some(&json!("assistant_text_delta"))
+        );
+        assert_eq!(
+            task_event
+                .get("payload")
+                .and_then(|payload| payload.get("delta")),
+            Some(&json!("第一段真实输出"))
+        );
     }
 
     #[test]
@@ -10056,6 +10334,34 @@ mod tests {
             TurnExecutionProfile::FullRuntime
         );
         assert!(!should_enable_model_skill_tool(Some(&metadata)));
+    }
+
+    #[test]
+    fn agent_app_skill_contract_should_resolve_required_skill_allowlist() {
+        let metadata = json!({
+            "harness": {
+                "theme": "general",
+                "session_mode": "default",
+                "allow_model_skills": true,
+                "content_factory_skill_contract": {
+                    "policy": "must_use_required_skills_before_final_patch",
+                    "required_skills": [
+                        { "id": "article-writer", "skill": "article-writer", "required": true },
+                        { "id": "content-reviewer", "skill": "content-reviewer", "required": true },
+                        { "id": "draft-only", "skill": "draft-only", "required": false }
+                    ]
+                }
+            }
+        });
+
+        assert_eq!(
+            resolve_agent_app_required_skill_tool_allowlist(Some(&metadata)),
+            Some(vec![
+                "article-writer".to_string(),
+                "content-reviewer".to_string()
+            ])
+        );
+        assert!(should_enable_model_skill_tool(Some(&metadata)));
     }
 
     #[tokio::test]

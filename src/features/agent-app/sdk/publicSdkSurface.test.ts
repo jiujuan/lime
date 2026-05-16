@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   LIME_AGENT_APP_BRIDGE_PROTOCOL,
   LIME_AGENT_APP_BRIDGE_VERSION,
+  LIME_CAPABILITY_DEFINITIONS,
   LIME_CAPABILITY_NAMES,
   MockCapabilityHost,
   createLimeCoreCapabilityAdapters,
@@ -27,6 +28,13 @@ describe("agent app SDK public surface", () => {
     expect(LIME_AGENT_APP_BRIDGE_PROTOCOL).toBe("lime.agentApp.bridge");
     expect(LIME_AGENT_APP_BRIDGE_VERSION).toBe(1);
     expect(LIME_CAPABILITY_NAMES).toContain("lime.agent");
+    expect(LIME_CAPABILITY_DEFINITIONS).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "lime.models" }),
+        expect.objectContaining({ name: "lime.skills" }),
+        expect.objectContaining({ name: "lime.usage" }),
+      ]),
+    );
     expect(isLimeCapabilityErrorCode("permission_denied")).toBe(true);
     expect(normalizeLimeCapabilityErrorCode("missing")).toBe("upstream_failed");
     expect(typeof createLimeCoreCapabilityAdapters).toBe("function");
@@ -44,7 +52,9 @@ describe("agent app SDK public surface", () => {
     );
     expect(publicSdkSurface).not.toHaveProperty("AgentRuntimeCapabilityHost");
     expect(publicSdkSurface).not.toHaveProperty("WorkflowRuntimeHost");
-    expect(publicSdkSurface).not.toHaveProperty("createAgentAppCapabilityDispatcher");
+    expect(publicSdkSurface).not.toHaveProperty(
+      "createAgentAppCapabilityDispatcher",
+    );
   });
 
   it("源码层不从 UI、安装、运行时或 adapter 内部层转导出", () => {

@@ -1,19 +1,18 @@
 import { defaultAgentAppHostFlags } from "../featureFlag";
 import type { HostCapabilityProfile } from "../types";
+import { buildLimeCapabilityProfileEntriesForMode } from "../sdk/capabilityCatalog";
+
+export const currentAgentAppHostRuntimeVersion = "0.7.0";
+export const currentAgentAppStandardVersion = "0.7";
+export const compatibleAgentAppStandardVersions = ["0.5", "0.6", "0.7"];
 
 export const p0HostCapabilityProfile: HostCapabilityProfile = {
-  appRuntimeVersion: "0.3.0",
-  runtimeTargets: ["local"],
-  capabilities: {
-    "lime.ui": { version: "0.3.0", enabled: false, implementation: "none" },
-    "lime.storage": { version: "0.3.0", enabled: false, implementation: "none" },
-    "lime.files": { version: "0.3.0", enabled: false, implementation: "none" },
-    "lime.agent": { version: "0.3.0", enabled: false, implementation: "none" },
-    "lime.knowledge": { version: "0.3.0", enabled: false, implementation: "none" },
-    "lime.tools": { version: "0.3.0", enabled: false, implementation: "none" },
-    "lime.artifacts": { version: "0.3.0", enabled: false, implementation: "none" },
-    "lime.evidence": { version: "0.3.0", enabled: false, implementation: "none" },
-    "lime.workflow": { version: "0.3.0", enabled: false, implementation: "none" },
+  appRuntimeVersion: currentAgentAppHostRuntimeVersion,
+  standardVersions: {
+    current: currentAgentAppStandardVersion,
+    compatible: [...compatibleAgentAppStandardVersions],
   },
+  runtimeTargets: ["local"],
+  capabilities: buildLimeCapabilityProfileEntriesForMode("base"),
   featureFlags: defaultAgentAppHostFlags,
 };

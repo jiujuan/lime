@@ -18,13 +18,19 @@ import {
   createLimeCoreCapabilityAdapters,
   LimeCapabilityAdapterError,
 } from "./capabilityAdapters";
+import {
+  LIME_CAPABILITY_DEFINITIONS,
+  getLimeCapabilityAdapterKey,
+} from "./capabilityCatalog";
 
 const recordProvenance = {
   sourceKind: "agent_app",
   appId: "content-factory-app",
   appVersion: "1.0.0",
-  packageHash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  manifestHash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  packageHash:
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  manifestHash:
+    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   entryKey: "dashboard",
   workflowRunId: "run-1",
   workspaceId: "workspace-1",
@@ -169,6 +175,32 @@ const agentStreamEvents: AgentAppTaskStreamEvent[] = [
 ];
 
 describe("P18.3 / P18.4 core capability adapters", () => {
+  it("应按 catalog 生成所有 lime.* typed adapter，不再只覆盖局部能力", () => {
+    const adapters = createLimeCoreCapabilityAdapters({
+      invoker: createLimeCapabilityInvoker(createMockLimeCapabilityTransport()),
+      provenance,
+    });
+
+    expect(Object.keys(adapters).sort()).toEqual(
+      LIME_CAPABILITY_DEFINITIONS.map((definition) =>
+        getLimeCapabilityAdapterKey(definition.name),
+      ).sort(),
+    );
+    LIME_CAPABILITY_DEFINITIONS.forEach((definition) => {
+      const adapter = adapters[
+        getLimeCapabilityAdapterKey(definition.name)
+      ] as Record<string, unknown>;
+      definition.methods.forEach((method) => {
+        expect(adapter[method]).toEqual(expect.any(Function));
+      });
+    });
+    expect(adapters.storage.namespace).toBe(provenance.appId);
+    expect(adapters.models.estimateCost).toEqual(expect.any(Function));
+    expect(adapters.skills.list).toEqual(expect.any(Function));
+    expect(adapters.policy.check).toEqual(expect.any(Function));
+    expect(adapters.usage.getTokenUsage).toEqual(expect.any(Function));
+  });
+
   it("应把 ui / storage / artifacts / evidence / knowledge / tools 调用转成 typed request 并附加 provenance", async () => {
     const requests: LimeCapabilityInvokeRequest[] = [];
     const invoker = createLimeCapabilityInvoker(
@@ -177,6 +209,15 @@ describe("P18.3 / P18.4 core capability adapters", () => {
           toast: (request) => {
             requests.push(request);
             return { accepted: true };
+          },
+          openAgentRun: (request) => {
+            requests.push(request);
+            return {
+              opened: true,
+              surface: "host_agent_run",
+              mode: "drawer",
+              taskId: (request.args as { taskId?: string }).taskId,
+            };
           },
         },
         "lime.storage": {
@@ -261,6 +302,14 @@ describe("P18.3 / P18.4 core capability adapters", () => {
       { message: "已保存", level: "success" },
       { requestId: "req-ui" },
     );
+    const agentRunUi = await adapters.ui.openAgentRun(
+      {
+        taskId: "agent-task-1",
+        title: "生成内容批次",
+        mode: "drawer",
+      },
+      { requestId: "req-ui-agent-run" },
+    );
     const stored = await adapters.storage.set(
       { key: "drafts/scenario", value: { title: "内容场景草稿" } },
       {
@@ -294,6 +343,12 @@ describe("P18.3 / P18.4 core capability adapters", () => {
     );
 
     expect(adapters.storage.namespace).toBe("content_factory_app");
+    expect(agentRunUi).toEqual({
+      opened: true,
+      surface: "host_agent_run",
+      mode: "drawer",
+      taskId: "agent-task-1",
+    });
     expect(stored).toMatchObject({
       key: "drafts/scenario",
       value: { title: "内容场景草稿" },
@@ -310,6 +365,12 @@ describe("P18.3 / P18.4 core capability adapters", () => {
         capability: "lime.ui",
         method: "toast",
         requestId: "req-ui",
+        provenance,
+      }),
+      expect.objectContaining({
+        capability: "lime.ui",
+        method: "openAgentRun",
+        requestId: "req-ui-agent-run",
         provenance,
       }),
       expect.objectContaining({

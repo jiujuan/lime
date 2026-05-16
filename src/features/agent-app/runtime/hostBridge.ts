@@ -19,6 +19,8 @@ import {
   type LimeCapabilityName,
 } from "../sdk/capabilityContract";
 import { toLimeCapabilityError } from "../sdk/capabilityErrors";
+import type { AgentAppRuntimeProcessView } from "../types";
+import { buildAgentRuntimeProcessView } from "./agentRuntimeProcess";
 
 export const AGENT_APP_BRIDGE_PROTOCOL = "lime.agentApp.bridge";
 export const AGENT_APP_BRIDGE_VERSION = 1;
@@ -75,6 +77,40 @@ export interface AgentAppHostBridgeNotifyPayload {
   level: "info" | "success" | "warning" | "error";
 }
 
+export type AgentAppHostAgentRunUiMode = "drawer" | "modal" | "page";
+
+export interface AgentAppHostAgentRunUiRequest {
+  taskId?: string;
+  bridgeAction?: string;
+  title?: string;
+  mode?: AgentAppHostAgentRunUiMode;
+  expectedOutput?: unknown;
+  runtimeProcess?: unknown;
+  runtimeFacts?: unknown;
+  task?: unknown;
+  snapshot?: unknown;
+  events?: unknown[];
+}
+
+export interface AgentAppHostAgentRunUiOpenResult {
+  opened: true;
+  surface: "host_agent_run";
+  mode: AgentAppHostAgentRunUiMode;
+  taskId?: string;
+}
+
+export interface AgentAppHostAgentRunUiUpdateResult {
+  updated: true;
+  surface: "host_agent_run";
+  taskId?: string;
+}
+
+export interface AgentAppHostAgentRunUiCloseResult {
+  closed: true;
+  surface: "host_agent_run";
+  taskId?: string;
+}
+
 export interface AgentAppHostBridgeCapabilityRequest {
   appId: string;
   entryKey?: string;
@@ -100,6 +136,15 @@ export interface CreateAgentAppHostBridgeOptions {
   locale?: string;
   notify?: (payload: AgentAppHostBridgeNotifyPayload) => void;
   openExternal?: (url: string) => void;
+  openAgentRunUi?: (
+    request: AgentAppHostAgentRunUiRequest,
+  ) => AgentAppHostAgentRunUiOpenResult;
+  updateAgentRunUi?: (
+    request: AgentAppHostAgentRunUiRequest,
+  ) => AgentAppHostAgentRunUiUpdateResult;
+  closeAgentRunUi?: (
+    request: Pick<AgentAppHostAgentRunUiRequest, "taskId" | "bridgeAction">,
+  ) => AgentAppHostAgentRunUiCloseResult;
   capabilities?: AgentAppHostBridgeCapabilities;
   dispatchCapability?: (
     request: AgentAppHostBridgeCapabilityRequest,
@@ -249,6 +294,38 @@ function readTaskEventsFromValue(value: unknown): unknown[] {
   return artifactEvents;
 }
 
+function taskEventIdentity(event: unknown, index: number): string {
+  if (!isRecord(event)) {
+    return `event:${index}`;
+  }
+  const stableParts = [
+    readString(event, "eventId"),
+    readString(event, "id"),
+    readString(event, "type") ?? readString(event, "eventType"),
+    readString(event, "requestId"),
+    readString(event, "message"),
+    readString(event, "occurredAt") ?? readString(event, "at"),
+  ].filter(Boolean);
+  return stableParts.length ? stableParts.join(":") : `event:${index}`;
+}
+
+function mergeTaskEvents(...groups: unknown[][]): unknown[] {
+  const seen = new Set<string>();
+  const merged: unknown[] = [];
+  groups.flat().forEach((event, index) => {
+    if (!event) {
+      return;
+    }
+    const key = taskEventIdentity(event, index);
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    merged.push(event);
+  });
+  return merged;
+}
+
 function readArtifactsFromValue(value: unknown): Record<string, unknown>[] {
   if (!isRecord(value)) {
     return [];
@@ -363,6 +440,9 @@ interface AgentAppTaskSubscription {
   timerId?: number;
   inFlight: boolean;
   terminalArtifactReplayPolls: number;
+  events: unknown[];
+  latestTask?: unknown;
+  process?: AgentAppRuntimeProcessView;
 }
 
 function collectCssVariableTokens(root: HTMLElement): Record<string, string> {
@@ -533,6 +613,15 @@ export class AgentAppHostBridge {
   private readonly locale?: string;
   private readonly notify?: (payload: AgentAppHostBridgeNotifyPayload) => void;
   private readonly openExternal?: (url: string) => void;
+  private readonly openAgentRunUi?: (
+    request: AgentAppHostAgentRunUiRequest,
+  ) => AgentAppHostAgentRunUiOpenResult;
+  private readonly updateAgentRunUi?: (
+    request: AgentAppHostAgentRunUiRequest,
+  ) => AgentAppHostAgentRunUiUpdateResult;
+  private readonly closeAgentRunUi?: (
+    request: Pick<AgentAppHostAgentRunUiRequest, "taskId" | "bridgeAction">,
+  ) => AgentAppHostAgentRunUiCloseResult;
   private readonly capabilities?: AgentAppHostBridgeCapabilities;
   private readonly dispatchCapability?: (
     request: AgentAppHostBridgeCapabilityRequest,
@@ -559,6 +648,9 @@ export class AgentAppHostBridge {
     this.locale = options.locale;
     this.notify = options.notify;
     this.openExternal = options.openExternal;
+    this.openAgentRunUi = options.openAgentRunUi;
+    this.updateAgentRunUi = options.updateAgentRunUi;
+    this.closeAgentRunUi = options.closeAgentRunUi;
     this.capabilities = options.capabilities;
     this.dispatchCapability = options.dispatchCapability;
     this.listenRuntimeEvent = options.listenRuntimeEvent ?? safeListen;
@@ -720,12 +812,6 @@ export class AgentAppHostBridge {
   private async handleCapabilityInvoke(
     message: LimeAgentAppBridgeMessage,
   ): Promise<Record<string, unknown>> {
-    if (!this.dispatchCapability) {
-      throw new AgentAppHostBridgeActionError(
-        "CAPABILITY_BLOCKED",
-        "Capability invocation is not enabled for this Agent App runtime.",
-      );
-    }
     if (!isRecord(message.payload)) {
       throw new AgentAppHostBridgeActionError(
         "INVALID_PAYLOAD",
@@ -793,10 +879,174 @@ export class AgentAppHostBridge {
     if (provenance) {
       request.provenance = provenance;
     }
-    const result = await this.dispatchCapability(request);
+    const uiResult = this.handleUiCapabilityInvoke(request);
+    if (uiResult) {
+      return {
+        ...createLimeCapabilitySuccessResponse(uiResult),
+        result: uiResult,
+      };
+    }
+    if (!this.dispatchCapability) {
+      throw new AgentAppHostBridgeActionError(
+        "CAPABILITY_BLOCKED",
+        "Capability invocation is not enabled for this Agent App runtime.",
+      );
+    }
+    const result = this.enrichAgentCapabilityResult(
+      request,
+      await this.dispatchCapability(request),
+    );
     return {
       ...createLimeCapabilitySuccessResponse(result),
       result,
+    };
+  }
+
+  private handleUiCapabilityInvoke(
+    request: AgentAppHostBridgeCapabilityRequest,
+  ): unknown | null {
+    if (request.capability !== "lime.ui") {
+      return null;
+    }
+    if (request.method === "toast") {
+      this.handleToast(request.input);
+      return { accepted: true };
+    }
+    if (request.method === "navigate") {
+      const url = this.resolveSameOriginActionUrl(request.input, ["route", "url"]);
+      window.setTimeout(() => {
+        if (!this.disposed) {
+          this.frame.src = url.href;
+        }
+      }, 0);
+      return { navigatedTo: url.pathname + url.search + url.hash };
+    }
+    if (request.method === "openExternal") {
+      const url = this.resolveExternalUrl(request.input);
+      (this.openExternal ?? ((target) => window.open(target, "_blank", "noopener,noreferrer")))(
+        url.href,
+      );
+      return { opened: true };
+    }
+    if (request.method === "download") {
+      const url = this.resolveSameOriginActionUrl(request.input, ["url", "href"]);
+      this.downloadSameOriginUrl(url, request.input);
+      return { downloaded: true };
+    }
+    if (request.method === "getSnapshot") {
+      return buildAgentAppHostSnapshot({
+        appId: this.appId,
+        entryKey: this.entryKey,
+        displayName: this.displayName,
+        entryRoute: this.entryRoute,
+        entryUrl: this.entryUrl,
+        locale: this.locale,
+        now: this.now,
+        runtimeOrigin: this.runtimeOrigin,
+        capabilities: this.capabilities,
+      }) as unknown as Record<string, unknown>;
+    }
+    if (request.method === "openAgentRun") {
+      return this.openAgentRunUi?.(this.normalizeAgentRunUiRequest(request.input)) ?? {
+        opened: true,
+        surface: "host_agent_run",
+        mode: "drawer",
+        taskId: this.readAgentRunUiTaskId(request.input),
+      };
+    }
+    if (request.method === "updateAgentRun") {
+      return this.updateAgentRunUi?.(this.normalizeAgentRunUiRequest(request.input)) ?? {
+        updated: true,
+        surface: "host_agent_run",
+        taskId: this.readAgentRunUiTaskId(request.input),
+      };
+    }
+    if (request.method === "closeAgentRun") {
+      const normalized = this.normalizeAgentRunUiRequest(request.input);
+      return this.closeAgentRunUi?.({
+        taskId: normalized.taskId,
+        bridgeAction: normalized.bridgeAction,
+      }) ?? {
+        closed: true,
+        surface: "host_agent_run",
+        taskId: normalized.taskId,
+      };
+    }
+    throw new AgentAppHostBridgeActionError(
+      "UNSUPPORTED_CAPABILITY_METHOD",
+      `${request.capability}.${request.method} is not supported by Agent App Host Bridge.`,
+    );
+  }
+
+  private normalizeAgentRunUiRequest(input: unknown): AgentAppHostAgentRunUiRequest {
+    if (!isRecord(input)) {
+      return {};
+    }
+    const mode = readString(input, "mode");
+    return {
+      taskId: this.readAgentRunUiTaskId(input),
+      bridgeAction: readString(input, "bridgeAction"),
+      title: readString(input, "title"),
+      mode: mode === "modal" || mode === "page" ? mode : "drawer",
+      expectedOutput: hasOwn(input, "expectedOutput") ? input.expectedOutput : undefined,
+      runtimeProcess: hasOwn(input, "runtimeProcess")
+        ? input.runtimeProcess
+        : hasOwn(input, "process")
+          ? input.process
+          : undefined,
+      runtimeFacts: hasOwn(input, "runtimeFacts") ? input.runtimeFacts : undefined,
+      task: hasOwn(input, "task") ? input.task : undefined,
+      snapshot: hasOwn(input, "snapshot") ? input.snapshot : undefined,
+      events: Array.isArray(input.events) ? input.events : undefined,
+    };
+  }
+
+  private readAgentRunUiTaskId(input: unknown): string | undefined {
+    if (!isRecord(input)) {
+      return undefined;
+    }
+    return (
+      readString(input, "taskId") ??
+      (isRecord(input.task) ? readString(input.task, "taskId") : undefined) ??
+      (isRecord(input.snapshot) ? readString(input.snapshot, "taskId") : undefined)
+    );
+  }
+
+  private enrichAgentCapabilityResult(
+    request: AgentAppHostBridgeCapabilityRequest,
+    result: unknown,
+  ): unknown {
+    if (request.capability !== "lime.agent" || !isRecord(result)) {
+      return result;
+    }
+    if (
+      isRecord(result.process) &&
+      isRecord(result.runtimeProcess)
+    ) {
+      return result;
+    }
+    if (
+      request.method !== "startTask" &&
+      request.method !== "getTask" &&
+      request.method !== "cancelTask" &&
+      request.method !== "retryTask"
+    ) {
+      return result;
+    }
+    const process = buildAgentRuntimeProcessView({
+      events: readTaskEventsFromValue(result),
+      task: result,
+      snapshot: result,
+      expectedOutput:
+        isRecord(request.input) && hasOwn(request.input, "expectedOutput")
+          ? request.input.expectedOutput
+          : undefined,
+      lastInput: request.input,
+    });
+    return {
+      ...result,
+      runtimeProcess: isRecord(result.runtimeProcess) ? result.runtimeProcess : process,
+      process: isRecord(result.process) ? result.process : process,
     };
   }
 
@@ -854,6 +1104,7 @@ export class AgentAppHostBridge {
       runtimeEventName,
       inFlight: false,
       terminalArtifactReplayPolls: 0,
+      events: [],
     });
     void this.attachRuntimeEventSubscription(subscriptionId);
     void this.pollTaskSubscription(subscriptionId);
@@ -944,6 +1195,11 @@ export class AgentAppHostBridge {
       return;
     }
     const events = readTaskEventsFromValue(payload);
+    const process = this.updateTaskSubscriptionProcess(
+      subscription,
+      payload,
+      events.length ? events : buildTaskEventsFromRuntimeEventPayload(payload),
+    );
     this.postToApp("capability:event", {
       subscriptionId,
       capability: "lime.agent",
@@ -954,8 +1210,60 @@ export class AgentAppHostBridge {
       runtimeEventName: subscription.runtimeEventName,
       runtimeEvent: payload,
       events: events.length ? events : buildTaskEventsFromRuntimeEventPayload(payload),
+      runtimeProcess: process,
+      process,
       emittedAt: (this.now ?? (() => new Date().toISOString()))(),
     });
+  }
+
+  private updateTaskSubscriptionProcess(
+    subscription: AgentAppTaskSubscription,
+    value: unknown,
+    events: unknown[],
+  ): AgentAppRuntimeProcessView {
+    if (isRecord(value) && (Array.isArray(value.events) || Array.isArray(value.taskEvents))) {
+      subscription.latestTask = value;
+    }
+    subscription.events = mergeTaskEvents(subscription.events, events);
+    const explicitProcess = this.readRuntimeProcess(value);
+    if (explicitProcess) {
+      subscription.process = explicitProcess;
+      return explicitProcess;
+    }
+    const process = buildAgentRuntimeProcessView({
+      events: subscription.events,
+      task: subscription.latestTask,
+      snapshot: value,
+    });
+    subscription.process = process;
+    return process;
+  }
+
+  private readRuntimeProcess(value: unknown): AgentAppRuntimeProcessView | null {
+    if (!isRecord(value)) {
+      return null;
+    }
+    if (isRecord(value.runtimeProcess)) {
+      return value.runtimeProcess as unknown as AgentAppRuntimeProcessView;
+    }
+    if (isRecord(value.process)) {
+      return value.process as unknown as AgentAppRuntimeProcessView;
+    }
+    const task = isRecord(value.task) ? value.task : undefined;
+    if (isRecord(task?.runtimeProcess)) {
+      return task.runtimeProcess as unknown as AgentAppRuntimeProcessView;
+    }
+    if (isRecord(task?.process)) {
+      return task.process as unknown as AgentAppRuntimeProcessView;
+    }
+    const snapshot = isRecord(value.snapshot) ? value.snapshot : undefined;
+    if (isRecord(snapshot?.runtimeProcess)) {
+      return snapshot.runtimeProcess as unknown as AgentAppRuntimeProcessView;
+    }
+    if (isRecord(snapshot?.process)) {
+      return snapshot.process as unknown as AgentAppRuntimeProcessView;
+    }
+    return null;
   }
 
   private async pollTaskSubscription(subscriptionId: string): Promise<void> {
@@ -968,6 +1276,12 @@ export class AgentAppHostBridge {
       const result = await this.dispatchCapability(
         this.buildTaskSubscriptionPollRequest(subscription),
       );
+      const events = readTaskEventsFromValue(result);
+      const process = this.updateTaskSubscriptionProcess(
+        subscription,
+        result,
+        events,
+      );
       this.postToApp("capability:event", {
         subscriptionId,
         capability: "lime.agent",
@@ -976,7 +1290,9 @@ export class AgentAppHostBridge {
         taskId: subscription.taskId,
         bridgeAction: subscription.bridgeAction,
         task: result,
-        events: readTaskEventsFromValue(result),
+        events,
+        runtimeProcess: process,
+        process,
         emittedAt: (this.now ?? (() => new Date().toISOString()))(),
       });
       const shouldPollForTerminalArtifact =

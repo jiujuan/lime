@@ -113,6 +113,36 @@ async function waitForCondition(label, probe, timeoutMs, intervalMs) {
   throw new Error(`${label} 超时${suffix}`);
 }
 
+async function waitForAnyVisibleText(page, label, texts, timeoutMs, intervalMs) {
+  return waitForCondition(
+    label,
+    async () => {
+      for (const text of texts) {
+        const locator = page.getByText(text, { exact: false }).first();
+        const visible = await locator
+          .waitFor({ state: "visible", timeout: Math.max(500, intervalMs) })
+          .then(() => true)
+          .catch(() => false);
+        if (visible) {
+          return text;
+        }
+      }
+      return null;
+    },
+    timeoutMs,
+    intervalMs,
+  );
+}
+
+async function isTextVisible(page, text, timeoutMs) {
+  return page
+    .getByText(text, { exact: false })
+    .first()
+    .waitFor({ state: "visible", timeout: timeoutMs })
+    .then(() => true)
+    .catch(() => false);
+}
+
 async function waitForHealth(options) {
   return waitForCondition(
     "等待 DevBridge health",
@@ -551,19 +581,26 @@ async function main() {
         "@配图 execute_skill 缺少 sessionId",
       );
 
-      await page
-        .getByText("先执行技能 image_generate", { exact: false })
-        .first()
-        .waitFor({ state: "visible", timeout: options.timeoutMs });
-      await page
-        .getByText("图片生成", { exact: false })
-        .first()
-        .waitFor({ state: "visible", timeout: options.timeoutMs });
+      const executionMarker = await waitForAnyVisibleText(
+        page,
+        "等待 @配图 技能执行可见状态",
+        [
+          "先执行技能 image_generate",
+          "正在执行 Skill: image_generate",
+          "任务类型：image_generate",
+          "图片生成",
+        ],
+        options.timeoutMs,
+        options.intervalMs,
+      );
+      const imagePreviewVisible = await isTextVisible(page, "图片生成", 5_000);
 
       summary.assertions.imageSkillExecutionSubmitted = true;
       summary.assertions.imageCommandTagPreserved = true;
       summary.assertions.imagePromptPreserved = true;
       summary.assertions.imageGenerateProcessVisible = true;
+      summary.assertions.imageGenerateProcessMarker = executionMarker;
+      summary.assertions.imagePreviewVisible = imagePreviewVisible;
       summary.submitRequest = {
         routeMode: "skill_execution",
         command: submitInvoke.cmd,

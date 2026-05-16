@@ -7,6 +7,11 @@ import {
   type LimeCapabilityName,
   type LimeCapabilityValue,
 } from "./capabilityContract";
+import {
+  LIME_CAPABILITY_DEFINITIONS,
+  getLimeCapabilityAdapterKey,
+  type LimeCapabilityDefinitionRecord,
+} from "./capabilityCatalog";
 import type { LimeCapabilityError } from "./capabilityErrors";
 
 export interface LimeCapabilityAdapterCallOptions {
@@ -50,6 +55,14 @@ type CapabilityAdapterMethod<
   options?: LimeCapabilityAdapterCallOptions,
 ) => Promise<LimeCapabilityValue<Capability, Method>>;
 
+type OptionalArgsCapabilityAdapterMethod<
+  Capability extends LimeCapabilityName,
+  Method extends LimeCapabilityMethod<Capability>,
+> = (
+  args?: LimeCapabilityArgs<Capability, Method>,
+  options?: LimeCapabilityAdapterCallOptions,
+) => Promise<LimeCapabilityValue<Capability, Method>>;
+
 type NoArgsCapabilityAdapterMethod<
   Capability extends LimeCapabilityName,
   Method extends LimeCapabilityMethod<Capability>,
@@ -57,74 +70,91 @@ type NoArgsCapabilityAdapterMethod<
   options?: LimeCapabilityAdapterCallOptions,
 ) => Promise<LimeCapabilityValue<Capability, Method>>;
 
-export interface LimeUiCapabilityAdapter {
-  readonly toast: CapabilityAdapterMethod<"lime.ui", "toast">;
-  readonly navigate: CapabilityAdapterMethod<"lime.ui", "navigate">;
-  readonly openExternal: CapabilityAdapterMethod<"lime.ui", "openExternal">;
-  readonly download: CapabilityAdapterMethod<"lime.ui", "download">;
-  readonly getSnapshot: NoArgsCapabilityAdapterMethod<
-    "lime.ui",
-    "getSnapshot"
+type CapabilityAdapterMethodFor<
+  Capability extends LimeCapabilityName,
+  Method extends LimeCapabilityMethod<Capability>,
+> = [LimeCapabilityArgs<Capability, Method>] extends [undefined]
+  ? NoArgsCapabilityAdapterMethod<Capability, Method>
+  : undefined extends LimeCapabilityArgs<Capability, Method>
+    ? OptionalArgsCapabilityAdapterMethod<Capability, Method>
+    : CapabilityAdapterMethod<Capability, Method>;
+
+export type LimeCapabilityAdapter<Capability extends LimeCapabilityName> = {
+  readonly [Method in LimeCapabilityMethod<Capability>]: CapabilityAdapterMethodFor<
+    Capability,
+    Method
   >;
-}
+};
 
-export interface LimeStorageCapabilityAdapter {
-  readonly namespace: string;
-  readonly get: CapabilityAdapterMethod<"lime.storage", "get">;
-  readonly set: CapabilityAdapterMethod<"lime.storage", "set">;
-  readonly list: NoArgsCapabilityAdapterMethod<"lime.storage", "list">;
-  readonly delete: CapabilityAdapterMethod<"lime.storage", "delete">;
-}
+type LimeCapabilityAdapterKey<Capability extends LimeCapabilityName> =
+  Capability extends `lime.${infer Key}` ? Key : never;
 
-export interface LimeAgentCapabilityAdapter {
-  readonly startTask: CapabilityAdapterMethod<"lime.agent", "startTask">;
-  readonly streamTask: CapabilityAdapterMethod<"lime.agent", "streamTask">;
-  readonly getTask: CapabilityAdapterMethod<"lime.agent", "getTask">;
-  readonly cancelTask: CapabilityAdapterMethod<"lime.agent", "cancelTask">;
-  readonly retryTask: CapabilityAdapterMethod<"lime.agent", "retryTask">;
-  readonly submitHostResponse: CapabilityAdapterMethod<
-    "lime.agent",
-    "submitHostResponse"
-  >;
-  readonly listTasks: NoArgsCapabilityAdapterMethod<
-    "lime.agent",
-    "listTasks"
-  >;
-}
+type LimeCapabilityAdapterFor<Capability extends LimeCapabilityName> =
+  Capability extends "lime.storage"
+    ? LimeCapabilityAdapter<Capability> & { readonly namespace: string }
+    : LimeCapabilityAdapter<Capability>;
 
-export interface LimeArtifactsCapabilityAdapter {
-  readonly create: CapabilityAdapterMethod<"lime.artifacts", "create">;
-  readonly open: CapabilityAdapterMethod<"lime.artifacts", "open">;
-  readonly export: CapabilityAdapterMethod<"lime.artifacts", "export">;
-}
+export type LimeCoreCapabilityAdapters = {
+  readonly [Capability in LimeCapabilityName as LimeCapabilityAdapterKey<Capability>]: LimeCapabilityAdapterFor<Capability>;
+};
 
-export interface LimeEvidenceCapabilityAdapter {
-  readonly record: CapabilityAdapterMethod<"lime.evidence", "record">;
-  readonly linkArtifact: CapabilityAdapterMethod<
-    "lime.evidence",
-    "linkArtifact"
-  >;
-}
+export type LimeUiCapabilityAdapter = LimeCapabilityAdapter<"lime.ui">;
+export type LimeStorageCapabilityAdapter =
+  LimeCapabilityAdapterFor<"lime.storage">;
+export type LimeFilesCapabilityAdapter = LimeCapabilityAdapter<"lime.files">;
+export type LimeAgentCapabilityAdapter = LimeCapabilityAdapter<"lime.agent">;
+export type LimeKnowledgeCapabilityAdapter =
+  LimeCapabilityAdapter<"lime.knowledge">;
+export type LimeToolsCapabilityAdapter = LimeCapabilityAdapter<"lime.tools">;
+export type LimeArtifactsCapabilityAdapter =
+  LimeCapabilityAdapter<"lime.artifacts">;
+export type LimeWorkflowCapabilityAdapter =
+  LimeCapabilityAdapter<"lime.workflow">;
+export type LimePolicyCapabilityAdapter = LimeCapabilityAdapter<"lime.policy">;
+export type LimeSecretsCapabilityAdapter =
+  LimeCapabilityAdapter<"lime.secrets">;
+export type LimeEvidenceCapabilityAdapter =
+  LimeCapabilityAdapter<"lime.evidence">;
+export type LimeEventsCapabilityAdapter = LimeCapabilityAdapter<"lime.events">;
+export type LimeCapabilitiesCapabilityAdapter =
+  LimeCapabilityAdapter<"lime.capabilities">;
+export type LimeModelsCapabilityAdapter = LimeCapabilityAdapter<"lime.models">;
+export type LimeUsageCapabilityAdapter = LimeCapabilityAdapter<"lime.usage">;
+export type LimeMemoryCapabilityAdapter = LimeCapabilityAdapter<"lime.memory">;
+export type LimeSkillsCapabilityAdapter = LimeCapabilityAdapter<"lime.skills">;
+export type LimeMcpCapabilityAdapter = LimeCapabilityAdapter<"lime.mcp">;
+export type LimeBrowserCapabilityAdapter =
+  LimeCapabilityAdapter<"lime.browser">;
+export type LimeSearchCapabilityAdapter = LimeCapabilityAdapter<"lime.search">;
+export type LimeDocumentsCapabilityAdapter =
+  LimeCapabilityAdapter<"lime.documents">;
+export type LimeMediaCapabilityAdapter = LimeCapabilityAdapter<"lime.media">;
+export type LimeTerminalCapabilityAdapter =
+  LimeCapabilityAdapter<"lime.terminal">;
+export type LimeTasksCapabilityAdapter = LimeCapabilityAdapter<"lime.tasks">;
+export type LimeSettingsCapabilityAdapter =
+  LimeCapabilityAdapter<"lime.settings">;
+export type LimeWorkspaceCapabilityAdapter =
+  LimeCapabilityAdapter<"lime.workspace">;
+export type LimeContextCapabilityAdapter =
+  LimeCapabilityAdapter<"lime.context">;
+export type LimeConnectorsCapabilityAdapter =
+  LimeCapabilityAdapter<"lime.connectors">;
+export type LimeAutomationCapabilityAdapter =
+  LimeCapabilityAdapter<"lime.automation">;
+export type LimeReviewCapabilityAdapter = LimeCapabilityAdapter<"lime.review">;
 
-export interface LimeKnowledgeCapabilityAdapter {
-  readonly search: CapabilityAdapterMethod<"lime.knowledge", "search">;
-  readonly bindStatus: CapabilityAdapterMethod<"lime.knowledge", "bindStatus">;
-}
-
-export interface LimeToolsCapabilityAdapter {
-  readonly invoke: CapabilityAdapterMethod<"lime.tools", "invoke">;
-  readonly getProgress: CapabilityAdapterMethod<"lime.tools", "getProgress">;
-}
-
-export interface LimeCoreCapabilityAdapters {
-  readonly ui: LimeUiCapabilityAdapter;
-  readonly storage: LimeStorageCapabilityAdapter;
-  readonly agent: LimeAgentCapabilityAdapter;
-  readonly artifacts: LimeArtifactsCapabilityAdapter;
-  readonly evidence: LimeEvidenceCapabilityAdapter;
-  readonly knowledge: LimeKnowledgeCapabilityAdapter;
-  readonly tools: LimeToolsCapabilityAdapter;
-}
+const NO_ARGS_CAPABILITY_METHOD_KEYS = new Set([
+  "lime.ui.getSnapshot",
+  "lime.storage.list",
+  "lime.agent.listTasks",
+  "lime.events.listSubscriptions",
+  "lime.capabilities.list",
+  "lime.capabilities.getProfile",
+  "lime.mcp.listServers",
+  "lime.workspace.getCurrent",
+  "lime.workspace.list",
+]);
 
 async function callCapability<
   Capability extends LimeCapabilityName,
@@ -154,93 +184,63 @@ async function callCapability<
   throw new LimeCapabilityAdapterError(response.error);
 }
 
+type BoundCapabilityCall = <
+  Capability extends LimeCapabilityName,
+  Method extends LimeCapabilityMethod<Capability>,
+>(
+  capability: Capability,
+  method: Method,
+  args: LimeCapabilityArgs<Capability, Method> | undefined,
+  callOptions?: LimeCapabilityAdapterCallOptions,
+) => Promise<LimeCapabilityValue<Capability, Method>>;
+
+function createCapabilityAdapter<Capability extends LimeCapabilityName>(
+  definition: LimeCapabilityDefinitionRecord & { name: Capability },
+  call: BoundCapabilityCall,
+): LimeCapabilityAdapter<Capability> {
+  const adapter: Record<string, unknown> = {};
+  definition.methods.forEach((methodName) => {
+    const method = methodName as LimeCapabilityMethod<Capability>;
+    const methodKey = `${definition.name}.${methodName}`;
+    adapter[methodName] = (argsOrOptions?: unknown, maybeOptions?: unknown) => {
+      if (NO_ARGS_CAPABILITY_METHOD_KEYS.has(methodKey)) {
+        return call(
+          definition.name,
+          method,
+          undefined,
+          argsOrOptions as LimeCapabilityAdapterCallOptions | undefined,
+        );
+      }
+      return call(
+        definition.name,
+        method,
+        argsOrOptions as LimeCapabilityArgs<Capability, typeof method>,
+        maybeOptions as LimeCapabilityAdapterCallOptions | undefined,
+      );
+    };
+  });
+  return adapter as LimeCapabilityAdapter<Capability>;
+}
+
 export function createLimeCoreCapabilityAdapters(
   options: CreateLimeCoreCapabilityAdaptersOptions,
 ): LimeCoreCapabilityAdapters {
   const { invoker, provenance } = options;
-  const call = <
-    Capability extends LimeCapabilityName,
-    Method extends LimeCapabilityMethod<Capability>,
-  >(
-    capability: Capability,
-    method: Method,
-    args: LimeCapabilityArgs<Capability, Method> | undefined,
-    callOptions?: LimeCapabilityAdapterCallOptions,
-  ) =>
-    callCapability(
-      invoker,
-      provenance,
-      capability,
-      method,
-      args,
-      callOptions,
-    );
+  const call: BoundCapabilityCall = (capability, method, args, callOptions) =>
+    callCapability(invoker, provenance, capability, method, args, callOptions);
+  const adapters: Record<string, unknown> = {};
 
-  return {
-    ui: {
-      toast: (args, callOptions) =>
-        call("lime.ui", "toast", args, callOptions),
-      navigate: (args, callOptions) =>
-        call("lime.ui", "navigate", args, callOptions),
-      openExternal: (args, callOptions) =>
-        call("lime.ui", "openExternal", args, callOptions),
-      download: (args, callOptions) =>
-        call("lime.ui", "download", args, callOptions),
-      getSnapshot: (callOptions) =>
-        call("lime.ui", "getSnapshot", undefined, callOptions),
-    },
-    storage: {
-      namespace: options.storageNamespace ?? provenance?.appId ?? "agent_app",
-      get: (args, callOptions) =>
-        call("lime.storage", "get", args, callOptions),
-      set: (args, callOptions) =>
-        call("lime.storage", "set", args, callOptions),
-      list: (callOptions) =>
-        call("lime.storage", "list", undefined, callOptions),
-      delete: (args, callOptions) =>
-        call("lime.storage", "delete", args, callOptions),
-    },
-    agent: {
-      startTask: (args, callOptions) =>
-        call("lime.agent", "startTask", args, callOptions),
-      streamTask: (args, callOptions) =>
-        call("lime.agent", "streamTask", args, callOptions),
-      getTask: (args, callOptions) =>
-        call("lime.agent", "getTask", args, callOptions),
-      cancelTask: (args, callOptions) =>
-        call("lime.agent", "cancelTask", args, callOptions),
-      retryTask: (args, callOptions) =>
-        call("lime.agent", "retryTask", args, callOptions),
-      submitHostResponse: (args, callOptions) =>
-        call("lime.agent", "submitHostResponse", args, callOptions),
-      listTasks: (callOptions) =>
-        call("lime.agent", "listTasks", undefined, callOptions),
-    },
-    artifacts: {
-      create: (args, callOptions) =>
-        call("lime.artifacts", "create", args, callOptions),
-      open: (args, callOptions) =>
-        call("lime.artifacts", "open", args, callOptions),
-      export: (args, callOptions) =>
-        call("lime.artifacts", "export", args, callOptions),
-    },
-    evidence: {
-      record: (args, callOptions) =>
-        call("lime.evidence", "record", args, callOptions),
-      linkArtifact: (args, callOptions) =>
-        call("lime.evidence", "linkArtifact", args, callOptions),
-    },
-    knowledge: {
-      search: (args, callOptions) =>
-        call("lime.knowledge", "search", args, callOptions),
-      bindStatus: (args, callOptions) =>
-        call("lime.knowledge", "bindStatus", args, callOptions),
-    },
-    tools: {
-      invoke: (args, callOptions) =>
-        call("lime.tools", "invoke", args, callOptions),
-      getProgress: (args, callOptions) =>
-        call("lime.tools", "getProgress", args, callOptions),
-    },
-  };
+  LIME_CAPABILITY_DEFINITIONS.forEach((definition) => {
+    const adapter = createCapabilityAdapter(definition, call);
+    adapters[getLimeCapabilityAdapterKey(definition.name)] =
+      definition.name === "lime.storage"
+        ? {
+            namespace:
+              options.storageNamespace ?? provenance?.appId ?? "agent_app",
+            ...adapter,
+          }
+        : adapter;
+  });
+
+  return adapters as LimeCoreCapabilityAdapters;
 }

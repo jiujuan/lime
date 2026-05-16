@@ -4,27 +4,31 @@
 
 状态：P18.0 文档计划已完成；P18.1 SDK facade / stable error / mock host 已完成最小代码契约；P18.2 Host Bridge typed router / stable error response 已完成；P18.3 Core capability adapters 已完成；P18.4 App-scoped Agent task SDK facade 已完成；P18.4-H AgentRuntime handoff gate 已完成；P18.5.1 Lime-side 内容工厂 SDK 回归已完成；P18.5.2 package-side read-only tests 已通过；P18.5-S Host Bridge SDK client 已完成 capability invoke、subscription、Host action 和 Host event contract；P18.5.3 package-side SDK facade / verify / dist 同步已完成；P18.6 Raw Worker 前 Gate 已完成；P17.5 Formal entry GUI smoke 已通过；完整 `verify:local` 已于 2026-05-16 07:33 通过，2026-05-16 10:53 SDK seam / handoff core 定向测试 5 files / 17 tests passed，`typecheck`、`test:contracts` 与 `lint` 当前会话复核通过；P18 功能完成，剩余 owner handoff / git 写集收口。
 
+## P18.7 重新打开原因
+
+2026-05-16 追加：用户要求“将 Lime 所有功能都抽象出来”，因此 P18 不再只以 typed SDK gate 完成为终点。新的 current 路线图是 [P18.7 Full Lime Capability Surface](./p18-7-full-lime-capability-surface.md)：先把全量 `lime.*` 能力、App / Lime 主 App 边界、v0.6 标准兼容、Host discovery 与后端接线顺序落成文档事实源，再继续代码。原 P18.1-P18.6 仍是已完成基础层，不代表整体目标完成。
+
 ## 协作分工
 
 P17.5 正式入口 smoke 已收口；P18 代码实施继续和 AgentRuntime / GUI 验证任务分工，避免抢同一运行环境或改同一底层投影。
 
-| 分工 | 负责范围 | 暂不触碰 |
-|---|---|---|
-| P17.5 / 已收口 | 正式 `agent-apps` smoke、`scripts/agent-apps-smoke.mjs`、P17.5 evidence summary。 | 不把通过 smoke 扩大解释为 marketplace / 真实 delete-data / Cloud 管理台。 |
-| AgentRuntime / 隔壁任务 | `AgentRuntimeThreadReadModel`、`agent_app_runtime_*` facade、artifact / evidence / handoff 投影、`artifact:created` refs、跨刷新 task 恢复、Host response 回写；`docs/roadmap/agentruntime/claw-capability-sharing.md` 进一步把 Claw `@` 能力收敛到 AgentRuntime capability catalog。 | 不改 Agent App SDK 路线图，不由 P18 复制 runtime read model；push subscribe、workspace patch producer、capability catalog service、Claw capability catalog 和真实桌面 GUI smoke 仍由 AgentRuntime 任务收口。 |
-| P18 / 完成候选 | 上游 Agent App v0.4 Host Bridge 标准对齐、Typed Capability SDK gate、App-scoped Agent task 契约。P18.1 已落 SDK 类型、stable error、mock host 和 contract seam；P18.2 已收敛 Host Bridge typed router；P18.3 已完成 core adapters；P18.4 已完成 `lime.agent` SDK facade；P18.4-H 已完成 handoff gate；P18.5.1 已完成 Lime-side 内容工厂 SDK 回归；P18.5.2 已完成 package-side read-only tests；P18.5-S 已补 Host Bridge SDK client；P18.5.3 已完成真实 package verify 和 dist 同步；P18.6 已完成 raw worker 前 gate。 | 不启停隔壁 Tauri / Vite / DevBridge，不改 `src-tauri/*` / runtime facade，不改 `src/features/agent-app/runtime/agentRuntimeCapabilityHost*`，不进入 raw worker；后续只做 owner handoff / 提交边界，不再扩 P18 功能面。 |
+| 分工                    | 负责范围                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | 暂不触碰                                                                                                                                                                                                               |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P17.5 / 已收口          | 正式 `agent-apps` smoke、`scripts/agent-apps-smoke.mjs`、P17.5 evidence summary。                                                                                                                                                                                                                                                                                                                                                                                                                                     | 不把通过 smoke 扩大解释为 marketplace / 真实 delete-data / Cloud 管理台。                                                                                                                                              |
+| AgentRuntime / 隔壁任务 | `AgentRuntimeThreadReadModel`、`agent_app_runtime_*` facade、artifact / evidence / handoff 投影、`artifact:created` refs、跨刷新 task 恢复、Host response 回写；`docs/roadmap/agentruntime/claw-capability-sharing.md` 进一步把 Claw `@` 能力收敛到 AgentRuntime capability catalog。                                                                                                                                                                                                                                 | 不改 Agent App SDK 路线图，不由 P18 复制 runtime read model；push subscribe、workspace patch producer、capability catalog service、Claw capability catalog 和真实桌面 GUI smoke 仍由 AgentRuntime 任务收口。           |
+| P18 / 完成候选          | 上游 Agent App v0.4 Host Bridge 标准对齐、Typed Capability SDK gate、App-scoped Agent task 契约。P18.1 已落 SDK 类型、stable error、mock host 和 contract seam；P18.2 已收敛 Host Bridge typed router；P18.3 已完成 core adapters；P18.4 已完成 `lime.agent` SDK facade；P18.4-H 已完成 handoff gate；P18.5.1 已完成 Lime-side 内容工厂 SDK 回归；P18.5.2 已完成 package-side read-only tests；P18.5-S 已补 Host Bridge SDK client；P18.5.3 已完成真实 package verify 和 dist 同步；P18.6 已完成 raw worker 前 gate。 | 不启停隔壁 Tauri / Vite / DevBridge，不改 `src-tauri/*` / runtime facade，不改 `src/features/agent-app/runtime/agentRuntimeCapabilityHost*`，不进入 raw worker；后续只做 owner handoff / 提交边界，不再扩 P18 功能面。 |
 
 收敛规则：P17.5 已解除正式入口 smoke 阻塞；P18 代码只从 SDK contract 最小面开始，不把 SDK gate 扩大成垂直内容系统。
 
 ## 协作接口边界
 
-| 接口面 | 隔壁 AgentRuntime 提供 | P18 消费方式 | 防打架规则 |
-|---|---|---|---|
-| `lime.agent` task facade | `start / stream / get / cancel / retry / submitHostResponse / listTasks` 到 `agent_app_runtime_*`，并映射 `sessionId / turnId / requestId`。 | P18.1 已定义 SDK 类型和 mock 行为；P18.4 已包装成 typed adapter；P18.4-H 已消费隔壁运行证据。 | P18 不改 Rust command、不改 `src/lib/api/agentAppRuntime.ts`。 |
-| task event projection | queued / progress / missing context / review / tool call / `artifact:created` / evidence / outcome / incident。 | SDK 固定 event union、stable error 和 mock fixtures；P18.4-H 已完成 handoff 校验，push subscribe 继续归 AgentRuntime owner。 | 不在 SDK 层重建 read model，不把轮询实现写进业务 App。 |
-| storage / artifact / evidence write-back | 内容工厂已用声明类型写回 `lime.storage / lime.artifacts / lime.evidence`，AgentRuntime 负责事实投影。 | P18.3 只包装 typed adapter，自动带 provenance。 | 不新增第二套 artifact / evidence store，不写垂直 `content_factory_*` adapter。 |
-| structured workspace patch | 内容工厂 App 已能消费 `workspacePatch / contentFactoryWorkspacePatch`；后端 producer contract 仍是 AgentRuntime 缺口。 | P18 先把 patch 作为可选 typed artifact/event，不把它当 P18.1 完成条件。 | 不由 SDK mock 伪造生产级 patch 成功；真实 producer 缺口回挂 AgentRuntime。 |
-| capability catalog | `docs/roadmap/agentruntime/claw-capability-sharing.md` 规定 Chat `@命令`、Agent App `lime.agent.startTask`、Automation job 都只是 surface adapter；首批 capability hints 已可映射 Claw `*_skill_launch` metadata，独立 catalog service 未完成。 | P18 先在 SDK 层定义 `lime.tools / lime.knowledge / lime.agent` 能力声明与错误语义；把 capability sharing 作为 AgentRuntime owner 输入消费。 | 不复制 Claw `*_skill_launch.rs`，不把 capability hint 内置成 App 专用逻辑，不新增 `content_factory_*` 垂直后端能力。 |
+| 接口面                                   | 隔壁 AgentRuntime 提供                                                                                                                                                                                                                          | P18 消费方式                                                                                                                                | 防打架规则                                                                                                           |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `lime.agent` task facade                 | `start / stream / get / cancel / retry / submitHostResponse / listTasks` 到 `agent_app_runtime_*`，并映射 `sessionId / turnId / requestId`。                                                                                                    | P18.1 已定义 SDK 类型和 mock 行为；P18.4 已包装成 typed adapter；P18.4-H 已消费隔壁运行证据。                                               | P18 不改 Rust command、不改 `src/lib/api/agentAppRuntime.ts`。                                                       |
+| task event projection                    | queued / progress / missing context / review / tool call / `artifact:created` / evidence / outcome / incident。                                                                                                                                 | SDK 固定 event union、stable error 和 mock fixtures；P18.4-H 已完成 handoff 校验，push subscribe 继续归 AgentRuntime owner。                | 不在 SDK 层重建 read model，不把轮询实现写进业务 App。                                                               |
+| storage / artifact / evidence write-back | 内容工厂已用声明类型写回 `lime.storage / lime.artifacts / lime.evidence`，AgentRuntime 负责事实投影。                                                                                                                                           | P18.3 只包装 typed adapter，自动带 provenance。                                                                                             | 不新增第二套 artifact / evidence store，不写垂直 `content_factory_*` adapter。                                       |
+| structured workspace patch               | 内容工厂 App 已能消费 `workspacePatch / contentFactoryWorkspacePatch`；后端 producer contract 仍是 AgentRuntime 缺口。                                                                                                                          | P18 先把 patch 作为可选 typed artifact/event，不把它当 P18.1 完成条件。                                                                     | 不由 SDK mock 伪造生产级 patch 成功；真实 producer 缺口回挂 AgentRuntime。                                           |
+| capability catalog                       | `docs/roadmap/agentruntime/claw-capability-sharing.md` 规定 Chat `@命令`、Agent App `lime.agent.startTask`、Automation job 都只是 surface adapter；首批 capability hints 已可映射 Claw `*_skill_launch` metadata，独立 catalog service 未完成。 | P18 先在 SDK 层定义 `lime.tools / lime.knowledge / lime.agent` 能力声明与错误语义；把 capability sharing 作为 AgentRuntime owner 输入消费。 | 不复制 Claw `*_skill_launch.rs`，不把 capability hint 内置成 App 专用逻辑，不新增 `content_factory_*` 垂直后端能力。 |
 
 ## 2026-05-16 隔壁 AgentRuntime 输入
 
@@ -98,32 +102,32 @@ flowchart TD
 
 ## 边界表
 
-| 层 | 负责 | 不负责 |
-|---|---|---|
-| `@lime/app-sdk` | TypeScript facade、调用参数类型、稳定错误码、mock host。 | 不 import Lime internal path，不执行模型 / 工具。 |
-| Host Bridge v1 | ready、snapshot、theme、visibility、toast、navigate、download、capability invoke 传输。 | 不绕过 readiness / permission / policy，不返回假成功。 |
-| Capability Router | 校验 appId、entryKey、origin、source、capability allowlist、requestId。 | 不拥有业务 UI，不做垂直业务逻辑。 |
-| AgentRuntime Surface | App-scoped task、stream、cancel、retry、trace、evidence。 | 不把 Claw Chat 复制一套，不让 App 直接拿模型 API。 |
-| App runtime package | UI、workflow、storage schema、业务状态和结果确认。 | 不保存 secret 明文，不访问宿主文件系统 / DB / Tauri API。 |
-| Lime Cloud / LimeCore | catalog、release、tenant enablement、license、policy defaults。 | 不默认运行 Agent，不渲染 App UI，不接管本地 storage。 |
+| 层                    | 负责                                                                                    | 不负责                                                    |
+| --------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `@lime/app-sdk`       | TypeScript facade、调用参数类型、稳定错误码、mock host。                                | 不 import Lime internal path，不执行模型 / 工具。         |
+| Host Bridge v1        | ready、snapshot、theme、visibility、toast、navigate、download、capability invoke 传输。 | 不绕过 readiness / permission / policy，不返回假成功。    |
+| Capability Router     | 校验 appId、entryKey、origin、source、capability allowlist、requestId。                 | 不拥有业务 UI，不做垂直业务逻辑。                         |
+| AgentRuntime Surface  | App-scoped task、stream、cancel、retry、trace、evidence。                               | 不把 Claw Chat 复制一套，不让 App 直接拿模型 API。        |
+| App runtime package   | UI、workflow、storage schema、业务状态和结果确认。                                      | 不保存 secret 明文，不访问宿主文件系统 / DB / Tauri API。 |
+| Lime Cloud / LimeCore | catalog、release、tenant enablement、license、policy defaults。                         | 不默认运行 Agent，不渲染 App UI，不接管本地 storage。     |
 
 ## Typed Capability Matrix
 
 P18 的最小 SDK 不追求能力全覆盖，而是先固定调用语义、错误语义和 mock 语义。
 
-| Capability | 最小调用 | P18 口径 |
-|---|---|---|
-| `lime.ui` | `toast`、`navigate`、`openExternal`、`download`、`getSnapshot` | 走 Host Bridge action；外链 / 下载必须校验协议、origin、权限。 |
-| `lime.storage` | `table.get`、`table.insert`、`table.update`、`table.query` | 只写 App namespace；自动附加 provenance；schema 不匹配返回 stable error。 |
-| `lime.files` | `pick`、`readRef` | 只接收 host file ref，不暴露 raw path。 |
-| `lime.agent` | `startTask`、`streamTask`、`getTask`、`cancelTask`、`retryTask`、`submitHostResponse`、`listTasks` | 映射到 AgentRuntime Surface；不跳通用 Chat；P18.4 已补 typed adapter，P18.4-H 已对齐 handoff 运行证据。 |
-| `lime.knowledge` | `search`、`bindStatus` | 只能访问 manifest / setup 声明的 Knowledge binding。 |
-| `lime.tools` | `invoke`、`getProgress` | 通过 Tool Broker / ToolHub；policy 和 secret handle 由 Host 管。 |
-| `lime.artifacts` | `create`、`open`、`export` | artifact 带 appId、entryKey、packageHash、manifestHash。 |
-| `lime.workflow` | `start`、`checkpoint`、`awaitHuman` | P18 仍是 typed workflow；raw worker 进入后续 gate。 |
-| `lime.policy` | `check`、`requestPermission` | UI prompt 不是最终授权；bridge 层必须强制。 |
-| `lime.secrets` | `getRef`、`requestBinding` | App 只能拿 scoped handle，不能拿 secret value。 |
-| `lime.evidence` | `record`、`linkArtifact` | 记录 task、tool、knowledge、artifact、eval 和 cleanup provenance。 |
+| Capability       | 最小调用                                                                                           | P18 口径                                                                                                |
+| ---------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `lime.ui`        | `toast`、`navigate`、`openExternal`、`download`、`getSnapshot`                                     | 走 Host Bridge action；外链 / 下载必须校验协议、origin、权限。                                          |
+| `lime.storage`   | `table.get`、`table.insert`、`table.update`、`table.query`                                         | 只写 App namespace；自动附加 provenance；schema 不匹配返回 stable error。                               |
+| `lime.files`     | `pick`、`readRef`                                                                                  | 只接收 host file ref，不暴露 raw path。                                                                 |
+| `lime.agent`     | `startTask`、`streamTask`、`getTask`、`cancelTask`、`retryTask`、`submitHostResponse`、`listTasks` | 映射到 AgentRuntime Surface；不跳通用 Chat；P18.4 已补 typed adapter，P18.4-H 已对齐 handoff 运行证据。 |
+| `lime.knowledge` | `search`、`bindStatus`                                                                             | 只能访问 manifest / setup 声明的 Knowledge binding。                                                    |
+| `lime.tools`     | `invoke`、`getProgress`                                                                            | 通过 Tool Broker / ToolHub；policy 和 secret handle 由 Host 管。                                        |
+| `lime.artifacts` | `create`、`open`、`export`                                                                         | artifact 带 appId、entryKey、packageHash、manifestHash。                                                |
+| `lime.workflow`  | `start`、`checkpoint`、`awaitHuman`                                                                | P18 仍是 typed workflow；raw worker 进入后续 gate。                                                     |
+| `lime.policy`    | `check`、`requestPermission`                                                                       | UI prompt 不是最终授权；bridge 层必须强制。                                                             |
+| `lime.secrets`   | `getRef`、`requestBinding`                                                                         | App 只能拿 scoped handle，不能拿 secret value。                                                         |
+| `lime.evidence`  | `record`、`linkArtifact`                                                                           | 记录 task、tool、knowledge、artifact、eval 和 cleanup provenance。                                      |
 
 ## Bridge Envelope
 
@@ -165,19 +169,19 @@ type LimeCapabilityInvokeResponse =
 
 稳定错误码首版：
 
-| 错误码 | 含义 |
-|---|---|
-| `capability_unavailable` | Host 不支持该 capability / method。 |
-| `readiness_blocked` | App / entry readiness 未通过。 |
-| `permission_denied` | 用户或租户未授权。 |
-| `policy_denied` | 企业策略、成本、网络或工具策略阻断。 |
-| `schema_invalid` | 请求参数或结果 schema 不匹配。 |
-| `source_unverified` | package / manifest / provenance 不可信。 |
-| `secret_required` | 缺必需 secret binding。 |
-| `timeout` | 调用超时。 |
-| `cancelled` | 用户或 Host 取消。 |
-| `conflict` | 幂等键、版本或并发状态冲突。 |
-| `upstream_failed` | 底层服务失败但边界仍完整。 |
+| 错误码                   | 含义                                     |
+| ------------------------ | ---------------------------------------- |
+| `capability_unavailable` | Host 不支持该 capability / method。      |
+| `readiness_blocked`      | App / entry readiness 未通过。           |
+| `permission_denied`      | 用户或租户未授权。                       |
+| `policy_denied`          | 企业策略、成本、网络或工具策略阻断。     |
+| `schema_invalid`         | 请求参数或结果 schema 不匹配。           |
+| `source_unverified`      | package / manifest / provenance 不可信。 |
+| `secret_required`        | 缺必需 secret binding。                  |
+| `timeout`                | 调用超时。                               |
+| `cancelled`              | 用户或 Host 取消。                       |
+| `conflict`               | 幂等键、版本或并发状态冲突。             |
+| `upstream_failed`        | 底层服务失败但边界仍完整。               |
 
 ## 时序图：SDK 初始化
 
@@ -247,13 +251,13 @@ flowchart TD
 
 ## 用户故事
 
-| 角色 | 用户故事 | 验收 |
-|---|---|---|
-| 业务用户 | 我在内容工厂页面内启动资料整理、文案生成和复盘，不需要跳回通用 Chat。 | App 内显示任务流、引用、错误、取消、重试和确认写回。 |
-| App 开发者 | 我只依赖 `@lime/app-sdk` 类型和 mock host，就能本地测试 App 工作流。 | 不 import Lime internal path；mock / real host 的错误码一致。 |
-| 平台维护者 | 我升级 storage、AgentRuntime 或 Tool Broker 时，不需要修改每个 App。 | SDK contract tests 通过；App 只感知兼容版本和稳定错误码。 |
-| 企业管理员 | 我可以用 policy / tenant overlay 控制工具、secret、成本和 network。 | Bridge 层强制策略；UI 只展示结果，不承担最终授权。 |
-| QA / 智能体 | 我能用 contract tests 和 GUI smoke 证明正式入口与 SDK 边界没有漂移。 | `src/features/agent-app` 无直接 `safeInvoke` / `invoke` / Tauri / raw Worker 越界。 |
+| 角色        | 用户故事                                                              | 验收                                                                                |
+| ----------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| 业务用户    | 我在内容工厂页面内启动资料整理、文案生成和复盘，不需要跳回通用 Chat。 | App 内显示任务流、引用、错误、取消、重试和确认写回。                                |
+| App 开发者  | 我只依赖 `@lime/app-sdk` 类型和 mock host，就能本地测试 App 工作流。  | 不 import Lime internal path；mock / real host 的错误码一致。                       |
+| 平台维护者  | 我升级 storage、AgentRuntime 或 Tool Broker 时，不需要修改每个 App。  | SDK contract tests 通过；App 只感知兼容版本和稳定错误码。                           |
+| 企业管理员  | 我可以用 policy / tenant overlay 控制工具、secret、成本和 network。   | Bridge 层强制策略；UI 只展示结果，不承担最终授权。                                  |
+| QA / 智能体 | 我能用 contract tests 和 GUI smoke 证明正式入口与 SDK 边界没有漂移。  | `src/features/agent-app` 无直接 `safeInvoke` / `invoke` / Tauri / raw Worker 越界。 |
 
 ## 用例
 
@@ -265,16 +269,16 @@ flowchart TD
 
 ## 实施拆分
 
-| 阶段 | 目标 | 主要产物 | 验收 |
-|---|---|---|---|
-| P18.0 | v0.4 标准差距收口 | 对齐 `agentapp-ref@0.4.0` Host Bridge v1、SDK typed API、错误码 gap matrix。 | 文档 diff check；不改运行代码。 |
-| P18.1 | SDK 类型与 schema | 已完成：`sdk` types、capability invoke envelope、stable error enum、mock host。 | `capabilityContract` + `MockCapabilityHost` SDK contract tests；`typecheck`。 |
-| P18.2 | Host Bridge router | 已完成：capability invoke typed envelope、`args` / `input` 兼容、requestId / idempotency / expectedSchema / provenance 透传、stable error response。 | bridge router / dispatcher / runtime page tests；未知 capability 不写假成功。 |
-| P18.3 | Core capability adapters | 已完成：`lime.ui`、`storage`、`artifacts`、`evidence`、`knowledge`、`tools` typed adapter facade。 | adapter contract tests、namespace / provenance tests、typecheck、contracts。 |
-| P18.4 | App-scoped Agent Task | 已完成：`lime.agent.startTask` / stream / get / cancel / retry / submitHostResponse / listTasks typed adapter，并覆盖 `task:*`、`artifact:created`、`evidence:*` 事件契约。 | App task adapter contract tests；不回跳通用 Chat；不重复实现 runtime read model。 |
-| P18.4-H | AgentRuntime handoff gate | 已完成：对齐隔壁 current MVP 与剩余缺口，新增消费侧 handoff checklist，并明确 push subscribe、workspace patch producer、capability catalog、GUI smoke owner。 | 只做 SDK 消费侧 gate，不抢 AgentRuntime Rust / TS 修改。 |
-| P18.5 | 内容工厂 SDK 化回归 | 已完成 Lime-side SDK regression、Host Bridge SDK client contract 和 package-side 只读 `npm test`；内容工厂 task / write-back / evidence 可由通用 facade 表达，也可穿过 Host Bridge v1。 | 下一刀等待 package owner 稳定后做 P18.5.3 package-side SDK facade / verify；不复刻内容工厂后端能力。 |
-| P18.6 | Raw worker 前 gate | 已完成：明确 worker sandbox、resource limit、network / secret policy 进入后续 P19，并记录 P18 不执行 raw worker 的证据。 | P18 不执行 raw worker。 |
+| 阶段    | 目标                      | 主要产物                                                                                                                                                                                | 验收                                                                                                 |
+| ------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| P18.0   | v0.4 标准差距收口         | 对齐 `agentapp-ref@0.4.0` Host Bridge v1、SDK typed API、错误码 gap matrix。                                                                                                            | 文档 diff check；不改运行代码。                                                                      |
+| P18.1   | SDK 类型与 schema         | 已完成：`sdk` types、capability invoke envelope、stable error enum、mock host。                                                                                                         | `capabilityContract` + `MockCapabilityHost` SDK contract tests；`typecheck`。                        |
+| P18.2   | Host Bridge router        | 已完成：capability invoke typed envelope、`args` / `input` 兼容、requestId / idempotency / expectedSchema / provenance 透传、stable error response。                                    | bridge router / dispatcher / runtime page tests；未知 capability 不写假成功。                        |
+| P18.3   | Core capability adapters  | 已完成：`lime.ui`、`storage`、`artifacts`、`evidence`、`knowledge`、`tools` typed adapter facade。                                                                                      | adapter contract tests、namespace / provenance tests、typecheck、contracts。                         |
+| P18.4   | App-scoped Agent Task     | 已完成：`lime.agent.startTask` / stream / get / cancel / retry / submitHostResponse / listTasks typed adapter，并覆盖 `task:*`、`artifact:created`、`evidence:*` 事件契约。             | App task adapter contract tests；不回跳通用 Chat；不重复实现 runtime read model。                    |
+| P18.4-H | AgentRuntime handoff gate | 已完成：对齐隔壁 current MVP 与剩余缺口，新增消费侧 handoff checklist，并明确 push subscribe、workspace patch producer、capability catalog、GUI smoke owner。                           | 只做 SDK 消费侧 gate，不抢 AgentRuntime Rust / TS 修改。                                             |
+| P18.5   | 内容工厂 SDK 化回归       | 已完成 Lime-side SDK regression、Host Bridge SDK client contract 和 package-side 只读 `npm test`；内容工厂 task / write-back / evidence 可由通用 facade 表达，也可穿过 Host Bridge v1。 | 下一刀等待 package owner 稳定后做 P18.5.3 package-side SDK facade / verify；不复刻内容工厂后端能力。 |
+| P18.6   | Raw worker 前 gate        | 已完成：明确 worker sandbox、resource limit、network / secret policy 进入后续 P19，并记录 P18 不执行 raw worker 的证据。                                                                | P18 不执行 raw worker。                                                                              |
 
 ## P18.1 实施记录
 
@@ -465,23 +469,23 @@ npm run verify:gui-smoke -- --reuse-running --timeout-ms 300000
 
 ## 风险与应对
 
-| 风险 | 影响 | 应对 |
-|---|---|---|
-| SDK 过厚，变成 Lime internal API 重导出。 | App 绑定内部实现，升级成本高。 | 只暴露 capability facade；禁止 internal import。 |
-| SDK 过薄，App 重复造底座。 | 每个 App 重复做 storage、tool、evidence。 | P18 优先封装高频底座和稳定错误语义。 |
-| Bridge 被当成私有协议滥用。 | 每个 App 自定义 postMessage，无法治理。 | App 作者只调用 SDK；Host Bridge 保持标准 v1 信封。 |
-| Agent task 退化为模型 API。 | 丢失 trace、tool、knowledge、evidence。 | `lime.agent` 必须走 AgentRuntime Surface。 |
-| P18 把 P17.5 证据扩大解释。 | 误以为已可发布 marketplace / Cloud 管理台。 | P17.5 只证明正式入口 smoke；P18 仍按 SDK gate 最小面推进。 |
-| 与隔壁任务改同一文件。 | 冲突或覆盖。 | P18 不改 AgentRuntime Rust 投影和运行中 GUI 验证链路。 |
+| 风险                                      | 影响                                        | 应对                                                       |
+| ----------------------------------------- | ------------------------------------------- | ---------------------------------------------------------- |
+| SDK 过厚，变成 Lime internal API 重导出。 | App 绑定内部实现，升级成本高。              | 只暴露 capability facade；禁止 internal import。           |
+| SDK 过薄，App 重复造底座。                | 每个 App 重复做 storage、tool、evidence。   | P18 优先封装高频底座和稳定错误语义。                       |
+| Bridge 被当成私有协议滥用。               | 每个 App 自定义 postMessage，无法治理。     | App 作者只调用 SDK；Host Bridge 保持标准 v1 信封。         |
+| Agent task 退化为模型 API。               | 丢失 trace、tool、knowledge、evidence。     | `lime.agent` 必须走 AgentRuntime Surface。                 |
+| P18 把 P17.5 证据扩大解释。               | 误以为已可发布 marketplace / Cloud 管理台。 | P17.5 只证明正式入口 smoke；P18 仍按 SDK gate 最小面推进。 |
+| 与隔壁任务改同一文件。                    | 冲突或覆盖。                                | P18 不改 AgentRuntime Rust 投影和运行中 GUI 验证链路。     |
 
 ## 决策点
 
-| 决策点 | 时间 | 判断问题 | Go 条件 | No-Go 动作 |
-|---|---|---|---|---|
-| D17 | P17.5 后 | 正式入口 smoke 是否稳定？ | 已通过：独立 `smoke:agent-apps` 输出 summary。 | 如后续回归失败，不继续扩大 SDK，先修正式入口。 |
-| D18 | P18.2 后 | Host Bridge typed router 是否足够稳定？ | 已通过：source / origin / appId / entryKey / requestId / typed envelope / stable error mapping 均有测试。 | 如回归失败，暂停 capability adapter 扩展，先修 router。 |
-| D19 | P18.4 后 | App-scoped Agent task 是否真正进入 AgentRuntime Surface？ | task / trace / evidence 可追溯，App 内可 stream / cancel / retry / submitHostResponse / write-back，并完成 P18.4-H handoff gate。 | 不开放更多 workflow / worker 能力。 |
-| D20 | P18 完成 | SDK 是否足够支撑更多 Agent App？ | types / schema / mock / contract / GUI smoke 均有证据，且外部 `content-factory-app` 已从手写 bridge wrapper 收敛到标准 SDK facade，并完成 package verify / Lime regression。 | 已满足；进入 owner handoff / 提交边界，不进入 raw worker 或 marketplace。 |
+| 决策点 | 时间     | 判断问题                                                  | Go 条件                                                                                                                                                                      | No-Go 动作                                                                |
+| ------ | -------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| D17    | P17.5 后 | 正式入口 smoke 是否稳定？                                 | 已通过：独立 `smoke:agent-apps` 输出 summary。                                                                                                                               | 如后续回归失败，不继续扩大 SDK，先修正式入口。                            |
+| D18    | P18.2 后 | Host Bridge typed router 是否足够稳定？                   | 已通过：source / origin / appId / entryKey / requestId / typed envelope / stable error mapping 均有测试。                                                                    | 如回归失败，暂停 capability adapter 扩展，先修 router。                   |
+| D19    | P18.4 后 | App-scoped Agent task 是否真正进入 AgentRuntime Surface？ | task / trace / evidence 可追溯，App 内可 stream / cancel / retry / submitHostResponse / write-back，并完成 P18.4-H handoff gate。                                            | 不开放更多 workflow / worker 能力。                                       |
+| D20    | P18 完成 | SDK 是否足够支撑更多 Agent App？                          | types / schema / mock / contract / GUI smoke 均有证据，且外部 `content-factory-app` 已从手写 bridge wrapper 收敛到标准 SDK facade，并完成 package verify / Lime regression。 | 已满足；进入 owner handoff / 提交边界，不进入 raw worker 或 marketplace。 |
 
 ## 下一刀口径
 

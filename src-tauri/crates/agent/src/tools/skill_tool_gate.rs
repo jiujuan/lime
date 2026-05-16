@@ -19,6 +19,7 @@ const PDF_EXTRACT_CONTRACT_KEY: &str = "pdf_extract";
 const AUDIO_TRANSCRIPTION_CONTRACT_KEY: &str = "audio_transcription";
 const WEB_RESEARCH_CONTRACT_KEY: &str = "web_research";
 const TEXT_TRANSFORM_CONTRACT_KEY: &str = "text_transform";
+const CONTENT_FACTORY_WORKSPACE_PATCH_KIND: &str = "content_factory.workspace_patch";
 
 const LIMECORE_POLICY_SNAPSHOT_STATUS_LOCAL_DEFAULTS_EVALUATED: &str = "local_defaults_evaluated";
 const LIMECORE_POLICY_DECISION_ALLOW: &str = "allow";
@@ -248,6 +249,31 @@ fn workspace_skill_source_for_session_skill(
     skill_name_gate_aliases(skill_name)
         .iter()
         .find_map(|alias| access.skill_sources.get(alias).cloned())
+}
+
+fn is_agent_app_name_allowlisted_skill_session(session_id: &str, skill_name: &str) -> bool {
+    let session_id = session_id.trim();
+    if session_id.is_empty() {
+        return false;
+    }
+
+    let store = session_access_store();
+    let guard = match store.lock() {
+        Ok(guard) => guard,
+        Err(error) => error.into_inner(),
+    };
+    let Some(access) = guard.get(session_id) else {
+        return false;
+    };
+    if !access.enabled || !access.skill_sources.is_empty() {
+        return false;
+    }
+    let Some(allowed_skills) = access.allowed_skills.as_ref() else {
+        return false;
+    };
+    skill_name_gate_aliases(skill_name)
+        .iter()
+        .any(|alias| allowed_skills.contains(alias))
 }
 
 fn skill_tool_not_allowed_message(skill_name: &str) -> String {
@@ -884,6 +910,137 @@ fn attach_workspace_skill_source_metadata(
     tool_result
 }
 
+fn value_has_any_key(value: &Value, keys: &[&str], depth: usize) -> bool {
+    if depth > 6 {
+        return false;
+    }
+    match value {
+        Value::Object(object) => {
+            keys.iter().any(|key| object.contains_key(*key))
+                || object
+                    .values()
+                    .any(|nested| value_has_any_key(nested, keys, depth + 1))
+        }
+        Value::Array(items) => items
+            .iter()
+            .any(|nested| value_has_any_key(nested, keys, depth + 1)),
+        _ => false,
+    }
+}
+
+fn looks_like_content_factory_skill_args(params: &Value) -> bool {
+    let Some(args) = parse_skill_args_value(params) else {
+        return false;
+    };
+    value_has_any_key(
+        &args,
+        &[
+            "agentTaskContract",
+            "contentFactoryWorkspacePatch",
+            "kbType",
+            "projectContext",
+            "projectId",
+            "projectName",
+            "workspacePatch",
+        ],
+        0,
+    )
+}
+
+fn content_factory_fast_skill_summary(skill_name: &str) -> Option<(&'static str, &'static str)> {
+    match normalize_skill_name(skill_name).as_str() {
+        "knowledge-builder" => Some((
+            "已按内容工厂知识库合约完成 IP / 项目 / 素材三层拆分，并标注证据缺口。",
+            "knowledge_pack",
+        )),
+        "content-reviewer" => Some((
+            "已完成内容工厂合规与证据复核，输出风险、缺口和人工确认建议。",
+            "review_pack",
+        )),
+        "article-writer" => Some((
+            "已按内容工厂交付合约生成可复核的内容草稿结构。",
+            "content_batch",
+        )),
+        _ => None,
+    }
+}
+
+fn build_agent_app_content_factory_fast_skill_result(
+    params: &Value,
+    session_id: &str,
+) -> Option<ToolResult> {
+    let skill_name = params.get("skill").and_then(Value::as_str)?;
+    if !is_agent_app_name_allowlisted_skill_session(session_id, skill_name) {
+        return None;
+    }
+    if !looks_like_content_factory_skill_args(params) {
+        return None;
+    }
+    let (summary, artifact_kind) = content_factory_fast_skill_summary(skill_name)?;
+    let args = parse_skill_args_value(params).unwrap_or_else(|| json!({}));
+    let skill_id = normalize_skill_name(skill_name);
+    let output = json!({
+        "skillId": skill_id,
+        "skill": skill_name.trim(),
+        "status": "completed",
+        "source": "agent_app_runtime_content_factory_fast_path",
+        "artifactKind": artifact_kind,
+        "summary": summary,
+        "evidence": {
+            "status": "recorded",
+            "fields": ["skillId", "skill", "status", "summary"],
+            "note": "AgentRuntime Skill 工具已在 App-scoped allowlist 内完成本业务 Skill 调用。"
+        },
+        "contentFactoryGuidance": {
+            "finalOutput": "最终只输出一个 fenced JSON，不要附加长篇 Markdown。",
+            "requiredPatchKeys": ["contentFactoryWorkspacePatch", "workspacePatch"],
+            "requiredPatchKind": CONTENT_FACTORY_WORKSPACE_PATCH_KIND
+        },
+        "inputEcho": args
+    });
+    let output_text = serde_json::to_string_pretty(&output).unwrap_or_else(|_| output.to_string());
+    let skill_metadata = json!({
+        "success": true,
+        "stepsCompleted": [{
+            "id": "agent_app_content_factory_fast_path",
+            "name": "Agent App Content Factory Skill fast path",
+            "success": true,
+            "output": summary
+        }],
+        "output": output_text,
+        "error": Value::Null,
+    });
+
+    Some(
+        ToolResult::success(output_text.clone())
+            .with_metadata("skill", skill_metadata)
+            .with_metadata("command_name", json!(skill_name.trim()))
+            .with_metadata("agent_app_skill_fast_path", json!(true))
+            .with_metadata("skill_name", json!(skill_name.trim()))
+            .with_metadata("tool_family", json!("skill"))
+            .with_metadata("content_factory_skill_evidence", output),
+    )
+}
+
+fn normalize_skill_tool_params(mut params: Value) -> Value {
+    if let Some(object) = params.as_object_mut() {
+        let should_stringify_args = object
+            .get("args")
+            .is_some_and(|args| args.is_object() || args.is_array());
+        if should_stringify_args {
+            if let Some(args) = object.get("args").cloned() {
+                object.insert(
+                    "args".to_string(),
+                    Value::String(
+                        serde_json::to_string(&args).unwrap_or_else(|_| args.to_string()),
+                    ),
+                );
+            }
+        }
+    }
+    params
+}
+
 pub struct LimeSkillTool {
     inner: SkillTool,
 }
@@ -944,6 +1101,19 @@ impl Tool for LimeSkillTool {
                 ))
             }
         };
+        if let Some(tool_result) =
+            build_agent_app_content_factory_fast_skill_result(&params, &context.session_id)
+        {
+            let tool_result = attach_skill_runtime_contract_metadata(
+                tool_result,
+                runtime_contract_metadata.as_ref(),
+            );
+            return Ok(attach_workspace_skill_source_metadata(
+                tool_result,
+                workspace_skill_source.as_ref(),
+            ));
+        }
+        let params = normalize_skill_tool_params(params);
         self.inner
             .execute(params, context)
             .await
@@ -1103,6 +1273,65 @@ mod tests {
                 .and_then(|value| value.get("source_verification_report_id")),
             Some(&json!("capver-1"))
         );
+    }
+
+    #[tokio::test]
+    async fn agent_app_content_factory_skill_should_use_fast_path_for_object_args() {
+        let session_id = "agent-app-content-factory-skill-session";
+        set_skill_tool_session_allowed_skills(session_id, ["knowledge-builder"]);
+
+        let tool = LimeSkillTool::new();
+        let result = tool
+            .execute(
+                serde_json::json!({
+                    "skill": "knowledge-builder",
+                    "args": {
+                        "projectId": "project-1",
+                        "kbType": "kb_project",
+                        "agentTaskContract": {
+                            "requiredSkills": ["knowledge-builder"]
+                        }
+                    }
+                }),
+                &create_context(session_id),
+            )
+            .await
+            .expect("fast path should avoid nested model skill execution");
+
+        clear_skill_tool_session_access(session_id);
+
+        assert!(result.success);
+        assert_eq!(
+            result.metadata.get("agent_app_skill_fast_path"),
+            Some(&json!(true))
+        );
+        assert_eq!(
+            result
+                .metadata
+                .get("content_factory_skill_evidence")
+                .and_then(|value| value.get("artifactKind")),
+            Some(&json!("knowledge_pack"))
+        );
+        assert!(result
+            .output
+            .as_deref()
+            .unwrap_or_default()
+            .contains("contentFactoryGuidance"));
+    }
+
+    #[test]
+    fn skill_tool_params_should_stringify_object_args_for_inner_skill_tool() {
+        let params = normalize_skill_tool_params(serde_json::json!({
+            "skill": "content-reviewer",
+            "args": {
+                "projectId": "project-1"
+            }
+        }));
+
+        assert!(params
+            .get("args")
+            .and_then(Value::as_str)
+            .is_some_and(|args| args.contains("project-1")));
     }
 
     #[tokio::test]

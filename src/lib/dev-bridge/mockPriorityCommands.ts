@@ -55,9 +55,6 @@ const mockPriorityCommands = new Set<string>([
   "agent_app_set_disabled",
   "agent_app_uninstall_rehearsal",
   "agent_app_uninstall",
-  "agent_app_start_ui_runtime",
-  "agent_app_get_ui_runtime_status",
-  "agent_app_stop_ui_runtime",
 ]);
 
 /**
@@ -87,6 +84,9 @@ const bridgeTruthCommands = new Set<string>([
   "agent_runtime_promote_queued_turn",
   "agent_runtime_remove_queued_turn",
   "agent_runtime_respond_action",
+  "agent_app_start_ui_runtime",
+  "agent_app_get_ui_runtime_status",
+  "agent_app_stop_ui_runtime",
   "agent_app_runtime_start_task",
   "agent_app_runtime_cancel_task",
   "agent_app_runtime_get_task",

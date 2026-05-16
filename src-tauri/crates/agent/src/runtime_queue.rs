@@ -9,8 +9,9 @@ use crate::{QueuedTurnSnapshot, QueuedTurnTask};
 use aster::session::{
     require_shared_session_runtime_queue_service, QueuedTurnRuntime, RuntimeQueueSubmitResult,
 };
-use futures::future::BoxFuture;
+use futures::future::{BoxFuture, FutureExt};
 use serde_json::Value;
+use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -27,6 +28,16 @@ fn emit_runtime_queue_event(
     event: RuntimeAgentEvent,
 ) {
     emitter(event_name.to_string(), event);
+}
+
+fn runtime_turn_panic_message(error: Box<dyn std::any::Any + Send>) -> String {
+    if let Some(message) = error.downcast_ref::<&str>() {
+        return format!("runtime turn 后台任务 panic: {message}");
+    }
+    if let Some(message) = error.downcast_ref::<String>() {
+        return format!("runtime turn 后台任务 panic: {message}");
+    }
+    "runtime turn 后台任务 panic: unknown panic payload".to_string()
 }
 
 fn spawn_runtime_turn_task<C>(
@@ -68,14 +79,28 @@ fn spawn_runtime_turn_task<C>(
             };
 
             runtime.block_on(async move {
-                let result = executor(context.clone(), payload).await;
-                if let Err(error) = result {
-                    tracing::warn!("[AsterAgent][Queue] 队列任务执行失败: {}", error);
-                    emit_runtime_queue_event(
-                        &emitter_for_thread,
-                        &event_name_for_thread,
-                        RuntimeAgentEvent::Error { message: error },
-                    );
+                let result = AssertUnwindSafe(executor(context.clone(), payload))
+                    .catch_unwind()
+                    .await;
+                match result {
+                    Ok(Ok(())) => {}
+                    Ok(Err(error)) => {
+                        tracing::warn!("[AsterAgent][Queue] 队列任务执行失败: {}", error);
+                        emit_runtime_queue_event(
+                            &emitter_for_thread,
+                            &event_name_for_thread,
+                            RuntimeAgentEvent::Error { message: error },
+                        );
+                    }
+                    Err(error) => {
+                        let message = runtime_turn_panic_message(error);
+                        tracing::error!("[AsterAgent][Queue] {}", message);
+                        emit_runtime_queue_event(
+                            &emitter_for_thread,
+                            &event_name_for_thread,
+                            RuntimeAgentEvent::Error { message },
+                        );
+                    }
                 }
                 if let Err(error) = continue_runtime_queue_after_turn(
                     session_id,
