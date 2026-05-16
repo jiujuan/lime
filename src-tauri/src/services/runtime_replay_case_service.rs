@@ -2994,6 +2994,7 @@ mod tests {
                 position: 1,
             }],
             tool_calls: Vec::new(),
+            artifacts: Vec::new(),
             model_routing: None,
             evidence_summary: Default::default(),
             telemetry_summary: Default::default(),

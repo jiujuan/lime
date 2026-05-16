@@ -430,7 +430,8 @@ describe("AgentAppRuntimePage", () => {
       expect.objectContaining({
         type: "host:response",
         requestId: "req-1",
-        payload: {
+        payload: expect.objectContaining({
+          ok: true,
           result: expect.objectContaining({
             taskId: "agent-app-task-1",
             traceId: "agent-app-trace-1",
@@ -438,7 +439,7 @@ describe("AgentAppRuntimePage", () => {
             taskKind: "content.scenario_planning",
             humanReview: true,
           }),
-        },
+        }),
       }),
       "http://127.0.0.1:4199",
     );
@@ -550,14 +551,15 @@ describe("AgentAppRuntimePage", () => {
       expect.objectContaining({
         type: "host:response",
         requestId: "task-start",
-        payload: {
+        payload: expect.objectContaining({
+          ok: true,
           result: expect.objectContaining({
             taskId: "agent-app-task-1",
             traceId: "agent-app-trace-1",
             status: "running",
             humanReview: true,
           }),
-        },
+        }),
       }),
       "http://127.0.0.1:4199",
     );
@@ -565,11 +567,12 @@ describe("AgentAppRuntimePage", () => {
       expect.objectContaining({
         type: "host:response",
         requestId: "task-stream",
-        payload: {
+        payload: expect.objectContaining({
+          ok: true,
           result: [
             expect.objectContaining({ type: "task:progress", status: "running" }),
           ],
-        },
+        }),
       }),
       "http://127.0.0.1:4199",
     );
@@ -577,14 +580,15 @@ describe("AgentAppRuntimePage", () => {
       expect.objectContaining({
         type: "host:response",
         requestId: "task-get",
-        payload: {
+        payload: expect.objectContaining({
+          ok: true,
           result: expect.objectContaining({
             taskId: "agent-app-task-1",
             traceId: "agent-app-trace-1",
             status: "running",
             taskKind: "content.scenario_planning",
           }),
-        },
+        }),
       }),
       "http://127.0.0.1:4199",
     );
@@ -592,14 +596,15 @@ describe("AgentAppRuntimePage", () => {
       expect.objectContaining({
         type: "host:response",
         requestId: "task-host-response",
-        payload: {
+        payload: expect.objectContaining({
+          ok: true,
           result: {
             taskId: "agent-app-task-1",
             requestId: "runtime-request-1",
             status: "submitted",
             submittedAt: expect.any(String),
           },
-        },
+        }),
       }),
       "http://127.0.0.1:4199",
     );
@@ -607,7 +612,8 @@ describe("AgentAppRuntimePage", () => {
       expect.objectContaining({
         type: "host:response",
         requestId: "task-cancel",
-        payload: {
+        payload: expect.objectContaining({
+          ok: true,
           result: expect.objectContaining({
             taskId: "agent-app-task-1",
             status: "cancelled",
@@ -615,7 +621,7 @@ describe("AgentAppRuntimePage", () => {
               expect.objectContaining({ type: "task:cancelled" }),
             ]),
           }),
-        },
+        }),
       }),
       "http://127.0.0.1:4199",
     );
@@ -623,7 +629,8 @@ describe("AgentAppRuntimePage", () => {
       expect.objectContaining({
         type: "host:response",
         requestId: "task-retry",
-        payload: {
+        payload: expect.objectContaining({
+          ok: true,
           result: expect.objectContaining({
             taskId: "agent-app-task-2",
             traceId: "agent-app-trace-2",
@@ -632,7 +639,7 @@ describe("AgentAppRuntimePage", () => {
             status: "running",
             humanReview: true,
           }),
-        },
+        }),
       }),
       "http://127.0.0.1:4199",
     );
@@ -730,12 +737,13 @@ describe("AgentAppRuntimePage", () => {
       expect.objectContaining({
         type: "host:response",
         requestId: "artifact-ok",
-        payload: {
+        payload: expect.objectContaining({
+          ok: true,
           result: expect.objectContaining({
             kind: "content_table",
             title: "内容表",
           }),
-        },
+        }),
       }),
       "http://127.0.0.1:4199",
     );
@@ -743,12 +751,13 @@ describe("AgentAppRuntimePage", () => {
       expect.objectContaining({
         type: "host:response",
         requestId: "evidence-ok",
-        payload: {
+        payload: expect.objectContaining({
+          ok: true,
           result: expect.objectContaining({
             kind: "fact_grounding",
             refs: ["adapter-artifact-1"],
           }),
-        },
+        }),
       }),
       "http://127.0.0.1:4199",
     );
@@ -757,7 +766,15 @@ describe("AgentAppRuntimePage", () => {
         type: "host:error",
         requestId: "artifact-blocked",
         payload: expect.objectContaining({
-          code: "WRITEBACK_NOT_DECLARED",
+          ok: false,
+          code: "upstream_failed",
+          causeCode: "WRITEBACK_NOT_DECLARED",
+          error: expect.objectContaining({
+            code: "upstream_failed",
+            causeCode: "WRITEBACK_NOT_DECLARED",
+            capability: "lime.artifacts",
+            method: "create",
+          }),
         }),
       }),
       "http://127.0.0.1:4199",
@@ -767,7 +784,15 @@ describe("AgentAppRuntimePage", () => {
         type: "host:error",
         requestId: "evidence-blocked",
         payload: expect.objectContaining({
-          code: "WRITEBACK_NOT_DECLARED",
+          ok: false,
+          code: "upstream_failed",
+          causeCode: "WRITEBACK_NOT_DECLARED",
+          error: expect.objectContaining({
+            code: "upstream_failed",
+            causeCode: "WRITEBACK_NOT_DECLARED",
+            capability: "lime.evidence",
+            method: "record",
+          }),
         }),
       }),
       "http://127.0.0.1:4199",

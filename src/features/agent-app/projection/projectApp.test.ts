@@ -41,6 +41,10 @@ describe("Agent App projection P0", () => {
     ]);
     expect(projection.artifactTypes.map((artifact) => artifact.key)).toEqual([
       "content_table",
+      "scene_table",
+      "content_batch",
+      "script_batch",
+      "prompt_batch",
     ]);
     expect(projection.services.map((service) => service.key)).toEqual([
       "content_worker",
@@ -54,9 +58,23 @@ describe("Agent App projection P0", () => {
     expect(projection.toolRequirements.map((tool) => tool.key)).toEqual([
       "document_parser",
       "competitor_research",
+      "creative_capability_search",
+    ]);
+    expect(
+      projection.toolRequirements.find(
+        (tool) => tool.key === "creative_capability_search",
+      )?.capabilities,
+    ).toEqual([
+      "lime.capability.image.generate",
+      "lime.capability.cover.generate",
+      "lime.capability.research.search",
+      "lime.capability.report.generate",
+      "lime.capability.pdf.read",
+      "lime.capability.summary.generate",
     ]);
     expect(projection.evals.map((evalRule) => evalRule.key)).toEqual([
       "fact_grounding",
+      "publish_readiness",
     ]);
     expect(projection.secrets.map((secret) => secret.key)).toEqual([
       "publishing_workspace_token",

@@ -82,12 +82,19 @@ interface RuntimeTaskState {
   retryAttempt?: number;
 }
 
+const RUNTIME_TASK_STORAGE_PREFIX = "agent-runtime/tasks/";
+
 type RuntimeAgentTaskRequest = AgentAppTaskRequest & {
   requiredCapabilities?: string[];
   capabilityHints?: string[];
   metadata?: Record<string, unknown>;
   sessionId?: string;
   workspaceId?: string;
+  providerPreference?: string;
+  modelPreference?: string;
+  queueIfBusy?: boolean;
+  skipPreSubmitResume?: boolean;
+  runStartHooks?: boolean;
 };
 
 const defaultRuntimeApi: AgentAppRuntimeCapabilityApi = {
@@ -104,6 +111,39 @@ function normalizeString(value: string | undefined): string | undefined {
 
 function normalizeList(values: string[] | undefined): string[] {
   return (values ?? []).map((value) => value.trim()).filter(Boolean);
+}
+
+function runtimeTaskStorageKey(taskId: string): string {
+  return `${RUNTIME_TASK_STORAGE_PREFIX}${taskId}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isRuntimeTaskState(value: unknown): value is RuntimeTaskState {
+  return (
+    isRecord(value) &&
+    typeof value.appId === "string" &&
+    typeof value.appVersion === "string" &&
+    typeof value.packageHash === "string" &&
+    typeof value.manifestHash === "string" &&
+    typeof value.taskId === "string" &&
+    typeof value.traceId === "string" &&
+    typeof value.sessionId === "string" &&
+    typeof value.turnId === "string" &&
+    typeof value.workspaceId === "string" &&
+    typeof value.taskKind === "string" &&
+    typeof value.startedAt === "string" &&
+    isRecord(value.request)
+  );
+}
+
+function readPersistedRuntimeTaskState(value: unknown): RuntimeTaskState | null {
+  if (isRecord(value) && isRuntimeTaskState(value.state)) {
+    return value.state;
+  }
+  return isRuntimeTaskState(value) ? value : null;
 }
 
 function mapRuntimeTaskStatus(status: string | undefined): AgentAppTaskStatus {
@@ -148,6 +188,7 @@ function mapRuntimeEventType(eventType: string): AgentAppTaskEventType {
     eventType === "task:cancelled" ||
     eventType === "task:completed" ||
     eventType === "task:incident" ||
+    eventType === "artifact:created" ||
     eventType === "evidence:recorded" ||
     eventType === "evidence:verified"
   ) {
@@ -192,18 +233,104 @@ function mapRuntimeEvent(
   if (event.evidenceRef) {
     streamEvent.refs = [event.evidenceRef];
   }
+  if (event.artifactRef) {
+    streamEvent.refs = [...(streamEvent.refs ?? []), event.artifactRef];
+  }
   return streamEvent;
+}
+
+function readRecordString(
+  value: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const item = value[key];
+  return typeof item === "string" && item.trim() ? item.trim() : undefined;
+}
+
+function readThreadReadArtifacts(threadRead: unknown): Record<string, unknown>[] {
+  if (!isRecord(threadRead) || !Array.isArray(threadRead.artifacts)) {
+    return [];
+  }
+  return threadRead.artifacts.filter(isRecord);
+}
+
+function buildRuntimeArtifactReplayEvents(
+  state: RuntimeTaskState,
+  threadRead: unknown,
+  existingEvents: AgentAppTaskStreamEvent[],
+): AgentAppTaskStreamEvent[] {
+  const artifacts = readThreadReadArtifacts(threadRead);
+  if (!artifacts.length) {
+    return [];
+  }
+  const existingArtifactRefs = new Set(
+    existingEvents.flatMap((event) => event.refs ?? []),
+  );
+  return artifacts.flatMap((artifact, index) => {
+    const artifactRef =
+      readRecordString(artifact, "path") ??
+      readRecordString(artifact, "item_id") ??
+      readRecordString(artifact, "id") ??
+      `artifact:${index + 1}`;
+    if (existingArtifactRefs.has(artifactRef)) {
+      return [];
+    }
+    const metadata = isRecord(artifact.metadata) ? artifact.metadata : {};
+    const artifactDocument =
+      isRecord(metadata.artifactDocument) || isRecord(metadata.artifact_document)
+        ? metadata.artifactDocument ?? metadata.artifact_document
+        : undefined;
+    const workspacePatch =
+      isRecord(metadata.workspacePatch) || isRecord(metadata.contentFactoryWorkspacePatch)
+        ? metadata.workspacePatch ?? metadata.contentFactoryWorkspacePatch
+        : undefined;
+    return [
+      {
+        eventId: `${state.taskId}:artifact:${artifactRef}`,
+        taskId: state.taskId,
+        traceId: state.traceId,
+        type: "artifact:created" as const,
+        status: "succeeded" as const,
+        at:
+          readRecordString(artifact, "completed_at") ??
+          readRecordString(artifact, "updated_at") ??
+          readRecordString(artifact, "created_at") ??
+          state.startedAt,
+        message:
+          readRecordString(artifact, "title") ??
+          readRecordString(artifact, "artifact_type") ??
+          "Artifact 已创建",
+        refs: [artifactRef],
+        payload: {
+          artifact,
+          artifactDocument,
+          workspacePatch,
+          contentFactoryWorkspacePatch: workspacePatch,
+        },
+      },
+    ];
+  });
 }
 
 function buildTaskRecord(
   state: RuntimeTaskState,
   snapshot?: AgentAppRuntimeTaskSnapshot,
 ): AgentAppTaskRecord {
-  const events = snapshot?.taskEvents.length
+  const runtimeEvents = snapshot?.taskEvents.length
     ? snapshot.taskEvents.map((event, index) =>
         mapRuntimeEvent(state, event, index),
       )
     : [buildStartEvent(state)];
+  const events = snapshot
+    ? [
+        ...runtimeEvents,
+        ...buildRuntimeArtifactReplayEvents(
+          state,
+          snapshot.threadRead,
+          runtimeEvents,
+        ),
+      ]
+    : runtimeEvents;
   const status = snapshot
     ? mapRuntimeTaskStatus(snapshot.taskStatus)
     : "running";
@@ -328,7 +455,14 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
   }
 
   getTasks(query?: AgentAppProvenanceQuery): AgentAppTaskRecord[] {
-    const runtimeTasks = Array.from(this.tasks.values())
+    const runtimeStates = new Map<string, RuntimeTaskState>();
+    for (const task of this.listPersistedRuntimeTaskStates(query)) {
+      runtimeStates.set(task.taskId, task);
+    }
+    for (const task of this.tasks.values()) {
+      runtimeStates.set(task.taskId, task);
+    }
+    const runtimeTasks = Array.from(runtimeStates.values())
       .filter((task) => !query?.appId || task.appId === query.appId)
       .map((task) => buildTaskRecord(task));
     return [...this.delegate.getTasks(query), ...runtimeTasks];
@@ -396,6 +530,11 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
       capabilityHints,
       knowledgeBindings: runtimeRequest.knowledge,
       humanReview: runtimeRequest.humanReview,
+      providerPreference: runtimeRequest.providerPreference,
+      modelPreference: runtimeRequest.modelPreference,
+      queueIfBusy: runtimeRequest.queueIfBusy,
+      skipPreSubmitResume: runtimeRequest.skipPreSubmitResume,
+      runStartHooks: runtimeRequest.runStartHooks,
       metadata: {
         ...(runtimeRequest.metadata ?? {}),
         agent_app_host_bridge: {
@@ -427,13 +566,15 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
       retryAttempt: retry?.retryAttempt,
     };
     this.tasks.set(state.taskId, state);
+    await this.persistRuntimeTaskState(state);
     return buildTaskRecord(state);
   }
 
   private async getRuntimeTask(
     taskId: string,
   ): Promise<AgentAppTaskRecord | null> {
-    const state = this.tasks.get(taskId);
+    const state =
+      this.tasks.get(taskId) ?? this.loadPersistedRuntimeTaskState(taskId);
     if (!state) {
       return null;
     }
@@ -446,7 +587,7 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
   }
 
   private async cancelRuntimeTask(taskId: string): Promise<AgentAppTaskRecord> {
-    const state = this.requireTask(taskId);
+    const state = await this.requireTask(taskId);
     await this.api.cancelTask({
       appId: state.appId,
       taskId: state.taskId,
@@ -477,7 +618,7 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
     entryKey: string,
     taskId: string,
   ): Promise<AgentAppTaskRecord> {
-    const source = this.requireTask(taskId);
+    const source = await this.requireTask(taskId);
     const retryAttempt = (source.retryAttempt ?? 0) + 1;
     return this.startRuntimeTask(
       entryKey,
@@ -493,7 +634,7 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
   private async submitRuntimeHostResponse(
     input: AgentAppTaskHostResponseRequest,
   ): Promise<AgentAppTaskHostResponseResult> {
-    const state = this.requireTask(input.taskId);
+    const state = await this.requireTask(input.taskId);
     const actionScope: NonNullable<
       AgentRuntimeRespondActionRequest["action_scope"]
     > = {
@@ -541,8 +682,54 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
     };
   }
 
-  private requireTask(taskId: string): RuntimeTaskState {
-    const state = this.tasks.get(taskId);
+  private async persistRuntimeTaskState(state: RuntimeTaskState): Promise<void> {
+    try {
+      const sdk = this.delegate.createSdkContext(state.entryKey ?? state.appId);
+      await sdk.storage.set(runtimeTaskStorageKey(state.taskId), {
+        schemaVersion: 1,
+        state,
+      });
+    } catch (error) {
+      console.warn("Agent App runtime task state persistence skipped", error);
+    }
+  }
+
+  private listPersistedRuntimeTaskStates(
+    query?: AgentAppProvenanceQuery,
+  ): RuntimeTaskState[] {
+    return this.delegate
+      .getStorageEntries({ appId: query?.appId ?? this.appId })
+      .filter((entry) => entry.key.startsWith(RUNTIME_TASK_STORAGE_PREFIX))
+      .map((entry) => readPersistedRuntimeTaskState(entry.value))
+      .filter((state): state is RuntimeTaskState => {
+        if (!state) {
+          return false;
+        }
+        if (query?.appId && state.appId !== query.appId) {
+          return false;
+        }
+        if (query?.entryKey && state.entryKey !== query.entryKey) {
+          return false;
+        }
+        return true;
+      });
+  }
+
+  private loadPersistedRuntimeTaskState(taskId: string): RuntimeTaskState | null {
+    const entry = this.delegate
+      .getStorageEntries({ appId: this.appId })
+      .find((item) => item.key === runtimeTaskStorageKey(taskId));
+    const state = readPersistedRuntimeTaskState(entry?.value);
+    if (state) {
+      this.tasks.set(state.taskId, state);
+      return state;
+    }
+    return null;
+  }
+
+  private async requireTask(taskId: string): Promise<RuntimeTaskState> {
+    const state =
+      this.tasks.get(taskId) ?? this.loadPersistedRuntimeTaskState(taskId);
     if (state) {
       return state;
     }

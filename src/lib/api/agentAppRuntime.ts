@@ -26,6 +26,8 @@ export interface AgentAppRuntimeStartTaskRequest {
   humanReview?: boolean;
   eventName?: string;
   turnId?: string;
+  providerPreference?: string;
+  modelPreference?: string;
   queueIfBusy?: boolean;
   skipPreSubmitResume?: boolean;
   runStartHooks?: boolean;
@@ -76,6 +78,7 @@ export interface AgentAppRuntimeTaskEvent {
   requestId?: string;
   toolName?: string;
   evidenceRef?: string;
+  artifactRef?: string;
   occurredAt?: string;
   payload?: unknown;
 }

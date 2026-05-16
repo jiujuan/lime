@@ -21,6 +21,7 @@
 - [./architecture.md](./architecture.md)：分层、事实源、接口与 profile 映射
 - [./adjacent-protocols.md](./adjacent-protocols.md)：`agentcontext`、`agentevidence`、`agentpolicy`、`agentui` 的 owner 边界与连接合同
 - [./app-surface-runtime.md](./app-surface-runtime.md)：Agent App 如何作为业务 surface 复用 AgentRuntime / Claw 主链
+- [./agent-app-runtime-completion-audit.md](./agent-app-runtime-completion-audit.md)：Agent App Runtime / 内容工厂闭环的完成审计、证据和剩余缺口
 - [./claw-capability-sharing.md](./claw-capability-sharing.md)：Claw `@` 能力如何抽象为 Chat、Agent App、Automation 可共享 capability
 - [./backend-surface-facade-plan.md](./backend-surface-facade-plan.md)：Agent App runtime command 与共享后端 surface facade 计划
 - [./diagrams.md](./diagrams.md)：架构图、流程图、时序图
@@ -104,7 +105,7 @@ Objective / User Input
 3. `agent_runtime_export_evidence_pack` 及其 replay / analysis / review 派生物。
 4. `TaskProfile / RoutingDecision / LimitState` 已接入的模型路由事实。
 5. Workspace / Harness GUI 对 runtime read model 的只读投影。
-6. Agent App Runtime Surface 作为新调用面，委托 AgentRuntime 主链执行 App-scoped task；`AgentAppRuntimePage` 的 Host Bridge `lime.agent` 已接入 `agent_app_runtime_*` facade，并支持 App 内响应 ask / elicitation / tool confirmation。
+6. Agent App Runtime Surface 作为新调用面，委托 AgentRuntime 主链执行 App-scoped task；`AgentAppRuntimePage` 的 Host Bridge `lime.agent` 已接入 `agent_app_runtime_*` facade，并支持 App 内响应 ask / elicitation / tool confirmation。Host Bridge 已支持 task subscription first-cut，通过 `capability:subscribe / capability:event` 把 Host 侧 `getTask` 轮询结果推回 App iframe；订阅时也会监听 `agent_app_runtime:{appId}:{taskId}` Tauri / DevBridge runtime event，把后端 runtime event 直接转发给 App。AgentRuntime profile event 生成处现在会在同名 event bus 主动追加 `agent_app_runtime:profileProjection` payload，把 `turn.* / tool.* / action.* / routing.* / model.*` 转成 App canonical `taskEvents`；高价值 `RuntimeAgentEvent` 也会追加 `agent_app_runtime:runtimeEventProjection`，其中 artifact 事件可直接携带 `workspacePatch / contentFactoryWorkspacePatch`，runtime event / timeline metadata 中显式存在的 `evidenceRefs / verificationOutcomes` 也会被主动投影为 `evidence:recorded / evidence:verified`；Evidence Pack / analysis / review / save review 导出成功后也会按 Agent App scope 主动 emit `agent_app_runtime:harnessExportProjection`，把导出 root、制品和 completion audit completed 事实投影为 App task events；成功终态如果暂未带 workspace patch，则继续短轮询 replay 最终 artifact。`AgentRuntimeCapabilityHost` 也会从 `threadRead.artifacts` 补投 `artifact:created` payload。Host dispatcher 已补 high-level manifest capability gate，未声明 `lime.agent` 等 Host capability 会被拒绝；Claw capability hint 还会校验 manifest `toolRefs[].capabilities` allowlist，避免 App 只声明一个 catalog key 后任意启动 Claw 能力。内容工厂实际 App 已把主生产结果和确认链结果写回 `lime.storage / lime.artifacts / lime.evidence`；AgentRuntime 原生 `FileArtifact` 已投影为 `artifact:created`，runtime task state 也已通过 Agent App storage 做跨刷新恢复第一刀；内容工厂 task 已在 runtime message 与 `harness.agent_app_runtime_output_contract` 写明 `contentFactoryWorkspacePatch / workspacePatch` producer contract，真实宿主 iframe 已验证最终 patch 可物化到 App 页面；多个 capability hint 会被投影到 `harness.agent_app_runtime_capability_workflow`，复合 output contract 任务保持 `metadata_only`，不强行启动单一 Claw Skill。
 7. Claw Capability Catalog 作为已实现 `@` 能力的复用索引，后续供 Chat、Agent App、Automation 共用。
 
 ### compat

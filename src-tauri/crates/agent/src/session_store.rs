@@ -1007,6 +1007,35 @@ pub fn create_session_sync(
     Ok(session.id)
 }
 
+/// 使用指定 ID 创建新会话。
+///
+/// 仅供内部运行时为非用户可见的辅助会话保留稳定前缀，普通入口应继续使用
+/// `create_session_sync` 生成随机会话 ID。
+pub fn create_session_with_id_sync(
+    db: &DbConnection,
+    session_id: String,
+    name: Option<String>,
+    working_dir: Option<String>,
+    workspace_id: String,
+    execution_strategy: Option<String>,
+) -> Result<String, String> {
+    let session_id = normalize_optional_text(Some(session_id))
+        .ok_or_else(|| "session_id 不能为空".to_string())?;
+    let session = create_session_record_sync(
+        db,
+        CreateSessionRecordInput {
+            session_id: Some(session_id),
+            title: Some(normalize_optional_text(name).unwrap_or_else(|| "新对话".to_string())),
+            working_dir,
+            workspace_id: Some(workspace_id),
+            execution_strategy,
+            ..CreateSessionRecordInput::default()
+        },
+    )?;
+
+    Ok(session.id)
+}
+
 /// 列出所有会话
 pub fn list_sessions_sync(
     db: &DbConnection,

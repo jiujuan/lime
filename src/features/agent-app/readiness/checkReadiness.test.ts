@@ -29,7 +29,12 @@ const resolvedSetup: AgentAppSetupState = {
     document_parser: true,
     competitor_research: true,
   },
-  artifactTypes: { content_table: true },
+  artifactTypes: {
+    content_table: true,
+    scene_table: true,
+    content_batch: true,
+    script_batch: true,
+  },
   evals: { fact_grounding: true },
   secrets: { publishing_workspace_token: true },
   overlays: { workspace_content_rules: true },

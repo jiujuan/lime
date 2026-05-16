@@ -783,6 +783,14 @@ struct RuntimeExportContext {
     workspace_root: PathBuf,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AgentAppRuntimeExportProjectionScope {
+    app_id: String,
+    task_id: String,
+    trace_id: Option<String>,
+    task_kind: Option<String>,
+}
+
 async fn load_runtime_export_context(
     runtime: &RuntimeCommandContext,
     session_id: &str,
@@ -813,6 +821,309 @@ async fn load_runtime_export_context(
         thread_read,
         workspace_root,
     })
+}
+
+fn normalize_agent_app_projection_text(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn agent_app_runtime_export_event_name(scope: &AgentAppRuntimeExportProjectionScope) -> String {
+    format!("agent_app_runtime:{}:{}", scope.app_id, scope.task_id)
+}
+
+fn agent_app_runtime_export_scope_from_runtime_summary_value(
+    summary: Option<&Value>,
+) -> Option<AgentAppRuntimeExportProjectionScope> {
+    let summary = summary?;
+    let surface = json_string_field(summary, &["surface"])?;
+    if surface != "agent_app" {
+        return None;
+    }
+
+    Some(AgentAppRuntimeExportProjectionScope {
+        app_id: json_string_field(summary, &["appId", "app_id"])?,
+        task_id: json_string_field(summary, &["taskId", "task_id"])?,
+        trace_id: json_string_field(summary, &["traceId", "trace_id"]),
+        task_kind: json_string_field(summary, &["taskKind", "task_kind"]),
+    })
+}
+
+fn agent_app_runtime_export_scope_from_execution_runtime(
+    runtime: Option<&lime_agent::SessionExecutionRuntime>,
+) -> Option<AgentAppRuntimeExportProjectionScope> {
+    let summary = runtime?.runtime_summary.as_ref()?;
+    if summary.surface.as_deref().map(str::trim) != Some("agent_app") {
+        return None;
+    }
+
+    Some(AgentAppRuntimeExportProjectionScope {
+        app_id: normalize_agent_app_projection_text(summary.app_id.as_deref())?,
+        task_id: normalize_agent_app_projection_text(summary.task_id.as_deref())?,
+        trace_id: normalize_agent_app_projection_text(summary.trace_id.as_deref()),
+        task_kind: normalize_agent_app_projection_text(summary.task_kind.as_deref()),
+    })
+}
+
+fn resolve_agent_app_runtime_export_projection_scope(
+    detail: &SessionDetail,
+    thread_read: &AgentRuntimeThreadReadModel,
+) -> Option<AgentAppRuntimeExportProjectionScope> {
+    agent_app_runtime_export_scope_from_runtime_summary_value(thread_read.runtime_summary.as_ref())
+        .or_else(|| {
+            agent_app_runtime_export_scope_from_execution_runtime(detail.execution_runtime.as_ref())
+        })
+}
+
+fn json_array_field<'a>(value: &'a Value, keys: &[&str]) -> Option<&'a Vec<Value>> {
+    keys.iter().find_map(|key| value.get(*key)?.as_array())
+}
+
+fn harness_export_kind_label(export_kind: &str) -> &'static str {
+    match export_kind {
+        "evidence_pack" => "Evidence Pack",
+        "analysis_handoff" => "Analysis Handoff",
+        "review_decision" => "Review Decision",
+        _ => "Harness Export",
+    }
+}
+
+fn harness_export_root_ref(export_kind: &str, export: &Value) -> Option<String> {
+    match export_kind {
+        "evidence_pack" => json_string_field(export, &["packRelativeRoot", "pack_relative_root"]),
+        "analysis_handoff" => {
+            json_string_field(export, &["analysisRelativeRoot", "analysis_relative_root"])
+        }
+        "review_decision" => {
+            json_string_field(export, &["reviewRelativeRoot", "review_relative_root"])
+        }
+        _ => None,
+    }
+}
+
+fn harness_exported_at(export: &Value) -> Option<String> {
+    json_string_field(export, &["exportedAt", "exported_at"])
+}
+
+fn build_harness_export_root_task_event(export_kind: &str, export: &Value) -> Option<Value> {
+    let root_ref = harness_export_root_ref(export_kind, export)?;
+    let label = harness_export_kind_label(export_kind);
+    let mut task_event = serde_json::Map::new();
+    task_event.insert(
+        "id".to_string(),
+        json!(format!("harness:{export_kind}:exported")),
+    );
+    task_event.insert(
+        "eventType".to_string(),
+        json!(if export_kind == "evidence_pack" {
+            "evidence:recorded"
+        } else {
+            "artifact:created"
+        }),
+    );
+    task_event.insert(
+        "status".to_string(),
+        json!(if export_kind == "evidence_pack" {
+            "recorded"
+        } else {
+            "created"
+        }),
+    );
+    task_event.insert("message".to_string(), json!(format!("{label} 已导出")));
+    task_event.insert("occurredAt".to_string(), json!(harness_exported_at(export)));
+    task_event.insert(
+        "payload".to_string(),
+        json!({
+            "exportKind": export_kind,
+            "rootRef": root_ref.clone(),
+            "export": export,
+        }),
+    );
+    if export_kind == "evidence_pack" {
+        task_event.insert("evidenceRef".to_string(), json!(root_ref));
+    } else {
+        task_event.insert("artifactRef".to_string(), json!(root_ref));
+    }
+    Some(Value::Object(task_event))
+}
+
+fn build_harness_export_artifact_task_event(
+    export_kind: &str,
+    source_key: &str,
+    index: usize,
+    artifact: &Value,
+) -> Option<Value> {
+    let artifact_ref = json_string_field(artifact, &["relativePath", "relative_path"])?;
+    let label = harness_export_kind_label(export_kind);
+    let mut task_event = serde_json::Map::new();
+    task_event.insert(
+        "id".to_string(),
+        json!(format!("harness:{export_kind}:{source_key}:{index}")),
+    );
+    task_event.insert("eventType".to_string(), json!("artifact:created"));
+    task_event.insert("status".to_string(), json!("created"));
+    task_event.insert("message".to_string(), json!(format!("{label} 制品已导出")));
+    task_event.insert("artifactRef".to_string(), json!(artifact_ref));
+    task_event.insert(
+        "payload".to_string(),
+        json!({
+            "exportKind": export_kind,
+            "source": source_key,
+            "artifact": artifact,
+        }),
+    );
+    Some(Value::Object(task_event))
+}
+
+fn build_harness_export_completion_verified_event(
+    export_kind: &str,
+    export: &Value,
+) -> Option<Value> {
+    if export_kind != "evidence_pack" {
+        return None;
+    }
+    let completion_audit_summary = export
+        .get("completionAuditSummary")
+        .or_else(|| export.get("completion_audit_summary"))?;
+    let decision = json_string_field(completion_audit_summary, &["decision"])?;
+    if decision != "completed" {
+        return None;
+    }
+
+    let evidence_ref = harness_export_root_ref(export_kind, export);
+    let mut task_event = serde_json::Map::new();
+    task_event.insert(
+        "id".to_string(),
+        json!("harness:evidence_pack:completion_audit"),
+    );
+    task_event.insert("eventType".to_string(), json!("evidence:verified"));
+    task_event.insert("status".to_string(), json!(decision));
+    task_event.insert("message".to_string(), json!("Evidence Pack 完成审计已通过"));
+    task_event.insert("occurredAt".to_string(), json!(harness_exported_at(export)));
+    task_event.insert(
+        "payload".to_string(),
+        json!({
+            "exportKind": export_kind,
+            "completionAuditSummary": completion_audit_summary,
+        }),
+    );
+    if let Some(evidence_ref) = evidence_ref {
+        task_event.insert("evidenceRef".to_string(), json!(evidence_ref));
+    }
+    Some(Value::Object(task_event))
+}
+
+fn build_harness_export_task_events(export_kind: &str, export: &Value) -> Vec<Value> {
+    let mut task_events = Vec::new();
+    if let Some(task_event) = build_harness_export_root_task_event(export_kind, export) {
+        task_events.push(task_event);
+    }
+    if let Some(artifacts) = json_array_field(export, &["artifacts"]) {
+        for (index, artifact) in artifacts.iter().enumerate() {
+            if let Some(task_event) =
+                build_harness_export_artifact_task_event(export_kind, "artifacts", index, artifact)
+            {
+                task_events.push(task_event);
+            }
+        }
+    }
+    if let Some(artifacts) = json_array_field(export, &["analysisArtifacts", "analysis_artifacts"])
+    {
+        for (index, artifact) in artifacts.iter().enumerate() {
+            if let Some(task_event) = build_harness_export_artifact_task_event(
+                export_kind,
+                "analysisArtifacts",
+                index,
+                artifact,
+            ) {
+                task_events.push(task_event);
+            }
+        }
+    }
+    if let Some(task_event) = build_harness_export_completion_verified_event(export_kind, export) {
+        task_events.push(task_event);
+    }
+    task_events
+}
+
+fn build_agent_app_runtime_harness_export_projection_payload(
+    detail: &SessionDetail,
+    thread_read: &AgentRuntimeThreadReadModel,
+    export_kind: &str,
+    export: &Value,
+) -> Option<Value> {
+    let scope = resolve_agent_app_runtime_export_projection_scope(detail, thread_read)?;
+    let task_events = build_harness_export_task_events(export_kind, export);
+    if task_events.is_empty() {
+        return None;
+    }
+    let runtime_event_name = agent_app_runtime_export_event_name(&scope);
+    let status = task_events
+        .first()
+        .and_then(|event| event.get("status").and_then(Value::as_str))
+        .unwrap_or("created")
+        .to_string();
+
+    Some(json!({
+        "type": "agent_app_runtime:harnessExportProjection",
+        "eventType": "task:runtimeEvent",
+        "appId": scope.app_id,
+        "taskId": scope.task_id,
+        "traceId": scope.trace_id,
+        "taskKind": scope.task_kind,
+        "sessionId": detail.id.clone(),
+        "threadId": detail.thread_id.clone(),
+        "status": status,
+        "exportKind": export_kind,
+        "harnessExport": export,
+        "runtimeEvent": {
+            "type": "harnessExport",
+            "exportKind": export_kind,
+            "result": export,
+        },
+        "taskEvents": task_events,
+        "runtimeEventName": runtime_event_name,
+        "emittedAt": chrono::Utc::now().to_rfc3339(),
+    }))
+}
+
+fn emit_agent_app_runtime_harness_export_projection<T: serde::Serialize>(
+    app: &AppHandle,
+    context: &RuntimeExportContext,
+    export_kind: &str,
+    export: &T,
+) {
+    let Ok(export_value) = serde_json::to_value(export) else {
+        tracing::warn!(
+            "[AsterAgent][AgentAppRuntime] 序列化 Harness export projection 失败: export_kind={}",
+            export_kind
+        );
+        return;
+    };
+    let Some(scope) =
+        resolve_agent_app_runtime_export_projection_scope(&context.detail, &context.thread_read)
+    else {
+        return;
+    };
+    let Some(payload) = build_agent_app_runtime_harness_export_projection_payload(
+        &context.detail,
+        &context.thread_read,
+        export_kind,
+        &export_value,
+    ) else {
+        return;
+    };
+    let event_name = agent_app_runtime_export_event_name(&scope);
+    if let Err(error) = app.emit(&event_name, payload) {
+        tracing::warn!(
+            "[AsterAgent][AgentAppRuntime] 发送 Harness export projection 失败: event_name={}, export_kind={}, error={}",
+            event_name,
+            export_kind,
+            error
+        );
+    }
 }
 
 /// 统一运行时：导出当前会话的交接制品 bundle。
@@ -862,6 +1173,7 @@ pub async fn agent_runtime_export_evidence_pack(
     automation_state: State<'_, AutomationServiceState>,
     session_id: String,
 ) -> Result<RuntimeEvidencePackExportResult, String> {
+    let app_for_projection = app.clone();
     let db_handle = db.inner().clone();
     let evidence_locale = config_manager.0.config().language;
     let runtime = build_runtime_command_context(
@@ -883,13 +1195,20 @@ pub async fn agent_runtime_export_evidence_pack(
             .map_err(|error| format!("查询 evidence pack owner runs 失败: {error}"))?
     };
 
-    export_runtime_evidence_pack_with_owner_runs_and_locale(
+    let export = export_runtime_evidence_pack_with_owner_runs_and_locale(
         &context.detail,
         &context.thread_read,
         &context.workspace_root,
         &owner_runs,
         Some(evidence_locale.as_str()),
-    )
+    )?;
+    emit_agent_app_runtime_harness_export_projection(
+        &app_for_projection,
+        &context,
+        "evidence_pack",
+        &export,
+    );
+    Ok(export)
 }
 
 /// 统一运行时：导出当前会话的外部分析交接包。
@@ -905,6 +1224,7 @@ pub async fn agent_runtime_export_analysis_handoff(
     automation_state: State<'_, AutomationServiceState>,
     session_id: String,
 ) -> Result<RuntimeAnalysisHandoffExportResult, String> {
+    let app_for_projection = app.clone();
     let export_locale = config_manager.0.config().language;
     let runtime = build_runtime_command_context(
         app,
@@ -920,12 +1240,19 @@ pub async fn agent_runtime_export_analysis_handoff(
     let context =
         load_runtime_export_context(&runtime, &session_id, "导出 analysis handoff 前").await?;
 
-    export_runtime_analysis_handoff_with_locale(
+    let export = export_runtime_analysis_handoff_with_locale(
         &context.detail,
         &context.thread_read,
         &context.workspace_root,
         Some(export_locale.as_str()),
-    )
+    )?;
+    emit_agent_app_runtime_harness_export_projection(
+        &app_for_projection,
+        &context,
+        "analysis_handoff",
+        &export,
+    );
+    Ok(export)
 }
 
 /// 统一运行时：导出当前会话的人工审核记录模板。
@@ -941,6 +1268,7 @@ pub async fn agent_runtime_export_review_decision_template(
     automation_state: State<'_, AutomationServiceState>,
     session_id: String,
 ) -> Result<RuntimeReviewDecisionTemplateExportResult, String> {
+    let app_for_projection = app.clone();
     let export_locale = config_manager.0.config().language;
     let runtime = build_runtime_command_context(
         app,
@@ -956,12 +1284,19 @@ pub async fn agent_runtime_export_review_decision_template(
     let context =
         load_runtime_export_context(&runtime, &session_id, "导出 review decision 模板前").await?;
 
-    export_runtime_review_decision_template_with_locale(
+    let export = export_runtime_review_decision_template_with_locale(
         &context.detail,
         &context.thread_read,
         &context.workspace_root,
         Some(export_locale.as_str()),
-    )
+    )?;
+    emit_agent_app_runtime_harness_export_projection(
+        &app_for_projection,
+        &context,
+        "review_decision",
+        &export,
+    );
+    Ok(export)
 }
 
 /// 统一运行时：保存当前会话的人工审核结果。
@@ -977,6 +1312,7 @@ pub async fn agent_runtime_save_review_decision(
     automation_state: State<'_, AutomationServiceState>,
     request: AgentRuntimeSaveReviewDecisionRequest,
 ) -> Result<RuntimeReviewDecisionTemplateExportResult, String> {
+    let app_for_projection = app.clone();
     let export_locale = config_manager.0.config().language;
     let runtime = build_runtime_command_context(
         app,
@@ -1012,6 +1348,12 @@ pub async fn agent_runtime_save_review_decision(
         Some(export_locale.as_str()),
     )?;
 
+    emit_agent_app_runtime_harness_export_projection(
+        &app_for_projection,
+        &context,
+        "review_decision",
+        &saved,
+    );
     Ok(saved)
 }
 
@@ -1307,6 +1649,48 @@ mod tests {
         }
     }
 
+    fn thread_read_for_harness_projection(runtime_summary: Value) -> AgentRuntimeThreadReadModel {
+        AgentRuntimeThreadReadModel {
+            thread_id: "thread-agent-app".to_string(),
+            status: "completed".to_string(),
+            profile_status: "completed".to_string(),
+            active_turn_id: None,
+            turns: Vec::new(),
+            pending_requests: Vec::new(),
+            last_outcome: None,
+            incidents: Vec::new(),
+            queued_turns: Vec::new(),
+            tool_calls: Vec::new(),
+            artifacts: Vec::new(),
+            model_routing: None,
+            evidence_summary: Default::default(),
+            telemetry_summary: Default::default(),
+            context_summary: None,
+            interrupt_state: None,
+            updated_at: None,
+            latest_compaction_boundary: None,
+            file_checkpoint_summary: None,
+            diagnostics: None,
+            task_kind: None,
+            service_model_slot: None,
+            routing_mode: None,
+            decision_source: None,
+            decision_reason: None,
+            candidate_count: None,
+            fallback_chain: None,
+            capability_gap: None,
+            estimated_cost_class: None,
+            single_candidate_only: None,
+            oem_policy: None,
+            runtime_summary: Some(runtime_summary),
+            auxiliary_task_runtime: None,
+            limit_state: None,
+            cost_state: None,
+            permission_state: None,
+            limit_event: None,
+        }
+    }
+
     #[test]
     fn normalize_runtime_session_history_limit_should_default_to_open_tail() {
         assert_eq!(
@@ -1413,6 +1797,150 @@ mod tests {
     }
 
     #[test]
+    fn agent_app_runtime_export_projection_extracts_scope_from_runtime_summary() {
+        let scope = agent_app_runtime_export_scope_from_runtime_summary_value(Some(&json!({
+            "surface": "agent_app",
+            "appId": "content-factory-app",
+            "taskId": "task-1",
+            "traceId": "trace-1",
+            "taskKind": "content_factory.copy.generate"
+        })))
+        .expect("agent app scope");
+
+        assert_eq!(scope.app_id, "content-factory-app");
+        assert_eq!(scope.task_id, "task-1");
+        assert_eq!(scope.trace_id.as_deref(), Some("trace-1"));
+        assert_eq!(
+            scope.task_kind.as_deref(),
+            Some("content_factory.copy.generate")
+        );
+        assert!(
+            agent_app_runtime_export_scope_from_runtime_summary_value(Some(&json!({
+                "surface": "chat",
+                "appId": "content-factory-app",
+                "taskId": "task-1"
+            })))
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn agent_app_runtime_harness_export_projection_builds_evidence_task_events() {
+        let detail = detail_with_turn_status(AgentThreadTurnStatus::Completed);
+        let thread_read = thread_read_for_harness_projection(json!({
+            "surface": "agent_app",
+            "appId": "content-factory-app",
+            "taskId": "task-1",
+            "traceId": "trace-1",
+            "taskKind": "content_factory.copy.generate"
+        }));
+        let export = json!({
+            "sessionId": detail.id.clone(),
+            "threadId": detail.thread_id.clone(),
+            "packRelativeRoot": ".lime/harness/sessions/session-runtime-queue/evidence",
+            "exportedAt": "2026-05-16T00:00:00Z",
+            "completionAuditSummary": {
+                "source": "runtime_evidence_pack_completion_audit",
+                "decision": "completed"
+            },
+            "artifacts": [
+                {
+                    "kind": "summary",
+                    "title": "Evidence summary",
+                    "relativePath": ".lime/harness/sessions/session-runtime-queue/evidence/summary.md"
+                }
+            ]
+        });
+
+        let payload = build_agent_app_runtime_harness_export_projection_payload(
+            &detail,
+            &thread_read,
+            "evidence_pack",
+            &export,
+        )
+        .expect("projection payload");
+        let task_events = payload
+            .get("taskEvents")
+            .and_then(Value::as_array)
+            .expect("task events");
+
+        assert_eq!(
+            payload.get("type"),
+            Some(&json!("agent_app_runtime:harnessExportProjection"))
+        );
+        assert_eq!(
+            payload.get("runtimeEventName"),
+            Some(&json!("agent_app_runtime:content-factory-app:task-1"))
+        );
+        assert!(task_events
+            .iter()
+            .any(|event| event.get("eventType") == Some(&json!("evidence:recorded"))));
+        assert!(task_events
+            .iter()
+            .any(|event| event.get("eventType") == Some(&json!("artifact:created"))));
+        assert!(task_events
+            .iter()
+            .any(|event| event.get("eventType") == Some(&json!("evidence:verified"))));
+    }
+
+    #[test]
+    fn agent_app_runtime_harness_export_projection_builds_review_artifact_events() {
+        let detail = detail_with_turn_status(AgentThreadTurnStatus::Completed);
+        let thread_read = thread_read_for_harness_projection(json!({
+            "surface": "agent_app",
+            "appId": "content-factory-app",
+            "taskId": "task-review"
+        }));
+        let export = json!({
+            "sessionId": detail.id.clone(),
+            "threadId": detail.thread_id.clone(),
+            "reviewRelativeRoot": ".lime/harness/sessions/session-runtime-queue/review",
+            "exportedAt": "2026-05-16T00:00:00Z",
+            "analysisArtifacts": [
+                {
+                    "kind": "analysis_brief",
+                    "title": "Analysis brief",
+                    "relativePath": ".lime/harness/sessions/session-runtime-queue/analysis/analysis-brief.md"
+                }
+            ],
+            "artifacts": [
+                {
+                    "kind": "review_decision_markdown",
+                    "title": "Review decision",
+                    "relativePath": ".lime/harness/sessions/session-runtime-queue/review/review-decision.md"
+                }
+            ]
+        });
+
+        let payload = build_agent_app_runtime_harness_export_projection_payload(
+            &detail,
+            &thread_read,
+            "review_decision",
+            &export,
+        )
+        .expect("review projection payload");
+        let task_events = payload
+            .get("taskEvents")
+            .and_then(Value::as_array)
+            .expect("task events");
+
+        assert_eq!(
+            task_events
+                .first()
+                .and_then(|event| event.get("eventType"))
+                .and_then(Value::as_str),
+            Some("artifact:created")
+        );
+        assert_eq!(
+            task_events
+                .iter()
+                .filter(|event| event.get("eventType") == Some(&json!("artifact:created")))
+                .count(),
+            3
+        );
+    }
+
+    #[test]
     fn latest_model_delta_timing_from_run_should_project_agent_run_metadata() {
         let run = AgentRun {
             id: "run-ttft-1".to_string(),
@@ -1481,6 +2009,7 @@ mod tests {
             incidents: Vec::new(),
             queued_turns: Vec::new(),
             tool_calls: Vec::new(),
+            artifacts: Vec::new(),
             model_routing: Some(json!({
                 "decisionSource": "responsive_chat_auto",
                 "selectedModel": "deepseek-v4-flash"

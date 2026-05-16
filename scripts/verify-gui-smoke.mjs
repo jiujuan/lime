@@ -1595,6 +1595,25 @@ async function main() {
       npmCommand,
       [
         "run",
+        "smoke:agent-apps",
+        "--",
+        "--app-url",
+        options.appUrl,
+        "--health-url",
+        options.healthUrl,
+        "--timeout-ms",
+        String(options.timeoutMs),
+        "--interval-ms",
+        String(options.intervalMs),
+      ],
+      "smoke:agent-apps",
+      options.timeoutMs + 30_000,
+    );
+
+    await runCommand(
+      npmCommand,
+      [
+        "run",
         "smoke:claw-chat-ready-streaming",
         "--",
         "--app-url",

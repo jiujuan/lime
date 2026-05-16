@@ -549,7 +549,10 @@ export function AgentAppsPage({
   ]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-slate-50">
+    <div
+      className="flex h-full min-h-0 flex-col bg-slate-50"
+      data-testid="agent-apps-page"
+    >
       <div className="flex-1 overflow-auto px-6 py-6">
         <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-5">
           <header className="flex flex-wrap items-start justify-between gap-4">

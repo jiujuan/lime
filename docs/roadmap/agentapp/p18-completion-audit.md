@@ -1,0 +1,194 @@
+# P18 Completion Audit / 协作防打架记录
+
+更新时间：2026-05-16
+
+状态：P18 当前交付候选已具备证据；P18.1、P18.2、P18.3、P18.4、P18.4-H、P18.5.1、P18.5.2、P18.5-S 与 P18.6 均有当前证据，完整 `verify:local` 已端到端通过；P18.5.3 package-side SDK facade 已从 `blocked` 推进到真实外部 package `npm run verify` 通过，且 handoff gate 显示 `distArtifacts=0`。当前剩余不是功能实现缺口，而是外部 package / Lime 工作区仍 dirty，需要 owner handoff / commit 边界收口。
+
+## 一句话结论
+
+P18 的 Lime-side typed Capability SDK gate 已具备当前可验证证据，并新增了可复用的 Host Bridge SDK client，完整 `verify:local` 也已绿灯；外部 `content-factory-app` 的 package-side source seam 已出现 `createLimeHostBridgeCapabilityInvoker + createLimeCoreCapabilityAdapters`，私有 bridge marker 已清零，真实外部 package verify 已通过，真实 `dist/*` 也已同步 SDK facade。P18 仍不自动等于“可提交”，因为外部 package 与 Lime 工作区仍 dirty，需 owner 明确接收写集。
+
+## 当前绿灯 / 阻塞摘要
+
+| 分类 | 最新证据 | 判定 |
+|---|---|---|
+| Lime-side Agent App feature island | 2026-05-16 10:17 `npm test -- src/features/agent-app`：36 files / 178 tests passed；2026-05-16 10:41 复跑 SDK seam 最小集 4 files / 11 tests passed。 | 通过当前定向测试；包含 SDK-only public surface、public SDK export regression 与内容工厂 SDK regression。 |
+| P18 SDK / Host Bridge | 2026-05-16 07:14 P18 SDK / Host Bridge 定向测试：9 files / 43 tests passed。 | 通过当前定向测试。 |
+| 静态与契约 | 2026-05-16 09:07 `verify:app-version` 已重跑通过；10:20 `lint` 通过；10:15 `typecheck` 通过；10:21 `test:contracts` 通过。 | 通过当前本地非 GUI 验证。 |
+| 外部 `content-factory-app` 只读验证 | 2026-05-16 10:41 低优先级复跑 `npm test`：46 tests passed；`validate:app` 为 `passed`，manifest hash `sha256:6ec3fed5f163739bcf0fd2b845c51a8e10d28aa856e8c6f90259fdab9edd1e48`；`readiness:app` 为 `needs-setup`。 | 只读验证通过；不能替代会重建 `dist/*` 的 package verify。 |
+| P18.5.3 package-side SDK facade / verify | 2026-05-16 10:55 真实外部 package `npm run verify` 通过：build、46 tests、validate、readiness 均完成；随后 handoff gate 输出 `status=needs_handoff`、dirty `tracked=36 / untracked=5`、`hostBridgePrivate=none`、`uiTestPrivate=none`、SDK marker 命中 `2+2`、`distArtifacts=diff:0,missing:0,extra:0,total:0`。 | 功能和产物验收通过；仍需 owner handoff，因为 package worktree 仍 dirty 且 build/verify/e2e 脚本天然会重写 dist。 |
+| 完整 `verify:local` | 2026-05-16 07:33 低优先级运行 `nice -n 10 npm run verify:local` 端到端通过，覆盖 app version、lint、typecheck、Vitest smart 58 batches、`test:contracts`、`cargo test --manifest-path src-tauri/Cargo.toml` 与全套 GUI smoke；`smoke:claw-chat-ready-streaming` 同次重跑 summary 为 `verdict=pass / error=null / consoleErrorCount=0 / failureRuntime=null`。 | 全量本地验证通过；不再是 P18 当前阻塞项。 |
+
+## 目标重述
+
+P18 要证明 Agent App 可以只依赖 Lime 公开 SDK facade 和 Host Bridge v1 完成 App 内业务闭环：
+
+1. App 作者调用 typed `@lime/app-sdk` facade，而不是手写私有 `postMessage` 协议或 import Lime internal modules。
+2. Host Bridge 只做传输，真实能力必须经过 readiness、permission、policy、provenance 和 stable error gate。
+3. `lime.agent` 能在 App 内启动、读取、取消、重试、提交 Host response 和列出 App-scoped task，不强制回跳通用 Chat。
+4. 内容工厂主链必须通过 `lime.agent / lime.storage / lime.artifacts / lime.evidence` 完成 task、write-back、artifact 和 evidence。
+5. P18 不执行 raw worker、不访问外部网络 / 文件系统 / secret value，不扩 marketplace、Cloud 管理台或垂直后端。
+6. 外部 `content-factory-app` 最终要从手写 bridge wrapper 收敛到标准 SDK facade，并通过 package verify。
+
+## Prompt-to-artifact checklist
+
+| 要求 | 当前证据 | 审计判定 |
+|---|---|---|
+| P18.1 Typed SDK facade、stable error、mock host。 | `src/features/agent-app/sdk/capabilityContract.ts`、`src/features/agent-app/sdk/capabilityErrors.ts`、`src/features/agent-app/sdk/MockCapabilityHost.ts`、`src/features/agent-app/sdk/capabilityContract.test.ts`、`src/features/agent-app/sdk/MockCapabilityHost.test.ts`。 | 通过当前 Lime-side 契约验证。 |
+| P18.2 Host Bridge typed router / stable error response。 | `src/features/agent-app/runtime/hostBridge.ts`、`src/features/agent-app/runtime/capabilityDispatcher.ts`、`hostBridge.test.ts`、`capabilityDispatcher.test.ts`。 | 通过当前定向测试；未进入 GUI smoke。 |
+| P18.3 Core capability adapters。 | `src/features/agent-app/sdk/capabilityAdapters.ts` 覆盖 `lime.ui / storage / artifacts / evidence / knowledge / tools / agent` facade；`capabilityAdapters.test.ts` 覆盖 adapter call envelope。 | 通过当前定向测试。 |
+| P18.4 App-scoped Agent task SDK facade。 | `LimeAgentCapabilityAdapter` 暴露 `startTask / streamTask / getTask / cancelTask / retryTask / submitHostResponse / listTasks`；`agentRuntimeCapabilityHost.test.ts` 覆盖 runtime host 接线。 | 通过当前定向测试；后端 push subscribe 仍归 AgentRuntime owner。 |
+| P18.4-H AgentRuntime handoff gate。 | `docs/roadmap/agentapp/p18-4-h-agentruntime-handoff-gate.md` 记录 handoff 判定与 owner 缺口。 | 文档 gate 已有；不由 P18 复制 runtime read model。 |
+| P18.5.1 Lime-side 内容工厂 SDK regression。 | `src/features/agent-app/sdk/contentFactorySdkRegression.test.ts` 断言内容工厂主链调用 `lime.agent.startTask / streamTask / submitHostResponse / storage.set / artifacts.create / evidence.record`，且 2026-05-16 10:08 已改为只从 `src/features/agent-app/sdk/index.ts` 的 SDK-only public surface 导入类型与 helper。 | 通过当前定向测试；证明 Lime-side 内容工厂回归不依赖 SDK 内部深文件。 |
+| P18.5.2 外部 package read-only tests。 | `/Users/coso/Documents/dev/ai/limecloud/content-factory-app: npm test` 当前通过；2026-05-16 08:19 owner handoff gate 复核为 46 tests passed。 | 通过只读测试；不能替代 package-side SDK facade 或 verify。 |
+| P18.5.2 外部 package 标准只读校验。 | 2026-05-16 07:11 与 08:42 低优先级运行 `/Users/coso/Documents/dev/ai/limecloud/content-factory-app: npm run validate:app && npm run readiness:app`；`validate:app` 返回 `ok=true / status=passed`，manifest hash 为 `sha256:6ec3fed5f163739bcf0fd2b845c51a8e10d28aa856e8c6f90259fdab9edd1e48`；`readiness:app` 返回 `ok=true / status=needs-setup`。 | 通过只读标准校验；`needs-setup` 符合宿主需补齐 required 依赖的状态，仍不能替代会重写 `dist/*` 的 package verify。 |
+| P18.5-S Lime-side Host Bridge SDK client。 | `src/features/agent-app/sdk/hostBridgeClient.ts` 提供 `createLimeHostBridgeCapabilityInvoker`，可把标准 `createLimeCoreCapabilityAdapters` 调用转成 Host Bridge v1 `capability:invoke` envelope，并承接 ready / snapshot / theme / visibility / toast / navigate / openExternal / download / `capability:subscribe / unsubscribe / event`；`hostBridgeClient.test.ts` 覆盖 Host action、trusted origin、stable error、timeout cleanup、subscription 分发和内容工厂 task / write-back / artifact / evidence 主链。 | 通过当前定向测试；为外部 package 收敛提供目标，但不等于已改外部 package。 |
+| P18.5-S SDK-only public surface。 | `src/features/agent-app/sdk/index.ts` 只导出 capability facade、stable error、Host Bridge client、mock host 和 App package 需要的 task / storage / artifact / evidence 类型；`src/features/agent-app/sdk/publicSdkSurface.test.ts` 固定该窄导出清单，并从运行时 namespace 与源码 export 来源两侧断言不导出 UI、installer、repository、runtime host、adapter、schema 或 dispatcher。 | 2026-05-16 10:08 定向测试通过，10:15 typecheck 通过；降低后续 `@lime/app-sdk` / package-local shim 误导出内部实现的风险。 |
+| P18.5-S public SDK export seam。 | `src/features/agent-app/index.ts` 已从 feature public entry 导出 `createLimeCoreCapabilityAdapters`、`createLimeHostBridgeCapabilityInvoker`、`LIME_AGENT_APP_BRIDGE_PROTOCOL` 与 `LIME_AGENT_APP_BRIDGE_VERSION`；`src/features/agent-app/index.test.ts` 固定该 public export contract。 | 通过 2026-05-16 07:54 定向测试；防止外部 package 后续只能依赖 Lime 内部深路径。 |
+| Host Bridge SDK client 文档化。 | `docs/roadmap/agentapp/capability-sdk.md` 增加 Host Bridge SDK Client 章节，记录 package-side App 如何用 `createLimeHostBridgeCapabilityInvoker + createLimeCoreCapabilityAdapters`，以及 P18.5.3 迁移规则。 | 通过文档 diff check；仍不替代外部 package 改造。 |
+| P18.5.3 外部 package 迁移计划。 | `docs/roadmap/agentapp/p18-5-3-package-sdk-migration-plan.md` 固定外部 package 当前只读事实、推荐写集、迁移步骤、验收清单和回滚点。 | 通过文档 diff check；等待外部 package owner 稳定后执行。 |
+| P18.5.3 owner handoff 单页。 | `docs/roadmap/agentapp/p18-5-3-owner-handoff.md` 浓缩接管前命令、最小写集、禁止项、迁移目标、验证顺序和完成条件。 | 给外部 package owner / 后续执行者使用；不替代 handoff 确认，也不代表外部 package 已迁移。 |
+| P18.5.3 最新复核。 | 2026-05-16 10:55 真实外部 package `npm run verify` 通过；handoff gate 显示 `hostBridgePrivate=none`、`uiTestPrivate=none`、SDK marker 命中 2+2、`distArtifacts=0`、blockers 为 `none`。 | P18.5.3 SDK facade / package verify / dist 同步已完成；当前只剩 owner handoff。 |
+| P18.5.3 package verify 风险。 | `docs/roadmap/agentapp/p18-5-3-package-sdk-migration-plan.md` 已记录 `npm run verify` 会先执行 `npm run build` 并重建 `dist/*`；2026-05-16 10:55 用户确认后已在真实 package 执行一次 verify。 | 当前 verify 已完成；后续若再次运行 build / verify / e2e，仍需 owner 接受 dist 重建。 |
+| P18.5.3 外部 UI tests 迁移靶点。 | `docs/roadmap/agentapp/p18-5-3-package-sdk-migration-plan.md` 已记录 `tests/ui.test.mjs` 中需要调整的 Host Bridge 断言：保留业务闭环、manifest kind 和 capability call sequence，删除鼓励手写 `postMessage` / message type 的结构性断言。 | 后续 package-side 迁移时可只改测试 mock / facade 断言，不删除内容工厂业务行为断言。 |
+| P18.5.3 package-side facade 兼容导出。 | `docs/roadmap/agentapp/p18-5-3-package-sdk-migration-plan.md` 已记录外部 `src/ui/app.js` 只直接 import `initHostBridge / notifyHost / runHostAgentTask / syncHostConfirmation / writeHostTaskResult`。 | 后续迁移优先保持这 5 个业务侧导出稳定，避免同时改 UI 主流程。 |
+| P18.5.3 package-side 迁移 dry-run 设计。 | `docs/roadmap/agentapp/p18-5-3-package-sdk-migration-plan.md` 已基于当前外部 `src/ui/host-bridge.js` 只读结构，记录最小 diff 顺序：SDK runtime factory、pure helper 保留、私有 transport owner 删除 / 下沉、业务 helper 只调用 `lime.agent / storage / artifacts / evidence` facade。 | 等 handoff 后可按设计实施；当前仍未应用外部 package。 |
+| P18.5.3 package-local SDK shim 退出条件。 | 外部 `content-factory-app` 当前 `dependencies / devDependencies` 为空；`p18-5-3-package-sdk-migration-plan.md` 已把 `src/ui/lime-app-sdk.js` 或等价 shim 列为仅在正式 `@lime/app-sdk` 不可安装时的临时写集。 | 禁止 import Lime repo 内部路径；shim 只能暴露 SDK 等价最小接口，后续发布正式 SDK 后退出。 |
+| 正式 `@lime/app-sdk` package 发布状态。 | 2026-05-16 08:37 只读复核：Lime repo 根 `package.json` 仍为 `"private": true`；`packages/` 下只有 `packages/lime-cli-npm`；未发现独立 `@lime/app-sdk` / `lime-app-sdk` package。 | 不把正式 SDK package 发布当作 P18.5.3 已完成证据；外部 App 仍不得 import Lime internal path，必要时只能使用带退出条件的 package-local shim。 |
+| P18.5.3 package-side SDK facade / verify。 | 2026-05-16 10:55 真实外部 package `npm run verify` 已通过，且 handoff gate 确认 `distArtifacts=0`。 | package-side SDK facade / verify 已完成；剩余为 owner handoff / git 写集收口，不是功能 blocker。 |
+| P18.6 Raw Worker 前 Gate。 | `workflowRuntimeHost.test.ts`、`featureFlag.test.ts`、`runtimePackageLoader.test.ts`、`entryRuntimeGuard.test.ts` 当前通过 25 tests；2026-05-16 08:33 feature island 越界扫描无输出。 | 通过当前 gate；raw worker 后移 P19。 |
+| 不绕过 SDK / 不复活旧 SceneApp。 | `rg -n "SceneApp|contentEngineering|sceneapp_|safeInvoke|invoke\\(|new Worker|Worker\\(" src/features/agent-app || true` 无输出。 | 通过当前扫描。 |
+| 不抢隔壁运行任务。 | 本审计只读外部 package；不改 `src-tauri/*`、`src/lib/api/agentAppRuntime.ts`、`agentRuntimeCapabilityHost*` 实现逻辑、GUI smoke 脚本或外部 package。 | 符合当前协作边界。 |
+
+## 本轮复核命令
+
+```bash
+nice -n 10 npm test -- src/features/agent-app/sdk/contentFactorySdkRegression.test.ts src/features/agent-app/sdk/capabilityAdapters.test.ts src/features/agent-app/sdk/capabilityContract.test.ts src/features/agent-app/sdk/MockCapabilityHost.test.ts src/features/agent-app/runtime/hostBridge.test.ts src/features/agent-app/runtime/capabilityDispatcher.test.ts src/features/agent-app/runtime/agentRuntimeCapabilityHost.test.ts src/features/agent-app/ui/AgentAppRuntimePage.test.tsx
+nice -n 10 npm test -- src/features/agent-app/sdk/hostBridgeClient.test.ts src/features/agent-app/sdk/capabilityAdapters.test.ts src/features/agent-app/sdk/contentFactorySdkRegression.test.ts
+nice -n 10 npm test -- src/features/agent-app/sdk/hostBridgeClient.test.ts src/features/agent-app/sdk/contentFactorySdkRegression.test.ts src/features/agent-app/sdk/capabilityAdapters.test.ts src/features/agent-app/sdk/capabilityContract.test.ts src/features/agent-app/sdk/MockCapabilityHost.test.ts src/features/agent-app/runtime/hostBridge.test.ts src/features/agent-app/runtime/capabilityDispatcher.test.ts src/features/agent-app/runtime/agentRuntimeCapabilityHost.test.ts src/features/agent-app/ui/AgentAppRuntimePage.test.tsx
+nice -n 10 npm test -- src/features/agent-app/sdk/hostBridgeClient.test.ts src/features/agent-app/sdk/capabilityContract.test.ts src/features/agent-app/sdk/capabilityAdapters.test.ts src/features/agent-app/sdk/contentFactorySdkRegression.test.ts
+nice -n 10 npm test -- src/features/agent-app/index.test.ts
+nice -n 10 npm test -- src/features/agent-app/sdk/hostBridgeClient.test.ts src/features/agent-app/sdk/contentFactorySdkRegression.test.ts src/features/agent-app/index.test.ts
+nice -n 10 npm test -- src/features/agent-app/ui/AgentAppsPage.test.tsx src/features/agent-app/ui/AgentAppManagerPanel.test.tsx src/features/agent-app/ui/AgentAppLabPage.test.tsx
+nice -n 10 npm test -- src/features/agent-app
+nice -n 10 npm run verify:app-version
+nice -n 10 npm run lint
+nice -n 10 npm run typecheck -- --pretty false
+nice -n 10 npm run test:contracts
+nice -n 10 npm test -- src/features/agent-app/runtime/workflowRuntimeHost.test.ts src/features/agent-app/featureFlag.test.ts src/features/agent-app/runtime/runtimePackageLoader.test.ts src/features/agent-app/runtime/entryRuntimeGuard.test.ts
+git diff --check -- src/features/agent-app/sdk src/features/agent-app/runtime/hostBridge.ts src/features/agent-app/index.ts src/features/agent-app/index.test.ts docs/roadmap/agentapp
+rg -n "SceneApp|contentEngineering|sceneapp_|safeInvoke|invoke\\(|new Worker|Worker\\(" src/features/agent-app || true
+cd /Users/coso/Documents/dev/ai/limecloud/content-factory-app && nice -n 10 npm test
+nice -n 10 npm run verify:local
+nice -n 10 npm run harness:doc-freshness
+```
+
+结果：
+
+- Lime SDK / Host Bridge 定向测试：新增 SDK client 前 8 files / 37 tests passed；新增后 9 files / 43 tests passed。
+- 2026-05-16 06:15 与 07:14 低优先级重跑 P18 SDK / Host Bridge 定向测试：9 files / 43 tests passed。
+- 2026-05-16 07:03 低优先级重跑 Lime-side P18 SDK 最小 contract 验证：`hostBridgeClient.test.ts`、`capabilityContract.test.ts`、`capabilityAdapters.test.ts`、`contentFactorySdkRegression.test.ts` 4 files / 13 tests passed。
+- Agent Apps 入口 UI 定向测试：2026-05-16 07:18 低优先级运行 `AgentAppsPage.test.tsx`、`AgentAppManagerPanel.test.tsx`、`AgentAppLabPage.test.tsx`，3 files / 24 tests passed。
+- Agent App feature island 全量定向测试：2026-05-16 07:59 低优先级运行 `npm test -- src/features/agent-app`，35 files / 169 tests passed；2026-05-16 09:09 复跑，35 files / 173 tests passed；2026-05-16 10:17 覆盖 SDK-only public surface 收口后复跑，36 files / 178 tests passed。
+- Host Bridge SDK client 定向测试：1 file / 6 tests passed。
+- Agent App public SDK export test：2026-05-16 07:54 低优先级运行 `npm test -- src/features/agent-app/index.test.ts`，1 file / 1 test passed。
+- SDK-only public surface test：2026-05-16 10:08 低优先级运行 `npm test -- src/features/agent-app/sdk/publicSdkSurface.test.ts src/features/agent-app/sdk/hostBridgeClient.test.ts src/features/agent-app/sdk/contentFactorySdkRegression.test.ts src/features/agent-app/index.test.ts`，4 files / 11 tests passed；同次证明 `contentFactorySdkRegression.test.ts` 已从 SDK-only public surface 导入。
+- 2026-05-16 08:19 当前会话低优先级复跑 SDK seam 最小集：`hostBridgeClient.test.ts`、`contentFactorySdkRegression.test.ts`、`index.test.ts`，3 files / 8 tests passed。
+- App version：2026-05-16 07:15 与 08:09 低优先级运行 `npm run verify:app-version` 均通过，版本一致性为 `1.40.0`。
+- Lime lint：2026-05-16 07:13、08:04 与 10:20 低优先级运行 `npm run lint` 均通过，10:20 覆盖 SDK-only public surface 与内容工厂 SDK regression 收口后的 `src` lint 面。
+- Lime typecheck：通过；2026-05-16 06:16、07:06、08:03、08:24、09:04、09:52 与 10:15 低优先级重跑 `npm run typecheck -- --pretty false` 仍通过，10:15 覆盖内容工厂回归改从 SDK-only public surface 导入后的类型面。
+- Lime command / harness / modality contracts：通过；2026-05-16 06:17、07:09、08:06、08:24、09:04 与 10:21 低优先级重跑 `npm run test:contracts` 仍通过，10:21 覆盖 SDK-only public surface 与 handoff gate 脚本新增后的契约面。
+- P18.6 raw worker 前 gate：4 files / 25 tests passed；2026-05-16 06:19 与 07:08 低优先级重跑仍通过。
+- `git diff --check`：通过；2026-05-16 06:20、06:45、07:12 与 08:08 重跑；08:08 命令已覆盖 `src/features/agent-app/index.test.ts`：`git diff --check -- src/features/agent-app/sdk src/features/agent-app/runtime/hostBridge.ts src/features/agent-app/index.ts src/features/agent-app/index.test.ts docs/roadmap/agentapp`。
+- feature island 越界扫描：无输出；2026-05-16 06:19、07:04 与 08:33 重跑 `rg -n "SceneApp|contentEngineering|sceneapp_|safeInvoke|invoke\\(|new Worker|Worker\\(" src/features/agent-app || true` 均无输出。
+- 外部 `content-factory-app` 只读测试：2026-05-16 07:50 与 08:19 按 owner handoff gate 低优先级重跑 `/Users/coso/Documents/dev/ai/limecloud/content-factory-app: npm test` 均为 46 tests passed；该只读结果不替代 package-side SDK facade / verify。
+- 完整 `verify:local`：2026-05-16 07:33 低优先级运行 `nice -n 10 npm run verify:local` 端到端通过；本次通过 app version、lint、typecheck、Vitest smart 58 batches、`test:contracts`、`cargo test --manifest-path src-tauri/Cargo.toml`、workspace-ready、browser-runtime、site-adapters、agent-service-skill-entry、agent-runtime-tool-surface、agent-runtime-tool-surface-page、at-command-registry、agent-apps、claw-chat-ready-streaming、knowledge-gui 与 design-canvas GUI smoke，最终输出 `[verify:gui-smoke] 通过` 与 `[local-ci] 本地校验完成。`
+- Doc freshness：2026-05-16 08:51 低优先级运行 `npm run harness:doc-freshness`，monitored docs 10 / existing docs 10 / issues 0 / broken markdown links 0 / broken code path refs 0，结果为 `doc freshness: clean`。
+
+## 2026-05-16 claw smoke 只读诊断
+
+本段只记录证据，不接管 AgentRuntime / GUI smoke owner 写集；最新完整 `verify:local` 已消费该 pass 结果。
+
+| 证据 | 观察 | P18 判定 |
+|---|---|---|
+| Summary | `.lime/qc/gui-evidence/claw-chat-ready-streaming/claw-chat-ready-streaming-summary.json` 在 2026-05-16 07:33 更新为 `verdict=pass / error=null / consoleErrorCount=0 / failureRuntime=null`；只读复核显示 `providerPreference=deepseek`、`modelPreference=deepseek-v4-flash`、`interruptedTurnStatus=aborted`、`followSessionId=c2742b86-f2cc-4a0b-91f2-b1baf3c6005e`、`followTurnId=091b4738-a537-43f2-a4b9-daf0ed1b3c3d`。 | 历史 blocker 已解除，并已进入完整 `verify:local` 通过证据；P18 不需要抢修 runtime / smoke。 |
+| GUI smoke 链路 | 同次完整 `verify:local` 已跑过 workspace-ready、browser-runtime、site-adapters、agent-service-skill-entry、agent-runtime-tool-surface、agent-runtime-tool-surface-page、at-command-registry、agent-apps、claw-chat-ready-streaming、knowledge-gui 与 design-canvas。 | 全局 GUI smoke 不再阻塞 P18 当前 SDK gate；后续只在外部 package 迁移后按改动范围补验证。 |
+| 协作边界 | 本轮不改 `src-tauri/*`、runtime facade 或 smoke 脚本；只把已通过证据写入客户端 P18 审计。 | 避免和隔壁 AgentRuntime / GUI smoke 任务打架。 |
+
+## 当前协作分工
+
+| 工作面 | Owner | P18 处理方式 |
+|---|---|---|
+| 外部 `content-factory-app` 源码、dist、UI、模型生成与 docs。 | 隔壁 package 任务。 | 只读观察；不覆盖 dirty / untracked 文件。 |
+| AgentRuntime Rust / TS facade、push subscribe、workspace patch producer、capability catalog、真实桌面 GUI smoke。 | 隔壁 AgentRuntime 任务。 | 只消费已验证 host surface，不复制 read model 或 runtime command。 |
+| Agent App P18 SDK contract、stable error、mock host、typed adapters、Lime-side regression、Host Bridge SDK client。 | Agent App P18。 | 当前通过定向测试与 contracts。 |
+| P18.5.3 package-side SDK facade / verify。 | 等外部 package owner 稳定后认领。 | 当前 blocked；不能用 read-only tests 伪装完成。 |
+
+## 2026-05-16 协作锁定
+
+隔壁标准资料已有新增，且外部 package / AgentRuntime 仍在并行推进。P18 当前采取“只读同步标准、只写客户端计划、不抢运行写集”的分工：
+
+| 输入 / 写集 | 当前观察 | 本轮处理方式 |
+|---|---|---|
+| `/Users/coso/Documents/dev/ai/limecloud/agentapp` | 工作区干净；当前 `HEAD=4bef605 fix: quote mermaid sdk labels`，zh / en 标准资料已覆盖 authoring、client implementation、reference、examples、what-is-agent-app、agent-app-vs-skills-knowledge 与 mini-program analogy，进一步固定 Agent App 是完整应用包、Expert Chat 只是 entry、能力调用必须通过 Capability SDK。 | 作为标准资料只读输入；同步到本审计和后续计划口径，不改标准仓库、不复制标准文档。 |
+| `/Users/coso/Documents/dev/ai/limecloud/content-factory-app` | 2026-05-16 07:39 只读复核有 39 个 dirty / untracked 条目，其中 36 个 tracked modified、3 个 untracked；当时 `src/ui/host-bridge.js`、`dist/ui/host-bridge.js`、`src/ui/app.js`、`tests/ui.test.mjs`、`dist/*`、docs 和 model-generation 相关文件仍在并行改动，且私有 bridge marker 仍命中。 | 历史 blocker；已被 10:55 真实 package verify 和 handoff gate `blockers=none / distArtifacts=0` 覆盖。 |
+| `src-tauri/*`、`src/lib/api/agentAppRuntime.ts`、`src/features/agent-app/runtime/agentRuntimeCapabilityHost*`、GUI smoke 脚本 | 2026-05-16 07:05 只读复核 owner-sensitive 写集仍有 25 个 dirty / untracked 条目，属于 AgentRuntime / GUI owner 面。 | 不改；P18 只消费已验证 host surface，不抢 Rust / TS facade / GUI smoke。 |
+| `smoke:claw-chat-ready-streaming` | 2026-05-16 07:33 只读复核最新 summary 为 `verdict=pass / error=null`；`providerPreference=deepseek`、`modelPreference=deepseek-v4-flash`、`interruptedTurnStatus=aborted`、`followTurnId=091b4738-a537-43f2-a4b9-daf0ed1b3c3d`，`consoleErrorCount=0`、`failureRuntime=null`。 | 已随完整 `verify:local` 通过；不在 P18 SDK lane 内抢修 AgentRuntime / GUI smoke。 |
+| `docs/roadmap/agentapp/*` | 客户端路线图需要记录标准资料和 owner 边界。 | 可做 additive 文档同步；避免把 Cloud / LimeCore、外部 package 或 AgentRuntime 实现混进客户端计划。 |
+| Lime 工作区自检 | 2026-05-16 07:39 只读复核 `docs/roadmap/agentapp` 与 `src/features/agent-app` 范围仍有 30 个 dirty / untracked 条目，其中 16 个 tracked modified、14 个 untracked；P18 文档收口写集保持在 `docs/roadmap/agentapp/p18-completion-audit.md` 与 `docs/roadmap/agentapp/p18-5-3-package-sdk-migration-plan.md`。 | 后续继续先 `git status --short` 再动手；不把并行实现写集纳入 P18 文档收口。 |
+
+2026-05-16 08:58 当前只读复核：
+
+| 检查项 | 当前事实 | P18 判定 |
+|---|---|---|
+| 标准与服务端仓库 | `/Users/coso/Documents/dev/ai/limecloud/agentapp` 工作区干净，`HEAD=4bef605`；`/Users/coso/Documents/dev/ai/limecloud/limecore` 工作区干净。 | 标准 / 服务端事实源可读；本轮不改标准仓库或 LimeCore。 |
+| 隔壁 Capability 共享输入 | 2026-05-16 只读读取 `docs/roadmap/agentruntime/claw-capability-sharing.md`；该 draft 固定 Chat `@命令`、Agent App `lime.agent.startTask`、Automation job 只是 surface adapter，Claw 能力需收敛到 AgentRuntime capability catalog，首刀已把部分 capability hint 写入现有 Claw `*_skill_launch` metadata。 | 作为 AgentRuntime owner 输入消费；P18 不复制 Claw skill launch，不新增 `content_factory_*` 垂直后端能力，也不把 capability catalog owner 迁入 Agent App SDK。 |
+| 外部 package 写集 | `/Users/coso/Documents/dev/ai/limecloud/content-factory-app` 仍有 36 个 tracked modified、3 个 untracked；两个 `npm run dev` 进程的 cwd 都在该仓库。 | owner 仍未稳定；P18.5.3 不接管外部源码、`dist/*`、`tests/*` 或 `package.json`。 |
+| 外部私有 bridge marker | `src/ui/host-bridge.js` 仍包含 `pendingRequests / buildMessage / window.parent.postMessage / requestHostBridge / capability:invoke / capability:subscribe / capability:event`，未出现 `createLimeHostBridgeCapabilityInvoker` 或 `createLimeCoreCapabilityAdapters`。 | package-side SDK facade 仍未完成。 |
+| 外部 UI 测试 marker | `tests/ui.test.mjs` 仍直接过滤 `message.type === 'capability:invoke'` 并模拟私有 `postMessage` transport。 | 测试仍鼓励私有 transport；迁移时必须改为 SDK invoker / Host Bridge client call log。 |
+| Lime 运行面 | Lime 当前仍有 Vite 与 `tauri:dev:headless` 进程在跑。 | 本轮不启停 DevBridge / Vite / Tauri，不跑 GUI smoke，不抢隔壁运行环境。 |
+| SDK package 发布边界 | Lime 根 `package.json` 仍是 private 桌面包；`packages/` 仅有 `@limecloud/lime-cli`，未发现正式 `@lime/app-sdk` package。 | 外部迁移若立即 handoff，只能用带退出条件的 package-local shim，不能 import Lime internal path。 |
+| 文档轻量验证 | 2026-05-16 08:59 低优先级运行 `npm run harness:doc-freshness`，monitored docs 10 / existing docs 10 / issues 0 / broken markdown links 0 / broken code path refs 0。 | 客户端文档引用未被本轮协作快照破坏；仍不能替代 P18.5.3 外部 package-side SDK facade / verify。 |
+| Agent App feature island 越界扫描 | 2026-05-16 09:00 只读运行 `rg -n "SceneApp\|contentEngineering\|sceneapp_\|safeInvoke\|invoke\\(\|new Worker\|Worker\\(" src/features/agent-app \|\| true`，无输出。 | 当前 feature island 未复活旧 SceneApp、未直接 Tauri invoke、未执行 raw Worker；仍不能替代外部 package SDK facade / verify。 |
+| Agent App feature island 全量定向测试 | 2026-05-16 10:17 低优先级运行 `npm test -- src/features/agent-app`，36 files / 178 tests passed。 | 当前 Agent App feature island 回归通过，并覆盖 SDK-only public surface 收口；仍不能替代外部 package-side SDK facade / verify。 |
+| Lime-side SDK seam 定向测试 | 2026-05-16 09:01 低优先级运行 `npm test -- src/features/agent-app/sdk/hostBridgeClient.test.ts src/features/agent-app/sdk/contentFactorySdkRegression.test.ts src/features/agent-app/index.test.ts`，3 files / 8 tests passed。 | Host Bridge SDK client、内容工厂 SDK regression 与 public SDK export seam 当前仍绿；仍不能替代外部 package-side SDK facade / verify。 |
+| Lime typecheck | 2026-05-16 10:55 低优先级运行 `npm run typecheck -- --pretty false`，通过。 | 当前 dirty 工作区的 TypeScript 类型层仍通过，并覆盖内容工厂回归改从 SDK-only public surface 导入后的类型面。 |
+| Lime lint | 2026-05-16 11:00 低优先级运行 `npm run lint`，通过。 | 当前 `src` lint 仍通过；脚本变更另由 handoff core test、diff check 与实际 gate 运行覆盖。 |
+| Lime contracts | 2026-05-16 10:53 低优先级运行 `npm run test:contracts`，command contracts、harness contracts、modality runtime contracts 与 cleanup report contract 均通过。 | 当前命令 / harness / modality 契约仍通过；不替代外部 package verify，但 package verify 已于 10:55 通过。 |
+| Lime app version | 2026-05-16 09:07 低优先级运行 `npm run verify:app-version`，版本一致性检查通过：`1.40.0`。 | 当前版本事实源一致；仍不能替代外部 package-side SDK facade / verify。 |
+| 外部 package 只读测试 | 2026-05-16 09:05 在 `/Users/coso/Documents/dev/ai/limecloud/content-factory-app` 低优先级运行 `npm test`，46 tests passed。 | 只证明外部 package 当前业务测试仍绿；测试仍在私有 bridge transport 上通过，不能替代 package-side SDK facade 或会重建 `dist/*` 的 `npm run verify`。 |
+| 外部标准只读校验 | 2026-05-16 09:06 在 `/Users/coso/Documents/dev/ai/limecloud/content-factory-app` 低优先级运行 `npm run validate:app && npm run readiness:app`；`validate:app` 为 `ok=true / status=passed`，manifest hash 为 `sha256:6ec3fed5f163739bcf0fd2b845c51a8e10d28aa856e8c6f90259fdab9edd1e48`；`readiness:app` 为 `ok=true / status=needs-setup`。 | 标准 manifest 可读，readiness 正确停在宿主 required 依赖待绑定状态；仍不能替代 package-side SDK facade 或会重建 `dist/*` 的 `npm run verify`。 |
+| AgentApp 文档旧口径扫描 | 2026-05-16 09:10 运行 `rg -n "08:30\|171 tests\|35 files / 171" docs/roadmap/agentapp \|\| true`，无输出。 | AgentApp 文档当前验证口径已统一到 09:04 / 09:09；仍不能替代外部 package-side SDK facade / verify。 |
+| 垂直后端能力越界扫描 | 2026-05-16 09:11 只读扫描 `src-tauri / src / scripts` 中 `content_factory_* command / skill_launch` 形态；命中项集中在 `src-tauri/src/commands/agent_app_runtime_cmd.rs` 的 `is_content_factory_runtime_task`、output contract helper 与测试，用于避免复合内容工厂任务被强制提升为单一 Claw skill launch。 | 当前未发现 P18 新增垂直 `content_factory_*` 后端 command；该 AgentRuntime helper 属隔壁 runtime owner 面，P18 只消费、不接管。 |
+| 外部 package SDK facade marker 复核 | 2026-05-16 09:22 只读复核 `/Users/coso/Documents/dev/ai/limecloud/content-factory-app`；`src/ui/host-bridge.js` 仍包含 `pendingRequests / buildMessage / window.parent.postMessage / requestHostBridge / capability:invoke / capability:subscribe / capability:event`，`tests/ui.test.mjs` 仍直接过滤 `message.type === 'capability:invoke'`。 | P18.5.3 唯一主阻塞仍未解除；外部 package 尚未成为 SDK facade consumer。 |
+| Handoff 确认状态 | 2026-05-16 09:26 已进入需显式确认状态：没有用户或外部 package owner 明确“接管外部 package 最小写集”前，不修改 `/Users/coso/Documents/dev/ai/limecloud/content-factory-app/src/ui/host-bridge.js`、`tests/ui.test.mjs`、`package.json` 或 `dist/*`。 | 当前只能继续只读复核 / 文档审计；不能实施 P18.5.3 package-side SDK facade。 |
+| 运行面复核 | 2026-05-16 09:28 只读复核进程，两个 `npm run dev` 的 cwd 都在 `/Users/coso/Documents/dev/ai/limecloud/content-factory-app`；Lime 侧仍有 Vite 与 `tauri:dev:headless` 进程。 | 外部 package 与 Lime GUI / Tauri 运行面仍在并行；不能抢占或启停这些进程。 |
+| 09:39 再复核 | 外部 package 当时有 36 个 tracked modified、3 个 untracked；`src/ui/host-bridge.js` / `tests/ui.test.mjs` marker 命中手写 transport；外部 `npm test` 重新通过 46 tests；Lime-side SDK seam 最小集 `hostBridgeClient.test.ts / contentFactorySdkRegression.test.ts / index.test.ts` 重新通过 3 files / 8 tests；`src/features/agent-app` 越界扫描无输出。 | 历史 blocker；已被 10:55 真实 package verify 覆盖。 |
+| 09:48 机械 gate | 新增 `scripts/agent-app-package-handoff-check.mjs` / `scripts/lib/agent-app-package-handoff-core.mjs` / `scripts/lib/agent-app-package-handoff-core.test.ts`，用只读方式把 dirty 计数、私有 bridge marker、SDK facade marker、`scripts/build.mjs` 与高风险脚本转成 `ready / needs_handoff / blocked` 判定；当前外部 package 输出 `status=blocked`，并命中 `build / verify / e2e:user-flow / e2e:user-flow:fake-model` 高风险脚本。 | P18.5.3 后续不再只靠人工 grep；但当前 gate 结果仍证明外部 package 未完成 SDK facade。 |
+| 10:17 外部 gate 复核 | 运行 `node scripts/agent-app-package-handoff-check.mjs --package-dir /Users/coso/Documents/dev/ai/limecloud/content-factory-app --check`，退出码 1；输出为 `status=blocked`、dirty `tracked=36 / untracked=3`、hostBridgeSdk `none`，私有 bridge marker 与 highRiskScripts 均未消失。 | 历史 blocker；已被 10:55 真实 package verify 覆盖。 |
+| 10:33 外部 gate 复核 | 运行 `node scripts/agent-app-package-handoff-check.mjs --package-dir /Users/coso/Documents/dev/ai/limecloud/content-factory-app`，输出 `status=needs_handoff`、dirty `tracked=36 / untracked=4 / total=40`、`hostBridgePrivate=none`、`uiTestPrivate=none`、`hostBridgeSdk=createLimeHostBridgeCapabilityInvoker:2, createLimeCoreCapabilityAdapters:2`，blockers 为 `none`。 | source-side facade blocker 已解除；当时主缺口切换为 owner handoff / dist verify；已在 10:55 收口。 |
+| 10:41 不重建 dist 验证 | Lime repo 低优先级运行 SDK seam 最小集：4 files / 11 tests passed；外部 package 低优先级运行 `npm test`：46 tests passed；`validate:app` passed；`readiness:app` needs-setup。 | 当前 source-side facade 与标准 manifest 仍绿；仍不能替代 `npm run verify`，因为 verify 会先 build 并重建 `dist/*`。 |
+| 10:45 dist 重建前预审 | 只读解析外部 `scripts/build.mjs`，确认 build 会先删除 `dist` 再复制 `src/*`；hash 对比发现 `src/ui/host-bridge.js` 与 `dist/ui/host-bridge.js` 不一致，且 `src/ui/lime-app-sdk.js` 尚无 `dist/ui/lime-app-sdk.js`。 | 安装产物缺口已明确：source-side facade 尚未同步到 dist；仍需 owner handoff 后重建 dist 或记录退出条件。 |
+| 10:47 隔离 verify 演练 | 复制外部 package 当前工作区到 `/tmp/limecloud-content-factory-verify.uots6S/content-factory-app`，用 sibling symlink 保持 `../agentapp` 可用，并在临时副本运行 `npm run verify`；build、46 tests、validate、readiness 全部通过，readiness 仍为预期 `needs-setup`。 | 证明当前源码若允许重建 dist，大概率可通过 package verify；仍不能替代真实 package 写集验收，因为真实 `/Users/coso/Documents/dev/ai/limecloud/content-factory-app/dist/*` 未被更新。 |
+| 10:55 真实 package verify | 用户确认后，在真实 `/Users/coso/Documents/dev/ai/limecloud/content-factory-app` 运行 `nice -n 10 npm run verify`：build 通过，46 tests passed，`validate:app` passed，`readiness:app` needs-setup；随后 handoff gate 显示 `distArtifacts=diff:0,missing:0,extra:0,total:0`。 | P18.5.3 的 package verify / dist 验收完成；gate 仍为 `needs_handoff` 是因为工作区 dirty 与高风险脚本 warning，不是 SDK facade blocker。 |
+
+冲突规约：
+
+1. 修改前先跑目标仓库 `git status --short`，发现 dirty / untracked 且不属于本任务写集时只读观察。
+2. 外部 package 未稳定前，不改 `src/ui/host-bridge.js`、`dist/ui/host-bridge.js`、`tests/ui.test.mjs` 或 `package.json`。
+3. AgentRuntime / Rust / GUI smoke 并行任务未收口前，不改 `src-tauri/*`、runtime facade、DevBridge / Tauri / Vite 进程和 smoke 脚本。
+4. 本机磁盘空间已恢复到可跑 Rust 测试；不在未确认时删除 `src-tauri/target` 或其他构建缓存。`smoke:claw-chat-ready-streaming` 的 06:23 历史失败已在 07:33 完整 `verify:local` 中转为 pass 证据。
+5. P18 后续只在通用 SDK contract 存在缺口时补 `src/features/agent-app/sdk/*`，不新增垂直 `content_factory_*` host command 或第二套 bridge。
+
+因此当前优先级调整为：不再把“外部 source-side facade、package verify、dist 同步”作为 P18 blocker；下一刀只剩 owner handoff、提交边界与是否归档 P18 的工程收口。完整 `verify:local` 已通过，不再把全局 GUI smoke 作为当前阻塞。
+
+## 下一刀
+
+1. 外部 `content-factory-app` owner 接收当前 dirty 写集，尤其是 `src/ui/host-bridge.js`、`src/ui/lime-app-sdk.js`、`tests/ui.test.mjs` 与 `dist/ui/*`。
+2. Lime 侧 owner 接收新增 SDK / handoff gate 脚本与 P18 roadmap 文档写集。
+3. 如后续还有外部 package 变更，先复跑 handoff gate；只有 `blockers=none` 且必要验证通过后再进入 P19。
+4. P18 归档后再启动 P19 raw worker、marketplace 扩展或内容工厂后端产品化；不要在 P18 写集中混入下一阶段。
+
+## 完成判定
+
+P18 当前满足功能完成判定：外部 `content-factory-app` package-side SDK facade 已完成，真实 package verify 已通过，Lime formal runtime / SDK regression 有迁移后新证据，并且没有引入私有 bridge、raw worker 或第二套 runtime。当前不等于“git 可提交完成”，因为外部 package 与 Lime 工作区仍 dirty，需要 owner 决定提交 / 推送边界。

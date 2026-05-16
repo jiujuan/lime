@@ -465,9 +465,19 @@ pub struct SessionExecutionRuntimeOemPolicy {
     pub can_invoke: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionExecutionRuntimeSummary {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub surface: Option<String>,
+    #[serde(default, alias = "app_id", skip_serializing_if = "Option::is_none")]
+    pub app_id: Option<String>,
+    #[serde(default, alias = "task_id", skip_serializing_if = "Option::is_none")]
+    pub task_id: Option<String>,
+    #[serde(default, alias = "trace_id", skip_serializing_if = "Option::is_none")]
+    pub trace_id: Option<String>,
+    #[serde(default, alias = "task_kind", skip_serializing_if = "Option::is_none")]
+    pub task_kind: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub candidate_count: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1086,22 +1096,38 @@ fn extract_oem_policy_from_metadata(
 fn extract_runtime_summary_from_metadata(
     metadata: &std::collections::HashMap<String, Value>,
 ) -> Option<SessionExecutionRuntimeSummary> {
-    let mut summary: SessionExecutionRuntimeSummary =
-        extract_lime_runtime_payload(metadata, LIME_RUNTIME_SUMMARY_KEY)?;
-    summary.routing_mode = normalize_optional_text(summary.routing_mode);
-    summary.decision_source = normalize_optional_text(summary.decision_source);
-    summary.decision_reason = normalize_optional_text(summary.decision_reason);
-    summary.estimated_cost_class = normalize_optional_text(summary.estimated_cost_class);
-    summary.limit_status = normalize_optional_text(summary.limit_status);
-    summary.limit_event_kind = normalize_optional_text(summary.limit_event_kind);
-    summary.limit_event_message = normalize_optional_text(summary.limit_event_message);
-    summary.capability_gap = normalize_optional_text(summary.capability_gap);
-    summary.permission_status = normalize_optional_text(summary.permission_status);
+    let runtime = extract_lime_runtime_object(metadata)?;
+    let mut summary: SessionExecutionRuntimeSummary = runtime
+        .get(LIME_RUNTIME_SUMMARY_KEY)
+        .and_then(|value| serde_json::from_value(value.clone()).ok())
+        .unwrap_or_default();
+    summary.surface = normalize_optional_text(summary.surface.take())
+        .or_else(|| extract_text_from_object(runtime, &["surface"]));
+    summary.app_id = normalize_optional_text(summary.app_id.take())
+        .or_else(|| extract_text_from_object(runtime, &["app_id", "appId"]));
+    summary.task_id = normalize_optional_text(summary.task_id.take())
+        .or_else(|| extract_text_from_object(runtime, &["task_id", "taskId"]));
+    summary.trace_id = normalize_optional_text(summary.trace_id.take())
+        .or_else(|| extract_text_from_object(runtime, &["trace_id", "traceId"]));
+    summary.task_kind = normalize_optional_text(summary.task_kind.take())
+        .or_else(|| extract_text_from_object(runtime, &["task_kind", "taskKind"]));
+    summary.routing_mode = normalize_optional_text(summary.routing_mode.take());
+    summary.decision_source = normalize_optional_text(summary.decision_source.take());
+    summary.decision_reason = normalize_optional_text(summary.decision_reason.take());
+    summary.estimated_cost_class = normalize_optional_text(summary.estimated_cost_class.take());
+    summary.limit_status = normalize_optional_text(summary.limit_status.take());
+    summary.limit_event_kind = normalize_optional_text(summary.limit_event_kind.take());
+    summary.limit_event_message = normalize_optional_text(summary.limit_event_message.take());
+    summary.capability_gap = normalize_optional_text(summary.capability_gap.take());
+    summary.permission_status = normalize_optional_text(summary.permission_status.take());
     summary.fallback_chain = summary
         .fallback_chain
         .into_iter()
         .filter_map(|value| normalize_optional_text(Some(value)))
         .collect();
+    if summary == SessionExecutionRuntimeSummary::default() {
+        return None;
+    }
     Some(summary)
 }
 
@@ -1398,6 +1424,8 @@ pub fn build_session_execution_runtime(
         && runtime.limit_state.is_none()
         && runtime.cost_state.is_none()
         && runtime.permission_state.is_none()
+        && runtime.oem_policy.is_none()
+        && runtime.runtime_summary.is_none()
         && runtime.limit_event.is_none()
     {
         return None;
@@ -2354,6 +2382,64 @@ mod tests {
             None
         );
         assert!(runtime.limit_event.is_none());
+    }
+
+    #[test]
+    fn extracts_agent_app_scope_from_lime_runtime_summary_fallback() {
+        let now = Utc::now();
+        let snapshot = SessionRuntimeSnapshot {
+            session_id: "session-agent-app".to_string(),
+            threads: vec![ThreadRuntimeSnapshot {
+                thread: ThreadRuntime::new(
+                    "thread-1",
+                    "session-agent-app",
+                    PathBuf::from("/tmp/workspace"),
+                ),
+                turns: vec![TurnRuntime {
+                    id: "turn-1".to_string(),
+                    session_id: "session-agent-app".to_string(),
+                    thread_id: "thread-1".to_string(),
+                    status: TurnStatus::Completed,
+                    input_text: Some("内容工厂任务".to_string()),
+                    error_message: None,
+                    context_override: Some(TurnContextOverride {
+                        metadata: [(
+                            "lime_runtime".to_string(),
+                            json!({
+                                "surface": "agent_app",
+                                "app_id": "content-factory-app",
+                                "task_id": "task-1",
+                                "trace_id": "trace-1",
+                                "task_kind": "content_factory.copy.generate"
+                            }),
+                        )]
+                        .into_iter()
+                        .collect(),
+                        ..TurnContextOverride::default()
+                    }),
+                    output_schema_runtime: None,
+                    created_at: now,
+                    started_at: Some(now),
+                    completed_at: Some(now),
+                    updated_at: now,
+                }],
+                items: Vec::new(),
+            }],
+        };
+
+        let runtime =
+            build_session_execution_runtime("session-agent-app", None, None, Some(&snapshot), None)
+                .expect("runtime");
+        let summary = runtime.runtime_summary.expect("agent app scope summary");
+
+        assert_eq!(summary.surface.as_deref(), Some("agent_app"));
+        assert_eq!(summary.app_id.as_deref(), Some("content-factory-app"));
+        assert_eq!(summary.task_id.as_deref(), Some("task-1"));
+        assert_eq!(summary.trace_id.as_deref(), Some("trace-1"));
+        assert_eq!(
+            summary.task_kind.as_deref(),
+            Some("content_factory.copy.generate")
+        );
     }
 
     #[test]

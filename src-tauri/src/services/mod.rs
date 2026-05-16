@@ -4,6 +4,7 @@
 //! 本模块保留 Tauri 相关服务。
 
 // 保留在主 crate 的 Tauri 相关服务
+pub mod agent_app_runtime_capability_catalog_service;
 pub mod agent_timeline_service;
 pub mod artifact_diff_service;
 pub mod artifact_document_service;
@@ -46,6 +47,7 @@ pub mod runtime_evidence_observability_service;
 pub mod runtime_evidence_pack_output_service;
 pub mod runtime_evidence_pack_service;
 pub mod runtime_evidence_path_service;
+pub mod runtime_evidence_projection_service;
 pub mod runtime_evidence_request_telemetry_service;
 pub mod runtime_evidence_tool_classifier_service;
 pub mod runtime_evidence_verification_service;

@@ -99,7 +99,7 @@ Agent App
 | Host Bridge | 安全传输、主题、语言、capability invoke、Host action。 | 不保存执行事实，不判断任务完成。 |
 | Agent App Runtime Surface | 把 App task / workflow 映射成 AgentRuntime request，并附加 app provenance。 | 不复制 Claw skill launch，不新建第二套 runtime。 |
 | AgentRuntime | 维护 session/thread/turn/task/event/read model/evidence。 | 不决定垂直 App UI 形态。 |
-| Claw Capability Catalog | 把现有 `@配图`、`@搜索`、`@研报` 等能力注册为可复用 capability。 | 不再让能力只绑定 Chat/Inputbar。 |
+| AgentRuntime Capability Catalog / Claw Capability Catalog | 把现有 `@配图`、`@搜索`、`@研报` 等能力注册为可复用 capability；Chat `@命令`、Agent App `lime.agent.startTask`、Automation job 都只是 surface adapter。 | 不再让能力只绑定 Chat/Inputbar，也不把 capability catalog owner 下放给 Agent App SDK。 |
 
 生产期 `lime.agent.startTask` / `lime.workflow.start` 必须通过后端 AgentRuntime Surface；前端 `CapabilityHost` / `WorkflowRuntimeHost` 只能作为 adapter、mock 或本地预览，不得成为生产执行事实源。详细设计见：
 
@@ -152,6 +152,76 @@ interface LimeAgentAppBridgeMessage {
 2. `capability:invoke` 仍必须经过 manifest 声明、entry readiness、permission、policy 和 provenance。
 3. 未开放能力返回 blocked error，不返回 mock 成功、不写假数据。
 4. 主题同步只传当前已生效 token；App 只应用到自己的 DOM，不读取外层 DOM。
+
+## Host Bridge SDK Client
+
+P18.5-S 已在 Lime-side SDK 增加标准 Host Bridge client，目标是让 package-side App 不再各自手写私有 `postMessage` wrapper。App UI 仍运行在 sandbox frame 内，但业务代码只依赖 SDK-style runtime handle：
+
+```ts
+import {
+  buildLimeCapabilityInvokeProvenance,
+  createLimeCoreCapabilityAdapters,
+  createLimeHostBridgeCapabilityInvoker,
+} from "@lime/app-sdk";
+
+const provenance = buildLimeCapabilityInvokeProvenance({
+  sourceKind: "agent_app",
+  appId: "content-factory-app",
+  appVersion: "1.0.0",
+  packageHash,
+  manifestHash,
+  entryKey: "dashboard",
+});
+
+const lime = createLimeCoreCapabilityAdapters({
+  invoker: createLimeHostBridgeCapabilityInvoker({
+    appId: "content-factory-app",
+    entryKey: "dashboard",
+    trustedHostOrigin: "https://lime.local",
+  }),
+  provenance,
+  storageNamespace: "content-factory-app",
+});
+
+await lime.agent.startTask({
+  title: "生成内容批次",
+  taskKind: "content.copy.generate",
+  idempotencyKey: "dashboard:copy",
+  expectedOutput: {
+    artifactKind: "content_batch",
+    workspacePatch: "contentFactoryWorkspacePatch",
+  },
+});
+```
+
+客户端当前实现位置：
+
+| 对象 | 作用 |
+|---|---|
+| `src/features/agent-app/sdk/hostBridgeClient.ts` | 把 typed SDK request 转成 Host Bridge v1 `capability:invoke` message，处理 `app:ready`、`host:getSnapshot`、`host:toast`、`host:navigate`、`host:openExternal`、`host:download`、`host:snapshot`、`theme:update`、`host:visibility`、`host:response` / `host:error`、trusted origin、timeout、pending cleanup，以及 `capability:subscribe / unsubscribe / event`。 |
+| `src/features/agent-app/sdk/index.ts` | SDK-only public surface，只导出 capability facade、stable error、Host Bridge client、mock host 和 App package 需要的 task / storage / artifact / evidence 类型；不导出 UI、installer、repository 或 runtime host 内部实现。 |
+| `src/features/agent-app/index.ts` | 当前 Lime repo public feature entry 已导出 `createLimeCoreCapabilityAdapters`、`createLimeHostBridgeCapabilityInvoker`、`LIME_AGENT_APP_BRIDGE_PROTOCOL` 与 `LIME_AGENT_APP_BRIDGE_VERSION`，作为后续正式 SDK package / package-local shim 的事实源。 |
+| `src/features/agent-app/sdk/hostBridgeClient.test.ts` | 覆盖 ready / snapshot / theme / visibility / toast / navigate / openExternal / download、envelope、stable error、timeout cleanup、capability subscription 事件分发，以及内容工厂 task / storage / artifact / evidence 主链。 |
+| `src/features/agent-app/sdk/publicSdkSurface.test.ts` | 固定 SDK-only public surface，确保后续正式 `@lime/app-sdk` 或 package-local shim 可以从窄导出清单取能力；同时从运行时 namespace 和源码 export 来源两侧禁止导出 UI、安装器、repository、runtime host、adapter、schema 或 dispatcher 内部对象。 |
+| `src/features/agent-app/index.test.ts` | 固定 public feature entry 的 SDK export seam，防止后续 App 只能依赖 Lime 内部深路径。 |
+
+发布状态与退出条件：正式 `@lime/app-sdk` package 尚未从 Lime repo 独立发布；外部 App 仍不得 import `src/features/agent-app/*` 或其它 Lime internal path。P18.5.3 如果需要 package-local shim，只能镜像本节 public API，并在正式 SDK package 可安装后退出。
+
+2026-05-16 08:37 只读复核：Lime repo 根 `package.json` 仍是 `"private": true` 的桌面 App 包；`packages/` 下只有 `packages/lime-cli-npm`，未发现独立 `@lime/app-sdk` / `lime-app-sdk` package 或 workspace export。当前可依赖的 Lime-side 事实源仍是 `src/features/agent-app/index.ts` 的 public feature entry 与 `index.test.ts` 的 export regression；因此外部 `content-factory-app` 在 P18.5.3 迁移时不能 import Lime internal path，正式 SDK 未发布前只能使用带退出条件的 package-local shim 或等待后续独立 SDK package。
+
+2026-05-16 09:52 补充：Lime-side 已新增 `src/features/agent-app/sdk/index.ts` 作为 SDK-only public surface，并用 `publicSdkSurface.test.ts` 固定导出范围。该文件仍不是可安装 npm package，也不授权外部 App import Lime 源码深路径；它只是把后续正式 `@lime/app-sdk` 或 package-local shim 的导出清单从 feature 总入口中剥离出来，降低 UI / installer / runtime host 内部实现被误导出的风险。
+
+2026-05-16 10:08 补充：`contentFactorySdkRegression.test.ts` 已改为只从 `src/features/agent-app/sdk/index.ts` 导入 SDK 类型和 helper，证明 Lime-side 内容工厂回归消费的是 SDK-only public surface，而不是 `capabilityContract.ts` / `capabilityAdapters.ts` 等内部深文件。该调整仍不代表外部 `content-factory-app` package 已迁移。
+
+迁移规则：
+
+1. App package 业务文件不能直接构造 `lime.agentApp.bridge` message。
+2. App package 可以保留业务 helper，但 helper 底层必须调用 `lime.agent / lime.storage / lime.artifacts / lime.evidence` typed facade。
+3. `app:ready`、snapshot、theme、visibility、toast、navigate、openExternal、download 等 Host action / Host event 必须通过 SDK client 使用，不由业务文件直接监听 window message。
+4. `trustedHostOrigin` 应由 Host snapshot / package runtime 注入；开发态可以配置为本地 Host origin，但不得在生产包里写死任意公网 origin。
+5. `targetOrigin` 默认跟随 `trustedHostOrigin`；缺失时只能作为开发态 fallback，不作为正式 package verify 的通过条件。
+6. 订阅类进度事件必须通过 `subscribeCapability / unsubscribeCapability` 注册，业务文件只消费事件 payload，不直接监听 `capability:event`。
+7. P18.5.3 外部 `content-factory-app` 已在 2026-05-16 10:55 完成 package-side SDK facade / verify / dist 同步；后续迁移其它 App 时仍按同一规则执行，不允许回退到私有 bridge transport。
 
 ## App 内 Agent Task API
 

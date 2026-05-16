@@ -10,6 +10,15 @@ import {
   type LimeEffectiveThemeMode,
   type LimeThemeMode,
 } from "@/lib/appearance/themeMode";
+import { safeListen } from "@/lib/dev-bridge";
+import {
+  buildLimeCapabilityInvokeRequest,
+  createLimeCapabilitySuccessResponse,
+  type LimeCapabilityInvokeProvenance,
+  type LimeCapabilityInvokeRequest,
+  type LimeCapabilityName,
+} from "../sdk/capabilityContract";
+import { toLimeCapabilityError } from "../sdk/capabilityErrors";
 
 export const AGENT_APP_BRIDGE_PROTOCOL = "lime.agentApp.bridge";
 export const AGENT_APP_BRIDGE_VERSION = 1;
@@ -74,6 +83,10 @@ export interface AgentAppHostBridgeCapabilityRequest {
   method: string;
   args?: unknown[];
   input?: unknown;
+  idempotencyKey?: string;
+  expectedSchema?: unknown;
+  provenance?: LimeCapabilityInvokeProvenance;
+  invokeRequest: LimeCapabilityInvokeRequest;
   rawPayload: Record<string, unknown>;
 }
 
@@ -91,6 +104,7 @@ export interface CreateAgentAppHostBridgeOptions {
   dispatchCapability?: (
     request: AgentAppHostBridgeCapabilityRequest,
   ) => Promise<unknown> | unknown;
+  listenRuntimeEvent?: typeof safeListen;
   now?: () => string;
 }
 
@@ -106,7 +120,14 @@ const HOST_ACTION_TYPES = new Set([
   "host:openExternal",
   "host:download",
   "capability:invoke",
+  "capability:subscribe",
+  "capability:unsubscribe",
 ]);
+
+const DEFAULT_TASK_SUBSCRIPTION_POLL_INTERVAL_MS = 1000;
+const MIN_TASK_SUBSCRIPTION_POLL_INTERVAL_MS = 250;
+const MAX_TASK_SUBSCRIPTION_POLL_INTERVAL_MS = 10_000;
+const DEFAULT_TERMINAL_ARTIFACT_REPLAY_POLLS = 4;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -117,10 +138,231 @@ function readString(value: Record<string, unknown>, key: string): string | undef
   return typeof item === "string" && item.trim() ? item.trim() : undefined;
 }
 
+function readPositiveInteger(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return fallback;
+  }
+  return Math.min(Math.max(Math.floor(number), min), max);
+}
+
+function hasOwn(value: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
 function readErrorCode(error: unknown): string | undefined {
   return isRecord(error) && typeof error.code === "string" && error.code.trim()
     ? error.code.trim()
     : undefined;
+}
+
+function readCapabilityInvokeProvenance(
+  value: unknown,
+): LimeCapabilityInvokeProvenance | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  if (
+    typeof value.appId !== "string" ||
+    typeof value.packageHash !== "string" ||
+    typeof value.manifestHash !== "string"
+  ) {
+    return undefined;
+  }
+  return {
+    appId: value.appId,
+    packageHash: value.packageHash,
+    manifestHash: value.manifestHash,
+    entryKey: typeof value.entryKey === "string" ? value.entryKey : undefined,
+    workflowRunId:
+      typeof value.workflowRunId === "string" ? value.workflowRunId : undefined,
+    workspaceId:
+      typeof value.workspaceId === "string" ? value.workspaceId : undefined,
+    taskId: typeof value.taskId === "string" ? value.taskId : undefined,
+  };
+}
+
+function readTaskIdFromPayload(payload: Record<string, unknown>): string | undefined {
+  const directTaskId = readString(payload, "taskId");
+  if (directTaskId) {
+    return directTaskId;
+  }
+  if (isRecord(payload.input)) {
+    const inputTaskId = readString(payload.input, "taskId");
+    if (inputTaskId) {
+      return inputTaskId;
+    }
+  }
+  return Array.isArray(payload.args) && typeof payload.args[0] === "string"
+    ? payload.args[0].trim()
+    : undefined;
+}
+
+function readRuntimeEventNameFromPayload(
+  appId: string,
+  taskId: string,
+  payload: Record<string, unknown>,
+): string {
+  const explicit =
+    readString(payload, "eventName") ??
+    (isRecord(payload.input) ? readString(payload.input, "eventName") : undefined);
+  return explicit ?? `agent_app_runtime:${appId}:${taskId}`;
+}
+
+function buildTaskEventsFromRuntimeEventPayload(payload: unknown): unknown[] {
+  if (!isRecord(payload)) {
+    return [];
+  }
+  return [
+    {
+      eventType:
+        readString(payload, "eventType") ??
+        readString(payload, "type") ??
+        "task:runtimeEvent",
+      status: readString(payload, "status"),
+      message:
+        readString(payload, "message") ??
+        readString(payload, "status") ??
+        readString(payload, "type") ??
+        "AgentRuntime event",
+      payload,
+    },
+  ];
+}
+
+function readTaskEventsFromValue(value: unknown): unknown[] {
+  if (!isRecord(value)) {
+    return [];
+  }
+  const artifactEvents = buildArtifactReplayEventsFromValue(value);
+  if (Array.isArray(value.events)) {
+    return [...value.events, ...artifactEvents];
+  }
+  if (Array.isArray(value.taskEvents)) {
+    return [...value.taskEvents, ...artifactEvents];
+  }
+  return artifactEvents;
+}
+
+function readArtifactsFromValue(value: unknown): Record<string, unknown>[] {
+  if (!isRecord(value)) {
+    return [];
+  }
+  const direct = Array.isArray(value.artifacts) ? value.artifacts : [];
+  const fromResult = isRecord(value.result) ? readArtifactsFromValue(value.result) : [];
+  const fromThreadRead = isRecord(value.threadRead)
+    ? readArtifactsFromValue(value.threadRead)
+    : [];
+  return [...direct, ...fromResult, ...fromThreadRead].filter(isRecord);
+}
+
+function buildArtifactReplayEventsFromValue(value: unknown): unknown[] {
+  const artifacts = readArtifactsFromValue(value);
+  if (!artifacts.length) {
+    return [];
+  }
+  return artifacts.map((artifact, index) => {
+    const metadata = isRecord(artifact.metadata) ? artifact.metadata : {};
+    const artifactRef =
+      readString(artifact, "path") ??
+      readString(artifact, "item_id") ??
+      readString(artifact, "id") ??
+      `artifact:${index + 1}`;
+    const artifactDocument =
+      isRecord(metadata.artifactDocument) || isRecord(metadata.artifact_document)
+        ? (metadata.artifactDocument ?? metadata.artifact_document)
+        : undefined;
+    const workspacePatch =
+      isRecord(metadata.workspacePatch) || isRecord(metadata.contentFactoryWorkspacePatch)
+        ? (metadata.workspacePatch ?? metadata.contentFactoryWorkspacePatch)
+        : undefined;
+    return {
+      eventType: "artifact:created",
+      status: readString(artifact, "status") ?? "created",
+      message:
+        readString(artifact, "title") ??
+        readString(artifact, "artifact_type") ??
+        "Artifact 已创建",
+      artifactRef,
+      payload: {
+        artifact,
+        artifactDocument,
+        workspacePatch,
+        contentFactoryWorkspacePatch: workspacePatch,
+      },
+    };
+  });
+}
+
+function isTerminalTaskValue(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const status = String(value.taskStatus ?? value.status ?? "").toLowerCase();
+  return [
+    "succeeded",
+    "success",
+    "completed",
+    "complete",
+    "failed",
+    "failure",
+    "error",
+    "cancelled",
+    "canceled",
+  ].includes(status);
+}
+
+function isSuccessfulTerminalTaskValue(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const status = String(value.taskStatus ?? value.status ?? "").toLowerCase();
+  return ["succeeded", "success", "completed", "complete"].includes(status);
+}
+
+function hasWorkspacePatchPayload(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+  if (isRecord(value.workspacePatch) || isRecord(value.contentFactoryWorkspacePatch)) {
+    return true;
+  }
+  if (isRecord(value.payload) && hasWorkspacePatchPayload(value.payload)) {
+    return true;
+  }
+  if (isRecord(value.result) && hasWorkspacePatchPayload(value.result)) {
+    return true;
+  }
+  if (isRecord(value.threadRead) && hasWorkspacePatchPayload(value.threadRead)) {
+    return true;
+  }
+  if (Array.isArray(value.events) && value.events.some(hasWorkspacePatchPayload)) {
+    return true;
+  }
+  if (Array.isArray(value.taskEvents) && value.taskEvents.some(hasWorkspacePatchPayload)) {
+    return true;
+  }
+  if (Array.isArray(value.artifacts) && value.artifacts.length > 0) {
+    return true;
+  }
+  return false;
+}
+
+interface AgentAppTaskSubscription {
+  subscriptionId: string;
+  taskId: string;
+  pollIntervalMs: number;
+  bridgeAction?: string;
+  runtimeEventName?: string;
+  runtimeEventUnlisten?: () => void;
+  timerId?: number;
+  inFlight: boolean;
+  terminalArtifactReplayPolls: number;
 }
 
 function collectCssVariableTokens(root: HTMLElement): Record<string, string> {
@@ -295,8 +537,11 @@ export class AgentAppHostBridge {
   private readonly dispatchCapability?: (
     request: AgentAppHostBridgeCapabilityRequest,
   ) => Promise<unknown> | unknown;
+  private readonly listenRuntimeEvent: typeof safeListen;
   private readonly now?: () => string;
   private readonly runtimeOrigin: string;
+  private readonly taskSubscriptions = new Map<string, AgentAppTaskSubscription>();
+  private taskSubscriptionSequence = 0;
   private disposed = false;
 
   constructor(options: CreateAgentAppHostBridgeOptions) {
@@ -316,6 +561,7 @@ export class AgentAppHostBridge {
     this.openExternal = options.openExternal;
     this.capabilities = options.capabilities;
     this.dispatchCapability = options.dispatchCapability;
+    this.listenRuntimeEvent = options.listenRuntimeEvent ?? safeListen;
     this.now = options.now;
     this.runtimeOrigin = runtimeOrigin;
   }
@@ -353,6 +599,9 @@ export class AgentAppHostBridge {
       "visibilitychange",
       this.handleVisibilityChanged,
     );
+    for (const subscriptionId of Array.from(this.taskSubscriptions.keys())) {
+      this.stopTaskSubscription(subscriptionId);
+    }
   }
 
   sendSnapshot(requestId?: string): void {
@@ -408,7 +657,10 @@ export class AgentAppHostBridge {
     }
 
     if (!HOST_ACTION_TYPES.has(message.type)) {
-      this.sendError(message, "UNKNOWN_MESSAGE", "Unsupported bridge message.");
+      this.sendError(message, {
+        code: "UNKNOWN_MESSAGE",
+        message: "Unsupported bridge message.",
+      });
       return;
     }
 
@@ -416,15 +668,8 @@ export class AgentAppHostBridge {
       const result = await this.dispatchHostAction(message);
       this.sendResponse(message, result);
     } catch (error) {
-      const payload =
-        error instanceof AgentAppHostBridgeActionError
-          ? { code: error.code, message: error.message }
-          : {
-              code: readErrorCode(error) ?? "HOST_ACTION_FAILED",
-              message:
-                error instanceof Error ? error.message : "Host action failed.",
-            };
-      this.sendError(message, payload.code, payload.message);
+      const payload = this.buildHostErrorPayload(message, error);
+      this.sendError(message, payload);
     }
   }
 
@@ -459,6 +704,12 @@ export class AgentAppHostBridge {
     if (message.type === "capability:invoke") {
       return this.handleCapabilityInvoke(message);
     }
+    if (message.type === "capability:subscribe") {
+      return this.handleCapabilitySubscribe(message);
+    }
+    if (message.type === "capability:unsubscribe") {
+      return this.handleCapabilityUnsubscribe(message);
+    }
 
     throw new AgentAppHostBridgeActionError(
       "CAPABILITY_BLOCKED",
@@ -489,13 +740,36 @@ export class AgentAppHostBridge {
         "capability:invoke requires payload.capability and payload.method.",
       );
     }
-    const args = Array.isArray(message.payload.args)
+    const rawArgs = hasOwn(message.payload, "args")
       ? message.payload.args
       : undefined;
+    const args = Array.isArray(rawArgs) ? rawArgs : undefined;
+    const input = hasOwn(message.payload, "input")
+      ? message.payload.input
+      : Array.isArray(rawArgs)
+        ? undefined
+        : rawArgs;
+    const idempotencyKey = readString(message.payload, "idempotencyKey");
+    const expectedSchema = hasOwn(message.payload, "expectedSchema")
+      ? message.payload.expectedSchema
+      : undefined;
+    const provenance = readCapabilityInvokeProvenance(
+      message.payload.provenance,
+    );
+    const invokeRequest = buildLimeCapabilityInvokeRequest({
+      capability: capability as LimeCapabilityName,
+      method: method as never,
+      args: input,
+      requestId: message.requestId,
+      idempotencyKey,
+      expectedSchema,
+      provenance,
+    }) as LimeCapabilityInvokeRequest;
     const request: AgentAppHostBridgeCapabilityRequest = {
       appId: this.appId,
       capability,
       method,
+      invokeRequest,
       rawPayload: message.payload,
     };
     if (this.entryKey) {
@@ -507,11 +781,293 @@ export class AgentAppHostBridge {
     if (args) {
       request.args = args;
     }
-    if (Object.prototype.hasOwnProperty.call(message.payload, "input")) {
-      request.input = message.payload.input;
+    if (input !== undefined) {
+      request.input = input;
+    }
+    if (idempotencyKey) {
+      request.idempotencyKey = idempotencyKey;
+    }
+    if (expectedSchema !== undefined) {
+      request.expectedSchema = expectedSchema;
+    }
+    if (provenance) {
+      request.provenance = provenance;
     }
     const result = await this.dispatchCapability(request);
-    return { result };
+    return {
+      ...createLimeCapabilitySuccessResponse(result),
+      result,
+    };
+  }
+
+  private async handleCapabilitySubscribe(
+    message: LimeAgentAppBridgeMessage,
+  ): Promise<Record<string, unknown>> {
+    if (!this.dispatchCapability) {
+      throw new AgentAppHostBridgeActionError(
+        "CAPABILITY_BLOCKED",
+        "Capability subscription is not enabled for this Agent App runtime.",
+      );
+    }
+    if (!isRecord(message.payload)) {
+      throw new AgentAppHostBridgeActionError(
+        "INVALID_PAYLOAD",
+        "capability:subscribe requires a payload object.",
+      );
+    }
+    const capability = readString(message.payload, "capability");
+    const topic =
+      readString(message.payload, "topic") ?? readString(message.payload, "method");
+    const taskId = readTaskIdFromPayload(message.payload);
+    if (capability !== "lime.agent" || !topic || !topic.startsWith("task") || !taskId) {
+      throw new AgentAppHostBridgeActionError(
+        "INVALID_PAYLOAD",
+        "capability:subscribe currently requires lime.agent task payload.taskId.",
+      );
+    }
+    const subscriptionId =
+      readString(message.payload, "subscriptionId") ??
+      `agent-app-subscription-${++this.taskSubscriptionSequence}`;
+    const pollIntervalMs = readPositiveInteger(
+      message.payload.pollIntervalMs,
+      DEFAULT_TASK_SUBSCRIPTION_POLL_INTERVAL_MS,
+      MIN_TASK_SUBSCRIPTION_POLL_INTERVAL_MS,
+      MAX_TASK_SUBSCRIPTION_POLL_INTERVAL_MS,
+    );
+    const bridgeAction =
+      readString(message.payload, "bridgeAction") ??
+      (isRecord(message.payload.input)
+        ? readString(message.payload.input, "bridgeAction")
+        : undefined);
+    const runtimeEventName = readRuntimeEventNameFromPayload(
+      this.appId,
+      taskId,
+      message.payload,
+    );
+
+    this.stopTaskSubscription(subscriptionId);
+    this.taskSubscriptions.set(subscriptionId, {
+      subscriptionId,
+      taskId,
+      pollIntervalMs,
+      bridgeAction,
+      runtimeEventName,
+      inFlight: false,
+      terminalArtifactReplayPolls: 0,
+    });
+    void this.attachRuntimeEventSubscription(subscriptionId);
+    void this.pollTaskSubscription(subscriptionId);
+
+    return {
+      subscriptionId,
+      capability,
+      topic: "task",
+      taskId,
+      pollIntervalMs,
+      bridgeAction,
+      runtimeEventName,
+    };
+  }
+
+  private handleCapabilityUnsubscribe(
+    message: LimeAgentAppBridgeMessage,
+  ): Record<string, unknown> {
+    if (!isRecord(message.payload)) {
+      throw new AgentAppHostBridgeActionError(
+        "INVALID_PAYLOAD",
+        "capability:unsubscribe requires a payload object.",
+      );
+    }
+    const subscriptionId =
+      readString(message.payload, "subscriptionId") ??
+      (isRecord(message.payload.input)
+        ? readString(message.payload.input, "subscriptionId")
+        : undefined);
+    if (!subscriptionId) {
+      throw new AgentAppHostBridgeActionError(
+        "INVALID_PAYLOAD",
+        "capability:unsubscribe requires payload.subscriptionId.",
+      );
+    }
+    const unsubscribed = this.stopTaskSubscription(subscriptionId);
+    return {
+      subscriptionId,
+      unsubscribed,
+    };
+  }
+
+  private async attachRuntimeEventSubscription(
+    subscriptionId: string,
+  ): Promise<void> {
+    const subscription = this.taskSubscriptions.get(subscriptionId);
+    if (!subscription?.runtimeEventName || this.disposed) {
+      return;
+    }
+    try {
+      const unlisten = await this.listenRuntimeEvent<unknown>(
+        subscription.runtimeEventName,
+        (event) => this.handleRuntimeTaskEvent(subscriptionId, event.payload),
+      );
+      const latest = this.taskSubscriptions.get(subscriptionId);
+      if (!latest || latest.runtimeEventName !== subscription.runtimeEventName) {
+        unlisten();
+        return;
+      }
+      latest.runtimeEventUnlisten = unlisten;
+    } catch (error) {
+      this.postToApp("capability:event", {
+        subscriptionId,
+        capability: "lime.agent",
+        topic: "task",
+        eventType: "task:eventStreamUnavailable",
+        taskId: subscription.taskId,
+        bridgeAction: subscription.bridgeAction,
+        runtimeEventName: subscription.runtimeEventName,
+        error: this.buildHostErrorPayload(
+          {
+            protocol: AGENT_APP_BRIDGE_PROTOCOL,
+            version: AGENT_APP_BRIDGE_VERSION,
+            type: "capability:subscribe",
+            appId: this.appId,
+            entryKey: this.entryKey,
+          },
+          error,
+        ),
+        emittedAt: (this.now ?? (() => new Date().toISOString()))(),
+      });
+    }
+  }
+
+  private handleRuntimeTaskEvent(subscriptionId: string, payload: unknown): void {
+    const subscription = this.taskSubscriptions.get(subscriptionId);
+    if (!subscription || this.disposed) {
+      return;
+    }
+    const events = readTaskEventsFromValue(payload);
+    this.postToApp("capability:event", {
+      subscriptionId,
+      capability: "lime.agent",
+      topic: "task",
+      eventType: "task:runtimeEvent",
+      taskId: subscription.taskId,
+      bridgeAction: subscription.bridgeAction,
+      runtimeEventName: subscription.runtimeEventName,
+      runtimeEvent: payload,
+      events: events.length ? events : buildTaskEventsFromRuntimeEventPayload(payload),
+      emittedAt: (this.now ?? (() => new Date().toISOString()))(),
+    });
+  }
+
+  private async pollTaskSubscription(subscriptionId: string): Promise<void> {
+    const subscription = this.taskSubscriptions.get(subscriptionId);
+    if (!subscription || subscription.inFlight || this.disposed || !this.dispatchCapability) {
+      return;
+    }
+    subscription.inFlight = true;
+    try {
+      const result = await this.dispatchCapability(
+        this.buildTaskSubscriptionPollRequest(subscription),
+      );
+      this.postToApp("capability:event", {
+        subscriptionId,
+        capability: "lime.agent",
+        topic: "task",
+        eventType: "task:update",
+        taskId: subscription.taskId,
+        bridgeAction: subscription.bridgeAction,
+        task: result,
+        events: readTaskEventsFromValue(result),
+        emittedAt: (this.now ?? (() => new Date().toISOString()))(),
+      });
+      const shouldPollForTerminalArtifact =
+        isSuccessfulTerminalTaskValue(result) && !hasWorkspacePatchPayload(result);
+      if (shouldPollForTerminalArtifact) {
+        subscription.terminalArtifactReplayPolls += 1;
+      }
+      if (
+        isTerminalTaskValue(result) &&
+        (!shouldPollForTerminalArtifact ||
+          subscription.terminalArtifactReplayPolls > DEFAULT_TERMINAL_ARTIFACT_REPLAY_POLLS)
+      ) {
+        this.stopTaskSubscription(subscriptionId);
+        return;
+      }
+    } catch (error) {
+      this.postToApp("capability:event", {
+        subscriptionId,
+        capability: "lime.agent",
+        topic: "task",
+        eventType: "task:error",
+        taskId: subscription.taskId,
+        bridgeAction: subscription.bridgeAction,
+        error: this.buildHostErrorPayload(
+          {
+            protocol: AGENT_APP_BRIDGE_PROTOCOL,
+            version: AGENT_APP_BRIDGE_VERSION,
+            type: "capability:invoke",
+            appId: this.appId,
+            entryKey: this.entryKey,
+          },
+          error,
+        ),
+        emittedAt: (this.now ?? (() => new Date().toISOString()))(),
+      });
+      this.stopTaskSubscription(subscriptionId);
+      return;
+    } finally {
+      subscription.inFlight = false;
+    }
+
+    const latest = this.taskSubscriptions.get(subscriptionId);
+    if (!latest || this.disposed) {
+      return;
+    }
+    latest.timerId = window.setTimeout(() => {
+      void this.pollTaskSubscription(subscriptionId);
+    }, latest.pollIntervalMs);
+  }
+
+  private buildTaskSubscriptionPollRequest(
+    subscription: AgentAppTaskSubscription,
+  ): AgentAppHostBridgeCapabilityRequest {
+    const input = { taskId: subscription.taskId };
+    const invokeRequest = buildLimeCapabilityInvokeRequest({
+      capability: "lime.agent",
+      method: "getTask" as never,
+      args: input,
+      requestId: `${subscription.subscriptionId}:poll`,
+    }) as LimeCapabilityInvokeRequest;
+    const request: AgentAppHostBridgeCapabilityRequest = {
+      appId: this.appId,
+      capability: "lime.agent",
+      method: "getTask",
+      requestId: `${subscription.subscriptionId}:poll`,
+      input,
+      invokeRequest,
+      rawPayload: {
+        capability: "lime.agent",
+        method: "getTask",
+        input,
+        subscriptionId: subscription.subscriptionId,
+      },
+    };
+    if (this.entryKey) {
+      request.entryKey = this.entryKey;
+    }
+    return request;
+  }
+
+  private stopTaskSubscription(subscriptionId: string): boolean {
+    const subscription = this.taskSubscriptions.get(subscriptionId);
+    if (!subscription) {
+      return false;
+    }
+    if (subscription.timerId !== undefined) {
+      window.clearTimeout(subscription.timerId);
+    }
+    subscription.runtimeEventUnlisten?.();
+    this.taskSubscriptions.delete(subscriptionId);
+    return true;
   }
 
   private handleToast(payload: unknown): void {
@@ -607,17 +1163,47 @@ export class AgentAppHostBridge {
     this.postToApp("host:response", payload, request.requestId);
   }
 
+  private buildHostErrorPayload(
+    request: LimeAgentAppBridgeMessage,
+    error: unknown,
+  ): Record<string, unknown> {
+    if (request.type === "capability:invoke") {
+      const payload = isRecord(request.payload) ? request.payload : {};
+      const stableError = toLimeCapabilityError(error, {
+        appId: request.appId,
+        entryKey: request.entryKey,
+        capability: readString(payload, "capability"),
+        method: readString(payload, "method"),
+        requestId: request.requestId,
+      });
+      return {
+        ok: false,
+        error: stableError,
+        code: stableError.code,
+        message: stableError.message,
+        causeCode: stableError.causeCode,
+      };
+    }
+
+    if (error instanceof AgentAppHostBridgeActionError) {
+      return {
+        code: error.code,
+        message: error.message,
+      };
+    }
+    return {
+      code: readErrorCode(error) ?? "HOST_ACTION_FAILED",
+      message: error instanceof Error ? error.message : "Host action failed.",
+    };
+  }
+
   private sendError(
     request: LimeAgentAppBridgeMessage,
-    code: string,
-    message: string,
+    payload: Record<string, unknown>,
   ): void {
     this.postToApp(
       "host:error",
-      {
-        code,
-        message,
-      },
+      payload,
       request.requestId,
     );
   }

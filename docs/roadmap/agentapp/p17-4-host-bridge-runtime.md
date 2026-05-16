@@ -384,5 +384,5 @@ P17.4 已完成当前 production hardening 闭环：`AgentAppHostBridge`、`capa
 结论：
 
 1. P17.4.5 已完成；完整 GUI smoke 通过，可以把 P17.4 runtime surface production hardening 标记为当前闭环完成。
-2. P17.5 仍未开始；下一刀需要新增或扩展正式 `agent-apps` 专用 smoke，覆盖 install / registration / launch / disable / uninstall rehearsal / runtime surface / flag-off。
-3. P17.5 之前仍不得发布 marketplace、Cloud 管理台或真实 delete-data。
+2. P17.5 已在后续 [Formal Entry GUI Smoke](./p17-5-formal-entry-gui-smoke.md) 中完成；正式 `agent-apps` 专用 smoke 已覆盖 install / registration / launch / disable / uninstall rehearsal / runtime surface / flag-off。
+3. P17.5 通过后仍不得发布 marketplace、Cloud 管理台或真实 delete-data；下一刀进入 P18 Typed Capability SDK Gate。

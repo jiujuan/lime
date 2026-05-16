@@ -265,6 +265,7 @@ fn build_thread_read() -> AgentRuntimeThreadReadModel {
                 error: None,
             },
         ],
+        artifacts: Vec::new(),
         model_routing: Some(json!({
             "taskKind": "translation",
             "serviceModelSlot": "translation",

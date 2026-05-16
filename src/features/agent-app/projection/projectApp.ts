@@ -208,6 +208,7 @@ export function projectApp(params: {
     toolRequirements: manifest.toolRefs.map((tool) => ({
       key: tool.key,
       provider: tool.provider,
+      capabilities: tool.capabilities ?? [],
       required: tool.required ?? false,
     })),
     evals: manifest.evals.map((evalRule) => ({

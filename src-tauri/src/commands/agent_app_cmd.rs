@@ -503,6 +503,7 @@ pub async fn agent_app_start_ui_runtime(
     start_agent_app_ui_runtime_with_env(request, runtime_env).await
 }
 
+#[cfg(debug_assertions)]
 pub async fn agent_app_start_ui_runtime_for_dev_bridge(
     request: AgentAppUiRuntimeStartRequest,
     config: &Config,

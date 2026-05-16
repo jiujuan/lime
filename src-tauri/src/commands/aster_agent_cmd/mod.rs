@@ -471,7 +471,7 @@ pub(crate) use dto::{
     AgentRuntimeSaveReviewDecisionRequest, AgentRuntimeSendSubagentInputRequest,
     AgentRuntimeSendSubagentInputResponse, AgentRuntimeSessionDetail,
     AgentRuntimeSpawnSubagentRequest, AgentRuntimeSpawnSubagentResponse,
-    AgentRuntimeSubmitTurnRequest, AgentRuntimeThreadDiagnostics,
+    AgentRuntimeSubmitTurnRequest, AgentRuntimeThreadArtifactView, AgentRuntimeThreadDiagnostics,
     AgentRuntimeThreadEvidenceSummary, AgentRuntimeThreadReadModel,
     AgentRuntimeThreadTelemetrySummary, AgentRuntimeThreadToolCallView,
     AgentRuntimeThreadTurnProfileView, AgentRuntimeToolInventoryRequest,
@@ -564,7 +564,7 @@ pub(crate) use service_skill_launch::{
     prepare_service_scene_launch_request_metadata, should_lock_service_skill_launch_to_site_tools,
     ServiceSkillLaunchPreloadExecution,
 };
-pub(crate) use session_runtime::create_runtime_session_internal_with_runtime;
+pub(crate) use session_runtime::create_runtime_session_internal_with_runtime_and_session_id;
 pub(crate) use session_runtime::{
     persist_session_provider_routing, resolve_recent_preference_from_sources,
     resolve_session_provider_selector, resolve_session_recent_harness_context,

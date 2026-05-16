@@ -63,6 +63,20 @@ describe("AgentRuntimeCapabilityHost", () => {
             evidenceRef: "evidence-1",
             occurredAt: "2026-05-15T00:00:02.000Z",
           },
+          {
+            id: "artifact:created:artifact-1",
+            eventType: "artifact:created",
+            status: "created",
+            message: "内容批次已创建",
+            artifactRef: ".lime/artifacts/content-batch.json",
+            occurredAt: "2026-05-15T00:00:02.500Z",
+            payload: {
+              contentFactoryWorkspacePatch: {
+                kind: "content_batch",
+                contentBatch: { count: 20 },
+              },
+            },
+          },
         ],
         threadRead: {
           session_id: request.sessionId,
@@ -102,6 +116,11 @@ describe("AgentRuntimeCapabilityHost", () => {
       expectedOutput: { artifactKind: "content_table" },
       tools: ["image_generation"],
       humanReview: true,
+      providerPreference: "deepseek",
+      modelPreference: "deepseek-v4-flash",
+      queueIfBusy: true,
+      skipPreSubmitResume: true,
+      runStartHooks: false,
     });
     const snapshot = await sdk.agent.getTask(started.taskId);
     const stream = await sdk.agent.streamTask(started.taskId);
@@ -124,6 +143,11 @@ describe("AgentRuntimeCapabilityHost", () => {
         taskKind: "content.scenario_planning",
         capabilityHints: ["image_generation"],
         humanReview: true,
+        providerPreference: "deepseek",
+        modelPreference: "deepseek-v4-flash",
+        queueIfBusy: true,
+        skipPreSubmitResume: true,
+        runStartHooks: false,
       }),
     );
     expect(started).toMatchObject({
@@ -148,6 +172,15 @@ describe("AgentRuntimeCapabilityHost", () => {
         expect.objectContaining({
           type: "evidence:recorded",
           refs: ["evidence-1"],
+        }),
+        expect.objectContaining({
+          type: "artifact:created",
+          refs: [".lime/artifacts/content-batch.json"],
+          payload: expect.objectContaining({
+            contentFactoryWorkspacePatch: expect.objectContaining({
+              kind: "content_batch",
+            }),
+          }),
         }),
       ]),
     });
@@ -200,5 +233,245 @@ describe("AgentRuntimeCapabilityHost", () => {
       retryOfTaskId: "agent-app-task-1",
       retryAttempt: 1,
     });
+  });
+
+  it("从 Agent App storage 恢复 runtime task state，支持刷新后继续读取和响应", async () => {
+    const api = {
+      startTask: vi.fn(async (request) => ({
+        appId: request.appId,
+        entryKey: request.entryKey,
+        taskId: "agent-app-task-persisted",
+        traceId: "agent-app-trace-persisted",
+        taskKind: request.taskKind,
+        sessionId: "session-persisted",
+        turnId: "turn-persisted",
+        eventName: `agent_app_runtime:${request.appId}:agent-app-task-persisted`,
+        status: "accepted" as const,
+        submittedAt: "2026-05-15T00:00:00.000Z",
+      })),
+      getTask: vi.fn(async (request) => ({
+        appId: request.appId,
+        taskId: request.taskId,
+        sessionId: request.sessionId,
+        status: "thread_read_available" as const,
+        taskStatus: "completed",
+        taskEvents: [
+          {
+            id: "artifact:created:artifact-1",
+            eventType: "artifact:created",
+            status: "created",
+            message: "内容批次已创建",
+            artifactRef: ".lime/artifacts/content-batch.json",
+            occurredAt: "2026-05-15T00:00:02.000Z",
+          },
+        ],
+        threadRead: {
+          session_id: request.sessionId,
+          profile_status: "completed",
+        },
+      })),
+      cancelTask: vi.fn(async (request) => ({
+        appId: request.appId,
+        taskId: request.taskId,
+        sessionId: request.sessionId,
+        cancelled: true,
+        status: "cancelled" as const,
+      })),
+      submitHostResponse: vi.fn(async (request) => ({
+        appId: request.appId,
+        taskId: request.taskId,
+        status: "submitted" as const,
+      })),
+    };
+    const delegate = buildDelegateHost();
+    const firstHost = new AgentRuntimeCapabilityHost({
+      delegate,
+      appId: "content-factory-app",
+      appVersion: "0.3.0",
+      packageHash: "package-hash-1",
+      manifestHash: "manifest-hash-1",
+      workspaceIdResolver: async () => "workspace-1",
+      api,
+      now: () => "2026-05-15T00:00:03.000Z",
+    });
+    const started = await firstHost
+      .createSdkContext("dashboard")
+      .agent.startTask({
+        title: "生成内容批次",
+        taskKind: "content.copy.generate",
+        input: { projectId: "project-1" },
+        expectedOutput: { artifactKind: "content_batch" },
+        humanReview: true,
+      });
+
+    expect(
+      delegate
+        .getStorageEntries({ appId: "content-factory-app" })
+        .some(
+          (entry) =>
+            entry.key ===
+            "agent-runtime/tasks/agent-app-task-persisted",
+        ),
+    ).toBe(true);
+
+    const reloadedHost = new AgentRuntimeCapabilityHost({
+      delegate,
+      appId: "content-factory-app",
+      appVersion: "0.3.0",
+      packageHash: "package-hash-1",
+      manifestHash: "manifest-hash-1",
+      workspaceIdResolver: async () => "workspace-1",
+      api,
+      now: () => "2026-05-15T00:00:04.000Z",
+    });
+    const reloadedSdk = reloadedHost.createSdkContext("dashboard");
+    const restored = await reloadedSdk.agent.getTask(started.taskId);
+    const listed = await reloadedSdk.agent.listTasks();
+    const hostResponse = await reloadedSdk.agent.submitHostResponse({
+      taskId: started.taskId,
+      requestId: "request-1",
+      actionType: "ask_user",
+      response: "继续执行。",
+    });
+
+    expect(api.getTask).toHaveBeenCalledWith({
+      appId: "content-factory-app",
+      taskId: "agent-app-task-persisted",
+      sessionId: "session-persisted",
+    });
+    expect(restored).toMatchObject({
+      taskId: "agent-app-task-persisted",
+      status: "succeeded",
+      events: [
+        expect.objectContaining({
+          type: "artifact:created",
+          refs: [".lime/artifacts/content-batch.json"],
+        }),
+      ],
+    });
+    expect(listed).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ taskId: "agent-app-task-persisted" }),
+      ]),
+    );
+    expect(api.submitHostResponse).toHaveBeenCalledWith({
+      appId: "content-factory-app",
+      taskId: "agent-app-task-persisted",
+      runtimeRequest: expect.objectContaining({
+        session_id: "session-persisted",
+        request_id: "request-1",
+        action_scope: expect.objectContaining({
+          session_id: "session-persisted",
+          turn_id: "turn-persisted",
+        }),
+      }),
+    });
+    expect(hostResponse).toEqual({
+      taskId: "agent-app-task-persisted",
+      requestId: "request-1",
+      status: "submitted",
+      submittedAt: "2026-05-15T00:00:04.000Z",
+    });
+  });
+
+  it("从 threadRead artifacts 补投 artifact:created payload，保证 Host Bridge 可 replay 最终产物", async () => {
+    const api = {
+      startTask: vi.fn(async (request) => ({
+        appId: request.appId,
+        entryKey: request.entryKey,
+        taskId: "agent-app-task-artifact-replay",
+        traceId: "agent-app-trace-artifact-replay",
+        taskKind: request.taskKind,
+        sessionId: "session-artifact-replay",
+        turnId: "turn-artifact-replay",
+        eventName: `agent_app_runtime:${request.appId}:agent-app-task-artifact-replay`,
+        status: "accepted" as const,
+        submittedAt: "2026-05-15T00:00:00.000Z",
+      })),
+      getTask: vi.fn(async (request) => ({
+        appId: request.appId,
+        taskId: request.taskId,
+        sessionId: request.sessionId,
+        status: "thread_read_available" as const,
+        taskStatus: "completed",
+        taskEvents: [
+          {
+            id: "task:completed",
+            eventType: "task:completed",
+            status: "completed",
+            message: "任务已完成",
+            occurredAt: "2026-05-15T00:00:02.000Z",
+          },
+        ],
+        threadRead: {
+          session_id: request.sessionId,
+          profile_status: "completed",
+          artifacts: [
+            {
+              item_id: "artifact-item-1",
+              path: ".lime/artifacts/content-batch.json",
+              title: "内容批次",
+              status: "completed",
+              completed_at: "2026-05-15T00:00:03.000Z",
+              metadata: {
+                artifactDocument: {
+                  blocks: [
+                    {
+                      content: "```json\n{\"contentFactoryWorkspacePatch\":{\"kind\":\"content_batch\",\"contentBatch\":{\"count\":20}}}\n```",
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+        },
+      })),
+      cancelTask: vi.fn(async (request) => ({
+        appId: request.appId,
+        taskId: request.taskId,
+        sessionId: request.sessionId,
+        cancelled: true,
+        status: "cancelled" as const,
+      })),
+      submitHostResponse: vi.fn(async (request) => ({
+        appId: request.appId,
+        taskId: request.taskId,
+        status: "submitted" as const,
+      })),
+    };
+    const host = new AgentRuntimeCapabilityHost({
+      delegate: buildDelegateHost(),
+      appId: "content-factory-app",
+      appVersion: "0.3.0",
+      packageHash: "package-hash-1",
+      manifestHash: "manifest-hash-1",
+      workspaceIdResolver: async () => "workspace-1",
+      api,
+      now: () => "2026-05-15T00:00:04.000Z",
+    });
+    const sdk = host.createSdkContext("dashboard");
+    const started = await sdk.agent.startTask({
+      title: "生成内容批次",
+      taskKind: "content.copy.generate",
+      input: { projectId: "project-1" },
+      expectedOutput: { artifactKind: "content_batch" },
+      humanReview: true,
+    });
+
+    const snapshot = await sdk.agent.getTask(started.taskId);
+
+    expect(snapshot?.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "artifact:created",
+          refs: [".lime/artifacts/content-batch.json"],
+          payload: expect.objectContaining({
+            artifactDocument: expect.objectContaining({
+              blocks: expect.any(Array),
+            }),
+          }),
+        }),
+      ]),
+    );
   });
 });

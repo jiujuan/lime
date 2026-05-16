@@ -1,6 +1,11 @@
 use super::*;
+use crate::services::runtime_evidence_projection_service::{
+    collect_runtime_evidence_projection_summary_from_metadata, evidence_ref_from_artifact_path,
+    RuntimeEvidenceProjectionSummary,
+};
 use crate::services::runtime_file_checkpoint_service;
 use chrono::{DateTime, Utc};
+use lime_core::database::dao::agent_timeline::AgentThreadItemPayload;
 use lime_core::models::model_registry::ModelCapabilities;
 
 /// Aster Agent 状态信息
@@ -599,6 +604,27 @@ pub struct AgentRuntimeThreadToolCallView {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentRuntimeThreadArtifactView {
+    pub item_id: String,
+    pub turn_id: String,
+    pub path: String,
+    pub source: String,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artifact_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completed_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentRuntimeThreadEvidenceSummary {
     #[serde(default)]
     pub evidence_refs: Vec<String>,
@@ -608,7 +634,10 @@ pub struct AgentRuntimeThreadEvidenceSummary {
 
 impl Default for AgentRuntimeThreadEvidenceSummary {
     fn default() -> Self {
-        build_thread_evidence_summary()
+        AgentRuntimeThreadEvidenceSummary {
+            evidence_refs: Vec::new(),
+            verification_outcomes: Vec::new(),
+        }
     }
 }
 
@@ -645,6 +674,8 @@ pub struct AgentRuntimeThreadReadModel {
     pub queued_turns: Vec<QueuedTurnSnapshot>,
     #[serde(default)]
     pub tool_calls: Vec<AgentRuntimeThreadToolCallView>,
+    #[serde(default)]
+    pub artifacts: Vec<AgentRuntimeThreadArtifactView>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model_routing: Option<serde_json::Value>,
     #[serde(default)]
@@ -1599,6 +1630,64 @@ fn build_thread_tool_calls(detail: &SessionDetail) -> Vec<AgentRuntimeThreadTool
         .collect()
 }
 
+fn artifact_metadata_string(metadata: Option<&serde_json::Value>, keys: &[&str]) -> Option<String> {
+    let metadata = metadata?;
+    keys.iter()
+        .filter_map(|key| metadata.get(*key))
+        .find_map(|value| {
+            value
+                .as_str()
+                .map(str::trim)
+                .filter(|item| !item.is_empty())
+        })
+        .map(str::to_string)
+}
+
+fn build_thread_artifacts(detail: &SessionDetail) -> Vec<AgentRuntimeThreadArtifactView> {
+    detail
+        .items
+        .iter()
+        .filter_map(|item| {
+            let lime_core::database::dao::agent_timeline::AgentThreadItemPayload::FileArtifact {
+                path,
+                source,
+                metadata,
+                ..
+            } = &item.payload
+            else {
+                return None;
+            };
+
+            let status = match item.status {
+                lime_core::database::dao::agent_timeline::AgentThreadItemStatus::InProgress => {
+                    "running"
+                }
+                lime_core::database::dao::agent_timeline::AgentThreadItemStatus::Failed => "failed",
+                lime_core::database::dao::agent_timeline::AgentThreadItemStatus::Completed => {
+                    "created"
+                }
+            };
+
+            Some(AgentRuntimeThreadArtifactView {
+                item_id: item.id.clone(),
+                turn_id: item.turn_id.clone(),
+                path: path.clone(),
+                source: source.clone(),
+                status: status.to_string(),
+                artifact_type: artifact_metadata_string(
+                    metadata.as_ref(),
+                    &["artifactType", "artifact_type", "kind"],
+                ),
+                title: artifact_metadata_string(metadata.as_ref(), &["title", "artifactTitle"]),
+                created_at: Some(item.started_at.clone()),
+                completed_at: item.completed_at.clone(),
+                updated_at: Some(item.updated_at.clone()),
+                metadata: metadata.clone(),
+            })
+        })
+        .collect()
+}
+
 fn build_thread_model_routing_summary(
     task_kind: Option<&str>,
     service_model_slot: Option<&str>,
@@ -1651,11 +1740,46 @@ fn build_thread_model_routing_summary(
     }))
 }
 
-fn build_thread_evidence_summary() -> AgentRuntimeThreadEvidenceSummary {
-    AgentRuntimeThreadEvidenceSummary {
-        evidence_refs: Vec::new(),
-        verification_outcomes: Vec::new(),
+fn build_thread_evidence_summary(detail: &SessionDetail) -> AgentRuntimeThreadEvidenceSummary {
+    let mut summary = RuntimeEvidenceProjectionSummary::default();
+
+    for item in &detail.items {
+        match &item.payload {
+            AgentThreadItemPayload::ToolCall { metadata, .. } => {
+                merge_evidence_projection_summary(
+                    &mut summary,
+                    collect_runtime_evidence_projection_summary_from_metadata(metadata.as_ref()),
+                );
+            }
+            AgentThreadItemPayload::FileArtifact { path, metadata, .. } => {
+                if let Some(evidence_ref) = evidence_ref_from_artifact_path(path) {
+                    summary.push_evidence_ref(evidence_ref);
+                }
+                merge_evidence_projection_summary(
+                    &mut summary,
+                    collect_runtime_evidence_projection_summary_from_metadata(metadata.as_ref()),
+                );
+            }
+            _ => {}
+        }
     }
+
+    AgentRuntimeThreadEvidenceSummary {
+        evidence_refs: summary.evidence_refs,
+        verification_outcomes: summary.verification_outcomes,
+    }
+}
+
+fn merge_evidence_projection_summary(
+    target: &mut RuntimeEvidenceProjectionSummary,
+    source: RuntimeEvidenceProjectionSummary,
+) {
+    for evidence_ref in source.evidence_refs {
+        target.push_evidence_ref(evidence_ref);
+    }
+    target
+        .verification_outcomes
+        .extend(source.verification_outcomes);
 }
 
 fn build_thread_telemetry_summary() -> AgentRuntimeThreadTelemetrySummary {
@@ -1937,6 +2061,7 @@ impl AgentRuntimeThreadReadModel {
         let profile_status = normalize_profile_status(&status);
         let turns = build_thread_profile_turns(detail);
         let tool_calls = build_thread_tool_calls(detail);
+        let artifacts = build_thread_artifacts(detail);
         let model_routing = build_thread_model_routing_summary(
             task_kind.as_deref(),
             service_model_slot.as_deref(),
@@ -1953,7 +2078,7 @@ impl AgentRuntimeThreadReadModel {
             estimated_cost_class.as_deref(),
             single_candidate_only,
         );
-        let evidence_summary = build_thread_evidence_summary();
+        let evidence_summary = build_thread_evidence_summary(detail);
         let telemetry_summary = build_thread_telemetry_summary();
         let context_summary = build_thread_context_summary(
             detail
@@ -1974,6 +2099,7 @@ impl AgentRuntimeThreadReadModel {
             incidents,
             queued_turns: queued_turns.to_vec(),
             tool_calls,
+            artifacts,
             model_routing,
             evidence_summary,
             telemetry_summary,
@@ -3315,6 +3441,81 @@ mod tests {
     }
 
     #[test]
+    fn thread_read_should_collect_evidence_projection_facts_from_runtime_metadata() {
+        let detail = build_session_detail(
+            vec![AgentThreadTurn {
+                id: "turn-1".to_string(),
+                thread_id: "thread-1".to_string(),
+                prompt_text: "导出证据".to_string(),
+                status: AgentThreadTurnStatus::Completed,
+                started_at: "2026-03-23T09:10:00Z".to_string(),
+                completed_at: Some("2026-03-23T09:10:30Z".to_string()),
+                error_message: None,
+                created_at: "2026-03-23T09:10:00Z".to_string(),
+                updated_at: "2026-03-23T09:10:30Z".to_string(),
+            }],
+            vec![
+                AgentThreadItem {
+                    id: "tool-1".to_string(),
+                    thread_id: "thread-1".to_string(),
+                    turn_id: "turn-1".to_string(),
+                    sequence: 1,
+                    status: AgentThreadItemStatus::Completed,
+                    started_at: "2026-03-23T09:10:01Z".to_string(),
+                    completed_at: Some("2026-03-23T09:10:10Z".to_string()),
+                    updated_at: "2026-03-23T09:10:10Z".to_string(),
+                    payload: AgentThreadItemPayload::ToolCall {
+                        tool_name: "EvidenceExporter".to_string(),
+                        arguments: None,
+                        output: Some("ok".to_string()),
+                        success: Some(true),
+                        error: None,
+                        metadata: Some(serde_json::json!({
+                            "evidenceRefs": ["evidence://session-1/runtime"],
+                            "verificationOutcomes": [{ "status": "passed" }]
+                        })),
+                    },
+                },
+                AgentThreadItem {
+                    id: "artifact-1".to_string(),
+                    thread_id: "thread-1".to_string(),
+                    turn_id: "turn-1".to_string(),
+                    sequence: 2,
+                    status: AgentThreadItemStatus::Completed,
+                    started_at: "2026-03-23T09:10:11Z".to_string(),
+                    completed_at: Some("2026-03-23T09:10:12Z".to_string()),
+                    updated_at: "2026-03-23T09:10:12Z".to_string(),
+                    payload: AgentThreadItemPayload::FileArtifact {
+                        path: ".lime/harness/sessions/session-1/evidence/runtime.json".to_string(),
+                        source: "runtime_evidence_pack".to_string(),
+                        content: None,
+                        metadata: None,
+                    },
+                },
+            ],
+        );
+
+        let thread_read = AgentRuntimeThreadReadModel::from_session_detail(&detail, &[]);
+
+        assert_eq!(
+            thread_read.evidence_summary.evidence_refs,
+            vec![
+                "evidence://session-1/runtime".to_string(),
+                ".lime/harness/sessions/session-1/evidence/runtime.json".to_string()
+            ]
+        );
+        assert_eq!(
+            thread_read
+                .evidence_summary
+                .verification_outcomes
+                .first()
+                .and_then(|outcome| outcome.get("status"))
+                .and_then(serde_json::Value::as_str),
+            Some("passed")
+        );
+    }
+
+    #[test]
     fn thread_read_should_not_keep_aborted_turn_active_after_followup_completed() {
         let detail = build_session_detail(
             vec![
@@ -3633,6 +3834,58 @@ mod tests {
         assert_eq!(thread_read.tool_calls[0].tool_name, "Read");
         assert_eq!(thread_read.tool_calls[0].status, "completed");
         assert_eq!(thread_read.tool_calls[0].success, Some(true));
+    }
+
+    #[test]
+    fn thread_read_should_project_file_artifacts_for_profile_consumers() {
+        let detail = build_session_detail(
+            vec![AgentThreadTurn {
+                id: "turn-artifact".to_string(),
+                thread_id: "thread-1".to_string(),
+                prompt_text: "生成内容批次".to_string(),
+                status: AgentThreadTurnStatus::Completed,
+                started_at: "2026-05-16T09:10:00Z".to_string(),
+                completed_at: Some("2026-05-16T09:10:05Z".to_string()),
+                error_message: None,
+                created_at: "2026-05-16T09:10:00Z".to_string(),
+                updated_at: "2026-05-16T09:10:05Z".to_string(),
+            }],
+            vec![AgentThreadItem {
+                id: "artifact-item-1".to_string(),
+                thread_id: "thread-1".to_string(),
+                turn_id: "turn-artifact".to_string(),
+                sequence: 1,
+                status: AgentThreadItemStatus::Completed,
+                started_at: "2026-05-16T09:10:01Z".to_string(),
+                completed_at: Some("2026-05-16T09:10:02Z".to_string()),
+                updated_at: "2026-05-16T09:10:02Z".to_string(),
+                payload: AgentThreadItemPayload::FileArtifact {
+                    path: ".lime/artifacts/content-batch.json".to_string(),
+                    source: "artifact_snapshot".to_string(),
+                    content: None,
+                    metadata: Some(serde_json::json!({
+                        "artifactType": "content_batch",
+                        "title": "内容批次"
+                    })),
+                },
+            }],
+        );
+
+        let thread_read = AgentRuntimeThreadReadModel::from_session_detail(&detail, &[]);
+
+        assert_eq!(thread_read.artifacts.len(), 1);
+        assert_eq!(thread_read.artifacts[0].item_id, "artifact-item-1");
+        assert_eq!(thread_read.artifacts[0].turn_id, "turn-artifact");
+        assert_eq!(
+            thread_read.artifacts[0].path,
+            ".lime/artifacts/content-batch.json"
+        );
+        assert_eq!(
+            thread_read.artifacts[0].artifact_type.as_deref(),
+            Some("content_batch")
+        );
+        assert_eq!(thread_read.artifacts[0].title.as_deref(), Some("内容批次"));
+        assert_eq!(thread_read.artifacts[0].status, "created");
     }
 
     #[test]

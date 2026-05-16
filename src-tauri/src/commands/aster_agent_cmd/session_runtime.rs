@@ -203,6 +203,7 @@ pub(crate) async fn create_runtime_session_internal(
         execution_strategy,
         true,
         None,
+        None,
     )
     .await
 }
@@ -224,6 +225,31 @@ pub(crate) async fn create_runtime_session_internal_with_runtime(
         name,
         execution_strategy,
         run_start_hooks,
+        None,
+        Some((state, mcp_manager)),
+    )
+    .await
+}
+
+pub(crate) async fn create_runtime_session_internal_with_runtime_and_session_id(
+    db: &DbConnection,
+    state: &AsterAgentState,
+    mcp_manager: &McpManagerState,
+    session_id: String,
+    working_dir: Option<String>,
+    workspace_id: String,
+    name: Option<String>,
+    execution_strategy: Option<AsterExecutionStrategy>,
+    run_start_hooks: bool,
+) -> Result<String, String> {
+    create_runtime_session_internal_impl(
+        db,
+        working_dir,
+        workspace_id,
+        name,
+        execution_strategy,
+        run_start_hooks,
+        Some(session_id),
         Some((state, mcp_manager)),
     )
     .await
@@ -236,6 +262,7 @@ async fn create_runtime_session_internal_impl(
     name: Option<String>,
     execution_strategy: Option<AsterExecutionStrategy>,
     run_start_hooks: bool,
+    session_id: Option<String>,
     runtime: Option<(&AsterAgentState, &McpManagerState)>,
 ) -> Result<String, String> {
     tracing::info!("[AsterAgent] 创建会话: name={:?}", name);
@@ -272,18 +299,29 @@ async fn create_runtime_session_internal_impl(
         .map(ToString::to_string)
         .or_else(|| Some(workspace_root.clone()));
 
-    let session_id = AsterAgentWrapper::create_session_sync(
-        db,
-        name,
-        resolved_working_dir,
-        workspace_id,
-        Some(
-            execution_strategy
-                .unwrap_or(AsterExecutionStrategy::React)
-                .as_db_value()
-                .to_string(),
-        ),
-    )?;
+    let execution_strategy = Some(
+        execution_strategy
+            .unwrap_or(AsterExecutionStrategy::React)
+            .as_db_value()
+            .to_string(),
+    );
+    let session_id = match session_id {
+        Some(session_id) => AsterAgentWrapper::create_session_with_id_sync(
+            db,
+            session_id,
+            name,
+            resolved_working_dir,
+            workspace_id,
+            execution_strategy,
+        )?,
+        None => AsterAgentWrapper::create_session_sync(
+            db,
+            name,
+            resolved_working_dir,
+            workspace_id,
+            execution_strategy,
+        )?,
+    };
 
     persist_default_session_access_mode_in_background(session_id.clone());
 

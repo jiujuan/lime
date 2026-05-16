@@ -99,7 +99,81 @@ export { normalizeManifest } from "./manifest/normalizeManifest";
 export { projectApp } from "./projection/projectApp";
 export { checkReadiness } from "./readiness/checkReadiness";
 export { p0HostCapabilityProfile } from "./readiness/hostCapabilityProfile";
-export { AgentAppCapabilityError } from "./sdk/capabilityErrors";
+export {
+  AgentAppCapabilityError,
+  LIME_CAPABILITY_ERROR_CODES,
+  isLimeCapabilityErrorCode,
+  normalizeLimeCapabilityErrorCode,
+  toLimeCapabilityError,
+} from "./sdk/capabilityErrors";
+export type {
+  AgentAppCapabilityErrorInit,
+  LimeCapabilityError,
+  LimeCapabilityErrorCode,
+  LimeCapabilityErrorContext,
+} from "./sdk/capabilityErrors";
+export {
+  LIME_CAPABILITY_NAMES,
+  buildLimeCapabilityInvokeProvenance,
+  buildLimeCapabilityInvokeRequest,
+  createLimeCapabilityErrorResponse,
+  createLimeCapabilityInvoker,
+  createLimeCapabilitySuccessResponse,
+  createMockLimeCapabilityTransport,
+} from "./sdk/capabilityContract";
+export type {
+  BuildLimeCapabilityInvokeRequestParams,
+  LimeCapabilityArgs,
+  LimeCapabilityContractMap,
+  LimeCapabilityInvokeProvenance,
+  LimeCapabilityInvokeRequest,
+  LimeCapabilityInvokeResponse,
+  LimeCapabilityInvoker,
+  LimeCapabilityMethod,
+  LimeCapabilityMockHandler,
+  LimeCapabilityMockHandlers,
+  LimeCapabilityName,
+  LimeCapabilityTransport,
+  LimeCapabilityValue,
+  LimeTypedCapabilityInvokeRequest,
+  LimeTypedCapabilityInvokeResponse,
+} from "./sdk/capabilityContract";
+export {
+  LimeCapabilityAdapterError,
+  createLimeCoreCapabilityAdapters,
+} from "./sdk/capabilityAdapters";
+export type {
+  CreateLimeCoreCapabilityAdaptersOptions,
+  LimeAgentCapabilityAdapter,
+  LimeArtifactsCapabilityAdapter,
+  LimeCapabilityAdapterCallOptions,
+  LimeCoreCapabilityAdapters,
+  LimeEvidenceCapabilityAdapter,
+  LimeKnowledgeCapabilityAdapter,
+  LimeStorageCapabilityAdapter,
+  LimeToolsCapabilityAdapter,
+  LimeUiCapabilityAdapter,
+} from "./sdk/capabilityAdapters";
+export {
+  LIME_AGENT_APP_BRIDGE_PROTOCOL,
+  LIME_AGENT_APP_BRIDGE_VERSION,
+  createLimeHostBridgeCapabilityInvoker,
+} from "./sdk/hostBridgeClient";
+export type {
+  CreateLimeHostBridgeCapabilityInvokerOptions,
+  LimeAgentAppBridgeClientMessage,
+  LimeHostBridgeCapabilityEvent,
+  LimeHostBridgeCapabilityEventHandler,
+  LimeHostBridgeCapabilityInvoker,
+  LimeHostBridgeCapabilitySubscribeRequest,
+  LimeHostBridgeCapabilitySubscription,
+  LimeHostBridgeCapabilityUnsubscribeResult,
+  LimeHostBridgeDownloadPayload,
+  LimeHostBridgeEventHandler,
+  LimeHostBridgeNavigatePayload,
+  LimeHostBridgeNotifyPayload,
+  LimeHostBridgeOpenExternalPayload,
+} from "./sdk/hostBridgeClient";
 export { MockCapabilityHost } from "./sdk/MockCapabilityHost";
 export { buildMockCapabilityProfile } from "./sdk/mockCapabilityProfile";
 export { buildAgentAppProvenance } from "./sdk/provenance";

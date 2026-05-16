@@ -68,6 +68,25 @@ impl AsterAgentWrapper {
         lime_agent::create_session_sync(db, name, working_dir, workspace_id, execution_strategy)
     }
 
+    /// 使用指定 ID 创建新会话。
+    pub fn create_session_with_id_sync(
+        db: &DbConnection,
+        session_id: String,
+        name: Option<String>,
+        working_dir: Option<String>,
+        workspace_id: String,
+        execution_strategy: Option<String>,
+    ) -> Result<String, String> {
+        lime_agent::create_session_with_id_sync(
+            db,
+            session_id,
+            name,
+            working_dir,
+            workspace_id,
+            execution_strategy,
+        )
+    }
+
     /// 列出所有会话
     pub fn list_sessions_sync(
         db: &DbConnection,

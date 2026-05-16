@@ -129,6 +129,7 @@ export interface SkillRefDeclaration {
 export interface ToolRefDeclaration {
   key: string;
   provider?: string;
+  capabilities?: string[];
   required?: boolean;
 }
 
@@ -558,6 +559,7 @@ export interface SkillRequirementProjection {
 export interface ToolRequirementProjection {
   key: string;
   provider?: string;
+  capabilities: string[];
   required: boolean;
 }
 
@@ -894,6 +896,7 @@ export type AgentAppTaskEventType =
   | "task:cancelled"
   | "task:completed"
   | "task:incident"
+  | "artifact:created"
   | "evidence:recorded"
   | "evidence:verified";
 
@@ -920,6 +923,11 @@ export interface AgentAppTaskRequest {
   prompt?: string;
   taskKind?: string;
   idempotencyKey?: string;
+  queueIfBusy?: boolean;
+  skipPreSubmitResume?: boolean;
+  runStartHooks?: boolean;
+  providerPreference?: string;
+  modelPreference?: string;
   input?: unknown;
   expectedOutput?: unknown;
   knowledge?: AgentAppTaskKnowledgeBinding[];

@@ -12,7 +12,12 @@ const resolvedSetup: AgentAppSetupState = {
   knowledgeBindings: { project_knowledge: true },
   skills: { "article-writer": true },
   tools: { document_parser: true },
-  artifactTypes: { content_table: true },
+  artifactTypes: {
+    content_table: true,
+    scene_table: true,
+    content_batch: true,
+    script_batch: true,
+  },
   evals: { fact_grounding: true },
   services: { content_worker: true },
   workflows: { content_scenario_planning: true },

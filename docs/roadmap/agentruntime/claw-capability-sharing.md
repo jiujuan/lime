@@ -1,6 +1,6 @@
 # Claw Capability 共享方案
 
-> 状态：draft
+> 状态：in progress（Agent App Runtime 首批 catalog、workflow metadata 与 manifest allowlist gate 第一刀已落地）
 > 更新时间：2026-05-16
 > 作用：把 Claw 已经实现的 `@` 能力从 Chat surface 中抽象为 AgentRuntime 可复用 capability，供 Agent App、Automation 和未来 surface 共享。
 
@@ -135,7 +135,7 @@ taskKind / capabilityId
 
 ## 8. 已落地第一刀
 
-`agent_app_runtime_start_task` 已经能读取 `requiredCapabilities` / `capabilityHints` 中的首个受支持 capability，并写入现有 Claw `*_skill_launch` metadata：
+`agent_app_runtime_start_task` 已经能读取 `requiredCapabilities` / `capabilityHints` 中受支持的 capability，首个单能力任务会写入现有 Claw `*_skill_launch` metadata；多个 capability 会被去重后作为 workflow metadata 暴露给 runtime / harness：
 
 | Capability hint | 写入 metadata | 首刀 Skill |
 | --- | --- | --- |
@@ -146,4 +146,4 @@ taskKind / capabilityId
 | `lime.capability.pdf.read` / `pdf_extract` | `harness.pdf_read_skill_launch.pdf_read_request` | `pdf_read` |
 | `lime.capability.summary.generate` | `harness.summary_skill_launch.summary_request` | `summary` |
 
-当前仍是第一刀：一个 App task 只会锁定首个可识别 capability，适合证明“App 不复制 Claw、而是进入同一 skill launch 主链”。多能力 workflow、manifest capability gate、事件转译和 artifact/evidence write-back 仍需后续阶段补齐。
+当前仍是第一刀：非复合任务只会把首个 capability 提升为实际 `*_skill_launch`，用于证明“App 不复制 Claw、而是进入同一 skill launch 主链”；内容工厂这类带 output contract 的复合任务会写入 `agent_app_runtime.capability_workflow` 与 `harness.agent_app_runtime_capability_workflow`，`mode=composite_output_contract`、`launch_policy=metadata_only`，避免 `research.search + image_generation` 把业务工作流强行改写成单一 research / image Skill。Host dispatcher 已有 high-level manifest capability gate，会拒绝未声明的 `lime.agent` 等 Host capability；Claw capability hint 也会校验 manifest `toolRefs[].capabilities` allowlist。AgentRuntime profile event 与高价值 RuntimeAgentEvent 已能主动转译为 App canonical `taskEvents`，artifact runtime event 可携带 workspace patch；evidence 变更还需要继续收敛。后端/cross-surface capability policy owner、真正多能力执行编排和跨 surface catalog owner 仍需后续阶段补齐。

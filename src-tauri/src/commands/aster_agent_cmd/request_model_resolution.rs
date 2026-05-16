@@ -2016,6 +2016,11 @@ fn build_runtime_summary(
     limit_event: Option<&lime_agent::SessionExecutionRuntimeLimitEvent>,
 ) -> lime_agent::SessionExecutionRuntimeSummary {
     lime_agent::SessionExecutionRuntimeSummary {
+        surface: None,
+        app_id: None,
+        task_id: None,
+        trace_id: None,
+        task_kind: None,
         candidate_count: Some(routing_decision.candidate_count),
         routing_mode: Some(routing_decision.routing_mode.clone()),
         decision_source: Some(routing_decision.decision_source.clone()),

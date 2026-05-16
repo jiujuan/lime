@@ -112,6 +112,30 @@
       "title": "内容表",
       "type": "table",
       "required": true
+    },
+    {
+      "key": "scene_table",
+      "title": "场景表",
+      "type": "table",
+      "required": true
+    },
+    {
+      "key": "content_batch",
+      "title": "内容批次",
+      "type": "batch",
+      "required": true
+    },
+    {
+      "key": "script_batch",
+      "title": "脚本批次",
+      "type": "batch",
+      "required": true
+    },
+    {
+      "key": "prompt_batch",
+      "title": "图片提示词批次",
+      "type": "batch",
+      "required": false
     }
   ],
   "policies": [
@@ -155,6 +179,19 @@
       "key": "competitor_research",
       "provider": "lime.tools",
       "required": false
+    },
+    {
+      "key": "creative_capability_search",
+      "provider": "lime.tools",
+      "capabilities": [
+        "lime.capability.image.generate",
+        "lime.capability.cover.generate",
+        "lime.capability.research.search",
+        "lime.capability.report.generate",
+        "lime.capability.pdf.read",
+        "lime.capability.summary.generate"
+      ],
+      "required": false
     }
   ],
   "evals": [
@@ -163,6 +200,12 @@
       "kind": "quality",
       "evidenceRequired": true,
       "required": true
+    },
+    {
+      "key": "publish_readiness",
+      "kind": "human-review",
+      "evidenceRequired": false,
+      "required": false
     }
   ],
   "events": [

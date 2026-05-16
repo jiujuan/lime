@@ -120,7 +120,7 @@ pub use session_query::{
 };
 pub use session_state_snapshot::SessionStateSnapshot;
 pub use session_store::{
-    count_session_messages_sync, create_session_sync, delete_session,
+    count_session_messages_sync, create_session_sync, create_session_with_id_sync, delete_session,
     get_persisted_session_metadata_sync, get_runtime_session_detail,
     get_runtime_session_detail_with_history_limit, get_runtime_session_detail_with_history_page,
     get_runtime_session_detail_with_history_window, get_session_sync, list_sessions_sync,

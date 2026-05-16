@@ -70,6 +70,7 @@ describe("MockCapabilityHost", () => {
 
     await expect(host.runEntry("dashboard")).rejects.toMatchObject({
       code: "FEATURE_DISABLED",
+      stableCode: "capability_unavailable",
     });
   });
 

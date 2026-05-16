@@ -41,9 +41,22 @@ describe("Agent App manifest P0", () => {
     expect(normalized.toolRefs.map((tool) => tool.key)).toEqual([
       "document_parser",
       "competitor_research",
+      "creative_capability_search",
+    ]);
+    expect(
+      normalized.toolRefs.find((tool) => tool.key === "creative_capability_search")
+        ?.capabilities,
+    ).toEqual([
+      "lime.capability.image.generate",
+      "lime.capability.cover.generate",
+      "lime.capability.research.search",
+      "lime.capability.report.generate",
+      "lime.capability.pdf.read",
+      "lime.capability.summary.generate",
     ]);
     expect(normalized.evals.map((evalRule) => evalRule.key)).toEqual([
       "fact_grounding",
+      "publish_readiness",
     ]);
     expect(normalized.secrets.map((secret) => secret.key)).toEqual([
       "publishing_workspace_token",

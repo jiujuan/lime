@@ -23,6 +23,9 @@ use crate::commands::auxiliary_model_selection::{
     prepare_auxiliary_provider_scope, AuxiliaryProviderResolution, AuxiliaryServiceModelSlot,
 };
 use crate::commands::modality_runtime_contracts::hydrate_limecore_policy_hits_from_request_metadata;
+use crate::services::runtime_evidence_projection_service::{
+    collect_runtime_evidence_projection_summary_from_value, RuntimeEvidenceProjectionSummary,
+};
 use aster::agents::extension::PlatformExtensionContext;
 use aster::hooks::{CompactTrigger, SessionSource};
 use aster::session::TurnContextOverride;
@@ -31,6 +34,7 @@ use lime_agent::{build_diagnostics_runtime_status_metadata, AgentEvent as Runtim
 use lime_core::database::dao::agent_timeline::{AgentThreadItemPayload, AgentThreadItemStatus};
 use lime_core::workspace::WorkspaceSettings;
 use regex::Regex;
+use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -51,6 +55,7 @@ const TURN_KNOWLEDGE_PACK_PROMPT_MARKER: &str = "【运行时知识包】";
 const TURN_MEMORY_PREFETCH_PROMPT_MARKER: &str = "【运行时记忆召回】";
 const TURN_LOCAL_PATH_FOCUS_PROMPT_MARKER: &str = "【本回合本地路径焦点】";
 const LIME_RUNTIME_METADATA_KEY: &str = "lime_runtime";
+const AGENT_APP_RUNTIME_EVENT_PREFIX: &str = "agent_app_runtime:";
 const AGENTUI_CONTEXT_METADATA_KEY: &str = "agentui_context";
 const LIME_RUNTIME_AUTO_COMPACT_KEY: &str = "auto_compact";
 const LIME_RUNTIME_TOOL_SURFACE_KEY: &str = "tool_surface";
@@ -79,6 +84,7 @@ fn emit_runtime_events(app: &AppHandle, event_name: &str, events: Vec<RuntimeAge
         if let Err(error) = app.emit(event_name, &event) {
             tracing::error!("[AsterAgent] 发送运行时事件失败: {}", error);
         }
+        emit_agent_app_runtime_event_projection(app, event_name, &event);
     }
 }
 
@@ -92,6 +98,686 @@ pub(crate) fn emit_agent_runtime_profile_event(
             "[AsterAgent][AgentRuntimeProfile] 发送 profile 事件失败: type={}, event_name={}, error={}",
             event.event_type,
             event_name,
+            error
+        );
+    }
+    emit_agent_app_runtime_profile_projection_event(app, event_name, &event);
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AgentAppRuntimeProjectionScope {
+    app_id: String,
+    task_id: String,
+}
+
+fn non_empty_projection_text(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn parse_agent_app_runtime_projection_scope(
+    event_name: &str,
+) -> Option<AgentAppRuntimeProjectionScope> {
+    let remainder = event_name
+        .trim()
+        .strip_prefix(AGENT_APP_RUNTIME_EVENT_PREFIX)?;
+    let (app_id, task_id) = remainder.split_once(':')?;
+    Some(AgentAppRuntimeProjectionScope {
+        app_id: non_empty_projection_text(Some(app_id))?,
+        task_id: non_empty_projection_text(Some(task_id))?,
+    })
+}
+
+fn agent_app_runtime_projection_event_name(scope: &AgentAppRuntimeProjectionScope) -> String {
+    format!(
+        "{}{}:{}",
+        AGENT_APP_RUNTIME_EVENT_PREFIX, scope.app_id, scope.task_id
+    )
+}
+
+fn profile_event_payload_string(event: &AgentRuntimeProfileEvent, keys: &[&str]) -> Option<String> {
+    keys.iter().find_map(|key| {
+        event
+            .payload
+            .get(*key)
+            .and_then(Value::as_str)
+            .and_then(|value| non_empty_projection_text(Some(value)))
+    })
+}
+
+fn agent_app_task_event_type_for_profile_event(event_type: &str) -> &'static str {
+    match event_type {
+        "turn.submitted" | "task.retrying" => "task:queued",
+        "tool.started" | "tool.result" | "tool.failed" => "task:toolCall",
+        "action.required" => "task:reviewRequested",
+        "action.resolved" => "task:reviewResolved",
+        "turn.completed" | "task.completed" => "task:completed",
+        "turn.failed" | "task.failed" | "model.failed" | "routing.not_possible" => "task:error",
+        _ => "task:progress",
+    }
+}
+
+fn agent_app_task_status_for_profile_event(event: &AgentRuntimeProfileEvent) -> String {
+    profile_event_payload_string(event, &["status"]).unwrap_or_else(|| {
+        match event.event_type.as_str() {
+            "turn.submitted" | "task.retrying" => "queued",
+            "turn.started" | "tool.started" | "model.requested" | "task.attempt.started" => {
+                "running"
+            }
+            "turn.completed" | "task.completed" | "tool.result" | "model.completed" => "completed",
+            "turn.failed" | "task.failed" | "tool.failed" | "model.failed" => "failed",
+            _ => "updated",
+        }
+        .to_string()
+    })
+}
+
+fn agent_app_task_message_for_profile_event(event: &AgentRuntimeProfileEvent) -> String {
+    if let Some(message) = profile_event_payload_string(event, &["message", "detail", "title"]) {
+        return message;
+    }
+
+    match event.event_type.as_str() {
+        "turn.submitted" => "AgentRuntime 已接收 App 任务",
+        "turn.started" => "AgentRuntime 正在执行 App 任务",
+        "turn.completed" => "AgentRuntime App 任务已完成",
+        "turn.failed" => "AgentRuntime App 任务执行失败",
+        "tool.started" => "AgentRuntime 工具调用开始",
+        "tool.result" => "AgentRuntime 工具调用完成",
+        "tool.failed" => "AgentRuntime 工具调用失败",
+        "action.required" => "AgentRuntime 等待 Host / 用户响应",
+        "action.resolved" => "Host / 用户响应已提交到 AgentRuntime",
+        "snapshot.updated" => "AgentRuntime 线程读模型已更新",
+        _ => "AgentRuntime App 任务状态已更新",
+    }
+    .to_string()
+}
+
+fn build_agent_app_runtime_profile_task_event(event: &AgentRuntimeProfileEvent) -> Value {
+    let status = agent_app_task_status_for_profile_event(event);
+    let mut task_event = serde_json::Map::new();
+    task_event.insert(
+        "id".to_string(),
+        json!(format!("profile:{}:{}", event.event_type, event.sequence)),
+    );
+    task_event.insert(
+        "eventType".to_string(),
+        json!(agent_app_task_event_type_for_profile_event(
+            &event.event_type
+        )),
+    );
+    task_event.insert("status".to_string(), json!(status));
+    task_event.insert(
+        "message".to_string(),
+        json!(agent_app_task_message_for_profile_event(event)),
+    );
+    task_event.insert("turnId".to_string(), json!(event.turn_id.clone()));
+    task_event.insert("occurredAt".to_string(), json!(event.timestamp.clone()));
+    task_event.insert("payload".to_string(), json!(event));
+
+    if let Some(tool_name) = profile_event_payload_string(event, &["toolName", "tool_name"]) {
+        task_event.insert("toolName".to_string(), json!(tool_name));
+    }
+    if let Some(request_id) =
+        profile_event_payload_string(event, &["actionId", "requestId", "decisionId"])
+    {
+        task_event.insert("requestId".to_string(), json!(request_id));
+    }
+    if matches!(
+        agent_app_task_event_type_for_profile_event(&event.event_type),
+        "task:error"
+    ) {
+        task_event.insert("severity".to_string(), json!("error"));
+    }
+
+    Value::Object(task_event)
+}
+
+fn build_agent_app_runtime_profile_projection_payload(
+    event_name: &str,
+    event: &AgentRuntimeProfileEvent,
+) -> Option<Value> {
+    let scope = parse_agent_app_runtime_projection_scope(event_name)?;
+    let status = agent_app_task_status_for_profile_event(event);
+    let task_event = build_agent_app_runtime_profile_task_event(event);
+    let projection_event_name = agent_app_runtime_projection_event_name(&scope);
+
+    Some(json!({
+        "type": "agent_app_runtime:profileProjection",
+        "eventType": "task:runtimeEvent",
+        "appId": scope.app_id.clone(),
+        "taskId": scope.task_id.clone(),
+        "sessionId": event.session_id,
+        "threadId": event.thread_id,
+        "turnId": event.turn_id,
+        "status": status,
+        "profileEvent": event,
+        "runtimeEvent": event,
+        "taskEvents": [task_event],
+        "runtimeEventName": projection_event_name,
+        "emittedAt": chrono::Utc::now().to_rfc3339(),
+    }))
+}
+
+fn emit_agent_app_runtime_profile_projection_event(
+    app: &AppHandle,
+    event_name: &str,
+    event: &AgentRuntimeProfileEvent,
+) {
+    let Some(scope) = parse_agent_app_runtime_projection_scope(event_name) else {
+        return;
+    };
+    let Some(payload) = build_agent_app_runtime_profile_projection_payload(event_name, event)
+    else {
+        return;
+    };
+    let projection_event_name = agent_app_runtime_projection_event_name(&scope);
+    if let Err(error) = app.emit(&projection_event_name, payload) {
+        tracing::warn!(
+            "[AsterAgent][AgentRuntimeProfile] 发送 Agent App task projection 失败: event_name={}, profile_type={}, error={}",
+            projection_event_name,
+            event.event_type,
+            error
+        );
+    }
+}
+
+fn runtime_event_payload_value(event: &RuntimeAgentEvent) -> Value {
+    serde_json::to_value(event).unwrap_or_else(|_| json!({ "type": "runtime_event" }))
+}
+
+fn runtime_workspace_patch_from_metadata_value(metadata: Option<&Value>) -> Option<Value> {
+    let metadata = metadata?.as_object()?;
+    ["contentFactoryWorkspacePatch", "workspacePatch"]
+        .iter()
+        .filter_map(|key| metadata.get(*key))
+        .find(|value| value.is_object())
+        .cloned()
+}
+
+fn runtime_workspace_patch_from_metadata_map(
+    metadata: Option<&HashMap<String, Value>>,
+) -> Option<Value> {
+    let metadata = metadata?;
+    ["contentFactoryWorkspacePatch", "workspacePatch"]
+        .iter()
+        .filter_map(|key| metadata.get(*key))
+        .find(|value| value.is_object())
+        .cloned()
+}
+
+fn build_runtime_projection_task_event(
+    id: String,
+    event_type: &'static str,
+    status: impl Into<String>,
+    message: impl Into<String>,
+    payload: Value,
+) -> serde_json::Map<String, Value> {
+    let mut task_event = serde_json::Map::new();
+    task_event.insert("id".to_string(), json!(id));
+    task_event.insert("eventType".to_string(), json!(event_type));
+    task_event.insert("status".to_string(), json!(status.into()));
+    task_event.insert("message".to_string(), json!(message.into()));
+    task_event.insert("payload".to_string(), payload);
+    task_event
+}
+
+fn build_runtime_projection_artifact_task_event(
+    id: String,
+    status: impl Into<String>,
+    message: impl Into<String>,
+    artifact_ref: String,
+    artifact_payload: Value,
+    workspace_patch: Option<Value>,
+) -> Value {
+    let mut payload = serde_json::Map::new();
+    payload.insert("artifact".to_string(), artifact_payload);
+    if let Some(workspace_patch) = workspace_patch {
+        payload.insert("workspacePatch".to_string(), workspace_patch.clone());
+        payload.insert("contentFactoryWorkspacePatch".to_string(), workspace_patch);
+    }
+
+    let mut task_event = build_runtime_projection_task_event(
+        id,
+        "artifact:created",
+        status,
+        message,
+        Value::Object(payload),
+    );
+    task_event.insert("artifactRef".to_string(), json!(artifact_ref));
+    Value::Object(task_event)
+}
+
+fn build_runtime_projection_tool_task_event(
+    id: String,
+    status: impl Into<String>,
+    message: impl Into<String>,
+    tool_name: Option<String>,
+    payload: Value,
+    failed: bool,
+) -> Value {
+    let mut task_event =
+        build_runtime_projection_task_event(id, "task:toolCall", status, message, payload);
+    if let Some(tool_name) = tool_name {
+        task_event.insert("toolName".to_string(), json!(tool_name));
+    }
+    if failed {
+        task_event.insert("severity".to_string(), json!("error"));
+    }
+    Value::Object(task_event)
+}
+
+fn build_runtime_projection_evidence_task_events(runtime_event: &Value) -> Vec<Value> {
+    let summary = collect_runtime_evidence_projection_summary_from_value(runtime_event);
+    build_runtime_projection_evidence_task_events_from_summary(runtime_event, summary)
+}
+
+fn build_runtime_projection_evidence_task_events_from_summary(
+    runtime_event: &Value,
+    summary: RuntimeEvidenceProjectionSummary,
+) -> Vec<Value> {
+    let mut events = Vec::new();
+    for evidence_ref in summary.evidence_refs {
+        let evidence_ref_for_payload = evidence_ref.clone();
+        let mut task_event = build_runtime_projection_task_event(
+            format!("runtime:evidence:recorded:{evidence_ref}"),
+            "evidence:recorded",
+            "recorded",
+            "运行证据已记录",
+            json!({
+                "evidenceRef": evidence_ref_for_payload,
+                "runtimeEvent": runtime_event,
+            }),
+        );
+        task_event.insert("evidenceRef".to_string(), json!(evidence_ref));
+        events.push(Value::Object(task_event));
+    }
+
+    for (index, outcome) in summary.verification_outcomes.into_iter().enumerate() {
+        let status = outcome
+            .get("status")
+            .or_else(|| outcome.get("outcome"))
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or("verified")
+            .to_string();
+        let mut task_event = build_runtime_projection_task_event(
+            format!("runtime:evidence:verified:{index}"),
+            "evidence:verified",
+            status.clone(),
+            "运行证据已验证",
+            json!({
+                "outcome": outcome,
+                "runtimeEvent": runtime_event,
+            }),
+        );
+        let normalized_status = status.to_ascii_lowercase();
+        if normalized_status.contains("fail")
+            || normalized_status.contains("blocking")
+            || normalized_status.contains("error")
+        {
+            task_event.insert("severity".to_string(), json!("error"));
+        }
+        events.push(Value::Object(task_event));
+    }
+
+    events
+}
+
+fn build_agent_app_runtime_event_primary_task_event(
+    event: &RuntimeAgentEvent,
+    runtime_event: Value,
+) -> Option<Value> {
+    match event {
+        RuntimeAgentEvent::RuntimeStatus { status } => {
+            Some(Value::Object(build_runtime_projection_task_event(
+                format!("runtime:status:{}", status.phase),
+                "task:progress",
+                status.phase.clone(),
+                status.title.clone(),
+                runtime_event,
+            )))
+        }
+        RuntimeAgentEvent::ToolStart {
+            tool_name, tool_id, ..
+        } => Some(build_runtime_projection_tool_task_event(
+            format!("runtime:tool:{tool_id}:started"),
+            "running",
+            format!("工具 {tool_name} 开始执行"),
+            Some(tool_name.clone()),
+            runtime_event,
+            false,
+        )),
+        RuntimeAgentEvent::ToolEnd { tool_id, result } => {
+            let tool_name = runtime_tool_name_from_result_metadata(result).map(str::to_string);
+            Some(build_runtime_projection_tool_task_event(
+                format!("runtime:tool:{tool_id}:completed"),
+                if result.success {
+                    "completed"
+                } else {
+                    "failed"
+                },
+                result
+                    .error
+                    .clone()
+                    .unwrap_or_else(|| "工具调用已完成".to_string()),
+                tool_name,
+                runtime_event,
+                !result.success,
+            ))
+        }
+        RuntimeAgentEvent::ToolProgress { tool_id, progress } => {
+            Some(Value::Object(build_runtime_projection_task_event(
+                format!("runtime:tool:{tool_id}:progress"),
+                "task:toolCall",
+                "running",
+                progress
+                    .message
+                    .clone()
+                    .unwrap_or_else(|| "工具正在执行".to_string()),
+                runtime_event,
+            )))
+        }
+        RuntimeAgentEvent::ArtifactSnapshot { artifact } => {
+            Some(build_runtime_projection_artifact_task_event(
+                format!("runtime:artifact:{}", artifact.artifact_id),
+                "created",
+                format!("Artifact 已创建：{}", artifact.file_path),
+                artifact.file_path.clone(),
+                runtime_event,
+                runtime_workspace_patch_from_metadata_map(artifact.metadata.as_ref()),
+            ))
+        }
+        RuntimeAgentEvent::ActionRequired {
+            request_id,
+            action_type,
+            ..
+        } => {
+            let event_type = if action_type.contains("missing") || action_type.contains("ask") {
+                "task:missingContextRequested"
+            } else {
+                "task:reviewRequested"
+            };
+            let mut task_event = build_runtime_projection_task_event(
+                format!("runtime:action:{request_id}:required"),
+                event_type,
+                "pending",
+                "AgentRuntime 等待 Host / 用户响应",
+                runtime_event,
+            );
+            task_event.insert("requestId".to_string(), json!(request_id));
+            Some(Value::Object(task_event))
+        }
+        RuntimeAgentEvent::ActionResolved { request_id, .. } => {
+            let mut task_event = build_runtime_projection_task_event(
+                format!("runtime:action:{request_id}:resolved"),
+                "task:reviewResolved",
+                "resolved",
+                "Host / 用户响应已提交到 AgentRuntime",
+                runtime_event,
+            );
+            task_event.insert("requestId".to_string(), json!(request_id));
+            Some(Value::Object(task_event))
+        }
+        RuntimeAgentEvent::TurnCompleted { turn } => {
+            Some(Value::Object(build_runtime_projection_task_event(
+                format!("runtime:turn:{}:completed", turn.id),
+                "task:completed",
+                turn.status.as_str(),
+                "AgentRuntime 回合已完成",
+                runtime_event,
+            )))
+        }
+        RuntimeAgentEvent::TurnFailed { turn } => {
+            let mut task_event = build_runtime_projection_task_event(
+                format!("runtime:turn:{}:failed", turn.id),
+                "task:error",
+                turn.status.as_str(),
+                turn.error_message
+                    .clone()
+                    .unwrap_or_else(|| "AgentRuntime 回合执行失败".to_string()),
+                runtime_event,
+            );
+            task_event.insert("severity".to_string(), json!("error"));
+            Some(Value::Object(task_event))
+        }
+        RuntimeAgentEvent::ItemStarted { item } | RuntimeAgentEvent::ItemUpdated { item } => {
+            match &item.payload {
+                AgentThreadItemPayload::ToolCall { tool_name, .. } => {
+                    Some(build_runtime_projection_tool_task_event(
+                        format!("runtime:item:{}:tool", item.id),
+                        item.status.as_str(),
+                        format!("工具 {tool_name} {}", item.status.as_str()),
+                        Some(tool_name.clone()),
+                        runtime_event,
+                        item.status == AgentThreadItemStatus::Failed,
+                    ))
+                }
+                AgentThreadItemPayload::ApprovalRequest {
+                    request_id, prompt, ..
+                }
+                | AgentThreadItemPayload::RequestUserInput {
+                    request_id, prompt, ..
+                } => {
+                    let mut task_event = build_runtime_projection_task_event(
+                        format!("runtime:item:{}:review", item.id),
+                        "task:reviewRequested",
+                        item.status.as_str(),
+                        prompt
+                            .clone()
+                            .unwrap_or_else(|| "任务等待 Host / 用户响应".to_string()),
+                        runtime_event,
+                    );
+                    task_event.insert("requestId".to_string(), json!(request_id));
+                    Some(Value::Object(task_event))
+                }
+                _ => None,
+            }
+        }
+        RuntimeAgentEvent::ItemCompleted { item } => match &item.payload {
+            AgentThreadItemPayload::ToolCall {
+                tool_name,
+                success,
+                error,
+                ..
+            } => Some(build_runtime_projection_tool_task_event(
+                format!("runtime:item:{}:tool", item.id),
+                item.status.as_str(),
+                error
+                    .clone()
+                    .unwrap_or_else(|| format!("工具 {tool_name} {}", item.status.as_str())),
+                Some(tool_name.clone()),
+                runtime_event,
+                item.status == AgentThreadItemStatus::Failed || matches!(success, Some(false)),
+            )),
+            AgentThreadItemPayload::FileArtifact { path, metadata, .. } => {
+                Some(build_runtime_projection_artifact_task_event(
+                    format!("runtime:item:{}:artifact", item.id),
+                    item.status.as_str(),
+                    format!("Artifact 已创建：{path}"),
+                    path.clone(),
+                    runtime_event,
+                    runtime_workspace_patch_from_metadata_value(metadata.as_ref()),
+                ))
+            }
+            AgentThreadItemPayload::ApprovalRequest {
+                request_id, prompt, ..
+            }
+            | AgentThreadItemPayload::RequestUserInput {
+                request_id, prompt, ..
+            } => {
+                let mut task_event = build_runtime_projection_task_event(
+                    format!("runtime:item:{}:review", item.id),
+                    "task:reviewResolved",
+                    item.status.as_str(),
+                    prompt
+                        .clone()
+                        .unwrap_or_else(|| "Host / 用户响应已记录".to_string()),
+                    runtime_event,
+                );
+                task_event.insert("requestId".to_string(), json!(request_id));
+                Some(Value::Object(task_event))
+            }
+            AgentThreadItemPayload::Warning { message, code } => {
+                let mut task_event = build_runtime_projection_task_event(
+                    format!(
+                        "runtime:item:{}:{}",
+                        item.id,
+                        code.as_deref().unwrap_or("warning")
+                    ),
+                    "task:incident",
+                    item.status.as_str(),
+                    message.clone(),
+                    runtime_event,
+                );
+                task_event.insert("severity".to_string(), json!("warning"));
+                Some(Value::Object(task_event))
+            }
+            AgentThreadItemPayload::Error { message } => {
+                let mut task_event = build_runtime_projection_task_event(
+                    format!("runtime:item:{}:error", item.id),
+                    "task:error",
+                    item.status.as_str(),
+                    message.clone(),
+                    runtime_event,
+                );
+                task_event.insert("severity".to_string(), json!("error"));
+                Some(Value::Object(task_event))
+            }
+            _ => None,
+        },
+        RuntimeAgentEvent::QueueAdded { queued_turn, .. } => {
+            Some(Value::Object(build_runtime_projection_task_event(
+                format!("runtime:queue:{}:added", queued_turn.queued_turn_id),
+                "task:queued",
+                "queued",
+                queued_turn.message_preview.clone(),
+                runtime_event,
+            )))
+        }
+        RuntimeAgentEvent::QueueStarted { queued_turn_id, .. } => {
+            Some(Value::Object(build_runtime_projection_task_event(
+                format!("runtime:queue:{queued_turn_id}:started"),
+                "task:progress",
+                "running",
+                "排队任务已开始执行",
+                runtime_event,
+            )))
+        }
+        RuntimeAgentEvent::QueueRemoved { queued_turn_id, .. } => {
+            Some(Value::Object(build_runtime_projection_task_event(
+                format!("runtime:queue:{queued_turn_id}:removed"),
+                "task:cancelled",
+                "cancelled",
+                "排队任务已移除",
+                runtime_event,
+            )))
+        }
+        RuntimeAgentEvent::QueueCleared { .. } => {
+            Some(Value::Object(build_runtime_projection_task_event(
+                "runtime:queue:cleared".to_string(),
+                "task:cancelled",
+                "cancelled",
+                "排队任务已清空",
+                runtime_event,
+            )))
+        }
+        RuntimeAgentEvent::Done { .. } | RuntimeAgentEvent::FinalDone { .. } => {
+            Some(Value::Object(build_runtime_projection_task_event(
+                "runtime:done".to_string(),
+                "task:completed",
+                "completed",
+                "AgentRuntime 本轮输出已结束",
+                runtime_event,
+            )))
+        }
+        RuntimeAgentEvent::Error { message } => {
+            let mut task_event = build_runtime_projection_task_event(
+                "runtime:error".to_string(),
+                "task:error",
+                "failed",
+                message.clone(),
+                runtime_event,
+            );
+            task_event.insert("severity".to_string(), json!("error"));
+            Some(Value::Object(task_event))
+        }
+        RuntimeAgentEvent::Warning { code, message } => {
+            let mut task_event = build_runtime_projection_task_event(
+                format!("runtime:warning:{}", code.as_deref().unwrap_or("warning")),
+                "task:incident",
+                "warning",
+                message.clone(),
+                runtime_event,
+            );
+            task_event.insert("severity".to_string(), json!("warning"));
+            Some(Value::Object(task_event))
+        }
+        _ => None,
+    }
+}
+
+fn build_agent_app_runtime_event_task_events(event: &RuntimeAgentEvent) -> Vec<Value> {
+    let runtime_event = runtime_event_payload_value(event);
+    let mut task_events = Vec::new();
+    if let Some(task_event) =
+        build_agent_app_runtime_event_primary_task_event(event, runtime_event.clone())
+    {
+        task_events.push(task_event);
+    }
+    task_events.extend(build_runtime_projection_evidence_task_events(
+        &runtime_event,
+    ));
+    task_events
+}
+
+fn build_agent_app_runtime_event_projection_payload(
+    event_name: &str,
+    event: &RuntimeAgentEvent,
+) -> Option<Value> {
+    let scope = parse_agent_app_runtime_projection_scope(event_name)?;
+    let task_events = build_agent_app_runtime_event_task_events(event);
+    if task_events.is_empty() {
+        return None;
+    }
+    let status = task_events
+        .first()
+        .and_then(|task_event| task_event.get("status").and_then(Value::as_str))
+        .unwrap_or("updated")
+        .to_string();
+    let projection_event_name = agent_app_runtime_projection_event_name(&scope);
+
+    Some(json!({
+        "type": "agent_app_runtime:runtimeEventProjection",
+        "eventType": "task:runtimeEvent",
+        "appId": scope.app_id.clone(),
+        "taskId": scope.task_id.clone(),
+        "status": status,
+        "runtimeEvent": event,
+        "taskEvents": task_events,
+        "runtimeEventName": projection_event_name,
+        "emittedAt": chrono::Utc::now().to_rfc3339(),
+    }))
+}
+
+fn emit_agent_app_runtime_event_projection(
+    app: &AppHandle,
+    event_name: &str,
+    event: &RuntimeAgentEvent,
+) {
+    let Some(scope) = parse_agent_app_runtime_projection_scope(event_name) else {
+        return;
+    };
+    let Some(payload) = build_agent_app_runtime_event_projection_payload(event_name, event) else {
+        return;
+    };
+    let projection_event_name = agent_app_runtime_projection_event_name(&scope);
+    if let Err(error) = app.emit(&projection_event_name, payload) {
+        tracing::warn!(
+            "[AsterAgent] 发送 Agent App runtime event projection 失败: event_name={}, error={}",
+            projection_event_name,
             error
         );
     }
@@ -140,6 +826,7 @@ fn emit_submit_accepted_runtime_status(app: &AppHandle, event_name: &str) {
             error
         );
     }
+    emit_agent_app_runtime_event_projection(app, event_name, &event);
 }
 
 fn describe_provider_request_attempt(request: &AsterChatRequest) -> (String, String, String) {
@@ -837,6 +1524,7 @@ fn emit_runtime_side_event(
     if let Err(error) = app.emit(event_name, &event) {
         tracing::warn!("[AsterAgent] 发送 Artifact 运行时事件失败: {}", error);
     }
+    emit_agent_app_runtime_event_projection(app, event_name, &event);
 }
 
 fn emit_service_skill_preload_runtime_events(
@@ -5417,6 +6105,7 @@ fn fail_runtime_turn_before_model_execution(
     if let Err(error) = app.emit(event_name, &error_event) {
         tracing::error!("[AsterAgent] 发送运行时执行前阻断错误事件失败: {}", error);
     }
+    emit_agent_app_runtime_event_projection(app, event_name, &error_event);
 }
 
 fn build_runtime_permission_review_status_from_state(
@@ -6133,6 +6822,7 @@ fn emit_direct_runtime_stream_event(
             error
         );
     }
+    emit_agent_app_runtime_event_projection(app, event_name, event);
 }
 
 #[derive(Default)]
@@ -6947,16 +7637,17 @@ async fn finalize_runtime_turn_result(
             if let Err(error) = app.emit(event_name, &done_event) {
                 tracing::error!("[AsterAgent] 发送完成事件失败: {}", error);
             }
+            emit_agent_app_runtime_event_projection(app, event_name, &done_event);
             emit_subagent_status_changed_events(app, session_id).await;
             Ok(())
         }
         Err(error) => {
             if is_runtime_turn_cancelled_error(&error) {
-                if let Err(emit_error) =
-                    app.emit(event_name, &RuntimeAgentEvent::FinalDone { usage: None })
-                {
+                let final_done_event = RuntimeAgentEvent::FinalDone { usage: None };
+                if let Err(emit_error) = app.emit(event_name, &final_done_event) {
                     tracing::error!("[AsterAgent] 发送中断完成事件失败: {}", emit_error);
                 }
+                emit_agent_app_runtime_event_projection(app, event_name, &final_done_event);
                 emit_subagent_status_changed_events(app, session_id).await;
                 return Ok(());
             }
@@ -6970,6 +7661,7 @@ async fn finalize_runtime_turn_result(
             if let Err(emit_error) = app.emit(event_name, &error_event) {
                 tracing::error!("[AsterAgent] 发送错误事件失败: {}", emit_error);
             }
+            emit_agent_app_runtime_event_projection(app, event_name, &error_event);
             emit_subagent_status_changed_events(app, session_id).await;
             Err(error)
         }
@@ -8211,6 +8903,170 @@ mod tests {
         "Agent",
         "StructuredOutput",
     ];
+
+    #[test]
+    fn agent_app_runtime_profile_projection_extracts_scope_from_event_name() {
+        let scope = parse_agent_app_runtime_projection_scope(
+            "agent_app_runtime:content-factory-app:task-1",
+        )
+        .expect("agent app runtime scope");
+
+        assert_eq!(scope.app_id, "content-factory-app");
+        assert_eq!(scope.task_id, "task-1");
+        assert_eq!(
+            agent_app_runtime_projection_event_name(&scope),
+            "agent_app_runtime:content-factory-app:task-1"
+        );
+        assert!(parse_agent_app_runtime_projection_scope("aster_stream:session-1").is_none());
+    }
+
+    #[test]
+    fn agent_app_runtime_profile_projection_builds_canonical_task_event_payload() {
+        let profile_stream = AgentRuntimeProfileStream::new("session-1", "thread-1", "turn-1")
+            .expect("profile stream");
+        let event = profile_stream.tool_started("tool-1", "Skill(research)");
+
+        let payload = build_agent_app_runtime_profile_projection_payload(
+            "agent_app_runtime:content-factory-app:task-1",
+            &event,
+        )
+        .expect("projection payload");
+        let task_event = payload
+            .get("taskEvents")
+            .and_then(Value::as_array)
+            .and_then(|events| events.first())
+            .and_then(Value::as_object)
+            .expect("task event");
+
+        assert_eq!(
+            payload.get("type"),
+            Some(&json!("agent_app_runtime:profileProjection"))
+        );
+        assert_eq!(payload.get("eventType"), Some(&json!("task:runtimeEvent")));
+        assert_eq!(payload.get("appId"), Some(&json!("content-factory-app")));
+        assert_eq!(payload.get("taskId"), Some(&json!("task-1")));
+        assert_eq!(payload.get("sessionId"), Some(&json!("session-1")));
+        assert_eq!(
+            payload.get("runtimeEventName"),
+            Some(&json!("agent_app_runtime:content-factory-app:task-1"))
+        );
+        assert_eq!(task_event.get("eventType"), Some(&json!("task:toolCall")));
+        assert_eq!(task_event.get("status"), Some(&json!("running")));
+        assert_eq!(task_event.get("toolName"), Some(&json!("Skill(research)")));
+        assert_eq!(task_event.get("turnId"), Some(&json!("turn-1")));
+        assert!(payload.get("profileEvent").is_some());
+    }
+
+    #[test]
+    fn agent_app_runtime_runtime_event_projection_builds_artifact_task_event_payload() {
+        let event = RuntimeAgentEvent::ArtifactSnapshot {
+            artifact: lime_agent::AgentArtifactSignal {
+                artifact_id: "artifact-1".to_string(),
+                file_path: ".lime/artifacts/content-batch.json".to_string(),
+                content: None,
+                metadata: Some(HashMap::from([(
+                    "workspacePatch".to_string(),
+                    json!({
+                        "kind": "content_batch",
+                        "projectId": "project-1",
+                        "contentBatch": { "count": 20 }
+                    }),
+                )])),
+            },
+        };
+
+        let payload = build_agent_app_runtime_event_projection_payload(
+            "agent_app_runtime:content-factory-app:task-1",
+            &event,
+        )
+        .expect("runtime event projection payload");
+        let task_event = payload
+            .get("taskEvents")
+            .and_then(Value::as_array)
+            .and_then(|events| events.first())
+            .and_then(Value::as_object)
+            .expect("task event");
+
+        assert_eq!(
+            payload.get("type"),
+            Some(&json!("agent_app_runtime:runtimeEventProjection"))
+        );
+        assert_eq!(
+            task_event.get("eventType"),
+            Some(&json!("artifact:created"))
+        );
+        assert_eq!(
+            task_event.get("artifactRef"),
+            Some(&json!(".lime/artifacts/content-batch.json"))
+        );
+        assert_eq!(
+            task_event
+                .get("payload")
+                .and_then(|payload| payload.get("contentFactoryWorkspacePatch"))
+                .and_then(|patch| patch.get("contentBatch"))
+                .and_then(|content_batch| content_batch.get("count")),
+            Some(&json!(20))
+        );
+    }
+
+    #[test]
+    fn agent_app_runtime_runtime_event_projection_builds_evidence_task_events_from_metadata() {
+        let event = RuntimeAgentEvent::ToolEnd {
+            tool_id: "tool-1".to_string(),
+            result: lime_agent::AgentToolResult {
+                success: true,
+                output: "ok".to_string(),
+                error: None,
+                images: None,
+                metadata: Some(HashMap::from([
+                    (
+                        "evidenceRefs".to_string(),
+                        json!(["evidence://session-1/runtime"]),
+                    ),
+                    (
+                        "verificationOutcomes".to_string(),
+                        json!([{ "status": "passed" }]),
+                    ),
+                ])),
+            },
+        };
+
+        let payload = build_agent_app_runtime_event_projection_payload(
+            "agent_app_runtime:content-factory-app:task-1",
+            &event,
+        )
+        .expect("runtime event projection payload");
+        let task_events = payload
+            .get("taskEvents")
+            .and_then(Value::as_array)
+            .expect("task events");
+
+        assert_eq!(task_events.len(), 3);
+        assert!(task_events
+            .iter()
+            .any(|event| event.get("eventType") == Some(&json!("task:toolCall"))));
+        assert!(task_events.iter().any(|event| {
+            event.get("eventType") == Some(&json!("evidence:recorded"))
+                && event.get("evidenceRef") == Some(&json!("evidence://session-1/runtime"))
+        }));
+        assert!(task_events.iter().any(|event| {
+            event.get("eventType") == Some(&json!("evidence:verified"))
+                && event.get("status") == Some(&json!("passed"))
+        }));
+    }
+
+    #[test]
+    fn agent_app_runtime_runtime_event_projection_skips_low_value_text_delta() {
+        let event = RuntimeAgentEvent::TextDelta {
+            text: "partial".to_string(),
+        };
+
+        assert!(build_agent_app_runtime_event_projection_payload(
+            "agent_app_runtime:content-factory-app:task-1",
+            &event,
+        )
+        .is_none());
+    }
 
     #[test]
     fn model_permission_detection_should_include_tenant_whitelist_400() {

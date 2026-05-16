@@ -14,8 +14,31 @@ import {
   AgentAppCapabilityDispatcherError,
   createAgentAppCapabilityDispatcher,
 } from "./capabilityDispatcher";
+import type { AgentAppHostBridgeCapabilityRequest } from "./hostBridge";
 
 const FIXED_NOW = "2026-05-15T00:00:00.000Z";
+
+type CapabilityRequestFixture = Omit<
+  AgentAppHostBridgeCapabilityRequest,
+  "invokeRequest"
+> &
+  Partial<Pick<AgentAppHostBridgeCapabilityRequest, "invokeRequest">>;
+
+function buildCapabilityRequest(
+  request: CapabilityRequestFixture,
+): AgentAppHostBridgeCapabilityRequest {
+  return {
+    ...request,
+    invokeRequest:
+      request.invokeRequest ??
+      ({
+        capability: request.capability,
+        method: request.method,
+        args: request.input ?? request.args?.[0],
+        requestId: request.requestId,
+      } as AgentAppHostBridgeCapabilityRequest["invokeRequest"]),
+  };
+}
 
 function buildDispatcher() {
   const preview = buildInstalledAppPreview({
@@ -34,12 +57,115 @@ function buildDispatcher() {
     now: () => FIXED_NOW,
   });
 
-  return createAgentAppCapabilityDispatcher({
+  const dispatch = createAgentAppCapabilityDispatcher({
     host,
     projection: preview.projection,
     entryKey: "dashboard",
     runId: "bridge-run-1",
   });
+  return (request: CapabilityRequestFixture) =>
+    dispatch(buildCapabilityRequest(request));
+}
+
+function buildDispatcherWithoutDeclaredCapability(capability: string) {
+  const preview = buildInstalledAppPreview({
+    profile: buildWorkflowRuntimeCapabilityProfile({
+      realAdapterEnabled: true,
+      uiRuntimeEnabled: true,
+      workerRuntimeEnabled: true,
+    }),
+    loadedAt: FIXED_NOW,
+    checkedAt: FIXED_NOW,
+    generatedAt: FIXED_NOW,
+  });
+  const host = new AdapterCapabilityHost({
+    preview,
+    store: new InMemoryAgentAppCapabilityStore(),
+    now: () => FIXED_NOW,
+  });
+  const projection = {
+    ...preview.projection,
+    requiredCapabilities: preview.projection.requiredCapabilities.filter(
+      (requirement) => requirement.capability !== capability,
+    ),
+  };
+
+  const dispatch = createAgentAppCapabilityDispatcher({
+    host,
+    projection,
+    entryKey: "dashboard",
+    runId: "bridge-run-1",
+  });
+  return (request: CapabilityRequestFixture) =>
+    dispatch(buildCapabilityRequest(request));
+}
+
+function buildDispatcherWithoutCreativeCapabilityToolRef() {
+  const preview = buildInstalledAppPreview({
+    profile: buildWorkflowRuntimeCapabilityProfile({
+      realAdapterEnabled: true,
+      uiRuntimeEnabled: true,
+      workerRuntimeEnabled: true,
+    }),
+    loadedAt: FIXED_NOW,
+    checkedAt: FIXED_NOW,
+    generatedAt: FIXED_NOW,
+  });
+  const host = new AdapterCapabilityHost({
+    preview,
+    store: new InMemoryAgentAppCapabilityStore(),
+    now: () => FIXED_NOW,
+  });
+  const projection = {
+    ...preview.projection,
+    toolRequirements: preview.projection.toolRequirements.filter(
+      (tool) => tool.key !== "creative_capability_search",
+    ),
+  };
+
+  const dispatch = createAgentAppCapabilityDispatcher({
+    host,
+    projection,
+    entryKey: "dashboard",
+    runId: "bridge-run-1",
+  });
+  return (request: CapabilityRequestFixture) =>
+    dispatch(buildCapabilityRequest(request));
+}
+
+function buildDispatcherWithoutCreativeCapabilityAllowlist() {
+  const preview = buildInstalledAppPreview({
+    profile: buildWorkflowRuntimeCapabilityProfile({
+      realAdapterEnabled: true,
+      uiRuntimeEnabled: true,
+      workerRuntimeEnabled: true,
+    }),
+    loadedAt: FIXED_NOW,
+    checkedAt: FIXED_NOW,
+    generatedAt: FIXED_NOW,
+  });
+  const host = new AdapterCapabilityHost({
+    preview,
+    store: new InMemoryAgentAppCapabilityStore(),
+    now: () => FIXED_NOW,
+  });
+  const projection = {
+    ...preview.projection,
+    toolRequirements: preview.projection.toolRequirements.map((tool) =>
+      tool.key === "creative_capability_search"
+        ? { ...tool, capabilities: [] }
+        : tool,
+    ),
+  };
+
+  const dispatch = createAgentAppCapabilityDispatcher({
+    host,
+    projection,
+    entryKey: "dashboard",
+    runId: "bridge-run-1",
+  });
+  return (request: CapabilityRequestFixture) =>
+    dispatch(buildCapabilityRequest(request));
 }
 
 describe("createAgentAppCapabilityDispatcher", () => {
@@ -232,6 +358,106 @@ describe("createAgentAppCapabilityDispatcher", () => {
     ).rejects.toBeInstanceOf(AgentAppCapabilityDispatcherError);
   });
 
+  it("应拒绝 manifest 未声明的 Host capability，避免绕过声明边界", async () => {
+    const dispatch = buildDispatcherWithoutDeclaredCapability("lime.agent");
+
+    await expect(
+      dispatch({
+        appId: "content-factory-app",
+        entryKey: "dashboard",
+        requestId: "req-task",
+        capability: "lime.agent",
+        method: "startTask",
+        input: {
+          title: "生成内容场景",
+          prompt: "基于项目知识生成内容规划",
+          taskKind: "content.scenario_planning",
+        },
+        rawPayload: {
+          capability: "lime.agent",
+          method: "startTask",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "CAPABILITY_NOT_DECLARED",
+    });
+  });
+
+  it("应拒绝 manifest 未声明的 Claw capability hint，保留 catalog 授权边界", async () => {
+    const dispatch = buildDispatcherWithoutCreativeCapabilityToolRef();
+
+    await expect(
+      dispatch({
+        appId: "content-factory-app",
+        entryKey: "dashboard",
+        requestId: "req-task",
+        capability: "lime.agent",
+        method: "startTask",
+        input: {
+          title: "生成内容场景",
+          prompt: "基于项目知识生成内容规划",
+          taskKind: "content.scenario_planning",
+          tools: ["research.search"],
+        },
+        rawPayload: {
+          capability: "lime.agent",
+          method: "startTask",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "CAPABILITY_NOT_DECLARED",
+    });
+
+    const allowedDispatch = buildDispatcher();
+    const task = (await allowedDispatch({
+      appId: "content-factory-app",
+      entryKey: "dashboard",
+      requestId: "req-task-allowed",
+      capability: "lime.agent",
+      method: "startTask",
+      input: {
+        title: "生成内容场景",
+        prompt: "基于项目知识生成内容规划",
+        taskKind: "content.scenario_planning",
+        tools: ["research.search"],
+      },
+      rawPayload: {
+        capability: "lime.agent",
+        method: "startTask",
+      },
+    })) as AgentAppTaskRecord;
+    expect(task).toMatchObject({
+      taskKind: "content.scenario_planning",
+      tools: ["research.search"],
+    });
+  });
+
+  it("应拒绝未列入 catalog allowlist 的 Claw capability hint", async () => {
+    const dispatch = buildDispatcherWithoutCreativeCapabilityAllowlist();
+
+    await expect(
+      dispatch({
+        appId: "content-factory-app",
+        entryKey: "dashboard",
+        requestId: "req-task",
+        capability: "lime.agent",
+        method: "startTask",
+        input: {
+          title: "生成内容场景",
+          prompt: "基于项目知识生成内容规划",
+          taskKind: "content.scenario_planning",
+          capabilityHints: ["image_generation"],
+        },
+        rawPayload: {
+          capability: "lime.agent",
+          method: "startTask",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "CAPABILITY_NOT_DECLARED",
+    });
+  });
+
   it("应只允许声明过的 artifact / evidence 写回", async () => {
     const dispatch = buildDispatcher();
 
@@ -277,6 +503,54 @@ describe("createAgentAppCapabilityDispatcher", () => {
     expect(evidence).toMatchObject({
       kind: "fact_grounding",
       refs: [artifact.id],
+      provenance: expect.objectContaining({
+        appId: "content-factory-app",
+        workflowRunId: "bridge-run-1",
+      }),
+    });
+
+    const contentBatchArtifact = (await dispatch({
+      appId: "content-factory-app",
+      entryKey: "dashboard",
+      capability: "lime.artifacts",
+      method: "create",
+      input: {
+        kind: "content_batch",
+        title: "内容批次",
+        content: { count: 20 },
+      },
+      rawPayload: {
+        capability: "lime.artifacts",
+        method: "create",
+      },
+    })) as AgentAppArtifactRecord;
+    expect(contentBatchArtifact).toMatchObject({
+      kind: "content_batch",
+      title: "内容批次",
+      provenance: expect.objectContaining({
+        appId: "content-factory-app",
+        workflowRunId: "bridge-run-1",
+      }),
+    });
+
+    const publishReadiness = (await dispatch({
+      appId: "content-factory-app",
+      entryKey: "dashboard",
+      capability: "lime.evidence",
+      method: "record",
+      input: {
+        kind: "publish_readiness",
+        message: "内容批次已可继续审核。",
+        refs: [contentBatchArtifact.id],
+      },
+      rawPayload: {
+        capability: "lime.evidence",
+        method: "record",
+      },
+    })) as AgentAppEvidenceRecord;
+    expect(publishReadiness).toMatchObject({
+      kind: "publish_readiness",
+      refs: [contentBatchArtifact.id],
       provenance: expect.objectContaining({
         appId: "content-factory-app",
         workflowRunId: "bridge-run-1",
