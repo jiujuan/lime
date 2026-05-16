@@ -90,6 +90,7 @@ Host 统一 Agent Run UI 第一刀只做通用容器，不急着复刻完整 Cla
 - 读取 `runtimeProcess.timeline`，运行中展开，完成后折叠但不删除。
 - 读取 `events / taskEvents / runtimeFacts`，把确认链、交付物和 Evidence 单独收成事实栏，避免业务 App 只在自家面板里展示这些关键过程。
 - 按 `timeline.kind` 呈现 routing / skill / tool / execution / artifact / warning / completed 的轻量语义标记，让 Host 面板接近 Claw 的运行现场，而不是普通日志列表。
+- 工具标题复用 Claw 的 `resolveUserFacingToolDisplayLabel`，避免 Agent App Host UI 暴露 `browser_snapshot` 这类底层工具名。
 - 展示 `thinkingText / executionText / streamText` 的入口，但不让业务 App 自己解析底层事件。
 - 后续可把 Claw 已有 renderer 下沉成共享 `AgentRunRenderer`，由 Host UI 调用，而不是 iframe App import Claw React 组件。
 
@@ -151,6 +152,7 @@ Host 统一 Agent Run UI 第一刀只做通用容器，不急着复刻完整 Cla
 | 思考、执行、成稿流式输出不被 App 私有解析 | `AgentRunHostDrawer.tsx` 直接读取 `runtimeProcess.thinkingText / executionText / streamText` | done/first-cut |
 | Tool / Skill / 模型路由 / 产物等过程可区分 | `AgentRunHostDrawer.tsx` 读取 `timeline.kind` 并输出 `data-agent-run-timeline-kind` 语义标记；测试覆盖 `routing / skill / tool / execution / completed` | done/first-cut |
 | Host UI 不只绑定抽屉一种形态 | `AgentRunProcessPanel` 从 `AgentRunHostDrawer` 抽出，后续可被 modal/page/Claw shared renderer 复用；测试断言 `agent-run-process-panel` 存在 | done/first-cut |
+| Claw 工具名展示复用 | `AgentRunHostDrawer.tsx` 复用 `resolveUserFacingToolDisplayLabel`；测试断言 `browser_snapshot` 在 Host Run UI 中显示为“页面截图” | done/first-cut |
 | 模型、Token、费用、Skill 由 Host 统一展示 | `AgentRunMetricCards` 读取 `runtimeProcess.model / usage / cost / skillNames / invokedSkillNames`；测试覆盖模型、Token、费用、Skill | done/first-cut |
 | 证据链、交付物、确认链不丢 | `AgentRunFactRail` 读取 `events / taskEvents / runtimeFacts`；测试覆盖 review request、artifact、evidence | done/first-cut |
 | 真正复用 Claw renderer | 目前仍是 Host Run 专用 renderer，未从 Claw 抽出共享 React renderer | missing |

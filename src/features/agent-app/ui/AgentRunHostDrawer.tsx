@@ -1,4 +1,5 @@
 import { Bot, PanelRightClose, X } from "lucide-react";
+import { resolveUserFacingToolDisplayLabel } from "@/components/agent/chat/utils/toolDisplayInfo";
 import type {
   AgentAppHostAgentRunUiMode,
   AgentAppHostAgentRunUiRequest,
@@ -164,6 +165,30 @@ function resolveTimelineKindClassName(kind: string): string {
     default:
       return "bg-slate-300";
   }
+}
+
+function extractToolNameFromTimelineTitle(title: string): string | null {
+  const match = title.match(/^(?:工具|Tool)\s*·\s*(.+)$/);
+  return match?.[1]?.trim() || null;
+}
+
+function resolveTimelineTitle(
+  record: Record<string, unknown>,
+  fallback: string,
+): string {
+  const title = readString(record.title) ?? fallback;
+  if (readTimelineKind(record) !== "tool") {
+    return title;
+  }
+  const toolName =
+    readString(record.toolName) ?? extractToolNameFromTimelineTitle(title);
+  if (!toolName) {
+    return title;
+  }
+  const displayName = resolveUserFacingToolDisplayLabel(toolName);
+  return displayName && displayName !== toolName
+    ? title.replace(toolName, displayName)
+    : title;
 }
 
 function readFactRecordArray(value: unknown, key: string): Record<string, unknown>[] {
@@ -406,8 +431,10 @@ function AgentRunTimeline({
             const record: Record<string, unknown> = isRecord(item) ? item : {};
             const kind = readTimelineKind(record);
             const title =
-              readString(record.title) ??
-              t("agentApp.apps.runtime.agentRun.timeline.event");
+              resolveTimelineTitle(
+                record,
+                t("agentApp.apps.runtime.agentRun.timeline.event"),
+              );
             const message = readString(record.message);
             const meta = readString(record.meta) ?? readString(record.statusText);
             const detail = readString(record.detail);

@@ -650,7 +650,7 @@ describe("AgentAppRuntimePage", () => {
     expect(container.textContent).toContain("content_factory_writer");
     expect(container.textContent).toContain("模型路由");
     expect(container.textContent).toContain("Skill · content_factory_writer");
-    expect(container.textContent).toContain("Tool · browser_snapshot");
+    expect(container.textContent).toContain("Tool · 页面截图");
     expect(
       container.querySelector('[data-agent-run-timeline-kind="skill"]'),
     ).not.toBeNull();
