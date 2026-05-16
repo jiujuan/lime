@@ -25,7 +25,11 @@ import { buildUiRuntimeCapabilityProfile } from "../runtime/uiRuntimeCapabilityP
 import type { InstalledAgentAppState, ProjectedEntry } from "../types";
 import { buildRuntimePackageLoadForPreview } from "./agentAppsRuntime";
 import { resolveInstalledAgentAppDisplayName } from "./agentAppDisplay";
-import { AgentRunHostDrawer, type AgentRunUiState } from "./AgentRunHostDrawer";
+import {
+  AgentRunHostDrawer,
+  type AgentRunTranslator,
+  type AgentRunUiState,
+} from "./AgentRunHostDrawer";
 
 const HOST_BRIDGE_DISPATCH_CAPABILITIES = new Set([
   "lime.capabilities",
@@ -441,6 +445,10 @@ export function AgentAppRuntimePage({
     },
     [],
   );
+  const translateAgentRun = useCallback<AgentRunTranslator>(
+    (key, params) => (t as unknown as AgentRunTranslator)(key, params),
+    [t],
+  );
 
   useEffect(() => {
     setAgentRunUi(null);
@@ -454,7 +462,7 @@ export function AgentAppRuntimePage({
       mergeAgentRunUiState(previous, request, now, mode),
     );
     return {
-      opened: true,
+      opened: true as const,
       surface: "host_agent_run" as const,
       mode,
       taskId: request.taskId,
@@ -467,7 +475,7 @@ export function AgentAppRuntimePage({
       mergeAgentRunUiState(previous, request, now, previous?.mode ?? "drawer"),
     );
     return {
-      updated: true,
+      updated: true as const,
       surface: "host_agent_run" as const,
       taskId: request.taskId,
     };
@@ -488,7 +496,7 @@ export function AgentAppRuntimePage({
         return sameTask && sameBridgeAction ? null : previous;
       });
       return {
-        closed: true,
+        closed: true as const,
         surface: "host_agent_run" as const,
         taskId: request.taskId,
       };
@@ -618,8 +626,12 @@ export function AgentAppRuntimePage({
           run={agentRunUi}
           displayName={displayName}
           expanded={agentRunExpanded}
-          onExpand={() => setAgentRunExpanded(true)}
-          onCollapse={() => setAgentRunExpanded(false)}
+          onExpand={() => {
+            setAgentRunExpanded(true);
+          }}
+          onCollapse={() => {
+            setAgentRunExpanded(false);
+          }}
           onClose={() => {
             setAgentRunExpanded(false);
             closeAgentRunUi({
@@ -627,7 +639,7 @@ export function AgentAppRuntimePage({
               bridgeAction: agentRunUi.bridgeAction,
             });
           }}
-          t={t}
+          t={translateAgentRun}
         />
       ) : null}
     </div>
