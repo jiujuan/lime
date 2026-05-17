@@ -261,8 +261,15 @@ fn build_thread_read() -> AgentRuntimeThreadReadModel {
                 turn_id: "turn-1".to_string(),
                 tool_name: "Read".to_string(),
                 status: "completed".to_string(),
+                started_at: Some("2026-03-13T00:00:01Z".to_string()),
+                finished_at: Some("2026-03-13T00:00:02Z".to_string()),
+                updated_at: Some("2026-03-13T00:00:02Z".to_string()),
+                arguments: None,
+                output: Some("读取完成".to_string()),
+                output_preview: Some("读取完成".to_string()),
                 success: Some(true),
                 error: None,
+                evidence_refs: Vec::new(),
             },
         ],
         artifacts: Vec::new(),
@@ -2036,6 +2043,87 @@ fn should_export_runtime_evidence_pack_to_workspace() {
     assert!(artifacts.contains("\"checkpoint_id\": \"artifact-1\""));
     assert!(artifacts.contains("\"matchedRequestCount\": 1"));
     assert!(!artifacts.contains("\"verification\""));
+}
+
+#[test]
+fn evidence_pack_should_redact_agent_app_connector_authorization_secret() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let detail = build_detail();
+    let mut thread_read = build_thread_read();
+    if let Some(permission_state) = thread_read.permission_state.as_mut() {
+        permission_state.confirmation_status = Some("resolved".to_string());
+        permission_state.confirmation_request_id = Some("approval-resolved".to_string());
+        permission_state.confirmation_source = Some("runtime_action_required".to_string());
+    }
+    thread_read.runtime_summary = Some(json!({
+        "surface": "agent_app",
+        "appId": "content-factory-app",
+        "taskId": "task-auth-1",
+        "agent_app_connector_authorization": {
+            "version": "p18.7-e4",
+            "request": {
+                "capability": "lime.connectors",
+                "method": "requestAuth",
+                "connectorId": "notion",
+                "input": {
+                    "connectorId": "notion",
+                    "rawOauthToken": "notion-refresh-token",
+                    "refresh_token": "notion-refresh-token-2",
+                    "authorization": {
+                        "header": "Bearer notion-nested-token"
+                    }
+                },
+                "policy": {
+                    "secretBinding": "host_managed",
+                    "tokenExposed": false,
+                    "sessionScoped": true
+                }
+            }
+        }
+    }));
+
+    export_runtime_evidence_pack(&detail, &thread_read, temp_dir.path()).expect("export");
+
+    let runtime_path = temp_dir
+        .path()
+        .join(".lime/harness/sessions/session-1/evidence/runtime.json");
+    let artifacts_path = temp_dir
+        .path()
+        .join(".lime/harness/sessions/session-1/evidence/artifacts.json");
+    let runtime = fs::read_to_string(runtime_path).expect("runtime");
+    let runtime_json = serde_json::from_str::<Value>(&runtime).expect("runtime json");
+
+    assert_eq!(
+        runtime_json.pointer(
+            "/thread/runtimeFacts/runtimeSummary/agent_app_connector_authorization/request/input/rawOauthToken"
+        ),
+        Some(&json!("[redacted:host_managed_secret]"))
+    );
+    assert_eq!(
+        runtime_json.pointer(
+            "/thread/runtimeFacts/runtimeSummary/agent_app_connector_authorization/request/input/authorization"
+        ),
+        Some(&json!("[redacted:host_managed_secret]"))
+    );
+    assert_eq!(
+        runtime_json.pointer(
+            "/thread/runtimeFacts/runtimeSummary/agent_app_connector_authorization/request/policy/secretBinding"
+        ),
+        Some(&json!("host_managed"))
+    );
+    assert_eq!(
+        runtime_json.pointer(
+            "/thread/runtimeFacts/runtimeSummary/agent_app_connector_authorization/request/policy/tokenExposed"
+        ),
+        Some(&json!(false))
+    );
+    assert!(runtime.contains("\"connectorId\": \"notion\""));
+    assert!(!runtime.contains("notion-refresh-token"));
+    assert!(!runtime.contains("notion-nested-token"));
+
+    let artifacts = fs::read_to_string(artifacts_path).expect("artifacts");
+    assert!(!artifacts.contains("notion-refresh-token"));
+    assert!(!artifacts.contains("notion-nested-token"));
 }
 
 #[test]

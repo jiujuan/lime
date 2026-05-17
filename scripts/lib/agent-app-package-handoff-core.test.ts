@@ -82,6 +82,47 @@ describe("agent-app-package-handoff-core", () => {
     expect(report.verdict.blockers).toEqual([]);
   });
 
+  it("把直接调用模型或 Gateway 的 Agent App package 判为 blocked", () => {
+    const report = createAgentAppPackageHandoffReport({
+      files: {
+        hostBridge: {
+          exists: true,
+          content: "createLimeHostBridgeCapabilityInvoker(); createLimeCoreCapabilityAdapters();",
+        },
+        uiTest: {
+          exists: true,
+          content: "sdkInvokerCallLog",
+        },
+        runtimeFiles: [
+          {
+            path: "src/integrations/limecore.mjs",
+            content:
+              "const base = process.env.LIME_GATEWAY_BASE; await fetch(`${base}/v1/chat/completions`);",
+          },
+          {
+            path: "dist/integrations/model-generation.mjs",
+            content: "const key = process.env.OPENAI_API_KEY;",
+          },
+        ],
+      },
+      packageJsonText: JSON.stringify({
+        scripts: {
+          test: "node --test tests/*.test.mjs",
+        },
+      }),
+    });
+
+    expect(report.verdict.status).toBe("blocked");
+    expect(report.agentRuntimeBypass.totalMatches).toBe(3);
+    expect(report.agentRuntimeBypass.fileCount).toBe(2);
+    expect(report.verdict.blockers).toContain(
+      "agent app package contains direct model/provider runtime bypass markers: 3 hit(s) in 2 file(s)",
+    );
+    expect(report.verdict.nextAction).toBe(
+      "Do not claim Agent App runtime completion; remove direct provider/Gateway calls and route AI work through lime.agent / AgentRuntime Host facade.",
+    );
+  });
+
   it("识别会重建 dist 的 build / verify / e2e 脚本", () => {
     const scripts = analyzeScripts(
       {

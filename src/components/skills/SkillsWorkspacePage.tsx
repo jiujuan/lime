@@ -334,7 +334,7 @@ function MarketplaceSkillVisual({
         "shrink-0 object-cover",
         variant === "cover"
           ? "h-full w-full"
-          : "h-10 w-10 rounded-xl border border-[#ddd5c8] bg-white",
+          : "h-10 w-10 rounded-xl border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)]",
       )}
     />
   );
@@ -382,7 +382,10 @@ function renderSkillMarkdown(content: string) {
   const flushParagraph = () => {
     if (paragraph.length === 0) return;
     nodes.push(
-      <p key={`p-${nodes.length}`} className="my-4 leading-7 text-[#333]">
+      <p
+        key={`p-${nodes.length}`}
+        className="my-4 leading-7 text-[color:var(--lime-text)]"
+      >
         {paragraph.join(" ")}
       </p>,
     );
@@ -393,7 +396,7 @@ function renderSkillMarkdown(content: string) {
     nodes.push(
       <blockquote
         key={`q-${nodes.length}`}
-        className="my-5 border-l-2 border-emerald-300 pl-5 italic leading-7 text-[#333]"
+        className="my-5 border-l-2 border-[color:var(--lime-surface-border-strong)] pl-5 italic leading-7 text-[color:var(--lime-text)]"
       >
         {quote.join(" ")}
       </blockquote>,
@@ -405,7 +408,7 @@ function renderSkillMarkdown(content: string) {
     nodes.push(
       <ul
         key={`ul-${nodes.length}`}
-        className="my-4 list-disc space-y-2 pl-6 leading-7 text-[#333]"
+        className="my-4 list-disc space-y-2 pl-6 leading-7 text-[color:var(--lime-text)]"
       >
         {list.map((item, index) => (
           <li key={`${index}-${item}`}>{item}</li>
@@ -424,7 +427,7 @@ function renderSkillMarkdown(content: string) {
         nodes.push(
           <pre
             key={`code-${nodes.length}`}
-            className="my-5 overflow-auto rounded-lg bg-[#f4f4f4] p-4 font-mono text-sm leading-6 text-[#222]"
+            className="my-5 overflow-auto rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] p-4 font-mono text-sm leading-6 text-[color:var(--lime-text-strong)]"
           >
             {code.join("\n")}
           </pre>,
@@ -452,7 +455,10 @@ function renderSkillMarkdown(content: string) {
       flushQuote();
       flushList();
       nodes.push(
-        <hr key={`hr-${nodes.length}`} className="my-8 border-[#ececec]" />,
+        <hr
+          key={`hr-${nodes.length}`}
+          className="my-8 border-[color:var(--lime-surface-border)]"
+        />,
       );
       continue;
     }
@@ -479,10 +485,10 @@ function renderSkillMarkdown(content: string) {
       const text = heading[2];
       const className =
         level === 1
-          ? "mb-8 mt-2 text-2xl font-semibold text-[#222]"
+          ? "mb-8 mt-2 text-2xl font-semibold text-[color:var(--lime-text-strong)]"
           : level === 2
-            ? "mb-4 mt-10 text-xl font-semibold text-[#222]"
-            : "mb-3 mt-7 text-base font-semibold text-[#222]";
+            ? "mb-4 mt-10 text-xl font-semibold text-[color:var(--lime-text-strong)]"
+            : "mb-3 mt-7 text-base font-semibold text-[color:var(--lime-text-strong)]";
       if (level === 1) {
         nodes.push(
           <h1 key={`h-${nodes.length}`} className={className}>
@@ -515,7 +521,7 @@ function renderSkillMarkdown(content: string) {
     nodes.push(
       <pre
         key={`code-${nodes.length}`}
-        className="my-5 overflow-auto rounded-lg bg-[#f4f4f4] p-4 font-mono text-sm leading-6 text-[#222]"
+        className="my-5 overflow-auto rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] p-4 font-mono text-sm leading-6 text-[color:var(--lime-text-strong)]"
       >
         {code.join("\n")}
       </pre>,
@@ -1572,10 +1578,10 @@ export function SkillsWorkspacePage({
       <article
         key={`${item.source}:${skill.name}`}
         className={cn(
-          "group flex min-h-[132px] flex-col rounded-[10px] border bg-white p-4 text-left shadow-[0_1px_2px_rgba(49,41,28,0.03)] transition hover:border-[#cfc5b4] hover:shadow-[0_6px_20px_rgba(49,41,28,0.07)]",
+          "group flex min-h-[132px] flex-col rounded-[10px] border bg-[color:var(--lime-surface)] p-4 text-left shadow-sm shadow-[color:var(--lime-shadow-color)] transition hover:border-[color:var(--lime-surface-border-strong)] hover:bg-[color:var(--lime-surface-hover)] hover:shadow-md",
           isSelected
-            ? "border-[#b8d8bd] ring-1 ring-[#b8d8bd]"
-            : "border-[#e7e2d9]",
+            ? "border-[color:var(--lime-surface-border-strong)] ring-1 ring-[color:var(--lime-surface-border-strong)]"
+            : "border-[color:var(--lime-surface-border)]",
         )}
         data-testid="skills-marketplace-card"
       >
@@ -1586,28 +1592,26 @@ export function SkillsWorkspacePage({
             tone={tone}
           />
           <div className="min-w-0 flex-1">
-            <h3 className="line-clamp-1 text-[15px] font-semibold leading-5 text-[#2b2b2b]">
+            <h3 className="line-clamp-1 text-[15px] font-semibold leading-5 text-[color:var(--lime-text-strong)]">
               {skill.title}
             </h3>
-            <p className="mt-0.5 line-clamp-1 text-[12px] leading-4 text-[#9a9488]">
+            <p className="mt-0.5 line-clamp-1 text-[12px] leading-4 text-[color:var(--lime-text-muted)]">
               {skill.name}
             </p>
           </div>
         </div>
-        <p className="mt-3 line-clamp-2 flex-1 text-[13px] leading-5 text-[#6b6b63]">
+        <p className="mt-3 line-clamp-2 flex-1 text-[13px] leading-5 text-[color:var(--lime-text)]">
           {summary}
         </p>
-        <div className="mt-3 flex items-center justify-between gap-3 text-[12px] leading-4 text-[#9a9488]">
-          <span className="line-clamp-1">
-            {secondaryText}
-          </span>
+        <div className="mt-3 flex items-center justify-between gap-3 text-[12px] leading-4 text-[color:var(--lime-text-muted)]">
+          <span className="line-clamp-1">{secondaryText}</span>
           <div className="flex shrink-0 items-center gap-1.5">
             {canUninstall ? (
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-7 rounded-full px-2.5 text-[12px] font-semibold text-[#8a5a42] hover:bg-[#f8efe8]"
+                className="h-7 rounded-full px-2.5 text-[12px] font-semibold text-[color:var(--lime-warning)] hover:bg-[color:var(--lime-warning-soft)]"
                 disabled={actionDisabled}
                 onClick={() => handleMarketplaceSkillUninstall(item)}
               >
@@ -1618,7 +1622,7 @@ export function SkillsWorkspacePage({
               type="button"
               variant="ghost"
               size="sm"
-              className="h-7 rounded-full px-2.5 text-[12px] font-semibold text-[#6f695f] hover:bg-[#f5efe4]"
+              className="h-7 rounded-full px-2.5 text-[12px] font-semibold text-[color:var(--lime-text)] hover:bg-[color:var(--lime-surface-hover)]"
               onClick={openDetail}
             >
               {t("skills.workspace.marketplace.action.detail")}
@@ -1626,7 +1630,7 @@ export function SkillsWorkspacePage({
             <Button
               type="button"
               size="sm"
-              className="h-7 rounded-full bg-[#232323] px-3 text-[12px] font-semibold text-white shadow-none hover:bg-[#111]"
+              className="h-7 rounded-full bg-[color:var(--lime-text-strong)] px-3 text-[12px] font-semibold text-[color:var(--lime-surface)] shadow-none hover:opacity-90"
               disabled={actionDisabled}
               onClick={() => handleMarketplaceSkillPrimaryAction(item)}
             >
@@ -1651,11 +1655,13 @@ export function SkillsWorkspacePage({
     return (
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-[17px] font-semibold tracking-[-0.01em] text-[#262626]">
+          <h2 className="text-[17px] font-semibold tracking-[-0.01em] text-[color:var(--lime-text-strong)]">
             {title}
           </h2>
           {meta ? (
-            <span className="text-[12px] leading-5 text-[#9a9488]">{meta}</span>
+            <span className="text-[12px] leading-5 text-[color:var(--lime-text-muted)]">
+              {meta}
+            </span>
           ) : null}
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -1669,13 +1675,13 @@ export function SkillsWorkspacePage({
 
   return (
     <>
-      <div className="lime-workbench-theme-scope flex h-full min-h-0 flex-col overflow-hidden bg-[#fbf8f0]">
-        <header className="flex h-16 shrink-0 items-center justify-end gap-3 border-b border-[#e6ddcd] bg-[#fbf8f0] px-5 lg:px-8">
+      <div className="lime-workbench-theme-scope flex h-full min-h-0 flex-col overflow-hidden bg-[color:var(--lime-app-bg)] text-[color:var(--lime-text)]">
+        <header className="flex h-16 shrink-0 items-center justify-end gap-3 border-b border-[color:var(--lime-surface-border)] bg-[color:var(--lime-app-bg)] px-5 lg:px-8">
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            className="h-8 w-8 rounded-full p-0 text-[#838579] hover:bg-[#f2eadc]"
+            className="h-8 w-8 rounded-full p-0 text-[color:var(--lime-text-muted)] hover:bg-[color:var(--lime-surface-hover)]"
             data-testid="skills-workspace-refresh-button"
             onClick={() => void handleRefreshAll()}
             disabled={refreshing}
@@ -1686,19 +1692,19 @@ export function SkillsWorkspacePage({
             />
           </Button>
           <label className="relative hidden w-[280px] sm:block">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7f8175]" />
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--lime-text-muted)]" />
             <Input
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder={t("skills.workspace.search.placeholder")}
-              className="h-9 rounded-full border-[#e1d9cb] bg-white pl-10 pr-4 text-sm font-semibold text-[#111827] shadow-none placeholder:text-[#8d8f9a]"
+              className="h-9 rounded-full border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] pl-10 pr-4 text-sm font-semibold text-[color:var(--lime-text-strong)] shadow-none placeholder:text-[color:var(--lime-text-muted)]"
             />
           </label>
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="h-9 rounded-full border-[#e1d9cb] bg-white px-4 text-sm font-semibold text-[#111827] shadow-none hover:bg-[#f8f3ea]"
+            className="h-9 rounded-full border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-4 text-sm font-semibold text-[color:var(--lime-text-strong)] shadow-none hover:bg-[color:var(--lime-surface-hover)]"
             onClick={() => {
               setScaffoldDialogDraft(null);
               setScaffoldDialogOpen(true);
@@ -1709,7 +1715,7 @@ export function SkillsWorkspacePage({
           <Button
             type="button"
             size="sm"
-            className="h-9 rounded-full bg-[#111] px-5 text-sm font-semibold text-white shadow-none hover:bg-[#000]"
+            className="h-9 rounded-full bg-[color:var(--lime-text-strong)] px-5 text-sm font-semibold text-[color:var(--lime-surface)] shadow-none hover:opacity-90"
             disabled={importingLocalSkill}
             onClick={() => void handleImportLocalSkill()}
           >
@@ -1719,23 +1725,23 @@ export function SkillsWorkspacePage({
           </Button>
         </header>
 
-        <main className="min-h-0 flex-1 overflow-auto bg-white px-5 pb-10 pt-10">
+        <main className="min-h-0 flex-1 overflow-auto bg-[color:var(--lime-surface)] px-5 pb-10 pt-10">
           <div className="mx-auto w-full max-w-[900px] space-y-8">
             <section className="space-y-4">
               <div>
-                <h1 className="text-[28px] font-semibold tracking-[-0.03em] text-[#111827]">
+                <h1 className="text-[28px] font-semibold tracking-[-0.03em] text-[color:var(--lime-text-strong)]">
                   {t("skills.workspace.header.title")}
                 </h1>
-                <p className="mt-2 text-sm leading-6 text-[#a0a0a0]">
+                <p className="mt-2 text-sm leading-6 text-[color:var(--lime-text-muted)]">
                   {t("skills.workspace.header.subtitle")}
                 </p>
               </div>
-              <div className="relative h-[128px] overflow-hidden rounded-lg bg-[#e9f8ff]">
+              <div className="relative h-[128px] overflow-hidden rounded-lg border border-[color:var(--lime-info-border)] bg-[color:var(--lime-info-soft)]">
                 <div className="absolute left-6 top-1/2 -translate-y-1/2">
-                  <div className="text-base font-semibold leading-6 text-[#222]">
+                  <div className="text-base font-semibold leading-6 text-[color:var(--lime-text-strong)]">
                     {t("skills.workspace.hero.title")}
                   </div>
-                  <p className="mt-2 text-sm leading-5 text-[#6f7780]">
+                  <p className="mt-2 text-sm leading-5 text-[color:var(--lime-text)]">
                     {t("skills.workspace.hero.description")}
                   </p>
                 </div>
@@ -1811,15 +1817,15 @@ export function SkillsWorkspacePage({
                       className={cn(
                         "inline-flex h-8 items-center gap-2 rounded-full text-base font-semibold transition",
                         active
-                          ? "text-[#222]"
-                          : "text-[#a1a197] hover:text-slate-900",
+                          ? "text-[color:var(--lime-text-strong)]"
+                          : "text-[color:var(--lime-text-muted)] hover:text-[color:var(--lime-text-strong)]",
                       )}
                       onClick={() => setActiveView(tab.key)}
                     >
                       {tab.label}
                       {tab.key === "installed" &&
                       typeof tab.count === "number" ? (
-                        <span className="text-xs text-[#a1a197]">
+                        <span className="text-xs text-[color:var(--lime-text-muted)]">
                           {formatNumber(tab.count, { locale: i18n.language })}
                         </span>
                       ) : null}
@@ -1833,7 +1839,7 @@ export function SkillsWorkspacePage({
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="h-8 rounded-lg border-[#e5e1d8] bg-white px-3 text-xs font-semibold text-[#5f6058] shadow-none hover:bg-[#faf8f3]"
+                    className="h-8 rounded-lg border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 text-xs font-semibold text-[color:var(--lime-text)] shadow-none hover:bg-[color:var(--lime-surface-hover)]"
                   >
                     {t("skills.workspace.filter.all")}
                   </Button>
@@ -1841,7 +1847,7 @@ export function SkillsWorkspacePage({
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="h-8 rounded-lg border-[#e5e1d8] bg-white px-3 text-xs font-semibold text-[#5f6058] shadow-none hover:bg-[#faf8f3]"
+                    className="h-8 rounded-lg border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 text-xs font-semibold text-[color:var(--lime-text)] shadow-none hover:bg-[color:var(--lime-surface-hover)]"
                   >
                     {t("skills.workspace.sort.hot")}
                   </Button>
@@ -2064,15 +2070,15 @@ export function SkillsWorkspacePage({
         }}
       >
         <DialogContent
-          className="overflow-hidden rounded-[18px] border border-[#e5ded2] bg-white p-0"
+          className="lime-workbench-theme-scope lime-workbench-surface-scope overflow-hidden rounded-[18px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-0 text-[color:var(--lime-text)]"
           maxWidth="max-w-[920px]"
         >
           {detailStoreItem ? (
             <div
-              className="flex max-h-[calc(100vh-3rem)] min-h-[560px] flex-col bg-white"
+              className="flex max-h-[calc(100vh-3rem)] min-h-[560px] flex-col bg-[color:var(--lime-surface)]"
               data-testid="skills-marketplace-detail"
             >
-              <div className="shrink-0 border-b border-[#eee8dd] px-6 py-5 pr-14">
+              <div className="shrink-0 border-b border-[color:var(--lime-surface-border)] px-6 py-5 pr-14">
                 <DialogHeader className="space-y-0 text-left">
                   <div className="flex items-center gap-3">
                     <MarketplaceSkillVisual
@@ -2085,10 +2091,10 @@ export function SkillsWorkspacePage({
                       title={detailStoreItem.skill.title}
                     />
                     <div className="min-w-0">
-                      <DialogTitle className="line-clamp-1 text-[22px] font-semibold leading-7 tracking-[-0.02em] text-[#222]">
+                      <DialogTitle className="line-clamp-1 text-[22px] font-semibold leading-7 tracking-[-0.02em] text-[color:var(--lime-text-strong)]">
                         {detailStoreItem.skill.title}
                       </DialogTitle>
-                      <div className="mt-1 line-clamp-1 text-[13px] leading-5 text-[#8a8376]">
+                      <div className="mt-1 line-clamp-1 text-[13px] leading-5 text-[color:var(--lime-text-muted)]">
                         {detailStoreItem.skill.name}
                       </div>
                     </div>
@@ -2097,7 +2103,7 @@ export function SkillsWorkspacePage({
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-                <div className="mb-5 rounded-lg border border-[#cfe9ff] bg-[#eef8ff] px-4 py-3 text-[13px] leading-5 text-[#2f6280]">
+                <div className="mb-5 rounded-lg border border-[color:var(--lime-info-border)] bg-[color:var(--lime-info-soft)] px-4 py-3 text-[13px] leading-5 text-[color:var(--lime-info)]">
                   {t("skills.workspace.marketplace.detail.sourceNotice")}
                 </div>
                 <article className="mx-auto max-w-[760px] pb-8 text-left">
@@ -2110,7 +2116,7 @@ export function SkillsWorkspacePage({
 
                     if (!contentState || contentState.status === "loading") {
                       return (
-                        <div className="rounded-lg border border-[#eee8dd] bg-[#fbfaf7] px-4 py-8 text-center text-sm text-[#8a8376]">
+                        <div className="rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] px-4 py-8 text-center text-sm text-[color:var(--lime-text-muted)]">
                           {t(
                             "skills.workspace.marketplace.detail.loadingSkillContent",
                           )}
@@ -2141,7 +2147,7 @@ export function SkillsWorkspacePage({
                 </article>
               </div>
 
-              <div className="flex shrink-0 justify-end border-t border-[#eee8dd] bg-[#fffdf8] px-6 py-4">
+              <div className="flex shrink-0 justify-end border-t border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] px-6 py-4">
                 {(() => {
                   const actionState =
                     resolveMarketplaceSkillActionState(detailStoreItem);
@@ -2159,7 +2165,7 @@ export function SkillsWorkspacePage({
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="h-9 rounded-full border-[#e1d9cb] bg-white px-5 text-sm font-semibold text-[#4f4a42] shadow-none hover:bg-[#f8f3ea]"
+                          className="h-9 rounded-full border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-5 text-sm font-semibold text-[color:var(--lime-text)] shadow-none hover:bg-[color:var(--lime-surface-hover)]"
                           disabled={actionState === "uninstalling"}
                           onClick={() =>
                             handleMarketplaceSkillUninstall(detailStoreItem)
@@ -2171,7 +2177,7 @@ export function SkillsWorkspacePage({
                       <Button
                         type="button"
                         size="sm"
-                        className="h-9 rounded-full bg-[#1f1f1f] px-5 text-sm font-semibold text-white shadow-none hover:bg-[#111]"
+                        className="h-9 rounded-full bg-[color:var(--lime-text-strong)] px-5 text-sm font-semibold text-[color:var(--lime-surface)] shadow-none hover:opacity-90"
                         disabled={
                           actionState === "installing" ||
                           actionState === "uninstalling"

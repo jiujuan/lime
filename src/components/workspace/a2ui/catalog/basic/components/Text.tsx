@@ -41,21 +41,21 @@ function containsMarkdownSyntax(value: string): boolean {
 }
 
 const A2UI_MARKDOWN_COMPONENTS: Components = {
-  p: ({ children }) => <p className="m-0 leading-[1.7]">{children}</p>,
+  p: ({ children }) => <p className="m-0 leading-5">{children}</p>,
   h1: ({ children }) => (
-    <h1 className="m-0 text-base font-semibold leading-6">{children}</h1>
+    <h1 className="m-0 text-[16px] font-semibold leading-6">{children}</h1>
   ),
   h2: ({ children }) => (
-    <h2 className="m-0 text-[0.9375rem] font-semibold leading-6">{children}</h2>
+    <h2 className="m-0 text-[15px] font-semibold leading-6">{children}</h2>
   ),
   h3: ({ children }) => (
-    <h3 className="m-0 text-sm font-semibold leading-6">{children}</h3>
+    <h3 className="m-0 text-[14px] font-semibold leading-5">{children}</h3>
   ),
   h4: ({ children }) => (
-    <h4 className="m-0 text-sm font-medium leading-6">{children}</h4>
+    <h4 className="m-0 text-[13px] font-medium leading-5">{children}</h4>
   ),
   h5: ({ children }) => (
-    <h5 className="m-0 text-sm font-medium leading-6">{children}</h5>
+    <h5 className="m-0 text-[13px] font-medium leading-5">{children}</h5>
   ),
   h6: ({ children }) => (
     <h6 className="m-0 text-xs font-medium uppercase tracking-[0.04em] text-[color:var(--lime-text-muted)]">
@@ -63,12 +63,12 @@ const A2UI_MARKDOWN_COMPONENTS: Components = {
     </h6>
   ),
   ul: ({ children }) => (
-    <ul className="m-0 list-disc space-y-1 pl-5">{children}</ul>
+    <ul className="m-0 list-disc space-y-0.5 pl-4">{children}</ul>
   ),
   ol: ({ children }) => (
-    <ol className="m-0 list-decimal space-y-1 pl-5">{children}</ol>
+    <ol className="m-0 list-decimal space-y-0.5 pl-4">{children}</ol>
   ),
-  li: ({ children }) => <li className="m-0 leading-[1.7]">{children}</li>,
+  li: ({ children }) => <li className="m-0 leading-5">{children}</li>,
   strong: ({ children }) => (
     <strong className="font-semibold">{children}</strong>
   ),
@@ -85,12 +85,12 @@ const A2UI_MARKDOWN_COMPONENTS: Components = {
     </a>
   ),
   blockquote: ({ children }) => (
-    <blockquote className="m-0 border-l-2 border-[color:var(--lime-surface-border-strong)] pl-3 text-[color:var(--lime-text-muted)]">
+    <blockquote className="m-0 border-l-2 border-slate-200 pl-2 text-[color:var(--lime-text-muted)]">
       {children}
     </blockquote>
   ),
   pre: ({ children }) => (
-    <pre className="m-0 overflow-x-auto rounded-xl border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] p-3 text-[0.8125rem] text-[color:var(--lime-text)] shadow-sm shadow-slate-950/5">
+    <pre className="m-0 overflow-x-auto rounded-[10px] border border-slate-200 bg-slate-50 p-2 text-[12px] text-[color:var(--lime-text)] shadow-none">
       {children}
     </pre>
   ),
@@ -113,23 +113,23 @@ const A2UI_MARKDOWN_COMPONENTS: Components = {
     );
   },
   table: ({ children }) => (
-    <div className="overflow-x-auto rounded-[14px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)]">
+    <div className="overflow-x-auto rounded-[10px] border border-slate-200 bg-white">
       <table className="w-full border-separate border-spacing-0 text-[13px]">
         {children}
       </table>
     </div>
   ),
   th: ({ children }) => (
-    <th className="border-b border-r border-[color:var(--lime-surface-border)] bg-[color:var(--lime-brand-soft)] px-3 py-2 text-left font-semibold text-[color:var(--lime-brand-strong)] last:border-r-0">
+    <th className="border-b border-r border-slate-200 bg-slate-50 px-2 py-1.5 text-left font-semibold text-[color:var(--lime-text-strong)] last:border-r-0">
       {children}
     </th>
   ),
   td: ({ children }) => (
-    <td className="border-b border-r border-[color:var(--lime-surface-border)] px-3 py-2 text-left align-top text-[color:var(--lime-text)] last:border-r-0">
+    <td className="border-b border-r border-slate-200 px-2 py-1.5 text-left align-top text-[color:var(--lime-text)] last:border-r-0">
       {children}
     </td>
   ),
-  hr: () => <hr className="m-0 border-[color:var(--lime-surface-border)]" />,
+  hr: () => <hr className="m-0 border-slate-200" />,
 };
 
 export function TextRenderer({
@@ -150,7 +150,7 @@ export function TextRenderer({
       )}
     >
       {shouldRenderMarkdown ? (
-        <div className="a2ui-markdown-content space-y-2 text-inherit">
+        <div className="a2ui-markdown-content space-y-1.5 text-inherit">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={A2UI_MARKDOWN_COMPONENTS}

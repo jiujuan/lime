@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { Check } from "lucide-react";
 import type { ChoicePickerComponent, A2UIFormData } from "../../../types";
 import { resolveDynamicValue } from "../../../parser";
 import {
@@ -70,7 +71,22 @@ export function ChoicePickerRenderer({
               aria-pressed={isSelected}
               className={getA2UIChoiceOptionClasses(isWrap, isSelected)}
             >
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-1.5">
+                <span
+                  className={getA2UIChoiceIndicatorClasses(
+                    isMutuallyExclusive,
+                    isSelected,
+                  )}
+                  aria-hidden="true"
+                >
+                  {isSelected ? (
+                    isMutuallyExclusive ? (
+                      <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                    ) : (
+                      <Check className="h-2.5 w-2.5 text-white" />
+                    )
+                  ) : null}
+                </span>
                 <div className="min-w-0">
                   <div className={getA2UIChoiceTitleClasses(isSelected)}>
                     {option.icon && <span>{option.icon}</span>}
@@ -82,13 +98,6 @@ export function ChoicePickerRenderer({
                     </div>
                   )}
                 </div>
-                <span
-                  className={getA2UIChoiceIndicatorClasses(
-                    isMutuallyExclusive,
-                    isSelected,
-                  )}
-                  aria-hidden="true"
-                />
               </div>
             </button>
           );

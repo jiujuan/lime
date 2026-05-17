@@ -229,7 +229,7 @@ export const InputbarRuntimeStatusLine: React.FC<
           </span>
           <span
             className="min-w-0 max-w-[300px] truncate text-slate-400"
-            title={detailText}
+            aria-label={detailText}
           >
             {detailText}
           </span>

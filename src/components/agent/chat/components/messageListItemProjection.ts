@@ -279,16 +279,8 @@ export function resolveMessageListItemProjection({
     visiblePrimaryTimelineItems.length === 0
       ? timelineActionRequests
       : undefined;
-  const shouldSuppressInlineA2UI =
-    activePendingA2UISource?.kind !== "action_request" &&
-    activePendingA2UISource?.messageId === message.id;
-  const suppressedActionRequestId =
-    activePendingA2UISource?.kind === "action_request" &&
-    (message.actionRequests || []).some(
-      (request) => request.requestId === activePendingA2UISource.requestId,
-    )
-      ? activePendingA2UISource.requestId
-      : null;
+  const shouldSuppressInlineA2UI = false;
+  const suppressedActionRequestId = null;
   const hasActivePendingSourceForMessage =
     activePendingA2UISource?.kind === "assistant_message"
       ? activePendingA2UISource.messageId === message.id

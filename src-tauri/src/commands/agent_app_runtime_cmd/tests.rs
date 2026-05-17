@@ -1,3 +1,13 @@
+use super::common::{
+    new_agent_app_runtime_session_id, AGENT_APP_RUNTIME_SESSION_ID_PREFIX,
+    CONTENT_FACTORY_WORKSPACE_PATCH_KIND, LIME_RUNTIME_METADATA_KEY, LIME_RUNTIME_TOOL_SURFACE_KEY,
+};
+use super::events::{
+    build_agent_app_runtime_task_events, build_agent_app_runtime_task_snapshot_event_payload,
+    extract_content_factory_workspace_patch_from_artifact_document,
+};
+use super::metadata::{build_agent_app_runtime_metadata, build_agent_app_runtime_task_message};
+use super::model_preference::model_preference_from_run_metadata;
 use super::*;
 use crate::agent::QueuedTurnSnapshot;
 use crate::commands::aster_agent_cmd::AgentRuntimeThreadReadModel;
@@ -207,6 +217,10 @@ fn test_agent_app_runtime_metadata_ignores_unknown_capability_without_fake_launc
 #[test]
 fn test_agent_app_runtime_content_factory_output_contract_is_machine_readable() {
     let mut request = runtime_request(Vec::new(), Vec::new());
+    request.input = Some(json!({
+        "projectId": "active-project-1",
+        "platform": "xiaohongshu"
+    }));
     request.expected_output = Some(json!({
         "artifactKind": "content_batch",
         "includes": ["copy", "script", "image_brief"],
@@ -235,10 +249,29 @@ fn test_agent_app_runtime_content_factory_output_contract_is_machine_readable() 
         output_contract.get("artifact_metadata_kind"),
         Some(&json!(CONTENT_FACTORY_WORKSPACE_PATCH_KIND))
     );
+    assert_eq!(
+        output_contract.get("project_id"),
+        Some(&json!("active-project-1"))
+    );
+    assert_eq!(
+        metadata.pointer("/contentFactory/projectId"),
+        Some(&json!("active-project-1"))
+    );
+    assert_eq!(
+        metadata.pointer("/agent_app_runtime/project_id"),
+        Some(&json!("active-project-1"))
+    );
     assert!(output_contract
         .get("patch_metadata_keys")
         .and_then(Value::as_array)
         .is_some_and(|items| items.contains(&json!("contentFactoryWorkspacePatch"))));
+    assert!(output_contract
+        .get("accepted_patch_fields")
+        .and_then(Value::as_array)
+        .is_some_and(|items| items.contains(&json!("strategyReport"))
+            && items.contains(&json!("pptOutline"))
+            && items.contains(&json!("reviewReport"))
+            && items.contains(&json!("riskCheck"))));
 
     let message = build_agent_app_runtime_task_message(&request);
     assert!(message.contains("Content Factory Output Contract"));
@@ -247,8 +280,45 @@ fn test_agent_app_runtime_content_factory_output_contract_is_machine_readable() 
     assert!(message.contains("tool=Skill"));
     assert!(message.contains("contentFactoryWorkspacePatch"));
     assert!(message.contains("artifactKind=content_batch"));
+    assert!(message.contains("active-project-1"));
+    assert!(message.contains("strategyReport"));
+    assert!(message.contains("reviewReport"));
     assert!(message.contains("不要通过 Bash"));
     assert!(message.contains("requiredSkills"));
+}
+
+#[test]
+fn test_agent_app_runtime_scene_table_contract_requires_workspace_patch() {
+    let mut request = runtime_request(Vec::new(), Vec::new());
+    request.task_kind = "content_factory.scenario.generate".to_string();
+    request.expected_output = Some(json!({
+        "artifactKind": "scene_table",
+        "minimumScenarioCount": 120,
+        "includes": ["scene_table", "image_brief"],
+        "requiredSkills": [
+            {
+                "id": "knowledge-builder",
+                "skill": "knowledge-builder",
+                "standard": "agentskills",
+                "required": true
+            },
+            {
+                "id": "content-reviewer",
+                "skill": "content-reviewer",
+                "standard": "agentskills",
+                "required": true
+            }
+        ]
+    }));
+
+    let message = build_agent_app_runtime_task_message(&request);
+
+    assert!(message.contains("artifactKind=scene_table"));
+    assert!(message.contains("contentFactoryWorkspacePatch.sceneTable"));
+    assert!(message.contains("sceneTable.actualCount"));
+    assert!(message.contains("imagePrompts"));
+    assert!(message.contains("只返回 analysis artifact"));
+    assert!(message.contains("workspace patch"));
 }
 
 #[test]
@@ -344,6 +414,143 @@ fn test_agent_app_runtime_content_factory_output_contract_uses_business_skills_w
 }
 
 #[test]
+fn test_agent_app_runtime_tool_execution_metadata_forces_toolruntime_owner_binding() {
+    let mut request = runtime_request(vec!["lime.browser"], vec!["mcp__lime-browser__navigate"]);
+    request.task_kind = "agent_app.tool_execution".to_string();
+    request.input = Some(json!({
+        "executionRequest": {
+            "capability": "lime.browser",
+            "method": "navigate",
+            "toolName": "mcp__lime-browser__navigate",
+            "input": {
+                "sessionId": "browser-session-1",
+                "url": "https://example.com"
+            }
+        }
+    }));
+    request.metadata = Some(json!({
+        "agent_app_tool_execution": {
+            "version": "p18.7-e2",
+            "source": "host_bridge_execution_gate",
+            "request": {
+                "capability": "lime.browser",
+                "method": "navigate",
+                "toolName": "mcp__lime-browser__navigate",
+                "action": "navigate",
+                "input": {
+                    "sessionId": "browser-session-1",
+                    "url": "https://example.com"
+                },
+                "policy": {
+                    "owner": "lime_agent_runtime",
+                    "approvalRequired": true,
+                    "mutationExposed": false,
+                    "tokenExposed": false
+                }
+            }
+        }
+    }));
+
+    let metadata = build_agent_app_runtime_metadata(&request, "task-tool-1", "trace-tool-1");
+    let harness = metadata
+        .get("harness")
+        .and_then(Value::as_object)
+        .expect("harness metadata");
+    let lime_runtime = metadata
+        .get(LIME_RUNTIME_METADATA_KEY)
+        .and_then(Value::as_object)
+        .expect("lime runtime metadata");
+    let message = build_agent_app_runtime_task_message(&request);
+
+    assert_eq!(harness.get("task_mode_enabled"), Some(&json!(true)));
+    assert_eq!(
+        harness
+            .get("agent_app_tool_execution")
+            .and_then(|value| value.pointer("/request/toolName")),
+        Some(&json!("mcp__lime-browser__navigate"))
+    );
+    assert_eq!(
+        harness
+            .get("browser_assist")
+            .and_then(|value| value.get("enabled")),
+        Some(&json!(true))
+    );
+    assert_eq!(
+        harness.get("browser_requirement"),
+        Some(&json!("required_with_user_step"))
+    );
+    assert_eq!(
+        lime_runtime.get(LIME_RUNTIME_TOOL_SURFACE_KEY),
+        Some(&json!("agent_app_tool_execution"))
+    );
+    assert_eq!(
+        metadata
+            .get("tool_scope")
+            .and_then(|value| value.get("mode")),
+        Some(&json!("tool_runtime_owner_binding"))
+    );
+    assert!(message.contains("Agent App Tool Execution Owner Contract"));
+    assert!(message.contains("Requested Tool: mcp__lime-browser__navigate"));
+    assert!(message.contains("Tool Input JSON"));
+}
+
+#[test]
+fn test_agent_app_runtime_connector_authorization_metadata_stays_host_managed() {
+    let mut request = runtime_request(vec!["lime.connectors"], vec!["connector:notion"]);
+    request.task_kind = "agent_app.connector_authorization".to_string();
+    request.metadata = Some(json!({
+        "agent_app_connector_authorization": {
+            "version": "p18.7-e4",
+            "source": "host_bridge_authorization_gate",
+            "request": {
+                "capability": "lime.connectors",
+                "method": "requestAuth",
+                "appId": "content-factory-app",
+                "connectorId": "notion",
+                "input": {
+                    "connectorId": "notion",
+                    "rawOauthToken": "notion-refresh-token",
+                    "authorization": {
+                        "header": "Bearer notion-nested-token"
+                    }
+                },
+                "policy": {
+                    "owner": "lime_connector_policy",
+                    "secretBinding": "host_managed",
+                    "tokenExposed": false,
+                    "sessionScoped": true
+                }
+            }
+        }
+    }));
+
+    let metadata = build_agent_app_runtime_metadata(&request, "task-auth-1", "trace-auth-1");
+    let runtime_summary = metadata
+        .pointer("/lime_runtime/runtime_summary")
+        .expect("runtime summary");
+
+    assert_eq!(
+        runtime_summary.pointer("/agent_app_connector_authorization/request/connectorId"),
+        Some(&json!("notion"))
+    );
+    assert_eq!(
+        runtime_summary.pointer("/agent_app_connector_authorization/request/input/rawOauthToken"),
+        Some(&json!("[redacted:host_managed_secret]"))
+    );
+    assert_eq!(
+        runtime_summary.pointer("/agent_app_connector_authorization/request/input/authorization"),
+        Some(&json!("[redacted:host_managed_secret]"))
+    );
+    assert_eq!(
+        runtime_summary.pointer("/agent_app_connector_authorization/request/policy/secretBinding"),
+        Some(&json!("host_managed"))
+    );
+    let serialized = serde_json::to_string(&metadata).expect("metadata json");
+    assert!(!serialized.contains("notion-refresh-token"));
+    assert!(!serialized.contains("notion-nested-token"));
+}
+
+#[test]
 fn test_agent_app_runtime_extracts_workspace_patch_from_artifact_document_blocks() {
     let metadata = json!({
         "artifactDocument": {
@@ -362,6 +569,30 @@ fn test_agent_app_runtime_extracts_workspace_patch_from_artifact_document_blocks
     assert_eq!(patch.get("kind"), Some(&json!("content_batch")));
     assert_eq!(patch.get("projectId"), Some(&json!("project-1")));
     assert!(patch.get("contentBatch").is_some());
+}
+
+#[test]
+fn test_agent_app_runtime_extracts_workspace_patch_from_markdown_with_unescaped_quotes() {
+    let metadata = json!({
+        "artifactDocument": {
+            "blocks": [
+                {
+                    "type": "rich_text",
+                    "content": "内容工厂最终产物：\n```json\n{\"contentFactoryWorkspacePatch\":{\"kind\":\"content_factory.workspace_patch\",\"artifactKind\":\"scene_table\",\"sceneTable\":{\"actualCount\":120,\"rows\":[{\"index\":1,\"imageBrief\":\"灶台实拍，突出\"一擦即净\"的视觉感。\"}]},\"imagePrompts\":{\"items\":[{\"title\":\"厨房台面\"}]}}}\n```"
+                }
+            ]
+        }
+    });
+
+    let patch = extract_content_factory_workspace_patch_from_artifact_document(Some(&metadata))
+        .expect("workspace patch");
+
+    assert_eq!(
+        patch.pointer("/sceneTable/rows/0/imageBrief"),
+        Some(&json!("灶台实拍，突出\"一擦即净\"的视觉感。"))
+    );
+    assert_eq!(patch.pointer("/sceneTable/actualCount"), Some(&json!(120)));
+    assert!(patch.get("imagePrompts").is_some());
 }
 
 #[test]
@@ -397,8 +628,15 @@ fn test_agent_app_runtime_task_events_project_thread_read_facts() {
         turn_id: "turn-1".to_string(),
         tool_name: "Skill(research)".to_string(),
         status: "completed".to_string(),
+        started_at: Some("2026-05-16T00:00:01.000Z".to_string()),
+        finished_at: Some("2026-05-16T00:00:01.400Z".to_string()),
+        updated_at: Some("2026-05-16T00:00:01.400Z".to_string()),
+        arguments: Some(json!({ "skill": "research", "query": "竞品" })),
+        output: Some("研究资料已整理".to_string()),
+        output_preview: Some("研究资料已整理".to_string()),
         success: Some(true),
         error: None,
+        evidence_refs: vec!["evidence://tool/research-1".to_string()],
     }];
     thread_read.artifacts = vec![AgentRuntimeThreadArtifactView {
         item_id: "artifact-item-1".to_string(),
@@ -465,6 +703,33 @@ fn test_agent_app_runtime_task_events_project_thread_read_facts() {
     assert!(events
         .iter()
         .any(|event| event.request_id.as_deref() == Some("request-1")));
+    let tool_event = events
+        .iter()
+        .find(|event| event.event_type == "task:toolCall")
+        .expect("tool call event");
+    assert_eq!(
+        tool_event.evidence_ref.as_deref(),
+        Some("evidence://tool/research-1")
+    );
+    assert_eq!(
+        tool_event.occurred_at.as_deref(),
+        Some("2026-05-16T00:00:01.400Z")
+    );
+    assert_eq!(
+        tool_event
+            .payload
+            .as_ref()
+            .and_then(|payload| payload.get("arguments"))
+            .and_then(|arguments| arguments.get("skill")),
+        Some(&json!("research"))
+    );
+    assert_eq!(
+        tool_event
+            .payload
+            .as_ref()
+            .and_then(|payload| payload.get("outputPreview")),
+        Some(&json!("研究资料已整理"))
+    );
     assert!(events
         .iter()
         .any(|event| event.evidence_ref.as_deref() == Some("evidence-1")));
@@ -495,6 +760,186 @@ fn test_agent_app_runtime_task_events_project_thread_read_facts() {
             .and_then(|content_batch| content_batch.get("count")),
         Some(&json!(20))
     );
+}
+
+#[test]
+fn test_agent_app_runtime_task_events_project_connector_outbox_evidence() {
+    let outbox_ref = "outbox://connector/notion/createPage/notion-create-page-1";
+    let mut thread_read = base_thread_read();
+    thread_read.profile_status = "completed".to_string();
+    thread_read.tool_calls = vec![AgentRuntimeThreadToolCallView {
+        tool_call_id: "tool-connector-1".to_string(),
+        turn_id: "turn-1".to_string(),
+        tool_name: "connector__notion__createPage".to_string(),
+        status: "completed".to_string(),
+        started_at: Some("2026-05-17T14:10:01.000Z".to_string()),
+        finished_at: Some("2026-05-17T14:10:02.000Z".to_string()),
+        updated_at: Some("2026-05-17T14:10:02.000Z".to_string()),
+        arguments: Some(json!({
+            "connectorId": "notion",
+            "action": "createPage",
+            "idempotencyKey": "notion-create-page-1",
+        })),
+        output: Some("queued_for_cloud_overlay".to_string()),
+        output_preview: Some("queued_for_cloud_overlay".to_string()),
+        success: Some(true),
+        error: None,
+        evidence_refs: vec![outbox_ref.to_string()],
+    }];
+    thread_read.evidence_summary = AgentRuntimeThreadEvidenceSummary {
+        evidence_refs: vec![outbox_ref.to_string()],
+        verification_outcomes: Vec::new(),
+    };
+
+    let events = build_agent_app_runtime_task_events(&thread_read);
+    let tool_event = events
+        .iter()
+        .find(|event| event.id == "task:toolCall:tool-connector-1")
+        .expect("connector tool event");
+
+    assert_eq!(tool_event.status, "completed");
+    assert_eq!(tool_event.evidence_ref.as_deref(), Some(outbox_ref));
+    assert_eq!(
+        tool_event
+            .payload
+            .as_ref()
+            .and_then(|payload| payload.get("evidenceRef")),
+        Some(&json!(outbox_ref))
+    );
+    assert_eq!(
+        tool_event
+            .payload
+            .as_ref()
+            .and_then(|payload| payload.get("outputPreview")),
+        Some(&json!("queued_for_cloud_overlay"))
+    );
+    assert!(events.iter().any(|event| {
+        event.event_type == "evidence:recorded" && event.evidence_ref.as_deref() == Some(outbox_ref)
+    }));
+}
+
+#[test]
+fn test_agent_app_runtime_task_events_project_report_workspace_patch_fields() {
+    let mut thread_read = base_thread_read();
+    thread_read.artifacts = vec![AgentRuntimeThreadArtifactView {
+        item_id: "artifact-item-report".to_string(),
+        turn_id: "turn-1".to_string(),
+        path: ".lime/artifacts/agent-app/task-1/strategy_report.workspace-patch.json".to_string(),
+        source: "agent_runtime".to_string(),
+        status: "created".to_string(),
+        artifact_type: Some("strategy_report".to_string()),
+        title: Some("交付报告".to_string()),
+        created_at: Some("2026-05-16T00:00:01.500Z".to_string()),
+        completed_at: Some("2026-05-16T00:00:01.800Z".to_string()),
+        updated_at: Some("2026-05-16T00:00:01.800Z".to_string()),
+        metadata: Some(json!({
+            "artifactKind": "strategy_report",
+            "projectId": "project-1",
+            "strategyReport": {
+                "executiveSummary": {
+                    "decision": "建议小范围试投"
+                },
+                "riskCheck": {
+                    "status": "requires_review"
+                }
+            },
+            "pptOutline": {
+                "sections": [{ "title": "结论" }]
+            }
+        })),
+    }];
+
+    let events = build_agent_app_runtime_task_events(&thread_read);
+    let artifact_event = events
+        .iter()
+        .find(|event| event.event_type == "artifact:created")
+        .expect("artifact event");
+    assert_eq!(
+        artifact_event
+            .payload
+            .as_ref()
+            .and_then(|payload| payload.get("contentFactoryWorkspacePatch"))
+            .and_then(|patch| patch.pointer("/strategyReport/executiveSummary/decision")),
+        Some(&json!("建议小范围试投"))
+    );
+    assert_eq!(
+        artifact_event
+            .payload
+            .as_ref()
+            .and_then(|payload| payload.get("contentFactoryWorkspacePatch"))
+            .and_then(|patch| patch.pointer("/strategyReport/riskCheck/status")),
+        Some(&json!("requires_review"))
+    );
+    assert!(events.iter().any(|event| {
+        event.event_type == "evidence:recorded"
+            && event
+                .payload
+                .as_ref()
+                .and_then(|payload| payload.get("workspacePatch"))
+                .and_then(|patch| patch.get("pptOutline"))
+                .is_some()
+    }));
+}
+
+#[test]
+fn test_agent_app_runtime_task_events_project_connector_authorization_gate() {
+    let mut thread_read = base_thread_read();
+    thread_read.profile_status = "blocked".to_string();
+    thread_read.runtime_summary = Some(json!({
+        "surface": "agent_app",
+        "appId": "content-factory-app",
+        "taskId": "task-auth-1",
+        "agent_app_connector_authorization": {
+            "version": "p18.7-e4",
+            "source": "host_bridge_authorization_gate",
+            "request": {
+                "capability": "lime.connectors",
+                "method": "requestAuth",
+                "appId": "content-factory-app",
+                "connectorId": "notion",
+                "input": {
+                    "connectorId": "notion",
+                    "rawOauthToken": "[redacted:host_managed_secret]"
+                },
+                "reason": "connector_auth_requires_lime_policy_and_secret_binding",
+                "policy": {
+                    "owner": "lime_connector_policy",
+                    "secretBinding": "host_managed",
+                    "tokenExposed": false,
+                    "sessionScoped": true
+                }
+            }
+        }
+    }));
+
+    let events = build_agent_app_runtime_task_events(&thread_read);
+    let auth_event = events
+        .iter()
+        .find(|event| event.id == "task:blocked:connector_authorization:notion")
+        .expect("connector authorization event");
+
+    assert_eq!(auth_event.event_type, "task:blocked");
+    assert_eq!(auth_event.status, "requires_host_authorization");
+    assert_eq!(
+        auth_event.request_id.as_deref(),
+        Some("connector_authorization:notion")
+    );
+    assert_eq!(
+        auth_event
+            .payload
+            .as_ref()
+            .and_then(|payload| payload.pointer("/authorizationGate/secretBinding")),
+        Some(&json!("host_managed"))
+    );
+    assert_eq!(
+        auth_event
+            .payload
+            .as_ref()
+            .and_then(|payload| payload.pointer("/authorizationGate/tokenExposed")),
+        Some(&json!(false))
+    );
+    let serialized = serde_json::to_string(&auth_event.payload).expect("payload json");
+    assert!(!serialized.contains("notion-refresh-token"));
 }
 
 #[test]

@@ -8,6 +8,7 @@ use aster::providers::formats::openai_responses::{
 use aster::providers::formats::{anthropic, google, openai};
 use aster::providers::utils::ImageFormat;
 use aster::session::TurnContextOverride;
+use aster::tools::VIEW_IMAGE_TOOL_NAME;
 use rmcp::model::Tool;
 use rmcp::object;
 use serde_json::{json, Value};
@@ -23,6 +24,7 @@ const COMPACT_PROVIDER_BROKER_TOOL_NAMES: &[&str] = &[
     "extensionmanager__search_available_extensions",
     "extensionmanager__manage_extensions",
     "Read",
+    VIEW_IMAGE_TOOL_NAME,
     "Glob",
     "Grep",
     "Bash",

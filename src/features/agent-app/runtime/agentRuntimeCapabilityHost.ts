@@ -256,6 +256,60 @@ function readThreadReadArtifacts(threadRead: unknown): Record<string, unknown>[]
   return threadRead.artifacts.filter(isRecord);
 }
 
+function repairUnescapedStringQuotes(value: string): string {
+  let output = "";
+  let inString = false;
+  let escaped = false;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (escaped) {
+      output += char;
+      escaped = false;
+      continue;
+    }
+    if (inString && char === "\\") {
+      output += char;
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      if (!inString) {
+        inString = true;
+        output += char;
+        continue;
+      }
+      const next = value.slice(index + 1).match(/\S/)?.[0];
+      if (!next || [",", "}", "]", ":"].includes(next)) {
+        inString = false;
+        output += char;
+      } else {
+        output += `\\"`;
+      }
+      continue;
+    }
+    output += char;
+  }
+  return output;
+}
+
+function parseJsonRecordCandidate(candidate: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(candidate);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    const repaired = repairUnescapedStringQuotes(candidate);
+    if (repaired === candidate) {
+      return null;
+    }
+    try {
+      const parsed = JSON.parse(repaired);
+      return isRecord(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+}
+
 function parseJsonObjectFromMarkdown(value: string): Record<string, unknown> | null {
   const trimmed = value.trim();
   const candidate = trimmed.startsWith("```")
@@ -266,22 +320,16 @@ function parseJsonObjectFromMarkdown(value: string): Record<string, unknown> | n
         .replace(/```\s*$/m, "")
         .trim()
     : trimmed;
-  try {
-    const parsed = JSON.parse(candidate);
-    return isRecord(parsed) ? parsed : null;
-  } catch {
-    const start = candidate.indexOf("{");
-    const end = candidate.lastIndexOf("}");
-    if (start < 0 || end <= start) {
-      return null;
-    }
-    try {
-      const parsed = JSON.parse(candidate.slice(start, end + 1));
-      return isRecord(parsed) ? parsed : null;
-    } catch {
-      return null;
-    }
+  const parsed = parseJsonRecordCandidate(candidate);
+  if (parsed) {
+    return parsed;
   }
+  const start = candidate.indexOf("{");
+  const end = candidate.lastIndexOf("}");
+  if (start < 0 || end <= start) {
+    return null;
+  }
+  return parseJsonRecordCandidate(candidate.slice(start, end + 1));
 }
 
 function hasContentFactoryWorkspacePatchFields(value: Record<string, unknown>): boolean {

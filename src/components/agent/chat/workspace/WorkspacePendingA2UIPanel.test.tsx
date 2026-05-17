@@ -110,7 +110,7 @@ function renderPanel(
 }
 
 describe("WorkspacePendingA2UIPanel", () => {
-  it("有待处理表单时应在聊天区底部渲染内置 A2UI 卡片", () => {
+  it("有待处理表单时应渲染内置 A2UI 卡片", () => {
     mockUseStickyA2UIForm.mockReturnValue({
       visibleForm: {
         id: "form-1",
@@ -142,6 +142,11 @@ describe("WorkspacePendingA2UIPanel", () => {
     expect(
       container.querySelector('[data-testid="workspace-a2ui-card"]'),
     ).not.toBeNull();
+    expect(
+      container
+        .querySelector('[data-testid="workspace-pending-a2ui-panel"]')
+        ?.getAttribute("data-placement"),
+    ).toBe("dock");
     expect(
       container.querySelector(
         '[data-testid="workspace-pending-a2ui-scroll-area"]',
@@ -226,5 +231,40 @@ describe("WorkspacePendingA2UIPanel", () => {
       container.querySelector('[data-testid="workspace-a2ui-notice"]'),
     ).not.toBeNull();
     expect(container.textContent).toContain("补充信息已确认:已继续处理。");
+  });
+
+  it("消息流位置应使用内联卡片布局", () => {
+    mockUseStickyA2UIForm.mockReturnValue({
+      visibleForm: {
+        id: "form-message",
+        root: "root",
+        components: [],
+        submitAction: {
+          label: "继续处理",
+          action: { name: "submit" },
+        },
+      },
+      isStale: false,
+    });
+
+    const container = renderPanel({
+      placement: "message",
+      pendingA2UIForm: {
+        id: "form-message",
+        root: "root",
+        components: [],
+        submitAction: {
+          label: "继续处理",
+          action: { name: "submit" },
+        },
+      },
+    });
+
+    const panel = container.querySelector(
+      '[data-testid="workspace-pending-a2ui-panel"]',
+    );
+    expect(panel?.getAttribute("data-placement")).toBe("message");
+    expect(panel?.className).toContain("max-w-[432px]");
+    expect(panel?.className).not.toContain("mb-3");
   });
 });

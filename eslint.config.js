@@ -1026,7 +1026,7 @@ const serverToolsCommandSelectors = ["test_api", "get_network_info"].map(
 );
 
 export default [
-  { ignores: ["dist", "src-tauri", "node_modules"] },
+  { ignores: ["dist", "src-tauri", "node_modules", "**/*.d.ts"] },
   {
     files: ["**/*.{ts,tsx}"],
     languageOptions: {

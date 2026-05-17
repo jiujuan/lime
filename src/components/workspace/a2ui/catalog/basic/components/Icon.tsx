@@ -66,7 +66,7 @@ export function IconRenderer({
         <span className={A2UI_RENDERER_TOKENS.iconShell}>
           <svg
             viewBox="0 0 24 24"
-            className="h-5 w-5"
+            className="h-4 w-4"
             fill="none"
             stroke="currentColor"
             strokeWidth="1.8"
@@ -94,7 +94,7 @@ export function IconRenderer({
   return (
     <span className={A2UI_RENDERER_TOKENS.iconShell}>
       {IconComponent ? (
-        <IconComponent className="h-5 w-5" strokeWidth={1.8} />
+        <IconComponent className="h-4 w-4" strokeWidth={1.8} />
       ) : (
         <span className={cn(A2UI_RENDERER_TOKENS.iconFallback)}>
           {iconName.slice(0, 2) || "?"}

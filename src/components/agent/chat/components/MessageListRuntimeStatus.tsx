@@ -40,6 +40,7 @@ export const MessageRuntimeStatusPill: React.FC<{
   return (
     <div
       data-testid="message-runtime-status-pill"
+      aria-label={tooltip || undefined}
       className={[
         "inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] leading-none",
         failed
@@ -48,7 +49,6 @@ export const MessageRuntimeStatusPill: React.FC<{
             ? "border-slate-200 bg-slate-50 text-slate-600"
             : "border-sky-200 bg-sky-50 text-sky-700",
       ].join(" ")}
-      title={tooltip || undefined}
     >
       <ToneIcon
         className={[

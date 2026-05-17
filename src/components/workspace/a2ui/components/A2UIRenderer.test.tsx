@@ -60,7 +60,7 @@ describe("A2UIRenderer", () => {
     const root = container.querySelector(
       ".a2ui-container",
     ) as HTMLDivElement | null;
-    expect(root?.className).toContain("space-y-3");
+    expect(root?.className).toContain("space-y-1.5");
     expect(container.textContent).toContain("这是推理提示");
     const submitButton = clickButtonByText(container, "开始处理");
     expect(submitButton?.className).toBe(A2UI_RENDERER_TOKENS.submitButton);
@@ -186,15 +186,24 @@ describe("A2UIRenderer", () => {
     expect(container.querySelector("img")?.getAttribute("src")).toBe(
       "https://example.com/hero.png",
     );
+    expect(container.querySelector("img")?.className).toContain("h-28");
     expect(container.querySelector("video")?.getAttribute("src")).toBe(
       "https://example.com/demo.mp4",
+    );
+    expect(container.querySelector("video")?.className).toContain(
+      "rounded-[12px]",
     );
     expect(container.querySelector("audio")?.getAttribute("src")).toBe(
       "https://example.com/demo.mp3",
     );
     expect(container.querySelector("svg")).not.toBeNull();
+    expect(container.querySelector("svg")?.className.baseVal).toContain("h-4");
     expect(container.textContent).toContain("第一个标签页");
     expect(container.textContent).not.toContain("第二个标签页");
+    const modalButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("打开详情"),
+    );
+    expect(modalButton?.className).toContain("h-8");
 
     clickButtonByText(container, "详情");
     expect(container.textContent).toContain("第二个标签页");
@@ -277,13 +286,12 @@ describe("TextRenderer", () => {
     expect(container.querySelector("br")).not.toBeNull();
     expect(container.textContent).not.toContain("**重点**");
     const codeBlock = container.querySelector("pre");
-    expect(codeBlock?.className).toContain(
-      "border-[color:var(--lime-surface-border)]",
-    );
+    expect(codeBlock?.className).toContain("rounded-[10px]");
+    expect(codeBlock?.className).toContain("shadow-none");
     expect(codeBlock?.textContent).toContain("const answer = 42;");
   });
 
-  it("markdown 表格应跟随 Lime 主题变量", () => {
+  it("markdown 表格应使用紧凑表格样式", () => {
     const { container } = mountHarness(
       TextRenderer,
       {
@@ -302,10 +310,9 @@ describe("TextRenderer", () => {
 
     const tableShell = container.querySelector("table")?.parentElement;
     const header = container.querySelector("th");
-    expect(tableShell?.className).toContain(
-      "border-[color:var(--lime-surface-border)]",
-    );
-    expect(header?.className).toContain("bg-[color:var(--lime-brand-soft)]");
+    expect(tableShell?.className).toContain("rounded-[10px]");
+    expect(tableShell?.className).toContain("border-slate-200");
+    expect(header?.className).toContain("bg-slate-50");
     expect(container.textContent).toContain("已适配");
   });
 });

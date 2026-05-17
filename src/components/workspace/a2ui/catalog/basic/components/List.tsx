@@ -39,8 +39,8 @@ export function ListRenderer({
   return (
     <div
       className={cn(
-        "flex gap-3",
-        isHorizontal ? "flex-row overflow-x-auto pb-1" : "flex-col",
+        "flex gap-1.5",
+        isHorizontal ? "flex-row overflow-x-auto pb-0.5" : "flex-col",
         component.align === "center" && "items-center",
         component.align === "end" && "items-end",
         component.align === "stretch" && "items-stretch",

@@ -29,7 +29,7 @@ use crate::services::runtime_evidence_projection_service::{
 use aster::agents::extension::PlatformExtensionContext;
 use aster::hooks::{CompactTrigger, SessionSource};
 use aster::session::TurnContextOverride;
-use aster::tools::{ConfigTool, SkillTool, ToolContext};
+use aster::tools::{ConfigTool, SkillTool, Tool, ToolContext};
 use lime_agent::{build_diagnostics_runtime_status_metadata, AgentEvent as RuntimeAgentEvent};
 use lime_core::database::dao::agent_timeline::{AgentThreadItemPayload, AgentThreadItemStatus};
 use lime_core::workspace::WorkspaceSettings;
@@ -1824,6 +1824,220 @@ fn image_skill_launch_failed_tool_result(error: &str) -> lime_agent::AgentToolRe
     }
 }
 
+fn agent_app_required_skill_tool_display_name(skill_name: &str) -> String {
+    let skill_name = skill_name.trim();
+    if skill_name.is_empty() {
+        "Skill".to_string()
+    } else {
+        format!("Skill({skill_name})")
+    }
+}
+
+fn agent_app_required_skill_tool_id(turn_id: &str, skill_name: &str, index: usize) -> String {
+    let normalized = skill_name
+        .trim()
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || character == '-' || character == '_' {
+                character.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string();
+    let suffix = if normalized.is_empty() {
+        format!("skill-{index}")
+    } else {
+        normalized
+    };
+    format!("agent-app-required-skill:{turn_id}:{index}:{suffix}")
+}
+
+fn agent_app_required_skill_agent_tool_result(
+    skill_name: &str,
+    source: &str,
+    tool_result: aster::tools::ToolResult,
+) -> lime_agent::AgentToolResult {
+    let success = tool_result.success;
+    let output = tool_result.output.unwrap_or_default();
+    let error = tool_result.error;
+    let mut metadata = tool_result.metadata;
+    let tool_name = agent_app_required_skill_tool_display_name(skill_name);
+    metadata
+        .entry("toolName".to_string())
+        .or_insert_with(|| serde_json::json!(tool_name));
+    metadata
+        .entry("tool_family".to_string())
+        .or_insert_with(|| serde_json::json!("skill"));
+    metadata
+        .entry("skill_name".to_string())
+        .or_insert_with(|| serde_json::json!(skill_name.trim()));
+    metadata
+        .entry("command_name".to_string())
+        .or_insert_with(|| serde_json::json!(skill_name.trim()));
+    metadata.insert(
+        "agent_app_required_skill_contract".to_string(),
+        serde_json::json!(true),
+    );
+    metadata.insert(
+        "agent_app_required_skill_source".to_string(),
+        serde_json::json!(source),
+    );
+
+    lime_agent::AgentToolResult {
+        success,
+        output,
+        error,
+        images: None,
+        metadata: Some(metadata),
+    }
+}
+
+fn agent_app_required_skill_failed_tool_result(
+    skill_name: &str,
+    source: &str,
+    error: &str,
+) -> lime_agent::AgentToolResult {
+    lime_agent::AgentToolResult {
+        success: false,
+        output: String::new(),
+        error: Some(error.to_string()),
+        images: None,
+        metadata: Some(HashMap::from([
+            (
+                "toolName".to_string(),
+                serde_json::json!(agent_app_required_skill_tool_display_name(skill_name)),
+            ),
+            ("tool_family".to_string(), serde_json::json!("skill")),
+            (
+                "skill_name".to_string(),
+                serde_json::json!(skill_name.trim()),
+            ),
+            (
+                "command_name".to_string(),
+                serde_json::json!(skill_name.trim()),
+            ),
+            (
+                "agent_app_required_skill_contract".to_string(),
+                serde_json::json!(true),
+            ),
+            (
+                "agent_app_required_skill_source".to_string(),
+                serde_json::json!(source),
+            ),
+            (
+                "skill".to_string(),
+                serde_json::json!({
+                    "success": false,
+                    "error": error,
+                    "stepsCompleted": [],
+                }),
+            ),
+        ])),
+    }
+}
+
+async fn execute_agent_app_required_skill_contract(
+    app: &AppHandle,
+    request: &AsterChatRequest,
+    timeline_recorder: &Arc<Mutex<AgentTimelineRecorder>>,
+    workspace_root: &str,
+    session_id: &str,
+    thread_id: &str,
+    turn_id: &str,
+    request_metadata: Option<&serde_json::Value>,
+) -> Result<(), String> {
+    let Some((skill_contract, required_skill_names)) =
+        resolve_agent_app_required_skill_contract(request_metadata)
+    else {
+        return Ok(());
+    };
+    let tool = lime_agent::tools::LimeSkillTool::new();
+    let context = build_image_skill_launch_tool_context(
+        workspace_root,
+        session_id,
+        thread_id,
+        turn_id,
+        request.project_id.as_deref(),
+        None,
+    );
+    let source = "agent_app_required_skill_contract_preexecution";
+
+    for (index, skill_name) in required_skill_names.iter().enumerate() {
+        let tool_id = agent_app_required_skill_tool_id(turn_id, skill_name, index);
+        let params = build_agent_app_required_skill_tool_params(
+            request_metadata,
+            &skill_contract,
+            skill_name,
+            index,
+            session_id,
+            thread_id,
+            turn_id,
+        );
+        emit_runtime_side_event(
+            app,
+            &request.event_name,
+            timeline_recorder,
+            workspace_root,
+            RuntimeAgentEvent::ToolStart {
+                tool_name: agent_app_required_skill_tool_display_name(skill_name),
+                tool_id: tool_id.clone(),
+                arguments: serde_json::to_string(&params).ok(),
+            },
+        );
+
+        let result = tool.execute(params, &context).await;
+        match result {
+            Ok(tool_result) => {
+                let agent_result =
+                    agent_app_required_skill_agent_tool_result(skill_name, source, tool_result);
+                let success = agent_result.success;
+                let error = agent_result.error.clone();
+                emit_runtime_side_event(
+                    app,
+                    &request.event_name,
+                    timeline_recorder,
+                    workspace_root,
+                    RuntimeAgentEvent::ToolEnd {
+                        tool_id,
+                        result: agent_result,
+                    },
+                );
+                if !success {
+                    return Err(format!(
+                        "Agent App required Skill({}) 执行失败: {}",
+                        skill_name,
+                        error.unwrap_or_else(|| "unknown error".to_string())
+                    ));
+                }
+            }
+            Err(error) => {
+                let message = format!(
+                    "Agent App required Skill({}) 执行失败: {}",
+                    skill_name, error
+                );
+                emit_runtime_side_event(
+                    app,
+                    &request.event_name,
+                    timeline_recorder,
+                    workspace_root,
+                    RuntimeAgentEvent::ToolEnd {
+                        tool_id,
+                        result: agent_app_required_skill_failed_tool_result(
+                            skill_name, source, &message,
+                        ),
+                    },
+                );
+                return Err(message);
+            }
+        }
+    }
+
+    Ok(())
+}
+
 fn emit_image_skill_launch_tool_event(
     app: &AppHandle,
     event_name: &str,
@@ -2553,6 +2767,40 @@ impl RuntimeTurnPreparedExecution {
             }
         }
 
+        if let Err(error) = execute_agent_app_required_skill_contract(
+            app,
+            request,
+            &self.runtime_turn_execution_context.timeline_recorder,
+            workspace_root,
+            session_id,
+            self.thread_id(),
+            self.turn_id(),
+            request_metadata,
+        )
+        .await
+        {
+            complete_runtime_status_projection(
+                agent,
+                app,
+                &request.event_name,
+                &self.runtime_turn_execution_context.timeline_recorder,
+                workspace_root,
+                &self
+                    .runtime_turn_execution_context
+                    .runtime_status_session_config,
+            )
+            .await;
+            fail_runtime_turn_before_model_execution(
+                app,
+                &request.event_name,
+                &self.runtime_turn_execution_context.timeline_recorder,
+                &self.runtime_turn_execution_context.profile_stream,
+                &self.runtime_turn_execution_context.task_profile_refs,
+                &error,
+            );
+            return Err(error);
+        }
+
         match execute_image_skill_launch_direct_task(
             app,
             request,
@@ -2719,6 +2967,117 @@ fn resolve_agent_app_required_skill_tool_allowlist(
     }
 
     None
+}
+
+fn resolve_agent_app_required_skill_contract(
+    request_metadata: Option<&serde_json::Value>,
+) -> Option<(serde_json::Value, Vec<String>)> {
+    for key in [
+        "content_factory_skill_contract",
+        "agent_app_runtime_skill_contract",
+    ] {
+        let Some(contract) = extract_harness_nested_object(request_metadata, &[key]) else {
+            continue;
+        };
+        let names = collect_required_skill_names_from_contract_object(contract);
+        if !names.is_empty() {
+            return Some((serde_json::Value::Object(contract.clone()), names));
+        }
+    }
+
+    None
+}
+
+fn clone_harness_nested_object_value(
+    request_metadata: Option<&serde_json::Value>,
+    keys: &[&str],
+) -> Option<serde_json::Value> {
+    extract_harness_nested_object(request_metadata, keys)
+        .map(|object| serde_json::Value::Object(object.clone()))
+}
+
+fn build_agent_app_required_skill_args(
+    request_metadata: Option<&serde_json::Value>,
+    skill_contract: &serde_json::Value,
+    skill_name: &str,
+    skill_index: usize,
+    session_id: &str,
+    thread_id: &str,
+    turn_id: &str,
+) -> serde_json::Value {
+    let mut args = serde_json::Map::new();
+    args.insert(
+        "agentTaskContract".to_string(),
+        json!({
+            "runtimeSurface": "agent_app",
+            "source": "agent_app_required_skill_contract_preexecution",
+            "policy": "must_use_required_skills_before_final_patch",
+            "requiredSkills": skill_contract
+                .get("required_skills")
+                .or_else(|| skill_contract.get("requiredSkills"))
+                .cloned()
+                .unwrap_or_else(|| json!([])),
+        }),
+    );
+    args.insert("skillContract".to_string(), skill_contract.clone());
+    args.insert(
+        "requiredSkill".to_string(),
+        json!({
+            "skill": skill_name,
+            "index": skill_index,
+            "required": true,
+        }),
+    );
+    args.insert(
+        "runtime".to_string(),
+        json!({
+            "sessionId": session_id,
+            "threadId": thread_id,
+            "turnId": turn_id,
+            "source": "lime_agent_runtime_contract",
+        }),
+    );
+
+    if let Some(agent_app_runtime) = clone_harness_nested_object_value(
+        request_metadata,
+        &["agent_app_runtime", "agentAppRuntime"],
+    ) {
+        args.insert("agentAppRuntime".to_string(), agent_app_runtime);
+    }
+    if let Some(output_contract) = clone_harness_nested_object_value(
+        request_metadata,
+        &[
+            "agent_app_runtime_output_contract",
+            "agentAppRuntimeOutputContract",
+        ],
+    ) {
+        args.insert("outputContract".to_string(), output_contract);
+    }
+
+    serde_json::Value::Object(args)
+}
+
+fn build_agent_app_required_skill_tool_params(
+    request_metadata: Option<&serde_json::Value>,
+    skill_contract: &serde_json::Value,
+    skill_name: &str,
+    skill_index: usize,
+    session_id: &str,
+    thread_id: &str,
+    turn_id: &str,
+) -> serde_json::Value {
+    json!({
+        "skill": skill_name,
+        "args": build_agent_app_required_skill_args(
+            request_metadata,
+            skill_contract,
+            skill_name,
+            skill_index,
+            session_id,
+            thread_id,
+            turn_id,
+        ),
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -6595,6 +6954,687 @@ fn should_skip_artifact_document_autopersist(
     !observation.artifact_paths.is_empty()
 }
 
+fn metadata_value_at_path<'a>(
+    request_metadata: Option<&'a serde_json::Value>,
+    path: &[&str],
+) -> Option<&'a serde_json::Value> {
+    let mut current = request_metadata?;
+    for key in path {
+        current = current.get(*key)?;
+    }
+    Some(current)
+}
+
+fn metadata_string_at_paths(
+    request_metadata: Option<&serde_json::Value>,
+    paths: &[&[&str]],
+) -> Option<String> {
+    paths.iter().find_map(|path| {
+        metadata_value_at_path(request_metadata, path)
+            .and_then(serde_json::Value::as_str)
+            .and_then(|value| non_empty_projection_text(Some(value)))
+    })
+}
+
+fn resolve_agent_app_output_contract_value(
+    request_metadata: Option<&serde_json::Value>,
+) -> Option<serde_json::Value> {
+    [
+        &["harness", "agent_app_runtime_output_contract"][..],
+        &["harness", "agentAppRuntimeOutputContract"][..],
+        &["harness", "agent_app_runtime", "output_contract"][..],
+        &["harness", "agentAppRuntime", "outputContract"][..],
+        &["agent_app_runtime_output_contract"][..],
+        &["agentAppRuntimeOutputContract"][..],
+        &["agent_app_runtime", "output_contract"][..],
+        &["agentAppRuntime", "outputContract"][..],
+        &["outputContract"][..],
+        &["output_contract"][..],
+    ]
+    .iter()
+    .find_map(|path| metadata_value_at_path(request_metadata, path))
+    .filter(|value| value.is_object())
+    .cloned()
+}
+
+fn value_string_at_nested_paths(value: &serde_json::Value, paths: &[&[&str]]) -> Option<String> {
+    paths.iter().find_map(|path| {
+        let mut current = value;
+        for key in path.iter() {
+            current = current.get(*key)?;
+        }
+        current
+            .as_str()
+            .and_then(|text| non_empty_projection_text(Some(text)))
+    })
+}
+
+fn resolve_agent_app_output_contract_artifact_kind(
+    output_contract: &serde_json::Value,
+) -> Option<String> {
+    value_string_at_nested_paths(
+        output_contract,
+        &[
+            &["artifact_kind"][..],
+            &["artifactKind"][..],
+            &["output_kind"][..],
+            &["outputKind"][..],
+            &["artifact_type"][..],
+            &["artifactType"][..],
+            &["workspacePatchContract", "artifactKind"][..],
+            &["workspace_patch_contract", "artifact_kind"][..],
+            &["requiredEnvelope", "artifactKind"][..],
+            &["required_envelope", "artifact_kind"][..],
+        ],
+    )
+}
+
+fn resolve_agent_app_content_factory_project_id(
+    request_metadata: Option<&serde_json::Value>,
+) -> String {
+    metadata_string_at_paths(
+        request_metadata,
+        &[
+            &["contentFactory", "projectId"][..],
+            &["contentFactory", "project_id"][..],
+            &["content_factory", "projectId"][..],
+            &["content_factory", "project_id"][..],
+            &["harness", "contentFactory", "projectId"][..],
+            &["harness", "contentFactory", "project_id"][..],
+            &["harness", "content_factory", "project_id"][..],
+            &["harness", "agent_app_runtime_output_contract", "project_id"][..],
+            &["harness", "agentAppRuntimeOutputContract", "projectId"][..],
+            &[
+                "harness",
+                "agent_app_runtime",
+                "output_contract",
+                "project_id",
+            ][..],
+            &["harness", "agentAppRuntime", "outputContract", "projectId"][..],
+            &["agent_app_runtime_output_contract", "project_id"][..],
+            &["agentAppRuntimeOutputContract", "projectId"][..],
+            &["agent_app_runtime", "output_contract", "project_id"][..],
+            &["agentAppRuntime", "outputContract", "projectId"][..],
+            &["projectId"][..],
+            &["project_id"][..],
+        ],
+    )
+    .unwrap_or_else(|| "unknown-project".to_string())
+}
+
+fn resolve_agent_app_runtime_metadata_text(
+    request_metadata: Option<&serde_json::Value>,
+    snake_key: &str,
+    camel_key: &str,
+) -> Option<String> {
+    metadata_string_at_paths(
+        request_metadata,
+        &[
+            &["harness", "agent_app_runtime", snake_key][..],
+            &["harness", "agentAppRuntime", camel_key][..],
+            &["agent_app_runtime", snake_key][..],
+            &["agentAppRuntime", camel_key][..],
+            &["agentRuntime", camel_key][..],
+            &["contentFactory", camel_key][..],
+            &["lime_runtime", snake_key][..],
+            &["limeRuntime", camel_key][..],
+        ],
+    )
+}
+
+fn is_content_factory_agent_app_output_contract(
+    request_metadata: Option<&serde_json::Value>,
+    output_contract: &serde_json::Value,
+) -> bool {
+    let app_id = resolve_agent_app_runtime_metadata_text(request_metadata, "app_id", "appId");
+    let task_kind =
+        resolve_agent_app_runtime_metadata_text(request_metadata, "task_kind", "taskKind");
+    let artifact_metadata_kind = value_string_at_nested_paths(
+        output_contract,
+        &[&["artifact_metadata_kind"][..], &["kind"][..]],
+    );
+
+    app_id.as_deref() == Some("content-factory-app")
+        || task_kind
+            .as_deref()
+            .is_some_and(|value| value.trim().starts_with("content_factory."))
+        || artifact_metadata_kind
+            .as_deref()
+            .is_some_and(|value| value.trim() == "content_factory.workspace_patch")
+}
+
+fn is_agent_app_report_output_kind(artifact_kind: &str) -> bool {
+    matches!(artifact_kind.trim(), "strategy_report" | "review_report")
+}
+
+fn is_agent_app_draft_materialization_output_kind(artifact_kind: &str) -> bool {
+    matches!(artifact_kind.trim(), "script_batch" | "prompt_batch")
+}
+
+fn json_object_has_any_key(value: &serde_json::Value, keys: &[&str], depth: usize) -> bool {
+    if depth > 8 {
+        return false;
+    }
+    match value {
+        serde_json::Value::Object(object) => {
+            keys.iter().any(|key| object.contains_key(*key))
+                || object
+                    .values()
+                    .any(|child| json_object_has_any_key(child, keys, depth + 1))
+        }
+        serde_json::Value::Array(items) => items
+            .iter()
+            .any(|child| json_object_has_any_key(child, keys, depth + 1)),
+        _ => false,
+    }
+}
+
+fn looks_like_content_factory_workspace_patch(value: &serde_json::Value) -> bool {
+    let Some(object) = value.as_object() else {
+        return false;
+    };
+    let kind = object
+        .get("kind")
+        .or_else(|| object.get("type"))
+        .or_else(|| object.get("patchKind"))
+        .or_else(|| object.get("patch_kind"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim);
+    kind == Some("content_factory.workspace_patch")
+        || [
+            "workspace",
+            "project",
+            "projectKnowledge",
+            "readiness",
+            "sceneTable",
+            "contentBatch",
+            "scripts",
+            "imagePrompts",
+            "strategyReport",
+            "pptOutline",
+            "reviewReport",
+            "assetPack",
+        ]
+        .iter()
+        .any(|key| object.contains_key(*key))
+}
+
+fn extract_content_factory_workspace_patch_from_value(
+    value: &serde_json::Value,
+    depth: usize,
+) -> Option<serde_json::Value> {
+    if depth > 8 {
+        return None;
+    }
+    match value {
+        serde_json::Value::Object(object) => {
+            for key in [
+                "contentFactoryWorkspacePatch",
+                "content_factory_workspace_patch",
+                "workspacePatch",
+                "workspace_patch",
+            ] {
+                if let Some(candidate) = object.get(key).filter(|candidate| candidate.is_object()) {
+                    return Some(candidate.clone());
+                }
+            }
+            if looks_like_content_factory_workspace_patch(value) {
+                return Some(value.clone());
+            }
+            object.values().find_map(|child| {
+                extract_content_factory_workspace_patch_from_value(child, depth + 1)
+            })
+        }
+        serde_json::Value::Array(items) => items
+            .iter()
+            .find_map(|child| extract_content_factory_workspace_patch_from_value(child, depth + 1)),
+        _ => None,
+    }
+}
+
+fn parse_json_candidate(candidate: &str) -> Option<serde_json::Value> {
+    let candidate = candidate.trim();
+    if candidate.is_empty() {
+        return None;
+    }
+    serde_json::from_str::<serde_json::Value>(candidate)
+        .ok()
+        .or_else(|| {
+            let start = candidate.find('{')?;
+            let end = candidate.rfind('}')?;
+            if start >= end {
+                return None;
+            }
+            serde_json::from_str::<serde_json::Value>(&candidate[start..=end]).ok()
+        })
+}
+
+fn extract_content_factory_workspace_patch_from_text(raw_text: &str) -> Option<serde_json::Value> {
+    let text = raw_text.trim();
+    if text.is_empty() {
+        return None;
+    }
+
+    if let Some(parsed) = parse_json_candidate(text) {
+        if let Some(patch) = extract_content_factory_workspace_patch_from_value(&parsed, 0) {
+            return Some(patch);
+        }
+    }
+
+    let fenced_json_regex = Regex::new(r"(?is)```(?:json)?\s*(.*?)```").ok()?;
+    for capture in fenced_json_regex.captures_iter(text) {
+        let Some(candidate) = capture.get(1).map(|matched| matched.as_str()) else {
+            continue;
+        };
+        let Some(parsed) = parse_json_candidate(candidate) else {
+            continue;
+        };
+        if let Some(patch) = extract_content_factory_workspace_patch_from_value(&parsed, 0) {
+            return Some(patch);
+        }
+    }
+
+    None
+}
+
+fn truncate_agent_app_materialized_text(value: &str, max_chars: usize) -> String {
+    let trimmed = value.trim();
+    let mut output = String::new();
+    for character in trimmed.chars().take(max_chars) {
+        output.push(character);
+    }
+    if trimmed.chars().count() > max_chars {
+        output.push('…');
+    }
+    output
+}
+
+fn first_agent_app_output_line(value: &str) -> Option<String> {
+    value
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(|line| truncate_agent_app_materialized_text(line, 140))
+}
+
+fn collect_agent_app_required_skill_names(
+    request_metadata: Option<&serde_json::Value>,
+) -> Vec<String> {
+    resolve_agent_app_required_skill_tool_allowlist(request_metadata).unwrap_or_default()
+}
+
+fn normalize_agent_app_workspace_patch(
+    mut patch: serde_json::Value,
+    artifact_kind: &str,
+    project_id: &str,
+    source: &str,
+) -> Option<serde_json::Value> {
+    let object = patch.as_object_mut()?;
+    object
+        .entry("kind".to_string())
+        .or_insert_with(|| json!("content_factory.workspace_patch"));
+    object
+        .entry("artifactKind".to_string())
+        .or_insert_with(|| json!(artifact_kind));
+    if project_id.trim() == "unknown-project" {
+        object
+            .entry("projectId".to_string())
+            .or_insert_with(|| json!(project_id));
+    } else {
+        object.insert("projectId".to_string(), json!(project_id));
+    }
+    object
+        .entry("source".to_string())
+        .or_insert_with(|| json!(source));
+    object
+        .entry("message".to_string())
+        .or_insert_with(|| json!("已由 Lime AgentRuntime 物化为内容工厂工作区补丁。"));
+    Some(patch)
+}
+
+fn build_agent_app_report_workspace_patch(
+    artifact_kind: &str,
+    project_id: &str,
+    final_text_output: &str,
+    required_skill_names: &[String],
+) -> serde_json::Value {
+    let output_summary = first_agent_app_output_line(final_text_output).unwrap_or_else(|| {
+        "AgentRuntime 已完成 required Skills，但模型未返回可直接解析的结构化补丁。".to_string()
+    });
+    let raw_output = truncate_agent_app_materialized_text(final_text_output, 8000);
+    let required_skills = required_skill_names
+        .iter()
+        .map(|skill| json!({ "skill": skill, "status": "completed" }))
+        .collect::<Vec<_>>();
+    let runtime_materialization = json!({
+        "status": "repaired_from_runtime_output",
+        "reason": "模型完成回合后没有创建 contentFactoryWorkspacePatch Artifact；Host Runtime 按 App 输出合同保留业务输出和 Skill 证据。",
+        "rawRuntimeOutput": raw_output.clone(),
+    });
+
+    if artifact_kind == "review_report" {
+        return json!({
+            "kind": "content_factory.workspace_patch",
+            "artifactKind": artifact_kind,
+            "projectId": project_id,
+            "mergePolicy": "replace_section",
+            "source": "agent_app_output_contract_materialization",
+            "message": "Lime AgentRuntime 已完成复盘分析，并物化为可复核工作区补丁。",
+            "requiresHumanReview": true,
+            "skillEvidence": required_skills,
+            "reviewReport": {
+                "status": "requires_review",
+                "decision": "待人工复核",
+                "summary": output_summary,
+                "rawRuntimeOutput": raw_output,
+                "nextCampaignSuggestion": {
+                    "action": "review_before_next_campaign",
+                    "reason": "已保留 AI Agent 输出，需人工确认后再进入下一轮运营动作。"
+                }
+            },
+            "runtimeMaterialization": runtime_materialization,
+        });
+    }
+
+    json!({
+        "kind": "content_factory.workspace_patch",
+        "artifactKind": artifact_kind,
+        "projectId": project_id,
+        "mergePolicy": "replace_section",
+        "source": "agent_app_output_contract_materialization",
+        "message": "Lime AgentRuntime 已完成交付包生成，并物化为可复核工作区补丁。",
+        "requiresHumanReview": true,
+        "skillEvidence": required_skills,
+        "strategyReport": {
+            "status": "requires_review",
+            "title": "交付结论",
+            "executiveSummary": {
+                "decision": output_summary,
+                "reason": "已保留 AI Agent 输出，需人工确认后进入正式交付。",
+                "feasibilityScore": 0
+            },
+            "rawRuntimeOutput": raw_output,
+            "riskCheck": {
+                "status": "requires_review",
+                "items": ["模型未返回结构化 strategy_report patch，已按运行输出生成可复核交付草稿。"]
+            }
+        },
+        "pptOutline": {
+            "title": "交付演示结构",
+            "sections": [
+                { "title": "项目背景与目标", "source": "runtime_output" },
+                { "title": "内容资产与证据链", "source": "runtime_output" },
+                { "title": "交付结论与风险", "source": "runtime_output" }
+            ]
+        },
+        "runtimeMaterialization": runtime_materialization,
+    })
+}
+
+fn build_agent_app_draft_workspace_patch(
+    artifact_kind: &str,
+    project_id: &str,
+    final_text_output: &str,
+    required_skill_names: &[String],
+) -> serde_json::Value {
+    let output_summary = first_agent_app_output_line(final_text_output).unwrap_or_else(|| {
+        "AgentRuntime 已完成 required Skills，但模型未返回可直接解析的结构化补丁。".to_string()
+    });
+    let raw_output = truncate_agent_app_materialized_text(final_text_output, 8000);
+    let required_skills = required_skill_names
+        .iter()
+        .map(|skill| json!({ "skill": skill, "status": "completed" }))
+        .collect::<Vec<_>>();
+    let runtime_materialization = json!({
+        "status": "requires_human_review",
+        "reason": "模型完成回合后没有创建 contentFactoryWorkspacePatch Artifact；Host Runtime 只物化可复核草稿，不把草稿伪装成已完成脚本或图片需求。",
+        "rawRuntimeOutput": raw_output.clone(),
+    });
+
+    if artifact_kind == "prompt_batch" {
+        return json!({
+            "kind": "content_factory.workspace_patch",
+            "artifactKind": artifact_kind,
+            "projectId": project_id,
+            "mergePolicy": "append_review_draft",
+            "source": "agent_app_output_contract_materialization",
+            "message": "Lime AgentRuntime 已完成图片需求草稿，并物化为需人工复核的工作区补丁。",
+            "requiresHumanReview": true,
+            "skillEvidence": required_skills,
+            "imagePrompts": [{
+                "id": "runtime-image-review-1",
+                "prompt": output_summary,
+                "description": raw_output,
+                "requiresHumanReview": true,
+                "source": "runtime_output_review_draft"
+            }],
+            "runtimeMaterialization": runtime_materialization,
+        });
+    }
+
+    json!({
+        "kind": "content_factory.workspace_patch",
+        "artifactKind": artifact_kind,
+        "projectId": project_id,
+        "mergePolicy": "append_review_draft",
+        "source": "agent_app_output_contract_materialization",
+        "message": "Lime AgentRuntime 已完成脚本草稿，并物化为需人工复核的工作区补丁。",
+        "requiresHumanReview": true,
+        "skillEvidence": required_skills,
+        "scripts": [{
+            "id": "runtime-script-review-1",
+            "templateLabel": "AI Agent 脚本草稿（需复核）",
+            "level": "review",
+            "opening": output_summary,
+            "script": raw_output,
+            "requiresHumanReview": true,
+            "source": "runtime_output_review_draft"
+        }],
+        "runtimeMaterialization": runtime_materialization,
+    })
+}
+
+fn build_agent_app_output_contract_workspace_patch(
+    request_metadata: Option<&serde_json::Value>,
+    final_text_output: &str,
+) -> Option<serde_json::Value> {
+    let output_contract = resolve_agent_app_output_contract_value(request_metadata)?;
+    if !is_content_factory_agent_app_output_contract(request_metadata, &output_contract) {
+        return None;
+    }
+    let artifact_kind = resolve_agent_app_output_contract_artifact_kind(&output_contract)?;
+    let project_id = resolve_agent_app_content_factory_project_id(request_metadata);
+
+    if let Some(patch) = extract_content_factory_workspace_patch_from_text(final_text_output)
+        .and_then(|patch| {
+            normalize_agent_app_workspace_patch(
+                patch,
+                artifact_kind.as_str(),
+                project_id.as_str(),
+                "agent_app_output_contract_model_patch",
+            )
+        })
+    {
+        return Some(patch);
+    }
+
+    if !is_agent_app_report_output_kind(artifact_kind.as_str())
+        && !is_agent_app_draft_materialization_output_kind(artifact_kind.as_str())
+    {
+        return None;
+    }
+
+    let required_skill_names = collect_agent_app_required_skill_names(request_metadata);
+    if final_text_output.trim().is_empty() && required_skill_names.is_empty() {
+        return None;
+    }
+
+    if is_agent_app_draft_materialization_output_kind(artifact_kind.as_str()) {
+        return Some(build_agent_app_draft_workspace_patch(
+            artifact_kind.as_str(),
+            project_id.as_str(),
+            final_text_output,
+            &required_skill_names,
+        ));
+    }
+
+    Some(build_agent_app_report_workspace_patch(
+        artifact_kind.as_str(),
+        project_id.as_str(),
+        final_text_output,
+        &required_skill_names,
+    ))
+}
+
+fn agent_app_output_contract_slug(value: &str) -> String {
+    let slug = value
+        .trim()
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || character == '-' || character == '_' {
+                character.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string();
+    if slug.is_empty() {
+        "agent-app".to_string()
+    } else {
+        slug
+    }
+}
+
+fn persist_agent_app_output_contract_workspace_patch(
+    workspace_root: &str,
+    task_id: &str,
+    turn_id: &str,
+    artifact_kind: &str,
+    workspace_patch: &serde_json::Value,
+) -> Result<(String, String), String> {
+    let task_slug = agent_app_output_contract_slug(task_id);
+    let turn_slug = agent_app_output_contract_slug(turn_id);
+    let kind_slug = agent_app_output_contract_slug(artifact_kind);
+    let relative_path = format!(
+        ".lime/artifacts/agent-app/{task_slug}/{turn_slug}/{kind_slug}.workspace-patch.json"
+    );
+    let absolute_path = PathBuf::from(workspace_root)
+        .join(relative_path.replace('/', std::path::MAIN_SEPARATOR_STR));
+    if let Some(parent) = absolute_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("创建 Agent App Artifact 目录失败: {error}"))?;
+    }
+    let content = serde_json::to_string_pretty(workspace_patch)
+        .map_err(|error| format!("序列化 Agent App workspace patch 失败: {error}"))?;
+    std::fs::write(&absolute_path, content.as_bytes())
+        .map_err(|error| format!("写入 Agent App workspace patch 失败: {error}"))?;
+    Ok((relative_path, content))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn materialize_agent_app_output_contract_artifact_after_stream(
+    app: &AppHandle,
+    event_name: &str,
+    timeline_recorder: &Arc<Mutex<AgentTimelineRecorder>>,
+    run_observation: &Arc<Mutex<ChatRunObservation>>,
+    workspace_root: &str,
+    thread_id: &str,
+    turn_id: &str,
+    request_metadata: Option<&serde_json::Value>,
+    final_text_output: &str,
+) {
+    let Some(workspace_patch) =
+        build_agent_app_output_contract_workspace_patch(request_metadata, final_text_output)
+    else {
+        return;
+    };
+    if json_object_has_any_key(
+        &workspace_patch,
+        &["contentFactoryWorkspacePatch", "workspacePatch"],
+        0,
+    ) {
+        return;
+    }
+    let artifact_kind = workspace_patch
+        .get("artifactKind")
+        .or_else(|| workspace_patch.get("artifact_kind"))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("workspace_patch");
+    let task_id = resolve_agent_app_runtime_metadata_text(request_metadata, "task_id", "taskId")
+        .unwrap_or_else(|| thread_id.to_string());
+    let (relative_path, serialized_patch) = match persist_agent_app_output_contract_workspace_patch(
+        workspace_root,
+        task_id.as_str(),
+        turn_id,
+        artifact_kind,
+        &workspace_patch,
+    ) {
+        Ok(result) => result,
+        Err(error) => {
+            emit_runtime_side_event(
+                app,
+                event_name,
+                timeline_recorder,
+                workspace_root,
+                RuntimeAgentEvent::Warning {
+                    code: Some("agent_app_output_contract_materialization_failed".to_string()),
+                    message: error,
+                },
+            );
+            return;
+        }
+    };
+
+    {
+        let mut observation = match run_observation.lock() {
+            Ok(guard) => guard,
+            Err(error) => error.into_inner(),
+        };
+        observation.record_artifact_path(relative_path.clone(), request_metadata);
+    }
+
+    emit_runtime_side_event(
+        app,
+        event_name,
+        timeline_recorder,
+        workspace_root,
+        RuntimeAgentEvent::ArtifactSnapshot {
+            artifact: lime_agent::AgentArtifactSignal {
+                artifact_id: format!(
+                    "agent-app-output-contract:{}:{}",
+                    agent_app_output_contract_slug(task_id.as_str()),
+                    agent_app_output_contract_slug(turn_id)
+                ),
+                file_path: relative_path,
+                content: Some(serialized_patch),
+                metadata: Some(HashMap::from([
+                    ("kind".to_string(), json!("content_factory.workspace_patch")),
+                    (
+                        "artifactType".to_string(),
+                        json!("content_factory.workspace_patch"),
+                    ),
+                    ("artifactKind".to_string(), json!(artifact_kind)),
+                    (
+                        "source".to_string(),
+                        json!("agent_app_output_contract_materialization"),
+                    ),
+                    (
+                        "contentFactoryWorkspacePatch".to_string(),
+                        workspace_patch.clone(),
+                    ),
+                    ("workspacePatch".to_string(), workspace_patch),
+                    (
+                        "agent_app_output_contract_materialized".to_string(),
+                        json!(true),
+                    ),
+                ])),
+            },
+        },
+    );
+}
+
 fn request_metadata_has_explicit_artifact_intent(
     request_metadata: Option<&serde_json::Value>,
 ) -> bool {
@@ -6792,6 +7832,17 @@ fn finalize_runtime_stream_success(
     request_metadata: Option<&serde_json::Value>,
     execution: &lime_agent::request_tool_policy::StreamReplyExecution,
 ) {
+    materialize_agent_app_output_contract_artifact_after_stream(
+        app,
+        event_name,
+        timeline_recorder,
+        run_observation,
+        workspace_root,
+        thread_id,
+        turn_id,
+        request_metadata,
+        execution.text_output.as_str(),
+    );
     maybe_persist_artifact_document_after_stream(
         app,
         db,
@@ -9089,6 +10140,7 @@ mod tests {
         delete_managed_session, initialize_shared_session_runtime_with_root,
         is_global_session_store_set, SessionManager, SessionType,
     };
+    use aster::tools::VIEW_IMAGE_TOOL_NAME;
     use async_trait::async_trait;
     use chrono::Utc;
     use lime_core::database::dao::agent_timeline::{
@@ -9150,6 +10202,7 @@ mod tests {
         "extensionmanager__search_available_extensions",
         "extensionmanager__manage_extensions",
         "Read",
+        VIEW_IMAGE_TOOL_NAME,
         "Glob",
         "Grep",
         "Bash",
@@ -10362,6 +11415,366 @@ mod tests {
             ])
         );
         assert!(should_enable_model_skill_tool(Some(&metadata)));
+    }
+
+    #[test]
+    fn agent_app_required_skill_params_should_preserve_contract_for_fast_path() {
+        let metadata = json!({
+            "harness": {
+                "agent_app_runtime": {
+                    "app_id": "content-factory-app",
+                    "task_id": "task-1",
+                    "task_kind": "content_factory.copy.generate"
+                },
+                "agent_app_runtime_output_contract": {
+                    "artifact_kind": "content_batch"
+                },
+                "content_factory_skill_contract": {
+                    "policy": "must_use_required_skills_before_final_patch",
+                    "required_skills": [
+                        { "skill": "article-writer", "required": true },
+                        { "skill": "content-reviewer", "required": true }
+                    ]
+                }
+            }
+        });
+        let (contract, names) = resolve_agent_app_required_skill_contract(Some(&metadata))
+            .expect("required skill contract");
+        let params = build_agent_app_required_skill_tool_params(
+            Some(&metadata),
+            &contract,
+            &names[0],
+            0,
+            "session-1",
+            "thread-1",
+            "turn-1",
+        );
+
+        assert_eq!(params.get("skill"), Some(&json!("article-writer")));
+        assert_eq!(
+            params.pointer("/args/agentTaskContract/runtimeSurface"),
+            Some(&json!("agent_app"))
+        );
+        assert_eq!(
+            params.pointer("/args/agentTaskContract/requiredSkills/1/skill"),
+            Some(&json!("content-reviewer"))
+        );
+        assert_eq!(
+            params.pointer("/args/agentAppRuntime/app_id"),
+            Some(&json!("content-factory-app"))
+        );
+        assert_eq!(
+            params.pointer("/args/outputContract/artifact_kind"),
+            Some(&json!("content_batch"))
+        );
+        assert_eq!(
+            params.pointer("/args/runtime/sessionId"),
+            Some(&json!("session-1"))
+        );
+    }
+
+    #[tokio::test]
+    async fn agent_app_required_skill_params_should_execute_lime_skill_fast_path() {
+        let session_id = format!("agent-app-required-skill-{}", Uuid::new_v4());
+        let metadata = json!({
+            "harness": {
+                "content_factory_skill_contract": {
+                    "policy": "must_use_required_skills_before_final_patch",
+                    "required_skills": [
+                        { "skill": "article-writer", "required": true }
+                    ]
+                }
+            }
+        });
+        let (contract, names) = resolve_agent_app_required_skill_contract(Some(&metadata))
+            .expect("required skill contract");
+        let params = build_agent_app_required_skill_tool_params(
+            Some(&metadata),
+            &contract,
+            &names[0],
+            0,
+            session_id.as_str(),
+            "thread-1",
+            "turn-1",
+        );
+        lime_agent::tools::set_skill_tool_session_allowed_skills(
+            session_id.as_str(),
+            ["article-writer"],
+        );
+        let context = build_image_skill_launch_tool_context(
+            ".",
+            session_id.as_str(),
+            "thread-1",
+            "turn-1",
+            None,
+            None,
+        );
+        let tool = lime_agent::tools::LimeSkillTool::new();
+        let result = aster::tools::Tool::execute(&tool, params, &context)
+            .await
+            .expect("required Skill should execute through LimeSkillTool fast path");
+        lime_agent::tools::clear_skill_tool_session_access(session_id.as_str());
+
+        assert_eq!(
+            result.metadata.get("agent_app_skill_fast_path"),
+            Some(&json!(true))
+        );
+        assert_eq!(
+            result.metadata.get("skill_name"),
+            Some(&json!("article-writer"))
+        );
+        assert!(result
+            .metadata
+            .get("content_factory_skill_evidence")
+            .is_some());
+    }
+
+    #[test]
+    fn agent_app_required_skill_tool_end_should_project_invocation_metadata() {
+        let tool_result = aster::tools::ToolResult::success("{}").with_metadata(
+            "content_factory_skill_evidence",
+            json!({ "status": "recorded" }),
+        );
+        let result = agent_app_required_skill_agent_tool_result(
+            "content-reviewer",
+            "test_required_skill",
+            tool_result,
+        );
+        let event = RuntimeAgentEvent::ToolEnd {
+            tool_id: "tool-1".to_string(),
+            result,
+        };
+        let payload = build_agent_app_runtime_event_projection_payload(
+            "agent_app_runtime:content-factory-app:task-1",
+            &event,
+        )
+        .expect("runtime event projection payload");
+        let task_event = payload
+            .get("taskEvents")
+            .and_then(Value::as_array)
+            .and_then(|events| events.first())
+            .and_then(Value::as_object)
+            .expect("task event");
+        let task_event_value = Value::Object(task_event.clone());
+
+        assert_eq!(task_event.get("eventType"), Some(&json!("task:toolCall")));
+        assert_eq!(task_event.get("status"), Some(&json!("completed")));
+        assert_eq!(
+            task_event.get("toolName"),
+            Some(&json!("Skill(content-reviewer)"))
+        );
+        assert_eq!(
+            task_event_value.pointer("/payload/result/metadata/skill_name"),
+            Some(&json!("content-reviewer"))
+        );
+        assert_eq!(
+            task_event_value.pointer("/payload/result/metadata/agent_app_required_skill_contract"),
+            Some(&json!(true))
+        );
+    }
+
+    #[test]
+    fn agent_app_output_contract_should_extract_model_workspace_patch() {
+        let metadata = json!({
+            "contentFactory": {
+                "projectId": "project-1"
+            },
+            "harness": {
+                "agent_app_runtime": {
+                    "app_id": "content-factory-app",
+                    "task_id": "task-1",
+                    "task_kind": "content_factory.delivery.prepare"
+                },
+                "agent_app_runtime_output_contract": {
+                    "artifact_kind": "strategy_report",
+                    "artifact_metadata_kind": "content_factory.workspace_patch"
+                }
+            }
+        });
+        let final_text = r#"交付结论如下：
+```json
+{
+  "contentFactoryWorkspacePatch": {
+    "strategyReport": {
+      "executiveSummary": {
+        "decision": "建议进入小范围试投",
+        "reason": "证据链完整"
+      }
+    },
+    "pptOutline": {
+      "sections": [{ "title": "结论" }]
+    }
+  }
+}
+```"#;
+
+        let patch = build_agent_app_output_contract_workspace_patch(Some(&metadata), final_text)
+            .expect("workspace patch should be extracted");
+
+        assert_eq!(
+            patch.get("kind"),
+            Some(&json!("content_factory.workspace_patch"))
+        );
+        assert_eq!(patch.get("artifactKind"), Some(&json!("strategy_report")));
+        assert_eq!(patch.get("projectId"), Some(&json!("project-1")));
+        assert_eq!(
+            patch.pointer("/strategyReport/executiveSummary/decision"),
+            Some(&json!("建议进入小范围试投"))
+        );
+    }
+
+    #[test]
+    fn agent_app_output_contract_should_scope_model_patch_to_host_project() {
+        let metadata = json!({
+            "contentFactory": {
+                "projectId": "active-project-1"
+            },
+            "harness": {
+                "agent_app_runtime": {
+                    "app_id": "content-factory-app",
+                    "task_id": "task-1",
+                    "task_kind": "content_factory.scenario.generate"
+                },
+                "agent_app_runtime_output_contract": {
+                    "artifact_kind": "scene_table",
+                    "artifact_metadata_kind": "content_factory.workspace_patch"
+                }
+            }
+        });
+        let final_text = r#"```json
+{
+  "contentFactoryWorkspacePatch": {
+    "kind": "content_factory.workspace_patch",
+    "artifactKind": "scene_table",
+    "projectId": "sample_content_factory_spring",
+    "sceneTable": {
+      "actualCount": 120,
+      "rows": [{ "scene": "厨房台面清洁", "dimension": "厨房", "decisionStage": "第一次了解", "imageBrief": "灶台实拍" }]
+    },
+    "imagePrompts": [{ "prompt": "厨房台面清洁前后对比" }]
+  }
+}
+```"#;
+
+        let patch = build_agent_app_output_contract_workspace_patch(Some(&metadata), final_text)
+            .expect("workspace patch should be extracted");
+
+        assert_eq!(patch.get("projectId"), Some(&json!("active-project-1")));
+        assert_eq!(patch.get("artifactKind"), Some(&json!("scene_table")));
+        assert_eq!(patch.pointer("/sceneTable/actualCount"), Some(&json!(120)));
+    }
+
+    #[test]
+    fn agent_app_output_contract_should_materialize_strategy_report_when_model_omits_patch() {
+        let metadata = json!({
+            "contentFactory": {
+                "projectId": "project-1"
+            },
+            "harness": {
+                "agent_app_runtime": {
+                    "app_id": "content-factory-app",
+                    "task_id": "task-1",
+                    "task_kind": "content_factory.delivery.prepare"
+                },
+                "agent_app_runtime_output_contract": {
+                    "artifact_kind": "strategy_report",
+                    "artifact_metadata_kind": "content_factory.workspace_patch"
+                },
+                "content_factory_skill_contract": {
+                    "required_skills": [
+                        { "skill": "article-writer", "required": true },
+                        { "skill": "content-reviewer", "required": true }
+                    ]
+                }
+            }
+        });
+
+        let patch = build_agent_app_output_contract_workspace_patch(
+            Some(&metadata),
+            "建议进入小范围试投，先复用已确认内容资产验证转化。",
+        )
+        .expect("report patch should be materialized from runtime output");
+
+        assert_eq!(patch.get("artifactKind"), Some(&json!("strategy_report")));
+        assert_eq!(
+            patch.pointer("/strategyReport/status"),
+            Some(&json!("requires_review"))
+        );
+        assert_eq!(
+            patch.pointer("/strategyReport/executiveSummary/decision"),
+            Some(&json!("建议进入小范围试投，先复用已确认内容资产验证转化。"))
+        );
+        assert_eq!(
+            patch.pointer("/skillEvidence/0/skill"),
+            Some(&json!("article-writer"))
+        );
+        assert!(patch.get("pptOutline").is_some());
+    }
+
+    #[test]
+    fn agent_app_output_contract_should_not_fake_content_batch_without_patch() {
+        let metadata = json!({
+            "harness": {
+                "agent_app_runtime": {
+                    "app_id": "content-factory-app",
+                    "task_id": "task-1",
+                    "task_kind": "content_factory.copy.generate"
+                },
+                "agent_app_runtime_output_contract": {
+                    "artifact_kind": "content_batch",
+                    "artifact_metadata_kind": "content_factory.workspace_patch"
+                }
+            }
+        });
+
+        assert!(build_agent_app_output_contract_workspace_patch(
+            Some(&metadata),
+            "这里只是自然语言总结，没有结构化内容包。",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn agent_app_output_contract_should_materialize_script_batch_review_draft() {
+        let metadata = json!({
+            "contentFactory": {
+                "projectId": "project-1"
+            },
+            "harness": {
+                "agent_app_runtime": {
+                    "app_id": "content-factory-app",
+                    "task_id": "task-1",
+                    "task_kind": "content_factory.script.generate"
+                },
+                "agent_app_runtime_output_contract": {
+                    "artifact_kind": "script_batch",
+                    "artifact_metadata_kind": "content_factory.workspace_patch"
+                },
+                "content_factory_skill_contract": {
+                    "required_skills": [
+                        { "skill": "article-writer", "required": true },
+                        { "skill": "content-reviewer", "required": true }
+                    ]
+                }
+            }
+        });
+
+        let patch = build_agent_app_output_contract_workspace_patch(
+            Some(&metadata),
+            "先给出 6 条短视频脚本草稿，等待人工复核后再进入正式交付。",
+        )
+        .expect("script draft patch should be materialized from runtime output");
+
+        assert_eq!(patch.get("artifactKind"), Some(&json!("script_batch")));
+        assert_eq!(patch.get("requiresHumanReview"), Some(&json!(true)));
+        assert_eq!(
+            patch.pointer("/scripts/0/templateLabel"),
+            Some(&json!("AI Agent 脚本草稿（需复核）"))
+        );
+        assert_eq!(
+            patch.pointer("/skillEvidence/1/skill"),
+            Some(&json!("content-reviewer"))
+        );
     }
 
     #[tokio::test]

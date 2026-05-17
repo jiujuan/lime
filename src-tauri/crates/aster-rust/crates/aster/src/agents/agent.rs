@@ -732,8 +732,67 @@ fn native_tool_metadata_to_value(
     }
 }
 
+fn parse_model_visible_image_data_url(data_url: &str) -> Option<(String, String)> {
+    let normalized = data_url.trim();
+    if !normalized.starts_with("data:image/") {
+        return None;
+    }
+
+    let (meta, data) = normalized.split_once(',')?;
+    if !meta.to_ascii_lowercase().contains(";base64") {
+        return None;
+    }
+
+    let mime_type = meta.strip_prefix("data:")?.split(';').next()?.trim();
+    let data = data.trim();
+    if mime_type.starts_with("image/") && !data.is_empty() {
+        Some((mime_type.to_string(), data.to_string()))
+    } else {
+        None
+    }
+}
+
+fn native_tool_model_visible_image_content(metadata: &HashMap<String, Value>) -> Option<Content> {
+    let model_visible_image = metadata
+        .get("model_visible_image")
+        .or_else(|| metadata.get("modelVisibleImage"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if !model_visible_image {
+        return None;
+    }
+
+    let image_url = metadata
+        .get("image_url")
+        .or_else(|| metadata.get("imageUrl"))
+        .and_then(Value::as_str)?;
+    let (mime_type, data) = parse_model_visible_image_data_url(image_url)?;
+    Some(Content::image(data, mime_type))
+}
+
+fn remove_model_visible_image_transport_metadata(metadata: &mut HashMap<String, Value>) {
+    for key in [
+        "image_url",
+        "imageUrl",
+        "model_visible_image",
+        "modelVisibleImage",
+    ] {
+        metadata.remove(key);
+    }
+}
+
 fn native_tool_result_to_call_tool_result(result: crate::tools::ToolResult) -> CallToolResult {
-    let structured_content = native_tool_metadata_to_value(result.metadata);
+    let mut metadata = result.metadata;
+    let image_content = if result.success {
+        native_tool_model_visible_image_content(&metadata)
+    } else {
+        None
+    };
+    if image_content.is_some() {
+        remove_model_visible_image_transport_metadata(&mut metadata);
+    }
+
+    let structured_content = native_tool_metadata_to_value(metadata);
     let fallback_text = structured_content
         .as_ref()
         .and_then(|value| serde_json::to_string_pretty(value).ok());
@@ -752,8 +811,13 @@ fn native_tool_result_to_call_tool_result(result: crate::tools::ToolResult) -> C
             .unwrap_or_default()
     };
 
+    let mut content = vec![Content::text(text)];
+    if let Some(image_content) = image_content {
+        content.push(image_content);
+    }
+
     CallToolResult {
-        content: vec![Content::text(text)],
+        content,
         structured_content,
         is_error: Some(!result.success),
         meta: None,
@@ -5924,6 +5988,10 @@ mod tests {
             "Read tool should be registered"
         );
         assert!(
+            registry_guard.contains(crate::tools::VIEW_IMAGE_TOOL_NAME),
+            "view_image tool should be registered"
+        );
+        assert!(
             registry_guard.contains("Write"),
             "Write tool should be registered"
         );
@@ -5993,6 +6061,10 @@ mod tests {
         assert!(
             registry_guard.contains("Read"),
             "Read tool should be registered"
+        );
+        assert!(
+            registry_guard.contains(crate::tools::VIEW_IMAGE_TOOL_NAME),
+            "view_image tool should be registered"
         );
         assert!(
             registry_guard.contains("ListMcpResourcesTool"),
@@ -7082,6 +7154,49 @@ mod tests {
             Some(&Value::Bool(true))
         );
         assert!(tool_surface_updated_from_call_tool_result(&call_result));
+    }
+
+    #[test]
+    fn test_native_tool_result_to_call_tool_result_attaches_model_visible_image() {
+        let tool_result = crate::tools::ToolResult::success("Viewed image: sample.png")
+            .with_metadata("tool_result_kind", serde_json::json!("view_image"))
+            .with_metadata("model_visible_image", serde_json::json!(true))
+            .with_metadata(
+                "image_url",
+                serde_json::json!("data:image/png;base64,aGVsbG8="),
+            )
+            .with_metadata("mime_type", serde_json::json!("image/png"));
+
+        let call_result = native_tool_result_to_call_tool_result(tool_result);
+
+        assert_eq!(call_result.is_error, Some(false));
+        assert_eq!(call_result.content.len(), 2);
+        assert_eq!(
+            call_result.content[0]
+                .as_text()
+                .map(|text| text.text.as_str()),
+            Some("Viewed image: sample.png")
+        );
+        let image = call_result.content[1]
+            .as_image()
+            .expect("view_image should attach image content");
+        assert_eq!(image.mime_type, "image/png");
+        assert_eq!(image.data, "aGVsbG8=");
+        assert_eq!(
+            call_result
+                .structured_content
+                .as_ref()
+                .and_then(|value| value.get("image_url")),
+            None
+        );
+        assert_eq!(
+            call_result
+                .structured_content
+                .as_ref()
+                .and_then(|value| value.get("mime_type"))
+                .and_then(Value::as_str),
+            Some("image/png")
+        );
     }
 
     #[test]

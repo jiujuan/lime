@@ -1003,6 +1003,117 @@ describe("AgentAppHostBridge", () => {
     }
   });
 
+  it("成功终态只有 artifact 外壳时不应停止等待 workspace patch 物化", async () => {
+    vi.useFakeTimers();
+    const { frame, postMessage } = buildFrame();
+    const artifactDocument = {
+      blocks: [
+        {
+          content: [
+            "内容工厂最终产物：",
+            "```json",
+            '{"contentFactoryWorkspacePatch":{"kind":"content_factory.workspace_patch","artifactKind":"scene_table","sceneTable":{"actualCount":120,"rows":[{"index":1,"imageBrief":"灶台实拍，突出"一擦即净"的视觉感。"}]},"imagePrompts":{"items":[{"title":"厨房台面"}]}}}',
+            "```",
+          ].join("\n"),
+        },
+      ],
+    };
+    const dispatchCapability = vi
+      .fn()
+      .mockResolvedValueOnce({
+        taskId: "task-1",
+        taskStatus: "completed",
+        events: [{ eventType: "task:completed", message: "任务已完成" }],
+        result: {
+          artifacts: [
+            {
+              path: ".lime/artifacts/scene-table.json",
+              title: "场景表创建中",
+              metadata: {},
+            },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({
+        taskId: "task-1",
+        taskStatus: "completed",
+        events: [{ eventType: "task:completed", message: "任务已完成" }],
+        result: {
+          artifacts: [
+            {
+              path: ".lime/artifacts/scene-table.json",
+              title: "场景表已创建",
+              metadata: { artifactDocument },
+            },
+          ],
+        },
+      });
+    const bridge = new AgentAppHostBridge({
+      frame,
+      appId,
+      entryKey,
+      displayName: "内容工厂",
+      entryRoute: "/dashboard",
+      entryUrl,
+      dispatchCapability,
+      listenRuntimeEvent: async () => () => undefined,
+      now: () => "2026-05-16T00:00:00.000Z",
+    });
+    const cleanup = bridge.start();
+
+    try {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: buildAppMessage("capability:subscribe", {
+            capability: "lime.agent",
+            topic: "task",
+            input: { taskId: "task-1", bridgeAction: "contentFactoryProduction" },
+            pollIntervalMs: 250,
+          }),
+          origin: runtimeOrigin,
+          source: frame.contentWindow,
+        }),
+      );
+      await flushBridgeTasks();
+
+      expect(dispatchCapability).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(250);
+      await flushBridgeTasks();
+
+      expect(dispatchCapability).toHaveBeenCalledTimes(2);
+      expect(postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "capability:event",
+          payload: expect.objectContaining({
+            taskId: "task-1",
+            events: expect.arrayContaining([
+              expect.objectContaining({
+                eventType: "artifact:created",
+                payload: expect.objectContaining({
+                  contentFactoryWorkspacePatch: expect.objectContaining({
+                    sceneTable: expect.objectContaining({
+                      actualCount: 120,
+                      rows: expect.arrayContaining([
+                        expect.objectContaining({
+                          imageBrief: '灶台实拍，突出"一擦即净"的视觉感。',
+                        }),
+                      ]),
+                    }),
+                  }),
+                }),
+              }),
+            ]),
+          }),
+        }),
+        runtimeOrigin,
+      );
+    } finally {
+      cleanup();
+      vi.useRealTimers();
+    }
+  });
+
   it("capability dispatcher 的结构化错误码应透传给 App", async () => {
     const { frame, postMessage } = buildFrame();
     const error = Object.assign(new Error("不支持该能力方法。"), {

@@ -62,10 +62,10 @@ function getRendererClassName(
 ): string {
   return cn(
     compact
-      ? "space-y-2.5 text-[13px] leading-5"
+      ? "space-y-1.5 text-[12px] leading-5"
       : "space-y-3 text-sm leading-6",
     surface === "embedded" &&
-      "space-y-2.5 text-[13px] leading-5 [&_.a2ui-text-h3]:text-[15px] [&_.a2ui-text-h3]:leading-6 [&_.a2ui-text-h3]:font-semibold [&_.a2ui-text-h4]:text-[13px] [&_.a2ui-text-h4]:leading-5 [&_.a2ui-text-h4]:font-medium [&_.a2ui-text-body]:text-[13px] [&_.a2ui-text-body]:leading-5 [&_.a2ui-field-stack]:space-y-1.5 [&_.a2ui-field-label]:text-[12px] [&_.a2ui-field-label]:leading-5 [&_.a2ui-helper-text]:text-[11px] [&_.a2ui-helper-text]:leading-4 [&_.a2ui-option-list]:gap-2 [&_.a2ui-choice-option]:rounded-[14px] [&_.a2ui-choice-option]:px-3 [&_.a2ui-choice-option]:py-2.5 [&_.a2ui-choice-option]:text-[13px] [&_.a2ui-choice-option-title]:text-[13px] [&_.a2ui-choice-option-title]:leading-5 [&_.a2ui-option-description]:mt-1 [&_.a2ui-option-description]:text-[11px] [&_.a2ui-option-description]:leading-4 [&_.a2ui-text-input]:h-9 [&_.a2ui-text-input]:rounded-[14px] [&_.a2ui-text-input]:px-3 [&_.a2ui-text-input]:text-[13px] [&_.a2ui-textarea]:min-h-[76px] [&_.a2ui-textarea]:rounded-[14px] [&_.a2ui-textarea]:px-3 [&_.a2ui-textarea]:py-2.5 [&_.a2ui-textarea]:text-[13px] [&_.a2ui-textarea]:leading-5 [&_.a2ui-card-shell]:rounded-[14px] [&_.a2ui-card-shell]:p-2.5 [&_.a2ui-card-shell]:shadow-none",
+      "space-y-1.5 text-[12px] leading-5 [&_.a2ui-text-h3]:text-[14px] [&_.a2ui-text-h3]:leading-5 [&_.a2ui-text-h3]:font-semibold [&_.a2ui-text-h4]:text-[13px] [&_.a2ui-text-h4]:leading-5 [&_.a2ui-text-h4]:font-semibold [&_.a2ui-text-body]:text-[12px] [&_.a2ui-text-body]:leading-5 [&_.a2ui-field-stack]:space-y-1 [&_.a2ui-field-label]:text-[13px] [&_.a2ui-field-label]:leading-5 [&_.a2ui-helper-text]:text-[12px] [&_.a2ui-helper-text]:leading-4 [&_.a2ui-option-list]:gap-1.5 [&_.a2ui-choice-option]:min-h-7 [&_.a2ui-choice-option]:rounded-full [&_.a2ui-choice-option]:px-2.5 [&_.a2ui-choice-option]:py-1 [&_.a2ui-choice-option]:text-[12px] [&_.a2ui-choice-option-title]:text-[12px] [&_.a2ui-choice-option-title]:leading-4 [&_.a2ui-option-description]:mt-0.5 [&_.a2ui-option-description]:text-[11px] [&_.a2ui-option-description]:leading-4 [&_.a2ui-text-input]:h-8 [&_.a2ui-text-input]:rounded-[10px] [&_.a2ui-text-input]:px-2.5 [&_.a2ui-text-input]:text-[12px] [&_.a2ui-textarea]:min-h-[76px] [&_.a2ui-textarea]:rounded-[10px] [&_.a2ui-textarea]:px-2.5 [&_.a2ui-textarea]:py-1.5 [&_.a2ui-textarea]:text-[12px] [&_.a2ui-textarea]:leading-[18px] [&_.a2ui-card-shell]:rounded-[12px] [&_.a2ui-card-shell]:p-2.5 [&_.a2ui-card-shell]:shadow-none",
   );
 }
 
@@ -91,8 +91,9 @@ export function A2UITaskCard({
   const rendererClassName = getRendererClassName(compact, surface);
   const submitButtonClassName = cn(
     "w-full",
-    surface === "embedded" && "h-10 rounded-[16px] px-4 text-[13px]",
+    surface === "embedded" && "h-8 rounded-[8px] px-3 text-[12px]",
   );
+  const shouldRenderHeader = surface !== "embedded";
 
   return (
     <A2UITaskCardShell
@@ -102,13 +103,15 @@ export function A2UITaskCard({
       surface={surface}
       testId="agent-a2ui-task-card"
     >
-      <A2UITaskCardHeader
-        title={copy.title}
-        subtitle={copy.subtitle}
-        compact={compact}
-        statusLabel={statusLabel}
-        surface={surface}
-      />
+      {shouldRenderHeader ? (
+        <A2UITaskCardHeader
+          title={copy.title}
+          subtitle={copy.subtitle}
+          compact={compact}
+          statusLabel={statusLabel}
+          surface={surface}
+        />
+      ) : null}
 
       <A2UITaskCardBody compact={compact} surface={surface}>
         <A2UIRenderer

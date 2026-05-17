@@ -182,6 +182,25 @@ function collectDistArtifacts(packageDir) {
   return entries;
 }
 
+function collectRuntimeFiles(packageDir) {
+  const entries = [];
+  const roots = ["src", "dist"];
+  const extensions = new Set([".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx"]);
+  for (const root of roots) {
+    const absoluteRoot = path.join(packageDir, root);
+    for (const filePath of walkFiles(absoluteRoot)) {
+      if (!extensions.has(path.extname(filePath))) {
+        continue;
+      }
+      entries.push({
+        path: path.relative(packageDir, filePath),
+        content: fs.readFileSync(filePath, "utf8"),
+      });
+    }
+  }
+  return entries;
+}
+
 function createReport(packageDir) {
   const resolvedPackageDir = path.resolve(packageDir);
   const hostBridgePath = path.join(resolvedPackageDir, "src", "ui", "host-bridge.js");
@@ -198,6 +217,7 @@ function createReport(packageDir) {
       uiTest: readFileIfExists(uiTestPath),
       buildScript: readFileIfExists(buildScriptPath),
       distArtifacts: collectDistArtifacts(resolvedPackageDir),
+      runtimeFiles: collectRuntimeFiles(resolvedPackageDir),
     },
     packageJsonText: packageJson.content,
   });
@@ -211,6 +231,10 @@ function renderMarkerSummary(markers) {
 }
 
 function renderSummary(report) {
+  const bypassSummary = report.agentRuntimeBypass.matches
+    .slice(0, 8)
+    .map((entry) => `${entry.file}:${entry.marker}:${entry.count}`)
+    .join(",");
   const lines = [
     `status=${report.verdict.status}`,
     `packageDir=${report.packageDir}`,
@@ -218,6 +242,7 @@ function renderSummary(report) {
     `hostBridgePrivate=${renderMarkerSummary(report.files.hostBridge.privateMarkers)}`,
     `hostBridgeSdk=${renderMarkerSummary(report.files.hostBridge.sdkMarkers)}`,
     `uiTestPrivate=${renderMarkerSummary(report.files.uiTest.privateMarkers)}`,
+    `agentRuntimeBypass=${bypassSummary || "none"}`,
     `highRiskScripts=${report.scripts.highRisk.map((entry) => entry.name).join(",") || "none"}`,
     `distArtifacts=diff:${report.distArtifacts.diffCount},missing:${report.distArtifacts.missingDistCount},extra:${report.distArtifacts.extraDistCount},total:${report.distArtifacts.totalDeltas}`,
     `blockers=${report.verdict.blockers.join(" | ") || "none"}`,

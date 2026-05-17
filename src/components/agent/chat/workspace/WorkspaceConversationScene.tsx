@@ -129,6 +129,16 @@ function renderWorkspaceChatContent({
   showInlineInputbar,
   inputbarNode,
 }: WorkspaceChatContentParams): ReactNode {
+  const pendingA2UISource = messageListProps.activePendingA2UISource ?? null;
+  const hasPendingA2UIMessageTailPayload = Boolean(
+    pendingA2UIForm || a2uiSubmissionNotice,
+  );
+  const shouldRenderPendingA2UIAsMessageTail =
+    hasPendingA2UIMessageTailPayload &&
+    (!pendingA2UISource ||
+      pendingA2UISource.kind === "scene_gate" ||
+      pendingA2UISource.kind === "service_skill" ||
+      Boolean(a2uiSubmissionNotice));
   const leadingMessageContent =
     sceneAppExecutionSummaryCard ||
     stepProgressProps ||
@@ -139,11 +149,27 @@ function renderWorkspaceChatContent({
         {serviceSkillExecutionCard}
       </>
     ) : null;
+  const pendingA2UIMessageTail = shouldRenderPendingA2UIAsMessageTail ? (
+    <WorkspacePendingA2UIPanel
+      pendingA2UIForm={pendingA2UIForm}
+      onA2UISubmit={onPendingA2UISubmit}
+      a2uiSubmissionNotice={a2uiSubmissionNotice}
+      placement="message"
+    />
+  ) : null;
+  const trailingMessageContent =
+    messageListProps.trailingContent || pendingA2UIMessageTail ? (
+      <>
+        {messageListProps.trailingContent}
+        {pendingA2UIMessageTail}
+      </>
+    ) : null;
 
   const messageListNode = (
     <MessageList
       {...messageListProps}
       leadingContent={leadingMessageContent}
+      trailingContent={trailingMessageContent}
       compactLeadingSpacing={contextWorkspaceEnabled}
     />
   );
@@ -217,11 +243,6 @@ function renderWorkspaceChatContent({
                 </button>
               </div>
             ) : null}
-            <WorkspacePendingA2UIPanel
-              pendingA2UIForm={pendingA2UIForm}
-              onA2UISubmit={onPendingA2UISubmit}
-              a2uiSubmissionNotice={a2uiSubmissionNotice}
-            />
             {showInlineInputbar ? (
               <ChatInputSlot>{inputbarNode}</ChatInputSlot>
             ) : null}

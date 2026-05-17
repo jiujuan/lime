@@ -42,7 +42,7 @@ export function ColumnRenderer({
         align: component.align,
         defaultAlign: "stretch",
       })}
-      style={{ gap: component.gap || 12 }}
+      style={{ gap: component.gap || 8 }}
     >
       {childEntries.map((entry) => (
         <ComponentRenderer

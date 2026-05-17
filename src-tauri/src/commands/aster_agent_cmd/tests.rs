@@ -9,17 +9,19 @@ mod tests {
     };
     use crate::commands::aster_agent_cmd::service_skill_launch::build_service_skill_preload_tool_projection;
     use crate::commands::aster_agent_cmd::tool_runtime::{
+        append_agent_app_tool_execution_session_permissions,
         append_fast_chat_request_tool_policy_session_permissions,
         prune_fast_chat_request_tool_policy_tools_from_registry,
+        register_agent_app_connector_preview_tools, resolve_agent_app_tool_execution_allowed_tools,
     };
     use crate::services::site_capability_service::{
         RunSiteAdapterRequest, SavedSiteAdapterContent, SiteAdapterDefinition, SiteAdapterRunResult,
     };
     use crate::tests::runtime_test_support::shared_aster_runtime_test_root;
     use async_trait::async_trait;
-    use base64::{Engine as _, engine::general_purpose::STANDARD};
-    use lime_agent::AgentEvent as RuntimeAgentEvent;
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
     use lime_agent::request_tool_policy::resolve_request_tool_policy;
+    use lime_agent::AgentEvent as RuntimeAgentEvent;
     use regex::Regex;
     use std::collections::HashSet;
     use std::ffi::OsString;
@@ -971,6 +973,186 @@ mod tests {
         );
 
         assert!(permissions.is_empty());
+    }
+
+    #[test]
+    fn test_agent_app_tool_execution_permissions_bind_search_to_toolruntime_owner() {
+        let metadata = serde_json::json!({
+            "agent_app_tool_execution": {
+                "request": {
+                    "capability": "lime.search",
+                    "method": "query",
+                    "toolName": "web_search",
+                    "action": "query",
+                    "input": {
+                        "query": "Lime Agent App"
+                    },
+                    "policy": {
+                        "owner": "lime_agent_runtime",
+                        "mutationExposed": false,
+                        "tokenExposed": false
+                    }
+                }
+            }
+        });
+        let mut permissions = Vec::new();
+
+        append_agent_app_tool_execution_session_permissions(
+            &mut permissions,
+            "session-agent-app-tool-1",
+            Some(&metadata),
+        );
+
+        let default_deny = permissions
+            .iter()
+            .find(|permission| permission.tool == "*" && !permission.allowed)
+            .expect("should add wildcard deny for unrequested tools");
+        assert!(default_deny.priority > 1300);
+        assert_eq!(default_deny.conditions.len(), 1);
+        assert_eq!(
+            default_deny.conditions[0].value,
+            serde_json::json!("session-agent-app-tool-1")
+        );
+        let web_search_allow = permissions
+            .iter()
+            .find(|permission| permission.tool == "WebSearch" && permission.allowed)
+            .expect("should allow canonical WebSearch through ToolRuntime owner");
+        assert!(web_search_allow.priority > default_deny.priority);
+        assert_eq!(
+            web_search_allow.metadata.get("source"),
+            Some(&serde_json::json!("agent_app_tool_execution"))
+        );
+        assert_eq!(
+            web_search_allow.metadata.get("capability"),
+            Some(&serde_json::json!("lime.search"))
+        );
+        assert!(permissions
+            .iter()
+            .any(|permission| permission.tool == "web_search" && permission.allowed));
+    }
+
+    #[test]
+    fn test_agent_app_tool_execution_permissions_keep_connector_secret_host_managed() {
+        let metadata = serde_json::json!({
+            "harness": {
+                "agent_app_tool_execution": {
+                    "request": {
+                        "capability": "lime.connectors",
+                        "method": "invoke",
+                        "toolName": "connector__notion__createPage",
+                        "action": "createPage",
+                        "input": {
+                            "connectorId": "notion",
+                            "action": "createPage",
+                            "token": "[redacted:token]"
+                        },
+                        "policy": {
+                            "owner": "lime_agent_runtime",
+                            "secretBinding": "host_managed",
+                            "tokenExposed": false
+                        }
+                    }
+                }
+            }
+        });
+
+        let allowed_tools = resolve_agent_app_tool_execution_allowed_tools(Some(&metadata));
+        assert_eq!(
+            allowed_tools,
+            vec!["connector__notion__createPage".to_string()]
+        );
+
+        let mut permissions = Vec::new();
+        append_agent_app_tool_execution_session_permissions(
+            &mut permissions,
+            "session-agent-app-tool-2",
+            Some(&metadata),
+        );
+
+        let connector_allow = permissions
+            .iter()
+            .find(|permission| permission.tool == "connector__notion__createPage")
+            .expect("should allow exact connector tool only");
+        assert!(connector_allow.allowed);
+        assert_eq!(
+            connector_allow.metadata.get("secret_binding"),
+            Some(&serde_json::json!("host_managed"))
+        );
+        let serialized = serde_json::to_string(&connector_allow.metadata).expect("metadata json");
+        assert!(!serialized.contains("[redacted:token]"));
+        assert!(!permissions
+            .iter()
+            .any(|permission| permission.tool == "connector__*" && permission.allowed));
+    }
+
+    #[tokio::test]
+    async fn test_agent_app_connector_preview_tool_registers_exact_not_available_adapter() {
+        let metadata = serde_json::json!({
+            "harness": {
+                "agent_app_tool_execution": {
+                    "request": {
+                        "capability": "lime.connectors",
+                        "method": "invoke",
+                        "action": "createPage",
+                        "input": {
+                            "connectorId": "notion",
+                            "action": "createPage"
+                        },
+                        "policy": {
+                            "owner": "lime_agent_runtime",
+                            "secretBinding": "host_managed",
+                            "tokenExposed": false
+                        }
+                    }
+                }
+            }
+        });
+        let mut registry = aster::tools::ToolRegistry::new();
+
+        let registered = register_agent_app_connector_preview_tools(&mut registry, Some(&metadata));
+
+        assert_eq!(registered, 1);
+        assert!(registry.contains("connector__notion__createPage"));
+        assert!(!registry.contains("connector__*"));
+        let result = registry
+            .execute(
+                "connector__notion__createPage",
+                serde_json::json!({
+                    "connectorId": "notion",
+                    "action": "createPage",
+                    "input": {
+                        "title": "内容计划",
+                        "token": "[redacted:token]"
+                    }
+                }),
+                &ToolContext::new(PathBuf::from(".")),
+                None,
+            )
+            .await
+            .expect("connector preview tool should execute as controlled result");
+
+        assert!(!result.success);
+        let payload = result
+            .metadata
+            .get("result")
+            .expect("result metadata should exist");
+        assert_eq!(
+            payload.get("status"),
+            Some(&serde_json::json!("not_available"))
+        );
+        assert_eq!(
+            payload.get("reason"),
+            Some(&serde_json::json!(
+                "connector_toolruntime_adapter_not_configured"
+            ))
+        );
+        assert_eq!(
+            payload.get("secretBinding"),
+            Some(&serde_json::json!("host_managed"))
+        );
+        assert_eq!(payload.get("tokenExposed"), Some(&serde_json::json!(false)));
+        let serialized = serde_json::to_string(&result).expect("result should serialize");
+        assert!(!serialized.contains("[redacted:token]"));
     }
 
     #[test]

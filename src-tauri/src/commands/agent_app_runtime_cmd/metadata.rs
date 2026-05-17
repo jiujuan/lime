@@ -1,8 +1,11 @@
-use super::types::AgentAppRuntimeStartTaskRequest;
-use super::{
+use super::common::{
     non_empty, AGENT_APP_RUNTIME_CAPABILITY_SOURCE, AGENT_APP_RUNTIME_METADATA_KEY,
     CONTENT_FACTORY_WORKSPACE_PATCH_KIND, LIME_RUNTIME_METADATA_KEY, LIME_RUNTIME_TOOL_SURFACE_KEY,
 };
+use super::tool_execution::{
+    insert_agent_app_tool_execution_runtime_hints, render_agent_app_tool_execution_contract_lines,
+};
+use super::types::AgentAppRuntimeStartTaskRequest;
 use crate::services::agent_app_runtime_capability_catalog_service::{
     resolve_capability_descriptors, AgentAppRuntimeCapabilityDescriptor,
 };
@@ -51,6 +54,7 @@ fn expected_artifact_kind(request: &AgentAppRuntimeStartTaskRequest) -> Option<S
     let expected_output = request.expected_output.as_ref()?.as_object()?;
     [
         "artifactKind",
+        "artifact_kind",
         "artifact_type",
         "artifactType",
         "kind",
@@ -59,6 +63,44 @@ fn expected_artifact_kind(request: &AgentAppRuntimeStartTaskRequest) -> Option<S
     .iter()
     .filter_map(|key| expected_output.get(*key).and_then(Value::as_str))
     .find_map(|value| non_empty(Some(value)))
+}
+
+fn value_string_at_paths(value: Option<&Value>, paths: &[&[&str]]) -> Option<String> {
+    paths.iter().find_map(|path| {
+        let mut current = value?;
+        for key in path.iter() {
+            current = current.get(*key)?;
+        }
+        current.as_str().and_then(|item| non_empty(Some(item)))
+    })
+}
+
+fn content_factory_project_id(request: &AgentAppRuntimeStartTaskRequest) -> Option<String> {
+    value_string_at_paths(
+        request.input.as_ref(),
+        &[
+            &["projectId"][..],
+            &["project_id"][..],
+            &["activeProjectId"][..],
+            &["active_project_id"][..],
+            &["project", "id"][..],
+            &["projectContext", "project", "id"][..],
+            &["project_context", "project", "id"][..],
+        ],
+    )
+    .or_else(|| {
+        value_string_at_paths(
+            request.metadata.as_ref(),
+            &[
+                &["contentFactory", "projectId"][..],
+                &["contentFactory", "project_id"][..],
+                &["content_factory", "projectId"][..],
+                &["content_factory", "project_id"][..],
+                &["projectId"][..],
+                &["project_id"][..],
+            ],
+        )
+    })
 }
 
 fn is_content_factory_runtime_task(request: &AgentAppRuntimeStartTaskRequest) -> bool {
@@ -71,7 +113,7 @@ fn build_agent_app_output_contract(request: &AgentAppRuntimeStartTaskRequest) ->
         return None;
     }
     let artifact_kind = expected_artifact_kind(request)?;
-    Some(json!({
+    let mut contract = json!({
         "producer": "agent_runtime_artifact_metadata",
         "artifact_kind": artifact_kind,
         "artifact_metadata_kind": CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
@@ -80,13 +122,52 @@ fn build_agent_app_output_contract(request: &AgentAppRuntimeStartTaskRequest) ->
         "accepted_patch_fields": [
             "workspace",
             "project",
+            "projectKnowledge",
+            "readiness",
             "sceneTable",
             "contentBatch",
             "scripts",
             "imagePrompts",
+            "strategyReport",
+            "pptOutline",
+            "reviewReport",
+            "riskCheck",
             "assetPack"
         ],
-    }))
+    });
+    if let (Some(contract), Some(project_id)) = (
+        contract.as_object_mut(),
+        content_factory_project_id(request),
+    ) {
+        contract.insert("project_id".to_string(), json!(project_id));
+    }
+    Some(contract)
+}
+
+fn render_content_factory_artifact_requirements(artifact_kind: &str) -> Vec<String> {
+    match artifact_kind {
+        "scene_table" => vec![
+            "- artifactKind=scene_table 时，最终 JSON 必须写入 contentFactoryWorkspacePatch.sceneTable。".to_string(),
+            "- sceneTable.actualCount 必须不小于 expectedOutput.minimumScenarioCount；sceneTable.rows 必须是可物化数组，每条至少包含 scene / dimension / decisionStage / imageBrief。".to_string(),
+            "- imagePrompts 必须随 sceneTable 一起写入；如果 Skill 只返回 evidence / review_pack，也要把 Skill 依据综合成 scene_table workspace patch。".to_string(),
+            "- 只返回 analysis artifact、Markdown 总结或 Skill evidence 不算完成；没有 sceneTable workspace patch 时任务应继续补齐结构化 JSON。".to_string(),
+        ],
+        "content_batch" => vec![
+            "- artifactKind=content_batch 时，最终 JSON 必须写入 contentFactoryWorkspacePatch.contentBatch，并按需要写入 scripts / imagePrompts。".to_string(),
+            "- contentBatch.items 必须是可审核数组；只返回自然语言文案摘要不算完成。".to_string(),
+        ],
+        "script_batch" => vec![
+            "- artifactKind=script_batch 时，最终 JSON 必须写入 contentFactoryWorkspacePatch.scripts，并保留对应 imagePrompts 或场景依据。".to_string(),
+            "- scripts 必须是可审核数组；只返回一个普通分析 artifact 不算完成。".to_string(),
+        ],
+        "strategy_report" => vec![
+            "- artifactKind=strategy_report 时，最终 JSON 必须写入 strategyReport，并按需要写入 pptOutline / riskCheck。".to_string(),
+        ],
+        "review_report" => vec![
+            "- artifactKind=review_report 时，最终 JSON 必须写入 reviewReport，并给出下一轮建议和人工确认依据。".to_string(),
+        ],
+        _ => Vec::new(),
+    }
 }
 
 fn read_object_string(object: &Map<String, Value>, keys: &[&str]) -> Option<String> {
@@ -334,6 +415,10 @@ pub(super) fn build_agent_app_runtime_task_message(
             .to_string(),
     ];
 
+    lines.extend(render_agent_app_tool_execution_contract_lines(
+        request.metadata.as_ref(),
+    ));
+
     if let Some(skill_contract) = build_agent_app_skill_contract(request) {
         lines.extend(render_agent_app_skill_contract_lines(&skill_contract));
     }
@@ -343,6 +428,11 @@ pub(super) fn build_agent_app_runtime_task_message(
             .get("artifact_kind")
             .and_then(Value::as_str)
             .unwrap_or("content_batch");
+        if let Some(project_id) = content_factory_project_id(request) {
+            lines.push(format!(
+                "- patch.projectId 必须等于当前 Agent App 请求的项目 ID：{project_id}；不得改成样例或历史项目 ID。"
+            ));
+        }
         lines.extend([
             "".to_string(),
             "Content Factory Output Contract:".to_string(),
@@ -357,12 +447,13 @@ pub(super) fn build_agent_app_runtime_task_message(
                 .to_string(),
             "- 最终回答的顶层 JSON 必须包含 contentFactoryWorkspacePatch 或 workspacePatch，方便 Host 自动回写当前 App 页面。"
                 .to_string(),
-            "- patch 至少包含 kind / projectId，并按结果类型填写 sceneTable、contentBatch、scripts、imagePrompts 或 assetPack。"
+            "- patch 至少包含 kind / projectId，并按结果类型填写 sceneTable、contentBatch、scripts、imagePrompts、assetPack、strategyReport、pptOutline、reviewReport 或 riskCheck。"
                 .to_string(),
             "- tools / capabilityHints 只是可选能力提示，不能把复合内容工厂任务改写成单一 research / image Skill；业务 requiredSkills 必须先通过 Skill 工具执行，最终仍收敛为 workspace patch。"
                 .to_string(),
             "- 不要只返回自然语言总结；结构化 patch 是 App 自动回写当前页面的事实源。".to_string(),
         ]);
+        lines.extend(render_content_factory_artifact_requirements(artifact_kind));
     }
 
     lines.extend([
@@ -382,6 +473,60 @@ fn insert_string_if_some(map: &mut Map<String, Value>, key: &str, value: Option<
         if !value.is_empty() {
             map.insert(key.to_string(), json!(value));
         }
+    }
+}
+
+fn is_connector_authorization_secret_key(key: &str) -> bool {
+    let normalized = key
+        .chars()
+        .filter(|ch| *ch != '_' && *ch != '-')
+        .collect::<String>()
+        .to_ascii_lowercase();
+    if matches!(
+        normalized.as_str(),
+        "secretbinding" | "tokenexposed" | "sessionscoped"
+    ) {
+        return false;
+    }
+    normalized.contains("token")
+        || normalized.contains("secret")
+        || normalized.contains("apikey")
+        || normalized.contains("credential")
+        || normalized.contains("authorization")
+        || normalized.contains("oauth")
+        || normalized.contains("password")
+}
+
+fn sanitize_connector_authorization_value(value: &Value, key: Option<&str>, depth: usize) -> Value {
+    if key.is_some_and(is_connector_authorization_secret_key) {
+        return json!("[redacted:host_managed_secret]");
+    }
+    if depth >= 8 {
+        return json!("[redacted:depth_limit]");
+    }
+    match value {
+        Value::Array(items) => Value::Array(
+            items
+                .iter()
+                .map(|item| sanitize_connector_authorization_value(item, key, depth + 1))
+                .collect(),
+        ),
+        Value::Object(object) => Value::Object(
+            object
+                .iter()
+                .map(|(item_key, item_value)| {
+                    (
+                        item_key.clone(),
+                        sanitize_connector_authorization_value(
+                            item_value,
+                            Some(item_key.as_str()),
+                            depth + 1,
+                        ),
+                    )
+                })
+                .collect(),
+        ),
+        _ => value.clone(),
     }
 }
 
@@ -601,6 +746,9 @@ pub(super) fn build_agent_app_runtime_metadata(
     if !metadata.is_object() {
         metadata = json!({});
     }
+    let connector_authorization = metadata
+        .get("agent_app_connector_authorization")
+        .map(|value| sanitize_connector_authorization_value(value, None, 0));
 
     let mut app_runtime = json!({
         "surface": "agent_app",
@@ -632,6 +780,12 @@ pub(super) fn build_agent_app_runtime_metadata(
     {
         app_runtime.insert("output_contract".to_string(), output_contract);
     }
+    if let (Some(app_runtime), Some(project_id)) = (
+        app_runtime.as_object_mut(),
+        content_factory_project_id(request),
+    ) {
+        app_runtime.insert("project_id".to_string(), json!(project_id));
+    }
     if let (Some(app_runtime), Some(capability_workflow)) =
         (app_runtime.as_object_mut(), capability_workflow.clone())
     {
@@ -644,10 +798,24 @@ pub(super) fn build_agent_app_runtime_metadata(
     }
 
     if let Some(root) = metadata.as_object_mut() {
+        if let Some(connector_authorization) = connector_authorization.clone() {
+            root.insert(
+                "agent_app_connector_authorization".to_string(),
+                connector_authorization.clone(),
+            );
+        }
         root.insert(
             AGENT_APP_RUNTIME_METADATA_KEY.to_string(),
             app_runtime.clone(),
         );
+        if let Some(project_id) = content_factory_project_id(request) {
+            let content_factory = root
+                .entry("contentFactory".to_string())
+                .or_insert_with(|| json!({}));
+            if let Some(content_factory) = content_factory.as_object_mut() {
+                content_factory.insert("projectId".to_string(), json!(project_id));
+            }
+        }
         let lime_runtime = root
             .entry(LIME_RUNTIME_METADATA_KEY.to_string())
             .or_insert_with(|| json!({}));
@@ -666,6 +834,12 @@ pub(super) fn build_agent_app_runtime_metadata(
                 runtime_summary.insert("task_id".to_string(), json!(task_id));
                 runtime_summary.insert("trace_id".to_string(), json!(trace_id));
                 runtime_summary.insert("task_kind".to_string(), json!(request.task_kind.trim()));
+                if let Some(connector_authorization) = connector_authorization.clone() {
+                    runtime_summary.insert(
+                        "agent_app_connector_authorization".to_string(),
+                        connector_authorization,
+                    );
+                }
             }
         }
         let should_insert_skill_tool_scope = skill_contract.is_some();
@@ -683,6 +857,14 @@ pub(super) fn build_agent_app_runtime_metadata(
                         "agent_app_runtime_output_contract".to_string(),
                         output_contract,
                     );
+                }
+                if let Some(project_id) = content_factory_project_id(request) {
+                    let content_factory = harness
+                        .entry("contentFactory".to_string())
+                        .or_insert_with(|| json!({}));
+                    if let Some(content_factory) = content_factory.as_object_mut() {
+                        content_factory.insert("projectId".to_string(), json!(project_id));
+                    }
                 }
                 insert_agent_app_output_contract_runtime_hints(
                     harness,
@@ -708,6 +890,7 @@ pub(super) fn build_agent_app_runtime_metadata(
         if should_insert_skill_tool_scope {
             insert_agent_app_required_skill_tool_scope(root);
         }
+        insert_agent_app_tool_execution_runtime_hints(root);
         if should_insert_primary_capability_launch {
             if let Some(descriptor) = capability_descriptors.first().copied() {
                 insert_agent_app_capability_launch_metadata(

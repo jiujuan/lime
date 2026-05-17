@@ -98,16 +98,16 @@ export function A2UITaskCardHeader({
   surface = "default",
 }: A2UITaskCardHeaderProps) {
   return (
-    <div className="flex items-start justify-between gap-3">
-      <div className="min-w-0 space-y-1.5">
+    <div className="flex items-start justify-between gap-2">
+      <div className="min-w-0 space-y-0.5">
         <div
           className={cn(
             "font-semibold tracking-tight text-[color:var(--lime-text-strong)]",
             compact && surface === "embedded"
-              ? "text-base leading-6"
+              ? "text-[14px] leading-5"
               : compact
-                ? "text-base leading-6"
-                : "text-lg leading-7",
+                ? "text-[14px] leading-5"
+                : "text-base leading-6",
           )}
         >
           {title}
@@ -116,10 +116,10 @@ export function A2UITaskCardHeader({
           className={cn(
             "text-[color:var(--lime-text-muted)]",
             compact && surface === "embedded"
-              ? "text-[11px] leading-4"
+              ? "text-[12px] leading-4"
               : compact
-                ? "text-xs leading-5"
-                : "text-sm leading-6",
+                ? "text-[12px] leading-4"
+                : "text-[13px] leading-5",
           )}
         >
           {subtitle}

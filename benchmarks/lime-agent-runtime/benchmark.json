@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "lime-harbor-benchmark-v1",
+  "datasetId": "lime-internal-agent-runtime-tasks",
+  "datasetVersion": "2026-05-harbor-mvp",
+  "purpose": "Use Harbor as the trial runner for Lime runtime hill-climbing while Agent QC remains the release gate owner.",
+  "agentQcManifest": "docs/test/agent-qc-scenarios.manifest.json",
+  "harnessManifest": "docs/test/harness-evals.manifest.json",
+  "harbor": {
+    "localPath": "benchmarks/lime-agent-runtime",
+    "baselineCommand": "harbor run -p benchmarks/lime-agent-runtime -a <agent> -m <model> --job-name lime-runtime-baseline-current",
+    "candidateCommand": "LIME_RUNTIME_TOOL_FEEDBACK_PROFILE=v2 harbor run -p benchmarks/lime-agent-runtime -a <agent> -m <model> --job-name lime-runtime-candidate-feedback-v2"
+  },
+  "decisionPolicy": {
+    "primaryMetric": "mean_reward_delta",
+    "required": [
+      "p0_qc_gate_regression_count == 0",
+      "evidence_completeness_rate >= baseline_evidence_completeness_rate",
+      "timeout_rate does not increase"
+    ],
+    "notes": "Candidate promotion still requires npm run agent-qc:check outside Harbor. Harbor reward is benchmark evidence, not a release pass."
+  },
+  "tasks": [
+    {
+      "id": "tool-approval-sandbox-boundary",
+      "scenarioId": "tool-approval-sandbox-boundary",
+      "risk": "P0",
+      "taskDir": "benchmarks/lime-agent-runtime/tool-approval-sandbox-boundary",
+      "taskToml": "benchmarks/lime-agent-runtime/tool-approval-sandbox-boundary/task.toml",
+      "instructionRef": "benchmarks/lime-agent-runtime/tool-approval-sandbox-boundary/instruction.md",
+      "verifierRef": "benchmarks/lime-agent-runtime/tool-approval-sandbox-boundary/tests/checks.mjs",
+      "status": "ready",
+      "requiredEvidence": [
+        "/logs/agent/trajectory.json",
+        "/logs/artifacts/runtime-transcript.json",
+        "/logs/artifacts/approval-sandbox-report.json",
+        "/logs/verifier/reward.json",
+        "/logs/verifier/reward-details.json"
+      ],
+      "failureModes": [
+        "approval bypass",
+        "tool result missing",
+        "timeout without recovery",
+        "unsafe tool exposed"
+      ],
+      "singleVariableExamples": [
+        "tool failure feedback profile",
+        "approval recovery prompt",
+        "sandbox deny error shape"
+      ]
+    }
+  ],
+  "backlog": [
+    {
+      "id": "harness-replay-regression",
+      "source": "docs/test/harness-evals.manifest.json",
+      "reason": "High reuse value, but should be added after the first Harbor task proves the artifact contract."
+    },
+    {
+      "id": "browser-runtime-site-adapter",
+      "source": "docs/test/agent-qc-scenarios.manifest.json",
+      "reason": "Needs DevBridge/browser evidence and should stay separated from deterministic runtime tasks."
+    }
+  ]
+}

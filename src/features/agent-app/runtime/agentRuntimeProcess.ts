@@ -24,18 +24,29 @@ export function buildAgentRuntimeProcessView({
   contract = null,
 }: BuildAgentRuntimeProcessViewOptions = {}): AgentAppRuntimeProcessView {
   const safeEvents = Array.isArray(events) ? events : [];
-  const timeline = buildTimelineItems(safeEvents);
-  const invokedSkillNames = uniqueTextValues(
-    safeEvents.map(extractSkillNameFromEvent),
-  );
   const taskRecord = isRecord(task) ? task : null;
   const resolvedExpectedOutput =
     expectedOutput ?? (taskRecord ? taskRecord.expectedOutput : undefined);
   const resolvedLastInput = lastInput ?? (taskRecord ? taskRecord.input : undefined);
-  const skillNames = uniqueTextValues([
+  const declaredSkillNames = uniqueSkillNames([
     ...collectRequiredSkillNames(task),
     ...collectRequiredSkillNames(resolvedLastInput),
     ...collectRequiredSkillNames(resolvedExpectedOutput),
+  ]);
+  const invokedSkillNames = uniqueSkillNames(
+    [
+      ...safeEvents.map(extractInvokedSkillNameFromEvent),
+      ...collectInvokedSkillNamesFromRuntimeValue(task, declaredSkillNames),
+      ...collectInvokedSkillNamesFromRuntimeValue(snapshot, declaredSkillNames),
+    ],
+    declaredSkillNames,
+  );
+  const timeline = appendMissingSkillTimelineItems(
+    buildTimelineItems(safeEvents),
+    ...invokedSkillNames,
+  );
+  const skillNames = uniqueSkillNames([
+    ...declaredSkillNames,
     ...invokedSkillNames,
   ]);
   const usage = extractUsageFromProcess(safeEvents, snapshot, task);
@@ -306,6 +317,46 @@ function buildTimelineItems(events: unknown[]): AgentAppRuntimeProcessTimelineIt
     items.push(item);
   }
   return items;
+}
+
+function appendMissingSkillTimelineItems(
+  timeline: AgentAppRuntimeProcessTimelineItem[],
+  ...invokedSkillNames: string[]
+): AgentAppRuntimeProcessTimelineItem[] {
+  const missingSkillNames = uniqueSkillNames(invokedSkillNames).filter(
+    (skillName) =>
+      !timeline.some((item) => timelineItemMentionsSkill(item, skillName)),
+  );
+  if (!missingSkillNames.length) {
+    return timeline;
+  }
+  return [
+    ...timeline,
+    ...missingSkillNames.map((skillName) => ({
+      kind: "skill" as const,
+      title: `Skill · ${skillName}`,
+      statusText: "已记录",
+      message: "AgentRuntime 已记录业务 Skill 调用。",
+      detail: "",
+      meta: skillName,
+      collapseKey: `skill:${skillName}`,
+    })),
+  ];
+}
+
+function timelineItemMentionsSkill(
+  item: AgentAppRuntimeProcessTimelineItem,
+  skillName: string,
+): boolean {
+  if (item.kind !== "skill") {
+    return false;
+  }
+  const surface = [item.title, item.message, item.detail, item.meta]
+    .filter(Boolean)
+    .join(" ");
+  return new RegExp(`(^|[^\\w@:/.-])${escapeRegExp(skillName)}([^\\w@:/.-]|$)`).test(
+    surface,
+  );
 }
 
 function collectStream(events: unknown[], targetKind: AgentRuntimeStreamKind): string {
@@ -656,9 +707,10 @@ function collectRequiredSkillNames(value: unknown): string[] {
   if (!isRecord(value)) {
     return [];
   }
+  const includeDirectSkillList = !isRuntimeTaskProjection(value);
   return uniqueTextValues([
     ...collectSkillNamesFromList(value.requiredSkills),
-    ...collectSkillNamesFromList(value.skills),
+    ...(includeDirectSkillList ? collectSkillNamesFromList(value.skills) : []),
     ...collectSkillNamesFromList(value.skillRefs),
     ...collectSkillNamesFromList(recordValue(value, "skillContract")?.requiredSkills),
     ...collectSkillNamesFromList(recordValue(recordValue(value, "input"), "agentTaskContract")?.requiredSkills),
@@ -667,6 +719,13 @@ function collectRequiredSkillNames(value: unknown): string[] {
     ...collectSkillNamesFromList(recordValue(recordValue(value, "metadata"), "contentFactory")?.skillRefs),
     ...collectSkillNamesFromList(recordValue(recordValue(recordValue(value, "metadata"), "contentFactory"), "skillContract")?.requiredSkills),
   ]);
+}
+
+function isRuntimeTaskProjection(value: Record<string, unknown>): boolean {
+  return Boolean(
+    (value.taskId || value.taskStatus || value.threadRead || value.runtimeProcess) &&
+      (value.status || value.taskStatus || value.threadRead || value.result),
+  );
 }
 
 function collectSkillNamesFromList(value: unknown): string[] {
@@ -706,6 +765,29 @@ function extractToolNameFromEvent(event: unknown): string {
   );
 }
 
+function extractInvokedSkillNameFromEvent(event: unknown): string {
+  if (!isRecord(event)) {
+    return "";
+  }
+  const payload = recordValue(event, "payload");
+  const runtimeEvent = readRuntimeEvent(event);
+  const toolName = extractToolNameFromEvent(event);
+  return normalizeSkillNameCandidate(
+    extractSkillNameFromToolName(toolName) ||
+      stringValue(findFirstValueByKeys(event, ["skillName", "skill_name", "command_name"])) ||
+      extractSkillNameFromArguments(readUnknown(runtimeEvent, "arguments")) ||
+      extractSkillNameFromArguments(readUnknown(runtimeEvent, "accumulated_arguments")) ||
+      extractSkillNameFromArguments(readUnknown(runtimeEvent, "accumulatedArguments")) ||
+      extractSkillNameFromArguments(readUnknown(payload, "arguments")) ||
+      extractSkillNameFromArguments(readUnknown(payload, "args")) ||
+      extractSkillNameFromArguments(readUnknown(event, "arguments")) ||
+      extractSkillNameFromText(readString(runtimeEvent, "arguments")) ||
+      extractSkillNameFromText(readString(runtimeEvent, "accumulated_arguments")) ||
+      extractSkillNameFromText(readString(runtimeEvent, "accumulatedArguments")) ||
+      extractSkillNameFromText(readString(event, "message")),
+  );
+}
+
 function extractSkillNameFromEvent(event: unknown): string {
   if (!isRecord(event)) {
     return "";
@@ -727,6 +809,172 @@ function extractSkillNameFromEvent(event: unknown): string {
       extractSkillNameFromText(readString(runtimeEvent, "accumulatedArguments")) ||
       extractSkillNameFromText(readString(payload, "delta")) ||
       extractSkillNameFromText(readString(event, "message")),
+  );
+}
+
+function collectInvokedSkillNamesFromRuntimeValue(
+  value: unknown,
+  declaredSkillNames: string[],
+): string[] {
+  if (!isRecord(value)) {
+    return [];
+  }
+  const threadRead = recordValue(value, "threadRead");
+  return uniqueSkillNames(
+    [
+      ...collectRuntimeProcessInvokedSkillNames(value),
+      ...collectRuntimeProcessInvokedSkillNames(recordValue(value, "runtimeProcess")),
+      ...collectRuntimeProcessInvokedSkillNames(recordValue(value, "process")),
+      ...collectInvokedSkillNamesFromEvents(readRecordArray(value, "events")),
+      ...collectInvokedSkillNamesFromEvents(readRecordArray(value, "taskEvents")),
+      ...collectInvokedSkillNamesFromRuntimeFacts(value, declaredSkillNames),
+      ...collectInvokedSkillNamesFromRuntimeFacts(threadRead, declaredSkillNames),
+    ],
+    declaredSkillNames,
+  );
+}
+
+function collectRuntimeProcessInvokedSkillNames(value: unknown): string[] {
+  if (!isRecord(value)) {
+    return [];
+  }
+  return collectSkillNamesFromList(value.invokedSkillNames);
+}
+
+function collectInvokedSkillNamesFromEvents(events: unknown[]): string[] {
+  return events.map(extractInvokedSkillNameFromEvent);
+}
+
+function collectInvokedSkillNamesFromRuntimeFacts(
+  value: unknown,
+  declaredSkillNames: string[],
+): string[] {
+  if (!isRecord(value)) {
+    return [];
+  }
+  return uniqueSkillNames(
+    [
+      ...collectSkillNamesFromToolCallList(readRecordArray(value, "tool_calls")),
+      ...collectSkillNamesFromToolCallList(readRecordArray(value, "toolCalls")),
+      ...collectSkillNamesFromToolCallList(readRecordArray(value, "toolRequests")),
+      ...collectSkillNamesFromTurns(readRecordArray(value, "turns"), declaredSkillNames),
+      ...collectSkillNamesFromArtifacts(
+        readRecordArray(value, "artifacts"),
+        declaredSkillNames,
+      ),
+    ],
+    declaredSkillNames,
+  );
+}
+
+function collectSkillNamesFromToolCallList(toolCalls: unknown[]): string[] {
+  return toolCalls.map(extractSkillNameFromToolCall);
+}
+
+function collectSkillNamesFromTurns(
+  turns: unknown[],
+  declaredSkillNames: string[],
+): string[] {
+  return uniqueSkillNames(
+    turns.flatMap((turn) =>
+      collectSkillNamesFromNestedRuntimeObject(turn, declaredSkillNames),
+    ),
+    declaredSkillNames,
+  );
+}
+
+function collectSkillNamesFromNestedRuntimeObject(
+  value: unknown,
+  declaredSkillNames: string[],
+  depth = 5,
+): string[] {
+  if (depth < 0) {
+    return [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) =>
+      collectSkillNamesFromNestedRuntimeObject(item, declaredSkillNames, depth - 1),
+    );
+  }
+  if (!isRecord(value)) {
+    return typeof value === "string"
+      ? collectSkillNamesFromText(value, declaredSkillNames)
+      : [];
+  }
+  const names = [
+    extractSkillNameFromToolCall(value),
+    ...collectSkillNamesFromRuntimeTextFields(value, declaredSkillNames),
+  ];
+  for (const [key, child] of Object.entries(value)) {
+    if (isStaticSkillDeclarationKey(key)) {
+      continue;
+    }
+    names.push(
+      ...collectSkillNamesFromNestedRuntimeObject(
+        child,
+        declaredSkillNames,
+        depth - 1,
+      ),
+    );
+  }
+  return uniqueSkillNames(names, declaredSkillNames);
+}
+
+function collectSkillNamesFromArtifacts(
+  artifacts: unknown[],
+  declaredSkillNames: string[],
+): string[] {
+  return uniqueSkillNames(
+    artifacts.flatMap((artifact) =>
+      collectSkillNamesFromNestedRuntimeObject(artifact, declaredSkillNames),
+    ),
+    declaredSkillNames,
+  );
+}
+
+function collectSkillNamesFromRuntimeTextFields(
+  value: Record<string, unknown>,
+  declaredSkillNames: string[],
+): string[] {
+  const textKeys = [
+    "message",
+    "summary",
+    "title",
+    "content",
+    "markdown",
+    "text",
+    "output",
+    "result",
+  ];
+  return uniqueSkillNames(
+    textKeys.flatMap((key) => {
+      const text = value[key];
+      return typeof text === "string"
+        ? collectSkillNamesFromText(text, declaredSkillNames)
+        : [];
+    }),
+    declaredSkillNames,
+  );
+}
+
+function extractSkillNameFromToolCall(value: unknown): string {
+  if (!isRecord(value)) {
+    return "";
+  }
+  const functionRecord = recordValue(value, "function");
+  const toolName =
+    readString(value, "toolName") ||
+    readString(value, "tool_name") ||
+    readString(value, "name") ||
+    readString(functionRecord, "name");
+  return normalizeSkillNameCandidate(
+    extractSkillNameFromToolName(toolName) ||
+      extractSkillNameFromArguments(readUnknown(value, "arguments")) ||
+      extractSkillNameFromArguments(readUnknown(value, "args")) ||
+      extractSkillNameFromArguments(readUnknown(value, "input")) ||
+      extractSkillNameFromArguments(readUnknown(functionRecord, "arguments")) ||
+      extractSkillNameFromText(readString(value, "arguments")) ||
+      extractSkillNameFromText(readString(functionRecord, "arguments")),
   );
 }
 
@@ -752,6 +1000,79 @@ function extractSkillNameFromText(text: string): string {
   return match?.[1] ?? "";
 }
 
+function collectSkillNamesFromText(
+  text: string,
+  declaredSkillNames: string[] = [],
+): string[] {
+  const value = String(text || "").trim();
+  if (!value) {
+    return [];
+  }
+  const names: string[] = [];
+  const parsed = parseJsonValue(value);
+  if (parsed !== null) {
+    names.push(...collectSkillNamesFromStructuredValue(parsed));
+  }
+  const keyedPattern =
+    /["']?(?:skill|skillName|skill_name|command_name)["']?\s*[:=]\s*["']?([@A-Za-z0-9_:/.-]+)/g;
+  for (const match of value.matchAll(keyedPattern)) {
+    names.push(match[1] ?? "");
+  }
+  const explicitSkillPattern =
+    /(?:\bSkill\b|技能)\s*[·:：=-]?\s*["']?([@A-Za-z0-9_:/.-]+)/gi;
+  for (const match of value.matchAll(explicitSkillPattern)) {
+    names.push(match[1] ?? "");
+  }
+  const completedTokenPattern =
+    /\b([@A-Za-z0-9_:/.-]*[-@:/][@A-Za-z0-9_:/.-]*)\b\s+(?:completed|succeeded|finished|done|已完成|完成)/gi;
+  for (const match of value.matchAll(completedTokenPattern)) {
+    names.push(match[1] ?? "");
+  }
+  for (const skillName of declaredSkillNames) {
+    if (!skillName || !value.includes(skillName)) {
+      continue;
+    }
+    if (
+      new RegExp(
+        `${escapeRegExp(skillName)}[\\s\\S]{0,32}(completed|succeeded|finished|done|已完成|完成|调用|执行|recorded|已记录)|` +
+          `(Skill|技能|调用|执行|recorded|已记录)[\\s\\S]{0,32}${escapeRegExp(skillName)}`,
+        "i",
+      ).test(value)
+    ) {
+      names.push(skillName);
+    }
+  }
+  return uniqueSkillNames(names, declaredSkillNames);
+}
+
+function collectSkillNamesFromStructuredValue(
+  value: unknown,
+  depth = 5,
+): string[] {
+  if (depth < 0) {
+    return [];
+  }
+  if (typeof value === "string") {
+    return [extractSkillNameFromText(value)];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) =>
+      collectSkillNamesFromStructuredValue(item, depth - 1),
+    );
+  }
+  if (!isRecord(value)) {
+    return [];
+  }
+  const names: string[] = [];
+  for (const key of ["skill", "skillName", "skill_name", "command_name"]) {
+    names.push(stringValue(value[key]));
+  }
+  for (const child of Object.values(value)) {
+    names.push(...collectSkillNamesFromStructuredValue(child, depth - 1));
+  }
+  return names;
+}
+
 function extractSkillNameFromArguments(value: unknown): string {
   if (typeof value === "string") {
     return extractSkillNameFromText(value);
@@ -775,7 +1096,12 @@ function extractSkillNameFromArguments(value: unknown): string {
 
 function normalizeSkillNameCandidate(value: string): string {
   const text = String(value || "").trim();
-  if (!text || /^Skill$/i.test(text)) {
+  if (
+    !text ||
+    /^(Skill|completed|complete|running|failed|failure|started|succeeded|success|done|工具|技能)$/i.test(
+      text,
+    )
+  ) {
     return "";
   }
   return /^[\w@:/.-]+$/.test(text) ? text : "";
@@ -974,9 +1300,13 @@ function findFirstValueByKeys(value: unknown, keys: string[], depth = 6): unknow
 }
 
 function parseJsonObject(text: string): Record<string, unknown> | null {
+  const parsed = parseJsonValue(text);
+  return isRecord(parsed) ? parsed : null;
+}
+
+function parseJsonValue(text: string): unknown | null {
   try {
-    const parsed = JSON.parse(text);
-    return isRecord(parsed) ? parsed : null;
+    return JSON.parse(text);
   } catch {
     return null;
   }
@@ -1000,6 +1330,71 @@ function uniqueTextValues(values: Array<string | undefined | null>): string[] {
   return Array.from(
     new Set(values.map((value) => String(value || "").trim()).filter(Boolean)),
   );
+}
+
+function uniqueSkillNames(
+  values: Array<string | undefined | null>,
+  declaredSkillNames: string[] = [],
+): string[] {
+  const normalized = uniqueTextValues(
+    values.map((value) => normalizeSkillNameCandidate(String(value || ""))),
+  );
+  const declared = uniqueTextValues(
+    declaredSkillNames.map((value) => normalizeSkillNameCandidate(value)),
+  );
+  return normalized.filter(
+    (value) => !isPartialSkillName(value, normalized, declared),
+  );
+}
+
+function isPartialSkillName(
+  value: string,
+  allValues: string[],
+  declaredSkillNames: string[],
+): boolean {
+  if (!value) {
+    return true;
+  }
+  if (
+    declaredSkillNames.some(
+      (candidate) => candidate !== value && candidate.startsWith(value),
+    )
+  ) {
+    return true;
+  }
+  if (declaredSkillNames.includes(value)) {
+    return false;
+  }
+  return allValues.some(
+    (candidate) =>
+      candidate !== value &&
+      candidate.startsWith(value) &&
+      (/^[-_:/@.]/.test(candidate.slice(value.length)) ||
+        /[-_:/@]/.test(value)),
+  );
+}
+
+function isStaticSkillDeclarationKey(key: string): boolean {
+  return [
+    "requiredSkills",
+    "skills",
+    "skillRefs",
+    "skillContract",
+    "expectedOutput",
+    "agentTaskContract",
+  ].includes(key);
+}
+
+function readRecordArray(value: unknown, key: string): unknown[] {
+  if (!isRecord(value)) {
+    return [];
+  }
+  const item = value[key];
+  return Array.isArray(item) ? item : [];
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function optionalNumberValue(value: unknown): number | undefined {

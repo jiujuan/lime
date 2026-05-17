@@ -559,6 +559,160 @@ describe("P18.5 Host Bridge SDK client", () => {
     invoker.dispose();
   });
 
+  it("应兼容内容工厂现有 Host Bridge facade 并保留回调与调用日志", async () => {
+    const fake = new FakeBridgeWindow();
+    const snapshots: unknown[] = [];
+    const capabilityEvents: unknown[] = [];
+    const invoker = createLimeHostBridgeCapabilityInvoker({
+      appId: "content-factory-app",
+      entryKey: "dashboard",
+      windowRef: fake.windowRef,
+      trustedHostOrigin: "https://lime.host",
+      requestIdPrefix: "content-factory",
+      onSnapshot: (payload) => snapshots.push(payload),
+      onCapabilityEvent: (event) => capabilityEvents.push(event),
+    });
+
+    const send = invoker.send;
+    send("host:toast", { message: "手动消息" }, "manual-toast");
+    expect(latestBridgeRequest(fake)).toMatchObject({
+      type: "host:toast",
+      requestId: "manual-toast",
+      payload: { message: "手动消息" },
+    });
+
+    invoker.ready();
+    expect(latestBridgeRequest(fake)).toMatchObject({ type: "app:ready" });
+
+    const getSnapshot = invoker.getSnapshot;
+    getSnapshot();
+    const snapshotRequest = latestBridgeRequest(fake);
+    expect(snapshotRequest).toMatchObject({
+      type: "host:getSnapshot",
+      requestId: undefined,
+    });
+    fake.emit({
+      protocol: LIME_AGENT_APP_BRIDGE_PROTOCOL,
+      version: LIME_AGENT_APP_BRIDGE_VERSION,
+      type: "host:snapshot",
+      appId: "content-factory-app",
+      entryKey: "dashboard",
+      payload: {
+        app: { appId: "content-factory-app", entryKey: "deliver" },
+        host: { locale: "zh-CN" },
+      },
+    });
+    expect(snapshots).toHaveLength(1);
+
+    const invokePromise = invoker.invoke(
+      {
+        capability: "lime.agent",
+        method: "startTask",
+        args: { title: "生成内容批次" },
+        provenance,
+      },
+      { requestId: "legacy-invoke" },
+    );
+    const invokeRequest = latestBridgeRequest(fake);
+    expect(invokeRequest).toMatchObject({
+      type: "capability:invoke",
+      requestId: "legacy-invoke",
+      entryKey: "deliver",
+      payload: {
+        capability: "lime.agent",
+        method: "startTask",
+        input: { title: "生成内容批次" },
+      },
+    });
+    fake.emit(hostResponse(invokeRequest, { result: buildTaskRecord() }));
+    await expect(invokePromise).resolves.toMatchObject({ taskId: "task-1" });
+
+    const subscribePromise = invoker.subscribe(
+      {
+        capability: "lime.agent",
+        topic: "task",
+        input: { taskId: "task-1" },
+        pollIntervalMs: 700,
+      },
+      { requestId: "legacy-subscribe" },
+    );
+    const subscribeRequest = latestBridgeRequest(fake);
+    expect(subscribeRequest).toMatchObject({
+      type: "capability:subscribe",
+      requestId: "legacy-subscribe",
+    });
+    fake.emit(
+      hostResponse(subscribeRequest, {
+        result: { subscriptionId: "sub-task-1", topic: "task" },
+      }),
+    );
+    await expect(subscribePromise).resolves.toMatchObject({
+      subscriptionId: "sub-task-1",
+    });
+
+    fake.emit({
+      protocol: LIME_AGENT_APP_BRIDGE_PROTOCOL,
+      version: LIME_AGENT_APP_BRIDGE_VERSION,
+      type: "capability:event",
+      appId: "content-factory-app",
+      entryKey: "deliver",
+      payload: {
+        subscriptionId: "sub-task-1",
+        capability: "lime.agent",
+        eventType: "task:update",
+        taskId: "task-1",
+      },
+    });
+    expect(capabilityEvents).toEqual([
+      expect.objectContaining({
+        subscriptionId: "sub-task-1",
+        eventType: "task:update",
+      }),
+    ]);
+
+    const unsubscribePromise = invoker.unsubscribe("sub-task-1", {
+      requestId: "legacy-unsubscribe",
+    });
+    const unsubscribeRequest = latestBridgeRequest(fake);
+    fake.emit(
+      hostResponse(unsubscribeRequest, {
+        result: { subscriptionId: "sub-task-1", unsubscribed: true },
+      }),
+    );
+    await expect(unsubscribePromise).resolves.toMatchObject({
+      unsubscribed: true,
+    });
+
+    const requestPromise = invoker.request(
+      "host:download",
+      { url: "/exports/content.csv" },
+      { requestId: "legacy-request" },
+    );
+    const request = latestBridgeRequest(fake);
+    fake.emit(hostResponse(request, { result: { downloaded: true } }));
+    await expect(requestPromise).resolves.toEqual({ downloaded: true });
+
+    const downloadPromise = invoker.download(
+      "/exports/content.csv",
+      "content.csv",
+      { requestId: "legacy-download" },
+    );
+    const downloadRequest = latestBridgeRequest(fake);
+    fake.emit(hostResponse(downloadRequest, { result: { downloaded: true } }));
+    await expect(downloadPromise).resolves.toEqual({ downloaded: true });
+
+    const getCallLog = invoker.getCallLog;
+    expect(getCallLog()).toEqual([
+      {
+        capability: "lime.agent",
+        method: "startTask",
+        args: { title: "生成内容批次" },
+      },
+    ]);
+    expect(invoker.pendingRequestCount).toBe(0);
+    invoker.dispose();
+  });
+
   it("内容工厂主链应能通过标准 Host Bridge SDK client 完成 task 与写回", async () => {
     const fake = new FakeBridgeWindow();
     const invoker = createLimeHostBridgeCapabilityInvoker({

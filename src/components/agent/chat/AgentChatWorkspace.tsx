@@ -5612,7 +5612,12 @@ export function AgentChatWorkspace({
       isSessionHydrating ||
       taskCenterDraftSurfaceActiveRef.current ||
       isTaskCenterDraftTabActive ||
-      initialPendingServiceSkillLaunchSignature
+      initialPendingServiceSkillLaunchSignature ||
+      (initialDispatchKey &&
+        (isBootstrapDispatchPending ||
+          messages.length === 0 ||
+          isSending ||
+          queuedTurns.length > 0))
     ) {
       return;
     }
@@ -5683,11 +5688,16 @@ export function AgentChatWorkspace({
     agentEntry,
     handleOpenTaskTopic,
     hasDisplayMessages,
+    initialDispatchKey,
     initialPendingServiceSkillLaunchSignature,
+    isBootstrapDispatchPending,
     isAutoRestoringSession,
     isSessionHydrating,
+    isSending,
     isTaskCenterDraftTabActive,
+    messages.length,
     normalizedInitialSessionId,
+    queuedTurns.length,
     sessionId,
     shouldHideDetachedTaskCenterTabs,
     taskCenterDetachedTopicId,
@@ -7006,7 +7016,7 @@ export function AgentChatWorkspace({
     const shouldRenderTopBar =
       !hideTopBar &&
       (!shouldRenderBrandedEmptyState || shouldUseBrowserWorkspaceHomeChrome);
-    const shouldRenderInlineA2UI = isSpecializedThemeMode;
+    const shouldRenderInlineA2UI = true;
 
     const shouldUseTeamPrimaryChatPanelWidth =
       layoutMode === "chat-canvas" &&
@@ -7048,7 +7058,6 @@ export function AgentChatWorkspace({
     isPreparingSend,
     isSending,
     isSessionHydrating,
-    isSpecializedThemeMode,
     isThemeWorkbench,
     layoutMode,
     taskCenterDraftSendRequest,

@@ -1,7 +1,7 @@
+use super::common::{agent_app_runtime_event_name, CONTENT_FACTORY_WORKSPACE_PATCH_KIND};
 use super::types::{AgentAppRuntimeTaskEvent, AgentAppRuntimeTaskSnapshot};
-use super::{agent_app_runtime_event_name, CONTENT_FACTORY_WORKSPACE_PATCH_KIND};
 use crate::commands::aster_agent_cmd::{
-    AgentRuntimeThreadArtifactView, AgentRuntimeThreadReadModel,
+    AgentRuntimeThreadArtifactView, AgentRuntimeThreadReadModel, AgentRuntimeThreadToolCallView,
 };
 use chrono::Utc;
 use serde_json::{json, Value};
@@ -67,6 +67,9 @@ fn is_content_factory_workspace_patch_kind(value: &str) -> bool {
             | "contentFactoryWorkspacePatch"
             | "workspace_patch"
             | "workspacePatch"
+            | "content_batch"
+            | "strategy_report"
+            | "review_report"
     )
 }
 
@@ -74,10 +77,16 @@ fn has_content_factory_workspace_patch_fields(value: &Value) -> bool {
     value.as_object().is_some_and(|object| {
         object.contains_key("workspace")
             || object.contains_key("project")
+            || object.contains_key("projectKnowledge")
+            || object.contains_key("readiness")
             || object.contains_key("sceneTable")
             || object.contains_key("contentBatch")
             || object.contains_key("scripts")
             || object.contains_key("imagePrompts")
+            || object.contains_key("strategyReport")
+            || object.contains_key("pptOutline")
+            || object.contains_key("reviewReport")
+            || object.contains_key("riskCheck")
             || object.contains_key("assetPack")
     })
 }
@@ -94,6 +103,7 @@ fn extract_content_factory_workspace_patch(metadata: Option<&Value>) -> Option<V
 
     let artifact_kind = metadata
         .get("artifactType")
+        .or_else(|| metadata.get("artifactKind"))
         .or_else(|| metadata.get("artifact_type"))
         .or_else(|| metadata.get("kind"))
         .or_else(|| metadata.get("outputKind"))
@@ -105,6 +115,60 @@ fn extract_content_factory_workspace_patch(metadata: Option<&Value>) -> Option<V
     }
 
     None
+}
+
+fn repair_unescaped_string_quotes(value: &str) -> String {
+    let chars = value.chars().collect::<Vec<_>>();
+    let mut output = String::with_capacity(value.len());
+    let mut in_string = false;
+    let mut escaped = false;
+
+    for (index, ch) in chars.iter().copied().enumerate() {
+        if escaped {
+            output.push(ch);
+            escaped = false;
+            continue;
+        }
+        if in_string && ch == '\\' {
+            output.push(ch);
+            escaped = true;
+            continue;
+        }
+        if ch == '"' {
+            if !in_string {
+                in_string = true;
+                output.push(ch);
+                continue;
+            }
+
+            let next = chars
+                .iter()
+                .skip(index + 1)
+                .find(|candidate| !candidate.is_whitespace())
+                .copied();
+            if matches!(next, None | Some(',' | '}' | ']' | ':')) {
+                in_string = false;
+                output.push(ch);
+            } else {
+                output.push('\\');
+                output.push(ch);
+            }
+            continue;
+        }
+        output.push(ch);
+    }
+
+    output
+}
+
+fn parse_json_value_candidate(candidate: &str) -> Option<Value> {
+    serde_json::from_str::<Value>(candidate).ok().or_else(|| {
+        let repaired = repair_unescaped_string_quotes(candidate);
+        if repaired == candidate {
+            return None;
+        }
+        serde_json::from_str::<Value>(&repaired).ok()
+    })
 }
 
 fn parse_json_object_from_markdown(value: &str) -> Option<Value> {
@@ -119,10 +183,10 @@ fn parse_json_object_from_markdown(value: &str) -> Option<Value> {
         trimmed.to_string()
     };
 
-    serde_json::from_str::<Value>(&candidate).ok().or_else(|| {
+    parse_json_value_candidate(&candidate).or_else(|| {
         let start = candidate.find('{')?;
         let end = candidate.rfind('}')?;
-        serde_json::from_str::<Value>(&candidate[start..=end]).ok()
+        parse_json_value_candidate(&candidate[start..=end])
     })
 }
 
@@ -162,6 +226,94 @@ fn build_artifact_event_payload(artifact: &AgentRuntimeThreadArtifactView) -> Op
         }));
     }
     Some(artifact_value)
+}
+
+fn build_tool_call_event_payload(tool_call: &AgentRuntimeThreadToolCallView) -> Option<Value> {
+    let mut payload = serde_json::to_value(tool_call).ok()?;
+    if let Some(object) = payload.as_object_mut() {
+        object.insert("source".to_string(), json!("agent_runtime_thread_read"));
+        if let Some(output) = tool_call.output_preview.as_ref() {
+            object.insert("outputPreview".to_string(), json!(output));
+        }
+        if let Some(evidence_ref) = tool_call.evidence_refs.first() {
+            object.insert("evidenceRef".to_string(), json!(evidence_ref));
+        }
+    }
+    Some(payload)
+}
+
+fn tool_call_occurred_at(tool_call: &AgentRuntimeThreadToolCallView) -> Option<String> {
+    tool_call
+        .finished_at
+        .clone()
+        .or_else(|| tool_call.updated_at.clone())
+        .or_else(|| tool_call.started_at.clone())
+}
+
+fn value_at_path<'a>(value: Option<&'a Value>, path: &[&str]) -> Option<&'a Value> {
+    path.iter()
+        .try_fold(value?, |current, key| current.get(*key))
+}
+
+fn string_at_path(value: Option<&Value>, path: &[&str]) -> Option<String> {
+    value_at_path(value, path)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn bool_at_path(value: Option<&Value>, path: &[&str]) -> Option<bool> {
+    value_at_path(value, path).and_then(Value::as_bool)
+}
+
+fn connector_authorization_request_from_runtime_summary(
+    runtime_summary: Option<&Value>,
+) -> Option<&Value> {
+    let request = value_at_path(
+        runtime_summary,
+        &["agent_app_connector_authorization", "request"],
+    )?;
+    if string_at_path(Some(request), &["capability"]).as_deref() != Some("lime.connectors") {
+        return None;
+    }
+    if string_at_path(Some(request), &["method"]).as_deref() != Some("requestAuth") {
+        return None;
+    }
+    Some(request)
+}
+
+fn connector_authorization_event_payload(runtime_summary: Option<&Value>) -> Option<Value> {
+    let request = connector_authorization_request_from_runtime_summary(runtime_summary)?;
+    let connector_id = string_at_path(Some(request), &["connectorId", "connector_id"])
+        .or_else(|| string_at_path(Some(request), &["input", "connectorId"]))
+        .or_else(|| string_at_path(Some(request), &["input", "connector_id"]))?;
+    Some(json!({
+        "source": "agent_app_connector_authorization",
+        "authorizationGate": {
+            "status": "requires_host_authorization",
+            "owner": "lime_connector_policy",
+            "connectorId": connector_id.clone(),
+            "secretBinding": string_at_path(Some(request), &["policy", "secretBinding"])
+                .or_else(|| string_at_path(Some(request), &["policy", "secret_binding"]))
+                .unwrap_or_else(|| "host_managed".to_string()),
+            "tokenExposed": bool_at_path(Some(request), &["policy", "tokenExposed"])
+                .or_else(|| bool_at_path(Some(request), &["policy", "token_exposed"]))
+                .unwrap_or(false),
+            "sessionScoped": bool_at_path(Some(request), &["policy", "sessionScoped"])
+                .or_else(|| bool_at_path(Some(request), &["policy", "session_scoped"]))
+                .unwrap_or(true),
+        },
+        "request": {
+            "capability": "lime.connectors",
+            "method": "requestAuth",
+            "appId": string_at_path(Some(request), &["appId", "app_id"]),
+            "entryKey": string_at_path(Some(request), &["entryKey", "entry_key"]),
+            "connectorId": connector_id,
+            "reason": string_at_path(Some(request), &["reason"]),
+            "idempotencyKey": string_at_path(Some(request), &["idempotencyKey", "idempotency_key"]),
+        }
+    }))
 }
 
 pub(super) fn build_agent_app_runtime_task_events(
@@ -204,6 +356,31 @@ pub(super) fn build_agent_app_runtime_task_events(
         })),
     );
 
+    if let Some(payload) =
+        connector_authorization_event_payload(thread_read.runtime_summary.as_ref())
+    {
+        let connector_id = payload
+            .get("authorizationGate")
+            .and_then(|gate| gate.get("connectorId"))
+            .and_then(Value::as_str)
+            .unwrap_or("unknown")
+            .to_string();
+        events.push(AgentAppRuntimeTaskEvent {
+            id: format!("task:blocked:connector_authorization:{connector_id}"),
+            event_type: "task:blocked".to_string(),
+            status: "requires_host_authorization".to_string(),
+            message: format!("连接器 {connector_id} 需要 Lime Host 授权"),
+            severity: None,
+            turn_id: thread_read.active_turn_id.clone(),
+            request_id: Some(format!("connector_authorization:{connector_id}")),
+            tool_name: None,
+            evidence_ref: None,
+            artifact_ref: None,
+            occurred_at: thread_read.updated_at.clone(),
+            payload: Some(payload),
+        });
+    }
+
     for pending_request in &thread_read.pending_requests {
         let message = pending_request
             .title
@@ -244,6 +421,7 @@ pub(super) fn build_agent_app_runtime_task_events(
     }
 
     for tool_call in &thread_read.tool_calls {
+        let evidence_ref = tool_call.evidence_refs.first().cloned();
         events.push(AgentAppRuntimeTaskEvent {
             id: format!("task:toolCall:{}", tool_call.tool_call_id),
             event_type: "task:toolCall".to_string(),
@@ -257,10 +435,10 @@ pub(super) fn build_agent_app_runtime_task_events(
             turn_id: Some(tool_call.turn_id.clone()),
             request_id: None,
             tool_name: Some(tool_call.tool_name.clone()),
-            evidence_ref: None,
+            evidence_ref,
             artifact_ref: None,
-            occurred_at: None,
-            payload: serde_json::to_value(tool_call).ok(),
+            occurred_at: tool_call_occurred_at(tool_call),
+            payload: build_tool_call_event_payload(tool_call),
         });
     }
 

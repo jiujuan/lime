@@ -742,7 +742,7 @@ describe("StreamingRenderer", () => {
 
     const card = container.querySelector('[data-testid="a2ui-card"]');
     expect(card?.getAttribute("data-compact")).toBe("true");
-    expect(card?.className).toContain("max-w-[760px]");
+    expect(card?.className).toContain("max-w-[432px]");
   });
 
   it("历史内联 A2UI 应只读回显并移除提交回调", () => {
@@ -1179,7 +1179,7 @@ describe("StreamingRenderer", () => {
     ).toBe("grouped-inline");
   });
 
-  it("提升为输入区 A2UI 的待处理问答不应继续渲染内联 DecisionPanel", () => {
+  it("提升为对话内 A2UI 的待处理问答应渲染为可提交卡片", () => {
     const { container } = renderHarness({
       content: "",
       actionRequests: [
@@ -1204,6 +1204,14 @@ describe("StreamingRenderer", () => {
     expect(
       container.querySelectorAll('[data-testid="decision-panel"]'),
     ).toHaveLength(1);
+    expect(container.querySelectorAll('[data-testid="a2ui-card"]')).toHaveLength(
+      1,
+    );
+    expect(
+      container
+        .querySelector('[data-testid="a2ui-card"]')
+        ?.getAttribute("data-has-on-submit"),
+    ).toBe("yes");
   });
 
   it("已排队的 ask_user 应继续以内联只读 A2UI 卡片回显", () => {

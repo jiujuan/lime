@@ -142,3 +142,7 @@ governance/
 src-tauri/crates/aster-rust/target/
 
 playwright*
+
+benchmarks/*
+!benchmarks/lime-agent-runtime/
+!benchmarks/lime-agent-runtime/**

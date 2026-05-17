@@ -13,19 +13,21 @@ use crate::conversation::message::{Message, MessageContent, ToolRequest};
 use crate::conversation::Conversation;
 use crate::model::ModelConfig;
 use crate::providers::base::{stream_from_single_message, MessageStream, Provider, ProviderUsage};
+use crate::providers::canonical::maybe_get_canonical_model;
 use crate::providers::errors::ProviderError;
 use crate::providers::toolshim::{
     augment_message_with_tool_calls, convert_tool_messages_to_text,
     modify_system_prompt_for_tool_json, OllamaInterpreter,
 };
 use crate::session_context::current_turn_context;
+use crate::tools::VIEW_IMAGE_TOOL_NAME;
 
 use crate::agents::code_execution_extension::EXTENSION_NAME as CODE_EXECUTION_EXTENSION;
 use crate::agents::subagent_tool::AGENT_TOOL_NAME;
 use crate::session::{apply_session_update, query_session, SessionStore, TokenStatsUpdate};
 #[cfg(test)]
 use crate::session::{SessionManager, SessionType, TurnContextOverride};
-use rmcp::model::Tool;
+use rmcp::model::{Content, Tool};
 
 const LIME_RUNTIME_METADATA_KEY: &str = "lime_runtime";
 const LIME_RUNTIME_TOOL_SURFACE_KEY: &str = "tool_surface";
@@ -33,7 +35,15 @@ const LIME_RUNTIME_IMAGE_INPUT_POLICY_KEY: &str = "image_input_policy";
 const TURN_TOOL_SURFACE_DIRECT_ANSWER: &str = "direct_answer";
 const TURN_TOOL_SURFACE_LOCAL_WORKSPACE: &str = "local_workspace";
 const TURN_TOOL_SURFACE_COMPACT_TOOLS: &str = "compact_tools";
-const LOCAL_WORKSPACE_TOOL_NAMES: &[&str] = &["Bash", "Read", "Write", "Edit", "Glob", "Grep"];
+const LOCAL_WORKSPACE_TOOL_NAMES: &[&str] = &[
+    "Bash",
+    "Read",
+    VIEW_IMAGE_TOOL_NAME,
+    "Write",
+    "Edit",
+    "Glob",
+    "Grep",
+];
 const COMPACT_TOOL_SURFACE_TOOL_NAMES: &[&str] = &[
     "ToolSearch",
     "ListMcpResourcesTool",
@@ -41,6 +51,7 @@ const COMPACT_TOOL_SURFACE_TOOL_NAMES: &[&str] = &[
     "extensionmanager__search_available_extensions",
     "extensionmanager__manage_extensions",
     "Read",
+    VIEW_IMAGE_TOOL_NAME,
     "Glob",
     "Grep",
     "Bash",
@@ -81,6 +92,28 @@ fn image_input_policy_disables_provider_images() -> bool {
     provider_supports_vision == Some(false) || dropped_image_count > 0
 }
 
+fn model_config_supports_image_input(
+    provider_name: &str,
+    model_config: &ModelConfig,
+) -> Option<bool> {
+    maybe_get_canonical_model(provider_name, &model_config.model_name).map(|model| {
+        model
+            .input_modalities
+            .iter()
+            .any(|modality| modality.eq_ignore_ascii_case("image"))
+    })
+}
+
+fn filter_tools_for_image_input_support(
+    mut tools: Vec<Tool>,
+    model_supports_image_input: Option<bool>,
+) -> Vec<Tool> {
+    if model_supports_image_input == Some(false) || image_input_policy_disables_provider_images() {
+        tools.retain(|tool| tool.name.as_ref() != VIEW_IMAGE_TOOL_NAME);
+    }
+    tools
+}
+
 fn strip_images_for_text_only_provider(messages: &[Message]) -> Conversation {
     let mut removed_total = 0usize;
     let stripped_messages = messages
@@ -88,14 +121,32 @@ fn strip_images_for_text_only_provider(messages: &[Message]) -> Conversation {
         .cloned()
         .map(|mut message| {
             let mut removed_from_message = 0usize;
-            message.content.retain(|content| {
-                if matches!(content, MessageContent::Image(_)) {
-                    removed_from_message += 1;
-                    false
-                } else {
-                    true
+
+            let mut stripped_content = Vec::with_capacity(message.content.len());
+            for mut content in std::mem::take(&mut message.content) {
+                match &mut content {
+                    MessageContent::Image(_) => {
+                        removed_from_message += 1;
+                    }
+                    MessageContent::ToolResponse(tool_response) => {
+                        if let Ok(result) = tool_response.tool_result.as_mut() {
+                            let before = result.content.len();
+                            result.content.retain(|content| content.as_image().is_none());
+                            let removed_from_tool_result = before.saturating_sub(result.content.len());
+                            if removed_from_tool_result > 0 {
+                                removed_from_message += removed_from_tool_result;
+                                result.content.push(Content::text(format!(
+                                    "[系统提示] 这个工具结果包含 {} 张图片，但当前模型不支持图片输入；图片已在发送给模型前省略。",
+                                    removed_from_tool_result
+                                )));
+                            }
+                        }
+                        stripped_content.push(content);
+                    }
+                    _ => stripped_content.push(content),
                 }
-            });
+            }
+            message.content = stripped_content;
 
             if removed_from_message > 0 {
                 removed_total += removed_from_message;
@@ -393,6 +444,15 @@ impl Agent {
         tools = filter_tools_for_turn_surface(tools, turn_tool_surface_mode.as_deref());
         let (turn_allowed_tools, turn_disallowed_tools) = resolve_turn_tool_scope();
         tools = filter_tools_for_turn_scope(tools, &turn_allowed_tools, &turn_disallowed_tools);
+        let provider_name = self
+            .provider()
+            .await
+            .ok()
+            .map(|provider| provider.get_name().to_string());
+        let model_supports_image_input = provider_name
+            .as_deref()
+            .and_then(|name| model_config_supports_image_input(name, model_config));
+        tools = filter_tools_for_image_input_support(tools, model_supports_image_input);
         let subagents_enabled = tools.iter().any(|tool| tool.name == AGENT_TOOL_NAME);
 
         // Stable tool ordering is important for multi session prompt caching.
@@ -1267,6 +1327,31 @@ mod tests {
         }
     }
 
+    #[test]
+    fn model_config_supports_image_input_uses_canonical_modalities() {
+        assert_eq!(
+            model_config_supports_image_input(
+                "openai",
+                &ModelConfig::new("gpt-5.2").expect("model config"),
+            ),
+            Some(true)
+        );
+        assert_eq!(
+            model_config_supports_image_input(
+                "deepseek",
+                &ModelConfig::new("deepseek-r1").expect("model config"),
+            ),
+            Some(false)
+        );
+        assert_eq!(
+            model_config_supports_image_input(
+                "unknown-provider",
+                &ModelConfig::new("unknown-model").expect("model config"),
+            ),
+            None
+        );
+    }
+
     #[tokio::test]
     async fn prepare_tools_and_prompt_hides_all_tools_for_direct_answer_turn_surface(
     ) -> anyhow::Result<()> {
@@ -1662,6 +1747,18 @@ mod tests {
             Message::user()
                 .with_text("请分析截图")
                 .with_image("aGVsbG8=", "image/png"),
+            Message::user().with_tool_response(
+                "tool-image",
+                Ok(CallToolResult {
+                    content: vec![
+                        Content::text("Viewed image: sample.png"),
+                        Content::image("aGVsbG8=", "image/png"),
+                    ],
+                    structured_content: None,
+                    is_error: Some(false),
+                    meta: None,
+                }),
+            ),
             Message::assistant().with_text("上一轮回复"),
         ];
 
@@ -1696,6 +1793,27 @@ mod tests {
         assert!(observed[0][0]
             .as_concat_text()
             .contains("当前模型不支持图片输入"));
+        let tool_response = observed[0]
+            .iter()
+            .flat_map(|message| message.content.iter())
+            .find_map(|content| match content {
+                MessageContent::ToolResponse(response) => Some(response),
+                _ => None,
+            })
+            .expect("tool response should stay in history");
+        let result = tool_response
+            .tool_result
+            .as_ref()
+            .expect("tool response result should stay successful");
+        assert!(result
+            .content
+            .iter()
+            .all(|content| content.as_image().is_none()));
+        assert!(result.content.iter().any(|content| {
+            content
+                .as_text()
+                .is_some_and(|text| text.text.contains("工具结果包含 1 张图片"))
+        }));
 
         Ok(())
     }

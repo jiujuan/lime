@@ -524,6 +524,42 @@ fn build_tool_image_from_data_url(raw: &str, origin: &str) -> Option<TauriToolIm
     })
 }
 
+fn build_tool_image_from_base64_parts(
+    data: &str,
+    mime_type: &str,
+    origin: &str,
+) -> Option<TauriToolImage> {
+    let normalized_data = data.trim();
+    let normalized_mime_type = mime_type.trim();
+    if normalized_data.is_empty() || !normalized_mime_type.starts_with("image/") {
+        return None;
+    }
+
+    Some(TauriToolImage {
+        src: format!("data:{normalized_mime_type};base64,{normalized_data}"),
+        mime_type: Some(normalized_mime_type.to_string()),
+        origin: Some(origin.to_string()),
+    })
+}
+
+fn build_tool_image_from_image_content_object(
+    obj: &serde_json::Map<String, serde_json::Value>,
+) -> Option<TauriToolImage> {
+    let content_type = obj.get("type").and_then(serde_json::Value::as_str)?;
+    if content_type != "image" {
+        return None;
+    }
+
+    let data = obj.get("data").and_then(serde_json::Value::as_str)?;
+    let mime_type = obj
+        .get("mimeType")
+        .or_else(|| obj.get("mime_type"))
+        .or_else(|| obj.get("mediaType"))
+        .or_else(|| obj.get("media_type"))
+        .and_then(serde_json::Value::as_str)?;
+    build_tool_image_from_base64_parts(data, mime_type, "tool_content")
+}
+
 fn extract_data_urls_from_text(text: &str) -> Vec<String> {
     const PREFIX: &str = "data:image/";
     let mut urls = Vec::new();
@@ -624,6 +660,11 @@ fn collect_tool_result_images(
                 }
             }
             serde_json::Value::Object(obj) => {
+                push_tool_image_if_new(
+                    target,
+                    seen_sources,
+                    build_tool_image_from_image_content_object(obj),
+                );
                 for key in ["image_url", "url", "data"] {
                     if target.len() >= TOOL_RESULT_MAX_IMAGES {
                         truncated = true;
@@ -2550,6 +2591,30 @@ mod tests {
         let extracted = extract_tool_result_data(&payload);
         assert_eq!(extracted.images.len(), 1);
         assert_eq!(extracted.images[0].src, "data:image/png;base64,aGVsbG8=");
+    }
+
+    #[test]
+    fn test_extract_tool_result_data_extracts_rmcp_image_content() {
+        let payload = serde_json::json!({
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Viewed image: sample.png"
+                },
+                {
+                    "type": "image",
+                    "data": "aGVsbG8=",
+                    "mimeType": "image/png"
+                }
+            ]
+        });
+
+        let extracted = extract_tool_result_data(&payload);
+        assert!(extracted.output.contains("Viewed image: sample.png"));
+        assert_eq!(extracted.images.len(), 1);
+        assert_eq!(extracted.images[0].src, "data:image/png;base64,aGVsbG8=");
+        assert_eq!(extracted.images[0].mime_type.as_deref(), Some("image/png"));
+        assert_eq!(extracted.images[0].origin.as_deref(), Some("tool_content"));
     }
 
     #[test]

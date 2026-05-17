@@ -84,6 +84,85 @@ fn format_permission_profile_keys(values: &[String], fallback: &str) -> String {
     }
 }
 
+fn is_connector_authorization_runtime_secret_key(key: &str) -> bool {
+    let normalized = key
+        .chars()
+        .filter(|ch| *ch != '_' && *ch != '-')
+        .collect::<String>()
+        .to_ascii_lowercase();
+    if matches!(
+        normalized.as_str(),
+        "secretbinding" | "tokenexposed" | "sessionscoped"
+    ) {
+        return false;
+    }
+    normalized.contains("token")
+        || normalized.contains("secret")
+        || normalized.contains("apikey")
+        || normalized.contains("credential")
+        || normalized.contains("authorization")
+        || normalized.contains("oauth")
+        || normalized.contains("password")
+}
+
+fn sanitize_connector_authorization_runtime_value(
+    value: &Value,
+    key: Option<&str>,
+    depth: usize,
+) -> Value {
+    if key.is_some_and(is_connector_authorization_runtime_secret_key) {
+        return json!("[redacted:host_managed_secret]");
+    }
+    if depth >= 8 {
+        return json!("[redacted:depth_limit]");
+    }
+    match value {
+        Value::Array(items) => Value::Array(
+            items
+                .iter()
+                .map(|item| sanitize_connector_authorization_runtime_value(item, key, depth + 1))
+                .collect(),
+        ),
+        Value::Object(object) => Value::Object(
+            object
+                .iter()
+                .map(|(item_key, item_value)| {
+                    (
+                        item_key.clone(),
+                        sanitize_connector_authorization_runtime_value(
+                            item_value,
+                            Some(item_key.as_str()),
+                            depth + 1,
+                        ),
+                    )
+                })
+                .collect(),
+        ),
+        _ => value.clone(),
+    }
+}
+
+fn sanitize_runtime_summary_for_evidence_pack(runtime_summary: Option<&Value>) -> Option<Value> {
+    let mut sanitized = runtime_summary?.clone();
+    let Some(object) = sanitized.as_object_mut() else {
+        return Some(sanitized);
+    };
+
+    for key in [
+        "agent_app_connector_authorization",
+        "agentAppConnectorAuthorization",
+    ] {
+        if let Some(value) = object.get(key).cloned() {
+            object.insert(
+                key.to_string(),
+                sanitize_connector_authorization_runtime_value(&value, None, 0),
+            );
+        }
+    }
+
+    Some(sanitized)
+}
+
 pub(crate) fn build_thread_runtime_facts_json(thread_read: &AgentRuntimeThreadReadModel) -> Value {
     json!({
         "profileStatus": thread_read.profile_status,
@@ -106,7 +185,7 @@ pub(crate) fn build_thread_runtime_facts_json(thread_read: &AgentRuntimeThreadRe
         "limitState": thread_read.limit_state,
         "costState": thread_read.cost_state,
         "limitEvent": thread_read.limit_event,
-        "runtimeSummary": thread_read.runtime_summary,
+        "runtimeSummary": sanitize_runtime_summary_for_evidence_pack(thread_read.runtime_summary.as_ref()),
         "permissionState": thread_read.permission_state,
         "oemPolicy": thread_read.oem_policy,
         "auxiliaryTaskRuntime": thread_read.auxiliary_task_runtime

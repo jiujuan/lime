@@ -23,6 +23,10 @@ describe("mockPriorityCommands", () => {
       false,
     );
     expect(shouldPreferMockInBrowser("close_webview_panel")).toBe(true);
+    expect(shouldPreferMockInBrowser("agent_app_list_installed")).toBe(false);
+    expect(shouldPreferMockInBrowser("agent_app_inspect_local_package")).toBe(
+      false,
+    );
     expect(shouldPreferMockInBrowser("agent_app_start_ui_runtime")).toBe(false);
     expect(shouldPreferMockInBrowser("agent_app_get_ui_runtime_status")).toBe(
       false,
@@ -67,6 +71,15 @@ describe("mockPriorityCommands", () => {
     expect(
       shouldDisallowMockFallbackInBrowser("agent_app_runtime_start_task"),
     ).toBe(true);
+    expect(
+      shouldDisallowMockFallbackInBrowser("agent_app_inspect_local_package"),
+    ).toBe(true);
+    expect(
+      shouldDisallowMockFallbackInBrowser("agent_app_save_installed_state"),
+    ).toBe(true);
+    expect(shouldDisallowMockFallbackInBrowser("agent_app_list_installed")).toBe(
+      true,
+    );
     expect(
       shouldDisallowMockFallbackInBrowser("agent_app_start_ui_runtime"),
     ).toBe(true);

@@ -28,6 +28,7 @@ export interface MessageListProps {
   sessionId?: string | null;
   messages: Message[];
   leadingContent?: React.ReactNode;
+  trailingContent?: React.ReactNode;
   emptyStateVariant?: "default" | "task-center";
   turns?: AgentThreadTurn[];
   threadItems?: AgentThreadItem[];
@@ -103,7 +104,7 @@ export interface MessageListProps {
   shouldCollapseCodeBlock?: (language: string, code: string) => boolean;
   /** 代码块点击回调（用于在画布中显示） */
   onCodeBlockClick?: (language: string, code: string) => void;
-  /** 是否将待处理问答提升为输入区 A2UI 表单 */
+  /** 是否将待处理问答提升为对话内 A2UI 表单 */
   promoteActionRequestsToA2UI?: boolean;
   /** 会话是否仍在自动恢复 */
   isRestoringSession?: boolean;
@@ -124,7 +125,7 @@ export interface MessageListProps {
   focusedTimelineItemId?: string | null;
   /** 触发 timeline item 聚焦的请求序号 */
   timelineFocusRequestKey?: number;
-  /** 当前由聊天区底部承载的待处理 A2UI 来源 */
+  /** 当前仍可在消息正文提交的 A2UI 来源 */
   activePendingA2UISource?: PendingA2UISource | null;
   /** 当前会话的 provider 选择器 */
   providerType?: string;

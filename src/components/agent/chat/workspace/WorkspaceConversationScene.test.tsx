@@ -4,9 +4,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceConversationScene } from "./WorkspaceConversationScene";
 
-const { mockWorkspaceMainArea } = vi.hoisted(() => ({
-  mockWorkspaceMainArea: vi.fn(),
-}));
+const { mockWorkspaceMainArea, mockWorkspacePendingA2UIPanel } = vi.hoisted(
+  () => ({
+    mockWorkspaceMainArea: vi.fn(),
+    mockWorkspacePendingA2UIPanel: vi.fn(),
+  }),
+);
 
 vi.mock("../components/CanvasWorkbenchLayout", () => ({
   CanvasWorkbenchLayout: () => <div data-testid="canvas-layout-stub" />,
@@ -21,13 +24,39 @@ vi.mock("../components/EmptyState", () => ({
 }));
 
 vi.mock("../components/MessageList", () => ({
-  MessageList: ({ leadingContent }: { leadingContent?: React.ReactNode }) => (
-    <div data-testid="message-list-stub">{leadingContent}</div>
+  MessageList: ({
+    leadingContent,
+    trailingContent,
+  }: {
+    leadingContent?: React.ReactNode;
+    trailingContent?: React.ReactNode;
+  }) => (
+    <div data-testid="message-list-stub">
+      {leadingContent}
+      {trailingContent}
+    </div>
   ),
 }));
 
 vi.mock("../components/TeamWorkspaceDock", () => ({
   TeamWorkspaceDock: () => <div data-testid="team-dock-stub" />,
+}));
+
+vi.mock("./WorkspacePendingA2UIPanel", () => ({
+  WorkspacePendingA2UIPanel: (props: {
+    pendingA2UIForm?: { id?: string } | null;
+    placement?: string;
+  }) => {
+    mockWorkspacePendingA2UIPanel(props);
+    return (
+      <div
+        data-testid="workspace-pending-a2ui-panel"
+        data-placement={props.placement || "dock"}
+      >
+        {props.pendingA2UIForm?.id || ""}
+      </div>
+    );
+  },
 }));
 
 vi.mock("./WorkspaceMainArea", () => ({
@@ -261,5 +290,62 @@ describe("WorkspaceConversationScene", () => {
     expect(
       mockWorkspaceMainArea.mock.calls.at(-1)?.[0]?.autoHideTaskCenterNavbar,
     ).toBeUndefined();
+  });
+
+  it("有消息来源的 pending A2UI 不应再渲染底部补参面板", () => {
+    const container = renderScene({
+      pendingA2UIForm: {
+        id: "assistant-inline-a2ui",
+        root: "root",
+        components: [],
+      },
+      onPendingA2UISubmit: vi.fn(),
+      messageListProps: {
+        messages: [],
+        activePendingA2UISource: {
+          kind: "assistant_message",
+          messageId: "msg-assistant-a2ui",
+        },
+      } as any,
+    });
+
+    expect(
+      container.querySelector('[data-testid="workspace-pending-a2ui-panel"]'),
+    ).toBeNull();
+    expect(mockWorkspacePendingA2UIPanel).not.toHaveBeenCalled();
+  });
+
+  it("无消息来源的 pending A2UI 应作为消息列表尾部卡片渲染", () => {
+    const container = renderScene({
+      pendingA2UIForm: {
+        id: "service-skill-a2ui",
+        root: "root",
+        components: [],
+      },
+      onPendingA2UISubmit: vi.fn(),
+      messageListProps: {
+        messages: [],
+        activePendingA2UISource: {
+          kind: "service_skill",
+          skillId: "daily-trend-briefing",
+          requestKey: "req-1",
+          messageId: undefined,
+        },
+      } as any,
+    });
+
+    const pendingPanel = container.querySelector(
+      '[data-testid="workspace-pending-a2ui-panel"]',
+    );
+    expect(pendingPanel?.getAttribute("data-placement")).toBe("message");
+    expect(pendingPanel?.textContent).toContain("service-skill-a2ui");
+    expect(mockWorkspacePendingA2UIPanel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        placement: "message",
+        pendingA2UIForm: expect.objectContaining({
+          id: "service-skill-a2ui",
+        }),
+      }),
+    );
   });
 });

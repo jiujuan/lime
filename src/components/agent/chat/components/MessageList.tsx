@@ -31,6 +31,7 @@ const MessageListInner: React.FC<MessageListProps> = ({
   sessionId = null,
   messages,
   leadingContent,
+  trailingContent,
   emptyStateVariant = "default",
   turns = [],
   threadItems = [],
@@ -133,7 +134,8 @@ const MessageListInner: React.FC<MessageListProps> = ({
   useMessageListAutoScroll({
     isRestoringSession,
     isUserScrolling: scrollController.isUserScrolling,
-    renderedMessageCount: renderWindow.renderedMessages.length,
+    renderedMessageCount:
+      renderWindow.renderedMessages.length + (trailingContent ? 1 : 0),
     scrollRef: scrollController.scrollRef,
     shouldAutoScroll: scrollController.shouldAutoScroll,
   });
@@ -415,6 +417,14 @@ const MessageListInner: React.FC<MessageListProps> = ({
             </section>
           );
         })}
+        {trailingContent ? (
+          <section
+            data-testid="message-list-trailing-content"
+            className="py-2"
+          >
+            {trailingContent}
+          </section>
+        ) : null}
         <div ref={scrollController.scrollRef} />
       </div>
     </MessageListContainer>

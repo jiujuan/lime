@@ -1,0 +1,15 @@
+# Dataset manifest for lime/internal-agent-runtime-tasks
+# Add tasks using: harbor add <path> --to benchmarks/lime-agent-runtime
+# Run with: harbor run -p benchmarks/lime-agent-runtime -a oracle --job-name lime-runtime-baseline-current
+
+[dataset]
+name = "lime/internal-agent-runtime-tasks"
+description = "Internal Lime Agent Runtime benchmark tasks for Agent QC hill climbing."
+keywords = ["lime", "agent-runtime", "agent-qc", "harbor", "benchmark"]
+
+[[dataset.authors]]
+name = "Lime QC"
+
+tasks = [
+  "./tool-approval-sandbox-boundary"
+]

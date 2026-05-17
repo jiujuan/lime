@@ -1,9 +1,20 @@
 import { Bot, PanelRightClose, X } from "lucide-react";
+import { InlineToolProcessStep } from "@/components/agent/chat/components/InlineToolProcessStep";
+import { MarkdownRenderer } from "@/components/agent/chat/components/MarkdownRenderer";
+import { ThinkingBlock } from "@/components/agent/chat/components/ThinkingBlock";
 import { resolveUserFacingToolDisplayLabel } from "@/components/agent/chat/utils/toolDisplayInfo";
+import { resolveToolProcessNarrative } from "@/components/agent/chat/utils/toolProcessSummary";
+import type { AgentToolCallState } from "@/lib/api/agentProtocol";
+import { buildAgentRunProjectionViewModelFromState } from "../runtime/agentRunProjectionState";
 import type {
   AgentAppHostAgentRunUiMode,
   AgentAppHostAgentRunUiRequest,
 } from "../runtime/hostBridge";
+import {
+  AgentRunProjectionPanel,
+  type AgentRunProjectionPanelLabels,
+  type AgentRunProjectionPanelProps,
+} from "./AgentRunProjectionPanel";
 
 export type AgentRunTranslator = (
   key: string,
@@ -19,6 +30,17 @@ export interface AgentRunUiState extends AgentAppHostAgentRunUiRequest {
 interface AgentRunFactItem {
   title: string;
   meta: string | null;
+}
+
+interface AgentRunTimelineGroup {
+  key: string;
+  kind: string;
+  title: string;
+  message: string | null;
+  meta: string | null;
+  detail: string | null;
+  count: number;
+  toolCall: AgentToolCallState | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -168,8 +190,21 @@ function resolveTimelineKindClassName(kind: string): string {
 }
 
 function extractToolNameFromTimelineTitle(title: string): string | null {
-  const match = title.match(/^(?:工具|Tool)\s*·\s*(.+)$/);
+  const match = title.match(/^(?:工具|Tool|技能|Skill)\s*·\s*(.+)$/);
   return match?.[1]?.trim() || null;
+}
+
+function readTimelineToolName(
+  record: Record<string, unknown>,
+  fallbackTitle?: string,
+): string | null {
+  return (
+    readString(record.toolName) ??
+    readString(record.tool_name) ??
+    readString(record.name) ??
+    readString(record.tool) ??
+    extractToolNameFromTimelineTitle(readString(record.title) ?? fallbackTitle ?? "")
+  );
 }
 
 function resolveTimelineTitle(
@@ -180,8 +215,7 @@ function resolveTimelineTitle(
   if (readTimelineKind(record) !== "tool") {
     return title;
   }
-  const toolName =
-    readString(record.toolName) ?? extractToolNameFromTimelineTitle(title);
+  const toolName = readTimelineToolName(record, title);
   if (!toolName) {
     return title;
   }
@@ -189,6 +223,170 @@ function resolveTimelineTitle(
   return displayName && displayName !== toolName
     ? title.replace(toolName, displayName)
     : title;
+}
+
+function stringifyToolArguments(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function readToolStatus(
+  record: Record<string, unknown>,
+): AgentToolCallState["status"] {
+  const status =
+    readString(record.status) ??
+    readString(record.statusText) ??
+    readString(record.state) ??
+    "";
+  const normalized = status.toLowerCase();
+  if (/fail|error|errored|blocked|失败|错误|中断/.test(normalized)) {
+    return "failed";
+  }
+  if (
+    /complete|completed|done|success|succeeded|已完成|完成|成功|已查看|已拿到|已记录|已保存|已更新|已执行/.test(
+      normalized,
+    )
+  ) {
+    return "completed";
+  }
+  return "running";
+}
+
+function buildToolCallFromTimeline(
+  record: Record<string, unknown>,
+): AgentToolCallState | null {
+  const title = readString(record.title) ?? undefined;
+  const kind = readTimelineKind(record);
+  const timelineToolName = readTimelineToolName(record, title);
+  if (!timelineToolName) {
+    return null;
+  }
+  const toolName = kind === "skill" ? "Skill" : timelineToolName;
+  const fallbackArguments =
+    kind === "skill"
+      ? {
+          skill: timelineToolName,
+          skill_title: timelineToolName,
+        }
+      : undefined;
+
+  const result = isRecord(record.result) ? record.result : null;
+  const output =
+    readString(record.output) ??
+    readString(record.result) ??
+    readString(result?.output);
+  const error = readString(record.error) ?? readString(result?.error);
+  const metadata = isRecord(record.metadata)
+    ? record.metadata
+    : isRecord(result?.metadata)
+      ? result.metadata
+      : undefined;
+  const hasResult = Boolean(output || error || metadata);
+
+  return {
+    id:
+      readString(record.id) ??
+      readString(record.toolCallId) ??
+      readString(record.callId) ??
+      toolName,
+    name: toolName,
+    arguments: stringifyToolArguments(
+      record.arguments ?? record.args ?? record.input ?? fallbackArguments,
+    ),
+    status: readToolStatus(record),
+    startTime: new Date(0),
+    result: hasResult
+      ? {
+          success: !error,
+          output: output ?? "",
+          ...(error ? { error } : {}),
+          ...(metadata || kind === "skill"
+            ? {
+                metadata: {
+                  ...(metadata ?? {}),
+                  ...(kind === "skill"
+                    ? {
+                        tool_family: "skill",
+                        skill_name: timelineToolName,
+                        skill_title: timelineToolName,
+                      }
+                    : {}),
+                },
+              }
+            : {}),
+        }
+      : undefined,
+  };
+}
+
+function resolveTimelineToolSummary(toolCall: AgentToolCallState | null): string | null {
+  if (!toolCall) {
+    return null;
+  }
+  return resolveToolProcessNarrative(toolCall).summary;
+}
+
+function buildTimelineGroups(
+  timeline: unknown[],
+  fallbackTitle: string,
+): AgentRunTimelineGroup[] {
+  const groups: AgentRunTimelineGroup[] = [];
+  const groupedByCollapseKey = new Map<string, AgentRunTimelineGroup>();
+
+  timeline.forEach((item, index) => {
+    const record: Record<string, unknown> = isRecord(item) ? item : {};
+    const collapseKey = readString(record.collapseKey);
+    const groupKey = collapseKey ? `collapse:${collapseKey}` : `item:${index}`;
+    const existing = collapseKey ? groupedByCollapseKey.get(groupKey) : null;
+    const kind = readTimelineKind(record);
+    const rawMessage = readString(record.message);
+    const toolCall =
+      kind === "tool" || kind === "skill" ? buildToolCallFromTimeline(record) : null;
+    const toolSummary = resolveTimelineToolSummary(toolCall);
+    const message = toolSummary ?? rawMessage;
+    const detail = [
+      toolSummary && rawMessage && toolSummary !== rawMessage ? rawMessage : null,
+      readString(record.detail),
+    ]
+      .filter(Boolean)
+      .join("\n");
+    const nextDetail = [message, detail].filter(Boolean).join("\n");
+
+    if (existing) {
+      existing.count += 1;
+      existing.detail = [existing.detail, nextDetail].filter(Boolean).join("\n");
+      if (!existing.message && message) {
+        existing.message = message;
+      }
+      return;
+    }
+
+    const group: AgentRunTimelineGroup = {
+      key: groupKey,
+      kind,
+      title: resolveTimelineTitle(record, fallbackTitle),
+      message,
+      meta: readString(record.meta) ?? readString(record.statusText),
+      detail: detail || null,
+      count: 1,
+      toolCall,
+    };
+    groups.push(group);
+    if (collapseKey) {
+      groupedByCollapseKey.set(groupKey, group);
+    }
+  });
+
+  return groups;
 }
 
 function readFactRecordArray(value: unknown, key: string): Record<string, unknown>[] {
@@ -415,6 +613,10 @@ function AgentRunTimeline({
 }) {
   const timeline = Array.isArray(process?.timeline) ? process.timeline : [];
   const terminal = process?.terminal === true;
+  const groups = buildTimelineGroups(
+    timeline,
+    t("agentApp.apps.runtime.agentRun.timeline.event"),
+  );
   return (
     <details
       className="rounded-2xl border border-slate-200 bg-white"
@@ -426,24 +628,19 @@ function AgentRunTimeline({
           : t("agentApp.apps.runtime.agentRun.timeline.running")}
       </summary>
       <div className="max-h-72 space-y-2 overflow-auto border-t border-slate-100 p-3">
-        {timeline.length ? (
-          timeline.map((item, index) => {
-            const record: Record<string, unknown> = isRecord(item) ? item : {};
-            const kind = readTimelineKind(record);
-            const title =
-              resolveTimelineTitle(
-                record,
-                t("agentApp.apps.runtime.agentRun.timeline.event"),
-              );
-            const message = readString(record.message);
-            const meta = readString(record.meta) ?? readString(record.statusText);
-            const detail = readString(record.detail);
-            const kindClassName = resolveTimelineKindClassName(kind);
+        {groups.length ? (
+          groups.map((group) => {
+            const kindClassName = resolveTimelineKindClassName(group.kind);
+            const meta =
+              group.count > 1
+                ? [group.meta, `×${group.count}`].filter(Boolean).join(" ")
+                : group.meta;
             return (
               <article
-                key={`${title}-${index}`}
+                key={group.key}
                 className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2"
-                data-agent-run-timeline-kind={kind}
+                data-agent-run-timeline-kind={group.kind}
+                data-agent-run-timeline-group={group.key}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex min-w-0 items-start gap-2">
@@ -452,7 +649,7 @@ function AgentRunTimeline({
                       aria-hidden
                     />
                     <p className="min-w-0 text-sm font-semibold text-slate-900">
-                      {title}
+                      {group.title}
                     </p>
                   </div>
                   {meta ? (
@@ -461,12 +658,21 @@ function AgentRunTimeline({
                     </span>
                   ) : null}
                 </div>
-                {message ? (
-                  <p className="mt-1 text-xs leading-5 text-slate-600">{message}</p>
+                {group.toolCall ? (
+                  <div className="mt-2 rounded-xl bg-white px-2 py-1">
+                    <InlineToolProcessStep
+                      toolCall={group.toolCall}
+                      isMessageStreaming={!terminal}
+                    />
+                  </div>
+                ) : group.message ? (
+                  <p className="mt-1 text-xs leading-5 text-slate-600">
+                    {group.message}
+                  </p>
                 ) : null}
-                {detail ? (
+                {group.detail ? (
                   <pre className="mt-2 max-h-24 overflow-auto whitespace-pre-wrap rounded-xl bg-white p-2 text-[11px] leading-5 text-slate-500">
-                    {detail}
+                    {group.detail}
                   </pre>
                 ) : null}
               </article>
@@ -485,9 +691,13 @@ function AgentRunTimeline({
 function AgentRunTextBlock({
   title,
   text,
+  renderMarkdown = false,
+  markdownTestId = "agent-run-markdown-output",
 }: {
   title: string;
   text: unknown;
+  renderMarkdown?: boolean;
+  markdownTestId?: string;
 }) {
   const content = readString(text);
   if (!content) {
@@ -498,28 +708,122 @@ function AgentRunTextBlock({
       <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-slate-700">
         {title}
       </summary>
-      <pre className="max-h-40 overflow-auto whitespace-pre-wrap border-t border-slate-100 p-3 text-xs leading-5 text-slate-600">
-        {content}
-      </pre>
+      {renderMarkdown ? (
+        <div
+          className="max-h-56 overflow-auto border-t border-slate-100 p-3 text-sm leading-6 text-slate-700"
+          data-testid={markdownTestId}
+        >
+          <MarkdownRenderer content={content} />
+        </div>
+      ) : (
+        <pre className="max-h-40 overflow-auto whitespace-pre-wrap border-t border-slate-100 p-3 text-xs leading-5 text-slate-600">
+          {content}
+        </pre>
+      )}
     </details>
   );
 }
 
-export function AgentRunProcessPanel({
-  run,
-  process,
-  taskId,
-  t,
-  className = "flex-1 space-y-3 overflow-auto p-4",
+function AgentRunThinkingBlock({
+  text,
+  terminal,
 }: {
+  text: unknown;
+  terminal: boolean;
+}) {
+  const content = readString(text);
+  if (!content) {
+    return null;
+  }
+  return (
+    <ThinkingBlock
+      content={content}
+      defaultExpanded={!terminal}
+      isStreaming={!terminal}
+    />
+  );
+}
+
+function buildProjectionPanelLabels(
+  t: AgentRunTranslator,
+): AgentRunProjectionPanelLabels {
+  const runtimeEvent = t("agentApp.apps.runtime.agentRun.timeline.event");
+  return {
+    parts: {
+      status: runtimeEvent,
+      queue: runtimeEvent,
+      answer: t("agentApp.apps.runtime.agentRun.output"),
+      reasoning: t("agentApp.apps.runtime.agentRun.thinking"),
+      tool: runtimeEvent,
+      actionRequired: t(
+        "agentApp.apps.runtime.agentRun.facts.confirmations.itemFallback",
+      ),
+      actionResolved: t("agentApp.apps.runtime.agentRun.facts.confirmations"),
+      artifact: t(
+        "agentApp.apps.runtime.agentRun.facts.artifacts.itemFallback",
+      ),
+      evidence: t("agentApp.apps.runtime.agentRun.facts.evidence.itemFallback"),
+      diagnostic: runtimeEvent,
+    },
+    summary: {
+      status: runtimeEvent,
+      pendingActions: t("agentApp.apps.runtime.agentRun.facts.confirmations"),
+      tools: t("agentApp.apps.runtime.agentRun.metric.skills"),
+      artifacts: t("agentApp.apps.runtime.agentRun.facts.artifacts"),
+      evidence: t("agentApp.apps.runtime.agentRun.facts.evidence"),
+      queue: t("agentApp.apps.runtime.agentRun.timeline.running"),
+    },
+    actionControls: {
+      approve: t("agentApp.apps.runtime.agentRun.action.approve"),
+      reject: t("agentApp.apps.runtime.agentRun.action.reject"),
+      answer: t("agentApp.apps.runtime.agentRun.action.answer"),
+      edit: t("agentApp.apps.runtime.agentRun.action.edit"),
+      retry: t("agentApp.apps.runtime.agentRun.action.retry"),
+      interrupt: t("agentApp.apps.runtime.agentRun.action.interrupt"),
+      stop: t("agentApp.apps.runtime.agentRun.action.stop"),
+    },
+    empty: t("agentApp.apps.runtime.agentRun.timeline.empty"),
+  };
+}
+
+function hasProjectionContent(
+  view: ReturnType<typeof buildAgentRunProjectionViewModelFromState>,
+): boolean {
+  return (
+    view.orderedParts.length > 0 ||
+    view.actions.length > 0 ||
+    view.artifacts.length > 0 ||
+    view.evidence.length > 0 ||
+    view.diagnostics.length > 0
+  );
+}
+
+export interface AgentRunRendererProps {
   run: AgentRunUiState;
   process: Record<string, unknown> | null;
   taskId: string | null;
   t: AgentRunTranslator;
   className?: string;
-}) {
+  onAction?: AgentRunProjectionPanelProps["onAction"];
+}
+
+export function AgentRunRenderer({
+  run,
+  process,
+  taskId,
+  t,
+  className = "flex-1 space-y-3 overflow-auto p-4",
+  onAction,
+}: AgentRunRendererProps) {
+  const projectionView = buildAgentRunProjectionViewModelFromState(run);
+  const shouldRenderProjection = hasProjectionContent(projectionView);
+
   return (
-    <div className={className} data-testid="agent-run-process-panel">
+    <div
+      className={className}
+      data-testid="agent-run-process-panel"
+      data-agent-run-renderer="host-shared"
+    >
       <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs leading-5 text-slate-500">
         <div className="flex justify-between gap-3">
           <span>{t("agentApp.apps.runtime.agentRun.taskId")}</span>
@@ -535,22 +839,37 @@ export function AgentRunProcessPanel({
         </div>
       </div>
       <AgentRunMetricCards process={process} t={t} />
-      <AgentRunFactRail run={run} t={t} />
+      {shouldRenderProjection ? (
+        <AgentRunProjectionPanel
+          view={projectionView}
+          labels={buildProjectionPanelLabels(t)}
+          onAction={onAction}
+        />
+      ) : (
+        <AgentRunFactRail run={run} t={t} />
+      )}
       <AgentRunTimeline process={process} t={t} />
-      <AgentRunTextBlock
-        title={t("agentApp.apps.runtime.agentRun.thinking")}
+      <AgentRunThinkingBlock
         text={process?.thinkingText}
+        terminal={process?.terminal === true}
       />
       <AgentRunTextBlock
         title={t("agentApp.apps.runtime.agentRun.execution")}
         text={process?.executionText}
+        renderMarkdown
+        markdownTestId="agent-run-markdown-execution"
       />
       <AgentRunTextBlock
         title={t("agentApp.apps.runtime.agentRun.output")}
         text={process?.streamText}
+        renderMarkdown
       />
     </div>
   );
+}
+
+export function AgentRunProcessPanel(props: AgentRunRendererProps) {
+  return <AgentRunRenderer {...props} />;
 }
 
 export function AgentRunHostDrawer({
@@ -560,6 +879,7 @@ export function AgentRunHostDrawer({
   onExpand,
   onCollapse,
   onClose,
+  onAction,
   t,
 }: {
   run: AgentRunUiState;
@@ -568,6 +888,7 @@ export function AgentRunHostDrawer({
   onExpand: () => void;
   onCollapse: () => void;
   onClose: () => void;
+  onAction?: AgentRunProjectionPanelProps["onAction"];
   t: AgentRunTranslator;
 }) {
   const process = readRuntimeProcess(run);
@@ -644,7 +965,13 @@ export function AgentRunHostDrawer({
           </div>
         </div>
       </header>
-      <AgentRunProcessPanel run={run} process={process} taskId={taskId} t={t} />
+      <AgentRunRenderer
+        run={run}
+        process={process}
+        taskId={taskId}
+        t={t}
+        onAction={onAction}
+      />
     </aside>
   );
 }

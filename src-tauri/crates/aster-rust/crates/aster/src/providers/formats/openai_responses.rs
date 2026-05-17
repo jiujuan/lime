@@ -7,7 +7,9 @@ use anyhow::{anyhow, Error};
 use async_stream::try_stream;
 use chrono;
 use futures::Stream;
-use rmcp::model::{object, CallToolRequestParam, ErrorCode, ErrorData, RawContent, Role, Tool};
+use rmcp::model::{
+    object, CallToolRequestParam, CallToolResult, ErrorCode, ErrorData, RawContent, Role, Tool,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::borrow::Cow;
@@ -382,25 +384,53 @@ fn add_function_calls(input_items: &mut Vec<Value>, messages: &[Message]) {
     }
 }
 
+fn responses_output_from_tool_result(result: &CallToolResult) -> Option<Value> {
+    let mut content_items = Vec::new();
+    let mut text_segments = Vec::new();
+    let mut saw_image = false;
+
+    for content in &result.content {
+        match content.deref() {
+            RawContent::Text(text) if !text.text.trim().is_empty() => {
+                text_segments.push(text.text.clone());
+            }
+            RawContent::Image(image) if !image.data.trim().is_empty() => {
+                if !text_segments.is_empty() {
+                    content_items.push(json!({
+                        "type": "input_text",
+                        "text": text_segments.join("\n")
+                    }));
+                    text_segments.clear();
+                }
+                content_items.push(convert_image_to_input_image(&image.mime_type, &image.data));
+                saw_image = true;
+            }
+            _ => {}
+        }
+    }
+
+    if saw_image {
+        if !text_segments.is_empty() {
+            content_items.push(json!({
+                "type": "input_text",
+                "text": text_segments.join("\n")
+            }));
+        }
+        Some(Value::Array(content_items))
+    } else if text_segments.is_empty() {
+        None
+    } else {
+        Some(json!(text_segments.join("\n")))
+    }
+}
+
 fn add_function_call_outputs(input_items: &mut Vec<Value>, messages: &[Message]) {
     for message in messages.iter().filter(|m| m.is_agent_visible()) {
         for content in &message.content {
             if let MessageContent::ToolResponse(response) = content {
                 match &response.tool_result {
                     Ok(contents) => {
-                        let text_content: Vec<String> = contents
-                            .content
-                            .iter()
-                            .filter_map(|c| {
-                                if let RawContent::Text(t) = c.deref() {
-                                    Some(t.text.clone())
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect();
-
-                        if !text_content.is_empty() {
+                        if let Some(output) = responses_output_from_tool_result(contents) {
                             tracing::debug!(
                                 "Sending function_call_output with call_id: {}",
                                 response.id
@@ -408,7 +438,7 @@ fn add_function_call_outputs(input_items: &mut Vec<Value>, messages: &[Message])
                             input_items.push(json!({
                                 "type": "function_call_output",
                                 "call_id": response.id,
-                                "output": text_content.join("\n")
+                                "output": output
                             }));
                         }
                     }
@@ -909,6 +939,7 @@ where
 mod tests {
     use super::*;
     use futures::StreamExt;
+    use rmcp::model::Content;
     use rmcp::object;
 
     #[test]
@@ -995,6 +1026,40 @@ mod tests {
         assert_eq!(content[1]["image_url"], "data:image/png;base64,Zmlyc3Q=");
         assert_eq!(content[2]["type"], "input_image");
         assert_eq!(content[2]["image_url"], "data:image/jpeg;base64,c2Vjb25k");
+    }
+
+    #[test]
+    fn test_create_responses_request_preserves_tool_result_images() {
+        let model_config = ModelConfig::new("gpt-5.4").unwrap();
+        let message = Message::user().with_tool_response(
+            "call_view_image",
+            Ok(CallToolResult {
+                content: vec![
+                    Content::text("Viewed image: sample.png"),
+                    Content::image("aGVsbG8=", "image/png"),
+                ],
+                structured_content: None,
+                is_error: Some(false),
+                meta: None,
+            }),
+        );
+
+        let payload = create_responses_request(
+            &model_config,
+            "",
+            &[message],
+            &[],
+            &ResponsesRequestOptions::default(),
+        )
+        .unwrap();
+        let output = &payload["input"][0]["output"];
+
+        assert_eq!(payload["input"][0]["type"], "function_call_output");
+        assert_eq!(payload["input"][0]["call_id"], "call_view_image");
+        assert_eq!(output[0]["type"], "input_text");
+        assert_eq!(output[0]["text"], "Viewed image: sample.png");
+        assert_eq!(output[1]["type"], "input_image");
+        assert_eq!(output[1]["image_url"], "data:image/png;base64,aGVsbG8=");
     }
 
     #[test]

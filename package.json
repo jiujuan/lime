@@ -1,7 +1,8 @@
 {
   "name": "lime",
   "private": true,
-  "version": "1.41.0",
+  "workspaces": ["packages/*"],
+  "version": "1.42.0",
   "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
   "keywords": [
     "ai",
@@ -83,6 +84,9 @@
     "agent-qc:gui-flow:report": "node scripts/agent-qc-gui-flow-report.mjs",
     "agent-qc:gui-flow:check": "node scripts/agent-qc-gui-flow-report.mjs --check --format json",
     "agent-qc:check": "node scripts/agent-qc-report.mjs --check --format json && node scripts/agent-qc-gui-flow-report.mjs --check --format json",
+    "agent-qc:benchmark:plan": "node scripts/agent-qc-benchmark-plan.mjs",
+    "agent-qc:benchmark:check": "node scripts/agent-qc-benchmark-plan.mjs --check --format json",
+    "agent-qc:benchmark:compare": "node scripts/agent-qc-benchmark-compare.mjs",
     "agent-qc:qcloop-job": "node scripts/agent-qc-qcloop-job.mjs",
     "agent-qc:payload-coverage": "node scripts/agent-qc-payload-coverage.mjs",
     "agent-qc:qcloop-status": "node scripts/agent-qc-qcloop-status.mjs",

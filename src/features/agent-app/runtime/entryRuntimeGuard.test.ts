@@ -85,6 +85,44 @@ describe("EntryRuntimeGuard P14", () => {
     );
   });
 
+  it("UI page entry 可在非本入口的 app-level blocker 下打开并展示降级警告", () => {
+    const preview = buildPreview(resolvedSetup);
+    preview.readiness = {
+      ...preview.readiness,
+      status: "blocked",
+      blockers: [
+        {
+          code: "CAPABILITY_MISSING",
+          severity: "blocker",
+          message: "lime.secrets is declared but not enabled in this host.",
+          capability: "lime.secrets",
+        },
+      ],
+    };
+    const runtimePackageLoad = loadRuntime(preview);
+    const result = evaluateAgentAppEntryRuntimeGuard({
+      preview,
+      entryKey: "dashboard",
+      flags: buildUiRuntimeCapabilityProfile({
+        realAdapterEnabled: true,
+        uiRuntimeEnabled: true,
+      }).featureFlags,
+      operation: "mount-ui",
+      runtimePackageLoad,
+      permissionDecision: "accepted",
+    });
+
+    expect(result.status).toBe("allow");
+    expect(result.blockers).toEqual([]);
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({
+        code: "CAPABILITY_MISSING",
+        capability: "lime.secrets",
+        severity: "warning",
+      }),
+    );
+  });
+
   it("required setup 未解决时输出 needs-setup 且不允许继续运行", () => {
     const preview = buildPreview();
     const runtimePackageLoad = loadRuntime(preview);

@@ -1,4 +1,5 @@
 import {
+  buildLimeCapabilityInvokeRequest,
   type LimeCapabilityInvoker,
   type LimeCapabilityInvokeRequest,
   type LimeCapabilityInvokeResponse,
@@ -52,13 +53,30 @@ export interface CreateLimeHostBridgeCapabilityInvokerOptions {
   appId: string;
   entryKey?: string;
   windowRef?: LimeHostBridgeWindowLike;
+  hostWindow?: LimeHostBridgeWindowLike;
   targetOrigin?: string;
   trustedHostOrigin?: string;
   requestTimeoutMs?: number;
   requestIdPrefix?: string;
+  onSnapshot?: LimeHostBridgeEventHandler;
+  onTheme?: LimeHostBridgeEventHandler;
+  onVisibility?: LimeHostBridgeEventHandler;
+  onCapabilityEvent?: LimeHostBridgeCapabilityEventHandler;
 }
 
 export interface LimeHostBridgeCapabilityInvoker extends LimeCapabilityInvoker {
+  send(type: string, payload?: unknown, requestId?: string): void;
+  request(
+    type: string,
+    payload?: unknown,
+    options?: LimeHostBridgeLegacyRequestOptions,
+  ): Promise<unknown>;
+  ready(): void;
+  getSnapshot(): void;
+  notifyHost(
+    message: string,
+    level?: LimeHostBridgeNotifyPayload["level"],
+  ): Promise<LimeCapabilityInvokeResponse<{ accepted: true }>>;
   sendReady(): void;
   getHostSnapshot(): Promise<LimeCapabilityInvokeResponse<unknown>>;
   notifyHost(
@@ -72,19 +90,65 @@ export interface LimeHostBridgeCapabilityInvoker extends LimeCapabilityInvoker {
   ): Promise<LimeCapabilityInvokeResponse<{ opened: true }>>;
   downloadHost(
     payload: LimeHostBridgeDownloadPayload,
+    options?: LimeHostBridgeLegacyRequestOptions,
   ): Promise<LimeCapabilityInvokeResponse<{ downloaded: true }>>;
   onHostSnapshot(handler: LimeHostBridgeEventHandler): () => void;
   onThemeUpdate(handler: LimeHostBridgeEventHandler): () => void;
   onVisibilityChange(handler: LimeHostBridgeEventHandler): () => void;
+  onCapabilityEvent(handler: LimeHostBridgeCapabilityEventHandler): () => void;
+  invoke<
+    Capability extends LimeCapabilityName,
+    Method extends LimeCapabilityMethod<Capability>,
+  >(
+    request: LimeHostBridgeLegacyInvokeRequest<Capability, Method>,
+    options?: LimeHostBridgeLegacyRequestOptions,
+  ): Promise<unknown>;
+  subscribe(
+    request: LimeHostBridgeCapabilitySubscribeRequest,
+    options?: LimeHostBridgeLegacyRequestOptions,
+  ): Promise<unknown>;
+  unsubscribe(
+    subscriptionId: string,
+    options?: LimeHostBridgeLegacyRequestOptions,
+  ): Promise<unknown>;
   subscribeCapability(
     request: LimeHostBridgeCapabilitySubscribeRequest,
-    handler: LimeHostBridgeCapabilityEventHandler,
+    handler?: LimeHostBridgeCapabilityEventHandler,
+    options?: LimeHostBridgeLegacyRequestOptions,
   ): Promise<LimeCapabilityInvokeResponse<LimeHostBridgeCapabilitySubscription>>;
   unsubscribeCapability(
     subscriptionId: string,
+    options?: LimeHostBridgeLegacyRequestOptions,
   ): Promise<LimeCapabilityInvokeResponse<LimeHostBridgeCapabilityUnsubscribeResult>>;
+  download(
+    url: string,
+    fileName?: string,
+    options?: LimeHostBridgeLegacyRequestOptions,
+  ): Promise<unknown>;
+  getCallLog(): LimeHostBridgeLegacyCallLogEntry[];
   dispose(): void;
   readonly pendingRequestCount: number;
+}
+
+export interface LimeHostBridgeLegacyRequestOptions {
+  requestId?: string;
+  timeoutMs?: number;
+}
+
+export interface LimeHostBridgeLegacyInvokeRequest<
+  Capability extends LimeCapabilityName = LimeCapabilityName,
+  Method extends LimeCapabilityMethod<Capability> = LimeCapabilityMethod<Capability>,
+> {
+  capability: Capability;
+  method: Method;
+  args?: unknown;
+  provenance?: LimeCapabilityInvokeRequest["provenance"];
+}
+
+export interface LimeHostBridgeLegacyCallLogEntry {
+  capability: string;
+  method: string;
+  args?: unknown;
 }
 
 export interface LimeHostBridgeNotifyPayload {
@@ -176,6 +240,25 @@ function readString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+function unwrapLegacyResponse<T>(response: LimeCapabilityInvokeResponse<T>): T {
+  if (response.ok) {
+    return response.value;
+  }
+  const error = new Error(response.error.message) as Error & {
+    code?: string;
+    payload?: unknown;
+    capability?: string;
+    method?: string;
+    requestId?: string;
+  };
+  error.code = response.error.code;
+  error.payload = response.error;
+  error.capability = response.error.capability;
+  error.method = response.error.method;
+  error.requestId = response.error.requestId;
+  throw error;
+}
+
 function isBridgeMessage(
   value: unknown,
 ): value is LimeAgentAppBridgeClientMessage {
@@ -263,7 +346,7 @@ class BrowserLimeHostBridgeCapabilityInvoker
   implements LimeHostBridgeCapabilityInvoker
 {
   private readonly appId: string;
-  private readonly entryKey?: string;
+  private entryKey?: string;
   private readonly windowRef?: LimeHostBridgeWindowLike;
   private readonly targetOrigin: string;
   private readonly trustedHostOrigin?: string;
@@ -277,6 +360,9 @@ class BrowserLimeHostBridgeCapabilityInvoker
   private readonly snapshotHandlers = new Set<LimeHostBridgeEventHandler>();
   private readonly themeHandlers = new Set<LimeHostBridgeEventHandler>();
   private readonly visibilityHandlers = new Set<LimeHostBridgeEventHandler>();
+  private readonly capabilityEventHandlers =
+    new Set<LimeHostBridgeCapabilityEventHandler>();
+  private readonly callLog: LimeHostBridgeLegacyCallLogEntry[] = [];
   private requestSequence = 0;
   private disposed = false;
 
@@ -285,6 +371,7 @@ class BrowserLimeHostBridgeCapabilityInvoker
     this.entryKey = options.entryKey;
     this.windowRef =
       options.windowRef ??
+      options.hostWindow ??
       (typeof window === "undefined"
         ? undefined
         : (window as unknown as LimeHostBridgeWindowLike));
@@ -292,6 +379,18 @@ class BrowserLimeHostBridgeCapabilityInvoker
     this.trustedHostOrigin = options.trustedHostOrigin;
     this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
     this.requestIdPrefix = options.requestIdPrefix ?? "lime-capability";
+    if (options.onSnapshot) {
+      this.snapshotHandlers.add(options.onSnapshot);
+    }
+    if (options.onTheme) {
+      this.themeHandlers.add(options.onTheme);
+    }
+    if (options.onVisibility) {
+      this.visibilityHandlers.add(options.onVisibility);
+    }
+    if (options.onCapabilityEvent) {
+      this.capabilityEventHandlers.add(options.onCapabilityEvent);
+    }
     this.windowRef?.addEventListener("message", this.handleHostMessage);
   }
 
@@ -305,6 +404,11 @@ class BrowserLimeHostBridgeCapabilityInvoker
   >(
     request: LimeTypedCapabilityInvokeRequest<Capability, Method>,
   ): Promise<LimeTypedCapabilityInvokeResponse<Capability, Method>> {
+    this.callLog.push({
+      capability: request.capability,
+      method: request.method,
+      args: request.args,
+    });
     const normalizedRequest = {
       ...request,
       requestId: request.requestId ?? this.nextRequestId(request),
@@ -316,9 +420,40 @@ class BrowserLimeHostBridgeCapabilityInvoker
     ) as Promise<LimeTypedCapabilityInvokeResponse<Capability, Method>>;
   }
 
+  readonly send = (
+    type: string,
+    payload?: unknown,
+    requestId?: string,
+  ): void => {
+    this.postBridgeMessage(type, payload, requestId);
+  };
+
+  readonly request = (
+    type: string,
+    payload?: unknown,
+    options: LimeHostBridgeLegacyRequestOptions = {},
+  ): Promise<unknown> => {
+    const request = this.buildHostActionContext(
+      "lime.ui",
+      type || "request",
+      options.requestId,
+    );
+    return this.requestBridgeAction(type, payload, request, options).then(
+      unwrapLegacyResponse,
+    );
+  };
+
+  readonly ready = (): void => {
+    this.sendReady();
+  };
+
   sendReady(): void {
     this.postBridgeMessage("app:ready");
   }
+
+  readonly getSnapshot = (): void => {
+    this.postBridgeMessage("host:getSnapshot");
+  };
 
   getHostSnapshot(): Promise<LimeCapabilityInvokeResponse<unknown>> {
     const request = this.buildHostActionContext("lime.ui", "getSnapshot");
@@ -326,8 +461,13 @@ class BrowserLimeHostBridgeCapabilityInvoker
   }
 
   notifyHost(
-    payload: LimeHostBridgeNotifyPayload,
+    payloadOrMessage: LimeHostBridgeNotifyPayload | string,
+    level?: LimeHostBridgeNotifyPayload["level"],
   ): Promise<LimeCapabilityInvokeResponse<{ accepted: true }>> {
+    const payload =
+      typeof payloadOrMessage === "string"
+        ? { message: payloadOrMessage, level }
+        : payloadOrMessage;
     const request = this.buildHostActionContext("lime.ui", "toast");
     return this.requestBridgeAction(
       "host:toast",
@@ -360,12 +500,14 @@ class BrowserLimeHostBridgeCapabilityInvoker
 
   downloadHost(
     payload: LimeHostBridgeDownloadPayload,
+    options: LimeHostBridgeLegacyRequestOptions = {},
   ): Promise<LimeCapabilityInvokeResponse<{ downloaded: true }>> {
     const request = this.buildHostActionContext("lime.ui", "download");
     return this.requestBridgeAction(
       "host:download",
       payload,
       request,
+      options,
     ) as Promise<LimeCapabilityInvokeResponse<{ downloaded: true }>>;
   }
 
@@ -390,17 +532,63 @@ class BrowserLimeHostBridgeCapabilityInvoker
     };
   }
 
+  onCapabilityEvent(handler: LimeHostBridgeCapabilityEventHandler): () => void {
+    this.capabilityEventHandlers.add(handler);
+    return () => {
+      this.capabilityEventHandlers.delete(handler);
+    };
+  }
+
+  invoke<
+    Capability extends LimeCapabilityName,
+    Method extends LimeCapabilityMethod<Capability>,
+  >(
+    request: LimeHostBridgeLegacyInvokeRequest<Capability, Method>,
+    options: LimeHostBridgeLegacyRequestOptions = {},
+  ): Promise<unknown> {
+    return this.call(
+      buildLimeCapabilityInvokeRequest({
+        capability: request.capability,
+        method: request.method,
+        args: request.args as never,
+        requestId: options.requestId,
+        provenance: request.provenance,
+      }),
+    ).then(unwrapLegacyResponse);
+  }
+
+  subscribe(
+    request: LimeHostBridgeCapabilitySubscribeRequest,
+    options: LimeHostBridgeLegacyRequestOptions = {},
+  ): Promise<unknown> {
+    return this.subscribeCapability(request, undefined, options).then(
+      unwrapLegacyResponse,
+    );
+  }
+
+  unsubscribe(
+    subscriptionId: string,
+    options: LimeHostBridgeLegacyRequestOptions = {},
+  ): Promise<unknown> {
+    return this.unsubscribeCapability(subscriptionId, options).then(
+      unwrapLegacyResponse,
+    );
+  }
+
   async subscribeCapability(
     request: LimeHostBridgeCapabilitySubscribeRequest,
-    handler: LimeHostBridgeCapabilityEventHandler,
+    handler?: LimeHostBridgeCapabilityEventHandler,
+    options: LimeHostBridgeLegacyRequestOptions = {},
   ): Promise<LimeCapabilityInvokeResponse<LimeHostBridgeCapabilitySubscription>> {
     const context = {
       capability: request.capability,
       method: "subscribe",
-      requestId: this.nextRequestId({
-        capability: request.capability,
-        method: "subscribe",
-      } as LimeCapabilityInvokeRequest),
+      requestId:
+        options.requestId ??
+        this.nextRequestId({
+          capability: request.capability,
+          method: "subscribe",
+        } as LimeCapabilityInvokeRequest),
     } as LimeCapabilityInvokeRequest;
     const response = await this.requestBridgeAction(
       "capability:subscribe",
@@ -417,10 +605,11 @@ class BrowserLimeHostBridgeCapabilityInvoker
         },
       ),
       context,
+      options,
     );
     if (response.ok && isRecord(response.value)) {
       const subscriptionId = readString(response.value.subscriptionId);
-      if (subscriptionId) {
+      if (subscriptionId && handler) {
         this.subscriptionHandlers.set(subscriptionId, handler);
       }
     }
@@ -429,19 +618,23 @@ class BrowserLimeHostBridgeCapabilityInvoker
 
   async unsubscribeCapability(
     subscriptionId: string,
+    options: LimeHostBridgeLegacyRequestOptions = {},
   ): Promise<LimeCapabilityInvokeResponse<LimeHostBridgeCapabilityUnsubscribeResult>> {
     const context = {
       capability: "lime.agent",
       method: "unsubscribe",
-      requestId: this.nextRequestId({
-        capability: "lime.agent",
-        method: "unsubscribe",
-      } as LimeCapabilityInvokeRequest),
+      requestId:
+        options.requestId ??
+        this.nextRequestId({
+          capability: "lime.agent",
+          method: "unsubscribe",
+        } as LimeCapabilityInvokeRequest),
     } as LimeCapabilityInvokeRequest;
     const response = await this.requestBridgeAction(
       "capability:unsubscribe",
       { subscriptionId },
       context,
+      options,
     );
     if (response.ok) {
       this.subscriptionHandlers.delete(subscriptionId);
@@ -449,18 +642,25 @@ class BrowserLimeHostBridgeCapabilityInvoker
     return response as LimeCapabilityInvokeResponse<LimeHostBridgeCapabilityUnsubscribeResult>;
   }
 
+  download(
+    url: string,
+    fileName?: string,
+    options: LimeHostBridgeLegacyRequestOptions = {},
+  ): Promise<unknown> {
+    return this.downloadHost({ url, fileName }, options).then(
+      unwrapLegacyResponse,
+    );
+  }
+
+  readonly getCallLog = (): LimeHostBridgeLegacyCallLogEntry[] => {
+    return [...this.callLog];
+  };
+
   private requestBridgeAction(
-    type:
-      | "capability:invoke"
-      | "capability:subscribe"
-      | "capability:unsubscribe"
-      | "host:getSnapshot"
-      | "host:toast"
-      | "host:navigate"
-      | "host:openExternal"
-      | "host:download",
+    type: string,
     payload: unknown,
     request: LimeCapabilityInvokeRequest,
+    options: LimeHostBridgeLegacyRequestOptions = {},
   ): Promise<LimeCapabilityInvokeResponse> {
     if (this.disposed || !this.windowRef || this.windowRef.parent === this.windowRef.self) {
       return Promise.resolve({
@@ -484,7 +684,7 @@ class BrowserLimeHostBridgeCapabilityInvoker
             request,
           ),
         });
-      }, this.requestTimeoutMs);
+      }, options.timeoutMs ?? this.requestTimeoutMs);
       this.pendingRequests.set(request.requestId!, {
         request,
         resolve,
@@ -527,6 +727,10 @@ class BrowserLimeHostBridgeCapabilityInvoker
       return;
     }
     if (event.data.type === "host:snapshot") {
+      if (isRecord(event.data.payload) && isRecord(event.data.payload.app)) {
+        this.entryKey =
+          readString(event.data.payload.app.entryKey) ?? this.entryKey;
+      }
       this.dispatchHostEvent(this.snapshotHandlers, event.data.payload);
       if (event.data.requestId) {
         this.settlePendingResponse(event.data.requestId, event.data.payload);
@@ -610,6 +814,10 @@ class BrowserLimeHostBridgeCapabilityInvoker
       return;
     }
     const subscriptionId = readString(payload.subscriptionId);
+    const event = payload as LimeHostBridgeCapabilityEvent;
+    for (const handler of this.capabilityEventHandlers) {
+      handler(event);
+    }
     if (!subscriptionId) {
       return;
     }
@@ -617,7 +825,7 @@ class BrowserLimeHostBridgeCapabilityInvoker
     if (!handler) {
       return;
     }
-    handler(payload);
+    handler(event);
   }
 
   private postBridgeMessage(
@@ -653,11 +861,14 @@ class BrowserLimeHostBridgeCapabilityInvoker
   private buildHostActionContext(
     capability: LimeCapabilityName,
     method: string,
+    requestId?: string,
   ): LimeCapabilityInvokeRequest {
     return {
       capability,
       method,
-      requestId: this.nextRequestId({ capability, method } as LimeCapabilityInvokeRequest),
+      requestId:
+        requestId ??
+        this.nextRequestId({ capability, method } as LimeCapabilityInvokeRequest),
     } as LimeCapabilityInvokeRequest;
   }
 

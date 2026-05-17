@@ -136,6 +136,32 @@ interface RuntimeModelProjection {
   startedAt: string;
   finishedAt?: string;
   model: AgentAppRuntimeProcessModel;
+  constraints?: RuntimeModelConstraintsProjection;
+}
+
+interface RuntimeModelConstraintsProjection {
+  selectedProvider?: string;
+  selectedModel?: string;
+  requestedModel?: string;
+  routingMode?: string;
+  decisionSource?: string;
+  decisionReason?: string;
+  candidateCount?: number;
+  fallbackChain: string[];
+  capabilityGap?: string;
+  estimatedCostClass?: string;
+  limitStatus?: string;
+  costStatus?: string;
+  singleCandidateOnly?: boolean;
+  providerLocked?: boolean;
+  settingsLocked?: boolean;
+  oemLocked?: boolean;
+  inputPerMillion?: number;
+  outputPerMillion?: number;
+  cacheReadPerMillion?: number;
+  cacheWritePerMillion?: number;
+  currency?: string;
+  source: "agent_runtime_model_constraints";
 }
 
 interface RuntimeUsageProjection {
@@ -158,16 +184,49 @@ interface RuntimeCostProjection {
   model: AgentAppRuntimeProcessModel;
 }
 
+interface RuntimeBudgetProjection {
+  taskId: string;
+  taskKind: string;
+  status: AgentAppTaskRecord["status"];
+  startedAt: string;
+  finishedAt?: string;
+  scope: "task";
+  limitStatus?: string;
+  costStatus?: string;
+  estimatedCostClass?: string;
+  estimatedTotalCost?: number;
+  currency?: string;
+  candidateCount?: number;
+  singleCandidateOnly?: boolean;
+  providerLocked?: boolean;
+  settingsLocked?: boolean;
+  oemLocked?: boolean;
+  capabilityGap?: string;
+  notes: string[];
+  limitState?: Record<string, unknown>;
+  costState?: Record<string, unknown>;
+  source: "agent_runtime_projection";
+}
+
 interface RuntimeSkillProjection {
   skillId: string;
   name: string;
-  status: "declared" | "invoked";
+  status: "declared" | "invoked" | "ready_for_manual_enable" | "blocked";
   taskCount: number;
   invocationCount: number;
   taskIds: string[];
   taskKinds: string[];
   lastSeenAt: string;
-  source: "agent_runtime_process";
+  source: "agent_runtime_process" | "workspace_skill_binding";
+  description?: string;
+  directory?: string;
+  bindingStatus?: string;
+  nextGate?: string;
+  runtimeGate?: string;
+  queryLoopVisible?: boolean;
+  toolRuntimeVisible?: boolean;
+  launchEnabled?: boolean;
+  permissionSummary?: string[];
 }
 
 interface RuntimeSkillInvocationProjection {
@@ -192,7 +251,20 @@ interface RuntimeMemoryProjection {
   knowledgeBindingKeys: string[];
   contextCompactionCount: number;
   pendingRequestCount: number;
+  memoryBudget?: RuntimeMemoryBudgetProjection;
+  contextRefLabels: string[];
+  retrievalRefCount: number;
+  missingContextCount: number;
+  teamMemoryRefCount: number;
+  contextGateStatus: string;
   source: "agent_runtime_projection";
+}
+
+interface RuntimeMemoryBudgetProjection {
+  usedTokens?: number;
+  maxTokens?: number;
+  status?: string;
+  source?: string;
 }
 
 interface RuntimeContextProjection {
@@ -211,6 +283,11 @@ interface RuntimeContextProjection {
   inputAttached: boolean;
   expectedOutputAttached: boolean;
   pendingRequestCount: number;
+  contextGateStatus: string;
+  memoryBudget?: RuntimeMemoryBudgetProjection;
+  retrievalRefCount: number;
+  missingContextCount: number;
+  teamMemoryRefCount: number;
   source: "agent_runtime_projection";
 }
 
@@ -229,15 +306,117 @@ interface RuntimeToolRunProjection {
   toolName: string;
   taskId: string;
   taskKind: string;
-  status: AgentAppTaskRecord["status"] | "declared" | "observed";
+  status: AgentAppTaskRecord["status"] | "declared" | "observed" | "completed";
   startedAt: string;
   finishedAt?: string;
   title: string;
   statusText: string;
   message: string;
   detail?: string;
-  source: "agent_runtime_process";
+  input?: unknown;
+  output?: unknown;
+  source: "agent_runtime_process" | "agent_runtime_thread_read";
 }
+
+interface ToolExecutionPolicyProjection {
+  owner: "lime_agent_runtime";
+  scope: "agent_app_session";
+  approvalRequired: boolean;
+  sandboxRequired: boolean;
+  mutationExposed: false;
+  tokenExposed: false;
+  secretBinding?: "host_managed";
+  reason: string;
+}
+
+interface ToolExecutionRequestEnvelope {
+  capability: string;
+  method: string;
+  appId: string;
+  entryKey?: string;
+  taskId?: string;
+  sessionId?: string;
+  toolName?: string;
+  action?: string;
+  input: unknown;
+  reason: string;
+  policy: ToolExecutionPolicyProjection;
+  idempotencyKey?: string;
+}
+
+const INTERNAL_TOOL_EXECUTION_REQUEST = Symbol(
+  "agentAppInternalToolExecutionRequest",
+);
+
+type ToolIntentResponse = Record<string, unknown> & {
+  [INTERNAL_TOOL_EXECUTION_REQUEST]?: ToolExecutionRequestEnvelope;
+};
+
+interface ToolExecutionHandoffProjection {
+  status: "accepted" | "not_started";
+  owner: "lime_agent_runtime";
+  source: "lime.agent.startTask";
+  reason?: string;
+  taskId?: string;
+  traceId?: string;
+  taskKind?: string;
+  taskStatus?: AgentAppTaskRecord["status"];
+}
+
+interface ConnectorAuthorizationPolicyProjection {
+  owner: "lime_connector_policy";
+  scope: "agent_app_session";
+  approvalRequired: true;
+  mutationExposed: false;
+  tokenExposed: false;
+  secretBinding: "host_managed";
+  sessionScoped: true;
+  reason: string;
+}
+
+interface ConnectorAuthorizationRequestEnvelope {
+  capability: "lime.connectors";
+  method: "requestAuth";
+  appId: string;
+  entryKey?: string;
+  connectorId: string;
+  taskId?: string;
+  sessionId?: string;
+  input: unknown;
+  reason: string;
+  policy: ConnectorAuthorizationPolicyProjection;
+  idempotencyKey?: string;
+}
+
+interface ConnectorAuthorizationHandoffProjection {
+  status: "accepted" | "not_started";
+  owner: "lime_connector_policy";
+  source: "lime.agent.startTask";
+  reason?: string;
+  taskId?: string;
+  traceId?: string;
+  taskKind?: string;
+  taskStatus?: AgentAppTaskRecord["status"];
+}
+
+type ToolExecutionAgentTaskRequest = AgentAppTaskRequest & {
+  requiredCapabilities?: string[];
+  capabilityHints?: string[];
+  metadata?: Record<string, unknown>;
+  sessionId?: string;
+};
+
+type ConnectorAuthorizationAgentTaskRequest = AgentAppTaskRequest & {
+  requiredCapabilities?: string[];
+  capabilityHints?: string[];
+  metadata?: Record<string, unknown>;
+  sessionId?: string;
+  queueIfBusy?: boolean;
+};
+
+type RuntimeAggregateProjectionSource =
+  | RuntimeToolRunProjection["source"]
+  | "mixed";
 
 interface RuntimeMcpToolProjection {
   toolName: string;
@@ -246,7 +425,7 @@ interface RuntimeMcpToolProjection {
   runIds: string[];
   taskIds: string[];
   lastSeenAt: string;
-  source: "agent_runtime_process";
+  source: RuntimeAggregateProjectionSource;
 }
 
 interface RuntimeConnectorProjection {
@@ -255,7 +434,84 @@ interface RuntimeConnectorProjection {
   runIds: string[];
   taskIds: string[];
   lastSeenAt: string;
-  source: "agent_runtime_process";
+  source: RuntimeAggregateProjectionSource;
+}
+
+interface RuntimeConnectorAuthorizationProjection {
+  connectorId: string;
+  actionId?: string;
+  taskId: string;
+  taskStatus: AgentAppTaskRecord["status"];
+  startedAt: string;
+  finishedAt?: string;
+  reason?: string;
+  secretBinding: "host_managed";
+  tokenExposed: false;
+  sessionScoped: true;
+  source: "agent_app_connector_authorization_task";
+  secretDelivery?: ConnectorRuntimeFactsProjection["secretDelivery"];
+}
+
+interface ConnectorRuntimeFactsProjection {
+  connectorId: string;
+  status: "observed" | "authorized";
+  authorizationStatus: "observed" | "authorized";
+  source:
+    | RuntimeAggregateProjectionSource
+    | RuntimeConnectorAuthorizationProjection["source"]
+    | "mixed"
+    | "host_fixture_connector";
+  actionIds?: string[];
+  runIds?: string[];
+  taskIds?: string[];
+  secretBinding: "host_managed";
+  tokenExposed: false;
+  secretDelivery?: {
+    status: "ready";
+    binding: "host_managed";
+    source: "host_managed_secret_delivery_fact";
+    target: "cloud_overlay_worker";
+    leaseObserved: true;
+    leaseRefExposed: false;
+    leaseHandleStatus: "host_managed";
+    credentialMaterialExposed: false;
+    tokenExposed: false;
+  };
+}
+
+type ConnectorSecretDeliveryProjection = NonNullable<
+  ConnectorRuntimeFactsProjection["secretDelivery"]
+>;
+
+type ConnectorSecretDeliveryInternalFact = ConnectorSecretDeliveryProjection & {
+  leaseRef: string;
+  expiresAt?: string;
+};
+
+type ConnectorRuntimeFactsInternalProjection = Omit<
+  ConnectorRuntimeFactsProjection,
+  "secretDelivery"
+> & {
+  secretDelivery?: ConnectorSecretDeliveryInternalFact;
+};
+
+interface RuntimeTaskProjection {
+  taskId: string;
+  traceId: string;
+  appId: string;
+  entryKey?: string;
+  title: string;
+  taskKind: string;
+  status: AgentAppTaskRecord["status"];
+  startedAt: string;
+  finishedAt?: string;
+  idempotencyKey: string;
+  humanReview: boolean;
+  toolCount: number;
+  eventCount: number;
+  hasResult: boolean;
+  runtimeStatus?: string;
+  source: "agent_runtime_projection";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -969,6 +1225,69 @@ function recordArray(
   return Array.isArray(value) ? value : [];
 }
 
+function recordValueByKeys(
+  record: Record<string, unknown> | null | undefined,
+  keys: string[],
+): unknown {
+  if (!record) {
+    return undefined;
+  }
+  for (const key of keys) {
+    if (record[key] !== undefined) {
+      return record[key];
+    }
+  }
+  return undefined;
+}
+
+function recordObjectByKeys(
+  record: Record<string, unknown> | null | undefined,
+  keys: string[],
+): Record<string, unknown> | null {
+  const value = recordValueByKeys(record, keys);
+  return isRecord(value) ? value : null;
+}
+
+function recordStringByKeys(
+  record: Record<string, unknown> | null | undefined,
+  keys: string[],
+): string | undefined {
+  return readString(recordValueByKeys(record, keys));
+}
+
+function recordNumberByKeys(
+  record: Record<string, unknown> | null | undefined,
+  keys: string[],
+): number | undefined {
+  return numberValue(recordValueByKeys(record, keys));
+}
+
+function recordBooleanByKeys(
+  record: Record<string, unknown> | null | undefined,
+  keys: string[],
+): boolean | undefined {
+  const value = recordValueByKeys(record, keys);
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function recordStringArrayByKeys(
+  record: Record<string, unknown> | null | undefined,
+  keys: string[],
+): string[] {
+  const value = recordValueByKeys(record, keys);
+  return Array.isArray(value)
+    ? value.map(readString).filter((item): item is string => Boolean(item))
+    : [];
+}
+
+function recordArrayByKeys(
+  record: Record<string, unknown> | null | undefined,
+  keys: string[],
+): unknown[] {
+  const value = recordValueByKeys(record, keys);
+  return Array.isArray(value) ? value : [];
+}
+
 function sortTasksByNewest(tasks: AgentAppTaskRecord[]): AgentAppTaskRecord[] {
   return [...tasks].sort((left, right) =>
     String(right.finishedAt ?? right.startedAt).localeCompare(
@@ -996,6 +1315,30 @@ function filterRuntimeProjectionTasks(
   );
 }
 
+function buildRuntimeTaskProjection(
+  task: AgentAppTaskRecord,
+): RuntimeTaskProjection {
+  const threadRead = readTaskThreadRead(task);
+  return {
+    taskId: task.taskId,
+    traceId: task.traceId,
+    appId: task.appId,
+    entryKey: task.entryKey,
+    title: task.title,
+    taskKind: task.taskKind,
+    status: task.status,
+    startedAt: task.startedAt,
+    finishedAt: task.finishedAt,
+    idempotencyKey: task.idempotencyKey,
+    humanReview: task.humanReview,
+    toolCount: task.tools.length,
+    eventCount: task.events.length + task.trace.length,
+    hasResult: task.result !== undefined,
+    runtimeStatus: recordStringByKeys(threadRead, ["status", "profile_status"]),
+    source: "agent_runtime_projection",
+  };
+}
+
 function buildModelProjection(
   task: AgentAppTaskRecord,
 ): RuntimeModelProjection | null {
@@ -1010,6 +1353,102 @@ function buildModelProjection(
     startedAt: task.startedAt,
     finishedAt: task.finishedAt,
     model: process.model,
+    constraints: buildRuntimeModelConstraints(task),
+  };
+}
+
+function buildRuntimeModelConstraints(
+  task: AgentAppTaskRecord,
+): RuntimeModelConstraintsProjection | undefined {
+  const threadRead = readTaskThreadRead(task);
+  const routing = recordObjectByKeys(threadRead, [
+    "modelRouting",
+    "model_routing",
+    "routingDecision",
+    "routing_decision",
+  ]);
+  const limitState = recordObjectByKeys(threadRead, [
+    "limitState",
+    "limit_state",
+  ]);
+  const costState = recordObjectByKeys(threadRead, ["costState", "cost_state"]);
+  if (!routing && !limitState && !costState) {
+    return undefined;
+  }
+  return {
+    selectedProvider: recordStringByKeys(routing, [
+      "selectedProvider",
+      "selected_provider",
+    ]),
+    selectedModel: recordStringByKeys(routing, [
+      "selectedModel",
+      "selected_model",
+    ]),
+    requestedModel: recordStringByKeys(routing, [
+      "requestedModel",
+      "requested_model",
+    ]),
+    routingMode: recordStringByKeys(routing, ["routingMode", "routing_mode"]),
+    decisionSource: recordStringByKeys(routing, [
+      "decisionSource",
+      "decision_source",
+    ]),
+    decisionReason: recordStringByKeys(routing, [
+      "decisionReason",
+      "decision_reason",
+    ]),
+    candidateCount:
+      recordNumberByKeys(routing, ["candidateCount", "candidate_count"]) ??
+      recordNumberByKeys(limitState, ["candidateCount", "candidate_count"]),
+    fallbackChain: recordStringArrayByKeys(routing, [
+      "fallbackChain",
+      "fallback_chain",
+    ]),
+    capabilityGap:
+      recordStringByKeys(routing, ["capabilityGap", "capability_gap"]) ??
+      recordStringByKeys(limitState, ["capabilityGap", "capability_gap"]),
+    estimatedCostClass:
+      recordStringByKeys(routing, [
+        "estimatedCostClass",
+        "estimated_cost_class",
+      ]) ??
+      recordStringByKeys(costState, [
+        "estimatedCostClass",
+        "estimated_cost_class",
+      ]),
+    limitStatus: recordStringByKeys(limitState, ["status"]),
+    costStatus: recordStringByKeys(costState, ["status"]),
+    singleCandidateOnly: recordBooleanByKeys(limitState, [
+      "singleCandidateOnly",
+      "single_candidate_only",
+    ]),
+    providerLocked: recordBooleanByKeys(limitState, [
+      "providerLocked",
+      "provider_locked",
+    ]),
+    settingsLocked: recordBooleanByKeys(limitState, [
+      "settingsLocked",
+      "settings_locked",
+    ]),
+    oemLocked: recordBooleanByKeys(limitState, ["oemLocked", "oem_locked"]),
+    inputPerMillion: recordNumberByKeys(costState, [
+      "inputPerMillion",
+      "input_per_million",
+    ]),
+    outputPerMillion: recordNumberByKeys(costState, [
+      "outputPerMillion",
+      "output_per_million",
+    ]),
+    cacheReadPerMillion: recordNumberByKeys(costState, [
+      "cacheReadPerMillion",
+      "cache_read_per_million",
+    ]),
+    cacheWritePerMillion: recordNumberByKeys(costState, [
+      "cacheWritePerMillion",
+      "cache_write_per_million",
+    ]),
+    currency: recordStringByKeys(costState, ["currency"]),
+    source: "agent_runtime_model_constraints",
   };
 }
 
@@ -1046,6 +1485,68 @@ function buildCostProjection(
     finishedAt: task.finishedAt,
     cost: process.cost,
     model: process.model,
+  };
+}
+
+function buildBudgetProjection(
+  task: AgentAppTaskRecord,
+): RuntimeBudgetProjection | null {
+  const threadRead = readTaskThreadRead(task);
+  const limitState = recordObjectByKeys(threadRead, [
+    "limitState",
+    "limit_state",
+  ]);
+  const costState = recordObjectByKeys(threadRead, ["costState", "cost_state"]);
+  if (!limitState && !costState) {
+    return null;
+  }
+  const processCost = readTaskRuntimeProcess(task)?.cost;
+  return {
+    taskId: task.taskId,
+    taskKind: task.taskKind,
+    status: task.status,
+    startedAt: task.startedAt,
+    finishedAt: task.finishedAt,
+    scope: "task",
+    limitStatus: recordStringByKeys(limitState, ["status"]),
+    costStatus: recordStringByKeys(costState, ["status"]),
+    estimatedCostClass:
+      recordStringByKeys(costState, [
+        "estimatedCostClass",
+        "estimated_cost_class",
+      ]) ?? processCost?.estimatedCostClass,
+    estimatedTotalCost:
+      recordNumberByKeys(costState, [
+        "estimatedTotalCost",
+        "estimated_total_cost",
+      ]) ?? processCost?.estimatedTotalCost,
+    currency:
+      recordStringByKeys(costState, ["currency"]) ?? processCost?.currency,
+    candidateCount: recordNumberByKeys(limitState, [
+      "candidateCount",
+      "candidate_count",
+    ]),
+    singleCandidateOnly: recordBooleanByKeys(limitState, [
+      "singleCandidateOnly",
+      "single_candidate_only",
+    ]),
+    providerLocked: recordBooleanByKeys(limitState, [
+      "providerLocked",
+      "provider_locked",
+    ]),
+    settingsLocked: recordBooleanByKeys(limitState, [
+      "settingsLocked",
+      "settings_locked",
+    ]),
+    oemLocked: recordBooleanByKeys(limitState, ["oemLocked", "oem_locked"]),
+    capabilityGap: recordStringByKeys(limitState, [
+      "capabilityGap",
+      "capability_gap",
+    ]),
+    notes: recordStringArrayByKeys(limitState, ["notes"]),
+    limitState: limitState ?? undefined,
+    costState: costState ?? undefined,
+    source: "agent_runtime_projection",
   };
 }
 
@@ -1110,6 +1611,7 @@ function uniqueModelSummaries(items: RuntimeModelProjection[]) {
       taskKinds: string[];
       lastTaskId: string;
       lastSeenAt: string;
+      constraints?: RuntimeModelConstraintsProjection;
     }
   >();
   items.forEach((item) => {
@@ -1123,6 +1625,7 @@ function uniqueModelSummaries(items: RuntimeModelProjection[]) {
       if (String(item.finishedAt ?? item.startedAt) > existing.lastSeenAt) {
         existing.lastTaskId = item.taskId;
         existing.lastSeenAt = String(item.finishedAt ?? item.startedAt);
+        existing.constraints = item.constraints ?? existing.constraints;
       }
       return;
     }
@@ -1132,6 +1635,7 @@ function uniqueModelSummaries(items: RuntimeModelProjection[]) {
       taskKinds: [item.taskKind],
       lastTaskId: item.taskId,
       lastSeenAt: String(item.finishedAt ?? item.startedAt),
+      constraints: item.constraints,
     });
   });
   return Array.from(summaries.values()).sort((left, right) =>
@@ -1191,10 +1695,99 @@ function buildRuntimeSkillProjection(
         source: "agent_runtime_process",
       });
     });
+    collectWorkspaceSkillBindingRecords(task).forEach((binding) => {
+      const directory = recordStringByKeys(binding, ["directory"]);
+      const name =
+        recordStringByKeys(binding, ["name"]) ??
+        recordStringByKeys(binding, ["key"]) ??
+        directory;
+      if (!name) {
+        return;
+      }
+      const skillId = recordStringByKeys(binding, ["key"]) ?? name;
+      const lastSeenAt = String(task.finishedAt ?? task.startedAt);
+      const bindingStatus =
+        recordStringByKeys(binding, ["binding_status", "bindingStatus"]) ??
+        "ready_for_manual_enable";
+      const status =
+        bindingStatus === "blocked" ? "blocked" : "ready_for_manual_enable";
+      const existing = summaries.get(skillId);
+      if (existing) {
+        existing.taskIds = Array.from(
+          new Set([...existing.taskIds, task.taskId]),
+        );
+        existing.taskKinds = Array.from(
+          new Set([...existing.taskKinds, task.taskKind]),
+        ).sort();
+        existing.taskCount = existing.taskIds.length;
+        if (lastSeenAt > existing.lastSeenAt) {
+          existing.lastSeenAt = lastSeenAt;
+        }
+        return;
+      }
+      summaries.set(skillId, {
+        skillId,
+        name,
+        status,
+        taskCount: 1,
+        invocationCount: 0,
+        taskIds: [task.taskId],
+        taskKinds: [task.taskKind],
+        lastSeenAt,
+        source: "workspace_skill_binding",
+        description: recordStringByKeys(binding, ["description"]),
+        directory,
+        bindingStatus,
+        nextGate: recordStringByKeys(binding, ["next_gate", "nextGate"]),
+        runtimeGate: recordStringByKeys(binding, [
+          "runtime_gate",
+          "runtimeGate",
+        ]),
+        queryLoopVisible: recordBooleanByKeys(binding, [
+          "query_loop_visible",
+          "queryLoopVisible",
+        ]),
+        toolRuntimeVisible: recordBooleanByKeys(binding, [
+          "tool_runtime_visible",
+          "toolRuntimeVisible",
+        ]),
+        launchEnabled: recordBooleanByKeys(binding, [
+          "launch_enabled",
+          "launchEnabled",
+        ]),
+        permissionSummary: recordStringArrayByKeys(binding, [
+          "permission_summary",
+          "permissionSummary",
+        ]),
+      });
+    });
   });
   return Array.from(summaries.values()).sort((left, right) =>
     right.lastSeenAt.localeCompare(left.lastSeenAt),
   );
+}
+
+function collectWorkspaceSkillBindingRecords(
+  task: AgentAppTaskRecord,
+): Record<string, unknown>[] {
+  const threadRead = readTaskThreadRead(task);
+  const candidates = [
+    threadRead,
+    recordObjectByKeys(threadRead, ["request_metadata", "requestMetadata"]),
+    ...recordArray(threadRead, "turns")
+      .filter(isRecord)
+      .flatMap((turn) => [
+        turn,
+        recordObjectByKeys(turn, ["request_metadata", "requestMetadata"]),
+      ]),
+  ];
+  return candidates.flatMap((candidate) => {
+    const container = recordObjectByKeys(candidate, [
+      "workspace_skill_bindings",
+      "workspaceSkillBindings",
+    ]);
+    return recordArray(container, "bindings").filter(isRecord);
+  });
 }
 
 function buildRuntimeSkillInvocations(
@@ -1412,6 +2005,70 @@ function buildTimelineToolRun(
   };
 }
 
+function buildThreadReadToolRun(
+  task: AgentAppTaskRecord,
+  call: Record<string, unknown>,
+  index: number,
+): RuntimeToolRunProjection | null {
+  const toolName =
+    recordStringByKeys(call, ["toolName", "tool_name", "name"]) ??
+    recordStringByKeys(recordObjectByKeys(call, ["function"]), ["name"]);
+  if (!toolName) {
+    return null;
+  }
+  const capability = classifyToolIntegrationCapability(toolName);
+  if (!capability) {
+    return null;
+  }
+  const status =
+    recordStringByKeys(call, ["status", "state"]) ??
+    (task.status === "succeeded" ? "completed" : task.status);
+  return {
+    runId:
+      recordStringByKeys(call, ["runId", "run_id", "id", "toolCallId"]) ??
+      `${task.taskId}:${capability}:${capabilityMatchToken(toolName)}:${index}:thread`,
+    capability,
+    toolName,
+    taskId: task.taskId,
+    taskKind: task.taskKind,
+    status:
+      status === "completed" || status === "declared" || status === "observed"
+        ? status
+        : task.status,
+    startedAt:
+      recordStringByKeys(call, ["startedAt", "started_at"]) ?? task.startedAt,
+    finishedAt:
+      recordStringByKeys(call, ["finishedAt", "finished_at", "completedAt"]) ??
+      task.finishedAt,
+    title: recordStringByKeys(call, ["title"]) ?? `Tool · ${toolName}`,
+    statusText:
+      recordStringByKeys(call, ["statusText", "status_text"]) ?? "已记录",
+    message:
+      recordStringByKeys(call, ["message"]) ??
+      "AgentRuntime threadRead 记录了该工具调用。",
+    detail: recordStringByKeys(call, ["detail"]),
+    input: recordValueByKeys(call, ["input", "args", "arguments"]),
+    output: recordValueByKeys(call, ["output", "result"]),
+    source: "agent_runtime_thread_read",
+  };
+}
+
+function collectThreadReadToolRuns(
+  task: AgentAppTaskRecord,
+): RuntimeToolRunProjection[] {
+  const threadRead = readTaskThreadRead(task);
+  const candidates = [
+    ...recordArrayByKeys(threadRead, ["toolCalls", "tool_calls"]),
+    ...recordArray(threadRead, "turns")
+      .filter(isRecord)
+      .flatMap((turn) => recordArrayByKeys(turn, ["toolCalls", "tool_calls"])),
+  ];
+  return candidates
+    .filter(isRecord)
+    .map((call, index) => buildThreadReadToolRun(task, call, index))
+    .filter((item): item is RuntimeToolRunProjection => Boolean(item));
+}
+
 function buildRuntimeToolRuns(
   tasks: AgentAppTaskRecord[],
   capability?: ToolIntegrationCapability,
@@ -1425,7 +2082,8 @@ function buildRuntimeToolRuns(
       .filter((item) => item.kind === "tool" || item.kind === "execution")
       .map((item, index) => buildTimelineToolRun(task, item, index))
       .filter((item): item is RuntimeToolRunProjection => Boolean(item));
-    return [...observed, ...declared];
+    const threadRead = collectThreadReadToolRuns(task);
+    return [...observed, ...threadRead, ...declared];
   });
   return runs
     .filter((run) => !capability || run.capability === capability)
@@ -1439,9 +2097,539 @@ function buildRuntimeToolRuns(
 function readToolIntent(
   input: Record<string, unknown>,
 ): Record<string, unknown> {
-  return Object.fromEntries(
+  const intent = Object.fromEntries(
     Object.entries(input).filter(([key]) => TOOL_INTENT_KEYS.has(key)),
   );
+  return sanitizeExecutionRequestInput(intent) as Record<string, unknown>;
+}
+
+const EXECUTION_SECRET_KEY_PATTERN =
+  /(?:secret|token|api[_-]?key|provider[_-]?key|password|credential|authorization|oauth|client[_-]?secret)/i;
+const EXECUTION_EVIDENCE_KEY_PATTERN =
+  /(?:evidence[_-]?(?:id|ref)?|artifact[_-]?evidence)/i;
+const EXECUTION_LOCAL_PATH_KEY_PATTERN =
+  /(?:absolute[_-]?path|local[_-]?path|workspace[_-]?root|project[_-]?root|file[_-]?path|directory|dir|cwd|path)$/i;
+
+function isSafeConnectorRuntimeFactValue(
+  key: string | undefined,
+  value: unknown,
+): boolean {
+  if (!key) {
+    return false;
+  }
+  switch (key) {
+    case "authorizationStatus":
+    case "authorization_status":
+      return (
+        typeof value === "string" &&
+        ["authorized", "connected", "observed", "ready"].includes(
+          value.trim().toLowerCase(),
+        )
+      );
+    case "secretBinding":
+    case "secret_binding":
+      return value === "host_managed";
+    case "tokenExposed":
+    case "token_exposed":
+      return value === false;
+    case "credentialMaterialExposed":
+    case "credential_material_exposed":
+      return value === false;
+    default:
+      return false;
+  }
+}
+
+function sanitizeConnectorSecretDeliveryFact(
+  value: Record<string, unknown>,
+  options: { exposeSecretLeaseRef?: boolean } = {},
+): Record<string, unknown> | string {
+  const sanitized: Record<string, unknown> = {};
+  const status = readString(value.status);
+  if (
+    status &&
+    ["ready", "pending", "available", "observed", "lease_observed"].includes(
+      status.toLowerCase(),
+    )
+  ) {
+    sanitized.status = status;
+  }
+  if (value.binding === "host_managed") {
+    sanitized.binding = "host_managed";
+  }
+  if (value.source === "host_managed_secret_delivery_fact") {
+    sanitized.source = "host_managed_secret_delivery_fact";
+  }
+  if (value.target === "cloud_overlay_worker") {
+    sanitized.target = "cloud_overlay_worker";
+  }
+  const leaseRef = readString(value.leaseRef) ?? readString(value.lease_ref);
+  if (leaseRef?.startsWith("secret-lease://connector/")) {
+    sanitized.leaseObserved = true;
+    sanitized.leaseRefExposed = false;
+    sanitized.leaseHandleStatus = "host_managed";
+    if (options.exposeSecretLeaseRef) {
+      sanitized.leaseRef = leaseRef;
+    }
+  } else if (value.leaseObserved === true || value.lease_observed === true) {
+    sanitized.leaseObserved = true;
+    sanitized.leaseRefExposed = false;
+    sanitized.leaseHandleStatus = "host_managed";
+  }
+  if (value.leaseRefExposed === false || value.lease_ref_exposed === false) {
+    sanitized.leaseRefExposed = false;
+  }
+  const leaseHandleStatus =
+    readString(value.leaseHandleStatus) ??
+    readString(value.lease_handle_status);
+  if (leaseHandleStatus === "host_managed") {
+    sanitized.leaseHandleStatus = "host_managed";
+  }
+  const expiresAt = readString(value.expiresAt) ?? readString(value.expires_at);
+  if (expiresAt) {
+    sanitized.expiresAt = expiresAt;
+  }
+  if (value.credentialMaterialExposed === false) {
+    sanitized.credentialMaterialExposed = false;
+  }
+  if (value.credential_material_exposed === false) {
+    sanitized.credential_material_exposed = false;
+  }
+  if (value.tokenExposed === false) {
+    sanitized.tokenExposed = false;
+  }
+  if (value.token_exposed === false) {
+    sanitized.token_exposed = false;
+  }
+  return Object.keys(sanitized).length > 0
+    ? sanitized
+    : "[redacted:host_managed_secret]";
+}
+
+function isAbsoluteLocalPath(value: string): boolean {
+  return (
+    value.startsWith("/") ||
+    /^[A-Za-z]:[\\/]/.test(value) ||
+    value.startsWith("\\\\") ||
+    value.startsWith("file:///")
+  );
+}
+
+function sanitizeExecutionRequestInput(
+  value: unknown,
+  key?: string,
+  depth = 0,
+  options: { exposeSecretLeaseRef?: boolean } = {},
+): unknown {
+  if (isSafeConnectorRuntimeFactValue(key, value)) {
+    return value;
+  }
+  if (
+    key &&
+    /^(?:secretDelivery|secret_delivery)$/i.test(key) &&
+    isRecord(value)
+  ) {
+    return sanitizeConnectorSecretDeliveryFact(value, options);
+  }
+  if (key && EXECUTION_SECRET_KEY_PATTERN.test(key)) {
+    return "[redacted:host_managed_secret]";
+  }
+  if (key && EXECUTION_EVIDENCE_KEY_PATTERN.test(key)) {
+    return "[redacted:host_owned_evidence]";
+  }
+  if (
+    key &&
+    typeof value === "string" &&
+    EXECUTION_LOCAL_PATH_KEY_PATTERN.test(key) &&
+    isAbsoluteLocalPath(value.trim())
+  ) {
+    return "[redacted:absolute_local_path]";
+  }
+  if (depth >= 8) {
+    return "[redacted:depth_limit]";
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) =>
+      sanitizeExecutionRequestInput(item, key, depth + 1, options),
+    );
+  }
+  if (isRecord(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([itemKey, itemValue]) => [
+        itemKey,
+        sanitizeExecutionRequestInput(itemValue, itemKey, depth + 1, options),
+      ]),
+    );
+  }
+  return value;
+}
+
+function buildToolExecutionPolicy(
+  capability: ToolIntegrationCapability | "lime.tools",
+  reason: string,
+): ToolExecutionPolicyProjection {
+  const requiresApproval = new Set<ToolIntegrationCapability | "lime.tools">([
+    "lime.browser",
+    "lime.mcp",
+    "lime.terminal",
+    "lime.connectors",
+    "lime.tools",
+  ]).has(capability);
+  const policy: ToolExecutionPolicyProjection = {
+    owner: "lime_agent_runtime",
+    scope: "agent_app_session",
+    approvalRequired: requiresApproval,
+    sandboxRequired: capability === "lime.terminal",
+    mutationExposed: false,
+    tokenExposed: false,
+    reason,
+  };
+  if (capability === "lime.connectors") {
+    policy.secretBinding = "host_managed";
+  }
+  return policy;
+}
+
+function buildToolExecutionRequestEnvelope(
+  request: AgentAppHostBridgeCapabilityRequest,
+  capability: ToolIntegrationCapability | "lime.tools",
+  input: Record<string, unknown>,
+  reason: string,
+  options: {
+    toolName?: string;
+    action?: string;
+    exposeSecretLeaseRef?: boolean;
+  } = {},
+): ToolExecutionRequestEnvelope {
+  const taskId = readString(input.taskId);
+  const sessionId = readString(input.sessionId);
+  const envelope: ToolExecutionRequestEnvelope = {
+    capability,
+    method: request.method,
+    appId: request.appId,
+    action: options.action ?? readString(input.action) ?? request.method,
+    input: sanitizeExecutionRequestInput(input, undefined, 0, {
+      exposeSecretLeaseRef: options.exposeSecretLeaseRef,
+    }),
+    reason,
+    policy: buildToolExecutionPolicy(capability, reason),
+  };
+  if (request.entryKey) {
+    envelope.entryKey = request.entryKey;
+  }
+  if (taskId) {
+    envelope.taskId = taskId;
+  }
+  if (sessionId) {
+    envelope.sessionId = sessionId;
+  }
+  if (options.toolName) {
+    envelope.toolName = options.toolName;
+  }
+  if (request.idempotencyKey) {
+    envelope.idempotencyKey = request.idempotencyKey;
+  }
+  return envelope;
+}
+
+function buildToolExecutionHandoffTaskRequest(
+  executionRequest: ToolExecutionRequestEnvelope,
+  toolHints: string[],
+  options: { internalExecutionRequest?: ToolExecutionRequestEnvelope } = {},
+): ToolExecutionAgentTaskRequest {
+  const internalExecutionRequest = options.internalExecutionRequest;
+  const uniqueHints = Array.from(
+    new Set(
+      [
+        executionRequest.toolName,
+        executionRequest.capability,
+        ...toolHints,
+      ].filter((item): item is string => Boolean(item?.trim())),
+    ),
+  );
+  return {
+    title: `Tool execution · ${
+      executionRequest.toolName ?? executionRequest.capability
+    }`,
+    taskKind: "agent_app.tool_execution",
+    idempotencyKey:
+      executionRequest.idempotencyKey ??
+      `${executionRequest.appId}:${
+        executionRequest.entryKey ?? "default"
+      }:${executionRequest.capability}:${executionRequest.method}`,
+    prompt: [
+      "【Agent App Tool Execution Request】",
+      `Capability: ${executionRequest.capability}`,
+      `Method: ${executionRequest.method}`,
+      `Tool: ${executionRequest.toolName ?? "n/a"}`,
+      `Action: ${executionRequest.action ?? "n/a"}`,
+      "",
+      "请由 Lime AgentRuntime / ToolRuntime policy owner 审核并执行该请求。",
+      "不要要求 Agent App 直接执行工具、MCP、终端、浏览器或 connector，也不要把 Host secret/token 暴露给 App。",
+    ].join("\n"),
+    input: {
+      executionRequest,
+    },
+    expectedOutput: {
+      kind: "tool_execution_result",
+      evidenceRequired: true,
+      source: "agent_runtime_tool_runtime",
+    },
+    tools: uniqueHints,
+    requiredCapabilities: [executionRequest.capability],
+    capabilityHints: uniqueHints,
+    humanReview: executionRequest.policy.approvalRequired,
+    sessionId: executionRequest.sessionId,
+    queueIfBusy: true,
+    metadata: {
+      agent_app_tool_execution: {
+        version: "p18.7-e2",
+        source: "host_bridge_execution_gate",
+        request: executionRequest,
+        ...(internalExecutionRequest &&
+        internalExecutionRequest !== executionRequest
+          ? { internalRequest: internalExecutionRequest }
+          : {}),
+      },
+    },
+  };
+}
+
+function readExecutionRequestFromResponse(
+  response: Record<string, unknown>,
+): ToolExecutionRequestEnvelope | null {
+  const executionGate = isRecord(response.executionGate)
+    ? response.executionGate
+    : null;
+  const request = executionGate?.request;
+  return isRecord(request) &&
+    typeof request.capability === "string" &&
+    typeof request.method === "string" &&
+    typeof request.appId === "string" &&
+    isRecord(request.policy)
+    ? (request as unknown as ToolExecutionRequestEnvelope)
+    : null;
+}
+
+async function attachToolExecutionHandoff(
+  response: Record<string, unknown>,
+  toolHints: string[],
+  resolveSdk?: () => LimeAppSdk,
+): Promise<Record<string, unknown>> {
+  if (!resolveSdk) {
+    return response;
+  }
+  const executionGate = isRecord(response.executionGate)
+    ? response.executionGate
+    : {};
+  const publicExecutionRequest = readExecutionRequestFromResponse(response);
+  const internalExecutionRequest = (response as ToolIntentResponse)[
+    INTERNAL_TOOL_EXECUTION_REQUEST
+  ];
+  const executionRequest = publicExecutionRequest ?? internalExecutionRequest;
+  if (!executionRequest) {
+    return response;
+  }
+  try {
+    const task = await resolveSdk().agent.startTask(
+      buildToolExecutionHandoffTaskRequest(executionRequest, toolHints, {
+        internalExecutionRequest,
+      }),
+    );
+    const handoff: ToolExecutionHandoffProjection = {
+      status: "accepted",
+      owner: "lime_agent_runtime",
+      source: "lime.agent.startTask",
+      taskId: task.taskId,
+      traceId: task.traceId,
+      taskKind: task.taskKind,
+      taskStatus: task.status,
+    };
+    return {
+      ...response,
+      executionGate: {
+        ...executionGate,
+        handoff,
+      },
+    };
+  } catch {
+    const handoff: ToolExecutionHandoffProjection = {
+      status: "not_started",
+      owner: "lime_agent_runtime",
+      source: "lime.agent.startTask",
+      reason: "agent_task_handoff_failed",
+    };
+    return {
+      ...response,
+      executionGate: {
+        ...executionGate,
+        handoff,
+      },
+    };
+  }
+}
+
+function buildConnectorAuthorizationPolicy(
+  reason: string,
+): ConnectorAuthorizationPolicyProjection {
+  return {
+    owner: "lime_connector_policy",
+    scope: "agent_app_session",
+    approvalRequired: true,
+    mutationExposed: false,
+    tokenExposed: false,
+    secretBinding: "host_managed",
+    sessionScoped: true,
+    reason,
+  };
+}
+
+function buildConnectorAuthorizationRequestEnvelope(
+  request: AgentAppHostBridgeCapabilityRequest,
+  connectorId: string,
+  input: Record<string, unknown>,
+  reason: string,
+): ConnectorAuthorizationRequestEnvelope {
+  const taskId = readString(input.taskId);
+  const sessionId = readString(input.sessionId);
+  const envelope: ConnectorAuthorizationRequestEnvelope = {
+    capability: "lime.connectors",
+    method: "requestAuth",
+    appId: request.appId,
+    connectorId,
+    input: sanitizeExecutionRequestInput(input),
+    reason,
+    policy: buildConnectorAuthorizationPolicy(reason),
+  };
+  if (request.entryKey) {
+    envelope.entryKey = request.entryKey;
+  }
+  if (taskId) {
+    envelope.taskId = taskId;
+  }
+  if (sessionId) {
+    envelope.sessionId = sessionId;
+  }
+  if (request.idempotencyKey) {
+    envelope.idempotencyKey = request.idempotencyKey;
+  }
+  return envelope;
+}
+
+function buildConnectorAuthorizationHandoffTaskRequest(
+  authorizationRequest: ConnectorAuthorizationRequestEnvelope,
+): ConnectorAuthorizationAgentTaskRequest {
+  return {
+    title: `Connector authorization · ${authorizationRequest.connectorId}`,
+    taskKind: "agent_app.connector_authorization",
+    idempotencyKey:
+      authorizationRequest.idempotencyKey ??
+      `${authorizationRequest.appId}:${
+        authorizationRequest.entryKey ?? "default"
+      }:lime.connectors:requestAuth:${authorizationRequest.connectorId}`,
+    prompt: [
+      "【Agent App Connector Authorization Request】",
+      `Connector: ${authorizationRequest.connectorId}`,
+      "",
+      "请由 Lime Host / Connector policy owner 创建或恢复 host-managed 授权绑定。",
+      "不要要求 Agent App 输入或保存 OAuth token、refresh token、API key 或 provider secret。",
+      "如果需要用户登录或授权，请通过 Host / Cloud Overlay 的授权流程发起，不要把 secret 明文写入任务结果。",
+    ].join("\n"),
+    input: {
+      authorizationRequest,
+    },
+    expectedOutput: {
+      kind: "connector_authorization_request",
+      connectorId: authorizationRequest.connectorId,
+      secretBinding: "host_managed",
+      tokenExposed: false,
+      source: "lime_connector_policy",
+    },
+    requiredCapabilities: ["lime.connectors"],
+    capabilityHints: [
+      "lime.connectors",
+      `connector:${authorizationRequest.connectorId}`,
+    ],
+    humanReview: true,
+    sessionId: authorizationRequest.sessionId,
+    queueIfBusy: true,
+    metadata: {
+      agent_app_connector_authorization: {
+        version: "p18.7-e4",
+        source: "host_bridge_authorization_gate",
+        request: authorizationRequest,
+      },
+    },
+  };
+}
+
+function readConnectorAuthorizationRequestFromResponse(
+  response: Record<string, unknown>,
+): ConnectorAuthorizationRequestEnvelope | null {
+  const authorizationGate = isRecord(response.authorizationGate)
+    ? response.authorizationGate
+    : null;
+  const request = authorizationGate?.request;
+  return isRecord(request) &&
+    request.capability === "lime.connectors" &&
+    request.method === "requestAuth" &&
+    typeof request.appId === "string" &&
+    typeof request.connectorId === "string" &&
+    isRecord(request.policy)
+    ? (request as unknown as ConnectorAuthorizationRequestEnvelope)
+    : null;
+}
+
+async function attachConnectorAuthorizationHandoff(
+  response: Record<string, unknown>,
+  resolveSdk?: () => LimeAppSdk,
+): Promise<Record<string, unknown>> {
+  if (!resolveSdk) {
+    return response;
+  }
+  const authorizationGate = isRecord(response.authorizationGate)
+    ? response.authorizationGate
+    : {};
+  const authorizationRequest =
+    readConnectorAuthorizationRequestFromResponse(response);
+  if (!authorizationRequest) {
+    return response;
+  }
+  try {
+    const task = await resolveSdk().agent.startTask(
+      buildConnectorAuthorizationHandoffTaskRequest(authorizationRequest),
+    );
+    const handoff: ConnectorAuthorizationHandoffProjection = {
+      status: "accepted",
+      owner: "lime_connector_policy",
+      source: "lime.agent.startTask",
+      taskId: task.taskId,
+      traceId: task.traceId,
+      taskKind: task.taskKind,
+      taskStatus: task.status,
+    };
+    return {
+      ...response,
+      authorizationGate: {
+        ...authorizationGate,
+        handoff,
+      },
+    };
+  } catch {
+    const handoff: ConnectorAuthorizationHandoffProjection = {
+      status: "not_started",
+      owner: "lime_connector_policy",
+      source: "lime.agent.startTask",
+      reason: "connector_authorization_handoff_failed",
+    };
+    return {
+      ...response,
+      authorizationGate: {
+        ...authorizationGate,
+        handoff,
+      },
+    };
+  }
 }
 
 function buildToolIntentResponse(
@@ -1449,9 +2637,33 @@ function buildToolIntentResponse(
   capability: ToolIntegrationCapability,
   input: Record<string, unknown>,
   runs: RuntimeToolRunProjection[],
-): unknown {
+  options: {
+    toolName?: string;
+    action?: string;
+    exposeSecretLeaseRefToInternal?: boolean;
+  } = {},
+): ToolIntentResponse {
   const spec = TOOL_INTEGRATION_SPECS[capability];
-  return {
+  const toolName =
+    options.toolName ?? readString(input.tool) ?? spec.toolHints[0];
+  const publicExecutionRequest = buildToolExecutionRequestEnvelope(
+    request,
+    capability,
+    input,
+    spec.reason,
+    {
+      toolName,
+      action: options.action,
+    },
+  );
+  const internalExecutionRequest = options.exposeSecretLeaseRefToInternal
+    ? buildToolExecutionRequestEnvelope(request, capability, input, spec.reason, {
+        toolName,
+        action: options.action,
+        exposeSecretLeaseRef: true,
+      })
+    : publicExecutionRequest;
+  const response: ToolIntentResponse = {
     appId: request.appId,
     capability,
     method: request.method,
@@ -1461,11 +2673,108 @@ function buildToolIntentResponse(
     intent: readToolIntent(input),
     toolHints: spec.toolHints,
     matchingRuns: runs,
+    executionGate: {
+      status: "requires_agent_task",
+      owner: "lime_agent_runtime",
+      mutationExposed: false,
+      evidenceSource: "agent_runtime_projection",
+      reason: spec.reason,
+      request: publicExecutionRequest,
+    },
     next: {
       capability: "lime.agent",
       method: "startTask",
       reason: "actual_tool_execution_is_owned_by_lime_agent_runtime",
     },
+  };
+  if (internalExecutionRequest !== publicExecutionRequest) {
+    Object.defineProperty(response, INTERNAL_TOOL_EXECUTION_REQUEST, {
+      value: internalExecutionRequest,
+      enumerable: false,
+    });
+  }
+  return response;
+}
+
+function toolRunMatchesToolName(
+  run: RuntimeToolRunProjection,
+  toolName: string,
+): boolean {
+  const requested = capabilityMatchToken(
+    normalizeToolIntegrationName(toolName),
+  );
+  const observed = capabilityMatchToken(
+    normalizeToolIntegrationName(run.toolName),
+  );
+  return Boolean(
+    requested &&
+    observed &&
+    (requested === observed ||
+      requested.includes(observed) ||
+      observed.includes(requested)),
+  );
+}
+
+function buildGenericToolIntentResponse(
+  request: AgentAppHostBridgeCapabilityRequest,
+  input: Record<string, unknown>,
+  runs: RuntimeToolRunProjection[],
+): Record<string, unknown> {
+  const toolName = readStringParam(request, "tool", 0);
+  const reason = "tool_execution_requires_lime_tool_runtime_policy";
+  const executionRequest = buildToolExecutionRequestEnvelope(
+    request,
+    "lime.tools",
+    input,
+    reason,
+    {
+      toolName,
+      action: readString(input.action) ?? request.method,
+    },
+  );
+  return {
+    appId: request.appId,
+    capability: "lime.tools",
+    method: request.method,
+    status: "requires_agent_task",
+    reason,
+    source: "tool_runtime_policy",
+    intent: readToolIntent(input),
+    toolHints: [toolName],
+    matchingRuns: runs.filter((run) => toolRunMatchesToolName(run, toolName)),
+    executionGate: {
+      status: "requires_agent_task",
+      owner: "lime_agent_runtime",
+      mutationExposed: false,
+      evidenceSource: "agent_runtime_projection",
+      reason,
+      request: executionRequest,
+    },
+    next: {
+      capability: "lime.agent",
+      method: "startTask",
+      reason: "actual_tool_execution_is_owned_by_lime_agent_runtime",
+    },
+  };
+}
+
+function readGenericToolProgress(
+  request: AgentAppHostBridgeCapabilityRequest,
+  runs: RuntimeToolRunProjection[],
+): RuntimeToolRunProjection & { invocationId: string } {
+  const invocationId = readStringParam(request, "invocationId", 0);
+  const run = runs.find(
+    (item) => item.runId === invocationId || item.taskId === invocationId,
+  );
+  if (!run) {
+    throw new AgentAppCapabilityDispatcherError(
+      "TOOL_RUN_NOT_FOUND",
+      `${invocationId} was not found in AgentRuntime tool projection.`,
+    );
+  }
+  return {
+    ...run,
+    invocationId,
   };
 }
 
@@ -1484,6 +2793,79 @@ function readToolRun(
     );
   }
   return run;
+}
+
+async function cancelToolExecutionViaAgentTask(
+  request: AgentAppHostBridgeCapabilityRequest,
+  input: Record<string, unknown>,
+  runs: RuntimeToolRunProjection[],
+  resolveSdk?: () => LimeAppSdk,
+): Promise<Record<string, unknown>> {
+  const taskId = readString(input.taskId) ?? readString(input.task_id);
+  const runId =
+    readString(input.runId) ??
+    readString(input.run_id) ??
+    readString(input.invocationId);
+  const run = runId
+    ? runs.find((item) => item.runId === runId || item.taskId === runId)
+    : undefined;
+  const resolvedTaskId = taskId ?? run?.taskId;
+  if (!resolvedTaskId) {
+    return {
+      status: "not_available",
+      reason: "tool_cancellation_requires_agent_task_id",
+      source: "agent_runtime_projection",
+      next: {
+        capability: "lime.agent",
+        method: "cancelTask",
+      },
+    };
+  }
+  if (!taskId) {
+    return {
+      status: "requires_agent_task_cancellation",
+      reason: "tool_run_cancellation_must_use_agent_task_id",
+      source: "agent_runtime_projection",
+      runId,
+      taskId: resolvedTaskId,
+      next: {
+        capability: "lime.agent",
+        method: "cancelTask",
+        taskId: resolvedTaskId,
+      },
+    };
+  }
+  if (!resolveSdk) {
+    return {
+      status: "requires_agent_task_cancellation",
+      reason: "agent_runtime_sdk_unavailable",
+      source: "agent_runtime_projection",
+      taskId: resolvedTaskId,
+      next: {
+        capability: "lime.agent",
+        method: "cancelTask",
+        taskId: resolvedTaskId,
+      },
+    };
+  }
+  const task = await resolveSdk().agent.cancelTask(resolvedTaskId);
+  return {
+    appId: request.appId,
+    capability: request.capability,
+    method: request.method,
+    status: "cancel_requested",
+    source: "lime.agent.cancelTask",
+    taskId: resolvedTaskId,
+    taskStatus: task.status,
+    task,
+  };
+}
+
+function mergeRuntimeProjectionSource(
+  current: RuntimeAggregateProjectionSource,
+  next: RuntimeToolRunProjection["source"],
+): RuntimeAggregateProjectionSource {
+  return current === next ? current : "mixed";
 }
 
 function parseMcpToolName(toolName: string): {
@@ -1519,6 +2901,10 @@ function buildRuntimeMcpTools(
     if (existing) {
       existing.runIds = Array.from(new Set([...existing.runIds, run.runId]));
       existing.taskIds = Array.from(new Set([...existing.taskIds, run.taskId]));
+      existing.source = mergeRuntimeProjectionSource(
+        existing.source,
+        run.source,
+      );
       if (lastSeenAt > existing.lastSeenAt) {
         existing.lastSeenAt = lastSeenAt;
       }
@@ -1531,7 +2917,7 @@ function buildRuntimeMcpTools(
       runIds: [run.runId],
       taskIds: [run.taskId],
       lastSeenAt,
-      source: "agent_runtime_process",
+      source: run.source,
     });
   });
   return Array.from(tools.values()).sort((left, right) =>
@@ -1559,6 +2945,18 @@ function parseConnectorToolName(toolName: string): {
   };
 }
 
+function isHostFixtureConnectorAction(
+  connectorId: string,
+  actionId?: string,
+): boolean {
+  return (
+    connectorId === "lime_fixture" &&
+    (actionId === undefined ||
+      actionId === "recordMutation" ||
+      actionId === "record_mutation")
+  );
+}
+
 function buildRuntimeConnectors(
   runs: RuntimeToolRunProjection[],
 ): RuntimeConnectorProjection[] {
@@ -1578,6 +2976,10 @@ function buildRuntimeConnectors(
       ).sort();
       existing.runIds = Array.from(new Set([...existing.runIds, run.runId]));
       existing.taskIds = Array.from(new Set([...existing.taskIds, run.taskId]));
+      existing.source = mergeRuntimeProjectionSource(
+        existing.source,
+        run.source,
+      );
       if (lastSeenAt > existing.lastSeenAt) {
         existing.lastSeenAt = lastSeenAt;
       }
@@ -1589,12 +2991,169 @@ function buildRuntimeConnectors(
       runIds: [run.runId],
       taskIds: [run.taskId],
       lastSeenAt,
-      source: "agent_runtime_process",
+      source: run.source,
     });
   });
   return Array.from(connectors.values()).sort((left, right) =>
     right.lastSeenAt.localeCompare(left.lastSeenAt),
   );
+}
+
+function readTaskConnectorAuthorizationRequest(
+  task: AgentAppTaskRecord,
+): Record<string, unknown> | null {
+  if (task.taskKind !== "agent_app.connector_authorization") {
+    return null;
+  }
+  if (isRecord(task.input) && isRecord(task.input.authorizationRequest)) {
+    return task.input.authorizationRequest;
+  }
+  if (
+    isRecord(task.result) &&
+    isRecord(task.result.agent_app_connector_authorization) &&
+    isRecord(task.result.agent_app_connector_authorization.request)
+  ) {
+    return task.result.agent_app_connector_authorization.request;
+  }
+  return null;
+}
+
+function buildConnectorAuthorizationProjection(
+  task: AgentAppTaskRecord,
+): RuntimeConnectorAuthorizationProjection | null {
+  const request = readTaskConnectorAuthorizationRequest(task);
+  const connectorId =
+    readString(request?.connectorId) ??
+    (isRecord(task.expectedOutput)
+      ? readString(task.expectedOutput.connectorId)
+      : undefined);
+  if (!connectorId) {
+    return null;
+  }
+
+  return {
+    connectorId,
+    actionId: readString(request?.action),
+    taskId: task.taskId,
+    taskStatus: task.status,
+    startedAt: task.startedAt,
+    finishedAt: task.finishedAt,
+    reason: readString(request?.reason),
+    secretBinding: "host_managed",
+    tokenExposed: false,
+    sessionScoped: true,
+    source: "agent_app_connector_authorization_task",
+    secretDelivery: buildHostManagedSecretDeliveryFact(
+      connectorId,
+      readString(request?.action),
+      task.taskId,
+      task.status,
+    ),
+  };
+}
+
+function buildConnectorAuthorizationProjections(
+  tasks: AgentAppTaskRecord[],
+): RuntimeConnectorAuthorizationProjection[] {
+  return tasks
+    .map(buildConnectorAuthorizationProjection)
+    .filter(
+      (item): item is RuntimeConnectorAuthorizationProjection =>
+        Boolean(item),
+    )
+    .sort((left, right) => left.connectorId.localeCompare(right.connectorId));
+}
+
+function buildConnectorRuntimeFacts(
+  connectorId: string,
+  connector?: RuntimeConnectorProjection,
+  authorizationRequest?: RuntimeConnectorAuthorizationProjection,
+  fixtureActionId?: string,
+  options: { exposeSecretLeaseRef?: boolean } = {},
+):
+  | ConnectorRuntimeFactsProjection
+  | ConnectorRuntimeFactsInternalProjection
+  | undefined {
+  if (isHostFixtureConnectorAction(connectorId, fixtureActionId)) {
+    return {
+      connectorId,
+      status: "authorized",
+      authorizationStatus: "authorized",
+      source: "host_fixture_connector",
+      actionIds: fixtureActionId ? [fixtureActionId] : ["recordMutation"],
+      secretBinding: "host_managed",
+      tokenExposed: false,
+    };
+  }
+
+  if (!connector && authorizationRequest?.taskStatus !== "succeeded") {
+    return undefined;
+  }
+
+  const authorizationStatus =
+    authorizationRequest?.taskStatus === "succeeded"
+      ? "authorized"
+      : "observed";
+  const taskIds = Array.from(
+    new Set([
+      ...(connector?.taskIds ?? []),
+      ...(authorizationRequest ? [authorizationRequest.taskId] : []),
+    ]),
+  );
+  const secretDelivery = buildHostManagedSecretDeliveryFact(
+    connectorId,
+    fixtureActionId,
+    authorizationRequest?.taskId,
+    authorizationRequest?.taskStatus,
+    options,
+  );
+
+  return {
+    connectorId,
+    status: connector ? "observed" : "authorized",
+    authorizationStatus,
+    source:
+      connector && authorizationRequest
+        ? "mixed"
+        : connector?.source ?? "agent_app_connector_authorization_task",
+    actionIds: connector?.actionIds,
+    runIds: connector?.runIds,
+    taskIds: taskIds.length > 0 ? taskIds : undefined,
+    secretBinding: "host_managed",
+    tokenExposed: false,
+    ...(secretDelivery ? { secretDelivery } : {}),
+  };
+}
+
+function buildHostManagedSecretDeliveryFact(
+  connectorId: string,
+  actionId: string | undefined,
+  authorizationTaskId: string | undefined,
+  authorizationTaskStatus: AgentAppTaskRecord["status"] | undefined,
+  options: { exposeSecretLeaseRef?: boolean } = {},
+): ConnectorSecretDeliveryProjection | ConnectorSecretDeliveryInternalFact | undefined {
+  if (authorizationTaskStatus !== "succeeded" || !authorizationTaskId) {
+    return undefined;
+  }
+  const normalizedActionId = actionId?.trim() || "default";
+  const leaseRef = [
+    "secret-lease://connector",
+    encodeURIComponent(connectorId),
+    encodeURIComponent(normalizedActionId),
+    encodeURIComponent(authorizationTaskId),
+  ].join("/");
+  const fact: ConnectorSecretDeliveryProjection = {
+    status: "ready",
+    binding: "host_managed",
+    source: "host_managed_secret_delivery_fact",
+    target: "cloud_overlay_worker",
+    leaseObserved: true,
+    leaseRefExposed: false,
+    leaseHandleStatus: "host_managed",
+    credentialMaterialExposed: false,
+    tokenExposed: false,
+  };
+  return options.exposeSecretLeaseRef ? { ...fact, leaseRef } : fact;
 }
 
 function readTaskThreadRead(
@@ -1613,6 +3172,15 @@ function readTaskThreadDiagnostics(
 ): Record<string, unknown> | null {
   const threadRead = readTaskThreadRead(task);
   return isRecord(threadRead?.diagnostics) ? threadRead.diagnostics : null;
+}
+
+function readTaskContextSummary(
+  task: AgentAppTaskRecord,
+): Record<string, unknown> | null {
+  return recordObjectByKeys(readTaskThreadRead(task), [
+    "contextSummary",
+    "context_summary",
+  ]);
 }
 
 function readKnowledgeBindingKeys(task: AgentAppTaskRecord): string[] {
@@ -1636,10 +3204,80 @@ function readThreadTurnIds(
     .filter((item): item is string => Boolean(item));
 }
 
+function readContextSummaryRefs(
+  summary: Record<string, unknown> | null,
+  keys: string[],
+): Record<string, unknown>[] {
+  return recordArrayByKeys(summary, keys).filter(isRecord);
+}
+
+function readContextRefLabels(refs: Record<string, unknown>[]): string[] {
+  return Array.from(
+    new Set(
+      refs
+        .flatMap((ref) => [
+          recordStringByKeys(ref, ["source_id", "sourceId"]),
+          recordStringByKeys(ref, ["title"]),
+          recordStringByKeys(ref, ["path"]),
+          recordStringByKeys(ref, ["label"]),
+          recordStringByKeys(ref, ["key"]),
+        ])
+        .filter((item): item is string => Boolean(item)),
+    ),
+  ).sort();
+}
+
+function readRuntimeMemoryBudget(
+  summary: Record<string, unknown> | null,
+): RuntimeMemoryBudgetProjection | undefined {
+  const budget = recordObjectByKeys(summary, ["memoryBudget", "memory_budget"]);
+  if (!budget) {
+    return undefined;
+  }
+  return {
+    usedTokens: recordNumberByKeys(budget, ["usedTokens", "used_tokens"]),
+    maxTokens: recordNumberByKeys(budget, ["maxTokens", "max_tokens"]),
+    status: recordStringByKeys(budget, ["status"]),
+    source: recordStringByKeys(budget, ["source"]),
+  };
+}
+
+function buildContextGateProjection(task: AgentAppTaskRecord) {
+  const summary = readTaskContextSummary(task);
+  const retrievalRefs = readContextSummaryRefs(summary, [
+    "retrievalRefs",
+    "retrieval_refs",
+  ]);
+  const missingContext = readContextSummaryRefs(summary, [
+    "missingContext",
+    "missing_context",
+  ]);
+  const teamMemoryRefs = readContextSummaryRefs(summary, [
+    "teamMemoryRefs",
+    "team_memory_refs",
+  ]);
+  const memoryBudget = readRuntimeMemoryBudget(summary);
+  return {
+    status: missingContext.length
+      ? "needs_context"
+      : (memoryBudget?.status ?? (summary ? "ready" : "unknown")),
+    memoryBudget,
+    retrievalRefs,
+    missingContext,
+    teamMemoryRefs,
+    labels: readContextRefLabels([
+      ...retrievalRefs,
+      ...missingContext,
+      ...teamMemoryRefs,
+    ]),
+  };
+}
+
 function buildRuntimeMemoryProjection(
   task: AgentAppTaskRecord,
 ): RuntimeMemoryProjection {
   const diagnostics = readTaskThreadDiagnostics(task);
+  const contextGate = buildContextGateProjection(task);
   return {
     taskId: task.taskId,
     taskKind: task.taskKind,
@@ -1655,6 +3293,12 @@ function buildRuntimeMemoryProjection(
     pendingRequestCount: integerValue(
       diagnostics?.pending_request_count ?? diagnostics?.pendingRequestCount,
     ),
+    memoryBudget: contextGate.memoryBudget,
+    contextRefLabels: contextGate.labels,
+    retrievalRefCount: contextGate.retrievalRefs.length,
+    missingContextCount: contextGate.missingContext.length,
+    teamMemoryRefCount: contextGate.teamMemoryRefs.length,
+    contextGateStatus: contextGate.status,
     source: "agent_runtime_projection",
   };
 }
@@ -1664,6 +3308,7 @@ function buildRuntimeContextProjection(
 ): RuntimeContextProjection {
   const threadRead = readTaskThreadRead(task);
   const diagnostics = readTaskThreadDiagnostics(task);
+  const contextGate = buildContextGateProjection(task);
   return {
     taskId: task.taskId,
     traceId: task.traceId,
@@ -1684,6 +3329,11 @@ function buildRuntimeContextProjection(
     pendingRequestCount: integerValue(
       diagnostics?.pending_request_count ?? diagnostics?.pendingRequestCount,
     ),
+    contextGateStatus: contextGate.status,
+    memoryBudget: contextGate.memoryBudget,
+    retrievalRefCount: contextGate.retrievalRefs.length,
+    missingContextCount: contextGate.missingContext.length,
+    teamMemoryRefCount: contextGate.teamMemoryRefs.length,
     source: "agent_runtime_projection",
   };
 }
@@ -1826,6 +3476,18 @@ function dispatchMemory(
           (total, item) => total + item.pendingRequestCount,
           0,
         ),
+        retrievalRefCount: observations.reduce(
+          (total, item) => total + item.retrievalRefCount,
+          0,
+        ),
+        missingContextCount: observations.reduce(
+          (total, item) => total + item.missingContextCount,
+          0,
+        ),
+        teamMemoryRefCount: observations.reduce(
+          (total, item) => total + item.teamMemoryRefCount,
+          0,
+        ),
       },
       observations,
     };
@@ -1838,7 +3500,12 @@ function dispatchMemory(
       status: "limited_projection",
       source: "agent_runtime_projection",
       records: observations.filter((item) =>
-        [item.taskId, item.taskKind, ...item.knowledgeBindingKeys]
+        [
+          item.taskId,
+          item.taskKind,
+          ...item.knowledgeBindingKeys,
+          ...item.contextRefLabels,
+        ]
           .join(" ")
           .toLowerCase()
           .includes(query),
@@ -1880,10 +3547,97 @@ function dispatchContext(
   throwUnsupportedMethod(request);
 }
 
-function dispatchSearch(
+function dispatchTasks(
   host: CapabilityHost,
   request: AgentAppHostBridgeCapabilityRequest,
 ): unknown {
+  const input = readOptionalInputRecord(request);
+  const tasks = filterRuntimeProjectionTasks(host, request);
+  if (request.method === "list") {
+    const status = readString(input.status);
+    const limit = recordNumberByKeys(input, ["limit"]);
+    const items = tasks
+      .filter((task) => !status || task.status === status)
+      .slice(
+        0,
+        limit === undefined ? undefined : Math.max(0, Math.floor(limit)),
+      )
+      .map(buildRuntimeTaskProjection);
+    return {
+      appId: request.appId,
+      entryKey: request.entryKey,
+      status: "read_only_projection",
+      source: "agent_runtime_projection",
+      taskCount: items.length,
+      tasks: items,
+    };
+  }
+  if (request.method === "get") {
+    const taskId = readStringParam(request, "taskId", 0);
+    const task = tasks.find((item) => item.taskId === taskId);
+    return task
+      ? buildRuntimeTaskProjection(task)
+      : {
+          taskId,
+          status: "not_found",
+          reason: "task_not_found",
+          source: "agent_runtime_projection",
+        };
+  }
+  if (request.method === "cancel") {
+    readStringParam(request, "taskId", 0);
+    return {
+      status: "not_available",
+      reason: "task_cancellation_must_use_lime_agent_cancel_task",
+      source: "agent_runtime_projection",
+      next: {
+        capability: "lime.agent",
+        method: "cancelTask",
+      },
+    };
+  }
+  if (request.method === "subscribe") {
+    readStringParam(request, "taskId", 0);
+    return {
+      status: "not_available",
+      reason: "task_subscription_must_use_lime_agent_stream_task",
+      source: "agent_runtime_projection",
+      next: {
+        capability: "lime.agent",
+        method: "streamTask",
+      },
+    };
+  }
+  throwUnsupportedMethod(request);
+}
+
+async function dispatchTools(
+  host: CapabilityHost,
+  request: AgentAppHostBridgeCapabilityRequest,
+  resolveSdk?: () => LimeAppSdk,
+): Promise<unknown> {
+  const input = readOptionalInputRecord(request);
+  const tasks = filterRuntimeProjectionTasks(host, request);
+  const runs = buildRuntimeToolRuns(tasks);
+  if (request.method === "invoke") {
+    const response = buildGenericToolIntentResponse(request, input, runs);
+    return attachToolExecutionHandoff(
+      response,
+      normalizeStringList(response.toolHints),
+      resolveSdk,
+    );
+  }
+  if (request.method === "getProgress") {
+    return readGenericToolProgress(request, runs);
+  }
+  throwUnsupportedMethod(request);
+}
+
+async function dispatchSearch(
+  host: CapabilityHost,
+  request: AgentAppHostBridgeCapabilityRequest,
+  resolveSdk?: () => LimeAppSdk,
+): Promise<unknown> {
   const input = readOptionalInputRecord(request);
   const tasks = filterRuntimeProjectionTasks(host, request);
   const runs = buildRuntimeToolRuns(tasks, "lime.search");
@@ -1892,15 +3646,26 @@ function dispatchSearch(
   }
   if (request.method === "query" || request.method === "deepResearch") {
     readStringParam(request, "query", 0);
-    return buildToolIntentResponse(request, "lime.search", input, runs);
+    const response = buildToolIntentResponse(
+      request,
+      "lime.search",
+      input,
+      runs,
+    );
+    return attachToolExecutionHandoff(
+      response,
+      normalizeStringList(response.toolHints),
+      resolveSdk,
+    );
   }
   throwUnsupportedMethod(request);
 }
 
-function dispatchBrowser(
+async function dispatchBrowser(
   host: CapabilityHost,
   request: AgentAppHostBridgeCapabilityRequest,
-): unknown {
+  resolveSdk?: () => LimeAppSdk,
+): Promise<unknown> {
   const input = readOptionalInputRecord(request);
   const tasks = filterRuntimeProjectionTasks(host, request);
   const runs = buildRuntimeToolRuns(tasks, "lime.browser");
@@ -1916,13 +3681,24 @@ function dispatchBrowser(
   } else if (request.method !== "open") {
     throwUnsupportedMethod(request);
   }
-  return buildToolIntentResponse(request, "lime.browser", input, runs);
+  const response = buildToolIntentResponse(
+    request,
+    "lime.browser",
+    input,
+    runs,
+  );
+  return attachToolExecutionHandoff(
+    response,
+    normalizeStringList(response.toolHints),
+    resolveSdk,
+  );
 }
 
-function dispatchDocuments(
+async function dispatchDocuments(
   host: CapabilityHost,
   request: AgentAppHostBridgeCapabilityRequest,
-): unknown {
+  resolveSdk?: () => LimeAppSdk,
+): Promise<unknown> {
   const input = readOptionalInputRecord(request);
   const tasks = filterRuntimeProjectionTasks(host, request);
   const runs = buildRuntimeToolRuns(tasks, "lime.documents");
@@ -1937,13 +3713,24 @@ function dispatchDocuments(
   } else {
     throwUnsupportedMethod(request);
   }
-  return buildToolIntentResponse(request, "lime.documents", input, runs);
+  const response = buildToolIntentResponse(
+    request,
+    "lime.documents",
+    input,
+    runs,
+  );
+  return attachToolExecutionHandoff(
+    response,
+    normalizeStringList(response.toolHints),
+    resolveSdk,
+  );
 }
 
-function dispatchMedia(
+async function dispatchMedia(
   host: CapabilityHost,
   request: AgentAppHostBridgeCapabilityRequest,
-): unknown {
+  resolveSdk?: () => LimeAppSdk,
+): Promise<unknown> {
   const input = readOptionalInputRecord(request);
   const tasks = filterRuntimeProjectionTasks(host, request);
   const runs = buildRuntimeToolRuns(tasks, "lime.media");
@@ -1959,13 +3746,19 @@ function dispatchMedia(
   } else {
     throwUnsupportedMethod(request);
   }
-  return buildToolIntentResponse(request, "lime.media", input, runs);
+  const response = buildToolIntentResponse(request, "lime.media", input, runs);
+  return attachToolExecutionHandoff(
+    response,
+    normalizeStringList(response.toolHints),
+    resolveSdk,
+  );
 }
 
-function dispatchMcp(
+async function dispatchMcp(
   host: CapabilityHost,
   request: AgentAppHostBridgeCapabilityRequest,
-): unknown {
+  resolveSdk?: () => LimeAppSdk,
+): Promise<unknown> {
   const input = readOptionalInputRecord(request);
   const tasks = filterRuntimeProjectionTasks(host, request);
   const runs = buildRuntimeToolRuns(tasks, "lime.mcp");
@@ -2023,15 +3816,21 @@ function dispatchMcp(
   }
   if (request.method === "invoke") {
     readStringParam(request, "tool", 0);
-    return buildToolIntentResponse(request, "lime.mcp", input, runs);
+    const response = buildToolIntentResponse(request, "lime.mcp", input, runs);
+    return attachToolExecutionHandoff(
+      response,
+      normalizeStringList(response.toolHints),
+      resolveSdk,
+    );
   }
   throwUnsupportedMethod(request);
 }
 
-function dispatchTerminal(
+async function dispatchTerminal(
   host: CapabilityHost,
   request: AgentAppHostBridgeCapabilityRequest,
-): unknown {
+  resolveSdk?: () => LimeAppSdk,
+): Promise<unknown> {
   const input = readOptionalInputRecord(request);
   const tasks = filterRuntimeProjectionTasks(host, request);
   const runs = buildRuntimeToolRuns(tasks, "lime.terminal");
@@ -2040,26 +3839,34 @@ function dispatchTerminal(
   }
   if (request.method === "run") {
     readStringParam(request, "command", 0);
-    return buildToolIntentResponse(request, "lime.terminal", input, runs);
+    const response = buildToolIntentResponse(
+      request,
+      "lime.terminal",
+      input,
+      runs,
+    );
+    return attachToolExecutionHandoff(
+      response,
+      normalizeStringList(response.toolHints),
+      resolveSdk,
+    );
   }
   if (request.method === "cancel") {
-    return {
-      status: "not_available",
-      reason: "terminal_runtime_cancellation_not_exposed_to_agent_apps",
-      source: "tool_runtime_policy",
-    };
+    return cancelToolExecutionViaAgentTask(request, input, runs, resolveSdk);
   }
   throwUnsupportedMethod(request);
 }
 
-function dispatchConnectors(
+async function dispatchConnectors(
   host: CapabilityHost,
   request: AgentAppHostBridgeCapabilityRequest,
-): unknown {
+  resolveSdk?: () => LimeAppSdk,
+): Promise<unknown> {
   const input = readOptionalInputRecord(request);
   const tasks = filterRuntimeProjectionTasks(host, request);
   const runs = buildRuntimeToolRuns(tasks, "lime.connectors");
   const connectors = buildRuntimeConnectors(runs);
+  const authorizationRequests = buildConnectorAuthorizationProjections(tasks);
   if (request.method === "list") {
     return {
       appId: request.appId,
@@ -2067,6 +3874,7 @@ function dispatchConnectors(
       status: "read_only_projection",
       source: "agent_runtime_process",
       connectors,
+      authorizationRequests,
     };
   }
   if (request.method === "getStatus") {
@@ -2074,36 +3882,170 @@ function dispatchConnectors(
     const connector = connectors.find(
       (item) => item.connectorId === connectorId,
     );
-    return connector
-      ? {
+    const authorizationRequest = authorizationRequests.find(
+      (item) => item.connectorId === connectorId,
+    );
+    if (connector) {
+      return {
+        connectorId,
+        status: "observed",
+        source: "agent_runtime_process",
+        connector,
+        authorizationRequest,
+      };
+    }
+    if (isHostFixtureConnectorAction(connectorId)) {
+      return {
+        connectorId,
+        status: "authorized",
+        source: "host_fixture_connector",
+        connectorRuntimeFacts: buildConnectorRuntimeFacts(connectorId),
+      };
+    }
+    if (authorizationRequest) {
+      if (authorizationRequest.taskStatus === "succeeded") {
+        return {
           connectorId,
-          status: "observed",
-          source: "agent_runtime_process",
-          connector,
-        }
-      : {
-          connectorId,
-          status: "not_connected",
-          reason: "no_connector_runtime_facts",
-          source: "agent_runtime_process",
+          status: "authorized",
+          source: "agent_app_connector_authorization_task",
+          authorizationRequest,
+          connectorRuntimeFacts: buildConnectorRuntimeFacts(
+            connectorId,
+            undefined,
+            authorizationRequest,
+            authorizationRequest.actionId,
+          ),
         };
-  }
-  if (request.method === "requestAuth") {
-    readStringParam(request, "connectorId", 0);
+      }
+      return {
+        connectorId,
+        status: "requires_host_authorization",
+        source: "agent_app_connector_authorization_task",
+        authorizationRequest,
+      };
+    }
     return {
-      appId: request.appId,
-      capability: "lime.connectors",
-      method: request.method,
-      status: "requires_host_authorization",
-      reason: "connector_auth_requires_lime_policy_and_secret_binding",
-      source: "tool_runtime_policy",
-      intent: readToolIntent(input),
+      connectorId,
+      status: "not_connected",
+      reason: "no_connector_runtime_facts",
+      source: "agent_runtime_process",
     };
   }
+  if (request.method === "requestAuth") {
+    const connectorId = readStringParam(request, "connectorId", 0);
+    const reason = "connector_auth_requires_lime_policy_and_secret_binding";
+    const authorizationRequest = buildConnectorAuthorizationRequestEnvelope(
+      request,
+      connectorId,
+      input,
+      reason,
+    );
+    return attachConnectorAuthorizationHandoff(
+      {
+        appId: request.appId,
+        capability: "lime.connectors",
+        method: request.method,
+        status: "requires_host_authorization",
+        reason,
+        source: "tool_runtime_policy",
+        intent: readToolIntent(input),
+        authorizationGate: {
+          status: "requires_host_authorization",
+          owner: "lime_connector_policy",
+          connectorId,
+          secretBinding: "host_managed",
+          tokenExposed: false,
+          sessionScoped: true,
+          request: authorizationRequest,
+        },
+        next: {
+          capability: "lime.connectors",
+          method: "invoke",
+          reason: "after_host_authorization_and_agent_task",
+        },
+      },
+      resolveSdk,
+    );
+  }
   if (request.method === "invoke") {
-    readStringParam(request, "connectorId", 0);
-    readStringParam(request, "action", 1);
-    return buildToolIntentResponse(request, "lime.connectors", input, runs);
+    const connectorId = readStringParam(request, "connectorId", 0);
+    const action = readStringParam(request, "action", 1);
+    const connector = connectors.find(
+      (item) => item.connectorId === connectorId,
+    );
+    const authorizationRequest = authorizationRequests.find(
+      (item) => item.connectorId === connectorId,
+    );
+    const fixtureRuntimeFacts = buildConnectorRuntimeFacts(
+      connectorId,
+      undefined,
+      undefined,
+      action,
+    );
+    if (
+      !connector &&
+      !fixtureRuntimeFacts &&
+      authorizationRequest?.taskStatus !== "succeeded"
+    ) {
+      return {
+        appId: request.appId,
+        capability: "lime.connectors",
+        method: request.method,
+        status: "requires_host_authorization",
+        reason: authorizationRequest
+          ? "connector_authorization_task_not_completed"
+          : "connector_authorization_required_before_execution",
+        source: authorizationRequest
+          ? "agent_app_connector_authorization_task"
+          : "tool_runtime_policy",
+        intent: readToolIntent(input),
+        authorizationGate: {
+          status: "requires_host_authorization",
+          owner: "lime_connector_policy",
+          connectorId,
+          secretBinding: "host_managed",
+          tokenExposed: false,
+          sessionScoped: true,
+          authorizationRequest,
+        },
+        next: {
+          capability: "lime.connectors",
+          method: "requestAuth",
+          reason: authorizationRequest
+            ? "wait_for_host_managed_authorization_task"
+            : "connector_auth_required_before_agent_task_execution",
+        },
+      };
+    }
+    const connectorRuntimeFacts = buildConnectorRuntimeFacts(
+      connectorId,
+      connector,
+      authorizationRequest,
+      action,
+      { exposeSecretLeaseRef: true },
+    );
+    const executionInput = connectorRuntimeFacts
+      ? {
+          ...input,
+          connectorRuntimeFacts,
+        }
+      : input;
+    const response = buildToolIntentResponse(
+      request,
+      "lime.connectors",
+      executionInput,
+      runs,
+      {
+        toolName: `connector__${connectorId}__${action}`,
+        action,
+        exposeSecretLeaseRefToInternal: true,
+      },
+    );
+    return attachToolExecutionHandoff(
+      response,
+      normalizeStringList(response.toolHints),
+      resolveSdk,
+    );
   }
   throwUnsupportedMethod(request);
 }
@@ -2120,6 +4062,9 @@ function dispatchUsage(
   const costItems = tasks
     .map(buildCostProjection)
     .filter((item): item is RuntimeCostProjection => Boolean(item));
+  const budgetItems = tasks
+    .map(buildBudgetProjection)
+    .filter((item): item is RuntimeBudgetProjection => Boolean(item));
   if (request.method === "getTokenUsage") {
     return {
       appId: request.appId,
@@ -2143,9 +4088,23 @@ function dispatchUsage(
     };
   }
   if (request.method === "getBudget") {
+    const scope = readString(input.scope) ?? "app";
+    if (budgetItems.length > 0) {
+      return {
+        appId: request.appId,
+        scope,
+        status: "observed",
+        source: "agent_runtime_projection",
+        taskCount: tasks.length,
+        budgetCount: budgetItems.length,
+        observedCost: aggregateCost(costItems),
+        latest: budgetItems[0],
+        tasks: budgetItems,
+      };
+    }
     return {
       appId: request.appId,
-      scope: readString(input.scope) ?? "app",
+      scope,
       status: "not_configured",
       reason: "no_agent_runtime_budget_facts",
       source: "agent_runtime_projection",
@@ -2182,6 +4141,12 @@ export function createAgentAppCapabilityDispatcher({
 
     assertCapabilityDeclared(projection, request, entryKey);
 
+    const resolveSdk = () =>
+      host.createSdkContext(
+        request.entryKey ?? entryKey,
+        resolveRunId(request, runId),
+      );
+
     if (request.capability === "lime.models") {
       return dispatchModels(host, request);
     }
@@ -2197,32 +4162,35 @@ export function createAgentAppCapabilityDispatcher({
     if (request.capability === "lime.context") {
       return dispatchContext(host, request);
     }
+    if (request.capability === "lime.tasks") {
+      return dispatchTasks(host, request);
+    }
+    if (request.capability === "lime.tools") {
+      return dispatchTools(host, request, resolveSdk);
+    }
     if (request.capability === "lime.search") {
-      return dispatchSearch(host, request);
+      return dispatchSearch(host, request, resolveSdk);
     }
     if (request.capability === "lime.browser") {
-      return dispatchBrowser(host, request);
+      return dispatchBrowser(host, request, resolveSdk);
     }
     if (request.capability === "lime.documents") {
-      return dispatchDocuments(host, request);
+      return dispatchDocuments(host, request, resolveSdk);
     }
     if (request.capability === "lime.media") {
-      return dispatchMedia(host, request);
+      return dispatchMedia(host, request, resolveSdk);
     }
     if (request.capability === "lime.mcp") {
-      return dispatchMcp(host, request);
+      return dispatchMcp(host, request, resolveSdk);
     }
     if (request.capability === "lime.terminal") {
-      return dispatchTerminal(host, request);
+      return dispatchTerminal(host, request, resolveSdk);
     }
     if (request.capability === "lime.connectors") {
-      return dispatchConnectors(host, request);
+      return dispatchConnectors(host, request, resolveSdk);
     }
 
-    const sdk = host.createSdkContext(
-      request.entryKey ?? entryKey,
-      resolveRunId(request, runId),
-    );
+    const sdk = resolveSdk();
 
     if (request.capability === "lime.storage") {
       return dispatchStorage(sdk, request, projection);

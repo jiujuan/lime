@@ -25,7 +25,7 @@ export function AudioPlayerRenderer({
   }
 
   return (
-    <div className="space-y-2 rounded-[16px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-3 shadow-sm shadow-slate-950/5">
+    <div className="space-y-1.5 rounded-[12px] border border-slate-200 bg-white p-2 shadow-none">
       {description && (
         <div className={A2UI_FORM_TOKENS.helperText}>{description}</div>
       )}

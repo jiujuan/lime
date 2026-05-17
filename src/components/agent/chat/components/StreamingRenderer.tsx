@@ -13,6 +13,8 @@ import { MarkdownRenderer, type MarkdownRenderMode } from "./MarkdownRenderer";
 import { A2UITaskCard, A2UITaskLoadingCard } from "./A2UITaskCard";
 import { ActionRequestA2UIPreviewCard } from "./ActionRequestA2UIPreviewCard";
 import { InlineToolProcessStep } from "./InlineToolProcessStep";
+import { ThinkingBlock } from "./ThinkingBlock";
+import { resolveThinkingDisplayParts } from "./thinkingBlockDisplay";
 import { DecisionPanel } from "./DecisionPanel";
 import { AgentPlanBlock } from "./AgentPlanBlock";
 import { RuntimePeerMessageCards } from "./RuntimePeerMessageCards";
@@ -36,12 +38,14 @@ import {
   splitProposedPlanSegments,
   stripProposedPlanBlocks,
 } from "../utils/proposedPlan";
-import { isActionRequestA2UICompatible } from "../utils/actionRequestA2UI";
+import {
+  buildActionRequestSubmissionPayload,
+  isActionRequestA2UICompatible,
+} from "../utils/actionRequestA2UI";
 import {
   sanitizeContentPartsForDisplay,
   sanitizeMessageTextForDisplay,
 } from "../utils/internalImagePlaceholder";
-import { normalizeProcessDisplayText } from "../utils/processDisplayText";
 import { isPureRuntimePeerMessageText } from "../utils/runtimePeerMessageDisplay";
 import {
   summarizeStreamingToolBatch,
@@ -94,180 +98,8 @@ function resolveInitialStreamingDisplayText(
 
 // ============ 思考内容组件 ============
 
-interface ThinkingBlockProps {
-  content: string;
-  defaultExpanded?: boolean;
-  grouped?: boolean;
-  groupMarker?: string;
-  isStreaming?: boolean;
-}
-
-interface ThinkingDisplayParts {
-  statusLabel: string;
-  body: string;
-  preview: string;
-}
-
 type WriteFileMessagePart = ParsedMessageContent & {
   type: "write_file" | "pending_write_file";
-};
-
-function resolveThinkingDisplayParts(
-  content: string,
-  isStreaming: boolean,
-): ThinkingDisplayParts {
-  const trimmed = normalizeProcessDisplayText(content).trim();
-  const statusLabel = isStreaming ? "思考中" : "已完成思考";
-
-  if (!trimmed) {
-    return {
-      statusLabel,
-      body: "",
-      preview: "",
-    };
-  }
-
-  const parsed = parseAIResponse(trimmed, false);
-  if (!parsed.hasA2UI && !parsed.hasPending) {
-    const preview = isStreaming
-      ? ""
-      : trimmed
-          .split(/\r?\n/)
-          .map((line) => line.trim())
-          .find(Boolean) || "";
-    return {
-      statusLabel,
-      body: trimmed,
-      preview,
-    };
-  }
-
-  const fallbackPreview =
-    trimmed
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find(Boolean) || "在整理结构化内容";
-  return {
-    statusLabel,
-    body: fallbackPreview,
-    preview: fallbackPreview,
-  };
-}
-
-const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
-  content,
-  defaultExpanded = false,
-  grouped = false,
-  groupMarker = "•",
-  isStreaming = false,
-}) => {
-  const [expanded, setExpanded] = React.useState(defaultExpanded);
-  const previousDefaultExpandedRef = React.useRef(defaultExpanded);
-  const thinkingDisplay = useMemo(
-    () => resolveThinkingDisplayParts(content, isStreaming),
-    [content, isStreaming],
-  );
-  const hasBody = thinkingDisplay.body.length > 0;
-
-  React.useEffect(() => {
-    if (previousDefaultExpandedRef.current !== defaultExpanded) {
-      previousDefaultExpandedRef.current = defaultExpanded;
-      setExpanded(defaultExpanded);
-    }
-  }, [defaultExpanded]);
-
-  if (!content) return null;
-
-  return (
-    <div
-      className={cn(grouped ? "flex items-start gap-2 py-1.5" : "py-0.5")}
-      data-testid="thinking-block"
-      data-visual-style={grouped ? "grouped-inline" : "card"}
-    >
-      {grouped ? (
-        <span className="pt-0.5 font-mono text-xs text-slate-400">
-          {groupMarker}
-        </span>
-      ) : null}
-      <details
-        className={cn(
-          "min-w-0 flex-1",
-          grouped
-            ? "rounded-none border-0 bg-transparent px-0 py-0"
-            : "rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm shadow-slate-950/5",
-        )}
-        open={expanded}
-        onToggle={(e) => setExpanded((e.target as HTMLDetailsElement).open)}
-      >
-        <summary
-          className={cn(
-            "list-none select-none rounded-xl transition-colors",
-            hasBody ? "cursor-pointer" : "cursor-default",
-            grouped && hasBody && "hover:bg-slate-50",
-          )}
-          onClick={(event) => {
-            if (!hasBody) {
-              event.preventDefault();
-            }
-          }}
-        >
-          <div
-            className={cn("flex items-start", grouped ? "gap-2.5" : "gap-3")}
-          >
-            <span
-              className={cn(
-                "shrink-0 rounded-full",
-                grouped ? "mt-2 h-2 w-2" : "mt-1.5 h-2.5 w-2.5",
-                isStreaming
-                  ? "animate-pulse bg-sky-500 shadow-[0_0_0_4px_rgba(14,165,233,0.14)]"
-                  : "bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.14)]",
-              )}
-            />
-            <div className="min-w-0 flex-1">
-              <div
-                className={cn(
-                  "text-sm font-medium leading-6",
-                  grouped ? "text-slate-700" : "text-slate-800",
-                )}
-              >
-                {thinkingDisplay.statusLabel}
-              </div>
-              {!expanded && thinkingDisplay.preview ? (
-                <div
-                  className={cn(
-                    "text-sm leading-6 text-slate-600",
-                    grouped ? "mt-0.5 line-clamp-2" : "mt-1 line-clamp-3",
-                  )}
-                >
-                  {thinkingDisplay.preview}
-                </div>
-              ) : null}
-            </div>
-            {hasBody ? (
-              <ChevronDown
-                className={cn(
-                  "mt-1 h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200",
-                  expanded && "rotate-180",
-                )}
-              />
-            ) : null}
-          </div>
-        </summary>
-        {hasBody && expanded ? (
-          <div
-            className={cn(
-              "min-w-0",
-              grouped ? "mt-1.5 pl-[18px]" : "mt-2.5 pl-[22px]",
-            )}
-          >
-            <div className="min-w-0">
-              <MarkdownRenderer content={thinkingDisplay.body} />
-            </div>
-          </div>
-        ) : null}
-      </details>
-    </div>
-  );
 };
 
 // ============ 流式光标 ============
@@ -682,7 +514,7 @@ const StreamingText: React.FC<StreamingTextProps> = memo(
                       onFormChange={onA2UIFormChange}
                       preset={CHAT_A2UI_TASK_CARD_PRESET}
                       compact={true}
-                      className="max-w-[760px]"
+                      className="max-w-[432px]"
                       preview={readOnlyA2UI}
                     />
                   );
@@ -700,7 +532,7 @@ const StreamingText: React.FC<StreamingTextProps> = memo(
                     preset={CHAT_A2UI_TASK_CARD_PRESET}
                     subtitle="正在解析结构化问题，请稍等。"
                     compact={true}
-                    className="max-w-[760px]"
+                    className="max-w-[432px]"
                   />
                 );
 
@@ -1092,13 +924,8 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
   }) => {
     const shouldRenderInlineActionRequest = React.useCallback(
       (request: ActionRequired) =>
-        !(
-          suppressedActionRequestId === request.requestId ||
-          (promoteActionRequestsToA2UI &&
-            request.status === "pending" &&
-            isActionRequestA2UICompatible(request))
-        ),
-      [promoteActionRequestsToA2UI, suppressedActionRequestId],
+        suppressedActionRequestId !== request.requestId,
+      [suppressedActionRequestId],
     );
 
     // 判断是否使用交错显示模式
@@ -1363,22 +1190,47 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
 
     const renderActionRequestNode = React.useCallback(
       (request: ActionRequired) => {
-        if (
+        if (!shouldRenderInlineActionRequest(request)) {
+          return null;
+        }
+
+        const shouldRenderA2UICard =
           isActionRequestA2UICompatible(request) &&
           (readOnlyActionRequests ||
             request.status === "submitted" ||
-            request.status === "queued")
-        ) {
+            request.status === "queued" ||
+            (promoteActionRequestsToA2UI && request.status === "pending"));
+        if (shouldRenderA2UICard) {
+          const isReadOnly =
+            readOnlyActionRequests ||
+            request.status === "submitted" ||
+            request.status === "queued" ||
+            !onPermissionResponse;
           return (
             <ActionRequestA2UIPreviewCard
               request={request}
               compact={true}
               context="chat"
+              readOnly={isReadOnly}
+              onSubmit={
+                isReadOnly
+                  ? undefined
+                  : (formData) => {
+                      const payload = buildActionRequestSubmissionPayload(
+                        request,
+                        formData,
+                      );
+                      onPermissionResponse({
+                        requestId: request.requestId,
+                        confirmed: true,
+                        actionType: request.actionType,
+                        response: payload.responseText,
+                        userData: payload.userData,
+                      });
+                    }
+              }
             />
           );
-        }
-        if (!shouldRenderInlineActionRequest(request)) {
-          return null;
         }
         return (
           <DecisionPanel
@@ -1389,6 +1241,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
       },
       [
         onPermissionResponse,
+        promoteActionRequestsToA2UI,
         readOnlyActionRequests,
         shouldRenderInlineActionRequest,
       ],
@@ -1501,7 +1354,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
                   onFormChange={onA2UIFormChange}
                   preset={CHAT_A2UI_TASK_CARD_PRESET}
                   compact={true}
-                  className="max-w-[760px]"
+                  className="max-w-[432px]"
                   preview={readOnlyA2UI}
                 />
               );
@@ -1523,7 +1376,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
                   preset={CHAT_A2UI_TASK_CARD_PRESET}
                   subtitle="正在解析结构化问题，请稍等。"
                   compact={true}
-                  className="max-w-[760px]"
+                  className="max-w-[432px]"
                 />
               );
 

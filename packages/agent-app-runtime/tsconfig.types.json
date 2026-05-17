@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "declarationMap": false,
+    "rootDir": "../../src/features/agent-app",
+    "outDir": "./dist/types"
+  },
+  "include": [
+    "../../src/features/agent-app/featureFlag.ts",
+    "../../src/features/agent-app/readiness/hostCapabilityProfile.ts",
+    "../../src/features/agent-app/sdk/**/*.ts",
+    "../../src/features/agent-app/types.ts"
+  ],
+  "exclude": [
+    "../../src/features/agent-app/sdk/**/*.test.ts"
+  ]
+}

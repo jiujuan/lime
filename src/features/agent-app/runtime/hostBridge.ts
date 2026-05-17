@@ -172,7 +172,7 @@ const HOST_ACTION_TYPES = new Set([
 const DEFAULT_TASK_SUBSCRIPTION_POLL_INTERVAL_MS = 1000;
 const MIN_TASK_SUBSCRIPTION_POLL_INTERVAL_MS = 250;
 const MAX_TASK_SUBSCRIPTION_POLL_INTERVAL_MS = 10_000;
-const DEFAULT_TERMINAL_ARTIFACT_REPLAY_POLLS = 4;
+const DEFAULT_TERMINAL_ARTIFACT_REPLAY_POLLS = 24;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -338,6 +338,177 @@ function readArtifactsFromValue(value: unknown): Record<string, unknown>[] {
   return [...direct, ...fromResult, ...fromThreadRead].filter(isRecord);
 }
 
+function repairUnescapedStringQuotes(value: string): string {
+  let output = "";
+  let inString = false;
+  let escaped = false;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (escaped) {
+      output += char;
+      escaped = false;
+      continue;
+    }
+    if (inString && char === "\\") {
+      output += char;
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      if (!inString) {
+        inString = true;
+        output += char;
+        continue;
+      }
+      const next = value.slice(index + 1).match(/\S/)?.[0];
+      if (!next || [",", "}", "]", ":"].includes(next)) {
+        inString = false;
+        output += char;
+      } else {
+        output += `\\"`;
+      }
+      continue;
+    }
+    output += char;
+  }
+  return output;
+}
+
+function parseJsonRecordCandidate(candidate: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(candidate);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    const repaired = repairUnescapedStringQuotes(candidate);
+    if (repaired === candidate) {
+      return null;
+    }
+    try {
+      const parsed = JSON.parse(repaired);
+      return isRecord(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+}
+
+function parseJsonObjectFromMarkdown(content: string): Record<string, unknown> | null {
+  const text = content.trim();
+  const candidates: string[] = [];
+  if (text.startsWith("{") && text.endsWith("}")) {
+    candidates.push(text);
+  }
+  for (const match of text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)) {
+    candidates.push(match[1]?.trim() ?? "");
+  }
+  for (const candidate of candidates.filter(Boolean)) {
+    const parsed = parseJsonRecordCandidate(candidate);
+    if (parsed) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function hasContentFactoryWorkspacePatchFields(value: Record<string, unknown>): boolean {
+  return [
+    "workspace",
+    "project",
+    "sceneTable",
+    "scene_table",
+    "contentBatch",
+    "content_batch",
+    "scripts",
+    "scriptBatch",
+    "script_batch",
+    "imagePrompts",
+    "image_prompts",
+    "assetPack",
+    "asset_pack",
+    "projectKnowledge",
+    "project_knowledge",
+    "strategyReport",
+    "strategy_report",
+    "reviewReport",
+    "review_report",
+  ].some((key) => isRecord(value[key]) || Array.isArray(value[key]));
+}
+
+function extractWorkspacePatchFromValue(
+  value: unknown,
+  depth = 0,
+): Record<string, unknown> | undefined {
+  if (depth > 10 || value == null) {
+    return undefined;
+  }
+  if (typeof value === "string") {
+    const parsed = parseJsonObjectFromMarkdown(value);
+    return parsed ? extractWorkspacePatchFromValue(parsed, depth + 1) : undefined;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const patch = extractWorkspacePatchFromValue(item, depth + 1);
+      if (patch) {
+        return patch;
+      }
+    }
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  for (const key of [
+    "contentFactoryWorkspacePatch",
+    "content_factory_workspace_patch",
+    "workspacePatch",
+    "workspace_patch",
+  ]) {
+    const patch = value[key];
+    if (isRecord(patch)) {
+      return patch;
+    }
+  }
+  const kind = readString(value, "kind") ?? readString(value, "artifactKind");
+  if (
+    kind === "content_factory.workspace_patch" ||
+    kind === "content_factory_workspace_patch" ||
+    kind === "workspacePatch" ||
+    kind === "workspace_patch" ||
+    hasContentFactoryWorkspacePatchFields(value)
+  ) {
+    return value;
+  }
+  for (const key of [
+    "payload",
+    "result",
+    "threadRead",
+    "metadata",
+    "artifactDocument",
+    "artifact_document",
+    "process",
+    "runtimeProcess",
+    "runtimeEvent",
+    "events",
+    "taskEvents",
+    "artifacts",
+    "items",
+    "blocks",
+    "content",
+    "markdown",
+    "text",
+    "message",
+    "output",
+    "response",
+    "streamText",
+  ]) {
+    const patch = extractWorkspacePatchFromValue(value[key], depth + 1);
+    if (patch) {
+      return patch;
+    }
+  }
+  return undefined;
+}
+
 function buildArtifactReplayEventsFromValue(value: unknown): unknown[] {
   const artifacts = readArtifactsFromValue(value);
   if (!artifacts.length) {
@@ -357,7 +528,7 @@ function buildArtifactReplayEventsFromValue(value: unknown): unknown[] {
     const workspacePatch =
       isRecord(metadata.workspacePatch) || isRecord(metadata.contentFactoryWorkspacePatch)
         ? (metadata.workspacePatch ?? metadata.contentFactoryWorkspacePatch)
-        : undefined;
+        : extractWorkspacePatchFromValue(artifactDocument);
     return {
       eventType: "artifact:created",
       status: readString(artifact, "status") ?? "created",
@@ -403,11 +574,11 @@ function isSuccessfulTerminalTaskValue(value: unknown): boolean {
 }
 
 function hasWorkspacePatchPayload(value: unknown): boolean {
+  if (extractWorkspacePatchFromValue(value)) {
+    return true;
+  }
   if (!isRecord(value)) {
     return false;
-  }
-  if (isRecord(value.workspacePatch) || isRecord(value.contentFactoryWorkspacePatch)) {
-    return true;
   }
   if (isRecord(value.payload) && hasWorkspacePatchPayload(value.payload)) {
     return true;
@@ -424,7 +595,7 @@ function hasWorkspacePatchPayload(value: unknown): boolean {
   if (Array.isArray(value.taskEvents) && value.taskEvents.some(hasWorkspacePatchPayload)) {
     return true;
   }
-  if (Array.isArray(value.artifacts) && value.artifacts.length > 0) {
+  if (Array.isArray(value.artifacts) && value.artifacts.some(hasWorkspacePatchPayload)) {
     return true;
   }
   return false;

@@ -119,9 +119,13 @@ vi.mock("./SkillScaffoldDialog", () => ({
 vi.mock("@/components/ui/dialog", () => ({
   Dialog: ({ open, children }: { open: boolean; children: ReactNode }) =>
     open ? <div>{children}</div> : null,
-  DialogContent: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
+  DialogContent: ({
+    children,
+    className,
+  }: {
+    children: ReactNode;
+    className?: string;
+  }) => <div className={className}>{children}</div>,
   DialogHeader: ({ children }: { children: ReactNode }) => (
     <div>{children}</div>
   ),
@@ -454,6 +458,35 @@ describe("SkillsWorkspacePage", () => {
     expect(container.textContent).toContain("使用");
     expect(container.textContent).toContain("卸载");
     expect(container.textContent).not.toContain("ASP.NET Core");
+  });
+
+  it("页面壳、卡片和详情弹窗应接入 Lime 主题变量", async () => {
+    const { container } = renderPage();
+    const shell = container.querySelector(".lime-workbench-theme-scope");
+    const card = findMarketplaceCard(container, "数据分析");
+
+    expect(shell?.className).toContain("bg-[color:var(--lime-app-bg)]");
+    expect(shell?.querySelector("main")?.className).toContain(
+      "bg-[color:var(--lime-surface)]",
+    );
+    expect(card?.className).toContain("bg-[color:var(--lime-surface)]");
+    expect(card?.className).toContain(
+      "border-[color:var(--lime-surface-border)]",
+    );
+
+    await act(async () => {
+      findButtonIn(card!, "详情")?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const detail = container.querySelector(
+      '[data-testid="skills-marketplace-detail"]',
+    );
+    const dialogScope = detail?.closest(".lime-workbench-theme-scope");
+
+    expect(dialogScope?.className).toContain("lime-workbench-surface-scope");
+    expect(dialogScope?.className).toContain("bg-[color:var(--lime-surface)]");
   });
 
   it("用户安装页点击使用应回首页输入框预选 @ 技能，不显示入口横幅", () => {

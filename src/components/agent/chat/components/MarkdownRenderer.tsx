@@ -1147,7 +1147,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
                           onSubmit={readOnlyA2UI ? undefined : onA2UISubmit}
                           preset={CHAT_A2UI_TASK_CARD_PRESET}
                           compact={true}
-                          className="max-w-[760px]"
+                          className="max-w-[432px]"
                           preview={readOnlyA2UI}
                         />
                       );
@@ -1158,7 +1158,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
                           preset={CHAT_A2UI_TASK_CARD_PRESET}
                           subtitle="正在解析结构化问题，请稍等。"
                           compact={true}
-                          className="max-w-[760px]"
+                          className="max-w-[432px]"
                         />
                       );
                     }

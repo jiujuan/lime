@@ -965,6 +965,10 @@ fn content_factory_fast_skill_summary(skill_name: &str) -> Option<(&'static str,
     }
 }
 
+fn is_agent_app_runtime_session(session_id: &str) -> bool {
+    session_id.trim().starts_with("agent-app-runtime-")
+}
+
 fn build_agent_app_content_factory_fast_skill_result(
     params: &Value,
     session_id: &str,
@@ -973,10 +977,10 @@ fn build_agent_app_content_factory_fast_skill_result(
     if !is_agent_app_name_allowlisted_skill_session(session_id, skill_name) {
         return None;
     }
-    if !looks_like_content_factory_skill_args(params) {
+    let (summary, artifact_kind) = content_factory_fast_skill_summary(skill_name)?;
+    if !looks_like_content_factory_skill_args(params) && !is_agent_app_runtime_session(session_id) {
         return None;
     }
-    let (summary, artifact_kind) = content_factory_fast_skill_summary(skill_name)?;
     let args = parse_skill_args_value(params).unwrap_or_else(|| json!({}));
     let skill_id = normalize_skill_name(skill_name);
     let output = json!({
@@ -1317,6 +1321,39 @@ mod tests {
             .as_deref()
             .unwrap_or_default()
             .contains("contentFactoryGuidance"));
+    }
+
+    #[tokio::test]
+    async fn agent_app_content_factory_skill_should_use_fast_path_for_text_args() {
+        let session_id = "agent-app-runtime-content-factory-text-skill";
+        set_skill_tool_session_allowed_skills(session_id, ["content-reviewer"]);
+
+        let tool = LimeSkillTool::new();
+        let result = tool
+            .execute(
+                serde_json::json!({
+                    "skill": "content-reviewer",
+                    "args": "复核内容工厂场景包输出，列出证据缺口和人工确认建议。"
+                }),
+                &create_context(session_id),
+            )
+            .await
+            .expect("agent app text args should still avoid nested skill execution");
+
+        clear_skill_tool_session_access(session_id);
+
+        assert!(result.success);
+        assert_eq!(
+            result.metadata.get("agent_app_skill_fast_path"),
+            Some(&json!(true))
+        );
+        assert_eq!(
+            result
+                .metadata
+                .get("content_factory_skill_evidence")
+                .and_then(|value| value.get("artifactKind")),
+            Some(&json!("review_pack"))
+        );
     }
 
     #[test]

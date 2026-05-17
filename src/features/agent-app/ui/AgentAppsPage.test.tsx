@@ -102,10 +102,12 @@ interface MountedPage {
 const mountedPages: MountedPage[] = [];
 const installedStates: InstalledAgentAppState[] = [];
 
-function buildReadyState(params: {
-  disabled?: boolean;
-  profile?: HostCapabilityProfile;
-} = {}): InstalledAgentAppState {
+function buildReadyState(
+  params: {
+    disabled?: boolean;
+    profile?: HostCapabilityProfile;
+  } = {},
+): InstalledAgentAppState {
   const manifest = contentFactoryFixture as AppManifest;
   const loadedAt = "2026-05-15T00:00:00.000Z";
   const identity = buildPackageIdentity({
@@ -142,17 +144,22 @@ function buildReadyState(params: {
   });
 }
 
-async function renderPage(pageParams?: {
-  selectedAgentAppId?: string;
-  launchAgentAppEntryKey?: string;
-  launchRequestKey?: number;
-}, onNavigate?: Parameters<typeof AgentAppsPage>[0]["onNavigate"]) {
+async function renderPage(
+  pageParams?: {
+    selectedAgentAppId?: string;
+    launchAgentAppEntryKey?: string;
+    launchRequestKey?: number;
+  },
+  onNavigate?: Parameters<typeof AgentAppsPage>[0]["onNavigate"],
+) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
 
   await act(async () => {
-    root.render(<AgentAppsPage onNavigate={onNavigate} pageParams={pageParams} />);
+    root.render(
+      <AgentAppsPage onNavigate={onNavigate} pageParams={pageParams} />,
+    );
     await Promise.resolve();
     await Promise.resolve();
   });
@@ -167,6 +174,21 @@ async function flush(times = 8) {
       await Promise.resolve();
     }
   });
+}
+
+async function openAppDetail(
+  container: HTMLElement,
+  appId = "content-factory-app",
+) {
+  const detailButton = container.querySelector(
+    `[data-testid="agent-apps-open-detail-${appId}"]`,
+  ) as HTMLButtonElement | null;
+  expect(detailButton).not.toBeNull();
+  await act(async () => {
+    detailButton?.click();
+    await Promise.resolve();
+  });
+  await flush();
 }
 
 function installState(state: InstalledAgentAppState): InstalledAgentAppState {
@@ -251,13 +273,15 @@ function setupDefaultApiMocks() {
       buildReviewResult(buildReadyState()),
   );
   apiMocks.saveInstalledAgentAppState.mockImplementation(
-    async (request: { state: InstalledAgentAppState }) => installState(request.state),
+    async (request: { state: InstalledAgentAppState }) =>
+      installState(request.state),
   );
   apiMocks.installLocalAgentAppPackage.mockImplementation(async () =>
     installState(buildReadyState()),
   );
   apiMocks.installCloudAgentAppRelease.mockImplementation(
-    async (_params: { app: CloudBootstrapApp }) => installState(buildReadyState()),
+    async (_params: { app: CloudBootstrapApp }) =>
+      installState(buildReadyState()),
   );
   apiMocks.submitAgentAppRegistrationCode.mockResolvedValue({
     source: "remote",
@@ -288,7 +312,11 @@ function setupDefaultApiMocks() {
     },
   });
   apiMocks.setAgentAppDisabled.mockImplementation(
-    async (request: { appId: string; disabled: boolean; updatedAt?: string }) => {
+    async (request: {
+      appId: string;
+      disabled: boolean;
+      updatedAt?: string;
+    }) => {
       const nextStates = installedStates.map((state) =>
         state.appId === request.appId
           ? {
@@ -375,14 +403,31 @@ describe("AgentAppsPage", () => {
     const container = await renderPage();
     await flush();
 
-    expect(container.textContent).toContain("agentApp.apps.localSource.title");
-    expect(container.textContent).toContain("agentApp.apps.badge.formalEntry");
-    expect(container.textContent).toContain("agentApp.apps.boundaryNote");
-    expect(container.textContent).toContain("agentApp.apps.localSource.description");
+    expect(container.textContent).toContain("agentApp.apps.center.title");
+    expect(container.textContent).toContain("agentApp.apps.center.description");
+    expect(
+      container
+        .querySelector('[data-testid="agent-apps-search"]')
+        ?.getAttribute("placeholder"),
+    ).toBe("agentApp.apps.center.searchPlaceholder");
     expect(container.textContent).not.toContain(REMOVED_MACHINE_PATH);
-    expect(container.textContent).toContain("agentApp.apps.cloudSource.title");
-    expect(container.textContent).toContain("content-factory-app@0.3.0");
-    expect(container.textContent).toContain("agentApp.apps.installed.empty");
+    expect(
+      container.querySelector(
+        '[data-testid="agent-apps-list-row-content-factory-app"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="agent-apps-open-detail-content-factory-app"]',
+      )?.textContent,
+    ).toContain("agentApp.apps.center.action.details");
+    expect(
+      container.querySelector('[data-testid="agent-apps-detail"]'),
+    ).toBeNull();
+    expect(container.textContent).toContain("agentApp.apps.center.source.cloud");
+    expect(container.textContent).toContain(
+      "agentApp.apps.center.status.installable",
+    );
 
     const installLocal = container.querySelector(
       '[data-testid="agent-apps-install-local"]',
@@ -429,6 +474,110 @@ describe("AgentAppsPage", () => {
       ),
     ).not.toBeNull();
     expect(container.textContent).toContain("内容工厂");
+  });
+
+  it("正式入口页面壳和主按钮应接入 Lime 主题变量", async () => {
+    const container = await renderPage();
+    await flush();
+
+    const page = container.querySelector('[data-testid="agent-apps-page"]');
+    const installLocal = container.querySelector(
+      '[data-testid="agent-apps-install-local"]',
+    ) as HTMLButtonElement | null;
+
+    expect(page?.className).toContain("lime-workbench-theme-scope");
+    expect(page?.className).toContain("bg-slate-50");
+    expect(installLocal?.className).toContain("bg-blue-950");
+    expect(installLocal?.className).toContain("text-white");
+    expect(
+      container
+        .querySelector('[data-testid="agent-apps-list"]')
+        ?.closest("section")
+        ?.className,
+    ).toContain("grid-rows-[auto_minmax(0,1fr)]");
+  });
+
+  it("应用中心应支持云端/本地来源筛选、搜索和分页", async () => {
+    apiMocks.getAgentAppCloudCatalog.mockResolvedValue({
+      source: "remote",
+      payload: {
+        schemaVersion: "agent-app-cloud-bootstrap/v1",
+        tenantId: "tenant-0001",
+        generatedAt: "2026-05-15T00:00:00.000Z",
+        apps: Array.from({ length: 25 }, (_, index) => {
+          const number = index + 1;
+          return {
+            appId: `bulk-app-${number}`,
+            displayName: `批量应用 ${String(number).padStart(2, "0")}`,
+            version: `1.0.${number}`,
+            registrationRequired: false,
+            registrationState: "not_required",
+            enabled: true,
+            packageUrl: `https://lime.local/agent-apps/bulk-app-${number}.zip`,
+            packageHash:
+              "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            manifestHash:
+              "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            capabilityRequirements: {},
+            defaultEntries: ["dashboard"],
+            policyDefaults: {},
+            toolAvailability: [],
+          } satisfies CloudBootstrapApp;
+        }),
+      },
+    });
+
+    const container = await renderPage();
+    await flush();
+
+    expect(
+      container.querySelector('[data-testid="agent-apps-list-row-bulk-app-21"]'),
+    ).toBeNull();
+
+    const nextPage = container.querySelector(
+      '[data-testid="agent-apps-pagination-next"]',
+    ) as HTMLButtonElement | null;
+    await act(async () => {
+      nextPage?.click();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(
+      container.querySelector('[data-testid="agent-apps-list-row-bulk-app-21"]'),
+    ).not.toBeNull();
+
+    const search = container.querySelector(
+      '[data-testid="agent-apps-search"]',
+    ) as HTMLInputElement | null;
+    await act(async () => {
+      if (search) {
+        search.value = "25";
+        search.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(
+      container.querySelector('[data-testid="agent-apps-list-row-bulk-app-25"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="agent-apps-list-row-bulk-app-21"]'),
+    ).toBeNull();
+
+    const localFilter = container.querySelector(
+      '[data-testid="agent-apps-source-filter-local"]',
+    ) as HTMLButtonElement | null;
+    await act(async () => {
+      localFilter?.click();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(container.textContent).toContain(
+      "agentApp.apps.center.empty.noMatches",
+    );
   });
 
   it("取消选择本地目录时不应生成安装审查或写入 repository", async () => {
@@ -545,6 +694,11 @@ describe("AgentAppsPage", () => {
         '[data-testid="agent-apps-registration-content-factory-app"]',
       ),
     ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="agent-apps-detail"]'),
+    ).toBeNull();
+
+    await openAppDetail(container);
 
     const input = container.querySelector(
       '[data-testid="agent-apps-registration-code-content-factory-app"]',
@@ -710,6 +864,8 @@ describe("AgentAppsPage", () => {
     const container = await renderPage();
     await flush();
 
+    await openAppDetail(container);
+
     const launchButton = container.querySelector(
       '[data-testid="agent-apps-launch-entry-dashboard"]',
     ) as HTMLButtonElement | null;
@@ -725,6 +881,15 @@ describe("AgentAppsPage", () => {
         ?.textContent,
     ).toContain("ui:项目首页:/dashboard");
 
+    const moreInfo = container.querySelector(
+      '[data-testid="agent-apps-more-info"]',
+    ) as HTMLButtonElement | null;
+    await act(async () => {
+      moreInfo?.click();
+      await Promise.resolve();
+    });
+    await flush();
+
     const disableButton = container.querySelector(
       '[data-testid="agent-apps-disable"]',
     ) as HTMLButtonElement | null;
@@ -739,7 +904,9 @@ describe("AgentAppsPage", () => {
       disabled: true,
       updatedAt: expect.any(String),
     });
-    expect(container.textContent).toContain("agentApp.apps.status.disabled");
+    expect(container.textContent).toContain(
+      "agentApp.apps.center.status.disabled",
+    );
 
     const enableButton = container.querySelector(
       '[data-testid="agent-apps-enable"]',
@@ -779,9 +946,7 @@ describe("AgentAppsPage", () => {
     expect(
       container.querySelector('[data-testid="agent-apps-residual-audit"]')
         ?.textContent,
-    ).toContain(
-      "agentApp.lab.manager.evidence.residual.pendingDeletion",
-    );
+    ).toContain("agentApp.lab.manager.evidence.residual.pendingDeletion");
     const evidenceJson = container.querySelector(
       '[data-testid="agent-apps-cleanup-evidence-json"]',
     )?.textContent;
@@ -802,7 +967,11 @@ describe("AgentAppsPage", () => {
       appId: "content-factory-app",
       mode: "delete-data",
     });
-    expect(container.textContent).toContain("content-factory-app@");
+    expect(
+      container.querySelector(
+        '[data-testid="agent-apps-list-row-content-factory-app"]',
+      ),
+    ).not.toBeNull();
     expect(
       container.querySelector('[data-testid="agent-apps-launch-summary"]')
         ?.textContent,
@@ -822,6 +991,8 @@ describe("AgentAppsPage", () => {
     const onNavigate = vi.fn();
     const container = await renderPage(undefined, onNavigate);
     await flush();
+
+    await openAppDetail(container);
 
     const launchButton = container.querySelector(
       '[data-testid="agent-apps-launch-entry-dashboard"]',
@@ -844,6 +1015,38 @@ describe("AgentAppsPage", () => {
     expect(
       container.querySelector('[data-testid="agent-apps-mounted-ui"]'),
     ).toBeNull();
+  });
+
+  it("普通用户首屏不暴露本地路径，更多信息展开后才显示诊断细节", async () => {
+    installedStates.push(
+      buildReadyState({
+        profile: buildWorkflowRuntimeCapabilityProfile({
+          realAdapterEnabled: true,
+          uiRuntimeEnabled: true,
+          workerRuntimeEnabled: true,
+        }),
+      }),
+    );
+    const container = await renderPage();
+    await flush();
+
+    expect(container.textContent).not.toContain(LOCAL_APP_DIR);
+
+    await openAppDetail(container);
+
+    const moreInfo = container.querySelector(
+      '[data-testid="agent-apps-more-info"]',
+    ) as HTMLButtonElement | null;
+    await act(async () => {
+      moreInfo?.click();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(
+      container.querySelector('[data-testid="agent-apps-more-info-content"]')
+        ?.textContent,
+    ).toContain(LOCAL_APP_DIR);
   });
 
   it("从导航进入 disabled App 时应被 lifecycle launch gate 阻断", async () => {
@@ -890,6 +1093,8 @@ describe("AgentAppsPage", () => {
     const container = await renderPage();
     await flush();
 
+    await openAppDetail(container);
+
     const launchButton = container.querySelector(
       '[data-testid="agent-apps-launch-entry-content_scenario_planning"]',
     ) as HTMLButtonElement | null;
@@ -903,7 +1108,9 @@ describe("AgentAppsPage", () => {
     expect(
       container.querySelector('[data-testid="agent-apps-launch-summary"]')
         ?.textContent,
-    ).toContain("workflow:内容场景规划:content_scenario_planning-workflow-runtime-1");
+    ).toContain(
+      "workflow:内容场景规划:content_scenario_planning-workflow-runtime-1",
+    );
   });
 
   it("从导航进入已安装 App 时应自动打开默认 UI entry", async () => {

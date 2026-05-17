@@ -321,6 +321,35 @@ describe("MessageList", () => {
     expect(messageColumn?.className).toContain("justify-start");
   });
 
+  it("应在同一滚动区域尾部渲染 trailingContent", () => {
+    const container = render(
+      [
+        {
+          id: "assistant-1",
+          role: "assistant",
+          content: "第一条消息",
+        } as Message,
+      ],
+      {
+        trailingContent: (
+          <div data-testid="trailing-probe">inline a2ui card</div>
+        ),
+      },
+    );
+
+    const trailingContent = container.querySelector(
+      '[data-testid="message-list-trailing-content"]',
+    );
+    const messageColumn = container.querySelector(
+      '[data-testid="message-list-column"]',
+    );
+
+    expect(trailingContent?.textContent).toContain("inline a2ui card");
+    expect(messageColumn?.lastElementChild?.previousElementSibling).toBe(
+      trailingContent,
+    );
+  });
+
   it("短对话发送首帧也应吸顶展示，避免完成前后跳动", () => {
     const container = render(
       [
@@ -3786,7 +3815,7 @@ describe("MessageList", () => {
     });
   });
 
-  it("当前由聊天区底部承载的 assistant A2UI 不应继续在正文里内联渲染", () => {
+  it("当前活动 assistant A2UI 应继续在消息正文里内联渲染", () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -3805,11 +3834,11 @@ describe("MessageList", () => {
     });
 
     expect(mockStreamingRenderer).toHaveBeenCalledWith(
-      expect.objectContaining({ renderA2UIInline: false }),
+      expect.objectContaining({ renderA2UIInline: true }),
     );
   });
 
-  it("当前由聊天区底部承载的 action_request 不应继续在正文里渲染内联确认卡", () => {
+  it("当前活动 action_request 不应再被底部面板抑制", () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -3837,7 +3866,7 @@ describe("MessageList", () => {
     });
 
     expect(mockStreamingRenderer).toHaveBeenCalledWith(
-      expect.objectContaining({ suppressedActionRequestId: "req-action-1" }),
+      expect.objectContaining({ suppressedActionRequestId: null }),
     );
   });
 

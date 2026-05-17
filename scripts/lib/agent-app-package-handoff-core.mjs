@@ -13,6 +13,49 @@ const SDK_FACADE_MARKERS = [
   "createLimeCoreCapabilityAdapters",
 ];
 
+const AGENT_RUNTIME_BYPASS_MARKERS = [
+  {
+    marker: "LIME_GATEWAY_BASE",
+    reason: "Agent App package must not call Lime Gateway directly; use lime.agent / AgentRuntime Host facade",
+  },
+  {
+    marker: "LIME_GATEWAY_PROTOCOL",
+    reason: "Agent App package must not choose provider protocol directly; route through AgentRuntime model routing",
+  },
+  {
+    marker: "OPENAI_API_KEY",
+    reason: "Agent App package must not own provider credentials; credentials belong to Lime runtime policy",
+  },
+  {
+    marker: "OPENAI_BASE_URL",
+    reason: "Agent App package must not own OpenAI-compatible endpoints; use Host runtime",
+  },
+  {
+    marker: "/v1/chat/completions",
+    reason: "Agent App package must not call chat completions directly; use AgentRuntime tasks",
+  },
+  {
+    marker: "/v1/responses",
+    reason: "Agent App package must not call Responses-style provider APIs directly; use AgentRuntime tasks",
+  },
+  {
+    marker: "new OpenAI(",
+    reason: "Agent App package must not instantiate provider SDK clients",
+  },
+  {
+    marker: ".chat.completions.create(",
+    reason: "Agent App package must not call provider SDK completions directly",
+  },
+  {
+    marker: "anthropic.messages.create(",
+    reason: "Agent App package must not call provider SDK message APIs directly",
+  },
+  {
+    marker: ".generateContent(",
+    reason: "Agent App package must not call provider generation APIs directly",
+  },
+];
+
 const HIGH_RISK_SCRIPT_PATTERNS = [
   {
     scriptName: "build",
@@ -148,7 +191,44 @@ function createDistArtifactReport(entries = []) {
   };
 }
 
-function createVerdict({ gitStatus, hostBridge, uiTest, scripts, distArtifacts }) {
+function createAgentRuntimeBypassReport(entries = []) {
+  const matches = [];
+
+  for (const entry of entries) {
+    const filePath = normalizeText(entry.path);
+    const content = normalizeText(entry.content);
+    if (!filePath || !content) {
+      continue;
+    }
+    for (const rule of AGENT_RUNTIME_BYPASS_MARKERS) {
+      const count = content.split(rule.marker).length - 1;
+      if (count <= 0) {
+        continue;
+      }
+      matches.push({
+        file: filePath,
+        marker: rule.marker,
+        count,
+        reason: rule.reason,
+      });
+    }
+  }
+
+  return {
+    matches,
+    totalMatches: matches.reduce((sum, entry) => sum + entry.count, 0),
+    fileCount: new Set(matches.map((entry) => entry.file)).size,
+  };
+}
+
+function createVerdict({
+  gitStatus,
+  hostBridge,
+  uiTest,
+  scripts,
+  distArtifacts,
+  agentRuntimeBypass,
+}) {
   const blockers = [];
   const warnings = [];
 
@@ -176,6 +256,11 @@ function createVerdict({ gitStatus, hostBridge, uiTest, scripts, distArtifacts }
   if (distArtifacts.totalDeltas > 0) {
     warnings.push(`dist artifacts are not synchronized: ${distArtifacts.totalDeltas} delta(s)`);
   }
+  if (agentRuntimeBypass.totalMatches > 0) {
+    blockers.push(
+      `agent app package contains direct model/provider runtime bypass markers: ${agentRuntimeBypass.totalMatches} hit(s) in ${agentRuntimeBypass.fileCount} file(s)`,
+    );
+  }
 
   const status = blockers.length > 0 ? "blocked" : warnings.length > 0 ? "needs_handoff" : "ready";
   const nextAction =
@@ -183,7 +268,9 @@ function createVerdict({ gitStatus, hostBridge, uiTest, scripts, distArtifacts }
       ? "Run package tests and the agreed package verify gate."
       : status === "needs_handoff"
         ? "Confirm owner handoff before changing or rebuilding package artifacts."
-        : "Do not claim P18.5.3 complete; remove private bridge transport through the SDK facade first.";
+        : agentRuntimeBypass.totalMatches > 0
+          ? "Do not claim Agent App runtime completion; remove direct provider/Gateway calls and route AI work through lime.agent / AgentRuntime Host facade."
+          : "Do not claim P18.5.3 complete; remove private bridge transport through the SDK facade first.";
 
   return {
     status,
@@ -208,7 +295,15 @@ function createAgentAppPackageHandoffReport({
     build: files.buildScript?.content,
   });
   const distArtifacts = createDistArtifactReport(files.distArtifacts || []);
-  const verdict = createVerdict({ gitStatus, hostBridge, uiTest, scripts, distArtifacts });
+  const agentRuntimeBypass = createAgentRuntimeBypassReport(files.runtimeFiles || []);
+  const verdict = createVerdict({
+    gitStatus,
+    hostBridge,
+    uiTest,
+    scripts,
+    distArtifacts,
+    agentRuntimeBypass,
+  });
 
   return {
     schemaVersion: "v1",
@@ -222,15 +317,18 @@ function createAgentAppPackageHandoffReport({
     packageJson,
     scripts,
     distArtifacts,
+    agentRuntimeBypass,
     verdict,
   };
 }
 
 export {
+  AGENT_RUNTIME_BYPASS_MARKERS,
   PRIVATE_BRIDGE_MARKERS,
   SDK_FACADE_MARKERS,
   analyzeScripts,
   createAgentAppPackageHandoffReport,
+  createAgentRuntimeBypassReport,
   createDistArtifactReport,
   countMarkerHits,
   parseGitStatusShort,

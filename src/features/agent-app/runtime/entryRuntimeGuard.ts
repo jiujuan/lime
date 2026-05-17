@@ -143,6 +143,15 @@ function toGuardIssue(issue: ReadinessIssue): AgentAppEntryRuntimeGuardIssue {
   };
 }
 
+function asLaunchWarning(
+  issue: AgentAppEntryRuntimeGuardIssue,
+): AgentAppEntryRuntimeGuardIssue {
+  return {
+    ...issue,
+    severity: "warning",
+  };
+}
+
 function packageVerificationIssue(
   verification: AgentAppPackageVerificationResult | undefined,
 ): AgentAppEntryRuntimeGuardIssue | null {
@@ -412,11 +421,17 @@ export function evaluateAgentAppEntryRuntimeGuard(
       descriptor,
     }),
   );
-  blockers.push(...params.preview.readiness.blockers.map(toGuardIssue));
-
   const entryReadiness = params.preview.readiness.entryReadiness.find(
     (item) => item.entryKey === entry.key,
   );
+  const appReadinessBlockers = params.preview.readiness.blockers.map(toGuardIssue);
+  // Page entries must remain openable so users can inspect setup and degraded capabilities.
+  if (params.operation === "mount-ui" && entryReadiness?.status !== "blocked") {
+    warnings.push(...appReadinessBlockers.map(asLaunchWarning));
+  } else {
+    blockers.push(...appReadinessBlockers);
+  }
+
   if (entryReadiness?.status === "blocked") {
     blockers.push(...entryReadiness.issues.map(toGuardIssue));
   }

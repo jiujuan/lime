@@ -1,0 +1,618 @@
+import { type QueuedTurnSnapshot } from "./queuedTurn";
+import type { AsterSessionExecutionRuntimeCostState, AsterSessionExecutionRuntimeLimitEvent, AsterSessionExecutionRuntimeLimitState, AsterSessionExecutionRuntimeRoutingDecision, AsterSessionExecutionRuntimeTaskProfile, AsterTurnOutputSchemaRuntime } from "./agentExecutionRuntime";
+import type { AsterApprovalPolicy, AsterProviderConfig, AgentRuntimeSubmitTurnRequest, AgentRuntimeWebSearchMode, AsterExecutionStrategy, AsterSandboxPolicy, AutoContinueRequestPayload, ImageInput } from "./agentRuntime/types";
+export interface AgentContextTraceStep {
+    stage: string;
+    detail: string;
+}
+export interface AgentToolResultImage {
+    src: string;
+    mimeType?: string;
+    origin?: "data_url" | "tool_payload" | "file_path";
+}
+export type AgentToolResultMetadata = Record<string, unknown>;
+export interface AgentToolExecutionResult {
+    success: boolean;
+    output: string;
+    error?: string;
+    images?: AgentToolResultImage[];
+    metadata?: AgentToolResultMetadata;
+}
+export interface AgentMessageContentText {
+    type: "text";
+    text: string;
+}
+export interface AgentMessageContentThinking {
+    type: "thinking";
+    text: string;
+}
+export interface AgentMessageContentToolRequest {
+    type: "tool_request";
+    id: string;
+    tool_name: string;
+    arguments: unknown;
+}
+export interface AgentMessageContentToolResponse {
+    type: "tool_response";
+    id: string;
+    success: boolean;
+    output: string;
+    error?: string;
+    images?: AgentToolResultImage[];
+    metadata?: AgentToolResultMetadata;
+}
+export interface AgentMessageContentActionRequired {
+    type: "action_required";
+    id: string;
+    action_type: AgentActionRequiredType | string;
+    data: unknown;
+    scope?: AgentActionRequiredScope;
+}
+export interface AgentMessageContentImage {
+    type: "image";
+    mime_type: string;
+    data: string;
+}
+export type AgentMessageContent = AgentMessageContentText | AgentMessageContentThinking | AgentMessageContentToolRequest | AgentMessageContentToolResponse | AgentMessageContentActionRequired | AgentMessageContentImage;
+export interface AgentMessage {
+    id?: string;
+    role: string;
+    content: AgentMessageContent[];
+    timestamp: number;
+    usage?: AgentTokenUsage;
+}
+export interface AgentArtifactSignal {
+    artifactId: string;
+    filePath?: string;
+    content?: string;
+    metadata?: Record<string, unknown>;
+}
+export interface AgentTokenUsage {
+    input_tokens: number;
+    output_tokens: number;
+    cached_input_tokens?: number;
+    cache_creation_input_tokens?: number;
+}
+export type AgentThreadTurnStatus = "running" | "completed" | "failed" | "aborted";
+export type AgentThreadItemStatus = "in_progress" | "completed" | "failed";
+export interface AgentThreadTurn {
+    id: string;
+    thread_id: string;
+    prompt_text: string;
+    status: AgentThreadTurnStatus;
+    started_at: string;
+    completed_at?: string;
+    error_message?: string;
+    created_at: string;
+    updated_at: string;
+}
+export interface AgentRequestOption {
+    label: string;
+    description?: string;
+}
+export interface AgentRequestQuestion {
+    question: string;
+    header?: string;
+    options?: AgentRequestOption[];
+    multi_select?: boolean;
+}
+interface AgentThreadItemBase {
+    id: string;
+    thread_id: string;
+    turn_id: string;
+    sequence: number;
+    status: AgentThreadItemStatus;
+    started_at: string;
+    completed_at?: string;
+    updated_at: string;
+}
+export interface AgentThreadUserMessageItem extends AgentThreadItemBase {
+    type: "user_message";
+    content: string;
+}
+export interface AgentThreadAgentMessageItem extends AgentThreadItemBase {
+    type: "agent_message";
+    text: string;
+    phase?: string;
+}
+export interface AgentThreadPlanItem extends AgentThreadItemBase {
+    type: "plan";
+    text: string;
+}
+export interface AgentThreadReasoningItem extends AgentThreadItemBase {
+    type: "reasoning";
+    text: string;
+    summary?: string[];
+}
+export interface AgentThreadToolCallItem extends AgentThreadItemBase {
+    type: "tool_call";
+    tool_name: string;
+    arguments?: unknown;
+    output?: string;
+    success?: boolean;
+    error?: string;
+    metadata?: unknown;
+}
+export interface AgentThreadCommandExecutionItem extends AgentThreadItemBase {
+    type: "command_execution";
+    command: string;
+    cwd: string;
+    aggregated_output?: string;
+    exit_code?: number;
+    error?: string;
+}
+export interface AgentThreadWebSearchItem extends AgentThreadItemBase {
+    type: "web_search";
+    query?: string;
+    action?: string;
+    output?: string;
+}
+export interface AgentThreadApprovalRequestItem extends AgentThreadItemBase {
+    type: "approval_request";
+    request_id: string;
+    action_type: string;
+    prompt?: string;
+    tool_name?: string;
+    arguments?: unknown;
+    response?: unknown;
+}
+export interface AgentThreadRequestUserInputItem extends AgentThreadItemBase {
+    type: "request_user_input";
+    request_id: string;
+    action_type: string;
+    prompt?: string;
+    questions?: AgentRequestQuestion[];
+    response?: unknown;
+}
+export interface AgentThreadFileArtifactItem extends AgentThreadItemBase {
+    type: "file_artifact";
+    path: string;
+    source: string;
+    content?: string;
+    metadata?: unknown;
+}
+export interface AgentThreadSubagentActivityItem extends AgentThreadItemBase {
+    type: "subagent_activity";
+    status_label: string;
+    title?: string;
+    summary?: string;
+    role?: string;
+    model?: string;
+    session_id?: string;
+}
+export interface AgentThreadWarningItem extends AgentThreadItemBase {
+    type: "warning";
+    message: string;
+    code?: string;
+}
+export interface AgentThreadContextCompactionItem extends AgentThreadItemBase {
+    type: "context_compaction";
+    stage: "started" | "completed" | string;
+    trigger?: string;
+    detail?: string;
+}
+export interface AgentThreadErrorItem extends AgentThreadItemBase {
+    type: "error";
+    message: string;
+}
+export interface AgentThreadTurnSummaryItem extends AgentThreadItemBase {
+    type: "turn_summary";
+    text: string;
+    metadata?: Record<string, unknown>;
+}
+export type AgentThreadItem = AgentThreadUserMessageItem | AgentThreadAgentMessageItem | AgentThreadPlanItem | AgentThreadReasoningItem | AgentThreadToolCallItem | AgentThreadCommandExecutionItem | AgentThreadWebSearchItem | AgentThreadApprovalRequestItem | AgentThreadRequestUserInputItem | AgentThreadFileArtifactItem | AgentThreadSubagentActivityItem | AgentThreadWarningItem | AgentThreadContextCompactionItem | AgentThreadErrorItem | AgentThreadTurnSummaryItem;
+export interface AgentToolCallState {
+    id: string;
+    name: string;
+    arguments?: string;
+    status: "running" | "completed" | "failed";
+    result?: AgentToolExecutionResult;
+    progress?: AgentToolProgressPayload & {
+        updatedAt?: Date;
+    };
+    startTime: Date;
+    endTime?: Date;
+    logs?: string[];
+}
+export interface AgentActionRequiredScope {
+    session_id?: string;
+    thread_id?: string;
+    turn_id?: string;
+}
+export type AgentActionRequiredType = "tool_confirmation" | "ask_user" | "elicitation";
+export interface AgentActionRequiredOption {
+    label: string;
+    description?: string;
+}
+export interface AgentActionRequiredQuestion {
+    question: string;
+    header?: string;
+    options?: AgentActionRequiredOption[];
+    multiSelect?: boolean;
+}
+export interface AgentEventTextDelta {
+    type: "text_delta";
+    text: string;
+}
+export type AgentEventTextDeltaBatchBoundary = "newline" | "backlog" | "final" | "provider" | (string & {});
+export interface AgentEventTextDeltaBatch {
+    type: "text_delta_batch";
+    text: string;
+    chunks: string[];
+    boundary: AgentEventTextDeltaBatchBoundary;
+}
+export interface AgentEventThreadStarted {
+    type: "thread_started";
+    thread_id: string;
+}
+export interface AgentEventTurnStarted {
+    type: "turn_started";
+    turn: AgentThreadTurn;
+}
+export interface AgentEventItemStarted {
+    type: "item_started";
+    item: AgentThreadItem;
+}
+export interface AgentEventItemUpdated {
+    type: "item_updated";
+    item: AgentThreadItem;
+}
+export interface AgentEventItemCompleted {
+    type: "item_completed";
+    item: AgentThreadItem;
+}
+export interface AgentEventTurnCompleted {
+    type: "turn_completed";
+    turn: AgentThreadTurn;
+}
+export interface AgentEventTurnFailed {
+    type: "turn_failed";
+    turn: AgentThreadTurn;
+}
+export interface AgentEventThinkingDelta {
+    type: "thinking_delta";
+    text: string;
+}
+export interface AgentEventToolStart {
+    type: "tool_start";
+    tool_name: string;
+    tool_id: string;
+    arguments?: string;
+}
+export interface AgentEventToolEnd {
+    type: "tool_end";
+    tool_id: string;
+    result: AgentToolExecutionResult;
+}
+export interface AgentToolProgressPayload {
+    message?: string;
+    progress?: number;
+    total?: number;
+    metadata?: Record<string, unknown>;
+}
+export interface AgentEventToolProgress {
+    type: "tool_progress";
+    tool_id: string;
+    progress: AgentToolProgressPayload;
+}
+export interface AgentEventToolOutputDelta {
+    type: "tool_output_delta";
+    tool_id: string;
+    delta: string;
+    output_kind?: string;
+    metadata?: Record<string, unknown>;
+}
+export interface AgentEventToolInputDelta {
+    type: "tool_input_delta";
+    tool_id: string;
+    tool_name?: string;
+    delta: string;
+    accumulated_arguments?: string;
+    provider?: string;
+}
+export interface AgentEventArtifactSnapshot {
+    type: "artifact_snapshot";
+    artifact: AgentArtifactSignal;
+}
+export interface AgentEventActionRequired {
+    type: "action_required";
+    request_id: string;
+    action_type: AgentActionRequiredType;
+    scope?: AgentActionRequiredScope;
+    tool_name?: string;
+    arguments?: Record<string, unknown>;
+    prompt?: string;
+    questions?: AgentActionRequiredQuestion[];
+    requested_schema?: Record<string, unknown>;
+}
+export interface AgentEventActionResolved {
+    type: "action_resolved";
+    request_id: string;
+    action_type: AgentActionRequiredType | "plan_approval" | string;
+    scope?: AgentActionRequiredScope;
+    approved?: boolean;
+    feedback?: string;
+    permission_mode?: string;
+    data?: Record<string, unknown>;
+}
+export interface AgentEventContextTrace {
+    type: "context_trace";
+    steps: AgentContextTraceStep[];
+}
+export interface AgentContextBudget {
+    used_tokens?: number;
+    max_tokens?: number;
+    remaining_tokens?: number;
+    status?: string;
+    source?: string;
+}
+export interface AgentMissingContextFact {
+    id?: string;
+    kind: string;
+    label: string;
+    status: string;
+    reason?: string;
+    source?: string;
+}
+export interface AgentRetrievalRef {
+    source_id: string;
+    kind: string;
+    title?: string;
+    path?: string;
+    url?: string;
+    score?: number;
+    scope?: string;
+    status?: string;
+    source?: string;
+}
+export interface AgentTeamMemoryRef {
+    key: string;
+    repo_scope?: string;
+    updated_at?: number;
+    priority?: number;
+    source?: string;
+}
+export interface AgentTurnContextSummary {
+    memory_budget?: AgentContextBudget | null;
+    missing_context?: AgentMissingContextFact[];
+    retrieval_refs?: AgentRetrievalRef[];
+    team_memory_refs?: AgentTeamMemoryRef[];
+}
+export interface AgentEventTurnContext {
+    type: "turn_context";
+    session_id: string;
+    thread_id: string;
+    turn_id: string;
+    output_schema_runtime?: AsterTurnOutputSchemaRuntime | null;
+    context_summary?: AgentTurnContextSummary | null;
+    approval_policy?: string | null;
+    sandbox_policy?: string | null;
+}
+export interface AgentEventModelChange {
+    type: "model_change";
+    model: string;
+    mode: string;
+}
+export interface AgentRuntimeStatusMetadata {
+    [key: string]: unknown;
+    sourceType?: string;
+    source?: string;
+    kind?: string;
+    eventClass?: string;
+    event_class?: string;
+    surface?: string;
+    visibility?: string;
+    persistence?: string;
+    presentation?: string;
+    agentui?: Record<string, unknown>;
+    agentUi?: Record<string, unknown>;
+    team_phase?: string;
+    team_parallel_budget?: number;
+    team_active_count?: number;
+    team_queued_count?: number;
+    concurrency_phase?: string;
+    concurrency_scope?: string;
+    concurrency_active_count?: number;
+    concurrency_queued_count?: number;
+    concurrency_budget?: number;
+    provider_concurrency_group?: string;
+    provider_parallel_budget?: number;
+    queue_reason?: string;
+    retryable_overload?: boolean;
+    permission_status?: string;
+    required_profile_keys?: string[];
+    ask_profile_keys?: string[];
+    blocking_profile_keys?: string[];
+    decision_source?: string;
+    decision_scope?: string;
+    confirmation_status?: string;
+    confirmation_request_id?: string;
+    confirmation_source?: string;
+    declared_only?: boolean;
+    turn_gating?: boolean;
+    limit_status?: string;
+    capability_gap?: string;
+    keepalive_kind?: string;
+    keepalive_sequence?: number;
+    keepalive_elapsed_ms?: number;
+}
+export interface AgentRuntimeStatusPayload {
+    phase: "preparing" | "routing" | "context" | "permission_review" | "failed";
+    title: string;
+    detail: string;
+    checkpoints?: string[];
+    metadata?: AgentRuntimeStatusMetadata;
+}
+export interface AgentEventRuntimeStatus {
+    type: "runtime_status";
+    status: AgentRuntimeStatusPayload;
+}
+export interface AgentEventTaskProfileResolved {
+    type: "task_profile_resolved";
+    task_profile: AsterSessionExecutionRuntimeTaskProfile;
+}
+export interface AgentEventCandidateSetResolved {
+    type: "candidate_set_resolved";
+    routing_decision: AsterSessionExecutionRuntimeRoutingDecision;
+}
+export interface AgentEventRoutingDecisionMade {
+    type: "routing_decision_made";
+    routing_decision: AsterSessionExecutionRuntimeRoutingDecision;
+}
+export interface AgentEventRoutingFallbackApplied {
+    type: "routing_fallback_applied";
+    routing_decision: AsterSessionExecutionRuntimeRoutingDecision;
+}
+export interface AgentEventRoutingNotPossible {
+    type: "routing_not_possible";
+    routing_decision: AsterSessionExecutionRuntimeRoutingDecision;
+}
+export interface AgentEventLimitStateUpdated {
+    type: "limit_state_updated";
+    limit_state: AsterSessionExecutionRuntimeLimitState;
+}
+export interface AgentEventSingleCandidateOnly {
+    type: "single_candidate_only";
+    limit_state: AsterSessionExecutionRuntimeLimitState;
+}
+export interface AgentEventSingleCandidateCapabilityGap {
+    type: "single_candidate_capability_gap";
+    limit_state: AsterSessionExecutionRuntimeLimitState;
+}
+export interface AgentEventCostEstimated {
+    type: "cost_estimated";
+    cost_state: AsterSessionExecutionRuntimeCostState;
+}
+export interface AgentEventCostRecorded {
+    type: "cost_recorded";
+    cost_state: AsterSessionExecutionRuntimeCostState;
+}
+export interface AgentEventRateLimitHit {
+    type: "rate_limit_hit";
+    limit_event: AsterSessionExecutionRuntimeLimitEvent;
+}
+export interface AgentEventQuotaLow {
+    type: "quota_low";
+    limit_event: AsterSessionExecutionRuntimeLimitEvent;
+}
+export interface AgentEventQuotaBlocked {
+    type: "quota_blocked";
+    limit_event: AsterSessionExecutionRuntimeLimitEvent;
+}
+export interface AgentEventQueueAdded {
+    type: "queue_added";
+    session_id: string;
+    queued_turn: QueuedTurnSnapshot;
+}
+export interface AgentEventQueueRemoved {
+    type: "queue_removed";
+    session_id: string;
+    queued_turn_id: string;
+}
+export interface AgentEventQueueStarted {
+    type: "queue_started";
+    session_id: string;
+    queued_turn_id: string;
+}
+export interface AgentEventQueueCleared {
+    type: "queue_cleared";
+    session_id: string;
+    queued_turn_ids: string[];
+}
+export type AgentSubagentRuntimeStatus = "idle" | "queued" | "running" | "completed" | "failed" | "aborted" | "closed" | "not_found";
+export interface AgentEventSubagentStatusChanged {
+    type: "subagent_status_changed";
+    session_id: string;
+    root_session_id: string;
+    parent_session_id?: string;
+    status: AgentSubagentRuntimeStatus;
+    latest_turn_id?: string;
+    latest_turn_status?: AgentSubagentRuntimeStatus;
+    queued_turn_count?: number;
+    team_phase?: string;
+    team_parallel_budget?: number;
+    team_active_count?: number;
+    team_queued_count?: number;
+    provider_concurrency_group?: string;
+    provider_parallel_budget?: number;
+    queue_reason?: string;
+    retryable_overload?: boolean;
+    closed?: boolean;
+    usage?: AgentTokenUsage;
+    duration_ms?: number;
+    tool_count?: number;
+    result_ref?: string;
+}
+export interface AgentEventDone {
+    type: "done";
+    usage?: AgentTokenUsage;
+}
+export interface AgentEventFinalDone {
+    type: "final_done";
+    usage?: AgentTokenUsage;
+}
+export interface AgentEventMessage {
+    type: "message";
+    message: AgentMessage;
+}
+export interface AgentEventWarning {
+    type: "warning";
+    code?: string;
+    message: string;
+}
+export interface AgentEventError {
+    type: "error";
+    message: string;
+}
+export type AgentEvent = AgentEventThreadStarted | AgentEventTurnStarted | AgentEventItemStarted | AgentEventItemUpdated | AgentEventItemCompleted | AgentEventTurnCompleted | AgentEventTurnFailed | AgentEventTextDelta | AgentEventTextDeltaBatch | AgentEventThinkingDelta | AgentEventToolStart | AgentEventToolEnd | AgentEventToolProgress | AgentEventToolOutputDelta | AgentEventToolInputDelta | AgentEventArtifactSnapshot | AgentEventActionRequired | AgentEventActionResolved | AgentEventTurnContext | AgentEventModelChange | AgentEventContextTrace | AgentEventRuntimeStatus | AgentEventTaskProfileResolved | AgentEventCandidateSetResolved | AgentEventRoutingDecisionMade | AgentEventRoutingFallbackApplied | AgentEventRoutingNotPossible | AgentEventLimitStateUpdated | AgentEventSingleCandidateOnly | AgentEventSingleCandidateCapabilityGap | AgentEventCostEstimated | AgentEventCostRecorded | AgentEventRateLimitHit | AgentEventQuotaLow | AgentEventQuotaBlocked | AgentEventQueueAdded | AgentEventQueueRemoved | AgentEventQueueStarted | AgentEventQueueCleared | AgentEventSubagentStatusChanged | AgentEventDone | AgentEventFinalDone | AgentEventMessage | AgentEventWarning | AgentEventError;
+export interface AgentUserPreferences {
+    providerConfig?: AsterProviderConfig;
+    providerPreference?: string;
+    modelPreference?: string;
+    thinking?: boolean;
+    webSearch?: boolean;
+    searchMode?: AgentRuntimeWebSearchMode;
+    approvalPolicy?: AsterApprovalPolicy;
+    sandboxPolicy?: AsterSandboxPolicy;
+    executionStrategy?: AsterExecutionStrategy;
+    autoContinue?: AutoContinueRequestPayload;
+}
+export interface AgentUserInputOp {
+    type: "user_input";
+    text: string;
+    sessionId: string;
+    eventName: string;
+    workspaceId?: string;
+    turnId?: string;
+    images?: ImageInput[];
+    preferences?: AgentUserPreferences;
+    systemPrompt?: string;
+    metadata?: Record<string, unknown>;
+    queueIfBusy?: boolean;
+    queuedTurnId?: string;
+    skipPreSubmitResume?: boolean;
+}
+export interface AgentInterruptOp {
+    type: "interrupt";
+    sessionId: string;
+    turnId?: string;
+}
+export interface AgentRetryOp {
+    type: "retry";
+    sessionId: string;
+    turnId: string;
+}
+export interface AgentConfigUpdateOp {
+    type: "config_update";
+    sessionId: string;
+    key: string;
+    value: unknown;
+}
+export interface AgentShutdownOp {
+    type: "shutdown";
+    sessionId?: string;
+}
+export type AgentOp = AgentUserInputOp | AgentInterruptOp | AgentRetryOp | AgentConfigUpdateOp | AgentShutdownOp;
+export declare function parseAgentEvent(data: unknown): AgentEvent | null;
+export declare function createSubmitTurnRequestFromAgentOp(op: AgentUserInputOp): AgentRuntimeSubmitTurnRequest;
+export {};

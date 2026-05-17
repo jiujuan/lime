@@ -1,7 +1,11 @@
 use super::*;
 
+#[path = "tool_runtime/agent_app_tool_execution.rs"]
+mod agent_app_tool_execution;
 #[path = "tool_runtime/browser_tools.rs"]
 mod browser_tools;
+#[path = "tool_runtime/connector_tools.rs"]
+mod connector_tools;
 #[path = "tool_runtime/creation_tools.rs"]
 mod creation_tools;
 #[path = "tool_runtime/lime_cli_runtime.rs"]
@@ -25,9 +29,15 @@ mod subagent_tools;
 #[path = "tool_runtime/workspace_tools.rs"]
 mod workspace_tools;
 
+pub(crate) use agent_app_tool_execution::{
+    append_agent_app_tool_execution_session_permissions,
+    resolve_agent_app_tool_execution_allowed_tools,
+};
 pub(crate) use browser_tools::ensure_browser_mcp_tools_registered;
 #[allow(unused_imports)]
 pub(crate) use browser_tools::LimeBrowserMcpTool;
+#[cfg(test)]
+pub(crate) use connector_tools::register_agent_app_connector_preview_tools;
 pub(crate) use creation_tools::{
     ensure_creation_task_tools_registered, submit_image_generation_task_value,
 };
@@ -425,6 +435,11 @@ pub(crate) async fn apply_workspace_sandbox_permissions(
         execution_profile,
         request_tool_policy,
     );
+    append_agent_app_tool_execution_session_permissions(
+        &mut permissions,
+        session_id,
+        request_metadata,
+    );
     append_subagent_tool_scope_session_permissions(&mut permissions, session_id, request_metadata);
     append_image_skill_launch_session_permissions(&mut permissions, session_id, request_metadata);
     append_cover_skill_launch_session_permissions(&mut permissions, session_id, request_metadata);
@@ -511,6 +526,7 @@ pub(crate) async fn apply_workspace_sandbox_permissions(
         app_handle.clone(),
         sandboxed_bash_tool,
     );
+    connector_tools::register_agent_app_connector_preview_tools(&mut registry, request_metadata);
 
     let subagent_runtime = SubagentControlRuntime::new(
         app_handle.clone(),

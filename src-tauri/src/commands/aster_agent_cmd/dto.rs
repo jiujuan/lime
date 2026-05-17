@@ -1,6 +1,7 @@
 use super::*;
 use crate::services::runtime_evidence_projection_service::{
-    collect_runtime_evidence_projection_summary_from_metadata, evidence_ref_from_artifact_path,
+    collect_runtime_evidence_projection_summary_from_metadata,
+    collect_runtime_evidence_projection_summary_from_tool_output, evidence_ref_from_artifact_path,
     RuntimeEvidenceProjectionSummary,
 };
 use crate::services::runtime_file_checkpoint_service;
@@ -598,9 +599,23 @@ pub struct AgentRuntimeThreadToolCallView {
     pub tool_name: String,
     pub status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finished_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub arguments: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_preview: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub success: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence_refs: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1573,6 +1588,18 @@ fn default_thread_profile_status() -> String {
     "unknown".to_string()
 }
 
+fn is_active_severe_incident_for_turn(incident: &AgentRuntimeIncidentView, turn_id: &str) -> bool {
+    if incident.turn_id.as_deref() != Some(turn_id) || incident.status != "active" {
+        return false;
+    }
+    let severe = matches!(incident.severity.as_str(), "high" | "critical");
+    let terminal_failure = matches!(
+        incident.incident_type.as_str(),
+        "runtime_error" | "provider_error" | "tool_failed" | "turn_failed"
+    );
+    severe && terminal_failure
+}
+
 fn build_thread_profile_turns(detail: &SessionDetail) -> Vec<AgentRuntimeThreadTurnProfileView> {
     detail
         .turns
@@ -1588,6 +1615,24 @@ fn build_thread_profile_turns(detail: &SessionDetail) -> Vec<AgentRuntimeThreadT
         .collect()
 }
 
+fn preview_tool_output(output: Option<&String>) -> Option<String> {
+    const LIMIT: usize = 4096;
+    let output = output?;
+    let trimmed = output.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let mut preview = String::new();
+    for (index, character) in trimmed.chars().enumerate() {
+        if index >= LIMIT {
+            preview.push_str("\n[tool output truncated]");
+            return Some(preview);
+        }
+        preview.push(character);
+    }
+    Some(preview)
+}
+
 fn build_thread_tool_calls(detail: &SessionDetail) -> Vec<AgentRuntimeThreadToolCallView> {
     detail
         .items
@@ -1595,8 +1640,11 @@ fn build_thread_tool_calls(detail: &SessionDetail) -> Vec<AgentRuntimeThreadTool
         .filter_map(|item| {
             let lime_core::database::dao::agent_timeline::AgentThreadItemPayload::ToolCall {
                 tool_name,
+                arguments,
+                output,
                 success,
                 error,
+                metadata,
                 ..
             } = &item.payload
             else {
@@ -1617,14 +1665,28 @@ fn build_thread_tool_calls(detail: &SessionDetail) -> Vec<AgentRuntimeThreadTool
             } else {
                 "completed"
             };
+            let output_preview = preview_tool_output(output.as_ref());
+            let mut evidence_summary =
+                collect_runtime_evidence_projection_summary_from_metadata(metadata.as_ref());
+            merge_evidence_projection_summary(
+                &mut evidence_summary,
+                collect_runtime_evidence_projection_summary_from_tool_output(output.as_deref()),
+            );
 
             Some(AgentRuntimeThreadToolCallView {
                 tool_call_id: item.id.clone(),
                 turn_id: item.turn_id.clone(),
                 tool_name: tool_name.clone(),
                 status: status.to_string(),
+                started_at: Some(item.started_at.clone()),
+                finished_at: item.completed_at.clone(),
+                updated_at: Some(item.updated_at.clone()),
+                arguments: arguments.clone(),
+                output: output_preview.clone(),
+                output_preview,
                 success: *success,
                 error: error.clone(),
+                evidence_refs: evidence_summary.evidence_refs,
             })
         })
         .collect()
@@ -1745,10 +1807,16 @@ fn build_thread_evidence_summary(detail: &SessionDetail) -> AgentRuntimeThreadEv
 
     for item in &detail.items {
         match &item.payload {
-            AgentThreadItemPayload::ToolCall { metadata, .. } => {
+            AgentThreadItemPayload::ToolCall {
+                metadata, output, ..
+            } => {
                 merge_evidence_projection_summary(
                     &mut summary,
                     collect_runtime_evidence_projection_summary_from_metadata(metadata.as_ref()),
+                );
+                merge_evidence_projection_summary(
+                    &mut summary,
+                    collect_runtime_evidence_projection_summary_from_tool_output(output.as_deref()),
                 );
             }
             AgentThreadItemPayload::FileArtifact { path, metadata, .. } => {
@@ -1877,12 +1945,27 @@ impl AgentRuntimeThreadReadModel {
         });
         let active_turn_running = active_running_turn.is_some();
         let interrupting = runtime_interrupt_marker.is_some() && active_turn_running;
+        let completed_turn_has_active_failure = latest_turn
+            .filter(|turn| {
+                matches!(
+                    turn.status,
+                    lime_core::database::dao::agent_timeline::AgentThreadTurnStatus::Completed
+                )
+            })
+            .map(|turn| {
+                incidents
+                    .iter()
+                    .any(|incident| is_active_severe_incident_for_turn(incident, &turn.id))
+            })
+            .unwrap_or(false);
         let status = if interrupting {
             "interrupting".to_string()
         } else if !pending_requests.is_empty() {
             "waiting_request".to_string()
         } else if active_turn_running {
             "running".to_string()
+        } else if completed_turn_has_active_failure {
+            "failed".to_string()
         } else if let Some(turn) = latest_turn {
             turn.status.as_str().to_string()
         } else if !queued_turns.is_empty() {
@@ -2703,6 +2786,7 @@ pub(crate) fn build_pending_requests(detail: &SessionDetail) -> Vec<AgentRuntime
 
 pub(crate) fn build_last_outcome(detail: &SessionDetail) -> Option<AgentRuntimeOutcomeView> {
     let latest_turn = detail.turns.last()?;
+    let latest_turn_error_item = latest_turn_error_item(detail, &latest_turn.id);
     let latest_turn_summary = detail
         .items
         .iter()
@@ -2724,6 +2808,20 @@ pub(crate) fn build_last_outcome(detail: &SessionDetail) -> Option<AgentRuntimeO
 
     match latest_turn.status {
         lime_core::database::dao::agent_timeline::AgentThreadTurnStatus::Completed => {
+            if let Some((error_item, message)) = latest_turn_error_item {
+                return Some(AgentRuntimeOutcomeView {
+                    thread_id: latest_turn.thread_id.clone(),
+                    turn_id: Some(latest_turn.id.clone()),
+                    outcome_type: classify_runtime_error_message(message),
+                    summary: Some(message.clone()),
+                    primary_cause: Some(message.clone()),
+                    retryable: true,
+                    ended_at: latest_turn
+                        .completed_at
+                        .clone()
+                        .or_else(|| Some(error_item.updated_at.clone())),
+                });
+            }
             Some(AgentRuntimeOutcomeView {
                 thread_id: latest_turn.thread_id.clone(),
                 turn_id: Some(latest_turn.id.clone()),
@@ -2763,6 +2861,43 @@ pub(crate) fn build_last_outcome(detail: &SessionDetail) -> Option<AgentRuntimeO
             })
         }
         lime_core::database::dao::agent_timeline::AgentThreadTurnStatus::Running => None,
+    }
+}
+
+fn latest_turn_error_item<'a>(
+    detail: &'a SessionDetail,
+    turn_id: &str,
+) -> Option<(
+    &'a lime_core::database::dao::agent_timeline::AgentThreadItem,
+    &'a String,
+)> {
+    detail.items.iter().rev().find_map(|item| {
+        if item.turn_id != turn_id {
+            return None;
+        }
+        let lime_core::database::dao::agent_timeline::AgentThreadItemPayload::Error { message } =
+            &item.payload
+        else {
+            return None;
+        };
+        Some((item, message))
+    })
+}
+
+fn classify_runtime_error_message(message: &str) -> String {
+    let lowered = message.to_lowercase();
+    if lowered.contains("provider")
+        || lowered.contains("request failed")
+        || lowered.contains("stream decode")
+        || lowered.contains("response body")
+        || lowered.contains("rate limit")
+        || lowered.contains("authentication")
+        || lowered.contains("network")
+        || lowered.contains("api")
+    {
+        "failed_provider".to_string()
+    } else {
+        "runtime_error".to_string()
     }
 }
 
@@ -2895,10 +3030,13 @@ pub(crate) fn build_incidents(
         }];
     }
 
-    let latest_issue_item = detail.items.iter().rev().find(|item| match &item.payload {
-        lime_core::database::dao::agent_timeline::AgentThreadItemPayload::Warning { .. }
-        | lime_core::database::dao::agent_timeline::AgentThreadItemPayload::Error { .. } => true,
-        _ => false,
+    let latest_issue_item = detail.items.iter().rev().find(|item| {
+        item.turn_id == latest_turn.id
+            && matches!(
+                &item.payload,
+                lime_core::database::dao::agent_timeline::AgentThreadItemPayload::Warning { .. }
+                    | lime_core::database::dao::agent_timeline::AgentThreadItemPayload::Error { .. }
+            )
     });
 
     match latest_issue_item {
@@ -3441,6 +3579,64 @@ mod tests {
     }
 
     #[test]
+    fn thread_read_should_not_complete_when_completed_turn_has_runtime_error() {
+        let detail = build_session_detail(
+            vec![AgentThreadTurn {
+                id: "turn-provider-error".to_string(),
+                thread_id: "thread-1".to_string(),
+                prompt_text: "生成场景表".to_string(),
+                status: AgentThreadTurnStatus::Completed,
+                started_at: "2026-05-17T09:10:00Z".to_string(),
+                completed_at: Some("2026-05-17T09:10:30Z".to_string()),
+                error_message: None,
+                created_at: "2026-05-17T09:10:00Z".to_string(),
+                updated_at: "2026-05-17T09:10:30Z".to_string(),
+            }],
+            vec![AgentThreadItem {
+                id: "item-provider-error".to_string(),
+                thread_id: "thread-1".to_string(),
+                turn_id: "turn-provider-error".to_string(),
+                sequence: 1,
+                status: AgentThreadItemStatus::Completed,
+                started_at: "2026-05-17T09:10:20Z".to_string(),
+                completed_at: Some("2026-05-17T09:10:21Z".to_string()),
+                updated_at: "2026-05-17T09:10:21Z".to_string(),
+                payload: AgentThreadItemPayload::Error {
+                    message: "Agent provider execution failed: Request failed: Stream decode error: error decoding response body".to_string(),
+                },
+            }],
+        );
+
+        let thread_read = AgentRuntimeThreadReadModel::from_session_detail(&detail, &[]);
+
+        assert_eq!(thread_read.status, "failed");
+        assert_eq!(thread_read.profile_status, "failed");
+        assert_eq!(
+            thread_read
+                .last_outcome
+                .as_ref()
+                .map(|value| value.outcome_type.as_str()),
+            Some("failed_provider")
+        );
+        assert_eq!(
+            thread_read
+                .last_outcome
+                .as_ref()
+                .and_then(|value| value.primary_cause.as_deref()),
+            Some("Agent provider execution failed: Request failed: Stream decode error: error decoding response body")
+        );
+        assert_eq!(thread_read.incidents.len(), 1);
+        assert_eq!(thread_read.incidents[0].incident_type, "runtime_error");
+        assert_eq!(
+            thread_read
+                .diagnostics
+                .as_ref()
+                .and_then(|diagnostics| diagnostics.primary_blocking_kind.as_deref()),
+            Some("runtime_error")
+        );
+    }
+
+    #[test]
     fn thread_read_should_collect_evidence_projection_facts_from_runtime_metadata() {
         let detail = build_session_detail(
             vec![AgentThreadTurn {
@@ -3816,11 +4012,20 @@ mod tests {
                 updated_at: "2026-03-23T09:10:02Z".to_string(),
                 payload: AgentThreadItemPayload::ToolCall {
                     tool_name: "Read".to_string(),
-                    arguments: None,
+                    arguments: Some(serde_json::json!({ "path": "docs/brief.md" })),
                     output: Some("hello".to_string()),
                     success: Some(true),
                     error: None,
-                    metadata: None,
+                    metadata: Some(serde_json::json!({
+                        "evidenceRefs": [
+                            "evidence://thread/tool-read-1",
+                            {
+                                "kind": "connector_fixture_mutation_log",
+                                "ref": "fixture://connector/lime_fixture/recordMutation/mutation-1",
+                                "storage": "workspace_local"
+                            }
+                        ]
+                    })),
                 },
             }],
         );
@@ -3833,7 +4038,113 @@ mod tests {
         assert_eq!(thread_read.tool_calls[0].turn_id, "turn-tool");
         assert_eq!(thread_read.tool_calls[0].tool_name, "Read");
         assert_eq!(thread_read.tool_calls[0].status, "completed");
+        assert_eq!(
+            thread_read.tool_calls[0].started_at.as_deref(),
+            Some("2026-03-23T09:10:01Z")
+        );
+        assert_eq!(
+            thread_read.tool_calls[0].finished_at.as_deref(),
+            Some("2026-03-23T09:10:02Z")
+        );
+        assert_eq!(
+            thread_read.tool_calls[0]
+                .arguments
+                .as_ref()
+                .and_then(|value| value.get("path"))
+                .and_then(serde_json::Value::as_str),
+            Some("docs/brief.md")
+        );
+        assert_eq!(thread_read.tool_calls[0].output.as_deref(), Some("hello"));
+        assert_eq!(
+            thread_read.tool_calls[0].output_preview.as_deref(),
+            Some("hello")
+        );
         assert_eq!(thread_read.tool_calls[0].success, Some(true));
+        assert_eq!(
+            thread_read.tool_calls[0].evidence_refs,
+            vec![
+                "evidence://thread/tool-read-1".to_string(),
+                "fixture://connector/lime_fixture/recordMutation/mutation-1".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn thread_read_should_project_cloud_overlay_outbox_evidence_for_connector_tool_calls() {
+        let outbox_ref = "outbox://connector/notion/createPage/notion-create-page-1";
+        let detail = build_session_detail(
+            vec![AgentThreadTurn {
+                id: "turn-connector".to_string(),
+                thread_id: "thread-1".to_string(),
+                prompt_text: "创建 Notion 页面".to_string(),
+                status: AgentThreadTurnStatus::Completed,
+                started_at: "2026-05-17T14:10:00Z".to_string(),
+                completed_at: Some("2026-05-17T14:10:05Z".to_string()),
+                error_message: None,
+                created_at: "2026-05-17T14:10:00Z".to_string(),
+                updated_at: "2026-05-17T14:10:05Z".to_string(),
+            }],
+            vec![AgentThreadItem {
+                id: "tool-connector-1".to_string(),
+                thread_id: "thread-1".to_string(),
+                turn_id: "turn-connector".to_string(),
+                sequence: 1,
+                status: AgentThreadItemStatus::Completed,
+                started_at: "2026-05-17T14:10:01Z".to_string(),
+                completed_at: Some("2026-05-17T14:10:02Z".to_string()),
+                updated_at: "2026-05-17T14:10:02Z".to_string(),
+                payload: AgentThreadItemPayload::ToolCall {
+                    tool_name: "connector__notion__createPage".to_string(),
+                    arguments: Some(serde_json::json!({
+                        "connectorId": "notion",
+                        "action": "createPage",
+                        "idempotencyKey": "notion-create-page-1"
+                    })),
+                    output: Some(format!(
+                        "已排队 Cloud Overlay mutation。\n{begin}\n{metadata}\n{end}",
+                        begin = LIME_TOOL_METADATA_BEGIN,
+                        metadata = serde_json::json!({
+                            "result": {
+                                "status": "queued_for_cloud_overlay",
+                                "externalStatus": "not_delivered",
+                                "adapterKind": "cloud_overlay",
+                                "adapterReadiness": "host_managed_outbox_adapter_ready",
+                                "evidenceRefs": [{
+                                    "kind": "connector_cloud_overlay_outbox",
+                                    "ref": outbox_ref,
+                                    "storage": "workspace_local",
+                                    "relativePath": ".lime/agent-app-connectors/cloud-overlay/outbox.jsonl"
+                                }]
+                            }
+                        }),
+                        end = LIME_TOOL_METADATA_END
+                    )),
+                    success: Some(true),
+                    error: None,
+                    metadata: None,
+                },
+            }],
+        );
+
+        let thread_read = AgentRuntimeThreadReadModel::from_session_detail(&detail, &[]);
+
+        assert_eq!(thread_read.profile_status, "completed");
+        assert_eq!(thread_read.tool_calls.len(), 1);
+        assert_eq!(thread_read.tool_calls[0].tool_call_id, "tool-connector-1");
+        assert_eq!(
+            thread_read.tool_calls[0].tool_name,
+            "connector__notion__createPage"
+        );
+        assert_eq!(thread_read.tool_calls[0].status, "completed");
+        assert_eq!(thread_read.tool_calls[0].success, Some(true));
+        assert_eq!(
+            thread_read.tool_calls[0].evidence_refs,
+            vec![outbox_ref.to_string()]
+        );
+        assert_eq!(
+            thread_read.evidence_summary.evidence_refs,
+            vec![outbox_ref.to_string()]
+        );
     }
 
     #[test]

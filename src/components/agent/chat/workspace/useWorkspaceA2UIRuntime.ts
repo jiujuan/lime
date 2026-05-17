@@ -35,7 +35,7 @@ type PendingA2UIResolution =
 
 interface UseWorkspaceA2UIRuntimeParams {
   messages: Message[];
-  /** 历史消息只允许在正文里只读回显，不再提升到底部可提交表单。 */
+  /** 历史消息只允许在正文里只读回显，不再作为当前可提交表单。 */
   readOnlyInteractiveMessageIds?: ReadonlySet<string>;
 }
 
@@ -406,7 +406,7 @@ export function useWorkspaceA2UIRuntime({
       return;
     }
 
-    console.warn("[AgentChatPage] 待处理 action_required 未生成输入区 A2UI", {
+    console.warn("[AgentChatPage] 待处理 action_required 未生成对话内 A2UI", {
       requestId: pendingActionRequest.requestId,
       actionType: pendingActionRequest.actionType,
       prompt: pendingActionRequest.prompt,

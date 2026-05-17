@@ -516,7 +516,7 @@ describe("MarkdownRenderer", () => {
     const card = container.querySelector('[data-testid="a2ui-task-card"]');
 
     expect(card?.getAttribute("data-compact")).toBe("true");
-    expect(card?.className).toContain("max-w-[760px]");
+    expect(card?.className).toContain("max-w-[432px]");
   });
 
   it("历史 Markdown A2UI 代码块应只读回显并移除提交回调", () => {

@@ -85,6 +85,14 @@ const i18nMocks = vi.hoisted(() => ({
       "agentApp.apps.runtime.agentRun.thinking": "思考过程",
       "agentApp.apps.runtime.agentRun.execution": "执行过程",
       "agentApp.apps.runtime.agentRun.output": "成稿流式输出",
+      "agentApp.apps.runtime.agentRun.action.approve": "确认",
+      "agentApp.apps.runtime.agentRun.action.reject": "拒绝",
+      "agentApp.apps.runtime.agentRun.action.answer": "补充说明",
+      "agentApp.apps.runtime.agentRun.action.edit": "编辑",
+      "agentApp.apps.runtime.agentRun.action.retry": "重试",
+      "agentApp.apps.runtime.agentRun.action.interrupt": "中断",
+      "agentApp.apps.runtime.agentRun.action.stop": "停止",
+      "agentApp.apps.toast.failed": "Agent App 操作失败",
     };
     return labels[key] ?? key;
   },
@@ -523,6 +531,24 @@ describe("AgentAppRuntimePage", () => {
       frame,
       "capability:invoke",
       {
+        capability: "lime.agent",
+        method: "startTask",
+        input: {
+          title: "生成内容批次",
+          prompt: "基于项目知识生成内容批次",
+          taskKind: "content.production",
+          idempotencyKey: "dashboard:production",
+          input: { projectId: "project-1" },
+          humanReview: true,
+        },
+      },
+      "agent-run-task-start",
+    );
+
+    await dispatchBridgeMessage(
+      frame,
+      "capability:invoke",
+      {
         capability: "lime.ui",
         method: "openAgentRun",
         input: {
@@ -571,15 +597,36 @@ describe("AgentAppRuntimePage", () => {
                 meta: "tool-1",
               },
               {
+                kind: "tool",
+                title: "Tool · browser_snapshot",
+                message: "页面截图已读取。",
+                statusText: "已完成",
+                meta: "tool-2",
+              },
+              {
                 kind: "execution",
                 title: "正在规划内容结构",
                 message: "AgentRuntime 已开始读取项目上下文。",
                 statusText: "running",
               },
+              {
+                kind: "output",
+                title: "成稿流式输出",
+                message: "第一段流式文案。",
+                statusText: "streaming",
+                collapseKey: "stream:assistant_text:main",
+              },
+              {
+                kind: "output",
+                title: "成稿流式输出",
+                message: "第二段流式文案。",
+                statusText: "streaming",
+                collapseKey: "stream:assistant_text:main",
+              },
             ],
             thinkingText: "先确认项目资料，再拆内容主题。",
-            executionText: "调用内容工厂 Skill。",
-            streamText: "正在生成第一批文案。",
+            executionText: "### 执行过程\n调用内容工厂 Skill。",
+            streamText: "## 首批文案\n- 正在生成第一批文案。",
           },
           events: [
             {
@@ -643,6 +690,9 @@ describe("AgentAppRuntimePage", () => {
     expect(
       container.querySelector('[data-testid="agent-run-process-panel"]'),
     ).not.toBeNull();
+    expect(
+      container.querySelector('[data-agent-run-renderer="host-shared"]'),
+    ).not.toBeNull();
     expect(container.textContent).toContain("生成内容批次");
     expect(container.textContent).toContain("Claude Sonnet 4.5");
     expect(container.textContent).toContain("200");
@@ -650,22 +700,101 @@ describe("AgentAppRuntimePage", () => {
     expect(container.textContent).toContain("content_factory_writer");
     expect(container.textContent).toContain("模型路由");
     expect(container.textContent).toContain("Skill · content_factory_writer");
+    expect(container.textContent).toContain("先执行技能 content_factory_writer");
+    expect(container.textContent).toContain("正在调用内容工厂写作 Skill");
     expect(container.textContent).toContain("Tool · 页面截图");
+    expect(container.textContent).toContain("先抓取页面状态");
+    expect(container.textContent).toContain("正在读取业务页面上下文");
+    expect(container.textContent).toContain("已拿到页面快照");
+    expect(container.textContent).toContain("页面截图已读取");
     expect(
       container.querySelector('[data-agent-run-timeline-kind="skill"]'),
     ).not.toBeNull();
     expect(
       container.querySelector('[data-agent-run-timeline-kind="tool"]'),
     ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="inline-tool-process-step"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(
+        '[data-agent-run-timeline-group="collapse:stream:assistant_text:main"]',
+      ),
+    ).not.toBeNull();
     expect(container.textContent).toContain("正在规划内容结构");
+    expect(container.textContent).toContain("第一段流式文案。");
+    expect(container.textContent).toContain("第二段流式文案。");
+    expect(container.textContent).toContain("×2");
+    expect(
+      container.querySelector('[data-testid="agent-run-markdown-output"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="agent-run-markdown-execution"]'),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("执行过程");
+    expect(container.textContent).toContain("首批文案");
+    expect(container.querySelector('[data-testid="thinking-block"]')).not.toBeNull();
+    expect(container.textContent).toContain("思考中");
     expect(container.textContent).toContain("先确认项目资料");
     expect(container.textContent).toContain("待确认");
     expect(container.textContent).toContain("请确认首批内容选题。");
-    expect(container.textContent).toContain("review-content-batch");
+    expect(
+      container.querySelector('[data-testid="agent-run-projection-panel"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(
+        '[data-agent-run-projection-action-id="review-content-batch"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-agent-run-projection-part-kind="tool"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(
+        '[data-agent-run-projection-part-kind="artifact"]',
+      ),
+    ).not.toBeNull();
     expect(container.textContent).toContain("交付物");
     expect(container.textContent).toContain("内容批次 JSON");
     expect(container.textContent).toContain("证据");
     expect(container.textContent).toContain("内容批次 evidence 已记录。");
+    const rejectButton = container.querySelector<HTMLButtonElement>(
+      '[data-agent-run-projection-action-control-button="reject"]',
+    );
+    expect(rejectButton?.textContent).toBe("拒绝");
+
+    await act(async () => {
+      rejectButton?.click();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(
+      runtimeApiMocks.submitAgentAppRuntimeHostResponse,
+    ).toHaveBeenCalledWith({
+      appId: "content-factory-app",
+      taskId: "agent-app-task-1",
+      runtimeRequest: expect.objectContaining({
+        session_id: "agent-app-session-1",
+        request_id: "review-content-batch",
+        action_type: "ask_user",
+        confirmed: false,
+        response: "reject",
+        metadata: expect.objectContaining({
+          source: "host_agent_run_panel",
+          control: "reject",
+        }),
+        action_scope: expect.objectContaining({
+          session_id: "agent-app-session-1",
+          turn_id: "agent-app-turn-1",
+        }),
+      }),
+    });
+    expect(
+      container.querySelector(
+        '[data-agent-run-projection-action-id="review-content-batch"][data-agent-run-projection-action-status="resolved"]',
+      ),
+    ).not.toBeNull();
 
     await dispatchBridgeMessage(
       frame,

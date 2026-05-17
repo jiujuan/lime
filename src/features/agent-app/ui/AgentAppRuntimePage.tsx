@@ -21,8 +21,17 @@ import {
   type AgentAppHostBridgeNotifyPayload,
 } from "../runtime/hostBridge";
 import { AgentRuntimeCapabilityHost } from "../runtime/agentRuntimeCapabilityHost";
+import type {
+  AgentAppRunProjectionAction,
+  AgentAppRunProjectionActionControl,
+} from "../runtime/agentUiProjectionViewModel";
 import { buildUiRuntimeCapabilityProfile } from "../runtime/uiRuntimeCapabilityProfile";
-import type { InstalledAgentAppState, ProjectedEntry } from "../types";
+import { buildLimeCapabilityInvokeRequest } from "../sdk/capabilityContract";
+import type {
+  AgentAppTaskHostResponseActionType,
+  InstalledAgentAppState,
+  ProjectedEntry,
+} from "../types";
 import { buildRuntimePackageLoadForPreview } from "./agentAppsRuntime";
 import { resolveInstalledAgentAppDisplayName } from "./agentAppDisplay";
 import {
@@ -60,6 +69,9 @@ const RUNTIME_PAGE_PROFILE = buildUiRuntimeCapabilityProfile({
   uiRuntimeEnabled: true,
 });
 const RUNTIME_PAGE_FLAGS = RUNTIME_PAGE_PROFILE.featureFlags;
+const NEGATIVE_AGENT_RUN_ACTION_CONTROLS = new Set<
+  AgentAppRunProjectionActionControl
+>(["reject", "interrupt", "stop"]);
 
 function isUiEntry(entry: ProjectedEntry): boolean {
   return ["page", "panel", "settings"].includes(entry.kind);
@@ -144,6 +156,26 @@ function readAgentRunTaskId(value: unknown): string | null {
     (isRecord(value.task) ? readString(value.task.taskId) : null) ??
     (isRecord(value.snapshot) ? readString(value.snapshot.taskId) : null)
   );
+}
+
+function normalizeAgentRunActionType(
+  value: string | undefined,
+): AgentAppTaskHostResponseActionType {
+  if (
+    value === "tool_confirmation" ||
+    value === "ask_user" ||
+    value === "elicitation"
+  ) {
+    return value;
+  }
+  return "ask_user";
+}
+
+function buildAgentRunActionResponse(control: AgentAppRunProjectionActionControl) {
+  return {
+    confirmed: !NEGATIVE_AGENT_RUN_ACTION_CONTROLS.has(control),
+    response: control,
+  };
 }
 
 function readAgentRunItemKey(item: unknown, index: number): string {
@@ -504,6 +536,94 @@ export function AgentAppRuntimePage({
     [],
   );
 
+  const submitAgentRunAction = useCallback(
+    async (
+      action: AgentAppRunProjectionAction,
+      control: AgentAppRunProjectionActionControl,
+    ) => {
+      const taskId = action.taskId ?? readAgentRunTaskId(agentRunUi);
+      if (!dispatchCapability || !selected || !taskId) {
+        toast.error(t("agentApp.apps.toast.failed"));
+        return;
+      }
+      const actionType = normalizeAgentRunActionType(action.actionType);
+      const response = buildAgentRunActionResponse(control);
+      const input = {
+        taskId,
+        requestId: action.actionId,
+        actionType,
+        confirmed: response.confirmed,
+        response: response.response,
+        metadata: {
+          source: "host_agent_run_panel",
+          control,
+        },
+        actionScope: {
+          sessionId: action.sessionId,
+          threadId: action.threadId,
+          turnId: action.turnId,
+        },
+      };
+      const requestId = `agent-run-action:${action.actionId}:${control}`;
+      const invokeRequest = buildLimeCapabilityInvokeRequest({
+        capability: "lime.agent",
+        method: "submitHostResponse",
+        args: input,
+        requestId,
+        provenance: {
+          appId: selected.appId,
+          entryKey: activeEntry?.key,
+          packageHash: selected.identity.packageHash,
+          manifestHash: selected.identity.manifestHash,
+          taskId,
+        },
+      });
+
+      try {
+        await dispatchCapability({
+          appId: selected.appId,
+          entryKey: activeEntry?.key,
+          requestId,
+          capability: "lime.agent",
+          method: "submitHostResponse",
+          input,
+          invokeRequest,
+          rawPayload: invokeRequest as unknown as Record<string, unknown>,
+        });
+        const now = new Date().toISOString();
+        setAgentRunUi((previous) =>
+          mergeAgentRunUiState(
+            previous,
+            {
+              taskId,
+              events: [
+                {
+                  id: requestId,
+                  type: "action.resolved",
+                  actionId: action.actionId,
+                  taskId,
+                  status: "resolved",
+                  control: "none",
+                  payload: {
+                    actionType,
+                    controls: [],
+                    preview: action.preview,
+                    response: response.response,
+                  },
+                },
+              ],
+            },
+            now,
+            previous?.mode ?? "drawer",
+          ),
+        );
+      } catch (error) {
+        toast.error(normalizeErrorMessage(error));
+      }
+    },
+    [activeEntry?.key, agentRunUi, dispatchCapability, selected, t],
+  );
+
   useEffect(() => {
     const frame = frameRef.current;
     if (!frame || !runtime?.entryUrl || !selected || !activeEntry) {
@@ -639,6 +759,7 @@ export function AgentAppRuntimePage({
               bridgeAction: agentRunUi.bridgeAction,
             });
           }}
+          onAction={submitAgentRunAction}
           t={translateAgentRun}
         />
       ) : null}

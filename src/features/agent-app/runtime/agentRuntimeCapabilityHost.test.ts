@@ -601,7 +601,8 @@ describe("AgentRuntimeCapabilityHost", () => {
                 artifactDocument: {
                   blocks: [
                     {
-                      content: "```json\n{\"contentFactoryWorkspacePatch\":{\"kind\":\"content_batch\",\"contentBatch\":{\"count\":20}}}\n```",
+                      content:
+                        "```json\n{\"contentFactoryWorkspacePatch\":{\"kind\":\"content_batch\",\"contentBatch\":{\"count\":20,\"items\":[{\"title\":\"突出\"一擦即净\"的视觉感\"}]}}}\n```",
                     },
                   ],
                 },
@@ -660,6 +661,15 @@ describe("AgentRuntimeCapabilityHost", () => {
           refs: ["evidence:.lime/artifacts/content-batch.json"],
           payload: expect.objectContaining({
             source: "agent_runtime_artifact_replay",
+            contentFactoryWorkspacePatch: expect.objectContaining({
+              contentBatch: expect.objectContaining({
+                items: expect.arrayContaining([
+                  expect.objectContaining({
+                    title: '突出"一擦即净"的视觉感',
+                  }),
+                ]),
+              }),
+            }),
           }),
         }),
       ]),

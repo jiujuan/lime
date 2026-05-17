@@ -159,6 +159,7 @@
 - 默认先跑受影响 crate、模块或定向测试
 - 再根据边界扩散决定是否执行全量 `cargo test`
 - 目标是尽快暴露问题，而不是一上来把所有测试都跑满
+- 在仓库根运行 Rust 校验必须显式带 `--manifest-path "src-tauri/Cargo.toml"`，或先 `cd src-tauri`；不要直接 `rustc src-tauri/src/*.rs` 编译主 crate，否则会绕过 workspace 依赖并产生 `can't find crate for lime_*` 误报
 - 如果定向测试来自 `src-tauri/crates/aster-rust` 这类被 Tauri watch 覆盖的子工作区，先确认其 Cargo `target-dir` 已统一回 `src-tauri/target`，避免 watch 风暴导致 dev 无法启动
 
 ## 质量分层

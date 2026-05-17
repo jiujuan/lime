@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import type { A2UIFormData } from "@/lib/workspace/a2ui";
 import {
   CHAT_A2UI_TASK_CARD_PRESET,
   TIMELINE_A2UI_TASK_CARD_PRESET,
@@ -16,6 +17,7 @@ interface ActionRequestA2UIPreviewCardProps {
   context?: "chat" | "timeline";
   className?: string;
   readOnly?: boolean;
+  onSubmit?: (formData: A2UIFormData) => void;
 }
 
 function resolveStatusLabel(request: ActionRequired): string {
@@ -60,6 +62,7 @@ export function ActionRequestA2UIPreviewCard({
   context = "chat",
   className,
   readOnly = true,
+  onSubmit,
 }: ActionRequestA2UIPreviewCardProps) {
   const response = buildActionRequestA2UI(request);
   if (!response) {
@@ -82,6 +85,7 @@ export function ActionRequestA2UIPreviewCard({
     <A2UITaskCard
       response={previewResponse}
       compact={compact}
+      onSubmit={readOnly ? undefined : onSubmit}
       preview={readOnly}
       preset={preset}
       title={resolveTitle(request)}

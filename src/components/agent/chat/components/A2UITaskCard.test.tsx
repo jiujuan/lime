@@ -137,7 +137,7 @@ describe("A2UITaskCard", () => {
       )?.dataset.surface,
     ).toBe("embedded");
     expect(container.querySelector(".a2ui-container")?.className).toContain(
-      "space-y-2.5",
+      "space-y-1.5",
     );
     expect(container.querySelector(".a2ui-choice-option")).not.toBeNull();
 

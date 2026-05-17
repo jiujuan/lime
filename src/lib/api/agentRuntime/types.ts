@@ -370,8 +370,15 @@ export interface AgentRuntimeThreadToolCallView {
   turn_id: string;
   tool_name: string;
   status: "running" | "completed" | "failed" | string;
+  started_at?: string | null;
+  finished_at?: string | null;
+  updated_at?: string | null;
+  arguments?: Record<string, unknown> | unknown[] | string | number | boolean | null;
+  output?: string | null;
+  output_preview?: string | null;
   success?: boolean | null;
   error?: string | null;
+  evidence_refs?: string[];
 }
 
 export interface AgentRuntimeThreadEvidenceSummary {

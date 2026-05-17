@@ -72,7 +72,7 @@ export function RowRenderer({
         defaultAlign: "start",
       })}
       style={{
-        gap: component.gap || 8,
+        gap: component.gap || 6,
         flexWrap: component.wrap ? "wrap" : "nowrap",
       }}
     >

@@ -5,10 +5,14 @@ use crate::providers::errors::ProviderError;
 use crate::providers::formats::tool_input_examples;
 use crate::providers::utils::{convert_image, parse_tool_arguments_json_object, ImageFormat};
 use anyhow::{anyhow, Result};
-use rmcp::model::{object, CallToolRequestParam, ErrorCode, ErrorData, JsonObject, Role, Tool};
+use rmcp::model::{
+    object, CallToolRequestParam, CallToolResult, ErrorCode, ErrorData, JsonObject, RawContent,
+    Role, Tool,
+};
 use rmcp::object as json_object;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
+use std::ops::Deref;
 use std::sync::Arc;
 
 // Constants for frequently used strings in Anthropic API format
@@ -30,6 +34,51 @@ const TOOL_USE_ID_FIELD: &str = "tool_use_id";
 const IS_ERROR_FIELD: &str = "is_error";
 const SIGNATURE_FIELD: &str = "signature";
 const DATA_FIELD: &str = "data";
+
+fn anthropic_tool_result_content(result: &CallToolResult) -> Value {
+    let mut content_blocks = Vec::new();
+    let mut text_segments = Vec::new();
+    let mut saw_image = false;
+
+    for content in &result.content {
+        match content.deref() {
+            RawContent::Text(text) if !text.text.trim().is_empty() => {
+                text_segments.push(text.text.clone());
+            }
+            RawContent::Image(image) if !image.data.trim().is_empty() => {
+                if !text_segments.is_empty() {
+                    content_blocks.push(json!({
+                        TYPE_FIELD: TEXT_TYPE,
+                        TEXT_TYPE: text_segments.join("\n")
+                    }));
+                    text_segments.clear();
+                }
+                content_blocks.push(json!({
+                    TYPE_FIELD: "image",
+                    "source": {
+                        TYPE_FIELD: "base64",
+                        "media_type": image.mime_type,
+                        DATA_FIELD: image.data,
+                    }
+                }));
+                saw_image = true;
+            }
+            _ => {}
+        }
+    }
+
+    if saw_image {
+        if !text_segments.is_empty() {
+            content_blocks.push(json!({
+                TYPE_FIELD: TEXT_TYPE,
+                TEXT_TYPE: text_segments.join("\n")
+            }));
+        }
+        Value::Array(content_blocks)
+    } else {
+        Value::String(text_segments.join("\n"))
+    }
+}
 
 /// Convert internal Message format to Anthropic's API message specification
 pub fn format_messages(messages: &[Message]) -> Vec<Value> {
@@ -68,17 +117,10 @@ pub fn format_messages(messages: &[Message]) -> Vec<Value> {
                 }
                 MessageContent::ToolResponse(tool_response) => match &tool_response.tool_result {
                     Ok(result) => {
-                        let text = result
-                            .content
-                            .iter()
-                            .filter_map(|c| c.as_text().map(|t| t.text.clone()))
-                            .collect::<Vec<_>>()
-                            .join("\n");
-
                         content.push(json!({
                             TYPE_FIELD: TOOL_RESULT_TYPE,
                             TOOL_USE_ID_FIELD: tool_response.id,
-                            CONTENT_FIELD: text
+                            CONTENT_FIELD: anthropic_tool_result_content(result)
                         }));
                     }
                     Err(tool_error) => {
@@ -1055,6 +1097,35 @@ mod tests {
         assert_eq!(spec[1]["content"][0]["text"], "Hi there");
         assert_eq!(spec[2]["role"], "user");
         assert_eq!(spec[2]["content"][0]["text"], "How are you?");
+    }
+
+    #[test]
+    fn test_message_to_anthropic_spec_preserves_tool_result_images() {
+        let messages = vec![Message::user().with_tool_response(
+            "tool_1",
+            Ok(CallToolResult {
+                content: vec![
+                    rmcp::model::Content::text("Viewed image: sample.png"),
+                    rmcp::model::Content::image("aGVsbG8=", "image/png"),
+                ],
+                structured_content: None,
+                is_error: Some(false),
+                meta: None,
+            }),
+        )];
+
+        let spec = format_messages(&messages);
+        let tool_content = spec[0]["content"][0]["content"]
+            .as_array()
+            .expect("image tool result should use structured content blocks");
+
+        assert_eq!(spec[0]["role"], "user");
+        assert_eq!(spec[0]["content"][0]["type"], "tool_result");
+        assert_eq!(tool_content[0]["type"], "text");
+        assert_eq!(tool_content[0]["text"], "Viewed image: sample.png");
+        assert_eq!(tool_content[1]["type"], "image");
+        assert_eq!(tool_content[1]["source"]["media_type"], "image/png");
+        assert_eq!(tool_content[1]["source"]["data"], "aGVsbG8=");
     }
 
     #[test]

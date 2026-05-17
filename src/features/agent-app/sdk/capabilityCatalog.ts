@@ -214,7 +214,7 @@ export const LIME_CAPABILITY_DEFINITIONS = [
     summary: "Host capability catalog、版本、可用性和 readiness 摘要。",
     appResponsibility: "按 profile 决定 UI 降级，不猜测底层实现。",
     limeResponsibility: "发布单一能力目录，阻止 App 自建能力表。",
-    profile: {},
+    profile: { mock: "native", adapter: "native" },
   },
   {
     name: "lime.models",

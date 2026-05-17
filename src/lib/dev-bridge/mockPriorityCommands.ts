@@ -48,13 +48,6 @@ const mockPriorityCommands = new Set<string>([
   "launch_browser_session",
   "launch_browser_profile_runtime_assist_cmd",
   "get_browser_action_audit_logs",
-  "agent_app_inspect_local_package",
-  "agent_app_fetch_cloud_package",
-  "agent_app_save_installed_state",
-  "agent_app_list_installed",
-  "agent_app_set_disabled",
-  "agent_app_uninstall_rehearsal",
-  "agent_app_uninstall",
 ]);
 
 /**
@@ -131,6 +124,13 @@ const bridgeTruthCommands = new Set<string>([
   "cancel_media_task_artifact",
   "save_layered_design_project_export",
   "read_layered_design_project_export",
+  "agent_app_inspect_local_package",
+  "agent_app_fetch_cloud_package",
+  "agent_app_save_installed_state",
+  "agent_app_list_installed",
+  "agent_app_set_disabled",
+  "agent_app_uninstall_rehearsal",
+  "agent_app_uninstall",
   "capability_draft_create",
   "capability_draft_list",
   "capability_draft_get",

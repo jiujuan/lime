@@ -14,12 +14,14 @@ interface WorkspacePendingA2UIPanelProps {
   pendingA2UIForm?: A2UIResponse | null;
   onA2UISubmit?: (formData: A2UIFormData) => void;
   a2uiSubmissionNotice?: A2UISubmissionNoticeData | null;
+  placement?: "dock" | "message";
 }
 
 export function WorkspacePendingA2UIPanel({
   pendingA2UIForm = null,
   onA2UISubmit,
   a2uiSubmissionNotice = null,
+  placement = "dock",
 }: WorkspacePendingA2UIPanelProps) {
   const { t } = useTranslation("workspace");
   const { visibleForm, isStale } = useStickyA2UIForm({
@@ -34,8 +36,16 @@ export function WorkspacePendingA2UIPanel({
   const shouldRender =
     Boolean(visibleNotice) || Boolean(visibleForm && onA2UISubmit);
   const toneClassName = visibleForm
-    ? "border-slate-200/90 bg-white"
-    : "border-emerald-200/90 bg-emerald-50/70";
+    ? "border-slate-200 bg-white"
+    : "border-emerald-200 bg-emerald-50";
+  const shellClassName =
+    placement === "message"
+      ? `w-full max-w-[432px] space-y-2 rounded-[12px] border px-3 py-3 shadow-none ${toneClassName}`
+      : `mx-4 mb-3 max-w-[432px] shrink-0 space-y-2 rounded-[12px] border px-3 py-3 shadow-none ${toneClassName}`;
+  const scrollAreaClassName =
+    placement === "message"
+      ? "min-h-0 max-h-[min(72vh,760px)] overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable] [scrollbar-width:thin]"
+      : "min-h-0 max-h-[min(44vh,420px)] overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable] [scrollbar-width:thin]";
   const progressMeta = readProgressiveA2UIProgressMeta(visibleForm);
   const statusLabel = isStale
     ? t("workspace.pendingA2UI.status.stale")
@@ -58,10 +68,11 @@ export function WorkspacePendingA2UIPanel({
   return (
     <section
       data-testid="workspace-pending-a2ui-panel"
-      className={`mx-4 mb-3 shrink-0 space-y-3 rounded-[22px] border px-3 py-3 shadow-sm shadow-slate-950/5 ${toneClassName}`}
+      data-placement={placement}
+      className={shellClassName}
     >
       {visibleNotice ? (
-        <div className="rounded-[18px] border border-emerald-200/90 bg-white px-2 py-2">
+        <div className="rounded-[10px] border border-emerald-200 bg-white px-2 py-2">
           <A2UISubmissionNotice
             notice={visibleNotice}
             visible={isSubmissionNoticeVisible}
@@ -72,7 +83,7 @@ export function WorkspacePendingA2UIPanel({
       {visibleForm && onA2UISubmit ? (
         <div
           data-testid="workspace-pending-a2ui-scroll-area"
-          className="min-h-0 max-h-[min(44vh,420px)] overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable] [scrollbar-width:thin]"
+          className={scrollAreaClassName}
         >
           <A2UITaskCard
             response={visibleForm}

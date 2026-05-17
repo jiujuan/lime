@@ -68,15 +68,19 @@ export function TabsRenderer({
 
   return (
     <UITabs defaultValue={tabItems[0].value} className="w-full">
-      <TabsList className="w-full justify-start rounded-2xl bg-[color:var(--lime-surface-muted)] p-1">
+      <TabsList className="h-8 w-full justify-start rounded-[10px] bg-slate-100 p-0.5">
         {tabItems.map((tab) => (
-          <TabsTrigger key={tab.key} value={tab.value} className="rounded-xl">
+          <TabsTrigger
+            key={tab.key}
+            value={tab.value}
+            className="h-7 rounded-[8px] px-2 text-[12px]"
+          >
             {tab.title}
           </TabsTrigger>
         ))}
       </TabsList>
       {tabItems.map((tab) => (
-        <TabsContent key={tab.key} value={tab.value} className="mt-4">
+        <TabsContent key={tab.key} value={tab.value} className="mt-2">
           <ComponentRenderer
             component={tab.child}
             components={components}

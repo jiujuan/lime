@@ -20,6 +20,7 @@ const DEFAULTS = {
   includeContentFactoryActionE2e: false,
   includeContentFactoryCompletionE2e: false,
   completionTimeoutMs: 90_000,
+  contentFactoryAction: "build-store",
 };
 
 const ACCOUNT_MENU_BUTTON_SELECTOR = '[data-testid="app-sidebar-account-button"]';
@@ -27,6 +28,74 @@ const AGENT_APPS_NAV_SELECTOR =
   'button[aria-label="Agent Apps"], button[title="Agent Apps"]';
 const AGENT_APP_LAB_NAV_SELECTOR =
   'button[aria-label="Agent App Lab"], button[title="Agent App Lab"]';
+const CONTENT_FACTORY_SAMPLE_PROJECT_ID = "sample_content_factory_spring";
+const CONTENT_FACTORY_ACTIONS = {
+  "build-store": {
+    action: "build-store",
+    page: "start",
+    pageText: /资料|资料原文或摘要|确认资料版本/,
+    label: "整理资料",
+    expectedSkills: ["knowledge-builder", "content-reviewer"],
+    runningPattern:
+      /正在整理资料|整理当前项目内容|当前进度|正在连接 Lime AI 同事/,
+  },
+  "run-scenarios": {
+    action: "run-scenarios",
+    page: "scenes",
+    pageText: /场景整理|场景概览|优先场景/,
+    label: "生成/更新场景包",
+    expectedSkills: ["knowledge-builder", "content-reviewer"],
+    runningPattern: /正在准备场景|整理当前项目内容|当前进度|正在连接 Lime AI 同事/,
+  },
+  "run-production": {
+    action: "run-production",
+    page: "produce",
+    pageText: /本轮内容画布|整理本轮内容|脚本和图片需求/,
+    campaignStep: "setup",
+    label: "生成本轮内容包",
+    expectedSkills: ["article-writer", "content-reviewer"],
+    runningPattern:
+      /正在整理本轮内容|整理当前项目内容|当前进度|正在连接 Lime AI 同事/,
+  },
+  "only-copy": {
+    action: "only-copy",
+    page: "produce",
+    pageText: /本轮内容画布|整理草稿|脚本和图片需求/,
+    campaignStep: "copy",
+    seedSampleWorkspace: true,
+    label: "只重写文案批次",
+    expectedSkills: ["article-writer", "content-reviewer"],
+    runningPattern: /正在重写草稿|整理当前项目内容|当前进度|正在连接 Lime AI 同事/,
+  },
+  "run-scripts": {
+    action: "run-scripts",
+    page: "produce",
+    pageText: /本轮内容画布|生成脚本|图片需求/,
+    campaignStep: "derivatives",
+    seedSampleWorkspace: true,
+    label: "生成脚本批次",
+    expectedSkills: ["article-writer", "content-reviewer"],
+    runningPattern: /正在生成脚本|整理当前项目内容|当前进度|正在连接 Lime AI 同事/,
+  },
+  "run-strategy": {
+    action: "run-strategy",
+    page: "deliver",
+    pageText: /交付出口|交付包工作台|交付物清单/,
+    seedSampleWorkspace: true,
+    label: "更新交付结论",
+    expectedSkills: ["article-writer", "content-reviewer"],
+    runningPattern:
+      /正在准备交付|整理当前项目内容|当前进度|正在连接 Lime AI 同事/,
+  },
+  "run-review": {
+    action: "run-review",
+    page: "review",
+    pageText: /复盘出口|复盘决策室|生成下一轮判断/,
+    label: "生成判断",
+    expectedSkills: ["content-reviewer"],
+    runningPattern: /正在分析复盘|整理当前项目内容|当前进度|正在连接 Lime AI 同事/,
+  },
+};
 
 function parseArgs(argv) {
   const options = { ...DEFAULTS };
@@ -72,6 +141,11 @@ function parseArgs(argv) {
     if (arg === "--completion-timeout-ms" && argv[index + 1]) {
       options.completionTimeoutMs = Number(argv[index + 1]);
       index += 1;
+      continue;
+    }
+    if (arg === "--content-factory-action" && argv[index + 1]) {
+      options.contentFactoryAction = String(argv[index + 1]).trim();
+      index += 1;
     }
   }
   return options;
@@ -85,6 +159,18 @@ function assert(condition, message) {
   if (!condition) {
     throw new Error(message);
   }
+}
+
+function getContentFactoryActionConfig(actionName) {
+  const action = CONTENT_FACTORY_ACTIONS[actionName];
+  if (!action) {
+    throw new Error(
+      `Unsupported content factory action: ${actionName}. Supported: ${Object.keys(
+        CONTENT_FACTORY_ACTIONS,
+      ).join(", ")}`,
+    );
+  }
+  return action;
 }
 
 function logStage(stage) {
@@ -559,6 +645,13 @@ function hasCostValue(value) {
   );
 }
 
+function hasContentFactoryEvidenceValue(value) {
+  return valueContainsPattern(
+    value,
+    /skillEvidence|skill_evidence|evidenceRefs|evidence_refs/,
+  );
+}
+
 function isTerminalRuntimeStatus(value) {
   return [
     "completed",
@@ -572,6 +665,12 @@ function isTerminalRuntimeStatus(value) {
     "canceled",
     "aborted",
   ].includes(String(value ?? "").trim().toLowerCase());
+}
+
+function isSuccessfulRuntimeStatus(value) {
+  return ["completed", "complete", "success", "succeeded"].includes(
+    String(value ?? "").trim().toLowerCase(),
+  );
 }
 
 function summarizeRuntimeSnapshotCompletion(snapshot) {
@@ -604,6 +703,9 @@ function summarizeRuntimeSnapshotCompletion(snapshot) {
   const terminal = isTerminalRuntimeStatus(snapshot.taskStatus) ||
     isTerminalRuntimeStatus(threadRead.profile_status) ||
     isTerminalRuntimeStatus(threadRead.status);
+  const successful = isSuccessfulRuntimeStatus(snapshot.taskStatus) ||
+    isSuccessfulRuntimeStatus(threadRead.profile_status) ||
+    isSuccessfulRuntimeStatus(threadRead.status);
   const hasRuntimeOutput =
     taskEvents.length > 0 || artifacts.length > 0 || toolCalls.length > 0 || turns.length > 0;
   const workspacePatchReady = hasContentFactoryWorkspacePatchValue(snapshot);
@@ -611,10 +713,11 @@ function summarizeRuntimeSnapshotCompletion(snapshot) {
   const evidenceReady = Boolean(
     (Array.isArray(evidenceRefs) && evidenceRefs.length > 0) ||
       valueContainsPattern(taskEvents, /evidence/i) ||
-      (workspacePatchReady && artifacts.length > 0),
+      (workspacePatchReady && (artifacts.length > 0 || hasContentFactoryEvidenceValue(snapshot))),
   );
 
   return {
+    terminalReady: successful,
     modelReady: Boolean(selectedModel || selectedProvider),
     usageReady: hasTokenUsageValue(snapshot) || (terminal && hasRuntimeOutput),
     costReady: hasCostValue(snapshot),
@@ -664,10 +767,19 @@ function mergeContentFactoryHostTaskRecords(base, next) {
     "artifactReady",
     "evidenceReady",
     "workspacePatchReady",
+    "terminalReady",
   ];
   const completion = {};
   for (const key of completionKeys) {
     completion[key] = Boolean(base.completion?.[key] || next.completion?.[key]);
+  }
+  const directTerminalRecords = [base, next].filter(
+    (record) => record?.recordSources?.directGetTask && record?.directRuntimeSnapshot?.ok,
+  );
+  if (directTerminalRecords.length > 0) {
+    completion.terminalReady = directTerminalRecords.some(
+      (record) => record.completion?.terminalReady === true,
+    );
   }
   return {
     ...base,
@@ -936,6 +1048,27 @@ async function clickAgentAppsNav(page, timeoutMs) {
   await page.locator(AGENT_APPS_NAV_SELECTOR).first().click();
 }
 
+async function openContentFactoryDetails(page, timeoutMs) {
+  await page.click('[data-testid="agent-apps-open-detail-content-factory-app"]', {
+    timeout: timeoutMs,
+  });
+  await page.waitForSelector('[data-testid="agent-apps-detail"]', {
+    timeout: timeoutMs,
+  });
+}
+
+async function expandContentFactoryMoreInfo(page, timeoutMs) {
+  if ((await page.locator('[data-testid="agent-apps-more-info-content"]').count()) > 0) {
+    return;
+  }
+  await page.click('[data-testid="agent-apps-more-info"]', {
+    timeout: timeoutMs,
+  });
+  await page.waitForSelector('[data-testid="agent-apps-more-info-content"]', {
+    timeout: timeoutMs,
+  });
+}
+
 async function getContentFactoryRuntimeFrame(page, timeoutMs) {
   const frameHandle = await page.waitForSelector('[data-testid="agent-app-runtime-frame"]', {
     timeout: Math.min(timeoutMs, 30_000),
@@ -1119,6 +1252,25 @@ async function readContentFactoryHostTaskRecord(frame) {
         }
         return Object.values(value).some((item) => hasWorkspacePatch(item, depth + 1));
       };
+      const hasEvidenceValue = (value, depth = 0) => {
+        if (depth > 6 || value == null) {
+          return false;
+        }
+        if (typeof value === "string") {
+          return /skillEvidence|skill_evidence|evidenceRefs|evidence_refs/.test(value);
+        }
+        if (Array.isArray(value)) {
+          return value.some((item) => hasEvidenceValue(item, depth + 1));
+        }
+        if (typeof value !== "object") {
+          return false;
+        }
+        return Object.entries(value).some(
+          ([key, item]) =>
+            /skillEvidence|skill_evidence|evidenceRefs|evidence_refs/.test(key) ||
+            hasEvidenceValue(item, depth + 1),
+        );
+      };
       const hostRecordTaskId =
         [
           task?.taskId,
@@ -1140,6 +1292,8 @@ async function readContentFactoryHostTaskRecord(frame) {
           findSessionId(taskRecord),
           findSessionId(bridgeRecord),
         ].find((value) => typeof value === "string" && value.trim()) ?? "";
+      const taskStatus = task?.status ?? snapshot?.taskStatus ?? snapshot?.status ?? "";
+      const terminalReady = /completed|complete|success|succeeded/i.test(String(taskStatus));
       return {
         taskId,
         sessionId,
@@ -1150,7 +1304,7 @@ async function readContentFactoryHostTaskRecord(frame) {
           bridgeAction: Boolean(bridgeRecord),
           taskId: Boolean(taskRecord),
         },
-        taskStatus: task?.status ?? snapshot?.taskStatus ?? snapshot?.status ?? "",
+        taskStatus,
         hasRuntimeFacts: Boolean(runtimeFacts),
         runtimeFactKeys:
           runtimeFacts && typeof runtimeFacts === "object" ? Object.keys(runtimeFacts) : [],
@@ -1171,9 +1325,11 @@ async function readContentFactoryHostTaskRecord(frame) {
               invokedSkillNames: Array.isArray(runtimeProcess.invokedSkillNames)
                 ? runtimeProcess.invokedSkillNames
                 : [],
+              terminal: Boolean(runtimeProcess.terminal),
             }
           : null,
         completion: {
+          terminalReady,
           modelReady: Boolean(
             runtimeProcess?.routingCount > 0 ||
               (runtimeProcess?.model?.label &&
@@ -1200,7 +1356,9 @@ async function readContentFactoryHostTaskRecord(frame) {
             runtimeProcess?.artifactCount > 0 ||
               anyEvent(/artifact/i),
           ),
-          evidenceReady: anyEvent(/evidence/i),
+          evidenceReady:
+            anyEvent(/evidence/i) ||
+            (hasWorkspacePatch(records) && hasEvidenceValue(records)),
           workspacePatchReady: hasWorkspacePatch(records),
         },
       };
@@ -1213,6 +1371,19 @@ async function readContentFactoryHostTaskRecord(frame) {
       runtimeFactKeys: [],
     };
   }
+}
+
+async function waitForContentFactoryHostTaskRecord(frame, timeoutMs) {
+  const startedAt = Date.now();
+  let lastRecord = null;
+  while (Date.now() - startedAt < timeoutMs) {
+    lastRecord = await readContentFactoryHostTaskRecord(frame);
+    if (lastRecord?.taskId) {
+      return lastRecord;
+    }
+    await sleep(500);
+  }
+  return lastRecord ?? {};
 }
 
 function summarizeCapabilityCalls(callLog) {
@@ -1244,6 +1415,7 @@ function summarizeContentFactoryCompletionReadiness(hostTaskRecord) {
     artifactReady: Boolean(completion.artifactReady),
     evidenceReady: Boolean(completion.evidenceReady),
     workspacePatchReady: Boolean(completion.workspacePatchReady),
+    terminalReady: Boolean(completion.terminalReady),
   };
   const missing = Object.entries(checks)
     .filter(([, ready]) => !ready)
@@ -1300,32 +1472,64 @@ async function inspectContentFactoryRuntimeFrame(page, timeoutMs) {
   }
 
   const bodyText = await frame.locator("body").innerText({ timeout: boundedTimeoutMs });
+  const bridgeState = await frame.locator("body").evaluate(() => {
+    const bridge = window.limeAgentAppBridge;
+    const callLog = typeof bridge?.getSdkCallLog === "function"
+      ? bridge.getSdkCallLog()
+      : [];
+    return {
+      hasBridge: Boolean(bridge?.protocol),
+      hasCapabilityRefresh: typeof bridge?.refreshHostCapabilityProfile === "function",
+      callCount: Array.isArray(callLog) ? callLog.length : 0,
+    };
+  });
   const hostProfileVisible =
-    bodyText.includes("已连接 Lime AI 同事") ||
-    bodyText.includes("部分 Lime 能力暂不可用") ||
-    bodyText.includes("模型、Token、费用和 Skills 由 Lime Host 统一回写");
+    bridgeState.hasBridge &&
+    bridgeState.hasCapabilityRefresh &&
+    (bodyText.includes("当前进度") ||
+      bodyText.includes("项目作战室") ||
+      bodyText.includes("工作台状态"));
   return {
     contentFactoryLoaded: bodyText.includes("内容工厂"),
     hostProfileVisible,
+    bridgeState,
     bodyPreview: bodyText.slice(0, 1_000),
   };
 }
 
 async function runContentFactoryActionE2e(page, options) {
+  const actionConfig = getContentFactoryActionConfig(options.contentFactoryAction);
   const frame = await getContentFactoryRuntimeFrame(page, options.timeoutMs);
   const boundedTimeoutMs = Math.min(options.timeoutMs, 45_000);
+  if (actionConfig.seedSampleWorkspace) {
+    await seedContentFactorySampleWorkspace(frame, boundedTimeoutMs);
+  }
   const beforeCallLog = await readContentFactorySdkCallLog(frame);
 
-  await frame.locator('button[data-page="start"]').first().click({
+  await frame.locator(`button[data-page="${actionConfig.page}"]`).first().click({
     timeout: boundedTimeoutMs,
   });
-  await frame.getByText("知识库底座").first().waitFor({ timeout: boundedTimeoutMs });
+  await frame.getByText(actionConfig.pageText).first().waitFor({
+    timeout: boundedTimeoutMs,
+  });
+  if (actionConfig.campaignStep) {
+    const stepButton = frame
+      .locator(`button[data-campaign-step="${actionConfig.campaignStep}"]`)
+      .first();
+    await stepButton.waitFor({ state: "visible", timeout: boundedTimeoutMs });
+    await stepButton.click({ timeout: boundedTimeoutMs });
+  }
 
-  const buildStoreButton = frame.locator('button[data-action="build-store"]').first();
-  await buildStoreButton.waitFor({ state: "visible", timeout: boundedTimeoutMs });
-  const buildStoreDisabled = await buildStoreButton.isDisabled().catch(() => false);
-  assert(!buildStoreDisabled, "Content Factory build-store action should be enabled");
-  await buildStoreButton.click({ timeout: boundedTimeoutMs });
+  const actionButton = frame
+    .locator(`button[data-action="${actionConfig.action}"]`)
+    .first();
+  await actionButton.waitFor({ state: "visible", timeout: boundedTimeoutMs });
+  const actionDisabled = await actionButton.isDisabled().catch(() => false);
+  assert(
+    !actionDisabled,
+    `Content Factory ${actionConfig.action} action should be enabled`,
+  );
+  await actionButton.click({ timeout: boundedTimeoutMs });
 
   await frame.waitForFunction(
     () =>
@@ -1364,46 +1568,77 @@ async function runContentFactoryActionE2e(page, options) {
     undefined,
     { timeout: boundedTimeoutMs },
   );
-  await frame.locator("body").getByText(/AI 同事正在整理知识库|Lime AI 运行现场|正在连接 Lime AI 同事/).first().waitFor({
-    timeout: boundedTimeoutMs,
-  });
+  await frame
+    .locator("body")
+    .getByText(actionConfig.runningPattern)
+    .first()
+    .waitFor({
+      timeout: boundedTimeoutMs,
+    });
 
   const bodyText = await frame.locator("body").innerText({ timeout: boundedTimeoutMs });
   const afterCallLog = await readContentFactorySdkCallLog(frame);
-  const hostTaskRecord = await readContentFactoryHostTaskRecord(frame);
+  const hostTaskRecord = await waitForContentFactoryHostTaskRecord(frame, boundedTimeoutMs);
   const newCalls = summarizeCapabilityCalls(afterCallLog.slice(beforeCallLog.length));
   const runtimeFacts = summarizeContentFactoryRuntimeFacts(newCalls);
   const startTaskSeen = newCalls.includes("lime.agent.startTask");
-  const taskAccepted = Boolean(hostTaskRecord.taskId);
-  const hostTaskRecordSeen = Boolean(hostTaskRecord.hostRecordTaskId);
+  const taskAccepted = Boolean(hostTaskRecord.taskId || hostTaskRecord.sdkTaskId);
+  const hostTaskRecordSeen = Boolean(
+    hostTaskRecord.hostRecordTaskId || hostTaskRecord.sdkTaskId,
+  );
   const runtimeFactsObserved = Boolean(hostTaskRecord.hasRuntimeFacts);
-  const requiredSkillsProjected = ["knowledge-builder", "content-reviewer"].every((skillName) =>
-    (hostTaskRecord.runtimeProcess?.skillNames ?? []).includes(skillName) ||
-    bodyText.includes(skillName),
+  const expectedSkills = actionConfig.expectedSkills ?? [
+    "knowledge-builder",
+    "content-reviewer",
+  ];
+  const skillEvidenceText = [
+    bodyText,
+    JSON.stringify(hostTaskRecord.runtimeProcess?.skillNames ?? []),
+    JSON.stringify(hostTaskRecord.runtimeProcess?.invokedSkillNames ?? []),
+    JSON.stringify(afterCallLog.slice(beforeCallLog.length)),
+  ].join("\n");
+  const requiredSkillsProjected = expectedSkills.every((skillName) =>
+    skillEvidenceText.includes(skillName),
   );
   const processPanelVisible =
     bodyText.includes("Lime AI 运行现场") ||
     bodyText.includes("正在连接 Lime AI 同事") ||
-    bodyText.includes("AI 同事正在整理知识库");
+    bodyText.includes("AI 同事正在整理知识库") ||
+    actionConfig.runningPattern.test(bodyText);
   const hostFallbackVisible = bodyText.includes("Lime AI 同事连接失败");
 
-  assert(startTaskSeen, "Content Factory action E2E should invoke lime.agent.startTask");
-  assert(taskAccepted, "Content Factory action E2E should receive a Host task id");
-  assert(runtimeFactsObserved, "Content Factory action E2E should expose Host runtime facts");
+  assert(
+    startTaskSeen,
+    `Content Factory ${actionConfig.action} E2E should invoke lime.agent.startTask`,
+  );
+  assert(
+    taskAccepted,
+    `Content Factory ${actionConfig.action} E2E should receive a Host task id`,
+  );
+  assert(
+    runtimeFactsObserved,
+    `Content Factory ${actionConfig.action} E2E should expose Host runtime facts`,
+  );
   assert(
     runtimeFacts.modelsStarted && runtimeFacts.usageStarted && runtimeFacts.skillsStarted,
-    "Content Factory action E2E should request Host runtime facts",
+    `Content Factory ${actionConfig.action} E2E should request Host runtime facts`,
   );
   assert(
     runtimeFacts.streamOrGetTaskStarted,
-    "Content Factory action E2E should subscribe to or poll the Host task",
+    `Content Factory ${actionConfig.action} E2E should subscribe to or poll the Host task`,
   );
   assert(
     requiredSkillsProjected,
-    "Content Factory action E2E should project required content factory Skills",
+    `Content Factory ${actionConfig.action} E2E should project required content factory Skills`,
   );
-  assert(processPanelVisible, "Content Factory action E2E should keep the process panel visible");
-  assert(!hostFallbackVisible, "Content Factory action E2E should not fall back after Host connection");
+  assert(
+    processPanelVisible,
+    `Content Factory ${actionConfig.action} E2E should keep the process panel visible`,
+  );
+  assert(
+    !hostFallbackVisible,
+    `Content Factory ${actionConfig.action} E2E should not fall back after Host connection`,
+  );
 
   const completionTimeoutMs = Math.min(
     options.timeoutMs,
@@ -1412,8 +1647,29 @@ async function runContentFactoryActionE2e(page, options) {
   const completionE2e = options.includeContentFactoryCompletionE2e
     ? await waitForContentFactoryCompletionE2e(frame, options, completionTimeoutMs)
     : null;
+  const completionInvokedSkillNames = Array.isArray(
+    completionE2e?.hostTaskRecord?.runtimeProcess?.invokedSkillNames,
+  )
+    ? completionE2e.hostTaskRecord.runtimeProcess.invokedSkillNames
+    : [];
+  const expectedSkillsInvoked =
+    !completionE2e ||
+    expectedSkills.every((skillName) =>
+      completionInvokedSkillNames.some(
+        (invokedSkillName) =>
+          invokedSkillName === skillName ||
+          String(invokedSkillName).endsWith(`:${skillName}`),
+      ),
+    );
+  assert(
+    expectedSkillsInvoked,
+    `Content Factory ${actionConfig.action} E2E should invoke expected content factory Skills: ${expectedSkills.join(", ")}`,
+  );
 
   return {
+    actionName: actionConfig.action,
+    actionLabel: actionConfig.label,
+    expectedSkills,
     startTaskSeen,
     taskAccepted,
     hostTaskRecordSeen,
@@ -1422,6 +1678,7 @@ async function runContentFactoryActionE2e(page, options) {
       runtimeFacts.modelsStarted && runtimeFacts.usageStarted && runtimeFacts.skillsStarted,
     streamOrGetTaskStarted: runtimeFacts.streamOrGetTaskStarted,
     requiredSkillsProjected,
+    expectedSkillsInvoked,
     processPanelVisible,
     hostFallbackVisible,
     hostTaskRecord,
@@ -1429,6 +1686,27 @@ async function runContentFactoryActionE2e(page, options) {
     capabilityCalls: newCalls,
     bodyPreview: bodyText.slice(0, 1_000),
   };
+}
+
+async function seedContentFactorySampleWorkspace(frame, timeoutMs) {
+  await frame.evaluate(async () => {
+    const response = await fetch("/api/sample/load", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    if (!response.ok) {
+      throw new Error(`load sample failed: ${response.status}`);
+    }
+    window.location.reload();
+  });
+  await frame.waitForLoadState("domcontentloaded", { timeout: timeoutMs });
+  await frame.locator('button[data-page="projects"]').first().click({ timeout: timeoutMs });
+  await frame
+    .locator(`button[data-open-project="${CONTENT_FACTORY_SAMPLE_PROJECT_ID}"]`)
+    .first()
+    .click({ timeout: timeoutMs });
+  await frame.getByText("春季新品内容项目").first().waitFor({ timeout: timeoutMs });
 }
 
 async function launchSmokeContext(userDataDir) {
@@ -1645,19 +1923,33 @@ async function main() {
     );
 
     logStage("install-cloud-review");
+    let cloudInstallReviewVisible = false;
+    let cloudInstallAlreadySatisfied = false;
     await page.click('[data-testid="agent-apps-install-cloud-content-factory-app"]', {
       timeout: options.timeoutMs,
     });
-    await page.waitForSelector('[data-testid="agent-apps-install-review"]', {
-      timeout: options.timeoutMs,
-    });
-    await page.click('[data-testid="agent-apps-install-review-confirm"]');
+    const reviewVisible = await page
+      .waitForSelector('[data-testid="agent-apps-install-review"]', {
+        timeout: Math.min(options.timeoutMs, 5_000),
+      })
+      .then(() => true)
+      .catch(() => false);
+    if (reviewVisible) {
+      cloudInstallReviewVisible = true;
+      await page.click('[data-testid="agent-apps-install-review-confirm"]');
+    } else {
+      cloudInstallAlreadySatisfied = true;
+      console.log(
+        "[smoke:agent-apps] install review skipped because content factory is already installed",
+      );
+    }
     await page.waitForSelector('[data-testid="agent-apps-installed-content-factory-app"]', {
       timeout: options.timeoutMs,
     });
 
     logStage("disable-enable");
-    await page.click('[data-testid="agent-apps-installed-content-factory-app"]');
+    await openContentFactoryDetails(page, options.timeoutMs);
+    await expandContentFactoryMoreInfo(page, options.timeoutMs);
     await page.click('[data-testid="agent-apps-disable"]');
     await page.waitForFunction(
       () =>
@@ -1703,6 +1995,67 @@ async function main() {
       contentFactoryActionE2e = await runContentFactoryActionE2e(page, options);
     }
 
+    if (options.includeContentFactoryCompletionE2e) {
+      const assertions = {
+        runtimeSurfaceVisible: Boolean(runtimeFrameSrc),
+        runtimeFrameContentFactoryLoaded: runtimeFrameInspection.contentFactoryLoaded,
+        runtimeFrameHostProfileVisible: runtimeFrameInspection.hostProfileVisible,
+        contentFactoryActionMatches:
+          contentFactoryActionE2e?.actionName === options.contentFactoryAction,
+        contentFactoryActionStarted: contentFactoryActionE2e?.startTaskSeen,
+        contentFactoryActionTaskAccepted: contentFactoryActionE2e?.taskAccepted,
+        contentFactoryActionRuntimeFactsObserved:
+          contentFactoryActionE2e?.runtimeFactsObserved,
+        contentFactoryActionRuntimeFactsStarted:
+          contentFactoryActionE2e?.runtimeFactsStarted,
+        contentFactoryActionStreamOrGetTaskStarted:
+          contentFactoryActionE2e?.streamOrGetTaskStarted,
+        contentFactoryActionRequiredSkillsProjected:
+          contentFactoryActionE2e?.requiredSkillsProjected,
+        contentFactoryActionExpectedSkillsInvoked:
+          contentFactoryActionE2e?.expectedSkillsInvoked,
+        contentFactoryActionProcessVisible: contentFactoryActionE2e?.processPanelVisible,
+        contentFactoryActionNoHostFallback: !contentFactoryActionE2e?.hostFallbackVisible,
+        contentFactoryCompletionReady: contentFactoryActionE2e?.completionE2e?.ready,
+      };
+      Object.entries(assertions).forEach(([key, value]) => {
+        assert(Boolean(value), `Assertion failed: ${key}`);
+      });
+
+      logStage("completion-focused-summary");
+      const screenshotPath = path.join(options.evidenceDir, `${options.prefix}.png`);
+      const summaryPath = path.join(options.evidenceDir, `${options.prefix}-summary.json`);
+      let screenshot = screenshotPath;
+      try {
+        await page.screenshot({ path: screenshotPath, timeout: 30_000 });
+      } catch (error) {
+        screenshot = {
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+      fs.writeFileSync(
+        summaryPath,
+        `${JSON.stringify(
+          {
+            scenarioId: "agent-apps-smoke-content-factory-completion",
+            appUrl: options.appUrl,
+            assertions,
+            runtimeFrameSrc,
+            runtimeFrameInspection,
+            contentFactoryActionE2e,
+            consoleErrors,
+            failedRequests,
+            screenshot,
+          },
+          null,
+          2,
+        )}\n`,
+      );
+      console.log(`[smoke:agent-apps] summary=${summaryPath}`);
+      console.log("[smoke:agent-apps] 通过");
+      return;
+    }
+
     logStage("return-agent-apps");
     await clickAgentAppsNav(page, options.timeoutMs);
     await page.waitForSelector('[data-testid="agent-apps-page"]', {
@@ -1713,6 +2066,8 @@ async function main() {
     });
 
     logStage("uninstall-rehearsal");
+    await openContentFactoryDetails(page, options.timeoutMs);
+    await expandContentFactoryMoreInfo(page, options.timeoutMs);
     await page.click('[data-testid="agent-apps-uninstall-delete-data"]');
     await page.waitForSelector('[data-testid="agent-apps-uninstall-preview"]', {
       timeout: options.timeoutMs,
@@ -1739,7 +2094,8 @@ async function main() {
       formalPageVisible: Boolean(await page.$('[data-testid="agent-apps-page"]')),
       installedVisible: stillInstalledAfterRehearsal,
       registrationRequiredBlocked: registrationInstallBlocked,
-      cloudInstallReviewVisible: true,
+      cloudInstallReviewVisible:
+        cloudInstallReviewVisible || cloudInstallAlreadySatisfied,
       disabledLaunchBlocked,
       runtimeSurfaceVisible: Boolean(runtimeFrameSrc),
       runtimeFrameContentFactoryLoaded: runtimeFrameInspection.contentFactoryLoaded,
@@ -1747,6 +2103,8 @@ async function main() {
       ...(contentFactoryActionE2e
         ? {
             contentFactoryActionStarted: contentFactoryActionE2e.startTaskSeen,
+            contentFactoryActionMatches:
+              contentFactoryActionE2e.actionName === options.contentFactoryAction,
             contentFactoryActionTaskAccepted: contentFactoryActionE2e.taskAccepted,
             contentFactoryActionRuntimeFactsObserved:
               contentFactoryActionE2e.runtimeFactsObserved,

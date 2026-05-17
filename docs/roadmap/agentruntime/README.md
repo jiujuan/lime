@@ -1,7 +1,7 @@
 # Lime AgentRuntime Profile 路线图
 
 > 状态：implementation-audited
-> 更新时间：2026-05-16
+> 更新时间：2026-05-17
 > 目标：把 Lime 已有的运行时、任务、模型路由、权限、证据、GUI read model 与 AgentRuntime 标准收敛成一条可执行、可测试、可回放的 current 主链。
 > 上游标准草案：`/Users/coso/Documents/dev/ai/limecloud/agentruntime`，当前对齐 `Agent Runtime v0.4.0` 与 `Lime AgentRuntime Profile`。
 
@@ -22,6 +22,7 @@
 - [./adjacent-protocols.md](./adjacent-protocols.md)：`agentcontext`、`agentevidence`、`agentpolicy`、`agentui` 的 owner 边界与连接合同
 - [./app-surface-runtime.md](./app-surface-runtime.md)：Agent App 如何作为业务 surface 复用 AgentRuntime / Claw 主链
 - [./agent-app-runtime-completion-audit.md](./agent-app-runtime-completion-audit.md)：Agent App Runtime / 内容工厂闭环的完成审计、证据和剩余缺口
+- [./agentruntime-standard-adoption-gap.md](./agentruntime-standard-adoption-gap.md)：外部 AgentRuntime 标准对 Agent App / Claw 共享运行事实的采用边界、prompt-to-artifact 审计和单会话失败 handoff
 - [./claw-capability-sharing.md](./claw-capability-sharing.md)：Claw `@` 能力如何抽象为 Chat、Agent App、Automation 可共享 capability
 - [./backend-surface-facade-plan.md](./backend-surface-facade-plan.md)：Agent App runtime command 与共享后端 surface facade 计划
 - [./diagrams.md](./diagrams.md)：架构图、流程图、时序图

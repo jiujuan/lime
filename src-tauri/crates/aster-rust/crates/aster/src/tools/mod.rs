@@ -48,6 +48,7 @@ pub mod task_output_tool;
 pub mod task_stop_tool;
 pub mod team_tools;
 pub mod tool_search_tool;
+mod view_image;
 pub mod web;
 mod workflow_integration;
 pub mod workflow_tool;
@@ -141,6 +142,7 @@ pub use task_list_tools::{
 pub use task_output_tool::TaskOutputTool;
 pub use task_stop_tool::TaskStopTool;
 pub use team_tools::{ListPeersTool, TeamCreateTool, TeamDeleteTool};
+pub use view_image::{ViewImageTool, VIEW_IMAGE_TOOL_NAME};
 
 // Web tools
 pub use web::{clear_web_caches, get_web_cache_stats, WebCache, WebFetchTool, WebSearchTool};
@@ -340,6 +342,7 @@ impl ToolRegistrationConfig {
 /// This function registers all built-in tools:
 /// - BashTool: Shell command execution
 /// - ReadTool: File reading (text, images, PDF, notebooks)
+/// - ViewImageTool: Local image viewing as model-visible image content
 /// - WriteTool: File writing with validation
 /// - EditTool: Smart file editing
 /// - GlobTool: File search with glob patterns
@@ -390,6 +393,7 @@ pub fn register_all_tools(
     // Register file tools with shared history
     let read_tool = ReadTool::new(shared_history.clone()).with_pdf_enabled(config.pdf_enabled);
     registry.register(Box::new(read_tool));
+    registry.register(Box::new(ViewImageTool::new()));
 
     let write_tool = WriteTool::new(shared_history.clone());
     registry.register(Box::new(write_tool));
@@ -612,6 +616,8 @@ mod tests {
             assert!(registry.contains("BashTool"));
             assert!(registry.contains("Read"));
             assert!(registry.contains("FileReadTool"));
+            assert!(registry.contains(VIEW_IMAGE_TOOL_NAME));
+            assert!(registry.contains("ViewImageTool"));
             assert!(registry.contains("Write"));
             assert!(registry.contains("FileWriteTool"));
             assert!(registry.contains("Edit"));
@@ -749,6 +755,8 @@ mod tests {
             assert!(registry.contains("BashTool"));
             assert!(registry.contains("Read"));
             assert!(registry.contains("FileReadTool"));
+            assert!(registry.contains(VIEW_IMAGE_TOOL_NAME));
+            assert!(registry.contains("ViewImageTool"));
             assert!(registry.contains("Write"));
             assert!(registry.contains("FileWriteTool"));
             assert!(registry.contains("Edit"));

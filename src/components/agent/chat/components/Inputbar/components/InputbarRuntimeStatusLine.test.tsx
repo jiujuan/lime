@@ -173,4 +173,26 @@ describe("InputbarRuntimeStatusLine", () => {
     expect(container.textContent).toContain("读 0 / 写 1.2K");
     expect(container.textContent).not.toContain("未声明自动缓存");
   });
+
+  it("等待补充详情不应生成原生 title 浮窗", () => {
+    const detail =
+      "若回复加入团队将带来巨大技术突破，请补充目标、边界、风险和最终交付口径。";
+    const container = renderStatusLine({
+      status: "waiting_input",
+      detail,
+      batchDescriptor: null,
+      queuedTurnCount: 0,
+      pendingRequestCount: 1,
+      subtaskStats: null,
+      startedAt: "2026-04-15T09:00:00Z",
+      completedAt: null,
+    });
+
+    const statusLine = container.querySelector(
+      '[data-testid="inputbar-runtime-status-line"]',
+    );
+    expect(statusLine?.textContent).toContain(detail);
+    expect(statusLine?.querySelector(`[title="${detail}"]`)).toBeNull();
+    expect(statusLine?.querySelector(`[aria-label="${detail}"]`)).not.toBeNull();
+  });
 });
